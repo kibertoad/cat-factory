@@ -1,5 +1,108 @@
 # @cat-factory/conformance
 
+## 0.10.56
+
+### Patch Changes
+
+- Updated dependencies [4a7fca0]
+  - @cat-factory/prompt-fragments@0.11.0
+  - @cat-factory/agents@0.43.1
+  - @cat-factory/orchestration@0.95.1
+  - @cat-factory/server@0.99.5
+
+## 0.10.55
+
+### Patch Changes
+
+- Updated dependencies [44fafa4]
+  - @cat-factory/orchestration@0.95.0
+  - @cat-factory/kernel@0.107.0
+  - @cat-factory/agents@0.43.0
+  - @cat-factory/server@0.99.4
+  - @cat-factory/gates@0.4.27
+  - @cat-factory/integrations@0.77.7
+
+## 0.10.54
+
+### Patch Changes
+
+- Updated dependencies [cd60892]
+  - @cat-factory/orchestration@0.94.0
+  - @cat-factory/server@0.99.3
+
+## 0.10.53
+
+### Patch Changes
+
+- Updated dependencies [89c861a]
+  - @cat-factory/agents@0.42.0
+  - @cat-factory/kernel@0.106.0
+  - @cat-factory/orchestration@0.93.1
+  - @cat-factory/server@0.99.2
+  - @cat-factory/gates@0.4.26
+  - @cat-factory/integrations@0.77.6
+
+## 0.10.52
+
+### Patch Changes
+
+- f7f9a9e: Technological-migration initiative — slice T2: phase-template ingest normalization.
+
+  The generic counterpart to T1's planner prompt fold: when an initiative preset declares a
+  `phaseTemplate`, the plan draft is now normalized against it at ingest, BEFORE the preset's own
+  `seedPlan` hook. This is plan-SHAPE enforcement only (which phases the plan presents, and in what
+  order) and stays deliberately separate from `seedPlan`'s per-item decoration.
+
+  - **orchestration**: new pure `normalizeDraftAgainstPhaseTemplate(template, draft)`
+    (`initiative.logic.ts`) — matches planned phases to template phases by `id` VERBATIM, reorders
+    them into template order (preserving the planner's `title`/`goal`), appends any extra phases
+    after the template ones when `allowAdditionalPhases` is set, and throws `ValidationError` on a
+    missing `required` phase or a disallowed extra (an id-less phase counts as an extra). Wired into
+    `InitiativeService.seedPlanDraft` ahead of the `seedPlan` hook and gated on the resolved preset's
+    `phaseTemplate`, so a preset with no template (including `preset_generic`) ingests byte-for-byte
+    as before. Pure + deterministic, so re-ingesting the same draft stays idempotent.
+  - **orchestration**: `validatePlanDraft` now also rejects a dependency that points FORWARD into a
+    later phase. Phases execute in declared order, so an earlier-phase item depending on a
+    later-phase one can never resolve and deadlocks the loop — a general invariant, but the T2 phase
+    reorder can turn a planner-consistent draft into a violating one, so it's caught loudly at the
+    ingest trust boundary instead of stalling silently at run time.
+  - **orchestration**: `seedPlanDraft` now RE-NORMALIZES the `seedPlan` hook's output against the
+    template (idempotent), symmetric with the existing re-parse-for-path-safety: a hook that touched
+    phases can no longer bypass the template's shape enforcement.
+  - **conformance**: `defineInitiativeSuite` now drives `InitiativeService.ingestPlan` over each
+    facade's real store — asserting an out-of-order plan is reordered into template order and
+    persisted, and a plan missing a required phase is rejected with nothing written — so the two
+    stores can't drift on a template-shaped plan.
+
+- Updated dependencies [f7f9a9e]
+  - @cat-factory/orchestration@0.93.0
+  - @cat-factory/server@0.99.1
+
+## 0.10.51
+
+### Patch Changes
+
+- Updated dependencies [2d97812]
+- Updated dependencies [b35e1a0]
+  - @cat-factory/agents@0.41.0
+  - @cat-factory/kernel@0.105.0
+  - @cat-factory/integrations@0.77.5
+  - @cat-factory/contracts@0.118.0
+  - @cat-factory/orchestration@0.92.0
+  - @cat-factory/server@0.99.0
+  - @cat-factory/gates@0.4.25
+  - @cat-factory/prompt-fragments@0.10.27
+
+## 0.10.50
+
+### Patch Changes
+
+- Updated dependencies [8f7af8e]
+- Updated dependencies [8f7af8e]
+  - @cat-factory/integrations@0.77.4
+  - @cat-factory/server@0.98.3
+  - @cat-factory/orchestration@0.91.1
+
 ## 0.10.49
 
 ### Patch Changes

@@ -191,15 +191,21 @@ defaultFragmentIds, policyDefaults?: Partial<InitiativeExecutionPolicy>, probe? 
     overrides when `humanReview` is on.
 12. **Spawned pipelines / agent kinds:**
 
-    | Item type          | Agent path                                                                                                                       | Pipeline                                                                     |
-    | ------------------ | -------------------------------------------------------------------------------------------------------------------------------- | ---------------------------------------------------------------------------- |
-    | README refresh     | reuse `doc-writer` (+ `doc-quality` gate; `targetPath` override)                                                                 | `pl_document_quick`                                                          |
-    | Business rules     | reuse `business-documenter` (placement passed via `targetPath`, turning its LLM-judgment default deterministic)                  | new lean `pl_business_docs` = `[business-documenter, conflicts, ci, merger]` |
-    | Mermaid diagrams   | NEW `diagram-author` (container-coding): reads the code, authors/updates mermaid docs under `diagramsDir`, opens a PR            | new `pl_diagrams` = `[diagram-author, doc-reviewer, conflicts, ci, merger]`  |
-    | In-source comments | NEW `code-commenter` (container-coding): adds/clarifies why-not-what comments, no behaviour change — the CI tail is load-bearing | new `pl_code_comments` = `[code-commenter, conflicts, ci, merger]`           |
+    | Item type          | Agent path                                                                                                                                                                                            | Pipeline                                                                     |
+    | ------------------ | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ---------------------------------------------------------------------------- |
+    | README refresh     | reuse `doc-writer` (+ `doc-quality` gate; `targetPath` override)                                                                                                                                      | `pl_document_quick`                                                          |
+    | Mermaid diagrams   | reuse `doc-writer` — a Mermaid `.md` is a document a writer produces; its `container-coding` clone already reads the code. Steer via the brief / a `diagrams` `docKind` (see the S8 doc-quality note) | `pl_document_quick`                                                          |
+    | Business rules     | reuse `business-documenter` (placement passed via `targetPath`, turning its LLM-judgment default deterministic)                                                                                       | new lean `pl_business_docs` = `[business-documenter, conflicts, ci, merger]` |
+    | In-source comments | NEW `code-commenter` (container-coding): adds/clarifies why-not-what comments, no behaviour change — the CI tail is load-bearing                                                                      | new `pl_code_comments` = `[code-commenter, conflicts, ci, merger]`           |
 
-    Minimal new-kind set: two. Merge policy is deliberately left to the workspace's merge
-    preset (`autoMergeEnabled` etc. not overridden) — merge stays a workspace concern.
+    Minimal new-kind set: **one** (`code-commenter`) — the only capability no existing kind has: an
+    in-place, comment-only edit of existing source. `doc-writer`'s contract is "write a new doc, do
+    not touch code", and `coder`'s whole role is to change code, so neither can express it. Diagrams
+    looked like a second new kind, but a Mermaid diagram doc is just Markdown a writer produces, so
+    `doc-writer` covers it — a dedicated `diagram-author` + `pl_diagrams` were dropped in S7's design
+    review (they'd have been a prompt wearing a pipeline costume). Merge policy is deliberately left
+    to the workspace's merge preset (`autoMergeEnabled` etc. not overridden) — merge stays a
+    workspace concern.
 
 13. **Sync semantics** — one-shot: completion = every item settled (PRs merged). Re-run by
     re-creating from the preset.
@@ -213,32 +219,76 @@ defaultFragmentIds, policyDefaults?: Partial<InitiativeExecutionPolicy>, probe? 
 | G3  | Planning pipeline hardcoded to `pl_initiative` in the SPA; no preset entity fields                                    | S1, S3           |
 | G4  | `buildTaskBlock` stamps only `estimate` — spawned tasks can't be typed doc tasks                                      | S5               |
 | G5  | No deterministic docs-folder/monorepo-placement detection                                                             | S6               |
-| G6  | No mermaid-authoring or in-source-comments agent kinds                                                                | S7               |
+| G6  | No in-source-comments agent kind (Mermaid diagrams reuse `doc-writer`, so no diagram kind needed)                     | S7               |
 | G7  | No registrable initiative-preset concept at all                                                                       | S1, S8, S9       |
 
 ## Per-slice status checklist
 
-| #   | Slice                                                                                                                                                                                                                                                    | Scope  | Status  | PR     |
-| --- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ------ | ------- | ------ |
-| 0   | This tracker                                                                                                                                                                                                                                             | —      | ✅ done | (this) |
-| 1   | Preset contracts (`initiative-preset.ts`: fields incl. `checkbox-group`/`path`/`showWhen`, descriptor, inputs) + kernel `registerInitiativePreset` registry + `preset_generic` + entity/draft schema extensions (`presetId`/`presetInputs`/item `spawn`) | SYSTEM | ✅ done | #812   |
-| 2   | Per-run gate-override engine seam (`ExecutionService.start` override → run steps; loop threads `spawn.gates`) + conformance on both runtimes                                                                                                             | SYSTEM | ✅ done | #880   |
-| 3   | Create/planning integration: create validation + qa/goal seeding for skip-interview presets, probe endpoint, snapshot attach (both facades), `AgentContextBuilder` preset folds, SPA starts `descriptor.planningPipelineId`                              | SYSTEM | ✅ done | #883   |
-| 4   | SPA preset picker + generic descriptor form renderer (checkbox-group/path/showWhen) + probe prefill + i18n chrome                                                                                                                                        | SYSTEM | ✅ done | #886   |
-| 5   | Loop/ingest glue: `buildTaskBlock` spawn decoration, `seedPlan` invocation at ingest, path-safety validation, conformance round-trip                                                                                                                     | SYSTEM | ✅ done | #890   |
-| 6   | `docs-detect.logic.ts` (pure over `RepoFiles`) + unit tests (monorepo/root/dir-name heuristics, bounded budget, never-throw)                                                                                                                             | PILOT  | ⬜ todo |        |
-| 7   | New kinds `diagram-author` / `code-commenter` (prompts, presentation, doc-aware trait) + `pl_diagrams` / `pl_code_comments` / `pl_business_docs`                                                                                                         | PILOT  | ⬜ todo |        |
-| 8   | `preset_docs_refresh` registration: descriptor (form), `detect` = S6, `seedPlan`, promptAdditions (analyst audit + planner shaping), review mapping, `pl_initiative_docs`                                                                                | PILOT  | ⬜ todo |        |
-| 9   | E2E (create-with-preset → auto-plan → spawn-with-decoration) + worked-example custom preset + `backend/docs/initiative-presets.md` + cross-doc updates                                                                                                   | BOTH   | ⬜ todo |        |
+| #   | Slice                                                                                                                                                                                                                                                                                   | Scope  | Status  | PR     |
+| --- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ------ | ------- | ------ |
+| 0   | This tracker                                                                                                                                                                                                                                                                            | —      | ✅ done | (this) |
+| 1   | Preset contracts (`initiative-preset.ts`: fields incl. `checkbox-group`/`path`/`showWhen`, descriptor, inputs) + kernel `registerInitiativePreset` registry + `preset_generic` + entity/draft schema extensions (`presetId`/`presetInputs`/item `spawn`)                                | SYSTEM | ✅ done | #812   |
+| 2   | Per-run gate-override engine seam (`ExecutionService.start` override → run steps; loop threads `spawn.gates`) + conformance on both runtimes                                                                                                                                            | SYSTEM | ✅ done | #880   |
+| 3   | Create/planning integration: create validation + qa/goal seeding for skip-interview presets, probe endpoint, snapshot attach (both facades), `AgentContextBuilder` preset folds, SPA starts `descriptor.planningPipelineId`                                                             | SYSTEM | ✅ done | #883   |
+| 4   | SPA preset picker + generic descriptor form renderer (checkbox-group/path/showWhen) + probe prefill + i18n chrome                                                                                                                                                                       | SYSTEM | ✅ done | #886   |
+| 5   | Loop/ingest glue: `buildTaskBlock` spawn decoration, `seedPlan` invocation at ingest, path-safety validation, conformance round-trip                                                                                                                                                    | SYSTEM | ✅ done | #890   |
+| 6   | `docs-detect.logic.ts` (pure over `RepoFiles`) + unit tests (monorepo/root/dir-name heuristics, bounded budget, never-throw)                                                                                                                                                            | PILOT  | ✅ done | #894   |
+| 7   | New kind `code-commenter` (prompt, presentation, doc-aware) + `pl_code_comments` / `pl_business_docs`; diagrams + READMEs reuse `doc-writer`/`pl_document_quick` (a Mermaid doc is just Markdown — no diagram kind)                                                                     | PILOT  | ✅ done | #903   |
+| 8   | `preset_docs_refresh` registration: descriptor (form), `detect` = S6, **`phaseTemplate`** (shape enforcement — reuse T1/T2, see the inter-phase follow-up), `seedPlan` (spawn DECORATION only), promptAdditions (analyst audit + planner shaping), review mapping, `pl_initiative_docs` | PILOT  | ⬜ todo |        |
+| 9   | E2E (create-with-preset → auto-plan → spawn-with-decoration) + worked-example custom preset + `backend/docs/initiative-presets.md` + cross-doc updates                                                                                                                                  | BOTH   | ⬜ todo |        |
 
 Ordering: 1 → {2, 3} → {4, 5}; 6–8 need 1+3; 7 is independent of 6.
 
 **Downstream consumers:** the technological-migration preset
 ([`tech-migration-preset-and-mssql-postgres-pilot.md`](./tech-migration-preset-and-mssql-postgres-pilot.md))
 hard-depends on the remaining **S8** (its registration copies the pattern S8 pioneers)
-and **S9** (its E2E extends the baseline), and builds generic phase-template machinery
-on S5's landed ingest hook — reprioritizing or re-scoping those slices affects that
-tracker's critical path.
+and **S9** (its E2E extends the baseline), and has already landed generic phase-template
+machinery (T1 #895 / T2 #900) on S5's ingest hook — reprioritizing or re-scoping those
+slices affects that tracker's critical path.
+
+## Inter-phase follow-ups (read before starting S8)
+
+Two items surfaced in S7's design review. Neither blocks S7 landing; both shape S8.
+
+1. **Adopt the generic `phaseTemplate` shape enforcement for `preset_docs_refresh` (do it in S8;
+   do NOT hand-roll phase shaping in `seedPlan`).** The technological-migration initiative landed a
+   generic initiative-preset capability we should reuse: **T1** (#895) added
+   `InitiativePresetDescriptor.phaseTemplate` (`initiativePresetPhaseTemplateSchema`,
+   `contracts/src/initiative-preset.ts`) + a planner prompt fold that renders a "required plan
+   shape"; **T2** (#900) added the pure ingest normalizer `normalizeDraftAgainstPhaseTemplate`
+   (orchestration `initiative.logic.ts`), wired into `InitiativeService.seedPlanDraft` **ahead of**
+   the `seedPlan` hook — it matches planned phases to template phases by `id` VERBATIM, reorders
+   them into template order, and rejects a missing `required` phase / a disallowed extra.
+   - **Validated relevant.** S8 had planned to enforce the docs-refresh plan shape (phase 1
+     "Foundations", then one phase per checked doc type) inside `seedPlan`. That is exactly what
+     `phaseTemplate` now does generically, and T2's governing gotcha is explicit: **shape lives in
+     `phaseTemplate`, DECORATION lives in `seedPlan` — never entangle them.** So S8 declares a
+     `phaseTemplate` for the plan shape and keeps `seedPlan` for the per-item spawn decoration ONLY.
+   - **Fits the input-dependent phases.** docs-refresh phases vary with the user's `docTypes`
+     selection, but the template is a STATIC descriptor field — which still fits: mark `foundations`
+     `required: true` and each per-doc-type phase (`readme` / `diagrams` / `comments` /
+     `business-rules`) OPTIONAL, with `allowAdditionalPhases: false`. The planner (steered by the
+     checked-types prompt additions) emits only the checked phases; the normalizer tolerates an
+     omitted OPTIONAL phase and still rejects unknown extras / a missing Foundations. Template phase
+     ids must match VERBATIM the ids the planner emits (the T1 contract).
+   - **S8 doc-quality note (diagrams via `doc-writer`).** Because diagrams reuse `pl_document_quick`
+     (which includes the `doc-quality` gate), give diagram items a `diagrams` `docKind` (or `other`)
+     whose template's required sections suit a diagram doc — otherwise the prose-oriented
+     required-section check would flag a perfectly good diagram document.
+
+2. **Templated pipelines — deferred (a separate initiative, not part of this one).** S7 collapsed
+   the near-identical spawn pipelines to the minimum by reusing existing kinds, but the recurring
+   shape is "one pipeline, one step swapped for a variant agent" (`[<author>, conflicts, ci,
+merger]`). A first-class **pipeline template with a slot/swappable step** would express that
+   directly and is the correct model when variations are different KINDS (which the per-step
+   `agentConfig` mode-param can't unify). It is NOT worth building for the handful of doc pipelines:
+   the only thing shared is the universal `conflicts → ci → merger` tail that EVERY catalog pipeline
+   already shares, and the change is cross-cutting — the `Pipeline` contract, both runtimes'
+   `pipelines` persistence + mappers, `ExecutionService.start` slot resolution, the SPA pipeline
+   editor + task form, `validatePipelineShape` / `usePipelineHealth`, reseed/versioning, and
+   conformance — a dedicated initiative in its own right. Build it only if variant-pipeline
+   proliferation becomes real (many near-identical built-ins, or users authoring variants); until
+   then the docs-refresh spawn simply stamps a concrete `pipelineId` per doc type.
 
 ## Conventions & gotchas (carry between iterations)
 
@@ -383,6 +433,17 @@ false` per step, so an override entry of `false` genuinely turns a pipeline gate
   demands an explicit conformance assertion for it — added to `initiative-suite.ts`. The spawned
   BLOCK's decoration fields (`taskType`/`taskTypeFields`/`fragmentIds`/`agentConfig`) are already
   covered by the block-store parity assertions, so slice 5 only adds the item-`spawn` round-trip.
+- **[S7] Only `code-commenter` is a NEW kind — do not re-add a diagram kind.** S7's design review
+  found diagrams need no new kind: a Mermaid diagram doc is Markdown a `doc-writer` produces (its
+  `container-coding` clone already reads the code), so diagrams + READMEs reuse `doc-writer` /
+  `pl_document_quick` and business rules reuse `business-documenter` / the lean `pl_business_docs`.
+  `code-commenter` (agents `kinds/code-commenter.ts`) is the ONLY genuinely-new capability — an
+  in-place, comment-only edit of existing source, which `doc-writer` ("never touch code") and
+  `coder` ("change code") both structurally cannot express. It rides the generic `container-coding`
+  work-branch lifecycle (no harness handler, no image bump), is `doc-aware`, and — like every
+  side-effect kind — must NOT carry `FINAL_ANSWER_IN_REPLY`. Its pipeline's `ci` step is
+  load-bearing (it proves the diff is behaviour-neutral). The "one pipeline, swap one step" itch S7
+  raised is the deferred templated-pipelines follow-up above — resist re-adding per-type kinds.
 
 ## Out of scope
 

@@ -1,5 +1,153 @@
 # @cat-factory/local-server
 
+## 0.59.1
+
+### Patch Changes
+
+- @cat-factory/agents@0.43.1
+- @cat-factory/orchestration@0.95.1
+- @cat-factory/server@0.99.5
+- @cat-factory/node-server@0.86.1
+- @cat-factory/executor-harness@1.37.0
+
+## 0.59.0
+
+### Minor Changes
+
+- 44fafa4: Inline subscription LLM steps can now run inside a prewarmed local container on a leased
+  subscription credential (initiative phase C2). The executor-harness gains a one-shot `inline`
+  job kind that runs `claude -p` / `codex exec` with no checkout and returns the completion text +
+  usage; the local `LocalContainerRunnerTransport` leases a warm pool member to serve it. The
+  local inline resolver now selects the developer's host CLI when its binary is present (ambient,
+  unmetered) and otherwise the container backend on a leased credential — personal per-run
+  activation for an individual vendor (Claude/Codex/GLM), a pooled token otherwise (Kimi/DeepSeek).
+  This lets a subscription-only preset run its inline reviewers/brainstorm/estimator even when the
+  host has no `claude`/`codex` binary and in mothership mode, and extends inline coverage to the
+  non-native claude-code vendors.
+
+  Mechanics: `ModelScope` gains an `executionId` run dimension and `resolveScopedModelProvider`
+  takes the full scope; the inline callers (the iterative reviewers, the doc/initiative
+  interviewers, the tester quality companion, Kaizen, and the AI/consensus agent executors) thread
+  the run's execution + initiator so the container backend can lease the right credential.
+  `buildNodeContainer`'s `wrapModelProviderResolver` seam now receives the subscription lease
+  closures. Bumps the executor-harness image tag (the harness `inline` kind is new image code).
+
+### Patch Changes
+
+- Updated dependencies [44fafa4]
+  - @cat-factory/executor-harness@1.37.0
+  - @cat-factory/node-server@0.86.0
+  - @cat-factory/orchestration@0.95.0
+  - @cat-factory/kernel@0.107.0
+  - @cat-factory/agents@0.43.0
+  - @cat-factory/server@0.99.4
+  - @cat-factory/gitlab@0.7.30
+  - @cat-factory/integrations@0.77.7
+
+## 0.58.3
+
+### Patch Changes
+
+- Updated dependencies [cd60892]
+  - @cat-factory/orchestration@0.94.0
+  - @cat-factory/server@0.99.3
+  - @cat-factory/node-server@0.85.10
+  - @cat-factory/executor-harness@1.35.0
+
+## 0.58.2
+
+### Patch Changes
+
+- Updated dependencies [89c861a]
+  - @cat-factory/agents@0.42.0
+  - @cat-factory/kernel@0.106.0
+  - @cat-factory/orchestration@0.93.1
+  - @cat-factory/server@0.99.2
+  - @cat-factory/node-server@0.85.9
+  - @cat-factory/gitlab@0.7.29
+  - @cat-factory/integrations@0.77.6
+  - @cat-factory/executor-harness@1.35.0
+
+## 0.58.1
+
+### Patch Changes
+
+- Updated dependencies [f7f9a9e]
+  - @cat-factory/orchestration@0.93.0
+  - @cat-factory/server@0.99.1
+  - @cat-factory/node-server@0.85.8
+  - @cat-factory/executor-harness@1.35.0
+
+## 0.58.0
+
+### Minor Changes
+
+- e3cfd61: Run inline LLM steps on a subscription-only model by default in local and mothership mode.
+
+  A preset that pins everything to a subscription-only model (e.g. `claude-opus`) used to be
+  refused at pipeline start with `preset_unsatisfiable` unless you also enabled
+  `LOCAL_NATIVE_AGENTS`, which runs whole container agents unsandboxed. The inline steps
+  (requirements reviewer, brainstorm, task-estimator, inline document kinds) are one-shot text
+  calls with no repo checkout or tools, so they now run on the developer's ambient `claude` /
+  `codex` CLI by default, via a dedicated `LOCAL_NATIVE_INLINE` flag (default on) that is
+  decoupled from the container-native opt-in. Set `LOCAL_NATIVE_INLINE=off` to disable, or list a
+  subset (e.g. `claude-code`) to restrict which vendors are inline-eligible. Only the native
+  vendors (`claude` / `codex`) are eligible; a non-native vendor reusing the `claude-code` harness
+  (GLM / Kimi / DeepSeek) still degrades to a provider model for inline steps.
+
+## 0.57.7
+
+### Patch Changes
+
+- Updated dependencies [2d97812]
+- Updated dependencies [b35e1a0]
+  - @cat-factory/agents@0.41.0
+  - @cat-factory/kernel@0.105.0
+  - @cat-factory/integrations@0.77.5
+  - @cat-factory/contracts@0.118.0
+  - @cat-factory/orchestration@0.92.0
+  - @cat-factory/server@0.99.0
+  - @cat-factory/node-server@0.85.7
+  - @cat-factory/gitlab@0.7.28
+  - @cat-factory/executor-harness@1.35.0
+
+## 0.57.6
+
+### Patch Changes
+
+- 8f7af8e: Make ephemeral-environment provisioning DETECTION more universal — so it adapts to repos that
+  follow different conventions than the stack-recipes pilot (different names, paths, tech stack). The
+  changes are additive in the sense that detection can only ever surface MORE — it never removes or
+  changes an existing detection, and a repo with no monorepo service-container dirs resolves exactly
+  as before. Note the one behavioural change below: the env-template scan now also looks one level into
+  `services/*`/`apps/*`/`packages/*`, so a monorepo that keeps per-service templates there will now
+  surface them as low-confidence, user-confirmed `recipe.envFiles` where it previously surfaced none.
+
+  - **Injectable detection conventions (deployment config).** A deployment can extend the built-in
+    compose file names/dirs, seed dirs, and env-template dirs via the `ENVIRONMENTS_DETECTION_CONVENTIONS`
+    JSON env var, threaded additively (built-ins always win; canonical compose names stay
+    highest-priority) through `CoreDependencies.detectionConventions` into BOTH the service-provisioning
+    detector (`EnvironmentConnectionService`) and the shared-stack detector (`SharedStackService`). New
+    `parseDetectionConventions` + `EnvironmentsConfig.detectionConventions` (`@cat-factory/server`,
+    parsed by both facades) and the exported `DetectionConventions` type (`@cat-factory/integrations`).
+  - **Env-template detection now scans one level into monorepo service-container dirs** (`services/*`,
+    `apps/*`, `packages/*`), so a per-service `*-dist`/`.example` template outside the compose dir (the
+    pilot's documented `services/app/` gap) is surfaced — still bounded by the existing read budget.
+    This is on by default (not gated behind conventions), so any monorepo with a compose file AND
+    per-service templates newly gets those as `recipe.envFiles`; they are low-confidence and confirmed
+    in the wizard before anything is materialized.
+  - **The environment setup wizard elevates the "run deep analysis" nudge** when a repo ships its own
+    imperative bring-up CLI/Makefile the deterministic scan can't read (`@cat-factory/app`), pointing the
+    user at the LLM analyst — the intended universality mechanism for stack-specific imperative steps.
+
+- Updated dependencies [8f7af8e]
+- Updated dependencies [8f7af8e]
+  - @cat-factory/integrations@0.77.4
+  - @cat-factory/server@0.98.3
+  - @cat-factory/orchestration@0.91.1
+  - @cat-factory/node-server@0.85.6
+  - @cat-factory/executor-harness@1.35.0
+
 ## 0.57.5
 
 ### Patch Changes

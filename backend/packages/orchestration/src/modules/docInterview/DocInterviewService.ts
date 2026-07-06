@@ -17,6 +17,7 @@ import {
   ValidationError,
 } from '@cat-factory/kernel'
 import { catFactoryObservability, FINAL_ANSWER_IN_REPLY } from '@cat-factory/agents'
+import { type ResolveBlockRunContext, scopeForBlockRun } from '../../inlineScope.js'
 import {
   answeredDigest,
   applyDocInterviewAnswer,
@@ -85,6 +86,8 @@ export interface DocInterviewDeps {
     agentKind: string,
     modelPresetId?: string,
   ) => Promise<string | undefined>
+  /** Resolve the block's run/execution + initiator, folded into the inline model scope. */
+  resolveRunContext?: ResolveBlockRunContext
 }
 
 /** A prior step's output, threaded in so the interviewer can read the outline / research. */
@@ -264,7 +267,8 @@ export class DocInterviewService {
     workspaceId: string,
     block: Block,
   ): Promise<{ modelProvider: ModelProvider; ref: ModelRef }> {
-    const modelProvider = await resolveScopedModelProvider(workspaceId, this.deps)
+    const scope = await scopeForBlockRun(workspaceId, block, this.deps.resolveRunContext)
+    const modelProvider = await resolveScopedModelProvider(scope, this.deps)
     const ref = await this.modelFor(workspaceId, block)
     if (!modelProvider || !ref) {
       throw new ValidationError('No model is configured for the document interviewer')

@@ -12,6 +12,7 @@ import type { StructuredOutput } from './structured-output.js'
 import { registerBugInvestigatorAgent } from './bug-investigator.js'
 import { registerReproTestAgent } from './repro-test.js'
 import { registerDocumentAgents } from './document.js'
+import { registerCodeCommenterAgent } from './code-commenter.js'
 import { registerInitiativeAgents } from './initiative.js'
 import { registerEnvironmentAnalystAgent } from './environment-analyst.js'
 
@@ -147,7 +148,8 @@ function withDerivedOutput(definition: AgentKindDefinition): AgentKindDefinition
  * `Map`, no `clear*()` test cruft, and no external-adapter module-identity gotcha: a
  * deployment registers extra kinds by reference (`registry.register(def)`) on the instance the
  * facade injects. The built-in kinds (`bug-investigator` / `repro-test` / `environment-analyst`
- * / the document + initiative kinds) are pre-loaded by the factory, not by an import side effect.
+ * / `code-commenter` / the document + initiative kinds) are pre-loaded by the factory, not by an
+ * import side effect.
  */
 export class AgentKindRegistry {
   private readonly registry = new Map<string, AgentKindDefinition>()
@@ -264,6 +266,7 @@ export function defaultAgentKindRegistry(): AgentKindRegistry {
   registerBugInvestigatorAgent(registry)
   registerReproTestAgent(registry)
   registerDocumentAgents(registry)
+  registerCodeCommenterAgent(registry)
   registerInitiativeAgents(registry)
   registerEnvironmentAnalystAgent(registry)
   return registry

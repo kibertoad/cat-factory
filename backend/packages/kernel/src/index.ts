@@ -61,6 +61,7 @@ export {
   isModelUsable,
   isModelUsableInline,
   nativeVendorForRef,
+  subscriptionVendorForRef,
   subscriptionOptionFor,
   isIndividualVendor,
   isAmbientNativeVendor,
@@ -78,6 +79,8 @@ export {
   DEP_UPDATE_PIPELINE_ID,
   TECH_DEBT_PIPELINE_ID,
   BUG_TRIAGE_PIPELINE_ID,
+  CODE_COMMENTS_PIPELINE_ID,
+  BUSINESS_DOCS_PIPELINE_ID,
 } from './domain/seed.js'
 
 // Pure initiative vocabulary (agent-kind constants + pipeline-shape predicates),
@@ -251,6 +254,12 @@ export {
   isBlockedPrivateHost,
 } from './shared/ip-host.logic.js'
 export { redactSecrets } from './shared/redact-secrets.logic.js'
+export {
+  type RepoScanEntry,
+  type CheckoutFreeRepoReader,
+  joinRepoPath,
+  BudgetedRepoScanner,
+} from './shared/repo-scan.logic.js'
 
 export { requireWorkspace } from './workspace-guard.js'
 

@@ -80,6 +80,16 @@ export interface ModelScope {
   accountId?: string | null
   /** The run initiator's `usr_*` id, to also draw from their personal keys. */
   userId?: string | null
+  /**
+   * The run/execution this resolution serves, when it happens inside a run. It carries no
+   * credential-pool meaning (unlike {@link workspaceId}/{@link accountId}/{@link userId}); it
+   * is the key an INLINE call needs to lease the run's per-run subscription activation — a
+   * facade that serves a subscription harness ref inline through a leased credential (the
+   * prewarmed-container inline backend) reads `executionId` + `userId` to lease the initiator's
+   * activated personal token, exactly as the container coding path does. Absent for a
+   * resolution with no run context (a sandbox experiment, a deployment-config-time probe).
+   */
+  executionId?: string | null
 }
 
 /**
@@ -102,11 +112,11 @@ export interface ModelProviderResolver {
  * drift between callers. Returns `undefined` when neither is configured.
  */
 export async function resolveScopedModelProvider(
-  workspaceId: string,
+  scope: ModelScope,
   deps: { modelProviderResolver?: ModelProviderResolver; modelProvider?: ModelProvider },
 ): Promise<ModelProvider | undefined> {
   if (deps.modelProviderResolver) {
-    return deps.modelProviderResolver.forScope({ workspaceId })
+    return deps.modelProviderResolver.forScope(scope)
   }
   return deps.modelProvider
 }

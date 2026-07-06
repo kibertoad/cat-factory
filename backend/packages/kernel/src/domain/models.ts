@@ -679,6 +679,38 @@ export function isIndividualVendor(vendor: SubscriptionVendor): boolean {
   return SUBSCRIPTION_VENDORS[vendor].individualOnly === true
 }
 
+// Reverse map from a concrete subscription ref (`${provider}:${model}`) to its vendor,
+// built once from the catalog's subscription flavours. Unlike {@link nativeVendorForRef}
+// (which resolves ONLY the two native-ambient vendors `claude`/`codex` from a bare ref),
+// this covers EVERY subscription vendor — including the non-native claude-code vendors that
+// carry their own base URL (GLM/Kimi/DeepSeek) — so a facade that can inject a leased token
+// (the prewarmed-container inline backend) can serve any of them inline, not just the two
+// the host CLI's ambient login covers.
+const VENDOR_BY_SUBSCRIPTION_REF: Map<string, SubscriptionVendor> = (() => {
+  const map = new Map<string, SubscriptionVendor>()
+  for (const model of MODEL_CATALOG) {
+    if (model.subscription) {
+      const ref = model.subscription.ref
+      map.set(`${ref.provider}:${ref.model}`, model.subscription.vendor)
+    }
+  }
+  return map
+})()
+
+/**
+ * The subscription vendor a harness ref belongs to (ANY vendor — `claude` / `codex` / `glm` /
+ * `kimi` / `deepseek`), or undefined for a non-subscription (Pi / absent-harness) ref. Matched
+ * by the catalog's subscription refs, so it stays in step with {@link MODEL_CATALOG} rather than
+ * re-deriving the provider→vendor mapping. This is the broad counterpart to
+ * {@link nativeVendorForRef}: use `nativeVendorForRef` to decide host-CLI (ambient-login)
+ * eligibility, and this to decide leased-credential eligibility (the container inline backend,
+ * which injects the token + base URL exactly like the container coding path).
+ */
+export function subscriptionVendorForRef(ref: ModelRef): SubscriptionVendor | undefined {
+  if (!ref.harness || ref.harness === 'pi') return undefined
+  return VENDOR_BY_SUBSCRIPTION_REF.get(`${ref.provider}:${ref.model}`)
+}
+
 /**
  * Whether NATIVE local execution serves `vendor` with the developer's own ambient CLI login
  * (no leased credential, no personal-credential gate) given the configured allow-list of

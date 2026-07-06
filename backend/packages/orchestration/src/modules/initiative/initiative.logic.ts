@@ -13,7 +13,11 @@ import type {
   UpdateInitiativeItemInput,
 } from '@cat-factory/kernel'
 import { ConflictError, ValidationError, hasInitiativeKinds } from '@cat-factory/kernel'
-import type { InitiativePresetDescriptor, InitiativePresetInputs } from '@cat-factory/contracts'
+import type {
+  InitiativePresetDescriptor,
+  InitiativePresetInputs,
+  InitiativePresetPhaseTemplate,
+} from '@cat-factory/contracts'
 import {
   INITIATIVE_ITEM_TERMINAL_STATUSES,
   INITIATIVE_PROSE_MAX,
@@ -83,41 +87,111 @@ function assertAcyclicItems(
 
 /**
  * Validate a plan draft's internal references: unique phase/item ids, every item
- * pointing at a declared phase, dependencies pointing at declared items, and an
- * acyclic dependency graph. Throws {@link ValidationError} on the first violation.
- * The lenient coercion (`coerceInitiativePlan`) already produces a well-formed
- * draft; this re-checks at the trust boundary so a hand-supplied draft can't
- * smuggle a broken graph into the loop.
+ * pointing at a declared phase, dependencies pointing at declared items, no
+ * dependency crossing FORWARD into a later phase, and an acyclic dependency graph.
+ * Throws {@link ValidationError} on the first violation. The lenient coercion
+ * (`coerceInitiativePlan`) already produces a well-formed draft; this re-checks at
+ * the trust boundary so a hand-supplied draft can't smuggle a broken graph into the
+ * loop.
  */
 export function validatePlanDraft(draft: InitiativePlanDraft): void {
-  const phaseIds = new Set<string>()
-  for (const phase of draft.phases) {
-    if (!phase.id) continue
-    if (phaseIds.has(phase.id)) throw new ValidationError(`Duplicate phase id '${phase.id}'`)
-    phaseIds.add(phase.id)
-  }
-  const itemIds = new Set<string>()
+  // Phase array order IS execution order — `deriveCurrentPhase` advances phase-by-phase in this
+  // order — so we track each phase's index, not just its presence, to reject later-phase deps below.
+  const phaseOrder = new Map<string, number>()
+  draft.phases.forEach((phase, idx) => {
+    if (!phase.id) return
+    if (phaseOrder.has(phase.id)) throw new ValidationError(`Duplicate phase id '${phase.id}'`)
+    phaseOrder.set(phase.id, idx)
+  })
+  const itemPhase = new Map<string, string | undefined>()
   for (const item of draft.items) {
     if (!item.id) continue
-    if (itemIds.has(item.id)) throw new ValidationError(`Duplicate item id '${item.id}'`)
-    itemIds.add(item.id)
+    if (itemPhase.has(item.id)) throw new ValidationError(`Duplicate item id '${item.id}'`)
+    itemPhase.set(item.id, item.phaseId)
   }
   for (const item of draft.items) {
-    if (item.phaseId && phaseIds.size > 0 && !phaseIds.has(item.phaseId)) {
+    if (item.phaseId && phaseOrder.size > 0 && !phaseOrder.has(item.phaseId)) {
       throw new ValidationError(
         `Item '${item.id ?? item.title}' references unknown phase '${item.phaseId}'`,
       )
     }
+    const here = item.phaseId ? phaseOrder.get(item.phaseId) : undefined
     for (const dep of item.dependsOn ?? []) {
-      if (!itemIds.has(dep)) {
+      if (!itemPhase.has(dep)) {
         throw new ValidationError(
           `Item '${item.id ?? item.title}' depends on unknown item '${dep}'`,
+        )
+      }
+      // An item may only depend on items in its own phase or an EARLIER one. A dependency pointing
+      // at a LATER phase can never resolve — the depended-on phase never becomes current while this
+      // item keeps its own (earlier) phase current — so the whole initiative deadlocks. This is a
+      // general loop invariant, but the phase-template reorder at ingest can turn a
+      // planner-consistent draft into a violating one, so it's enforced here at the trust boundary
+      // rather than left to surface as a silent run-time stall.
+      const depPhaseId = itemPhase.get(dep)
+      const there = depPhaseId ? phaseOrder.get(depPhaseId) : undefined
+      if (here !== undefined && there !== undefined && there > here) {
+        throw new ValidationError(
+          `Item '${item.id ?? item.title}' depends on '${dep}' in a later phase '${depPhaseId}' — a dependency must not point at a later phase (it would deadlock the loop)`,
         )
       }
     }
   }
   // Cycle check over the dependency edges (shared with the mid-flight item edit).
   assertAcyclicItems(draft.items.map((i) => ({ id: i.id ?? '', dependsOn: i.dependsOn })))
+}
+
+/**
+ * Normalize a planner draft's phases against a preset's declarative {@link
+ * InitiativePresetPhaseTemplate} (slice T2), run at ingest BEFORE the preset's own `seedPlan`
+ * hook. This enforces PLAN SHAPE only — which phases the plan presents, and in what order — and
+ * is deliberately kept separate from `seedPlan`'s per-item decoration (T7): the generic template
+ * machinery owns shape, the preset hook owns content, and neither re-does the other's job.
+ *
+ * - **Reorder, don't reject, for ordering.** Draft phases whose `id` matches a template phase are
+ *   reordered into template order — matched by id VERBATIM, the same contract the planner prompt
+ *   fold renders. The planner-authored `title`/`goal` are preserved untouched; the template
+ *   dictates presence + order, never content.
+ * - **Extra phases** — a draft phase with no id, or an id not in the template — are appended AFTER
+ *   the template phases (in their original relative order) when `allowAdditionalPhases` is set,
+ *   and are a hard error otherwise (the template is exhaustive).
+ * - **A missing `required` phase** is a hard error; an optional (`required !== true`) template
+ *   phase the planner omitted is fine.
+ *
+ * Rejection is a {@link ValidationError} at the ingest trust boundary (the landed
+ * `assertPipelinesExist` / strict-re-parse pattern), surfacing as a planner retry / human fix at
+ * the plan-approval gate — never a silent draft mutation for a missing-required phase. Pure +
+ * total, and deterministic: a draft already in an exhaustive template's order (no extras) returns
+ * an equal phase list, so re-ingesting the same draft stays byte-identical (the ingest idempotency
+ * check relies on it). A draft repeating a template id lands both copies in template order and is
+ * caught downstream by {@link validatePlanDraft}'s duplicate-id check — we don't silently drop it.
+ */
+export function normalizeDraftAgainstPhaseTemplate(
+  template: InitiativePresetPhaseTemplate,
+  draft: InitiativePlanDraft,
+): InitiativePlanDraft {
+  const templateIds = new Set(template.phases.map((p) => p.id))
+  // Template ids are unique (the contract enforces it), so each template slot matches its draft
+  // phase(s) exactly once — iterating the template preserves template order.
+  const matched = template.phases.flatMap((tp) => draft.phases.filter((p) => p.id === tp.id))
+  const extras = draft.phases.filter((p) => !p.id || !templateIds.has(p.id))
+
+  const missing = template.phases.filter(
+    (tp) => tp.required === true && !draft.phases.some((p) => p.id === tp.id),
+  )
+  if (missing.length > 0) {
+    throw new ValidationError(
+      `Plan is missing required phase(s): ${missing.map((p) => `'${p.id}'`).join(', ')}`,
+    )
+  }
+  if (extras.length > 0 && !template.allowAdditionalPhases) {
+    const labels = extras.map((p) => `'${p.id ?? p.title}'`).join(', ')
+    throw new ValidationError(
+      `Plan introduces phase(s) not allowed by the preset's phase template: ${labels}`,
+    )
+  }
+
+  return { ...draft, phases: [...matched, ...extras] }
 }
 
 /** Assign a unique slug-derived id, suffixing `-2`, `-3`, … on collision. */
@@ -398,19 +472,21 @@ export function applyAnalysis(initiative: Initiative, summary: string): Initiati
 }
 
 // ---------------------------------------------------------------------------
-// Preset skip-interview seeding (slice 3) — for a preset whose `interview` is `skip`, the FORM
-// the user filled IS the interview. At create the service seeds the `qa` log with one answered
-// exchange per filled, VISIBLE field (label → rendered value), so the existing tracker digest +
-// planning-prompt path (`initiativeContextLines`) surface the form with no interviewer step.
-// Pure + total.
+// Preset form → qa seeding (slice 3; extended to full-interview presets in T3). The FORM the user
+// filled at create is folded into the `qa` log as one answered exchange per filled, VISIBLE field
+// (label → rendered value). For a SKIP-interview preset the form IS the interview (no interviewer
+// step); for a FULL-interview preset the seeded answers are the interviewer's STARTING POINT (it
+// builds on them rather than re-asking). Either way the existing tracker digest + planning-prompt
+// path (`initiativeContextLines`) surface the form. Pure + total.
 // ---------------------------------------------------------------------------
 
 /**
- * Seed the `qa` digest for a SKIP-interview preset from the filled form: one answered exchange
- * (`question` = the field label, `answer` = the rendered value) per VISIBLE field carrying a
- * non-empty value. Hidden (`showWhen`-failed) and blank fields are skipped. The result feeds the
- * entity's `qa` at create, so the analyst / planner prompts (and the committed tracker digest)
- * read the form AS the interview. Ids come from the caller's generator.
+ * Seed the `qa` digest from a preset's filled form: one answered exchange (`question` = the field
+ * label, `answer` = the rendered value) per VISIBLE field carrying a non-empty value. Hidden
+ * (`showWhen`-failed) and blank fields are skipped. The result feeds the entity's `qa` at create,
+ * so the analyst / planner prompts (and the committed tracker digest) read the form — and a
+ * full-interview preset's interviewer builds on it. Interview-mode-agnostic: the caller decides
+ * whether the form IS the interview (skip) or SEEDS it (full). Ids come from the caller's generator.
  */
 export function seedPresetInterviewQa(
   descriptor: InitiativePresetDescriptor,

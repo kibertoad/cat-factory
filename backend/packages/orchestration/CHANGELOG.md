@@ -1,5 +1,195 @@
 # @cat-factory/orchestration
 
+## 0.95.1
+
+### Patch Changes
+
+- Updated dependencies [4a7fca0]
+  - @cat-factory/prompt-fragments@0.11.0
+  - @cat-factory/agents@0.43.1
+  - @cat-factory/sandbox@0.9.31
+
+## 0.95.0
+
+### Minor Changes
+
+- 44fafa4: Inline subscription LLM steps can now run inside a prewarmed local container on a leased
+  subscription credential (initiative phase C2). The executor-harness gains a one-shot `inline`
+  job kind that runs `claude -p` / `codex exec` with no checkout and returns the completion text +
+  usage; the local `LocalContainerRunnerTransport` leases a warm pool member to serve it. The
+  local inline resolver now selects the developer's host CLI when its binary is present (ambient,
+  unmetered) and otherwise the container backend on a leased credential — personal per-run
+  activation for an individual vendor (Claude/Codex/GLM), a pooled token otherwise (Kimi/DeepSeek).
+  This lets a subscription-only preset run its inline reviewers/brainstorm/estimator even when the
+  host has no `claude`/`codex` binary and in mothership mode, and extends inline coverage to the
+  non-native claude-code vendors.
+
+  Mechanics: `ModelScope` gains an `executionId` run dimension and `resolveScopedModelProvider`
+  takes the full scope; the inline callers (the iterative reviewers, the doc/initiative
+  interviewers, the tester quality companion, Kaizen, and the AI/consensus agent executors) thread
+  the run's execution + initiator so the container backend can lease the right credential.
+  `buildNodeContainer`'s `wrapModelProviderResolver` seam now receives the subscription lease
+  closures. Bumps the executor-harness image tag (the harness `inline` kind is new image code).
+
+### Patch Changes
+
+- Updated dependencies [44fafa4]
+  - @cat-factory/kernel@0.107.0
+  - @cat-factory/agents@0.43.0
+  - @cat-factory/caching@0.6.7
+  - @cat-factory/integrations@0.77.7
+  - @cat-factory/sandbox@0.9.30
+  - @cat-factory/spend@0.11.13
+  - @cat-factory/workspaces@0.12.13
+
+## 0.94.0
+
+### Minor Changes
+
+- cd60892: Technological-migration initiative — slice T3: full-interview qa seeding.
+
+  A preset's create-time FORM now seeds the planning-interview digest for BOTH interview modes, so a
+  FULL-interview preset's interviewer starts from the enumerable facts the form already captured
+  instead of re-asking them. Generic (preset-id-agnostic) behaviour: `preset_generic` and a
+  preset-less initiative are byte-for-byte unchanged.
+
+  - **orchestration**: `InitiativeService.create` now runs `seedPresetInterviewQa` for ANY resolved
+    preset (previously only `interview: 'skip'`), folding each filled, visible field into the entity's
+    `qa` as one answered exchange. `seedPresetInterviewQa` reads the filled fields, so `preset_generic`
+    (empty form) seeds nothing; an absent preset seeds nothing. Goal-templating from the preset's
+    stated purpose stays `skip`-only — a full-interview preset's goal is still synthesized by the
+    interviewer (blank until it converges when the human gave no description).
+  - **orchestration**: `InitiativeInterviewService` now adds a generic "the answers above include the
+    intake-form responses the stakeholder already provided — treat them as SETTLED, do NOT re-ask what
+    the form covers, build on them" steering line to the interviewer prompt when the preset form
+    actually seeded qa. The gate re-derives that from the SAME seeder the create flow ran (over the
+    frozen `presetInputs`), so it can never disagree with what was seeded: `preset_generic` (empty
+    form), a preset-less initiative, and a preset whose visible fields were all left blank never see
+    it, keeping their interviewer prompt unchanged. The interviewer digs into the fuzzy,
+    judgment-dependent aspects the form could not capture (downtime tolerance, data-migration
+    constraints, compat posture) rather than repeating the form.
+
+## 0.93.1
+
+### Patch Changes
+
+- Updated dependencies [89c861a]
+  - @cat-factory/agents@0.42.0
+  - @cat-factory/kernel@0.106.0
+  - @cat-factory/sandbox@0.9.29
+  - @cat-factory/caching@0.6.6
+  - @cat-factory/integrations@0.77.6
+  - @cat-factory/spend@0.11.12
+  - @cat-factory/workspaces@0.12.12
+
+## 0.93.0
+
+### Minor Changes
+
+- f7f9a9e: Technological-migration initiative — slice T2: phase-template ingest normalization.
+
+  The generic counterpart to T1's planner prompt fold: when an initiative preset declares a
+  `phaseTemplate`, the plan draft is now normalized against it at ingest, BEFORE the preset's own
+  `seedPlan` hook. This is plan-SHAPE enforcement only (which phases the plan presents, and in what
+  order) and stays deliberately separate from `seedPlan`'s per-item decoration.
+
+  - **orchestration**: new pure `normalizeDraftAgainstPhaseTemplate(template, draft)`
+    (`initiative.logic.ts`) — matches planned phases to template phases by `id` VERBATIM, reorders
+    them into template order (preserving the planner's `title`/`goal`), appends any extra phases
+    after the template ones when `allowAdditionalPhases` is set, and throws `ValidationError` on a
+    missing `required` phase or a disallowed extra (an id-less phase counts as an extra). Wired into
+    `InitiativeService.seedPlanDraft` ahead of the `seedPlan` hook and gated on the resolved preset's
+    `phaseTemplate`, so a preset with no template (including `preset_generic`) ingests byte-for-byte
+    as before. Pure + deterministic, so re-ingesting the same draft stays idempotent.
+  - **orchestration**: `validatePlanDraft` now also rejects a dependency that points FORWARD into a
+    later phase. Phases execute in declared order, so an earlier-phase item depending on a
+    later-phase one can never resolve and deadlocks the loop — a general invariant, but the T2 phase
+    reorder can turn a planner-consistent draft into a violating one, so it's caught loudly at the
+    ingest trust boundary instead of stalling silently at run time.
+  - **orchestration**: `seedPlanDraft` now RE-NORMALIZES the `seedPlan` hook's output against the
+    template (idempotent), symmetric with the existing re-parse-for-path-safety: a hook that touched
+    phases can no longer bypass the template's shape enforcement.
+  - **conformance**: `defineInitiativeSuite` now drives `InitiativeService.ingestPlan` over each
+    facade's real store — asserting an out-of-order plan is reordered into template order and
+    persisted, and a plan missing a required phase is rejected with nothing written — so the two
+    stores can't drift on a template-shaped plan.
+
+## 0.92.0
+
+### Minor Changes
+
+- b35e1a0: Technological-migration initiative — slice T1: preset phase templates (contract + planner prompt fold).
+
+  A generic, declarative capability that lets an initiative preset shape its plan's phase
+  structure; the migration preset (a later slice) is its first consumer, and `preset_generic`
+  declares no template and stays byte-for-byte free-form.
+
+  - **contracts**: `InitiativePresetDescriptor` gains an optional `phaseTemplate: { phases:
+[{ id, title, goal, required? }], allowAdditionalPhases? }`. `id`/`title`/`goal` reuse the exact
+    clamps of `initiativePhaseSchema` (so a template phase matches a planned phase by id); phase ids
+    must be unique and the array non-empty. Pure serialisable wire data (like `policyDefaults`), so
+    it rides the workspace snapshot and a future SPA create-time preview needs zero per-preset work.
+  - **kernel**: `AgentRunContext.initiative.preset` now carries an optional `phaseTemplate` and its
+    `promptAddition` is optional — a preset may contribute a template, steering, or both.
+  - **orchestration** (`AgentContextBuilder`): the preset-context resolver surfaces the descriptor's
+    `phaseTemplate` and returns the preset context when EITHER a per-kind `promptAddition` OR a
+    `phaseTemplate` is present (neither ⇒ absent, so the generic planning prompt is unchanged).
+  - **server** (planner prompt fold): when the resolved preset declares a template, the initiative
+    **planner** prompt renders a generic "Required plan shape" section — phase ids VERBATIM, titles,
+    goals, order, and whether extra phases are allowed. Generic code that never branches on a preset
+    id; no template ⇒ the free-form planner prompt is byte-for-byte today's, and the analyst prompt
+    (a prose step) never renders the plan shape.
+
+  Ingest normalization/enforcement of the template shape is the following slice (T2); this slice
+  lands the contract + the prompt fold only.
+
+### Patch Changes
+
+- Updated dependencies [2d97812]
+- Updated dependencies [b35e1a0]
+  - @cat-factory/agents@0.41.0
+  - @cat-factory/kernel@0.105.0
+  - @cat-factory/integrations@0.77.5
+  - @cat-factory/contracts@0.118.0
+  - @cat-factory/sandbox@0.9.28
+  - @cat-factory/caching@0.6.5
+  - @cat-factory/spend@0.11.11
+  - @cat-factory/workspaces@0.12.11
+  - @cat-factory/prompt-fragments@0.10.27
+
+## 0.91.1
+
+### Patch Changes
+
+- 8f7af8e: Make ephemeral-environment provisioning DETECTION more universal — so it adapts to repos that
+  follow different conventions than the stack-recipes pilot (different names, paths, tech stack). The
+  changes are additive in the sense that detection can only ever surface MORE — it never removes or
+  changes an existing detection, and a repo with no monorepo service-container dirs resolves exactly
+  as before. Note the one behavioural change below: the env-template scan now also looks one level into
+  `services/*`/`apps/*`/`packages/*`, so a monorepo that keeps per-service templates there will now
+  surface them as low-confidence, user-confirmed `recipe.envFiles` where it previously surfaced none.
+
+  - **Injectable detection conventions (deployment config).** A deployment can extend the built-in
+    compose file names/dirs, seed dirs, and env-template dirs via the `ENVIRONMENTS_DETECTION_CONVENTIONS`
+    JSON env var, threaded additively (built-ins always win; canonical compose names stay
+    highest-priority) through `CoreDependencies.detectionConventions` into BOTH the service-provisioning
+    detector (`EnvironmentConnectionService`) and the shared-stack detector (`SharedStackService`). New
+    `parseDetectionConventions` + `EnvironmentsConfig.detectionConventions` (`@cat-factory/server`,
+    parsed by both facades) and the exported `DetectionConventions` type (`@cat-factory/integrations`).
+  - **Env-template detection now scans one level into monorepo service-container dirs** (`services/*`,
+    `apps/*`, `packages/*`), so a per-service `*-dist`/`.example` template outside the compose dir (the
+    pilot's documented `services/app/` gap) is surfaced — still bounded by the existing read budget.
+    This is on by default (not gated behind conventions), so any monorepo with a compose file AND
+    per-service templates newly gets those as `recipe.envFiles`; they are low-confidence and confirmed
+    in the wizard before anything is materialized.
+  - **The environment setup wizard elevates the "run deep analysis" nudge** when a repo ships its own
+    imperative bring-up CLI/Makefile the deterministic scan can't read (`@cat-factory/app`), pointing the
+    user at the LLM analyst — the intended universality mechanism for stack-specific imperative steps.
+
+- Updated dependencies [8f7af8e]
+- Updated dependencies [8f7af8e]
+  - @cat-factory/integrations@0.77.4
+
 ## 0.91.0
 
 ### Minor Changes

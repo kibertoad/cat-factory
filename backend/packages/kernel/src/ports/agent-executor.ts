@@ -18,6 +18,7 @@ import type {
   TaskTypeFields,
   WebSearchAvailability,
 } from '../domain/types.js'
+import type { InitiativePresetPhaseTemplate } from '@cat-factory/contracts'
 
 // Port for "an agent doing its work". The execution engine calls this to perform
 // each pipeline step. An agent either produces a work product or asks for a
@@ -311,17 +312,19 @@ export interface AgentRunContext {
     qa?: { question: string; answer: string }[]
     analysisSummary?: string
     /**
-     * The initiative PRESET's planning-prompt steering for THIS step (slice 3), resolved by the
-     * engine from the entity's `presetId` against the registry: `label` names the preset and
-     * `promptAddition` is its per-agent-kind steering (already resolved for the running kind — the
-     * analyst/planner render it into their prompt). Present ONLY when the running kind has a
-     * `promptAddition`; the built-in generic preset registers none, so this stays absent and the
-     * generic planning prompt is byte-for-byte today's. (The frozen form is surfaced via `qa`, not
-     * here.)
+     * The initiative PRESET's planning steering for THIS step, resolved by the engine from the
+     * entity's `presetId` against the registry. `label` names the preset; `promptAddition` is its
+     * per-agent-kind steering text (already resolved for the running kind); `phaseTemplate` is the
+     * preset's declarative plan shape (slice T1), which the planner prompt fold renders as a
+     * "required plan shape" section. Present ONLY when the preset contributes at least one of these
+     * for the running kind — the built-in generic preset registers neither, so this stays absent
+     * and the generic planning prompt is byte-for-byte today's. (The frozen form is surfaced via
+     * `qa`, not here.)
      */
     preset?: {
       label: string
-      promptAddition: string
+      promptAddition?: string
+      phaseTemplate?: InitiativePresetPhaseTemplate
     }
   }
 }

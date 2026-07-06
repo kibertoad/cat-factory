@@ -1,5 +1,125 @@
 # @cat-factory/server
 
+## 0.99.5
+
+### Patch Changes
+
+- Updated dependencies [4a7fca0]
+  - @cat-factory/prompt-fragments@0.11.0
+  - @cat-factory/agents@0.43.1
+  - @cat-factory/orchestration@0.95.1
+
+## 0.99.4
+
+### Patch Changes
+
+- Updated dependencies [44fafa4]
+  - @cat-factory/orchestration@0.95.0
+  - @cat-factory/kernel@0.107.0
+  - @cat-factory/agents@0.43.0
+  - @cat-factory/integrations@0.77.7
+  - @cat-factory/spend@0.11.13
+
+## 0.99.3
+
+### Patch Changes
+
+- Updated dependencies [cd60892]
+  - @cat-factory/orchestration@0.94.0
+
+## 0.99.2
+
+### Patch Changes
+
+- Updated dependencies [89c861a]
+  - @cat-factory/agents@0.42.0
+  - @cat-factory/kernel@0.106.0
+  - @cat-factory/orchestration@0.93.1
+  - @cat-factory/integrations@0.77.6
+  - @cat-factory/spend@0.11.12
+
+## 0.99.1
+
+### Patch Changes
+
+- Updated dependencies [f7f9a9e]
+  - @cat-factory/orchestration@0.93.0
+
+## 0.99.0
+
+### Minor Changes
+
+- b35e1a0: Technological-migration initiative — slice T1: preset phase templates (contract + planner prompt fold).
+
+  A generic, declarative capability that lets an initiative preset shape its plan's phase
+  structure; the migration preset (a later slice) is its first consumer, and `preset_generic`
+  declares no template and stays byte-for-byte free-form.
+
+  - **contracts**: `InitiativePresetDescriptor` gains an optional `phaseTemplate: { phases:
+[{ id, title, goal, required? }], allowAdditionalPhases? }`. `id`/`title`/`goal` reuse the exact
+    clamps of `initiativePhaseSchema` (so a template phase matches a planned phase by id); phase ids
+    must be unique and the array non-empty. Pure serialisable wire data (like `policyDefaults`), so
+    it rides the workspace snapshot and a future SPA create-time preview needs zero per-preset work.
+  - **kernel**: `AgentRunContext.initiative.preset` now carries an optional `phaseTemplate` and its
+    `promptAddition` is optional — a preset may contribute a template, steering, or both.
+  - **orchestration** (`AgentContextBuilder`): the preset-context resolver surfaces the descriptor's
+    `phaseTemplate` and returns the preset context when EITHER a per-kind `promptAddition` OR a
+    `phaseTemplate` is present (neither ⇒ absent, so the generic planning prompt is unchanged).
+  - **server** (planner prompt fold): when the resolved preset declares a template, the initiative
+    **planner** prompt renders a generic "Required plan shape" section — phase ids VERBATIM, titles,
+    goals, order, and whether extra phases are allowed. Generic code that never branches on a preset
+    id; no template ⇒ the free-form planner prompt is byte-for-byte today's, and the analyst prompt
+    (a prose step) never renders the plan shape.
+
+  Ingest normalization/enforcement of the template shape is the following slice (T2); this slice
+  lands the contract + the prompt fold only.
+
+### Patch Changes
+
+- Updated dependencies [2d97812]
+- Updated dependencies [b35e1a0]
+  - @cat-factory/agents@0.41.0
+  - @cat-factory/kernel@0.105.0
+  - @cat-factory/integrations@0.77.5
+  - @cat-factory/contracts@0.118.0
+  - @cat-factory/orchestration@0.92.0
+  - @cat-factory/spend@0.11.11
+  - @cat-factory/prompt-fragments@0.10.27
+
+## 0.98.3
+
+### Patch Changes
+
+- 8f7af8e: Make ephemeral-environment provisioning DETECTION more universal — so it adapts to repos that
+  follow different conventions than the stack-recipes pilot (different names, paths, tech stack). The
+  changes are additive in the sense that detection can only ever surface MORE — it never removes or
+  changes an existing detection, and a repo with no monorepo service-container dirs resolves exactly
+  as before. Note the one behavioural change below: the env-template scan now also looks one level into
+  `services/*`/`apps/*`/`packages/*`, so a monorepo that keeps per-service templates there will now
+  surface them as low-confidence, user-confirmed `recipe.envFiles` where it previously surfaced none.
+
+  - **Injectable detection conventions (deployment config).** A deployment can extend the built-in
+    compose file names/dirs, seed dirs, and env-template dirs via the `ENVIRONMENTS_DETECTION_CONVENTIONS`
+    JSON env var, threaded additively (built-ins always win; canonical compose names stay
+    highest-priority) through `CoreDependencies.detectionConventions` into BOTH the service-provisioning
+    detector (`EnvironmentConnectionService`) and the shared-stack detector (`SharedStackService`). New
+    `parseDetectionConventions` + `EnvironmentsConfig.detectionConventions` (`@cat-factory/server`,
+    parsed by both facades) and the exported `DetectionConventions` type (`@cat-factory/integrations`).
+  - **Env-template detection now scans one level into monorepo service-container dirs** (`services/*`,
+    `apps/*`, `packages/*`), so a per-service `*-dist`/`.example` template outside the compose dir (the
+    pilot's documented `services/app/` gap) is surfaced — still bounded by the existing read budget.
+    This is on by default (not gated behind conventions), so any monorepo with a compose file AND
+    per-service templates newly gets those as `recipe.envFiles`; they are low-confidence and confirmed
+    in the wizard before anything is materialized.
+  - **The environment setup wizard elevates the "run deep analysis" nudge** when a repo ships its own
+    imperative bring-up CLI/Makefile the deterministic scan can't read (`@cat-factory/app`), pointing the
+    user at the LLM analyst — the intended universality mechanism for stack-specific imperative steps.
+
+- Updated dependencies [8f7af8e]
+- Updated dependencies [8f7af8e]
+  - @cat-factory/integrations@0.77.4
+  - @cat-factory/orchestration@0.91.1
+
 ## 0.98.2
 
 ### Patch Changes

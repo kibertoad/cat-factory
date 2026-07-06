@@ -923,6 +923,73 @@ function parseFrontendInfraSpec(o: Record<string, unknown>): FrontendInfraSpec {
   }
 }
 
+// ---- Inline job (POST /jobs, kind=inline) --------------------------------
+//
+// A ONE-SHOT, no-checkout LLM completion run through a subscription harness CLI
+// (Claude Code / Codex) on a leased subscription credential — the container analogue of
+// the local host-CLI inline runner. It exists so a deployment that can't run the ambient
+// CLI on the host (no `claude`/`codex` binary, or mothership mode) can still serve the
+// inline LLM steps (requirements reviewer, brainstorm, task-estimator, inline document
+// kinds) on a subscription model, at warm-pool latency. It clones NOTHING and pushes
+// NOTHING: the CLI runs in a throwaway temp cwd and only the completion text + token usage
+// come back. Auth is the SAME `HarnessAuthFields` the coding path uses (subscriptionToken +
+// optional subscriptionBaseUrl, or ambientAuth), so the credential-env setup is shared.
+
+/** The one-shot inline completion job. `harness` must be a subscription harness. */
+export interface InlineJob extends HarnessAuthFields {
+  jobId: string
+  /** Real vendor model id, e.g. `claude-opus-4-8` / `gpt-5.5-codex`. */
+  model: string
+  /** Composed role + best-practice fragments (Claude: `--append-system-prompt`; Codex: prepended). */
+  systemPrompt: string
+  /** The concrete task/user prompt fed to the CLI over stdin. */
+  userPrompt: string
+  /** Advisory output cap, forwarded for parity; the one-shot CLIs don't all honour it. */
+  maxOutputTokens?: number
+}
+
+/** The inline completion result: the reply text plus lifted token usage / per-call telemetry. */
+export interface InlineResult {
+  text: string
+  /** `length` when the model hit its output cap (the reviewer rejects a truncated doc). */
+  finishReason?: 'stop' | 'length'
+  usage?: { inputTokens: number; outputTokens: number }
+  /** Per-model-call telemetry lifted from the CLI stream (recorded into `llm_call_metrics`). */
+  callMetrics?: HarnessCallMetric[]
+  /** A structured failure marks a job-level failure even on a clean HTTP exit (see JobResultBase). */
+  error?: string
+}
+
+/**
+ * Validate + narrow an untrusted body into an {@link InlineJob}. The harness MUST be a
+ * subscription harness (`claude-code` / `codex`) — the inline path never runs Pi (that goes
+ * through the LLM proxy inline, not a container CLI). Reuses {@link parseHarnessAuth}, so a
+ * non-ambient job requires `subscriptionToken`.
+ */
+export function parseInlineJob(input: unknown): InlineJob {
+  if (typeof input !== 'object' || input === null) {
+    throw new Error('Invalid job: body must be an object')
+  }
+  const o = input as Record<string, unknown>
+  // Validate the harness FIRST (before parseHarnessAuth, whose `pi` branch demands a proxy
+  // base URL): the inline path only ever runs a subscription CLI, so a Pi/absent harness is a
+  // clear inline-specific rejection rather than a confusing "proxyBaseUrl required".
+  if (o.harness !== 'claude-code' && o.harness !== 'codex') {
+    throw new Error("Invalid inline job: 'harness' must be 'claude-code' or 'codex'")
+  }
+  const auth = parseHarnessAuth(o)
+  const maxOutputTokens = posInt(o.maxOutputTokens)
+  return {
+    jobId: str(o.jobId, 'jobId'),
+    model: str(o.model, 'model'),
+    // The system prompt is optional (an empty role is valid); the user prompt is required.
+    systemPrompt: typeof o.systemPrompt === 'string' ? o.systemPrompt : '',
+    userPrompt: str(o.userPrompt, 'userPrompt'),
+    ...auth,
+    ...(maxOutputTokens !== undefined ? { maxOutputTokens } : {}),
+  }
+}
+
 /** Validate + narrow an untrusted body into an {@link AgentJob}, throwing on bad input. */
 export function parseAgentJob(input: unknown): AgentJob {
   if (typeof input !== 'object' || input === null) {

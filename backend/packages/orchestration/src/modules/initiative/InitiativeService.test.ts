@@ -119,6 +119,30 @@ function registerDocsPreset() {
   })
 }
 
+const FULL_PRESET_ID = 'preset_test_migration'
+/** A FULL-interview preset with a form — its filled fields seed the qa for the interviewer (T3). */
+function registerFullPreset() {
+  registerInitiativePreset({
+    descriptor: {
+      id: FULL_PRESET_ID,
+      presentation: {
+        label: 'Technological migration',
+        icon: 'i-lucide-database',
+        color: '#000',
+        description: 'Swap a load-bearing technology behind a safety net.',
+      },
+      fields: [
+        { key: 'fromTech', label: 'From', type: 'text', required: true },
+        { key: 'toTech', label: 'To', type: 'text', required: true },
+      ],
+      planningPipelineId: 'pl_initiative',
+      interview: 'full',
+      humanReviewDefault: true,
+      defaultFragmentIds: [],
+    },
+  })
+}
+
 describe('InitiativeService.create — presets', () => {
   beforeEach(() => {
     idSeq = 0
@@ -201,6 +225,43 @@ describe('InitiativeService.create — presets', () => {
     ])
     // No human description ⇒ the goal is templated from the preset's stated purpose.
     expect(initiative.goal).toBe('Audit and refresh the service documentation.')
+  })
+
+  it('seeds the qa digest from the form for a FULL-interview preset (interviewer builds on it)', async () => {
+    registerFullPreset()
+    const { service } = makeService()
+    const { initiative } = await service.create('ws-1', {
+      frameId: frame.id,
+      title: 'Migrate DB',
+      description: '',
+      presetId: FULL_PRESET_ID,
+      presetInputs: { fromTech: 'MSSQL', toTech: 'PostgreSQL 16' },
+    })
+    // The full-interview form is folded into the qa (T3), so the interviewer starts from it rather
+    // than re-asking the enumerable facts the form already captured.
+    expect(initiative.qa).toEqual([
+      { id: expect.stringMatching(/^iqa-/), question: 'From', answer: 'MSSQL' },
+      { id: expect.stringMatching(/^iqa-/), question: 'To', answer: 'PostgreSQL 16' },
+    ])
+    // A full-interview preset does NOT template the goal from its description (the interviewer
+    // synthesizes it), so with no human description the goal stays blank until the interview converges.
+    expect(initiative.goal).toBe('')
+  })
+
+  it('a full-interview preset with no fields (preset_generic) seeds no qa and is unchanged', async () => {
+    // preset_generic is interview:'full' with an EMPTY form, so the T3 seeding is a no-op — its
+    // behaviour is byte-for-byte today's (empty qa, goal = the human description, no frozen inputs).
+    const { service } = makeService()
+    const { initiative } = await service.create('ws-1', {
+      frameId: frame.id,
+      title: 'Open-ended work',
+      description: 'the goal',
+      presetId: 'preset_generic',
+    })
+    expect(initiative.presetId).toBe('preset_generic')
+    expect(initiative.presetInputs).toBeUndefined()
+    expect(initiative.qa).toEqual([])
+    expect(initiative.goal).toBe('the goal')
   })
 
   it("a human description wins over the preset's templated goal", async () => {
@@ -359,5 +420,109 @@ describe('InitiativeService.ingestPlan — seedPlan (slice 5)', () => {
     }
 
     await expect(service.ingestPlan('ws-1', blockId, badDraft)).rejects.toThrow()
+  })
+})
+
+// The phase-template SHAPE step and the `seedPlan` DECORATION hook compose in `seedPlanDraft`:
+// normalize runs FIRST (so the hook sees template-ordered phases) and AGAIN over the hook's output
+// (so a hook can't bypass plan shape). Pins that ordering contract — it is invisible to the pure
+// normalizer's own unit tests and to the conformance suite (whose template preset has no seedPlan).
+describe('InitiativeService.ingestPlan — phase-template shaping ⨯ seedPlan (T2)', () => {
+  beforeEach(() => {
+    idSeq = 0
+    clockNow = 1_000
+    clearRegisteredInitiativePresets()
+  })
+  afterEach(() => clearRegisteredInitiativePresets())
+
+  const PRESET_ID = 'preset_template_seedplan'
+
+  /** Register a skip-interview preset with an exhaustive 3-phase template + an optional seedPlan. */
+  function registerTemplatePreset(seedPlan?: InitiativePresetRegistration['seedPlan']) {
+    registerInitiativePreset({
+      descriptor: {
+        id: PRESET_ID,
+        presentation: { label: 'Templated', icon: 'i', color: '#000', description: 'x' },
+        fields: [],
+        planningPipelineId: 'pl_initiative',
+        interview: 'skip',
+        humanReviewDefault: false,
+        defaultFragmentIds: [],
+        phaseTemplate: {
+          phases: [
+            { id: 'a', title: 'A', goal: '', required: true },
+            { id: 'b', title: 'B', goal: '', required: true },
+            { id: 'c', title: 'C', goal: '', required: true },
+          ],
+          allowAdditionalPhases: false,
+        },
+      },
+      seedPlan,
+    })
+  }
+
+  /** A planner draft carrying the given phase ids (each with one item), in the given order. */
+  const draftWith = (phaseIds: string[]) => ({
+    goal: 'g',
+    phases: phaseIds.map((id) => ({ id, title: `${id} title` })),
+    items: phaseIds.map((id) => ({ id: `i-${id}`, phaseId: id, title: id, description: '' })),
+    policy: { maxConcurrent: 2, defaultPipelineId: 'pl_full' },
+  })
+
+  async function seedInitiative(service: InitiativeService): Promise<string> {
+    const { block } = await service.create('ws-1', {
+      frameId: frame.id,
+      title: 'Seed',
+      description: '',
+      presetId: PRESET_ID,
+      presetInputs: {} as never,
+    })
+    return block.id
+  }
+
+  it('normalizes BEFORE running seedPlan (the hook sees template-ordered phases)', async () => {
+    let seenByHook: string[] = []
+    registerTemplatePreset((d) => {
+      seenByHook = d.phases.map((p) => p.id ?? '')
+      return d
+    })
+    const { service } = makeService()
+    const blockId = await seedInitiative(service)
+
+    const ingested = await service.ingestPlan('ws-1', blockId, draftWith(['c', 'a', 'b']))
+
+    // The hook observed the ALREADY-reordered phases (normalize ran first), and the persisted plan
+    // is in template order.
+    expect(seenByHook).toEqual(['a', 'b', 'c'])
+    expect(ingested!.phases!.map((p) => p.id)).toEqual(['a', 'b', 'c'])
+  })
+
+  it('re-normalizes seedPlan output so a hook that reorders phases cannot bypass the template', async () => {
+    // A misbehaving DECORATION hook shuffles phases out of template order; the re-normalization
+    // after seedPlan puts them back — the hook cannot defeat plan SHAPE enforcement.
+    registerTemplatePreset((d) => ({ ...d, phases: [...d.phases].reverse() }))
+    const { service } = makeService()
+    const blockId = await seedInitiative(service)
+
+    const ingested = await service.ingestPlan('ws-1', blockId, draftWith(['a', 'b', 'c']))
+
+    expect(ingested!.phases!.map((p) => p.id)).toEqual(['a', 'b', 'c'])
+  })
+
+  it('rejects a seedPlan that introduces a phase disallowed by an exhaustive template', async () => {
+    registerTemplatePreset((d) => ({
+      ...d,
+      phases: [...d.phases, { id: 'rogue', title: 'Rogue', goal: '' }],
+      items: [
+        ...d.items,
+        { id: 'i-rogue', phaseId: 'rogue', title: 'rogue', description: '', dependsOn: [] },
+      ],
+    }))
+    const { service } = makeService()
+    const blockId = await seedInitiative(service)
+
+    await expect(service.ingestPlan('ws-1', blockId, draftWith(['a', 'b', 'c']))).rejects.toThrow(
+      /not allowed by the preset's phase template/,
+    )
   })
 })

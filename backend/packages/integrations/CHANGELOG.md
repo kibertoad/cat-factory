@@ -1,5 +1,93 @@
 # @cat-factory/integrations
 
+## 0.77.7
+
+### Patch Changes
+
+- Updated dependencies [44fafa4]
+  - @cat-factory/kernel@0.107.0
+
+## 0.77.6
+
+### Patch Changes
+
+- Updated dependencies [89c861a]
+  - @cat-factory/kernel@0.106.0
+
+## 0.77.5
+
+### Patch Changes
+
+- 2d97812: Initiative presets — slice 6 (docs-refresh pilot): deterministic documentation-layout
+  autodetection.
+
+  - **agents** (`presets/docs-refresh/docs-detect.logic.ts`): a new pure `detectDocsLayout(reader)`
+    heuristic — the checkout-free repo probe behind the docs-refresh preset's form prefill (its
+    `detect` hook lands in slice 8). Over a narrow `DocsRepoReader` (a `RepoFiles` satisfies it
+    structurally) it proposes the preset's placement DEFAULTS without a clone: the docs root
+    (`docs`/`doc`/`documentation`), the diagrams + business-rules subfolders (known dir-name
+    heuristics under the detected root), a monorepo flag (workspace manifest / `package.json`
+    `workspaces` / conventional `packages`|`apps`|`services`|`libs` dirs), a `per-service` vs `root`
+    placement decision (sampled from whether most packages carry their own docs), and an
+    `hasExistingMermaid` hint for the analyst.
+  - Deterministic, memoized, bounded by a hard read budget, and TOTAL — it never throws and never
+    rejects, so an unwired GitHub / a partial or unreadable repo simply yields the conventional
+    defaults (a prefill must never block create). Detected values are non-binding FORM DEFAULTS; a
+    user edit wins and the analyst confirms placement at planning time.
+  - **kernel** (`shared/repo-scan.logic.ts`): extracts the checkout-free scan primitives the repo
+    auto-detectors share — `joinRepoPath` + the budgeted, memoized `BudgetedRepoScanner` (over a
+    `CheckoutFreeRepoReader`) — into one home, so a fix to path normalization / caching / budget
+    lands once instead of drifting across copies.
+  - **integrations**: the service-provisioning (`provision-detect`) and frontend-config
+    (`frontend-detect`) detectors now consume the shared kernel primitive instead of their own
+    private `joinPath` + `Scanner` copies — a behaviour-neutral refactor (the shared `exhausted`
+    uses the precise "a read was actually skipped" semantics both had converged toward).
+
+- Updated dependencies [2d97812]
+- Updated dependencies [b35e1a0]
+  - @cat-factory/kernel@0.105.0
+  - @cat-factory/contracts@0.118.0
+
+## 0.77.4
+
+### Patch Changes
+
+- 8f7af8e: Make ephemeral-environment provisioning DETECTION more universal — so it adapts to repos that
+  follow different conventions than the stack-recipes pilot (different names, paths, tech stack). The
+  changes are additive in the sense that detection can only ever surface MORE — it never removes or
+  changes an existing detection, and a repo with no monorepo service-container dirs resolves exactly
+  as before. Note the one behavioural change below: the env-template scan now also looks one level into
+  `services/*`/`apps/*`/`packages/*`, so a monorepo that keeps per-service templates there will now
+  surface them as low-confidence, user-confirmed `recipe.envFiles` where it previously surfaced none.
+
+  - **Injectable detection conventions (deployment config).** A deployment can extend the built-in
+    compose file names/dirs, seed dirs, and env-template dirs via the `ENVIRONMENTS_DETECTION_CONVENTIONS`
+    JSON env var, threaded additively (built-ins always win; canonical compose names stay
+    highest-priority) through `CoreDependencies.detectionConventions` into BOTH the service-provisioning
+    detector (`EnvironmentConnectionService`) and the shared-stack detector (`SharedStackService`). New
+    `parseDetectionConventions` + `EnvironmentsConfig.detectionConventions` (`@cat-factory/server`,
+    parsed by both facades) and the exported `DetectionConventions` type (`@cat-factory/integrations`).
+  - **Env-template detection now scans one level into monorepo service-container dirs** (`services/*`,
+    `apps/*`, `packages/*`), so a per-service `*-dist`/`.example` template outside the compose dir (the
+    pilot's documented `services/app/` gap) is surfaced — still bounded by the existing read budget.
+    This is on by default (not gated behind conventions), so any monorepo with a compose file AND
+    per-service templates newly gets those as `recipe.envFiles`; they are low-confidence and confirmed
+    in the wizard before anything is materialized.
+  - **The environment setup wizard elevates the "run deep analysis" nudge** when a repo ships its own
+    imperative bring-up CLI/Makefile the deterministic scan can't read (`@cat-factory/app`), pointing the
+    user at the LLM analyst — the intended universality mechanism for stack-specific imperative steps.
+
+- 8f7af8e: Stack-recipes-and-shared-stacks slice 9 (pilot): add the sanitized pilot fixtures, golden
+  detection tests, reference recipe/shared-stack configs, and the upstream-drift-alarm script
+  (`pilot:golden`) under `@cat-factory/integrations`. No runtime `dist` change — this pins the
+  deterministic provisioning detector's output against a faithful, sanitized snapshot of the
+  initiative's acceptance repos and doubles as an upstream-drift alarm.
+
+  Rename the pilot's placeholder consumer from `acme-main` to `acme-monolith` across the
+  fixtures, goldens, reference configs, tests, and docs (and the drift script's live-clone env
+  var `ACME_MAIN_DIR` → `ACME_MONOLITH_DIR`) for a clearer name; still fully sanitized, no
+  upstream names.
+
 ## 0.77.3
 
 ### Patch Changes
