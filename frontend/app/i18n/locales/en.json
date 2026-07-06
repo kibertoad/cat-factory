@@ -4397,10 +4397,12 @@
     "create": {
       "title": "Create initiative",
       "inFrame": "New initiative in {frame}",
+      "preset": "Type",
       "titleField": "Title",
       "titlePlaceholder": "e.g. Migrate the API to the new auth model",
       "goalField": "Goal",
       "goalPlaceholder": "Describe the goal, constraints and rough scope. The planner refines this into a multi-phase plan.",
+      "pathInvalid": "Enter a path inside the repository (no \"..\", absolute paths, or backslashes).",
       "hint": "Nothing runs yet: after creating, run the Initiative Planning pipeline on the block. It analyses the codebase and drafts the multi-phase plan for your approval.",
       "submit": "Create initiative",
       "failedTitle": "Could not create the initiative"

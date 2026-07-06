@@ -224,7 +224,7 @@ defaultFragmentIds, policyDefaults?: Partial<InitiativeExecutionPolicy>, probe? 
 | 1   | Preset contracts (`initiative-preset.ts`: fields incl. `checkbox-group`/`path`/`showWhen`, descriptor, inputs) + kernel `registerInitiativePreset` registry + `preset_generic` + entity/draft schema extensions (`presetId`/`presetInputs`/item `spawn`) | SYSTEM | ✅ done | #812   |
 | 2   | Per-run gate-override engine seam (`ExecutionService.start` override → run steps; loop threads `spawn.gates`) + conformance on both runtimes                                                                                                             | SYSTEM | ✅ done | #880   |
 | 3   | Create/planning integration: create validation + qa/goal seeding for skip-interview presets, probe endpoint, snapshot attach (both facades), `AgentContextBuilder` preset folds, SPA starts `descriptor.planningPipelineId`                              | SYSTEM | ✅ done | #883   |
-| 4   | SPA preset picker + generic descriptor form renderer (checkbox-group/path/showWhen) + probe prefill + i18n chrome                                                                                                                                        | SYSTEM | ⬜ todo |        |
+| 4   | SPA preset picker + generic descriptor form renderer (checkbox-group/path/showWhen) + probe prefill + i18n chrome                                                                                                                                        | SYSTEM | ✅ done | #885   |
 | 5   | Loop/ingest glue: `buildTaskBlock` spawn decoration, `seedPlan` invocation at ingest, path-safety validation, conformance round-trip                                                                                                                     | SYSTEM | ⬜ todo |        |
 | 6   | `docs-detect.logic.ts` (pure over `RepoFiles`) + unit tests (monorepo/root/dir-name heuristics, bounded budget, never-throw)                                                                                                                             | PILOT  | ⬜ todo |        |
 | 7   | New kinds `diagram-author` / `code-commenter` (prompts, presentation, doc-aware trait) + `pl_diagrams` / `pl_code_comments` / `pl_business_docs`                                                                                                         | PILOT  | ⬜ todo |        |
@@ -323,6 +323,26 @@ false` per step, so an override entry of `false` genuinely turns a pipeline gate
   valibot default), so code/test literals must supply them even though they're optional on the wire
   (InferInput). Slice 4's create call sends the InferInput shape (both optional); the service sees the
   defaulted output.
+- **[S4] The form renderer is a controlled component over the TYPED inputs.**
+  `InitiativePresetFields.vue` takes the descriptor + a `v-model` of `InitiativePresetInputs` and
+  keeps values typed (`checkbox-group` → `string[]`, `checkbox` → boolean, `number` → number, else
+  string), NOT the flat string map `ProviderConnectionTab` uses — so it feeds the shared
+  `validateInitiativePresetInputs`/`sanitizeInitiativePresetInputs` directly with no coercion. A
+  slice-8 field type outside this switch renders as a plain text input, so keep new field kinds to
+  the eight the contract declares (extend the contract picklist + this switch together).
+- **[S4] Defaults live in `defaultPresetInputs` (`utils/initiative.ts`), applied by the MODAL, not
+  the renderer.** The renderer is pure/stateless; the modal seeds defaults on open + preset-change,
+  then layers the probe prefill, then the user's edits. Only meaningful defaults are seeded (an
+  unchecked box / empty string / empty multi-select stays ABSENT), so the frozen inputs never carry
+  an empty value. A slice-8 `default`/`defaultValues` on a descriptor field is what surfaces here.
+- **[S4] The picker defaults to `preset_generic` and hides itself when only that preset exists**, so
+  a stock install is byte-for-byte today's form. The modal ALWAYS sends `presetId` (generic when
+  unpicked) — safe because the server always resolves `preset_generic`. When slice 8 registers
+  `preset_docs_refresh`, the picker appears (>1 preset) and its fields render with no modal change.
+- **[S4] Probe prefill is stale-guarded and best-effort.** The modal fires `probePreset` on
+  preset/frame selection behind a monotonic token and only merges detected values for KNOWN field
+  keys over the defaults; a slow response from a since-changed preset is discarded, and any error
+  degrades to `{}` (defaults) — the probe never blocks or clears the form.
 
 ## Out of scope
 

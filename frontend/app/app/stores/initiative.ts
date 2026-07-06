@@ -4,6 +4,7 @@ import type {
   Initiative,
   InitiativeExecutionPolicy,
   InitiativePresetDescriptor,
+  InitiativePresetInputs,
   PromoteInitiativeFollowUpInput,
   UpdateInitiativeItemInput,
 } from '~/types/domain'
@@ -99,8 +100,21 @@ export const useInitiativesStore = defineStore('initiatives', () => {
     byBlock.value = { ...byBlock.value, [initiative.blockId]: initiative }
   }
 
-  /** Create an initiative under a service frame (block + entity in one call). */
-  async function create(frameId: string, input: { title: string; description?: string }) {
+  /**
+   * Create an initiative under a service frame (block + entity in one call). `presetId` +
+   * `presetInputs` carry the create-form picker's selection; the server validates the inputs
+   * against the resolved descriptor and freezes their sanitized (known, visible) subset. Empty
+   * `presetInputs` is dropped so a preset with no form (the generic one) sends just its id.
+   */
+  async function create(
+    frameId: string,
+    input: {
+      title: string
+      description?: string
+      presetId?: string
+      presetInputs?: InitiativePresetInputs
+    },
+  ) {
     if (!workspace.workspaceId) throw new Error('No active workspace')
     creating.value = true
     try {
@@ -108,12 +122,31 @@ export const useInitiativesStore = defineStore('initiatives', () => {
         frameId,
         title: input.title,
         ...(input.description ? { description: input.description } : {}),
+        ...(input.presetId ? { presetId: input.presetId } : {}),
+        ...(input.presetInputs && Object.keys(input.presetInputs).length
+          ? { presetInputs: input.presetInputs }
+          : {}),
       })
       useBoardStore().upsert(created.block)
       upsert(created.initiative)
       return created
     } finally {
       creating.value = false
+    }
+  }
+
+  /**
+   * Run a preset's repo-detection PREFILL probe for a frame, returning the detected form values to
+   * seed the create form. Best-effort: an unwired GitHub / no linked repo / no `detect` hook yields
+   * `{}` (descriptor defaults) by contract, and any transport error degrades to `{}` — the probe
+   * never blocks create.
+   */
+  async function probePreset(presetId: string, frameId: string): Promise<InitiativePresetInputs> {
+    if (!workspace.workspaceId) return {}
+    try {
+      return await api.probeInitiativePreset(workspace.workspaceId, presetId, frameId)
+    } catch {
+      return {}
     }
   }
 
@@ -286,6 +319,7 @@ export const useInitiativesStore = defineStore('initiatives', () => {
     hydratePresets,
     upsert,
     create,
+    probePreset,
     load,
     answerQuestion,
     continuePlanning,
