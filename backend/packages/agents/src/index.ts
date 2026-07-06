@@ -163,6 +163,17 @@ export {
   CODE_COMMENTER_AGENT_KINDS,
   registerCodeCommenterAgent,
 } from './agents/kinds/code-commenter.js'
+// The Documentation-refresh initiative preset (initiative-presets slice 8), registered as a SIDE
+// EFFECT of importing this module (the `@cat-factory/gates` pattern) so the pilot preset is
+// available in every deployment with no per-facade wiring — the two runtimes cannot drift on it.
+// `detect` reuses slice 6's `detectDocsLayout`, `seedPlan` stamps per-item spawn decoration ONLY,
+// and `phaseTemplate` enforces the plan shape via the generic ingest normalizer (never `seedPlan`).
+export {
+  DOCS_REFRESH_PRESET_ID,
+  DOCS_REFRESH_PRESET,
+  registerDocsRefreshPreset,
+  docsReviewGates,
+} from './presets/docs-refresh/preset.js'
 // Per-`DocKind` document templates: the single source of truth for a kind's expected shape,
 // woven into the outliner/writer prompts and (later) read by the doc-quality gate. The
 // built-in `DOC_TEMPLATES` are the fallback; a deployment overrides via `registerDocTemplate`.
