@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import type { AgentState } from '~/types/domain'
+import type { AgentState, PipelineStep } from '~/types/domain'
 import { agentKindMeta } from '~/utils/catalog'
 import {
   subtaskIconClass,
@@ -63,6 +63,26 @@ const STATE_META: Record<AgentState, { color: string; icon: string }> = {
   done: { color: '#22c55e', icon: 'i-lucide-circle-check' },
 }
 
+// A reviewer gate (requirements-review / clarity-review) folding answers or re-reviewing in
+// the driver parks the step in `waiting_decision`, but it's actively doing background LLM
+// work and needs no human — so it must read as working (a spinning loader) rather than the
+// waiting-for-a-human question mark.
+function backgroundReview(s: PipelineStep) {
+  return reviews.isBackground(s.agentKind, props.taskId)
+}
+/** The state visual for a step's trailing status icon: failed cross for a mid-flight step on
+ *  a failed run, a spinning working loader for a reviewer gate mid background cycle, else the
+ *  plain per-state accent. */
+function stepVisual(s: PipelineStep) {
+  if (isFailedStep(s.state, runFailed.value)) return FAILED_STEP_META
+  if (backgroundReview(s)) return STATE_META.working
+  return STATE_META[s.state]
+}
+/** Whether that trailing icon should spin — a live `working` step or a background review. */
+function stepSpinning(s: PipelineStep) {
+  return !runFailed.value && (s.state === 'working' || backgroundReview(s))
+}
+
 // Same todo-status icons the bootstrap card uses, so a zoomed-in task reads the
 // same way as a zoomed-in bootstrap.
 const ITEM_ICON: Record<string, string> = {
@@ -106,16 +126,10 @@ const ITEM_ICON: Record<string, string> = {
         </span>
         <UIcon
           v-else
-          :name="
-            isFailedStep(s.state, runFailed) ? FAILED_STEP_META.icon : STATE_META[s.state].icon
-          "
+          :name="stepVisual(s).icon"
           class="ms-auto h-2.5 w-2.5 shrink-0"
-          :class="s.state === 'working' && !runFailed ? 'animate-spin' : ''"
-          :style="{
-            color: isFailedStep(s.state, runFailed)
-              ? FAILED_STEP_META.color
-              : STATE_META[s.state].color,
-          }"
+          :class="stepSpinning(s) ? 'animate-spin' : ''"
+          :style="{ color: stepVisual(s).color }"
         />
       </button>
 
