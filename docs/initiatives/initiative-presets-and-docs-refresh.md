@@ -468,18 +468,24 @@ false` per step, so an override entry of `false` genuinely turns a pipeline gate
   "review" gate is on each produced doc PR, not the plan: `seedPlan` reads the frozen
   `presetInputs.humanReview` and emits `spawn.gates` (threaded by the loop through the slice-2 seam).
   The pure `docsReviewGates(pipelineId, humanReview)` emits the FULL per-pipeline boolean array (the
-  [S2] whole-array rule) with the gate at the pipeline's review point — `doc-reviewer` for
-  `pl_document_quick`, `merger` for the lean author→conflicts→ci→merger pipelines that have no
-  reviewer. A `preset.test.ts` drift-guard pins each array length to the seed pipeline's `agentKinds`
-  (a mismatch would fail the spawn's `ExecutionService.start` length check).
-- **[S8] Placement that can't ride the `.md`-only `taskTypeFields.targetPath` goes in the item
-  DESCRIPTION, not `targetPath`.** `targetPath` is `.md`-only (`isSafeDocPath`) and single-file, so
-  only single-file writers get one: `diagrams` (derived `<diagramsDir>/<slug>.md`) and `foundations`
-  (derived `<docsRoot>/<slug>.md`) by `seedPlan`, `readme` planner-authored (beside the code) and
-  preserved. `code-commenter`'s scope is a module DIR and `business-documenter` writes MANY docs under
-  a dir — neither fits a single `.md`, so the placement dir is named in the planner-authored
-  description (steered by the promptAdditions), and those items carry NO `targetPath`. (This means
-  `code-commenter`'s S7 `targetPath` reader is dormant for docs-refresh — expected.)
+  [S2] whole-array rule), gating the **`merger`** step so the human reviews the CI-green PR right
+  before it merges — the same review point for every doc pipeline, matching the form's "review each
+  documentation change before it merges" promise (NOT a mid-pipeline `doc-reviewer` gate that would
+  still auto-merge afterwards). The placement is DERIVED from the pipeline's `agentKinds` (the
+  `merger` index), so the override is parallel to the pipeline by construction rather than a
+  hand-maintained array — a `preset.test.ts` guard asserts exactly one `true`, on the merge step,
+  length-matched to `agentKinds` (a mismatch would fail the spawn's `ExecutionService.start` check).
+- **[S8] Only a DERIVABLE single-file `.md` path gets a `targetPath`; everything else is placed
+  from the item DESCRIPTION.** `targetPath` is `.md`-only (`isSafeDocPath`) and single-file, and —
+  crucially — `seedPlan` can only ever set a path it DERIVES itself, because the planner's structured
+  output has no `spawn` field (`INITIATIVE_PLANNER_SYSTEM_PROMPT`) so `coerceInitiativePlan` never
+  carries a planner-authored path through to the hook. So `seedPlan` derives `<docsRoot>/<slug>.md`
+  for `foundations` and `<diagramsDir>/<slug>.md` for `diagrams` (each **deduplicated** via
+  `uniqueDocPath`, so two same-slug titles never collide on one file). `readme` (its per-service path
+  is beside the code — un-derivable here), `code-commenter` (a module DIR) and `business-documenter`
+  (MANY docs under a dir) all name their placement in the planner-authored DESCRIPTION and carry NO
+  `targetPath` — the writer places them. (So `code-commenter`'s S7 `targetPath` reader is dormant for
+  docs-refresh — expected.)
 - **[S8] Diagrams reuse `doc-writer` with `docKind: 'other'` — no new `diagrams` DocKind.** Adding a
   `diagrams` value to `DOC_KINDS` (contracts) would ripple into the frontend doc-kind labels + the
   i18n locale-parity gate for no real gain. The inter-phase note's "or `other`" path is taken: the

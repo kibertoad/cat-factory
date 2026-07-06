@@ -124,8 +124,9 @@ function draftFixture(): InitiativePlanDraft {
         id: 'r1',
         phaseId: 'readme',
         title: 'Auth service README',
-        // A README's path is planner-authored (beside the code); seedPlan preserves it.
-        spawn: { taskTypeFields: { targetPath: 'services/auth/README.md' } },
+        // A README is writer-placed (its per-service path lives in the description). Any OTHER
+        // planner-authored spawn field (here an agentConfig) must survive seedPlan's decoration.
+        spawn: { agentConfig: { 'playwright.e2eTarget': 'ci' } },
       },
       { id: 'd1', phaseId: 'diagrams', title: 'Billing architecture' },
       { id: 'c1', phaseId: 'comments', title: 'Comment the scheduler module' },
@@ -169,8 +170,12 @@ describe('preset_docs_refresh — seedPlan (spawn decoration)', () => {
     expect(items.get('d1')?.spawn?.taskTypeFields?.targetPath).toBe(
       'docs/diagrams/billing-architecture.md',
     )
-    // README → the planner-authored path is preserved.
-    expect(items.get('r1')?.spawn?.taskTypeFields?.targetPath).toBe('services/auth/README.md')
+    // README → a document task, docKind `reference`, but NO derived target path (writer-placed
+    // beside the code from the description); the planner-authored agentConfig is preserved.
+    expect(items.get('r1')?.spawn?.taskType).toBe('document')
+    expect(items.get('r1')?.spawn?.taskTypeFields?.docKind).toBe('reference')
+    expect(items.get('r1')?.spawn?.taskTypeFields?.targetPath).toBeUndefined()
+    expect(items.get('r1')?.spawn?.agentConfig).toEqual({ 'playwright.e2eTarget': 'ci' })
     // Comments → code edit, NOT a document task, and no `.md` target path.
     expect(items.get('c1')?.spawn?.taskType).toBeUndefined()
     expect(items.get('c1')?.spawn?.taskTypeFields).toBeUndefined()
@@ -191,13 +196,27 @@ describe('preset_docs_refresh — seedPlan (spawn decoration)', () => {
     }
   })
 
-  it('gates the review point of each pipeline when human review is on', () => {
+  it('gates the merge step of each pipeline when human review is on', () => {
     const items = new Map(seed({ ...FULL_INPUTS, humanReview: true }).items.map((i) => [i.id, i]))
-    // pl_document_quick: gate the converged doc-reviewer (index 1 of 6).
-    expect(items.get('d1')?.spawn?.gates).toEqual([false, true, false, false, false, false])
-    // Lean author→conflicts→ci→merger pipelines: gate the merge (index 3 of 4).
+    // Every doc pipeline is gated at its `merger` (review the CI-green PR before it merges).
+    // pl_document_quick: [doc-writer, doc-reviewer, doc-quality, conflicts, ci, merger] — index 5.
+    expect(items.get('d1')?.spawn?.gates).toEqual([false, false, false, false, false, true])
+    // Lean author→conflicts→ci→merger pipelines: merger at index 3.
     expect(items.get('c1')?.spawn?.gates).toEqual([false, false, false, true])
     expect(items.get('b1')?.spawn?.gates).toEqual([false, false, false, true])
+  })
+
+  it('gives two same-title items distinct derived target paths (no file collision)', () => {
+    const draft = draftFixture()
+    // Two diagram items whose titles slug identically must not both stamp the same `.md` path.
+    draft.items.push(
+      { id: 'd2', phaseId: 'diagrams', title: 'Billing architecture', description: '', dependsOn: [] },
+      { id: 'd3', phaseId: 'diagrams', title: 'Billing Architecture!', description: '', dependsOn: [] },
+    )
+    const items = new Map(parseInitiativePlanDraft(preset.seedPlan!(draft, FULL_INPUTS)).items.map((i) => [i.id, i]))
+    const paths = ['d1', 'd2', 'd3'].map((id) => items.get(id)?.spawn?.taskTypeFields?.targetPath)
+    expect(new Set(paths).size).toBe(3)
+    expect(paths[0]).toBe('docs/diagrams/billing-architecture.md')
   })
 
   it('never touches the plan phases (shape is the template’s job, not seedPlan’s)', () => {
@@ -220,16 +239,22 @@ describe('preset_docs_refresh — seedPlan (spawn decoration)', () => {
   })
 })
 
-describe('preset_docs_refresh — gate-override length matches the spawned pipelines', () => {
-  // Guard the hardcoded `docsReviewGates` arrays against pipeline-shape drift: a full gate override
-  // must be parallel to its pipeline's `agentKinds` (ExecutionService.start rejects a mismatch).
-  const lengthOf = (id: string): number =>
-    seedPipelines().find((p) => p.id === id)?.agentKinds.length ?? -1
+describe('preset_docs_refresh — gate-override matches the spawned pipelines', () => {
+  // `docsReviewGates` derives the override from each pipeline's `agentKinds`, so the array is
+  // parallel to the pipeline by construction (ExecutionService.start rejects a length mismatch) and
+  // the single `true` sits on the merge step.
+  const kindsOf = (id: string): readonly string[] =>
+    seedPipelines().find((p) => p.id === id)?.agentKinds ?? []
 
   it.each([DOCUMENT_QUICK_PIPELINE_ID, CODE_COMMENTS_PIPELINE_ID, BUSINESS_DOCS_PIPELINE_ID])(
-    'matches %s',
+    'gates the merge step of %s',
     (pipelineId) => {
-      expect(docsReviewGates(pipelineId, true)?.length).toBe(lengthOf(pipelineId))
+      const kinds = kindsOf(pipelineId)
+      const gates = docsReviewGates(pipelineId, true)
+      expect(gates?.length).toBe(kinds.length)
+      // Exactly one gate, on the pipeline's `merger` step.
+      expect(gates?.filter(Boolean)).toHaveLength(1)
+      expect(gates?.[kinds.lastIndexOf('merger')]).toBe(true)
     },
   )
 
