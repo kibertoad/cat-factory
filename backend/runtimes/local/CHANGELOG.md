@@ -1,5 +1,15 @@
 # @cat-factory/local-server
 
+## 0.59.1
+
+### Patch Changes
+
+- @cat-factory/agents@0.43.1
+- @cat-factory/orchestration@0.95.1
+- @cat-factory/server@0.99.5
+- @cat-factory/node-server@0.86.1
+- @cat-factory/executor-harness@1.37.0
+
 ## 0.59.0
 
 ### Minor Changes

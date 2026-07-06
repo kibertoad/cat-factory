@@ -1,5 +1,12 @@
 # @cat-factory/agents
 
+## 0.43.1
+
+### Patch Changes
+
+- Updated dependencies [4a7fca0]
+  - @cat-factory/prompt-fragments@0.11.0
+
 ## 0.43.0
 
 ### Minor Changes

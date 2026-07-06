@@ -1,5 +1,14 @@
 # @cat-factory/orchestration
 
+## 0.95.1
+
+### Patch Changes
+
+- Updated dependencies [4a7fca0]
+  - @cat-factory/prompt-fragments@0.11.0
+  - @cat-factory/agents@0.43.1
+  - @cat-factory/sandbox@0.9.31
+
 ## 0.95.0
 
 ### Minor Changes
