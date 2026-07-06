@@ -1729,7 +1729,7 @@
         "remote-kubernetes": "Uzak Kubernetes"
       },
       "kubernetesEngine": {
-        "localK3sHint": "Bu makinedeki yerel bir k3s/k3d/kind kümesi için önceden dolduruldu. Bir ServiceAccount'u bir role bağlayın, `kubectl create token NAME -n NAMESPACE` (Kubernetes 1.24+) ile token'ını oluşturun ve aşağıya yapıştırın. Ardından ortam URL'sinin nasıl türetileceğini seçin ve kümeniz farklı bir bağlantı noktasını dinliyorsa API sunucu URL'sini düzenleyin.",
+        "localK3sHint": "Bu makinedeki yerel bir k3s/k3d/kind kümesi için önceden dolduruldu. Bir ServiceAccount'u bir role bağlayın ve aşağıya uzun ömürlü bir token yapıştırın. Düz bir `kubectl create token NAME -n NAMESPACE` token'ının 1 saatte sona erdiğini unutmayın: daha uzun ömür için `--duration=720h` ekleyin veya süresi dolmayan bir kubernetes.io/service-account-token Secret oluşturup okuyun. Ardından ortam URL'sinin nasıl türetileceğini seçin ve kümeniz farklı bir bağlantı noktasını dinliyorsa API sunucu URL'sini düzenleyin.",
         "autoSetup": {
           "title": "CLI ile otomatik kurulum",
           "description": "Yerel bir kümeyi algılamak veya sağlamak, bir ServiceAccount belirteci oluşturmak ve bu formu önceden doldurulmuş olarak açmak için bunu terminalinizde çalıştırın. Yazdırdığı belirteci yapıştırın, ardından Test edin ve Kaydedin."

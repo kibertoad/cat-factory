@@ -1729,7 +1729,7 @@
         "remote-kubernetes": "リモート Kubernetes"
       },
       "kubernetesEngine": {
-        "localK3sHint": "このマシン上のローカル k3s/k3d/kind クラスター向けにあらかじめ入力されています。ServiceAccount をロールにバインドし、`kubectl create token NAME -n NAMESPACE`（Kubernetes 1.24 以降）でトークンを発行して下記に貼り付けてください。その後、環境 URL の導出方法を選択し、クラスターが別のポートで待ち受けている場合は API サーバー URL を編集してください。",
+        "localK3sHint": "このマシン上のローカル k3s/k3d/kind クラスター向けにあらかじめ入力されています。ServiceAccount をロールにバインドし、長期間有効なトークンを下記に貼り付けてください。通常の `kubectl create token NAME -n NAMESPACE` のトークンは1時間で失効する点に注意してください。より長くするには `--duration=720h` を付け、失効しないトークンが必要な場合は kubernetes.io/service-account-token の Secret を作成して読み取ってください。その後、環境 URL の導出方法を選択し、クラスターが別のポートで待ち受けている場合は API サーバー URL を編集してください。",
         "autoSetup": {
           "title": "CLI による自動セットアップ",
           "description": "これをターミナルで実行すると、ローカルクラスターを検出またはプロビジョニングし、ServiceAccount トークンを生成して、このフォームを事前入力した状態で開きます。表示されたトークンを貼り付けてから、テストして保存してください。"

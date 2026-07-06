@@ -115,6 +115,60 @@ export function apiBase(config: { apiServerUrl: string }): string {
   return config.apiServerUrl.trim().replace(/\/+$/, '')
 }
 
+/**
+ * Turn a FAILED apiserver connection-test response into a human-readable, ACTIONABLE
+ * message for the connect form (rendered verbatim). Shared by the Kubernetes runner +
+ * environment `testConnection`s so the two can't drift.
+ *
+ * The two verdicts worth explaining are the auth ones — their raw body
+ * (`{"kind":"Status",...,"message":"Unauthorized"}`) tells the operator nothing about what to
+ * DO, and on a local k3s/k3d/kind cluster a 401 is by far the most common way a connection that
+ * "used to work" stops working:
+ *
+ * - **401 Unauthorized** — the apiserver could not AUTHENTICATE the token (distinct from 403,
+ *   which authenticates then denies on RBAC). The token is expired or the cluster no longer
+ *   recognises it. Two "worked before, now 401" causes dominate on a local cluster: (a) the token
+ *   aged out — a `kubectl create token` token is time-bound (default 1 hour) — and (b) the cluster
+ *   was recreated/reinstalled, which rotates the ServiceAccount token-signing keypair and
+ *   invalidates EVERY previously-issued token. A plain restart of a persistent cluster does NOT
+ *   rotate those keys, so it doesn't invalidate tokens. Either way the fix is: mint a fresh token
+ *   and paste it in.
+ * - **403 Forbidden** — the token authenticated but the ServiceAccount lacks the RBAC for the
+ *   probe (`operation`). Grant the role and re-test.
+ *
+ * Any other status keeps the raw `apiserver responded <status>: <body>` shape (an unexpected
+ * apiserver error the operator wants verbatim).
+ */
+export function apiServerConnectionFailureMessage(
+  status: number,
+  body: string,
+  ctx: { operation: string; namespace?: string },
+): string {
+  if (status === 401) {
+    const ns = ctx.namespace ?? '<namespace>'
+    return (
+      'The apiserver rejected the ServiceAccount token (401 Unauthorized) — an authentication ' +
+      'failure (the token is expired or no longer recognised by the cluster), not an RBAC one. ' +
+      'If this worked before, on a local k3s/k3d/kind cluster it is usually because the token ' +
+      'aged out (a `kubectl create token` token is short-lived — default 1 hour) or the cluster ' +
+      'was recreated/reinstalled, which rotates its token-signing keys and invalidates every ' +
+      'earlier token (a plain restart does not). Mint a fresh token and paste it into the token ' +
+      `field, then test again: \`kubectl create token <serviceaccount> -n ${ns}\` (add ` +
+      '`--duration=720h`, or create a long-lived kubernetes.io/service-account-token Secret, for ' +
+      'a token that does not expire in an hour).'
+    )
+  }
+  if (status === 403) {
+    return (
+      `The apiserver authenticated the token but denied the request (403 Forbidden): the ` +
+      `ServiceAccount is not allowed to ${ctx.operation}` +
+      (ctx.namespace ? ` in namespace '${ctx.namespace}'` : '') +
+      `. Bind it to a Role/ClusterRole granting that access, then test again. Details: ${body}`
+    )
+  }
+  return `apiserver responded ${status}: ${body}`
+}
+
 /** Collection URL for pods in the configured namespace. */
 export function podsUrl(config: KubernetesRunnerConfig): string {
   return `${apiBase(config)}/api/v1/namespaces/${config.namespace}/pods`

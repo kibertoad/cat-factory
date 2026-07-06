@@ -1778,7 +1778,7 @@
         "remote-kubernetes": "Remote Kubernetes"
       },
       "kubernetesEngine": {
-        "localK3sHint": "Prefilled for a local k3s/k3d/kind cluster on this machine. Bind a ServiceAccount to a role, mint its token with `kubectl create token NAME -n NAMESPACE` (Kubernetes 1.24+), and paste it below. Then choose how the environment URL is derived, and edit the API server URL if your cluster listens on a different port.",
+        "localK3sHint": "Prefilled for a local k3s/k3d/kind cluster on this machine. Bind a ServiceAccount to a role and paste a long-lived token below. Note a plain `kubectl create token NAME -n NAMESPACE` token expires in 1 hour: add `--duration=720h` for longer, or create a non-expiring kubernetes.io/service-account-token Secret and read it back. Then choose how the environment URL is derived, and edit the API server URL if your cluster listens on a different port.",
         "autoSetup": {
           "title": "Auto-setup with the CLI",
           "description": "Run this in your terminal to probe or provision a local cluster, mint a ServiceAccount token, and open this form pre-filled. Paste the token it prints, then Test and Save."

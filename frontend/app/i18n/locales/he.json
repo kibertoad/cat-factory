@@ -1728,7 +1728,7 @@
         "remote-kubernetes": "Kubernetes מרוחק"
       },
       "kubernetesEngine": {
-        "localK3sHint": "מולא מראש עבור אשכול k3s/k3d/kind מקומי במחשב הזה. קשרו ServiceAccount לתפקיד, הנפיקו עבורו token באמצעות `kubectl create token NAME -n NAMESPACE` (Kubernetes 1.24+) והדביקו אותו למטה. לאחר מכן בחרו כיצד נגזרת כתובת ה-URL של הסביבה, וערכו את כתובת ה-API server אם האשכול שלכם מאזין ביציאה אחרת.",
+        "localK3sHint": "מולא מראש עבור אשכול k3s/k3d/kind מקומי במחשב הזה. קשרו ServiceAccount לתפקיד והדביקו למטה token בעל תוקף ארוך. שימו לב ש-token רגיל מ-`kubectl create token NAME -n NAMESPACE` פג תוקף לאחר שעה אחת: הוסיפו `--duration=720h` לתוקף ארוך יותר, או צרו Secret מסוג kubernetes.io/service-account-token שאינו פג וקראו אותו. לאחר מכן בחרו כיצד נגזרת כתובת ה-URL של הסביבה, וערכו את כתובת ה-API server אם האשכול שלכם מאזין ביציאה אחרת.",
         "autoSetup": {
           "title": "הגדרה אוטומטית באמצעות ה-CLI",
           "description": "הרץ זאת בטרמינל כדי לזהות או להקצות אשכול מקומי, ליצור אסימון ServiceAccount ולפתוח טופס זה כשהוא ממולא מראש. הדבק את האסימון המוצג, ולאחר מכן בצע בדיקה ושמירה."

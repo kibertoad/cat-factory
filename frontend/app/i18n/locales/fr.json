@@ -2277,7 +2277,7 @@
         "remote-kubernetes": "Kubernetes distant"
       },
       "kubernetesEngine": {
-        "localK3sHint": "Prérempli pour un cluster local k3s/k3d/kind sur cette machine. Liez un ServiceAccount à un rôle, générez son token avec `kubectl create token NAME -n NAMESPACE` (Kubernetes 1.24+) et collez-le ci-dessous. Choisissez ensuite comment l'URL de l'environnement est dérivée, et modifiez l'URL de l'API server si votre cluster écoute sur un autre port.",
+        "localK3sHint": "Prérempli pour un cluster local k3s/k3d/kind sur cette machine. Liez un ServiceAccount à un rôle et collez ci-dessous un token de longue durée. Notez qu'un token `kubectl create token NAME -n NAMESPACE` simple expire au bout d'1 heure : ajoutez `--duration=720h` pour prolonger sa durée, ou créez un Secret kubernetes.io/service-account-token qui n'expire pas et relisez-le. Choisissez ensuite comment l'URL de l'environnement est dérivée, et modifiez l'URL de l'API server si votre cluster écoute sur un autre port.",
         "autoSetup": {
           "title": "Configuration automatique avec la CLI",
           "description": "Exécutez-le dans votre terminal pour détecter ou provisionner un cluster local, générer un jeton de ServiceAccount et ouvrir ce formulaire prérempli. Collez le jeton affiché, puis cliquez sur Tester et Enregistrer."
