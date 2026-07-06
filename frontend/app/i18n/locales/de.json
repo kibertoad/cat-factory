@@ -734,6 +734,65 @@
         "title": "Diesen Runner entfernen?",
         "body": "\"{name}\" wird entfernt. Dies kann nicht rückgängig gemacht werden."
       }
+    },
+    "modelPolicy": {
+      "title": "Model access policy",
+      "description": "Restrict which model families this account’s teams can run. Data-residency risk depends on the serving route, so a trusted (residency-guaranteed) route can exempt an otherwise-blocked family.",
+      "regionLabel": "Operating region",
+      "applyPreset": "Apply preset:",
+      "modeLabel": "Policy mode",
+      "modes": {
+        "off": "No restriction",
+        "blocklist": "Block listed families",
+        "allowlist": "Allow only listed families"
+      },
+      "familiesBlockLabel": "Blocked families",
+      "familiesAllowLabel": "Allowed families",
+      "trustedLabel": "Trusted (residency-guaranteed) routes",
+      "trustedHint": "A blocked family stays available when it is served over one of these routes.",
+      "families": {
+        "claude": "Claude (Anthropic)",
+        "openai": "OpenAI / ChatGPT",
+        "gemini": "Gemini (Google)",
+        "llama": "Llama (Meta)",
+        "qwen": "Qwen (Alibaba)",
+        "kimi": "Kimi (Moonshot)",
+        "deepseek": "DeepSeek",
+        "glm": "GLM (Z.ai)"
+      },
+      "regions": {
+        "usa": "United States",
+        "europe": "Europe",
+        "china": "China",
+        "other": "Other"
+      },
+      "providers": {
+        "bedrock": "AWS Bedrock"
+      },
+      "presets": {
+        "us-block-cn": {
+          "label": "Block China-hosted families",
+          "description": "Block DeepSeek, Qwen, Kimi and GLM; allow them only over a residency-guaranteed route (e.g. Bedrock)."
+        },
+        "eu-block-cn": {
+          "label": "EU: block China-hosted families",
+          "description": "Block DeepSeek, Qwen, Kimi and GLM; a residency-guaranteed EU route (e.g. Bedrock) stays allowed."
+        },
+        "eu-guaranteed-only": {
+          "label": "EU: residency-guaranteed routes only",
+          "description": "Allow a model only when it is served over a residency-guaranteed route."
+        },
+        "cn-prefer-domestic": {
+          "label": "Prefer China-hosted families",
+          "description": "Allow China-hosted families (plus Llama) and any residency-guaranteed route."
+        },
+        "other-block-cn": {
+          "label": "Block China-hosted families",
+          "description": "Block DeepSeek, Qwen, Kimi and GLM; allow them only over a residency-guaranteed route."
+        }
+      },
+      "saved": "Model access policy saved",
+      "saveFailed": "Could not save the model access policy"
     }
   },
   "inspector": {
@@ -3580,6 +3639,8 @@
         "provision_type_unhandled": "Kein Handler für diesen Bereitstellungstyp",
         "preset_unsatisfiable": "Modell-Preset kann diese Pipeline nicht ausführen",
         "visual_pipeline_no_frontend": "Kein Frontend zum Testen",
+        "model_policy_blocked": "Model blocked by account policy",
+        "model_policy_unsupported": "Model policy not available here",
         "deployer_required_before_tester": "Füge einen Deployer vor dem Tester hinzu"
       },
       "fallbackMessage": "Diese Aktion steht im Konflikt mit dem aktuellen Zustand.",

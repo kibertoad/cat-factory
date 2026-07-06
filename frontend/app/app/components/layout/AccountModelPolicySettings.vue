@@ -58,9 +58,9 @@ const modeLabels = computed<Record<ModelPolicyMode, string>>(() => ({
   blocklist: t('settings.modelPolicy.modes.blocklist'),
   allowlist: t('settings.modelPolicy.modes.allowlist'),
 }))
-const providerLabels: Record<(typeof TRUSTED_PROVIDERS)[number], string> = {
+const providerLabels = computed<Record<(typeof TRUSTED_PROVIDERS)[number], string>>(() => ({
   bedrock: t('settings.modelPolicy.providers.bedrock'),
-}
+}))
 
 const modeItems = computed(() => MODES.map((m) => ({ label: modeLabels.value[m], value: m })))
 const regionItems = computed(() => REGIONS.map((r) => ({ label: regionLabels.value[r], value: r })))
