@@ -106,6 +106,15 @@ export function applyLocalDefaults(env: NodeJS.ProcessEnv): NodeJS.ProcessEnv {
       : {
           WEB_SEARCH_SEARXNG_URL: env.WEB_SEARCH_SEARXNG_URL?.trim() || DEFAULT_LOCAL_SEARXNG_URL,
         }),
+    // Label this deployment as the `local` environment. It stays non-production (so the
+    // auth gate may default open, below), and it makes `@cat-factory/server`'s CORS policy
+    // REFLECT the requesting origin when `CORS_ALLOWED_ORIGINS` is unset (`local` is a
+    // recognised development value in `corsReflectsWhenUnset`). Without this the server
+    // default-DENIES CORS on an unset allow-list, so the SPA on :3000 fails with "blocked by
+    // CORS policy / can't reach backend" — a no-brainer for a single-developer local box.
+    // Auth is a bearer header (credentials mode off), so reflecting any origin here is safe.
+    // Set `CORS_ALLOWED_ORIGINS` to pin specific origins, or `ENVIRONMENT` to override.
+    ENVIRONMENT: env.ENVIRONMENT?.trim() || 'local',
     // `|| 'true'` (not `??`) so an explicit empty `AUTH_DEV_OPEN=` still defaults open,
     // consistent with the other fields here; set `AUTH_DEV_OPEN=false` to close the gate.
     // devOpen keeps the API open for unauthenticated reads (and the test harness), but a
@@ -133,12 +142,11 @@ export function applyLocalDefaults(env: NodeJS.ProcessEnv): NodeJS.ProcessEnv {
     // alias routes back to this service on the host. The docker-family transport
     // publishes that alias on Linux via `--add-host=<alias>:host-gateway`.
     PUBLIC_URL: env.PUBLIC_URL?.trim() || `http://${hostAlias}:${port}`,
-    // Assemble the ephemeral-environment module by default so the Tester's "delegate test
-    // environments to a provider" opt-in works once a developer registers a provider — the
-    // module is inert (and the local default stays host DinD) until they connect one AND
-    // flip the toggle, so defaulting it on has no behavioural cost. Set ENVIRONMENTS_ENABLED
-    // explicitly to override.
-    ENVIRONMENTS_ENABLED: env.ENVIRONMENTS_ENABLED?.trim() || 'true',
+    // The ephemeral-environment module assembles from the shared ENCRYPTION_KEY (always set
+    // in local mode), so the Tester's "delegate test environments to a provider" opt-in is
+    // available once a developer registers a provider. The module is inert (and the local
+    // default stays host DinD) until they connect one, so its always-on assembly has no
+    // behavioural cost.
     // A local k3s preview environment is reached over http at a loopback/LAN host (a
     // localhost NodePort, or a Traefik ingress host like `app.127.0.0.1.nip.io` /
     // `myapp.localhost`). The strict public-https URL guard would reject the URL the

@@ -1,4 +1,4 @@
-import type { AgentFailure, PipelineStep } from '@cat-factory/kernel'
+import type { AgentFailure, PipelineStep, PriorStepOutput } from '@cat-factory/kernel'
 
 /**
  * Plan how a failed run resumes on retry: keep the steps that already completed
@@ -51,6 +51,56 @@ export function carryForwardFailures(prev: {
   const history = prev.failureHistory ?? []
   const next = prev.failure ? [...history, prev.failure] : history
   return next.length > MAX_FAILURE_HISTORY ? next.slice(-MAX_FAILURE_HISTORY) : next
+}
+
+/** How many prior successful outputs a run keeps (mirrors {@link MAX_FAILURE_HISTORY}). */
+export const MAX_OUTPUT_HISTORY = 20
+
+/**
+ * Per-entry character cap on a recorded prior output. An agent's prose output can be many
+ * KB and a single restart can discard several at once, so — unlike a failure `detail` — the
+ * output is clipped (with a `truncated` flag) to keep the run's `detail` JSON, which is
+ * re-serialized on every step-progress write, from bloating for the rest of the run's life.
+ */
+export const MAX_HISTORY_OUTPUT_CHARS = 8_000
+
+/**
+ * Accumulate a run's SUCCESSFUL-output trail across a restart — the positive complement of
+ * {@link carryForwardFailures}. A restart resets `resetFromIndex` and every later step,
+ * dropping their `output`; the ones that had already SUCCEEDED (state `done` with a non-empty
+ * output) are appended here, attributed to their `stepIndex`, so the step-detail execution
+ * history keeps the successful outputs the restart superseded rather than losing them. Each
+ * output is clipped to {@link MAX_HISTORY_OUTPUT_CHARS} and the trail to the
+ * {@link MAX_OUTPUT_HISTORY} most recent, so the `detail` JSON stays bounded. A plain retry
+ * resumes at the first UNFINISHED step, so it resets no completed step and records nothing —
+ * it simply carries the existing trail forward.
+ *
+ * Pure + deterministic so it can be unit-tested without the service's ports; the caller
+ * supplies `now` (its clock) as the fallback timestamp for a step missing `finishedAt`.
+ */
+export function carryForwardOutputs(
+  prev: { steps: PipelineStep[]; outputHistory?: PriorStepOutput[] },
+  resetFromIndex: number,
+  now: number,
+): PriorStepOutput[] {
+  const history = prev.outputHistory ?? []
+  const discarded: PriorStepOutput[] = []
+  for (let i = Math.max(resetFromIndex, 0); i < prev.steps.length; i++) {
+    const step = prev.steps[i]!
+    const output = step.output
+    // Only a step that actually produced a successful output is worth preserving — the
+    // reset ones that failed/never ran are covered by the failure trail (or are just empty).
+    if (step.state !== 'done' || !output || !output.trim()) continue
+    const truncated = output.length > MAX_HISTORY_OUTPUT_CHARS
+    discarded.push({
+      stepIndex: i,
+      occurredAt: step.finishedAt ?? now,
+      output: truncated ? output.slice(0, MAX_HISTORY_OUTPUT_CHARS) : output,
+      ...(truncated ? { truncated: true } : {}),
+    })
+  }
+  const next = [...history, ...discarded]
+  return next.length > MAX_OUTPUT_HISTORY ? next.slice(-MAX_OUTPUT_HISTORY) : next
 }
 
 /**

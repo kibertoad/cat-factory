@@ -3,6 +3,8 @@ import type {
   EnvironmentAccessHandle,
   EnvironmentManifest,
   EnvironmentStatus,
+  PreflightRef,
+  PreflightResult,
   ProviderConfigField,
 } from '../domain/types.js'
 import type { RunRepoContext } from './repo-files.js'
@@ -127,7 +129,43 @@ export interface ProvisionEnvironmentRequest {
    * simple single-file compose path, or a facade with no provisioning log wired). Never throws.
    */
   recordStep?: RecipeStepRecorder
+  /**
+   * Bring the SHARED STACKS a stack recipe references (`recipe.sharedStackRefs`) UP before the
+   * per-PR consumer project is stood up (provider-before-consumer), returning the managed Docker
+   * networks those stacks own so the consumer can be attached to them as `external: true` (the
+   * acme `acme-net` shape). Given the shared-stack ids, it ensures each idempotently, IN ORDER (a
+   * later stack may depend on an earlier one's network), and returns the deduped union of their
+   * managed networks — or a blocking `error` (never throws) when a ref names no stack in the
+   * workspace or a stack's bring-up fails, so the provider surfaces it as a deterministic provision
+   * failure. Wired by the provisioning service (which owns the workspace + the shared-stack
+   * lifecycle); the provider only names the refs. Absent ⇒ the shared-stack lifecycle isn't wired
+   * (no host daemon), so a recipe that declares refs fails loudly instead of silently ignoring them.
+   */
+  ensureSharedStacks?: (refs: string[]) => Promise<SharedStackEnsureResult>
+  /**
+   * Run a stack recipe's machine PREREQUISITE checks (`recipe.prerequisites`) at provision start and
+   * return one verdict per ref — the compose provider streams each to the provisioning log and fails
+   * the provision fast (before the daemon / clone work) when any REQUIRED check fails, surfacing its
+   * remediation instead of a mystery deep inside a 40-image pull. Given the refs, it runs the host
+   * probes (docker daemon / disk / RAM / registry login / reachability / mkcert / hosts / secrets
+   * marker) and returns their results; it never throws (a probe error is a `fail` verdict). Bound by
+   * the provisioning service (which owns the workspace); the provider only names the refs. Absent ⇒
+   * the preflight host-probe runtime isn't wired (no host daemon), so a recipe that declares
+   * prerequisites fails loudly rather than silently skipping a declared safety gate.
+   */
+  runPreflights?: (refs: PreflightRef[]) => Promise<PreflightResult[]>
 }
+
+/**
+ * The outcome of a provision-time {@link ProvisionEnvironmentRequest.ensureSharedStacks} call:
+ * either the referenced shared stacks are all up (`networks` = the deduped union of the Docker
+ * networks they own, for the consumer to attach to as `external: true`) or a blocking `error` (a
+ * missing ref / a stack whose bring-up failed). Never thrown — the compose provider turns a
+ * failure into a deterministic `status: 'failed'` provision, like every other recipe-step verdict.
+ */
+export type SharedStackEnsureResult =
+  | { ok: true; networks: string[] }
+  | { ok: false; error: string }
 
 export interface EnvironmentStatusRequest {
   manifest: EnvironmentManifest

@@ -4,6 +4,7 @@ export {
   SpendService,
   type SpendServiceDependencies,
   type RecordUsageInput,
+  type BudgetTierScope,
 } from './SpendService.js'
 export {
   type ModelPrice,
@@ -11,6 +12,8 @@ export {
   DEFAULT_MODEL_PRICES,
   DEFAULT_MONTHLY_LIMIT_EUR,
   DEFAULT_SPEND_PRICING,
+  budgetCapsOverlay,
+  effectiveTierLimit,
   priceFor,
   modelCostResolver,
   estimateCost,

@@ -8,11 +8,14 @@ import type {
   DeployCloneTarget,
   DeployProvisionInputs,
   DeployProvisionJob,
+  EnvironmentFailureReason,
   EnvironmentManifest,
   EnvironmentProvider,
   InfraEngine,
   ProvisionContext,
   ProvisionEnvironmentRequest,
+  PreflightRef,
+  PreflightResult,
   ProvisionType,
   ProvisionedEnvironment,
   RecipeStepLog,
@@ -24,6 +27,7 @@ import type {
   RunRepoContext,
   SecretResolver,
   ServiceProvisioning,
+  SharedStackEnsureResult,
   UrlSafetyPolicy,
 } from '@cat-factory/kernel'
 import type { SecretCipher } from '@cat-factory/kernel'
@@ -38,7 +42,9 @@ import {
 import type { EnvironmentConnectionService } from './EnvironmentConnectionService.js'
 import {
   assertSafeEnvironmentUrl,
+  type EnvironmentIdentity,
   recordToHandle,
+  shouldTeardownSuperseded,
   stringifyProviderConfig,
 } from './environments.logic.js'
 import type { ProvisioningLogRecorder } from '../provisioning-logs/ProvisioningLogService.js'
@@ -106,6 +112,33 @@ export interface EnvironmentProvisioningServiceDependencies {
     blockId: string,
     ref?: string,
   ) => Promise<DeployCloneTarget | null>
+  /**
+   * Tear a superseded environment's real infrastructure down (best-effort) when a new provision
+   * targets a DIFFERENT provider identity (a config change → different namespace, a provider/type
+   * switch, or an `infraless` flip where nothing replaces it). Typed structurally (not the concrete
+   * `EnvironmentTeardownService`) to avoid a construction-order coupling. Absent ⇒ supersede is
+   * tombstone-only (the prior behaviour; tests/conformance and the identity-unchanged path).
+   */
+  environmentTeardown?: { teardown(workspaceId: string, id: string): Promise<unknown> }
+  /**
+   * Bring the SHARED STACKS a compose stack recipe references up (provider-before-consumer) and
+   * return the managed Docker networks they own — the {@link SharedStackService.ensureRefsUp} seam,
+   * exposed on the provision request as {@link ProvisionEnvironmentRequest.ensureSharedStacks} so
+   * the compose provider can attach the per-PR project to those networks. Wired only where the
+   * shared-stack lifecycle exists (a host Docker daemon — the local facade); absent ⇒ a recipe that
+   * declares `sharedStackRefs` fails loudly at provision. Typed structurally (not the concrete
+   * service) so integrations stays decoupled.
+   */
+  ensureSharedStacks?: (workspaceId: string, refs: string[]) => Promise<SharedStackEnsureResult>
+  /**
+   * Run a stack recipe's machine PREREQUISITE checks (`recipe.prerequisites`) at provision start —
+   * the {@link PreflightService.run} seam, exposed on the provision request as
+   * {@link ProvisionEnvironmentRequest.runPreflights} so the compose provider fails fast (before the
+   * daemon / clone) when a required check is red. Wired only where the host-probe runtime exists (a
+   * host Docker daemon — the local facade); absent ⇒ a recipe that declares prerequisites fails
+   * loudly at provision. Typed structurally (not the concrete service) so integrations stays decoupled.
+   */
+  runPreflights?: (workspaceId: string, refs: PreflightRef[]) => Promise<PreflightResult[]>
 }
 
 /**
@@ -216,6 +249,16 @@ export class EnvironmentProvisioningService {
     return resolution.ok ? { ok: true } : { ok: false, reason: resolution.reason }
   }
 
+  /**
+   * Whether the workspace has a legacy single-connection environment provider registered — the
+   * compat-bridge path a service with NO declared provision type provisions through. The deployer
+   * consults this so an UNDECLARED frame stands an env up only when one is actually configured
+   * (else the injected deployer is a safe no-op instead of failing on "no connection").
+   */
+  async hasLegacyConnection(workspaceId: string): Promise<boolean> {
+    return this.deps.connectionService.hasConnection(workspaceId)
+  }
+
   /** Provision an environment, persisting an encrypted record keyed by block/run. */
   async provision(args: ProvisionArgs): Promise<EnvironmentHandle> {
     const resolved = await this.resolveProvision(args)
@@ -281,10 +324,19 @@ export class EnvironmentProvisioningService {
       return { kind: 'completed', handle }
     }
     if (!this.deps.deployJobClient) {
+      // Provider-agnostic on purpose: ANY provider whose config needs a container-backed render
+      // (Kubernetes today; a future Nomad/custom provider tomorrow) reaches here, so the message
+      // names the runtime-neutral transport remedies, not one provider's CLIs. The SPA keys its
+      // runtime-/provider-specific hint off the `deploy_runner_unwired` reason instead.
       const message =
-        'This environment needs the container deploy adapter, but no runner transport is wired.'
+        "This service's environment provider needs a container-backed deploy to render and " +
+        'apply its manifests, but this deployment has no deploy runner wired to run it. ' +
+        'Configure a deploy backend for this deployment — a self-hosted runner pool (Node), the ' +
+        'LOCAL_DEPLOY_RUNTIME env (local mode), or the DeployContainer binding (Cloudflare) — or ' +
+        'use an environment config that provisions without a deploy container.'
       await this.captureProvisionFailure(args, resolved, message)
-      throw new ValidationError(message)
+      const reason: EnvironmentFailureReason = 'deploy_runner_unwired'
+      throw new ValidationError(message, { reason })
     }
     try {
       await this.deps.deployJobClient.dispatch(
@@ -486,6 +538,19 @@ export class EnvironmentProvisioningService {
           })
         }
       : undefined
+    // Bring the recipe's referenced shared stacks up + collect their managed networks, so the
+    // compose provider can attach the per-PR project to them. Bound to the workspace here (the
+    // provider only names the refs); wired only where the shared-stack lifecycle exists.
+    const ensureSharedStacks = this.deps.ensureSharedStacks
+      ? (refs: string[]): Promise<SharedStackEnsureResult> =>
+          this.deps.ensureSharedStacks!(workspaceId, refs)
+      : undefined
+    // Run the recipe's machine-prerequisite checks at provision start, bound to the workspace here
+    // (the provider only names the refs); wired only where the host-probe runtime exists.
+    const runPreflights = this.deps.runPreflights
+      ? (refs: PreflightRef[]): Promise<PreflightResult[]> =>
+          this.deps.runPreflights!(workspaceId, refs)
+      : undefined
     return {
       manifest,
       inputs,
@@ -494,6 +559,8 @@ export class EnvironmentProvisioningService {
       ...(runRepo ? { runRepo } : {}),
       ...(clone ? { clone } : {}),
       ...(recordStep ? { recordStep } : {}),
+      ...(ensureSharedStacks ? { ensureSharedStacks } : {}),
+      ...(runPreflights ? { runPreflights } : {}),
       ...(this.deps.resolveRepoFilesForWorkspace
         ? {
             resolveRepoFiles: (coords) =>
@@ -609,8 +676,16 @@ export class EnvironmentProvisioningService {
     engine: InfraEngine | null,
   ): Promise<EnvironmentHandle> {
     const { workspaceId } = args
-    // A (block, frame) pair holds at most one live environment: supersede any prior one.
-    await this.supersedePriorEnvironment(workspaceId, args.blockId ?? null, args.frameId ?? null)
+    // A (block, frame) pair holds at most one live environment: supersede any prior one, tearing
+    // its real infra down when the new provision targets a different provider identity (else keep
+    // the tombstone-only overwrite-in-place). `provisioned.externalId` is null on the async
+    // `provisioning` placeholder insert — then a matching type/engine is treated as the same
+    // deterministic resource (no teardown).
+    await this.supersedePriorEnvironment(workspaceId, args.blockId ?? null, args.frameId ?? null, {
+      provisionType,
+      engine,
+      externalId: provisioned.externalId,
+    })
 
     const now = this.deps.clock.now()
     const record = this.buildEnvironmentRecord({
@@ -712,8 +787,10 @@ export class EnvironmentProvisioningService {
       'Environment',
       id,
     )
-    const { manifest, provider } = await this.deps.connectionService.resolveProvider(workspaceId)
-    const resolveSecret = await this.deps.connectionService.resolveSecrets(workspaceId)
+    // Resolve the provider from the record's stored provision type/engine (the handler that stood
+    // it up), not the workspace-primary — matching the per-type resolution provisioning uses.
+    const { manifest, provider, resolveSecret } =
+      await this.deps.connectionService.resolveProviderForRecord(record)
     const provisionFields = await this.decryptFields(record.provisionFieldsCipher)
 
     let provisioned: ProvisionedEnvironment
@@ -883,7 +960,9 @@ export class EnvironmentProvisioningService {
     blockId: string | null,
     frameId: string | null = null,
   ): Promise<void> {
-    await this.supersedePriorEnvironment(workspaceId, blockId, frameId)
+    // Nothing replaces the prior env (the service flipped to `infraless`), so tear its real infra
+    // down (best-effort) rather than merely tombstoning the row and orphaning the namespace/project.
+    await this.supersedePriorEnvironment(workspaceId, blockId, frameId, null)
   }
 
   private resolveExpiry(
@@ -927,6 +1006,11 @@ export class EnvironmentProvisioningService {
     workspaceId: string,
     blockId: string | null,
     frameId: string | null,
+    // The incoming env's identity when a new provision replaces the prior (compared to decide
+    // teardown-vs-overwrite); `null` when NOTHING replaces it (an `infraless` flip). `undefined`
+    // (the default) keeps the legacy tombstone-only behaviour — used by the failed-provision path,
+    // which must never tear the prior live env down.
+    next?: EnvironmentIdentity | null,
   ): Promise<void> {
     if (!blockId) return
     const prior = frameId
@@ -936,13 +1020,28 @@ export class EnvironmentProvisioningService {
           frameId,
         )
       : await this.deps.environmentRegistryRepository.getFramelessByBlock(workspaceId, blockId)
-    if (prior) {
-      await this.deps.environmentRegistryRepository.softDelete(
-        workspaceId,
-        prior.id,
-        this.deps.clock.now(),
-      )
+    if (!prior) return
+    if (
+      this.deps.environmentTeardown &&
+      next !== undefined &&
+      shouldTeardownSuperseded(prior, next)
+    ) {
+      try {
+        // Reclaims the real infra AND tombstones on success (resolving the provider by the record).
+        // BEST-EFFORT: a teardown failure must not fail the new provision — leave the row LIVE so
+        // the TTL reaper retries (tombstoning it would orphan the un-torn-down infra beyond the
+        // reaper's reach).
+        await this.deps.environmentTeardown.teardown(workspaceId, prior.id)
+      } catch {
+        // swallowed on purpose (see above); TTL reaper is the backstop.
+      }
+      return
     }
+    await this.deps.environmentRegistryRepository.softDelete(
+      workspaceId,
+      prior.id,
+      this.deps.clock.now(),
+    )
   }
 
   /**

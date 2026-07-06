@@ -16,6 +16,7 @@ import {
 import {
   analyzePodStatus,
   apiBase,
+  apiServerConnectionFailureMessage,
   buildPodManifest,
   classifyPodReadiness,
   KUBERNETES_TOKEN_KEY,
@@ -151,7 +152,10 @@ export class KubernetesRunnerTransport implements RunnerTransport {
       }
       return {
         ok: false,
-        message: `apiserver responded ${res.status}: ${await safeText(res)}`,
+        message: apiServerConnectionFailureMessage(res.status, await safeText(res), {
+          operation: 'list pods',
+          namespace: this.config.namespace,
+        }),
       }
     } catch (err) {
       return { ok: false, message: err instanceof Error ? err.message : String(err) }

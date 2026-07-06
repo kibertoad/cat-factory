@@ -153,8 +153,18 @@ import type { BoardService } from '../board/BoardService.js'
 import type { SpendService } from '@cat-factory/spend'
 import { requireWorkspace } from '@cat-factory/kernel'
 import type { AdvanceOptions, AdvanceResult } from './advance.js'
-import { carryForwardFailures, planResumedSteps, planRestartFromStep } from './retry.logic.js'
-import { decideTesterInfra, TESTER_INFRA_MESSAGES } from './tester-infra.logic.js'
+import {
+  carryForwardFailures,
+  carryForwardOutputs,
+  planResumedSteps,
+  planRestartFromStep,
+} from './retry.logic.js'
+import {
+  decideTesterInfra,
+  ENV_CONSUMER_KINDS,
+  needsDeployerBeforeConsumer,
+  TESTER_INFRA_MESSAGES,
+} from './tester-infra.logic.js'
 import { hasLiveServiceBinding, hasServiceBinding } from './frontend-infra.logic.js'
 
 export interface ExecutionServiceDependencies {
@@ -441,15 +451,6 @@ export interface ExecutionServiceDependencies {
    */
   llmObservability?: LlmObservabilityService
   /**
-   * Optional: whether the runtime can run a `docker-compose` service's infra in-container
-   * via Docker-in-Docker. Defaults to `true` (Cloudflare, Node, tests). The local facade
-   * sets it `false` for runtimes without nesting (Apple `container`), which makes
-   * {@link ExecutionService.assertTesterInfraConfigured} refuse a `docker-compose` Tester
-   * run ("limited mode" — steer to an `infraless` service or a runtime that nests
-   * containers) instead of dispatching a job that can't stand its dependencies up.
-   */
-  localTestInfraSupported?: boolean
-  /**
    * Optional: resolve a block's run repo (installation + repo + default branch) bound to
    * a checkout-free {@link RepoFiles} so a registered custom kind's pre/post-op hooks
    * read/commit a targeted subset of the repo WITHOUT a checkout. A facade composes it
@@ -564,8 +565,6 @@ export class ExecutionService {
     agentKind: string,
     modelPresetId?: string,
   ) => Promise<string | undefined>
-  /** Whether the runtime can run the Tester's local DinD infra (false = limited mode). */
-  private readonly localTestInfraSupported: boolean
   /** Start-time assertion that a container-agent backend is configured (local-mode pool). */
   private readonly assertAgentBackendConfigured?: (workspaceId: string) => Promise<void>
   /**
@@ -631,7 +630,6 @@ export class ExecutionService {
     resolveWorkspaceModelDefault,
     resolveProviderCapabilities,
     inlineHarnessRef,
-    localTestInfraSupported,
     resolveRunRepoContext,
     assertAgentBackendConfigured,
     runInitiatorScope,
@@ -726,20 +724,34 @@ export class ExecutionService {
       agentExecutor,
       contextBuilder: this.contextBuilder,
       notificationService,
-      // Wrap the env services with the deployer's input/context derivation so the gate's
-      // provisioning matches a `deployer` step's. Left undefined when no provider is wired
-      // (the gate degrades to manual mode).
+      // The human-test gate READS the env the upstream `deployer` step provisioned (it no longer
+      // stands up its own) — resolved by the block's OWN service frame, exactly as the tester
+      // context resolves it, so the gate and the tester(s) share the one provisioned env. Left
+      // undefined when no provider is wired (the gate degrades to manual mode).
       ...(environmentProvisioning
         ? {
-            provisionEnvironment: (ws, block, executionId) =>
-              environmentProvisioning.provision({
-                workspaceId: ws,
-                blockId: block.id,
-                executionId,
-                inputs: this.runDispatcher.deployInputs(block),
-                context: this.runDispatcher.deployContext(block),
-              }),
-            refreshEnvironment: (ws, id) => environmentProvisioning.refreshStatus(ws, id),
+            readEnvironment: async (ws, block) => {
+              const frame = await this.contextBuilder.resolveServiceFrame(ws, block.id)
+              const handle = await environmentProvisioning.getHandleForBlock(
+                ws,
+                block.id,
+                frame?.id,
+              )
+              // Reconcile against the LIVE provider status when the stored record isn't yet
+              // `ready`: the deployer records an async provider's env as `provisioning`, and nothing
+              // re-polls that row once the deployer step completes, so a slow-but-now-ready env
+              // would otherwise read stale and wrongly degrade the gate to manual mode. One refresh
+              // reconciles it; an env still genuinely provisioning / failed degrades as before.
+              // Best-effort — keep the stored handle if the status read throws.
+              if (handle && handle.status !== 'ready') {
+                try {
+                  return await environmentProvisioning.refreshStatus(ws, handle.id)
+                } catch {
+                  return handle
+                }
+              }
+              return handle
+            },
           }
         : {}),
       ...(environmentTeardown
@@ -882,7 +894,6 @@ export class ExecutionService {
     this.resolveWorkspaceModelDefault = resolveWorkspaceModelDefault
     this.resolveProviderCapabilities = resolveProviderCapabilities
     this.inlineHarnessRef = inlineHarnessRef
-    this.localTestInfraSupported = localTestInfraSupported ?? true
     this.assertAgentBackendConfigured = assertAgentBackendConfigured
     this.resolveBinaryArtifactStore = resolveBinaryArtifactStore
   }
@@ -1013,18 +1024,6 @@ export class ExecutionService {
   }
 
   /**
-   * Guard a Tester pipeline's start on the service frame's declared provisioning being
-   * runnable. The Tester needs SOME way to stand its system up: `infraless` (or no
-   * provisioning declared) runs with no infra; a `docker-compose` service stands its stack
-   * up in-container (so a runtime without Docker-in-Docker is refused — "limited mode"); a
-   * `kubernetes`/`custom` service is provisioned by a workspace handler, so one must resolve
-   * for its type. Throws a {@link ConflictError} (`tester_infra_unsupported` when the local
-   * docker-compose infra can't run — no DinD or no compose path declared,
-   * `provision_type_unhandled` for a missing handler) — surfaced as an actionable message —
-   * otherwise. Passes through when the provisioning seam is unwired (tests / no environment
-   * integration), like the other optional start guards.
-   */
-  /**
    * Guard a run start when the pipeline carries a VISUAL step (`tester-ui` /
    * `visual-confirmation`): such a step exercises a rendered UI, so it only makes sense where
    * there is a UI to drive — a `type: 'frontend'` frame (it owns the app under test) or a frame
@@ -1057,6 +1056,16 @@ export class ExecutionService {
     )
   }
 
+  /**
+   * Guard a Tester pipeline's start on the service frame's declared provisioning being runnable.
+   * The Tester needs SOME way to stand its system up: `infraless` (or none declared) runs with no
+   * infra; `docker-compose`/`kubernetes`/`custom` are all provisioned by the single Deployer step
+   * through a workspace handler, so one must resolve for the service's type. A `frontend` frame is
+   * gated instead on having a live service under test. Throws an actionable {@link ConflictError}
+   * (`tester_infra_unsupported` for the frontend case, `provision_type_unhandled` for a missing
+   * handler); passes through when the provisioning seam is unwired (tests / no environment
+   * integration), like the other optional start guards.
+   */
   private async assertTesterInfraConfigured(workspaceId: string, block: Block): Promise<void> {
     // A `frontend` frame (the self-contained UI-test flow) is gated on having a live service
     // under test, NOT on a provision type — resolved first and short-circuiting the backend
@@ -1071,8 +1080,6 @@ export class ExecutionService {
           hasLiveService: hasLiveServiceBinding(frontend.bindings),
         },
         provisionType: undefined,
-        localTestInfraSupported: this.localTestInfraSupported,
-        hasComposePath: false,
         handlerResolves: true,
       })
       if (decision.ok) return
@@ -1082,30 +1089,55 @@ export class ExecutionService {
     }
     const service = await this.contextBuilder.resolveServiceConfig(workspaceId, block)
     const provisioning = service?.provisioning
-    // Only `kubernetes`/`custom` need a workspace handler resolved; resolve it lazily and
-    // only when the provisioning seam is wired (else pass through, treating it as resolvable).
-    const needsHandler = provisioning?.type === 'kubernetes' || provisioning?.type === 'custom'
+    // `docker-compose`/`kubernetes`/`custom` are all provisioned by the Deployer via a workspace
+    // handler, so resolve it lazily — and only when the provisioning seam is wired (else pass
+    // through, treating it as resolvable). `infraless`/none needs no handler.
+    const needsHandler =
+      provisioning?.type === 'docker-compose' ||
+      provisioning?.type === 'kubernetes' ||
+      provisioning?.type === 'custom'
     const handlerResolves =
       needsHandler && this.environmentProvisioning
         ? (await this.environmentProvisioning.canProvision(workspaceId, provisioning)).ok
         : true
-    const decision = decideTesterInfra({
-      provisionType: provisioning?.type,
-      localTestInfraSupported: this.localTestInfraSupported,
-      hasComposePath: !!provisioning?.composePath,
-      handlerResolves,
-    })
+    const decision = decideTesterInfra({ provisionType: provisioning?.type, handlerResolves })
     if (decision.ok) return
-    // A docker-compose service that can't stand its infra up (no DinD, or no compose path)
-    // surfaces as the "test infra not configured" conflict; a missing handler is distinct.
-    if (decision.reason === 'limited-local' || decision.reason === 'compose-unconfigured') {
-      throw new ConflictError(TESTER_INFRA_MESSAGES[decision.reason], 'tester_infra_unsupported', {
-        infraReason: decision.reason,
-      })
-    }
+    // The only backend-branch refusal is a provision type with no resolvable handler.
     throw new ConflictError(TESTER_INFRA_MESSAGES[decision.reason], 'provision_type_unhandled', {
       provisionType: provisioning!.type,
     })
+  }
+
+  /**
+   * Fail fast when a `docker-compose`/`kubernetes`/`custom` service's chain would dead-end at an
+   * env-consumer (tester / human-test / playwright) because no enabled `deployer` provisions the
+   * environment before it — the exact silent dead-end this initiative fixes (the tester picks
+   * ephemeral mode from the provision type but finds no coordinates). The pure ordering check lives
+   * in {@link needsDeployerBeforeConsumer}; here we resolve the service's provision type (only when a
+   * consumer is present, so consumer-less chains skip the read) and translate a positive verdict
+   * into an actionable {@link ConflictError}. Pass-through for infraless/frontend services and for
+   * chains with a deployer before the first consumer.
+   */
+  private async assertDeployerBeforeConsumer(
+    workspaceId: string,
+    block: Block,
+    agentKinds: readonly string[],
+    enabled: readonly boolean[] | undefined,
+  ): Promise<void> {
+    const hasConsumer = agentKinds.some(
+      (kind, i) => enabled?.[i] !== false && ENV_CONSUMER_KINDS.includes(kind),
+    )
+    if (!hasConsumer) return
+    const service = await this.contextBuilder.resolveServiceConfig(workspaceId, block)
+    if (!needsDeployerBeforeConsumer(agentKinds, enabled, service?.provisioning?.type)) return
+    throw new ConflictError(
+      `This service provisions a '${service!.provisioning!.type}' environment, but this pipeline ` +
+        'has no Deployer step before its first Tester / human-test step, so the environment would ' +
+        'never be stood up. Reseed this pipeline to the latest built-in (which includes a Deployer) ' +
+        'and start a new run, or set the service to docker-compose / infraless.',
+      'deployer_required_before_tester',
+      { provisionType: service!.provisioning!.type },
+    )
   }
 
   /**
@@ -1245,7 +1277,8 @@ export class ExecutionService {
     agentKinds: readonly string[],
     initiatedBy: string | null | undefined,
   ): Promise<void> {
-    if (!(await this.spend.isOverBudget(workspaceId))) return
+    const accountId = await this.workspaceRepository.accountOf(workspaceId)
+    if (!(await this.spend.isOverBudget(workspaceId, { accountId, userId: initiatedBy }))) return
     if (!this.resolveProviderCapabilities) return
     const caps = await this.resolveProviderCapabilities(workspaceId, initiatedBy)
     const ids: (string | undefined)[] = []
@@ -1263,12 +1296,10 @@ export class ExecutionService {
       ids.push(undefined)
     }
     if (!ids.some((id) => this.modelIdIsMetered(id, caps))) return
-    const status = await this.spend.status(workspaceId)
     throw new ConflictError(
-      `This workspace has reached its spend budget (${status.costSpent.toFixed(2)}/` +
-        `${status.costLimit.toFixed(2)} ${status.currency}). New runs on metered models are ` +
-        'paused until the budget is raised (Workspace settings → Budget) or the billing period ' +
-        'resets. A task pinned to a local model or a connected subscription still runs.',
+      'This run has reached a spend budget (workspace, account, or user). New runs on metered ' +
+        'models are paused until the budget is raised or the billing period resets. A task pinned ' +
+        'to a local model or a connected subscription still runs.',
     )
   }
 
@@ -1328,10 +1359,15 @@ export class ExecutionService {
     await this.assertPipelineFrameTypeAllowed(workspaceId, block, shape.agentKinds)
 
     // A chain with a Tester needs the service's declared provisioning to be runnable
-    // (`infraless`/none = no infra, `docker-compose` = DinD, `kubernetes`/`custom` = a handler).
+    // (`infraless`/none = no infra; `docker-compose`/`kubernetes`/`custom` = a workspace handler).
     if (shape.agentKinds.some(isTesterKind)) {
       await this.assertTesterInfraConfigured(workspaceId, block)
     }
+
+    // A `docker-compose`/`kubernetes`/`custom` service whose enabled chain reaches an env-consumer
+    // (tester / human-test / playwright) with NO enabled `deployer` before it would dead-end inside
+    // the consumer — nothing provisions the environment it reads. Fail fast with an actionable error.
+    await this.assertDeployerBeforeConsumer(workspaceId, block, shape.agentKinds, shape.enabled)
 
     // A chain carrying an agent that relies on binary-artifact storage (the UI Tester uploads
     // screenshots) needs the account to have storage configured.
@@ -1742,7 +1778,13 @@ export class ExecutionService {
     // to the budget, so it must not be held hostage by a budget other (metered) models
     // exhausted. This is what lets a deliberately local-only / subscription-only workspace
     // keep running at a `0` budget (see the spend-budget docs).
-    if (await this.spend.isOverBudget(workspaceId)) {
+    const budgetAccountId = await this.workspaceRepository.accountOf(workspaceId)
+    if (
+      await this.spend.isOverBudget(workspaceId, {
+        accountId: budgetAccountId,
+        userId: instance.initiatedBy,
+      })
+    ) {
       if (!(await this.runDispatcher.currentStepIsNonMetered(workspaceId, instance, step))) {
         if (instance.status !== 'paused') {
           instance.status = 'paused'
@@ -2863,8 +2905,9 @@ export class ExecutionService {
     message: string,
     kind: AgentFailureKind = 'agent',
     detail: string | null = null,
+    reason: string | null = null,
   ): Promise<void> {
-    return this.runStateMachine.failRun(workspaceId, executionId, message, kind, detail)
+    return this.runStateMachine.failRun(workspaceId, executionId, message, kind, detail, reason)
   }
 
   /**
@@ -2943,6 +2986,9 @@ export class ExecutionService {
       // Preserve the error trail: the failure this retry is clearing is appended to the
       // history so it stays viewable after the top banner disappears on restart.
       failureHistory: carryForwardFailures(previous),
+      // A retry resumes at the first UNFINISHED step, so it discards no completed output —
+      // this just carries any prior restart's successful-output trail forward unchanged.
+      outputHistory: carryForwardOutputs(previous, currentStep, this.clock.now()),
     }
     await this.insertLiveRunOrConflict(workspaceId, instance, replaceId)
     const done = steps.filter((s) => s.state === 'done').length
@@ -3051,6 +3097,10 @@ export class ExecutionService {
       // Preserve the error trail across a restart too (a failed run is a valid restart
       // source), so the prior failure stays viewable once the run is running again.
       failureHistory: carryForwardFailures(previous),
+      // A restart resets the chosen step + every later one, discarding their outputs — record
+      // the SUCCESSFUL ones so the step-detail execution history keeps what they produced, not
+      // only the errors. Attributed by step index and accumulated across successive restarts.
+      outputHistory: carryForwardOutputs(previous, currentStep, this.clock.now()),
     }
     await this.insertLiveRunOrConflict(workspaceId, instance, replaceId)
     const done = steps.filter((s) => s.state === 'done').length

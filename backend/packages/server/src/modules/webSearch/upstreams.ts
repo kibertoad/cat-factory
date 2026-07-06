@@ -50,6 +50,8 @@ interface BraveSearchResponse {
  * onto the normalised `{url,title,content}` shape.
  */
 export class BraveWebSearchUpstream implements WebSearchUpstream {
+  readonly provider = 'brave' as const
+
   constructor(
     private readonly apiKey: string,
     private readonly endpoint = 'https://api.search.brave.com/res/v1/web/search',
@@ -93,6 +95,7 @@ interface SearxngSearchResponse {
  * credential off the sandbox (the container only sees this backend proxy).
  */
 export class SearxngWebSearchUpstream implements WebSearchUpstream {
+  readonly provider = 'searxng' as const
   private readonly base: string
   constructor(
     baseUrl: string,

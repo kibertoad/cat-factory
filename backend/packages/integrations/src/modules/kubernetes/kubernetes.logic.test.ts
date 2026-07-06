@@ -1,6 +1,7 @@
 import type { KubernetesRunnerConfig } from '@cat-factory/kernel'
 import { describe, expect, it } from 'vitest'
 import {
+  apiServerConnectionFailureMessage,
   assertApiServerUrlSafe,
   buildPodManifest,
   classifyPodReadiness,
@@ -199,5 +200,45 @@ describe('buildPodManifest', () => {
     expect(pod.spec.containers[0]!.readinessProbe).toMatchObject({
       httpGet: { path: '/health', port: 8080 },
     })
+  })
+})
+
+describe('apiServerConnectionFailureMessage', () => {
+  const body = '{"kind":"Status","message":"Unauthorized","code":401}'
+
+  it('explains a 401 as an auth failure with an actionable mint-a-fresh-token fix', () => {
+    const msg = apiServerConnectionFailureMessage(401, body, { operation: 'list pods' })
+    expect(msg).toContain('401')
+    expect(msg).toMatch(/expired|no longer recognised/i)
+    // It must NOT frame a 401 as an RBAC problem (that's a 403).
+    expect(msg).not.toMatch(/RBAC to list pods/i)
+    // Actionable: names the causes (short-lived token / recreated cluster) and the fix.
+    expect(msg).toMatch(/kubectl create token/)
+    expect(msg).toMatch(/recreated|rotates/i)
+    // Does NOT dump the raw apiserver Status body for the auth verdicts.
+    expect(msg).not.toContain('"kind":"Status"')
+  })
+
+  it('substitutes the namespace into the 401 fix command when provided', () => {
+    const msg = apiServerConnectionFailureMessage(401, body, {
+      operation: 'list pods',
+      namespace: 'cat-factory',
+    })
+    expect(msg).toContain('-n cat-factory')
+  })
+
+  it('explains a 403 as an RBAC denial naming the attempted operation', () => {
+    const msg = apiServerConnectionFailureMessage(403, 'forbidden', {
+      operation: 'list namespaces',
+    })
+    expect(msg).toContain('403')
+    expect(msg).toMatch(/not allowed to list namespaces/i)
+    expect(msg).toMatch(/Role|ClusterRole/)
+  })
+
+  it('keeps the raw status:body shape for any other status', () => {
+    expect(apiServerConnectionFailureMessage(500, 'boom', { operation: 'list pods' })).toBe(
+      'apiserver responded 500: boom',
+    )
   })
 })

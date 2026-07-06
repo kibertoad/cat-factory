@@ -17,6 +17,7 @@ import DecisionModal from '~/components/panels/DecisionModal.vue'
 import AgentStepDetail from '~/components/panels/AgentStepDetail.vue'
 import StepResultViewHost from '~/components/panels/StepResultViewHost.vue'
 import AddTaskModal from '~/components/board/AddTaskModal.vue'
+import CreateInitiativeModal from '~/components/board/CreateInitiativeModal.vue'
 import GitHubOnboarding from '~/components/github/GitHubOnboarding.vue'
 import CommandBar from '~/components/layout/CommandBar.vue'
 import PersonalCredentialModal from '~/components/providers/PersonalCredentialModal.vue'
@@ -93,6 +94,9 @@ const PackageRegistriesPanel = defineAsyncComponent(
 )
 const InfrastructureWindow = defineAsyncComponent(
   () => import('~/components/settings/InfrastructureWindow.vue'),
+)
+const EnvironmentSetupWizard = defineAsyncComponent(
+  () => import('~/components/environments/EnvironmentSetupWizard.vue'),
 )
 const ModelConfigurationPanel = defineAsyncComponent(
   () => import('~/components/settings/ModelConfigurationPanel.vue'),
@@ -242,6 +246,8 @@ const stream = useWorkspaceStream()
 // in the template would not unwrap, since `stream` is a plain object). Drives the headless
 // `workspace-stream` readiness marker the e2e suite waits on.
 const streamConnected = computed(() => stream.connected.value)
+const streamEverConnected = computed(() => stream.everConnected.value)
+const streamConnectionFailed = computed(() => stream.connectionFailed.value)
 watch(
   () => workspace.workspaceId,
   (id) => {
@@ -319,7 +325,11 @@ watch(
         />
         <BoardToolbar />
         <SpendWarningBanner />
-        <ConnectionStatusBanner :connected="streamConnected" />
+        <ConnectionStatusBanner
+          :connected="streamConnected"
+          :ever-connected="streamEverConnected"
+          :connection-failed="streamConnectionFailed"
+        />
         <InspectorPanel />
         <!-- Code-split focus view. The fade lives here (not inside the component) so the
              leave animation still plays when `focusBlockId` clears and the v-if unmounts
@@ -366,6 +376,7 @@ watch(
       <ObservabilityConnectionPanel v-if="ui.observabilityConnectionOpen" />
       <PackageRegistriesPanel v-if="ui.packageRegistriesOpen" />
       <InfrastructureWindow v-if="ui.infrastructureOpen" />
+      <EnvironmentSetupWizard v-if="ui.environmentWizardOpen" />
       <ModelConfigurationPanel v-if="ui.modelConfigOpen" />
       <LocalModelEndpointsPanel v-if="ui.localModelsOpen" />
       <SandboxPanel v-if="ui.sandboxOpen" />

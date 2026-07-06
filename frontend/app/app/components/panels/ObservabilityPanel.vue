@@ -1,7 +1,12 @@
 <script setup lang="ts">
 import { computed, reactive, ref, watch } from 'vue'
 import { onKeyStroke } from '@vueuse/core'
-import type { AgentContextSnapshot, LlmCallMetric } from '~/types/execution'
+import type {
+  AgentContextSnapshot,
+  AgentSearchQuery,
+  LlmCallMetric,
+  WebSearchProvider,
+} from '~/types/execution'
 import { agentKindMeta } from '~/utils/catalog'
 import { formatMs, formatTokens, pct } from '~/utils/observability'
 
@@ -32,15 +37,59 @@ const exporting = computed(
 const error = computed(() =>
   executionId.value ? (observability.errors[executionId.value] ?? null) : null,
 )
+const contextError = computed(() =>
+  executionId.value ? (observability.contextErrors[executionId.value] ?? null) : null,
+)
 
-// Which view is shown: the per-call model activity, or the complete provided context.
-const view = ref<'calls' | 'context'>('calls')
+function retryCalls() {
+  if (executionId.value) void observability.load(executionId.value)
+}
+function retryContext() {
+  if (executionId.value) void observability.loadContext(executionId.value)
+}
+
+// Which view is shown: per-call model activity, the complete provided context, or the
+// performed web searches.
+const view = ref<'calls' | 'context' | 'search'>('calls')
 
 const contextSnapshots = computed<AgentContextSnapshot[]>(() =>
   executionId.value ? observability.contextFor(executionId.value) : [],
 )
 const contextLoading = computed(
   () => !!executionId.value && observability.isContextLoading(executionId.value),
+)
+
+const searchQueries = computed<AgentSearchQuery[]>(() =>
+  executionId.value ? observability.searchQueriesFor(executionId.value) : [],
+)
+const searchLoading = computed(
+  () => !!executionId.value && observability.isSearchQueriesLoading(executionId.value),
+)
+
+// Brand names, kept verbatim across locales (not translatable prose).
+const PROVIDER_LABEL: Record<WebSearchProvider, string> = { brave: 'Brave', searxng: 'SearXNG' }
+function providerLabel(provider: WebSearchProvider | null): string {
+  return provider ? PROVIDER_LABEL[provider] : ''
+}
+
+// Whether web search was available to this run's container agents, and which provider(s)
+// served it — a static per-run fact set on each container step at dispatch (not gated by
+// prompt-recording telemetry, unlike the performed queries below).
+const searchAvailability = computed<{ available: boolean; providers: WebSearchProvider[] } | null>(
+  () => {
+    const steps = (instance.value?.steps ?? []).filter((s) => s.search)
+    if (!steps.length) return null
+    const available = steps.some((s) => s.search?.available)
+    const providers = [
+      ...new Set(
+        steps
+          .map((s) => s.search)
+          .filter((x): x is NonNullable<typeof x> => !!x?.available && !!x.provider)
+          .map((x) => x.provider as WebSearchProvider),
+      ),
+    ]
+    return { available, providers }
+  },
 )
 
 // Load (and refresh) whenever a different run's panel opens. Reset to the calls view
@@ -52,6 +101,7 @@ watch(
       view.value = 'calls'
       void observability.load(id)
       void observability.loadContext(id)
+      void observability.loadSearchQueries(id)
     }
   },
   // Lazy v-if mount: the panel mounts with executionId already set, so load immediately.
@@ -182,6 +232,17 @@ function exportJson() {
               >
                 {{ t('observability.providedContext') }}
               </button>
+              <button
+                class="rounded-md px-2.5 py-1 transition"
+                :class="
+                  view === 'search'
+                    ? 'bg-slate-800 text-slate-100'
+                    : 'text-slate-400 hover:text-slate-200'
+                "
+                @click="view = 'search'"
+              >
+                {{ t('observability.webSearch') }}
+              </button>
             </div>
             <UButton
               v-if="view === 'calls'"
@@ -282,12 +343,22 @@ function exportJson() {
               <UIcon name="i-lucide-loader-circle" class="h-4 w-4 animate-spin" />
               {{ t('observability.loadingActivity') }}
             </p>
-            <p
+            <div
               v-else-if="error"
-              class="rounded-lg border border-dashed border-rose-900/60 py-6 text-center text-sm text-rose-400"
+              class="flex flex-col items-center gap-3 rounded-lg border border-dashed border-rose-900/60 py-6 text-center text-sm text-rose-400"
             >
               {{ error }}
-            </p>
+              <UButton
+                icon="i-lucide-rotate-cw"
+                color="neutral"
+                variant="soft"
+                size="xs"
+                :loading="loading"
+                @click="retryCalls"
+              >
+                {{ t('common.retry') }}
+              </UButton>
+            </div>
             <p
               v-else-if="!calls.length"
               class="rounded-lg border border-dashed border-slate-800 py-8 text-center text-sm text-slate-500"
@@ -434,7 +505,7 @@ function exportJson() {
           </div>
 
           <!-- Provided context: the complete context each container agent was given. -->
-          <div v-else class="mx-auto max-w-4xl space-y-5">
+          <div v-else-if="view === 'context'" class="mx-auto max-w-4xl space-y-5">
             <p
               v-if="contextLoading && !contextSnapshots.length"
               class="flex items-center justify-center gap-2 py-8 text-center text-sm text-slate-500"
@@ -442,6 +513,22 @@ function exportJson() {
               <UIcon name="i-lucide-loader-circle" class="h-4 w-4 animate-spin" />
               {{ t('observability.loadingContext') }}
             </p>
+            <div
+              v-else-if="contextError && !contextSnapshots.length"
+              class="flex flex-col items-center gap-3 rounded-lg border border-dashed border-rose-900/60 py-8 text-center text-sm text-rose-400"
+            >
+              {{ t('observability.contextError') }}
+              <UButton
+                icon="i-lucide-rotate-cw"
+                color="neutral"
+                variant="soft"
+                size="xs"
+                :loading="contextLoading"
+                @click="retryContext"
+              >
+                {{ t('common.retry') }}
+              </UButton>
+            </div>
             <p
               v-else-if="!contextSnapshots.length"
               class="rounded-lg border border-dashed border-slate-800 py-8 text-center text-sm text-slate-500"
@@ -552,6 +639,88 @@ function exportJson() {
                 </div>
               </li>
             </ul>
+          </div>
+
+          <div v-else class="mx-auto max-w-4xl space-y-5">
+            <!-- Availability header: a static per-run fact (not telemetry-gated). -->
+            <section
+              v-if="searchAvailability"
+              class="flex flex-wrap items-center gap-x-3 gap-y-1 rounded-xl border border-slate-800 bg-slate-900/50 px-4 py-3 text-[13px]"
+            >
+              <span class="text-[11px] uppercase tracking-wide text-slate-500">
+                {{ t('observability.webSearch') }}
+              </span>
+              <span
+                class="inline-flex items-center gap-1.5"
+                :class="searchAvailability.available ? 'text-emerald-300' : 'text-slate-400'"
+              >
+                <UIcon
+                  :name="searchAvailability.available ? 'i-lucide-globe' : 'i-lucide-globe-lock'"
+                  class="h-4 w-4"
+                />
+                {{
+                  searchAvailability.available
+                    ? t('observability.search.available')
+                    : t('observability.search.unavailable')
+                }}
+              </span>
+              <span v-if="searchAvailability.providers.length" class="text-slate-400 tabular-nums">
+                {{ t('observability.search.provider') }}:
+                {{ searchAvailability.providers.map(providerLabel).join(', ') }}
+              </span>
+            </section>
+
+            <p
+              v-if="searchLoading && !searchQueries.length"
+              class="flex items-center justify-center gap-2 py-8 text-center text-sm text-slate-500"
+            >
+              <UIcon name="i-lucide-loader-circle" class="h-4 w-4 animate-spin" />
+              {{ t('observability.loadingSearch') }}
+            </p>
+            <p
+              v-else-if="!searchQueries.length"
+              class="rounded-lg border border-dashed border-slate-800 py-8 text-center text-sm text-slate-500"
+            >
+              {{ t('observability.noSearch') }}
+            </p>
+
+            <div v-else>
+              <div class="mb-2 text-[11px] uppercase tracking-wide text-slate-500">
+                {{ t('observability.search.queriesTitle') }}
+              </div>
+              <ul class="space-y-2">
+                <li
+                  v-for="q in searchQueries"
+                  :key="q.id"
+                  class="flex items-center gap-3 rounded-xl border border-slate-800 bg-slate-900/40 px-4 py-2.5"
+                >
+                  <UIcon
+                    :name="agentMeta(q.agentKind).icon"
+                    class="h-4 w-4 shrink-0"
+                    :style="{ color: agentMeta(q.agentKind).color }"
+                    :title="agentMeta(q.agentKind).label"
+                  />
+                  <span class="min-w-0 flex-1 truncate text-[13px] text-slate-200" :title="q.query">
+                    {{ q.query }}
+                  </span>
+                  <div
+                    class="flex shrink-0 items-center gap-2.5 text-[11px] tabular-nums text-slate-400"
+                  >
+                    <span v-if="q.provider" class="hidden sm:inline">{{
+                      providerLabel(q.provider)
+                    }}</span>
+                    <span>{{
+                      t(
+                        'observability.search.resultsCount',
+                        { count: q.resultCount },
+                        q.resultCount,
+                      )
+                    }}</span>
+                    <span class="hidden text-slate-600 md:inline">{{ clock(q.createdAt) }}</span>
+                  </div>
+                </li>
+              </ul>
+            </div>
           </div>
         </div>
       </div>

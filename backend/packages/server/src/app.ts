@@ -19,6 +19,7 @@ import { vcsWebhookController } from './modules/vcs/VcsWebhookController.js'
 import { llmProxyController } from './modules/llmProxy/LlmProxyController.js'
 import { mergePresetController } from './modules/merge/MergePresetController.js'
 import { sharedStackController } from './modules/sharedStack/SharedStackController.js'
+import { preflightController } from './modules/preflight/PreflightController.js'
 import { sandboxController } from './modules/sandbox/SandboxController.js'
 import { workspaceSettingsController } from './modules/settings/WorkspaceSettingsController.js'
 import { localSettingsController } from './modules/localSettings/LocalSettingsController.js'
@@ -53,6 +54,7 @@ import { slackController, slackOAuthController } from './modules/slack/SlackCont
 import { vendorCredentialController } from './modules/providers/VendorCredentialController.js'
 import { personalSubscriptionController } from './modules/providers/PersonalSubscriptionController.js'
 import { localModelEndpointController } from './modules/localModels/LocalModelEndpointController.js'
+import { userSettingsController } from './modules/userSettings/UserSettingsController.js'
 import { userSecretController } from './modules/providers/UserSecretController.js'
 import { openRouterCatalogController } from './modules/openrouter/OpenRouterCatalogController.js'
 import {
@@ -107,6 +109,7 @@ export function registerCoreControllers<E extends AppEnv>(app: Hono<E>): void {
   app.route('/', accountController())
   app.route('/', personalSubscriptionController())
   app.route('/', localModelEndpointController())
+  app.route('/', userSettingsController())
   // Per-user infra handler overrides (local mode); 503s where the service is unwired.
   app.route('/', environmentUserHandlerController())
   app.route('/', userSecretController())
@@ -154,6 +157,7 @@ export function registerCoreControllers<E extends AppEnv>(app: Hono<E>): void {
   app.route('/workspaces/:workspaceId', notificationController())
   app.route('/workspaces/:workspaceId', mergePresetController())
   app.route('/workspaces/:workspaceId', sharedStackController())
+  app.route('/workspaces/:workspaceId', preflightController())
   app.route('/workspaces/:workspaceId', sandboxController())
   app.route('/workspaces/:workspaceId', workspaceSettingsController())
   app.route('/workspaces/:workspaceId', releaseHealthController())

@@ -41,6 +41,7 @@ import type {
 } from '@cat-factory/contracts'
 import { detectCustomManifest, detectKubernetesProvisioning } from './provision-detect.logic.js'
 import { detectFrontendConfig } from './frontend-detect.logic.js'
+import { RepoReadError } from './repo-read-error.js'
 import type {
   EnvironmentBackendProvider,
   EnvironmentBackendRegistry,
@@ -75,6 +76,26 @@ import type { ProvisioningLogRecorder } from '../provisioning-logs/ProvisioningL
 // primary handler so the existing controller + frontend keep working until the per-type HTTP
 // surface lands (slices 4–5). See docs/initiatives/per-service-provision-types.md.
 // ---------------------------------------------------------------------------
+
+/**
+ * The provider-specific "check the credential has read access" clause of the auto-detect
+ * read-fault guidance. Kept provider-neutral in the shared detect path: name a GitHub-only
+ * concept ("GitHub App", "Contents: read") ONLY when the detect input actually pinned GitHub,
+ * so a GitLab deployment (local mode is GitLab-capable) isn't told to fix a permission it has
+ * no equivalent for. Absent provider (⇒ the workspace's connected provider) stays neutral.
+ */
+function repoAccessHint(provider?: 'github' | 'gitlab'): string {
+  if (provider === 'gitlab') {
+    return 'Confirm the connected GitLab token still has "read_repository" scope and access to this project'
+  }
+  if (provider === 'github') {
+    return (
+      'Confirm the GitHub App still has "Contents: read" access to this repository ' +
+      "(re-check the installation's repository access)"
+    )
+  }
+  return 'Confirm the connected VCS credential still has read access to this repository'
+}
 
 /** Map a resolved engine back to the provision type it serves. */
 function engineToProvisionType(engine: InfraEngine): ProvisionType {
@@ -700,19 +721,54 @@ export class EnvironmentConnectionService {
       const type = (await this.listCustomTypes(workspaceId)).find(
         (t) => t.manifestId === input.manifestId,
       )
-      return detectCustomManifest(bound.repo, {
+      return this.mapRepoReadError(input, () =>
+        detectCustomManifest(bound.repo, {
+          gitRef: input.gitRef ?? bound.baseBranch,
+          ...(input.directory ? { directory: input.directory } : {}),
+          manifestId: input.manifestId,
+          ...(type?.defaultManifestPath ? { defaultPath: type.defaultManifestPath } : {}),
+          ...(input.currentManifestPath ? { currentPath: input.currentManifestPath } : {}),
+        }),
+      )
+    }
+    return this.mapRepoReadError(input, () =>
+      detectKubernetesProvisioning(bound.repo, {
         gitRef: input.gitRef ?? bound.baseBranch,
         ...(input.directory ? { directory: input.directory } : {}),
-        manifestId: input.manifestId,
-        ...(type?.defaultManifestPath ? { defaultPath: type.defaultManifestPath } : {}),
-        ...(input.currentManifestPath ? { currentPath: input.currentManifestPath } : {}),
-      })
+        ...(input.prefer ? { prefer: input.prefer } : {}),
+      }),
+    )
+  }
+
+  /**
+   * Run an auto-detect scan and translate a {@link RepoReadError} — a genuine "couldn't read the
+   * repo" fault the checkout-free reader threw — into an actionable {@link ValidationError} the
+   * SPA surfaces verbatim. Without this the fault would either be masked as a misleading "nothing
+   * detected" or escape as an opaque 500 ("Internal server error"), which is exactly the vague,
+   * unhelpful outcome this replaces. A clean miss (nothing found, no fault) returns normally.
+   */
+  private async mapRepoReadError<T>(
+    input: {
+      owner: string
+      repo: string
+      directory?: string
+      gitRef?: string
+      provider?: 'github' | 'gitlab'
+    },
+    run: () => Promise<T>,
+  ): Promise<T> {
+    try {
+      return await run()
+    } catch (err) {
+      if (!(err instanceof RepoReadError)) throw err
+      const where = input.directory ? ` (directory "${input.directory}")` : ''
+      const at = input.gitRef ? ` at "${input.gitRef}"` : ''
+      throw new ValidationError(
+        `Could not read ${input.owner}/${input.repo}${where}${at} to auto-detect. ` +
+          `${repoAccessHint(input.provider)}, that the branch exists, and that you are not ` +
+          `rate-limited, then retry. Underlying error: ${err.reason}`,
+      )
     }
-    return detectKubernetesProvisioning(bound.repo, {
-      gitRef: input.gitRef ?? bound.baseBranch,
-      ...(input.directory ? { directory: input.directory } : {}),
-      ...(input.prefer ? { prefer: input.prefer } : {}),
-    })
   }
 
   /**
@@ -742,10 +798,12 @@ export class EnvironmentConnectionService {
         ],
       }
     }
-    return detectFrontendConfig(bound.repo, {
-      gitRef: input.gitRef ?? bound.baseBranch,
-      ...(input.directory ? { directory: input.directory } : {}),
-    })
+    return this.mapRepoReadError(input, () =>
+      detectFrontendConfig(bound.repo, {
+        gitRef: input.gitRef ?? bound.baseBranch,
+        ...(input.directory ? { directory: input.directory } : {}),
+      }),
+    )
   }
 
   /**
@@ -1069,6 +1127,49 @@ export class EnvironmentConnectionService {
     const record = await this.requirePrimary(workspaceId)
     const { provider, manifest } = this.buildFromRecord(record)
     return { provider: this.deps.environmentProvider ?? provider, manifest }
+  }
+
+  /**
+   * Resolve the live provider + manifest + secret resolver for an EXISTING environment record,
+   * keyed by the record's persisted provision type/engine — the per-type handler that stood it up,
+   * NOT the workspace-primary handler. So teardown / status of an env in a workspace with several
+   * per-type handlers goes through the SAME handler that provisioned it (the previous
+   * `resolveProvider` always used the primary, tearing an env down through the wrong provider).
+   * Falls back to the legacy single-connection resolution for a legacy row (null `provisionType`)
+   * or when no per-type handler matches (its handler was unregistered) — so those envs keep working
+   * and the fallback preserves the old behaviour.
+   */
+  async resolveProviderForRecord(record: {
+    workspaceId: string
+    provisionType: string | null
+    engine: string | null
+  }): Promise<{
+    provider: EnvironmentProvider
+    manifest: EnvironmentManifest
+    resolveSecret: SecretResolver
+  }> {
+    const { workspaceId } = record
+    if (record.provisionType) {
+      // One batched list + a pure filter (no N+1 point-read). `EnvironmentRecord` carries no
+      // manifestId, so a `custom` type pinned to a manifest id can't be disambiguated here — a
+      // single matching handler wins, else prefer the same engine, else fall through to legacy.
+      const handlers = await this.deps.environmentConnectionRepository.listByWorkspace(workspaceId)
+      const matches = handlers.filter((h) => h.provisionType === record.provisionType)
+      const handler =
+        matches.length === 1
+          ? matches[0]
+          : (matches.find((h) => h.engine === record.engine) ?? undefined)
+      if (handler) {
+        const { provider, manifest } = this.buildFromRecord(handler)
+        return {
+          provider: this.deps.environmentProvider ?? provider,
+          manifest,
+          resolveSecret: await this.buildResolveSecret(handler),
+        }
+      }
+    }
+    const { provider, manifest } = await this.resolveProvider(workspaceId)
+    return { provider, manifest, resolveSecret: await this.resolveSecrets(workspaceId) }
   }
 
   /** Resolve a VCS-neutral bound RepoFiles for the workspace+coords, or null. */

@@ -120,17 +120,16 @@ describe('onCallUserPrompt', () => {
 })
 
 describe('testerInfraSpec', () => {
-  it('carries the docker-compose path for a `docker-compose` service', () => {
+  it('runs ephemeral for a `docker-compose` service (Deployer-provisioned, no in-container bring-up)', () => {
+    // Compose is now stood up by the single Deployer step through a workspace handler, exactly like
+    // kubernetes/custom — so the Tester targets the provisioned env, never a local `composePath`.
     const spec = testerInfraSpec(
       context({
         service: { provisioning: { type: 'docker-compose', composePath: 'docker-compose.yml' } },
+        environment: { url: 'https://compose.env' },
       } as Record<string, unknown>),
     )
-    expect(spec).toMatchObject({
-      environment: 'local',
-      noInfraDependencies: false,
-      composePath: 'docker-compose.yml',
-    })
+    expect(spec).toEqual({ environment: 'ephemeral', environmentUrl: 'https://compose.env' })
   })
 
   it('flags no-infra for an `infraless` service (or none declared)', () => {

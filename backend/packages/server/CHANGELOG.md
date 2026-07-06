@@ -1,5 +1,213 @@
 # @cat-factory/server
 
+## 0.94.1
+
+### Patch Changes
+
+- Updated dependencies [10787c4]
+  - @cat-factory/contracts@0.110.1
+  - @cat-factory/kernel@0.101.1
+  - @cat-factory/orchestration@0.83.1
+  - @cat-factory/integrations@0.73.5
+  - @cat-factory/agents@0.40.5
+  - @cat-factory/prompt-fragments@0.10.18
+  - @cat-factory/spend@0.11.2
+
+## 0.94.0
+
+### Minor Changes
+
+- c66362f: Remove the `ENVIRONMENTS_ENABLED` deployment flag; the ephemeral-environment
+  integration now assembles wherever the shared `ENCRYPTION_KEY` is set, the same
+  "always on where the key is present" model as the document/task sources.
+
+  The flag was a footgun: it defaulted off and its only effect was to make the whole
+  integration silently inert (auto-detect 503ing with `unavailable`) even when the real
+  prerequisites — an encryption key plus a registered per-workspace connection — were
+  present. Whether a workspace provisions anything is already governed by whether it
+  connects a provider and whether its pipeline includes a `deployer`/`tester` step, so to
+  keep environments out of a pipeline you simply omit those steps. `EnvironmentsConfig`
+  drops its `enabled` field and the module gates on `encryptionKey` presence in all three
+  runtimes.
+
+  Breaking: `ENVIRONMENTS_ENABLED` is no longer read; remove it from deployment config
+  (setting it has no effect). The inspector's dedicated "ephemeral environments aren't
+  enabled" auto-detect panel is removed with it, since that off state no longer exists.
+
+## 0.93.0
+
+### Minor Changes
+
+- f596090: Record successful step outputs in the step-detail "execution history", not just failures.
+
+  A restart-from-step resets the chosen step and every later one, dropping their `output`;
+  previously that successful work was lost and the per-step history could only ever show
+  errors. The run now keeps an `outputHistory` — the positive complement of `failureHistory`
+  — capturing the successful outputs a restart superseded (attributed by step index, bounded
+  in count + per-entry size, riding the run's `detail` JSON with no schema migration). The
+  step-detail overlay renders a merged, newest-first timeline of these superseded outputs and
+  the failed attempts. A plain retry (which re-runs only unfinished steps) records nothing.
+
+### Patch Changes
+
+- Updated dependencies [f596090]
+  - @cat-factory/contracts@0.110.0
+  - @cat-factory/kernel@0.101.0
+  - @cat-factory/orchestration@0.83.0
+  - @cat-factory/agents@0.40.4
+  - @cat-factory/integrations@0.73.4
+  - @cat-factory/prompt-fragments@0.10.17
+  - @cat-factory/spend@0.11.1
+
+## 0.92.0
+
+### Minor Changes
+
+- 9ea1e77: Tiered spend budgets (account / workspace / user) with operator hard caps.
+
+  Budgets are now tracked and enforced across three tiers: the existing per-workspace
+  monthly limit, a per-account limit, and a per-user limit. A run pauses when any applicable
+  tier is exhausted. All three tiers are configurable and visible in the Budget settings
+  screen.
+
+  Two new environment variables (`BUDGET_MAX_MONTHLY_PER_ACCOUNT`,
+  `BUDGET_MAX_MONTHLY_PER_USER`), read by the Node and Cloudflare config loaders, set
+  operator hard ceilings on the account/user tiers; the UI cannot exceed a configured cap and
+  shows it on the budget screen. See `docs/environment-variables.md` and
+  `docs/initiatives/tiered-budgets.md`.
+
+  Breaking (pre-1.0, no data migration): the `token_usage` ledger gains nullable
+  `account_id`/`user_id` columns (existing rows are unattributed and excluded from the new
+  account/user rollups until re-metered); `TokenUsageRecord`, `RecordUsageInput`, and
+  `SpendPricing` gained fields; `SpendService.isOverBudget` now takes an optional tier scope.
+  A new `user_settings` table and `GET/PUT /user-settings` endpoint carry the user-tier
+  budget.
+
+### Patch Changes
+
+- Updated dependencies [9ea1e77]
+  - @cat-factory/contracts@0.109.0
+  - @cat-factory/kernel@0.100.0
+  - @cat-factory/spend@0.11.0
+  - @cat-factory/orchestration@0.82.0
+  - @cat-factory/agents@0.40.3
+  - @cat-factory/integrations@0.73.3
+  - @cat-factory/prompt-fragments@0.10.16
+
+## 0.91.0
+
+### Minor Changes
+
+- e66accb: Stack recipes & shared stacks (slice 7): make the Deployer the sole docker-compose provisioner + the environment setup wizard scaffolding.
+
+  **Deployer becomes the single docker-compose provisioner (the compose-centralization follow-up owed by this slice).** Now that the setup wizard can save a `docker-compose` handler, docker-compose is provisioned by the single Deployer step through a workspace handler, exactly like `kubernetes`/`custom` — the in-container (DinD) bring-up is retired from the run-mode decision:
+
+  - `decideTesterInfra` (`tester-infra.logic.ts`): `docker-compose` is handler-based (drops the `localTestInfraSupported`/`hasComposePath` inputs and the `limited-local`/`compose-unconfigured` reasons).
+  - `needsDeployerBeforeConsumer` + `ExecutionService.assertTesterInfraConfigured`'s `needsHandler` now cover `docker-compose`, so a compose chain that reaches a tester with no resolvable handler is refused at run start (fail-fast, same as k8s/custom) instead of dead-ending.
+  - `testerInfraSpec` (`@cat-factory/server`): `docker-compose` targets the Deployer-provisioned env (`environment: 'ephemeral'`); the `local`/`composePath` branch is gone.
+  - (The harness's in-container `docker compose up` is now unreachable and retired in a later image-bumping slice.)
+
+  **Environment setup wizard.** The guided detect → review → preflight → save flow the compose-centralization depends on: `EnvironmentSetupWizard.vue` (stepper shell over the `environmentWizard` store — detection, opt-in deep analysis via `pl_environment_analysis` with live provenance-merged review, compose-file/profile/seed candidate pickers, a raw-recipe editor, the preflight checklist, save the workspace compose handler + the frame recipe, and an optional trial provision with live provisioning logs), a docker-compose service-inspector nudge, a SideBar entry, the mount in `pages/index.vue`, and the `environmentWizard` i18n namespace across all 8 locales. Backed by the `preflights` API + store (`POST /workspaces/:ws/preflights/run`) and the `provisionEnvironment` API. (The `data-testid`-only e2e spec is deferred — it needs a fake `ProvisioningRepoReader` e2e seam so detection returns a canned recommendation with GitHub off; tracked in the slice-7 checklist.)
+
+  Breaking (pre-1.0, acceptable): a `docker-compose` service reaching a tester/human-test with no configured compose handler is now refused at run start rather than falling back to an in-container compose bring-up.
+
+  Review follow-ups in the same slice: the `environmentWizard` store now fully resets per-frame state when re-targeted (`selectFrame` no longer leaves a prior frame's `saved`/service/port behind), resolves the analyst run by preferring a live/succeeded instance over a bare `.at(-1)` (so a retry's dead predecessor can't mask the successful run), validates the exposed port before registering the handler, and surfaces a real (non-503) preflight failure instead of swallowing it. The now-dead `localTestInfraSupported` dependency (its only reads were removed with the DinD path) is dropped from `CoreDependencies`/`ExecutionService` and the local facade's wiring, and the stale DinD doc comments on `assertTesterInfraConfigured` / `testerInfraSpec` are corrected.
+
+### Patch Changes
+
+- Updated dependencies [e66accb]
+  - @cat-factory/orchestration@0.81.0
+  - @cat-factory/contracts@0.108.1
+  - @cat-factory/agents@0.40.2
+  - @cat-factory/integrations@0.73.2
+  - @cat-factory/kernel@0.99.1
+  - @cat-factory/prompt-fragments@0.10.15
+  - @cat-factory/spend@0.10.109
+
+## 0.90.3
+
+### Patch Changes
+
+- Updated dependencies [9cc02a0]
+  - @cat-factory/integrations@0.73.1
+  - @cat-factory/orchestration@0.80.1
+
+## 0.90.2
+
+### Patch Changes
+
+- Updated dependencies [1afa003]
+- Updated dependencies [f91b99d]
+  - @cat-factory/kernel@0.99.0
+  - @cat-factory/orchestration@0.80.0
+  - @cat-factory/integrations@0.73.0
+  - @cat-factory/contracts@0.108.0
+  - @cat-factory/agents@0.40.1
+  - @cat-factory/spend@0.10.108
+  - @cat-factory/prompt-fragments@0.10.14
+
+## 0.90.1
+
+### Patch Changes
+
+- Updated dependencies [eef8612]
+- Updated dependencies [bf31df7]
+  - @cat-factory/integrations@0.72.1
+  - @cat-factory/contracts@0.107.0
+  - @cat-factory/agents@0.40.0
+  - @cat-factory/kernel@0.98.0
+  - @cat-factory/orchestration@0.79.1
+  - @cat-factory/prompt-fragments@0.10.13
+  - @cat-factory/spend@0.10.107
+
+## 0.90.0
+
+### Minor Changes
+
+- 6f9d935: Stack recipes & shared stacks (slice 6): preflight prerequisite checks with guided remediation.
+
+  A stack recipe can now declare machine `prerequisites: PreflightRef[]` — automated PROBE + human REMEDIATION checks for the inherently-manual one-time machine setup a complex compose repo needs (docker daemon reachable, free disk / RAM, container-registry login state, VPN reachability, mkcert CA, hosts-file entries, an env-file secrets marker). They are re-run at provision start: a failing REQUIRED check fails the provision fast with its copy-paste remediation in the provisioning log, instead of a mystery deep inside a 40-image pull (a non-required check is advisory — a warning). A `POST /workspaces/:ws/preflights/run` endpoint runs an arbitrary set of checks for the setup wizard's live re-check.
+
+  - Contracts: `PreflightCheckId` / `PreflightParams` / `PreflightRef` / `PreflightResult` (`preflights.ts`) + `prerequisites` on `stackRecipeSchema`; the `runPreflightsContract` route.
+  - Kernel: the runtime-bound `PreflightHostProbes` seam + `PreflightProbeOutcome`, and a `runPreflights` seam on `ProvisionEnvironmentRequest`.
+  - Integrations: `PreflightService` (runtime-neutral orchestration over the probe seam) + provision-start enforcement in `ComposeEnvironmentProvider`.
+  - Server: `PreflightController`.
+  - Local facade: `createDockerPreflightProbes` (the host probes over the docker CLI + `node:*`), wired only where the compose runtime is (a Docker-family host daemon). The probes are runtime-bound (local facade only, the documented compose exception); the declaration + API are runtime-neutral and the recipe rides the existing `provisioning` blob, so there is no migration. On the Worker / plain Node the preflight API 503s and a recipe that declares prerequisites fails loudly at provision.
+
+### Patch Changes
+
+- Updated dependencies [6f9d935]
+  - @cat-factory/contracts@0.106.0
+  - @cat-factory/kernel@0.97.0
+  - @cat-factory/integrations@0.72.0
+  - @cat-factory/orchestration@0.79.0
+  - @cat-factory/agents@0.39.4
+  - @cat-factory/prompt-fragments@0.10.12
+  - @cat-factory/spend@0.10.106
+
+## 0.89.0
+
+### Minor Changes
+
+- 5490103: Surface web search on container agent run details, and store/display performed search queries as telemetry.
+
+  - Container steps now carry a `search` availability fact (`{ available, provider }`), resolved backend-side at dispatch from the run's account web-search keys (else the deployment default). The observability drill-down shows whether web search was available and which provider (Brave / SearXNG) served the run — a static per-run fact, not gated by prompt-recording.
+  - New `agent_search_queries` telemetry sink records every web search a container agent performs through the backend search proxy (query, provider, result count), gated by the same double switch as agent-context snapshots (`LLM_RECORD_PROMPTS` + the workspace `storeAgentContext` setting) and pruned on the same telemetry retention window. Mirrored across the D1 (Cloudflare) and Drizzle/Postgres (Node) stores with a cross-runtime conformance suite, and surfaced on demand via `GET /workspaces/:ws/executions/:executionId/search-queries` in a new "Web search" observability view.
+
+### Patch Changes
+
+- e5b9462: Show a step's failure trail on its step-detail overlay. The step-detail overlay now has an "Execution history" toggle that reveals the prior failed attempts recorded for that specific step (plus the current failure when the run is presently failed at it): the run-level "previous errors" history narrowed to one step. Each `AgentFailure` now carries the `stepIndex` it failed at (stamped by the engine's failure funnel), so the trail can be attributed per step.
+- Updated dependencies [5490103]
+- Updated dependencies [e5b9462]
+- Updated dependencies [dd6df12]
+  - @cat-factory/contracts@0.105.0
+  - @cat-factory/kernel@0.96.0
+  - @cat-factory/orchestration@0.78.0
+  - @cat-factory/integrations@0.71.0
+  - @cat-factory/agents@0.39.3
+  - @cat-factory/prompt-fragments@0.10.11
+  - @cat-factory/spend@0.10.105
+
 ## 0.88.0
 
 ### Minor Changes

@@ -16,6 +16,8 @@ import type {
   EmailProviderKind,
   AgentContextSnapshot,
   AgentContextSnapshotRepository,
+  AgentSearchQuery,
+  AgentSearchQueryRepository,
   CloudProvider,
   AgentRunRef,
   AgentRunRepository,
@@ -113,6 +115,8 @@ import type {
   UserIdentityRecord,
   UserRecord,
   UserRepository,
+  UserSettings,
+  UserSettingsRepository,
   IdentityProvider,
   Workspace,
   WorkspaceRepository,
@@ -121,7 +125,11 @@ import type {
   WorkspaceSettingsRepository,
 } from '@cat-factory/kernel'
 import { LLM_WARNING_FINISH_REASONS } from '@cat-factory/kernel'
-import { agentRunKindSchema, decodeInitiativeRow } from '@cat-factory/contracts'
+import {
+  agentRunKindSchema,
+  decodeInitiativeRow,
+  isWebSearchProvider,
+} from '@cat-factory/contracts'
 import {
   decodeEnum,
   tryDecodeRows,
@@ -169,6 +177,7 @@ import {
   localSettings,
   accounts,
   agentContextSnapshots,
+  agentSearchQueries,
   agentRuns,
   blocks,
   consensusSessions,
@@ -204,6 +213,7 @@ import {
   modelPresets,
   userIdentities,
   users,
+  userSettings,
   workspaceFragmentDefaults,
   workspaceServices,
   workspaceSettings,
@@ -837,6 +847,7 @@ function rowToAccount(row: typeof accounts.$inferSelect): AccountRecord {
     ...(row.default_cloud_provider
       ? { defaultCloudProvider: row.default_cloud_provider as CloudProvider }
       : {}),
+    ...(row.spend_monthly_limit != null ? { spendMonthlyLimit: row.spend_monthly_limit } : {}),
   }
 }
 
@@ -871,6 +882,7 @@ class DrizzleAccountRepository implements AccountRepository {
       owner_user_id: account.ownerUserId,
       created_at: account.createdAt,
       default_cloud_provider: account.defaultCloudProvider ?? null,
+      spend_monthly_limit: account.spendMonthlyLimit ?? null,
     })
   }
 
@@ -879,11 +891,15 @@ class DrizzleAccountRepository implements AccountRepository {
   }
 
   async updateSettings(id: string, patch: AccountSettingsPatch): Promise<void> {
-    if (!('defaultCloudProvider' in patch)) return
-    await this.db
-      .update(accounts)
-      .set({ default_cloud_provider: patch.defaultCloudProvider ?? null })
-      .where(eq(accounts.id, id))
+    const set: Partial<typeof accounts.$inferInsert> = {}
+    if ('defaultCloudProvider' in patch) {
+      set.default_cloud_provider = patch.defaultCloudProvider ?? null
+    }
+    if ('spendMonthlyLimit' in patch) {
+      set.spend_monthly_limit = patch.spendMonthlyLimit ?? null
+    }
+    if (Object.keys(set).length === 0) return
+    await this.db.update(accounts).set(set).where(eq(accounts.id, id))
   }
 
   async findPersonalByUser(userId: string): Promise<AccountRecord | null> {
@@ -1265,6 +1281,8 @@ class DrizzleTokenUsageRepository implements TokenUsageRepository {
     await this.db.insert(tokenUsage).values({
       id: usage.id,
       workspace_id: usage.workspaceId,
+      account_id: usage.accountId,
+      user_id: usage.userId,
       execution_id: usage.executionId,
       agent_kind: usage.agentKind,
       provider: usage.provider,
@@ -1312,12 +1330,67 @@ class DrizzleTokenUsageRepository implements TokenUsageRepository {
     }
   }
 
+  async totalsSinceForAccount(accountId: string, epochMs: number): Promise<TokenUsageTotals> {
+    const [row] = await this.db
+      .select({
+        input: sql<string>`coalesce(sum(${tokenUsage.input_tokens}), 0)::bigint`,
+        output: sql<string>`coalesce(sum(${tokenUsage.output_tokens}), 0)::bigint`,
+        cost: sql<number>`coalesce(sum(${tokenUsage.cost_estimate}), 0)::float8`,
+      })
+      .from(tokenUsage)
+      .where(and(eq(tokenUsage.account_id, accountId), gte(tokenUsage.created_at, epochMs)))
+    return {
+      inputTokens: Number(row?.input ?? 0),
+      outputTokens: Number(row?.output ?? 0),
+      costEstimate: row?.cost ?? 0,
+    }
+  }
+
+  async totalsSinceForUser(userId: string, epochMs: number): Promise<TokenUsageTotals> {
+    const [row] = await this.db
+      .select({
+        input: sql<string>`coalesce(sum(${tokenUsage.input_tokens}), 0)::bigint`,
+        output: sql<string>`coalesce(sum(${tokenUsage.output_tokens}), 0)::bigint`,
+        cost: sql<number>`coalesce(sum(${tokenUsage.cost_estimate}), 0)::float8`,
+      })
+      .from(tokenUsage)
+      .where(and(eq(tokenUsage.user_id, userId), gte(tokenUsage.created_at, epochMs)))
+    return {
+      inputTokens: Number(row?.input ?? 0),
+      outputTokens: Number(row?.output ?? 0),
+      costEstimate: row?.cost ?? 0,
+    }
+  }
+
   async deleteOlderThan(epochMs: number): Promise<number> {
     const deleted = await this.db
       .delete(tokenUsage)
       .where(lt(tokenUsage.created_at, epochMs))
       .returning({ id: tokenUsage.id })
     return deleted.length
+  }
+}
+
+class DrizzleUserSettingsRepository implements UserSettingsRepository {
+  constructor(private readonly db: DrizzleDb) {}
+
+  async get(userId: string): Promise<UserSettings | null> {
+    const [row] = await this.db.select().from(userSettings).where(eq(userSettings.user_id, userId))
+    return row ? { spendMonthlyLimit: row.spend_monthly_limit } : null
+  }
+
+  async upsert(userId: string, settings: UserSettings): Promise<void> {
+    await this.db
+      .insert(userSettings)
+      .values({
+        user_id: userId,
+        spend_monthly_limit: settings.spendMonthlyLimit ?? null,
+        updated_at: Date.now(),
+      })
+      .onConflictDoUpdate({
+        target: userSettings.user_id,
+        set: { spend_monthly_limit: settings.spendMonthlyLimit ?? null, updated_at: Date.now() },
+      })
   }
 }
 
@@ -1573,6 +1646,61 @@ class DrizzleAgentContextSnapshotRepository implements AgentContextSnapshotRepos
       .delete(agentContextSnapshots)
       .where(lt(agentContextSnapshots.created_at, epochMs))
       .returning({ id: agentContextSnapshots.id })
+    return deleted.length
+  }
+}
+
+type AgentSearchQueryRow = typeof agentSearchQueries.$inferSelect
+
+function rowToAgentSearchQuery(row: AgentSearchQueryRow): AgentSearchQuery {
+  return {
+    id: row.id,
+    workspaceId: row.workspace_id,
+    executionId: row.execution_id,
+    agentKind: row.agent_kind,
+    // The stored provider column is free-text; narrow it back to the wire union.
+    provider: isWebSearchProvider(row.provider) ? row.provider : null,
+    query: row.query,
+    resultCount: row.result_count,
+    createdAt: row.created_at,
+  }
+}
+
+class DrizzleAgentSearchQueryRepository implements AgentSearchQueryRepository {
+  constructor(private readonly db: DrizzleDb) {}
+
+  async record(query: AgentSearchQuery): Promise<void> {
+    await this.db.insert(agentSearchQueries).values({
+      id: query.id,
+      workspace_id: query.workspaceId,
+      execution_id: query.executionId,
+      agent_kind: query.agentKind,
+      provider: query.provider,
+      query: query.query,
+      result_count: query.resultCount,
+      created_at: query.createdAt,
+    })
+  }
+
+  async listByExecution(workspaceId: string, executionId: string): Promise<AgentSearchQuery[]> {
+    const rows = await this.db
+      .select()
+      .from(agentSearchQueries)
+      .where(
+        and(
+          eq(agentSearchQueries.workspace_id, workspaceId),
+          eq(agentSearchQueries.execution_id, executionId),
+        ),
+      )
+      .orderBy(desc(agentSearchQueries.created_at), desc(agentSearchQueries.id))
+    return rows.map(rowToAgentSearchQuery)
+  }
+
+  async deleteOlderThan(epochMs: number): Promise<number> {
+    const deleted = await this.db
+      .delete(agentSearchQueries)
+      .where(lt(agentSearchQueries.created_at, epochMs))
+      .returning({ id: agentSearchQueries.id })
     return deleted.length
   }
 }
@@ -4457,6 +4585,7 @@ export interface CoreRepositories {
   tokenUsageRepository: TokenUsageRepository
   llmCallMetricRepository: LlmCallMetricRepository
   agentContextSnapshotRepository: AgentContextSnapshotRepository
+  agentSearchQueryRepository: AgentSearchQueryRepository
   binaryArtifactMetadataStore: BinaryArtifactMetadataStore
   agentRunRepository: AgentRunRepository
   modelPresetRepository: ModelPresetRepository
@@ -4476,6 +4605,7 @@ export interface CoreRepositories {
   mergePresetRepository: MergePresetRepository
   sharedStackRepository: SharedStackRepository
   workspaceSettingsRepository: WorkspaceSettingsRepository
+  userSettingsRepository: UserSettingsRepository
   observabilityConnectionRepository: ObservabilityConnectionRepository
   packageRegistryConnectionRepository: PackageRegistryConnectionRepository
   incidentEnrichmentConnectionRepository: IncidentEnrichmentConnectionRepository
@@ -4500,6 +4630,7 @@ export function createDrizzleRepositories(db: DrizzleDb, clock: Clock): CoreRepo
     tokenUsageRepository: new DrizzleTokenUsageRepository(db),
     llmCallMetricRepository: new DrizzleLlmCallMetricRepository(db),
     agentContextSnapshotRepository: new DrizzleAgentContextSnapshotRepository(db),
+    agentSearchQueryRepository: new DrizzleAgentSearchQueryRepository(db),
     binaryArtifactMetadataStore: new DrizzleBinaryArtifactMetadataStore(db),
     agentRunRepository: new DrizzleAgentRunRepository(db),
     modelPresetRepository: new DrizzleModelPresetRepository(db),
@@ -4519,6 +4650,7 @@ export function createDrizzleRepositories(db: DrizzleDb, clock: Clock): CoreRepo
     mergePresetRepository: new DrizzleMergePresetRepository(db),
     sharedStackRepository: new DrizzleSharedStackRepository(db),
     workspaceSettingsRepository: new DrizzleWorkspaceSettingsRepository(db),
+    userSettingsRepository: new DrizzleUserSettingsRepository(db),
     observabilityConnectionRepository: new DrizzleObservabilityConnectionRepository(db),
     packageRegistryConnectionRepository: new DrizzlePackageRegistryConnectionRepository(db),
     incidentEnrichmentConnectionRepository: new DrizzleIncidentEnrichmentConnectionRepository(db),

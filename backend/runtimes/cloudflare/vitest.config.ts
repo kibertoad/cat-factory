@@ -55,10 +55,9 @@ export default defineConfig(async () => {
             // and `documentsDeps()`/`tasksDeps()` build their ciphers from it.
             // Production sets this as a secret.
             ENCRYPTION_KEY: 'c2hhcmVkLW1hc3Rlci1rZXktMDEyMzQ1Njc4OWFiY2RlZg==',
-            // Enable the opt-in environment + runner-pool integrations so their real
-            // services wire up; their specs stub global `fetch` to act as the
-            // provider/scheduler.
-            ENVIRONMENTS_ENABLED: 'true',
+            // Enable the opt-in runner-pool integration so its real service wires up; its
+            // specs stub global `fetch` to act as the scheduler. (The environment
+            // integration assembles from ENCRYPTION_KEY above — no flag.)
             RUNNERS_ENABLED: 'true',
             // Enable the Slack notification transport so its module + channel wire up;
             // the conformance Slack CRUD asserts persistence parity with Node, and the

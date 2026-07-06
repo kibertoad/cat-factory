@@ -3,7 +3,8 @@
     "loading": "Chargement…",
     "loadingBoard": "Chargement du tableau…",
     "backendUnreachable": "Impossible de joindre le backend",
-    "reconnecting": "Reconnexion…"
+    "reconnecting": "Reconnexion…",
+    "offline": "Mises à jour en direct non reçues"
   },
   "language": {
     "switcher": "Langue",
@@ -39,6 +40,8 @@
       "reconfigureHint": "Vous pourrez le reconfigurer plus tard."
     },
     "copied": "Copié dans le presse-papiers",
+    "reveal": "Afficher",
+    "hide": "Masquer",
     "disconnect": "Déconnecter",
     "copyFailed": "Échec de la copie dans le presse-papiers",
     "revoke": "Révoquer",
@@ -51,7 +54,10 @@
       "cleared": "{name} effacé",
       "destroyed": "{name} détruit"
     },
-    "undo": "Annuler"
+    "undo": "Annuler",
+    "back": "Retour",
+    "next": "Suivant",
+    "done": "Terminé"
   },
   "nav": {
     "menu": "Menu de navigation",
@@ -72,7 +78,8 @@
     "workspaceSettings": "Paramètres de l’espace de travail",
     "modelConfiguration": "Configuration du modèle",
     "accountSettings": "Paramètres du compte",
-    "infrastructure": "Infrastructure"
+    "infrastructure": "Infrastructure",
+    "environmentSetup": "Configuration d'environnement"
   },
   "board": {
     "toast": {
@@ -81,6 +88,7 @@
       "moveFailed": "Impossible de déplacer",
       "deleteFailed": "Impossible de supprimer",
       "linkFailed": "Impossible de lier les tâches",
+      "unlinkFailed": "Impossible de supprimer la dépendance",
       "recurringDeleteFailed": "Impossible de supprimer le pipeline récurrent",
       "deleted": "\"{name}\" supprimé",
       "moved": "\"{name}\" déplacé"
@@ -104,7 +112,11 @@
       "spendTitle": "Dépense de tokens ce mois-ci",
       "spendLimitReached": "Limite de dépense atteinte : exécutions en pause",
       "serviceAdded": "{title} ajouté",
-      "serviceAddFailed": "Impossible d’ajouter le service"
+      "serviceAddFailed": "Impossible d’ajouter le service",
+      "zoomOut": "Dézoomer",
+      "zoomIn": "Zoomer",
+      "fitView": "Ajuster au contenu",
+      "resetZoom": "Réinitialiser le zoom à 100 %"
     },
     "canvas": {
       "emptyTitle": "Votre tableau est vide",
@@ -264,6 +276,9 @@
       "stalled": "L’exécution est bloquée",
       "retryBootstrap": "Relancer l’initialisation",
       "retryRun": "Relancer l’exécution",
+      "environmentSetup": "Configurer les environnements",
+      "deployRunnerSetup": "Configurer le pool de runners",
+      "environmentLocalHint": "Les environnements éphémères locaux nécessitent un runtime de déploiement pour exécuter kubectl/kustomize/helm. Définissez {runtime} dans votre .env : le mode natif exécute ces outils sur votre hôte ({native}), le mode conteneur les exécute dans l'image de déploiement ({container}).",
       "showDetail": "Afficher le détail",
       "retrying": "Nouvelle tentative…",
       "history": {
@@ -385,7 +400,8 @@
         "preset_unsatisfiable": "Le préréglage de modèle ne peut pas exécuter ce pipeline",
         "visual_pipeline_no_frontend": "Aucun frontend à tester",
         "model_policy_blocked": "Model blocked by account policy",
-        "model_policy_unsupported": "Model policy not available here"
+        "model_policy_unsupported": "Model policy not available here",
+        "deployer_required_before_tester": "Ajoutez un Deployer avant le Testeur"
       },
       "fallbackMessage": "Cette action est en conflit avec l’état actuel.",
       "providersUnconfigured": {
@@ -454,6 +470,7 @@
     }
   },
   "inspector": {
+    "detectRepoUnresolved": "Le dépôt de ce bloc ne figure pas parmi les dépôts GitHub connectés et ne peut donc pas être lu. Connectez ou synchronisez GitHub pour ce dépôt, puis réessayez.",
     "container": {
       "title": "Contenu",
       "hint": "Les modules et les tâches contenus dans ce bloc. Cliquez sur une entrée pour la sélectionner sur le tableau.",
@@ -690,6 +707,11 @@
           "succeeded": "Manifeste généré et poussé.",
           "failed": "La génération du manifeste a échoué. Réessayez depuis la fenêtre Infrastructure."
         }
+      },
+      "envWizard": {
+        "title": "Configuration d'environnement Compose",
+        "hint": "Configurez la recette, les vérifications préalables et le gestionnaire pour que le Deployer provisionne cette stack.",
+        "open": "Ouvrir l'assistant"
       }
     },
     "agentConfig": {
@@ -965,6 +987,10 @@
       "companionCapDetail": "Effectuer un tour de retravail automatique supplémentaire, passer à l'étape suivante en acceptant la sortie actuelle, ou arrêter et réinitialiser la tâche pour modifier les entrées et la resoumettre.",
       "infraAttempts": "Tentatives d'infrastructure",
       "hideInfraAttempts": "Masquer les tentatives d'infrastructure",
+      "executionHistory": "Historique d'exécution",
+      "hideExecutionHistory": "Masquer l'historique d'exécution",
+      "attemptSucceeded": "Réussi",
+      "outputTruncated": "Sortie tronquée pour garder l'historique d'exécution compact.",
       "editingConclusions": "Modification des conclusions",
       "editConclusionsPlaceholder": "Modifiez les conclusions de l'agent ; vos modifications sont enregistrées lorsque vous approuvez…",
       "noProseOutput": "Cet agent n'a produit aucune sortie en texte libre.",
@@ -1052,6 +1078,7 @@
     "loadingContext": "Chargement du contexte fourni…",
     "noCalls": "Aucun appel de modèle enregistré pour cette exécution.",
     "noContext": "Aucun contexte d'agent stocké pour cette exécution. Il est capturé à chaque dispatch lorsque l'espace de travail a activé 'Stocker le contexte complet de l'agent'.",
+    "contextError": "Impossible de charger le contexte fourni.",
     "summary": {
       "calls": "Appels",
       "tokensInOut": "Tokens (entrée / sortie)",
@@ -1098,6 +1125,16 @@
       "systemPrompt": "Prompt système",
       "userPrompt": "Prompt utilisateur",
       "details": "Détails"
+    },
+    "webSearch": "Recherche web",
+    "loadingSearch": "Chargement des recherches web…",
+    "noSearch": "Aucune recherche web enregistrée pour cette exécution. Les requêtes sont capturées lorsque la recherche web s'exécute et que l'espace de travail a activé « Stocker le contexte complet de l'agent ».",
+    "search": {
+      "available": "Disponible",
+      "unavailable": "Indisponible",
+      "provider": "Fournisseur",
+      "resultsCount": "{count} résultat | {count} résultats",
+      "queriesTitle": "Recherches effectuées"
     }
   },
   "auth": {
@@ -2163,11 +2200,22 @@
       },
       "budget": {
         "heading": "Budget de dépenses mensuel",
-        "body": "L'utilisation des jetons est décomptée par appel LLM, valorisée et plafonnée par ce budget. Une fois atteint, les exécutions de cet espace de travail sont mises en pause et le tableau affiche un avertissement. Laissez vide pour hériter de la valeur par défaut intégrée (environ 100 EUR/mois).",
+        "body": "L'utilisation des jetons est décomptée par appel LLM, valorisée et plafonnée par ces budgets. Une exécution est mise en pause dès qu'un niveau auquel elle appartient est épuisé. Laissez un champ vide pour ne fixer aucune limite à ce niveau (le niveau de l'espace de travail hérite alors de la valeur par défaut intégrée, environ 100 EUR/mois).",
         "monthlyLimit": "Limite mensuelle",
         "defaultPlaceholder": "Par défaut",
         "currency": "Devise (ISO 4217)",
-        "save": "Enregistrer le budget"
+        "save": "Enregistrer le budget",
+        "saveTier": "Enregistrer",
+        "workspace": "Cet espace de travail",
+        "account": "Compte (tous les espaces de travail)",
+        "user": "Vous (toutes vos exécutions)",
+        "accountBody": "Un plafond pour tous les espaces de travail de ce compte.",
+        "userBody": "Un plafond pour toutes les exécutions que vous lancez, dans n'importe quel espace de travail.",
+        "hardCap": "Limite de l'opérateur : {amount}",
+        "hardCapHint": "définie par le déploiement ; la valeur ne peut pas la dépasser",
+        "spent": "{spent} sur {limit} dépensé ce mois-ci",
+        "adminOnly": "Seul un administrateur du compte peut modifier le budget du compte.",
+        "noLimitPlaceholder": "Aucune limite"
       },
       "toast": {
         "saved": "Paramètres enregistrés",
@@ -2231,7 +2279,7 @@
         "remote-kubernetes": "Kubernetes distant"
       },
       "kubernetesEngine": {
-        "localK3sHint": "Prérempli pour un cluster local k3s/k3d/kind sur cette machine. Liez un ServiceAccount à un rôle, générez son token avec `kubectl create token NAME -n NAMESPACE` (Kubernetes 1.24+) et collez-le ci-dessous. Choisissez ensuite comment l'URL de l'environnement est dérivée, et modifiez l'URL de l'API server si votre cluster écoute sur un autre port.",
+        "localK3sHint": "Prérempli pour un cluster local k3s/k3d/kind sur cette machine. Liez un ServiceAccount à un rôle et collez ci-dessous un token de longue durée. Notez qu'un token `kubectl create token NAME -n NAMESPACE` simple expire au bout d'1 heure : ajoutez `--duration=720h` pour prolonger sa durée, ou créez un Secret kubernetes.io/service-account-token qui n'expire pas et relisez-le. Choisissez ensuite comment l'URL de l'environnement est dérivée, et modifiez l'URL de l'API server si votre cluster écoute sur un autre port.",
         "autoSetup": {
           "title": "Configuration automatique avec la CLI",
           "description": "Exécutez-le dans votre terminal pour détecter ou provisionner un cluster local, générer un jeton de ServiceAccount et ouvrir ce formulaire prérempli. Collez le jeton affiché, puis cliquez sur Tester et Enregistrer."
@@ -3279,8 +3327,6 @@
     "reReviewingStage": "Nouvelle relecture du rapport de bogue mis à jour… Vous pouvez fermer ceci, nous vous avertirons seulement si plus d'informations sont nécessaires.",
     "answerLabel": "Réponse",
     "answerPlaceholder": "Répondez à ce constat…",
-    "refineAnswerPlaceholder": "Affinez votre réponse…",
-    "saveAnswer": "Enregistrer la réponse",
     "dismissIrrelevant": "Écarter comme non pertinent",
     "reopen": "Rouvrir",
     "docHeading": "Rapport de bogue clarifié",
@@ -4283,6 +4329,80 @@
       "maxConcurrentField": "Taches simultanees maximales",
       "defaultPipelineField": "Pipeline par defaut",
       "failed": "Impossible de mettre a jour l'initiative"
+    }
+  },
+  "environmentWizard": {
+    "title": "Configurer un environnement de test",
+    "subtitle": "Détectez, vérifiez et enregistrez une recette Docker Compose pour que le Deployer la provisionne.",
+    "recommended": "recommandé",
+    "steps": {
+      "pick": "Choisir le service",
+      "review": "Vérifier la recette",
+      "preflight": "Vérifications",
+      "save": "Enregistrer"
+    },
+    "pick": {
+      "intro": "Choisissez le service pour lequel configurer un environnement Docker Compose.",
+      "empty": "Aucun service pour l'instant. Ajoutez-en un d'abord."
+    },
+    "review": {
+      "detectHint": "Détecté depuis le dépôt. Rien n'est appliqué avant l'enregistrement.",
+      "detect": "Redétecter",
+      "noRepo": "Ce service n'a pas de dépôt lié, la détection est impossible.",
+      "detectError": "La détection a échoué. Vérifiez la connexion au dépôt et réessayez.",
+      "provenanceTitle": "D'où vient chaque champ",
+      "service": "Service Compose exposé",
+      "servicePlaceholder": "p. ex. app",
+      "port": "Port exposé",
+      "composeFiles": "Fichiers Compose",
+      "profiles": "Profils",
+      "seedDumps": "Jeux de données",
+      "seedAdd": "Ajouter une étape d'amorçage",
+      "seedAdded": "Ajouté",
+      "rawEditor": "Modifier la recette brute",
+      "rawApply": "Appliquer"
+    },
+    "analysis": {
+      "title": "Analyse approfondie",
+      "hint": "Lancez l'analyste d'environnement pour ébaucher les étapes de configuration et les contrôles de santé depuis le dépôt.",
+      "run": "Lancer l'analyse",
+      "unavailable": "L'analyse approfondie nécessite un dépôt lié et le pipeline d'analyse.",
+      "failed": "L'exécution de l'analyse a échoué.",
+      "apply": "Appliquer l'ébauche de l'analyste"
+    },
+    "field": {
+      "composeFiles": "Fichiers Compose",
+      "composeProfiles": "Profils",
+      "envFiles": "Fichiers d'environnement",
+      "externalNetworks": "Réseaux externes",
+      "sharedStackRefs": "Stacks partagées",
+      "prerequisites": "Vérifications préalables",
+      "setupSteps": "Étapes de configuration",
+      "healthGate": "Contrôle de santé",
+      "teardownSteps": "Étapes de démontage"
+    },
+    "origin": {
+      "detector": "détecté",
+      "analyst": "analyste",
+      "both": "détecté + analyste"
+    },
+    "preflight": {
+      "intro": "Vérifiez les prérequis de la machine avant le provisionnement.",
+      "run": "Lancer les vérifications",
+      "none": "Cette recette ne déclare aucune vérification préalable.",
+      "unavailable": "Les vérifications préalables s'exécutent sur la machine locale et ne sont pas disponibles sur ce déploiement.",
+      "optional": "facultatif"
+    },
+    "save": {
+      "handlerLabel": "Libellé du gestionnaire",
+      "handlerHint": "Le gestionnaire Docker Compose de l'espace de travail que le Deployer utilise pour provisionner cette stack.",
+      "summary": "Enregistre une recette Docker Compose sur « {frame} » (exposant le service « {service} ») et enregistre le gestionnaire de l'espace de travail.",
+      "saved": "Enregistré. Le Deployer provisionnera cette stack lors de l'exécution d'un pipeline.",
+      "save": "Enregistrer la configuration"
+    },
+    "trial": {
+      "hint": "Provisionnez éventuellement cet environnement maintenant pour tester la recette.",
+      "run": "Provisionnement d'essai"
     }
   }
 }

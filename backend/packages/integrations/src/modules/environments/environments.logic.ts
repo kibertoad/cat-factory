@@ -35,6 +35,37 @@ export function isDeployStep(agentKind: string): boolean {
   return agentKind === DEPLOYER_AGENT_KIND
 }
 
+/** The provider-identity fields that decide whether a superseded env's real infra is reclaimed. */
+export interface EnvironmentIdentity {
+  provisionType: string | null
+  engine: string | null
+  /** The provider's external resource id (a k8s namespace, …); null when not yet known/provisioned. */
+  externalId: string | null
+}
+
+/**
+ * Whether a superseded environment's REAL infrastructure should be torn down when a new provision
+ * takes its place. `next` is the incoming env's identity, or `null` when NOTHING replaces it (an
+ * `infraless` flip / removed provisioning). Teardown fires only when the prior actually provisioned
+ * real infra (`externalId` set) AND the new target is a DIFFERENT provider resource — a different
+ * type/engine, or (when the new external id is known) a different external id. When the new external
+ * id is not yet known (the async `provisioning` placeholder insert), a matching type/engine is
+ * treated as the same deterministic resource (overwrite-in-place), so nothing is torn down and the
+ * TTL reaper stays the backstop. Same identity ⇒ keep the tombstone-only supersede (tearing a
+ * namespace down then re-applying it would churn/race).
+ */
+export function shouldTeardownSuperseded(
+  prior: EnvironmentIdentity,
+  next: EnvironmentIdentity | null,
+): boolean {
+  if (!prior.externalId) return false
+  if (next === null) return true
+  if (prior.provisionType !== next.provisionType) return true
+  if (prior.engine !== next.engine) return true
+  if (next.externalId != null && next.externalId !== prior.externalId) return true
+  return false
+}
+
 /**
  * Whether `host` is exempt from the private/internal-host block under `policy`.
  * An allow-list entry matches the hostname case-insensitively, either exactly or as a

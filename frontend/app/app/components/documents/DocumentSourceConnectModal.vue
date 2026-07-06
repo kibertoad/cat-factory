@@ -5,6 +5,7 @@
 // are write-only — the backend never returns them, so on reload we show
 // "Connected" with empty fields.
 import IntegrationBackTitle from '~/components/layout/IntegrationBackTitle.vue'
+import SecretInput from '~/components/common/SecretInput.vue'
 
 const { t } = useI18n()
 const ui = useUiStore()
@@ -103,9 +104,9 @@ async function disconnect() {
             :label="field.label"
             :help="field.help"
           >
-            <UInput
+            <SecretInput
               v-model="values[field.key]"
-              :type="field.secret ? 'password' : 'text'"
+              :secret="!!field.secret"
               :placeholder="field.placeholder"
               class="w-full"
             />

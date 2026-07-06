@@ -409,12 +409,12 @@ export function onCallUserPrompt(
 /**
  * The tester's infra stand-up spec for the generic agent job, derived from the service's
  * declared provision type AND whether the run actually provisioned an environment: a
- * `kubernetes`/`custom` service — or ANY run that provisioned an env URL (e.g. a `deployer`
- * step) — runs against that ephemeral environment (`environment:'ephemeral'` + the URL); a
- * `docker-compose` service stands its compose stack up in-container (`environment:'local'` +
- * the compose path); an `infraless` service (or none declared) stands nothing up (`local` +
- * `noInfraDependencies`). The harness `infra` wire shape is unchanged — only its source moved
- * from the old `tester.environment` config to the service's `provisioning` + the run env.
+ * `docker-compose`/`kubernetes`/`custom` service — or ANY run that provisioned an env URL (e.g. a
+ * `deployer` step) — runs against that ephemeral environment (`environment:'ephemeral'` + the URL
+ * when present), since all three are stood up by the single Deployer step; an `infraless` service
+ * (or none declared) stands nothing up (`local` + `noInfraDependencies`). The harness `infra` wire
+ * shape is unchanged — only its source moved from the old `tester.environment` config to the
+ * service's `provisioning` + the run env.
  */
 
 /**
@@ -483,10 +483,11 @@ export function testerInfraSpec(context: AgentRunContext): Record<string, unknow
     peerEnvironments[key] = involved.envUrl
   }
   const peers = Object.keys(peerEnvironments).length ? { peerEnvironments } : {}
-  // Prefer a provisioned environment whenever one exists: a `kubernetes`/`custom` service is
-  // provisioned by a workspace handler, and a `deployer` step can provision an env for any
-  // service. Either way the Tester targets that URL rather than standing nothing up locally.
-  if (type === 'kubernetes' || type === 'custom' || envUrl) {
+  // Prefer a provisioned environment whenever one exists. `docker-compose`/`kubernetes`/`custom`
+  // are all stood up by the single `deployer` step (compose now goes through a workspace handler +
+  // the recipe/shared-stack provider, exactly like the others), so the Tester targets that URL
+  // rather than standing anything up itself. `infraless`/undeclared falls through to no-infra.
+  if (type === 'docker-compose' || type === 'kubernetes' || type === 'custom' || envUrl) {
     return {
       environment: 'ephemeral',
       ...(envUrl ? { environmentUrl: envUrl } : {}),
@@ -495,10 +496,7 @@ export function testerInfraSpec(context: AgentRunContext): Record<string, unknow
   }
   return {
     environment: 'local',
-    noInfraDependencies: type !== 'docker-compose',
-    ...(type === 'docker-compose' && provisioning?.composePath
-      ? { composePath: provisioning.composePath }
-      : {}),
+    noInfraDependencies: true,
     ...peers,
   }
 }

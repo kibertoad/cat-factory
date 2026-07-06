@@ -43,6 +43,7 @@ import {
   ConflictError,
   DEFAULT_MERGE_PRESET,
   getErrorMessage,
+  getErrorReason,
   DOC_INTERVIEWER_AGENT_KIND,
   getProvider,
   INITIATIVE_ANALYST_AGENT_KIND,
@@ -467,6 +468,9 @@ export class RunDispatcher {
         step.jobId = handle.jobId
         // Record the model at dispatch — the poll site can't resolve it later.
         if (handle.model) step.model = handle.model
+        // Surface web-search availability + provider on the step (run details), resolved
+        // backend-side at dispatch. A static per-run fact, not gated by prompt telemetry.
+        if (handle.search) step.search = handle.search
         // The dispatch returned, so the container is up and the job is accepted; the
         // live phase + the container id/url arrive on the first poll.
         step.container = { status: 'up' }
@@ -946,12 +950,9 @@ export class RunDispatcher {
       return { kind: 'noop' }
     }
     const step = instance.steps[instance.currentStep]
-    // The human-testing gate rides the same `awaiting_gate` poll loop while its ephemeral
-    // environment provisions — re-poll the env status (ready → park the human; still
-    // provisioning → keep polling; failed → degrade to manual mode).
-    if (step?.agentKind === HUMAN_TEST_AGENT_KIND) {
-      return this.humanTestController.pollEnvironment(workspaceId, instance)
-    }
+    // The human-testing gate no longer provisions its own env (the upstream `deployer` does), so it
+    // never rides the `awaiting_gate` poll loop — it parks the human synchronously. A human-test
+    // step here is not a registered gate, so it falls through to the gate-less `continue` below.
     const gate = step ? this.gateFor(step.agentKind) : undefined
     if (!step || !gate) return { kind: 'continue' }
     // A helper job is in flight — the driver should be polling it, not the gate; let
@@ -984,10 +985,11 @@ export class RunDispatcher {
       return { kind: 'noop' }
     }
     const step = instance.steps[instance.currentStep]
-    // The human-testing gate never times the RUN out while provisioning: instead of failing,
-    // park the human in degraded mode so they can wait, recreate, or test by hand.
+    // The human-testing gate no longer provisions (so it never sits in the gate-poll loop) — but be
+    // defensive against a replay landing here for one: re-drive rather than failing the run, so it
+    // re-evaluates and re-parks the human.
     if (step?.agentKind === HUMAN_TEST_AGENT_KIND) {
-      return this.humanTestController.onProvisionTimeout(workspaceId, instance)
+      return { kind: 'continue' }
     }
     const gate = step ? this.gateFor(step.agentKind) : undefined
     const timeoutError = 'Gate precheck did not settle within its polling budget'
@@ -1432,11 +1434,32 @@ export class RunDispatcher {
       // Every frame settled: finish the step (all ready → done; a primary failure short-circuited).
       return this.completeDeployerStep(workspaceId, instance, step, isFinalStep, targets)
     }
-    // A frame explicitly declaring `infraless` stands nothing up — tombstone any prior env for it
-    // (a service flipped to `infraless` from a real type), mark the frame skipped, and re-enter to
-    // process the next frame. An UNDECLARED own frame falls through to the legacy single-connection
-    // path (the compat bridge), so existing workspaces keep provisioning.
-    if (next.provisioning?.type === 'infraless') {
+    // The deployer is the SINGLE environment provisioner: it stands the frame's env up whenever
+    // there is genuinely one to stand up, so every downstream consumer (tester / human-test /
+    // playwright) can depend on a pre-provisioned env rather than standing infra up itself:
+    //  - a DECLARED `kubernetes`/`custom` type (resolved through its per-type handler), OR
+    //  - a DECLARED `docker-compose` type on a workspace with a compose handler configured (the
+    //    setup wizard saves one) — the per-PR compose stack is provisioned HERE (attaching shared
+    //    stacks / running preflights), and the tester then targets that provisioned env (see
+    //    `testerInfraSpec`). A compose chain that reaches a tester with no resolvable handler is now
+    //    refused at run start (`assertTesterInfraConfigured`), so this stays the sole compose path, OR
+    //  - an UNDECLARED frame on a workspace with a legacy single-connection registered (the compat
+    //    bridge — preserved so existing single-connection deployments keep provisioning).
+    // Every other frame stands nothing up HERE — `infraless`/none, an undeclared frame with NO
+    // connection, or a frontend frame — so the deployer records `{status:'skipped'}` and re-enters
+    // for the next frame. This makes the deployer a safe NO-OP prefix that can be injected before
+    // every tester/human-test step without failing services that never configured provisioning.
+    const provisionType = next.provisioning?.type
+    const declaresEnv = provisionType === 'kubernetes' || provisionType === 'custom'
+    const composeEnv =
+      provisionType === 'docker-compose' &&
+      next.provisioning !== undefined &&
+      ((await this.environmentProvisioning?.canProvision(workspaceId, next.provisioning))?.ok ??
+        false)
+    const legacyEnv =
+      provisionType === undefined &&
+      (await this.environmentProvisioning?.hasLegacyConnection(workspaceId))
+    if (!declaresEnv && !composeEnv && !legacyEnv) {
       await this.environmentProvisioning?.supersedeForBlock(workspaceId, block.id, next.frameId)
       step.deployEnvs = { ...done, [next.frameId]: { status: 'skipped' } }
       // Persist this frame's TERMINAL outcome BEFORE processing the next frame, so a crash/replay
@@ -1473,6 +1496,9 @@ export class RunDispatcher {
         next,
         null,
         getErrorMessage(error),
+        // Propagate the provider's machine-readable cause (e.g. `deploy_runner_unwired`) so the
+        // SPA can render precise, runtime-specific guidance rather than string-matching the prose.
+        getErrorReason(error),
       )
     }
     if (dispatch.kind === 'completed') {
@@ -1648,11 +1674,13 @@ export class RunDispatcher {
     target: DeployTarget,
     url: string | null | undefined,
     error: string,
+    /** Machine-readable cause (e.g. `deploy_runner_unwired`) carried to the failure record. */
+    reason?: string,
   ): Promise<AdvanceResult> {
     const done = step.deployEnvs ?? {}
     step.deployEnvs = { ...done, [target.frameId]: { status: 'failed', url: url ?? null, error } }
     if (target.isPrimary) {
-      return this.failDeployerStep(workspaceId, instance, step, target.frameId, error)
+      return this.failDeployerStep(workspaceId, instance, step, target.frameId, error, reason)
     }
     // A PEER failure is non-terminal — persist it BEFORE moving to the next frame so a replay
     // doesn't re-attempt this failed peer (same rationale as the ready/infraless settle paths).
@@ -1955,6 +1983,9 @@ export class RunDispatcher {
     step: PipelineStep,
     frameId: string,
     message: string,
+    /** Machine-readable cause (e.g. `deploy_runner_unwired`) surfaced on the failure so the SPA
+     *  renders precise guidance without string-matching the prose. */
+    reason?: string,
   ): Promise<AdvanceResult> {
     // Project the FAILED frame's env (so its `lastError` renders in the Environment panel) — for a
     // single-frame deploy that is the own env; for a failed involved-service env it surfaces the
@@ -1967,6 +1998,7 @@ export class RunDispatcher {
       error: 'Environment provisioning failed.',
       failureKind: 'environment',
       detail: message,
+      ...(reason ? { reason } : {}),
     }
   }
 

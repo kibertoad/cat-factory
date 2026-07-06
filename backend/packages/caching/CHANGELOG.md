@@ -1,5 +1,61 @@
 # @cat-factory/caching
 
+## 0.4.20
+
+### Patch Changes
+
+- Updated dependencies [10787c4]
+  - @cat-factory/kernel@0.101.1
+
+## 0.4.19
+
+### Patch Changes
+
+- Updated dependencies [f596090]
+  - @cat-factory/kernel@0.101.0
+
+## 0.4.18
+
+### Patch Changes
+
+- Updated dependencies [9ea1e77]
+  - @cat-factory/kernel@0.100.0
+
+## 0.4.17
+
+### Patch Changes
+
+- @cat-factory/kernel@0.99.1
+
+## 0.4.16
+
+### Patch Changes
+
+- Updated dependencies [1afa003]
+  - @cat-factory/kernel@0.99.0
+
+## 0.4.15
+
+### Patch Changes
+
+- Updated dependencies [bf31df7]
+  - @cat-factory/kernel@0.98.0
+
+## 0.4.14
+
+### Patch Changes
+
+- Updated dependencies [6f9d935]
+  - @cat-factory/kernel@0.97.0
+
+## 0.4.13
+
+### Patch Changes
+
+- Updated dependencies [5490103]
+- Updated dependencies [dd6df12]
+  - @cat-factory/kernel@0.96.0
+
 ## 0.4.12
 
 ### Patch Changes

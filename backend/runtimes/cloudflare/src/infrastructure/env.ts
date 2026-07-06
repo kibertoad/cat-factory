@@ -171,6 +171,14 @@ export interface Env {
   // The spend safeguard (monthly limit / currency / per-model price overrides) is now
   // configured PER WORKSPACE in the UI (the `workspace_settings` row), not via env — see
   // `@cat-factory/contracts` `workspace-settings.ts` + `SpendService`.
+  /**
+   * Operator hard ceiling on the ACCOUNT-tier monthly budget (base pricing currency). When
+   * set, no account may configure a monthly budget above this, and it acts as the effective
+   * account budget when none is configured. See docs/environment-variables.md.
+   */
+  BUDGET_MAX_MONTHLY_PER_ACCOUNT?: string
+  /** Operator hard ceiling on the USER-tier monthly budget. Same semantics per user. */
+  BUDGET_MAX_MONTHLY_PER_USER?: string
 
   // ---- Provider credentials -----------------------------------------------
   OPENAI_API_KEY?: string
@@ -373,13 +381,10 @@ export interface Env {
    */
   DOCUMENT_PLANNER?: string
 
-  // ---- Ephemeral environment integration (see config.ts; opt-in) ----------
-  /**
-   * Enables the environment provider integration ('true'). Per-workspace provider
-   * manifests and their (encrypted) secret bundles live in D1, not here. Secrets are
-   * sealed with the shared `ENCRYPTION_KEY`.
-   */
-  ENVIRONMENTS_ENABLED?: string
+  // ---- Ephemeral environment integration (see config.ts) ------------------
+  // The integration assembles from the shared `ENCRYPTION_KEY` (which seals the
+  // per-workspace manifests/secret bundles in D1); there is no enable flag. Only the
+  // URL-guard escape hatches below are read from env.
   /**
    * Comma-separated hostnames exempt from the strict public-https URL guard, for a
    * TRUSTED in-house adapter pointing at an internal env platform (a private/VPN host).

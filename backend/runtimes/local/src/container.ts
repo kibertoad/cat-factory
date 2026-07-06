@@ -65,6 +65,7 @@ import { createLocalPreviewTransportFromEnv } from './LocalPreviewTransport.js'
 import { resolveHarnessImage } from './harnessImage.js'
 import { createRuntimeAdapter, resolveRuntimeId, runtimeProfile } from './runtimes/index.js'
 import { createDockerComposeRuntime } from './compose.js'
+import { createDockerPreflightProbes } from './preflight.js'
 
 // The local-mode composition root. It is intentionally thin: the ENTIRE Drizzle/
 // Postgres persistence, pg-boss durable execution, gateways and model provisioning
@@ -385,12 +386,17 @@ export function buildLocalContainer(options: NodeContainerOptions): ServerContai
   // thread it into both — the backend registry here, and the core deps via `overrides.composeRuntime`
   // below (so `SharedStackService.ensureUp`/`teardown` can drive the daemon).
   let localComposeRuntime: ReturnType<typeof createDockerComposeRuntime> | undefined
+  // Host-bound PREFLIGHT probes (docker daemon / disk / RAM / registry login / reachability /
+  // mkcert / hosts / secrets marker) that enforce a stack recipe's `prerequisites` at provision
+  // start. Built alongside the compose runtime on a Docker-family runtime (same daemon + binary).
+  let localPreflightProbes: ReturnType<typeof createDockerPreflightProbes> | undefined
   if (
     runtimeProfile(localRuntimeId).family === 'docker' &&
     !backendRegistries.environmentBackendRegistry.get('compose')
   ) {
     const composeBinary = env.LOCAL_DOCKER_BINARY?.trim() || runtimeProfile(localRuntimeId).binary
     localComposeRuntime = createDockerComposeRuntime({ binary: composeBinary })
+    localPreflightProbes = createDockerPreflightProbes({ binary: composeBinary })
     backendRegistries.environmentBackendRegistry.register(
       composeEnvironmentBackend(localComposeRuntime),
     )
@@ -588,6 +594,10 @@ export function buildLocalContainer(options: NodeContainerOptions): ServerContai
       // same runtime the compose env backend uses. Only on a Docker-family runtime; absent ⇒ the
       // lifecycle endpoints refuse (Apple `container` can't nest, like `localDind`).
       ...(localComposeRuntime ? { composeRuntime: localComposeRuntime } : {}),
+      // The host-probe seam that enforces a stack recipe's machine `prerequisites` at provision
+      // start (and backs the preflight API). Present only on a Docker-family runtime (same gate as
+      // the compose runtime above); absent ⇒ the preflight API 503s.
+      ...(localPreflightProbes ? { preflightHostProbes: localPreflightProbes } : {}),
       // Clone a shared stack's repo with the same source-control PAT the agent containers push
       // with, so a stack whose `cloneUrl` is a PRIVATE repo can be brought up (else public-only).
       ...(gitToken ? { sharedStackCloneToken: gitToken } : {}),
@@ -603,10 +613,6 @@ export function buildLocalContainer(options: NodeContainerOptions): ServerContai
       ...(gitToken
         ? ({ workflowsGranted: async () => true } satisfies Partial<CoreDependencies>)
         : {}),
-      // Gate the Tester's local-infra mode on the runtime's Docker-in-Docker support
-      // (local-authoritative — after the overrides so a deployment can't accidentally
-      // claim DinD support the runtime doesn't have).
-      localTestInfraSupported,
       // Per-USER infra handler overrides are a LOCAL-mode feature: only the local facade
       // wires the repository, so the per-user override service + controller assemble here
       // (and stay 503 / inert on the Worker + Node facades). A developer can point a

@@ -3,7 +3,8 @@
     "loading": "読み込み中…",
     "loadingBoard": "ボードを読み込み中…",
     "backendUnreachable": "バックエンドに接続できません",
-    "reconnecting": "再接続中…"
+    "reconnecting": "再接続中…",
+    "offline": "ライブ更新を受信していません"
   },
   "language": {
     "switcher": "言語",
@@ -39,6 +40,8 @@
       "reconfigureHint": "後で再設定できます。"
     },
     "copied": "クリップボードにコピーしました",
+    "reveal": "表示",
+    "hide": "非表示",
     "disconnect": "切断",
     "copyFailed": "クリップボードにコピーできませんでした",
     "revoke": "取り消す",
@@ -51,7 +54,10 @@
       "cleared": "{name} をクリアしました",
       "destroyed": "{name} を破棄しました"
     },
-    "undo": "元に戻す"
+    "undo": "元に戻す",
+    "back": "戻る",
+    "next": "次へ",
+    "done": "完了"
   },
   "nav": {
     "menu": "ナビゲーションメニュー",
@@ -72,7 +78,8 @@
     "configuration": "設定",
     "workspaceSettings": "ワークスペース設定",
     "modelConfiguration": "モデル設定",
-    "accountSettings": "アカウント設定"
+    "accountSettings": "アカウント設定",
+    "environmentSetup": "環境セットアップ"
   },
   "board": {
     "toast": {
@@ -81,6 +88,7 @@
       "moveFailed": "移動できませんでした",
       "deleteFailed": "削除できませんでした",
       "linkFailed": "タスクをリンクできませんでした",
+      "unlinkFailed": "依存関係を削除できませんでした",
       "recurringDeleteFailed": "定期パイプラインを削除できませんでした",
       "deleted": "\"{name}\" を削除しました",
       "moved": "\"{name}\" を移動しました"
@@ -104,7 +112,11 @@
       "spendTitle": "今月のトークン消費量",
       "spendLimitReached": "消費上限に達しました。実行を一時停止しています",
       "serviceAdded": "{title} を追加しました",
-      "serviceAddFailed": "サービスを追加できませんでした"
+      "serviceAddFailed": "サービスを追加できませんでした",
+      "zoomOut": "縮小",
+      "zoomIn": "拡大",
+      "fitView": "内容に合わせる",
+      "resetZoom": "ズームを100%にリセット"
     },
     "canvas": {
       "emptyTitle": "ボードが空です",
@@ -264,6 +276,9 @@
       "stalled": "実行が停止しました",
       "retryBootstrap": "ブートストラップを再試行",
       "retryRun": "実行を再試行",
+      "environmentSetup": "環境をセットアップ",
+      "deployRunnerSetup": "ランナープールをセットアップ",
+      "environmentLocalHint": "ローカルの一時環境では、kubectl/kustomize/helm を実行するためにデプロイランタイムが必要です。.env に {runtime} を設定してください。ネイティブモードはこれらのツールをホスト上で実行し（{native}）、コンテナモードはデプロイイメージ内で実行します（{container}）。",
       "showDetail": "詳細を表示",
       "retrying": "再試行中…",
       "history": {
@@ -385,7 +400,8 @@
         "preset_unsatisfiable": "モデルプリセットではこのパイプラインを実行できません",
         "visual_pipeline_no_frontend": "テスト対象のフロントエンドがありません",
         "model_policy_blocked": "Model blocked by account policy",
-        "model_policy_unsupported": "Model policy not available here"
+        "model_policy_unsupported": "Model policy not available here",
+        "deployer_required_before_tester": "テスターの前にDeployerを追加してください"
       },
       "fallbackMessage": "この操作は現在の状態と競合します。",
       "providersUnconfigured": {
@@ -454,6 +470,7 @@
     }
   },
   "inspector": {
+    "detectRepoUnresolved": "このブロックのリポジトリは接続済みの GitHub リポジトリに含まれていないため、読み取れません。GitHub を接続または同期してから、もう一度お試しください。",
     "container": {
       "title": "内容",
       "hint": "このブロック内のモジュールとタスク。エントリをクリックするとボード上で選択されます。",
@@ -690,6 +707,11 @@
           "succeeded": "マニフェストを生成してプッシュしました。",
           "failed": "マニフェスト生成の実行に失敗しました。インフラウィンドウから再試行してください。"
         }
+      },
+      "envWizard": {
+        "title": "Compose 環境のセットアップ",
+        "hint": "レシピ・プリフライト・ハンドラーを設定して、Deployer がこのスタックをプロビジョニングできるようにします。",
+        "open": "ウィザードを開く"
       }
     },
     "agentConfig": {
@@ -965,6 +987,10 @@
       "companionCapDetail": "自動の再作業をもう1回実行するか、現在の出力を受け入れて次のステップに進むか、タスクを停止してリセットし、入力を編集して再送信してください。",
       "infraAttempts": "インフラの試行",
       "hideInfraAttempts": "インフラの試行を非表示",
+      "executionHistory": "実行履歴",
+      "hideExecutionHistory": "実行履歴を非表示",
+      "attemptSucceeded": "成功",
+      "outputTruncated": "実行履歴を簡潔に保つため出力を切り詰めました。",
       "editingConclusions": "結論を編集中",
       "editConclusionsPlaceholder": "エージェントの結論を編集してください。編集内容は承認時に保存されます…",
       "noProseOutput": "このエージェントは文章出力を生成しませんでした。",
@@ -1052,6 +1078,7 @@
     "loadingContext": "提供されたコンテキストを読み込み中…",
     "noCalls": "この実行で記録されたモデル呼び出しはありません。",
     "noContext": "この実行で保存されたエージェントコンテキストはありません。ワークスペースで「エージェントコンテキストを完全保存」が有効な場合、ディスパッチごとに記録されます。",
+    "contextError": "提供されたコンテキストを読み込めませんでした。",
     "summary": {
       "calls": "呼び出し",
       "tokensInOut": "トークン (入力 / 出力)",
@@ -1098,6 +1125,16 @@
       "systemPrompt": "システムプロンプト",
       "userPrompt": "ユーザープロンプト",
       "details": "詳細"
+    },
+    "webSearch": "ウェブ検索",
+    "loadingSearch": "ウェブ検索を読み込み中…",
+    "noSearch": "この実行のウェブ検索は記録されていません。クエリはウェブ検索の実行時、かつワークスペースで「エージェントコンテキスト全体を保存」が有効な場合に記録されます。",
+    "search": {
+      "available": "利用可能",
+      "unavailable": "利用不可",
+      "provider": "プロバイダー",
+      "resultsCount": "{count} 件の結果 | {count} 件の結果",
+      "queriesTitle": "実行した検索"
     }
   },
   "auth": {
@@ -1694,7 +1731,7 @@
         "remote-kubernetes": "リモート Kubernetes"
       },
       "kubernetesEngine": {
-        "localK3sHint": "このマシン上のローカル k3s/k3d/kind クラスター向けにあらかじめ入力されています。ServiceAccount をロールにバインドし、`kubectl create token NAME -n NAMESPACE`（Kubernetes 1.24 以降）でトークンを発行して下記に貼り付けてください。その後、環境 URL の導出方法を選択し、クラスターが別のポートで待ち受けている場合は API サーバー URL を編集してください。",
+        "localK3sHint": "このマシン上のローカル k3s/k3d/kind クラスター向けにあらかじめ入力されています。ServiceAccount をロールにバインドし、長期間有効なトークンを下記に貼り付けてください。通常の `kubectl create token NAME -n NAMESPACE` のトークンは1時間で失効する点に注意してください。より長くするには `--duration=720h` を付け、失効しないトークンが必要な場合は kubernetes.io/service-account-token の Secret を作成して読み取ってください。その後、環境 URL の導出方法を選択し、クラスターが別のポートで待ち受けている場合は API サーバー URL を編集してください。",
         "autoSetup": {
           "title": "CLI による自動セットアップ",
           "description": "これをターミナルで実行すると、ローカルクラスターを検出またはプロビジョニングし、ServiceAccount トークンを生成して、このフォームを事前入力した状態で開きます。表示されたトークンを貼り付けてから、テストして保存してください。"
@@ -2285,11 +2322,22 @@
       },
       "budget": {
         "heading": "月間の支出予算",
-        "body": "トークン使用量は LLM 呼び出しごとに計測され、価格付けされ、この予算で制限されます。上限に達すると、このワークスペースの実行は一時停止し、ボードに警告が表示されます。空欄のままにすると組み込みのデフォルト (月額約 100 EUR) を継承します。",
+        "body": "トークン使用量は LLM 呼び出しごとに計測され、価格付けされ、これらの予算で制限されます。実行は、それが属するいずれかの階層が使い切られると一時停止します。その階層に上限を設けない場合はフィールドを空欄のままにします (ワークスペース階層は組み込みのデフォルト、月額約 100 EUR を継承します)。",
         "monthlyLimit": "月間上限",
         "defaultPlaceholder": "デフォルト",
         "currency": "通貨 (ISO 4217)",
-        "save": "予算を保存"
+        "save": "予算を保存",
+        "saveTier": "保存",
+        "workspace": "このワークスペース",
+        "account": "アカウント (すべてのワークスペース)",
+        "user": "あなた (あなたのすべての実行)",
+        "accountBody": "このアカウント内のすべてのワークスペースにまたがる上限です。",
+        "userBody": "任意のワークスペースであなたが開始するすべての実行にまたがる上限です。",
+        "hardCap": "運用上限: {amount}",
+        "hardCapHint": "デプロイによって設定されます。この値を超えることはできません",
+        "spent": "今月は {limit} のうち {spent} を使用しました",
+        "adminOnly": "アカウント予算を変更できるのはアカウント管理者のみです。",
+        "noLimitPlaceholder": "上限なし"
       },
       "toast": {
         "saved": "設定を保存しました",
@@ -3291,8 +3339,6 @@
     "reReviewingStage": "更新されたバグ報告を再レビュー中… これを閉じてもかまいません。追加の入力が必要な場合のみ通知します。",
     "answerLabel": "回答",
     "answerPlaceholder": "この指摘に回答…",
-    "refineAnswerPlaceholder": "回答を改善…",
-    "saveAnswer": "回答を保存",
     "dismissIrrelevant": "無関係として却下",
     "reopen": "再オープン",
     "docHeading": "明確化されたバグ報告",
@@ -4295,6 +4341,80 @@
       "maxConcurrentField": "最大同時実行タスク数",
       "defaultPipelineField": "既定のパイプライン",
       "failed": "イニシアチブを更新できませんでした"
+    }
+  },
+  "environmentWizard": {
+    "title": "テスト環境をセットアップ",
+    "subtitle": "Docker Compose レシピを検出・確認・保存して、Deployer がプロビジョニングできるようにします。",
+    "recommended": "推奨",
+    "steps": {
+      "pick": "サービス選択",
+      "review": "レシピ確認",
+      "preflight": "プリフライト",
+      "save": "保存"
+    },
+    "pick": {
+      "intro": "Docker Compose 環境をセットアップするサービスを選択します。",
+      "empty": "サービスがまだありません。まずサービスを追加してください。"
+    },
+    "review": {
+      "detectHint": "リポジトリから検出しました。保存するまで何も適用されません。",
+      "detect": "再検出",
+      "noRepo": "このサービスにはリンクされたリポジトリがないため、検出できません。",
+      "detectError": "検出に失敗しました。リポジトリ接続を確認して再試行してください。",
+      "provenanceTitle": "各フィールドの出所",
+      "service": "公開する Compose サービス",
+      "servicePlaceholder": "例: app",
+      "port": "公開ポート",
+      "composeFiles": "Compose ファイル",
+      "profiles": "プロファイル",
+      "seedDumps": "シードダンプ",
+      "seedAdd": "シードステップを追加",
+      "seedAdded": "追加済み",
+      "rawEditor": "生のレシピを編集",
+      "rawApply": "適用"
+    },
+    "analysis": {
+      "title": "詳細分析",
+      "hint": "環境アナリストを実行して、リポジトリからセットアップ手順とヘルスゲートを下書きします。",
+      "run": "分析を実行",
+      "unavailable": "詳細分析にはリンクされたリポジトリと分析パイプラインが必要です。",
+      "failed": "分析の実行に失敗しました。",
+      "apply": "アナリストの下書きを適用"
+    },
+    "field": {
+      "composeFiles": "Compose ファイル",
+      "composeProfiles": "プロファイル",
+      "envFiles": "環境ファイル",
+      "externalNetworks": "外部ネットワーク",
+      "sharedStackRefs": "共有スタック",
+      "prerequisites": "プリフライト",
+      "setupSteps": "セットアップ手順",
+      "healthGate": "ヘルスゲート",
+      "teardownSteps": "ティアダウン手順"
+    },
+    "origin": {
+      "detector": "検出",
+      "analyst": "アナリスト",
+      "both": "検出 + アナリスト"
+    },
+    "preflight": {
+      "intro": "プロビジョニング前にマシンの前提条件を確認します。",
+      "run": "チェックを実行",
+      "none": "このレシピにはプリフライトチェックが宣言されていません。",
+      "unavailable": "プリフライトチェックはローカルマシンで実行され、このデプロイでは利用できません。",
+      "optional": "任意"
+    },
+    "save": {
+      "handlerLabel": "ハンドラーのラベル",
+      "handlerHint": "Deployer がこのスタックのプロビジョニングに使う、ワークスペースの Docker Compose ハンドラー。",
+      "summary": "「{frame}」に Docker Compose レシピを保存し（サービス「{service}」を公開）、ワークスペースハンドラーを登録します。",
+      "saved": "保存しました。パイプラインが実行されると Deployer がこのスタックをプロビジョニングします。",
+      "save": "設定を保存"
+    },
+    "trial": {
+      "hint": "レシピをテストするため、この環境を今すぐプロビジョニングすることもできます。",
+      "run": "お試しプロビジョニング"
     }
   }
 }

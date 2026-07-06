@@ -1,11 +1,13 @@
 import * as v from 'valibot'
 import {
   blockSchema,
+  budgetCapsSchema,
   executionInstanceSchema,
   pipelineSchema,
   spendStatusSchema,
   workspaceSchema,
 } from './entities.js'
+import { userSettingsSchema } from './user-settings.js'
 import { bootstrapJobSchema } from './bootstrap.js'
 import { envConfigRepairJobSchema } from './env-config-repair.js'
 import { notificationSchema } from './notifications.js'
@@ -62,10 +64,34 @@ export const workspaceSnapshotSchema = v.object({
    */
   envConfigRepairJobs: v.optional(v.array(envConfigRepairJobSchema)),
   /**
-   * The current spend-safeguard status. Attached by the worker (it depends on
-   * deployment-wide pricing/budget config), so it is optional on the wire.
+   * The current spend-safeguard status for the WORKSPACE tier. Attached by the
+   * facade (it depends on deployment-wide pricing/budget config), so it is optional
+   * on the wire.
    */
   spend: v.optional(spendStatusSchema),
+  /**
+   * The ACCOUNT-tier spend status (this period's spend across all the owning
+   * account's workspaces vs the account budget). Attached only when the workspace
+   * belongs to an account and the account tier is active (a limit or env cap is set).
+   */
+  accountSpend: v.optional(spendStatusSchema),
+  /**
+   * The USER-tier spend status for the signed-in caller (this period's spend across
+   * every run they initiated vs their user budget). Attached only when the user tier
+   * is active (a limit or env cap is set).
+   */
+  userSpend: v.optional(spendStatusSchema),
+  /**
+   * The signed-in caller's editable per-user settings (holds the user-tier budget),
+   * so the budget screen can render the current value without a separate fetch.
+   */
+  userSettings: v.optional(userSettingsSchema),
+  /**
+   * Operator hard ceilings on the account/user budget tiers (from the deployment env
+   * vars). Attached so the budget configuration screens can show the hard limit and
+   * cap the input. Absent ⇒ this facade sets no ceilings.
+   */
+  budgetCaps: v.optional(budgetCapsSchema),
   /**
    * Open human-actionable notifications for this workspace (PRs awaiting a merge
    * decision, completed pipelines awaiting confirmation, CI that gave up). Carried

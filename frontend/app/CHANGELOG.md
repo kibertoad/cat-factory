@@ -1,5 +1,376 @@
 # @cat-factory/app
 
+## 0.100.2
+
+### Patch Changes
+
+- 10787c4: Make the "environment provisioning failed" surface actionable when no deploy runner is wired.
+
+  - **Backend, provider-agnostic message:** the `EnvironmentProvisioningService` error for a
+    render-needing config with no `deployJobClient` no longer hardcodes Kubernetes tooling (it
+    reaches for any provider that needs a container-backed deploy). It names the runtime-neutral
+    transport remedies (a self-hosted runner pool, `LOCAL_DEPLOY_RUNTIME`, or the Cloudflare
+    `DeployContainer` binding) or using a config that provisions without a deploy container.
+  - **Structured failure reason:** `AgentFailure` gains an optional machine-readable `reason`
+    (JSON column — no migration), and this condition carries `deploy_runner_unwired`
+    (`EnvironmentFailureReason` in contracts) from the thrown `ValidationError` through the
+    deployer-step failure path onto the run's failure, so the SPA can act on the cause without
+    string-matching prose. Adds `getErrorReason` to the kernel error helpers.
+  - **Frontend, precisely-gated guidance:** the board's `AgentFailureCard` shows a "Configure…"
+    deep-link on `environment`-kind failures whose destination follows the cause: a
+    `deploy_runner_unwired` failure on a non-local deployment links to Infrastructure → **Agent
+    containers** (`runner-pool`) — where the deploy runner/pool is actually wired, so the button no
+    longer dead-ends on the Test-environments tab that can't fix it — while every other environment
+    failure keeps linking to Infrastructure → **Test environments** (`environment`). The
+    Kubernetes+local env-var hint (`LOCAL_DEPLOY_RUNTIME` + `LOCAL_DEPLOY_HARNESS_ENTRY` /
+    `LOCAL_DEPLOY_IMAGE`) is shown ONLY for the `deploy_runner_unwired` reason, in local mode, and
+    for a `kubernetes` provision — so a docker-compose / transient / future non-K8s failure never
+    shows inaccurate guidance.
+
+- Updated dependencies [10787c4]
+  - @cat-factory/contracts@0.110.1
+
+## 0.100.1
+
+### Patch Changes
+
+- c66362f: Remove the `ENVIRONMENTS_ENABLED` deployment flag; the ephemeral-environment
+  integration now assembles wherever the shared `ENCRYPTION_KEY` is set, the same
+  "always on where the key is present" model as the document/task sources.
+
+  The flag was a footgun: it defaulted off and its only effect was to make the whole
+  integration silently inert (auto-detect 503ing with `unavailable`) even when the real
+  prerequisites — an encryption key plus a registered per-workspace connection — were
+  present. Whether a workspace provisions anything is already governed by whether it
+  connects a provider and whether its pipeline includes a `deployer`/`tester` step, so to
+  keep environments out of a pipeline you simply omit those steps. `EnvironmentsConfig`
+  drops its `enabled` field and the module gates on `encryptionKey` presence in all three
+  runtimes.
+
+  Breaking: `ENVIRONMENTS_ENABLED` is no longer read; remove it from deployment config
+  (setting it has no effect). The inspector's dedicated "ephemeral environments aren't
+  enabled" auto-detect panel is removed with it, since that off state no longer exists.
+
+## 0.100.0
+
+### Minor Changes
+
+- f596090: Record successful step outputs in the step-detail "execution history", not just failures.
+
+  A restart-from-step resets the chosen step and every later one, dropping their `output`;
+  previously that successful work was lost and the per-step history could only ever show
+  errors. The run now keeps an `outputHistory` — the positive complement of `failureHistory`
+  — capturing the successful outputs a restart superseded (attributed by step index, bounded
+  in count + per-entry size, riding the run's `detail` JSON with no schema migration). The
+  step-detail overlay renders a merged, newest-first timeline of these superseded outputs and
+  the failed attempts. A plain retry (which re-runs only unfinished steps) records nothing.
+
+### Patch Changes
+
+- 5834659: Explain the "Environment integration is not configured" case in service auto-detect instead of showing the raw backend line.
+
+  When auto-detecting a service's test-environment config, the backend returns a 503 `unavailable` if the ephemeral-environment integration is off for the deployment. The inspector used to surface the terse server message ("Environment integration is not configured"), which read like a failure of the (working) GitHub connection. It now shows a dedicated panel that says exactly what is off, that it is separate from GitHub, how it gets enabled (`ENVIRONMENTS_ENABLED` + an encryption key on the server), and links the environments-integration docs. Copy added to all locales.
+
+- Updated dependencies [f596090]
+  - @cat-factory/contracts@0.110.0
+
+## 0.99.0
+
+### Minor Changes
+
+- 9ea1e77: Tiered spend budgets (account / workspace / user) with operator hard caps.
+
+  Budgets are now tracked and enforced across three tiers: the existing per-workspace
+  monthly limit, a per-account limit, and a per-user limit. A run pauses when any applicable
+  tier is exhausted. All three tiers are configurable and visible in the Budget settings
+  screen.
+
+  Two new environment variables (`BUDGET_MAX_MONTHLY_PER_ACCOUNT`,
+  `BUDGET_MAX_MONTHLY_PER_USER`), read by the Node and Cloudflare config loaders, set
+  operator hard ceilings on the account/user tiers; the UI cannot exceed a configured cap and
+  shows it on the budget screen. See `docs/environment-variables.md` and
+  `docs/initiatives/tiered-budgets.md`.
+
+  Breaking (pre-1.0, no data migration): the `token_usage` ledger gains nullable
+  `account_id`/`user_id` columns (existing rows are unattributed and excluded from the new
+  account/user rollups until re-metered); `TokenUsageRecord`, `RecordUsageInput`, and
+  `SpendPricing` gained fields; `SpendService.isOverBudget` now takes an optional tier scope.
+  A new `user_settings` table and `GET/PUT /user-settings` endpoint carry the user-tier
+  budget.
+
+### Patch Changes
+
+- Updated dependencies [9ea1e77]
+  - @cat-factory/contracts@0.109.0
+
+## 0.98.0
+
+### Minor Changes
+
+- e66accb: Stack recipes & shared stacks (slice 7): make the Deployer the sole docker-compose provisioner + the environment setup wizard scaffolding.
+
+  **Deployer becomes the single docker-compose provisioner (the compose-centralization follow-up owed by this slice).** Now that the setup wizard can save a `docker-compose` handler, docker-compose is provisioned by the single Deployer step through a workspace handler, exactly like `kubernetes`/`custom` — the in-container (DinD) bring-up is retired from the run-mode decision:
+
+  - `decideTesterInfra` (`tester-infra.logic.ts`): `docker-compose` is handler-based (drops the `localTestInfraSupported`/`hasComposePath` inputs and the `limited-local`/`compose-unconfigured` reasons).
+  - `needsDeployerBeforeConsumer` + `ExecutionService.assertTesterInfraConfigured`'s `needsHandler` now cover `docker-compose`, so a compose chain that reaches a tester with no resolvable handler is refused at run start (fail-fast, same as k8s/custom) instead of dead-ending.
+  - `testerInfraSpec` (`@cat-factory/server`): `docker-compose` targets the Deployer-provisioned env (`environment: 'ephemeral'`); the `local`/`composePath` branch is gone.
+  - (The harness's in-container `docker compose up` is now unreachable and retired in a later image-bumping slice.)
+
+  **Environment setup wizard.** The guided detect → review → preflight → save flow the compose-centralization depends on: `EnvironmentSetupWizard.vue` (stepper shell over the `environmentWizard` store — detection, opt-in deep analysis via `pl_environment_analysis` with live provenance-merged review, compose-file/profile/seed candidate pickers, a raw-recipe editor, the preflight checklist, save the workspace compose handler + the frame recipe, and an optional trial provision with live provisioning logs), a docker-compose service-inspector nudge, a SideBar entry, the mount in `pages/index.vue`, and the `environmentWizard` i18n namespace across all 8 locales. Backed by the `preflights` API + store (`POST /workspaces/:ws/preflights/run`) and the `provisionEnvironment` API. (The `data-testid`-only e2e spec is deferred — it needs a fake `ProvisioningRepoReader` e2e seam so detection returns a canned recommendation with GitHub off; tracked in the slice-7 checklist.)
+
+  Breaking (pre-1.0, acceptable): a `docker-compose` service reaching a tester/human-test with no configured compose handler is now refused at run start rather than falling back to an in-container compose bring-up.
+
+  Review follow-ups in the same slice: the `environmentWizard` store now fully resets per-frame state when re-targeted (`selectFrame` no longer leaves a prior frame's `saved`/service/port behind), resolves the analyst run by preferring a live/succeeded instance over a bare `.at(-1)` (so a retry's dead predecessor can't mask the successful run), validates the exposed port before registering the handler, and surfaces a real (non-503) preflight failure instead of swallowing it. The now-dead `localTestInfraSupported` dependency (its only reads were removed with the DinD path) is dropped from `CoreDependencies`/`ExecutionService` and the local facade's wiring, and the stale DinD doc comments on `assertTesterInfraConfigured` / `testerInfraSpec` are corrected.
+
+### Patch Changes
+
+- Updated dependencies [e66accb]
+  - @cat-factory/contracts@0.108.1
+
+## 0.97.1
+
+### Patch Changes
+
+- 9cc02a0: Surface a real, actionable error when "auto-detect" (test-infra provisioning / frontend config)
+  can't read the repository. Before, a genuine read fault (revoked App access, missing
+  `Contents: read`, a rate limit, or a token-mint/transport error) was either masked as a
+  misleading "nothing found" or escaped as an opaque 500, and the SPA discarded whatever the
+  backend said and showed a fixed "Could not read the repository to detect provisioning." line.
+
+  Now the checkout-free detectors record a genuine (non-404) reader throw and raise a
+  `RepoReadError` when they detected nothing because of it; the environments service maps that to a
+  `ValidationError` naming the repo and the underlying reason, with provider-aware guidance to check
+  repository read access and rate limits (a GitHub-specific "Contents: read" hint only when the
+  detect input pinned GitHub, a GitLab `read_repository` hint for GitLab, neutral otherwise — so a
+  GitLab deployment isn't told to fix a GitHub-only permission). The inspector's Detect affordance
+  surfaces the server's real message, and distinguishes the client-only "this frame's repo isn't in
+  the connected repos" case with its own `inspector.detectRepoUnresolved` copy instead of the generic
+  read-failure line.
+
+## 0.97.0
+
+### Minor Changes
+
+- 1afa003: Make the **Deployer the single environment provisioner** and fix environment-lifecycle
+  correctness so a `kubernetes`/`custom` service can no longer dead-end inside the Tester.
+
+  - **Deployer in every tester/human-test built-in pipeline.** A type-aware `deployer` is seeded
+    before the first tester / human-test / playwright step in the 12 relevant built-ins. It
+    provisions `kubernetes`/`custom`, a `docker-compose` service with a resolvable compose handler,
+    or an undeclared service on a workspace with a legacy connection, and is a fast **no-op** for
+    `infraless`/frontend frames (and for `docker-compose` with no compose handler configured yet) — so
+    the injection is safe everywhere. Touched built-ins get a `version` bump (reseed offer).
+  - **Docker-compose provisions through the Deployer** (single-provisioner direction) whenever a
+    compose handler resolves; the Tester then targets that provisioned env (`testerInfraSpec` already
+    prefers a provisioned URL for any type). Until the shared-stacks compose-connection setup wizard
+    lands, docker-compose with no handler stays a Deployer no-op and the Tester falls back to its
+    in-container compose bring-up (no regression). See the initiative trackers for the full
+    centralization owed once the wizard ships.
+  - **`human-test` no longer self-provisions.** The gate READS the environment the upstream Deployer
+    provisioned (the one env is shared by the AI tester + the human), and its recreate / fix-loop /
+    pull-main rebuild now **loops back to the Deployer** to re-provision, rather than standing up its
+    own env. No deployer before it (an infraless service) ⇒ the gate degrades to manual mode.
+  - **Fail-fast run-start guard.** Starting a `kubernetes`/`custom` pipeline whose enabled chain
+    reaches a tester/human-test with no enabled `deployer` before it is now refused with an actionable
+    `deployer_required_before_tester` conflict (new `ConflictReason`) instead of the silent
+    ephemeral-with-no-coordinates dead-end inside the Tester.
+  - **Environment teardown correctness.** Superseding a provisioned env now tears the old infra down
+    when the new provision targets a DIFFERENT provider identity (a config-change namespace switch, a
+    provider/type change, or the `infraless` flip) — best-effort, with the TTL reaper as the backstop
+    — instead of only tombstoning the registry row. Teardown + status now resolve the provider from
+    the env RECORD's stored provision type/engine (the handler that stood it up), not the
+    workspace-primary handler.
+  - **Named-gate pipeline authoring.** Built-in pipelines are authored with `definePipeline` +
+    named-step specs (`{ kind, gate, enabled }`) instead of fragile index-aligned `gates`/`enabled`
+    boolean arrays, so a gate is declared on its step by name and inserting a step can't shift a flag
+    onto the wrong one. The persisted wire shape is unchanged.
+  - Frontend: a `deployer` palette/step metadata entry (renders as "Deployer" rather than a generic
+    agent) and the localized `deployer_required_before_tester` conflict title.
+
+  Breaking (pre-1.0, acceptable): persisted built-in pipeline copies are offered a reseed to gain the
+  deployer step; a `kubernetes`/`custom` pipeline that previously relied on the Tester dead-ending is
+  now refused at launch until a Deployer is added or the service is set to docker-compose/infraless.
+
+### Patch Changes
+
+- Updated dependencies [1afa003]
+- Updated dependencies [f91b99d]
+  - @cat-factory/contracts@0.108.0
+
+## 0.96.5
+
+### Patch Changes
+
+- 20cff9e: feat(app): board zoom/canvas navigation papercuts (UX-07/08/09/14/15/16)
+
+  Burns down the board zoom-control cluster from the UX papercuts initiative:
+
+  - The three toolbar zoom controls (`zoom out` / `zoom in` / fit-to-content) now route
+    through the shared `IconButton` primitive with accessible labels applied as both
+    `title` and `aria-label`, so the ambiguous `maximize` glyph is finally named (UX-08).
+  - The `%`/LOD readout is a real `<button>` that snaps the camera back to 100%
+    (`resetZoom` → `zoomTo(1)`), and it's always visible now — only the LOD sub-label
+    drops below `sm` (UX-14, UX-15).
+  - Zoom in/out buttons disable at the min/max clamps, now sourced from shared
+    `BOARD_MIN_ZOOM`/`BOARD_MAX_ZOOM` constants consumed by both the canvas and the
+    button-disable logic so they can't drift (UX-16).
+  - Double-clicking a service frame focuses it (centre + zoom in) instead of calling the
+    inert `toggleFrame` no-op; double-clicking a task card inside a frame now opens that
+    task's focus view (the double-click target is resolved from the DOM, since a task lives
+    inside its frame's Vue Flow node) (UX-09).
+  - Dropping a pipeline on blank canvas (or a non-task) now shows the "aim at a task"
+    nudge instead of silently vanishing (UX-07).
+
+## 0.96.4
+
+### Patch Changes
+
+- 168b11f: UX papercuts — secret/password inputs mask by default with a reveal toggle (section B, UX-19/UX-20)
+
+  - **UX-19 (P2): every password/secret field gets a show/hide toggle.** New shared
+    `common/SecretInput.vue` primitive (mirroring `common/IconButton.vue` / `common/CopyButton.vue`)
+    wraps `UInput` with a masked default (`type="password"`) and a trailing eye-toggle button —
+    labeled and `aria-pressed` via the new `common.reveal` / `common.hide` keys — so a user can
+    verify a pasted token, the leading cause of invalid-credential retries. It forwards every other
+    UInput prop/listener via `$attrs` and binds with `v-model` exactly like `UInput`. Every bare
+    `type="password"` field now routes through it: both auth screens (`LoginScreen`,
+    `ResetPasswordScreen`), the descriptor-driven `DocumentSourceConnectModal` +
+    `UserSecretsSection` (via a `:secret` prop that preserves the `field.secret`-conditional
+    masking), `ObservabilityConnectionPanel`, `LocalModelEndpointsPanel`, `SlackPanel`,
+    `PersonalCredentialModal`, plus the audit-missed surfaces `AccountDeploymentSettings`,
+    `AccountTeamSettings`, `KubernetesEnvironmentForm` / `KubernetesEngineForm`,
+    `ProviderManifestEditor`, and `PackageRegistriesPanel`.
+  - **UX-20 (P2): plaintext secret textareas are masked.** The four fully-visible secret
+    `UTextarea`s (`ApiKeysSection`, `VendorCredentialsModal`, `OpenRouterCatalogPanel`,
+    `PersonalSubscriptionSection`) are converted to the same masked-by-default `SecretInput`, so
+    live vendor keys no longer render in cleartext (shoulder-surf / screen-share leakage).
+
+  Adds `common.reveal` / `common.hide` message keys across all eight locales.
+
+- Updated dependencies [bf31df7]
+  - @cat-factory/contracts@0.107.0
+
+## 0.96.3
+
+### Patch Changes
+
+- 398ca72: UX papercuts — accessibility: icon-button labeling, keyboard, focus & reduced motion (section F, UX-62..UX-66)
+
+  - **UX-62/63 (P1/P2): icon-only buttons are named by construction.** New shared
+    `common/IconButton.vue` primitive (mirroring `common/CopyButton.vue`) requires a `label`
+    and applies it as BOTH `title` (pointer tooltip) and `aria-label` (screen readers),
+    forwarding all other UButton props/listeners via `$attrs`. Every previously-unlabeled
+    dismiss button now routes through it with `t('common.close')`: the block focus view,
+    clarity / brainstorm / requirements review windows, the inspector, and the service-spec
+    window. This replaces the ad-hoc mix of title-only / aria-only / nothing with one
+    enforceable convention.
+  - **UX-64 (P2): the task card's mini pipeline steps are keyboard-operable.** The clickable
+    `<div>` is now a real `<button type="button">` — focusable, Enter/Space-activatable, with
+    a `focus-visible` ring — instead of a pointer-only, screen-reader-invisible target.
+  - **UX-65 (P2): hand-rolled inputs have a visible focus ring.** The textareas that only
+    swapped their border hue on focus (human-test, follow-up, gate human-review, both
+    visual-confirmation notes) now add `focus-visible:ring-2` (fixing the WCAG 2.4.7
+    hue-only-focus failure).
+  - **UX-66 (P2): decorative animations respect `prefers-reduced-motion`.** A
+    `@media (prefers-reduced-motion: reduce)` block silences the infinite attention pulses
+    (blocked / decision-needed halo, PR-ready halo, the active-step and follow-up halos) and
+    the marching-ants edge animation. Loading spinners are intentionally left animating — a
+    spinner's motion is its meaning.
+
+## 0.96.2
+
+### Patch Changes
+
+- Updated dependencies [6f9d935]
+  - @cat-factory/contracts@0.106.0
+
+## 0.96.1
+
+### Patch Changes
+
+- 8b1fae5: UX papercuts — async state, realtime & error surfacing (section E, UX-70..UX-77)
+
+  - **UX-70 (P1): a board that never goes live is no longer silently frozen.** After a few
+    failed initial WebSocket handshakes (proxy/firewall blocking WS while REST works, or a
+    ticket-mint failure), `useWorkspaceStream` flags the connection as failed and
+    `ConnectionStatusBanner` shows a distinct "not receiving live updates" strip — separate
+    from the amber reconnecting strip (which only appears once we've actually been live).
+  - **UX-71 (P2): a `board` event's coarse refresh no longer silently swallows failures.**
+    It now retries with backoff (aborting on stream-stop / workspace-switch), so one
+    transient failure can't leave the board stale (a materialised module never appearing).
+  - **UX-72 (P2): a reconnect that fails to reconcile now retries.** The on-open resync uses
+    the same retrying refresh instead of a swallowed `.catch(() => {})`, so a reconnect no
+    longer presents as fully live while missing everything from the outage. `connected` is
+    still announced even if every retry fails (we are connected).
+  - **UX-73 (P2): a `starting` preview no longer wedges on a transient poll error.** The
+    preview store keeps polling through blips up to a small cap (self-heals when the runtime
+    recovers), then surfaces the error and stops — instead of leaving the amber "Starting…"
+    spinning forever with no recovery.
+  - **UX-74 (P2): the service-spec window's error state has a Retry.** No more
+    close-and-reopen as the only escape.
+  - **UX-75 (P3): the observability panel distinguishes a context-load failure from an empty
+    run.** A failed provided-context load now shows an error-with-retry state instead of
+    masquerading as "no context stored"; the model-activity error state also gained a Retry.
+  - **UX-76 (P3): `removeDependency` surfaces failures.** It's wrapped in try/catch like its
+    sibling `toggleDependency`, toasting on failure instead of rejecting unhandled.
+  - **UX-77 (P3): actionable error toasts are sticky.** The "Configure AI" / "Configure
+    storage" remedy toasts no longer auto-dismiss and take their one-click fix with them.
+
+## 0.96.0
+
+### Minor Changes
+
+- 5490103: Surface web search on container agent run details, and store/display performed search queries as telemetry.
+
+  - Container steps now carry a `search` availability fact (`{ available, provider }`), resolved backend-side at dispatch from the run's account web-search keys (else the deployment default). The observability drill-down shows whether web search was available and which provider (Brave / SearXNG) served the run — a static per-run fact, not gated by prompt-recording.
+  - New `agent_search_queries` telemetry sink records every web search a container agent performs through the backend search proxy (query, provider, result count), gated by the same double switch as agent-context snapshots (`LLM_RECORD_PROMPTS` + the workspace `storeAgentContext` setting) and pruned on the same telemetry retention window. Mirrored across the D1 (Cloudflare) and Drizzle/Postgres (Node) stores with a cross-runtime conformance suite, and surfaced on demand via `GET /workspaces/:ws/executions/:executionId/search-queries` in a new "Web search" observability view.
+
+### Patch Changes
+
+- e5b9462: Show a step's failure trail on its step-detail overlay. The step-detail overlay now has an "Execution history" toggle that reveals the prior failed attempts recorded for that specific step (plus the current failure when the run is presently failed at it): the run-level "previous errors" history narrowed to one step. Each `AgentFailure` now carries the `stepIndex` it failed at (stamped by the engine's failure funnel), so the trail can be attributed per step.
+- e5b9462: Fix a retried run leaving its stale "Run failed" banner up (and its carried-forward failure history hidden). After a retry replaces a block's failed run with a fresh run under a new id, the execution store's snapshot reconcile was preserving the now-deleted predecessor, which then shadowed the running run in the by-block projection. Drop a cached-only run whose block the incoming snapshot already covers so the banner clears on restart and the "previous errors" history surfaces on the task inspector.
+- d17a2fc: UX papercuts — the requirements & clarity review windows (UX-32/33/34)
+
+  - **UX-32 (P1): the review gate is no longer unadvanceable below `lg`.** The action rail
+    (Proceed / Incorporate / Re-review / Redo / resolve-exceeded) used to live in an
+    `aside` that was `hidden` below the `lg` breakpoint, so on a laptop split-screen or
+    tablet the human could answer findings but had no visible way to advance the gate. The
+    rail is now a right-hand column on wide screens and a bottom action bar below `lg`
+    (never hidden); the purely-informational stats collapse away below `lg` to keep the bar
+    compact.
+  - **UX-33 (P1): typed answers are no longer lost on close.** Closing a review window (X,
+    backdrop, or Escape) now flushes any typed-but-unblurred answer before the view tears
+    down. `useResultView` grew an `onClose` hook so all three close paths flush through one
+    seam; the flush snapshots the review up front so it survives the reactive state going
+    null on close.
+  - **UX-34 (P2): the two review windows now share one save model.** The clarity window
+    auto-saves answers on blur (seeding each textarea from the recorded reply), matching the
+    requirements window, instead of requiring an explicit "Save answer" click — so muscle
+    memory from one no longer silently drops data in the other.
+
+- Updated dependencies [5490103]
+- Updated dependencies [e5b9462]
+  - @cat-factory/contracts@0.105.0
+
+## 0.95.1
+
+### Patch Changes
+
+- 35f499c: Fix local-mode CORS + two SPA regressions
+
+  - **local-server:** default `ENVIRONMENT=local` in `applyLocalDefaults`, and pass the
+    localized env (not the raw one) into `start()`. The shared app's CORS middleware reads
+    `ENVIRONMENT` / `CORS_ALLOWED_ORIGINS` directly off the env, and the raw env was being
+    passed through, so the server default-DENIED CORS and the SPA on `:3000` failed with
+    "can't reach backend" until an operator hand-set `CORS_ALLOWED_ORIGINS`. Local mode now
+    reflects the SPA origin out of the box (auth is a bearer header, credentials mode off).
+  - **app:** import the `CreateInitiativeModal` component in `index.vue` — it was referenced
+    in the template but never imported, so Vue logged "Failed to resolve component".
+  - **app:** stop sending an empty `?kind=` query when describing an infra provider without a
+    concrete backend kind. The empty string was read as a real (unknown) backend kind and
+    rejected with 422; the request now omits the param so the server falls back to the
+    workspace's stored/default kind.
+
 ## 0.95.0
 
 ### Minor Changes

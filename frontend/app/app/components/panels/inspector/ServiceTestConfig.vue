@@ -18,6 +18,7 @@ import type {
 } from '@cat-factory/contracts'
 import RepoTreeBrowser from '~/components/github/RepoTreeBrowser.vue'
 import InspectorSection from '~/components/panels/inspector/InspectorSection.vue'
+import { apiErrorEnvelope } from '~/composables/api/errors'
 
 // Service-level (frame) configuration: the service-owned PROVISIONING — the provision
 // TYPE this service produces (`infraless` / `docker-compose` / `kubernetes` / `custom`)
@@ -42,6 +43,7 @@ const github = useGitHubStore()
 const services = useServicesStore()
 const infra = useInfraConfigStore()
 const agentRuns = useAgentRunsStore()
+const ui = useUiStore()
 const { t } = useI18n()
 
 // The custom-manifest-type catalog feeds the `custom` picker. Cheap + shared (coalesced).
@@ -284,7 +286,10 @@ function applyPicked() {
 // every field stays editable, and the engine-level URL/namespace suggestions are surfaced
 // read-only (the workspace handler owns them). Nothing is persisted server-side by detection.
 const detecting = ref(false)
-const detectError = ref(false)
+// The detect failure message to show, or null when there's no error. Holds the SERVER's real
+// message (the backend now raises an actionable one for an unreadable repo) so the user sees why
+// detection failed instead of a fixed, vague line.
+const detectError = ref<string | null>(null)
 const detectResult = ref<ProvisioningRecommendation | null>(null)
 // Advisory, LOCAL-ONLY selection: which compose `services:` key the user picked. It is NOT persisted
 // (the compose backend targets the file, not a single service), so it lives only in component state
@@ -298,7 +303,7 @@ watch(
   () => props.block.id,
   () => {
     detectResult.value = null
-    detectError.value = false
+    detectError.value = null
     pickedComposeService.value = null
   },
 )
@@ -308,11 +313,14 @@ async function detectFromRepo() {
   if (!ctx) return
   const repo = github.repoFor(ctx.githubId)
   if (!repo) {
-    detectError.value = true
+    // The frame points at a repo that isn't in the connected-repo projection, so we can't resolve
+    // its owner/name to ask the backend. That's a "sync/connect GitHub" problem, NOT "couldn't read
+    // the repo" — say so specifically.
+    detectError.value = t('inspector.detectRepoUnresolved')
     return
   }
   detecting.value = true
-  detectError.value = false
+  detectError.value = null
   try {
     const rec = await infra.detectProvisioning({
       owner: repo.owner,
@@ -342,8 +350,13 @@ async function detectFromRepo() {
       board.updateBlock(props.block.id, { provisioning: rec.provisioning })
       if (rec.provisioning.type === 'kubernetes') seedKubeSource(rec.provisioning.manifestSource)
     }
-  } catch {
-    detectError.value = true
+  } catch (e) {
+    // Surface the server's real message (an actionable "couldn't read the repo — check App access"
+    // for a read fault), falling back to the generic line only when none is available.
+    detectError.value =
+      apiErrorEnvelope(e)?.message ??
+      (e instanceof Error ? e.message : null) ??
+      t('inspector.testConfig.detect.error')
   } finally {
     detecting.value = false
   }
@@ -431,6 +444,34 @@ function setSize(value: InstanceSize) {
       </p>
     </div>
 
+    <!-- Nudge into the guided environment setup wizard for a docker-compose service: the wizard
+         drives detect → review (recipe + analyst draft) → preflight → save so the single Deployer
+         provisions the compose stack, rather than editing the raw path inline. -->
+    <div
+      v-if="provisionType === 'docker-compose'"
+      class="flex items-center justify-between gap-2 rounded border border-primary-800/40 bg-primary-950/20 p-2"
+      data-testid="env-setup-nudge"
+    >
+      <div class="min-w-0">
+        <p class="text-[11px] font-medium text-primary-200/90">
+          {{ t('inspector.testConfig.envWizard.title') }}
+        </p>
+        <p class="text-[11px] leading-snug text-slate-500">
+          {{ t('inspector.testConfig.envWizard.hint') }}
+        </p>
+      </div>
+      <UButton
+        size="xs"
+        variant="soft"
+        color="primary"
+        icon="i-lucide-flask-conical"
+        data-testid="env-setup-nudge-open"
+        @click="ui.openEnvironmentSetup(props.block.id)"
+      >
+        {{ t('inspector.testConfig.envWizard.open') }}
+      </UButton>
+    </div>
+
     <!-- Auto-detect a recommended provisioning config from the repo (slice 11). Non-binding:
          it prefills the form below + the kube edit refs; the user confirms/edits everything. -->
     <div v-if="repoContext" class="space-y-2 rounded border border-slate-800 bg-slate-900/40 p-2">
@@ -452,7 +493,7 @@ function setSize(value: InstanceSize) {
       </p>
 
       <p v-if="detectError" class="text-[11px] text-rose-300/80">
-        {{ t('inspector.testConfig.detect.error') }}
+        {{ detectError }}
       </p>
 
       <template v-if="detectResult && !detecting">

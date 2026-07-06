@@ -4,7 +4,16 @@ Status: **fixes in progress.** Slices landed: the undo & confirmation-blast-radi
 cluster (UX-01/02/03/13, [#737](https://github.com/kibertoad/cat-factory/pull/737)); the
 clipboard-feedback shared primitive (UX-38/39); friendly model/agent-kind labels in the
 review & consensus windows (UX-36/37); markdown prose + copy affordances in the result
-views (UX-43, UX-44 copy buttons). This
+views (UX-43, UX-44 copy buttons); the review-window gate-actions + draft-persistence
+cluster (UX-32/33/34); the async-state / realtime / error-surfacing section E in full
+(UX-70..UX-77 — offline indicator, retrying refresh/resync, self-healing preview poll,
+retry affordances, sticky remedy toasts); the accessibility icon-labeling / keyboard /
+focus / reduced-motion cluster (UX-62..66 — the `IconButton` primitive, keyboard-operable
+mini-steps, focus-visible rings, reduced-motion guards); the secret-input reveal cluster
+(UX-19/20 — the `SecretInput` primitive: every password field and every plaintext secret
+textarea now masks by default with an eye toggle); the board zoom/canvas navigation cluster
+(UX-07/08/09/14/15/16 — labeled+clamp-disabled zoom controls, a click-to-reset-100% readout,
+double-click-to-focus a frame, and a nudge on blank-canvas pipeline drops). This
 document catalogs UX papercuts
 (small annoyances, missing affordances, rough edges) found in the SPA
 (`frontend/app/app`) during a systematic sweep on 2026-07-02. Every finding was
@@ -66,16 +75,16 @@ per-file patches:
 | UX-04 | P2  | todo        | Drag/reparent has no drop-target highlighting                                 |
 | UX-05 | P2  | todo        | Dependency drag-to-connect: no target highlight, silent no-op on invalid drop |
 | UX-06 | P2  | todo        | Dependency edges cannot be removed (or hovered) on the canvas                 |
-| UX-07 | P2  | todo        | Pipeline dropped on blank canvas gives no feedback                            |
-| UX-08 | P2  | todo        | Zoom / fit-view toolbar buttons lack tooltips; `maximize` glyph ambiguous     |
-| UX-09 | P2  | todo        | Double-clicking a frame/epic is a dead no-op                                  |
+| UX-07 | P2  | done (#847) | Pipeline dropped on blank canvas gives no feedback                            |
+| UX-08 | P2  | done (#847) | Zoom / fit-view toolbar buttons lack tooltips; `maximize` glyph ambiguous     |
+| UX-09 | P2  | done (#847) | Double-clicking a frame/epic is a dead no-op                                  |
 | UX-10 | P2  | todo        | Selection, zoom, viewport lost on reload / workspace switch                   |
 | UX-11 | P2  | todo        | Camera doesn't refit on workspace switch                                      |
 | UX-12 | P2  | todo        | No arrow-key navigation or keyboard block movement                            |
 | UX-13 | P2  | done (#737) | Hardcoded English toast `'Could not move'` in `moveBlock`                     |
-| UX-14 | P3  | todo        | No reset-zoom-to-100%; zoom readout not clickable                             |
-| UX-15 | P3  | todo        | Zoom/LOD readout hidden below `sm` breakpoint                                 |
-| UX-16 | P3  | todo        | Zoom buttons don't disable at min/max                                         |
+| UX-14 | P3  | done (#847) | No reset-zoom-to-100%; zoom readout not clickable                             |
+| UX-15 | P3  | done (#847) | Zoom/LOD readout hidden below `sm` breakpoint                                 |
+| UX-16 | P3  | done (#847) | Zoom buttons don't disable at min/max                                         |
 | UX-17 | P3  | todo        | Desktop frame-resize grips are an 8px hit target                              |
 
 - **UX-01 — No undo after delete. DONE.** `stores/board.ts` `removeBlock` now
@@ -106,16 +115,23 @@ per-file patches:
   `components/board/TaskDependencyEdges.vue:163` — the whole SVG overlay is
   `pointer-events-none`. Removal requires re-running the exact same drag
   (`toggleDependency`), which is undiscoverable. Fix: clickable edge with hover "×".
-- **UX-07 — Silent failed pipeline drop.** `BoardCanvas.vue:138-160`. Wrong-level and
-  dependency-blocked drops toast, but `if (!target || !pipeline) return` swallows a
-  drop on empty canvas. Fix: "Drop a pipeline onto a task" toast.
-- **UX-08 — Untitled zoom controls.** `components/layout/BoardToolbar.vue:102-130`.
-  `zoom-in`/`zoom-out`/`i-lucide-maximize` (fit-to-content, reads as "fullscreen")
-  have no `:title`/aria-label, unlike the frame-header buttons.
-- **UX-09 — Dead double-click.** `BoardCanvas.vue:103-106` calls `ui.toggleFrame`,
-  but `BlockNode.vue:78` hardcodes `showExpanded = true` and
-  `ui.isFrameExpanded()` (`stores/ui.ts:262-264`) always returns `true` — the toggle
-  gates nothing. Remove the handler or repurpose (e.g. zoom-to-fit the frame).
+- **UX-07 — Silent failed pipeline drop. DONE.** `BoardCanvas.vue`'s `onDrop` split the
+  old `if (!target || !pipeline) return` — an unknown pipeline id stays a silent no-op
+  (internal glitch, nothing the user can act on), but a drop onto blank canvas / a
+  non-block now raises the same `board.canvas.dropOntoTask` nudge the wrong-level path
+  gives, so the drop never just vanishes.
+- **UX-08 — Untitled zoom controls. DONE.** The three zoom controls in
+  `BoardToolbar.vue` now route through the shared `common/IconButton.vue` primitive with
+  labels (`board.toolbar.zoomOut`/`zoomIn`/`fitView`), applied as both `:title` and
+  `:aria-label` — so `i-lucide-maximize` (fit-to-content) is no longer an ambiguous
+  "fullscreen" glyph.
+- **UX-09 — Dead double-click. DONE.** `BoardCanvas.vue`'s `onNodeDoubleClick` no longer
+  calls the inert `ui.toggleFrame` (frames are always expanded, so it gated nothing).
+  Because a task card lives _inside_ its frame's Vue Flow node, the handler resolves the
+  real double-click target from the DOM (`blockIdFromEvent`): a task double-click opens
+  that task's focus view (`ui.focus`, the same gesture the card's review action uses),
+  while a double-click on frame chrome `focusFrame`s the frame — centres the camera and
+  zooms in, a quick "focus this service" gesture. Epics (non-containers) stay a no-op.
 - **UX-10 — Transient view state.** `stores/ui.ts:34,239,244` — `selectedBlockId`,
   `zoom`, `expandedFrames` are plain refs; `BoardCanvas.vue:178-181` only does
   `fit-view-on-init`. Fix: persist per-workspace (localStorage).
@@ -128,9 +144,15 @@ per-file patches:
 - **UX-13 — Un-i18n'd move-failure toast. DONE.** `moveBlock`'s failure toast now uses
   `tr('board.toast.moveFailed')` (the key already existed) instead of the literal
   `'Could not move'`.
-- **UX-14/15/16 — Zoom polish.** `BoardToolbar.vue:102-130` + `BoardCanvas.vue:176-177`:
-  readout is static text (make it click-to-reset-100%), hidden below `sm`, and the
-  buttons stay enabled-but-inert at the 0.2/3.0 clamps.
+- **UX-14/15/16 — Zoom polish. DONE.** The `%`/LOD readout in `BoardToolbar.vue` is now a
+  real `<button>` (`board-zoom-reset`) that snaps the camera back to 100% via
+  `useBoardFlow().resetZoom()` (`zoomTo(1)`), titled `board.toolbar.resetZoom` with a
+  focus-visible ring (UX-14); it's always visible now (only the LOD sub-label drops below
+  `sm`) so the zoom level is never a mystery (UX-15); and the zoom-in/out `IconButton`s
+  `:disabled` at the clamps via `atMinZoom`/`atMaxZoom` computed against the shared
+  `BOARD_MIN_ZOOM`/`BOARD_MAX_ZOOM` constants (now sourced from `useBoardFlow.ts` and
+  consumed by `<VueFlow>` too, so the clamps can't drift from the button-disable logic)
+  (UX-16).
 - **UX-17 — Tiny resize grips.** `components/board/nodes/ModuleFrame.vue:83-91`,
   `BlockNode.vue:515-528` — `w-2`/`h-2` (8px) grips, widened only for
   `pointer-coarse:`. Add a larger invisible hit area for fine pointers.
@@ -140,8 +162,8 @@ per-file patches:
 | ID    | Sev | Status | Finding                                                                            |
 | ----- | --- | ------ | ---------------------------------------------------------------------------------- |
 | UX-18 | P1  | todo   | Content-heavy modals discard all typed input on Escape/backdrop click              |
-| UX-19 | P2  | todo   | No show/hide toggle on any password/secret field (systemic)                        |
-| UX-20 | P2  | todo   | Provider API key entered in a plaintext, unmasked textarea (several surfaces)      |
+| UX-19 | P2  | done   | No show/hide toggle on any password/secret field (systemic)                        |
+| UX-20 | P2  | done   | Provider API key entered in a plaintext, unmasked textarea (several surfaces)      |
 | UX-21 | P2  | todo   | `unlinkSource` (fragment library) destroys a synced source with no confirmation    |
 | UX-22 | P2  | todo   | Reset-password validation is submit-only, no inline feedback                       |
 | UX-23 | P2  | todo   | Slack member-mapping rows keyed by index; incomplete rows silently dropped on save |
@@ -161,20 +183,24 @@ per-file patches:
   credential modals. Fix: dirty flag + confirm-before-discard, or
   non-dismissible-when-dirty. This is the single most damaging papercut for
   heavy users. (Review-window variant: UX-33; settings variant: UX-58.)
-- **UX-19 — No reveal toggle.** Bare `type="password"` with no eye toggle at:
-  `auth/LoginScreen.vue:323,394`, `auth/ResetPasswordScreen.vue:79,88`,
-  `documents/DocumentSourceConnectModal.vue:108`, `settings/UserSecretsSection.vue:210-215`,
-  `settings/ObservabilityConnectionPanel.vue:197-210,257,268`,
-  `settings/LocalModelEndpointsPanel.vue:275`, `slack/SlackPanel.vue:189-195`,
-  `providers/PersonalCredentialModal.vue:114`. Users pasting long tokens can't
-  verify them — a leading cause of invalid-credential retries. Fix: shared
-  trailing-slot eye toggle on `UInput`.
-- **UX-20 — Plaintext secret textareas.** `providers/ApiKeysSection.vue:325-333`,
-  `providers/VendorCredentialsModal.vue:217-224`,
-  `settings/OpenRouterCatalogPanel.vue:278-285`,
-  `providers/PersonalSubscriptionSection.vue:235-243` — live vendor keys render
-  fully visible (shoulder-surf / screen-share leakage), inconsistent with the
-  masked fields in UX-19's list. Fix: mask by default + reveal toggle.
+- **UX-19 — No reveal toggle. DONE.** A shared `common/SecretInput.vue` primitive (mirroring
+  `IconButton`/`CopyButton`) wraps `UInput` with a masked default (`type="password"`) and a
+  trailing eye-toggle button (labeled + `aria-pressed` via the new `common.reveal`/`common.hide`
+  keys) so a user can verify a pasted token — the leading cause of invalid-credential retries.
+  Every bare `type="password"` field now routes through it: both auth screens
+  (`LoginScreen`, `ResetPasswordScreen`), the descriptor-driven `DocumentSourceConnectModal` +
+  `UserSecretsSection` (via a `:secret` prop that preserves the `field.secret`-conditional
+  masking), `ObservabilityConnectionPanel` (Datadog + PagerDuty + incident.io),
+  `LocalModelEndpointsPanel`, `SlackPanel`, `PersonalCredentialModal`, and the
+  audit-missed surfaces `AccountDeploymentSettings` (Slack/Linear/web-search/content-storage),
+  `AccountTeamSettings` (email key), `KubernetesEnvironmentForm`/`KubernetesEngineForm`,
+  `ProviderManifestEditor`, `PackageRegistriesPanel`. When `secret` is false it degrades to a
+  plain text input with no toggle.
+- **UX-20 — Plaintext secret textareas. DONE.** The four fully-visible secret `UTextarea`s
+  (`ApiKeysSection`, `VendorCredentialsModal`, `OpenRouterCatalogPanel`,
+  `PersonalSubscriptionSection`) are converted to the same masked-by-default `SecretInput`, so
+  live vendor keys no longer render in cleartext (shoulder-surf / screen-share leakage). These
+  keys are single-line tokens, so the single-line masked input + reveal is the correct shape.
 - **UX-21 — Unguarded unlink.** `fragments/FragmentLibraryManager.vue:233-240`
   (button :502-508) fires immediately, while sibling `removeFragment` (:124-140)
   routes through `confirm()`. Fix: same confirm dialog.
@@ -216,9 +242,9 @@ per-file patches:
 
 | ID    | Sev | Status  | Finding                                                                                                          |
 | ----- | --- | ------- | ---------------------------------------------------------------------------------------------------------------- |
-| UX-32 | P1  | todo    | Requirements/Clarity review actions completely hidden below `lg` — gate unadvanceable                            |
-| UX-33 | P1  | todo    | Typed review answers lost when window closes without blur/save                                                   |
-| UX-34 | P2  | todo    | Requirements auto-saves on blur; Clarity needs explicit "Save answer" — opposite models                          |
+| UX-32 | P1  | done    | Requirements/Clarity review actions completely hidden below `lg` — gate unadvanceable                            |
+| UX-33 | P1  | done    | Typed review answers lost when window closes without blur/save                                                   |
+| UX-34 | P2  | done    | Requirements auto-saves on blur; Clarity needs explicit "Save answer" — opposite models                          |
 | UX-35 | P2  | todo    | No elapsed time on running steps in PipelineProgress / TaskExecution                                             |
 | UX-36 | P2  | done    | Raw model id rendered verbatim in review windows                                                                 |
 | UX-37 | P2  | done    | Internal `agentKind` enum + raw model id leak in consensus window                                                |
@@ -230,22 +256,28 @@ per-file patches:
 | UX-43 | P3  | done    | Agent prose rendered as plain text in several result views                                                       |
 | UX-44 | P3  | partial | Structured JSON / consensus output lack copy buttons; no jump-to-latest in live stream; findings lack timestamps |
 
-- **UX-32 — Hidden gate actions.** `requirements/RequirementsReviewWindow.vue:794`
-  and `clarity/ClarityReviewWindow.vue:479`: the entire action rail (Proceed,
-  Incorporate, Re-review, Redo, …) lives in `<aside class="hidden w-72 … lg:flex">`.
-  Below `lg` (laptop split-screen, tablet) the user can answer findings but cannot
-  advance the review — a hard pipeline gate with no visible exit. Fix: move the
-  action block into the scrollable main column or a sticky footer. **Highest-priority
-  single fix in this doc.**
-- **UX-33 — Lost review drafts.** `RequirementsReviewWindow.vue:576` persists an
-  answer only on textarea `@blur`; `flushDrafts()` runs only before explicit
-  actions; `close()` (backdrop :414, X :442, Escape via `useResultView`) doesn't
-  flush. Clarity requires an explicit "Save answer" click
-  (`ClarityReviewWindow.vue:402-411`) with no flush at all. Fix: flush drafts in
-  the close path.
-- **UX-34 — Inconsistent save models.** Same visual language, opposite
-  interaction between the two review windows; muscle memory from one silently
-  drops data in the other. Standardize on auto-save-on-blur (+ close-flush).
+- **UX-32 — Hidden gate actions. DONE.** The action rail in both
+  `RequirementsReviewWindow.vue` and `ClarityReviewWindow.vue` was `<aside class="hidden
+w-72 … lg:flex">`, so below `lg` (laptop split-screen, tablet) the human could answer
+  findings but had no visible way to advance the gate. The `aside` is now a responsive
+  rail — a right-hand column on wide screens (`lg:w-72 lg:border-s`) and a full-width
+  bottom action bar below `lg` (`flex w-full border-t`, never hidden). The
+  purely-informational stats block is the only thing hidden below `lg`
+  (`hidden … lg:block`) so the mobile action bar stays compact; every action button shows
+  at all sizes. (The `exceeded` state's `IterationCapPrompt` was already in the main
+  column, so it was reachable — the fix is for the `ready`/`merged` actions +
+  request-recommendations.)
+- **UX-33 — Lost review drafts. DONE.** `useResultView` gained an `onClose` hook that
+  runs on EVERY close path (X, backdrop, Escape) before the view tears down; both review
+  windows pass `onClose: () => void flushDrafts()`. `flushDrafts` now snapshots the review
+  up front and threads it through `persistDraft`, so the persist completes even though the
+  reactive `review`/`blockId` go null the instant the view closes.
+- **UX-34 — Inconsistent save models. DONE.** The clarity window was converted to
+  auto-save-on-blur (the requirements pattern): a seeding `watch` pre-fills each textarea
+  from the recorded reply, `persistDraft` saves on `@blur` only when the trimmed draft
+  differs, and the explicit "Save answer" button (+ its `clarity.saveAnswer` /
+  `clarity.refineAnswerPlaceholder` i18n keys, removed from all 8 locales) is gone. Both
+  windows now behave identically.
 - **UX-35 — No elapsed clock.** `pipeline/PipelineProgress.vue` and
   `panels/inspector/TaskExecution.vue` show spinner/phase/subtasks but no duration;
   `composables/useStepTimer.ts` is wired only into the step-detail overlay. A step
@@ -371,87 +403,96 @@ per-file patches:
 
 | ID    | Sev | Status | Finding                                                                                 |
 | ----- | --- | ------ | --------------------------------------------------------------------------------------- |
-| UX-70 | P1  | todo   | Board whose WebSocket never connects is silently non-live — no indicator                |
-| UX-71 | P2  | todo   | Debounced board refresh swallows failures → silently stale board                        |
-| UX-72 | P2  | todo   | Reconnect declares "connected" even when the resync refresh failed                      |
-| UX-73 | P2  | todo   | Preview polling stops silently on transient error → stuck "Starting…" forever           |
-| UX-74 | P2  | todo   | Service-spec window error state has no retry                                            |
-| UX-75 | P3  | todo   | Observability panel error has no retry; context-load failure masquerades as empty state |
-| UX-76 | P3  | todo   | `removeDependency` has no error handling (sibling `toggleDependency` does)              |
-| UX-77 | P3  | todo   | Actionable error toasts auto-dismiss, taking their remedy button with them              |
+| UX-70 | P1  | done   | Board whose WebSocket never connects is silently non-live — no indicator                |
+| UX-71 | P2  | done   | Debounced board refresh swallows failures → silently stale board                        |
+| UX-72 | P2  | done   | Reconnect declares "connected" even when the resync refresh failed                      |
+| UX-73 | P2  | done   | Preview polling stops silently on transient error → stuck "Starting…" forever           |
+| UX-74 | P2  | done   | Service-spec window error state has no retry                                            |
+| UX-75 | P3  | done   | Observability panel error has no retry; context-load failure masquerades as empty state |
+| UX-76 | P3  | done   | `removeDependency` has no error handling (sibling `toggleDependency` does)              |
+| UX-77 | P3  | done   | Actionable error toasts auto-dismiss, taking their remedy button with them              |
 
-- **UX-70 — Never-connected is invisible.** `layout/ConnectionStatusBanner.vue:33,42`
-  gates on `everConnected`; if the very first WS handshake keeps failing
-  (proxy/firewall blocks WS while REST works, or `mintEventsTicket` throws at
-  `useWorkspaceStream.ts:117-122`) the board loads via REST but never goes live and
-  no banner ever appears — a user watching a run sees a frozen board. Fix: after N
-  failed initial attempts, show an "offline / not receiving live updates" state.
-- **UX-71 — Swallowed coarse refresh.** `useWorkspaceStream.ts:42-45` — a `board`
-  event triggers `void workspace.refresh()` with no catch/retry; one transient
-  failure leaves the board silently stale (a materialised module never appears).
-- **UX-72 — Optimistic reconnect.** `useWorkspaceStream.ts:152-160` — the resync
-  `refresh().catch(() => {})` is swallowed but `connected = true` is still set; a
-  reconnect whose reconcile failed presents as fully live while missing everything
-  from the outage, and the reconcile never retries.
-- **UX-73 — Preview stuck forever.** `stores/preview.ts:50-58` +
-  `panels/inspector/FrontendConfig.vue:405-411,456-470` — any fetch error during
-  `starting` polling stops the poll and sets nothing, so the amber "Starting…"
-  persists indefinitely with no error and no recovery short of Stop/Start.
-- **UX-74 — No retry on spec load.** `spec/ServiceSpecWindow.vue:180-186`
-  (+ `stores/serviceSpec.ts:55-56`) — static "couldn't load"; only escape is
-  close-and-reopen. Add a Retry calling `serviceSpec.load(blockId)`.
-- **UX-75 — Observability gaps.** `panels/ObservabilityPanel.vue:285-290` error
-  has no retry; `stores/observability.ts:130-134` swallows `loadContext` errors
-  entirely so a failure renders as the `noContext` empty state — indistinguishable
-  from a run with genuinely no captured context.
-- **UX-76 — Unhandled removeDependency.** `stores/board.ts:402-407` — no
-  try/catch; a failure rejects unhandled with no toast and the edge stays visible.
-  Mirror `toggleDependency` (:387-399).
-- **UX-77 — Vanishing remedies.** `composables/usePipelineErrorToast.ts:89-104,
-112-128,142-157` — the toasts carrying one-click remedies ("Configure AI",
-  "Configure storage") set no `duration`, so they auto-dismiss with the framework
-  default (~5s). Make action-bearing error toasts sticky (`duration: 0`).
+- **UX-70 — Never-connected is invisible. DONE.** `useWorkspaceStream` now tracks the
+  per-workspace connection lifecycle (`everConnected` + `connectionFailed`, reset on
+  `start()`): after `INITIAL_FAIL_ATTEMPTS` (3) failed connects with no successful handshake it
+  flags `connectionFailed`, and `ConnectionStatusBanner` renders a distinct rose "not receiving
+  live updates" strip (`data-testid="stream-offline"`, `i-lucide-wifi-off`) — separate from the
+  amber reconnecting strip (which only shows once we HAVE been live). The banner's local
+  `everConnected` tracking moved into the stream (passed as props) so both variants read the same
+  source of truth.
+- **UX-71 — Swallowed coarse refresh. DONE.** `debouncedBoardRefresh` now routes through
+  `refreshWithRetry(workspaceId)` (up to `REFRESH_MAX_ATTEMPTS`, backoff 0.4→4s), aborting between
+  attempts if the stream stopped or the workspace switched — one transient failure no longer leaves
+  the board silently stale.
+- **UX-72 — Optimistic reconnect. DONE.** The on-`open` resync uses the same
+  `refreshWithRetry` instead of `refresh().catch(() => {})`, so a reconnect whose first reconcile
+  fails now retries rather than presenting as fully live while missing the outage's events.
+  `connected` is still flipped even if every retry fails (we ARE connected; a refresh error must
+  not wedge the indicator / the e2e `data-connected` gate).
+- **UX-73 — Preview stuck forever. DONE.** `stores/preview.ts` `refresh` now, on a poll-tick
+  error while the last known state is `starting`, keeps polling up to `POLL_MAX_ERRORS` (5) — so a
+  transient blip self-heals — then surfaces the error into `requestError` and stops, instead of
+  silently wedging the amber "Starting…" forever. A successful tick resets the per-frame error
+  counter.
+- **UX-74 — No retry on spec load. DONE.** `spec/ServiceSpecWindow.vue`'s error state gained a
+  Retry button (`common.retry`, `:loading` bound to the store's loading flag) calling
+  `serviceSpec.load(blockId)`.
+- **UX-75 — Observability gaps. DONE.** `stores/observability.ts` now records
+  `contextErrors[executionId]` on a `loadContext` failure (cleared on each attempt); the panel's
+  context view shows a distinct error-with-retry state (`observability.contextError` + Retry)
+  before the `noContext` empty state, so a fetch failure no longer masquerades as "no context
+  stored". The calls view's existing error state also gained a Retry (`observability.load`).
+- **UX-76 — Unhandled removeDependency. DONE.** `stores/board.ts` `removeDependency` is now
+  wrapped in try/catch mirroring `toggleDependency`, toasting `board.toast.unlinkFailed` on
+  failure instead of rejecting unhandled with no feedback.
+- **UX-77 — Vanishing remedies. DONE.** The two action-bearing conflict toasts in
+  `usePipelineErrorToast` (`providers_unconfigured` → "Configure AI",
+  `binary_storage_unconfigured` → "Configure storage") now set `duration: 0` so the one-click
+  remedy stays reachable instead of auto-dismissing (~5s). Non-actionable toasts keep the default.
 
 ## F. Accessibility, keyboard & theming
 
-| ID    | Sev | Status | Finding                                                                                  |
-| ----- | --- | ------ | ---------------------------------------------------------------------------------------- |
-| UX-62 | P1  | todo   | Icon-only close/action buttons with no accessible name (widespread)                      |
-| UX-63 | P2  | todo   | No single labeling convention for icon buttons (title-only vs aria-only vs both vs none) |
-| UX-64 | P2  | todo   | Clickable non-interactive `<div>` steps on board cards — not keyboard-operable           |
-| UX-65 | P2  | todo   | Color-only focus indicator on hand-rolled inputs (`outline-none` + border-hue swap)      |
-| UX-66 | P2  | todo   | Animations ignore `prefers-reduced-motion` (infinite board pulses, marching ants)        |
-| UX-67 | P2  | todo   | No light mode / system color-scheme support; palette hardcoded                           |
-| UX-68 | P3  | todo   | Keyboard-shortcuts cheatsheet lists 4 shortcuts; others undocumented                     |
-| UX-69 | P3  | todo   | Board nodes not in the tab order — no keyboard path to a specific card                   |
+| ID    | Sev | Status      | Finding                                                                                  |
+| ----- | --- | ----------- | ---------------------------------------------------------------------------------------- |
+| UX-62 | P1  | done (#841) | Icon-only close/action buttons with no accessible name (widespread)                      |
+| UX-63 | P2  | done (#841) | No single labeling convention for icon buttons (title-only vs aria-only vs both vs none) |
+| UX-64 | P2  | done (#841) | Clickable non-interactive `<div>` steps on board cards — not keyboard-operable           |
+| UX-65 | P2  | done (#841) | Color-only focus indicator on hand-rolled inputs (`outline-none` + border-hue swap)      |
+| UX-66 | P2  | done (#841) | Animations ignore `prefers-reduced-motion` (infinite board pulses, marching ants)        |
+| UX-67 | P2  | todo        | No light mode / system color-scheme support; palette hardcoded                           |
+| UX-68 | P3  | todo        | Keyboard-shortcuts cheatsheet lists 4 shortcuts; others undocumented                     |
+| UX-69 | P3  | todo        | Board nodes not in the tab order — no keyboard path to a specific card                   |
 
-- **UX-62 — Unlabeled icon buttons.** Representative: `focus/BlockFocusView.vue:108`,
-  `clarity/ClarityReviewWindow.vue:267`, `brainstorm/BrainstormWindow.vue:284`,
-  `panels/InspectorPanel.vue:265`, `panels/AgentStepDetail.vue:291`,
-  `panels/ObservabilityPanel.vue:200`, `settings/ModelConfigurationPanel.vue:289`,
-  `pipeline/PipelineBuilder.vue:488` — `<UButton icon="i-lucide-x">` with neither
-  `aria-label` nor `title`; the primary dismiss of most hand-rolled windows is
-  unnamed to screen readers. The `common.close` i18n key already exists.
-- **UX-63 — No convention.** `StepContainerStatus.vue:120-121` does both `:title`
-  and `:aria-label` (correct); elsewhere title-only (`ArtifactLightbox`,
-  `PipelineBuilder`), aria-only (`github/AddServiceFromRepoModal.vue:297`), or
-  nothing. Fix: an `IconButton` wrapper (or lint rule) enforcing `aria-label`.
-  Native `title` alone also never fires on touch — pair with `UTooltip`
-  (`ArtifactLightbox.vue:182-275`, `PipelineBuilder.vue:470-494`).
-- **UX-64 — Keyboard-dead click target.** `board/nodes/TaskPipelineMini.vue:82-86`
-  — `<div class="cursor-pointer" @click.stop="openStep(i)">` with no role, tabindex,
-  or key handler; the mini pipeline steps can't be opened by keyboard. Make it a
-  `<button>`.
-- **UX-65 — Invisible focus.** `humanTest/HumanTestWindow.vue:292`,
-  `followUp/FollowUpWindow.vue:203`, `gates/GateResultView.vue:289`,
-  `visualConfirm/VisualConfirmationWindow.vue:289,343` — raw inputs with
-  `focus:outline-none focus:border-amber-500` (hue-only, same width) fail
-  WCAG 2.4.7. Add `focus-visible:ring-2`.
-- **UX-66 — Motion never reduced.** `assets/css/main.css:45-95` — `board-pulse`,
-  `board-pulse-green`, marching-ants `board-dash` loop infinitely regardless of
-  `prefers-reduced-motion`; only `spa-loading-template.html:126` honors it. Wrap
-  keyframes in `@media (prefers-reduced-motion: no-preference)` or add a global
-  reduce reset.
+- **UX-62 — Unlabeled icon buttons. DONE.** Every icon-only dismiss button that had
+  neither `aria-label` nor `title` now routes through the new shared `common/IconButton.vue`
+  primitive with `:label="t('common.close')"`: `focus/BlockFocusView.vue`,
+  `clarity/ClarityReviewWindow.vue`, `brainstorm/BrainstormWindow.vue`,
+  `panels/InspectorPanel.vue`, `spec/ServiceSpecWindow.vue`,
+  `requirements/RequirementsReviewWindow.vue`. (The `AgentStepDetail` /
+  `ObservabilityPanel` / `ModelConfigurationPanel` / `PipelineBuilder` X buttons were
+  already `:title`-labeled and were left as-is; the `DocumentTemplatesModal` remove
+  buttons carry visible "Remove" text so they're already named.)
+- **UX-63 — No convention. DONE.** The convention is now a component, not a habit:
+  `common/IconButton.vue` (mirroring `common/CopyButton.vue`) requires a `label` prop
+  and applies it as BOTH `:title` (pointer tooltip) and `:aria-label` (screen readers),
+  passing every other UButton prop/listener through via `$attrs`. An icon-only button
+  with no accessible name is now unrepresentable through the primitive. (No `UTooltip`
+  exists in the app; `title`+`aria-label` is the established named-icon pattern —
+  `StepContainerStatus.vue` — so IconButton codifies exactly that.)
+- **UX-64 — Keyboard-dead click target. DONE.** `board/nodes/TaskPipelineMini.vue`'s
+  clickable `<div>` mini-step is now a real `<button type="button">` (keyboard-focusable
+  - operable), with `focus-visible:ring-2` and `text-start w-full` to preserve layout.
+- **UX-65 — Invisible focus. DONE.** The hue-only raw inputs now add
+  `focus-visible:ring-2 focus-visible:ring-<hue>/60` (hue matching each surface's accent)
+  alongside the existing `focus:border-*`: `humanTest/HumanTestWindow.vue`,
+  `followUp/FollowUpWindow.vue`, `gates/GateResultView.vue`, and both textareas in
+  `visualConfirm/VisualConfirmationWindow.vue`.
+- **UX-66 — Motion never reduced. DONE.** A `@media (prefers-reduced-motion: reduce)`
+  block in `assets/css/main.css` disables the decorative infinite pulses (`board-pulse`,
+  `board-pulse-green`) and the marching-ants edge animation; the matching pair in
+  `pipeline/PipelineProgress.vue`'s scoped styles (`step-active`, `followup-blink`) does
+  the same. Loading spinners (`animate-spin`) are deliberately untouched — a spinner's
+  motion IS its meaning.
 - **UX-67 — Dark-only.** Zero `dark:`/`useColorMode`/`prefers-color-scheme`
   matches; palette hardcoded to slate/`#0b1020` (`main.css:14-16`) with only a
   `--board-bg` variable. Light/high-contrast users have no option. At minimum,
@@ -532,9 +573,54 @@ per-file patches:
   plain-text `<pre>`/`<p whitespace-pre-wrap>`. It's the inline counterpart to the full
   segmented reader (`parseOutputOutline`) used by `AgentStepDetail`. Pair copy-able output
   (JSON, prose) with the shared `common/CopyButton.vue`.
-- When fixing i18n papercuts (UX-13), remember the locale-parity CI check: adding
-  or changing an `en.json` key requires the same change in every other locale in
-  the same PR.
+- **Flush unsaved draft input on the close path via `useResultView`'s `onClose` hook**
+  (not per-close-button handlers). A result-view window that holds editable draft state
+  (the review windows) passes `onClose: () => void flushDrafts()`; the composable fires it
+  on the X button, the backdrop click, AND the Escape key, so no close path can leak. The
+  flush MUST snapshot whatever it needs (the review, the block id) synchronously up front —
+  the reactive `blockId`/derived state go null the moment `closeResultView()` runs, so an
+  async persist that re-reads them mid-flight silently no-ops.
+- **A best-effort async load that can fail must NOT swallow the error into an empty/idle state.**
+  A store's `catch {}` that sets nothing renders as "nothing here" — indistinguishable from
+  genuine emptiness (the `loadContext` → `noContext` trap, UX-75). Record a per-key error message
+  (`contextErrors`/`requestError`/`errors` shaped `Record<id, string | null>`), render a distinct
+  error state, and offer a Retry that re-invokes the same loader (reuse `common.retry` — no new
+  key). For a poll loop, a transient tick failure should keep polling up to a small cap (self-heal)
+  then surface the error and stop — never wedge a spinner forever (UX-73).
+- **Realtime resync/refresh retries; it does not fire-and-forget.** A coarse `workspace.refresh()`
+  driven by a `board` event or a socket (re)connect goes through a bounded retry-with-backoff
+  helper (`refreshWithRetry` in `useWorkspaceStream`) that aborts if the stream stopped or the
+  workspace switched — one transient failure must not leave the board silently stale. `connected`
+  is still announced even if every retry fails (we ARE connected; the resync is a best-effort
+  reconcile, and wedging the indicator would break the e2e `data-connected` gate).
+- **Action-bearing error toasts are sticky (`duration: 0`).** A toast whose value is a one-click
+  remedy button ("Configure AI") must not auto-dismiss and take the remedy with it. Plain
+  informational error toasts keep the default duration.
+- **Icon-only buttons go through `common/IconButton.vue` (never a bare `<UButton icon=…>`).**
+  The primitive requires a `label` and applies it as BOTH `:title` and `:aria-label`, so a
+  named-icon button is correct by construction (the app has no `UTooltip`; `title`+`aria-label`
+  is the pattern). It forwards all other UButton props/listeners via `$attrs`; `label` is a
+  declared prop so it strips off before reaching UButton's own visible-text `label`. For a
+  close/dismiss button use `:label="t('common.close')"` (the key already exists — no locale
+  churn). A clickable non-`<button>` element (a `<div @click>`) is the same defect for the
+  keyboard: make it a real `<button type="button">` with a `focus-visible:ring`. Hand-rolled
+  inputs that only swap the border hue on focus need `focus-visible:ring-2` too (hue-only fails
+  WCAG 2.4.7). Decorative infinite CSS animations must be silenced under
+  `@media (prefers-reduced-motion: reduce)` — but leave `animate-spin` loaders alone, their
+  motion is their meaning.
+- **Secret/password fields go through `common/SecretInput.vue` (never a bare
+  `<UInput type="password">` or a plaintext secret `<UTextarea>`).** The primitive masks by
+  default and adds a trailing eye toggle (labeled `common.reveal`/`common.hide`,
+  `aria-pressed`), forwarding every other UInput prop/listener via `$attrs`. Bind it with
+  `v-model` exactly like `UInput`. For descriptor-driven fields whose secrecy is data-dependent
+  pass `:secret="!!field.secret"` (falsy → a plain unmasked text input, no toggle) — do NOT rely
+  on the `secret` default of `true`, which would mask a non-secret field. A single-line masked
+  input is the right shape even for long tokens (the four UX-20 `UTextarea`s were single-line
+  vendor keys); reserve a real `UTextarea` for genuinely multi-line secrets (e.g. a PEM key),
+  which this primitive does not cover.
+- When fixing i18n papercuts (UX-13), remember the locale-parity CI check: adding,
+  changing, OR removing an `en.json` key requires the same change in every other locale in
+  the same PR (removing the two dead `clarity.*` keys above meant editing all 8 locales).
 - Frontend fixes to `@cat-factory/app` need a changeset (patch), and any new
   interactive affordance covered by e2e wants a `data-testid`.
 - Line references are from the 2026-07-02 audit; re-verify anchors before editing.

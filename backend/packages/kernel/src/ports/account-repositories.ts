@@ -22,12 +22,20 @@ export interface AccountRecord {
    * override it per-frame). Absent ⇒ the built-in {@link DEFAULT_CLOUD_PROVIDER}.
    */
   defaultCloudProvider?: CloudProvider
+  /**
+   * The account-tier monthly spend budget (base pricing currency). Absent/null ⇒ no
+   * account-level limit; the effective account budget then falls back to the operator
+   * env cap if set, else unlimited. See the tiered-budgets initiative.
+   */
+  spendMonthlyLimit?: number | null
 }
 
 /** Mutable account settings a member-owner can change (see {@link AccountRepository.updateSettings}). */
 export interface AccountSettingsPatch {
   /** `null` clears the override (back to the built-in default); `undefined` leaves it. */
   defaultCloudProvider?: CloudProvider | null
+  /** Account-tier monthly budget; `null` clears the limit, `undefined` leaves it. */
+  spendMonthlyLimit?: number | null
 }
 
 export interface Membership {

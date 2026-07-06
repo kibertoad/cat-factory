@@ -1,5 +1,69 @@
 # @cat-factory/provider-bedrock
 
+## 0.7.159
+
+### Patch Changes
+
+- Updated dependencies [10787c4]
+  - @cat-factory/kernel@0.101.1
+  - @cat-factory/agents@0.40.5
+
+## 0.7.158
+
+### Patch Changes
+
+- Updated dependencies [f596090]
+  - @cat-factory/kernel@0.101.0
+  - @cat-factory/agents@0.40.4
+
+## 0.7.157
+
+### Patch Changes
+
+- Updated dependencies [9ea1e77]
+  - @cat-factory/kernel@0.100.0
+  - @cat-factory/agents@0.40.3
+
+## 0.7.156
+
+### Patch Changes
+
+- @cat-factory/agents@0.40.2
+- @cat-factory/kernel@0.99.1
+
+## 0.7.155
+
+### Patch Changes
+
+- Updated dependencies [1afa003]
+  - @cat-factory/kernel@0.99.0
+  - @cat-factory/agents@0.40.1
+
+## 0.7.154
+
+### Patch Changes
+
+- Updated dependencies [bf31df7]
+  - @cat-factory/agents@0.40.0
+  - @cat-factory/kernel@0.98.0
+
+## 0.7.153
+
+### Patch Changes
+
+- Updated dependencies [6f9d935]
+  - @cat-factory/kernel@0.97.0
+  - @cat-factory/agents@0.39.4
+
+## 0.7.152
+
+### Patch Changes
+
+- Updated dependencies [5490103]
+- Updated dependencies [dd6df12]
+  - @cat-factory/kernel@0.96.0
+  - @cat-factory/agents@0.39.3
+
 ## 0.7.151
 
 ### Patch Changes

@@ -2,8 +2,6 @@ import type { EnvironmentConnection, EnvironmentHandle } from '@cat-factory/kern
 import { env } from 'cloudflare:test'
 import { afterEach, describe, expect, it, vi } from 'vitest'
 import { makeApp } from '../helpers'
-import { buildContainer } from '../../src/infrastructure/container'
-import { FakeAgentExecutor } from '../fakes/FakeAgentExecutor'
 import { bearerConfig, readyEnvBody, recordingFetch, TEST_API_TOKEN } from './environment.fixtures'
 
 afterEach(() => vi.unstubAllGlobals())
@@ -65,20 +63,5 @@ describe('environment credential encryption', () => {
     await app.call('POST', `/workspaces/${ws}/environments/provision`, { blockId: 'b' })
     const call = stub.calls.find((c) => c.url === 'https://envs.test/api/environments')
     expect(call?.headers.authorization).toBe('Bearer rotated-token')
-  })
-
-  it('assembles only when the integration is enabled (key comes from the shared ENCRYPTION_KEY)', async () => {
-    const enabled = buildContainer(env, { agentExecutor: new FakeAgentExecutor() })
-    expect(enabled.environments).toBeDefined()
-
-    // Opt-in flag off → module stays unassembled even though the shared key is present.
-    const disabled = buildContainer(
-      {
-        ...env,
-        ENVIRONMENTS_ENABLED: undefined,
-      } as typeof env,
-      { agentExecutor: new FakeAgentExecutor() },
-    )
-    expect(disabled.environments).toBeUndefined()
   })
 })

@@ -1,4 +1,5 @@
 import * as v from 'valibot'
+import { preflightRefSchema } from './preflights.js'
 import { nonEmpty, urlString } from './primitives.js'
 
 // ---------------------------------------------------------------------------
@@ -182,6 +183,13 @@ export const stackRecipeSchema = v.object({
   externalNetworks: v.optional(v.array(recipeName)),
   /** Ids of SharedStack entities that must be up first (slice 4). */
   sharedStackRefs: v.optional(v.array(recipeName)),
+  /**
+   * Machine-prerequisite checks re-run at provision start (docker daemon / disk / RAM / registry
+   * login / VPN reachability / mkcert CA / hosts entries / env-secrets marker). A failing REQUIRED
+   * check fails the provision fast with its remediation, instead of a mystery deep in a 40-image
+   * pull. Runtime-bound probes (local facade); see `preflights.ts`.
+   */
+  prerequisites: v.optional(v.array(preflightRefSchema)),
   /** Ordered post-`up` setup steps. */
   setupSteps: v.optional(v.array(recipeStepSchema)),
   /** Terminal readiness gate; absent ⇒ `compose-healthy` (today's `up --wait`). */

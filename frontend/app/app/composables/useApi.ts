@@ -21,6 +21,7 @@ import { localSettingsApi } from './api/localSettings'
 import { modelsApi } from './api/models'
 import { notificationsApi } from './api/notifications'
 import { packageRegistriesApi } from './api/packageRegistries'
+import { preflightsApi } from './api/preflights'
 import { presetsApi } from './api/presets'
 import { sharedStacksApi } from './api/sharedStacks'
 import { providerConnectionsApi } from './api/providerConnections'
@@ -35,6 +36,7 @@ import { slackApi } from './api/slack'
 import { specApi } from './api/spec'
 import { tasksApi } from './api/tasks'
 import { userSecretsApi } from './api/userSecrets'
+import { userSettingsApi } from './api/userSettings'
 import { workspacesApi } from './api/workspaces'
 
 /**
@@ -113,6 +115,7 @@ export function useApi() {
     ...specApi(ctx),
     ...notificationsApi(ctx),
     ...presetsApi(ctx),
+    ...preflightsApi(ctx),
     ...sharedStacksApi(ctx),
     ...providerConnectionsApi(ctx),
     ...infraHandlersApi(ctx),
@@ -129,5 +132,6 @@ export function useApi() {
     ...slackApi(ctx),
     ...bootstrapApi(ctx),
     ...userSecretsApi(ctx),
+    ...userSettingsApi(ctx),
   }
 }

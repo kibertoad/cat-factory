@@ -3,7 +3,8 @@
     "loading": "טוען…",
     "loadingBoard": "טוען לוח…",
     "backendUnreachable": "לא ניתן להתחבר לבקאנד",
-    "reconnecting": "מתחבר מחדש…"
+    "reconnecting": "מתחבר מחדש…",
+    "offline": "לא מתקבלים עדכונים חיים"
   },
   "language": {
     "switcher": "שפה",
@@ -39,6 +40,8 @@
       "reconfigureHint": "אפשר להגדיר זאת שוב מאוחר יותר."
     },
     "copied": "הועתק ללוח",
+    "reveal": "הצג",
+    "hide": "הסתר",
     "disconnect": "נתק",
     "copyFailed": "לא ניתן להעתיק ללוח",
     "revoke": "לבטל",
@@ -51,7 +54,10 @@
       "cleared": "{name} נוקה",
       "destroyed": "{name} הושמד"
     },
-    "undo": "בטל"
+    "undo": "בטל",
+    "back": "חזרה",
+    "next": "הבא",
+    "done": "סיום"
   },
   "nav": {
     "menu": "תפריט ניווט",
@@ -72,7 +78,8 @@
     "configuration": "תצורה",
     "workspaceSettings": "הגדרות סביבת עבודה",
     "modelConfiguration": "תצורת מודל",
-    "accountSettings": "הגדרות חשבון"
+    "accountSettings": "הגדרות חשבון",
+    "environmentSetup": "הגדרת סביבה"
   },
   "board": {
     "toast": {
@@ -81,6 +88,7 @@
       "moveFailed": "לא ניתן היה להעביר",
       "deleteFailed": "לא ניתן היה למחוק",
       "linkFailed": "לא ניתן היה לקשר משימות",
+      "unlinkFailed": "לא ניתן להסיר את התלות",
       "recurringDeleteFailed": "לא ניתן היה למחוק את הצינור החוזר",
       "deleted": "\"{name}\" נמחק",
       "moved": "\"{name}\" הועבר"
@@ -104,7 +112,11 @@
       "spendTitle": "צריכת טוקנים החודש",
       "spendLimitReached": "הוגעה למגבלת הצריכה — הריצות הושהו",
       "serviceAdded": "{title} נוסף",
-      "serviceAddFailed": "לא ניתן היה להוסיף את השירות"
+      "serviceAddFailed": "לא ניתן היה להוסיף את השירות",
+      "zoomOut": "הקטנה",
+      "zoomIn": "הגדלה",
+      "fitView": "התאמה לתוכן",
+      "resetZoom": "איפוס התקריב ל-100%"
     },
     "canvas": {
       "emptyTitle": "הלוח שלך ריק",
@@ -264,6 +276,9 @@
       "stalled": "הריצה נתקעה",
       "retryBootstrap": "נסה שוב לאתחל",
       "retryRun": "נסה שוב להריץ",
+      "environmentSetup": "הגדרת סביבות",
+      "deployRunnerSetup": "הגדרת מאגר ראנרים",
+      "environmentLocalHint": "סביבות זמניות מקומיות זקוקות לזמן ריצה לפריסה כדי להריץ את kubectl/kustomize/helm. הגדירו את {runtime} בקובץ ה-.env שלכם: מצב מקורי מריץ את הכלים האלה על המארח שלכם ({native}), מצב מכולה מריץ אותם בתוך תמונת הפריסה ({container}).",
       "showDetail": "הצג פרטים",
       "retrying": "מנסה שוב…",
       "history": {
@@ -385,7 +400,8 @@
         "preset_unsatisfiable": "קדם‑הגדרת המודל אינה יכולה להריץ צנרת זו",
         "visual_pipeline_no_frontend": "אין frontend לבדיקה",
         "model_policy_blocked": "Model blocked by account policy",
-        "model_policy_unsupported": "Model policy not available here"
+        "model_policy_unsupported": "Model policy not available here",
+        "deployer_required_before_tester": "הוסף Deployer לפני ה-Tester"
       },
       "fallbackMessage": "פעולה זו מתנגשת עם המצב הנוכחי.",
       "providersUnconfigured": {
@@ -454,6 +470,7 @@
     }
   },
   "inspector": {
+    "detectRepoUnresolved": "מאגר הקוד של בלוק זה אינו נמצא בין מאגרי GitHub המחוברים, ולכן לא ניתן לקרוא אותו. חבר או סנכרן את GitHub עבורו ונסה שוב.",
     "container": {
       "title": "תוכן",
       "hint": "המודולים והמשימות בתוך בלוק זה. לחץ על פריט כדי לבחור אותו בלוח.",
@@ -690,6 +707,11 @@
           "succeeded": "המניפסט נוצר ונדחף.",
           "failed": "הפקת המניפסט נכשלה. נסה שוב מחלון התשתית."
         }
+      },
+      "envWizard": {
+        "title": "הגדרת סביבת Compose",
+        "hint": "הגדירו את המתכון, בדיקות המוכנות והמטפל כדי שה-Deployer יקצה את הסטאק הזה.",
+        "open": "פתיחת אשף"
       }
     },
     "agentConfig": {
@@ -965,6 +987,10 @@
       "companionCapDetail": "בצע סבב עיבוד אוטומטי נוסף, המשך לשלב הבא תוך קבלת הפלט הנוכחי, או עצור ואפס את המשימה כדי לערוך את הקלטים ולשלוח מחדש.",
       "infraAttempts": "ניסיונות תשתית",
       "hideInfraAttempts": "הסתר ניסיונות תשתית",
+      "executionHistory": "היסטוריית הרצה",
+      "hideExecutionHistory": "הסתר היסטוריית הרצה",
+      "attemptSucceeded": "הצליח",
+      "outputTruncated": "הפלט נקטע כדי לשמור על היסטוריית ההרצה קומפקטית.",
       "editingConclusions": "עריכת המסקנות",
       "editConclusionsPlaceholder": "ערוך את מסקנות הסוכן; העריכות שלך נשמרות כשתאשר…",
       "noProseOutput": "סוכן זה לא הפיק פלט טקסטואלי.",
@@ -1052,6 +1078,7 @@
     "loadingContext": "טוען את ההקשר שסופק…",
     "noCalls": "לא נרשמו קריאות מודל עבור ריצה זו.",
     "noContext": "לא אוחסן הקשר סוכן עבור ריצה זו. הוא נלכד בכל שיגור כשבסביבת העבודה מופעל 'אחסן הקשר סוכן מלא'.",
+    "contextError": "לא ניתן לטעון את ההקשר שסופק.",
     "summary": {
       "calls": "קריאות",
       "tokensInOut": "טוקנים (נכנס / יוצא)",
@@ -1098,6 +1125,16 @@
       "systemPrompt": "פרומפט מערכת",
       "userPrompt": "פרומפט משתמש",
       "details": "פרטים"
+    },
+    "webSearch": "חיפוש באינטרנט",
+    "loadingSearch": "טוען חיפושי אינטרנט…",
+    "noSearch": "לא נרשמו חיפושי אינטרנט עבור הרצה זו. שאילתות נלכדות כאשר חיפוש האינטרנט פועל וכאשר במרחב העבודה מופעל 'אחסון הקשר סוכן מלא'.",
+    "search": {
+      "available": "זמין",
+      "unavailable": "לא זמין",
+      "provider": "ספק",
+      "resultsCount": "תוצאה {count} | {count} תוצאות",
+      "queriesTitle": "חיפושים שבוצעו"
     }
   },
   "auth": {
@@ -1693,7 +1730,7 @@
         "remote-kubernetes": "Kubernetes מרוחק"
       },
       "kubernetesEngine": {
-        "localK3sHint": "מולא מראש עבור אשכול k3s/k3d/kind מקומי במחשב הזה. קשרו ServiceAccount לתפקיד, הנפיקו עבורו token באמצעות `kubectl create token NAME -n NAMESPACE` (Kubernetes 1.24+) והדביקו אותו למטה. לאחר מכן בחרו כיצד נגזרת כתובת ה-URL של הסביבה, וערכו את כתובת ה-API server אם האשכול שלכם מאזין ביציאה אחרת.",
+        "localK3sHint": "מולא מראש עבור אשכול k3s/k3d/kind מקומי במחשב הזה. קשרו ServiceAccount לתפקיד והדביקו למטה token בעל תוקף ארוך. שימו לב ש-token רגיל מ-`kubectl create token NAME -n NAMESPACE` פג תוקף לאחר שעה אחת: הוסיפו `--duration=720h` לתוקף ארוך יותר, או צרו Secret מסוג kubernetes.io/service-account-token שאינו פג וקראו אותו. לאחר מכן בחרו כיצד נגזרת כתובת ה-URL של הסביבה, וערכו את כתובת ה-API server אם האשכול שלכם מאזין ביציאה אחרת.",
         "autoSetup": {
           "title": "הגדרה אוטומטית באמצעות ה-CLI",
           "description": "הרץ זאת בטרמינל כדי לזהות או להקצות אשכול מקומי, ליצור אסימון ServiceAccount ולפתוח טופס זה כשהוא ממולא מראש. הדבק את האסימון המוצג, ולאחר מכן בצע בדיקה ושמירה."
@@ -2284,11 +2321,22 @@
       },
       "budget": {
         "heading": "תקציב הוצאה חודשי",
-        "body": "שימוש באסימונים נמדד לכל קריאת LLM, מתומחר ומוגבל על ידי תקציב זה. כשמגיעים אליו, הרצות בסביבת עבודה זו מושהות והלוח מציג אזהרה. השאר ריק כדי לרשת את ברירת המחדל המובנית (כ-100 EUR לחודש).",
+        "body": "שימוש באסימונים נמדד לכל קריאת LLM, מתומחר ומוגבל על ידי תקציבים אלה. הרצה מושהית כאשר כל שכבה שאליה היא שייכת מוצתה. השאר שדה ריק כדי לא להגביל את אותה שכבה (שכבת סביבת העבודה יורשת אז את ברירת המחדל המובנית, כ-100 EUR לחודש).",
         "monthlyLimit": "מגבלה חודשית",
         "defaultPlaceholder": "ברירת מחדל",
         "currency": "מטבע (ISO 4217)",
-        "save": "שמור תקציב"
+        "save": "שמור תקציב",
+        "saveTier": "שמור",
+        "workspace": "סביבת עבודה זו",
+        "account": "חשבון (כל סביבות העבודה)",
+        "user": "אתה (כל ההרצות שלך)",
+        "accountBody": "תקרה לכל סביבות העבודה בחשבון זה.",
+        "userBody": "תקרה לכל הרצה שאתה מתחיל, בכל סביבת עבודה.",
+        "hardCap": "מגבלת מפעיל: {amount}",
+        "hardCapHint": "נקבעת על ידי הפריסה; הערך אינו יכול לחרוג ממנה",
+        "spent": "{spent} מתוך {limit} הוצאו החודש",
+        "adminOnly": "רק מנהל חשבון יכול לשנות את תקציב החשבון.",
+        "noLimitPlaceholder": "ללא הגבלה"
       },
       "toast": {
         "saved": "ההגדרות נשמרו",
@@ -3290,8 +3338,6 @@
     "reReviewingStage": "בודק מחדש את דוח הבאג המעודכן… תוכל לסגור את זה, נודיע לך רק אם נדרש קלט נוסף.",
     "answerLabel": "תשובה",
     "answerPlaceholder": "ענה על ממצא זה…",
-    "refineAnswerPlaceholder": "חדד את התשובה שלך…",
-    "saveAnswer": "שמור תשובה",
     "dismissIrrelevant": "דחה כלא רלוונטי",
     "reopen": "פתח מחדש",
     "docHeading": "דוח באג מובהר",
@@ -4294,6 +4340,80 @@
       "maxConcurrentField": "מקסימום משימות במקביל",
       "defaultPipelineField": "צינור ברירת מחדל",
       "failed": "לא ניתן לעדכן את היוזמה"
+    }
+  },
+  "environmentWizard": {
+    "title": "הגדרת סביבת בדיקות",
+    "subtitle": "זהו, סקרו ושמרו מתכון Docker Compose כדי שה-Deployer יקצה אותו.",
+    "recommended": "מומלץ",
+    "steps": {
+      "pick": "בחירת שירות",
+      "review": "סקירת מתכון",
+      "preflight": "בדיקות מוכנות",
+      "save": "שמירה"
+    },
+    "pick": {
+      "intro": "בחרו את השירות שעבורו להגדיר סביבת Docker Compose.",
+      "empty": "אין שירותים עדיין. הוסיפו שירות תחילה."
+    },
+    "review": {
+      "detectHint": "זוהה מהמאגר. שום דבר לא מוחל עד שתשמרו.",
+      "detect": "זיהוי מחדש",
+      "noRepo": "לשירות זה אין מאגר מקושר, ולכן הזיהוי אינו יכול לרוץ.",
+      "detectError": "הזיהוי נכשל. בדקו את חיבור המאגר ונסו שוב.",
+      "provenanceTitle": "מהיכן הגיע כל שדה",
+      "service": "שירות Compose חשוף",
+      "servicePlaceholder": "למשל app",
+      "port": "פורט חשוף",
+      "composeFiles": "קובצי Compose",
+      "profiles": "פרופילים",
+      "seedDumps": "קובצי זריעה",
+      "seedAdd": "הוספת שלב זריעה",
+      "seedAdded": "נוסף",
+      "rawEditor": "עריכת מתכון גולמי",
+      "rawApply": "החלה"
+    },
+    "analysis": {
+      "title": "ניתוח מעמיק",
+      "hint": "הריצו את מנתח הסביבה כדי לנסח שלבי הגדרה ובדיקות תקינות מהמאגר.",
+      "run": "הרצת ניתוח",
+      "unavailable": "ניתוח מעמיק דורש מאגר מקושר ואת צינור הניתוח.",
+      "failed": "הרצת הניתוח נכשלה.",
+      "apply": "החלת טיוטת המנתח"
+    },
+    "field": {
+      "composeFiles": "קובצי Compose",
+      "composeProfiles": "פרופילים",
+      "envFiles": "קובצי סביבה",
+      "externalNetworks": "רשתות חיצוניות",
+      "sharedStackRefs": "סטאקים משותפים",
+      "prerequisites": "בדיקות מוכנות",
+      "setupSteps": "שלבי הגדרה",
+      "healthGate": "בדיקת תקינות",
+      "teardownSteps": "שלבי פירוק"
+    },
+    "origin": {
+      "detector": "זוהה",
+      "analyst": "מנתח",
+      "both": "זוהה + מנתח"
+    },
+    "preflight": {
+      "intro": "בדקו את דרישות המכונה לפני ההקצאה.",
+      "run": "הרצת בדיקות",
+      "none": "מתכון זה אינו מצהיר על בדיקות מוכנות.",
+      "unavailable": "בדיקות המוכנות רצות על המכונה המקומית ואינן זמינות בפריסה זו.",
+      "optional": "רשות"
+    },
+    "save": {
+      "handlerLabel": "תווית המטפל",
+      "handlerHint": "מטפל ה-Docker Compose של סביבת העבודה שה-Deployer משתמש בו כדי להקצות את הסטאק הזה.",
+      "summary": "שומר מתכון Docker Compose על \"{frame}\" (חושף את השירות \"{service}\") ורושם את המטפל של סביבת העבודה.",
+      "saved": "נשמר. ה-Deployer יקצה את הסטאק הזה כאשר צינור יריץ אותו.",
+      "save": "שמירת תצורה"
+    },
+    "trial": {
+      "hint": "אפשר להקצות סביבה זו כעת כדי לבדוק את המתכון.",
+      "run": "הקצאת ניסיון"
     }
   }
 }

@@ -5,6 +5,7 @@
 // credential_required. On submit it transparently retries the gated action and caches the
 // password. The copy follows the pending vendor (Claude / GLM / ChatGPT-Codex).
 import { computed, ref, watch } from 'vue'
+import SecretInput from '~/components/common/SecretInput.vue'
 
 const { t } = useI18n()
 const personal = usePersonalSubscriptionsStore()
@@ -119,9 +120,8 @@ function goConnect() {
             {{ t('providers.personalCredential.passwordBody', { vendor: vendorLabel }) }}
           </p>
           <UFormField :label="t('providers.personalCredential.passwordField')">
-            <UInput
+            <SecretInput
               v-model="password"
-              type="password"
               autofocus
               :placeholder="t('providers.personalCredential.passwordPlaceholder')"
               @keydown.enter="submit()"

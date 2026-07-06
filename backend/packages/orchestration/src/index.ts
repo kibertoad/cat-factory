@@ -190,6 +190,11 @@ export {
   MAX_AGENT_CONTEXT_TOTAL_CHARS,
 } from './modules/observability/AgentContextObservabilityService.js'
 export {
+  SearchQueryObservabilityService,
+  type SearchQueryObservabilityServiceDependencies,
+  MAX_SEARCH_QUERY_CHARS,
+} from './modules/observability/SearchQueryObservabilityService.js'
+export {
   classifyCall,
   isWarningFinishReason,
   outputHeadroomRatio,
@@ -260,6 +265,7 @@ export {
   type SlackModule,
   type MergePresetsModule,
   type SharedStacksModule,
+  type PreflightsModule,
   type SandboxModule,
   type WorkspaceSettingsModule,
   type ModelPresetsModule,

@@ -72,9 +72,8 @@ const TEST_ENV: NodeJS.ProcessEnv = {
   // the local facade (parity with the Node/Worker test envs); the conformance Slack
   // CRUD asserts persistence parity and the channel bails when no Slack is connected.
   SLACK_ENABLED: 'true',
-  // Opt into the ephemeral-environment integration (parity with the Node/Worker test
-  // envs) so the conformance env CRUD asserts persistence parity here too.
-  ENVIRONMENTS_ENABLED: 'true',
+  // The ephemeral-environment integration wires from ENCRYPTION_KEY (no flag), parity with
+  // the Node/Worker test envs, so the conformance env CRUD asserts persistence parity here too.
   // Opt into the prompt-fragment library (ADR 0006) so its module wires up (parity
   // with the Node/Worker test envs); the conformance library CRUD asserts parity.
   PROMPT_LIBRARY_ENABLED: 'true',
@@ -403,6 +402,14 @@ export function makeConformanceApp(
         store: (userId, kind, input) => svc.store(userId, kind as UserSecretKind, input),
         resolve: (userId, kind) => svc.resolve(userId, kind as UserSecretKind),
         describe: (kind) => svc.describe(kind as UserSecretKind),
+      }
+    },
+    userSettings: () => {
+      const svc = container.userSettings?.service
+      if (!svc) return undefined
+      return {
+        get: (userId) => svc.get(userId),
+        update: (userId, input) => svc.update(userId, input),
       }
     },
   }

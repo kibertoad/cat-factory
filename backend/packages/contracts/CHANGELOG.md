@@ -1,5 +1,185 @@
 # @cat-factory/contracts
 
+## 0.110.1
+
+### Patch Changes
+
+- 10787c4: Make the "environment provisioning failed" surface actionable when no deploy runner is wired.
+
+  - **Backend, provider-agnostic message:** the `EnvironmentProvisioningService` error for a
+    render-needing config with no `deployJobClient` no longer hardcodes Kubernetes tooling (it
+    reaches for any provider that needs a container-backed deploy). It names the runtime-neutral
+    transport remedies (a self-hosted runner pool, `LOCAL_DEPLOY_RUNTIME`, or the Cloudflare
+    `DeployContainer` binding) or using a config that provisions without a deploy container.
+  - **Structured failure reason:** `AgentFailure` gains an optional machine-readable `reason`
+    (JSON column — no migration), and this condition carries `deploy_runner_unwired`
+    (`EnvironmentFailureReason` in contracts) from the thrown `ValidationError` through the
+    deployer-step failure path onto the run's failure, so the SPA can act on the cause without
+    string-matching prose. Adds `getErrorReason` to the kernel error helpers.
+  - **Frontend, precisely-gated guidance:** the board's `AgentFailureCard` shows a "Configure…"
+    deep-link on `environment`-kind failures whose destination follows the cause: a
+    `deploy_runner_unwired` failure on a non-local deployment links to Infrastructure → **Agent
+    containers** (`runner-pool`) — where the deploy runner/pool is actually wired, so the button no
+    longer dead-ends on the Test-environments tab that can't fix it — while every other environment
+    failure keeps linking to Infrastructure → **Test environments** (`environment`). The
+    Kubernetes+local env-var hint (`LOCAL_DEPLOY_RUNTIME` + `LOCAL_DEPLOY_HARNESS_ENTRY` /
+    `LOCAL_DEPLOY_IMAGE`) is shown ONLY for the `deploy_runner_unwired` reason, in local mode, and
+    for a `kubernetes` provision — so a docker-compose / transient / future non-K8s failure never
+    shows inaccurate guidance.
+
+## 0.110.0
+
+### Minor Changes
+
+- f596090: Record successful step outputs in the step-detail "execution history", not just failures.
+
+  A restart-from-step resets the chosen step and every later one, dropping their `output`;
+  previously that successful work was lost and the per-step history could only ever show
+  errors. The run now keeps an `outputHistory` — the positive complement of `failureHistory`
+  — capturing the successful outputs a restart superseded (attributed by step index, bounded
+  in count + per-entry size, riding the run's `detail` JSON with no schema migration). The
+  step-detail overlay renders a merged, newest-first timeline of these superseded outputs and
+  the failed attempts. A plain retry (which re-runs only unfinished steps) records nothing.
+
+## 0.109.0
+
+### Minor Changes
+
+- 9ea1e77: Tiered spend budgets (account / workspace / user) with operator hard caps.
+
+  Budgets are now tracked and enforced across three tiers: the existing per-workspace
+  monthly limit, a per-account limit, and a per-user limit. A run pauses when any applicable
+  tier is exhausted. All three tiers are configurable and visible in the Budget settings
+  screen.
+
+  Two new environment variables (`BUDGET_MAX_MONTHLY_PER_ACCOUNT`,
+  `BUDGET_MAX_MONTHLY_PER_USER`), read by the Node and Cloudflare config loaders, set
+  operator hard ceilings on the account/user tiers; the UI cannot exceed a configured cap and
+  shows it on the budget screen. See `docs/environment-variables.md` and
+  `docs/initiatives/tiered-budgets.md`.
+
+  Breaking (pre-1.0, no data migration): the `token_usage` ledger gains nullable
+  `account_id`/`user_id` columns (existing rows are unattributed and excluded from the new
+  account/user rollups until re-metered); `TokenUsageRecord`, `RecordUsageInput`, and
+  `SpendPricing` gained fields; `SpendService.isOverBudget` now takes an optional tier scope.
+  A new `user_settings` table and `GET/PUT /user-settings` endpoint carry the user-tier
+  budget.
+
+## 0.108.1
+
+### Patch Changes
+
+- e66accb: Stack recipes & shared stacks (slice 7): make the Deployer the sole docker-compose provisioner + the environment setup wizard scaffolding.
+
+  **Deployer becomes the single docker-compose provisioner (the compose-centralization follow-up owed by this slice).** Now that the setup wizard can save a `docker-compose` handler, docker-compose is provisioned by the single Deployer step through a workspace handler, exactly like `kubernetes`/`custom` — the in-container (DinD) bring-up is retired from the run-mode decision:
+
+  - `decideTesterInfra` (`tester-infra.logic.ts`): `docker-compose` is handler-based (drops the `localTestInfraSupported`/`hasComposePath` inputs and the `limited-local`/`compose-unconfigured` reasons).
+  - `needsDeployerBeforeConsumer` + `ExecutionService.assertTesterInfraConfigured`'s `needsHandler` now cover `docker-compose`, so a compose chain that reaches a tester with no resolvable handler is refused at run start (fail-fast, same as k8s/custom) instead of dead-ending.
+  - `testerInfraSpec` (`@cat-factory/server`): `docker-compose` targets the Deployer-provisioned env (`environment: 'ephemeral'`); the `local`/`composePath` branch is gone.
+  - (The harness's in-container `docker compose up` is now unreachable and retired in a later image-bumping slice.)
+
+  **Environment setup wizard.** The guided detect → review → preflight → save flow the compose-centralization depends on: `EnvironmentSetupWizard.vue` (stepper shell over the `environmentWizard` store — detection, opt-in deep analysis via `pl_environment_analysis` with live provenance-merged review, compose-file/profile/seed candidate pickers, a raw-recipe editor, the preflight checklist, save the workspace compose handler + the frame recipe, and an optional trial provision with live provisioning logs), a docker-compose service-inspector nudge, a SideBar entry, the mount in `pages/index.vue`, and the `environmentWizard` i18n namespace across all 8 locales. Backed by the `preflights` API + store (`POST /workspaces/:ws/preflights/run`) and the `provisionEnvironment` API. (The `data-testid`-only e2e spec is deferred — it needs a fake `ProvisioningRepoReader` e2e seam so detection returns a canned recommendation with GitHub off; tracked in the slice-7 checklist.)
+
+  Breaking (pre-1.0, acceptable): a `docker-compose` service reaching a tester/human-test with no configured compose handler is now refused at run start rather than falling back to an in-container compose bring-up.
+
+  Review follow-ups in the same slice: the `environmentWizard` store now fully resets per-frame state when re-targeted (`selectFrame` no longer leaves a prior frame's `saved`/service/port behind), resolves the analyst run by preferring a live/succeeded instance over a bare `.at(-1)` (so a retry's dead predecessor can't mask the successful run), validates the exposed port before registering the handler, and surfaces a real (non-503) preflight failure instead of swallowing it. The now-dead `localTestInfraSupported` dependency (its only reads were removed with the DinD path) is dropped from `CoreDependencies`/`ExecutionService` and the local facade's wiring, and the stale DinD doc comments on `assertTesterInfraConfigured` / `testerInfraSpec` are corrected.
+
+## 0.108.0
+
+### Minor Changes
+
+- 1afa003: Make the **Deployer the single environment provisioner** and fix environment-lifecycle
+  correctness so a `kubernetes`/`custom` service can no longer dead-end inside the Tester.
+
+  - **Deployer in every tester/human-test built-in pipeline.** A type-aware `deployer` is seeded
+    before the first tester / human-test / playwright step in the 12 relevant built-ins. It
+    provisions `kubernetes`/`custom`, a `docker-compose` service with a resolvable compose handler,
+    or an undeclared service on a workspace with a legacy connection, and is a fast **no-op** for
+    `infraless`/frontend frames (and for `docker-compose` with no compose handler configured yet) — so
+    the injection is safe everywhere. Touched built-ins get a `version` bump (reseed offer).
+  - **Docker-compose provisions through the Deployer** (single-provisioner direction) whenever a
+    compose handler resolves; the Tester then targets that provisioned env (`testerInfraSpec` already
+    prefers a provisioned URL for any type). Until the shared-stacks compose-connection setup wizard
+    lands, docker-compose with no handler stays a Deployer no-op and the Tester falls back to its
+    in-container compose bring-up (no regression). See the initiative trackers for the full
+    centralization owed once the wizard ships.
+  - **`human-test` no longer self-provisions.** The gate READS the environment the upstream Deployer
+    provisioned (the one env is shared by the AI tester + the human), and its recreate / fix-loop /
+    pull-main rebuild now **loops back to the Deployer** to re-provision, rather than standing up its
+    own env. No deployer before it (an infraless service) ⇒ the gate degrades to manual mode.
+  - **Fail-fast run-start guard.** Starting a `kubernetes`/`custom` pipeline whose enabled chain
+    reaches a tester/human-test with no enabled `deployer` before it is now refused with an actionable
+    `deployer_required_before_tester` conflict (new `ConflictReason`) instead of the silent
+    ephemeral-with-no-coordinates dead-end inside the Tester.
+  - **Environment teardown correctness.** Superseding a provisioned env now tears the old infra down
+    when the new provision targets a DIFFERENT provider identity (a config-change namespace switch, a
+    provider/type change, or the `infraless` flip) — best-effort, with the TTL reaper as the backstop
+    — instead of only tombstoning the registry row. Teardown + status now resolve the provider from
+    the env RECORD's stored provision type/engine (the handler that stood it up), not the
+    workspace-primary handler.
+  - **Named-gate pipeline authoring.** Built-in pipelines are authored with `definePipeline` +
+    named-step specs (`{ kind, gate, enabled }`) instead of fragile index-aligned `gates`/`enabled`
+    boolean arrays, so a gate is declared on its step by name and inserting a step can't shift a flag
+    onto the wrong one. The persisted wire shape is unchanged.
+  - Frontend: a `deployer` palette/step metadata entry (renders as "Deployer" rather than a generic
+    agent) and the localized `deployer_required_before_tester` conflict title.
+
+  Breaking (pre-1.0, acceptable): persisted built-in pipeline copies are offered a reseed to gain the
+  deployer step; a `kubernetes`/`custom` pipeline that previously relied on the Tester dead-ending is
+  now refused at launch until a Deployer is added or the service is set to docker-compose/infraless.
+
+- f91b99d: Stack recipes & shared stacks (slice 7, part 1): the analyst draft-merge core.
+
+  Adds `mergeAnalystRecipeDraft(recommendation, draft)` — the pure function that combines the deterministic provisioning recommendation with the opt-in environment analyst's `AnalystRecipeDraft` into a single reviewable recipe with per-field provenance. This is the "review recipe" input the setup wizard renders (the piece slice 8 deferred here).
+
+  The rule: **deterministic detector facts win where both produce a field; analyst-only fields (setup steps, health gate, prerequisites the checkout-free scan can't see) fill the gaps.** Each populated field carries the winning source's provenance — detector confidence + note, or the analyst's rationale + source citations — and the analyst's verbatim notes ride along so the wizard can surface granular per-step provenance (e.g. `setupSteps[2]`).
+
+  - `mergeAnalystRecipeDraft` + the `MergedRecipeDraft` / `MergedRecipeField` / `RecipeFieldOrigin` view-model types + the `MERGEABLE_RECIPE_FIELDS` field list (`environment-analyst-merge.ts`).
+  - Placed in `@cat-factory/contracts` beside the types it merges (both inputs are contract types) rather than in `integrations` beside the detector, so the SPA wizard consumes it client-side with no extra endpoint — the same shared-pure-helper shape as `resolveFrontendBindings` / `buildFrontendRunNotes`. Unit-tested from `@cat-factory/integrations` (contracts has no test runner), the pattern by which `buildFrontendRunNotes` is tested from a consumer.
+
+  Pure + no IO, no persistence change. The wizard UI + the "run deep analysis" trigger are the remainder of slice 7.
+
+## 0.107.0
+
+### Minor Changes
+
+- bf31df7: Stack recipes & shared stacks (slice 8): the opt-in environment analyst.
+
+  Adds an `environment-analyst` agent kind — the LLM half of environment auto-detection. Where the deterministic detector reads a repo checkout-free and can only see mechanical facts (compose layering, external networks, env-file pairs), the analyst is a read-only `container-explore` agent that CLONES the repo and reads the imperative bring-up a scan can't (README / Makefile / `bin/*` CLIs / setup scripts / seed dumps) to draft a declarative Docker Compose stack recipe — setup steps, prerequisites and a health gate — each grounded in a source citation. It returns the draft on `result.custom` (rendered by the shared `generic-structured` view); it never writes the repo. The draft is NON-BINDING: the setup wizard (slice 7) will merge it over the deterministic recommendation and nothing is applied until the human confirms.
+
+  - Contracts: `AnalystRecipeDraft` / `AnalystRecipeNote` / `AnalystCitation` (`environment-analyst.ts`) — a lenient LLM-output shape (a proposed `StackRecipe` + per-field provenance + summary) that degrades field-by-field on a partially-malformed reply.
+  - Agents: the `environment-analyst` kind (registered through the public `AgentKindRegistry` seam, pre-loaded by `defaultAgentKindRegistry()`), with its schema-derived structured output (`failOnUnusableFinal`, so an empty reply fails loudly rather than yielding an empty draft).
+  - Kernel: a seeded analyst-only pipeline `pl_environment_analysis` (`ENVIRONMENT_ANALYSIS_PIPELINE_ID`) the wizard runs against a service frame, mirroring `pl_blueprint`.
+
+  No persistence change — the analyst rides the execution engine and the existing `provisioning` blob, so no migration and no runtime asymmetry. The draft-merge + wizard trigger UI land with the wizard (slice 7).
+
+## 0.106.0
+
+### Minor Changes
+
+- 6f9d935: Stack recipes & shared stacks (slice 6): preflight prerequisite checks with guided remediation.
+
+  A stack recipe can now declare machine `prerequisites: PreflightRef[]` — automated PROBE + human REMEDIATION checks for the inherently-manual one-time machine setup a complex compose repo needs (docker daemon reachable, free disk / RAM, container-registry login state, VPN reachability, mkcert CA, hosts-file entries, an env-file secrets marker). They are re-run at provision start: a failing REQUIRED check fails the provision fast with its copy-paste remediation in the provisioning log, instead of a mystery deep inside a 40-image pull (a non-required check is advisory — a warning). A `POST /workspaces/:ws/preflights/run` endpoint runs an arbitrary set of checks for the setup wizard's live re-check.
+
+  - Contracts: `PreflightCheckId` / `PreflightParams` / `PreflightRef` / `PreflightResult` (`preflights.ts`) + `prerequisites` on `stackRecipeSchema`; the `runPreflightsContract` route.
+  - Kernel: the runtime-bound `PreflightHostProbes` seam + `PreflightProbeOutcome`, and a `runPreflights` seam on `ProvisionEnvironmentRequest`.
+  - Integrations: `PreflightService` (runtime-neutral orchestration over the probe seam) + provision-start enforcement in `ComposeEnvironmentProvider`.
+  - Server: `PreflightController`.
+  - Local facade: `createDockerPreflightProbes` (the host probes over the docker CLI + `node:*`), wired only where the compose runtime is (a Docker-family host daemon). The probes are runtime-bound (local facade only, the documented compose exception); the declaration + API are runtime-neutral and the recipe rides the existing `provisioning` blob, so there is no migration. On the Worker / plain Node the preflight API 503s and a recipe that declares prerequisites fails loudly at provision.
+
+## 0.105.0
+
+### Minor Changes
+
+- 5490103: Surface web search on container agent run details, and store/display performed search queries as telemetry.
+
+  - Container steps now carry a `search` availability fact (`{ available, provider }`), resolved backend-side at dispatch from the run's account web-search keys (else the deployment default). The observability drill-down shows whether web search was available and which provider (Brave / SearXNG) served the run — a static per-run fact, not gated by prompt-recording.
+  - New `agent_search_queries` telemetry sink records every web search a container agent performs through the backend search proxy (query, provider, result count), gated by the same double switch as agent-context snapshots (`LLM_RECORD_PROMPTS` + the workspace `storeAgentContext` setting) and pruned on the same telemetry retention window. Mirrored across the D1 (Cloudflare) and Drizzle/Postgres (Node) stores with a cross-runtime conformance suite, and surfaced on demand via `GET /workspaces/:ws/executions/:executionId/search-queries` in a new "Web search" observability view.
+
+### Patch Changes
+
+- e5b9462: Show a step's failure trail on its step-detail overlay. The step-detail overlay now has an "Execution history" toggle that reveals the prior failed attempts recorded for that specific step (plus the current failure when the run is presently failed at it): the run-level "previous errors" history narrowed to one step. Each `AgentFailure` now carries the `stepIndex` it failed at (stamped by the engine's failure funnel), so the trail can be attributed per step.
+
 ## 0.104.0
 
 ### Minor Changes

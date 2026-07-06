@@ -3,7 +3,8 @@
     "loading": "Yükleniyor…",
     "loadingBoard": "Pano yükleniyor…",
     "backendUnreachable": "Arka uca ulaşılamıyor",
-    "reconnecting": "Yeniden bağlanılıyor…"
+    "reconnecting": "Yeniden bağlanılıyor…",
+    "offline": "Canlı güncellemeler alınmıyor"
   },
   "language": {
     "switcher": "Dil",
@@ -39,6 +40,8 @@
       "reconfigureHint": "Bunu daha sonra yeniden yapılandırabilirsiniz."
     },
     "copied": "Panoya kopyalandı",
+    "reveal": "Göster",
+    "hide": "Gizle",
     "disconnect": "Bağlantıyı kes",
     "copyFailed": "Panoya kopyalanamadı",
     "revoke": "İptal et",
@@ -51,7 +54,10 @@
       "cleared": "{name} temizlendi",
       "destroyed": "{name} yok edildi"
     },
-    "undo": "Geri al"
+    "undo": "Geri al",
+    "back": "Geri",
+    "next": "İleri",
+    "done": "Bitti"
   },
   "nav": {
     "menu": "Gezinme menüsü",
@@ -72,7 +78,8 @@
     "configuration": "Yapılandırma",
     "workspaceSettings": "Çalışma alanı ayarları",
     "modelConfiguration": "Model yapılandırması",
-    "accountSettings": "Hesap ayarları"
+    "accountSettings": "Hesap ayarları",
+    "environmentSetup": "Ortam kurulumu"
   },
   "board": {
     "toast": {
@@ -81,6 +88,7 @@
       "moveFailed": "Taşınamadı",
       "deleteFailed": "Silinemedi",
       "linkFailed": "Görevler bağlanamadı",
+      "unlinkFailed": "Bağımlılık kaldırılamadı",
       "recurringDeleteFailed": "Yinelenen pipeline silinemedi",
       "deleted": "\"{name}\" silindi",
       "moved": "\"{name}\" taşındı"
@@ -104,7 +112,11 @@
       "spendTitle": "Bu ayki token harcaması",
       "spendLimitReached": "Harcama limitine ulaşıldı, çalıştırmalar duraklatıldı",
       "serviceAdded": "{title} eklendi",
-      "serviceAddFailed": "Servis eklenemedi"
+      "serviceAddFailed": "Servis eklenemedi",
+      "zoomOut": "Uzaklaştır",
+      "zoomIn": "Yakınlaştır",
+      "fitView": "İçeriğe sığdır",
+      "resetZoom": "Yakınlaştırmayı %100'e sıfırla"
     },
     "canvas": {
       "emptyTitle": "Panonuz boş",
@@ -264,6 +276,9 @@
       "stalled": "Çalıştırma askıda kaldı",
       "retryBootstrap": "Bootstrap'ı yeniden dene",
       "retryRun": "Çalıştırmayı yeniden dene",
+      "environmentSetup": "Ortamları yapılandır",
+      "deployRunnerSetup": "Runner havuzunu yapılandır",
+      "environmentLocalHint": "Yerel geçici ortamlar, kubectl/kustomize/helm çalıştırmak için bir dağıtım çalışma zamanı gerektirir. .env dosyanızda {runtime} değerini ayarlayın: yerel mod bu araçları ana makinenizde çalıştırır ({native}), konteyner modu bunları dağıtım imajında çalıştırır ({container}).",
       "showDetail": "Ayrıntıyı göster",
       "retrying": "Yeniden deneniyor…",
       "history": {
@@ -385,7 +400,8 @@
         "preset_unsatisfiable": "Model ön ayarı bu ardışık düzeni çalıştıramıyor",
         "visual_pipeline_no_frontend": "Test edilecek bir frontend yok",
         "model_policy_blocked": "Model blocked by account policy",
-        "model_policy_unsupported": "Model policy not available here"
+        "model_policy_unsupported": "Model policy not available here",
+        "deployer_required_before_tester": "Tester’dan önce bir Deployer ekleyin"
       },
       "fallbackMessage": "Bu eylem mevcut durumla çelişiyor.",
       "providersUnconfigured": {
@@ -454,6 +470,7 @@
     }
   },
   "inspector": {
+    "detectRepoUnresolved": "Bu bloğun deposu bağlı GitHub depoları arasında değil, bu yüzden okunamıyor. Bunun için GitHub'ı bağlayın veya eşitleyin, ardından yeniden deneyin.",
     "container": {
       "title": "İçerik",
       "hint": "Bu bloğun içindeki modüller ve görevler. Bir öğeye tıklayarak panoda seçin.",
@@ -690,6 +707,11 @@
           "succeeded": "Manifest oluşturuldu ve gönderildi.",
           "failed": "Manifest oluşturma çalışması başarısız oldu. Altyapı penceresinden yeniden deneyin."
         }
+      },
+      "envWizard": {
+        "title": "Compose ortam kurulumu",
+        "hint": "Tarifi, ön kontrolleri ve işleyiciyi yapılandırın; böylece Deployer bu yığını sağlar.",
+        "open": "Sihirbazı aç"
       }
     },
     "agentConfig": {
@@ -965,6 +987,10 @@
       "companionCapDetail": "Bir otomatik yeniden çalışma turu daha yapın, mevcut çıktıyı kabul ederek sonraki adıma geçin ya da durup görevi sıfırlayarak girdileri düzenleyip yeniden gönderin.",
       "infraAttempts": "Altyapı denemeleri",
       "hideInfraAttempts": "Altyapı denemelerini gizle",
+      "executionHistory": "Yürütme geçmişi",
+      "hideExecutionHistory": "Yürütme geçmişini gizle",
+      "attemptSucceeded": "Başarılı",
+      "outputTruncated": "Yürütme geçmişini derli toplu tutmak için çıktı kırpıldı.",
       "editingConclusions": "Sonuçlar düzenleniyor",
       "editConclusionsPlaceholder": "Aracının sonuçlarını düzenleyin; düzenlemeleriniz onayladığınızda kaydedilir…",
       "noProseOutput": "Bu aracı herhangi bir metin çıktısı üretmedi.",
@@ -1052,6 +1078,7 @@
     "loadingContext": "Sağlanan bağlam yükleniyor…",
     "noCalls": "Bu çalışma için kaydedilmiş model çağrısı yok.",
     "noContext": "Bu çalışma için saklanmış aracı bağlamı yok. Çalışma alanında 'Tam aracı bağlamını sakla' etkinleştirildiğinde her gönderim için yakalanır.",
+    "contextError": "Sağlanan bağlam yüklenemedi.",
     "summary": {
       "calls": "Çağrılar",
       "tokensInOut": "Token (giriş / çıkış)",
@@ -1098,6 +1125,16 @@
       "systemPrompt": "Sistem istemi",
       "userPrompt": "Kullanıcı istemi",
       "details": "Ayrıntılar"
+    },
+    "webSearch": "Web araması",
+    "loadingSearch": "Web aramaları yükleniyor…",
+    "noSearch": "Bu çalıştırma için web araması kaydedilmedi. Sorgular, web araması çalıştığında ve çalışma alanında 'Tam aracı bağlamını depola' etkinleştirildiğinde yakalanır.",
+    "search": {
+      "available": "Kullanılabilir",
+      "unavailable": "Kullanılamıyor",
+      "provider": "Sağlayıcı",
+      "resultsCount": "{count} sonuç | {count} sonuç",
+      "queriesTitle": "Yapılan aramalar"
     }
   },
   "auth": {
@@ -1694,7 +1731,7 @@
         "remote-kubernetes": "Uzak Kubernetes"
       },
       "kubernetesEngine": {
-        "localK3sHint": "Bu makinedeki yerel bir k3s/k3d/kind kümesi için önceden dolduruldu. Bir ServiceAccount'u bir role bağlayın, `kubectl create token NAME -n NAMESPACE` (Kubernetes 1.24+) ile token'ını oluşturun ve aşağıya yapıştırın. Ardından ortam URL'sinin nasıl türetileceğini seçin ve kümeniz farklı bir bağlantı noktasını dinliyorsa API sunucu URL'sini düzenleyin.",
+        "localK3sHint": "Bu makinedeki yerel bir k3s/k3d/kind kümesi için önceden dolduruldu. Bir ServiceAccount'u bir role bağlayın ve aşağıya uzun ömürlü bir token yapıştırın. Düz bir `kubectl create token NAME -n NAMESPACE` token'ının 1 saatte sona erdiğini unutmayın: daha uzun ömür için `--duration=720h` ekleyin veya süresi dolmayan bir kubernetes.io/service-account-token Secret oluşturup okuyun. Ardından ortam URL'sinin nasıl türetileceğini seçin ve kümeniz farklı bir bağlantı noktasını dinliyorsa API sunucu URL'sini düzenleyin.",
         "autoSetup": {
           "title": "CLI ile otomatik kurulum",
           "description": "Yerel bir kümeyi algılamak veya sağlamak, bir ServiceAccount belirteci oluşturmak ve bu formu önceden doldurulmuş olarak açmak için bunu terminalinizde çalıştırın. Yazdırdığı belirteci yapıştırın, ardından Test edin ve Kaydedin."
@@ -2285,11 +2322,22 @@
       },
       "budget": {
         "heading": "Aylık harcama bütçesi",
-        "body": "Token kullanımı her LLM çağrısı için ölçülür, fiyatlandırılır ve bu bütçeyle sınırlandırılır. Ulaşıldığında bu çalışma alanındaki çalıştırmalar duraklatılır ve panoda bir uyarı gösterilir. Yerleşik varsayılanı (aylık yaklaşık 100 EUR) devralmak için boş bırakın.",
+        "body": "Token kullanımı her LLM çağrısı için ölçülür, fiyatlandırılır ve bu bütçelerle sınırlandırılır. Bir çalıştırma, ait olduğu herhangi bir katman tükendiğinde duraklatılır. O katmanda sınır olmaması için bir alanı boş bırakın (çalışma alanı katmanı bu durumda yerleşik varsayılanı, aylık yaklaşık 100 EUR devralır).",
         "monthlyLimit": "Aylık sınır",
         "defaultPlaceholder": "Varsayılan",
         "currency": "Para birimi (ISO 4217)",
-        "save": "Bütçeyi kaydet"
+        "save": "Bütçeyi kaydet",
+        "saveTier": "Kaydet",
+        "workspace": "Bu çalışma alanı",
+        "account": "Hesap (tüm çalışma alanları)",
+        "user": "Siz (başlattığınız tüm çalıştırmalar)",
+        "accountBody": "Bu hesaptaki tüm çalışma alanlarını kapsayan bir üst sınır.",
+        "userBody": "Herhangi bir çalışma alanında başlattığınız her çalıştırmayı kapsayan bir üst sınır.",
+        "hardCap": "Operatör sınırı: {amount}",
+        "hardCapHint": "dağıtım tarafından belirlenir; değer bunu aşamaz",
+        "spent": "Bu ay {limit} bütçenin {spent} kadarı harcandı",
+        "adminOnly": "Yalnızca bir hesap yöneticisi hesap bütçesini değiştirebilir.",
+        "noLimitPlaceholder": "Sınır yok"
       },
       "toast": {
         "saved": "Ayarlar kaydedildi",
@@ -3291,8 +3339,6 @@
     "reReviewingStage": "Güncellenen hata raporu yeniden inceleniyor… Bunu kapatabilirsiniz, yalnızca daha fazla girdi gerekirse sizi bilgilendireceğiz.",
     "answerLabel": "Yanıt",
     "answerPlaceholder": "Bu bulguyu yanıtlayın…",
-    "refineAnswerPlaceholder": "Yanıtınızı iyileştirin…",
-    "saveAnswer": "Yanıtı kaydet",
     "dismissIrrelevant": "İlgisiz olarak göz ardı et",
     "reopen": "Yeniden aç",
     "docHeading": "Netleştirilmiş hata raporu",
@@ -4295,6 +4341,80 @@
       "maxConcurrentField": "Maks. es zamanli gorev",
       "defaultPipelineField": "Varsayilan pipeline",
       "failed": "Girisim guncellenemedi"
+    }
+  },
+  "environmentWizard": {
+    "title": "Bir test ortamı kur",
+    "subtitle": "Deployer sağlasın diye bir Docker Compose tarifini algıla, gözden geçir ve kaydet.",
+    "recommended": "önerilen",
+    "steps": {
+      "pick": "Servis seç",
+      "review": "Tarifi gözden geçir",
+      "preflight": "Ön kontrol",
+      "save": "Kaydet"
+    },
+    "pick": {
+      "intro": "Docker Compose ortamı kuracağın servisi seç.",
+      "empty": "Henüz servis yok. Önce bir servis ekle."
+    },
+    "review": {
+      "detectHint": "Depodan algılandı. Kaydedene kadar hiçbir şey uygulanmaz.",
+      "detect": "Yeniden algıla",
+      "noRepo": "Bu servisin bağlı bir deposu yok, bu yüzden algılama çalışamaz.",
+      "detectError": "Algılama başarısız oldu. Depo bağlantısını kontrol edip tekrar deneyin.",
+      "provenanceTitle": "Her alanın kaynağı",
+      "service": "Açığa çıkarılan Compose servisi",
+      "servicePlaceholder": "örn. app",
+      "port": "Açığa çıkarılan port",
+      "composeFiles": "Compose dosyaları",
+      "profiles": "Profiller",
+      "seedDumps": "Tohum dökümleri",
+      "seedAdd": "Tohum adımı ekle",
+      "seedAdded": "Eklendi",
+      "rawEditor": "Ham tarifi düzenle",
+      "rawApply": "Uygula"
+    },
+    "analysis": {
+      "title": "Derin analiz",
+      "hint": "Depodan kurulum adımlarını ve sağlık kapılarını taslak olarak çıkarmak için ortam analistini çalıştır.",
+      "run": "Analizi çalıştır",
+      "unavailable": "Derin analiz için bağlı bir depo ve analiz hattı gerekir.",
+      "failed": "Analiz çalışması başarısız oldu.",
+      "apply": "Analist taslağını uygula"
+    },
+    "field": {
+      "composeFiles": "Compose dosyaları",
+      "composeProfiles": "Profiller",
+      "envFiles": "Ortam dosyaları",
+      "externalNetworks": "Dış ağlar",
+      "sharedStackRefs": "Paylaşılan yığınlar",
+      "prerequisites": "Ön kontroller",
+      "setupSteps": "Kurulum adımları",
+      "healthGate": "Sağlık kapısı",
+      "teardownSteps": "Sökme adımları"
+    },
+    "origin": {
+      "detector": "algılandı",
+      "analyst": "analist",
+      "both": "algılandı + analist"
+    },
+    "preflight": {
+      "intro": "Sağlamadan önce makine ön koşullarını kontrol et.",
+      "run": "Kontrolleri çalıştır",
+      "none": "Bu tarif hiçbir ön kontrol tanımlamıyor.",
+      "unavailable": "Ön kontroller yerel makinede çalışır ve bu dağıtımda kullanılamaz.",
+      "optional": "isteğe bağlı"
+    },
+    "save": {
+      "handlerLabel": "İşleyici etiketi",
+      "handlerHint": "Deployer'ın bu yığını sağlamak için kullandığı çalışma alanının Docker Compose işleyicisi.",
+      "summary": "\"{frame}\" üzerine bir Docker Compose tarifi kaydeder (\"{service}\" servisini açığa çıkararak) ve çalışma alanı işleyicisini kaydeder.",
+      "saved": "Kaydedildi. Bir hat çalıştırdığında Deployer bu yığını sağlayacak.",
+      "save": "Yapılandırmayı kaydet"
+    },
+    "trial": {
+      "hint": "Tarifi test etmek için bu ortamı isteğe bağlı olarak şimdi sağlayabilirsin.",
+      "run": "Deneme sağlaması"
     }
   }
 }

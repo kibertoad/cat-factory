@@ -78,12 +78,14 @@ import {
   type RunnerPoolProvider,
   type TaskConnectionRepository,
   type TaskSourceProvider,
+  type WebSearchAvailability,
   CompositeNotificationChannel,
   SUBSCRIPTION_VENDORS,
   isAmbientNativeVendor,
 } from '@cat-factory/kernel'
 import {
   AgentContextObservabilityService,
+  SearchQueryObservabilityService,
   type CoreDependencies,
   createCore,
   PACKAGE_REGISTRY_CIPHER_INFO,
@@ -131,6 +133,7 @@ import {
   buildResolveRepoTarget,
   buildResolveRepoTargets,
   createDefaultWebSearchUpstream,
+  createWebSearchUpstream,
   makePreviewJobBuilder,
   makeResolveDeployCloneTarget,
   makeResolveRunRepoContext,
@@ -806,7 +809,7 @@ function buildNodeContainerExecutor(
   resolveAccountId?: (workspaceId: string) => Promise<string | null | undefined>,
   resolveUserGitHubToken?: ResolveUserGitHubToken,
   agentContextObservability?: AgentContextObservabilityService,
-  resolveWebSearchEnabled?: (workspaceId: string) => Promise<boolean>,
+  resolveWebSearchAvailability?: (workspaceId: string) => Promise<WebSearchAvailability>,
   resolveRepoOrigin?: ResolveRepoOrigin,
   resolvePackageRegistries?: (workspaceId: string) => Promise<JobPackageRegistrySpec[]>,
   recordHarnessCalls?: (input: HarnessCallsRecordInput) => Promise<void>,
@@ -910,7 +913,7 @@ function buildNodeContainerExecutor(
     // Point container agents' web search at the backend search proxy (no provider key in
     // the sandbox), but only for a run whose account has keys (resolved per run — see the
     // call site), so the tool is never advertised to a run where it would just fail.
-    ...(resolveWebSearchEnabled ? { resolveWebSearchEnabled } : {}),
+    ...(resolveWebSearchAvailability ? { resolveWebSearchAvailability } : {}),
     // Decrypt the workspace's private-registry entries onto the job body (rendered by
     // the harness into ~/.npmrc), so private dependencies resolve on install.
     ...(resolvePackageRegistries ? { resolvePackageRegistries } : {}),
@@ -1635,7 +1638,7 @@ export function buildNodeContainer(options: NodeContainerOptions): ServerContain
             : {},
         )
       : undefined)
-  const deployDeps: Partial<CoreDependencies> = config.environments.enabled
+  const deployDeps: Partial<CoreDependencies> = config.environments.encryptionKey
     ? {
         ...(deployJobClient ? { deployJobClient } : {}),
         ...(resolveDeployCloneTarget ? { resolveDeployCloneTarget } : {}),
@@ -1660,6 +1663,17 @@ export function buildNodeContainer(options: NodeContainerOptions): ServerContain
   // live in the `telemetry` Postgres schema (see schema.ts).
   const agentContextObservability = new AgentContextObservabilityService({
     agentContextSnapshotRepository: repos.agentContextSnapshotRepository,
+    workspaceSettingsRepository: repos.workspaceSettingsRepository,
+    idGenerator,
+    clock,
+    recordPrompts: config.observability.recordPrompts,
+  })
+  // Agent-search-query observability sink: records each web search a container agent
+  // performed through the search proxy. Same double gate + retention window as the
+  // agent-context sink. Wired into the search proxy (write, via the container) AND
+  // createCore (read). Telemetry rows live in the `telemetry` Postgres schema.
+  const searchQueryObservability = new SearchQueryObservabilityService({
+    agentSearchQueryRepository: repos.agentSearchQueryRepository,
     workspaceSettingsRepository: repos.workspaceSettingsRepository,
     idGenerator,
     clock,
@@ -1702,15 +1716,25 @@ export function buildNodeContainer(options: NodeContainerOptions): ServerContain
         clock,
       })
     : undefined
-  const resolveWebSearchEnabled =
+  const resolveWebSearchAvailability =
     defaultWebSearchUpstream || webSearchAccountSettings
-      ? async (workspaceId: string): Promise<boolean> => {
-          // A deployment default serves every account, so the tool is on regardless.
-          if (defaultWebSearchUpstream) return true
-          if (!webSearchAccountSettings) return false
-          const accountId = await repos.workspaceRepository.accountOf(workspaceId)
-          if (!accountId) return false
-          return Boolean((await webSearchAccountSettings.resolve(accountId)).webSearch)
+      ? async (workspaceId: string): Promise<WebSearchAvailability> => {
+          // Mirror the proxy's own resolution (`accountUpstream ?? defaultWebSearchUpstream`):
+          // the run's account keys WIN and the deployment default is only the fallback, so the
+          // surfaced provider matches the one that will actually serve the run's searches. Build
+          // the account upstream the SAME way the proxy does before falling back to the default.
+          if (webSearchAccountSettings) {
+            const accountId = await repos.workspaceRepository.accountOf(workspaceId)
+            if (accountId) {
+              const accountUpstream = createWebSearchUpstream(
+                (await webSearchAccountSettings.resolve(accountId)).webSearch ?? {},
+              )
+              if (accountUpstream) return { available: true, provider: accountUpstream.provider }
+            }
+          }
+          if (defaultWebSearchUpstream)
+            return { available: true, provider: defaultWebSearchUpstream.provider }
+          return { available: false, provider: null }
         }
       : undefined
   // Private package registries (npm private orgs, GitHub Packages): sealed per-workspace
@@ -1746,7 +1770,7 @@ export function buildNodeContainer(options: NodeContainerOptions): ServerContain
     (workspaceId) => repos.workspaceRepository.accountOf(workspaceId),
     resolveUserGitHubToken,
     agentContextObservability,
-    resolveWebSearchEnabled,
+    resolveWebSearchAvailability,
     options.resolveRepoOrigin,
     resolvePackageRegistries,
     recordHarnessCalls,
@@ -2236,6 +2260,9 @@ export function buildNodeContainer(options: NodeContainerOptions): ServerContain
     // Re-exposed on the core for the agent-context read endpoint; the same instance
     // is injected into the container executor above for the write path.
     agentContextObservability,
+    // Re-exposed on the core for the search-query read endpoint AND the search proxy's
+    // write path (it reads it off the request container).
+    searchQueryObservability,
     // Opt-in Langfuse trace sink (fans every recorded LLM call out as a generation).
     // Built only when configured; otherwise undefined and there is no external emission.
     llmTraceSink: buildLangfuseSink(config),
@@ -2281,6 +2308,7 @@ export function buildNodeContainer(options: NodeContainerOptions): ServerContain
     // limit). Wired unconditionally so the settings API + the limit enforcement + the
     // escalation sweep work identically to the Worker.
     workspaceSettingsRepository: repos.workspaceSettingsRepository,
+    userSettingsRepository: repos.userSettingsRepository,
     modelProviderResolver,
     requirementReviewModel: config.agents.routing.default.ref,
     requirementReviewResolveModel: config.agents.resolveBlockModel,
@@ -2747,10 +2775,10 @@ function selectNodeDocumentsDeps(
  * from the env-backend registry by the stored `kind` (built-in `manifest`/`kubernetes`, or a
  * deployment's programmatically-registered custom kind), so nothing is injected here.
  * Per-tenant management-API secrets are encrypted at rest with the shared ENCRYPTION_KEY.
- * Disabled → `{}` and the module stays off.
+ * No key configured → `{}` and the module stays off (there is no separate enable flag).
  */
 function selectNodeEnvironmentsDeps(config: AppConfig, db: DrizzleDb): Partial<CoreDependencies> {
-  if (!config.environments.enabled || !config.environments.encryptionKey) return {}
+  if (!config.environments.encryptionKey) return {}
   // The provider is resolved per-workspace from the env-backend registry by the stored
   // `kind`. Node honors custom-CA / insecure-skip TLS (undici), so a Kubernetes env config
   // with a CA is allowed (environmentCustomTlsSupported defaults to supported).

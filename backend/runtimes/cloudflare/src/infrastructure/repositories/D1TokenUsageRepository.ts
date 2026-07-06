@@ -13,13 +13,15 @@ export class D1TokenUsageRepository implements TokenUsageRepository {
     await this.db
       .prepare(
         `INSERT INTO token_usage
-           (id, workspace_id, execution_id, agent_kind, provider, model,
+           (id, workspace_id, account_id, user_id, execution_id, agent_kind, provider, model,
             input_tokens, output_tokens, cost_estimate, created_at)
-         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
       )
       .bind(
         usage.id,
         usage.workspaceId,
+        usage.accountId,
+        usage.userId,
         usage.executionId,
         usage.agentKind,
         usage.provider,
@@ -62,6 +64,44 @@ export class D1TokenUsageRepository implements TokenUsageRepository {
          WHERE workspace_id = ? AND created_at >= ?`,
       )
       .bind(workspaceId, epochMs)
+      .first<{ input_tokens: number; output_tokens: number; cost_estimate: number }>()
+    return {
+      inputTokens: row?.input_tokens ?? 0,
+      outputTokens: row?.output_tokens ?? 0,
+      costEstimate: row?.cost_estimate ?? 0,
+    }
+  }
+
+  async totalsSinceForAccount(accountId: string, epochMs: number): Promise<TokenUsageTotals> {
+    const row = await this.db
+      .prepare(
+        `SELECT
+           COALESCE(SUM(input_tokens), 0)  AS input_tokens,
+           COALESCE(SUM(output_tokens), 0) AS output_tokens,
+           COALESCE(SUM(cost_estimate), 0) AS cost_estimate
+         FROM token_usage
+         WHERE account_id = ? AND created_at >= ?`,
+      )
+      .bind(accountId, epochMs)
+      .first<{ input_tokens: number; output_tokens: number; cost_estimate: number }>()
+    return {
+      inputTokens: row?.input_tokens ?? 0,
+      outputTokens: row?.output_tokens ?? 0,
+      costEstimate: row?.cost_estimate ?? 0,
+    }
+  }
+
+  async totalsSinceForUser(userId: string, epochMs: number): Promise<TokenUsageTotals> {
+    const row = await this.db
+      .prepare(
+        `SELECT
+           COALESCE(SUM(input_tokens), 0)  AS input_tokens,
+           COALESCE(SUM(output_tokens), 0) AS output_tokens,
+           COALESCE(SUM(cost_estimate), 0) AS cost_estimate
+         FROM token_usage
+         WHERE user_id = ? AND created_at >= ?`,
+      )
+      .bind(userId, epochMs)
       .first<{ input_tokens: number; output_tokens: number; cost_estimate: number }>()
     return {
       inputTokens: row?.input_tokens ?? 0,

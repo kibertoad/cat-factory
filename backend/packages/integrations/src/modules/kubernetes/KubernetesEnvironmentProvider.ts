@@ -19,7 +19,11 @@ import type {
   SecretResolver,
 } from '@cat-factory/kernel'
 import { KubernetesApiClient, safeText } from './KubernetesApiClient.js'
-import { apiBase, classifyDeploymentReadiness } from './kubernetes.logic.js'
+import {
+  apiBase,
+  apiServerConnectionFailureMessage,
+  classifyDeploymentReadiness,
+} from './kubernetes.logic.js'
 import {
   buildDeployJobSpec,
   mapDeployOutcome,
@@ -201,7 +205,12 @@ export class KubernetesEnvironmentProvider implements EnvironmentProvider {
         READ_TIMEOUT_MS,
       )
       if (res.ok) return { ok: true, message: `Reached ${apiBase(config)}.` }
-      return { ok: false, message: `apiserver responded ${res.status}: ${await safeText(res)}` }
+      return {
+        ok: false,
+        message: apiServerConnectionFailureMessage(res.status, await safeText(res), {
+          operation: 'list namespaces',
+        }),
+      }
     } catch (err) {
       return { ok: false, message: err instanceof Error ? err.message : String(err) }
     }

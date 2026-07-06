@@ -196,6 +196,18 @@ export const provisionTypeSchema = v.picklist([
 export type ProvisionType = v.InferOutput<typeof provisionTypeSchema>
 
 /**
+ * Machine-readable cause of an environment-provisioning failure, surfaced on the run's
+ * {@link AgentFailure.reason} so the SPA can render precise, actionable guidance instead of
+ * string-matching the provider prose (the failure analogue of {@link ConflictReason}).
+ *  - `deploy_runner_unwired` — the service's provider needs a container-backed deploy (a real
+ *    render/apply) but no deploy runner is wired on this deployment. The fix is deployment-level
+ *    config (a runner pool / `LOCAL_DEPLOY_RUNTIME` / the Cloudflare DeployContainer binding), so
+ *    the SPA gates its runtime-specific hint on this reason rather than on the prose.
+ */
+export const environmentFailureReasonSchema = v.picklist(['deploy_runner_unwired'])
+export type EnvironmentFailureReason = v.InferOutput<typeof environmentFailureReasonSchema>
+
+/**
  * The engine a workspace/user handler uses to stand up / connect to an environment for a
  * provision type. `none` is the synthetic engine for `infraless`. `local-docker` runs a
  * compose stack locally; `local-k3s`/`remote-kubernetes` drive a kube apiserver;

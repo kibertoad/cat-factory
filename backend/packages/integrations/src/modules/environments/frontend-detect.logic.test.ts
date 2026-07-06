@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest'
 import type { FrontendRepoReader } from './frontend-detect.logic.js'
 import { detectFrontendConfig } from './frontend-detect.logic.js'
+import { RepoReadError } from './repo-read-error.js'
 
 // In-memory RepoFiles-shaped reader built from a flat path→content map. A missing path yields
 // `null` (mirroring the contents API), which is all the detector's targeted reads need.
@@ -170,5 +171,14 @@ describe('detectFrontendConfig', () => {
     expect(rec.detected).toBe(false)
     expect(rec.config).toEqual({ backendBindings: [] })
     expect(rec.notes.length).toBeGreaterThan(0)
+  })
+
+  it('throws RepoReadError when the repo is unreadable rather than "not a frontend repo"', async () => {
+    const reader: FrontendRepoReader = {
+      async getFile() {
+        throw new Error('GitHub GET /contents → 403: forbidden')
+      },
+    }
+    await expect(detectFrontendConfig(reader)).rejects.toThrow(RepoReadError)
   })
 })

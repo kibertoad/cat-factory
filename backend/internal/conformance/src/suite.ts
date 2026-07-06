@@ -858,6 +858,31 @@ export function defineCoreConformance(harness: ConformanceHarness): void {
         expect(after.body.currency).toBe('USD')
       })
 
+      it('round-trips the per-user (user-tier) budget (D1 ⇄ Postgres)', async () => {
+        // The user-tier budget lives in the `user_settings` table (PK user_id). It is user-scoped,
+        // so — like local model endpoints — it is exercised through the service directly (the
+        // dev-open HTTP `call` path has no signed-in user). Asserts the new table round-trips a
+        // nullable numeric identically on both stores.
+        const app = harness.makeApp()
+        const probe = app.userSettings?.()
+        if (!probe) return
+        const userId = 'usr_budget_conformance'
+
+        const before = await probe.get(userId)
+        expect(before.spendMonthlyLimit).toBeNull()
+
+        const saved = await probe.update(userId, { spendMonthlyLimit: 42 })
+        expect(saved.spendMonthlyLimit).toBe(42)
+        expect((await probe.get(userId)).spendMonthlyLimit).toBe(42)
+
+        // `0` is a real "no paid spend" limit, distinct from null (inherit/unlimited).
+        await probe.update(userId, { spendMonthlyLimit: 0 })
+        expect((await probe.get(userId)).spendMonthlyLimit).toBe(0)
+
+        await probe.update(userId, { spendMonthlyLimit: null })
+        expect((await probe.get(userId)).spendMonthlyLimit).toBeNull()
+      })
+
       it('round-trips the local-mode delegation toggle + a paired boolean (D1 ⇄ Postgres)', async () => {
         const { call, createWorkspace } = harness.makeApp()
         const { workspace } = await createWorkspace()
@@ -4520,6 +4545,9 @@ export function defineIntegrationConformance(harness: ConformanceHarness): void 
         expect(exec.failure?.detail).toContain('ECONNREFUSED')
         const deployStep = exec.steps.find((s) => s.agentKind === 'deployer')!
         expect(deployStep.state).not.toBe('done')
+        // The failure is attributed to the in-flight step (the deployer), so the step-detail
+        // overlay can filter its per-step execution history — and it round-trips through the facade.
+        expect(exec.failure?.stepIndex).toBe(exec.steps.indexOf(deployStep))
         // The failed EnvironmentRecord round-tripped through the facade's registry repo and
         // projects onto the step — the cross-runtime persistence + column-mapping assertion.
         expect(deployStep.environment?.status).toBe('failed')
@@ -6532,6 +6560,8 @@ export function defineExecutionConformance(harness: ConformanceHarness): void {
         expect(firstRun.steps.map((s) => s.state)).toEqual(['done', 'done'])
         const originalSpec = firstRun.steps[0]!.output
         expect(originalSpec).toContain('[spec-writer]')
+        const originalCoder = firstRun.steps[1]!.output
+        expect(originalCoder).toBeTruthy()
 
         // Restart from the LAST step (coder). The earlier spec-writer is preserved
         // untouched; the coder is reset to re-run. A fresh run id is minted and the
@@ -6551,6 +6581,12 @@ export function defineExecutionConformance(harness: ConformanceHarness): void {
         // Step 1 was reset (no stale output; re-running, not done).
         expect(restarted.body.steps[1]!.state).not.toBe('done')
         expect(restarted.body.steps[1]!.output).toBeFalsy()
+        // The restart DISCARDED the coder's completed output; rather than losing it, the run
+        // records it in an output history attributed to that step — so the step-detail
+        // execution history can surface superseded SUCCESSFUL outputs, not only failures.
+        expect(restarted.body.outputHistory).toEqual([
+          expect.objectContaining({ stepIndex: 1, output: originalCoder }),
+        ])
 
         const afterCoder = (await app.drive(wsId)).find((e) => e.blockId === 'task_login')!
         expect(afterCoder.status).toBe('done')
@@ -6573,6 +6609,14 @@ export function defineExecutionConformance(harness: ConformanceHarness): void {
         const afterHead = (await app.drive(wsId)).find((e) => e.blockId === 'task_login')!
         expect(afterHead.status).toBe('done')
         expect(afterHead.steps[0]!.output).toContain(`[desc]${REWORKED}[/desc]`)
+        // The successful-output trail accumulates across restarts and round-trips through the
+        // facade's persistence (it rides the run's `detail` JSON like the failure trail): the
+        // first restart discarded the coder (step 1); the head restart then discarded the re-run
+        // spec-writer (step 0) + coder (step 1) — each attributed to the step that produced it.
+        expect(afterHead.outputHistory?.map((o) => o.stepIndex)).toEqual([1, 0, 1])
+        expect(
+          afterHead.outputHistory?.some((o) => o.stepIndex === 0 && o.output === originalSpec),
+        ).toBe(true)
 
         // An out-of-range step index is rejected (422) rather than stranding the run.
         const bad = await app.call(

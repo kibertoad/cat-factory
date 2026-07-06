@@ -5,6 +5,7 @@ import type {
   FrontendDetectionNote,
   FrontendPackageManager,
 } from '@cat-factory/contracts'
+import { RepoReadError } from './repo-read-error.js'
 
 // ---------------------------------------------------------------------------
 // Frontend-config AUTO-DETECTION: a deterministic, pure-TS heuristic that proposes a NON-BINDING
@@ -18,8 +19,11 @@ import type {
 
 /**
  * The narrow slice of {@link RepoFiles} the detector needs — a {@link RepoFiles} satisfies it
- * structurally, and a test supplies an in-memory fake. Reads are best-effort: a missing path
- * yields `null` / `[]` (never throws), so the heuristics degrade gracefully on partial repos.
+ * structurally, and a test supplies an in-memory fake. A MISSING path yields `null`, so the
+ * heuristics degrade gracefully on partial repos. A genuine read fault (auth/permission revoked,
+ * rate limit, transport error) may THROW — the real reader throws on any non-404 status. The
+ * {@link Scanner} tolerates that (records it, keeps scanning) so a truly unreadable repo surfaces
+ * an actionable error instead of a misleading "not a frontend repo"; see {@link Scanner.readFault}.
  */
 export interface FrontendRepoReader {
   getFile(path: string, gitRef?: string): Promise<{ content: string } | null>
@@ -83,6 +87,7 @@ function joinPath(...parts: (string | undefined)[]): string {
 class Scanner {
   private reads = 0
   private truncated = false
+  private firstFault: string | undefined
   constructor(
     private readonly reader: FrontendRepoReader,
     private readonly gitRef: string | undefined,
@@ -96,14 +101,32 @@ class Scanner {
     return this.truncated
   }
 
+  /**
+   * The message of the FIRST genuine read fault the reader threw (auth/permission revoked, rate
+   * limit, transport error), else `undefined`. A miss (absent path) is NOT a fault. The caller
+   * raises {@link RepoReadError} when nothing was detected AND this is set.
+   */
+  get readFault(): string | undefined {
+    return this.firstFault
+  }
+
   async getFile(path: string): Promise<string | null> {
     if (this.reads >= READ_BUDGET) {
       this.truncated = true
       return null
     }
     this.reads++
-    const file = await this.reader.getFile(path, this.gitRef)
-    return file?.content ?? null
+    try {
+      const file = await this.reader.getFile(path, this.gitRef)
+      return file?.content ?? null
+    } catch (err) {
+      // A genuine read fault (non-404 — the reader turns 404 into null itself). Record it so an
+      // all-miss outcome can be reported as "couldn't read" rather than "not a frontend repo".
+      if (this.firstFault === undefined) {
+        this.firstFault = err instanceof Error ? err.message : String(err)
+      }
+      return null
+    }
   }
 
   /** True when a file exists (a cheap presence probe that still spends one read). */
@@ -284,7 +307,10 @@ export async function detectFrontendConfig(
   const pkgContent = await scanner.getFile(joinPath(root, 'package.json'))
   const pkg = pkgContent ? parsePackageJson(pkgContent) : null
   if (!pkg && !packageManager) {
-    // No package.json AND no lockfile — this doesn't look like a frontend repo (at this root).
+    // No package.json AND no lockfile. If the reads couldn't actually reach the repo (a genuine
+    // fault, not a clean miss), surface that instead of "this doesn't look like a frontend repo".
+    if (scanner.readFault) throw new RepoReadError(scanner.readFault)
+    // Otherwise it genuinely doesn't look like a frontend repo (at this root).
     return emptyRecommendation(
       root
         ? `No package.json or lockfile was found under "${root}" — check the frontend directory, or configure the fields manually.`

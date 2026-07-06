@@ -346,6 +346,18 @@ export const SYSTEM_AGENT_META: Record<string, AgentArchetype> = {
     color: '#22d3ee',
     description: 'Maps the repository into the service → modules blueprint.',
   },
+  // The single environment provisioner: an operational (non-LLM) step that stands up the ephemeral
+  // environment the tester / human-test gate run against for a kubernetes/custom service, and is a
+  // fast no-op for docker-compose / infraless. Seeded before the first tester/human-test step in the
+  // built-in pipelines, so it needs display metadata (else it renders as a generic gray "Agent").
+  deployer: {
+    kind: 'deployer',
+    label: 'Deployer',
+    icon: 'i-lucide-cloud-upload',
+    color: '#34d399',
+    description:
+      'Provisions the ephemeral environment the tester and human-test gate run against (kubernetes / custom services); a no-op for docker-compose / infraless.',
+  },
   // The Initiative Planning pipeline's two steps. Only runnable on an initiative
   // block (pl_initiative — enforced by the engine), so they are display-metadata
   // system kinds, never palette archetypes.

@@ -1,5 +1,207 @@
 # @cat-factory/integrations
 
+## 0.73.5
+
+### Patch Changes
+
+- 10787c4: Make the "environment provisioning failed" surface actionable when no deploy runner is wired.
+
+  - **Backend, provider-agnostic message:** the `EnvironmentProvisioningService` error for a
+    render-needing config with no `deployJobClient` no longer hardcodes Kubernetes tooling (it
+    reaches for any provider that needs a container-backed deploy). It names the runtime-neutral
+    transport remedies (a self-hosted runner pool, `LOCAL_DEPLOY_RUNTIME`, or the Cloudflare
+    `DeployContainer` binding) or using a config that provisions without a deploy container.
+  - **Structured failure reason:** `AgentFailure` gains an optional machine-readable `reason`
+    (JSON column — no migration), and this condition carries `deploy_runner_unwired`
+    (`EnvironmentFailureReason` in contracts) from the thrown `ValidationError` through the
+    deployer-step failure path onto the run's failure, so the SPA can act on the cause without
+    string-matching prose. Adds `getErrorReason` to the kernel error helpers.
+  - **Frontend, precisely-gated guidance:** the board's `AgentFailureCard` shows a "Configure…"
+    deep-link on `environment`-kind failures whose destination follows the cause: a
+    `deploy_runner_unwired` failure on a non-local deployment links to Infrastructure → **Agent
+    containers** (`runner-pool`) — where the deploy runner/pool is actually wired, so the button no
+    longer dead-ends on the Test-environments tab that can't fix it — while every other environment
+    failure keeps linking to Infrastructure → **Test environments** (`environment`). The
+    Kubernetes+local env-var hint (`LOCAL_DEPLOY_RUNTIME` + `LOCAL_DEPLOY_HARNESS_ENTRY` /
+    `LOCAL_DEPLOY_IMAGE`) is shown ONLY for the `deploy_runner_unwired` reason, in local mode, and
+    for a `kubernetes` provision — so a docker-compose / transient / future non-K8s failure never
+    shows inaccurate guidance.
+
+- Updated dependencies [10787c4]
+  - @cat-factory/contracts@0.110.1
+  - @cat-factory/kernel@0.101.1
+
+## 0.73.4
+
+### Patch Changes
+
+- Updated dependencies [f596090]
+  - @cat-factory/contracts@0.110.0
+  - @cat-factory/kernel@0.101.0
+
+## 0.73.3
+
+### Patch Changes
+
+- Updated dependencies [9ea1e77]
+  - @cat-factory/contracts@0.109.0
+  - @cat-factory/kernel@0.100.0
+
+## 0.73.2
+
+### Patch Changes
+
+- Updated dependencies [e66accb]
+  - @cat-factory/contracts@0.108.1
+  - @cat-factory/kernel@0.99.1
+
+## 0.73.1
+
+### Patch Changes
+
+- 9cc02a0: Surface a real, actionable error when "auto-detect" (test-infra provisioning / frontend config)
+  can't read the repository. Before, a genuine read fault (revoked App access, missing
+  `Contents: read`, a rate limit, or a token-mint/transport error) was either masked as a
+  misleading "nothing found" or escaped as an opaque 500, and the SPA discarded whatever the
+  backend said and showed a fixed "Could not read the repository to detect provisioning." line.
+
+  Now the checkout-free detectors record a genuine (non-404) reader throw and raise a
+  `RepoReadError` when they detected nothing because of it; the environments service maps that to a
+  `ValidationError` naming the repo and the underlying reason, with provider-aware guidance to check
+  repository read access and rate limits (a GitHub-specific "Contents: read" hint only when the
+  detect input pinned GitHub, a GitLab `read_repository` hint for GitLab, neutral otherwise — so a
+  GitLab deployment isn't told to fix a GitHub-only permission). The inspector's Detect affordance
+  surfaces the server's real message, and distinguishes the client-only "this frame's repo isn't in
+  the connected repos" case with its own `inspector.detectRepoUnresolved` copy instead of the generic
+  read-failure line.
+
+## 0.73.0
+
+### Minor Changes
+
+- 1afa003: Make the **Deployer the single environment provisioner** and fix environment-lifecycle
+  correctness so a `kubernetes`/`custom` service can no longer dead-end inside the Tester.
+
+  - **Deployer in every tester/human-test built-in pipeline.** A type-aware `deployer` is seeded
+    before the first tester / human-test / playwright step in the 12 relevant built-ins. It
+    provisions `kubernetes`/`custom`, a `docker-compose` service with a resolvable compose handler,
+    or an undeclared service on a workspace with a legacy connection, and is a fast **no-op** for
+    `infraless`/frontend frames (and for `docker-compose` with no compose handler configured yet) — so
+    the injection is safe everywhere. Touched built-ins get a `version` bump (reseed offer).
+  - **Docker-compose provisions through the Deployer** (single-provisioner direction) whenever a
+    compose handler resolves; the Tester then targets that provisioned env (`testerInfraSpec` already
+    prefers a provisioned URL for any type). Until the shared-stacks compose-connection setup wizard
+    lands, docker-compose with no handler stays a Deployer no-op and the Tester falls back to its
+    in-container compose bring-up (no regression). See the initiative trackers for the full
+    centralization owed once the wizard ships.
+  - **`human-test` no longer self-provisions.** The gate READS the environment the upstream Deployer
+    provisioned (the one env is shared by the AI tester + the human), and its recreate / fix-loop /
+    pull-main rebuild now **loops back to the Deployer** to re-provision, rather than standing up its
+    own env. No deployer before it (an infraless service) ⇒ the gate degrades to manual mode.
+  - **Fail-fast run-start guard.** Starting a `kubernetes`/`custom` pipeline whose enabled chain
+    reaches a tester/human-test with no enabled `deployer` before it is now refused with an actionable
+    `deployer_required_before_tester` conflict (new `ConflictReason`) instead of the silent
+    ephemeral-with-no-coordinates dead-end inside the Tester.
+  - **Environment teardown correctness.** Superseding a provisioned env now tears the old infra down
+    when the new provision targets a DIFFERENT provider identity (a config-change namespace switch, a
+    provider/type change, or the `infraless` flip) — best-effort, with the TTL reaper as the backstop
+    — instead of only tombstoning the registry row. Teardown + status now resolve the provider from
+    the env RECORD's stored provision type/engine (the handler that stood it up), not the
+    workspace-primary handler.
+  - **Named-gate pipeline authoring.** Built-in pipelines are authored with `definePipeline` +
+    named-step specs (`{ kind, gate, enabled }`) instead of fragile index-aligned `gates`/`enabled`
+    boolean arrays, so a gate is declared on its step by name and inserting a step can't shift a flag
+    onto the wrong one. The persisted wire shape is unchanged.
+  - Frontend: a `deployer` palette/step metadata entry (renders as "Deployer" rather than a generic
+    agent) and the localized `deployer_required_before_tester` conflict title.
+
+  Breaking (pre-1.0, acceptable): persisted built-in pipeline copies are offered a reseed to gain the
+  deployer step; a `kubernetes`/`custom` pipeline that previously relied on the Tester dead-ending is
+  now refused at launch until a Deployer is added or the service is set to docker-compose/infraless.
+
+### Patch Changes
+
+- Updated dependencies [1afa003]
+- Updated dependencies [f91b99d]
+  - @cat-factory/kernel@0.99.0
+  - @cat-factory/contracts@0.108.0
+
+## 0.72.1
+
+### Patch Changes
+
+- eef8612: fix(runners): forward subscription-harness `callMetrics` through the runner-pool result mapper
+
+  The Node self-hosted runner-pool transport (`HttpRunnerPoolProvider.coerceRunnerResult`)
+  rebuilds a finished job's result from a fixed allow-list and never copied `callMetrics`, so
+  a Claude Code / Codex run dispatched to a pool recorded zero rows in `llm_call_metrics` — the
+  Cloudflare and local transports return the harness view verbatim and were unaffected. Coerce
+  and forward `callMetrics` (validating each entry) so pool-backed subscription runs are
+  observed identically, restoring runtime symmetry.
+
+- Updated dependencies [bf31df7]
+  - @cat-factory/contracts@0.107.0
+  - @cat-factory/kernel@0.98.0
+
+## 0.72.0
+
+### Minor Changes
+
+- 6f9d935: Stack recipes & shared stacks (slice 6): preflight prerequisite checks with guided remediation.
+
+  A stack recipe can now declare machine `prerequisites: PreflightRef[]` — automated PROBE + human REMEDIATION checks for the inherently-manual one-time machine setup a complex compose repo needs (docker daemon reachable, free disk / RAM, container-registry login state, VPN reachability, mkcert CA, hosts-file entries, an env-file secrets marker). They are re-run at provision start: a failing REQUIRED check fails the provision fast with its copy-paste remediation in the provisioning log, instead of a mystery deep inside a 40-image pull (a non-required check is advisory — a warning). A `POST /workspaces/:ws/preflights/run` endpoint runs an arbitrary set of checks for the setup wizard's live re-check.
+
+  - Contracts: `PreflightCheckId` / `PreflightParams` / `PreflightRef` / `PreflightResult` (`preflights.ts`) + `prerequisites` on `stackRecipeSchema`; the `runPreflightsContract` route.
+  - Kernel: the runtime-bound `PreflightHostProbes` seam + `PreflightProbeOutcome`, and a `runPreflights` seam on `ProvisionEnvironmentRequest`.
+  - Integrations: `PreflightService` (runtime-neutral orchestration over the probe seam) + provision-start enforcement in `ComposeEnvironmentProvider`.
+  - Server: `PreflightController`.
+  - Local facade: `createDockerPreflightProbes` (the host probes over the docker CLI + `node:*`), wired only where the compose runtime is (a Docker-family host daemon). The probes are runtime-bound (local facade only, the documented compose exception); the declaration + API are runtime-neutral and the recipe rides the existing `provisioning` blob, so there is no migration. On the Worker / plain Node the preflight API 503s and a recipe that declares prerequisites fails loudly at provision.
+
+### Patch Changes
+
+- Updated dependencies [6f9d935]
+  - @cat-factory/contracts@0.106.0
+  - @cat-factory/kernel@0.97.0
+
+## 0.71.0
+
+### Minor Changes
+
+- dd6df12: feat(environments): attach per-PR compose stacks to their shared stacks (shared-stacks slice 5)
+
+  Wire a stack recipe's `sharedStackRefs` + `externalNetworks` through to the per-PR consumer
+  environment, so a complex compose repo can reach the long-lived shared infra it depends on (the
+  acme `acme-net` shape). This is the provider-integration slice of the stack-recipes initiative.
+
+  - **Provider-before-consumer bring-up.** `SharedStackService.ensureRefsUp(workspaceId, refs)`
+    brings each referenced shared stack up (via the idempotent `ensureUp`) IN ORDER and returns the
+    deduped union of the Docker networks they own — or a blocking `error` (never a throw) for a
+    missing ref, a failed bring-up, or a deployment with no host daemon. It is exposed to the compose
+    provider as the new `ProvisionEnvironmentRequest.ensureSharedStacks` seam (a kernel
+    `SharedStackEnsureResult`), bound in `EnvironmentProvisioningService.buildProvisionRequest`.
+  - **External-network attach.** `ComposeEnvironmentProvider.provisionRecipe` ensures the shared
+    stacks up (streaming one `shared stacks (N)` provisioning-log step) and then attaches the per-PR
+    project to `externalNetworks ∪ managedNetworks` via a new pure `attachExternalNetworks` folded
+    into `prepareRecipeComposeFiles`: each network not already declared external across the merged
+    `-f` layers is declared top-level `{ external: true }` and joined by every service (preserving
+    the implicit `default` connectivity; skipping a `network_mode`-pinned service). The attach
+    reasons about the MERGED stack (all `-f` layers together), not each layer in isolation, so it
+    never re-adds `default` to a service the base intentionally scoped, never lands `networks` on a
+    service whose `network_mode` sits in another layer (which compose rejects at `up`), and refuses —
+    rather than silently overwrites — a requested network whose name collides with a project-owned
+    network in the recipe.
+  - Execution stays local-facade-bound (the documented compose runtime-binding exception); the recipe
+    rides the existing persisted `provisioning` blob, so there is no migration. A recipe that
+    references shared stacks on a deployment without the lifecycle wired fails loudly.
+
+### Patch Changes
+
+- Updated dependencies [5490103]
+- Updated dependencies [e5b9462]
+- Updated dependencies [dd6df12]
+  - @cat-factory/contracts@0.105.0
+  - @cat-factory/kernel@0.96.0
+
 ## 0.70.1
 
 ### Patch Changes

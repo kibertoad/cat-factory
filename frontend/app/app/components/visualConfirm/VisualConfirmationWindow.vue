@@ -286,7 +286,7 @@ const canApprove = computed(
                     v-model="perViewNotes[p.view]"
                     rows="2"
                     :placeholder="t('visualConfirm.notePlaceholder', { view: p.view })"
-                    class="mt-1 w-full rounded-md border border-slate-700 bg-slate-950 px-2 py-1.5 text-[12px] text-slate-200 placeholder:text-slate-600 focus:border-amber-500 focus:outline-none"
+                    class="mt-1 w-full rounded-md border border-slate-700 bg-slate-950 px-2 py-1.5 text-[12px] text-slate-200 placeholder:text-slate-600 focus:border-amber-500 focus:outline-none focus-visible:ring-2 focus-visible:ring-amber-500/60"
                   />
                 </div>
               </div>
@@ -340,7 +340,7 @@ const canApprove = computed(
                 v-model="globalFindings"
                 rows="3"
                 :placeholder="t('visualConfirm.requestFix.placeholder')"
-                class="w-full rounded-md border border-slate-700 bg-slate-950 px-3 py-2 text-[13px] text-slate-200 placeholder:text-slate-600 focus:border-amber-500 focus:outline-none"
+                class="w-full rounded-md border border-slate-700 bg-slate-950 px-3 py-2 text-[13px] text-slate-200 placeholder:text-slate-600 focus:border-amber-500 focus:outline-none focus-visible:ring-2 focus-visible:ring-amber-500/60"
               />
               <div class="mt-2 flex items-center justify-between">
                 <span class="text-[11px] text-slate-500">

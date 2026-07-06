@@ -376,6 +376,8 @@ describe('rowToExecution', () => {
       hint: null,
       occurredAt: 1,
       lastSubtasks: null,
+      // The step the attempt failed at rides through unchanged (attributes the trail per step).
+      stepIndex: 2,
     }
     const detail = JSON.stringify({
       pipelineId: 'pl_1',
@@ -416,6 +418,35 @@ describe('rowToExecution', () => {
     // An empty trail is not written into detail (the key is omitted), so it reads back as [].
     const empty = executionToDetail({ ...rowToExecution(base), failureHistory: [] })
     expect(JSON.parse(empty).failureHistory).toBeUndefined()
+  })
+
+  it('defaults the prior-attempts outputHistory to an empty array when absent', () => {
+    expect(rowToExecution(base).outputHistory).toEqual([])
+  })
+
+  it('round-trips a successful-output trail through detail and drops garbage entries', () => {
+    const good = { stepIndex: 1, occurredAt: 5, output: 'the superseded spec', truncated: true }
+    const detail = JSON.stringify({
+      pipelineId: 'pl_1',
+      pipelineName: 'Quick',
+      steps: [],
+      currentStep: 0,
+      outputHistory: [
+        good,
+        // Structurally-broken entries are dropped, not surfaced (they'd fail the SPA re-validation).
+        { stepIndex: 2 },
+        { occurredAt: 3, output: 'no index' },
+        'nonsense',
+      ],
+    })
+    const mapped = rowToExecution({ ...base, detail })
+    expect(mapped.outputHistory).toEqual([good])
+    expect(() => v.parse(executionInstanceSchema, mapped)).not.toThrow()
+
+    // executionToDetail persists a non-empty trail and omits an empty one.
+    const persisted = executionToDetail({ ...rowToExecution(base), outputHistory: [good] })
+    expect(rowToExecution({ ...base, detail: persisted }).outputHistory).toEqual([good])
+    expect(JSON.parse(executionToDetail(rowToExecution(base))).outputHistory).toBeUndefined()
   })
 })
 

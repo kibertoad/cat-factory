@@ -39,6 +39,10 @@ export const CONFLICT_REASONS = [
   // An account-settings write tried to set a model-family policy on a deployment that does
   // not support it (plain local mode) — the policy is a hosted/mothership-only control.
   'model_policy_unsupported',
+  // A `docker-compose`/`kubernetes`/`custom` service's pipeline reaches a Tester / human-test /
+  // playwright step with no enabled `deployer` before it, so nothing would provision the env it
+  // needs — the run would dead-end inside the consumer. The Deployer is the single provisioner.
+  'deployer_required_before_tester',
 ] as const
 
 export type ConflictReason = (typeof CONFLICT_REASONS)[number]

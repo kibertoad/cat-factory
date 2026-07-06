@@ -16,7 +16,7 @@ import type {
 } from '@cat-factory/server'
 import { resolveMachineTokenTtlMs } from '@cat-factory/server'
 import { GITLAB_PUBLIC_API_BASE } from '@cat-factory/gitlab'
-import { DEFAULT_SPEND_PRICING, modelCostResolver } from '@cat-factory/spend'
+import { DEFAULT_SPEND_PRICING, budgetCapsOverlay, modelCostResolver } from '@cat-factory/spend'
 
 // Translate the Node process environment into the shared AppConfig contract. This is
 // the Node analogue of the Worker's `loadConfig(env)`: same SHAPE, different source.
@@ -274,7 +274,15 @@ export function loadNodeConfig(env: NodeJS.ProcessEnv): AppConfig {
   // The deployment-level BASE pricing (built-in table + the fallback currency/monthly-limit
   // a workspace inherits when it sets no budget of its own). The per-workspace budget moved
   // out of env (`SPEND_*`) onto the workspace settings row; the spend service overlays it.
-  const spend = DEFAULT_SPEND_PRICING
+  // The operator env caps (`BUDGET_MAX_MONTHLY_PER_ACCOUNT` / `BUDGET_MAX_MONTHLY_PER_USER`)
+  // ceiling the account/user budget tiers — see docs/environment-variables.md.
+  const spend = {
+    ...DEFAULT_SPEND_PRICING,
+    ...budgetCapsOverlay(
+      num(env.BUDGET_MAX_MONTHLY_PER_ACCOUNT),
+      num(env.BUDGET_MAX_MONTHLY_PER_USER),
+    ),
+  }
 
   return {
     agents: {
@@ -373,20 +381,16 @@ export function loadNodeConfig(env: NodeJS.ProcessEnv): AppConfig {
     // ENCRYPTION_KEY backs credential encryption at rest).
     documents: loadDocumentsConfig(env),
     tasks: loadTasksConfig(env),
-    // Ephemeral-environment provider integration: opt-in (a tenant rolls its own
-    // environment-management API), gated on ENVIRONMENTS_ENABLED + the shared
-    // ENCRYPTION_KEY (credentials are encrypted at rest), mirroring the Worker.
-    environments:
-      env.ENVIRONMENTS_ENABLED === 'true' && env.ENCRYPTION_KEY?.trim()
-        ? {
-            enabled: true,
-            encryptionKey: env.ENCRYPTION_KEY.trim(),
-            // Trusted-adapter escape hatch: permit an in-house env platform on an
-            // internal/VPN host (otherwise the strict public-https guard rejects it).
-            allowUrlHosts: csv(env.ENVIRONMENTS_ALLOW_URL_HOSTS),
-            allowHttpUrls: env.ENVIRONMENTS_ALLOW_HTTP_URLS === 'true',
-          }
-        : { enabled: false },
+    // Ephemeral-environment provider integration (a tenant rolls its own
+    // environment-management API): assembles from the shared ENCRYPTION_KEY that seals
+    // per-tenant credentials at rest, with no separate enable flag, mirroring the Worker.
+    environments: {
+      encryptionKey: env.ENCRYPTION_KEY?.trim(),
+      // Trusted-adapter escape hatch: permit an in-house env platform on an
+      // internal/VPN host (otherwise the strict public-https guard rejects it).
+      allowUrlHosts: csv(env.ENVIRONMENTS_ALLOW_URL_HOSTS),
+      allowHttpUrls: env.ENVIRONMENTS_ALLOW_HTTP_URLS === 'true',
+    },
     runners: runnersEncryptionKey
       ? {
           enabled: true,

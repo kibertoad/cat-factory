@@ -1,10 +1,12 @@
 import { describe, expect, it } from 'vitest'
-import { decideTesterInfra, type TesterInfraInput } from './tester-infra.logic.js'
+import {
+  decideTesterInfra,
+  needsDeployerBeforeConsumer,
+  type TesterInfraInput,
+} from './tester-infra.logic.js'
 
 const base: TesterInfraInput = {
   provisionType: undefined,
-  localTestInfraSupported: true,
-  hasComposePath: true,
   handlerResolves: true,
 }
 
@@ -17,49 +19,21 @@ describe('decideTesterInfra', () => {
     expect(decideTesterInfra({ ...base, provisionType: 'infraless' })).toEqual({ ok: true })
   })
 
-  describe('docker-compose (stood up in-container)', () => {
-    it('passes on a DinD-capable runtime with a compose path', () => {
-      expect(
-        decideTesterInfra({
-          ...base,
-          provisionType: 'docker-compose',
-          localTestInfraSupported: true,
-          hasComposePath: true,
-        }),
-      ).toEqual({ ok: true })
-    })
+  describe('docker-compose / kubernetes / custom (provisioned by a workspace handler)', () => {
+    for (const provisionType of ['docker-compose', 'kubernetes', 'custom'] as const) {
+      it(`passes a ${provisionType} service when a handler resolves`, () => {
+        expect(decideTesterInfra({ ...base, provisionType, handlerResolves: true })).toEqual({
+          ok: true,
+        })
+      })
 
-    it('refuses on a runtime that cannot nest containers (Apple `container`)', () => {
-      expect(
-        decideTesterInfra({
-          ...base,
-          provisionType: 'docker-compose',
-          localTestInfraSupported: false,
-        }),
-      ).toEqual({ ok: false, reason: 'limited-local' })
-    })
-
-    it('refuses a DinD-capable runtime when no compose path is declared (nothing to stand up)', () => {
-      expect(
-        decideTesterInfra({
-          ...base,
-          provisionType: 'docker-compose',
-          localTestInfraSupported: true,
-          hasComposePath: false,
-        }),
-      ).toEqual({ ok: false, reason: 'compose-unconfigured' })
-    })
-
-    it('refuses on no-DinD before the compose-path check (limited mode wins)', () => {
-      expect(
-        decideTesterInfra({
-          ...base,
-          provisionType: 'docker-compose',
-          localTestInfraSupported: false,
-          hasComposePath: false,
-        }),
-      ).toEqual({ ok: false, reason: 'limited-local' })
-    })
+      it(`refuses a ${provisionType} service when no handler resolves`, () => {
+        expect(decideTesterInfra({ ...base, provisionType, handlerResolves: false })).toEqual({
+          ok: false,
+          reason: 'provision-type-unhandled',
+        })
+      })
+    }
   })
 
   describe('frontend (self-contained UI test)', () => {
@@ -98,28 +72,61 @@ describe('decideTesterInfra', () => {
         decideTesterInfra({
           frontend: { hasServiceBindings: true, hasLiveService: true },
           provisionType: 'docker-compose',
-          localTestInfraSupported: false,
-          hasComposePath: false,
           handlerResolves: false,
         }),
       ).toEqual({ ok: true })
     })
   })
+})
 
-  describe('kubernetes / custom (provisioned by a workspace handler)', () => {
-    for (const provisionType of ['kubernetes', 'custom'] as const) {
-      it(`passes a ${provisionType} service when a handler resolves`, () => {
-        expect(decideTesterInfra({ ...base, provisionType, handlerResolves: true })).toEqual({
-          ok: true,
-        })
-      })
+describe('needsDeployerBeforeConsumer', () => {
+  it('refuses a kubernetes chain whose tester has no deployer before it', () => {
+    expect(
+      needsDeployerBeforeConsumer(['coder', 'tester-api', 'merger'], undefined, 'kubernetes'),
+    ).toBe(true)
+  })
 
-      it(`refuses a ${provisionType} service when no handler resolves`, () => {
-        expect(decideTesterInfra({ ...base, provisionType, handlerResolves: false })).toEqual({
-          ok: false,
-          reason: 'provision-type-unhandled',
-        })
-      })
-    }
+  it('passes once a deployer precedes the first consumer', () => {
+    expect(
+      needsDeployerBeforeConsumer(
+        ['coder', 'deployer', 'tester-api', 'merger'],
+        undefined,
+        'custom',
+      ),
+    ).toBe(false)
+  })
+
+  it('passes a chain with no env-consumer at all', () => {
+    expect(
+      needsDeployerBeforeConsumer(['coder', 'reviewer', 'merger'], undefined, 'kubernetes'),
+    ).toBe(false)
+  })
+
+  it('fires for docker-compose (now Deployer-provisioned like kubernetes/custom)', () => {
+    expect(
+      needsDeployerBeforeConsumer(['coder', 'tester-api', 'merger'], undefined, 'docker-compose'),
+    ).toBe(true)
+  })
+
+  it('never fires for infraless / undeclared services', () => {
+    const chain = ['coder', 'tester-api', 'merger']
+    expect(needsDeployerBeforeConsumer(chain, undefined, 'infraless')).toBe(false)
+    expect(needsDeployerBeforeConsumer(chain, undefined, undefined)).toBe(false)
+  })
+
+  it('covers human-test and playwright as env-consumers', () => {
+    expect(needsDeployerBeforeConsumer(['coder', 'human-test'], undefined, 'kubernetes')).toBe(true)
+    expect(needsDeployerBeforeConsumer(['coder', 'playwright'], undefined, 'kubernetes')).toBe(true)
+  })
+
+  it('ignores a DISABLED deployer but honours a disabled consumer', () => {
+    // A disabled deployer never runs, so it does not satisfy the guard.
+    expect(
+      needsDeployerBeforeConsumer(['deployer', 'tester-api'], [false, true], 'kubernetes'),
+    ).toBe(true)
+    // A disabled consumer imposes no requirement.
+    expect(needsDeployerBeforeConsumer(['coder', 'tester-api'], [true, false], 'kubernetes')).toBe(
+      false,
+    )
   })
 })

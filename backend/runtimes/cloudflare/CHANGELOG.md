@@ -1,5 +1,242 @@
 # @cat-factory/worker
 
+## 0.74.1
+
+### Patch Changes
+
+- Updated dependencies [10787c4]
+  - @cat-factory/contracts@0.110.1
+  - @cat-factory/kernel@0.101.1
+  - @cat-factory/orchestration@0.83.1
+  - @cat-factory/integrations@0.73.5
+  - @cat-factory/agents@0.40.5
+  - @cat-factory/consensus@0.9.19
+  - @cat-factory/eks@0.1.17
+  - @cat-factory/gates@0.4.16
+  - @cat-factory/gitlab@0.7.19
+  - @cat-factory/prompt-fragments@0.10.18
+  - @cat-factory/server@0.94.1
+  - @cat-factory/spend@0.11.2
+  - @cat-factory/caching@0.4.20
+  - @cat-factory/observability-langfuse@0.7.151
+  - @cat-factory/provider-cloudflare@0.7.160
+
+## 0.74.0
+
+### Minor Changes
+
+- c66362f: Remove the `ENVIRONMENTS_ENABLED` deployment flag; the ephemeral-environment
+  integration now assembles wherever the shared `ENCRYPTION_KEY` is set, the same
+  "always on where the key is present" model as the document/task sources.
+
+  The flag was a footgun: it defaulted off and its only effect was to make the whole
+  integration silently inert (auto-detect 503ing with `unavailable`) even when the real
+  prerequisites — an encryption key plus a registered per-workspace connection — were
+  present. Whether a workspace provisions anything is already governed by whether it
+  connects a provider and whether its pipeline includes a `deployer`/`tester` step, so to
+  keep environments out of a pipeline you simply omit those steps. `EnvironmentsConfig`
+  drops its `enabled` field and the module gates on `encryptionKey` presence in all three
+  runtimes.
+
+  Breaking: `ENVIRONMENTS_ENABLED` is no longer read; remove it from deployment config
+  (setting it has no effect). The inspector's dedicated "ephemeral environments aren't
+  enabled" auto-detect panel is removed with it, since that off state no longer exists.
+
+### Patch Changes
+
+- Updated dependencies [c66362f]
+  - @cat-factory/server@0.94.0
+
+## 0.73.1
+
+### Patch Changes
+
+- Updated dependencies [f596090]
+  - @cat-factory/contracts@0.110.0
+  - @cat-factory/kernel@0.101.0
+  - @cat-factory/orchestration@0.83.0
+  - @cat-factory/server@0.93.0
+  - @cat-factory/agents@0.40.4
+  - @cat-factory/consensus@0.9.18
+  - @cat-factory/eks@0.1.16
+  - @cat-factory/gates@0.4.15
+  - @cat-factory/gitlab@0.7.18
+  - @cat-factory/integrations@0.73.4
+  - @cat-factory/prompt-fragments@0.10.17
+  - @cat-factory/spend@0.11.1
+  - @cat-factory/caching@0.4.19
+  - @cat-factory/observability-langfuse@0.7.150
+  - @cat-factory/provider-cloudflare@0.7.159
+
+## 0.73.0
+
+### Minor Changes
+
+- 9ea1e77: Tiered spend budgets (account / workspace / user) with operator hard caps.
+
+  Budgets are now tracked and enforced across three tiers: the existing per-workspace
+  monthly limit, a per-account limit, and a per-user limit. A run pauses when any applicable
+  tier is exhausted. All three tiers are configurable and visible in the Budget settings
+  screen.
+
+  Two new environment variables (`BUDGET_MAX_MONTHLY_PER_ACCOUNT`,
+  `BUDGET_MAX_MONTHLY_PER_USER`), read by the Node and Cloudflare config loaders, set
+  operator hard ceilings on the account/user tiers; the UI cannot exceed a configured cap and
+  shows it on the budget screen. See `docs/environment-variables.md` and
+  `docs/initiatives/tiered-budgets.md`.
+
+  Breaking (pre-1.0, no data migration): the `token_usage` ledger gains nullable
+  `account_id`/`user_id` columns (existing rows are unattributed and excluded from the new
+  account/user rollups until re-metered); `TokenUsageRecord`, `RecordUsageInput`, and
+  `SpendPricing` gained fields; `SpendService.isOverBudget` now takes an optional tier scope.
+  A new `user_settings` table and `GET/PUT /user-settings` endpoint carry the user-tier
+  budget.
+
+### Patch Changes
+
+- Updated dependencies [9ea1e77]
+  - @cat-factory/contracts@0.109.0
+  - @cat-factory/kernel@0.100.0
+  - @cat-factory/spend@0.11.0
+  - @cat-factory/orchestration@0.82.0
+  - @cat-factory/server@0.92.0
+  - @cat-factory/agents@0.40.3
+  - @cat-factory/consensus@0.9.17
+  - @cat-factory/eks@0.1.15
+  - @cat-factory/gates@0.4.14
+  - @cat-factory/gitlab@0.7.17
+  - @cat-factory/integrations@0.73.3
+  - @cat-factory/prompt-fragments@0.10.16
+  - @cat-factory/caching@0.4.18
+  - @cat-factory/observability-langfuse@0.7.149
+  - @cat-factory/provider-cloudflare@0.7.158
+
+## 0.72.5
+
+### Patch Changes
+
+- Updated dependencies [e66accb]
+  - @cat-factory/orchestration@0.81.0
+  - @cat-factory/server@0.91.0
+  - @cat-factory/contracts@0.108.1
+  - @cat-factory/agents@0.40.2
+  - @cat-factory/consensus@0.9.16
+  - @cat-factory/eks@0.1.14
+  - @cat-factory/gates@0.4.13
+  - @cat-factory/gitlab@0.7.16
+  - @cat-factory/integrations@0.73.2
+  - @cat-factory/kernel@0.99.1
+  - @cat-factory/prompt-fragments@0.10.15
+  - @cat-factory/spend@0.10.109
+  - @cat-factory/provider-cloudflare@0.7.157
+  - @cat-factory/caching@0.4.17
+  - @cat-factory/observability-langfuse@0.7.148
+
+## 0.72.4
+
+### Patch Changes
+
+- Updated dependencies [9cc02a0]
+  - @cat-factory/integrations@0.73.1
+  - @cat-factory/eks@0.1.13
+  - @cat-factory/orchestration@0.80.1
+  - @cat-factory/server@0.90.3
+
+## 0.72.3
+
+### Patch Changes
+
+- Updated dependencies [1afa003]
+- Updated dependencies [f91b99d]
+  - @cat-factory/kernel@0.99.0
+  - @cat-factory/orchestration@0.80.0
+  - @cat-factory/integrations@0.73.0
+  - @cat-factory/contracts@0.108.0
+  - @cat-factory/agents@0.40.1
+  - @cat-factory/caching@0.4.16
+  - @cat-factory/consensus@0.9.15
+  - @cat-factory/eks@0.1.12
+  - @cat-factory/gates@0.4.12
+  - @cat-factory/gitlab@0.7.15
+  - @cat-factory/observability-langfuse@0.7.147
+  - @cat-factory/provider-cloudflare@0.7.156
+  - @cat-factory/server@0.90.2
+  - @cat-factory/spend@0.10.108
+  - @cat-factory/prompt-fragments@0.10.14
+
+## 0.72.2
+
+### Patch Changes
+
+- Updated dependencies [eef8612]
+- Updated dependencies [bf31df7]
+  - @cat-factory/integrations@0.72.1
+  - @cat-factory/contracts@0.107.0
+  - @cat-factory/agents@0.40.0
+  - @cat-factory/kernel@0.98.0
+  - @cat-factory/eks@0.1.11
+  - @cat-factory/orchestration@0.79.1
+  - @cat-factory/server@0.90.1
+  - @cat-factory/consensus@0.9.14
+  - @cat-factory/gates@0.4.11
+  - @cat-factory/gitlab@0.7.14
+  - @cat-factory/prompt-fragments@0.10.13
+  - @cat-factory/spend@0.10.107
+  - @cat-factory/provider-cloudflare@0.7.155
+  - @cat-factory/caching@0.4.15
+  - @cat-factory/observability-langfuse@0.7.146
+
+## 0.72.1
+
+### Patch Changes
+
+- Updated dependencies [6f9d935]
+  - @cat-factory/contracts@0.106.0
+  - @cat-factory/kernel@0.97.0
+  - @cat-factory/integrations@0.72.0
+  - @cat-factory/orchestration@0.79.0
+  - @cat-factory/server@0.90.0
+  - @cat-factory/agents@0.39.4
+  - @cat-factory/consensus@0.9.13
+  - @cat-factory/eks@0.1.10
+  - @cat-factory/gates@0.4.10
+  - @cat-factory/gitlab@0.7.13
+  - @cat-factory/prompt-fragments@0.10.12
+  - @cat-factory/spend@0.10.106
+  - @cat-factory/caching@0.4.14
+  - @cat-factory/observability-langfuse@0.7.145
+  - @cat-factory/provider-cloudflare@0.7.154
+
+## 0.72.0
+
+### Minor Changes
+
+- 5490103: Surface web search on container agent run details, and store/display performed search queries as telemetry.
+
+  - Container steps now carry a `search` availability fact (`{ available, provider }`), resolved backend-side at dispatch from the run's account web-search keys (else the deployment default). The observability drill-down shows whether web search was available and which provider (Brave / SearXNG) served the run — a static per-run fact, not gated by prompt-recording.
+  - New `agent_search_queries` telemetry sink records every web search a container agent performs through the backend search proxy (query, provider, result count), gated by the same double switch as agent-context snapshots (`LLM_RECORD_PROMPTS` + the workspace `storeAgentContext` setting) and pruned on the same telemetry retention window. Mirrored across the D1 (Cloudflare) and Drizzle/Postgres (Node) stores with a cross-runtime conformance suite, and surfaced on demand via `GET /workspaces/:ws/executions/:executionId/search-queries` in a new "Web search" observability view.
+
+### Patch Changes
+
+- Updated dependencies [5490103]
+- Updated dependencies [e5b9462]
+- Updated dependencies [dd6df12]
+  - @cat-factory/contracts@0.105.0
+  - @cat-factory/kernel@0.96.0
+  - @cat-factory/server@0.89.0
+  - @cat-factory/orchestration@0.78.0
+  - @cat-factory/integrations@0.71.0
+  - @cat-factory/agents@0.39.3
+  - @cat-factory/consensus@0.9.12
+  - @cat-factory/eks@0.1.9
+  - @cat-factory/gates@0.4.9
+  - @cat-factory/gitlab@0.7.12
+  - @cat-factory/prompt-fragments@0.10.11
+  - @cat-factory/spend@0.10.105
+  - @cat-factory/caching@0.4.13
+  - @cat-factory/observability-langfuse@0.7.144
+  - @cat-factory/provider-cloudflare@0.7.153
+
 ## 0.71.0
 
 ### Minor Changes

@@ -1,6 +1,7 @@
 <script setup lang="ts">
 import { computed, ref, watch } from 'vue'
 import { apiErrorEnvelope } from '~/composables/api/errors'
+import SecretInput from '~/components/common/SecretInput.vue'
 
 const auth = useAuthStore()
 const { t } = useI18n()
@@ -320,9 +321,8 @@ const noSignInMethod = computed(
           size="lg"
           class="w-full"
         />
-        <UInput
+        <SecretInput
           v-model="password"
-          type="password"
           required
           :placeholder="t('auth.login.passwordPlaceholder')"
           icon="i-lucide-lock"
@@ -395,9 +395,8 @@ const noSignInMethod = computed(
               {{ PROVIDER_LABELS[p] }}
             </UButton>
           </div>
-          <UInput
+          <SecretInput
             v-model="remotePatToken"
-            type="password"
             required
             :placeholder="
               t('auth.login.patPlaceholder', { provider: PROVIDER_LABELS[remotePatProvider] })

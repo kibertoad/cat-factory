@@ -1,5 +1,63 @@
 # @cat-factory/prompt-fragments
 
+## 0.10.18
+
+### Patch Changes
+
+- Updated dependencies [10787c4]
+  - @cat-factory/contracts@0.110.1
+
+## 0.10.17
+
+### Patch Changes
+
+- Updated dependencies [f596090]
+  - @cat-factory/contracts@0.110.0
+
+## 0.10.16
+
+### Patch Changes
+
+- Updated dependencies [9ea1e77]
+  - @cat-factory/contracts@0.109.0
+
+## 0.10.15
+
+### Patch Changes
+
+- Updated dependencies [e66accb]
+  - @cat-factory/contracts@0.108.1
+
+## 0.10.14
+
+### Patch Changes
+
+- Updated dependencies [1afa003]
+- Updated dependencies [f91b99d]
+  - @cat-factory/contracts@0.108.0
+
+## 0.10.13
+
+### Patch Changes
+
+- Updated dependencies [bf31df7]
+  - @cat-factory/contracts@0.107.0
+
+## 0.10.12
+
+### Patch Changes
+
+- Updated dependencies [6f9d935]
+  - @cat-factory/contracts@0.106.0
+
+## 0.10.11
+
+### Patch Changes
+
+- Updated dependencies [5490103]
+- Updated dependencies [e5b9462]
+  - @cat-factory/contracts@0.105.0
+
 ## 0.10.10
 
 ### Patch Changes

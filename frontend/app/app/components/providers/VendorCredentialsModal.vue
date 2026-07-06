@@ -8,6 +8,7 @@
 import { computed, ref, watch } from 'vue'
 import type { SubscriptionVendor } from '~/types/domain'
 import IntegrationBackTitle from '~/components/layout/IntegrationBackTitle.vue'
+import SecretInput from '~/components/common/SecretInput.vue'
 
 const { t, n } = useI18n()
 const ui = useUiStore()
@@ -215,11 +216,10 @@ function vendorLabel(v: SubscriptionVendor): string {
                 />
               </UFormField>
               <UFormField :label="t('providers.vendorCredentials.tokenField')">
-                <UTextarea
+                <SecretInput
                   v-model="token"
-                  :rows="3"
                   :placeholder="tokenPlaceholder"
-                  class="font-mono"
+                  class="w-full font-mono"
                 />
               </UFormField>
               <div class="flex justify-end">

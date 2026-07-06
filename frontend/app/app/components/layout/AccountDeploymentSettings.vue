@@ -1,6 +1,7 @@
 <script setup lang="ts">
 import { computed, nextTick, onMounted, reactive, ref, watch } from 'vue'
 import type { ContentStorageBackend, ContentStorageConfig } from '~/types/accountSettings'
+import SecretInput from '~/components/common/SecretInput.vue'
 
 // Deployment integration secrets for an account (admin only): the Slack app OAuth
 // credentials, the container web-search upstream keys, and the binary-artifact (screenshot)
@@ -383,9 +384,8 @@ async function clearWeb() {
           :placeholder="t('layout.accountDeployment.slack.clientId')"
           size="sm"
         />
-        <UInput
+        <SecretInput
           v-model="slack.clientSecret"
-          type="password"
           :placeholder="t('layout.accountDeployment.slack.clientSecret')"
           size="sm"
         />
@@ -445,9 +445,8 @@ async function clearWeb() {
           :placeholder="t('layout.accountDeployment.linear.clientId')"
           size="sm"
         />
-        <UInput
+        <SecretInput
           v-model="linear.clientSecret"
-          type="password"
           :placeholder="t('layout.accountDeployment.linear.clientSecret')"
           size="sm"
         />
@@ -498,9 +497,8 @@ async function clearWeb() {
         {{ t('layout.accountDeployment.web.description') }}
       </p>
       <div class="grid grid-cols-1 gap-2 sm:grid-cols-3">
-        <UInput
+        <SecretInput
           v-model="web.braveApiKey"
-          type="password"
           :placeholder="t('layout.accountDeployment.web.braveKey')"
           size="sm"
         />
@@ -509,9 +507,8 @@ async function clearWeb() {
           :placeholder="t('layout.accountDeployment.web.searxngUrl')"
           size="sm"
         />
-        <UInput
+        <SecretInput
           v-model="web.searxngApiKey"
-          type="password"
           :placeholder="t('layout.accountDeployment.web.searxngKey')"
           size="sm"
         />
@@ -628,15 +625,13 @@ async function clearWeb() {
           </UBadge>
         </div>
         <div class="grid grid-cols-1 gap-2 sm:grid-cols-2">
-          <UInput
+          <SecretInput
             v-model="cs.accessKeyId"
-            type="password"
             :placeholder="t('layout.accountDeployment.contentStorage.accessKeyId')"
             size="sm"
           />
-          <UInput
+          <SecretInput
             v-model="cs.secretAccessKey"
-            type="password"
             :placeholder="t('layout.accountDeployment.contentStorage.secretAccessKey')"
             size="sm"
           />

@@ -8,6 +8,7 @@
 // single-connection backend, which still carries the manifest source inline).
 import { computed, reactive, ref, watch } from 'vue'
 import { KUBERNETES_ENV_TOKEN_SECRET_KEY } from '@cat-factory/contracts'
+import SecretInput from '~/components/common/SecretInput.vue'
 import type {
   EnvironmentHandlerView,
   InfraEngine,
@@ -351,10 +352,9 @@ async function copyAutoSetupCommand() {
           {{ t('settings.infrastructure.kubernetesEngine.tokenSaved') }}
         </span>
       </template>
-      <UInput
+      <SecretInput
         v-model="apiToken"
-        type="password"
-        class="font-mono"
+        class="w-full font-mono"
         autocomplete="off"
         :placeholder="
           tokenStored

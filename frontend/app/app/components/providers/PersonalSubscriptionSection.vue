@@ -6,6 +6,7 @@
 // such a run (cached locally so it's usually transparent). Recurring schedules can't use them.
 import { computed, onMounted, ref } from 'vue'
 import type { SubscriptionVendor } from '~/types/domain'
+import SecretInput from '~/components/common/SecretInput.vue'
 
 const personal = usePersonalSubscriptionsStore()
 const auth = useAuthStore()
@@ -233,19 +234,17 @@ async function disconnect(v: SubscriptionVendor) {
         />
       </UFormField>
       <UFormField :label="selectedMeta.tokenLabel">
-        <UTextarea
+        <SecretInput
           v-model="token"
-          :rows="2"
           :disabled="needsSignIn"
           :placeholder="selectedMeta.tokenPlaceholder"
-          class="font-mono"
+          class="w-full font-mono"
         />
       </UFormField>
       <div class="flex flex-wrap gap-3">
         <UFormField :label="t('personalSubscriptions.passwordField')" class="flex-1">
-          <UInput
+          <SecretInput
             v-model="password"
-            type="password"
             :disabled="needsSignIn"
             :placeholder="t('personalSubscriptions.passwordPlaceholder')"
           />

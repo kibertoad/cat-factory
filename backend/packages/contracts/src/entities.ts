@@ -853,12 +853,47 @@ export const agentFailureSchema = v.object({
   detail: v.nullable(v.string()),
   /** Where to look next (e.g. "check the container logs for this job id"). */
   hint: v.nullable(v.string()),
+  /**
+   * Optional machine-readable cause code so the SPA can render precise, actionable guidance
+   * without string-matching the prose `message`/`detail` (the failure analogue of a
+   * {@link ConflictReason}). Kind-scoped: an `environment` failure carries an
+   * {@link EnvironmentFailureReason} (e.g. `deploy_runner_unwired`). Absent when the cause has
+   * no client-specific handling.
+   */
+  reason: v.optional(v.nullable(v.string())),
   /** Epoch ms the failure was recorded. */
   occurredAt: v.number(),
   /** Last subtask counts seen before the failure, for context (null if none). */
   lastSubtasks: v.nullable(stepSubtasksSchema),
+  /**
+   * Index of the pipeline step that was in flight when the run failed (the run's
+   * `currentStep` at fail time), so the per-attempt failure trail can be attributed to a
+   * specific step — the step-detail overlay filters its "execution history" to the failures
+   * recorded for that step. Absent on a bootstrap failure (no steps) and on legacy records.
+   */
+  stepIndex: v.optional(v.number()),
 })
 export type AgentFailure = v.InferOutput<typeof agentFailureSchema>
+
+/**
+ * A SUCCESSFUL step attempt whose output a restart later superseded — the positive
+ * complement of {@link agentFailureSchema}. When a run is restarted from a step, that
+ * step and every later one are reset and their `output` dropped; the ones that had
+ * already succeeded are recorded here so the step-detail overlay's "execution history"
+ * surfaces what a superseded attempt PRODUCED, not only the errors. Attributed to a
+ * `stepIndex` exactly like a failure, and rides in the run's `detail` JSON (no column).
+ */
+export const priorStepOutputSchema = v.object({
+  /** Index of the pipeline step that produced this output (see {@link agentFailureSchema} `stepIndex`). */
+  stepIndex: v.number(),
+  /** Epoch ms the superseded attempt finished (its `finishedAt`, else when it was recorded). */
+  occurredAt: v.number(),
+  /** The attempt's prose/JSON output, clipped to a stored-size bound when {@link truncated}. */
+  output: v.string(),
+  /** Whether {@link output} was clipped because the original exceeded the per-entry size bound. */
+  truncated: v.optional(v.boolean()),
+})
+export type PriorStepOutput = v.InferOutput<typeof priorStepOutputSchema>
 
 /**
  * State a polling **gate** step carries (today `ci` and `conflicts`). A gate is
@@ -1250,6 +1285,34 @@ export const runContainerSchema = v.object({
 })
 export type RunContainer = v.InferOutput<typeof runContainerSchema>
 
+/** The web-search backend a run's container searches through, when search is available. */
+export const webSearchProviderSchema = v.picklist(['brave', 'searxng'])
+export type WebSearchProvider = v.InferOutput<typeof webSearchProviderSchema>
+
+/**
+ * Narrow a free-text stored value (a telemetry `provider` column, which is plain TEXT) back
+ * to the {@link WebSearchProvider} union, or null when it isn't one. The single source of
+ * truth both telemetry stores use to map their rows, so the union is defined once.
+ */
+export function isWebSearchProvider(value: unknown): value is WebSearchProvider {
+  return value === 'brave' || value === 'searxng'
+}
+
+/**
+ * Whether a container agent had web search available for its run, and — when it did —
+ * which upstream backend served it (resolved backend-side at dispatch from the run's
+ * account keys, else the deployment default). Surfaced on a container step so the run
+ * details can say "Web search: SearXNG" vs "Web search: unavailable"; it is a static
+ * dispatch-time fact, NOT gated by prompt-recording telemetry (the performed queries
+ * are — see the agent-search-query observability sink). `provider` is null when search
+ * was unavailable.
+ */
+export const webSearchAvailabilitySchema = v.object({
+  available: v.boolean(),
+  provider: v.nullable(webSearchProviderSchema),
+})
+export type WebSearchAvailability = v.InferOutput<typeof webSearchAvailabilitySchema>
+
 /**
  * The TERMINAL per-frame outcome of one environment a `deployer` step provisioned during a
  * multi-env fan-out (the task's own service frame + every involved-service frame): `ready`
@@ -1517,6 +1580,14 @@ export const pipelineStepSchema = v.object({
    * non-container steps and steps not yet dispatched. See {@link runContainerSchema}.
    */
   container: v.optional(v.nullable(runContainerSchema)),
+  /**
+   * Whether web search was available to this container step, and which upstream backend
+   * served it. Set at dispatch (a static per-run fact resolved from the account's
+   * web-search keys, else the deployment default). Only ever set on async (container)
+   * steps; absent on non-container steps and steps not yet dispatched. Distinct from the
+   * telemetry-gated per-query log — this is always surfaced. See {@link webSearchAvailabilitySchema}.
+   */
+  search: v.optional(v.nullable(webSearchAvailabilitySchema)),
   decision: v.nullable(decisionSchema),
   /**
    * Whether a human approval gate fires after this step completes. Copied from
@@ -1787,6 +1858,17 @@ export const executionInstanceSchema = v.object({
    */
   failureHistory: v.optional(v.array(agentFailureSchema)),
   /**
+   * Successful outputs from the run's PRIOR attempts that a restart discarded, oldest→newest —
+   * the positive complement of {@link failureHistory}. A restart-from-step resets the chosen
+   * step and every later one, dropping their `output`; those that had already SUCCEEDED are
+   * recorded here (attributed by `stepIndex`) so the step-detail overlay's execution history
+   * surfaces the successful outputs a restart superseded, not only the errors. Bounded in count
+   * and per-entry size so the run's `detail` JSON doesn't bloat. Absent/empty for a run never
+   * restarted past a completed step (a plain retry re-runs only unfinished steps, so it records
+   * nothing).
+   */
+  outputHistory: v.optional(v.array(priorStepOutputSchema)),
+  /**
    * Non-fatal advisories computed once at run start — today the frontend UI-test flow's
    * resolved-binding notes ({@link buildFrontendRunNotes}: duplicate env vars, or a partial-live
    * set of bound services where some fall back to WireMock). Mirrors the harness's own
@@ -1845,11 +1927,12 @@ export const workspaceSchema = v.object({
 export type Workspace = v.InferOutput<typeof workspaceSchema>
 
 /**
- * The spend safeguard's view of the current billing period. Token usage is
- * tracked per LLM call and priced into a single currency; once `costSpent`
- * reaches `costLimit` the engine pauses runs and the frontend shows a warning.
- * Global across all workspaces (an operator's budget is org-wide), attached to
- * every snapshot by the worker so the client can render the warning anywhere.
+ * The spend safeguard's view of the current billing period for one budget tier.
+ * Token usage is tracked per LLM call and priced into a single currency; once
+ * `costSpent` reaches `costLimit` the engine pauses runs and the frontend shows a
+ * warning. The same shape describes each tier — workspace, account, and user — with
+ * the tier's own spent/limit. Attached to every snapshot by the facade so the client
+ * can render the warning anywhere.
  */
 export const spendStatusSchema = v.object({
   /** Start of the current billing period (epoch ms; calendar month, UTC). */
@@ -1868,6 +1951,23 @@ export const spendStatusSchema = v.object({
   exceeded: v.boolean(),
 })
 export type SpendStatus = v.InferOutput<typeof spendStatusSchema>
+
+/**
+ * Operator-configured hard ceilings on the account- and user-tier monthly budgets,
+ * from the deployment env vars `BUDGET_MAX_MONTHLY_PER_ACCOUNT` /
+ * `BUDGET_MAX_MONTHLY_PER_USER`. Null ⇒ that tier has no operator ceiling. Surfaced
+ * to the SPA so the budget configuration screens can show the hard limit and prevent
+ * a user from configuring a value above it. Values are in the base pricing currency.
+ */
+export const budgetCapsSchema = v.object({
+  /** Max monthly budget any account may configure. Null ⇒ no operator ceiling. */
+  accountMonthlyLimitMax: v.nullable(v.number()),
+  /** Max monthly budget any user may configure. Null ⇒ no operator ceiling. */
+  userMonthlyLimitMax: v.nullable(v.number()),
+  /** ISO 4217 currency the caps are expressed in (the base pricing currency). */
+  currency: v.string(),
+})
+export type BudgetCaps = v.InferOutput<typeof budgetCapsSchema>
 
 // The workspace snapshot schema lives in ./snapshot — it references
 // `bootstrapJobSchema` from ./bootstrap, which itself imports from this file, so

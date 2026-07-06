@@ -3,7 +3,8 @@
     "loading": "Ładowanie…",
     "loadingBoard": "Ładowanie tablicy…",
     "backendUnreachable": "Nie można połączyć się z backendem",
-    "reconnecting": "Ponowne łączenie…"
+    "reconnecting": "Ponowne łączenie…",
+    "offline": "Brak aktualizacji na żywo"
   },
   "language": {
     "switcher": "Język",
@@ -39,6 +40,8 @@
       "reconfigureHint": "Możesz skonfigurować to ponownie później."
     },
     "copied": "Skopiowano do schowka",
+    "reveal": "Pokaż",
+    "hide": "Ukryj",
     "disconnect": "Rozłącz",
     "copyFailed": "Nie udało się skopiować do schowka",
     "revoke": "Unieważnij",
@@ -51,7 +54,10 @@
       "cleared": "Wyczyszczono {name}",
       "destroyed": "Zniszczono {name}"
     },
-    "undo": "Cofnij"
+    "undo": "Cofnij",
+    "back": "Wstecz",
+    "next": "Dalej",
+    "done": "Gotowe"
   },
   "nav": {
     "menu": "Menu nawigacji",
@@ -72,7 +78,8 @@
     "workspaceSettings": "Ustawienia obszaru roboczego",
     "modelConfiguration": "Konfiguracja modelu",
     "accountSettings": "Ustawienia konta",
-    "infrastructure": "Infrastruktura"
+    "infrastructure": "Infrastruktura",
+    "environmentSetup": "Konfiguracja środowiska"
   },
   "board": {
     "toast": {
@@ -81,6 +88,7 @@
       "moveFailed": "Nie udało się przenieść",
       "deleteFailed": "Nie udało się usunąć",
       "linkFailed": "Nie udało się powiązać zadań",
+      "unlinkFailed": "Nie udało się usunąć zależności",
       "recurringDeleteFailed": "Nie udało się usunąć cyklicznego pipeline'u",
       "deleted": "Usunięto \"{name}\"",
       "moved": "Przeniesiono \"{name}\""
@@ -104,7 +112,11 @@
       "spendTitle": "Wydatki na tokeny w tym miesiącu",
       "spendLimitReached": "Osiągnięto limit wydatków: uruchomienia wstrzymane",
       "serviceAdded": "Dodano {title}",
-      "serviceAddFailed": "Nie udało się dodać usługi"
+      "serviceAddFailed": "Nie udało się dodać usługi",
+      "zoomOut": "Pomniejsz",
+      "zoomIn": "Powiększ",
+      "fitView": "Dopasuj do zawartości",
+      "resetZoom": "Zresetuj powiększenie do 100%"
     },
     "canvas": {
       "emptyTitle": "Twoja tablica jest pusta",
@@ -264,6 +276,9 @@
       "stalled": "Uruchomienie utknęło",
       "retryBootstrap": "Ponów inicjalizację",
       "retryRun": "Ponów uruchomienie",
+      "environmentSetup": "Skonfiguruj środowiska",
+      "deployRunnerSetup": "Skonfiguruj pulę runnerów",
+      "environmentLocalHint": "Lokalne środowiska tymczasowe wymagają środowiska uruchomieniowego wdrożenia do uruchomienia kubectl/kustomize/helm. Ustaw {runtime} w pliku .env: tryb natywny uruchamia te narzędzia na twoim hoście ({native}), tryb kontenerowy uruchamia je w obrazie wdrożeniowym ({container}).",
       "showDetail": "Pokaż szczegóły",
       "retrying": "Ponawianie…",
       "history": {
@@ -385,7 +400,8 @@
         "preset_unsatisfiable": "Ten zestaw modeli nie może uruchomić tego potoku",
         "visual_pipeline_no_frontend": "Brak frontendu do przetestowania",
         "model_policy_blocked": "Model blocked by account policy",
-        "model_policy_unsupported": "Model policy not available here"
+        "model_policy_unsupported": "Model policy not available here",
+        "deployer_required_before_tester": "Dodaj Deployer przed Testerem"
       },
       "fallbackMessage": "Ta akcja jest sprzeczna z bieżącym stanem.",
       "providersUnconfigured": {
@@ -454,6 +470,7 @@
     }
   },
   "inspector": {
+    "detectRepoUnresolved": "Repozytorium tego bloku nie znajduje się wśród połączonych repozytoriów GitHub, więc nie można go odczytać. Połącz lub zsynchronizuj GitHub dla tego repozytorium, a następnie spróbuj ponownie.",
     "container": {
       "title": "Zawartość",
       "hint": "Moduły i zadania wewnątrz tego bloku. Kliknij pozycję, aby zaznaczyć ją na tablicy.",
@@ -690,6 +707,11 @@
           "succeeded": "Manifest wygenerowany i wypchnięty.",
           "failed": "Generowanie manifestu nie powiodło się. Spróbuj ponownie w oknie Infrastruktura."
         }
+      },
+      "envWizard": {
+        "title": "Konfiguracja środowiska Compose",
+        "hint": "Skonfiguruj przepis, kontrole wstępne i handler, aby Deployer udostępnił ten stos.",
+        "open": "Otwórz kreatora"
       }
     },
     "agentConfig": {
@@ -965,6 +987,10 @@
       "companionCapDetail": "Wykonaj jeszcze jedną automatyczną rundę przeróbki, przejdź do następnego kroku akceptując bieżący wynik, albo zatrzymaj i zresetuj zadanie, aby edytować dane wejściowe i przesłać ponownie.",
       "infraAttempts": "Próby infrastrukturalne",
       "hideInfraAttempts": "Ukryj próby infrastrukturalne",
+      "executionHistory": "Historia wykonania",
+      "hideExecutionHistory": "Ukryj historię wykonania",
+      "attemptSucceeded": "Powodzenie",
+      "outputTruncated": "Wynik przycięty, aby zachować zwięzłość historii wykonania.",
       "editingConclusions": "Edytowanie wniosków",
       "editConclusionsPlaceholder": "Edytuj wnioski agenta; Twoje zmiany zostaną zapisane po zatwierdzeniu…",
       "noProseOutput": "Ten agent nie wytworzył wyniku tekstowego.",
@@ -1052,6 +1078,7 @@
     "loadingContext": "Ładowanie dostarczonego kontekstu…",
     "noCalls": "Brak zarejestrowanych wywołań modelu dla tego uruchomienia.",
     "noContext": "Brak zapisanego kontekstu agenta dla tego uruchomienia. Jest on przechwytywany przy każdym wysłaniu, gdy w obszarze roboczym włączono opcję 'Przechowuj pełny kontekst agenta'.",
+    "contextError": "Nie udało się załadować dostarczonego kontekstu.",
     "summary": {
       "calls": "Wywołania",
       "tokensInOut": "Tokeny (we / wy)",
@@ -1098,6 +1125,16 @@
       "systemPrompt": "Prompt systemowy",
       "userPrompt": "Prompt użytkownika",
       "details": "Szczegóły"
+    },
+    "webSearch": "Wyszukiwanie w sieci",
+    "loadingSearch": "Ładowanie wyszukań w sieci…",
+    "noSearch": "Nie zarejestrowano wyszukań w sieci dla tego uruchomienia. Zapytania są rejestrowane, gdy wyszukiwanie w sieci jest uruchomione, a przestrzeń robocza ma włączone „Przechowuj pełny kontekst agenta”.",
+    "search": {
+      "available": "Dostępne",
+      "unavailable": "Niedostępne",
+      "provider": "Dostawca",
+      "resultsCount": "{count} wynik | {count} wyniki | {count} wyników",
+      "queriesTitle": "Wykonane wyszukiwania"
     }
   },
   "auth": {
@@ -2163,11 +2200,22 @@
       },
       "budget": {
         "heading": "Miesięczny budżet wydatków",
-        "body": "Zużycie tokenów jest mierzone na wywołanie LLM, wyceniane i ograniczane tym budżetem. Po jego osiągnięciu uruchomienia w tym obszarze roboczym są wstrzymywane, a tablica pokazuje ostrzeżenie. Pozostaw puste, aby odziedziczyć wbudowaną wartość domyślną (około 100 EUR/miesiąc).",
+        "body": "Zużycie tokenów jest mierzone na wywołanie LLM, wyceniane i ograniczane tymi budżetami. Uruchomienie jest wstrzymywane, gdy dowolny poziom, do którego należy, zostanie wyczerpany. Pozostaw pole puste, aby nie ustawiać limitu dla tego poziomu (poziom obszaru roboczego dziedziczy wtedy wbudowaną wartość domyślną, około 100 EUR/miesiąc).",
         "monthlyLimit": "Limit miesięczny",
         "defaultPlaceholder": "Domyślny",
         "currency": "Waluta (ISO 4217)",
-        "save": "Zapisz budżet"
+        "save": "Zapisz budżet",
+        "saveTier": "Zapisz",
+        "workspace": "Ten obszar roboczy",
+        "account": "Konto (wszystkie obszary robocze)",
+        "user": "Ty (wszystkie Twoje uruchomienia)",
+        "accountBody": "Pułap dla wszystkich obszarów roboczych na tym koncie.",
+        "userBody": "Pułap dla każdego uruchomienia, które rozpoczniesz, w dowolnym obszarze roboczym.",
+        "hardCap": "Limit operatora: {amount}",
+        "hardCapHint": "ustawiony przez wdrożenie; wartość nie może go przekroczyć",
+        "spent": "Wydano {spent} z {limit} w tym miesiącu",
+        "adminOnly": "Tylko administrator konta może zmienić budżet konta.",
+        "noLimitPlaceholder": "Bez limitu"
       },
       "toast": {
         "saved": "Ustawienia zapisane",
@@ -2231,7 +2279,7 @@
         "remote-kubernetes": "Zdalny Kubernetes"
       },
       "kubernetesEngine": {
-        "localK3sHint": "Wstępnie wypełnione dla lokalnego klastra k3s/k3d/kind na tym komputerze. Powiąż ServiceAccount z rolą, wygeneruj jego token poleceniem `kubectl create token NAME -n NAMESPACE` (Kubernetes 1.24+) i wklej go poniżej. Następnie wybierz sposób ustalania adresu URL środowiska i zmień URL serwera API, jeśli Twój klaster nasłuchuje na innym porcie.",
+        "localK3sHint": "Wstępnie wypełnione dla lokalnego klastra k3s/k3d/kind na tym komputerze. Powiąż ServiceAccount z rolą i wklej poniżej token o długim czasie ważności. Pamiętaj, że zwykły token z `kubectl create token NAME -n NAMESPACE` wygasa po 1 godzinie: dodaj `--duration=720h`, aby wydłużyć jego ważność, albo utwórz niewygasający Secret kubernetes.io/service-account-token i odczytaj go. Następnie wybierz sposób ustalania adresu URL środowiska i zmień URL serwera API, jeśli Twój klaster nasłuchuje na innym porcie.",
         "autoSetup": {
           "title": "Automatyczna konfiguracja przez CLI",
           "description": "Uruchom to w terminalu, aby wykryć lub udostępnić lokalny klaster, wygenerować token ServiceAccount i otworzyć ten formularz wstępnie wypełniony. Wklej wyświetlony token, a następnie kliknij Przetestuj i Zapisz."
@@ -3279,8 +3327,6 @@
     "reReviewingStage": "Ponowna recenzja zaktualizowanego zgłoszenia błędu… Możesz to zamknąć, powiadomimy Cię tylko, jeśli potrzebne będą dodatkowe informacje.",
     "answerLabel": "Odpowiedź",
     "answerPlaceholder": "Odpowiedz na tę uwagę…",
-    "refineAnswerPlaceholder": "Dopracuj swoją odpowiedź…",
-    "saveAnswer": "Zapisz odpowiedź",
     "dismissIrrelevant": "Odrzuć jako nieistotne",
     "reopen": "Otwórz ponownie",
     "docHeading": "Doprecyzowane zgłoszenie błędu",
@@ -4283,6 +4329,80 @@
       "maxConcurrentField": "Maks. rownoczesnych zadan",
       "defaultPipelineField": "Domyslny pipeline",
       "failed": "Nie udalo sie zaktualizowac inicjatywy"
+    }
+  },
+  "environmentWizard": {
+    "title": "Skonfiguruj środowisko testowe",
+    "subtitle": "Wykryj, przejrzyj i zapisz przepis Docker Compose, aby Deployer go udostępnił.",
+    "recommended": "zalecane",
+    "steps": {
+      "pick": "Wybierz usługę",
+      "review": "Przejrzyj przepis",
+      "preflight": "Kontrole wstępne",
+      "save": "Zapisz"
+    },
+    "pick": {
+      "intro": "Wybierz usługę, dla której skonfigurować środowisko Docker Compose.",
+      "empty": "Brak usług. Najpierw dodaj usługę."
+    },
+    "review": {
+      "detectHint": "Wykryto z repozytorium. Nic nie zostanie zastosowane, dopóki nie zapiszesz.",
+      "detect": "Wykryj ponownie",
+      "noRepo": "Ta usługa nie ma powiązanego repozytorium, więc wykrywanie nie może działać.",
+      "detectError": "Wykrywanie nie powiodło się. Sprawdź połączenie z repozytorium i spróbuj ponownie.",
+      "provenanceTitle": "Skąd pochodzi każde pole",
+      "service": "Udostępniona usługa Compose",
+      "servicePlaceholder": "np. app",
+      "port": "Udostępniony port",
+      "composeFiles": "Pliki Compose",
+      "profiles": "Profile",
+      "seedDumps": "Zrzuty danych",
+      "seedAdd": "Dodaj krok ładowania",
+      "seedAdded": "Dodano",
+      "rawEditor": "Edytuj surowy przepis",
+      "rawApply": "Zastosuj"
+    },
+    "analysis": {
+      "title": "Analiza pogłębiona",
+      "hint": "Uruchom analityka środowiska, aby na podstawie repozytorium naszkicować kroki konfiguracji i bramki kondycji.",
+      "run": "Uruchom analizę",
+      "unavailable": "Analiza pogłębiona wymaga powiązanego repozytorium i potoku analizy.",
+      "failed": "Uruchomienie analizy nie powiodło się.",
+      "apply": "Zastosuj szkic analityka"
+    },
+    "field": {
+      "composeFiles": "Pliki Compose",
+      "composeProfiles": "Profile",
+      "envFiles": "Pliki środowiska",
+      "externalNetworks": "Sieci zewnętrzne",
+      "sharedStackRefs": "Współdzielone stosy",
+      "prerequisites": "Kontrole wstępne",
+      "setupSteps": "Kroki konfiguracji",
+      "healthGate": "Bramka kondycji",
+      "teardownSteps": "Kroki demontażu"
+    },
+    "origin": {
+      "detector": "wykryto",
+      "analyst": "analityk",
+      "both": "wykryto + analityk"
+    },
+    "preflight": {
+      "intro": "Sprawdź wymagania maszyny przed udostępnieniem.",
+      "run": "Uruchom kontrole",
+      "none": "Ten przepis nie deklaruje kontroli wstępnych.",
+      "unavailable": "Kontrole wstępne działają na komputerze lokalnym i nie są dostępne w tym wdrożeniu.",
+      "optional": "opcjonalne"
+    },
+    "save": {
+      "handlerLabel": "Etykieta handlera",
+      "handlerHint": "Handler Docker Compose obszaru roboczego, którego Deployer używa do udostępnienia tego stosu.",
+      "summary": "Zapisuje przepis Docker Compose w „{frame}” (udostępniając usługę „{service}”) i rejestruje handler obszaru roboczego.",
+      "saved": "Zapisano. Deployer udostępni ten stos, gdy uruchomi go potok.",
+      "save": "Zapisz konfigurację"
+    },
+    "trial": {
+      "hint": "Opcjonalnie udostępnij to środowisko teraz, aby przetestować przepis.",
+      "run": "Udostępnienie próbne"
     }
   }
 }

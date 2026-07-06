@@ -137,6 +137,28 @@ async function testSavedKube() {
   }
 }
 
+// Auto-probe a SAVED kube connection as soon as the window shows one, so the operator sees a
+// LIVE verdict instead of a bare "connection established" card that only means a config is
+// stored — the token can have silently expired (a `kubectl create token` token is short-lived)
+// or the cluster been recreated, which the static card would misleadingly present as healthy.
+// Keyed on the stored config so it re-probes after an edit, and resets when disconnected so a
+// reconnect re-probes; the probe reuses the server-side saved token (empty secrets).
+const autoTestedKubeKey = ref<string | null>(null)
+watch(
+  kubeHandler,
+  (h) => {
+    if (!h) {
+      autoTestedKubeKey.value = null
+      return
+    }
+    const key = JSON.stringify(h.config)
+    if (autoTestedKubeKey.value === key) return
+    autoTestedKubeKey.value = key
+    void testSavedKube()
+  },
+  { immediate: true },
+)
+
 async function testKubeOverride(payload: {
   config: KubeHandlerConfig
   secrets: Record<string, string>

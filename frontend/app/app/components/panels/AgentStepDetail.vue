@@ -11,6 +11,7 @@ import FrontendBindingsResolved from '~/components/panels/inspector/FrontendBind
 import { UI_TESTER_AGENT_KIND } from '@cat-factory/contracts'
 import ProvisioningLogsDrawer from '~/components/provisioning/ProvisioningLogsDrawer.vue'
 import IterationCapPrompt from '~/components/pipeline/IterationCapPrompt.vue'
+import StepExecutionHistory from '~/components/board/StepExecutionHistory.vue'
 import { useStepTimer } from '~/composables/useStepTimer'
 import { useStepProse } from '~/composables/useStepProse'
 import { useStepApproval } from '~/composables/useStepApproval'
@@ -83,6 +84,29 @@ const runNotes = computed(() => (isFrontendFrame.value ? (instance.value?.notes 
 // executionId filter visible — most useful when the run failed to start a container.
 const showProvisioning = ref(false)
 const executionId = computed(() => instance.value?.id ?? null)
+
+// This step's own "execution history": the run-level failure trail narrowed to the failures
+// recorded for THIS step (each carries the `stepIndex` it failed at). Includes the current
+// failure when the run is presently failed at this step (it moves into `failureHistory` only on
+// the next retry). Revealed behind a toggle, mirroring the infra-attempts drawer above.
+const stepFailures = computed(() => {
+  const idx = ctx.value?.stepIndex
+  if (idx == null) return []
+  const trail = [...(instance.value?.failureHistory ?? [])]
+  if (instance.value?.failure) trail.push(instance.value.failure)
+  return trail.filter((f) => f.stepIndex === idx)
+})
+// The positive complement of the failure trail: the SUCCESSFUL outputs a restart discarded
+// for THIS step (each carries the `stepIndex` that produced it), so the history surfaces what
+// superseded attempts produced — not only errors. Merged with `stepFailures` in the timeline.
+const stepOutputs = computed(() => {
+  const idx = ctx.value?.stepIndex
+  if (idx == null) return []
+  return (instance.value?.outputHistory ?? []).filter((o) => o.stepIndex === idx)
+})
+// Whether this step has ANY prior-attempt history (successful outputs and/or failures).
+const hasStepHistory = computed(() => stepFailures.value.length > 0 || stepOutputs.value.length > 0)
+const showHistory = ref(false)
 
 // A failed run is no longer executing: a step left mid-flight (state still
 // `working`, no `finishedAt`) must stop looking live — no ticking clock, no
@@ -188,6 +212,8 @@ watch(
   () => {
     prose.reset()
     approval.resetForStep()
+    // Collapse the per-step execution history so reopening a different step starts clean.
+    showHistory.value = false
   },
 )
 
@@ -420,6 +446,36 @@ async function copyOutput() {
                   class="mt-2"
                   :execution-id="executionId"
                   :live="runLive"
+                />
+              </div>
+
+              <!-- this step's execution history (the run-level trail narrowed to this step),
+                   behind a toggle — a merged timeline of the SUCCESSFUL outputs a restart
+                   superseded and the FAILED attempts, scoped to the step being looked at -->
+              <div v-if="hasStepHistory">
+                <UButton
+                  :icon="showHistory ? 'i-lucide-chevron-up' : 'i-lucide-history'"
+                  variant="ghost"
+                  size="xs"
+                  data-testid="step-execution-history-toggle"
+                  @click="
+                    () => {
+                      showHistory = !showHistory
+                    }
+                  "
+                >
+                  {{
+                    showHistory
+                      ? t('panels.stepDetail.hideExecutionHistory')
+                      : t('panels.stepDetail.executionHistory')
+                  }}
+                </UButton>
+                <StepExecutionHistory
+                  v-if="showHistory"
+                  class="mt-2"
+                  :failures="stepFailures"
+                  :outputs="stepOutputs"
+                  data-testid="step-execution-history"
                 />
               </div>
 

@@ -30,6 +30,7 @@ export type {
   PipelineAvailability,
   PipelineStep,
   Position,
+  PriorStepOutput,
   PromptFragment,
   PullRequestRef,
   PeerPullRequest,
@@ -38,6 +39,8 @@ export type {
   StepApproval,
   StepReviewComment,
   StepSubtasks,
+  WebSearchAvailability,
+  WebSearchProvider,
   Workspace,
   WorkspaceSnapshot,
   // Prompt-fragment library shapes (ADR 0006).
@@ -141,6 +144,7 @@ export type {
   KubernetesProvisionConfig,
   // Per-service provision type + per-type infra handlers (the what/where ÷ how split).
   ProvisionType,
+  EnvironmentFailureReason,
   InfraEngine,
   ManifestId,
   ServiceProvisioning,
@@ -150,6 +154,12 @@ export type {
   RecipeStepKind,
   RecipeHealthGate,
   RecipeEnvFile,
+  // Preflights (machine-prerequisite checks with guided remediation).
+  PreflightCheckId,
+  PreflightParams,
+  PreflightRef,
+  PreflightStatus,
+  PreflightResult,
   // Frontend-frame config (build/serve/mock knobs + backend bindings that double as links).
   FrontendConfig,
   FrontendBackendBinding,
@@ -351,6 +361,9 @@ export type {
   UpdateWorkspaceSettingsInput,
   TaskLimitMode,
   TaskLimitPerType,
+  // Per-user settings (the user-tier spend budget).
+  UserSettings,
+  UpdateUserSettingsInput,
   // Slack integration shapes (Slack as an extra notification transport).
   SlackConnection,
   SlackRoute,

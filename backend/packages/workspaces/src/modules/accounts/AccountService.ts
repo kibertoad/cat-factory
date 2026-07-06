@@ -30,6 +30,19 @@ export interface AccountServiceDependencies {
   clock: Clock
   /** Optional: resolve member display details (name/email/avatar) for the roster. */
   userRepository?: UserRepository
+  /**
+   * Optional: invalidate the spend service's cached account-tier limit when an account's
+   * budget changes, so the new ceiling takes effect immediately (wired to
+   * `SpendService.invalidateAccountLimit`).
+   */
+  onAccountBudgetChanged?: (accountId: string) => void
+  /**
+   * The operator hard ceiling on the account-tier budget (`BUDGET_MAX_MONTHLY_PER_ACCOUNT`),
+   * or null/undefined when uncapped. Enforced on write so a submitted value can't exceed the
+   * cap (the docs promise server-side enforcement; the gate additionally clamps at read time).
+   * A late-bound getter so it tracks the live pricing config.
+   */
+  resolveAccountBudgetCap?: () => number | null | undefined
 }
 
 /** The signed-in identity the tenancy decisions are made against. */
@@ -50,6 +63,7 @@ function toWire(account: AccountRecord, roles: Account['roles']): Account {
     createdAt: account.createdAt,
     roles,
     ...(account.defaultCloudProvider ? { defaultCloudProvider: account.defaultCloudProvider } : {}),
+    ...(account.spendMonthlyLimit != null ? { spendMonthlyLimit: account.spendMonthlyLimit } : {}),
   }
 }
 
@@ -207,6 +221,18 @@ export class AccountService {
       await this.deps.accountRepository.updateSettings(accountId, {
         defaultCloudProvider: input.defaultCloudProvider ?? null,
       })
+    }
+    if ('spendMonthlyLimit' in input) {
+      const limit = input.spendMonthlyLimit ?? null
+      const cap = this.deps.resolveAccountBudgetCap?.()
+      if (limit != null && cap != null && limit > cap) {
+        throw new ValidationError(
+          `Account monthly budget (${limit}) exceeds the operator cap (${cap}).`,
+        )
+      }
+      await this.deps.accountRepository.updateSettings(accountId, { spendMonthlyLimit: limit })
+      // Drop the spend service's cached account limit so the new ceiling takes effect now.
+      this.deps.onAccountBudgetChanged?.(accountId)
     }
     const account = assertFound(
       await this.deps.accountRepository.get(accountId),

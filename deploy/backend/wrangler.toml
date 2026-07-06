@@ -390,11 +390,12 @@ DOCUMENT_PLANNER = "llm"
 # deployment-level source allow-list). Per-workspace credentials are stored ENCRYPTED in
 # D1. REQUIRES the ENCRYPTION_KEY above; the worker fails to boot without it.
 
-# Ephemeral environment provider integration. Off by default. Turn it on to let a
-# workspace register its own self-rolled environment management API so a
-# `deployer` agent can provision ephemeral environments a `tester` then runs
-# against. Its secrets are sealed with the shared ENCRYPTION_KEY above.
-ENVIRONMENTS_ENABLED = "false"
+# Ephemeral environment provider integration. It is always available (assembled from the
+# shared ENCRYPTION_KEY above, which seals its secrets); a workspace registers its own
+# self-rolled environment management API so a `deployer` agent can provision ephemeral
+# environments a `tester` then runs against. Nothing provisions until a workspace connects
+# a provider and its pipeline includes a `deployer`/`tester` step — to keep environments out
+# of a pipeline entirely, just omit those steps.
 # Trusted-operator escape hatch: let the env management API / returned env URL live on
 # an internal/VPN host (otherwise the strict public-https SSRF guard rejects it). Each
 # host matches exactly or as a dot suffix when it starts with `.` (`.internal`). Leave

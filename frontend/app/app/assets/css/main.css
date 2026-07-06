@@ -94,6 +94,21 @@ body {
   }
 }
 
+/* Respect prefers-reduced-motion: the decorative, infinite attention pulses (the
+ * blocked / decision-needed halo, the PR-ready halo) and the marching-ants edge
+ * animation convey nothing the static state doesn't already, so we disable them for
+ * users who ask for less motion. Loading spinners are deliberately left alone — a
+ * spinner's motion IS its meaning ("work in progress"). */
+@media (prefers-reduced-motion: reduce) {
+  .board-pulse,
+  .board-pulse-green {
+    animation: none;
+  }
+  .vue-flow__edge.is-live .vue-flow__edge-path {
+    animation: none;
+  }
+}
+
 /* Custom block node should not show the default node chrome */
 .vue-flow__node-block {
   padding: 0;

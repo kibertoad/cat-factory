@@ -12,6 +12,7 @@ import type { CreateTaskType, TaskLimitMode } from '~/types/domain'
 import MergeThresholdsPanel from '~/components/settings/MergeThresholdsPanel.vue'
 import IssueTrackerPanel from '~/components/settings/IssueTrackerPanel.vue'
 import ServiceFragmentDefaultsPanel from '~/components/settings/ServiceFragmentDefaultsPanel.vue'
+import BudgetSettings from '~/components/settings/BudgetSettings.vue'
 import IntegrationBackTitle from '~/components/layout/IntegrationBackTitle.vue'
 
 const { t, te } = useI18n()
@@ -114,9 +115,6 @@ const draft = reactive({
   storeAgentContext: true,
   artifactRetentionDays: 14,
   kaizenEnabled: true,
-  // Budget: empty string ⇒ "use the built-in default" (null on the wire).
-  spendCurrency: '',
-  spendMonthlyLimit: '',
 })
 
 function hydrate() {
@@ -129,8 +127,6 @@ function hydrate() {
   draft.storeAgentContext = s.storeAgentContext
   draft.artifactRetentionDays = s.artifactRetentionDays
   draft.kaizenEnabled = s.kaizenEnabled
-  draft.spendCurrency = s.spendCurrency ?? ''
-  draft.spendMonthlyLimit = s.spendMonthlyLimit == null ? '' : String(s.spendMonthlyLimit)
 }
 
 // `store.settings` is always replaced wholesale (store hydrate/update reassign the ref),
@@ -174,46 +170,6 @@ async function save() {
     })
   } finally {
     saving.value = false
-  }
-}
-
-const savingBudget = ref(false)
-
-async function saveBudget() {
-  savingBudget.value = true
-  // The number input emits a raw number once edited but starts as a string from hydrate, so
-  // coerce through String() before trimming. Blank ⇒ "use the built-in default" (null on the wire).
-  const raw = String(draft.spendMonthlyLimit ?? '').trim()
-  const monthlyLimit = raw === '' ? null : Number(raw)
-  try {
-    await store.update({
-      spendCurrency: draft.spendCurrency.trim() ? draft.spendCurrency.trim().toUpperCase() : null,
-      spendMonthlyLimit: monthlyLimit,
-    })
-    toast.add({
-      title: t('settings.workspaceSettings.toast.budgetSaved'),
-      icon: 'i-lucide-check',
-      color: 'success',
-    })
-    // The settings PUT only returns the settings; re-fetch the snapshot so the toolbar's
-    // spend meter reflects the newly-set limit/currency (spendService.status) right away.
-    // Best-effort and AFTER the save succeeded: a transient snapshot-refresh failure must
-    // not report a successfully-saved budget as failed (the meter also catches up on the
-    // next snapshot pushed over the stream).
-    try {
-      await useWorkspaceStore().refresh()
-    } catch {
-      // ignore — the budget is persisted; the meter will catch up on the next snapshot.
-    }
-  } catch (e) {
-    toast.add({
-      title: t('settings.workspaceSettings.toast.budgetSaveFailed'),
-      description: e instanceof Error ? e.message : String(e),
-      icon: 'i-lucide-triangle-alert',
-      color: 'error',
-    })
-  } finally {
-    savingBudget.value = false
   }
 }
 </script>
@@ -370,56 +326,9 @@ async function saveBudget() {
           </div>
         </template>
 
-        <!-- Budget -->
+        <!-- Budget (workspace / account / user tiers) -->
         <template #budget>
-          <div class="space-y-6">
-            <section class="space-y-2">
-              <h3 class="text-sm font-semibold text-slate-200">
-                {{ t('settings.workspaceSettings.budget.heading') }}
-              </h3>
-              <p class="text-[11px] text-slate-400">
-                {{ t('settings.workspaceSettings.budget.body') }}
-              </p>
-              <div class="grid grid-cols-2 gap-3">
-                <label class="block">
-                  <span class="mb-1 block text-[10px] uppercase tracking-wide text-slate-500">
-                    {{ t('settings.workspaceSettings.budget.monthlyLimit') }}
-                  </span>
-                  <UInput
-                    v-model="draft.spendMonthlyLimit"
-                    type="number"
-                    :min="0"
-                    :placeholder="t('settings.workspaceSettings.budget.defaultPlaceholder')"
-                    size="sm"
-                  />
-                </label>
-                <label class="block">
-                  <span class="mb-1 block text-[10px] uppercase tracking-wide text-slate-500">
-                    {{ t('settings.workspaceSettings.budget.currency') }}
-                  </span>
-                  <UInput
-                    v-model="draft.spendCurrency"
-                    placeholder="EUR"
-                    maxlength="3"
-                    size="sm"
-                    class="uppercase"
-                  />
-                </label>
-              </div>
-            </section>
-
-            <div class="flex justify-end">
-              <UButton
-                color="primary"
-                icon="i-lucide-save"
-                size="sm"
-                :loading="savingBudget"
-                @click="saveBudget"
-              >
-                {{ t('settings.workspaceSettings.budget.save') }}
-              </UButton>
-            </div>
-          </div>
+          <BudgetSettings />
         </template>
 
         <!-- Merge thresholds -->
