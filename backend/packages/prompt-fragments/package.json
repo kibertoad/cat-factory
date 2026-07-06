@@ -1,6 +1,6 @@
 {
   "name": "@cat-factory/prompt-fragments",
-  "version": "0.10.27",
+  "version": "0.11.0",
   "description": "Curated, versioned best-practice prompt fragments injected into agent system prompts.",
   "repository": {
     "type": "git",
