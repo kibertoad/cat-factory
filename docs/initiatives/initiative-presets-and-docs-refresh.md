@@ -234,7 +234,7 @@ defaultFragmentIds, policyDefaults?: Partial<InitiativeExecutionPolicy>, probe? 
 | 5   | Loop/ingest glue: `buildTaskBlock` spawn decoration, `seedPlan` invocation at ingest, path-safety validation, conformance round-trip                                                                                                                                                    | SYSTEM | ✅ done | #890   |
 | 6   | `docs-detect.logic.ts` (pure over `RepoFiles`) + unit tests (monorepo/root/dir-name heuristics, bounded budget, never-throw)                                                                                                                                                            | PILOT  | ✅ done | #894   |
 | 7   | New kind `code-commenter` (prompt, presentation, doc-aware) + `pl_code_comments` / `pl_business_docs`; diagrams + READMEs reuse `doc-writer`/`pl_document_quick` (a Mermaid doc is just Markdown — no diagram kind)                                                                     | PILOT  | ✅ done | #903   |
-| 8   | `preset_docs_refresh` registration: descriptor (form), `detect` = S6, **`phaseTemplate`** (shape enforcement — reuse T1/T2, see the inter-phase follow-up), `seedPlan` (spawn DECORATION only), promptAdditions (analyst audit + planner shaping), review mapping, `pl_initiative_docs` | PILOT  | ✅ done | #904   |
+| 8   | `preset_docs_refresh` registration: descriptor (form), `detect` = S6, **`phaseTemplate`** (shape enforcement — reuse T1/T2, see the inter-phase follow-up), `seedPlan` (spawn DECORATION only), promptAdditions (analyst audit + planner shaping), review mapping, `pl_initiative_docs` | PILOT  | ✅ done | #911   |
 | 9   | E2E (create-with-preset → auto-plan → spawn-with-decoration) + worked-example custom preset + `backend/docs/initiative-presets.md` + cross-doc updates                                                                                                                                  | BOTH   | ⬜ todo |        |
 
 Ordering: 1 → {2, 3} → {4, 5}; 6–8 need 1+3; 7 is independent of 6.
@@ -251,7 +251,7 @@ slices affects that tracker's critical path.
 Two items surfaced in S7's design review. Neither blocks S7 landing; both shape S8.
 
 1. **Adopt the generic `phaseTemplate` shape enforcement for `preset_docs_refresh` (do it in S8;
-   do NOT hand-roll phase shaping in `seedPlan`).** — ✅ done in S8 (#904): `preset_docs_refresh`
+   do NOT hand-roll phase shaping in `seedPlan`).** — ✅ done in S8 (#911): `preset_docs_refresh`
    declares a `phaseTemplate` (Foundations `required` + optional per-doc-type phases,
    `allowAdditionalPhases: false`) and `seedPlan` does per-item DECORATION only; see the [S8] gotchas.
    The technological-migration initiative landed a
