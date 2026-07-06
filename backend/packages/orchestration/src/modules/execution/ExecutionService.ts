@@ -45,6 +45,7 @@ import {
 import {
   assertFound,
   ConflictError,
+  type ConnectionTestResult,
   isAllowedByFamilyPolicy,
   isModelUsable,
   isModelUsableInline,
@@ -165,6 +166,11 @@ import {
   needsDeployerBeforeConsumer,
   TESTER_INFRA_MESSAGES,
 } from './tester-infra.logic.js'
+import {
+  decideDeployerConfig,
+  deployerServiceConfigIssues,
+  hasEnabledDeployerStep,
+} from './deployer.logic.js'
 import { hasLiveServiceBinding, hasServiceBinding } from './frontend-infra.logic.js'
 
 export interface ExecutionServiceDependencies {
@@ -1141,6 +1147,113 @@ export class ExecutionService {
   }
 
   /**
+   * Guard a pipeline that INCLUDES an enabled `deployer` step on its ephemeral-environment config
+   * being FULL + CORRECT on BOTH sides of the "what/where ÷ how" split, so a misconfigured
+   * environment fails LOUDLY at start with a fixable pointer instead of mid-run: a `kubernetes` /
+   * `custom` service silently failing its async provision, or a `docker-compose` one whose deployer
+   * NO-OPS because no handler resolves (the exact silent dead-ends this initiative closes). It
+   * checks, in order of the fix a human would make:
+   *   1. the SERVICE's provisioning config is complete for its declared type (manifest source /
+   *      compose path / custom-manifest id) — else `deployer_service_provisioning_incomplete`;
+   *   2. a WORKSPACE handler resolves for the type — else `provision_type_unhandled` (the same
+   *      reason the Tester gate raises; a MISSING/ambiguous handler, not a broken one);
+   *   3. (bonus, best-effort) the resolved deployment integration's live connection PROBES green —
+   *      else `deployer_connection_test_failed`, carrying the provider's failure detail.
+   * Each `ConflictError` carries a machine-readable reason + details the SPA deep-links off to the
+   * exact fix surface. Pass-through for `infraless`/undeclared services (the deployer stands nothing
+   * up) and when the environment seam is unwired (tests / no-env deployments), like the other
+   * optional start guards.
+   */
+  private async assertDeployerConfigured(
+    workspaceId: string,
+    block: Block,
+    agentKinds: readonly string[],
+    enabled: readonly boolean[] | undefined,
+    initiatedBy: string | null | undefined,
+  ): Promise<void> {
+    if (!this.environmentProvisioning) return
+    if (!hasEnabledDeployerStep(agentKinds, enabled)) return
+    const service = await this.contextBuilder.resolveServiceConfig(workspaceId, block)
+    const provisioning = service?.provisioning
+    // A Deployer on an `infraless`/undeclared service is a safe no-op (nothing to provision), so
+    // there is nothing to validate — matching the deployer's own skip in advanceDeployerFrames.
+    if (!provisioning || provisioning.type === 'infraless') return
+    const type = provisioning.type
+
+    const serviceIssues = deployerServiceConfigIssues(provisioning)
+    // `canProvision` is a single batched handler read (no decrypt / no N+1); safe to run eagerly.
+    // Pass the initiator so a local per-user handler override resolves exactly as provisioning does
+    // (else a valid override-only local setup would be falsely reported as unhandled).
+    const handlerResolution = await this.environmentProvisioning.canProvision(
+      workspaceId,
+      provisioning,
+      initiatedBy,
+    )
+    // Only probe the LIVE connection when the structural config is sound — a network probe is
+    // wasted (and its verdict misleading) while the service config is incomplete or no handler
+    // resolves. A probe FAULT (transient network / provider-build hiccup) is not a definitive
+    // "connection broken" verdict, so swallow it and let the async provision surface a real fault
+    // rather than blocking the start on a flake.
+    let connectionTest: ConnectionTestResult | undefined
+    if (serviceIssues.length === 0 && handlerResolution.ok) {
+      try {
+        connectionTest =
+          (await this.environmentProvisioning.testProvisioning(
+            workspaceId,
+            provisioning,
+            initiatedBy,
+          )) ?? undefined
+      } catch {
+        connectionTest = undefined
+      }
+    }
+
+    const decision = decideDeployerConfig({
+      provisionType: type,
+      serviceIssues,
+      handlerResolution,
+      ...(connectionTest ? { connectionTest } : {}),
+    })
+    if (decision.ok) return
+
+    if (decision.reason === 'service-config-incomplete') {
+      // Deep-link target: the service FRAME's environment config (the inspector / compose wizard).
+      const frameId =
+        block.level === 'frame'
+          ? block.id
+          : ((await this.contextBuilder.resolveServiceFrameId(workspaceId, block.id)) ?? undefined)
+      throw new ConflictError(
+        `This service provisions a '${type}' environment via the Deployer, but its environment ` +
+          `configuration is incomplete (missing: ${decision.missing.join(', ')}). Complete the ` +
+          "service's environment configuration before starting.",
+        'deployer_service_provisioning_incomplete',
+        { provisionType: type, missing: [...decision.missing], ...(frameId ? { frameId } : {}) },
+      )
+    }
+    if (decision.reason === 'workspace-unhandled') {
+      throw new ConflictError(
+        `This service provisions a '${type}' environment via the Deployer, but this workspace has ` +
+          (decision.handlerReason === 'type-mismatch'
+            ? `more than one handler matching it — pin a manifest id to disambiguate, `
+            : `no infrastructure handler configured for that type — `) +
+          'configure a handler (Infrastructure → Test environments), or set the service to ' +
+          'infraless, before starting.',
+        'provision_type_unhandled',
+        { provisionType: type },
+      )
+    }
+    // decision.reason === 'connection-failed'
+    throw new ConflictError(
+      `The '${type}' deployment integration for this service isn't working: ` +
+        `${decision.message ?? 'the connection test failed'}. Check the handler's endpoint and ` +
+        'credentials (Infrastructure → Test environments) and re-test the connection, then start ' +
+        'again.',
+      'deployer_connection_test_failed',
+      { provisionType: type, ...(decision.message ? { detail: decision.message } : {}) },
+    )
+  }
+
+  /**
    * Guard a pipeline's start when it carries an agent kind that RELIES on binary-artifact
    * storage (the {@link BINARY_STORAGE_TRAIT}, e.g. the UI Tester, which uploads its
    * screenshots there). Such a run would otherwise dispatch and then fail/degrade with no
@@ -1368,6 +1481,18 @@ export class ExecutionService {
     // (tester / human-test / playwright) with NO enabled `deployer` before it would dead-end inside
     // the consumer — nothing provisions the environment it reads. Fail fast with an actionable error.
     await this.assertDeployerBeforeConsumer(workspaceId, block, shape.agentKinds, shape.enabled)
+
+    // A chain that INCLUDES an enabled Deployer needs the service's provisioning config (the
+    // "what/where") AND the workspace's infra handler (the "how") complete + correct — and, best
+    // effort, the deployment integration's live connection working — so a misconfigured environment
+    // fails loudly here with a fix-it pointer instead of an async failed env (or a silent no-op).
+    await this.assertDeployerConfigured(
+      workspaceId,
+      block,
+      shape.agentKinds,
+      shape.enabled,
+      initiatedBy,
+    )
 
     // A chain carrying an agent that relies on binary-artifact storage (the UI Tester uploads
     // screenshots) needs the account to have storage configured.

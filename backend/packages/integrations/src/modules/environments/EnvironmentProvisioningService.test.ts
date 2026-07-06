@@ -806,3 +806,85 @@ describe('EnvironmentProvisioningService — async container-backed deploy lifec
     expect(client.dispatched).toHaveLength(1)
   })
 })
+
+describe('EnvironmentProvisioningService — canProvision + testProvisioning (Deployer-config gate)', () => {
+  /**
+   * A service whose connection layer resolves a handler ONLY when a per-user override is present
+   * (so the override-awareness is observable), and returns the given provider for `testProvisioning`.
+   */
+  function makeGateService(
+    provider: EnvironmentProvider,
+    opts: {
+      resolveUserHandlerOverrides?: (userId: string, workspaceId: string) => Promise<unknown[]>
+    } = {},
+  ) {
+    const connectionService = {
+      resolveHandlerForType: async (_ws: string, _service: unknown, overrides: unknown[] = []) =>
+        overrides.length > 0
+          ? { ok: true, engine: 'remote-custom', handler: {}, fromUserOverride: true }
+          : { ok: false, reason: 'no-handler' as const },
+      resolveProviderForType: async () => ({
+        provider,
+        manifest: MANIFEST,
+        provisionType: 'custom',
+        engine: 'remote-custom',
+        resolveSecret: () => undefined,
+      }),
+    } as unknown as EnvironmentConnectionService
+    let n = 0
+    return new EnvironmentProvisioningService({
+      connectionService,
+      environmentRegistryRepository: fakeRegistry(),
+      secretCipher: fakeCipher,
+      idGenerator: { next: (prefix: string) => `${prefix}_${++n}` },
+      clock: { now: () => 1_700_000_000_000 },
+      ...(opts.resolveUserHandlerOverrides
+        ? { resolveUserHandlerOverrides: opts.resolveUserHandlerOverrides as never }
+        : {}),
+    })
+  }
+
+  it('canProvision honors the run initiator local per-user override', async () => {
+    const service = makeGateService(recordingProvider(READY), {
+      resolveUserHandlerOverrides: async () => [{ provisionType: 'custom' }],
+    })
+    // No initiator ⇒ no override loaded ⇒ the workspace handler alone doesn't resolve.
+    expect(await service.canProvision('ws1', { type: 'custom', manifestId: 'preview' })).toEqual({
+      ok: false,
+      reason: 'no-handler',
+    })
+    // WITH an initiator, the per-user override resolves it (matching what provision() would do).
+    expect(
+      await service.canProvision('ws1', { type: 'custom', manifestId: 'preview' }, 'user-7'),
+    ).toEqual({ ok: true })
+  })
+
+  it('testProvisioning returns null for infraless (nothing to probe)', async () => {
+    const service = makeGateService(recordingProvider(READY))
+    expect(await service.testProvisioning('ws1', { type: 'infraless' })).toBeNull()
+  })
+
+  it('testProvisioning returns null when the resolved provider has no testConnection', async () => {
+    // recordingProvider implements no testConnection.
+    const service = makeGateService(recordingProvider(READY))
+    expect(
+      await service.testProvisioning('ws1', { type: 'custom', manifestId: 'preview' }),
+    ).toBeNull()
+  })
+
+  it('testProvisioning delegates to the provider testConnection and returns its verdict', async () => {
+    const provider: EnvironmentProvider = {
+      ...recordingProvider(READY),
+      async testConnection() {
+        return { ok: false, message: 'apiserver unreachable' }
+      },
+    }
+    const service = makeGateService(provider)
+    expect(
+      await service.testProvisioning('ws1', { type: 'custom', manifestId: 'preview' }),
+    ).toEqual({
+      ok: false,
+      message: 'apiserver unreachable',
+    })
+  })
+})

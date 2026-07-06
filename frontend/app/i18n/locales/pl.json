@@ -420,6 +420,21 @@
         "title": "Brak magazynu dla tego potoku",
         "body": "Ten potok zawiera agenta, który wymaga magazynu binarnego (tester UI przesyła swoje zrzuty ekranu), ale to konto nie ma skonfigurowanego magazynu treści. Skonfiguruj magazyn treści, aby go uruchomić.",
         "action": "Skonfiguruj magazyn"
+      },
+      "deployerServiceConfig": {
+        "title": "Niekompletna konfiguracja środowiska usługi",
+        "body": "Ten potok zawiera Deployer, ale konfiguracja środowiska tej usługi jest niekompletna (brakuje: {missing}). Uzupełnij konfigurację środowiska usługi, aby go uruchomić.",
+        "action": "Popraw konfigurację usługi"
+      },
+      "provisionTypeUnhandled": {
+        "title": "Brak obsługi dla tego typu provisioningu",
+        "body": "Dla typu provisioningu {type} w tym obszarze roboczym nie skonfigurowano żadnego handlera infrastruktury, więc Deployer nie ma środowiska do postawienia. Skonfiguruj handler lub ustaw usługę jako infraless, aby go uruchomić.",
+        "action": "Skonfiguruj infrastrukturę"
+      },
+      "deployerConnectionFailed": {
+        "title": "Integracja wdrożeniowa nie działa",
+        "body": "Integracja wdrożeniowa tej usługi nie przeszła testu połączenia: {detail}. Sprawdź jej punkt końcowy i poświadczenia, a następnie ponownie przetestuj połączenie, aby go uruchomić.",
+        "action": "Skonfiguruj infrastrukturę"
       }
     }
   },

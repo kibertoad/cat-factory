@@ -1,4 +1,4 @@
-import type { Clock, IdGenerator } from '@cat-factory/kernel'
+import type { Clock, ConnectionTestResult, IdGenerator } from '@cat-factory/kernel'
 import type {
   EnvironmentConnectionRecord,
   EnvironmentRecord,
@@ -235,17 +235,24 @@ export class EnvironmentProvisioningService {
 
   /**
    * Whether the workspace can provision a service's declared provisioning — the lightweight
-   * start-time check the Tester's infra gate uses (no provider build / no secret decrypt).
-   * `infraless` resolves trivially (it provisions nothing); any other type needs a workspace
+   * start-time check the Tester's infra gate + the Deployer-config gate use (no provider build / no
+   * secret decrypt). `infraless` resolves trivially (it provisions nothing); any other type needs a
    * handler that resolves for it (a bare `custom` must be unambiguous). Mirrors exactly what
-   * {@link provision} would resolve, so a run that passes the gate also provisions.
+   * {@link provision} would resolve — including the run initiator's local per-user handler
+   * OVERRIDES when `initiatedBy` is given — so a run that passes the gate also provisions.
    */
   async canProvision(
     workspaceId: string,
     service: ServiceProvisioning,
+    initiatedBy?: string | null,
   ): Promise<{ ok: boolean; reason?: 'no-handler' | 'type-mismatch' }> {
     if (service.type === 'infraless') return { ok: true }
-    const resolution = await this.deps.connectionService.resolveHandlerForType(workspaceId, service)
+    const userOverrides = await this.resolveUserOverrides(workspaceId, initiatedBy)
+    const resolution = await this.deps.connectionService.resolveHandlerForType(
+      workspaceId,
+      service,
+      userOverrides,
+    )
     return resolution.ok ? { ok: true } : { ok: false, reason: resolution.reason }
   }
 
@@ -257,6 +264,53 @@ export class EnvironmentProvisioningService {
    */
   async hasLegacyConnection(workspaceId: string): Promise<boolean> {
     return this.deps.connectionService.hasConnection(workspaceId)
+  }
+
+  /**
+   * Probe the LIVE connection for a service's declared provisioning against the ALREADY-SAVED
+   * workspace handler — the start-time health check the Deployer gate runs so a broken deployment
+   * integration (unreachable endpoint / apiserver, revoked token) is surfaced UP FRONT instead of
+   * as an async failed environment mid-run. Resolves the per-type provider (merging the service's
+   * manifest source, exactly as provisioning does) and delegates to its `testConnection`. Returns
+   * `null` when there is nothing to probe: `infraless` (no provider) or a provider with no
+   * `testConnection`. Resolves through the run initiator's local per-user handler OVERRIDES when
+   * `initiatedBy` is given, matching {@link provision}. Callers gate this behind
+   * {@link canProvision} so the resolve never throws for a missing handler; an unexpected
+   * build/probe fault is the caller's to tolerate.
+   */
+  async testProvisioning(
+    workspaceId: string,
+    service: ServiceProvisioning,
+    initiatedBy?: string | null,
+  ): Promise<ConnectionTestResult | null> {
+    if (service.type === 'infraless') return null
+    const userOverrides = await this.resolveUserOverrides(workspaceId, initiatedBy)
+    const resolved = await this.deps.connectionService.resolveProviderForType(
+      workspaceId,
+      service,
+      userOverrides,
+    )
+    if (!resolved.provider.testConnection) return null
+    return resolved.provider.testConnection({
+      manifest: resolved.manifest,
+      config: {},
+      resolveSecret: resolved.resolveSecret,
+    })
+  }
+
+  /**
+   * The run initiator's local per-user handler overrides (local mode), or `[]` — the connection
+   * records the resolver layers over the workspace handlers. Shared by {@link resolveProvision},
+   * {@link canProvision} and {@link testProvisioning} so the three resolve identically. Wired only
+   * by the local facade; absent (Worker/Node) ⇒ always `[]` and the workspace handler wins.
+   */
+  private async resolveUserOverrides(
+    workspaceId: string,
+    initiatedBy: string | null | undefined,
+  ): Promise<EnvironmentConnectionRecord[]> {
+    return initiatedBy && this.deps.resolveUserHandlerOverrides
+      ? this.deps.resolveUserHandlerOverrides(initiatedBy, workspaceId)
+      : []
   }
 
   /** Provision an environment, persisting an encrypted record keyed by block/run. */
@@ -433,10 +487,7 @@ export class EnvironmentProvisioningService {
         throw new ValidationError('An infraless service provisions no environment')
       }
       // In local mode the run initiator's personal handlers layer over the workspace's.
-      const userOverrides =
-        args.initiatedBy && this.deps.resolveUserHandlerOverrides
-          ? await this.deps.resolveUserHandlerOverrides(args.initiatedBy, workspaceId)
-          : []
+      const userOverrides = await this.resolveUserOverrides(workspaceId, args.initiatedBy)
       const resolved = await this.deps.connectionService.resolveProviderForType(
         workspaceId,
         args.serviceProvisioning,

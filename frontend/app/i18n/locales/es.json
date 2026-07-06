@@ -420,6 +420,21 @@
         "title": "No hay almacenamiento para esta canalización",
         "body": "Esta canalización incluye un agente que necesita almacenamiento binario (el probador de UI sube sus capturas de pantalla), pero esta cuenta no tiene almacenamiento de contenido configurado. Configura el almacenamiento de contenido para ejecutarla.",
         "action": "Configurar almacenamiento"
+      },
+      "deployerServiceConfig": {
+        "title": "Configuración de entorno del servicio incompleta",
+        "body": "Esta canalización incluye un Deployer, pero la configuración de entorno de este servicio está incompleta (falta: {missing}). Completa la configuración de entorno del servicio para ejecutarla.",
+        "action": "Corregir configuración del servicio"
+      },
+      "provisionTypeUnhandled": {
+        "title": "No hay gestor para este tipo de aprovisionamiento",
+        "body": "No hay ningún gestor de infraestructura configurado para el tipo de aprovisionamiento {type} de este espacio de trabajo, por lo que el Deployer no tiene ningún entorno que levantar. Configura un gestor o marca el servicio como infraless para ejecutarla.",
+        "action": "Configurar infraestructura"
+      },
+      "deployerConnectionFailed": {
+        "title": "La integración de despliegue no funciona",
+        "body": "La integración de despliegue de este servicio falló la prueba de conexión: {detail}. Revisa su endpoint y credenciales y vuelve a probar la conexión para ejecutarla.",
+        "action": "Configurar infraestructura"
       }
     }
   },

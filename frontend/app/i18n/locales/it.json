@@ -3654,7 +3654,6 @@
         "github_not_connected": "GitHub non connesso",
         "bootstrap_not_retryable": "Impossibile ripetere l'inizializzazione",
         "bootstrap_reference_missing": "L'architettura di riferimento non esiste più",
-        "provision_type_unhandled": "Nessun gestore per questo tipo di provisioning",
         "preset_unsatisfiable": "Il preset del modello non può eseguire questa pipeline",
         "visual_pipeline_no_frontend": "Nessun frontend da testare",
         "model_policy_blocked": "Modello bloccato dalla policy dell'account",
@@ -3671,6 +3670,21 @@
         "title": "Nessuno storage per questa pipeline",
         "body": "Questa pipeline include un agente che richiede storage binario (il Tester dell'interfaccia carica i suoi screenshot), ma questo account non ha alcuno storage di contenuti configurato. Configura lo storage di contenuti per eseguirla.",
         "action": "Configura storage"
+      },
+      "deployerServiceConfig": {
+        "title": "Configurazione dell’ambiente del servizio incompleta",
+        "body": "Questa pipeline include un Deployer, ma la configurazione dell’ambiente di questo servizio è incompleta (mancante: {missing}). Completa la configurazione dell’ambiente del servizio per eseguirla.",
+        "action": "Correggi configurazione del servizio"
+      },
+      "provisionTypeUnhandled": {
+        "title": "Nessun gestore per questo tipo di provisioning",
+        "body": "Nessun gestore di infrastruttura è configurato per il tipo di provisioning {type} di questo spazio di lavoro, quindi il Deployer non ha alcun ambiente da avviare. Configura un gestore o imposta il servizio su infraless per eseguirla.",
+        "action": "Configura infrastruttura"
+      },
+      "deployerConnectionFailed": {
+        "title": "Integrazione di deployment non funzionante",
+        "body": "L’integrazione di deployment di questo servizio non ha superato il test di connessione: {detail}. Controlla il suo endpoint e le credenziali, poi riprova la connessione per eseguirla.",
+        "action": "Configura infrastruttura"
       }
     }
   },

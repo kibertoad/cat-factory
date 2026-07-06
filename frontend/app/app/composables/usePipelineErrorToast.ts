@@ -28,14 +28,19 @@ interface ConflictDetails {
  * fails THIS typecheck until it is mapped here. (The typed-message-keys feature can't see the
  * `t()` lookup because the key is resolved at runtime via this map, not written as a literal —
  * so the exhaustiveness of the map, not `t()`, is what makes a missing reason a build error.)
- * `providers_unconfigured` and `binary_storage_unconfigured` are excluded: each has bespoke
- * handling (a "configure X" action) + its own key namespace, so neither reaches the generic
- * lookup below.
+ * The reasons with BESPOKE handling below (a "configure X" action + their own key namespace) are
+ * excluded, since none reaches this generic lookup: `providers_unconfigured`,
+ * `binary_storage_unconfigured`, and the deployment-environment trio `provision_type_unhandled` /
+ * `deployer_service_provisioning_incomplete` / `deployer_connection_test_failed`.
  */
-const CONFLICT_TITLE_KEYS: Record<
-  Exclude<ConflictReason, 'providers_unconfigured' | 'binary_storage_unconfigured'>,
-  string
-> = {
+type BespokeConflictReason =
+  | 'providers_unconfigured'
+  | 'binary_storage_unconfigured'
+  | 'provision_type_unhandled'
+  | 'deployer_service_provisioning_incomplete'
+  | 'deployer_connection_test_failed'
+
+const CONFLICT_TITLE_KEYS: Record<Exclude<ConflictReason, BespokeConflictReason>, string> = {
   dependencies_unmet: 'errors.conflict.title.dependencies_unmet',
   task_limit_reached: 'errors.conflict.title.task_limit_reached',
   tester_infra_unsupported: 'errors.conflict.title.tester_infra_unsupported',
@@ -45,7 +50,6 @@ const CONFLICT_TITLE_KEYS: Record<
   github_not_connected: 'errors.conflict.title.github_not_connected',
   bootstrap_not_retryable: 'errors.conflict.title.bootstrap_not_retryable',
   bootstrap_reference_missing: 'errors.conflict.title.bootstrap_reference_missing',
-  provision_type_unhandled: 'errors.conflict.title.provision_type_unhandled',
   preset_unsatisfiable: 'errors.conflict.title.preset_unsatisfiable',
   visual_pipeline_no_frontend: 'errors.conflict.title.visual_pipeline_no_frontend',
   model_policy_blocked: 'errors.conflict.title.model_policy_blocked',
@@ -137,17 +141,100 @@ export function usePipelineErrorToast() {
       return
     }
 
+    // A pipeline includes a Deployer, but the SERVICE's ephemeral-environment config (the in-repo
+    // "what/where") is incomplete for its declared type. Steer the user straight to THAT service's
+    // environment config — the compose wizard for docker-compose, the service inspector otherwise —
+    // falling back to the workspace infrastructure window if the frame id wasn't carried.
+    if (conflict?.reason === 'deployer_service_provisioning_incomplete') {
+      const frameId =
+        typeof conflict.details.frameId === 'string' ? conflict.details.frameId : undefined
+      const provisionType =
+        typeof conflict.details.provisionType === 'string'
+          ? conflict.details.provisionType
+          : undefined
+      const missing = Array.isArray(conflict.details.missing)
+        ? conflict.details.missing.join(', ')
+        : ''
+      toast.add({
+        title: t('errors.conflict.deployerServiceConfig.title'),
+        description: missing
+          ? t('errors.conflict.deployerServiceConfig.body', { missing })
+          : (conflict.message ?? t('errors.conflict.fallbackMessage')),
+        color: 'error',
+        icon: 'i-lucide-server',
+        // Sticky, like the other actionable conflicts: keep the "Fix configuration" jump reachable.
+        duration: 0,
+        actions: [
+          {
+            label: t('errors.conflict.deployerServiceConfig.action'),
+            icon: 'i-lucide-settings',
+            onClick: () => {
+              if (frameId && provisionType === 'docker-compose') ui.openEnvironmentSetup(frameId)
+              else if (frameId) ui.select(frameId)
+              else ui.openProviderConnection('environment')
+            },
+          },
+        ],
+      })
+      return
+    }
+
+    // A pipeline includes a Deployer and the service config is sound, but no WORKSPACE handler
+    // resolves for the service's provision type (missing or ambiguous). Steer to the Infrastructure
+    // window's Test-environments tab. (Also raised by the Tester start gate — same fix applies.)
+    if (conflict?.reason === 'provision_type_unhandled') {
+      const type =
+        typeof conflict.details.provisionType === 'string' ? conflict.details.provisionType : ''
+      toast.add({
+        title: t('errors.conflict.provisionTypeUnhandled.title'),
+        description: type
+          ? t('errors.conflict.provisionTypeUnhandled.body', { type })
+          : (conflict.message ?? t('errors.conflict.fallbackMessage')),
+        color: 'error',
+        icon: 'i-lucide-server-cog',
+        duration: 0,
+        actions: [
+          {
+            label: t('errors.conflict.provisionTypeUnhandled.action'),
+            icon: 'i-lucide-settings',
+            onClick: () => ui.openProviderConnection('environment'),
+          },
+        ],
+      })
+      return
+    }
+
+    // A pipeline includes a Deployer, the config is structurally complete, but the live connection
+    // probe of the resolved deployment integration failed (unreachable endpoint / apiserver, bad
+    // token). Surface the provider's failure detail and steer to the handler to fix + re-test it.
+    if (conflict?.reason === 'deployer_connection_test_failed') {
+      const detail =
+        typeof conflict.details.detail === 'string' ? conflict.details.detail : undefined
+      toast.add({
+        title: t('errors.conflict.deployerConnectionFailed.title'),
+        description: detail
+          ? t('errors.conflict.deployerConnectionFailed.body', { detail })
+          : (conflict.message ?? t('errors.conflict.fallbackMessage')),
+        color: 'error',
+        icon: 'i-lucide-plug',
+        duration: 0,
+        actions: [
+          {
+            label: t('errors.conflict.deployerConnectionFailed.action'),
+            icon: 'i-lucide-settings',
+            onClick: () => ui.openProviderConnection('environment'),
+          },
+        ],
+      })
+      return
+    }
+
     if (conflict) {
       // Per-reason title key from the exhaustive map; fall back to the caller's title key when
       // this reason has no mapped/translated copy (`te` = translation-exists, so a key missing
       // in the active locale never leaks as raw text). An unknown reason isn't in the map.
       const reasonKey =
-        CONFLICT_TITLE_KEYS[
-          conflict.reason as Exclude<
-            ConflictReason,
-            'providers_unconfigured' | 'binary_storage_unconfigured'
-          >
-        ]
+        CONFLICT_TITLE_KEYS[conflict.reason as Exclude<ConflictReason, BespokeConflictReason>]
       toast.add({
         title: reasonKey && te(reasonKey) ? t(reasonKey) : t(fallbackTitleKey),
         description: conflict.message ?? t('errors.conflict.fallbackMessage'),
