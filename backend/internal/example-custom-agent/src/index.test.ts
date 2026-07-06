@@ -2,9 +2,13 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { type AgentKindRegistry, defaultAgentKindRegistry } from '@cat-factory/agents'
 import type { CommitFilesInput, GateStepState, RepoFiles } from '@cat-factory/kernel'
 import {
+  allInitiativePresets,
   clearRegisteredGates,
+  clearRegisteredInitiativePresets,
   clearRegisteredPipelines,
   clearRegisteredStepResolvers,
+  getInitiativePreset,
+  initiativePresetDescriptors,
   registeredGateFactories,
   registeredStepResolverFactories,
   seedPipelines,
@@ -16,6 +20,8 @@ import {
   LICENSE_CHECK_KIND,
   LICENSE_FIXER_KIND,
   ORG_AUDIT_PIPELINE_ID,
+  ORG_AUDIT_PRESET,
+  ORG_AUDIT_PRESET_ID,
   ORG_REVIEWER_KIND,
   SECURITY_AUDITOR_KIND,
   registerExampleCustomAgents,
@@ -31,6 +37,7 @@ beforeEach(() => {
   clearRegisteredPipelines()
   clearRegisteredGates()
   clearRegisteredStepResolvers()
+  clearRegisteredInitiativePresets()
   registry = defaultAgentKindRegistry()
   registerExampleCustomAgents(registry)
 })
@@ -38,6 +45,7 @@ afterEach(() => {
   clearRegisteredPipelines()
   clearRegisteredGates()
   clearRegisteredStepResolvers()
+  clearRegisteredInitiativePresets()
   // The license provider is a module-level handle; clear it so a wired test can't leak.
   wireLicenseProvider(undefined)
 })
@@ -205,5 +213,74 @@ describe('example custom agents', () => {
       result: { output: 'no json' },
     })
     expect(commitFiles).not.toHaveBeenCalled()
+  })
+})
+
+describe('example org-audit initiative preset', () => {
+  it('registers the preset through the public registerInitiativePreset seam', () => {
+    // The registration is the same object reference the registry hands back (replace-by-id).
+    expect(getInitiativePreset(ORG_AUDIT_PRESET_ID)).toBe(ORG_AUDIT_PRESET)
+    expect(allInitiativePresets().map((p) => p.descriptor.id)).toContain(ORG_AUDIT_PRESET_ID)
+  })
+
+  it('advertises a descriptor with probe:false (no detect hook) bound to a real planning pipeline', () => {
+    const descriptor = initiativePresetDescriptors().find((d) => d.id === ORG_AUDIT_PRESET_ID)
+    expect(descriptor).toBeTruthy()
+    // No `detect` hook ⇒ the server-derived probe flag is false, so the SPA never fires a probe.
+    expect(descriptor?.probe).toBe(false)
+    expect(descriptor?.interview).toBe('full')
+    // The planning binding must resolve to a real pipeline (else create/start would 404 the run).
+    expect(descriptor?.planningPipelineId).toBe('pl_initiative')
+    expect(seedPipelines().some((p) => p.id === descriptor?.planningPipelineId)).toBe(true)
+  })
+
+  it('declares a single required org-audit phase (shape is the template’s job)', () => {
+    const template = ORG_AUDIT_PRESET.descriptor.phaseTemplate
+    expect(template?.allowAdditionalPhases).toBe(false)
+    expect(template?.phases.map((p) => p.id)).toEqual(['org-audit'])
+    expect(template?.phases[0]?.required).toBe(true)
+  })
+
+  it('seedPlan DECORATES org-audit items onto pl_org_audit and leaves others untouched', () => {
+    // The draft is the planner's InferOutput shape, so the valibot-defaulted fields
+    // (`goal`/`description`/`dependsOn`/`rules`/`onMissingEstimate`) are all required here.
+    const decorated = ORG_AUDIT_PRESET.seedPlan!(
+      {
+        goal: '',
+        constraints: [],
+        nonGoals: [],
+        analysisSummary: '',
+        phases: [{ id: 'org-audit', title: 'Compliance audit', goal: '' }],
+        items: [
+          {
+            id: 'i1',
+            phaseId: 'org-audit',
+            title: 'Audit payments',
+            description: '',
+            dependsOn: [],
+          },
+          {
+            id: 'i2',
+            phaseId: 'unrelated',
+            title: 'Untouched item',
+            description: '',
+            dependsOn: [],
+          },
+        ],
+        policy: {
+          maxConcurrent: 2,
+          defaultPipelineId: 'pl_quick',
+          rules: [],
+          onMissingEstimate: 'default',
+        },
+        decisions: [],
+        caveats: [],
+      },
+      {},
+    )
+    // The org-audit item runs this package's OWN pipeline; the plan shape is unchanged.
+    expect(decorated.items[0]?.pipelineId).toBe(ORG_AUDIT_PIPELINE_ID)
+    expect(decorated.items[1]?.pipelineId).toBeUndefined()
+    expect(decorated.phases.map((p) => p.id)).toEqual(['org-audit'])
   })
 })

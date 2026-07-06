@@ -34,6 +34,14 @@ export interface FakeProfile {
    * setup wizard reads back off the step). Absent ⇒ the fake's default `{ ok: true }`.
    */
   customResult?: unknown
+  /**
+   * The plan draft the `initiative-planner` step returns as `result.initiativePlan` (an
+   * `InitiativePlanDraft`), so a spec can drive an initiative PLANNING run to completion —
+   * create-with-preset → auto-plan → the loop spawning the decorated tasks. Absent ⇒ the planner
+   * emits no plan and the run faults (the planner requires one), so any initiative-planning spec
+   * must set it.
+   */
+  initiativePlan?: unknown
 }
 
 // Structural types derived from the conformance fakes, so this test-only package needs no
@@ -64,6 +72,9 @@ function profileToOptions(profile: FakeProfile | undefined): FakeOptions {
     ...(profile.asyncPolls !== undefined ? { asyncPolls: profile.asyncPolls } : {}),
     ...(profile.customResult !== undefined
       ? { customResult: profile.customResult as FakeOptions['customResult'] }
+      : {}),
+    ...(profile.initiativePlan !== undefined
+      ? { initiativePlan: profile.initiativePlan as FakeOptions['initiativePlan'] }
       : {}),
   }
 }

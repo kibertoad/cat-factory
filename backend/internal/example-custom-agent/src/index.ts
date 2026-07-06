@@ -1,10 +1,18 @@
 import type { AgentKindDefinition, AgentKindRegistry } from '@cat-factory/agents'
 import { defineStructuredOutput } from '@cat-factory/agents'
-import type { GateProbe, RepoOp, StepCompletionResolver } from '@cat-factory/kernel'
+import type {
+  GateProbe,
+  InitiativePresetRegistration,
+  RepoOp,
+  StepCompletionResolver,
+} from '@cat-factory/kernel'
 import {
+  INITIATIVE_ANALYST_AGENT_KIND,
+  INITIATIVE_PLANNER_AGENT_KIND,
   defineProviderToken,
   isProviderWired,
   registerGate,
+  registerInitiativePreset,
   registerPipeline,
   registerStepResolver,
   wireProvider,
@@ -276,13 +284,127 @@ const auditorSummaryResolver: StepCompletionResolver = {
   },
 }
 
+// ---------------------------------------------------------------------------
+// A WORKED EXAMPLE of a company-authored INITIATIVE PRESET.
+//
+// The THIRD extension seam (alongside agent kinds + gates): an initiative preset bundles a
+// backend-supplied FORM the user fills at create time, a planning-pipeline binding, a
+// declarative phase template, per-kind planning-prompt steering, and a `seedPlan` hook that
+// DECORATES the tasks the initiative loop spawns. This one turns the generic initiative into an
+// "org compliance audit": the analyst inventories the services, the planner emits one audit item
+// per in-scope service, and `seedPlan` routes every item to this package's OWN `pl_org_audit`
+// pipeline — so a deployment can add a first-class initiative shape that runs its own agent kinds,
+// through the public `registerInitiativePreset` seam ALONE (no engine change, no per-facade wiring).
+//
+// It mirrors the built-in `preset_docs_refresh` (`@cat-factory/agents`) but stays deliberately
+// minimal: `interview: 'full'` reuses the built-in `pl_initiative` planning pipeline (so there is
+// no new planning pipeline to register), and `seedPlan` does DECORATION only — it never touches
+// the plan's phase structure (that is the declarative `phaseTemplate`'s job, enforced by the
+// generic ingest normalizer). See `backend/docs/initiative-presets.md` for the full model.
+// ---------------------------------------------------------------------------
+
+export const ORG_AUDIT_PRESET_ID = 'preset_org_audit'
+
+/**
+ * The single audit phase id — shared VERBATIM by the phase template, the planner steering, and
+ * `seedPlan` (the "define the phase id ONCE, reference it everywhere" contract the phase-template
+ * machinery relies on: the planner must emit this exact id and the ingest normalizer matches on it).
+ */
+const ORG_AUDIT_PHASE_ID = 'org-audit'
+
+/** The policy areas the user checkboxes; the analyst/planner steering keys off the selection. */
+const AUDIT_AREA_OPTIONS = [
+  { value: 'licensing', label: 'Licensing' },
+  { value: 'security', label: 'Security' },
+  { value: 'dependencies', label: 'Dependency hygiene' },
+]
+
+/** The org-compliance-audit initiative preset registration (descriptor + code hooks). */
+export const ORG_AUDIT_PRESET: InitiativePresetRegistration = {
+  descriptor: {
+    id: ORG_AUDIT_PRESET_ID,
+    presentation: {
+      label: 'Org compliance audit',
+      icon: 'i-lucide-clipboard-check',
+      color: '#f59e0b',
+      description:
+        'Inventory every service and audit each against the org policy, committing a compliance report per service.',
+    },
+    fields: [
+      {
+        key: 'auditAreas',
+        label: 'Audit areas',
+        help: 'Which policy areas each in-scope service is audited against.',
+        type: 'checkbox-group',
+        options: AUDIT_AREA_OPTIONS,
+        defaultValues: AUDIT_AREA_OPTIONS.map((o) => o.value),
+      },
+      {
+        key: 'scopeHint',
+        label: 'Scope (optional)',
+        help: 'Limit the audit to specific services or areas. Leave blank to cover the whole frame.',
+        type: 'textarea',
+        placeholder: 'e.g. the payments and identity services only',
+      },
+    ],
+    // Reuse the built-in generic planning pipeline — interviewer → analyst → planner(gate) →
+    // committer — so no new planning pipeline is registered; all deviation is descriptor data + hooks.
+    planningPipelineId: 'pl_initiative',
+    interview: 'full',
+    humanReviewDefault: true,
+    defaultFragmentIds: [],
+    // Plan SHAPE: exactly one required `org-audit` phase (`allowAdditionalPhases: false`), enforced by
+    // the generic ingest normalizer — this preset NEVER hand-rolls shape in `seedPlan`.
+    phaseTemplate: {
+      phases: [
+        {
+          id: ORG_AUDIT_PHASE_ID,
+          title: 'Compliance audit',
+          goal: 'Audit each in-scope service against the selected policy areas and commit its report.',
+          required: true,
+        },
+      ],
+      allowAdditionalPhases: false,
+    },
+  },
+  // DECORATION only — route every audit item to this package's own pipeline. NEVER touches phases.
+  seedPlan(draft) {
+    const items = draft.items.map((item) =>
+      item.phaseId === ORG_AUDIT_PHASE_ID ? { ...item, pipelineId: ORG_AUDIT_PIPELINE_ID } : item,
+    )
+    return { ...draft, items }
+  },
+  // Per-kind planning-prompt steering (DATA, off the wire descriptor). The frozen form values reach
+  // the prompt via the seeded interview digest, so these carry METHODOLOGY, not the form answers.
+  promptAdditions: {
+    [INITIATIVE_ANALYST_AGENT_KIND]:
+      'Inventory every service in scope and, per service, note which of the requested audit areas ' +
+      '(licensing, security, dependency hygiene) apply and what evidence a compliance report would need.',
+    [INITIATIVE_PLANNER_AGENT_KIND]:
+      `Emit a single "${ORG_AUDIT_PHASE_ID}" phase with ONE audit item per in-scope service. Each ` +
+      "item runs the org compliance audit and commits that service's compliance report; write a " +
+      'self-sufficient description naming the service and the audit areas to cover.',
+  },
+}
+
+/**
+ * Register the org-compliance-audit initiative preset. Idempotent (the preset registry replaces by
+ * id), and called from {@link registerExampleCustomAgents} — the deployment composition root — so a
+ * deployment that opts into this package gets the preset in its create-initiative picker with no
+ * further wiring. Tests that `clearRegisteredInitiativePresets()` call this to restore it.
+ */
+export function registerOrgAuditPreset(): void {
+  registerInitiativePreset(ORG_AUDIT_PRESET)
+}
+
 /**
  * Register the example kinds on the app-owned {@link AgentKindRegistry} the composition root
- * injects, plus the `pl_org_audit` pipeline that chains them and the example `license-check`
- * gate + the auditor summary resolver (still on the module-global pipeline/gate/step-resolver
- * registries — those registries have not migrated to app-owned DI yet). Idempotent (registries
- * replace by id/kind). Called explicitly from a facade/test — there is no module-load side
- * effect any more, since the agent-kind registry is an app-owned instance, not a global.
+ * injects, plus the `pl_org_audit` pipeline that chains them, the example `license-check`
+ * gate + the auditor summary resolver, and the `preset_org_audit` initiative preset (all still on
+ * the module-global pipeline/gate/step-resolver/preset registries — those registries have not
+ * migrated to app-owned DI yet). Idempotent (registries replace by id/kind). Called explicitly from
+ * a facade/test — there is no module-load side effect any more, since the agent-kind registry is an
+ * app-owned instance, not a global.
  */
 export function registerExampleCustomAgents(registry: AgentKindRegistry): void {
   registry.registerAll(EXAMPLE_AGENT_KINDS)
@@ -291,6 +413,7 @@ export function registerExampleCustomAgents(registry: AgentKindRegistry): void {
     name: 'Org compliance audit',
     agentKinds: [ORG_REVIEWER_KIND, SECURITY_AUDITOR_KIND],
   })
+  registerOrgAuditPreset()
   // The custom polling gate — a deterministic precheck that escalates to `license-fixer`.
   registerGate(LICENSE_CHECK_KIND, (ctx) => ({
     kind: LICENSE_CHECK_KIND,

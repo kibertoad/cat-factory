@@ -1,6 +1,6 @@
 # Initiative: Initiative presets & the Documentation-refresh preset (pilot)
 
-**Status:** planning (slice 0 = this tracker) · **Owner:** orchestration · **Started:** 2026-07-05
+**Status:** complete (slices 1–9 landed) · **Owner:** orchestration · **Started:** 2026-07-05
 
 > Durable source of truth for a multi-PR initiative. Read this first before picking up the
 > next slice; update the checklist at the end of each PR.
@@ -224,18 +224,18 @@ defaultFragmentIds, policyDefaults?: Partial<InitiativeExecutionPolicy>, probe? 
 
 ## Per-slice status checklist
 
-| #   | Slice                                                                                                                                                                                                                                                                                   | Scope  | Status  | PR     |
-| --- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ------ | ------- | ------ |
-| 0   | This tracker                                                                                                                                                                                                                                                                            | —      | ✅ done | (this) |
-| 1   | Preset contracts (`initiative-preset.ts`: fields incl. `checkbox-group`/`path`/`showWhen`, descriptor, inputs) + kernel `registerInitiativePreset` registry + `preset_generic` + entity/draft schema extensions (`presetId`/`presetInputs`/item `spawn`)                                | SYSTEM | ✅ done | #812   |
-| 2   | Per-run gate-override engine seam (`ExecutionService.start` override → run steps; loop threads `spawn.gates`) + conformance on both runtimes                                                                                                                                            | SYSTEM | ✅ done | #880   |
-| 3   | Create/planning integration: create validation + qa/goal seeding for skip-interview presets, probe endpoint, snapshot attach (both facades), `AgentContextBuilder` preset folds, SPA starts `descriptor.planningPipelineId`                                                             | SYSTEM | ✅ done | #883   |
-| 4   | SPA preset picker + generic descriptor form renderer (checkbox-group/path/showWhen) + probe prefill + i18n chrome                                                                                                                                                                       | SYSTEM | ✅ done | #886   |
-| 5   | Loop/ingest glue: `buildTaskBlock` spawn decoration, `seedPlan` invocation at ingest, path-safety validation, conformance round-trip                                                                                                                                                    | SYSTEM | ✅ done | #890   |
-| 6   | `docs-detect.logic.ts` (pure over `RepoFiles`) + unit tests (monorepo/root/dir-name heuristics, bounded budget, never-throw)                                                                                                                                                            | PILOT  | ✅ done | #894   |
-| 7   | New kind `code-commenter` (prompt, presentation, doc-aware) + `pl_code_comments` / `pl_business_docs`; diagrams + READMEs reuse `doc-writer`/`pl_document_quick` (a Mermaid doc is just Markdown — no diagram kind)                                                                     | PILOT  | ✅ done | #903   |
-| 8   | `preset_docs_refresh` registration: descriptor (form), `detect` = S6, **`phaseTemplate`** (shape enforcement — reuse T1/T2, see the inter-phase follow-up), `seedPlan` (spawn DECORATION only), promptAdditions (analyst audit + planner shaping), review mapping, `pl_initiative_docs` | PILOT  | ✅ done | #911   |
-| 9   | E2E (create-with-preset → auto-plan → spawn-with-decoration) + worked-example custom preset + `backend/docs/initiative-presets.md` + cross-doc updates                                                                                                                                  | BOTH   | ⬜ todo |        |
+| #   | Slice                                                                                                                                                                                                                                                                                   | Scope  | Status  | PR        |
+| --- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ------ | ------- | --------- |
+| 0   | This tracker                                                                                                                                                                                                                                                                            | —      | ✅ done | (this)    |
+| 1   | Preset contracts (`initiative-preset.ts`: fields incl. `checkbox-group`/`path`/`showWhen`, descriptor, inputs) + kernel `registerInitiativePreset` registry + `preset_generic` + entity/draft schema extensions (`presetId`/`presetInputs`/item `spawn`)                                | SYSTEM | ✅ done | #812      |
+| 2   | Per-run gate-override engine seam (`ExecutionService.start` override → run steps; loop threads `spawn.gates`) + conformance on both runtimes                                                                                                                                            | SYSTEM | ✅ done | #880      |
+| 3   | Create/planning integration: create validation + qa/goal seeding for skip-interview presets, probe endpoint, snapshot attach (both facades), `AgentContextBuilder` preset folds, SPA starts `descriptor.planningPipelineId`                                                             | SYSTEM | ✅ done | #883      |
+| 4   | SPA preset picker + generic descriptor form renderer (checkbox-group/path/showWhen) + probe prefill + i18n chrome                                                                                                                                                                       | SYSTEM | ✅ done | #886      |
+| 5   | Loop/ingest glue: `buildTaskBlock` spawn decoration, `seedPlan` invocation at ingest, path-safety validation, conformance round-trip                                                                                                                                                    | SYSTEM | ✅ done | #890      |
+| 6   | `docs-detect.logic.ts` (pure over `RepoFiles`) + unit tests (monorepo/root/dir-name heuristics, bounded budget, never-throw)                                                                                                                                                            | PILOT  | ✅ done | #894      |
+| 7   | New kind `code-commenter` (prompt, presentation, doc-aware) + `pl_code_comments` / `pl_business_docs`; diagrams + READMEs reuse `doc-writer`/`pl_document_quick` (a Mermaid doc is just Markdown — no diagram kind)                                                                     | PILOT  | ✅ done | #903      |
+| 8   | `preset_docs_refresh` registration: descriptor (form), `detect` = S6, **`phaseTemplate`** (shape enforcement — reuse T1/T2, see the inter-phase follow-up), `seedPlan` (spawn DECORATION only), promptAdditions (analyst audit + planner shaping), review mapping, `pl_initiative_docs` | PILOT  | ✅ done | #911      |
+| 9   | E2E (create-with-preset → auto-plan → spawn-with-decoration) + worked-example custom preset + `backend/docs/initiative-presets.md` + cross-doc updates                                                                                                                                  | BOTH   | ✅ done | #924   |
 
 Ordering: 1 → {2, 3} → {4, 5}; 6–8 need 1+3; 7 is independent of 6.
 
@@ -492,6 +492,32 @@ false` per step, so an override entry of `false` genuinely turns a pipeline gate
   planner brief steers an Overview + the diagrams so the `doc-quality` `other` template
   (Overview + Details required sections) accepts a diagram doc. Revisit only if diagram docs start
   failing `doc-quality` in practice.
+
+- **[S9] Driving a PLANNING run in tests needs the fake-plan seam — the planner faults without a
+  plan.** The `initiative-planner` step's post-completion resolver THROWS when
+  `result.initiativePlan` is absent (`RunDispatcher`), and the shared `FakeAgentExecutor` otherwise
+  emits only generic prose. So S9 added an `initiativePlan?` option to `FakeAgentExecutor`
+  (`@cat-factory/conformance`) — a branch that returns `{ initiativePlan }` for the
+  `initiative-planner` kind — surfaced to the e2e as `FakeProfile.initiativePlan`. The analyst needs
+  no companion knob (its benign prose feeds `recordAnalysis`) and the committer is a deterministic
+  engine step that never calls the executor and degrades gracefully with GitHub off. T10 reuses this
+  exact seam for the migration plan — do NOT add a second one.
+- **[S9] The docs-refresh e2e is unattended end-to-end because the preset is `interview: 'skip'` +
+  `pl_initiative_docs` (no interviewer, no human gate).** The plan the fake returns MUST satisfy the
+  phase template (include the required `foundations` phase — even item-less — plus only template
+  phase ids, or the ingest normalizer rejects it and faults the run). The first spawn comes from the
+  periodic loop SWEEP, not inline after the committer (the planning block has no `initiativeId`, so
+  the terminal-poke path doesn't fire) — so the Node sweep interval is now env-configurable
+  (`INITIATIVE_LOOP_INTERVAL_MS`, default 60s) and the e2e sets it to 1s. The spec asserts on a
+  spawned `[data-task-type="document"]` task card (a `data-task-type` attr added to `TaskCard.vue`;
+  the seeded board has no document tasks, so the locator is unique) — the DOM proof of
+  spawn-with-decoration.
+- **[S9] The worked-example preset (`preset_org_audit`) is a DEPLOYMENT preset, in
+  `backend/internal/example-custom-agent`** (the custom-agent trust model — a preset carries code, so
+  it is as trusted as a custom agent), registered from `registerExampleCustomAgents(registry)`. It
+  reuses `pl_initiative` (`interview: 'full'`, no new planning pipeline) and its `seedPlan` routes
+  audit items to the package's own `pl_org_audit`. Contrast the built-in docs-refresh preset, which
+  self-registers as a module side effect of `@cat-factory/agents`. See `backend/docs/initiative-presets.md`.
 
 ## Out of scope
 
