@@ -1,5 +1,41 @@
 # @cat-factory/orchestration
 
+## 0.85.0
+
+### Minor Changes
+
+- ecbcbec: Add repo autodetection to the shared-stacks definition screen. A new **Autodetect** button on
+  the shared-stack form reads the repo at the entered clone URL — checkout-free, over the
+  workspace's VCS connection (no clone, no host daemon) — and prefills the compose-shaped fields
+  from a non-binding recommendation the user reviews before saving:
+
+  - **`composeFiles`** — the base compose file plus any `<stem>.override.ya?ml` auto-merge family
+    (the common single self-contained `docker-compose.yml` case resolves to just that one file).
+  - **`managedNetworks`** — the `external: true` networks the compose references, which a shared
+    stack is responsible for creating + owning (the `acme-net` shape). A self-contained stack that
+    defines its dependencies internally declares no external network, so this stays empty.
+  - **`composeProfiles`** — the `COMPOSE_PROFILES` the file declares.
+  - A suggested **name** from the repo basename (only when the field is empty).
+
+  New wire contract `POST /workspaces/:ws/shared-stacks/detect` (`detectSharedStackContract` +
+  `sharedStackRecommendationSchema`), served by `SharedStackService.detect`, which reuses the
+  deterministic compose scan (`detectSharedStack`) the environment provisioning detector already
+  runs. Detection is a pass-through (`detected: false`) when no VCS connection is wired, and a
+  genuine read fault surfaces as an actionable error. Nothing is persisted.
+
+### Patch Changes
+
+- Updated dependencies [ecbcbec]
+  - @cat-factory/contracts@0.112.0
+  - @cat-factory/kernel@0.102.0
+  - @cat-factory/integrations@0.75.0
+  - @cat-factory/agents@0.40.7
+  - @cat-factory/prompt-fragments@0.10.20
+  - @cat-factory/sandbox@0.9.21
+  - @cat-factory/spend@0.11.4
+  - @cat-factory/workspaces@0.12.4
+  - @cat-factory/caching@0.4.22
+
 ## 0.84.0
 
 ### Minor Changes
