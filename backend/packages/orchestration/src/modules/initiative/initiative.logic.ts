@@ -178,6 +178,11 @@ export function applyPlanDraft(
       dependsOn: d.dependsOn ?? [],
       ...(d.estimate ? { estimate: d.estimate } : {}),
       ...(d.pipelineId ? { pipelineId: d.pipelineId } : {}),
+      // Preset-authored spawn decoration (a `seedPlan` may have stamped it at ingest). Follows
+      // the draft like the other content fields — the loop's `buildTaskBlock` folds it onto the
+      // spawned block. A re-plan refreshing an already-materialised item is harmless: its block
+      // was decorated when it spawned, so re-stamping the item's `spawn` never re-touches it.
+      ...(d.spawn ? { spawn: d.spawn } : {}),
       status: prior?.status ?? 'pending',
       ...(prior?.blockId != null ? { blockId: prior.blockId } : {}),
       ...(prior?.pr ? { pr: prior.pr } : {}),

@@ -300,6 +300,50 @@ describe('InitiativeLoopService', () => {
     )
   })
 
+  it("folds a spawned item's preset decoration onto the task block (taskTypeFields/fragmentIds/agentConfig)", async () => {
+    // Slice 5's `buildTaskBlock` decoration: an item's `spawn` bag comes out as a first-class
+    // TYPED task block (a doc task's docKind/targetPath, its writing-style fragments, per-agent
+    // config) instead of a bare description block — so a docs-refresh item spawns a real doc task.
+    const decorated = item({
+      id: 'a',
+      spawn: {
+        taskTypeFields: { docKind: 'reference', targetPath: 'docs/api/reference.md' },
+        fragmentIds: ['style.anti-llmisms', 'style.concise-actionable'],
+        agentConfig: { 'tester.environment': 'local' },
+      },
+    })
+    const h = harness({ items: [decorated] })
+    await h.initiatives.insert('ws-1', makeInitiative([decorated]))
+
+    await h.loop.runDue(clockNow)
+
+    const entity = await h.initiatives.getByBlock('ws-1', initiativeBlock.id)
+    const block = await h.blocks.get('ws-1', entity!.items![0]!.blockId!)
+    expect(block).toMatchObject({
+      level: 'task',
+      parentId: frame.id,
+      initiativeId: initiativeBlock.id,
+      taskTypeFields: { docKind: 'reference', targetPath: 'docs/api/reference.md' },
+      fragmentIds: ['style.anti-llmisms', 'style.concise-actionable'],
+      agentConfig: { 'tester.environment': 'local' },
+    })
+  })
+
+  it('leaves a decoration-less spawned block bare (no empty taskTypeFields/fragmentIds/agentConfig)', async () => {
+    // An item with no `spawn` bag (the generic-preset / no-preset case) must spawn a block
+    // byte-identical to the pre-slice-5 shape — no empty decoration keys accreted.
+    const h = harness({ items: [item({ id: 'a' })] })
+    await h.initiatives.insert('ws-1', makeInitiative([item({ id: 'a' })]))
+
+    await h.loop.runDue(clockNow)
+
+    const entity = await h.initiatives.getByBlock('ws-1', initiativeBlock.id)
+    const block = await h.blocks.get('ws-1', entity!.items![0]!.blockId!)
+    expect(block).not.toHaveProperty('taskTypeFields')
+    expect(block).not.toHaveProperty('fragmentIds')
+    expect(block).not.toHaveProperty('agentConfig')
+  })
+
   it('reconciles a finished task, copies the PR, and completes the initiative', async () => {
     const h = harness({ items: [item({ id: 'a' })] })
     await h.initiatives.insert('ws-1', makeInitiative([item({ id: 'a' })]))

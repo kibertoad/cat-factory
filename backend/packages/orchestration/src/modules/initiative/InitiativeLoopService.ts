@@ -386,7 +386,14 @@ export class InitiativeLoopService {
     }
   }
 
-  /** Build the task block a spawned item runs as (item estimate stamped, `initiativeId` linked). */
+  /**
+   * Build the task block a spawned item runs as: item estimate stamped, `initiativeId` linked,
+   * and the item's preset-authored `spawn` decoration folded on (slice 5) so it comes out a
+   * first-class TYPED task rather than a bare description block — the doc task's
+   * `taskTypeFields` (docKind / targetPath / …), best-practice `fragmentIds`, and per-agent-kind
+   * `agentConfig`. Each is additive + sparse, mirroring `BoardService.addTask`: an empty bag is
+   * omitted so a decoration-less item is byte-identical to the pre-slice-5 block.
+   */
   private buildTaskBlock(
     blockId: string,
     item: InitiativeItem,
@@ -394,6 +401,7 @@ export class InitiativeLoopService {
     initiativeBlockId: string,
   ): Block {
     const estimate = estimateForItem(item, this.deps.clock.now())
+    const spawn = item.spawn
     return {
       id: blockId,
       title: item.title,
@@ -411,6 +419,13 @@ export class InitiativeLoopService {
       // loop OWNS sequencing, so NEVER opt into `autoStartDependents` on a spawned block.
       initiativeId: initiativeBlockId,
       ...(estimate ? { estimate } : {}),
+      ...(spawn?.taskTypeFields && Object.keys(spawn.taskTypeFields).length
+        ? { taskTypeFields: spawn.taskTypeFields }
+        : {}),
+      ...(spawn?.fragmentIds && spawn.fragmentIds.length ? { fragmentIds: spawn.fragmentIds } : {}),
+      ...(spawn?.agentConfig && Object.keys(spawn.agentConfig).length
+        ? { agentConfig: spawn.agentConfig }
+        : {}),
     }
   }
 
