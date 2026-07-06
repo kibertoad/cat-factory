@@ -842,6 +842,14 @@ export class RunDispatcher {
     }
 
     if (update.state === 'failed') {
+      // Preserve the transport-reported backend (native host process vs. sandboxed container)
+      // BEFORE branching on eviction: a first-poll failure/eviction may never have hit the
+      // running branch that normally records it, and an evicted run is exactly the case a
+      // post-mortem inspects ("which backend evicted this?"). Idempotent, so it's harmless when
+      // the running branch already stamped it; whichever path upserts below persists it — the
+      // eviction re-dispatch/exhausted upsert in recoverContainerEviction, or markContainerErrored
+      // on a genuine failure (failRun then re-reads from storage).
+      this.recordBackendDiagnostics(instance, update.backend)
       // A container eviction (the per-run container vanished, its in-memory job is gone) is
       // usually transient. The shared recovery drops the dead handle and returns `continue` so
       // the driver re-dispatches the SAME step to a fresh container, within the per-flavour
@@ -859,10 +867,6 @@ export class RunDispatcher {
       // older image (or a pool transport that doesn't forward the cause) reported none — the
       // same regex the bootstrap path uses, so a watchdog timeout still classifies as `timeout`
       // rather than a generic `agent`. The extended diagnostic surfaces as the failure detail.
-      // Preserve the transport-reported backend (a first-poll failure may never have hit the
-      // running branch that normally records it) so the failure diagnostics still name where it
-      // ran. Persisted by markContainerErrored's upsert below (failRun re-reads from storage).
-      this.recordBackendDiagnostics(instance, update.backend)
       // Mark the container errored and persist so the failed details show it (failRun
       // re-reads from storage, so an in-memory-only mutation would be lost; failRun emits
       // the terminal frame, so markContainerErrored deliberately doesn't).
