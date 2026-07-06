@@ -174,6 +174,17 @@ export {
   registerDocsRefreshPreset,
   docsReviewGates,
 } from './presets/docs-refresh/preset.js'
+// The Technological-migration initiative preset (tech-migration slice T8), registered as a SIDE
+// EFFECT of importing this module (the same pattern as docs-refresh) so it is available in every
+// deployment with no per-facade wiring — the two runtimes cannot drift on it. It composes the
+// already-landed migration pieces: the `phaseTemplate` (five-phase methodology enforced by the
+// generic ingest normalizer), `seedMigrationPlan` as `seedPlan` (T7 spawn decoration +
+// confidence-case wiring), the T5 `promptAdditions`, and the T4 `MIGRATION_FRAGMENT_IDS`. No probe.
+export {
+  TECH_MIGRATION_PRESET_ID,
+  TECH_MIGRATION_PRESET,
+  registerTechMigrationPreset,
+} from './presets/tech-migration/preset.js'
 // Per-`DocKind` document templates: the single source of truth for a kind's expected shape,
 // woven into the outliner/writer prompts and (later) read by the doc-quality gate. The
 // built-in `DOC_TEMPLATES` are the fallback; a deployment overrides via `registerDocTemplate`.
