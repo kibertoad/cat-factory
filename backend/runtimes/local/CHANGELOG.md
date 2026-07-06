@@ -1,5 +1,43 @@
 # @cat-factory/local-server
 
+## 0.55.3
+
+### Patch Changes
+
+- 23f7342: Mothership mode: give the four remaining `local-sqlite` bucket repositories a `node:sqlite` home on
+  the laptop, so the subscription features and the local-mode settings panel work in mothership mode
+  (previously their services were OFF for lack of a database).
+
+  - The local credential store (`credentialStore.ts`) gains three sealed-credential repositories —
+    `SqliteProviderSubscriptionTokenRepository` (the per-workspace pooled Claude Code / Codex / GLM
+    subscription tokens), `SqlitePersonalSubscriptionRepository` (per-user individual-usage
+    credentials, the outer double-encryption blob), and `SqliteSubscriptionActivationRepository`
+    (their short-lived per-run, system-key-only copies). A new `localSettingsStore.ts` holds the
+    local-mode operational settings singleton (`SqliteLocalSettingsRepository`), kept out of the
+    credential store so its "only credentials" invariant holds.
+  - All mirror their `D1*` SQL (D1 is SQLite) and stay LOCAL for the same reason the API-key pool
+    does: the tokens are leased + decrypted by the LOCAL container executor with the LOCAL key, so
+    they must never traverse the machine API to the mothership.
+  - New `NodeContainerOptions` credential-override seams (`providerSubscriptionTokenRepository` /
+    `personalSubscriptionRepository` / `subscriptionActivationRepository`, mirroring the existing
+    `providerApiKeyRepository` seam) let `buildNodeSubscriptionService` /
+    `buildNodePersonalSubscriptionService` build without a `db`; the activation repo is threaded once
+    and shared by both its consumers (the personal-subscription service's mint + the engine core's
+    clear-on-completion). `localSettingsService` is built in the local facade from the local-sqlite
+    repo when there is no `db`.
+
+- Updated dependencies [23f7342]
+- Updated dependencies [fdba1ea]
+  - @cat-factory/node-server@0.83.0
+  - @cat-factory/contracts@0.111.0
+  - @cat-factory/integrations@0.74.0
+  - @cat-factory/orchestration@0.84.0
+  - @cat-factory/agents@0.40.6
+  - @cat-factory/gitlab@0.7.20
+  - @cat-factory/kernel@0.101.2
+  - @cat-factory/server@0.94.3
+  - @cat-factory/executor-harness@1.35.0
+
 ## 0.55.2
 
 ### Patch Changes
