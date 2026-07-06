@@ -1,5 +1,12 @@
 # @cat-factory/prompt-fragments
 
+## 0.10.20
+
+### Patch Changes
+
+- Updated dependencies [ecbcbec]
+  - @cat-factory/contracts@0.112.0
+
 ## 0.10.19
 
 ### Patch Changes
