@@ -53,7 +53,7 @@ transition-design items), but the human audits arguments rather than re-deriving
 
 The validation pilot is an **MSSQL → PostgreSQL** migration whose centrepiece is
 replacing stored procedures with explicit app code + SQL while observable behaviour
-stays unchanged — run as a REAL initiative through the product (picker → form → probe →
+stays unchanged — run as a REAL initiative through the product (picker → form →
 interview → plan → approval → loop) against a **purpose-built synthetic MSSQL fixture
 repo** (locked decision: not a real internal codebase) that deliberately exercises the
 classic behaviour-preservation traps.
@@ -82,7 +82,7 @@ classic behaviour-preservation traps.
 | **S8** `preset_docs_refresh` registration (the FIRST real preset)                                                                                                                     | ⬜ todo                                | **T8** (transitively T10, T11) | S8 pioneers the registration pattern (descriptor + hooks + review mapping, incl. the full-gate-array rule from the parent's [S2] gotcha). Two presets pioneering that pattern in parallel is exactly the overlap this tracker exists to avoid; T8 **copies** S8's landed shape. |
 | **S9** E2E baseline (create-with-preset → auto-plan → spawn-with-decoration) + `backend/docs/initiative-presets.md`                                                                   | ⬜ todo                                | **T10** (transitively T11)     | The migration E2E must extend S9's baseline fixture, never fork a parallel harness.                                                                                                                                                                                             |
 
-Unblocked today (parallel-safe with the parent roadmap): T1, T3, T4, T5, T6, T7, T9 —
+Unblocked today (parallel-safe with the parent roadmap): T1, T3, T4, T5, T7, T9 —
 and T2 as soon as T1 lands. Critical path: T1 → T2 → (+ parent S8) T8 → (+ parent S9)
 T10 → T11.
 
@@ -140,7 +140,7 @@ minRisk: 0.6, minComplexity: 0.6 }], onMissingEstimate: 'strongest' }` — low
    | Field               | Type     | Required | Default                 | Notes                                                                                                |
    | ------------------- | -------- | -------- | ----------------------- | ---------------------------------------------------------------------------------------------------- |
    | `migrationKind`     | select   | yes      | —                       | `database` / `framework-major` / `runtime` / `library-swap` / `other` — "which migration"            |
-   | `fromTech`          | text     | yes      | —                       | e.g. "MSSQL 2019 + stored procedures"; probe-prefilled                                               |
+   | `fromTech`          | text     | yes      | —                       | e.g. "MSSQL 2019 + stored procedures"                                                                |
    | `toTech`            | text     | yes      | —                       | e.g. "PostgreSQL 16"                                                                                 |
    | `migrationDetail`   | textarea | no       | —                       | scope + specific concerns; the interviewer digs here                                                 |
    | `storedProcPolicy`  | select   | no       | `replace-with-app-code` | `showWhen: migrationKind equals 'database'`; also `port-to-target` / `decide-per-object`             |
@@ -164,15 +164,7 @@ minRisk: 0.6, minComplexity: 0.6 }], onMissingEstimate: 'strongest' }` — low
       behaviour suite green throughout.
    5. `migration-verify-decommission` — "Verify & decommission": prove behaviour parity
       on the new target, flip defaults/CI, remove the old path per the compat posture.
-8. **`detect` hook** (`migration-detect.logic.ts`; prior art
-   `provision-detect.logic.ts` and the parent's S6 pattern): bounded (~6–8
-   `listDirectory`/root-manifest reads), never throws, `{}` on any failure. Reads root
-   manifests + compose files for database/driver markers (`mssql`/`tedious`/`pg`, EF/
-   Dapper/knex/prisma providers, `mcr.microsoft.com/mssql` vs `postgres:` images) →
-   prefills `migrationKind: 'database'` + `fromTech`; framework manifests with
-   major-version pins → `framework-major` hints. Prefill only; user overrides win;
-   everything freezes at create.
-9. **`seedPlan` hook** (`seedMigrationPlan` — pure, total, unit-tested on draft
+8. **`seedPlan` hook** (`seedMigrationPlan` — pure, total, unit-tested on draft
    fixtures): does **no shape enforcement** (that is T2's generic normalizer).
    Responsibilities: (a) stamp `spawn` decoration — artifact items (phase 1/3/5 reports)
    get `taskType: 'document'` + `taskTypeFields.{docKind, targetPath}` with every
@@ -184,18 +176,18 @@ minRisk: 0.6, minComplexity: 0.6 }], onMissingEstimate: 'strongest' }` — low
    item the same way; (c) apply granularity caps (phase 2 ≤ ~8 coverage items, phase-4
    delivery batches per design area); (d) honour the `humanReview` input → gate arrays
    on spawned pipelines.
-10. **`promptAdditions`** (data, code-side): `initiative-interviewer` — probe migration
-    unknowns (downtime tolerance, data-migration constraints, compat posture when
-    unset); never re-ask seeded form answers. `initiative-analyst` — the blast-zone
-    methodology: enumerate direct touchpoints, then chase TRANSITIVE ones
-    (callers-of-callers, config, ops tooling, CI, scheduled jobs); classify each with
-    risk and "covered by which tests today"; produce the provisional inventory in the
-    analysis. `initiative-planner` — per-phase item briefs (what the blast-zone report
-    item commits, coverage items per provisional-inventory area at a seam above the
-    swapped layer, the confidence-case item and its obligations, the design item,
-    delivery batches derived from the design, decommission checks) and the
-    coverage-before-delivery discipline.
-11. **Zero new agent kinds.** Phase-1/3/5 artifacts are existing document tasks
+9. **`promptAdditions`** (data, code-side): `initiative-interviewer` — probe migration
+   unknowns (downtime tolerance, data-migration constraints, compat posture when
+   unset); never re-ask seeded form answers. `initiative-analyst` — the blast-zone
+   methodology: enumerate direct touchpoints, then chase TRANSITIVE ones
+   (callers-of-callers, config, ops tooling, CI, scheduled jobs); classify each with
+   risk and "covered by which tests today"; produce the provisional inventory in the
+   analysis. `initiative-planner` — per-phase item briefs (what the blast-zone report
+   item commits, coverage items per provisional-inventory area at a seam above the
+   swapped layer, the confidence-case item and its obligations, the design item,
+   delivery batches derived from the design, decommission checks) and the
+   coverage-before-delivery discipline.
+10. **Zero new agent kinds.** Phase-1/3/5 artifacts are existing document tasks
     (`doc-writer` via `pl_document_quick`, `targetPath` overridden); phase-2 coverage
     and phase-4/5 delivery are ordinary coding pipelines (`pl_quick`/`pl_full` via the
     estimate rules) — tests are code, and the coder→reviewer→ci tail is exactly the
@@ -257,12 +249,11 @@ divergence). Artifacts live under `migrationDocsDir`, never `docs/initiatives/<s
 | G1  | Plan shape is pure planner judgment — no declarative per-preset phase structure, prompt fold, or ingest enforcement | T1, T2                                                            |
 | G2  | Create-time qa seeding exists only for `interview: 'skip'` — a full-interview preset's interviewer re-asks the form | T3                                                                |
 | G3  | No migration methodology: blast-zone/coverage/transition prompt steering, behaviour-preservation fragments          | T4, T5                                                            |
-| G4  | No migration repo probe (db/driver/framework marker detection)                                                      | T6                                                                |
-| G5  | No migration plan post-processor (spawn decoration, confidence-case wiring, granularity)                            | T7                                                                |
-| G6  | No second real preset registration; the registration pattern lands only with parent S8                              | T8                                                                |
-| G7  | No confidence-case control point between coverage and delivery                                                      | §C design (data-only: gated item + `decision`), enforced by T7/T8 |
-| G8  | No MSSQL fixture repo exercising the behaviour-preservation traps                                                   | T9                                                                |
-| G9  | No migration E2E; the baseline harness lands only with parent S9                                                    | T10                                                               |
+| G4  | No migration plan post-processor (spawn decoration, confidence-case wiring, granularity)                            | T7                                                                |
+| G5  | No second real preset registration; the registration pattern lands only with parent S8                              | T8                                                                |
+| G6  | No confidence-case control point between coverage and delivery                                                      | §C design (data-only: gated item + `decision`), enforced by T7/T8 |
+| G7  | No MSSQL fixture repo exercising the behaviour-preservation traps                                                   | T9                                                                |
+| G8  | No migration E2E; the baseline harness lands only with parent S9                                                    | T10                                                               |
 
 Parent-owned, NOT ours (listed to prevent scope creep): the registration-pattern pilot
 (S8), the E2E baseline + `backend/docs/initiative-presets.md` developer doc (S9). The
@@ -278,16 +269,15 @@ loop/ingest glue (S5) is already landed and is consumed, never modified, here.
 | T3  | Full-interview qa seeding: extend `seedPresetInterviewQa` to `interview: 'full'` presets + a generic interviewer "build on seeded answers, don't re-ask" prompt line                                                                          | SYSTEM    | —                             | ⬜ todo |        |
 | T4  | `migration.*` prompt-fragment collection (behaviour-preservation, migration-discipline, confidence-case authoring standard) + tests                                                                                                           | MIGRATION | —                             | ⬜ todo |        |
 | T5  | Methodology prompt pack: promptAdditions for interviewer/analyst/planner (transitive blast-zone method, per-phase item briefs, confidence-case/design gating expectations) as exported constants + tests                                      | MIGRATION | —                             | ⬜ todo |        |
-| T6  | `migration-detect.logic.ts` bounded probe + unit tests (db/driver/compose markers → `migrationKind`/`fromTech` prefill; never throws)                                                                                                         | MIGRATION | —                             | ⬜ todo |        |
 | T7  | `seedMigrationPlan` pure post-processor + unit tests over draft fixtures (spawn stamping under `migrationDocsDir`, confidence-case injection/gating/dependsOn, granularity caps, `humanReview` gate arrays) — lands unwired, dormant until T8 | MIGRATION | —                             | ⬜ todo |        |
-| T8  | `preset_tech_migration` registration: descriptor (form, `phaseTemplate`, `policyDefaults`, review mapping, `planningPipelineId: 'pl_initiative'`) wiring T4–T7                                                                                | MIGRATION | **parent S8**, T1, T2, T3, T7 | ⬜ todo |        |
+| T8  | `preset_tech_migration` registration: descriptor (form, `phaseTemplate`, `policyDefaults`, review mapping, `planningPipelineId: 'pl_initiative'`) wiring T4, T5, T7                                                                            | MIGRATION | **parent S8**, T1, T2, T3, T7 | ⬜ todo |        |
 | T9  | Synthetic MSSQL fixture repo (schema + procs/triggers/views + app code + dual-target-ready integration tests + CI) exercising the behaviour traps (see Pilot)                                                                                 | PILOT     | —                             | ⬜ todo |        |
 | T10 | Migration E2E extending the S9 baseline: create-with-preset → full interview with seeded qa → template-shaped plan → spawn decoration → confidence-case gate                                                                                  | BOTH      | **parent S9**, T8             | ⬜ todo |        |
 | T11 | Pilot run + validation: real MSSQL→PG initiative through the product against T9's repo; validation checklist (see Pilot); learnings folded back into this tracker                                                                             | PILOT     | T8, T9, T10                   | ⬜ todo |        |
 
-Ordering: T1, T3–T7, T9 are unblocked today and parallel-safe with the parent roadmap;
-T2 unblocks when T1 lands. Critical path: T1 → T2 → (+ parent S8) T8 → (+ parent S9)
-T10 → T11.
+Ordering: T1, T3–T5, T7, T9 are unblocked today and parallel-safe with the parent
+roadmap; T2 unblocks when T1 lands. Critical path: T1 → T2 → (+ parent S8) T8 →
+(+ parent S9) T10 → T11.
 
 ## Pilot: MSSQL → PostgreSQL
 
@@ -346,8 +336,8 @@ primary), MSSQL leg/deps removal per posture, decommission `decision` recorded.
 
 **Validation checklist (what T11 must observe to call the preset proven):**
 
-- Created via picker → form; the probe prefill is observed; the full interview builds on
-  the seeded qa without re-asking form answers.
+- Created via picker → form; the full interview builds on the seeded qa without
+  re-asking form answers.
 - The approved plan has exactly the 5 template phase ids in order (T2 normalization
   observed); items carry `spawn` bags (verified on the entity + the in-repo tracker
   mirror).
@@ -370,8 +360,6 @@ Carried forward from the parent (they bind here too):
   data + create/ingest hooks.
 - **Keep the runtimes symmetric**: T2's ingest behaviour gets conformance assertions on
   both runtimes in the SAME slice.
-- **`detect` is bounded, never throws, degrades to `{}`** — no N+1, prefill never blocks
-  create.
 - **Inputs freeze after create**; the analyst records deviations as `decisions`, never
   rewrites `presetInputs`.
 - **Gate overrides are FULL boolean arrays** computed from the pipeline's own gate
@@ -412,6 +400,24 @@ New, migration-specific:
 
 ## Out of scope
 
+- **A create-time repo-detection PREFILL probe (`migration-detect.logic.ts` — the former
+  T6 slice, now cut; this is why the slice numbering skips T6).** A `detect` hook can read
+  only the repo's current FROM-side stack — never the destination (`toTech`) or the
+  migration intent — so once scoped honestly its entire job shrinks to prefilling the one
+  discoverable field, `fromTech`, and pre-selecting `migrationKind` in the unambiguous
+  single-DB case. That saves the user typing a single sentence they already know, while the
+  `initiative-analyst` rediscovers the whole blast zone far more thoroughly at planning
+  time regardless. Net: real implementation cost (a bounded checkout-free scanner + tests)
+  for a marginal, audience-dependent UX convenience on a high-ceremony (`interview: 'full'`)
+  preset that already confirms the stack in the interview. **The detector discovers nothing
+  the pipeline doesn't; it is not worth the slice.** Consequence: `preset_tech_migration`
+  registers with **no `detect` hook**, so its descriptor `probe` flag is `false` (derived
+  from `!!detect`) and the SPA simply never fires a probe — the form opens on its declared
+  defaults and the user fills `fromTech`/`toTech` by hand. (Contrast docs-refresh, where the
+  probe detects the docs LAYOUT the preset then acts on — there the detection is load-bearing,
+  here it is not.) If a future pilot shows filling the form by hand is a genuine friction
+  point, a probe can be added back as a self-contained slice with zero impact on the rest of
+  the initiative — nothing here depends on it.
 - **Re-plan-at-phase-boundary engine seam** — follow-ups + human curation suffice for
   v1; revisit if pilots show plan-time provisional items diverge badly (that would be
   parent-roadmap-shaped generic work).
