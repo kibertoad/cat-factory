@@ -225,7 +225,7 @@ defaultFragmentIds, policyDefaults?: Partial<InitiativeExecutionPolicy>, probe? 
 | 2   | Per-run gate-override engine seam (`ExecutionService.start` override → run steps; loop threads `spawn.gates`) + conformance on both runtimes                                                                                                             | SYSTEM | ✅ done | #880   |
 | 3   | Create/planning integration: create validation + qa/goal seeding for skip-interview presets, probe endpoint, snapshot attach (both facades), `AgentContextBuilder` preset folds, SPA starts `descriptor.planningPipelineId`                              | SYSTEM | ✅ done | #883   |
 | 4   | SPA preset picker + generic descriptor form renderer (checkbox-group/path/showWhen) + probe prefill + i18n chrome                                                                                                                                        | SYSTEM | ✅ done | #886   |
-| 5   | Loop/ingest glue: `buildTaskBlock` spawn decoration, `seedPlan` invocation at ingest, path-safety validation, conformance round-trip                                                                                                                     | SYSTEM | ⬜ todo |        |
+| 5   | Loop/ingest glue: `buildTaskBlock` spawn decoration, `seedPlan` invocation at ingest, path-safety validation, conformance round-trip                                                                                                                     | SYSTEM | ✅ done | #890   |
 | 6   | `docs-detect.logic.ts` (pure over `RepoFiles`) + unit tests (monorepo/root/dir-name heuristics, bounded budget, never-throw)                                                                                                                             | PILOT  | ⬜ todo |        |
 | 7   | New kinds `diagram-author` / `code-commenter` (prompts, presentation, doc-aware trait) + `pl_diagrams` / `pl_code_comments` / `pl_business_docs`                                                                                                         | PILOT  | ⬜ todo |        |
 | 8   | `preset_docs_refresh` registration: descriptor (form), `detect` = S6, `seedPlan`, promptAdditions (analyst audit + planner shaping), review mapping, `pl_initiative_docs`                                                                                | PILOT  | ⬜ todo |        |
@@ -352,6 +352,30 @@ false` per step, so an override entry of `false` genuinely turns a pipeline gate
   ABSENT (above), `isPresetFieldVisible` (`@cat-factory/contracts`) reads an absent value as `false`
   when the condition compares a boolean — so a field gated on an off box shows at first render, not
   only after a toggle on→off. Both facades' validate/sanitize inherit this via the shared function.
+- **[S5] `seedPlan` runs in `InitiativeService.ingestPlan`, resolved from the FROZEN entity, and its
+  output is RE-PARSED.** The preset comes from `initiative.presetId`/`presetInputs` (frozen at
+  create, never mutated), so it's read once via `getByBlock` OUTSIDE the CAS `mutate` — safe because
+  `seedPlan` is pure, so its result is a deterministic function of `(draft, frozen inputs)` and stays
+  replay-safe/idempotent. The hook output goes back through `parseInitiativePlanDraft`, which is the
+  path-safety story: an unsafe spawn `targetPath` (from a hook OR the planner's raw draft) fails
+  `taskTypeFieldsSchema`'s `isSafeDocPath` check at the trust boundary — there is NO separate
+  path-validation pass, and slice 8's `seedPlan` needs none. `assertPipelinesExist` runs on the
+  SEEDED draft (so a `seedPlan` that adds `pipelineId`s is still checked).
+- **[S5] `buildTaskBlock` folds `spawn.{taskType,taskTypeFields,fragmentIds,agentConfig}` sparsely**
+  (empty bag omitted), mirroring `BoardService.addTask`, so a decoration-less item stays
+  byte-identical to the pre-slice-5 block. `spawn.taskType` is REQUIRED for a typed spawn to
+  classify correctly: `taskType` (not `taskTypeFields`) is what keys the per-type task limit
+  (`ExecutionService`) and the SPA's document affordances (the inspector doc-repo picker), so a
+  `document` item that stamped only `taskTypeFields` would still count as a `feature` and hide the
+  picker — hence the `taskType` field on `initiativeItemSpawnSchema`. A `document`-typed spawn with
+  no explicit `fragmentIds` inherits `DEFAULT_DOCUMENT_STYLE_FRAGMENT_IDS`, exactly as `addTask`
+  seeds them. `spawn.gates` was already threaded in slice 2; the rest lands here. `applyPlanDraft`
+  now carries `d.spawn` onto the persisted item (like the other draft content fields) — that's the
+  wire from the planner draft to the loop's block builder.
+- **[S5] The spawn bag rides the `doc` blob** (symmetric by construction), but the convention still
+  demands an explicit conformance assertion for it — added to `initiative-suite.ts`. The spawned
+  BLOCK's decoration fields (`taskType`/`taskTypeFields`/`fragmentIds`/`agentConfig`) are already
+  covered by the block-store parity assertions, so slice 5 only adds the item-`spawn` round-trip.
 
 ## Out of scope
 

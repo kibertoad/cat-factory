@@ -1,5 +1,5 @@
 import * as v from 'valibot'
-import { taskTypeFieldsSchema } from './primitives.js'
+import { createTaskTypeSchema, taskTypeFieldsSchema } from './primitives.js'
 import { agentConfigValuesSchema } from './agent-config.js'
 
 // ---------------------------------------------------------------------------
@@ -161,6 +161,10 @@ export type InitiativePhase = v.InferOutput<typeof initiativePhaseSchema>
  * Preset-authored decoration for a spawned task, folded onto the task block by the
  * execution loop's `buildTaskBlock` (slice 5) so an item comes out as a first-class typed
  * task rather than a bare description block. Every field is optional and additive:
+ *   - `taskType`       — the kind of work (`document`/`bug`/`spike`/…), so a spawned doc task
+ *                        classifies exactly like one created on the board (`taskType`-keyed
+ *                        per-type task limits + the SPA's document affordances). Absent ⇒ the
+ *                        block stays untyped (`feature`), byte-identical to the pre-slice-5 shape.
  *   - `taskTypeFields` — the per-type block fields (a doc task's `targetPath`/`docKind`, …).
  *   - `fragmentIds`    — best-practice prompt fragments to stamp on the block.
  *   - `agentConfig`    — per-agent-kind config values for the spawned pipeline.
@@ -169,6 +173,7 @@ export type InitiativePhase = v.InferOutput<typeof initiativePhaseSchema>
  * Emitted by the planner (via the draft item) and/or enforced by a preset's `seedPlan`.
  */
 export const initiativeItemSpawnSchema = v.object({
+  taskType: v.optional(createTaskTypeSchema),
   taskTypeFields: v.optional(taskTypeFieldsSchema),
   fragmentIds: v.optional(v.array(v.string())),
   agentConfig: v.optional(agentConfigValuesSchema),
