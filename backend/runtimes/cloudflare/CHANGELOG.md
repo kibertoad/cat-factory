@@ -1,5 +1,13 @@
 # @cat-factory/worker
 
+## 0.77.8
+
+### Patch Changes
+
+- Updated dependencies [f7f9a9e]
+  - @cat-factory/orchestration@0.93.0
+  - @cat-factory/server@0.99.1
+
 ## 0.77.7
 
 ### Patch Changes
