@@ -1,9 +1,12 @@
 <script setup lang="ts">
 // The board card for an `initiative`-level block (a frame child, like a module):
 // title, the initiative's lifecycle status, and — once a plan is ingested — the
-// item-completion progress. Clicking selects the block (the inspector offers
-// "Run planning" / "Open tracker"); the tracker button opens the dedicated
-// window directly. Draggable within its frame like a task card.
+// item-completion progress. Mirrors a task card's on-card "Start" affordance: the
+// initiative's equivalent "Run planning" (and, while parked mid-interview, "Answer
+// planning questions") lives right here on the board — the same actions the
+// inspector offers — so starting an initiative isn't hidden behind selecting it.
+// The tracker button opens the dedicated window directly. Draggable within its
+// frame like a task card.
 import type { InitiativeStatus } from '~/types/domain'
 import { useBlockDrag } from '~/composables/useBlockDrag'
 import {
@@ -15,6 +18,8 @@ import {
 const props = defineProps<{ blockId: string }>()
 const board = useBoardStore()
 const initiatives = useInitiativesStore()
+const pipelines = usePipelinesStore()
+const execution = useExecutionStore()
 const ui = useUiStore()
 const { t } = useI18n()
 const { draggingId, startDrag } = useBlockDrag()
@@ -29,8 +34,41 @@ const progress = computed(() => initiativeProgress(initiative.value?.items))
 
 const selected = computed(() => ui.selectedBlockId === props.blockId)
 
+// The planning pipeline runnable on this block (its preset's `planningPipelineId`, or the
+// generic `pl_initiative`). Null for a named preset that hasn't hydrated yet, so "Run
+// planning" stays disabled rather than launching the wrong pipeline — same guard as the
+// inspector; the engine's runnable check still enforces an initiative-shaped pipeline here.
+const planningPipeline = computed(() => {
+  const id = initiatives.planningPipelineIdFor(initiative.value)
+  return id ? pipelines.pipelines.find((p) => p.id === id) : undefined
+})
+const running = computed(() => !!block.value?.executionId)
+
+// The interviewer has parked the planning run with questions awaiting answers.
+const awaitingAnswers = computed(
+  () =>
+    initiative.value?.interview?.status === 'awaiting' &&
+    (initiative.value?.qa ?? []).some((q) => !(q.answer ?? '').trim()),
+)
+
+// Optimistic "Run planning": flip to a spinning state the instant it's clicked, before the
+// stream pushes the block's executionId back (which keeps the button disabled thereafter).
+const starting = ref(false)
+
 function select() {
   ui.select(props.blockId)
+}
+async function runPlanning() {
+  if (!planningPipeline.value || running.value) return
+  starting.value = true
+  const started = await execution.start(props.blockId, planningPipeline.value)
+  // On success `running` takes over and keeps the button disabled; on refusal/cancel the
+  // store surfaces its own toast, so just revert the optimistic state.
+  if (!started) starting.value = false
+}
+function openPlanning() {
+  ui.select(props.blockId)
+  ui.openInitiativePlanning(props.blockId)
 }
 function openTracker() {
   ui.select(props.blockId)
@@ -91,17 +129,43 @@ function onHandle(e: PointerEvent) {
           {{ t('initiative.card.progress', { done: progress.settled, total: progress.total }) }}
         </div>
       </div>
-      <UButton
-        class="nodrag mt-2"
-        data-testid="initiative-open-tracker"
-        size="xs"
-        variant="soft"
-        color="primary"
-        icon="i-lucide-list-checks"
-        @click.stop="openTracker"
-      >
-        {{ t('initiative.card.openTracker') }}
-      </UButton>
+      <div class="nodrag mt-2 flex flex-wrap items-center gap-1">
+        <UButton
+          v-if="awaitingAnswers"
+          data-testid="initiative-card-answer-planning"
+          size="xs"
+          variant="solid"
+          color="primary"
+          icon="i-lucide-messages-square"
+          @click.stop="openPlanning"
+        >
+          {{ t('initiative.inspector.answerPlanning') }}
+        </UButton>
+        <UButton
+          v-else
+          data-testid="initiative-card-run-planning"
+          size="xs"
+          variant="soft"
+          color="primary"
+          icon="i-lucide-play"
+          :loading="starting || running"
+          :disabled="!planningPipeline || running || starting"
+          :title="t('initiative.inspector.runPlanning')"
+          @click.stop="runPlanning"
+        >
+          {{ t('initiative.inspector.runPlanning') }}
+        </UButton>
+        <UButton
+          data-testid="initiative-open-tracker"
+          size="xs"
+          variant="soft"
+          color="neutral"
+          icon="i-lucide-list-checks"
+          @click.stop="openTracker"
+        >
+          {{ t('initiative.card.openTracker') }}
+        </UButton>
+      </div>
     </div>
   </div>
 </template>

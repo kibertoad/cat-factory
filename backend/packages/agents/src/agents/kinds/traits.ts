@@ -1,5 +1,9 @@
 import { SPEC_FEATURES_DIR, SPEC_MODULES_DIR, SPEC_OVERVIEW_PATH } from '@cat-factory/contracts'
-import type { AgentKind } from '@cat-factory/kernel'
+import {
+  type AgentKind,
+  DOC_INTERVIEWER_AGENT_KIND,
+  INITIATIVE_INTERVIEWER_AGENT_KIND,
+} from '@cat-factory/kernel'
 import type { AgentKindRegistry } from './registry.js'
 
 // Agent traits: first-class, checkable CAPABILITIES an agent kind carries, beyond its
@@ -50,6 +54,20 @@ export const SPEC_AWARE_TRAIT: AgentTrait = 'spec-aware'
  */
 export const BINARY_STORAGE_TRAIT: AgentTrait = 'binary-storage'
 
+/**
+ * Interview-gate kinds run the shared interactive-INTERVIEWER spine
+ * (`InterviewGateController`): they PARK the run on a durable decision-wait while a human answers
+ * the interviewer's clarifying questions in a dedicated window, then RESUME by re-running the
+ * (slow) interviewer LLM in the durable driver — the human's `continue`/`proceed` records a
+ * `pendingInterview` marker on the parked step and wakes the driver. A pure MARKER trait (no
+ * prompt guidance): the execution engine reads it in TWO places — its step re-park guard lets a
+ * resumed interview step (one carrying `pendingInterview`) fall through to the gate's own
+ * evaluation instead of immediately re-parking, and the generic approve/reject guard refuses to
+ * settle such a gate through the plain approval endpoint (it must go through the interview window).
+ * A new interviewer just carries the trait instead of the engine hard-coding its kind.
+ */
+export const INTERVIEW_GATE_TRAIT: AgentTrait = 'interview-gate'
+
 /** The guidance appended to a spec-aware kind's system prompt — explains the spec format. */
 export const SPEC_AWARE_GUIDANCE = [
   `This repository may contain a prescriptive SPECIFICATION for the service under the \`spec/\` directory — the source of truth for what the service must do. It is sharded by a module (domain) → feature (group) taxonomy. When it is present, read it before doing the work:`,
@@ -97,6 +115,10 @@ export const STANDARD_AGENT_TRAITS: Partial<Record<AgentKind, AgentTrait[]>> = {
   // gets `doc-aware` here — folding the SAME writing-style fragments the writer received,
   // which become its review criteria (style guidance as both instruction and check).
   'doc-reviewer': [DOC_AWARE_TRAIT],
+  // The interactive-interviewer gates ride the shared InterviewGateController park/resume spine;
+  // the engine keys its re-park + approval-gate guards off this trait rather than their kind ids.
+  [INITIATIVE_INTERVIEWER_AGENT_KIND]: [INTERVIEW_GATE_TRAIT],
+  [DOC_INTERVIEWER_AGENT_KIND]: [INTERVIEW_GATE_TRAIT],
 }
 
 /** Definition of a (custom) trait: its id and optional system-prompt guidance. */
@@ -194,6 +216,8 @@ function registerStandardTraits(): void {
   // A pure marker, like `code-aware`: its whole effect is the engine's fragment fold.
   registerAgentTrait({ id: DOC_AWARE_TRAIT })
   registerAgentTrait({ id: SPEC_AWARE_TRAIT, guidance: SPEC_AWARE_GUIDANCE })
+  // A pure marker, like `code-aware`: its whole effect is the engine's interview-gate handling.
+  registerAgentTrait({ id: INTERVIEW_GATE_TRAIT })
 }
 
 registerStandardTraits()
