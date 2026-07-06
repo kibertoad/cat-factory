@@ -6,6 +6,7 @@ import type {
   R2Bucket,
   Workflow,
 } from '@cloudflare/workers-types'
+import { ENV_HELP, configProblem } from '@cat-factory/server'
 import type { DeployContainer } from './containers/DeployContainer'
 import type { ExecutionContainer } from './containers/ExecutionContainer'
 import type { WorkspaceEventsHub } from './durable-objects/WorkspaceEventsHub'
@@ -518,10 +519,7 @@ export interface Env {
  */
 export function requireTelemetryDb(env: Env): D1Database {
   if (!env.TELEMETRY_DB) {
-    throw new Error(
-      'TELEMETRY_DB binding is required (the dedicated telemetry D1 database). ' +
-        'Add a [[d1_databases]] entry with binding = "TELEMETRY_DB" to wrangler.toml.',
-    )
+    throw configProblem({ key: 'TELEMETRY_DB', ...ENV_HELP.TELEMETRY_DB })
   }
   return env.TELEMETRY_DB
 }

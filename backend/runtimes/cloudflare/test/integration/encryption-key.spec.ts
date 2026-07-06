@@ -25,6 +25,6 @@ describe('shared ENCRYPTION_KEY', () => {
   it('fails loudly at config load when ENCRYPTION_KEY is unset', () => {
     expect(() =>
       buildContainer({ ...env, ENCRYPTION_KEY: undefined } as typeof env, agent()),
-    ).toThrow(/ENCRYPTION_KEY is required/i)
+    ).toThrow(/ENCRYPTION_KEY/i)
   })
 })

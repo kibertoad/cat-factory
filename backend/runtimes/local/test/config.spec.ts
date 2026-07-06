@@ -21,19 +21,19 @@ describe('[local] applyLocalDefaults secrets', () => {
 
   it('throws when AUTH_SESSION_SECRET is missing', () => {
     expect(() => applyLocalDefaults({ ENCRYPTION_KEY: SECRETS.ENCRYPTION_KEY })).toThrow(
-      /AUTH_SESSION_SECRET is required/,
+      /AUTH_SESSION_SECRET/,
     )
   })
 
   it('throws when ENCRYPTION_KEY is missing', () => {
     expect(() => applyLocalDefaults({ AUTH_SESSION_SECRET: SECRETS.AUTH_SESSION_SECRET })).toThrow(
-      /ENCRYPTION_KEY is required/,
+      /ENCRYPTION_KEY/,
     )
   })
 
   it('treats a blank secret as missing', () => {
     expect(() => applyLocalDefaults({ ...SECRETS, AUTH_SESSION_SECRET: '   ' })).toThrow(
-      /AUTH_SESSION_SECRET is required/,
+      /AUTH_SESSION_SECRET/,
     )
   })
 

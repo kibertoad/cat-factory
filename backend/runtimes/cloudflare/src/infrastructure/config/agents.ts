@@ -1,7 +1,7 @@
 import type { AgentKind } from '@cat-factory/contracts'
 import { type ProviderCapabilities, resolveModelRef } from '@cat-factory/kernel'
 import type { AgentModelConfig } from '@cat-factory/agents'
-import type { AgentsConfig } from '@cat-factory/server'
+import { ENV_HELP, type AgentsConfig, configProblem } from '@cat-factory/server'
 import type { Env } from '../env'
 import { num } from './utils'
 
@@ -17,7 +17,11 @@ function parseModelOverrides(
   try {
     parsed = JSON.parse(raw)
   } catch {
-    throw new Error('AGENT_MODELS is not valid JSON')
+    throw configProblem({
+      key: 'AGENT_MODELS',
+      summary: ENV_HELP.AGENT_MODELS.summary,
+      remedy: `It is not valid JSON. ${ENV_HELP.AGENT_MODELS.remedy}`,
+    })
   }
   if (typeof parsed !== 'object' || parsed === null) return {}
 
@@ -26,7 +30,11 @@ function parseModelOverrides(
     const provider = value.provider
     const model = value.model
     if (typeof provider !== 'string' || typeof model !== 'string') {
-      throw new Error(`AGENT_MODELS.${kind} requires string "provider" and "model"`)
+      throw configProblem({
+        key: 'AGENT_MODELS',
+        summary: ENV_HELP.AGENT_MODELS.summary,
+        remedy: `Entry "${kind}" is missing a string "provider" and/or "model". ${ENV_HELP.AGENT_MODELS.remedy}`,
+      })
     }
     out[kind] = {
       ref: { provider, model },

@@ -3552,7 +3552,14 @@
     "loadingBoard": "Board wird geladen…",
     "backendUnreachable": "Backend nicht erreichbar",
     "reconnecting": "Verbindung wird wiederhergestellt…",
-    "offline": "Keine Live-Updates"
+    "offline": "Keine Live-Updates",
+    "misconfigured": {
+      "title": "Backend nicht konfiguriert",
+      "intro": "Der Server wurde gestartet, kann aber erst laufen, wenn die folgenden Einstellungen vorhanden sind. Ergänze die fehlenden Werte in deiner Umgebung und lade neu.",
+      "howToFix": "So behebst du es:",
+      "reload": "Neu laden",
+      "hint": "Hier werden nur Variablennamen und deren Einrichtung angezeigt, niemals geheime Werte."
+    }
   },
   "language": {
     "switcher": "Sprache",

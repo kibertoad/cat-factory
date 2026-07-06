@@ -1,4 +1,8 @@
-import type { InfrastructureCapabilities, LocalModeConfig } from '@cat-factory/contracts'
+import type {
+  BackendMisconfigured,
+  InfrastructureCapabilities,
+  LocalModeConfig,
+} from '@cat-factory/contracts'
 import { defineStore } from 'pinia'
 import { computed, ref } from 'vue'
 import type { AuthUser } from '~/types/domain'
@@ -61,6 +65,14 @@ export const useAuthStore = defineStore(
     /** True once the initial auth handshake has settled. */
     const ready = ref(false)
     /**
+     * Set when the backend answered its boot handshake but reported that it is MISCONFIGURED — it
+     * failed to start normally because a mandatory env var / binding is missing, and is serving the
+     * fallback backend that lists the problems (each carries only a name + meaning + remedy, never a
+     * secret). Present ⇒ the SPA renders the dedicated misconfiguration screen instead of the
+     * login/board. Null on a normally-booted backend.
+     */
+    const misconfigured = ref<BackendMisconfigured | null>(null)
+    /**
      * Mothership mode: the last mothership sign-in failure (node unreachable / rejected session),
      * or null. Set when the post-OAuth connect exchange fails, so the login screen can tell the
      * user the click didn't take instead of silently returning them to the sign-in button.
@@ -83,6 +95,9 @@ export const useAuthStore = defineStore(
 
     /** May the app render? True when auth is off, or on with a known user. */
     const isAuthenticated = computed(() => !required.value || user.value !== null)
+
+    /** Whether the backend reported itself misconfigured (drives the dedicated error screen). */
+    const isMisconfigured = computed(() => misconfigured.value !== null)
 
     /**
      * Whether the SPA must show the login screen before the board.
@@ -176,7 +191,14 @@ export const useAuthStore = defineStore(
         testingNoAuth.value = config.testingNoAuth ?? false
         localMode.value = config.localMode ?? null
         infrastructure.value = config.infrastructure ?? null
+        misconfigured.value = config.misconfigured ?? null
         configLoaded.value = true
+        // A misconfigured backend serves only the fallback app; there's no session/board to
+        // resolve, so settle here and let the SPA render the misconfiguration screen.
+        if (misconfigured.value) {
+          ready.value = true
+          return
+        }
       } catch {
         // Backend unreachable — let the board's own error UI handle it (configLoaded stays
         // false, so we never mistake this for an unauthenticated session and gate it).
@@ -335,8 +357,10 @@ export const useAuthStore = defineStore(
       ready,
       mothershipError,
       configLoaded,
+      misconfigured,
       isLocalFacade,
       isAuthenticated,
+      isMisconfigured,
       needsLogin,
       bootstrap,
       login,

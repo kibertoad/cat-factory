@@ -4,7 +4,14 @@
     "loadingBoard": "Cargando tablero…",
     "backendUnreachable": "No se puede conectar con el backend",
     "reconnecting": "Reconectando…",
-    "offline": "No se reciben actualizaciones en vivo"
+    "offline": "No se reciben actualizaciones en vivo",
+    "misconfigured": {
+      "title": "Backend sin configurar",
+      "intro": "El servidor se inició pero no puede funcionar hasta que se proporcionen los ajustes siguientes. Añade los valores que faltan a tu entorno y vuelve a cargar.",
+      "howToFix": "Cómo solucionarlo:",
+      "reload": "Recargar",
+      "hint": "Aquí solo se muestran los nombres de las variables y cómo definirlas, nunca valores secretos."
+    }
   },
   "language": {
     "switcher": "Idioma",

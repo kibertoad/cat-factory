@@ -6,6 +6,7 @@ import {
   resetPasswordSchema,
   signupSchema,
 } from '../auth.js'
+import { backendMisconfiguredSchema } from '../config.js'
 import { errorResponses, singleStringParam } from './_shared.js'
 
 // ---------------------------------------------------------------------------
@@ -168,6 +169,14 @@ const authConfigViewSchema = v.object({
    */
   testingNoAuth: v.optional(v.boolean()),
   infrastructure: v.optional(infrastructureCapabilitiesSchema),
+  /**
+   * Set ONLY by the misconfiguration fallback backend: a facade that failed to boot because a
+   * mandatory env var / binding is missing serves a minimal app whose `/auth/config` carries this
+   * list of problems (never any secret value — just each var's name, meaning, and remedy). Present
+   * ⇒ the SPA renders the dedicated "backend misconfigured" screen instead of the login/board.
+   * Absent ⇒ a normally-booted backend.
+   */
+  misconfigured: v.optional(backendMisconfiguredSchema),
 })
 
 const meViewSchema = v.object({

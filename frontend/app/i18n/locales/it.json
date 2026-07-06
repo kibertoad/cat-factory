@@ -3552,7 +3552,14 @@
     "loadingBoard": "Caricamento della board…",
     "backendUnreachable": "Impossibile raggiungere il backend",
     "reconnecting": "Riconnessione…",
-    "offline": "Aggiornamenti in tempo reale non ricevuti"
+    "offline": "Aggiornamenti in tempo reale non ricevuti",
+    "misconfigured": {
+      "title": "Backend non configurato",
+      "intro": "Il server è avviato ma non può funzionare finché non vengono forniti i parametri seguenti. Aggiungi i valori mancanti al tuo ambiente e ricarica.",
+      "howToFix": "Come risolvere:",
+      "reload": "Ricarica",
+      "hint": "Qui vengono mostrati solo i nomi delle variabili e come impostarle, mai valori segreti."
+    }
   },
   "language": {
     "switcher": "Lingua",

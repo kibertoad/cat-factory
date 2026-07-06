@@ -7,9 +7,10 @@ import {
   NodeRealtimeHub,
   createApp,
   serveAppWithRealtime,
+  serveMisconfigured,
   start,
 } from '@cat-factory/node-server'
-import { logger } from '@cat-factory/server'
+import { isConfigValidationError, logger } from '@cat-factory/server'
 import { validateRegistrationsOnce } from '@cat-factory/orchestration'
 import type { BackendRegistries } from '@cat-factory/integrations'
 import { applyLocalDefaults } from './config.js'
@@ -70,7 +71,25 @@ export async function startLocal(
   } = {},
 ): Promise<Awaited<ReturnType<typeof start>>> {
   const env = options.env ?? process.env
+  try {
+    return await bootLocal(options, env)
+  } catch (err) {
+    // A mandatory secret / config value is missing or invalid (e.g. AUTH_SESSION_SECRET,
+    // ENCRYPTION_KEY, DATABASE_URL). Rather than exiting — which drops the developer's SPA onto a
+    // bare "can't reach the backend" panel — keep the port reachable serving the fallback backend
+    // so the UI explains exactly what to add to their .env. (The Postgres path's own config errors
+    // are already handled inside `start()`; this covers the ones thrown by `applyLocalDefaults` and
+    // the mothership path, before `start()` runs.)
+    if (isConfigValidationError(err)) return serveMisconfigured(err.problems, env, options.host)
+    throw err
+  }
+}
 
+/** The real local boot, wrapped by {@link startLocal} so a {@link ConfigValidationError} falls back. */
+async function bootLocal(
+  options: NonNullable<Parameters<typeof startLocal>[0]>,
+  env: NodeJS.ProcessEnv,
+): Promise<Awaited<ReturnType<typeof start>>> {
   // The auth gate defaults OPEN in local mode and the listener binds to all interfaces
   // (so on native Linux Docker the agent containers can reach the LLM proxy via the
   // bridge gateway). That combination means anyone on your network can reach the API —

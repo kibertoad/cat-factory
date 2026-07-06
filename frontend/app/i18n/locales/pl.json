@@ -4,7 +4,14 @@
     "loadingBoard": "Ładowanie tablicy…",
     "backendUnreachable": "Nie można połączyć się z backendem",
     "reconnecting": "Ponowne łączenie…",
-    "offline": "Brak aktualizacji na żywo"
+    "offline": "Brak aktualizacji na żywo",
+    "misconfigured": {
+      "title": "Backend nie jest skonfigurowany",
+      "intro": "Serwer wystartował, ale nie zadziała, dopóki nie uzupełnisz poniższych ustawień. Dodaj brakujące wartości do swojego środowiska i odśwież.",
+      "howToFix": "Jak naprawić:",
+      "reload": "Odśwież",
+      "hint": "Tutaj pokazujemy tylko nazwy zmiennych i sposób ich ustawienia, nigdy wartości sekretnych."
+    }
   },
   "language": {
     "switcher": "Język",

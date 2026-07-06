@@ -2,14 +2,20 @@ import { serve } from '@hono/node-server'
 import {
   type AppEnv,
   CORS_ALLOWED_HEADERS,
+  type ConfigProblem,
   type ServerContainer,
   corsReflectsWhenUnset,
+  createMisconfiguredApp,
+  formatConfigProblems,
   handleError,
+  isConfigValidationError,
   logger,
+  requireEnv,
   mountAuthGate,
   registerCoreControllers,
   resolveCorsOrigin,
 } from '@cat-factory/server'
+import { loadNodeConfig } from './config.js'
 import { Hono } from 'hono'
 import { cors } from 'hono/cors'
 import { validateRegistrationsOnce } from '@cat-factory/orchestration'
@@ -109,15 +115,49 @@ export function serveAppWithRealtime(opts: {
   host?: string
   label: string
 }): { server: ReturnType<typeof serve>; stopRealtime: ReturnType<typeof attachRealtime> } {
-  const port = Number(opts.env.PORT ?? 8787)
-  const host = opts.host ?? opts.env.HOST?.trim() ?? undefined
-  const server = serve({ fetch: opts.app.fetch, port, ...(host ? { hostname: host } : {}) })
+  const { port, hostname } = resolveBind(opts.env, opts.host)
+  const server = serve({ fetch: opts.app.fetch, port, ...(hostname ? { hostname } : {}) })
   // Accept the SPA's WebSocket event-stream upgrades on the same listener (the Worker uses a
   // per-workspace Durable Object; `@hono/node-server` doesn't upgrade on its own, so attach a
   // `ws` server here).
   const stopRealtime = attachRealtime(server, opts.realtimeHub, opts.auth, logger)
-  logger.info({ port, host: host ?? '0.0.0.0' }, `${opts.label} listening`)
+  logger.info({ port, host: hostname ?? '0.0.0.0' }, `${opts.label} listening`)
   return { server, stopRealtime }
+}
+
+/**
+ * Resolve the HTTP listen address (`PORT` / `HOST`, with an optional explicit `host` override).
+ * Shared by {@link serveAppWithRealtime} and {@link serveMisconfigured} so the fallback backend can
+ * never bind a different port/host than the real server — the SPA reaches the deployment at one
+ * fixed address, and the whole point of the fallback is that it answers there too.
+ */
+function resolveBind(env: NodeJS.ProcessEnv, host?: string): { port: number; hostname?: string } {
+  const port = Number(env.PORT ?? 8787)
+  const hostname = host ?? env.HOST?.trim() ?? undefined
+  return { port, ...(hostname ? { hostname } : {}) }
+}
+
+/**
+ * Serve the misconfiguration FALLBACK backend on the normal port/host. Used when {@link start}
+ * (or the local facade's boot) catches a {@link ConfigValidationError}: instead of exiting — which
+ * leaves the SPA showing a bare "can't reach the backend" panel with no clue what's wrong — we keep
+ * the deployment reachable serving a minimal app that reports the exact missing variables, so the
+ * SPA can render its dedicated "backend misconfigured" screen. Logs a clear operator message too.
+ */
+export function serveMisconfigured(
+  problems: ConfigProblem[],
+  env: NodeJS.ProcessEnv,
+  host?: string,
+): ReturnType<typeof serve> {
+  logger.error(
+    { problems: problems.map((p) => p.key) },
+    `cat-factory node server is MISCONFIGURED — serving the fallback error backend so the UI can explain what to fix.\n${formatConfigProblems(problems)}`,
+  )
+  const app = createMisconfiguredApp(problems)
+  const { port, hostname } = resolveBind(env, host)
+  const server = serve({ fetch: app.fetch, port, ...(hostname ? { hostname } : {}) })
+  logger.info({ port, host: hostname ?? '0.0.0.0' }, 'cat-factory misconfigured fallback listening')
+  return server
 }
 
 /**
@@ -161,10 +201,29 @@ export async function start(
   } = {},
 ): Promise<ReturnType<typeof serve>> {
   const env = options.env ?? process.env
-  const databaseUrl = env.DATABASE_URL
-  if (!databaseUrl) {
-    throw new Error('DATABASE_URL is required to start the Node server')
+  try {
+    return await bootServer(options, env)
+  } catch (err) {
+    // A mandatory env var / binding is missing or invalid: don't die (which leaves the SPA on a
+    // bare "can't reach the backend" panel) — keep the port reachable serving the fallback backend
+    // so the UI can tell the developer exactly what to fix. Any OTHER failure is a real crash and
+    // is rethrown to the entrypoint (which exits non-zero).
+    if (isConfigValidationError(err)) return serveMisconfigured(err.problems, env, options.host)
+    throw err
   }
+}
+
+/** The real boot sequence, wrapped by {@link start} so a {@link ConfigValidationError} falls back. */
+async function bootServer(
+  options: NonNullable<Parameters<typeof start>[0]>,
+  env: NodeJS.ProcessEnv,
+): Promise<ReturnType<typeof serve>> {
+  const databaseUrl = requireEnv(env, 'DATABASE_URL')
+  // Validate the full config UP FRONT — it is pure (no I/O), so an ENCRYPTION_KEY / auth-provider
+  // problem surfaces as a ConfigValidationError here, BEFORE we open a Postgres connection or run
+  // migrations. Without this the same throw would fire deep inside `buildContainer` only after the
+  // heavy DB boot, and a bad-config restart would needlessly hammer Postgres first.
+  loadNodeConfig(env)
   const { db, pool } = createDbClient(databaseUrl)
   const boss = new PgBoss(databaseUrl)
   // Migrations (Drizzle, app schema) and pg-boss's own schema provisioning are

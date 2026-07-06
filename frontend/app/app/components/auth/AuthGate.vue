@@ -1,5 +1,6 @@
 <script setup lang="ts">
 import { computed } from 'vue'
+import BackendMisconfiguredScreen from '~/components/auth/BackendMisconfiguredScreen.vue'
 import LoginScreen from '~/components/auth/LoginScreen.vue'
 
 // Resolves auth state once on mount, then either renders the app (auth off, or
@@ -24,6 +25,8 @@ onMounted(() => auth.bootstrap())
     <UIcon name="i-lucide-loader" class="h-8 w-8 animate-spin" />
     <span class="text-sm">{{ t('auth.gate.loading') }}</span>
   </div>
+
+  <BackendMisconfiguredScreen v-else-if="auth.isMisconfigured" />
 
   <slot v-else-if="isPublicRoute" />
 

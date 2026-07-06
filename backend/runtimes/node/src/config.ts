@@ -14,7 +14,7 @@ import type {
   PrivilegedAppConfig,
   TasksConfig,
 } from '@cat-factory/server'
-import { resolveMachineTokenTtlMs } from '@cat-factory/server'
+import { ENV_HELP, configProblem, resolveMachineTokenTtlMs } from '@cat-factory/server'
 import { GITLAB_PUBLIC_API_BASE } from '@cat-factory/gitlab'
 import { DEFAULT_SPEND_PRICING, budgetCapsOverlay, modelCostResolver } from '@cat-factory/spend'
 
@@ -99,11 +99,7 @@ function parseDocumentSources(raw: string | undefined): DocumentSourceKind[] {
 function loadDocumentsConfig(env: NodeJS.ProcessEnv): DocumentsConfig {
   const encryptionKey = env.ENCRYPTION_KEY?.trim()
   if (!encryptionKey) {
-    throw new Error(
-      'ENCRYPTION_KEY is required: the document-source integration (Notion, Confluence, …) ' +
-        'encrypts per-workspace source credentials at rest. Set it to a base64-encoded key of ' +
-        'at least 32 bytes.',
-    )
+    throw configProblem({ key: 'ENCRYPTION_KEY', ...ENV_HELP.ENCRYPTION_KEY })
   }
   return {
     enabled: true,
@@ -126,11 +122,7 @@ function loadTasksConfig(env: NodeJS.ProcessEnv): TasksConfig {
   // integration via its HKDF `info`, so one key safely backs them all).
   const encryptionKey = env.ENCRYPTION_KEY?.trim()
   if (!encryptionKey) {
-    throw new Error(
-      'ENCRYPTION_KEY is required: the task-source integration (Jira, …) encrypts ' +
-        'per-workspace source credentials at rest. Set it to a base64-encoded key of at ' +
-        'least 32 bytes.',
-    )
+    throw configProblem({ key: 'ENCRYPTION_KEY', ...ENV_HELP.ENCRYPTION_KEY })
   }
   return {
     enabled: true,
@@ -246,10 +238,13 @@ export function loadNodeConfig(env: NodeJS.ProcessEnv): AppConfig {
     sessionSecret.length < MIN_SESSION_SECRET_LENGTH &&
     !devOpen
   ) {
-    throw new Error(
-      `AUTH_SESSION_SECRET must be at least ${MIN_SESSION_SECRET_LENGTH} characters when GitHub OAuth is configured ` +
-        `(got ${sessionSecret.length}). Set a longer secret or enable AUTH_DEV_OPEN in a non-production environment.`,
-    )
+    throw configProblem({
+      key: 'AUTH_SESSION_SECRET',
+      summary: ENV_HELP.AUTH_SESSION_SECRET.summary,
+      remedy:
+        `Must be at least ${MIN_SESSION_SECRET_LENGTH} characters when GitHub OAuth is configured ` +
+        `(got ${sessionSecret.length}). ${ENV_HELP.AUTH_SESSION_SECRET.remedy} Or enable AUTH_DEV_OPEN in a non-production ENVIRONMENT.`,
+    })
   }
 
   // Remote node mode has NO anonymous tier: a hosted deployment must be able to sign a
@@ -261,14 +256,7 @@ export function loadNodeConfig(env: NodeJS.ProcessEnv): AppConfig {
   // trips this; only a genuinely unconfigured remote deployment does.
   const authEnabled = githubEnabled || googleEnabled || passwordEnabled
   if (!authEnabled && !devOpen) {
-    throw new Error(
-      'No authentication provider is configured. Remote node mode has no anonymous access: ' +
-        'enable GitHub OAuth (GITHUB_OAUTH_CLIENT_ID + GITHUB_OAUTH_CLIENT_SECRET), Google OAuth ' +
-        '(GOOGLE_OAUTH_CLIENT_ID + GOOGLE_OAUTH_CLIENT_SECRET), or password login ' +
-        `(AUTH_PASSWORD_ENABLED=true) together with a ${MIN_SESSION_SECRET_LENGTH}+ character ` +
-        'AUTH_SESSION_SECRET. (For local development or tests, set AUTH_DEV_OPEN=true in a ' +
-        'non-production environment instead.)',
-    )
+    throw configProblem({ key: 'AUTH_PROVIDER', ...ENV_HELP.AUTH_PROVIDER })
   }
 
   // The deployment-level BASE pricing (built-in table + the fallback currency/monthly-limit

@@ -55,7 +55,7 @@ describe('loadNodeConfig — privileged App tier (ADR 0005)', () => {
 // login provider is configured and the dev-open hatch is off.
 describe('loadNodeConfig — remote node mode requires authentication', () => {
   it('throws when no auth provider is configured and dev-open is off', () => {
-    expect(() => loadNodeConfig({ ENCRYPTION_KEY })).toThrow(/anonymous access/i)
+    expect(() => loadNodeConfig({ ENCRYPTION_KEY })).toThrow(/anonymous tier/i)
   })
 
   it('boots under the dev-open hatch with no provider (local dev / tests)', () => {
@@ -96,7 +96,7 @@ describe('loadNodeConfig — TESTING_NO_AUTH', () => {
   it('is refused in a production-like ENVIRONMENT (so it cannot re-open a deployment)', () => {
     expect(() =>
       loadNodeConfig({ ENCRYPTION_KEY, TESTING_NO_AUTH: 'true', ENVIRONMENT: 'production' }),
-    ).toThrow(/anonymous access/i)
+    ).toThrow(/anonymous tier/i)
   })
 
   it('defaults off — plain dev-open does not set testingNoAuth', () => {

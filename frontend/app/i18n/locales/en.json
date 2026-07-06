@@ -4,7 +4,14 @@
     "loadingBoard": "Loading board…",
     "backendUnreachable": "Can't reach the backend",
     "reconnecting": "Reconnecting…",
-    "offline": "Not receiving live updates"
+    "offline": "Not receiving live updates",
+    "misconfigured": {
+      "title": "Backend not configured",
+      "intro": "The server started but can't run until the settings below are provided. Add the missing values to your environment, then reload.",
+      "howToFix": "How to fix:",
+      "reload": "Reload",
+      "hint": "Only variable names and how to set them are shown here, never any secret values."
+    }
   },
   "language": {
     "switcher": "Language",
