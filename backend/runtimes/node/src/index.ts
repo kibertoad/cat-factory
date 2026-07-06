@@ -60,6 +60,10 @@ export {
   type AgentKindDefinition,
 } from '@cat-factory/agents'
 export { registerPipeline, registerPipelines, clearRegisteredPipelines } from '@cat-factory/kernel'
+// The built-in model-preset ids + the catalog fallback default, re-exported so a deploy-app
+// wrapper can name a preset when passing `start({ defaultModelPresetId })` without a direct
+// `@cat-factory/kernel` import.
+export { DEFAULT_MODEL_PRESET_ID, MODEL_PRESET_SEED_IDS } from '@cat-factory/kernel'
 export { SystemClock, CryptoIdGenerator } from './runtime.js'
 // Re-exported so the local facade can build its own provisioning-log recorder for the
 // per-workspace transport chooser without taking a direct @cat-factory/integrations dep.

@@ -198,6 +198,16 @@ export async function start(
      * the Worker's isolate-safe profile passes it through). Omitted ⇒ the default profile.
      */
     cachesProfile?: Partial<AppCachesProfile>
+    /**
+     * The catalog id of the built-in model preset a fresh workspace is seeded with as its
+     * DEFAULT (`MODEL_PRESET_SEED_IDS.{kimi,glm,claude}`). A deploy-app wrapper passes this to
+     * change the out-of-the-box default without editing library code — e.g.
+     * `start({ defaultModelPresetId: MODEL_PRESET_SEED_IDS.claude })`. Forwarded to
+     * `buildNodeContainer` (and, via the local facade's builder, to `buildLocalContainer`).
+     * Applied only at FIRST seed of a workspace's preset library, so a user's later manual
+     * default choice is always preserved. Omitted ⇒ the facade default (Node → Kimi K2.7).
+     */
+    defaultModelPresetId?: string
   } = {},
 ): Promise<ReturnType<typeof serve>> {
   const env = options.env ?? process.env
@@ -265,6 +275,9 @@ async function bootServer(
     realtimeSink: realtimePropagator,
     caches,
     agentKindRegistry: options.agentKindRegistry,
+    // Forward the deployment's default-preset choice (undefined ⇒ the builder's facade
+    // default). The local facade rides on this same field via its `buildContainer` override.
+    defaultModelPresetId: options.defaultModelPresetId,
   })
   // Connect the cross-node adapters (a no-op when none are configured) so peer events start
   // reaching this node's browsers.

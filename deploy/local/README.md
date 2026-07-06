@@ -126,6 +126,32 @@ with `InvalidCharacterError`. Set it explicitly to keep encrypted-at-rest creden
 restarts; otherwise a fresh per-process key means they have to be re-entered after
 each restart.
 
+## Choosing the default model preset
+
+Every workspace's model-preset library is seeded on first use with three built-ins
+(Kimi K2.7, GLM-5.2, Claude Opus 4.8). Local mode marks **Claude Opus 4.8** the default:
+local runs subscription-backed models (your ambient `claude` CLI for inline steps, a
+leased personal credential for container steps), so Claude is first-class even though it
+can't run on the bare Cloudflare baseline. To ship a different out-of-the-box default,
+pass `defaultModelPresetId` to `startLocal()` — the entry (`src/main.ts`) is yours to
+edit:
+
+```ts
+import { startLocal, MODEL_PRESET_SEED_IDS } from '@cat-factory/local-server'
+
+startLocal({ defaultModelPresetId: MODEL_PRESET_SEED_IDS.kimi }).catch((err: unknown) => {
+  console.error('failed to start cat-factory local server:', err)
+  process.exit(1)
+})
+```
+
+`MODEL_PRESET_SEED_IDS` is re-exported from the library (`.kimi` / `.glm` / `.claude`), so
+you don't need a direct `@cat-factory/kernel` import. This is a **deployment-level fact**
+resolved at composition time, not an env var — the same programmatic seam as the
+`agentKindRegistry` / `backendRegistries` options. It applies only at the **first** seed of
+a workspace, so a user's later manual default choice is always preserved; changing it does
+not retroactively re-flag existing workspaces (they can reseed from the UI).
+
 ## Using a local model (Ollama / LM Studio / llama.cpp / vLLM)
 
 Run agents on a model on your own machine instead of (or alongside) a cloud provider.

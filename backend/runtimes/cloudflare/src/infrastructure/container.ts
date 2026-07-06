@@ -2452,9 +2452,12 @@ export function buildContainer(
     ...selectGitHubDeps(env, config, db, clock, idGenerator, caches.repoFiles),
     ...selectMergeLifecycleDeps(env, config, db, clock, idGenerator),
     // A fresh workspace's model-preset library is seeded with Kimi K2.7 as the default
-    // (Cloudflare-runnable on the bare AI binding). Applied only at first seed, so a user's
-    // later manual default choice always wins.
-    defaultModelPresetId: DEFAULT_MODEL_PRESET_ID,
+    // (Cloudflare-runnable on the bare AI binding). A deployment overrides the out-of-the-box
+    // default by passing `defaultModelPresetId` through `createApp`'s / `buildContainer`'s
+    // `overrides` (a `Partial<CoreDependencies>` field). Read explicitly here — rather than
+    // relying on the trailing `...overrides` spread — so the seam stays legible and robust to a
+    // future reorder. Applied only at first seed, so a user's later manual default choice wins.
+    defaultModelPresetId: overrides.defaultModelPresetId ?? DEFAULT_MODEL_PRESET_ID,
     ...selectReleaseHealthDeps(env, config, db),
     ...selectIncidentEnrichmentDeps(env, db),
     ...selectPackageRegistryDeps(env, db),
