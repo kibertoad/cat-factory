@@ -154,6 +154,15 @@ export {
   resolveDocumentTarget,
   type DocumentTarget,
 } from './agents/kinds/document.js'
+// The in-source comment annotator (`code-commenter`), pre-loaded by `defaultAgentKindRegistry()`
+// so it is a first-class kind in every deployment (Worker / Node / local) — the in-source-comments
+// leg of the docs-refresh preset (diagrams / READMEs reuse `doc-writer`, business rules reuse
+// `business-documenter`, so it is the one genuinely-new authoring capability the preset needs).
+export {
+  CODE_COMMENTER_KIND,
+  CODE_COMMENTER_AGENT_KINDS,
+  registerCodeCommenterAgent,
+} from './agents/kinds/code-commenter.js'
 // Per-`DocKind` document templates: the single source of truth for a kind's expected shape,
 // woven into the outliner/writer prompts and (later) read by the doc-quality gate. The
 // built-in `DOC_TEMPLATES` are the fallback; a deployment overrides via `registerDocTemplate`.

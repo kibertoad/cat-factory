@@ -620,6 +620,29 @@ export function seedPipelines(): Pipeline[] {
       version: 2,
       agentKinds: ['doc-writer', 'doc-reviewer', 'doc-quality', 'conflicts', 'ci', 'merger'],
     },
+    // The Documentation-refresh pilot's two lean spawn pipelines (initiative-presets slice 7).
+    // Each drives a single authoring step through the standard mergeability / CI / merge tail, so
+    // the produced comment / doc change can't merge over a conflict or a red build. The
+    // docs-refresh preset (slice 8) spawns tasks onto these; they are also pickable standalone.
+    // (Diagrams + READMEs reuse `doc-writer` / `pl_document_quick` — a Mermaid `.md` is just a
+    // document a writer produces — so only the in-place comment annotator gets a new kind/pipeline.)
+    {
+      // Add/clarify why-not-what in-source comments with NO behaviour change: `code-commenter`
+      // edits only comments and opens a PR; the `ci` step is load-bearing here — it proves the
+      // diff is behaviour-neutral before `merger` ships it.
+      id: 'pl_code_comments',
+      name: 'Improve code comments',
+      agentKinds: ['code-commenter', 'conflicts', 'ci', 'merger'],
+    },
+    {
+      // Capture the service's business rules / domain constraints as in-repo docs: the reverse-
+      // documentation `business-documenter` reads the implementation, commits the docs and opens
+      // a PR; `conflicts`/`ci`/`merger` gate + ship it. A lean alternative to folding the
+      // documenter into a full build pipeline when only the domain-rules docs are wanted.
+      id: 'pl_business_docs',
+      name: 'Document business rules',
+      agentKinds: ['business-documenter', 'conflicts', 'ci', 'merger'],
+    },
   ]
   // Every curated catalog pipeline is a read-only template: it can be cloned into an
   // editable copy but not edited in place (see PipelineService.update / clone). Each carries
@@ -646,6 +669,14 @@ export const INITIATIVE_BREAKDOWN_PIPELINE_ID = 'pl_initiative_breakdown'
 
 /** Pipeline id of the Initiative Planning pipeline (initiative blocks only). */
 export const INITIATIVE_PIPELINE_ID = 'pl_initiative'
+
+/**
+ * Pipeline ids of the Documentation-refresh pilot's lean spawn pipelines (initiative-presets
+ * slice 7). The docs-refresh preset (slice 8) stamps these onto the tasks its planner spawns
+ * (in-source comments / business rules); diagrams + READMEs reuse `pl_document_quick`.
+ */
+export const CODE_COMMENTS_PIPELINE_ID = 'pl_code_comments'
+export const BUSINESS_DOCS_PIPELINE_ID = 'pl_business_docs'
 
 /** Pipeline ids of the built-in recurring-pipeline presets. */
 export const DEP_UPDATE_PIPELINE_ID = 'pl_dep_update'
