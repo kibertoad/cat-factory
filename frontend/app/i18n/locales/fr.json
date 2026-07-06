@@ -420,6 +420,21 @@
         "title": "Aucun stockage pour ce pipeline",
         "body": "Ce pipeline inclut un agent qui a besoin d’un stockage binaire (le testeur d’UI téléverse ses captures d’écran), mais aucun stockage de contenu n’est configuré pour ce compte. Configurez le stockage de contenu pour l’exécuter.",
         "action": "Configurer le stockage"
+      },
+      "deployerServiceConfig": {
+        "title": "Configuration d’environnement du service incomplète",
+        "body": "Ce pipeline inclut un Deployer, mais la configuration d’environnement de ce service est incomplète (manquant : {missing}). Complétez la configuration d’environnement du service pour l’exécuter.",
+        "action": "Corriger la configuration du service"
+      },
+      "provisionTypeUnhandled": {
+        "title": "Aucun gestionnaire pour ce type d’approvisionnement",
+        "body": "Aucun gestionnaire d’infrastructure n’est configuré pour le type d’approvisionnement {type} de cet espace de travail ; le Deployer n’a donc aucun environnement à provisionner. Configurez un gestionnaire ou définissez le service comme infraless pour l’exécuter.",
+        "action": "Configurer l’infrastructure"
+      },
+      "deployerConnectionFailed": {
+        "title": "L’intégration de déploiement ne fonctionne pas",
+        "body": "L’intégration de déploiement de ce service a échoué au test de connexion : {detail}. Vérifiez son point de terminaison et ses identifiants, puis retestez la connexion pour l’exécuter.",
+        "action": "Configurer l’infrastructure"
       }
     }
   },

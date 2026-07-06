@@ -3654,7 +3654,6 @@
         "github_not_connected": "GitHub nicht verbunden",
         "bootstrap_not_retryable": "Bootstrap kann nicht wiederholt werden",
         "bootstrap_reference_missing": "Referenzarchitektur ist nicht mehr vorhanden",
-        "provision_type_unhandled": "Kein Handler für diesen Bereitstellungstyp",
         "preset_unsatisfiable": "Modell-Preset kann diese Pipeline nicht ausführen",
         "visual_pipeline_no_frontend": "Kein Frontend zum Testen",
         "model_policy_blocked": "Modell durch Kontorichtlinie blockiert",
@@ -3671,6 +3670,21 @@
         "title": "Kein Speicher für diese Pipeline",
         "body": "Diese Pipeline enthält einen Agenten, der Binärspeicher benötigt (der UI-Tester lädt seine Screenshots hoch), aber für dieses Konto ist kein Inhaltsspeicher konfiguriert. Konfiguriere Inhaltsspeicher, um sie auszuführen.",
         "action": "Speicher konfigurieren"
+      },
+      "deployerServiceConfig": {
+        "title": "Umgebungskonfiguration des Dienstes unvollständig",
+        "body": "Diese Pipeline enthält einen Deployer, aber die Umgebungskonfiguration dieses Dienstes ist unvollständig (fehlt: {missing}). Vervollständige die Umgebungskonfiguration des Dienstes, um sie auszuführen.",
+        "action": "Dienstkonfiguration korrigieren"
+      },
+      "provisionTypeUnhandled": {
+        "title": "Kein Handler für diesen Bereitstellungstyp",
+        "body": "Für den Bereitstellungstyp {type} dieses Arbeitsbereichs ist kein Infrastruktur-Handler konfiguriert, daher hat der Deployer keine Umgebung zum Bereitstellen. Konfiguriere einen Handler oder setze den Dienst auf infraless, um sie auszuführen.",
+        "action": "Infrastruktur konfigurieren"
+      },
+      "deployerConnectionFailed": {
+        "title": "Bereitstellungsintegration funktioniert nicht",
+        "body": "Die Bereitstellungsintegration dieses Dienstes hat den Verbindungstest nicht bestanden: {detail}. Überprüfe ihren Endpunkt und ihre Anmeldedaten und teste die Verbindung erneut, um sie auszuführen.",
+        "action": "Infrastruktur konfigurieren"
       }
     }
   },

@@ -1,7 +1,14 @@
 import { describe, expect, it } from 'vitest'
 import { DEPLOYER_AGENT_KIND } from '@cat-factory/integrations'
-import type { PipelineStep } from '@cat-factory/kernel'
-import { deployEvictionEpoch, deployJobId, orderProvisionTargets } from './deployer.logic.js'
+import type { PipelineStep, ServiceProvisioning } from '@cat-factory/kernel'
+import {
+  decideDeployerConfig,
+  deployerServiceConfigIssues,
+  deployEvictionEpoch,
+  deployJobId,
+  hasEnabledDeployerStep,
+  orderProvisionTargets,
+} from './deployer.logic.js'
 
 const step = (over: Partial<PipelineStep> = {}): PipelineStep =>
   ({ agentKind: DEPLOYER_AGENT_KIND, ...over }) as PipelineStep
@@ -81,5 +88,143 @@ describe('deployEvictionEpoch', () => {
     expect(
       deployEvictionEpoch(step({ evictionRecoveries: 1, transientEvictionRecoveries: 4 })),
     ).toBe(5)
+  })
+})
+
+describe('hasEnabledDeployerStep', () => {
+  it('is true when an enabled deployer is present', () => {
+    expect(hasEnabledDeployerStep(['coder', DEPLOYER_AGENT_KIND, 'tester'], undefined)).toBe(true)
+  })
+
+  it('treats a disabled deployer as absent', () => {
+    expect(hasEnabledDeployerStep(['coder', DEPLOYER_AGENT_KIND], [true, false])).toBe(false)
+  })
+
+  it('is false with no deployer in the chain', () => {
+    expect(hasEnabledDeployerStep(['coder', 'tester'], undefined)).toBe(false)
+  })
+})
+
+describe('deployerServiceConfigIssues', () => {
+  const provisioning = (over: Partial<ServiceProvisioning>): ServiceProvisioning =>
+    ({ type: 'infraless', ...over }) as ServiceProvisioning
+
+  it('is complete for infraless / undeclared (deployer no-op)', () => {
+    expect(deployerServiceConfigIssues(undefined)).toEqual([])
+    expect(deployerServiceConfigIssues(provisioning({ type: 'infraless' }))).toEqual([])
+  })
+
+  it('requires a manifest source for kubernetes', () => {
+    expect(deployerServiceConfigIssues(provisioning({ type: 'kubernetes' }))).toEqual([
+      'manifestSource',
+    ])
+    expect(
+      deployerServiceConfigIssues(
+        provisioning({
+          type: 'kubernetes',
+          manifestSource: { type: 'colocated', path: 'k8s' },
+        }),
+      ),
+    ).toEqual([])
+  })
+
+  it('requires a compose path or recipe compose files for docker-compose', () => {
+    expect(deployerServiceConfigIssues(provisioning({ type: 'docker-compose' }))).toEqual([
+      'composePath',
+    ])
+    expect(
+      deployerServiceConfigIssues(provisioning({ type: 'docker-compose', composePath: '  ' })),
+    ).toEqual(['composePath'])
+    expect(
+      deployerServiceConfigIssues(
+        provisioning({ type: 'docker-compose', composePath: 'docker-compose.yml' }),
+      ),
+    ).toEqual([])
+    expect(
+      deployerServiceConfigIssues(
+        provisioning({ type: 'docker-compose', recipe: { composeFiles: ['compose.yaml'] } }),
+      ),
+    ).toEqual([])
+  })
+
+  it('requires a manifest id for custom', () => {
+    expect(deployerServiceConfigIssues(provisioning({ type: 'custom' }))).toEqual(['manifestId'])
+    expect(
+      deployerServiceConfigIssues(provisioning({ type: 'custom', manifestId: 'preview' })),
+    ).toEqual([])
+  })
+})
+
+describe('decideDeployerConfig', () => {
+  const ok = { ok: true } as const
+
+  it('passes through for infraless / undeclared', () => {
+    expect(
+      decideDeployerConfig({ provisionType: undefined, serviceIssues: [], handlerResolution: ok }),
+    ).toEqual(ok)
+    expect(
+      decideDeployerConfig({
+        provisionType: 'infraless',
+        serviceIssues: [],
+        handlerResolution: ok,
+      }),
+    ).toEqual(ok)
+  })
+
+  it('reports an incomplete service config first (before the handler)', () => {
+    expect(
+      decideDeployerConfig({
+        provisionType: 'kubernetes',
+        serviceIssues: ['manifestSource'],
+        // Even a missing handler is not surfaced while the service config is incomplete.
+        handlerResolution: { ok: false, reason: 'no-handler' },
+      }),
+    ).toEqual({ ok: false, reason: 'service-config-incomplete', missing: ['manifestSource'] })
+  })
+
+  it('reports a missing / ambiguous workspace handler once the service config is sound', () => {
+    expect(
+      decideDeployerConfig({
+        provisionType: 'kubernetes',
+        serviceIssues: [],
+        handlerResolution: { ok: false, reason: 'no-handler' },
+      }),
+    ).toEqual({ ok: false, reason: 'workspace-unhandled', handlerReason: 'no-handler' })
+    expect(
+      decideDeployerConfig({
+        provisionType: 'custom',
+        serviceIssues: [],
+        handlerResolution: { ok: false, reason: 'type-mismatch' },
+      }),
+    ).toEqual({ ok: false, reason: 'workspace-unhandled', handlerReason: 'type-mismatch' })
+  })
+
+  it('reports a failing connection only after both structural checks pass', () => {
+    expect(
+      decideDeployerConfig({
+        provisionType: 'kubernetes',
+        serviceIssues: [],
+        handlerResolution: ok,
+        connectionTest: { ok: false, message: 'apiserver unreachable' },
+      }),
+    ).toEqual({ ok: false, reason: 'connection-failed', message: 'apiserver unreachable' })
+  })
+
+  it('passes when everything resolves and the connection probe is green (or absent)', () => {
+    expect(
+      decideDeployerConfig({
+        provisionType: 'kubernetes',
+        serviceIssues: [],
+        handlerResolution: ok,
+        connectionTest: { ok: true },
+      }),
+    ).toEqual(ok)
+    expect(
+      decideDeployerConfig({
+        provisionType: 'kubernetes',
+        serviceIssues: [],
+        handlerResolution: ok,
+      }),
+    ).toEqual(ok)
   })
 })

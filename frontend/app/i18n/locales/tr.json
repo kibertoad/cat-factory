@@ -420,6 +420,21 @@
         "title": "Bu işlem hattı için depolama yok",
         "body": "Bu işlem hattı, ikili depolama gerektiren bir ajan içeriyor (UI test ekran görüntülerini yükler), ancak bu hesapta yapılandırılmış içerik depolaması yok. Çalıştırmak için içerik depolaması yapılandırın.",
         "action": "Depolamayı yapılandır"
+      },
+      "deployerServiceConfig": {
+        "title": "Hizmet ortam yapılandırması eksik",
+        "body": "Bu ardışık düzen bir Deployer içeriyor, ancak bu hizmetin ortam yapılandırması eksik (eksik: {missing}). Çalıştırmak için hizmetin ortam yapılandırmasını tamamlayın.",
+        "action": "Hizmet yapılandırmasını düzelt"
+      },
+      "provisionTypeUnhandled": {
+        "title": "Bu sağlama türü için işleyici yok",
+        "body": "Bu çalışma alanının {type} sağlama türü için yapılandırılmış bir altyapı işleyicisi yok, bu nedenle Deployer'ın ayağa kaldıracağı bir ortam yok. Çalıştırmak için bir işleyici yapılandırın veya hizmeti infraless olarak ayarlayın.",
+        "action": "Altyapıyı yapılandır"
+      },
+      "deployerConnectionFailed": {
+        "title": "Dağıtım entegrasyonu çalışmıyor",
+        "body": "Bu hizmetin dağıtım entegrasyonu bağlantı testinde başarısız oldu: {detail}. Uç noktasını ve kimlik bilgilerini kontrol edin, ardından çalıştırmak için bağlantıyı yeniden test edin.",
+        "action": "Altyapıyı yapılandır"
       }
     }
   },
