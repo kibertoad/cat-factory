@@ -19,12 +19,13 @@ import { sanitizedChildEnv } from './childEnv.js'
 
 // Local-mode INLINE harness execution: run the developer's ambient `claude` / `codex` CLI as a
 // host subprocess to serve the inline LLM steps (requirements reviewer, brainstorm,
-// task-estimator, inline document kinds) on a subscription model — the inline analogue of the
-// container ambient-auth path (`LOCAL_NATIVE_AGENTS`). Only NATIVE ambient vendors qualify
-// (`claude` / `codex`, no injected credential); a non-native claude-code vendor (GLM/Kimi/
-// DeepSeek) keeps degrading to a provider model, exactly as `nativeVendorForRef` /
-// `isAmbientNativeVendor` gate the container path — so the guard's `inlineHarnessRef` predicate
-// and this provider agree on what can run inline.
+// task-estimator, inline document kinds) on a subscription model. Gated by `LOCAL_NATIVE_INLINE`
+// (default ON), DECOUPLED from the container-native `LOCAL_NATIVE_AGENTS` opt-in — an inline step
+// is a one-shot text call (no repo checkout, no tools), so running it on the local CLI is benign
+// and on by default. Only NATIVE ambient vendors qualify (`claude` / `codex`, no injected
+// credential); a non-native claude-code vendor (GLM/Kimi/DeepSeek) keeps degrading to a provider
+// model, exactly as `nativeVendorForRef` / `isAmbientNativeVendor` gate the container path — so
+// the guard's `inlineHarnessRef` predicate and this provider agree on what can run inline.
 
 /**
  * Runs a CLI once: feed the prompt over stdin, collect stdout, reject on non-zero exit, abort,
@@ -227,8 +228,9 @@ class HarnessInlineModelProvider implements ModelProvider {
 /**
  * Wrap the Node model-provider resolver so every resolved provider serves ambient-eligible
  * subscription harness refs inline via the developer's CLI. Passed to `buildNodeContainer` as
- * `wrapModelProviderResolver` in local mode; a no-op wrapper when no native harnesses are enabled.
- * `exec` is the injectable CLI seam (defaults to a real spawn); tests pass a fake.
+ * `wrapModelProviderResolver` in local mode; a no-op wrapper when no inline harnesses are enabled
+ * (`LOCAL_NATIVE_INLINE=off`). `exec` is the injectable CLI seam (defaults to a real spawn); tests
+ * pass a fake.
  */
 export function wrapResolverWithInlineHarness(
   nativeAmbientAuth: readonly HarnessKind[] | undefined,

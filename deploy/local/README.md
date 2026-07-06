@@ -378,3 +378,24 @@ your pipelines is Claude/Codex you can run native-only with no image.
 > acceptable ONLY because it's your own machine — it is opt-in and off by default. The
 > Tester's local docker-compose infra is unavailable in native mode for now (a follow-up
 > adds host-Docker compose with per-run project names + git-worktree isolation).
+
+### Inline steps on your subscription (`LOCAL_NATIVE_INLINE`, default on)
+
+The inline LLM steps — the requirements reviewer, brainstorm, task-estimator and inline
+document kinds — are one-shot text calls, not container agents. A subscription-only model
+(`claude-opus`, GPT via Codex) can't be reached by an inline HTTP call, so by default local
+and mothership mode run these steps on your ambient `claude` / `codex` CLI, exactly like
+the native container path above but **without** the `LOCAL_NATIVE_AGENTS` sandbox trade-off
+(a text call touches no repo and runs no tools). This is what lets a preset that pins
+everything to `claude-opus` start its pipelines instead of being refused with
+`preset_unsatisfiable`.
+
+It is **decoupled** from `LOCAL_NATIVE_AGENTS`: your container agents keep running in a
+sandboxed per-run container (leasing their real credential) unless you separately opt into
+native containers. To turn the inline CLI path off, set `LOCAL_NATIVE_INLINE=off` (or list a
+subset, e.g. `LOCAL_NATIVE_INLINE=claude-code`, to allow only Claude). Only the native
+vendors (`claude` / `codex`) are eligible; a non-native vendor that reuses the `claude-code`
+harness (GLM / Kimi / DeepSeek) still degrades to a provider model for inline steps. Running
+these steps in a **prewarmed container** with the leased subscription credential (so the
+host CLI need not be installed) is a planned follow-up — see
+`docs/initiatives/inline-harness-and-preset-satisfiability.md`.

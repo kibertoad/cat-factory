@@ -2,6 +2,15 @@
 
 **Status:** in progress · **Owner:** core · **Started:** 2026-07-02
 
+> **Update 2026-07-06 (dedicated inline flag, default on).** The inline ambient-CLI path is now
+> gated by its OWN env flag `LOCAL_NATIVE_INLINE` (default ON), decoupled from the container-native
+> `LOCAL_NATIVE_AGENTS` opt-in — see [Phase C](#phase-c-dedicated-inline-flag--prewarmed-container-backend)
+> below. Previously a subscription-only preset (everything pinned to `claude-opus`) could run its
+> inline reviewers ONLY if you also opted into UNSANDBOXED native container execution; now the inline
+> steps (one-shot text, no repo/tools) run on the local `claude`/`codex` CLI by default in both local
+> and mothership mode. The prewarmed-container backend (run the inline CLI in a warm container on the
+> leased subscription, so the host CLI need not be installed) is the documented next slice.
+
 > Durable source of truth for this change. Read it first before picking up the next slice;
 > update the checklist at the end of each PR.
 
@@ -142,3 +151,61 @@ guard treats a subscription model as inline-satisfiable; where it isn't, the gua
   error string is parsed as a real review. These one-shot CLIs expose no token-length stop
   reason, so a genuine output-cap truncation reads as `stop` (the `finishReason === 'length'`
   guard only fires for HTTP providers).
+
+## Phase C: dedicated inline flag + prewarmed-container backend
+
+Motivation: a developer running local (or mothership) mode with a Claude subscription and a preset
+that pins `claude-opus` everywhere was refused at pipeline start with `preset_unsatisfiable` unless
+they ALSO turned on `LOCAL_NATIVE_AGENTS` — which runs whole CONTAINER agents unsandboxed. Coupling
+the benign inline path (a one-shot text call, no repo checkout, no tools) to the unsandboxed
+container opt-in was wrong.
+
+### C1 — dedicated `LOCAL_NATIVE_INLINE` flag (default on) ✅ done (2026-07-06)
+
+- **New env `LOCAL_NATIVE_INLINE`** (local facade), a comma-separated harness allow-list that
+  **defaults ON** (both `claude-code` + `codex` when unset). `off`/`false`/… disables; a subset
+  (`claude-code`) restricts. Parsed by `parseInlineHarnesses` (`runtimes/local/src/container.ts`),
+  which shares `parseHarnessSet` with `parseNativeHarnesses` — the ONLY difference is the
+  unset-default (native defaults off, inline defaults on).
+- **Decoupled wiring.** `buildLocalContainer` now derives `inlineHarnesses` from
+  `LOCAL_NATIVE_INLINE` and wires `config.agents.inlineHarnessRef` + `wrapModelProviderResolver`
+  from THAT set, independent of `nativeHarnesses` (`LOCAL_NATIVE_AGENTS`, still the container-native
+  opt-in feeding `config.nativeAmbientAuth`). Works in local AND mothership mode — both boot through
+  this facade on the developer's machine, so the host CLI is reachable in either.
+- **Scope.** Uses the developer's AMBIENT CLI login (leases nothing), so only the native vendors
+  `claude` / `codex` qualify (`nativeVendorForRef`). A non-native `claude-code` vendor (GLM/Kimi/
+  DeepSeek, which carries a base URL) still degrades to a provider model for inline steps, and the
+  start guard still refuses it when no provider-backed flavour is usable.
+- **Consequence.** With the flag default-on, a subscription-only preset starts and its inline steps
+  run on the local CLI. If the CLI is NOT installed/logged in, the inline step now fails at spawn
+  (a clear runner error) rather than the run being refused up front — acceptable for a local dev
+  machine and the explicit product choice (default on). Set `LOCAL_NATIVE_INLINE=off` to restore the
+  up-front `preset_unsatisfiable` refusal.
+
+### C2 — prewarmed-container inline backend ⬜ todo (the compatibility path)
+
+Goal: run the inline subscription CLI inside a **prewarmed local container** on the LEASED/configured
+subscription credential, so the inline path works even when the host has no `claude`/`codex` binary
+(and in mothership mode without touching the host), at warm-pool latency. This is the "increase
+compatibility" half of the product ask and is deliberately deferred because it is cross-cutting and
+credential-sensitive:
+
+- **Run-context threading (the blocker).** For an INDIVIDUAL-usage vendor (`claude`/`codex`/`glm`,
+  the `claude-opus` case) the token is leased per-run via
+  `leasePersonalSubscriptionToken(executionId, userId, vendor)` against the `subscription_activations`
+  row minted at run start. But the inline model seam carries almost nothing: `ModelScope` has only
+  `workspaceId`/`accountId`/`userId` (no run/execution id), and `resolveScopedModelProvider` drops
+  even `userId` (passes `forScope({ workspaceId })`). So C2 must first thread `executionId` +
+  initiating `userId` through the inline callers (`IterativeReviewService`, `KaizenService`,
+  `SandboxRunService`, `routing.resolveInlineModelRef`) and add a run/execution dimension to the
+  resolver scope, then wire the personal + pooled subscription lease into a container-inline runner.
+  (Pooled vendors — Kimi/DeepSeek — need only `workspaceId`, so they are the easier first step.)
+- **Container execution.** Add an `exec`-into-a-warm-member seam on `ContainerRuntimeAdapter` (or a
+  harness one-shot `/inline` endpoint — the latter is cleaner but bumps the executor-harness image),
+  lease a warm `LocalContainerRunnerTransport` member for the call, run `claude -p` / `codex exec`
+  inside it with the leased `subscriptionToken` + `subscriptionBaseUrl` injected (mirroring the job
+  body `ContainerAgentExecutor.resolveAuth` builds), and adapt the result through the SAME
+  `CliInlineLanguageModel` / `InlineCliRunner` seam C1 uses.
+- **Selection.** With C2 landed, the inline runner picks host-CLI (when `LOCAL_NATIVE_INLINE` names
+  the vendor AND the host CLI is present) else the prewarmed-container backend on the leased token,
+  so the two backends compose behind one predicate.
