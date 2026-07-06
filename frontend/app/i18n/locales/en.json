@@ -2224,6 +2224,8 @@
         "cloneUrl": "Repository clone URL",
         "cloneUrlHelp": "The git repository the stack's compose files live in.",
         "gitRef": "Branch or tag (optional)",
+        "directory": "Subdirectory (optional)",
+        "directoryHelp": "Used only by Autodetect: the monorepo subdirectory the compose stack lives in.",
         "composeFiles": "Compose files",
         "composeFilesHelp": "Comma-separated, repo-relative, in override order.",
         "composeProfiles": "Compose profiles (optional)",
@@ -2238,7 +2240,8 @@
         "detected": "Detected stack configuration",
         "detectedBody": "Prefilled from the repository. Review the fields before saving.",
         "nothing": "Nothing to autodetect",
-        "failed": "Autodetection failed"
+        "failed": "Autodetection failed",
+        "envFiles": "Env templates to materialize before start:"
       },
       "edit": {
         "heading": "Edit shared stack",

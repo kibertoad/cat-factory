@@ -9,6 +9,7 @@ import type {
 import { ConflictError } from '@cat-factory/kernel'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 import type { ComposeExecResult, ComposeRuntime } from '../compose/compose-environment.logic.js'
+import type { SharedStackServiceDependencies } from './SharedStackService.js'
 import { SharedStackService } from './SharedStackService.js'
 
 // In-memory shared-stack repository + a workspace-guard stub + a scriptable fake ComposeRuntime,
@@ -435,7 +436,7 @@ describe('SharedStackService', () => {
 
     function detectService(
       repo: SharedStackRepository,
-      resolveRepoFilesForWorkspace?: (ws: string, coords: never) => Promise<never>,
+      resolveRepoFilesForWorkspace?: SharedStackServiceDependencies['resolveRepoFilesForWorkspace'],
     ): SharedStackService {
       let n = 0
       return new SharedStackService({

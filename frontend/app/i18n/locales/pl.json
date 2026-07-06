@@ -2050,6 +2050,8 @@
         "cloneUrl": "URL klonowania repozytorium",
         "cloneUrlHelp": "Repozytorium git, w którym znajdują się pliki Compose stosu.",
         "gitRef": "Gałąź lub tag (opcjonalnie)",
+        "directory": "Podkatalog (opcjonalnie)",
+        "directoryHelp": "Używane tylko przez automatyczne wykrywanie: podkatalog monorepo, w którym znajduje się stos compose.",
         "composeFiles": "Pliki Compose",
         "composeFilesHelp": "Rozdzielone przecinkami, względem repozytorium, w kolejności nadpisywania.",
         "composeProfiles": "Profile Compose (opcjonalnie)",
@@ -2064,7 +2066,8 @@
         "detected": "Wykryto konfigurację stosu",
         "detectedBody": "Wypełniono wstępnie na podstawie repozytorium. Sprawdź pola przed zapisaniem.",
         "nothing": "Nie ma nic do automatycznego wykrycia",
-        "failed": "Automatyczne wykrywanie nie powiodło się"
+        "failed": "Automatyczne wykrywanie nie powiodło się",
+        "envFiles": "Szablony env do zmaterializowania przed uruchomieniem:"
       },
       "edit": {
         "heading": "Edytuj współdzielony stos",

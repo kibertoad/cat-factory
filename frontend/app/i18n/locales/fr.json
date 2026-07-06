@@ -2050,6 +2050,8 @@
         "cloneUrl": "URL de clonage du dépôt",
         "cloneUrlHelp": "Le dépôt git où se trouvent les fichiers Compose du stack.",
         "gitRef": "Branche ou tag (facultatif)",
+        "directory": "Sous-répertoire (facultatif)",
+        "directoryHelp": "Utilisé uniquement par la détection automatique : le sous-répertoire du monorepo où se trouve le stack compose.",
         "composeFiles": "Fichiers Compose",
         "composeFilesHelp": "Séparés par des virgules, relatifs au dépôt, dans l'ordre de surcharge.",
         "composeProfiles": "Profils Compose (facultatif)",
@@ -2064,7 +2066,8 @@
         "detected": "Configuration de la pile détectée",
         "detectedBody": "Prérempli à partir du dépôt. Vérifiez les champs avant d'enregistrer.",
         "nothing": "Rien à détecter automatiquement",
-        "failed": "Échec de la détection automatique"
+        "failed": "Échec de la détection automatique",
+        "envFiles": "Modèles d'environnement à matérialiser avant le démarrage :"
       },
       "edit": {
         "heading": "Modifier le stack partagé",

@@ -2050,6 +2050,8 @@
         "cloneUrl": "URL de clonación del repositorio",
         "cloneUrlHelp": "El repositorio git donde viven los archivos de Compose del stack.",
         "gitRef": "Rama o etiqueta (opcional)",
+        "directory": "Subdirectorio (opcional)",
+        "directoryHelp": "Solo lo usa la detección automática: el subdirectorio del monorepo donde se encuentra el stack de compose.",
         "composeFiles": "Archivos de Compose",
         "composeFilesHelp": "Separados por comas, relativos al repositorio, en orden de anulación.",
         "composeProfiles": "Perfiles de Compose (opcional)",
@@ -2064,7 +2066,8 @@
         "detected": "Configuración del stack detectada",
         "detectedBody": "Rellenado desde el repositorio. Revisa los campos antes de guardar.",
         "nothing": "No hay nada que detectar automáticamente",
-        "failed": "La detección automática falló"
+        "failed": "La detección automática falló",
+        "envFiles": "Plantillas de entorno que se materializarán antes de iniciar:"
       },
       "edit": {
         "heading": "Editar stack compartido",

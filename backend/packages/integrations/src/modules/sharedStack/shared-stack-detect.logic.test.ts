@@ -18,6 +18,20 @@ describe('parseVcsCloneUrl', () => {
     })
   })
 
+  it('derives the provider even when the URL carries an explicit port', () => {
+    // Regression: `url.host` includes `:port`, so provider inference must use `url.hostname`.
+    expect(parseVcsCloneUrl('https://github.com:443/acme/acme-shared-services.git')).toEqual({
+      owner: 'acme',
+      repo: 'acme-shared-services',
+      provider: 'github',
+    })
+    expect(parseVcsCloneUrl('ssh://git@github.com:22/acme/acme-shared-services.git')).toEqual({
+      owner: 'acme',
+      repo: 'acme-shared-services',
+      provider: 'github',
+    })
+  })
+
   it('parses an scp-like SSH URL', () => {
     expect(parseVcsCloneUrl('git@github.com:acme/acme-shared-services.git')).toEqual({
       owner: 'acme',

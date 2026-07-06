@@ -44,7 +44,9 @@ export function parseVcsCloneUrl(cloneUrl: string): ParsedCloneUrl | null {
   let rawPath: string
   try {
     const url = new URL(trimmed)
-    host = url.host.toLowerCase()
+    // `hostname` (not `host`) — the latter carries the `:port`, which would defeat the exact
+    // `github.com` / `gitlab.com` provider match for a ported clone URL (`https://github.com:443/…`).
+    host = url.hostname.toLowerCase()
     rawPath = url.pathname
   } catch {
     // scp-like SSH: `user@host:owner/repo.git` (no scheme, a `:` separating host from path).

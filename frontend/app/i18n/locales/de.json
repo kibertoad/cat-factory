@@ -530,6 +530,8 @@
         "cloneUrl": "Clone-URL des Repositorys",
         "cloneUrlHelp": "Das Git-Repository, in dem die Compose-Dateien des Stacks liegen.",
         "gitRef": "Branch oder Tag (optional)",
+        "directory": "Unterverzeichnis (optional)",
+        "directoryHelp": "Wird nur von der automatischen Erkennung verwendet: das Monorepo-Unterverzeichnis, in dem der Compose-Stack liegt.",
         "composeFiles": "Compose-Dateien",
         "composeFilesHelp": "Kommagetrennt, repo-relativ, in Override-Reihenfolge.",
         "composeProfiles": "Compose-Profile (optional)",
@@ -544,7 +546,8 @@
         "detected": "Stack-Konfiguration erkannt",
         "detectedBody": "Aus dem Repository vorausgefüllt. Überprüfen Sie die Felder vor dem Speichern.",
         "nothing": "Nichts automatisch zu erkennen",
-        "failed": "Automatische Erkennung fehlgeschlagen"
+        "failed": "Automatische Erkennung fehlgeschlagen",
+        "envFiles": "Env-Vorlagen, die vor dem Start materialisiert werden:"
       },
       "edit": {
         "heading": "Gemeinsamen Stack bearbeiten",
