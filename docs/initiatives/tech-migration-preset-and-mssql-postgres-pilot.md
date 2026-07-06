@@ -1,6 +1,6 @@
 # Initiative: Technological-migration preset & the MSSQL→PostgreSQL pilot
 
-**Status:** in progress (T1–T4 done — preset phase templates + ingest normalization + full-interview qa seeding + `migration.*` fragment pack) · **Owner:** orchestration · **Started:** 2026-07-06
+**Status:** in progress (T1–T5 done — preset phase templates + ingest normalization + full-interview qa seeding + `migration.*` fragment pack + methodology prompt pack & interviewer promptAddition seam) · **Owner:** orchestration · **Started:** 2026-07-06
 
 > Durable source of truth for a multi-PR initiative. Read this first before picking up the
 > next slice; update the checklist at the end of each PR.
@@ -82,7 +82,7 @@ classic behaviour-preservation traps.
 | **S8** `preset_docs_refresh` registration (the FIRST real preset)                                                                                                                     | ⬜ todo                                | **T8** (transitively T10, T11) | S8 pioneers the registration pattern (descriptor + hooks + review mapping, incl. the full-gate-array rule from the parent's [S2] gotcha). Two presets pioneering that pattern in parallel is exactly the overlap this tracker exists to avoid; T8 **copies** S8's landed shape. |
 | **S9** E2E baseline (create-with-preset → auto-plan → spawn-with-decoration) + `backend/docs/initiative-presets.md`                                                                   | ⬜ todo                                | **T10** (transitively T11)     | The migration E2E must extend S9's baseline fixture, never fork a parallel harness.                                                                                                                                                                                             |
 
-Unblocked today (parallel-safe with the parent roadmap): T5, T6, T7, T9 (T1–T4
+Unblocked today (parallel-safe with the parent roadmap): T6, T7, T9 (T1–T5
 now done). Critical path: T1 → T2 → T3 → (+ parent S8) T8 → (+ parent S9) T10 → T11 — the next
 critical-path slice T8 is still blocked on **parent S8** (and T7).
 
@@ -277,7 +277,7 @@ loop/ingest glue (S5) is already landed and is consumed, never modified, here.
 | T2  | Phase-template ingest normalization/validation in the landed `seedPlanDraft` path, before `seedPlan` (reorder known phases; `ValidationError` on missing-required/disallowed-extra); conformance both runtimes                                | SYSTEM    | T1                            | ✅ done | #900   |
 | T3  | Full-interview qa seeding: extend `seedPresetInterviewQa` to `interview: 'full'` presets + a generic interviewer "build on seeded answers, don't re-ask" prompt line                                                                          | SYSTEM    | —                             | ✅ done | #904   |
 | T4  | `migration.*` prompt-fragment collection (behaviour-preservation, migration-discipline, confidence-case authoring standard) + tests                                                                                                           | MIGRATION | —                             | ✅ done | #909   |
-| T5  | Methodology prompt pack: promptAdditions for interviewer/analyst/planner (transitive blast-zone method, per-phase item briefs, confidence-case/design gating expectations) as exported constants + tests                                      | MIGRATION | —                             | ⬜ todo |        |
+| T5  | Methodology prompt pack: promptAdditions for interviewer/analyst/planner (transitive blast-zone method, per-phase item briefs, confidence-case/design gating expectations) as exported constants + tests                                      | MIGRATION | —                             | ✅ done | #911   |
 | T6  | `migration-detect.logic.ts` bounded probe + unit tests (db/driver/compose markers → `migrationKind`/`fromTech` prefill; never throws)                                                                                                         | MIGRATION | —                             | ⬜ todo |        |
 | T7  | `seedMigrationPlan` pure post-processor + unit tests over draft fixtures (spawn stamping under `migrationDocsDir`, confidence-case injection/gating/dependsOn, granularity caps, `humanReview` gate arrays) — lands unwired, dormant until T8 | MIGRATION | —                             | ⬜ todo |        |
 | T8  | `preset_tech_migration` registration: descriptor (form, `phaseTemplate`, `policyDefaults`, review mapping, `planningPipelineId: 'pl_initiative'`) wiring T4–T7                                                                                | MIGRATION | **parent S8**, T1, T2, T3, T7 | ⬜ todo |        |
@@ -285,7 +285,7 @@ loop/ingest glue (S5) is already landed and is consumed, never modified, here.
 | T10 | Migration E2E extending the S9 baseline: create-with-preset → full interview with seeded qa → template-shaped plan → spawn decoration → confidence-case gate                                                                                  | BOTH      | **parent S9**, T8             | ⬜ todo |        |
 | T11 | Pilot run + validation: real MSSQL→PG initiative through the product against T9's repo; validation checklist (see Pilot); learnings folded back into this tracker                                                                             | PILOT     | T8, T9, T10                   | ⬜ todo |        |
 
-Ordering: T1–T4 are done; T5–T7 and T9 are unblocked and parallel-safe with the parent
+Ordering: T1–T5 are done; T6, T7 and T9 are unblocked and parallel-safe with the parent
 roadmap. Critical path: T1 → T2 → T3 → (+ parent S8) T8 → (+ parent S9) T10 → T11 (T8 now waits
 only on parent S8 + T7).
 
@@ -409,6 +409,21 @@ New, migration-specific:
 - **T2 rejects by throwing `ValidationError` at ingest** — the landed S5 pattern
   (`assertPipelinesExist` / the strict re-parse), never a silent draft mutation for a
   missing required phase.
+- **[T5] The interviewer consumes its promptAddition through a SEPARATE seam from the
+  analyst/planner.** The analyst/planner fold `promptAdditions[kind]` via
+  `AgentContextBuilder` → `initiativeContextLines` (they run through the engine); the
+  interviewer is the INLINE `InitiativeInterviewService`, which builds its own prompt and
+  never passes through the context builder. T5 completed that half — the service now folds
+  `promptAdditions[INITIATIVE_INTERVIEWER_AGENT_KIND]` under the same
+  `## Initiative preset: <label>` heading. This seam existed for the analyst/planner since
+  T1/parent-S3 but not the interviewer, because docs-refresh is `interview: 'skip'`; the
+  migration preset is the first FULL-interview preset to steer its interviewer. It never
+  branches on a preset id, so generic/preset-less interviews are byte-for-byte unchanged.
+- **[T5] Canonical phase ids live in `agents/src/presets/tech-migration/phases.ts`**
+  (`MIGRATION_PHASE_IDS` + `MIGRATION_PHASE_ID_ORDER`); the prompt pack is
+  `prompt-additions.ts` (`MIGRATION_PROMPT_ADDITIONS`, keyed by the kernel initiative kind
+  constants). T7's `seedMigrationPlan`, T8's descriptor `phaseTemplate`, and T10's E2E all
+  import the ids from `phases.ts` — do NOT retype a phase id anywhere else.
 
 ## Out of scope
 

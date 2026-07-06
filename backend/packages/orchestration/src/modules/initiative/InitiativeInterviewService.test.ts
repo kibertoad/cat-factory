@@ -34,6 +34,34 @@ function registerMigrationPreset() {
   })
 }
 
+const STEERED_PRESET_ID = 'preset_steered_interviewer'
+/** A phrase unique to this preset's interviewer promptAddition — never in the static system prompt. */
+const INTERVIEWER_STEERING = 'probe the downtime tolerance and cutover window'
+/**
+ * A FULL-interview preset that registers an `initiative-interviewer` promptAddition. This is the
+ * generic seam the migration preset (the first full-interview preset to steer its interviewer)
+ * relies on: the inline interviewer must fold the registered steering into its prompt.
+ */
+function registerSteeredPreset() {
+  registerInitiativePreset({
+    descriptor: {
+      id: STEERED_PRESET_ID,
+      presentation: {
+        label: 'Steered migration',
+        icon: 'i-lucide-database',
+        color: '#000',
+        description: 'A full-interview preset that steers its interviewer.',
+      },
+      fields: [],
+      planningPipelineId: 'pl_initiative',
+      interview: 'full',
+      humanReviewDefault: true,
+      defaultFragmentIds: [],
+    },
+    promptAdditions: { 'initiative-interviewer': `Migration interview: ${INTERVIEWER_STEERING}.` },
+  })
+}
+
 const OPTIONAL_PRESET_ID = 'preset_optional_only'
 /**
  * A FULL-interview preset whose only field is OPTIONAL — so `{ notes: '' }` is a reachable frozen
@@ -192,5 +220,46 @@ describe('InitiativeInterviewService — build-on-form steering (T3)', () => {
       { finalize: false },
     )
     expect(cap.prompt()).not.toContain(FORM_STEERING)
+  })
+})
+
+describe('InitiativeInterviewService — preset interviewer steering (T5)', () => {
+  beforeEach(() => {
+    clearRegisteredInitiativePresets()
+    registerSteeredPreset()
+    registerMigrationPreset()
+  })
+  afterEach(() => clearRegisteredInitiativePresets())
+
+  it('folds the registered interviewer promptAddition into the prompt', async () => {
+    const cap = capturingModel()
+    await makeService(cap.model).runInterview(
+      'ws_1',
+      BLOCK,
+      initiative({ presetId: STEERED_PRESET_ID }),
+      { finalize: false },
+    )
+    expect(cap.prompt()).toContain(INTERVIEWER_STEERING)
+    // Headed by the preset label so it reads the same way as the analyst/planner fold.
+    expect(cap.prompt()).toContain('Steered migration')
+  })
+
+  it('leaves the prompt unchanged for a preset without an interviewer promptAddition', async () => {
+    const cap = capturingModel()
+    await makeService(cap.model).runInterview(
+      'ws_1',
+      BLOCK,
+      // `registerMigrationPreset` sets a form but NO promptAdditions — so no steering appears.
+      initiative({ presetId: MIGRATION_PRESET_ID }),
+      { finalize: false },
+    )
+    expect(cap.prompt()).not.toContain(INTERVIEWER_STEERING)
+    expect(cap.prompt()).not.toContain('Initiative preset:')
+  })
+
+  it('leaves the prompt unchanged for a preset-less initiative', async () => {
+    const cap = capturingModel()
+    await makeService(cap.model).runInterview('ws_1', BLOCK, initiative({}), { finalize: false })
+    expect(cap.prompt()).not.toContain('Initiative preset:')
   })
 })
