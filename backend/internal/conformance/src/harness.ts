@@ -101,6 +101,19 @@ export interface ConformanceApp {
    */
   drive(workspaceId: string, maxRounds?: number): Promise<ExecutionInstance[]>
   /**
+   * Start a run straight through the facade's real `ExecutionService`, optionally with a
+   * per-run gate override (the initiative-preset gate-override seam) — a path no HTTP route
+   * exposes. Lets the suite assert the override lands on the persisted run steps (and drive
+   * the run's pause/advance) identically on D1 and Postgres. `initiatedBy` is left
+   * system-null and `origin` defaults to manual, matching a loop-spawned run.
+   */
+  startExecution(
+    workspaceId: string,
+    blockId: string,
+    pipelineId: string,
+    opts?: { gates?: boolean[] },
+  ): Promise<ExecutionInstance>
+  /**
    * Poll a bootstrap run to a terminal state (the Node/CF facades durably drive this via
    * pg-boss / a BootstrapWorkflow; the suite drives it directly against a deterministic
    * {@link FakeRepoBootstrapper}). Returns the number of polls taken.

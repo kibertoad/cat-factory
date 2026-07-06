@@ -1436,6 +1436,17 @@ export class ExecutionService {
      * run, so it never re-checks this.
      */
     origin: RunOrigin = 'manual',
+    /**
+     * Per-run approval-gate override (the initiative-preset gate-override seam). When supplied
+     * it REPLACES the pipeline's declared `gates` for THIS run only — one boolean per pipeline
+     * step, indexed by the pipeline's ORIGINAL step index exactly like `pipeline.gates`, so it
+     * must be parallel to `pipeline.agentKinds`. `undefined` ⇒ today's behaviour (the pipeline's
+     * own gates). The initiative loop threads an item's `spawn.gates` through here; a preset's
+     * review mapping computes the array from the user's `humanReview` choice. The override is
+     * copied onto the run's steps (`requiresApproval`), so a retry/restart — which re-drive the
+     * STORED steps — preserve it with no extra persistence.
+     */
+    gatesOverride?: boolean[],
   ): Promise<ExecutionInstance> {
     await this.requireWorkspace(workspaceId)
     const block = await this.requireBlock(workspaceId, blockId)
@@ -1449,6 +1460,15 @@ export class ExecutionService {
     // manual start of a recurring-only pipeline (or a scheduled fire of a one-off-only one), and
     // a bug-intake pipeline that isn't recurring. Before any side effects.
     assertPipelineLaunchable(pipeline.agentKinds, pipeline.availability, origin, pipeline.enabled)
+
+    // Per-run gate override must be parallel to the pipeline's steps (one boolean per step,
+    // original-index-aligned like `pipeline.gates`). A mismatch means a preset's review mapping
+    // is out of step with the pipeline it targets — reject up front, before any side effects.
+    if (gatesOverride && gatesOverride.length !== pipeline.agentKinds.length) {
+      throw new ValidationError(
+        `Gate override has ${gatesOverride.length} entr${gatesOverride.length === 1 ? 'y' : 'ies'} but pipeline '${pipeline.id}' has ${pipeline.agentKinds.length} step(s).`,
+      )
+    }
 
     // Shared config/resource preconditions (pipeline shape, frame type, tester infra, binary
     // storage, agent backend, provider/preset satisfiability, budget) — the SAME gate a retry
@@ -1518,8 +1538,11 @@ export class ExecutionService {
           progress: 0,
           decision: null,
           // A gated step pauses for human approval once its proposal is ready (see
-          // recordStepResult). Copied from the pipeline definition at run start.
-          requiresApproval: pipeline.gates?.[i] ?? false,
+          // recordStepResult). A per-run override (the initiative-preset seam) wins over the
+          // pipeline's own gate for this step; else the pipeline definition at run start. Both
+          // read by the step's ORIGINAL index `i`, so they stay aligned to the kind even when
+          // earlier steps are disabled.
+          requiresApproval: gatesOverride?.[i] ?? pipeline.gates?.[i] ?? false,
           approval: null,
           // A consensus-enabled step runs through the multi-model mechanism (the consensus
           // executor reads this off the context). Copied from the pipeline at run start.
