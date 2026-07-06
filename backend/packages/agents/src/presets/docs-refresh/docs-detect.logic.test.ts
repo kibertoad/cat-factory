@@ -148,6 +148,16 @@ describe('detectDocsLayout — existing mermaid', () => {
     expect(rec.hasExistingMermaid).toBe(true)
   })
 
+  it('flags a standalone `.mmd` file at the repo root (no docs dir)', async () => {
+    const rec = await detectDocsLayout(makeReader({ 'flow.mmd': 'graph TD', 'README.md': 'x' }))
+    expect(rec.hasExistingMermaid).toBe(true)
+  })
+
+  it('flags a `mermaid` directory at the repo root (no docs dir)', async () => {
+    const rec = await detectDocsLayout(makeReader({ 'mermaid/diagram.txt': 'graph TD' }))
+    expect(rec.hasExistingMermaid).toBe(true)
+  })
+
   it('flags a mermaid source nested inside the detected diagrams subfolder', async () => {
     const rec = await detectDocsLayout(makeReader({ 'docs/diagrams/system.mermaid': 'graph TD' }))
     expect(rec.diagramsDir).toBe('docs/diagrams')
@@ -177,6 +187,36 @@ describe('detectDocsLayout — monorepo & placement mode', () => {
       makeReader({ 'package.json': JSON.stringify({ workspaces: ['packages/*'] }) }),
     )
     expect(rec.monorepo).toBe(true)
+  })
+
+  it("detects a monorepo from yarn's object-form `workspaces` (`{ packages: [...] }`)", async () => {
+    const rec = await detectDocsLayout(
+      makeReader({ 'package.json': JSON.stringify({ workspaces: { packages: ['packages/*'] } }) }),
+    )
+    expect(rec.monorepo).toBe(true)
+  })
+
+  it('does NOT treat an empty `workspaces` declaration as a monorepo', async () => {
+    const emptyArray = await detectDocsLayout(
+      makeReader({ 'package.json': JSON.stringify({ workspaces: [] }), 'docs/x.md': 'x' }),
+    )
+    expect(emptyArray.monorepo).toBe(false)
+    const emptyObject = await detectDocsLayout(
+      makeReader({ 'package.json': JSON.stringify({ workspaces: {} }), 'docs/x.md': 'x' }),
+    )
+    expect(emptyObject.monorepo).toBe(false)
+  })
+
+  it('stays root on an even split — per-service needs a strict majority, not a tie', async () => {
+    const rec = await detectDocsLayout(
+      makeReader({
+        'pnpm-workspace.yaml': 'packages:\n  - packages/*',
+        'packages/alpha/docs/readme.md': 'x', // documents itself
+        'packages/beta/src/index.ts': 'y', // no docs — 1 of 2 is a tie, not "most"
+      }),
+    )
+    expect(rec.monorepo).toBe(true)
+    expect(rec.placementMode).toBe('root')
   })
 
   it('detects per-service placement when most sampled packages carry their own docs', async () => {

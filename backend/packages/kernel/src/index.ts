@@ -251,6 +251,12 @@ export {
   isBlockedPrivateHost,
 } from './shared/ip-host.logic.js'
 export { redactSecrets } from './shared/redact-secrets.logic.js'
+export {
+  type RepoScanEntry,
+  type CheckoutFreeRepoReader,
+  joinRepoPath,
+  BudgetedRepoScanner,
+} from './shared/repo-scan.logic.js'
 
 export { requireWorkspace } from './workspace-guard.js'
 

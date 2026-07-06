@@ -18,14 +18,17 @@
 // `docs/initiatives/initiative-presets-and-docs-refresh.md` (slice 6).
 // ---------------------------------------------------------------------------
 
+import { BudgetedRepoScanner, joinRepoPath } from '@cat-factory/kernel'
+
 /**
  * The narrow slice of the checkout-free repo API the detector needs — a `RepoFiles`
  * satisfies it structurally, and a test supplies an in-memory fake. A MISSING path yields
  * `null` / `[]`, so the heuristics degrade gracefully on partial repos. A genuine read
  * fault (auth/permission revoked, rate limit, transport error) may THROW — the real
  * GitHub/GitLab reader throws on any non-404 status. The detector NEVER propagates it: the
- * {@link Scanner} swallows the fault (records nothing, keeps scanning best-effort) so the
- * probe can only ever return defaults, never reject — a prefill must never block create.
+ * shared {@link BudgetedRepoScanner} swallows the fault (records it, keeps scanning
+ * best-effort) and this probe simply ignores `readFault`, so it can only ever return
+ * defaults, never reject — a prefill must never block create.
  */
 export interface DocsRepoReader {
   getFile(path: string, gitRef?: string): Promise<{ content: string } | null>
@@ -95,65 +98,6 @@ const MAX_SAMPLED_PACKAGES = 6
 // cap only bites on a decoy-heavy tree, where the scan simply stops and returns what it has.
 const READ_BUDGET = 32
 
-/** Join + normalize repo-relative path segments (drops empties, collapses `.`, resolves `..`). */
-function joinPath(...parts: (string | undefined)[]): string {
-  const segs: string[] = []
-  for (const part of parts) {
-    if (!part) continue
-    for (const seg of part.split('/')) {
-      if (!seg || seg === '.') continue
-      if (seg === '..') segs.pop()
-      else segs.push(seg)
-    }
-  }
-  return segs.join('/')
-}
-
-/**
- * Stateful reader wrapper with a hard read budget + per-path memoization so detection can't
- * fan out without bound and re-listing a shared dir is free. Every method is TOTAL: a read
- * fault is swallowed (recorded as an empty result) so the probe degrades to defaults rather
- * than throwing — a prefill must never block create.
- */
-class Scanner {
-  private reads = 0
-  private readonly dirCache = new Map<string, { name: string; type: string; path: string }[]>()
-  private readonly fileCache = new Map<string, string | null>()
-  constructor(private readonly reader: DocsRepoReader) {}
-
-  async listDir(path: string): Promise<{ name: string; type: string; path: string }[]> {
-    const cached = this.dirCache.get(path)
-    if (cached !== undefined) return cached
-    if (this.reads >= READ_BUDGET) return []
-    this.reads++
-    let entries: { name: string; type: string; path: string }[] = []
-    try {
-      entries = await this.reader.listDirectory(path)
-    } catch {
-      // A genuine read fault (auth / rate limit / transport). Treat as empty and keep going —
-      // the probe never rejects, so the worst outcome is "returned the conventional defaults".
-      entries = []
-    }
-    this.dirCache.set(path, entries)
-    return entries
-  }
-
-  async getFile(path: string): Promise<string | null> {
-    const cached = this.fileCache.get(path)
-    if (cached !== undefined) return cached
-    if (this.reads >= READ_BUDGET) return null
-    this.reads++
-    let content: string | null = null
-    try {
-      content = (await this.reader.getFile(path))?.content ?? null
-    } catch {
-      content = null
-    }
-    this.fileCache.set(path, content)
-    return content
-  }
-}
-
 /** Immediate child directory names of a listing. */
 function dirNames(entries: { name: string; type: string }[]): Set<string> {
   return new Set(entries.filter((e) => e.type === 'dir').map((e) => e.name))
@@ -183,13 +127,21 @@ function listingHasMermaid(entries: { name: string; type: string }[]): boolean {
  * npm/yarn/bun monorepo marker). Best-effort: an absent/unparseable manifest ⇒ false. This is
  * the only file the probe reads beyond directory listings, and it is a root workspace manifest.
  */
-async function hasNpmWorkspaces(scanner: Scanner): Promise<boolean> {
+async function hasNpmWorkspaces(scanner: BudgetedRepoScanner): Promise<boolean> {
   const content = await scanner.getFile('package.json')
   if (!content) return false
   try {
     const pkg = JSON.parse(content) as { workspaces?: unknown }
     const ws = pkg.workspaces
-    return Array.isArray(ws) ? ws.length > 0 : ws !== null && typeof ws === 'object'
+    // Array form (`["packages/*"]`) OR yarn's object form (`{ packages: ["packages/*"] }`) — a
+    // monorepo marker only when it actually declares globs. An empty `[]`/`{}` (or `{ nohoist }`
+    // with no `packages`) declares no workspaces, so it's not a monorepo signal.
+    if (Array.isArray(ws)) return ws.length > 0
+    if (ws !== null && typeof ws === 'object') {
+      const packages = (ws as { packages?: unknown }).packages
+      return Array.isArray(packages) && packages.length > 0
+    }
+    return false
   } catch {
     return false
   }
@@ -201,7 +153,7 @@ async function hasNpmWorkspaces(scanner: Scanner): Promise<boolean> {
  * any sampled package held a mermaid source. Bounded by the sample cap + the global read budget.
  */
 async function samplePackageDocs(
-  scanner: Scanner,
+  scanner: BudgetedRepoScanner,
   workspaceDirs: string[],
 ): Promise<{ sampled: number; withDocs: number; mermaid: boolean }> {
   let sampled = 0
@@ -213,7 +165,7 @@ async function samplePackageDocs(
     for (const child of children) {
       if (sampled >= MAX_SAMPLED_PACKAGES) break
       sampled++
-      const entries = await scanner.listDir(joinPath(wsDir, child.name))
+      const entries = await scanner.listDir(joinRepoPath(wsDir, child.name))
       if (firstPresent(dirNames(entries), DOCS_ROOT_NAMES)) withDocs++
       if (listingHasMermaid(entries)) mermaid = true
     }
@@ -231,7 +183,7 @@ async function samplePackageDocs(
  * planning time.
  */
 export async function detectDocsLayout(reader: DocsRepoReader): Promise<DocsLayoutDetection> {
-  const scanner = new Scanner(reader)
+  const scanner = new BudgetedRepoScanner(reader, READ_BUDGET)
 
   const rootEntries = await scanner.listDir('')
   const rootDirs = dirNames(rootEntries)
@@ -239,23 +191,25 @@ export async function detectDocsLayout(reader: DocsRepoReader): Promise<DocsLayo
 
   // --- docs root -------------------------------------------------------------------------------
   const docsRoot = firstPresent(rootDirs, DOCS_ROOT_NAMES) ?? DEFAULT_DOCS_ROOT
-  let diagramsDir = joinPath(docsRoot, 'diagrams')
-  let businessRulesDir = joinPath(docsRoot, 'business-logic')
-  let hasExistingMermaid = [...rootFiles].some((n) => MERMAID_FILE_RE.test(n))
+  let diagramsDir = joinRepoPath(docsRoot, 'diagrams')
+  let businessRulesDir = joinRepoPath(docsRoot, 'business-logic')
+  // Root listing signal: a standalone `.mmd`/`.mermaid` file OR a `mermaid` directory (the root
+  // is a scanned location, so both halves of the signal count here — not just the file half).
+  let hasExistingMermaid = listingHasMermaid(rootEntries)
 
   // --- known subfolders under the docs root ----------------------------------------------------
   if (rootDirs.has(docsRoot)) {
     const docsEntries = await scanner.listDir(docsRoot)
     const docsDirs = dirNames(docsEntries)
     const diagramsChild = firstPresent(docsDirs, DIAGRAMS_DIR_NAMES)
-    if (diagramsChild) diagramsDir = joinPath(docsRoot, diagramsChild)
+    if (diagramsChild) diagramsDir = joinRepoPath(docsRoot, diagramsChild)
     const businessChild = firstPresent(docsDirs, BUSINESS_RULES_DIR_NAMES)
-    if (businessChild) businessRulesDir = joinPath(docsRoot, businessChild)
+    if (businessChild) businessRulesDir = joinRepoPath(docsRoot, businessChild)
     hasExistingMermaid = hasExistingMermaid || listingHasMermaid(docsEntries)
     // Peek inside the diagrams dir once for standalone mermaid sources (budget permitting).
     if (diagramsChild && !hasExistingMermaid) {
       hasExistingMermaid = listingHasMermaid(
-        await scanner.listDir(joinPath(docsRoot, diagramsChild)),
+        await scanner.listDir(joinRepoPath(docsRoot, diagramsChild)),
       )
     }
   }
@@ -270,9 +224,10 @@ export async function detectDocsLayout(reader: DocsRepoReader): Promise<DocsLayo
   if (monorepo && workspaceDirs.length > 0) {
     const { sampled, withDocs, mermaid } = await samplePackageDocs(scanner, workspaceDirs)
     hasExistingMermaid = hasExistingMermaid || mermaid
-    // Per-service when MOST sampled packages document themselves. A monorepo we can't sample
-    // (manifest-only, no conventional package dir) stays `root` — the safe, common default.
-    if (sampled > 0 && withDocs * 2 >= sampled) placementMode = 'per-service'
+    // Per-service when MOST sampled packages document themselves (a strict majority — an even
+    // split stays on the safe `root` default). A monorepo we can't sample (manifest-only, no
+    // conventional package dir) stays `root` too — the safe, common default.
+    if (sampled > 0 && withDocs * 2 > sampled) placementMode = 'per-service'
   }
 
   return { placementMode, docsRoot, diagramsDir, businessRulesDir, hasExistingMermaid, monorepo }
