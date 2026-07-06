@@ -78,3 +78,26 @@ export const migrationFragments: PromptFragment[] = [
     appliesTo: { agentKinds: ['coder', 'doc-writer'] },
   },
 ]
+
+/**
+ * The ids of the migration fragments, in catalog order — the single source of truth for "which
+ * best-practice fragments a technological migration applies by default". Derived from
+ * {@link migrationFragments} so it can never drift from the definitions. Consumed by the
+ * `preset_tech_migration` preset's descriptor `defaultFragmentIds` (T8, the workspace default set).
+ */
+export const MIGRATION_FRAGMENT_IDS: readonly string[] = migrationFragments.map((f) => f.id)
+
+/**
+ * The migration fragment ids that apply to `agentKind`, in catalog order — the subset whose
+ * `appliesTo.agentKinds` includes the kind (a fragment with no `appliesTo` restriction applies to
+ * all). This RESPECTS each fragment's declared scoping, which the manual per-block `fragmentIds`
+ * pin path does NOT (the run-time resolver folds pinned bodies in unconditionally — only the
+ * automatic service-fragment selector consults `appliesTo`). `seedMigrationPlan` (T7) stamps this
+ * per item keyed off the item's PRIMARY producer (`coder` for coding items, `doc-writer` for the
+ * document items), so a doc task no longer receives the coding-only behaviour-preservation standard.
+ */
+export function migrationFragmentIdsFor(agentKind: string): string[] {
+  return migrationFragments
+    .filter((f) => !f.appliesTo?.agentKinds || f.appliesTo.agentKinds.includes(agentKind))
+    .map((f) => f.id)
+}

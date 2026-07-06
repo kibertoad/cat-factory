@@ -1,6 +1,6 @@
 # Initiative: Technological-migration preset & the MSSQL→PostgreSQL pilot
 
-**Status:** in progress (T1–T5 done — preset phase templates + ingest normalization + full-interview qa seeding + `migration.*` fragment pack + methodology prompt pack & interviewer promptAddition seam) · **Owner:** orchestration · **Started:** 2026-07-06
+**Status:** in progress (T1–T5, T7 done — preset phase templates + ingest normalization + full-interview qa seeding + `migration.*` fragment pack + methodology prompt pack & interviewer promptAddition seam + `seedMigrationPlan` post-processor) · **Owner:** orchestration · **Started:** 2026-07-06
 
 > Durable source of truth for a multi-PR initiative. Read this first before picking up the
 > next slice; update the checklist at the end of each PR.
@@ -82,9 +82,9 @@ classic behaviour-preservation traps.
 | **S8** `preset_docs_refresh` registration (the FIRST real preset)                                                                                                                     | ⬜ todo                                | **T8** (transitively T10, T11) | S8 pioneers the registration pattern (descriptor + hooks + review mapping, incl. the full-gate-array rule from the parent's [S2] gotcha). Two presets pioneering that pattern in parallel is exactly the overlap this tracker exists to avoid; T8 **copies** S8's landed shape. |
 | **S9** E2E baseline (create-with-preset → auto-plan → spawn-with-decoration) + `backend/docs/initiative-presets.md`                                                                   | ⬜ todo                                | **T10** (transitively T11)     | The migration E2E must extend S9's baseline fixture, never fork a parallel harness.                                                                                                                                                                                             |
 
-Unblocked today (parallel-safe with the parent roadmap): T7, T9 (T1–T5
+Unblocked today (parallel-safe with the parent roadmap): T9 (T1–T5 and T7
 now done). Critical path: T1 → T2 → T3 → (+ parent S8) T8 → (+ parent S9) T10 → T11 — the next
-critical-path slice T8 is still blocked on **parent S8** (and T7).
+critical-path slice T8 is now blocked only on **parent S8** (T7 landed).
 
 ## Target architecture
 
@@ -269,15 +269,15 @@ loop/ingest glue (S5) is already landed and is consumed, never modified, here.
 | T3  | Full-interview qa seeding: extend `seedPresetInterviewQa` to `interview: 'full'` presets + a generic interviewer "build on seeded answers, don't re-ask" prompt line                                                                          | SYSTEM    | —                             | ✅ done | #904   |
 | T4  | `migration.*` prompt-fragment collection (behaviour-preservation, migration-discipline, confidence-case authoring standard) + tests                                                                                                           | MIGRATION | —                             | ✅ done | #909   |
 | T5  | Methodology prompt pack: promptAdditions for interviewer/analyst/planner (transitive blast-zone method, per-phase item briefs, confidence-case/design gating expectations) as exported constants + tests                                      | MIGRATION | —                             | ✅ done | #913   |
-| T7  | `seedMigrationPlan` pure post-processor + unit tests over draft fixtures (spawn stamping under `migrationDocsDir`, confidence-case injection/gating/dependsOn, granularity caps, `humanReview` gate arrays) — lands unwired, dormant until T8 | MIGRATION | —                             | ⬜ todo |        |
+| T7  | `seedMigrationPlan` pure post-processor + unit tests over draft fixtures (spawn stamping under `migrationDocsDir`, confidence-case injection/gating/dependsOn, granularity caps, `humanReview` gate arrays) — lands unwired, dormant until T8 | MIGRATION | —                             | ✅ done | #921   |
 | T8  | `preset_tech_migration` registration: descriptor (form, `phaseTemplate`, `policyDefaults`, review mapping, `planningPipelineId: 'pl_initiative'`) wiring T4, T5, T7                                                                           | MIGRATION | **parent S8**, T1, T2, T3, T7 | ⬜ todo |        |
 | T9  | Synthetic MSSQL fixture repo (schema + procs/triggers/views + app code + dual-target-ready integration tests + CI) exercising the behaviour traps (see Pilot)                                                                                 | PILOT     | —                             | ⬜ todo |        |
 | T10 | Migration E2E extending the S9 baseline: create-with-preset → full interview with seeded qa → template-shaped plan → spawn decoration → confidence-case gate                                                                                  | BOTH      | **parent S9**, T8             | ⬜ todo |        |
 | T11 | Pilot run + validation: real MSSQL→PG initiative through the product against T9's repo; validation checklist (see Pilot); learnings folded back into this tracker                                                                             | PILOT     | T8, T9, T10                   | ⬜ todo |        |
 
-Ordering: T1–T5 are done; T7 and T9 are unblocked and parallel-safe with the parent
+Ordering: T1–T5 and T7 are done; T9 is unblocked and parallel-safe with the parent
 roadmap. Critical path: T1 → T2 → T3 → (+ parent S8) T8 → (+ parent S9) T10 → T11 (T8 now waits
-only on parent S8 + T7).
+only on parent S8).
 
 ## Pilot: MSSQL → PostgreSQL
 
@@ -412,6 +412,48 @@ New, migration-specific:
   `prompt-additions.ts` (`MIGRATION_PROMPT_ADDITIONS`, keyed by the kernel initiative kind
   constants). T7's `seedMigrationPlan`, T8's descriptor `phaseTemplate`, and T10's E2E all
   import the ids from `phases.ts` — do NOT retype a phase id anywhere else.
+- **[T7] `seedMigrationPlan` lives in `agents/src/presets/tech-migration/seed-plan.ts`**, keyed
+  purely off `item.phaseId`. It exports the field-key constants (`FIELD_MIGRATION_DOCS_DIR`,
+  `FIELD_HUMAN_REVIEW`, `DEFAULT_MIGRATION_DOCS_DIR`) and `migrationReviewGates` for T8's descriptor
+  to reuse — the form's field keys/defaults are defined ONCE here, not retyped in the descriptor.
+  The migration fragment ids come from `@cat-factory/prompt-fragments`: T8's `defaultFragmentIds`
+  draws the full `MIGRATION_FRAGMENT_IDS`, while T7 stamps per item the subset that APPLIES to the
+  item's primary producer via `migrationFragmentIdsFor(agentKind)` (`coder` for coding items,
+  `doc-writer` for documents). This is deliberate: manual per-block `fragmentIds` pins bypass a
+  fragment's `appliesTo` at run time (the resolver folds pinned bodies in unconditionally — only the
+  automatic service-fragment selector consults `appliesTo`), so the scoping is applied at STAMP time
+  instead, or a doc task would receive the coding-only `migration.behaviour-preservation` standard.
+- **[T7] The shared `seedPlan` primitives live in `presets/plan-helpers.ts`.** `strInput`, `fileSlug`,
+  `uniqueDocPath`, and the merge-step gate-override derivation (`mergeGateOverride`) are ONE
+  implementation shared by docs-refresh and tech-migration — do NOT re-copy them per preset.
+  `migrationReviewGates` / `docsReviewGates` are thin per-preset wrappers over `mergeGateOverride`.
+- **[T7] Per-phase archetype (which item is a document vs coding) is a DATA table, derived from the
+  phase, not a planner marker** — `coerceInitiativePlan` strips the planner's `spawn`, so the hook
+  can't read a hint off the draft. The document phases + their docKind/canonical-filename/gate policy
+  are declared once in `DOC_PHASE_DECORATIONS` (mirroring docs-refresh's `PHASE_DECORATIONS`); a phase
+  with no entry is CODING. Phases 1/3 are DOCUMENT phases (blast-zone report / transition-design),
+  phase 2 is coverage CODING closed by the confidence-case DOCUMENT, phases 4/5 are CODING. The
+  confidence case is matched within phase 2 by a title heuristic ANCHORED at the title start
+  (`/^(verb )*confidence[-\s]?case\b/`) so a coverage item that merely mentions it is not hijacked; a
+  planner-authored one is canonicalized rather than duplicated, and absent it is injected last.
+- **[T7] An `always`-gated document asserts its gate.** `asDocument` THROWS if an intrinsic control
+  point (confidence-case / transition-design) resolves to no merge gate (a doc pipeline with no
+  `merger` step) rather than silently shipping it unattended — the invariant is enforced, not hoped.
+- **[T7] Coding items carry NO gate override.** Their pipeline is chosen at spawn time by the policy's
+  estimate rules (`pl_quick`/`pl_full`), so a length-correct `spawn.gates` array can't be pre-computed
+  at seed time (and `selectInitiativePipeline` lives in orchestration, which agents can't import). This
+  is correct, not a gap: the coverage→delivery human control is the **confidence-case gate** (phase 4
+  can't start until phase 2 — incl. the gated confidence case — completes), plus the always-gated
+  transition-design document. Per-delivery-PR gates would duplicate that control. The confidence-case
+  and transition-design documents are human-gated ALWAYS (intrinsic control points); `humanReview`
+  only additionally gates the informational blast-zone report.
+- **[T7] Phase 5 has no separate document task.** The §D "closing section appended to
+  `transition-design.md`" is committed by the phase-5 verify/decommission CODING agent editing the
+  existing file — NOT a second document writer creating it (which would break single-writer). So T7
+  decorates all phase-5 items as coding.
+- **[T7] The granularity cap drops, then scrubs.** Phase-2 coverage is capped at 8 items; dropped
+  ids are scrubbed from every surviving item's `dependsOn` (and never appear in the confidence case's
+  deps) so no dangling reference trips `validatePlanDraft`'s unknown-dep check at ingest.
 
 ## Out of scope
 
