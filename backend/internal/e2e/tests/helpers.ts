@@ -148,15 +148,16 @@ export async function startRun(
   )
 }
 
-/** One run's step, as the execution snapshot returns it (only the fields the specs read). */
+/** One run's step, as the workspace snapshot returns it (only the fields the specs read). */
 interface ExecutionStep {
   agentKind: string
   state: string
   approval?: { id: string; status: string } | null
 }
-/** One execution instance (only the fields the specs read). */
+/** One execution instance from the snapshot (only the fields the specs read). */
 interface ExecutionInstance {
   id: string
+  blockId: string
   status: string
   steps: ExecutionStep[]
 }
@@ -171,8 +172,9 @@ export interface ParkedApproval {
  * A `gate: true` pipeline step parks its run `blocked` with the step `waiting_decision` and a
  * `pending` approval — the same generic gate `approval-gate.spec` drives through the UI. The
  * initiative planner gate rides this exact mechanism, but no SPA surface exposes it for an
- * initiative-level block, so its e2e approves it over REST (a trigger). Reads the block's
- * executions and returns the parked run + approval ids to approve.
+ * initiative-level block, so its e2e approves it over REST (a trigger). Reads the run off the
+ * workspace snapshot (there is no per-block executions endpoint) and returns the parked run +
+ * approval ids to approve.
  */
 export async function findParkedApproval(
   request: APIRequestContext,
@@ -180,10 +182,11 @@ export async function findParkedApproval(
   blockId: string,
   agentKind: string,
 ): Promise<ParkedApproval | null> {
-  const executions = await json<ExecutionInstance[]>(
-    await request.get(`${BACKEND_URL}/workspaces/${workspaceId}/blocks/${blockId}/executions`),
+  const snapshot = await json<{ executions: ExecutionInstance[] }>(
+    await request.get(`${BACKEND_URL}/workspaces/${workspaceId}`),
   )
-  for (const instance of executions) {
+  for (const instance of snapshot.executions) {
+    if (instance.blockId !== blockId) continue
     const step = instance.steps.find(
       (s) =>
         s.agentKind === agentKind &&
