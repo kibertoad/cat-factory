@@ -2,7 +2,7 @@ import { mkdtemp, rm } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { describe, expect, it } from 'vitest'
-import { cloneRepo, isGitTimeoutKill } from '../src/git.js'
+import { NON_INTERACTIVE_CREDENTIAL_ARGS, cloneRepo, isGitTimeoutKill } from '../src/git.js'
 import { HarnessFailure } from '../src/failure.js'
 
 // The non-interactive-auth hardening: a per-command timeout kill must be reported as a STALL
@@ -39,6 +39,18 @@ describe('isGitTimeoutKill', () => {
       stderr: 'fatal: repository not found',
     })
     expect(isGitTimeoutKill(err, false)).toBe(false)
+  })
+})
+
+describe('non-interactive credential args', () => {
+  // Regression guard for the #678 break: `-c credential.interactive=false` is honored by modern
+  // git (≥ 2.47) and makes it SKIP GIT_ASKPASS, so every authenticated clone/push died with
+  // "unable to get password from user". The empty helper list is what defeats the GCM popup; the
+  // interactive flag must never come back.
+  it('empties the credential helper but never sets credential.interactive', () => {
+    expect(NON_INTERACTIVE_CREDENTIAL_ARGS).toContain('credential.helper=')
+    expect(NON_INTERACTIVE_CREDENTIAL_ARGS).not.toContain('credential.interactive=false')
+    expect(NON_INTERACTIVE_CREDENTIAL_ARGS.join(' ')).not.toMatch(/credential\.interactive/)
   })
 })
 
