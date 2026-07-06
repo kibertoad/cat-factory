@@ -472,19 +472,21 @@ export function applyAnalysis(initiative: Initiative, summary: string): Initiati
 }
 
 // ---------------------------------------------------------------------------
-// Preset skip-interview seeding (slice 3) — for a preset whose `interview` is `skip`, the FORM
-// the user filled IS the interview. At create the service seeds the `qa` log with one answered
-// exchange per filled, VISIBLE field (label → rendered value), so the existing tracker digest +
-// planning-prompt path (`initiativeContextLines`) surface the form with no interviewer step.
-// Pure + total.
+// Preset form → qa seeding (slice 3; extended to full-interview presets in T3). The FORM the user
+// filled at create is folded into the `qa` log as one answered exchange per filled, VISIBLE field
+// (label → rendered value). For a SKIP-interview preset the form IS the interview (no interviewer
+// step); for a FULL-interview preset the seeded answers are the interviewer's STARTING POINT (it
+// builds on them rather than re-asking). Either way the existing tracker digest + planning-prompt
+// path (`initiativeContextLines`) surface the form. Pure + total.
 // ---------------------------------------------------------------------------
 
 /**
- * Seed the `qa` digest for a SKIP-interview preset from the filled form: one answered exchange
- * (`question` = the field label, `answer` = the rendered value) per VISIBLE field carrying a
- * non-empty value. Hidden (`showWhen`-failed) and blank fields are skipped. The result feeds the
- * entity's `qa` at create, so the analyst / planner prompts (and the committed tracker digest)
- * read the form AS the interview. Ids come from the caller's generator.
+ * Seed the `qa` digest from a preset's filled form: one answered exchange (`question` = the field
+ * label, `answer` = the rendered value) per VISIBLE field carrying a non-empty value. Hidden
+ * (`showWhen`-failed) and blank fields are skipped. The result feeds the entity's `qa` at create,
+ * so the analyst / planner prompts (and the committed tracker digest) read the form — and a
+ * full-interview preset's interviewer builds on it. Interview-mode-agnostic: the caller decides
+ * whether the form IS the interview (skip) or SEEDS it (full). Ids come from the caller's generator.
  */
 export function seedPresetInterviewQa(
   descriptor: InitiativePresetDescriptor,

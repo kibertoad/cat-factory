@@ -109,16 +109,21 @@ export class InitiativeService {
       if (problems.length > 0) throw new ValidationError(problems.join(' '))
       presetInputs = sanitizeInitiativePresetInputs(preset.descriptor, input.presetInputs ?? {})
     }
-    // A SKIP-interview preset has no interviewer step — the filled FORM is the interview. Seed the
-    // qa digest from it (one answered exchange per field) so the analyst/planner + committed
-    // tracker read the form, and template the goal from the human's description, falling back to
-    // the preset's stated purpose.
+    // Seed the qa digest from the filled FORM for ANY preset (T3): for a SKIP-interview preset the
+    // form IS the interview; for a FULL-interview preset the seeded answers are the interviewer's
+    // STARTING POINT so it builds on them (see InitiativeInterviewService) rather than re-asking the
+    // enumerable facts the form already captured. `seedPresetInterviewQa` reads the filled fields, so
+    // `preset_generic` (no fields) seeds nothing and stays byte-for-byte unchanged; an absent preset
+    // seeds nothing (today's free-form behaviour).
     const skipInterview = preset?.descriptor.interview === 'skip'
-    const seededQa: InitiativeQa[] = skipInterview
-      ? seedPresetInterviewQa(preset!.descriptor, presetInputs ?? {}, () =>
+    const seededQa: InitiativeQa[] = preset
+      ? seedPresetInterviewQa(preset.descriptor, presetInputs ?? {}, () =>
           this.deps.idGenerator.next('iqa'),
         )
       : []
+    // Only a SKIP-interview preset templates the goal from its stated purpose (the form is the whole
+    // scoping step). A FULL-interview preset's goal is synthesized by the interviewer, so it stays
+    // the human's description (or blank until the interview converges).
     const goal =
       input.description?.trim() ||
       (skipInterview ? preset!.descriptor.presentation.description.trim() : '')

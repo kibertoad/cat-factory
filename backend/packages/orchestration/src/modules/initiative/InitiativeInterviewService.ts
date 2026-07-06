@@ -46,6 +46,16 @@ export const INITIATIVE_INTERVIEW_SYSTEM_PROMPT =
   'is true, `questions` is empty and you MUST fill `goal` (and `constraints`/`nonGoals` where ' +
   'they apply). No prose, no code fences.'
 
+/**
+ * Whether this initiative was created from a preset FORM whose filled fields seeded the `qa`
+ * (T3). `presetInputs` is frozen on the entity only when a preset's visible fields carried
+ * values, so `preset_generic` (empty form) and a preset-less initiative both read `false` and
+ * their interviewer prompt stays unchanged.
+ */
+function formSeeded(initiative: Initiative): boolean {
+  return !!initiative.presetInputs && Object.keys(initiative.presetInputs).length > 0
+}
+
 /** What the interviewer needs to resolve its inline model + reach the provider. */
 export interface InitiativeInterviewDeps {
   /** Resolve a ModelProvider for a workspace's credential scope (preferred). */
@@ -119,6 +129,20 @@ export class InitiativeInterviewService {
     if (answered.length) {
       lines.push('', 'Answers gathered so far:')
       for (const { question, answer } of answered) lines.push(`- Q: ${question}`, `  A: ${answer}`)
+    }
+    // A FORM-backed preset (T3) pre-answers the enumerable facts at create; those answers are the
+    // seeded qa above. Tell the interviewer they are SETTLED so it builds on them and digs into the
+    // fuzzy, judgment-dependent aspects the form could not capture, instead of re-asking the form.
+    // `presetInputs` is persisted only for a preset with FILLED fields, so `preset_generic` and a
+    // preset-less initiative never trigger this — their interviews stay byte-for-byte unchanged.
+    if (answered.length && formSeeded(initiative)) {
+      lines.push(
+        '',
+        'The answers above include the intake-form responses the stakeholder already provided at ' +
+          'create time. Treat every one of them as SETTLED: do NOT re-ask what the form already ' +
+          'covers. Build on them and probe only the fuzzy, judgment-dependent aspects the form ' +
+          'could not capture.',
+      )
     }
     if (initiative.goal?.trim()) lines.push('', `Current goal statement: ${initiative.goal.trim()}`)
     lines.push(
