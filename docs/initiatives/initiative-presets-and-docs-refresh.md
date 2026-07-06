@@ -306,4 +306,4 @@ false` per step, so an override entry of `false` genuinely turns a pipeline gate
   why a spawned task does/doesn't pause)? **Resolved (S2): no bespoke UI.** The override is
   copied onto the run's steps' `requiresApproval`, which the existing run/step detail already
   renders as per-step approval gates — a spawned task shows exactly the gates it will pause on,
-  with no new surface. Revisit only if a preset needs to explain the mapping's *rationale*.
+  with no new surface. Revisit only if a preset needs to explain the mapping's _rationale_.

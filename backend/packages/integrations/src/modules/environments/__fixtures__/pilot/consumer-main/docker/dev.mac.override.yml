@@ -1,0 +1,6 @@
+# Sanitized fixture — the macOS-specific `-f` override the detector surfaces as an
+# opt-in `composeFileCandidate` (os: mac). Its CONTENTS are never read by detection
+# (only its filename matters); a minimal stanza keeps it a valid compose override.
+services:
+  app: {}
+  acme-main-nginx: {}

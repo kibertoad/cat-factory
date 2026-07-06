@@ -1,0 +1,83 @@
+{
+  "$comment": "Reference StackRecipe for the acme-main consumer pilot — the hand-authored end-state a saved `docker-compose` ServiceProvisioning.recipe would hold. It realizes the A-rows of the initiative's acme mapping table (env-file materialization, override layering + external network + shared-stack attach, composer install, seed import, cache warmup, migrations, index build, frontend build gate, health loop) and declares the M-row preflights (memory, registry login, mkcert CA, hosts entries, secrets marker) with copy-paste remediation. Validated against stackRecipeSchema by pilot-golden.logic.test.ts. Illustrative — not run against the reduced detection fixtures.",
+  "composeFiles": ["docker/dev.yml", "docker/dev.wsl.override.yml"],
+  "composeProfiles": [],
+  "envFiles": [
+    { "template": "services/app/.env.dev.local-dist", "target": "services/app/.env.dev.local" },
+    { "template": "services/app/.split.yaml.dist", "target": "services/app/.split.yaml" }
+  ],
+  "externalNetworks": ["acme-net"],
+  "sharedStackRefs": ["acme-shared-services"],
+  "prerequisites": [
+    { "check": "docker-daemon" },
+    { "check": "memory", "params": { "minGib": 16 } },
+    {
+      "check": "registry-auth",
+      "params": { "registry": "private-registry.example" },
+      "remediation": "Log in to the private image registry (e.g. `aws ecr get-login-password | docker login private-registry.example --username AWS --password-stdin`), then re-run this check. Tokens expire ~8-hourly, so a stale login shows up here rather than mid-pull."
+    },
+    {
+      "check": "mkcert-ca",
+      "remediation": "Install mkcert and run `mkcert -install` so the `*.acme.local` dev certificates are trusted, then re-run."
+    },
+    { "check": "hosts-entries", "params": { "hostnames": ["acme.local"] } },
+    {
+      "check": "env-secrets-marker",
+      "params": { "file": "services/app/.env.dev.local", "marker": "# BOF SECRETS #" },
+      "remediation": "Pull the dev secrets into services/app/.env.dev.local via the repo's own secrets step, then re-run — a missing marker means that one-time step has not run yet."
+    }
+  ],
+  "setupSteps": [
+    {
+      "kind": "compose-exec",
+      "name": "composer install",
+      "service": "app",
+      "command": ["composer", "install", "--no-interaction"],
+      "timeoutMs": 900000
+    },
+    {
+      "kind": "compose-exec",
+      "name": "seed database",
+      "service": "app",
+      "command": ["sh", "-c", "mysql -h mysql -u root acme < /dev/stdin"],
+      "stdinFile": "deployment/acme-db-dummy/acme-dummy.sql",
+      "timeoutMs": 600000
+    },
+    {
+      "kind": "compose-exec",
+      "name": "cache warmup",
+      "service": "app",
+      "command": ["bin/console", "cache:warmup"],
+      "timeoutMs": 600000
+    },
+    {
+      "kind": "compose-exec",
+      "name": "database migrations",
+      "service": "app",
+      "command": ["bin/console", "doctrine:migrations:migrate", "--no-interaction"],
+      "timeoutMs": 600000
+    },
+    {
+      "kind": "compose-exec",
+      "name": "create search indexes",
+      "service": "app",
+      "command": ["bin/console", "search:create-indexes", "--delete", "--all"],
+      "timeoutMs": 900000
+    },
+    {
+      "kind": "wait-file",
+      "name": "frontend build gate",
+      "path": "/app/public/js/compiled/ui/manifest.json",
+      "service": "node-app",
+      "intervalMs": 5000,
+      "timeoutMs": 900000
+    }
+  ],
+  "healthGate": {
+    "kind": "compose-exec",
+    "service": "app",
+    "command": ["bin/console", "monitor:health"],
+    "intervalMs": 5000,
+    "timeoutMs": 600000
+  }
+}

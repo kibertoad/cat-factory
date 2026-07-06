@@ -1,0 +1,53 @@
+{
+  "$comment": "Reference CreateSharedStackInput for the acme-shared-services pilot — the hand-authored end-state a POST /workspaces/:ws/shared-stacks body would carry. It brings up the long-lived shared infra ONCE per workspace/machine: create + own `acme-net`, materialize `.env.shared`, up under the public `backends` profile (the CI-validatable, private-registry-free subset), sync database users, register Debezium connectors. The `peer`-profile services (private-registry images) are omitted here and gated behind the non-required registry-auth preflight. Validated against createSharedStackSchema by pilot-golden.logic.test.ts.",
+  "name": "acme-shared-services",
+  "cloneUrl": "https://example.com/acme/acme-shared-services.git",
+  "gitRef": "main",
+  "composeFiles": ["docker-compose.yml"],
+  "composeProfiles": ["backends"],
+  "envFiles": [{ "template": ".env.shared.example", "target": ".env.shared" }],
+  "managedNetworks": ["acme-net"],
+  "prerequisites": [
+    { "check": "docker-daemon" },
+    {
+      "check": "mkcert-ca",
+      "remediation": "Install mkcert and run `mkcert -install` so the wildcard `*.acme.local` certificates this stack serves are trusted, then re-run."
+    },
+    { "check": "hosts-entries", "params": { "hostnames": ["acme.local", "mailpit.acme.local"] } },
+    {
+      "check": "registry-auth",
+      "params": { "registry": "private-registry.example" },
+      "required": false,
+      "remediation": "Log in to the private image registry to enable the `peer`-profile services (cockroach, languagetool, okapi). Without it the public `backends` subset still comes up fully — this check is advisory, not blocking."
+    }
+  ],
+  "setupSteps": [
+    {
+      "kind": "wait-http",
+      "name": "wait for kafka connect",
+      "url": "http://localhost:8083/",
+      "intervalMs": 5000,
+      "timeoutMs": 300000
+    },
+    {
+      "kind": "compose-exec",
+      "name": "sync database users",
+      "service": "mysql",
+      "command": ["sh", "-c", "mysql -u root < /docker-entrypoint-initdb.d/users.sql"],
+      "timeoutMs": 120000
+    },
+    {
+      "kind": "compose-exec",
+      "name": "register debezium connectors",
+      "service": "debezium-connect",
+      "command": [
+        "sh",
+        "-c",
+        "curl -sf -X POST http://localhost:8083/connectors -H 'Content-Type: application/json' -d @/connectors/acme.json"
+      ],
+      "timeoutMs": 120000
+    }
+  ],
+  "healthGate": { "kind": "compose-healthy" },
+  "allowHostCommands": false
+}

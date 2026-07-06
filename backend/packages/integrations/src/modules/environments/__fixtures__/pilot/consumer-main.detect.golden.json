@@ -1,0 +1,255 @@
+{
+  "detected": true,
+  "provisioning": {
+    "type": "docker-compose",
+    "composePath": "docker/dev.yml",
+    "composeBuild": true,
+    "recipe": {
+      "composeFiles": ["docker/dev.yml"],
+      "externalNetworks": ["acme-net"]
+    }
+  },
+  "composeServiceCandidates": [
+    {
+      "composePath": "docker/dev.yml",
+      "service": "app",
+      "recommended": true
+    },
+    {
+      "composePath": "docker/dev.yml",
+      "service": "datadog-agent",
+      "recommended": false
+    },
+    {
+      "composePath": "docker/dev.yml",
+      "service": "otel-collector",
+      "recommended": false
+    },
+    {
+      "composePath": "docker/dev.yml",
+      "service": "jaeger",
+      "recommended": false
+    },
+    {
+      "composePath": "docker/dev.yml",
+      "service": "crontab",
+      "recommended": false
+    },
+    {
+      "composePath": "docker/dev.yml",
+      "service": "daemon-dev",
+      "recommended": false
+    },
+    {
+      "composePath": "docker/dev.yml",
+      "service": "daemon-symfony",
+      "recommended": false
+    },
+    {
+      "composePath": "docker/dev.yml",
+      "service": "daemon-group-symfony",
+      "recommended": false
+    },
+    {
+      "composePath": "docker/dev.yml",
+      "service": "daemon-dev-group",
+      "recommended": false
+    },
+    {
+      "composePath": "docker/dev.yml",
+      "service": "daemon-thtm-group",
+      "recommended": false
+    },
+    {
+      "composePath": "docker/dev.yml",
+      "service": "daemon-bg-process-consumer",
+      "recommended": false
+    },
+    {
+      "composePath": "docker/dev.yml",
+      "service": "daemon-dev-events",
+      "recommended": false
+    },
+    {
+      "composePath": "docker/dev.yml",
+      "service": "acme-main-nginx",
+      "recommended": false
+    },
+    {
+      "composePath": "docker/dev.yml",
+      "service": "content-conversion",
+      "recommended": false
+    },
+    {
+      "composePath": "docker/dev.yml",
+      "service": "node-app",
+      "recommended": false
+    },
+    {
+      "composePath": "docker/dev.yml",
+      "service": "maestro",
+      "recommended": false
+    },
+    {
+      "composePath": "docker/dev.yml",
+      "service": "webhook-receiver-service",
+      "recommended": false
+    },
+    {
+      "composePath": "docker/dev.yml",
+      "service": "sass",
+      "recommended": false
+    },
+    {
+      "composePath": "docker/dev.yml",
+      "service": "ts",
+      "recommended": false
+    },
+    {
+      "composePath": "docker/dev.yml",
+      "service": "ts-ui",
+      "recommended": false
+    },
+    {
+      "composePath": "docker/dev.yml",
+      "service": "grunt",
+      "recommended": false
+    },
+    {
+      "composePath": "docker/dev.yml",
+      "service": "blackfire",
+      "recommended": false
+    },
+    {
+      "composePath": "docker/dev.yml",
+      "service": "mock-saml-idp",
+      "recommended": false
+    },
+    {
+      "composePath": "docker/dev.yml",
+      "service": "metricbeat",
+      "recommended": false
+    },
+    {
+      "composePath": "docker/dev.yml",
+      "service": "spectre",
+      "recommended": false
+    },
+    {
+      "composePath": "docker/dev.yml",
+      "service": "xerox",
+      "recommended": false
+    },
+    {
+      "composePath": "docker/dev.yml",
+      "service": "barker",
+      "recommended": false
+    },
+    {
+      "composePath": "docker/dev.yml",
+      "service": "expert-search",
+      "recommended": false
+    }
+  ],
+  "composeFileCandidates": [
+    {
+      "path": "docker/dev.yml",
+      "name": "dev.yml",
+      "recommended": true
+    },
+    {
+      "path": "docker/dev.mac.override.yml",
+      "name": "dev.mac.override.yml",
+      "os": "mac",
+      "recommended": false
+    },
+    {
+      "path": "docker/dev.wsl.override.yml",
+      "name": "dev.wsl.override.yml",
+      "os": "wsl",
+      "recommended": false
+    }
+  ],
+  "profileCandidates": [
+    {
+      "profile": "blackfire",
+      "recommended": false
+    },
+    {
+      "profile": "datadog",
+      "recommended": false
+    },
+    {
+      "profile": "otel",
+      "recommended": false
+    }
+  ],
+  "seedDumpCandidates": [
+    {
+      "path": "deployment/acme-db-dummy/acme-dummy.sql",
+      "name": "acme-dummy.sql",
+      "recommended": true
+    },
+    {
+      "path": "deployment/acme-db-dummy/acme-pre-dummy.sql",
+      "name": "acme-pre-dummy.sql",
+      "recommended": false
+    }
+  ],
+  "repoCliHint": {
+    "path": "bin/dev-console",
+    "kind": "repo-cli"
+  },
+  "notes": [
+    {
+      "field": "provisionType",
+      "confidence": "high",
+      "message": "Detected a Docker Compose file at docker/dev.yml."
+    },
+    {
+      "field": "composeBuild",
+      "confidence": "high",
+      "message": "This compose stack builds its images from source (build:). Recommending build-from-source mode, which clones the PR head and runs `docker compose build` — available only on a local (Docker-capable) deployment."
+    },
+    {
+      "field": "kubernetes",
+      "confidence": "low",
+      "message": "Kubernetes manifests also exist in this repo; recommending docker-compose because it is your selected provision type. Switch to kubernetes if that is the test target."
+    },
+    {
+      "field": "composeService",
+      "confidence": "low",
+      "message": "The compose file declares 28 services; pre-selected \"app\" for this block. The file is the deploy target — the service choice is advisory; pick another if that's wrong."
+    },
+    {
+      "field": "composeFiles",
+      "confidence": "high",
+      "message": "Layered 1 compose file(s): docker/dev.yml. 2 OS-specific override(s) surfaced — pick the one matching your machine."
+    },
+    {
+      "field": "externalNetworks",
+      "confidence": "high",
+      "message": "This project expects external network(s) to already exist: acme-net. They must be created before it comes up."
+    },
+    {
+      "field": "sharedStackRefs",
+      "confidence": "low",
+      "message": "Bind the external network(s) (acme-net) to a shared stack so it is brought up first, or create them on the host manually."
+    },
+    {
+      "field": "composeProfiles",
+      "confidence": "low",
+      "message": "The compose file declares 3 profile(s): blackfire, datadog, otel. All surfaced default-off — enable the optional service groups you need."
+    },
+    {
+      "field": "seedDump",
+      "confidence": "low",
+      "message": "Found 2 SQL seed dump(s) (pre-selected deployment/acme-db-dummy/acme-dummy.sql). Confirm one to import as a seed step; none is applied automatically."
+    },
+    {
+      "field": "repoCli",
+      "confidence": "low",
+      "message": "This repo has its own imperative bring-up (repo-cli at bin/dev-console); the deterministic scan can't read it. Consider running deep analysis to translate its setup into recipe steps."
+    }
+  ]
+}
