@@ -1,5 +1,20 @@
 # @cat-factory/conformance
 
+## 0.10.67
+
+### Patch Changes
+
+- Updated dependencies [a2db337]
+- Updated dependencies [a2db337]
+  - @cat-factory/orchestration@0.98.0
+  - @cat-factory/agents@0.48.4
+  - @cat-factory/contracts@0.120.0
+  - @cat-factory/kernel@0.110.0
+  - @cat-factory/server@0.102.0
+  - @cat-factory/gates@0.4.31
+  - @cat-factory/integrations@0.78.2
+  - @cat-factory/prompt-fragments@0.13.2
+
 ## 0.10.66
 
 ### Patch Changes
