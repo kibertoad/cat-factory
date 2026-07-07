@@ -101,7 +101,6 @@ import type { InitiativeInterviewService } from '../initiative/InitiativeIntervi
 import { InitiativeInterviewController } from './InitiativeInterviewController.js'
 import type { DocInterviewService } from '../docInterview/DocInterviewService.js'
 import { DocInterviewController } from './DocInterviewController.js'
-import type { InterviewGateController } from './InterviewGateController.js'
 import {
   type InitiativeRunHarvest,
   assertInitiativeShapeAllowed,
@@ -871,7 +870,7 @@ export class ExecutionService {
       interviewControllers: [
         this.initiativeInterviewController,
         this.docInterviewController,
-      ].filter((c): c is InterviewGateController<unknown> => !!c),
+      ].filter((c): c is InitiativeInterviewController | DocInterviewController => !!c),
       runInitiatorScope: runInitiatorScopeFn,
       environmentProvisioning,
       ticketTrackerProvider,

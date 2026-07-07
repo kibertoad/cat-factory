@@ -559,7 +559,7 @@ describe('clarification actions (not-relevant / recommend)', () => {
   it('a dismissed question is NOT pending (does not block continue) but an unanswered open one is', () => {
     let entity = asked()
     entity = applyQuestionStatus(entity, 'iqa-1', 'dismissed')
-    const byId = (qid: string) => entity.qa?.find((x) => x.id === qid)!
+    const byId = (qid: string) => entity.qa!.find((x) => x.id === qid)!
     expect(isPendingQuestion(byId('iqa-1'))).toBe(false)
     expect(isPendingQuestion(byId('iqa-2'))).toBe(true)
     expect(isPendingQuestion({ ...byId('iqa-2'), answer: 'done' })).toBe(false)
