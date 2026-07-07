@@ -82,6 +82,15 @@ export class InterviewGateController<TEntity> {
   ) {}
 
   /**
+   * The pipeline-step `agentKind` this gate runs as. Exposed so the engine's step dispatch can
+   * build its interview-gate routing table from the wired controllers (keyed by this) rather than
+   * hard-coding each interviewer kind — matching the trait-based re-park / approval guards.
+   */
+  get agentKind(): string {
+    return this.kind.agentKind
+  }
+
+  /**
    * Run the interviewer gate step. When no interviewer model is wired the step passes through
    * (pipelines — and the conformance suite — run unchanged). Otherwise it runs an interviewer
    * pass: questions → PARK for the window; converged → advance. Re-entrant: after the human

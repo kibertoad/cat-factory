@@ -44,11 +44,9 @@ import {
   DEFAULT_MERGE_PRESET,
   getErrorMessage,
   getErrorReason,
-  DOC_INTERVIEWER_AGENT_KIND,
   getProvider,
   INITIATIVE_ANALYST_AGENT_KIND,
   INITIATIVE_COMMITTER_AGENT_KIND,
-  INITIATIVE_INTERVIEWER_AGENT_KIND,
   INITIATIVE_PLANNER_AGENT_KIND,
   isAsyncAgentExecutor,
   NotFoundError,
@@ -67,8 +65,10 @@ import {
 import {
   blueprintPostOp,
   commitInitiativeTracker,
+  hasTrait,
   isCompanionKind,
   isContainerBackedCompanion,
+  INTERVIEW_GATE_TRAIT,
   moduleSlug,
   runRepoOps,
   specPostOp,
@@ -128,8 +128,7 @@ import { CompanionController } from './CompanionController.js'
 import { HumanTestController } from './HumanTestController.js'
 import { MergeResolver } from './MergeResolver.js'
 import { ReviewGateController, type ReviewKind } from './ReviewGateController.js'
-import type { InitiativeInterviewController } from './InitiativeInterviewController.js'
-import type { DocInterviewController } from './DocInterviewController.js'
+import type { InterviewGateController } from './InterviewGateController.js'
 import { RunStateMachine } from './RunStateMachine.js'
 import { StepGraph } from './StepGraph.js'
 import { TesterController } from './TesterController.js'
@@ -261,10 +260,13 @@ export interface RunDispatcherDeps {
   clarityKind: ReviewKind<ClarityReview>
   requirementsBrainstormKind: ReviewKind<BrainstormSession>
   architectureBrainstormKind: ReviewKind<BrainstormSession>
-  /** The interactive-planning interviewer gate (slice 2); absent → the step passes through. */
-  initiativeInterviewController?: InitiativeInterviewController
-  /** The interactive document-interview gate (WS5); absent → the step passes through. */
-  docInterviewController?: DocInterviewController
+  /**
+   * The interactive-interviewer gates wired for this deployment (initiative-planning, document
+   * interview, …). Each rides the shared {@link InterviewGateController} spine and is routed by
+   * the `interview-gate` TRAIT, keyed on its own `agentKind` — so adding a new interviewer wires
+   * its controller here, with no new dispatch branch. Absent/unwired kinds pass through.
+   */
+  interviewControllers?: InterviewGateController<unknown>[]
   runInitiatorScope: RunInitiatorScope
   environmentProvisioning?: EnvironmentProvisioningService
   ticketTrackerProvider?: TicketTrackerProvider
@@ -324,8 +326,8 @@ export class RunDispatcher {
   private readonly clarityKind: ReviewKind<ClarityReview>
   private readonly requirementsBrainstormKind: ReviewKind<BrainstormSession>
   private readonly architectureBrainstormKind: ReviewKind<BrainstormSession>
-  private readonly initiativeInterviewController?: InitiativeInterviewController
-  private readonly docInterviewController?: DocInterviewController
+  /** Interview-gate controllers keyed by their `agentKind` — the trait-driven dispatch table. */
+  private readonly interviewControllers: Map<string, InterviewGateController<unknown>>
   private readonly runInitiatorScope: RunInitiatorScope
   private readonly environmentProvisioning?: EnvironmentProvisioningService
   private readonly ticketTrackerProvider?: TicketTrackerProvider
@@ -377,8 +379,9 @@ export class RunDispatcher {
     this.clarityKind = deps.clarityKind
     this.requirementsBrainstormKind = deps.requirementsBrainstormKind
     this.architectureBrainstormKind = deps.architectureBrainstormKind
-    this.initiativeInterviewController = deps.initiativeInterviewController
-    this.docInterviewController = deps.docInterviewController
+    this.interviewControllers = new Map(
+      (deps.interviewControllers ?? []).map((c) => [c.agentKind, c]),
+    )
     this.runInitiatorScope = deps.runInitiatorScope
     this.environmentProvisioning = deps.environmentProvisioning
     this.ticketTrackerProvider = deps.ticketTrackerProvider
@@ -2578,42 +2581,26 @@ export class RunDispatcher {
         handle: ({ workspaceId, instance, step, block, isFinalStep }) =>
           this.runBugIntake(workspaceId, instance, step, block, isFinalStep),
       },
-      // The `initiative-interviewer` step interviews the human on goals/constraints — an
-      // inline LLM gate that PARKS the planning run on a decision-wait while they answer
-      // through the planning window, then synthesizes the brief onto the entity and advances
-      // (see {@link InitiativeInterviewController}). Pass-through when the interviewer isn't
-      // wired (no model / no initiative store), so pipelines + conformance run unchanged.
+      // The interactive-INTERVIEWER gates (`initiative-interviewer`, `doc-interviewer`, …): an
+      // inline LLM gate that PARKS the run on a decision-wait while the human answers the
+      // interviewer's questions through a dedicated window, then synthesizes a brief and advances
+      // (see {@link InterviewGateController}). Routed by the `interview-gate` TRAIT — the same
+      // marker the re-park + approval guards key off — and dispatched to the controller registered
+      // for the step's `agentKind`, so a new interviewer just carries the trait + wires its
+      // controller (no new branch here). Pass-through when the interviewer isn't wired (no model /
+      // no store) so pipelines + conformance run unchanged; a wired-but-unmatched trait kind is a
+      // pipeline authoring error, but we still advance rather than wedge the run.
       {
-        kind: INITIATIVE_INTERVIEWER_AGENT_KIND,
+        kind: 'interview-gate',
         order: 113,
-        canHandle: ({ step }) => step.agentKind === INITIATIVE_INTERVIEWER_AGENT_KIND,
-        handle: ({ workspaceId, instance, step, block, isFinalStep }) =>
-          this.initiativeInterviewController
-            ? this.initiativeInterviewController.evaluate(
-                workspaceId,
-                instance,
-                step,
-                block,
-                isFinalStep,
-              )
-            : // No initiative store wired: record an empty pass-through result so the step
-              // advances rather than wedging (an initiative pipeline can't meaningfully run
-              // without the store, but never leave the run stuck).
-              this.recordStepResult(workspaceId, instance, step, isFinalStep, { output: '' }),
-      },
-      // The `doc-interviewer` step converses with the human to refine a document's scope /
-      // structure — an inline LLM gate that PARKS the run on a decision-wait while they answer
-      // through the interview window, then synthesizes an authoring brief onto its session and
-      // advances (see {@link DocInterviewController}). Pass-through when the interviewer isn't
-      // wired (no model), so document pipelines + conformance run unchanged off the raw outline.
-      {
-        kind: DOC_INTERVIEWER_AGENT_KIND,
-        order: 114,
-        canHandle: ({ step }) => step.agentKind === DOC_INTERVIEWER_AGENT_KIND,
-        handle: ({ workspaceId, instance, step, block, isFinalStep }) =>
-          this.docInterviewController
-            ? this.docInterviewController.evaluate(workspaceId, instance, step, block, isFinalStep)
-            : this.recordStepResult(workspaceId, instance, step, isFinalStep, { output: '' }),
+        canHandle: ({ step }) =>
+          hasTrait(step.agentKind, INTERVIEW_GATE_TRAIT, this.agentKindRegistry),
+        handle: ({ workspaceId, instance, step, block, isFinalStep }) => {
+          const controller = this.interviewControllers.get(step.agentKind)
+          return controller
+            ? controller.evaluate(workspaceId, instance, step, block, isFinalStep)
+            : this.recordStepResult(workspaceId, instance, step, isFinalStep, { output: '' })
+        },
       },
       // The `initiative-committer` step persists an APPROVED initiative plan: it runs
       // strictly after the planner's human gate, flips the entity to `executing`, and
