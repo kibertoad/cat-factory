@@ -75,6 +75,16 @@
     "next": "Next",
     "done": "Done"
   },
+  "clarification": {
+    "answerPlaceholder": "Your answer",
+    "notRelevant": "Not relevant",
+    "recommend": "Recommend an answer",
+    "reopen": "Reopen",
+    "dismissed": "Marked not relevant",
+    "generating": "Drafting a suggestion…",
+    "suggestion": "Suggested answer",
+    "useSuggestion": "Use this answer"
+  },
   "nav": {
     "menu": "Navigation menu",
     "openMenu": "Open menu",

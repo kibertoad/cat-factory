@@ -11,13 +11,16 @@ import {
   probeInitiativePresetContract,
   proceedInitiativePlanningContract,
   promoteInitiativeFollowUpContract,
+  recommendInitiativeAnswerContract,
   resumeInitiativeContract,
+  setInitiativeQuestionStatusContract,
   updateInitiativeItemContract,
   updateInitiativePolicyContract,
 } from '@cat-factory/contracts'
 import type {
   InitiativeExecutionPolicy,
   InitiativePresetInputs,
+  InitiativeQaStatus,
   PromoteInitiativeFollowUpInput,
   UpdateInitiativeItemInput,
 } from '@cat-factory/contracts'
@@ -72,6 +75,27 @@ export function initiativeApi({ send, ws }: ApiContext) {
         pathPrefix: ws(workspaceId),
         pathParams: { blockId },
         body: { questionId, answer },
+      }),
+
+    // Mark a planning question not-relevant (`dismissed`) or reopen it, and ask the interviewer to
+    // recommend a suggested answer for one question. Both mutate the entity without resuming the run.
+    setInitiativeQuestionStatus: (
+      workspaceId: string,
+      blockId: string,
+      questionId: string,
+      status: InitiativeQaStatus,
+    ) =>
+      send(setInitiativeQuestionStatusContract, {
+        pathPrefix: ws(workspaceId),
+        pathParams: { blockId },
+        body: { questionId, status },
+      }),
+
+    recommendInitiativeAnswer: (workspaceId: string, blockId: string, questionId: string) =>
+      send(recommendInitiativeAnswerContract, {
+        pathPrefix: ws(workspaceId),
+        pathParams: { blockId },
+        body: { questionId },
       }),
 
     continueInitiativePlanning: (workspaceId: string, blockId: string) =>
