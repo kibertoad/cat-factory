@@ -66,6 +66,16 @@
     "next": "次へ",
     "done": "完了"
   },
+  "clarification": {
+    "answerPlaceholder": "回答を入力",
+    "notRelevant": "関連なし",
+    "recommend": "回答を提案",
+    "reopen": "再開",
+    "dismissed": "関連なしとして設定",
+    "generating": "提案を作成中…",
+    "suggestion": "提案された回答",
+    "useSuggestion": "この回答を使用"
+  },
   "nav": {
     "menu": "ナビゲーションメニュー",
     "openMenu": "メニューを開く",

@@ -166,8 +166,8 @@ describe('InitiativeInterviewService — build-on-form steering (T3)', () => {
         presetId: MIGRATION_PRESET_ID,
         presetInputs: { fromTech: 'MSSQL', toTech: 'PostgreSQL 16' },
         qa: [
-          { id: 'iqa-1', question: 'From', answer: 'MSSQL' },
-          { id: 'iqa-2', question: 'To', answer: 'PostgreSQL 16' },
+          { id: 'iqa-1', question: 'From', answer: 'MSSQL', status: 'open' },
+          { id: 'iqa-2', question: 'To', answer: 'PostgreSQL 16', status: 'open' },
         ],
       }),
       { finalize: false },
@@ -181,7 +181,7 @@ describe('InitiativeInterviewService — build-on-form steering (T3)', () => {
       'ws_1',
       BLOCK,
       // An answered round exists, but no preset form backs this initiative.
-      initiative({ qa: [{ id: 'iqa-1', question: 'Prior?', answer: 'A' }] }),
+      initiative({ qa: [{ id: 'iqa-1', question: 'Prior?', answer: 'A', status: 'open' }] }),
       { finalize: false },
     )
     expect(cap.prompt()).not.toContain(FORM_STEERING)
@@ -196,7 +196,7 @@ describe('InitiativeInterviewService — build-on-form steering (T3)', () => {
       // must NOT appear, so preset_generic's interview stays byte-for-byte unchanged.
       initiative({
         presetId: 'preset_generic',
-        qa: [{ id: 'iqa-1', question: 'Prior?', answer: 'A' }],
+        qa: [{ id: 'iqa-1', question: 'Prior?', answer: 'A', status: 'open' }],
       }),
       { finalize: false },
     )
@@ -215,7 +215,7 @@ describe('InitiativeInterviewService — build-on-form steering (T3)', () => {
       initiative({
         presetId: OPTIONAL_PRESET_ID,
         presetInputs: { notes: '' },
-        qa: [{ id: 'iqa-1', question: 'Downtime tolerance?', answer: 'Zero' }],
+        qa: [{ id: 'iqa-1', question: 'Downtime tolerance?', answer: 'Zero', status: 'open' }],
       }),
       { finalize: false },
     )

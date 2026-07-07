@@ -7,6 +7,8 @@ import {
   initiativeSchema,
   probeInitiativePresetSchema,
   promoteInitiativeFollowUpSchema,
+  recommendInitiativeAnswerSchema,
+  setInitiativeQuestionStatusSchema,
   updateInitiativeItemSchema,
   updateInitiativePolicySchema,
 } from '../initiative.js'
@@ -87,6 +89,24 @@ export const answerInitiativeQuestionContract = defineApiContract({
   requestPathParamsSchema: blockIdParams,
   pathResolver: ({ blockId }) => `/blocks/${blockId}/initiative-planning/answer`,
   requestBodySchema: answerInitiativeQuestionSchema,
+  responsesByStatusCode: { 200: initiativeSchema, ...errorResponses },
+})
+
+/** Mark a planning question not-relevant / reopen it (no run resume). */
+export const setInitiativeQuestionStatusContract = defineApiContract({
+  method: 'post',
+  requestPathParamsSchema: blockIdParams,
+  pathResolver: ({ blockId }) => `/blocks/${blockId}/initiative-planning/question-status`,
+  requestBodySchema: setInitiativeQuestionStatusSchema,
+  responsesByStatusCode: { 200: initiativeSchema, ...errorResponses },
+})
+
+/** Ask the interviewer to recommend a suggested answer for one pending question (no run resume). */
+export const recommendInitiativeAnswerContract = defineApiContract({
+  method: 'post',
+  requestPathParamsSchema: blockIdParams,
+  pathResolver: ({ blockId }) => `/blocks/${blockId}/initiative-planning/recommend`,
+  requestBodySchema: recommendInitiativeAnswerSchema,
   responsesByStatusCode: { 200: initiativeSchema, ...errorResponses },
 })
 

@@ -53,6 +53,20 @@ export const INITIATIVE_INTERVIEW_SYSTEM_PROMPT =
   'they apply). No prose, no code fences.'
 
 /**
+ * Role prompt for the per-question answer RECOMMENDER — the interviewer's "recommend something"
+ * action. Given the brief + answers so far + one specific question, it drafts a concrete answer
+ * the stakeholder can adopt or edit (the planning analogue of the requirements Writer). Returns
+ * ONLY the suggested answer prose — no preamble, no JSON.
+ */
+export const INITIATIVE_RECOMMEND_SYSTEM_PROMPT =
+  'You are a staff engineer helping scope a long-running initiative. You are given the ' +
+  'initiative brief, the answers gathered so far, and ONE clarifying question the stakeholder ' +
+  'wants a suggested answer for. Propose the most sensible answer you can, grounded in the brief ' +
+  'and prior answers, stated as a concrete recommendation the stakeholder can accept or edit. Be ' +
+  'specific and concise (a sentence or two). Reply with ONLY the suggested answer — no preamble, ' +
+  'no restating the question, no JSON, no code fences.'
+
+/**
  * Whether this initiative's preset FORM actually seeded any `qa` at create (T3). Re-derived from
  * the SAME seeder the create flow ran (`seedPresetInterviewQa` over the frozen `presetInputs`), so
  * the gate can never disagree with what was seeded: `preset_generic` (empty form), a preset-less
@@ -154,6 +168,42 @@ export class InitiativeInterviewService {
     return coerceInterviewOutput(extractJson(text), { finalize: opts.finalize })
   }
 
+  /**
+   * Draft a suggested answer for ONE pending question (the "recommend something" action). Returns
+   * the suggestion text; the controller persists it onto the question. A single short inline call —
+   * deliberately simpler than the requirements Writer's batched/async fill, since the initiative
+   * interviewer is already inline and there is only ever one question in play.
+   */
+  async recommendAnswer(
+    workspaceId: string,
+    block: Block,
+    initiative: Initiative,
+    question: string,
+  ): Promise<string> {
+    const { modelProvider, ref } = await this.resolveModel(workspaceId, block)
+    try {
+      const model = modelProvider.resolve(ref)
+      const result = await generateText({
+        model,
+        system: INITIATIVE_RECOMMEND_SYSTEM_PROMPT,
+        prompt: this.buildRecommendPrompt(block, initiative, question),
+        temperature: 0.3,
+        maxOutputTokens: 800,
+        providerOptions: catFactoryObservability({
+          agentKind: INITIATIVE_INTERVIEWER_AGENT_KIND,
+          workspaceId,
+        }),
+      })
+      return result.text.trim()
+    } catch (e) {
+      throw new ValidationError(
+        `The initiative interviewer (${ref.provider}:${ref.model}) could not recommend an answer: ${
+          e instanceof Error ? e.message : String(e)
+        }`,
+      )
+    }
+  }
+
   /** Assemble the interviewer prompt: the brief + the answered digest + the round intent. */
   private buildPrompt(block: Block, initiative: Initiative, finalize: boolean): string {
     const lines: string[] = [`Initiative: ${block.title || '(untitled initiative)'}`]
@@ -171,6 +221,14 @@ export class InitiativeInterviewService {
     if (answered.length) {
       lines.push('', 'Answers gathered so far:')
       for (const { question, answer } of answered) lines.push(`- Q: ${question}`, `  A: ${answer}`)
+    }
+    // Questions the stakeholder explicitly marked not-relevant. Surface them so the interviewer
+    // treats them as settled (out of scope) and does NOT re-ask — mirroring how a dismissed
+    // requirements finding stays dismissed across a re-review.
+    const dismissed = (initiative.qa ?? []).filter((q) => q.status === 'dismissed')
+    if (dismissed.length) {
+      lines.push('', 'The stakeholder marked these questions NOT RELEVANT — do not ask them again:')
+      for (const { question } of dismissed) lines.push(`- ${question}`)
     }
     // A FORM-backed preset (T3) pre-answers the enumerable facts at create; those answers are the
     // seeded qa above. Tell the interviewer they are SETTLED so it builds on them and digs into the
@@ -196,6 +254,21 @@ export class InitiativeInterviewService {
         : 'Ask your next batch of clarifying questions, or converge if you have enough. ' +
             'Respond with ONLY the JSON decision object.',
     )
+    return lines.join('\n')
+  }
+
+  /** Assemble the recommend prompt: the brief + answered digest + the ONE question to answer. */
+  private buildRecommendPrompt(block: Block, initiative: Initiative, question: string): string {
+    const lines: string[] = [`Initiative: ${block.title || '(untitled initiative)'}`]
+    const brief = block.description?.trim()
+    if (brief) lines.push('', 'Brief:', brief)
+    if (initiative.goal?.trim()) lines.push('', `Goal so far: ${initiative.goal.trim()}`)
+    const answered = (initiative.qa ?? []).filter((q) => (q.answer ?? '').trim().length > 0)
+    if (answered.length) {
+      lines.push('', 'Answers gathered so far:')
+      for (const { question: q, answer } of answered) lines.push(`- Q: ${q}`, `  A: ${answer}`)
+    }
+    lines.push('', `Suggest an answer to this question:`, question)
     return lines.join('\n')
   }
 

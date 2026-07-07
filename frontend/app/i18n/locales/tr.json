@@ -66,6 +66,16 @@
     "next": "İleri",
     "done": "Bitti"
   },
+  "clarification": {
+    "answerPlaceholder": "Yanıtınız",
+    "notRelevant": "İlgili değil",
+    "recommend": "Bir yanıt öner",
+    "reopen": "Yeniden aç",
+    "dismissed": "İlgisiz olarak işaretlendi",
+    "generating": "Öneri hazırlanıyor…",
+    "suggestion": "Önerilen yanıt",
+    "useSuggestion": "Bu yanıtı kullan"
+  },
   "nav": {
     "menu": "Gezinme menüsü",
     "openMenu": "Menüyü aç",

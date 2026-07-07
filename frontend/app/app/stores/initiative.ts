@@ -181,6 +181,49 @@ export const useInitiativesStore = defineStore('initiatives', () => {
     return updated
   }
 
+  /** Question ids the interviewer is currently drafting a recommendation for (window spinner). */
+  const recommending = ref<Set<string>>(new Set())
+
+  /** Mark a planning question not-relevant (`dismissed`) or reopen it (no run resume). */
+  async function setQuestionStatus(
+    blockId: string,
+    questionId: string,
+    status: 'open' | 'dismissed',
+  ) {
+    if (!workspace.workspaceId) throw new Error('No active workspace')
+    const updated = await api.setInitiativeQuestionStatus(
+      workspace.workspaceId,
+      blockId,
+      questionId,
+      status,
+    )
+    upsert(updated)
+    return updated
+  }
+
+  /**
+   * Ask the interviewer to recommend a suggested answer for one pending question. Runs the
+   * interviewer LLM inline server-side; the returned entity carries the suggestion on the question.
+   * Tracks the in-flight id so the window can show a per-question spinner.
+   */
+  async function recommendAnswer(blockId: string, questionId: string) {
+    if (!workspace.workspaceId) throw new Error('No active workspace')
+    recommending.value = new Set(recommending.value).add(questionId)
+    try {
+      const updated = await api.recommendInitiativeAnswer(
+        workspace.workspaceId,
+        blockId,
+        questionId,
+      )
+      upsert(updated)
+      return updated
+    } finally {
+      const next = new Set(recommending.value)
+      next.delete(questionId)
+      recommending.value = next
+    }
+  }
+
   /** Submit the answers and resume the interview (the interviewer re-runs, may ask more). */
   async function continuePlanning(blockId: string) {
     if (!workspace.workspaceId) throw new Error('No active workspace')
@@ -313,6 +356,7 @@ export const useInitiativesStore = defineStore('initiatives', () => {
     resuming,
     controlling,
     curating,
+    recommending,
     forBlock,
     presetById,
     planningPipelineIdFor,
@@ -323,6 +367,8 @@ export const useInitiativesStore = defineStore('initiatives', () => {
     probePreset,
     load,
     answerQuestion,
+    setQuestionStatus,
+    recommendAnswer,
     continuePlanning,
     proceedPlanning,
     control,

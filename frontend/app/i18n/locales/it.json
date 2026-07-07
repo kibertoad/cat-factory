@@ -3616,6 +3616,16 @@
     "next": "Avanti",
     "done": "Fatto"
   },
+  "clarification": {
+    "answerPlaceholder": "La tua risposta",
+    "notRelevant": "Non pertinente",
+    "recommend": "Suggerisci una risposta",
+    "reopen": "Riapri",
+    "dismissed": "Contrassegnata come non pertinente",
+    "generating": "Creazione di un suggerimento…",
+    "suggestion": "Risposta suggerita",
+    "useSuggestion": "Usa questa risposta"
+  },
   "nav": {
     "menu": "Menu di navigazione",
     "openMenu": "Apri il menu",

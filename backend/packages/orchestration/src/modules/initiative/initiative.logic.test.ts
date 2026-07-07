@@ -12,6 +12,8 @@ import {
   applyPlanDraft,
   applyPolicyEdit,
   applyPromoteFollowUp,
+  applyQuestionRecommendation,
+  applyQuestionStatus,
   applyRevertClaim,
   applyRunHarvest,
   applySpawnClaim,
@@ -25,6 +27,7 @@ import {
   initiativeProgress,
   initiativeSlug,
   interviewAtCap,
+  isPendingQuestion,
   itemDependenciesMet,
   normalizeDraftAgainstPhaseTemplate,
   phaseIsHalted,
@@ -472,8 +475,8 @@ describe('interview state transitions', () => {
     let id = 0
     const next = applyInterviewQuestions(emptyEntity(), ['Q1', 'Q2'], () => `iqa-${++id}`)
     expect(next.qa).toEqual([
-      { id: 'iqa-1', question: 'Q1', answer: '' },
-      { id: 'iqa-2', question: 'Q2', answer: '' },
+      { id: 'iqa-1', question: 'Q1', answer: '', status: 'open' },
+      { id: 'iqa-2', question: 'Q2', answer: '', status: 'open' },
     ])
     expect(next.interview).toEqual({ round: 1, maxRounds: 4, status: 'awaiting' })
   })
@@ -507,7 +510,7 @@ describe('interview state transitions', () => {
     })
     expect(done.goal).toBe('Ship it')
     expect(done.constraints).toEqual(['keep runtimes symmetric'])
-    expect(done.qa).toEqual([{ id: 'iqa-1', question: 'Q1', answer: 'A1' }])
+    expect(done.qa).toEqual([{ id: 'iqa-1', question: 'Q1', answer: 'A1', status: 'open' }])
     expect(done.interview?.status).toBe('done')
   })
 
@@ -526,6 +529,55 @@ describe('interview state transitions', () => {
     expect(applyAnalysis(emptyEntity(), '  The codebase is layered.  ').analysisSummary).toBe(
       'The codebase is layered.',
     )
+  })
+})
+
+describe('clarification actions (not-relevant / recommend)', () => {
+  // Fresh id counter per call so every `asked()` yields iqa-1 / iqa-2 deterministically.
+  const asked = () => {
+    let n = 0
+    return applyInterviewQuestions(emptyEntity(), ['Q1', 'Q2'], () => `iqa-${++n}`)
+  }
+
+  it('dismiss marks a question not-relevant and clears its answer + recommendation', () => {
+    let entity = asked()
+    entity = applyQuestionRecommendation(entity, 'iqa-1', 'a draft answer')
+    entity = applyQuestionStatus(entity, 'iqa-1', 'dismissed')
+    const q = entity.qa?.find((x) => x.id === 'iqa-1')
+    expect(q?.status).toBe('dismissed')
+    expect(q?.answer).toBe('')
+    expect(q?.recommendation).toBeNull()
+  })
+
+  it('reopen returns a dismissed question to open', () => {
+    let entity = asked()
+    entity = applyQuestionStatus(entity, 'iqa-1', 'dismissed')
+    entity = applyQuestionStatus(entity, 'iqa-1', 'open')
+    expect(entity.qa?.find((x) => x.id === 'iqa-1')?.status).toBe('open')
+  })
+
+  it('a dismissed question is NOT pending (does not block continue) but an unanswered open one is', () => {
+    let entity = asked()
+    entity = applyQuestionStatus(entity, 'iqa-1', 'dismissed')
+    const byId = (qid: string) => entity.qa!.find((x) => x.id === qid)!
+    expect(isPendingQuestion(byId('iqa-1'))).toBe(false)
+    expect(isPendingQuestion(byId('iqa-2'))).toBe(true)
+    expect(isPendingQuestion({ ...byId('iqa-2'), answer: 'done' })).toBe(false)
+  })
+
+  it('a follow-up round retains dismissed questions (so the interviewer does not re-ask them)', () => {
+    let entity = asked()
+    entity = applyQuestionStatus(entity, 'iqa-1', 'dismissed') // Q1 dismissed, Q2 untouched
+    const round2 = applyInterviewQuestions(entity, ['Q3'], () => 'iqa-3')
+    // Q1 (dismissed) survives; Q2 (neither answered nor dismissed) is dropped; Q3 is appended.
+    expect(round2.qa?.map((q) => q.question)).toEqual(['Q1', 'Q3'])
+    expect(round2.qa?.find((q) => q.question === 'Q1')?.status).toBe('dismissed')
+  })
+
+  it('applyQuestionRecommendation attaches a suggestion to the target question only', () => {
+    const entity = applyQuestionRecommendation(asked(), 'iqa-2', 'try option B')
+    expect(entity.qa?.find((q) => q.id === 'iqa-2')?.recommendation).toBe('try option B')
+    expect(entity.qa?.find((q) => q.id === 'iqa-1')?.recommendation).toBeUndefined()
   })
 })
 
@@ -1096,10 +1148,15 @@ describe('seedPresetInterviewQa', () => {
       seqIds(),
     )
     expect(qa).toEqual([
-      { id: 'iqa-1', question: 'Documentation types', answer: 'READMEs, Mermaid diagrams' },
-      { id: 'iqa-2', question: 'Placement', answer: 'Per service' },
-      { id: 'iqa-3', question: 'Docs root', answer: 'docs/' },
-      { id: 'iqa-4', question: 'Diagrams dir', answer: 'docs/diagrams' },
+      {
+        id: 'iqa-1',
+        question: 'Documentation types',
+        answer: 'READMEs, Mermaid diagrams',
+        status: 'open',
+      },
+      { id: 'iqa-2', question: 'Placement', answer: 'Per service', status: 'open' },
+      { id: 'iqa-3', question: 'Docs root', answer: 'docs/', status: 'open' },
+      { id: 'iqa-4', question: 'Diagrams dir', answer: 'docs/diagrams', status: 'open' },
     ])
   })
 
@@ -1115,7 +1172,7 @@ describe('seedPresetInterviewQa', () => {
 
   it('records a CHECKED checkbox as "Yes" and an empty multi-select as nothing', () => {
     expect(seedPresetInterviewQa(descriptor(), { humanReview: true }, seqIds())).toEqual([
-      { id: 'iqa-1', question: 'Human review', answer: 'Yes' },
+      { id: 'iqa-1', question: 'Human review', answer: 'Yes', status: 'open' },
     ])
     expect(seedPresetInterviewQa(descriptor(), { docTypes: [] }, seqIds())).toEqual([])
   })

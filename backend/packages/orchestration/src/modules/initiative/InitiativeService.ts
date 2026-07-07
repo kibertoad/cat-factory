@@ -20,7 +20,7 @@ import {
   getInitiativePreset,
   requireWorkspace,
 } from '@cat-factory/kernel'
-import type { InitiativeQa } from '@cat-factory/kernel'
+import type { InitiativeQa, InitiativeQaStatus } from '@cat-factory/kernel'
 import type { InitiativePresetInputs } from '@cat-factory/contracts'
 import {
   parseInitiativePlanDraft,
@@ -39,6 +39,8 @@ import {
   applyPlanDraft,
   applyPolicyEdit,
   applyPromoteFollowUp,
+  applyQuestionRecommendation,
+  applyQuestionStatus,
   initiativeSlug,
   normalizeDraftAgainstPhaseTemplate,
   seedPresetInterviewQa,
@@ -380,6 +382,30 @@ export class InitiativeService {
   ): Promise<Initiative | null> {
     return this.mutate(workspaceId, blockId, (current) =>
       applyInterviewAnswer(current, questionId, answer),
+    )
+  }
+
+  /** Mark one planning question `dismissed` (not relevant) or reopen it (no run resume). */
+  async recordQuestionStatus(
+    workspaceId: string,
+    blockId: string,
+    questionId: string,
+    status: InitiativeQaStatus,
+  ): Promise<Initiative | null> {
+    return this.mutate(workspaceId, blockId, (current) =>
+      applyQuestionStatus(current, questionId, status),
+    )
+  }
+
+  /** Attach an AI-suggested answer to one pending question (the recommend action). */
+  async recordQuestionRecommendation(
+    workspaceId: string,
+    blockId: string,
+    questionId: string,
+    recommendation: string,
+  ): Promise<Initiative | null> {
+    return this.mutate(workspaceId, blockId, (current) =>
+      applyQuestionRecommendation(current, questionId, recommendation),
     )
   }
 

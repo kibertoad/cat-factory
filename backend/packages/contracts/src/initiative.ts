@@ -243,16 +243,36 @@ export const initiativeFollowUpSchema = v.object({
 export type InitiativeFollowUp = v.InferOutput<typeof initiativeFollowUpSchema>
 
 /**
+ * Lifecycle of one planning-interview question — the initiative half of the shared
+ * "clarification item" vocabulary (see `docs/initiatives/clarification-items.md`), mirroring the
+ * requirements-review item statuses the planning window reuses. `open` = awaiting an answer;
+ * `dismissed` = the stakeholder marked it not relevant (it no longer blocks continue/proceed and
+ * the interviewer is told not to re-ask). "Answered" is DERIVED from a non-empty `answer` (not a
+ * stored status), so the interviewer's answered-digest logic stays unchanged.
+ */
+export const initiativeQaStatusSchema = v.picklist(['open', 'dismissed'])
+export type InitiativeQaStatus = v.InferOutput<typeof initiativeQaStatusSchema>
+
+/**
  * A single planning-interview exchange, kept as a bounded digest on the tracker AND the
  * live state of the interactive interview: the interviewer appends a question with an empty
  * `answer` (a PENDING question the human must answer) and the human fills it in. A stable
  * `id` addresses the answer write; it is optional only so hand-authored/fixture Q&A without
  * one still parses (the interviewer always sets it).
+ *
+ * `status`/`recommendation` back the shared clarification surface the planning window borrows
+ * from requirements review: a question can be marked `dismissed` ("not relevant"), and the human
+ * can ask the interviewer to `recommend` a suggested answer (stored here, offered as "use this").
+ * Both default to the pre-existing shape, so older rows / fixtures parse unchanged.
  */
 export const initiativeQaSchema = v.object({
   id: v.optional(idField),
   question: shortProseField,
   answer: v.optional(shortProseField, ''),
+  /** `open` (default) or `dismissed`. Answered-ness is derived from a non-empty `answer`. */
+  status: v.optional(initiativeQaStatusSchema, 'open'),
+  /** An AI-suggested answer the human can adopt/edit, or null; set by the recommend action. */
+  recommendation: v.optional(v.nullable(shortProseField)),
 })
 export type InitiativeQa = v.InferOutput<typeof initiativeQaSchema>
 
@@ -413,6 +433,21 @@ export const answerInitiativeQuestionSchema = v.object({
   answer: shortProseField,
 })
 export type AnswerInitiativeQuestionInput = v.InferOutput<typeof answerInitiativeQuestionSchema>
+
+/** Mark a planning-interview question not-relevant (`dismissed`) or reopen it (`open`). */
+export const setInitiativeQuestionStatusSchema = v.object({
+  questionId: v.pipe(v.string(), v.trim(), v.minLength(1)),
+  status: initiativeQaStatusSchema,
+})
+export type SetInitiativeQuestionStatusInput = v.InferOutput<
+  typeof setInitiativeQuestionStatusSchema
+>
+
+/** Ask the interviewer to recommend a suggested answer for one pending planning question. */
+export const recommendInitiativeAnswerSchema = v.object({
+  questionId: v.pipe(v.string(), v.trim(), v.minLength(1)),
+})
+export type RecommendInitiativeAnswerInput = v.InferOutput<typeof recommendInitiativeAnswerSchema>
 
 // ---- Follow-up triage + item/policy editing (slice 4) ----------------------
 // Mid-flight human curation of an executing initiative. A follow-up harvested from a spawned
