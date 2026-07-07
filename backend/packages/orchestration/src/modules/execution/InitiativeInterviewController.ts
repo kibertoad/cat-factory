@@ -1,5 +1,9 @@
-import type { Initiative } from '@cat-factory/kernel'
-import { INITIATIVE_INTERVIEWER_AGENT_KIND } from '@cat-factory/kernel'
+import type { Initiative, InitiativeQaStatus } from '@cat-factory/kernel'
+import {
+  assertFound,
+  INITIATIVE_INTERVIEWER_AGENT_KIND,
+  ValidationError,
+} from '@cat-factory/kernel'
 import type { InitiativeService } from '../initiative/InitiativeService.js'
 import type { InitiativeInterviewService } from '../initiative/InitiativeInterviewService.js'
 import { interviewAtCap } from '../initiative/initiative.logic.js'
@@ -65,7 +69,78 @@ function initiativeInterviewKind(
 }
 
 export class InitiativeInterviewController extends InterviewGateController<Initiative> {
+  private readonly interviewService?: InitiativeInterviewService
+  private readonly initiativeService: InitiativeService
+  private readonly blocks: InterviewGateDeps['blockRepository']
+
   constructor(deps: InitiativeInterviewControllerDeps) {
     super(deps, initiativeInterviewKind(deps))
+    this.interviewService = deps.interviewService
+    this.initiativeService = deps.initiativeService
+    this.blocks = deps.blockRepository
+  }
+
+  /**
+   * Mark one planning question `dismissed` ("not relevant") or reopen it. Like {@link answer}, a
+   * pure entity write that does NOT resume the run — the human is still curating the question set;
+   * they resume with continue/proceed. Part of the shared clarification surface (dismiss/recommend)
+   * the planning window borrows from requirements review.
+   */
+  setQuestionStatus(
+    workspaceId: string,
+    blockId: string,
+    questionId: string,
+    status: InitiativeQaStatus,
+  ): Promise<Initiative> {
+    return this.requireInitiative(
+      this.initiativeService.recordQuestionStatus(workspaceId, blockId, questionId, status),
+      blockId,
+    )
+  }
+
+  /**
+   * Draft an AI-suggested answer for one pending question and persist it onto that question (the
+   * "recommend something" action). Runs the interviewer LLM inline — a single short call, not the
+   * requirements Writer's async batch — then records the suggestion; no run resume. Throws when no
+   * interviewer model is wired (the SPA surfaces it), or when the question no longer exists.
+   */
+  async recommendAnswer(
+    workspaceId: string,
+    blockId: string,
+    questionId: string,
+  ): Promise<Initiative> {
+    if (!this.interviewService?.enabled) {
+      throw new ValidationError('No model is configured for the initiative interviewer')
+    }
+    const initiative = assertFound(
+      await this.initiativeService.getByBlock(workspaceId, blockId),
+      'Initiative',
+      blockId,
+    )
+    const question = (initiative.qa ?? []).find((q) => q.id === questionId)
+    if (!question) throw new ValidationError(`Unknown planning question '${questionId}'`)
+    const block = assertFound(await this.blocks.get(workspaceId, blockId), 'Block', blockId)
+    const suggestion = await this.interviewService.recommendAnswer(
+      workspaceId,
+      block,
+      initiative,
+      question.question,
+    )
+    return this.requireInitiative(
+      this.initiativeService.recordQuestionRecommendation(
+        workspaceId,
+        blockId,
+        questionId,
+        suggestion,
+      ),
+      blockId,
+    )
+  }
+
+  private async requireInitiative(
+    entity: Promise<Initiative | null>,
+    blockId: string,
+  ): Promise<Initiative> {
+    return assertFound(await entity, 'Initiative', blockId)
   }
 }

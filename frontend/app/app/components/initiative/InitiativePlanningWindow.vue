@@ -8,6 +8,7 @@
 // (`ui.openInitiativePlanning`) or as the interviewer step's result view. Live `initiative`
 // stream events patch the store, so an open window follows the interview as it progresses.
 import { computed, reactive, watch } from 'vue'
+import ClarificationItem from '~/components/common/ClarificationItem.vue'
 import { INITIATIVE_STATUS_LABEL_KEYS } from '~/utils/initiative'
 
 const board = useBoardStore()
@@ -25,7 +26,10 @@ const initiative = computed(() => (blockId.value ? initiatives.forBlock(blockId.
 const questions = computed(() =>
   (initiative.value?.qa ?? []).map((q, i) => ({ ...q, key: q.id ?? `q-${i}` })),
 )
-const pending = computed(() => questions.value.filter((q) => !(q.answer ?? '').trim()))
+/** Questions still needing an answer: not dismissed, and not yet answered (mirrors backend). */
+const pending = computed(() =>
+  questions.value.filter((q) => q.status !== 'dismissed' && !(q.answer ?? '').trim()),
+)
 /** The interview converged (or never started with a model): nothing left to answer. */
 const converged = computed(() => initiative.value?.interview?.status === 'done')
 
@@ -43,16 +47,48 @@ watch(
 )
 
 const resuming = computed(() => initiatives.resuming)
-/** Continue is meaningful once every pending question has a drafted answer. */
+/**
+ * Continue is meaningful once every pending question has a drafted answer. A dismissed question
+ * doesn't count (it was set aside), so an all-dismissed round is trivially "answered".
+ */
 const allAnswered = computed(() => pending.value.every((q) => drafts[q.key]?.trim()))
 
-/** Persist one answer if its draft differs from what's recorded. */
-async function persist(q: { id?: string; key: string; answer?: string }) {
+/**
+ * Persist one answer if its draft differs from what's recorded. A `dismissed` question is skipped:
+ * it was set aside (its server answer cleared), and the `flushThen` sweep on continue/proceed must
+ * NOT write a stale local draft back to it — that would silently re-answer a not-relevant question
+ * and leak it into the converged digest.
+ */
+async function persist(q: {
+  id?: string
+  key: string
+  answer?: string
+  status?: 'open' | 'dismissed'
+}) {
   const id = q.id
-  if (!id || !blockId.value) return
+  if (!id || !blockId.value || q.status === 'dismissed') return
   const next = (drafts[q.key] ?? '').trim()
   if (!next || next === (q.answer ?? '').trim()) return
   await initiatives.answerQuestion(blockId.value, id, next)
+}
+
+/** Mark a question not-relevant / reopen it. */
+async function setStatus(q: { id?: string }, status: 'open' | 'dismissed') {
+  if (!q.id || !blockId.value) return
+  await initiatives.setQuestionStatus(blockId.value, q.id, status)
+}
+
+/** Ask the interviewer to draft a suggested answer for this question. */
+async function recommend(q: { id?: string }) {
+  if (!q.id || !blockId.value) return
+  await initiatives.recommendAnswer(blockId.value, q.id)
+}
+
+/** Adopt a suggested answer into the draft, then persist it. */
+async function useRecommendation(q: { id?: string; key: string; recommendation?: string | null }) {
+  if (!q.recommendation) return
+  drafts[q.key] = q.recommendation
+  await persist(q)
 }
 
 /** Flush all dirty drafts, then run a window action (continue / proceed). */
@@ -129,23 +165,22 @@ const onProceed = () => flushThen((id) => initiatives.proceedPlanning(id))
               {{ t('initiative.planning.converged') }}
             </div>
 
-            <!-- Interview questions -->
+            <!-- Interview questions — the shared clarification surface (answer / not-relevant /
+                 recommend), reused with the requirements-review window. -->
             <ul v-else class="space-y-4">
-              <li
-                v-for="q in questions"
-                :key="q.key"
-                class="rounded-lg border border-slate-800 bg-slate-950/40 p-3"
-                data-testid="initiative-planning-question"
-              >
-                <p class="mb-2 text-[13px] font-medium text-slate-200">{{ q.question }}</p>
-                <UTextarea
-                  v-model="drafts[q.key]"
-                  :rows="2"
-                  autoresize
-                  :placeholder="t('initiative.planning.answerPlaceholder')"
-                  class="w-full"
-                  data-testid="initiative-planning-answer"
-                  @blur="persist(q)"
+              <li v-for="q in questions" :key="q.key" data-testid="initiative-planning-question">
+                <ClarificationItem
+                  v-model:answer="drafts[q.key]"
+                  :prompt="q.question"
+                  :dismissed="q.status === 'dismissed'"
+                  :recommendation="q.recommendation"
+                  :recommending="!!q.id && initiatives.recommending.has(q.id)"
+                  :answer-placeholder="t('initiative.planning.answerPlaceholder')"
+                  @persist="persist(q)"
+                  @dismiss="setStatus(q, 'dismissed')"
+                  @reopen="setStatus(q, 'open')"
+                  @recommend="recommend(q)"
+                  @use-recommendation="useRecommendation(q)"
                 />
               </li>
             </ul>

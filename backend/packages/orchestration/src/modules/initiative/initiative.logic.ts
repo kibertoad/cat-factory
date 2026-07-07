@@ -9,6 +9,7 @@ import type {
   InitiativePhase,
   InitiativePlanDraft,
   InitiativeQa,
+  InitiativeQaStatus,
   PromoteInitiativeFollowUpInput,
   UpdateInitiativeItemInput,
 } from '@cat-factory/kernel'
@@ -390,15 +391,34 @@ export function coerceInterviewOutput(
   return { kind: 'questions', questions }
 }
 
-/** Only the answered exchanges — the digest that survives onto the tracker. */
+/** Only the answered exchanges — the digest that survives onto the tracker at convergence. */
 function answeredQa(initiative: Initiative): InitiativeQa[] {
   return (initiative.qa ?? []).filter((q) => (q.answer ?? '').trim().length > 0)
 }
 
 /**
- * Append a fresh round of pending questions: keep the answered digest, drop any prior-round
- * questions the human skipped, and add the new ones with stable ids. Bumps the interview
- * round and parks it `awaiting`.
+ * Whether a planning question still needs a human answer: not dismissed, and no answer yet.
+ * The single source of truth shared by the window (`pending`/`allAnswered`), the interviewer,
+ * and {@link retainedQa}, so a `dismissed` question never counts as blocking.
+ */
+export function isPendingQuestion(q: InitiativeQa): boolean {
+  return q.status !== 'dismissed' && (q.answer ?? '').trim().length === 0
+}
+
+/**
+ * Questions that survive into the NEXT interview round: everything that is no longer PENDING —
+ * i.e. the answered digest PLUS any the human marked `dismissed`. Keeping the dismissed ones
+ * (rather than dropping every unanswered question) is what lets the interviewer see they were
+ * deemed not-relevant and not re-ask them.
+ */
+function retainedQa(initiative: Initiative): InitiativeQa[] {
+  return (initiative.qa ?? []).filter((q) => !isPendingQuestion(q))
+}
+
+/**
+ * Append a fresh round of pending questions: keep the answered + dismissed digest, drop any
+ * prior-round questions the human left neither answered nor dismissed, and add the new ones with
+ * stable ids. Bumps the interview round and parks it `awaiting`.
  */
 export function applyInterviewQuestions(
   initiative: Initiative,
@@ -409,15 +429,52 @@ export function applyInterviewQuestions(
     id: nextId(),
     question: clampShort(question),
     answer: '',
+    status: 'open',
   }))
   return {
     ...initiative,
-    qa: [...answeredQa(initiative), ...pending],
+    qa: [...retainedQa(initiative), ...pending],
     interview: {
       round: (initiative.interview?.round ?? 0) + 1,
       maxRounds: initiative.interview?.maxRounds ?? INITIATIVE_MAX_INTERVIEW_ROUNDS,
       status: 'awaiting',
     },
+  }
+}
+
+/**
+ * Mark one question `dismissed` ("not relevant") or reopen it. Dismissing clears any drafted
+ * answer + AI recommendation (the question is being set aside, not answered). Matched by id;
+ * no-op if unknown. Part of the shared clarification surface the planning window borrows from
+ * requirements review.
+ */
+export function applyQuestionStatus(
+  initiative: Initiative,
+  questionId: string,
+  status: InitiativeQaStatus,
+): Initiative {
+  return {
+    ...initiative,
+    qa: (initiative.qa ?? []).map((q) => {
+      if (q.id !== questionId) return q
+      return status === 'dismissed'
+        ? { ...q, status, answer: '', recommendation: null }
+        : { ...q, status }
+    }),
+  }
+}
+
+/** Attach an AI-suggested answer to one question (the recommend action). No-op if unknown. */
+export function applyQuestionRecommendation(
+  initiative: Initiative,
+  questionId: string,
+  recommendation: string,
+): Initiative {
+  return {
+    ...initiative,
+    qa: (initiative.qa ?? []).map((q) =>
+      q.id === questionId ? { ...q, recommendation: clampShort(recommendation) } : q,
+    ),
   }
 }
 
@@ -503,7 +560,12 @@ export function seedPresetInterviewQa(
     if (value === undefined || value === false) continue
     const answer = renderInitiativePresetValue(field, value).trim()
     if (!answer) continue
-    qa.push({ id: nextId(), question: field.label.trim(), answer: clampShort(answer) })
+    qa.push({
+      id: nextId(),
+      question: field.label.trim(),
+      answer: clampShort(answer),
+      status: 'open',
+    })
   }
   return qa
 }

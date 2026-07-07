@@ -66,6 +66,16 @@
     "next": "הבא",
     "done": "סיום"
   },
+  "clarification": {
+    "answerPlaceholder": "התשובה שלך",
+    "notRelevant": "לא רלוונטי",
+    "recommend": "המלץ על תשובה",
+    "reopen": "פתח מחדש",
+    "dismissed": "סומן כלא רלוונטי",
+    "generating": "מנסח הצעה…",
+    "suggestion": "תשובה מוצעת",
+    "useSuggestion": "השתמש בתשובה זו"
+  },
   "nav": {
     "menu": "תפריט ניווט",
     "openMenu": "פתח תפריט",

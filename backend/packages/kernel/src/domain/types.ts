@@ -421,6 +421,7 @@ export type {
   InitiativeDeviation,
   InitiativeFollowUp,
   InitiativeQa,
+  InitiativeQaStatus,
   InitiativeInterviewState,
   InitiativePlanDraft,
   InitiativeDraftItem,

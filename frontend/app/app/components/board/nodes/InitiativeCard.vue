@@ -1,11 +1,15 @@
 <script setup lang="ts">
 // The board card for an `initiative`-level block (a frame child, like a module):
 // title, the initiative's lifecycle status, and — once a plan is ingested — the
-// item-completion progress. Clicking selects the block (the inspector offers
-// "Run planning" / "Open tracker"); the tracker button opens the dedicated
-// window directly. Draggable within its frame like a task card.
+// item-completion progress. Mirrors a task card's on-card "Start" affordance: the
+// initiative's equivalent "Run planning" (and, while parked mid-interview, "Answer
+// planning questions") lives right here on the board — the same actions the
+// inspector offers — so starting an initiative isn't hidden behind selecting it.
+// The tracker button opens the dedicated window directly. Draggable within its
+// frame like a task card.
 import type { InitiativeStatus } from '~/types/domain'
 import { useBlockDrag } from '~/composables/useBlockDrag'
+import { useInitiativePlanning } from '~/composables/useInitiativePlanning'
 import {
   INITIATIVE_STATUS_CHIPS,
   INITIATIVE_STATUS_LABEL_KEYS,
@@ -29,12 +33,20 @@ const progress = computed(() => initiativeProgress(initiative.value?.items))
 
 const selected = computed(() => ui.selectedBlockId === props.blockId)
 
+// The "Run planning" / "Answer planning questions" affordances, shared with the inspector so the
+// board card and inspector can't drift (see {@link useInitiativePlanning}).
+const {
+  planningPipeline,
+  running,
+  awaitingAnswers,
+  starting,
+  runPlanning,
+  openPlanning,
+  openTracker,
+} = useInitiativePlanning(() => props.blockId)
+
 function select() {
   ui.select(props.blockId)
-}
-function openTracker() {
-  ui.select(props.blockId)
-  ui.openInitiativeTracker(props.blockId)
 }
 function onHandle(e: PointerEvent) {
   if (block.value) startDrag(block.value, e)
@@ -65,7 +77,7 @@ function onHandle(e: PointerEvent) {
     <div
       data-testid="initiative-card"
       class="cursor-pointer rounded-b-lg border border-indigo-800/60 bg-indigo-950/40 p-3 transition hover:border-indigo-600"
-      :class="selected ? 'ring-2 ring-indigo-400/60' : ''"
+      :class="[selected ? 'ring-2 ring-indigo-400/60' : '', awaitingAnswers ? 'board-pulse' : '']"
       @click.stop="select"
     >
       <div class="flex items-start justify-between gap-2">
@@ -91,17 +103,43 @@ function onHandle(e: PointerEvent) {
           {{ t('initiative.card.progress', { done: progress.settled, total: progress.total }) }}
         </div>
       </div>
-      <UButton
-        class="nodrag mt-2"
-        data-testid="initiative-open-tracker"
-        size="xs"
-        variant="soft"
-        color="primary"
-        icon="i-lucide-list-checks"
-        @click.stop="openTracker"
-      >
-        {{ t('initiative.card.openTracker') }}
-      </UButton>
+      <div class="nodrag mt-2 flex flex-wrap items-center gap-1">
+        <UButton
+          v-if="awaitingAnswers"
+          data-testid="initiative-card-answer-planning"
+          size="xs"
+          variant="solid"
+          color="primary"
+          icon="i-lucide-messages-square"
+          @click.stop="openPlanning"
+        >
+          {{ t('initiative.inspector.answerPlanning') }}
+        </UButton>
+        <UButton
+          v-else
+          data-testid="initiative-card-run-planning"
+          size="xs"
+          variant="soft"
+          color="primary"
+          icon="i-lucide-play"
+          :loading="starting || running"
+          :disabled="!planningPipeline || running || starting"
+          :title="t('initiative.inspector.runPlanning')"
+          @click.stop="runPlanning"
+        >
+          {{ t('initiative.inspector.runPlanning') }}
+        </UButton>
+        <UButton
+          data-testid="initiative-open-tracker"
+          size="xs"
+          variant="soft"
+          color="neutral"
+          icon="i-lucide-list-checks"
+          @click.stop="openTracker"
+        >
+          {{ t('initiative.card.openTracker') }}
+        </UButton>
+      </div>
     </div>
   </div>
 </template>

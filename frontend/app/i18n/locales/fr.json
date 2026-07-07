@@ -66,6 +66,16 @@
     "next": "Suivant",
     "done": "Terminé"
   },
+  "clarification": {
+    "answerPlaceholder": "Votre réponse",
+    "notRelevant": "Non pertinent",
+    "recommend": "Proposer une réponse",
+    "reopen": "Rouvrir",
+    "dismissed": "Marquée comme non pertinente",
+    "generating": "Rédaction d'une suggestion…",
+    "suggestion": "Réponse suggérée",
+    "useSuggestion": "Utiliser cette réponse"
+  },
   "nav": {
     "menu": "Menu de navigation",
     "openMenu": "Ouvrir le menu",
