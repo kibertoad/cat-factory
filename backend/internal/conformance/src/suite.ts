@@ -8935,6 +8935,27 @@ export function defineMiscConformance(harness: ConformanceHarness): void {
         expect(accounts.every((a) => a.roles.length > 0)).toBe(true)
       })
 
+      it('resolves ONE personal account under concurrent first sign-in (no duplicate-key race)', async () => {
+        const ob = harness.makeApp().onboarding()
+        const user = {
+          id: `usr_race_${crypto.randomUUID()}`,
+          login: 'race-owner',
+          name: 'Race Owner',
+        }
+        // Fire the first-load resolution many times at once: each runs ensurePersonalAccount
+        // before any INSERT commits, so a check-then-create would race to a duplicate-key 500
+        // on the personal-account unique index. The atomic get-or-create must instead converge
+        // every caller on the same single account, with no rejection.
+        const ids = await ob.concurrentPersonalAccounts(user, 8)
+        expect(ids).toHaveLength(8)
+        expect(new Set(ids).size).toBe(1)
+        // And a follow-up read returns that same one account — no orphan duplicates were left.
+        const after = await ob.accountsForUser(user)
+        const personal = after.filter((a) => a.type === 'personal')
+        expect(personal).toHaveLength(1)
+        expect(personal[0]?.id).toBe(ids[0])
+      })
+
       it('invites + redeems org membership bound to the invited email', async () => {
         const app = harness.makeApp()
         const ob = app.onboarding()

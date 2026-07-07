@@ -12,6 +12,7 @@
     "typecheck": "tsc -p tsconfig.json --noEmit"
   },
   "dependencies": {
+    "@cat-factory/agents": "workspace:*",
     "@cat-factory/conformance": "workspace:*",
     "@cat-factory/contracts": "workspace:*",
     "@cat-factory/node-server": "workspace:*"
@@ -19,6 +20,7 @@
   "devDependencies": {
     "@playwright/test": "^1.61.1",
     "@types/node": "^26.1.0",
+    "ai": "^6.0.219",
     "typescript": "7.0.1-rc"
   }
 }

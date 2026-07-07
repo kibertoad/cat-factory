@@ -186,6 +186,12 @@ export {
   TECH_MIGRATION_PRESET,
   registerTechMigrationPreset,
 } from './presets/tech-migration/preset.js'
+// The canonical migration phase ids — the CONTRACT shared by the preset's `phaseTemplate`, its
+// `promptAdditions`, `seedMigrationPlan`, and the migration e2e (T10). Re-exported so a consumer
+// (notably the e2e's fake plan draft) references the ids by import rather than retyping a string
+// that could silently drift out of the template the ingest normalizer matches on.
+export { MIGRATION_PHASE_IDS, MIGRATION_PHASE_ID_ORDER } from './presets/tech-migration/phases.js'
+export type { MigrationPhaseId } from './presets/tech-migration/phases.js'
 // Per-`DocKind` document templates: the single source of truth for a kind's expected shape,
 // woven into the outliner/writer prompts and (later) read by the doc-quality gate. The
 // built-in `DOC_TEMPLATES` are the fallback; a deployment overrides via `registerDocTemplate`.

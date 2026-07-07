@@ -82,6 +82,35 @@ export class D1AccountRepository implements AccountRepository {
       .run()
   }
 
+  async ensurePersonal(account: AccountRecord): Promise<AccountRecord> {
+    // Atomic get-or-create: `INSERT OR IGNORE` no-ops when a personal account already exists
+    // for this owner (the partial unique index `idx_accounts_personal` arbitrates), so
+    // concurrent first-sign-in callers converge on the one surviving row instead of racing to
+    // a duplicate-key error. Re-select to return whichever row won.
+    await this.db
+      .prepare(
+        'INSERT OR IGNORE INTO accounts (id, type, name, github_account_login, owner_user_id, created_at, default_cloud_provider, spend_monthly_limit) VALUES (?, ?, ?, ?, ?, ?, ?, ?)',
+      )
+      .bind(
+        account.id,
+        account.type,
+        account.name,
+        account.githubAccountLogin,
+        account.ownerUserId,
+        account.createdAt,
+        account.defaultCloudProvider ?? null,
+        account.spendMonthlyLimit ?? null,
+      )
+      .run()
+    const row = await this.findPersonalByUser(account.ownerUserId ?? '')
+    if (!row) {
+      throw new Error(
+        `ensurePersonal: personal account missing after insert for ${account.ownerUserId}`,
+      )
+    }
+    return row
+  }
+
   async rename(id: string, name: string): Promise<void> {
     await this.db.prepare('UPDATE accounts SET name = ? WHERE id = ?').bind(name, id).run()
   }

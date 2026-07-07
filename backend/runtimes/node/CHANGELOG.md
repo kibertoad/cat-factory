@@ -1,5 +1,63 @@
 # @cat-factory/node-server
 
+## 0.87.2
+
+### Patch Changes
+
+- 35636d5: Honour `INITIATIVE_LOOP_INTERVAL_MS` when it is supplied through `start({ env })`. The initiative-
+  loop sweeper resolved its interval from `process.env` directly, but `start()` takes its config from
+  an injected `env` object it never writes back to `process.env` — so a deployment (or the e2e
+  backend) that set the knob via the injected env was silently ignored and the loop ran at the 60s
+  backstop. `resolveSweepInterval(env)` now reads the passed env and `start()` threads its own `env`
+  through. This deflakes an intermittent e2e failure where an initiative's first task spawn (which,
+  absent a terminal poke, waits for the sweep) landed ~60s later — past the spec's timeout.
+- Updated dependencies [35636d5]
+  - @cat-factory/agents@0.48.3
+  - @cat-factory/consensus@0.10.10
+  - @cat-factory/orchestration@0.97.2
+  - @cat-factory/provider-bedrock@0.7.180
+  - @cat-factory/provider-cloudflare@0.7.181
+  - @cat-factory/server@0.101.2
+
+## 0.87.1
+
+### Patch Changes
+
+- 8319e52: Fix a first-sign-in race in `AccountService.ensurePersonalAccount` that 500'd
+  `GET /accounts` ("cannot reach backend") on a fresh DB.
+
+  The method was a non-atomic check-then-act: concurrent first-load requests all read
+  "no personal account yet", then all `INSERT`, so all but one failed with a duplicate-key
+  violation on the personal-account partial unique index (`idx_accounts_personal`) and the
+  error surfaced as an unhandled 500.
+
+  The create path is now atomic. A new `AccountRepository.ensurePersonal(account)` port
+  inserts-or-returns the surviving row — D1 via `INSERT OR IGNORE`, Postgres via
+  `ON CONFLICT DO NOTHING` — so concurrent first-sign-in callers all converge on the same
+  account with no rejection. Both runtimes implement it and a cross-runtime conformance
+  assertion fires the concurrent resolution and asserts a single account results.
+
+  The sibling paths are unaffected: `createOrg` is a deliberate non-idempotent create (org
+  accounts have no such unique index), and `ensureMembership` already writes through an
+  idempotent `upsert`.
+
+- Updated dependencies [8319e52]
+  - @cat-factory/kernel@0.109.1
+  - @cat-factory/agents@0.48.2
+  - @cat-factory/caching@0.6.10
+  - @cat-factory/consensus@0.10.9
+  - @cat-factory/eks@0.1.33
+  - @cat-factory/gates@0.4.30
+  - @cat-factory/gitlab@0.7.33
+  - @cat-factory/integrations@0.78.1
+  - @cat-factory/observability-langfuse@0.7.165
+  - @cat-factory/orchestration@0.97.1
+  - @cat-factory/provider-bedrock@0.7.179
+  - @cat-factory/provider-cloudflare@0.7.180
+  - @cat-factory/provider-s3@0.2.115
+  - @cat-factory/server@0.101.1
+  - @cat-factory/spend@0.11.16
+
 ## 0.87.0
 
 ### Minor Changes

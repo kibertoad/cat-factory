@@ -1,6 +1,6 @@
 {
   "name": "@cat-factory/kernel",
-  "version": "0.109.0",
+  "version": "0.109.1",
   "description": "Shared vocabulary, pure logic, and port interfaces for the Agent Architecture Board.",
   "repository": {
     "type": "git",
