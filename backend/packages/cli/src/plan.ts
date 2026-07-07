@@ -42,6 +42,8 @@ export interface BootstrapInput {
   harnessEntry?: string
   authSessionSecret: string
   encryptionKey: string
+  /** Shared HMAC secret between the backend and the executor-harness (`HARNESS_SHARED_SECRET`). */
+  harnessSharedSecret: string
   /** Existing root `.gitignore` content, if the target dir already has one (rules are merged in). */
   existingGitignore?: string
 }
@@ -52,6 +54,7 @@ export function buildPlan(input: BootstrapInput): PlannedFile[] {
     databaseUrl: input.databaseUrl,
     authSessionSecret: input.authSessionSecret,
     encryptionKey: input.encryptionKey,
+    harnessSharedSecret: input.harnessSharedSecret,
     harnessImage: input.harnessImage,
     port: input.port,
     corsAllowedOrigins: input.corsAllowedOrigins,
@@ -136,7 +139,8 @@ with \`cat-factory init\`. It has two parts:
   via a personal access token.
 - **\`frontend/\`** — the board SPA (extends the \`@cat-factory/app\` Nuxt layer).
 
-> The \`.env\` files hold generated secrets (\`AUTH_SESSION_SECRET\`, \`ENCRYPTION_KEY\`) and your
+> The \`.env\` files hold generated secrets (\`AUTH_SESSION_SECRET\`, \`ENCRYPTION_KEY\`,
+> \`HARNESS_SHARED_SECRET\`) and your
 > ${label} token (\`${tokenVar}\`). They are gitignored — **keep the values stable and never
 > commit them.** Regenerating \`AUTH_SESSION_SECRET\` forces a re-login; regenerating
 > \`ENCRYPTION_KEY\` orphans every encrypted credential.

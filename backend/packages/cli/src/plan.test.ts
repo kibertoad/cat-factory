@@ -14,6 +14,7 @@ const input: BootstrapInput = {
   containerRuntime: 'docker',
   authSessionSecret: 'sess',
   encryptionKey: 'enc',
+  harnessSharedSecret: 'harness',
 }
 
 function plan(extra: Partial<BootstrapInput> = {}) {

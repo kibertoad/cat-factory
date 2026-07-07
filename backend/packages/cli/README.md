@@ -10,8 +10,9 @@ the **published** libraries, so the generated project stands alone outside the m
 It does the fiddly setup for you:
 
 - **Offers to generate the crypto secrets** in the exact formats the server requires —
-  `AUTH_SESSION_SECRET` (32 random bytes, hex) and `ENCRYPTION_KEY` (32 random bytes, base64).
-  On by default; decline to leave them blank and paste your own.
+  `AUTH_SESSION_SECRET` (32 random bytes, hex), `ENCRYPTION_KEY` (32 random bytes, base64) and
+  `HARNESS_SHARED_SECRET` (32 random bytes, hex). All three are required to boot. On by default;
+  decline to leave them blank and paste your own.
 - **Lets you choose how agents run** — a **prewarmed Docker pool** (isolated per-run containers
   from the executor image, the default) or **native host agents** (a host process driving your
   own installed `claude`/`codex` CLI: no container, no leased credential, but no sandbox and only
@@ -30,6 +31,19 @@ It does the fiddly setup for you:
 - **Populates and gitignores the `.env` files.** It writes `local/.env` (DB URL, the generated
   secrets, your PAT, the harness image) and `frontend/.env` (`NUXT_PUBLIC_API_BASE`), and writes
   (or merges into) a `.gitignore` so those secret files are never committed.
+
+## Commands
+
+- **`cat-factory init`** (the default) — scaffolds the whole deployment (`local/` + `frontend/`),
+  described above.
+- **`cat-factory env`** — generates **only** a ready-to-run local-mode `.env` in the current
+  directory (or `--dir`), using the same secret generation, PAT flow, and pool-vs-native choice.
+  Use it when the deployment already exists (e.g. inside [`deploy/local`](../../../deploy/local),
+  or an already-scaffolded project) and you just need a fresh, complete `.env`. It refuses to
+  overwrite an existing `.env` unless you pass `--force`. A model-provider key is **not** needed to
+  boot — add providers/keys through the UI after sign-in (the `.env` leaves them as commented
+  hints) — so the generated file runs local mode with no manual edits.
+- **`cat-factory k3s`** — guided local Kubernetes setup for ephemeral environments (see `--help`).
 
 ## Usage
 
@@ -131,9 +145,9 @@ Tester's Docker-in-Docker / ephemeral environments, the warm container pool, etc
   commit them. If you scaffold into an existing git repo, the CLI **merges** the required ignore
   rules into your existing `.gitignore` rather than clobbering it.
 - The pasted token is **not echoed** to the terminal.
-- Keep `AUTH_SESSION_SECRET` and `ENCRYPTION_KEY` **stable**: regenerating the session secret
-  forces a re-login, and regenerating the encryption key orphans every encrypted-at-rest
-  credential.
+- Keep `AUTH_SESSION_SECRET`, `ENCRYPTION_KEY` and `HARNESS_SHARED_SECRET` **stable**: regenerating
+  the session secret forces a re-login, and regenerating the encryption key orphans every
+  encrypted-at-rest credential.
 
 ## Programmatic API
 
