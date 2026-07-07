@@ -397,23 +397,22 @@ function answeredQa(initiative: Initiative): InitiativeQa[] {
 }
 
 /**
- * Questions that survive into the NEXT interview round: the answered digest PLUS any the human
- * marked `dismissed`. Keeping the dismissed ones (rather than dropping unanswered questions
- * wholesale) is what lets the interviewer see they were deemed not-relevant and not re-ask them.
- */
-function retainedQa(initiative: Initiative): InitiativeQa[] {
-  return (initiative.qa ?? []).filter(
-    (q) => (q.answer ?? '').trim().length > 0 || q.status === 'dismissed',
-  )
-}
-
-/**
  * Whether a planning question still needs a human answer: not dismissed, and no answer yet.
  * The single source of truth shared by the window (`pending`/`allAnswered`), the interviewer,
  * and {@link retainedQa}, so a `dismissed` question never counts as blocking.
  */
 export function isPendingQuestion(q: InitiativeQa): boolean {
   return q.status !== 'dismissed' && (q.answer ?? '').trim().length === 0
+}
+
+/**
+ * Questions that survive into the NEXT interview round: everything that is no longer PENDING —
+ * i.e. the answered digest PLUS any the human marked `dismissed`. Keeping the dismissed ones
+ * (rather than dropping every unanswered question) is what lets the interviewer see they were
+ * deemed not-relevant and not re-ask them.
+ */
+function retainedQa(initiative: Initiative): InitiativeQa[] {
+  return (initiative.qa ?? []).filter((q) => !isPendingQuestion(q))
 }
 
 /**
