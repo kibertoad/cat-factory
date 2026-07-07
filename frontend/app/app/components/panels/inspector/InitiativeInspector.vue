@@ -5,47 +5,29 @@
 // cancel once executing), and the tracker window opener. Plan/policy editing lands
 // with slice 4.
 import type { Block, InitiativeStatus } from '~/types/domain'
+import { useInitiativePlanning } from '~/composables/useInitiativePlanning'
 import { INITIATIVE_STATUS_LABEL_KEYS, initiativeProgress } from '~/utils/initiative'
 
 const props = defineProps<{ block: Block }>()
 
 const initiatives = useInitiativesStore()
-const pipelines = usePipelinesStore()
-const execution = useExecutionStore()
-const ui = useUiStore()
 const { t } = useI18n()
 
 const initiative = computed(() => initiatives.forBlock(props.block.id))
 
 const status = computed<InitiativeStatus>(() => initiative.value?.status ?? 'planning')
 
-// The planning pipeline runnable on this initiative block: its preset descriptor's
-// `planningPipelineId` (a preset picks its own planning pipeline — the generic preset keeps
-// `pl_initiative`). `planningPipelineIdFor` returns null for a named preset that hasn't hydrated,
-// so "Run planning" stays disabled rather than launching the wrong (generic interviewer) pipeline.
-// The engine's runnable guard still enforces that only an initiative-shaped pipeline runs here.
-const planningPipeline = computed(() => {
-  const id = initiatives.planningPipelineIdFor(initiative.value)
-  return id ? pipelines.pipelines.find((p) => p.id === id) : undefined
-})
-const running = computed(() => !!props.block.executionId)
-
-// The interviewer has parked the planning run with questions awaiting answers.
-const awaitingAnswers = computed(
-  () =>
-    initiative.value?.interview?.status === 'awaiting' &&
-    (initiative.value?.qa ?? []).some((q) => !(q.answer ?? '').trim()),
-)
-
-function runPlanning() {
-  if (planningPipeline.value) void execution.start(props.block.id, planningPipeline.value)
-}
-function openTracker() {
-  ui.openInitiativeTracker(props.block.id)
-}
-function openPlanning() {
-  ui.openInitiativePlanning(props.block.id)
-}
+// The "Run planning" / "Answer planning questions" affordances, shared with the board card so the
+// two surfaces can't drift (see {@link useInitiativePlanning}).
+const {
+  planningPipeline,
+  running,
+  awaitingAnswers,
+  starting,
+  runPlanning,
+  openPlanning,
+  openTracker,
+} = useInitiativePlanning(() => props.block.id)
 
 const progress = computed(() => initiativeProgress(initiative.value?.items))
 
@@ -90,7 +72,8 @@ function control(action: 'pause' | 'resume' | 'cancel') {
         variant="soft"
         size="sm"
         icon="i-lucide-play"
-        :disabled="!planningPipeline || running"
+        :loading="starting || running"
+        :disabled="!planningPipeline || running || starting"
         @click="runPlanning"
       >
         {{ t('initiative.inspector.runPlanning') }}

@@ -9,6 +9,7 @@
 // frame like a task card.
 import type { InitiativeStatus } from '~/types/domain'
 import { useBlockDrag } from '~/composables/useBlockDrag'
+import { useInitiativePlanning } from '~/composables/useInitiativePlanning'
 import {
   INITIATIVE_STATUS_CHIPS,
   INITIATIVE_STATUS_LABEL_KEYS,
@@ -18,8 +19,6 @@ import {
 const props = defineProps<{ blockId: string }>()
 const board = useBoardStore()
 const initiatives = useInitiativesStore()
-const pipelines = usePipelinesStore()
-const execution = useExecutionStore()
 const ui = useUiStore()
 const { t } = useI18n()
 const { draggingId, startDrag } = useBlockDrag()
@@ -34,45 +33,20 @@ const progress = computed(() => initiativeProgress(initiative.value?.items))
 
 const selected = computed(() => ui.selectedBlockId === props.blockId)
 
-// The planning pipeline runnable on this block (its preset's `planningPipelineId`, or the
-// generic `pl_initiative`). Null for a named preset that hasn't hydrated yet, so "Run
-// planning" stays disabled rather than launching the wrong pipeline — same guard as the
-// inspector; the engine's runnable check still enforces an initiative-shaped pipeline here.
-const planningPipeline = computed(() => {
-  const id = initiatives.planningPipelineIdFor(initiative.value)
-  return id ? pipelines.pipelines.find((p) => p.id === id) : undefined
-})
-const running = computed(() => !!block.value?.executionId)
-
-// The interviewer has parked the planning run with questions awaiting answers.
-const awaitingAnswers = computed(
-  () =>
-    initiative.value?.interview?.status === 'awaiting' &&
-    (initiative.value?.qa ?? []).some((q) => !(q.answer ?? '').trim()),
-)
-
-// Optimistic "Run planning": flip to a spinning state the instant it's clicked, before the
-// stream pushes the block's executionId back (which keeps the button disabled thereafter).
-const starting = ref(false)
+// The "Run planning" / "Answer planning questions" affordances, shared with the inspector so the
+// board card and inspector can't drift (see {@link useInitiativePlanning}).
+const {
+  planningPipeline,
+  running,
+  awaitingAnswers,
+  starting,
+  runPlanning,
+  openPlanning,
+  openTracker,
+} = useInitiativePlanning(() => props.blockId)
 
 function select() {
   ui.select(props.blockId)
-}
-async function runPlanning() {
-  if (!planningPipeline.value || running.value) return
-  starting.value = true
-  const started = await execution.start(props.blockId, planningPipeline.value)
-  // On success `running` takes over and keeps the button disabled; on refusal/cancel the
-  // store surfaces its own toast, so just revert the optimistic state.
-  if (!started) starting.value = false
-}
-function openPlanning() {
-  ui.select(props.blockId)
-  ui.openInitiativePlanning(props.blockId)
-}
-function openTracker() {
-  ui.select(props.blockId)
-  ui.openInitiativeTracker(props.blockId)
 }
 function onHandle(e: PointerEvent) {
   if (block.value) startDrag(block.value, e)

@@ -101,6 +101,7 @@ import type { InitiativeInterviewService } from '../initiative/InitiativeIntervi
 import { InitiativeInterviewController } from './InitiativeInterviewController.js'
 import type { DocInterviewService } from '../docInterview/DocInterviewService.js'
 import { DocInterviewController } from './DocInterviewController.js'
+import type { InterviewGateController } from './InterviewGateController.js'
 import {
   type InitiativeRunHarvest,
   assertInitiativeShapeAllowed,
@@ -865,8 +866,12 @@ export class ExecutionService {
       clarityKind: this.clarityKind,
       requirementsBrainstormKind: this.requirementsBrainstormKind,
       architectureBrainstormKind: this.architectureBrainstormKind,
-      initiativeInterviewController: this.initiativeInterviewController,
-      docInterviewController: this.docInterviewController,
+      // The interview-gate controllers, dispatched by the `interview-gate` trait keyed on each
+      // controller's `agentKind` (a new interviewer wires its controller here — no engine branch).
+      interviewControllers: [
+        this.initiativeInterviewController,
+        this.docInterviewController,
+      ].filter((c): c is InterviewGateController<unknown> => !!c),
       runInitiatorScope: runInitiatorScopeFn,
       environmentProvisioning,
       ticketTrackerProvider,
