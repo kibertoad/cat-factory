@@ -1,5 +1,13 @@
 # @cat-factory/spend
 
+## 0.11.17
+
+### Patch Changes
+
+- Updated dependencies [a2db337]
+  - @cat-factory/contracts@0.120.0
+  - @cat-factory/kernel@0.110.0
+
 ## 0.11.16
 
 ### Patch Changes

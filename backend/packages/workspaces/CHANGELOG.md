@@ -1,5 +1,13 @@
 # @cat-factory/workspaces
 
+## 0.13.2
+
+### Patch Changes
+
+- Updated dependencies [a2db337]
+  - @cat-factory/contracts@0.120.0
+  - @cat-factory/kernel@0.110.0
+
 ## 0.13.1
 
 ### Patch Changes

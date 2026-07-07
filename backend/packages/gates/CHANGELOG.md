@@ -1,5 +1,13 @@
 # @cat-factory/gates
 
+## 0.4.31
+
+### Patch Changes
+
+- Updated dependencies [a2db337]
+  - @cat-factory/contracts@0.120.0
+  - @cat-factory/kernel@0.110.0
+
 ## 0.4.30
 
 ### Patch Changes

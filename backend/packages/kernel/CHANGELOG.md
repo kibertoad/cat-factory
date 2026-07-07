@@ -1,5 +1,25 @@
 # @cat-factory/kernel
 
+## 0.110.0
+
+### Minor Changes
+
+- a2db337: Planning-interview questions gain the same answer surface as requirements review, via a shared
+  clarification-item abstraction (see `docs/initiatives/clarification-items.md`).
+
+  A planning question can now be marked **not relevant** (dismissed — it stops blocking Continue and
+  the interviewer is told not to re-ask it) and the human can ask the interviewer to **recommend** a
+  suggested answer (drafted inline, adopted with "use this answer"). These reuse a new shared
+  `ClarificationItem` component rather than cloning the requirements UI. `InitiativeQa` gains
+  `status` + `recommendation`; no DB migration (the initiative persists as a JSON blob, so both
+  runtimes pick up the fields for free). The initiative board card also pulses while its interview is
+  awaiting answers, matching how a review gate surfaces attention on a task card.
+
+### Patch Changes
+
+- Updated dependencies [a2db337]
+  - @cat-factory/contracts@0.120.0
+
 ## 0.109.1
 
 ### Patch Changes
