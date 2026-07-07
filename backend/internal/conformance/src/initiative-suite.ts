@@ -30,7 +30,7 @@ function initiative(
     goal: 'Move module-global registries to app-owned DI',
     constraints: ['keep the runtimes symmetric'],
     nonGoals: ['backwards compatibility'],
-    qa: [{ id: 'iqa-1', question: 'Scope?', answer: 'All registries' }],
+    qa: [{ id: 'iqa-1', question: 'Scope?', answer: 'All registries', status: 'open' }],
     interview: { round: 1, maxRounds: 4, status: 'done' },
     analysisSummary: 'Registries live in kernel/agents.',
     phases: [{ id: 'phase-1', title: 'Pilot', goal: 'Convert one registry' }],
