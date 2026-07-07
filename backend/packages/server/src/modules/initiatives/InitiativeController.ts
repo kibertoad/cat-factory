@@ -12,7 +12,9 @@ import {
   probeInitiativePresetContract,
   proceedInitiativePlanningContract,
   promoteInitiativeFollowUpContract,
+  recommendInitiativeAnswerContract,
   resumeInitiativeContract,
+  setInitiativeQuestionStatusContract,
   updateInitiativeItemContract,
   updateInitiativePolicyContract,
 } from '@cat-factory/contracts'
@@ -116,6 +118,25 @@ export function initiativeController(): Hono<AppEnv> {
     const { blockId } = c.req.valid('param')
     const { questionId, answer } = c.req.valid('json')
     return c.json(await planning.answer(param(c, 'workspaceId'), blockId, questionId, answer), 200)
+  })
+
+  buildHonoRoute(app, setInitiativeQuestionStatusContract, async (c) => {
+    const planning = requirePlanning(c)
+    if (!planning) return unavailable(c)
+    const { blockId } = c.req.valid('param')
+    const { questionId, status } = c.req.valid('json')
+    return c.json(
+      await planning.setQuestionStatus(param(c, 'workspaceId'), blockId, questionId, status),
+      200,
+    )
+  })
+
+  buildHonoRoute(app, recommendInitiativeAnswerContract, async (c) => {
+    const planning = requirePlanning(c)
+    if (!planning) return unavailable(c)
+    const { blockId } = c.req.valid('param')
+    const { questionId } = c.req.valid('json')
+    return c.json(await planning.recommendAnswer(param(c, 'workspaceId'), blockId, questionId), 200)
   })
 
   buildHonoRoute(app, continueInitiativePlanningContract, async (c) => {

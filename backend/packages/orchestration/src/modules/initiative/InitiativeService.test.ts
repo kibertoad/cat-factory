@@ -220,8 +220,14 @@ describe('InitiativeService.create — presets', () => {
         id: expect.stringMatching(/^iqa-/),
         question: 'Documentation types',
         answer: 'READMEs, Mermaid diagrams',
+        status: 'open',
       },
-      { id: expect.stringMatching(/^iqa-/), question: 'Docs root', answer: 'docs/' },
+      {
+        id: expect.stringMatching(/^iqa-/),
+        question: 'Docs root',
+        answer: 'docs/',
+        status: 'open',
+      },
     ])
     // No human description ⇒ the goal is templated from the preset's stated purpose.
     expect(initiative.goal).toBe('Audit and refresh the service documentation.')
@@ -240,8 +246,13 @@ describe('InitiativeService.create — presets', () => {
     // The full-interview form is folded into the qa (T3), so the interviewer starts from it rather
     // than re-asking the enumerable facts the form already captured.
     expect(initiative.qa).toEqual([
-      { id: expect.stringMatching(/^iqa-/), question: 'From', answer: 'MSSQL' },
-      { id: expect.stringMatching(/^iqa-/), question: 'To', answer: 'PostgreSQL 16' },
+      { id: expect.stringMatching(/^iqa-/), question: 'From', answer: 'MSSQL', status: 'open' },
+      {
+        id: expect.stringMatching(/^iqa-/),
+        question: 'To',
+        answer: 'PostgreSQL 16',
+        status: 'open',
+      },
     ])
     // A full-interview preset does NOT template the goal from its description (the interviewer
     // synthesizes it), so with no human description the goal stays blank until the interview converges.
