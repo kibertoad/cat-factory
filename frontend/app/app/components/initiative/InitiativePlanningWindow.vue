@@ -53,10 +53,20 @@ const resuming = computed(() => initiatives.resuming)
  */
 const allAnswered = computed(() => pending.value.every((q) => drafts[q.key]?.trim()))
 
-/** Persist one answer if its draft differs from what's recorded. */
-async function persist(q: { id?: string; key: string; answer?: string }) {
+/**
+ * Persist one answer if its draft differs from what's recorded. A `dismissed` question is skipped:
+ * it was set aside (its server answer cleared), and the `flushThen` sweep on continue/proceed must
+ * NOT write a stale local draft back to it — that would silently re-answer a not-relevant question
+ * and leak it into the converged digest.
+ */
+async function persist(q: {
+  id?: string
+  key: string
+  answer?: string
+  status?: 'open' | 'dismissed'
+}) {
   const id = q.id
-  if (!id || !blockId.value) return
+  if (!id || !blockId.value || q.status === 'dismissed') return
   const next = (drafts[q.key] ?? '').trim()
   if (!next || next === (q.answer ?? '').trim()) return
   await initiatives.answerQuestion(blockId.value, id, next)
