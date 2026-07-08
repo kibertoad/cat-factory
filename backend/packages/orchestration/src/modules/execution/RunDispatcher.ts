@@ -55,6 +55,7 @@ import {
   registeredGateFactories,
   registeredStepResolverFactories,
   requireProvider,
+  RunContendedError,
   sameSubtasks,
 } from '@cat-factory/kernel'
 import {
@@ -397,6 +398,26 @@ export class RunDispatcher {
   }
 
   /**
+   * Run a durable-driver entry point, turning a lost optimistic-concurrency race into a
+   * re-drive. A driver write ({@link RunStateMachine.casPersist}) throws {@link RunContendedError}
+   * when a concurrent human action moved the row or a `cancel`/`stopRun` removed/terminated it;
+   * we swallow that and return `{ kind: 'continue' }` so the durable loop re-enters
+   * `advanceInstance`, reloads FRESH state, and either re-applies the mechanical step on the
+   * winning snapshot or no-ops on a gone/terminal run — never clobbering the winner or
+   * resurrecting a cancelled run (race-audit 2.2 driver-half / 2.3). This MUST run inside each
+   * entry point (ahead of the drivers' generic `catch`→`failRun` and Cloudflare's `step.do`
+   * retry); every other error propagates so real failures still fail the run.
+   */
+  private async redriveOnContention(run: () => Promise<AdvanceResult>): Promise<AdvanceResult> {
+    try {
+      return await run()
+    } catch (error) {
+      if (error instanceof RunContendedError) return { kind: 'continue' }
+      throw error
+    }
+  }
+
+  /**
    * The generic container/inline-agent step — the lowest-priority StepHandler, claiming
    * every step no more-specific handler did (coder, architect, spec-writer, merger,
    * task-estimator, the container-backed companions, …). Builds the agent context, runs the
@@ -444,7 +465,7 @@ export class RunDispatcher {
         // Surface the block's ephemeral environment (if any) alongside the cold-boot
         // phase, so a run's details show the env spinning up next to the container.
         await this.attachEnvironmentProjection(workspaceId, instance.blockId, step)
-        await this.executionRepository.upsert(workspaceId, instance)
+        await this.runStateMachine.casPersist(workspaceId, instance)
         await this.runStateMachine.emitInstance(workspaceId, instance)
 
         let handle: AgentJobHandle
@@ -457,7 +478,7 @@ export class RunDispatcher {
           // start") so the run details say the container never started — not a generic
           // "run failed". A dispatch-time eviction still routes to the evicted framing.
           step.container = { status: 'errored' }
-          await this.executionRepository.upsert(workspaceId, instance)
+          await this.runStateMachine.casPersist(workspaceId, instance)
           await this.runStateMachine.emitInstance(workspaceId, instance)
           const message = getErrorMessage(error)
           const evicted = isContainerEvictionError(message)
@@ -483,7 +504,7 @@ export class RunDispatcher {
         // The dispatch returned, so the container is up and the job is accepted; the
         // live phase + the container id/url arrive on the first poll.
         step.container = { status: 'up' }
-        await this.executionRepository.upsert(workspaceId, instance)
+        await this.runStateMachine.casPersist(workspaceId, instance)
         await this.runStateMachine.emitInstance(workspaceId, instance)
       }
       return { kind: 'awaiting_job', jobId: step.jobId, stepIndex: instance.currentStep }
@@ -495,7 +516,7 @@ export class RunDispatcher {
     const previewModel = await this.previewStepModel(context)
     if (previewModel && previewModel !== step.model) {
       step.model = previewModel
-      await this.executionRepository.upsert(workspaceId, instance)
+      await this.runStateMachine.casPersist(workspaceId, instance)
       await this.runStateMachine.emitInstance(workspaceId, instance)
     }
 
@@ -636,6 +657,13 @@ export class RunDispatcher {
    * simply lets the driver advance the now-current step.
    */
   async pollAgentJob(workspaceId: string, executionId: string): Promise<AdvanceResult> {
+    return this.redriveOnContention(() => this.pollAgentJobInner(workspaceId, executionId))
+  }
+
+  private async pollAgentJobInner(
+    workspaceId: string,
+    executionId: string,
+  ): Promise<AdvanceResult> {
     const instance = await this.executionRepository.get(workspaceId, executionId)
     if (!instance || (instance.status !== 'running' && instance.status !== 'paused')) {
       return { kind: 'noop' }
@@ -669,30 +697,57 @@ export class RunDispatcher {
       agentKind: step.agentKind,
     })
     if (update.state === 'running') {
-      // A successful poll proves the container is up, so the cold-boot phase is
-      // over (defensive: a replay may have left the flag set). Surface live subtask
-      // progress (e.g. 3/8 todos done) without advancing the step. Only persist +
-      // emit when something actually changed so an idle poll doesn't churn storage
-      // or the event stream.
-      let changed = false
-      // A successful poll proves the container is up: reflect that, the live phase
-      // (clone / agent / push) and the container's id/url the transport surfaced.
-      if (this.applyContainerRunning(step, update)) changed = true
-      if (this.applySubtaskProgress(step, update.subtasks)) changed = true
-      // The transport reports WHICH backend served the job on the first poll (native host
-      // process vs. sandboxed container) — record it in the run diagnostics.
-      if (this.recordBackendDiagnostics(instance, update.backend)) changed = true
-      // Append any forward-looking items the Coder streamed since the last poll so the
-      // Follow-up companion lights up + accrues items LIVE while the container still runs.
-      if (this.appendStreamedFollowUps(step, update.followUps)) changed = true
-      // Refresh the env projection so its status transitions (provisioning→ready→
-      // expired/torn_down) and any error stay live in the run details during the run.
-      if (await this.attachEnvironmentProjection(workspaceId, instance.blockId, step)) {
-        changed = true
+      // A successful poll proves the container is up, so the cold-boot phase is over
+      // (defensive: a replay may have left the flag set). Surface live subtask progress
+      // (e.g. 3/8 todos done) without advancing the step. Only persist + emit when something
+      // actually changed so an idle poll doesn't churn storage or the event stream.
+      //
+      // Fold the poll's delta onto a target instance, returning whether anything changed. The
+      // captured `update` is the source, so re-applying on a freshly-reloaded instance is
+      // idempotent for the set-to-latest folds AND correct for the APPEND fold: the harness
+      // follow-up buffer is drain-on-read (`runner.ts`), so those streamed items exist ONLY on
+      // this `update` — abort-and-redrive would lose them, whereas re-applying under
+      // `mutateInstance` (which reloads a clean base each attempt) preserves them.
+      const applyRunningFold = async (target: ExecutionInstance): Promise<boolean> => {
+        const s = target.steps[target.currentStep]
+        // The step advanced (or the job was superseded) under a concurrent write — nothing to fold.
+        if (!s || s.jobId !== step.jobId) return false
+        let changed = false
+        if (this.applyContainerRunning(s, update)) changed = true
+        if (this.applySubtaskProgress(s, update.subtasks)) changed = true
+        // The transport reports WHICH backend served the job on the first poll (native host
+        // process vs. sandboxed container) — record it in the run diagnostics.
+        if (this.recordBackendDiagnostics(target, update.backend)) changed = true
+        // Append any forward-looking items the Coder streamed since the last poll so the
+        // Follow-up companion lights up + accrues items LIVE while the container still runs.
+        if (this.appendStreamedFollowUps(s, update.followUps)) changed = true
+        // Refresh the env projection so its status transitions (provisioning→ready→
+        // expired/torn_down) and any error stay live in the run details during the run.
+        if (await this.attachEnvironmentProjection(workspaceId, target.blockId, s)) changed = true
+        return changed
       }
-      if (changed) {
-        await this.executionRepository.upsert(workspaceId, instance)
-        await this.runStateMachine.emitInstance(workspaceId, instance)
+      // Cheap pre-check against the loaded snapshot: skip the write entirely on an idle poll
+      // (the common case). The mutation is discarded — the authoritative write re-applies the
+      // same fold on fresh state under CAS below.
+      if (await applyRunningFold(instance)) {
+        try {
+          const persisted = await this.runStateMachine.mutateInstance(
+            workspaceId,
+            executionId,
+            async (fresh) => {
+              await applyRunningFold(fresh)
+            },
+          )
+          await this.runStateMachine.emitInstance(workspaceId, persisted)
+        } catch (error) {
+          // The run was cancelled/removed mid-poll (`NotFoundError`) or stayed hot-contended
+          // past the retry budget (`ConflictError`) — re-drive on fresh state rather than
+          // failing the run; the next entry no-ops on a gone/terminal run.
+          if (error instanceof NotFoundError || error instanceof ConflictError) {
+            throw new RunContendedError(executionId)
+          }
+          throw error
+        }
       }
       return { kind: 'awaiting_job', jobId: step.jobId, stepIndex: instance.currentStep }
     }
@@ -790,7 +845,7 @@ export class RunDispatcher {
       step.jobId = undefined
       step.subtasks = undefined
       if (step.gate) step.gate.phase = 'checking'
-      await this.executionRepository.upsert(workspaceId, instance)
+      await this.runStateMachine.casPersist(workspaceId, instance)
       await this.runStateMachine.emitInstance(workspaceId, instance)
       return { kind: 'awaiting_gate', stepIndex: instance.currentStep }
     }
@@ -976,7 +1031,7 @@ export class RunDispatcher {
       // The container vanished and a fresh one is about to boot for the re-dispatch, so the
       // details show it spinning up again rather than a stale "up".
       step.container = { status: 'starting' }
-      await this.executionRepository.upsert(workspaceId, instance)
+      await this.runStateMachine.casPersist(workspaceId, instance)
       await this.runStateMachine.emitInstance(workspaceId, instance)
       return { kind: 'continue' }
     }
@@ -1007,7 +1062,7 @@ export class RunDispatcher {
     step: PipelineStep,
   ): Promise<void> {
     step.container = { ...step.container, status: 'errored' }
-    await this.executionRepository.upsert(workspaceId, instance)
+    await this.runStateMachine.casPersist(workspaceId, instance)
   }
 
   /**
@@ -1019,6 +1074,10 @@ export class RunDispatcher {
    * step is a gate actively in its `checking` phase.
    */
   async pollGate(workspaceId: string, executionId: string): Promise<AdvanceResult> {
+    return this.redriveOnContention(() => this.pollGateInner(workspaceId, executionId))
+  }
+
+  private async pollGateInner(workspaceId: string, executionId: string): Promise<AdvanceResult> {
     const instance = await this.executionRepository.get(workspaceId, executionId)
     if (!instance || (instance.status !== 'running' && instance.status !== 'paused')) {
       return { kind: 'noop' }
@@ -1054,6 +1113,15 @@ export class RunDispatcher {
     workspaceId: string,
     executionId: string,
   ): Promise<AdvanceResult> {
+    return this.redriveOnContention(() =>
+      this.resolveGatePollExhaustionInner(workspaceId, executionId),
+    )
+  }
+
+  private async resolveGatePollExhaustionInner(
+    workspaceId: string,
+    executionId: string,
+  ): Promise<AdvanceResult> {
     const instance = await this.executionRepository.get(workspaceId, executionId)
     if (!instance || (instance.status !== 'running' && instance.status !== 'paused')) {
       return { kind: 'noop' }
@@ -1073,7 +1141,7 @@ export class RunDispatcher {
     // the run.
     if (step && gate && gate.pollExhaustion === 'rearm') {
       if (step.gate) step.gate.phase = 'checking'
-      await this.executionRepository.upsert(workspaceId, instance)
+      await this.runStateMachine.casPersist(workspaceId, instance)
       return { kind: 'awaiting_gate', stepIndex: instance.currentStep }
     }
     if (!step || !gate || gate.pollExhaustion !== 'pass') {
@@ -1091,7 +1159,7 @@ export class RunDispatcher {
       const windowElapsed = this.clock.now() - watchSince >= windowMinutes * 60_000
       if (!windowElapsed) {
         if (step.gate) step.gate.phase = 'checking'
-        await this.executionRepository.upsert(workspaceId, instance)
+        await this.runStateMachine.casPersist(workspaceId, instance)
         return { kind: 'awaiting_gate', stepIndex: instance.currentStep }
       }
     }
@@ -1185,7 +1253,7 @@ export class RunDispatcher {
     if (isFinalStep) {
       instance.status = 'done'
       await this.runStateMachine.finalizeBlock(workspaceId, instance, undefined)
-      await this.executionRepository.upsert(workspaceId, instance)
+      await this.runStateMachine.casPersist(workspaceId, instance)
       await this.runStateMachine.emitInstance(workspaceId, instance)
       await this.runStateMachine.stopRunContainer(workspaceId, instance)
       return { kind: 'done' }
@@ -1194,7 +1262,7 @@ export class RunDispatcher {
     const next = instance.steps[instance.currentStep]
     if (next) this.stepGraph.startStep(next)
     await this.runStateMachine.updateBlockProgress(workspaceId, instance, 'in_progress')
-    await this.executionRepository.upsert(workspaceId, instance)
+    await this.runStateMachine.casPersist(workspaceId, instance)
     await this.runStateMachine.emitInstance(workspaceId, instance)
     return { kind: 'continue' }
   }
@@ -1234,7 +1302,7 @@ export class RunDispatcher {
       this.stepGraph.pauseStepForInput(step)
       instance.status = 'blocked'
       await this.runStateMachine.updateBlockProgress(workspaceId, instance, 'blocked')
-      await this.executionRepository.upsert(workspaceId, instance)
+      await this.runStateMachine.casPersist(workspaceId, instance)
       await this.runStateMachine.emitInstance(workspaceId, instance)
       return { kind: 'awaiting_decision', decisionId: step.decision.id }
     }
@@ -1363,7 +1431,7 @@ export class RunDispatcher {
       this.stepGraph.pauseStepForInput(step)
       instance.status = 'blocked'
       await this.runStateMachine.updateBlockProgress(workspaceId, instance, 'blocked')
-      await this.executionRepository.upsert(workspaceId, instance)
+      await this.runStateMachine.casPersist(workspaceId, instance)
       await this.runStateMachine.emitInstance(workspaceId, instance)
       return { kind: 'awaiting_decision', decisionId: step.approval.id }
     }
@@ -1415,7 +1483,7 @@ export class RunDispatcher {
       // real merge via the step-completion resolver registry (so a trailing
       // post-release-health gate doesn't disable auto-merge). Nothing merge-specific here.
       await this.runStateMachine.finalizeBlock(workspaceId, instance, result.confidence)
-      await this.executionRepository.upsert(workspaceId, instance)
+      await this.runStateMachine.casPersist(workspaceId, instance)
       await this.runStateMachine.emitInstance(workspaceId, instance)
       // The run is finished: reclaim its per-run container now instead of letting it
       // idle out its sleepAfter window (~10 min of billed-but-useless compute). All
@@ -1436,7 +1504,7 @@ export class RunDispatcher {
     } else {
       await this.runStateMachine.updateBlockProgress(workspaceId, instance, 'in_progress')
     }
-    await this.executionRepository.upsert(workspaceId, instance)
+    await this.runStateMachine.casPersist(workspaceId, instance)
     await this.runStateMachine.emitInstance(workspaceId, instance)
     return { kind: 'continue' }
   }
@@ -1549,7 +1617,7 @@ export class RunDispatcher {
       // mid-fan-out resumes at the first un-settled frame rather than re-doing an already-settled
       // one (which, on the synchronous REST path, would re-hit the provider — no idempotency guard
       // there, unlike the deterministic async job ref).
-      await this.executionRepository.upsert(workspaceId, instance)
+      await this.runStateMachine.casPersist(workspaceId, instance)
       return this.advanceDeployerFrames(workspaceId, instance, step, block, isFinalStep, targets)
     }
     // Start provisioning the next frame: a raw-manifest config provisions SYNCHRONOUSLY over REST
@@ -1608,7 +1676,7 @@ export class RunDispatcher {
     // mid-flight). Absent for the undeclared legacy path, which re-resolution handles harmlessly.
     step.deployProvisioning = next.provisioning
     await this.attachEnvironmentProjection(workspaceId, instance.blockId, step, next.frameId)
-    await this.executionRepository.upsert(workspaceId, instance)
+    await this.runStateMachine.casPersist(workspaceId, instance)
     await this.runStateMachine.emitInstance(workspaceId, instance)
     return { kind: 'awaiting_job', jobId: step.jobId, stepIndex: instance.currentStep }
   }
@@ -1735,7 +1803,7 @@ export class RunDispatcher {
     step.deployEnvs = { ...done, [target.frameId]: { status: 'ready', url: handle.url } }
     // Persist this frame's TERMINAL outcome BEFORE provisioning the next frame (see the infraless
     // branch) so a crash/replay resumes at the first un-settled frame, not re-provisioning this one.
-    await this.executionRepository.upsert(workspaceId, instance)
+    await this.runStateMachine.casPersist(workspaceId, instance)
     return this.advanceDeployerFrames(workspaceId, instance, step, block, isFinalStep, targets)
   }
 
@@ -1767,7 +1835,7 @@ export class RunDispatcher {
     }
     // A PEER failure is non-terminal — persist it BEFORE moving to the next frame so a replay
     // doesn't re-attempt this failed peer (same rationale as the ready/infraless settle paths).
-    await this.executionRepository.upsert(workspaceId, instance)
+    await this.runStateMachine.casPersist(workspaceId, instance)
     return this.advanceDeployerFrames(workspaceId, instance, step, block, isFinalStep, targets)
   }
 
@@ -1804,7 +1872,7 @@ export class RunDispatcher {
         changed = true
       }
       if (changed) {
-        await this.executionRepository.upsert(workspaceId, instance)
+        await this.runStateMachine.casPersist(workspaceId, instance)
         await this.runStateMachine.emitInstance(workspaceId, instance)
       }
       return { kind: 'awaiting_job', jobId: step.jobId!, stepIndex: instance.currentStep }
@@ -2074,7 +2142,7 @@ export class RunDispatcher {
     // single-frame deploy that is the own env; for a failed involved-service env it surfaces the
     // peer's error rather than a sibling's healthy env.
     await this.attachEnvironmentProjection(workspaceId, instance.blockId, step, frameId)
-    await this.executionRepository.upsert(workspaceId, instance)
+    await this.runStateMachine.casPersist(workspaceId, instance)
     await this.runStateMachine.emitInstance(workspaceId, instance)
     return {
       kind: 'job_failed',
@@ -2220,7 +2288,7 @@ export class RunDispatcher {
         progress: 1,
       })
     }
-    await this.executionRepository.upsert(workspaceId, instance)
+    await this.runStateMachine.casPersist(workspaceId, instance)
     await this.runStateMachine.emitInstance(workspaceId, instance)
     await this.runStateMachine.stopRunContainer(workspaceId, instance)
     return { kind: 'done' }
@@ -3079,7 +3147,7 @@ export class RunDispatcher {
     if (step.gate.pendingFix && isAsyncAgentExecutor(this.agentExecutor)) {
       const fix = step.gate.pendingFix
       step.gate.pendingFix = null
-      await this.executionRepository.upsert(workspaceId, instance)
+      await this.runStateMachine.casPersist(workspaceId, instance)
       return this.dispatchGateHelper(
         workspaceId,
         instance,
@@ -3126,7 +3194,7 @@ export class RunDispatcher {
     if (probe.status === 'pending') {
       // Keep polling. Persist the head sha + phase so the board can reflect it.
       step.gate.phase = 'checking'
-      await this.executionRepository.upsert(workspaceId, instance)
+      await this.runStateMachine.casPersist(workspaceId, instance)
       await this.runStateMachine.emitInstance(workspaceId, instance)
       return { kind: 'awaiting_gate', stepIndex: instance.currentStep }
     }
@@ -3232,7 +3300,7 @@ export class RunDispatcher {
       // `pendingFix.instructions`), which both arrive here as `failureSummary`.
       lastDispatchedInstructions: failureSummary ?? step.gate?.lastDispatchedInstructions ?? null,
     }
-    await this.executionRepository.upsert(workspaceId, instance)
+    await this.runStateMachine.casPersist(workspaceId, instance)
     await this.runStateMachine.emitInstance(workspaceId, instance)
     return { kind: 'awaiting_job', jobId: step.jobId, stepIndex: instance.currentStep }
   }
@@ -3291,7 +3359,7 @@ export class RunDispatcher {
     if (shouldLoopCoder(state)) {
       this.loopCoderForFollowUps(instance, step)
       await this.runStateMachine.updateBlockProgress(workspaceId, instance, 'in_progress')
-      await this.executionRepository.upsert(workspaceId, instance)
+      await this.runStateMachine.casPersist(workspaceId, instance)
       await this.runStateMachine.emitInstance(workspaceId, instance)
       return { kind: 'continue' }
     }
@@ -3404,11 +3472,9 @@ export class RunDispatcher {
     executionId: string,
     itemId: string,
   ): Promise<FollowUpsStepState> {
-    const { instance, step, index, item } = await this.loadFollowUpItem(
-      workspaceId,
-      executionId,
-      itemId,
-    )
+    // Snapshot read for validation + frame resolution before the non-idempotent ticket
+    // creation; the item's ticket refs are then recorded under CAS in applyFollowUpDecision.
+    const { instance, item } = await this.loadFollowUpItem(workspaceId, executionId, itemId)
     if (item.kind !== 'follow_up') {
       throw new ConflictError('Only follow-up items can be filed as issues')
     }
@@ -3433,12 +3499,16 @@ export class RunDispatcher {
     if (!ticket) {
       throw new ConflictError('No issue tracker is configured for this workspace')
     }
-    item.status = 'filed'
-    item.ticketExternalId = ticket.externalId
-    item.ticketUrl = ticket.url
-    item.updatedAt = this.clock.now()
-    await this.driveFollowUpsAfterDecision(workspaceId, instance, step, index)
-    return step.followUps!
+    return this.applyFollowUpDecision(workspaceId, executionId, itemId, (target) => {
+      // Re-validated on the fresh snapshot inside the CAS (the ticket was already created above).
+      if (target.kind !== 'follow_up') {
+        throw new ConflictError('Only follow-up items can be filed as issues')
+      }
+      target.status = 'filed'
+      target.ticketExternalId = ticket.externalId
+      target.ticketUrl = ticket.url
+      target.updatedAt = this.clock.now()
+    })
   }
 
   /** Queue a `follow_up` item to send back to the Coder on its next pass. */
@@ -3447,19 +3517,14 @@ export class RunDispatcher {
     executionId: string,
     itemId: string,
   ): Promise<FollowUpsStepState> {
-    const { instance, step, index, item } = await this.loadFollowUpItem(
-      workspaceId,
-      executionId,
-      itemId,
-    )
-    if (item.kind !== 'follow_up') {
-      throw new ConflictError('Only follow-up items can be sent back to the Coder')
-    }
-    item.status = 'queued'
-    item.sentToCoder = false
-    item.updatedAt = this.clock.now()
-    await this.driveFollowUpsAfterDecision(workspaceId, instance, step, index)
-    return step.followUps!
+    return this.applyFollowUpDecision(workspaceId, executionId, itemId, (item) => {
+      if (item.kind !== 'follow_up') {
+        throw new ConflictError('Only follow-up items can be sent back to the Coder')
+      }
+      item.status = 'queued'
+      item.sentToCoder = false
+      item.updatedAt = this.clock.now()
+    })
   }
 
   /** Answer a `question` item; the answer is folded into the Coder's next pass. */
@@ -3469,20 +3534,15 @@ export class RunDispatcher {
     itemId: string,
     answer: string,
   ): Promise<FollowUpsStepState> {
-    const { instance, step, index, item } = await this.loadFollowUpItem(
-      workspaceId,
-      executionId,
-      itemId,
-    )
-    if (item.kind !== 'question') {
-      throw new ConflictError('Only question items can be answered')
-    }
-    item.status = 'answered'
-    item.answer = answer
-    item.sentToCoder = false
-    item.updatedAt = this.clock.now()
-    await this.driveFollowUpsAfterDecision(workspaceId, instance, step, index)
-    return step.followUps!
+    return this.applyFollowUpDecision(workspaceId, executionId, itemId, (item) => {
+      if (item.kind !== 'question') {
+        throw new ConflictError('Only question items can be answered')
+      }
+      item.status = 'answered'
+      item.answer = answer
+      item.sentToCoder = false
+      item.updatedAt = this.clock.now()
+    })
   }
 
   /** Dismiss a follow-up / question item without acting on it. */
@@ -3491,68 +3551,96 @@ export class RunDispatcher {
     executionId: string,
     itemId: string,
   ): Promise<FollowUpsStepState> {
-    const { instance, step, index, item } = await this.loadFollowUpItem(
-      workspaceId,
-      executionId,
-      itemId,
-    )
-    item.status = 'dismissed'
-    item.updatedAt = this.clock.now()
-    await this.driveFollowUpsAfterDecision(workspaceId, instance, step, index)
-    return step.followUps!
+    return this.applyFollowUpDecision(workspaceId, executionId, itemId, (item) => {
+      item.status = 'dismissed'
+      item.updatedAt = this.clock.now()
+    })
   }
 
   /**
-   * Persist an item decision and, when the run is PARKED on this step's follow-up gate and
-   * every item is now decided, drive it forward: loop the Coder for the queued / answered
-   * items (within the budget), else advance past the gate. When the run is not parked (the
-   * Coder is still running, or it already moved on) this only persists + emits the change.
+   * Apply a human follow-up item decision and, when the run is PARKED on this step's follow-up
+   * gate with every item now decided, drive it forward — loop the Coder for the queued/answered
+   * items, hand off to a co-located approval gate, or advance past the gate — all under
+   * OPTIMISTIC CONCURRENCY. A follow-up decision can race the driver's running-poll fold (which
+   * appends newly-streamed items) or another decision on a sibling item, so it RE-READS +
+   * RE-APPLIES on a lost CAS race instead of clobbering — the human-action dual of the driver's
+   * abort-and-redrive (race-audit 2.2). The item mutation + the in-memory gate transition run
+   * INSIDE the CAS callback (idempotent, re-runnable on reload); the non-idempotent side effects
+   * (notifications, `signalDecision`, emit) run once AFTER, on the winning snapshot. `decide`
+   * validates + mutates the item, throwing a `ConflictError`/`NotFoundError` that propagates
+   * immediately (a domain error is not retried).
    */
-  private async driveFollowUpsAfterDecision(
+  private async applyFollowUpDecision(
     workspaceId: string,
-    instance: ExecutionInstance,
-    step: PipelineStep,
-    index: number,
-  ): Promise<void> {
-    const parkedHere =
-      instance.status === 'blocked' &&
-      step.approval?.status === 'pending' &&
-      instance.currentStep === index
-    if (!parkedHere || hasPendingFollowUps(step.followUps!)) {
-      // Still collecting decisions (or the run isn't parked on this gate): just record it.
-      await this.executionRepository.upsert(workspaceId, instance)
-      await this.runStateMachine.emitInstance(workspaceId, instance)
-      return
+    executionId: string,
+    itemId: string,
+    decide: (item: FollowUpItem) => void,
+  ): Promise<FollowUpsStepState> {
+    // Captured inside the (re-runnable) callback for the last winning attempt; the
+    // non-idempotent side effects below act on them.
+    let outcome: 'record' | 'loop' | 'handoff' | 'advance' = 'record'
+    let index = -1
+    let loopDecisionId: string | undefined
+    const persisted = await this.runStateMachine.mutateInstance(
+      workspaceId,
+      executionId,
+      (fresh) => {
+        outcome = 'record'
+        loopDecisionId = undefined
+        index = fresh.steps.findIndex(
+          (s) => s.followUps?.enabled && s.followUps.items.some((i) => i.id === itemId),
+        )
+        if (index < 0) throw new NotFoundError('Follow-up item', itemId)
+        const step = fresh.steps[index]!
+        decide(step.followUps!.items.find((i) => i.id === itemId)!)
+
+        const parkedHere =
+          fresh.status === 'blocked' &&
+          step.approval?.status === 'pending' &&
+          fresh.currentStep === index
+        // Still collecting decisions (or the run isn't parked on this gate): only record it.
+        if (!parkedHere || hasPendingFollowUps(step.followUps!)) return
+        // Every item decided and the run is parked here: loop the Coder for the send-back items,
+        // hand off to a co-located approval gate, or advance past the gate.
+        if (shouldLoopCoder(step.followUps!)) {
+          loopDecisionId = step.approval!.id
+          this.loopCoderForFollowUps(fresh, step)
+          outcome = 'loop'
+          return
+        }
+        const isFinalStep = index === fresh.steps.length - 1
+        if (step.requiresApproval && !isFinalStep && step.approval?.status === 'pending') {
+          // The follow-up park reused `step.approval`; advancing here would silently SKIP the
+          // approval. Refresh the proposal and hand off to the standard approval gate (the
+          // follow-up card is cleared + the "waiting for input" card re-raised below), preserving
+          // the follow-up-before-approval ordering recordStepResult established across the park.
+          step.approval = { ...step.approval, proposal: step.output ?? '' }
+          outcome = 'handoff'
+          return
+        }
+        this.runStateMachine.advanceRunPastGate(fresh, index)
+        outcome = 'advance'
+      },
+    )
+    // Non-idempotent side effects on the winning snapshot (the CAS write is the source of truth,
+    // so nothing re-persists here). The settled paths first clear the follow-up waiting card.
+    if (outcome === 'record') {
+      await this.runStateMachine.emitInstance(workspaceId, persisted)
+    } else {
+      await this.runStateMachine.clearWaitingNotification(workspaceId, persisted)
+      if (outcome === 'loop') {
+        await this.runStateMachine.updateBlockProgress(workspaceId, persisted, 'in_progress')
+        await this.workRunner.signalDecision(workspaceId, persisted.id, loopDecisionId!, 'approved')
+        await this.runStateMachine.emitInstance(workspaceId, persisted)
+      } else if (outcome === 'handoff') {
+        await this.runStateMachine.ensureWaitingNotification(workspaceId, persisted)
+        await this.runStateMachine.emitInstance(workspaceId, persisted)
+      } else {
+        // advance: block writes + `signalDecision('approved')` + emit — the approveStep template.
+        await this.runStateMachine.settleAdvancedGate(workspaceId, persisted, index)
+      }
     }
-    // Every item is decided and the run is parked here: clear the waiting card and either
-    // loop the Coder for the send-back items or advance past the gate.
-    await this.runStateMachine.clearWaitingNotification(workspaceId, instance)
-    if (shouldLoopCoder(step.followUps!)) {
-      const decisionId = step.approval!.id
-      this.loopCoderForFollowUps(instance, step)
-      await this.runStateMachine.updateBlockProgress(workspaceId, instance, 'in_progress')
-      await this.executionRepository.upsert(workspaceId, instance)
-      await this.workRunner.signalDecision(workspaceId, instance.id, decisionId, 'approved')
-      await this.runStateMachine.emitInstance(workspaceId, instance)
-      return
-    }
-    // The follow-up gate is settled and we won't loop. If this step ALSO carries a human
-    // approval gate, hand off to it now instead of advancing — the follow-up park reused
-    // `step.approval`, so advancing here would silently SKIP the approval. Keep the same
-    // parked decision id (the durable driver is already waiting on it), refresh the proposal
-    // to the step output, and re-raise the standard "waiting for input" card (we just cleared
-    // the follow-up one). The human then resolves it through the normal approve / request-
-    // changes path. The follow-up gate already ran BEFORE the approval gate in
-    // recordStepResult, so this preserves that exact ordering across the park.
-    const isFinalStep = index === instance.steps.length - 1
-    if (step.requiresApproval && !isFinalStep && step.approval?.status === 'pending') {
-      step.approval = { ...step.approval, proposal: step.output ?? '' }
-      await this.executionRepository.upsert(workspaceId, instance)
-      await this.runStateMachine.ensureWaitingNotification(workspaceId, instance)
-      await this.runStateMachine.emitInstance(workspaceId, instance)
-      return
-    }
-    await this.runStateMachine.advancePastResolvedGate(workspaceId, instance, index)
+    return persisted.steps[index]!.followUps!
   }
 
   /** Provision inputs (`{{input.*}}`) derived from the block under deployment. */

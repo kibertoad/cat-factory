@@ -110,6 +110,22 @@ Fix shape: a partial unique index on live runs (`WHERE status IN ('running','pau
 or an atomic delete+insert (D1 `batch()` / Postgres transaction), mirrored on both
 runtimes with a conformance assertion.
 
+> **Status: ADDRESSED (driver half + the human-action handlers).** The single-action human
+> handlers (`resolveDecision`/`approveStep`/`requestStepChanges`/`rejectStep`/`requestHumanReviewFix`/
+> `resumePaused`) already route through `mutateInstance`. The **durable driver** now does too: every
+> `RunDispatcher` blind `upsert` (+ the two `ExecutionService.stepInstance` writes) goes through a
+> new `RunStateMachine.casPersist` (a `compareAndSwap` that throws the internal `RunContendedError`
+> on a lost race), caught at the four driver entry points (`advanceInstance` / `pollAgentJob` /
+> `pollGate` / `resolveGatePollExhaustion`) and turned into a `{ kind: 'continue' }` re-drive on
+> FRESH state — so a concurrent human write survives and a `cancel`/`stop`-deleted run is never
+> resurrected (`compareAndSwap` never inserts). The `pollAgentJob` running-fold uses `mutateInstance`
+> (its streamed follow-ups are drain-on-read, so a re-drive would lose them), and `RunDispatcher`'s
+> own follow-up human actions (`driveFollowUpsAfterDecision`) moved to `mutateInstance`. Cross-runtime
+> conformance asserts the driver can't clobber/resurrect. **Still open:** the gate-window CONTROLLER
+> writes (`ReviewGateController`/`TesterController`/`CompanionController`/`HumanTestController`/
+> `InterviewGateController`/`VisualConfirmationController` still call `persistInstance`) — the
+> controller half of this finding, a distinct later slice.
+
 ### 2.2 The optimistic-concurrency (rev/CAS) migration is one-sided: blind whole-row upserts clobber CAS-protected writes — CONFIRMED
 
 The engine has a real OCC design (`ExecutionRepository.compareAndSwap`,
@@ -146,6 +162,14 @@ Fix shape: route the remaining human actions through `mutateInstance`, and make 
 driver's post-poll writes CAS-with-retry (re-apply the mechanical mutation on fresh
 state) or narrow them to field-level patches (the bootstrap-job `json_set` column
 patches are the in-repo model).
+
+> **Status: ADDRESSED.** The driver's writes are now `compareAndSwap` (never inserts), so an
+> in-flight `pollAgentJob`/`pollGate` that loaded a pre-cancel snapshot can no longer re-insert the
+> deleted row — its stale write is refused and the run stays cancelled (see 2.2). And `failRun`'s
+> terminal guard now treats `done` as terminal too, with `markFailed` SQL-guarded (`AND status NOT
+IN ('done','failed')`) on BOTH runtimes, so a `stopRun` racing a run that just merged can't
+> re-mark it `failed`/`blocked`. Cross-runtime conformance asserts CAS-never-resurrects + the
+> markFailed done-guard.
 
 ### 2.3 `cancel()`/`stopRun()` vs an in-flight driver iteration: run resurrection and terminal-state clobber — CONFIRMED mechanism (Node; narrower on Cloudflare)
 
@@ -459,17 +483,16 @@ already-shipped `rev`; (b) generation-check `workspace.refresh()`/`hydrate` (fix
 
 ## 7. Suggested fix order
 
-1. **Spend-resume on Cloudflare** (1.1) — a broken feature that destroys runs; fresh
-   instance id on resume, plus the same fix for the BootstrapWorkflow re-drive intent (1.2).
-2. **One live run per block at the DB** (2.1) — a partial unique index or atomic
-   delete+insert on both runtimes + a conformance assertion; collapses the amplifiers in
-   3.1/3.3 and the recurring double-fire.
-3. **Finish the OCC migration** (2.2/2.3) — route `approveStep`,
-   `resolveCompanionExceeded`, and the gate-window controllers through `mutateInstance`;
-   make the driver's post-poll writes CAS-or-merge so Stop/cancel can't be undone by an
-   in-flight poll.
-4. **CAS the notification status flip before the side effect** (3.1) + conditional
-   `UPDATE … WHERE status='open'` in the escalation sweep (3.2).
+1. ~~**Spend-resume on Cloudflare** (1.1)~~ + ~~BootstrapWorkflow re-drive (1.2)~~ — **DONE.**
+2. ~~**One live run per block at the DB** (2.1)~~ — **DONE** (partial unique index + `insertLive`).
+3. **Finish the OCC migration** (2.2/2.3) — **driver half DONE**: `approveStep`/
+   `resolveCompanionExceeded` route through `mutateInstance`, and the durable driver's post-poll
+   writes are now CAS-or-re-drive (`casPersist` + `RunContendedError` → `continue`), so Stop/cancel
+   can't be undone by an in-flight poll and `failRun`/`markFailed` won't re-fail a merged run.
+   **Remaining:** route the gate-window CONTROLLERS (`ReviewGateController`/`TesterController`/…)
+   through `mutateInstance` (the controller half).
+4. **CAS the notification status flip before the side effect** (3.1) — **still open**; the
+   escalation-sweep half (3.2) is **DONE** (`escalateStaleOpen` conditional update).
 5. **rev/CAS or item-targeted writes for the review repositories** (2.5).
 6. **Frontend**: `rev`-guard `execution.hydrate`, generation-check `workspace.refresh`,
    replicate the bootstrap guard onto env-config-repair (4.1–4.5).

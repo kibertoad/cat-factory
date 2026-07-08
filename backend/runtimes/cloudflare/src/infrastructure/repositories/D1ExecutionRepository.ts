@@ -240,11 +240,17 @@ export class D1ExecutionRepository implements ExecutionRepository {
   }
 
   async markFailed(workspaceId: string, id: string, failure: AgentFailure): Promise<void> {
+    // Guard against clobbering a row that already reached a terminal state: a `stopRun`
+    // racing a run that just merged (`done`) or already failed must not overwrite it. This
+    // is the authoritative first-write-wins / no-re-fail-a-merged-run check — `failRun`'s
+    // in-memory guard reads a snapshot that can be stale by the time this write lands
+    // (race-audit 2.3).
     await this.db
       .prepare(
         `UPDATE agent_runs
            SET status = 'failed', error = ?, failure = ?, updated_at = ?
-         WHERE workspace_id = ? AND id = ? AND kind = 'execution'`,
+         WHERE workspace_id = ? AND id = ? AND kind = 'execution'
+           AND status NOT IN ('done', 'failed')`,
       )
       .bind(failure.message, JSON.stringify(failure), this.clock.now(), workspaceId, id)
       .run()

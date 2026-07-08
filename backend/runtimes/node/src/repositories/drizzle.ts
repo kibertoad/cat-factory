@@ -754,6 +754,11 @@ class DrizzleExecutionRepository implements ExecutionRepository {
   }
 
   async markFailed(workspaceId: string, id: string, failure: AgentFailure): Promise<void> {
+    // Guard against clobbering a row that already reached a terminal state: a `stopRun`
+    // racing a run that just merged (`done`) or already failed must not overwrite it. This
+    // is the authoritative first-write-wins / no-re-fail-a-merged-run check — `failRun`'s
+    // in-memory guard reads a snapshot that can be stale by the time this write lands
+    // (race-audit 2.3). Mirrors the D1 `AND status NOT IN ('done','failed')`.
     await this.db
       .update(agentRuns)
       .set({
@@ -762,7 +767,14 @@ class DrizzleExecutionRepository implements ExecutionRepository {
         failure: JSON.stringify(failure),
         updated_at: this.clock.now(),
       })
-      .where(and(eq(agentRuns.workspace_id, workspaceId), eq(agentRuns.id, id), this.isExecution))
+      .where(
+        and(
+          eq(agentRuns.workspace_id, workspaceId),
+          eq(agentRuns.id, id),
+          this.isExecution,
+          notInArray(agentRuns.status, ['done', 'failed']),
+        ),
+      )
   }
 }
 
