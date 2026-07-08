@@ -56,6 +56,8 @@ import {
   INCIDENT_ENRICHMENT_CIPHER_INFO,
   AccountSettingsService,
   ACCOUNT_SETTINGS_CIPHER_INFO,
+  TestSecretsService,
+  TEST_SECRETS_CIPHER_INFO,
   type DeployJobClient,
 } from '@cat-factory/integrations'
 import {
@@ -174,7 +176,12 @@ import {
   registerGitLab,
   StaticGitLabTokenSource,
 } from '@cat-factory/gitlab'
-import type { AppCaches, PreviewTransport, VcsIdentityRegistry } from '@cat-factory/kernel'
+import type {
+  AppCaches,
+  PreviewTransport,
+  TestSecretEntry,
+  VcsIdentityRegistry,
+} from '@cat-factory/kernel'
 import type { PgBoss } from 'pg-boss'
 import { loadNodeConfig } from './config.js'
 import type { DrizzleDb } from './db/client.js'
@@ -880,6 +887,7 @@ function buildNodeContainerExecutor(
   resolveWebSearchAvailability?: (workspaceId: string) => Promise<WebSearchAvailability>,
   resolveRepoOrigin?: ResolveRepoOrigin,
   resolvePackageRegistries?: (workspaceId: string) => Promise<JobPackageRegistrySpec[]>,
+  resolveTestSecrets?: (workspaceId: string, blockId: string) => Promise<TestSecretEntry[]>,
   recordHarnessCalls?: (input: HarnessCallsRecordInput) => Promise<void>,
 ): AgentExecutor | null {
   // The harness reaches models only through this service's LLM proxy; `PUBLIC_URL`
@@ -985,6 +993,9 @@ function buildNodeContainerExecutor(
     // Decrypt the workspace's private-registry entries onto the job body (rendered by
     // the harness into ~/.npmrc), so private dependencies resolve on install.
     ...(resolvePackageRegistries ? { resolvePackageRegistries } : {}),
+    // Decrypt the service frame's SENSITIVE test credentials onto the tester job body (out of
+    // band — injected as container env vars by the harness, never in the prompt/telemetry).
+    ...(resolveTestSecrets ? { resolveTestSecrets } : {}),
     githubApiBase: config.github.apiBase,
     // Resolve the clone URL + provider per repo. The local GitLab facade injects a GitLab
     // origin so containers clone gitlab.com (or a self-managed host) and open MRs; absent ⇒
@@ -1872,6 +1883,29 @@ export function buildNodeContainer(options: NodeContainerOptions): ServerContain
           workspaceId,
         )
     : undefined
+  // Sensitive per-service test credentials (sealed): the service backs the CRUD controller, the
+  // engine's prompt refs (via `resolveTestSecretRefs`) and the executor's out-of-band value
+  // injection (via `resolveTestSecrets`). Guarded by ENCRYPTION_KEY like the other sealed stores.
+  const testSecretsEncryptionKey = env.ENCRYPTION_KEY?.trim()
+  const testSecretsService = testSecretsEncryptionKey
+    ? new TestSecretsService({
+        testSecretsRepository: repos.testSecretsRepository,
+        secretCipher: new WebCryptoSecretCipher({
+          masterKeyBase64: testSecretsEncryptionKey,
+          info: TEST_SECRETS_CIPHER_INFO,
+        }),
+        blockRepository: repos.blockRepository,
+        clock,
+      })
+    : undefined
+  const resolveTestSecrets = testSecretsService
+    ? (workspaceId: string, blockId: string) =>
+        testSecretsService.resolveValuesForBlock(workspaceId, blockId)
+    : undefined
+  const resolveTestSecretRefs = testSecretsService
+    ? (workspaceId: string, blockId: string) =>
+        testSecretsService.resolveRefsForBlock(workspaceId, blockId)
+    : undefined
   const container = buildNodeContainerExecutor(
     env,
     config,
@@ -1890,6 +1924,7 @@ export function buildNodeContainer(options: NodeContainerOptions): ServerContain
     resolveWebSearchAvailability,
     options.resolveRepoOrigin,
     resolvePackageRegistries,
+    resolveTestSecrets,
     recordHarnessCalls,
   )
 
@@ -2335,6 +2370,9 @@ export function buildNodeContainer(options: NodeContainerOptions): ServerContain
     ...releaseHealthDeps,
     ...incidentEnrichmentDeps,
     ...packageRegistryDeps,
+    // Fold the service frame's SENSITIVE test-credential refs (key + description, never values)
+    // into the tester prompt. Present when ENCRYPTION_KEY is set; absent ⇒ no advertised secrets.
+    ...(resolveTestSecretRefs ? { resolveTestSecretRefs } : {}),
     // App-owned backend registries (kind → provider) the connection services resolve through.
     environmentBackendRegistry,
     runnerBackendRegistry,
@@ -2778,6 +2816,9 @@ export function buildNodeContainer(options: NodeContainerOptions): ServerContain
     // `/auth/pat`, held to the server's login/org/domain allowlist. Local mode overrides this
     // (via its container spread) with a configured-token, allowlist-exempt registry.
     vcsIdentity: buildNodeVcsIdentityRegistry(config),
+    // The sensitive per-service test-credential store the shared test-secrets controller reads;
+    // present when the shared ENCRYPTION_KEY is configured.
+    ...(testSecretsService ? { testSecrets: testSecretsService } : {}),
     // The vendor-credential (subscription token pool) service the shared controller
     // reads; present when the shared ENCRYPTION_KEY is configured.
     subscriptions,

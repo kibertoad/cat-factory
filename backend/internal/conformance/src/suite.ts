@@ -3896,6 +3896,79 @@ export function defineIntegrationConformance(harness: ConformanceHarness): void 
       })
     })
 
+    describe('sensitive per-service test credentials (sealed)', () => {
+      it('seals values, lists redacted refs, and removes — identically per store', async () => {
+        const app = harness.makeApp()
+        const { workspace } = await app.createWorkspace({ seed: true })
+        // Key by a demo-board block (the inspector edits a service frame; CRUD is exact-keyed
+        // by block id, so any seeded block id exercises the same store round-trip).
+        const base = `/workspaces/${workspace.id}/services/blk_auth/test-secrets`
+
+        const empty = await app.call<{ blockId: string; entries: unknown[] }>('GET', base)
+        // Facades without ENCRYPTION_KEY don't wire the store; nothing to assert there.
+        if (empty.status === 503) return
+        expect(empty.status).toBe(200)
+        expect(empty.body.entries).toEqual([])
+
+        // Seal two secrets. The view is REDACTED: key + description only — the VALUE must
+        // never appear on the wire (it is sealed at rest and delivered out of band).
+        const set = await app.call<{
+          blockId: string
+          entries: { key: string; description: string }[]
+        }>('PUT', base, {
+          entries: [
+            {
+              key: 'STRIPE_API_KEY',
+              description: 'Stripe test-mode secret key',
+              value: 'sk_test_SECRET_VALUE_1',
+            },
+            {
+              key: 'SENDGRID_TOKEN',
+              description: 'SendGrid sandbox token',
+              value: 'SG.SECRET_VALUE_2',
+            },
+          ],
+        })
+        expect(set.status).toBe(200)
+        expect(set.body.entries.map((e) => e.key)).toEqual(['STRIPE_API_KEY', 'SENDGRID_TOKEN'])
+        expect(JSON.stringify(set.body)).not.toContain('sk_test_SECRET_VALUE_1')
+        expect(JSON.stringify(set.body)).not.toContain('SG.SECRET_VALUE_2')
+
+        const listed = await app.call<{ entries: { key: string; description: string }[] }>(
+          'GET',
+          base,
+        )
+        expect(listed.status).toBe(200)
+        expect(listed.body.entries).toEqual([
+          { key: 'STRIPE_API_KEY', description: 'Stripe test-mode secret key' },
+          { key: 'SENDGRID_TOKEN', description: 'SendGrid sandbox token' },
+        ])
+        expect(JSON.stringify(listed.body)).not.toContain('SECRET_VALUE')
+
+        // A duplicate key is rejected at the write boundary (keys are unique per service).
+        const dup = await app.call('PUT', base, {
+          entries: [
+            { key: 'STRIPE_API_KEY', description: 'a', value: 'x1' },
+            { key: 'STRIPE_API_KEY', description: 'b', value: 'x2' },
+          ],
+        })
+        expect(dup.status).toBeGreaterThanOrEqual(400)
+
+        // A non-env-var key is rejected too.
+        const badKey = await app.call('PUT', base, {
+          entries: [{ key: '1-bad key', description: 'nope', value: 'x' }],
+        })
+        expect(badKey.status).toBeGreaterThanOrEqual(400)
+
+        // Replacing with an empty set removes the row; the view is empty again.
+        const cleared = await app.call<{ entries: unknown[] }>('PUT', base, { entries: [] })
+        expect(cleared.status).toBe(200)
+        expect(cleared.body.entries).toEqual([])
+        expect((await app.call('DELETE', base)).status).toBe(204)
+        expect((await app.call<{ entries: unknown[] }>('GET', base)).body.entries).toEqual([])
+      })
+    })
+
     describe('repo bootstrap', () => {
       it('round-trips reference architectures', async () => {
         const { call, createWorkspace } = harness.makeApp()

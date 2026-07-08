@@ -182,6 +182,11 @@ export type {
   ValidateEnvironmentRepoInput,
   BootstrapEnvironmentRepoInput,
   BootstrapRepoResult,
+  // Sensitive per-service test credentials (sealed; delivered out-of-band to the Tester).
+  TestSecretRef,
+  TestSecretEntry,
+  ServiceTestSecretsView,
+  UpsertServiceTestSecretsInput,
   // Unified provisioning event-log shapes.
   ProvisioningSubsystem,
   ProvisioningOperation,

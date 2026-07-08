@@ -71,6 +71,13 @@ export interface KindBodyParts {
    * same PR shape as the primary. Present only for the implementer on a task whose involved
    * connected services resolve to DISTINCT repos; the harness ignores it for other kinds.
    */
+  /**
+   * SENSITIVE test credentials for the tester kinds, as `{ key, value }` env pairs the harness
+   * injects into the container environment (out of band). A dedicated top-level body field the
+   * agent-context snapshot allow-list omits — the value never reaches a prompt or the telemetry
+   * snapshot. Present only for the tester kinds when the service frame has secrets configured.
+   */
+  testSecretEnv?: { key: string; value: string }[]
   peerRepos?: { repo: Record<string, unknown>; frameId?: string }[]
   /**
    * The backend-rendered "Multi-repo workspace" system-prompt section (which repo is primary,
@@ -749,7 +756,14 @@ export function buildMigratedBuiltInBody(
         roleSystemPrompt,
         registry,
       )
-      return { kind: built.kind, body: { ...built.body, infra: testerInfraSpec(context) } }
+      return {
+        kind: built.kind,
+        body: {
+          ...built.body,
+          infra: testerInfraSpec(context),
+          ...(parts.testSecretEnv?.length ? { testSecrets: parts.testSecretEnv } : {}),
+        },
+      }
     }
     // The UI tester is the Tester's browser-driven sibling: same read-only structured
     // explore + infra stand-up, but it drives Playwright (supplied by the UI-tester
@@ -768,7 +782,14 @@ export function buildMigratedBuiltInBody(
         roleSystemPrompt,
         registry,
       )
-      return { kind: built.kind, body: { ...built.body, infra: testerInfraSpec(context) } }
+      return {
+        kind: built.kind,
+        body: {
+          ...built.body,
+          infra: testerInfraSpec(context),
+          ...(parts.testSecretEnv?.length ? { testSecrets: parts.testSecretEnv } : {}),
+        },
+      }
     }
   }
   return undefined

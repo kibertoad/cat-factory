@@ -16,6 +16,7 @@ import {
   type RunnerDispatchOptions,
   type RunnerJobRef,
   type SubscriptionVendor,
+  type TestSecretEntry,
   type WebSearchAvailability,
 } from '@cat-factory/kernel'
 import {
@@ -43,7 +44,11 @@ import {
   renderMultiRepoWorkspaceSection,
   renderReferenceReposSection,
 } from './jobBody.js'
-import { UI_TESTER_AGENT_KIND, type HarnessCallsRecordInput } from '@cat-factory/orchestration'
+import {
+  UI_TESTER_AGENT_KIND,
+  isTesterKind,
+  type HarnessCallsRecordInput,
+} from '@cat-factory/orchestration'
 import type { ContainerSessionService } from '../containers/ContainerSessionService.js'
 import { RunnerJobClient, type ResolveRunnerTransport } from './RunnerJobClient.js'
 import type { RepoCheckout, ResolveRepoTargets } from './resolveRepoTarget.js'
@@ -542,6 +547,15 @@ export interface ContainerAgentExecutorDependencies {
    */
   resolvePackageRegistries?: (workspaceId: string) => Promise<JobPackageRegistrySpec[]>
   /**
+   * Resolve (DECRYPT) the sensitive test credentials configured for a run block's service frame
+   * — the values the harness injects into the Tester container's environment OUT OF BAND. Called
+   * only for the tester kinds. Wired from the facade's `TestSecretsService`; absent ⇒ no secrets
+   * are injected. The returned values are put on a dedicated top-level body field (like
+   * {@link JobPackageRegistrySpec}), which the agent-context snapshot allow-list OMITS — so a
+   * value NEVER reaches a prompt or the telemetry snapshot, only the container environment.
+   */
+  resolveTestSecrets?: (workspaceId: string, blockId: string) => Promise<TestSecretEntry[]>
+  /**
    * Optional observability trace sink (e.g. Langfuse). When wired, each poll forwards
    * the container's drained tool spans as child spans under the run's trace — the same
    * sink the LLM proxy fans generations out to, so the trace tree is complete.
@@ -1009,6 +1023,18 @@ export class ContainerAgentExecutor implements AsyncAgentExecutor {
     // Private-registry auth for the checkout's installs. Resolved per dispatch (like
     // ghToken) and spread into `common`, so every kind with a checkout gets it.
     const packageRegistries = (await this.deps.resolvePackageRegistries?.(workspaceId)) ?? []
+    // Sensitive test credentials for the tester kinds ONLY: decrypt the service frame's sealed
+    // secrets and carry them as `{ key, value }` env pairs on a dedicated top-level body field
+    // (like `packageRegistries`), which the agent-context snapshot allow-list omits. The harness
+    // injects each as an env var; the prompt only advertises the keys+descriptions (from
+    // `context.testSecrets`). Values NEVER reach a prompt or the telemetry snapshot.
+    const testSecretEnv =
+      isTesterKind(context.agentKind) && this.deps.resolveTestSecrets
+        ? (await this.deps.resolveTestSecrets(workspaceId, blockId)).map((e) => ({
+            key: e.key,
+            value: e.value,
+          }))
+        : []
     // Resolve the repo origin once so both the harness `RepoSpec` and the diagnostics repo
     // summary (returned below) agree on the VCS provider.
     const origin = (this.deps.resolveRepoOrigin ?? githubRepoOrigin)(repo)
@@ -1145,6 +1171,7 @@ export class ContainerAgentExecutor implements AsyncAgentExecutor {
         repo,
         workBranch,
         workBranchReady,
+        ...(testSecretEnv.length ? { testSecretEnv } : {}),
         ...(peerRepos ? { peerRepos } : {}),
         ...(multiRepoSection ? { multiRepoSection } : {}),
         ...(referenceRepos ? { referenceRepos } : {}),

@@ -420,6 +420,7 @@ export type {
   IncidentEnrichmentConnectionRecord,
   IncidentEnrichmentConnectionRepository,
 } from './incident-enrichment-repositories.js'
+export type { TestSecretRecord, TestSecretsRepository } from './test-secrets-repositories.js'
 export type {
   PackageRegistryConnectionRecord,
   PackageRegistryConnectionRepository,

@@ -407,6 +407,49 @@ export function parsePackageRegistries(
   return entries
 }
 
+/**
+ * One sensitive test credential the tester receives: an env-var name + its (secret) value.
+ * The backend seals these at rest and decrypts them at dispatch; the harness injects each as an
+ * environment variable the tester's shell can read (out of band — the value is NEVER in the
+ * prompt/telemetry). See {@link parseTestSecrets}.
+ */
+export interface TestSecretSpec {
+  key: string
+  value: string
+}
+
+/** A valid POSIX shell variable name (letters, digits, underscore; not starting with a digit). */
+const ENV_VAR_NAME_PATTERN = /^[A-Za-z_][A-Za-z0-9_]*$/
+
+/**
+ * Validate the optional tester `testSecrets` list — `{ key, value }` env pairs the harness
+ * injects into the run environment. Keys must be valid env-var names; toolchain-critical /
+ * reserved names ({@link isReservedEnvName}) and duplicates are dropped so a drifted body can't
+ * clobber PATH/NODE_OPTIONS/etc. Absent ⇒ no secrets injected.
+ */
+export function parseTestSecrets(value: unknown): TestSecretSpec[] {
+  if (value === undefined || value === null) return []
+  if (!Array.isArray(value)) throw new Error("Invalid job: 'testSecrets' must be an array")
+  const entries: TestSecretSpec[] = []
+  const seen = new Set<string>()
+  for (const [i, raw] of value.entries()) {
+    if (typeof raw !== 'object' || raw === null) {
+      throw new Error(`Invalid job: 'testSecrets[${i}]' must be an object`)
+    }
+    const entry = raw as Record<string, unknown>
+    const key = str(entry.key, `testSecrets[${i}].key`).trim()
+    if (!ENV_VAR_NAME_PATTERN.test(key)) {
+      throw new Error(
+        `Invalid job: 'testSecrets[${i}].key' must be a valid environment variable name`,
+      )
+    }
+    if (isReservedEnvName(key) || seen.has(key)) continue
+    seen.add(key)
+    entries.push({ key, value: str(entry.value, `testSecrets[${i}].value`) })
+  }
+  return entries
+}
+
 // ---- Shared repo-bootstrap target ---------------------------------------
 
 /** The new repository a repo-bootstrap run force-pushes its fresh history to. */
@@ -602,6 +645,13 @@ export interface AgentJob extends HarnessAuthFields {
    * job on a reused container is removed.
    */
   packageRegistries?: PackageRegistrySpec[]
+  /**
+   * Tester kinds only: sensitive test credentials injected into the run's ENVIRONMENT (out of
+   * band) as `{ key, value }` env pairs, so the tester's shell can read `$KEY` without the value
+   * ever appearing in the prompt or telemetry. Reserved/toolchain env names are dropped at parse.
+   * Absent ⇒ no secrets injected.
+   */
+  testSecrets?: TestSecretSpec[]
   /**
    * Explore mode: stand the service's dependencies up before the agent runs (the
    * tester). Brings the docker-compose infra up on localhost for the duration of the
@@ -1042,6 +1092,7 @@ export function parseAgentJob(input: unknown): AgentJob {
   const bootstrap = parseAgentBootstrapSpec(o.bootstrap)
   const contextFiles = parseContextFiles(o.contextFiles)
   const packageRegistries = parsePackageRegistries(o.packageRegistries)
+  const testSecrets = parseTestSecrets(o.testSecrets)
   const guardLimits = parseGuardLimits(o.guardLimits)
   const job: AgentJob = {
     jobId: str(o.jobId, 'jobId'),
@@ -1062,6 +1113,7 @@ export function parseAgentJob(input: unknown): AgentJob {
     ...(output ? { output } : {}),
     ...(contextFiles.length ? { contextFiles } : {}),
     ...(packageRegistries.length ? { packageRegistries } : {}),
+    ...(testSecrets.length ? { testSecrets } : {}),
     ...(infra ? { infra } : {}),
     ...(typeof o.newBranch === 'string' && o.newBranch ? { newBranch: o.newBranch } : {}),
     ...(typeof o.pushBranch === 'string' && o.pushBranch ? { pushBranch: o.pushBranch } : {}),

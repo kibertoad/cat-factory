@@ -281,6 +281,28 @@ export function involvedServicesSection(context: AgentRunContext): string {
 }
 
 /**
+ * Render the SENSITIVE test-credentials section — the keys + descriptions of the secrets the
+ * platform injected into the tester's container ENVIRONMENT out of band. Only the non-secret
+ * KEY + DESCRIPTION appear here; the VALUE reaches the container as an environment variable
+ * (`$KEY`), never the prompt, so the agent is told what is available and how to use it without
+ * the secret ever being written into the prompt or telemetry. Empty string when the run carries
+ * no test secrets (every non-tester run, and tester runs whose service configured none).
+ */
+export function testSecretsSection(context: AgentRunContext): string {
+  const secrets = context.testSecrets
+  if (!secrets?.length) return ''
+  const lines = [
+    '',
+    'Sensitive test credentials (injected as environment variables — read them from the',
+    'environment, e.g. `$STRIPE_API_KEY`; they are NOT printed here and must not be logged):',
+  ]
+  for (const secret of secrets) {
+    lines.push(`- \`${secret.key}\`${secret.description ? ` — ${secret.description}` : ''}`)
+  }
+  return lines.join('\n')
+}
+
+/**
  * Render the initiative-PRESET steering section — the `## Initiative preset: <label>` header plus
  * the preset's per-agent-kind `promptAddition` (already resolved for the running kind by the
  * engine's context builder). This is the standing, preset-level methodology an org attaches to a

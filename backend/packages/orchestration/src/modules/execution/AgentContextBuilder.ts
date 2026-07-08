@@ -19,6 +19,7 @@ import type {
   RequirementReviewRepository,
   TaskRecord,
   TaskRepository,
+  TestSecretRef,
   WorkspaceRepository,
 } from '@cat-factory/kernel'
 import { buildExcerpt, CONTEXT_BUDGET, getInitiativePreset } from '@cat-factory/kernel'
@@ -39,6 +40,7 @@ import {
 } from './frontend-infra.logic.js'
 import { connectionDescription } from '@cat-factory/contracts'
 import { frameOf, validInvolvedServiceFrames } from './frame.logic.js'
+import { isTesterKind } from './ci.logic.js'
 import { getFragment } from '@cat-factory/prompt-fragments'
 import { extractReferences } from '@cat-factory/integrations'
 import type { EnvironmentProvisioningService } from '@cat-factory/integrations'
@@ -156,6 +158,14 @@ export interface AgentContextBuilderDeps {
   initiatives?: InitiativeRepository
   environmentProvisioning?: EnvironmentProvisioningService
   /**
+   * Optional: resolve the NON-secret references (key + description) of the sensitive test
+   * credentials configured for a run block's service frame — folded into the tester prompt so
+   * the agent knows which env vars are injected and what each is for. Wired from the facade's
+   * `TestSecretsService`; absent ⇒ the tester runs with no advertised secrets. NEVER returns a
+   * value — the values reach only the container environment, resolved separately at dispatch.
+   */
+  resolveTestSecretRefs?: (workspaceId: string, blockId: string) => Promise<TestSecretRef[]>
+  /**
    * Optional: resolves fragment ids against the merged tenant catalog (managed +
    * document-backed entries). When wired the engine uses it instead of the static
    * pool, so curated and living-document fragments actually reach a run.
@@ -224,6 +234,13 @@ export class AgentContextBuilder {
     const service = await this.resolveServiceConfig(workspaceId, block)
     const frontend = await this.resolveFrontendConfig(workspaceId, block)
     const involvedServices = await this.resolveInvolvedServices(workspaceId, block)
+    // The SENSITIVE test-credential refs (key + description, NEVER values) for the tester kinds
+    // only — the kinds that receive the values out of band. Advertised in the tester prompt so
+    // the agent knows which env vars are injected; the values are resolved separately at dispatch.
+    const testSecrets =
+      isTesterKind(agentKind) && this.deps.resolveTestSecretRefs
+        ? await this.deps.resolveTestSecretRefs(workspaceId, block.id)
+        : []
     // An initiative-level run (the planning pipeline) carries the interview + analysis
     // context so the analyst/planner prompts fold in the human's intent and prior findings,
     // plus the preset steering resolved for THIS step's kind.
@@ -317,6 +334,7 @@ export class AgentContextBuilder {
       ...(service ? { service } : {}),
       ...(frontend ? { frontend } : {}),
       ...(involvedServices?.length ? { involvedServices } : {}),
+      ...(testSecrets.length ? { testSecrets } : {}),
       // Read-only reference repos for a doc-authoring task, lifted verbatim from the block —
       // the executor clones them as read-only siblings for the doc-writer. A pure projection
       // (identities are self-contained), so no repo reads here.
