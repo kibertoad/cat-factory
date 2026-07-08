@@ -3,6 +3,7 @@ import { type CliOptions, OPTION_DEFAULTS } from './args.js'
 import { buildLocalEnv } from './env.js'
 import { ALL_NATIVE_HARNESSES, NATIVE_HARNESS_INFO } from './execution.js'
 import { type FileSystem, realFs } from './fs.js'
+import { buildGitignore, mergeGitignore } from './gitignore.js'
 import { createConsoleIo, type Io } from './io.js'
 import {
   type ExecutionChoice,
@@ -84,7 +85,13 @@ export async function generateEnv(options: CliOptions, deps: EnvCommandDeps = {}
   fs.writeFileSync(envPath, content)
   io.info(`\nWrote ${envPath}  (secret — gitignore it, never commit it)`)
 
+  // A `.env` written into a bare dir is only safe if something ignores it. Rather than rely on a
+  // printed reminder (or a parent `.gitignore` that may not exist), guarantee it the same way
+  // `init` does: create/merge the required ignore rules into the target dir's own `.gitignore`.
+  const gitignoreWritten = ensureGitignore(fs, io, outDir)
+
   printNextSteps(io, {
+    gitignoreWritten,
     envPath,
     provider,
     port,
@@ -94,22 +101,40 @@ export async function generateEnv(options: CliOptions, deps: EnvCommandDeps = {}
   return envPath
 }
 
+/**
+ * Guarantee the freshly written `.env` can't be committed: create the target dir's `.gitignore`
+ * (or merge the required rules into an existing one). Idempotent — merging into a dir that already
+ * ignores `.env` (e.g. `deploy/local`) appends nothing. Returns whether the file was (re)written.
+ */
+function ensureGitignore(fs: FileSystem, io: Io, outDir: string): boolean {
+  const gitignorePath = join(outDir, '.gitignore')
+  const existing = fs.existsSync(gitignorePath) ? fs.readFileSync(gitignorePath, 'utf8') : undefined
+  const next = existing === undefined ? buildGitignore() : mergeGitignore(existing)
+  if (next === existing) return false
+  fs.writeFileSync(gitignorePath, next)
+  io.info(`Ensured ${gitignorePath} ignores .env`)
+  return true
+}
+
 interface NextStepsInput {
   envPath: string
   provider: VcsProvider
   port: number
   tokenProvided: boolean
+  gitignoreWritten: boolean
   execution: ExecutionChoice
 }
 
 function printNextSteps(io: Io, input: NextStepsInput): void {
   const lines = [
     '',
-    'Done. Your local-mode .env is ready to run:',
+    'Done. Your local-mode .env is ready to run from a scaffolded deployment dir',
+    '(one made by `cat-factory init`, or deploy/local in the repo) that provides these scripts:',
     '',
-    '  # from the deployment dir that holds this .env (e.g. deploy/local)',
     '  npm run db:up      # start local Postgres (docker compose)',
     '  npm start          # migrate + serve the API on :' + String(input.port),
+    '',
+    'If you ran this in a bare directory, wire up a deployment first (see `cat-factory init`).',
     '',
     'Reminders:',
     `  - Pull the executor image:  docker pull ${OPTION_DEFAULTS.harnessImage}`,
@@ -136,6 +161,10 @@ function printNextSteps(io: Io, input: NextStepsInput): void {
         '.env before running agents.',
     )
   }
-  lines.push('  - The .env holds secrets and must stay gitignored — never commit it.')
+  lines.push(
+    input.gitignoreWritten
+      ? '  - The .env holds secrets; the .gitignore now keeps it out of git — never commit it.'
+      : '  - The .env holds secrets and must stay gitignored — never commit it.',
+  )
   io.info(lines.join('\n'))
 }

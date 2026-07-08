@@ -73,9 +73,35 @@ describe('generateEnv (non-interactive)', () => {
     expect(env).toContain(`ENCRYPTION_KEY=${Buffer.alloc(32, 1).toString('base64')}`)
     expect(env).toContain(`HARNESS_SHARED_SECRET=${'01'.repeat(32)}`)
     expect(env).toContain('DATABASE_URL=postgres://cat:cat@localhost:5432/catfactory')
-    // No project scaffold — just the one env file.
-    expect([...fs.files.keys()]).toEqual(['/work/.env'])
+    // No project scaffold — just the env file and the .gitignore that protects it.
+    expect([...fs.files.keys()].sort()).toEqual(['/work/.env', '/work/.gitignore'])
+    // The secret file is guaranteed uncommittable.
+    expect(fs.files.get('/work/.gitignore')).toContain('.env')
     expect(io.opened).toEqual([])
+  })
+
+  it('creates a .gitignore alongside the .env, and merges into an existing one', async () => {
+    // Fresh dir: a .gitignore is created with the secret rules.
+    const fresh = memFs()
+    await generateEnv(opts({ yes: true, token: 't' }), {
+      io: scriptIo(),
+      fs: fresh,
+      cwd: '/work',
+      randomBytes: fixedBytes,
+    })
+    expect(fresh.files.get('/work/.gitignore')).toContain('.env')
+
+    // Existing .gitignore: the developer's own rules are preserved and .env stays ignored.
+    const existing = memFs({ '/work/.gitignore': '# my rules\ncoverage/\n' })
+    await generateEnv(opts({ yes: true, token: 't' }), {
+      io: scriptIo(),
+      fs: existing,
+      cwd: '/work',
+      randomBytes: fixedBytes,
+    })
+    const merged = existing.files.get('/work/.gitignore') ?? ''
+    expect(merged).toContain('coverage/') // existing content kept verbatim
+    expect(merged).toContain('.env') // secret rule merged in
   })
 
   it('honours --dir for the output directory', async () => {

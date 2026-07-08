@@ -40,9 +40,10 @@ It does the fiddly setup for you:
   directory (or `--dir`), using the same secret generation, PAT flow, and pool-vs-native choice.
   Use it when the deployment already exists (e.g. inside [`deploy/local`](../../../deploy/local),
   or an already-scaffolded project) and you just need a fresh, complete `.env`. It refuses to
-  overwrite an existing `.env` unless you pass `--force`. A model-provider key is **not** needed to
-  boot — add providers/keys through the UI after sign-in (the `.env` leaves them as commented
-  hints) — so the generated file runs local mode with no manual edits.
+  overwrite an existing `.env` unless you pass `--force`, and (like `init`) it creates or merges
+  the target dir's `.gitignore` so the secret `.env` can never be committed. A model-provider key
+  is **not** needed to boot — add providers/keys through the UI after sign-in (the `.env` leaves
+  them as commented hints) — so the generated file runs local mode with no manual edits.
 - **`cat-factory k3s`** — guided local Kubernetes setup for ephemeral environments (see `--help`).
 
 ## Usage
