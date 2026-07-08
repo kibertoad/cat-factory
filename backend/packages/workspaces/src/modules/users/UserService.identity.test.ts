@@ -87,6 +87,32 @@ describe('UserService identity collision-safety', () => {
     expect(again.id).toBe(first.id)
   })
 
+  it('refuses to fork a new account for a dangling identity (identity present, user gone)', async () => {
+    const repo = new InMemoryUserRepository()
+    // Simulate the orphaning incident: an identity row survives while its users row is
+    // removed. `findByIdentity` (join) then returns null, but the identity still exists.
+    await repo.linkIdentity({
+      userId: 'usr_gone',
+      provider: 'github',
+      subject: '12345',
+      secret: null,
+      metadata: null,
+      createdAt: 1_700_000_000_000,
+    })
+    const svc = new UserService({
+      userRepository: repo,
+      passwordHasher,
+      idGenerator: { next: (p?: string) => `${p ?? 'id'}_new` },
+      clock: { now: () => 1_700_000_000_000 },
+    })
+    // Must throw loudly rather than silently creating usr_new + a fresh personal account.
+    await expect(svc.findOrCreateByIdentity('github', '12345')).rejects.toThrow(
+      /dangling identity/i,
+    )
+    // And it must NOT have forked a new user behind the scenes.
+    expect(await repo.get('usr_new')).toBeNull()
+  })
+
   it('a password account (subject = email) never collides with a PAT identity', async () => {
     const svc = makeService()
     const gh = await svc.findOrCreateByIdentity('github', '42')

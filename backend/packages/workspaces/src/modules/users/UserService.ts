@@ -81,6 +81,24 @@ export class UserService {
     const existing = await this.deps.userRepository.findByIdentity(provider, subject)
     if (existing) return existing
 
+    // `findByIdentity` inner-joins `users`, so it returns null for BOTH "never seen this
+    // identity" and "identity row exists but its `users` row is gone" (a dangling identity —
+    // e.g. a `users` row deleted out from under a still-present identity/account/subscription).
+    // Those must NOT be conflated: silently forking a fresh user + personal account for a
+    // dangling identity strands the original account and everything hanging off it
+    // (subscriptions, secrets, settings) with no error surfaced — the account-orphaning
+    // upgrade incident. Distinguish them with the join-free identity read and fail LOUDLY
+    // (→ logged 500, no silent fork) so the corruption is caught and healed, never masked.
+    const orphanedIdentity = await this.deps.userRepository.getIdentity(provider, subject)
+    if (orphanedIdentity) {
+      throw new Error(
+        `Dangling identity: (${provider}, ${orphanedIdentity.userId}) — the identity ` +
+          `'${provider}:${subject}' references a user that no longer exists. Refusing to ` +
+          `fork a new account (which would orphan the original). A users row was removed ` +
+          `without clearing its identity; restore the user or delete the stale identity.`,
+      )
+    }
+
     let email = profile.email?.toLowerCase().trim() || null
     // Is this email already owned by another user? (Unique-index-safe handling below.)
     const emailOwner = email ? await this.deps.userRepository.findByEmail(email) : null

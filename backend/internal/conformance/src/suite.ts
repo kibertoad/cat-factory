@@ -9308,11 +9308,18 @@ export function defineMiscConformance(harness: ConformanceHarness): void {
 
       it('resolves ONE personal account under concurrent first sign-in (no duplicate-key race)', async () => {
         const ob = harness.makeApp().onboarding()
-        const user = {
-          id: `usr_race_${crypto.randomUUID()}`,
-          login: 'race-owner',
-          name: 'Race Owner',
-        }
+        // The personal-account owner must be a real users row first — the
+        // `accounts.owner_user_id → users(id)` foreign key rejects an account for a
+        // nonexistent user. `findOrCreateByIdentity` creates only the user + identity (no
+        // account), so the first-sign-in race on ensurePersonalAccount below is unchanged.
+        const owner = await ob.users.findOrCreateByIdentity(
+          'github',
+          `race_${crypto.randomUUID()}`,
+          {
+            name: 'Race Owner',
+          },
+        )
+        const user = { id: owner.id, login: 'race-owner', name: 'Race Owner' }
         // Fire the first-load resolution many times at once: each runs ensurePersonalAccount
         // before any INSERT commits, so a check-then-create would race to a duplicate-key 500
         // on the personal-account unique index. The atomic get-or-create must instead converge

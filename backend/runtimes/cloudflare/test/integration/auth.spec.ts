@@ -160,6 +160,14 @@ describe('auth', () => {
     })
 
     it('allows a valid session', async () => {
+      // Seed the session user's `users` row (created at login in production) so the first
+      // authenticated request's `ensurePersonalAccount` satisfies the
+      // `accounts.owner_user_id → users(id)` foreign key. Idempotent.
+      await env.DB.prepare(
+        'INSERT OR IGNORE INTO users (id, name, email, avatar_url, created_at) VALUES (?, ?, ?, ?, ?)',
+      )
+        .bind('usr_42', 'octocat', null, null, Date.now())
+        .run()
       const token = await session()
       const res = await fetchWith(authEnv, { path: '/workspaces', token })
       expect(res.status).toBe(200)
