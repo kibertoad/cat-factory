@@ -1,5 +1,12 @@
 # @cat-factory/spend
 
+## 0.11.18
+
+### Patch Changes
+
+- Updated dependencies [bcc843d]
+  - @cat-factory/kernel@0.110.1
+
 ## 0.11.17
 
 ### Patch Changes
