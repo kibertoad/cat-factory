@@ -42,7 +42,7 @@ class MemoryTestSecretsRepository implements TestSecretsRepository {
 function blockRepo(blocks: Block[]): BlockRepository {
   const byId = new Map(blocks.map((b) => [b.id, b]))
   return {
-    get: (_ws, id) => Promise.resolve(byId.get(id) ?? null),
+    get: (_ws: string, id: string) => Promise.resolve(byId.get(id) ?? null),
   } as unknown as BlockRepository
 }
 
@@ -126,5 +126,28 @@ describe('TestSecretsService', () => {
     const cleared = await svc.set('ws', 'svc', { entries: [] })
     expect(cleared).toEqual({ blockId: 'svc', entries: [] })
     expect(await repo.getByBlock('ws', 'svc')).toBeNull()
+  })
+
+  it('rejects setting secrets on a non-frame block (they resolve only up to the frame)', async () => {
+    const repo = new MemoryTestSecretsRepository()
+    const svc = makeService(repo, [frame('svc'), task('t1', 'svc')])
+    // Storing against a task would leave the secrets silently un-injected (resolution walks UP to
+    // the frame), so the write is rejected rather than saved to a dead spot.
+    await expect(
+      svc.set('ws', 't1', {
+        entries: [{ key: 'STRIPE_API_KEY', description: '', value: 'sk_test_123' }],
+      }),
+    ).rejects.toThrow(/service frame/i)
+    expect(await repo.getByBlock('ws', 't1')).toBeNull()
+  })
+
+  it('rejects a set against an unknown block', async () => {
+    const repo = new MemoryTestSecretsRepository()
+    const svc = makeService(repo, [frame('svc')])
+    await expect(
+      svc.set('ws', 'missing', {
+        entries: [{ key: 'K', description: '', value: 'v-secret' }],
+      }),
+    ).rejects.toThrow()
   })
 })

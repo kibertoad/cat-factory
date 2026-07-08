@@ -22,7 +22,12 @@ import type {
   TestSecretRef,
   WorkspaceRepository,
 } from '@cat-factory/kernel'
-import { buildExcerpt, CONTEXT_BUDGET, getInitiativePreset } from '@cat-factory/kernel'
+import {
+  buildExcerpt,
+  CONTEXT_BUDGET,
+  getInitiativePreset,
+  resolveServiceFrameBlock,
+} from '@cat-factory/kernel'
 import {
   CODE_AWARE_TRAIT,
   DOC_AWARE_TRAIT,
@@ -469,13 +474,7 @@ export class AgentContextBuilder {
    * (e.g. `frontendConfig`) doesn't re-fetch the row the walk already loaded.
    */
   async resolveServiceFrame(workspaceId: string, blockId: string): Promise<Block | null> {
-    let current = await this.deps.blockRepository.get(workspaceId, blockId)
-    // Bounded walk (the tree is at most frame → module → task) guarded against cycles.
-    for (let i = 0; current && i < 8; i++) {
-      if (current.level === 'frame' || !current.parentId) return current
-      current = await this.deps.blockRepository.get(workspaceId, current.parentId)
-    }
-    return current ?? null
+    return resolveServiceFrameBlock((id) => this.deps.blockRepository.get(workspaceId, id), blockId)
   }
 
   /**

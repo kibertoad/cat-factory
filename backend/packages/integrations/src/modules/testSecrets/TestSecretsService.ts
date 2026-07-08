@@ -4,6 +4,7 @@ import type {
   SecretCipher,
   TestSecretsRepository,
 } from '@cat-factory/kernel'
+import { NotFoundError, resolveServiceFrameBlock, ValidationError } from '@cat-factory/kernel'
 import type {
   ServiceTestSecretsView,
   TestSecretEntry,
@@ -68,6 +69,15 @@ export class TestSecretsService {
     blockId: string,
     input: UpsertServiceTestSecretsInput,
   ): Promise<ServiceTestSecretsView> {
+    // Secrets are keyed by (and resolved up to) the SERVICE FRAME, so storing them against a
+    // module/task block would leave them silently un-injected at tester time (resolution walks
+    // UP to the frame and never finds them). Reject a non-frame block here so the operator gets
+    // a clear error instead of a store that appears to save but never delivers.
+    const block = await this.blocks.get(workspaceId, blockId)
+    if (!block) throw new NotFoundError('block', blockId)
+    if (block.level !== 'frame') {
+      throw new ValidationError('Sensitive test credentials can only be set on a service frame')
+    }
     if (input.entries.length === 0) {
       await this.repo.deleteByBlock(workspaceId, blockId)
       return { blockId, entries: [] }
@@ -133,18 +143,14 @@ export class TestSecretsService {
   }
 
   /**
-   * The service-frame id for a block — walks up frame → module → task, cycle-guarded, mirroring
-   * the engine's `resolveServiceFrame`. Returns the frame's id (or the topmost block reached).
+   * The service-frame id for a block — the shared {@link resolveServiceFrameBlock} walk (frame →
+   * module → task, cycle-guarded), the same resolution the engine's `AgentContextBuilder` uses.
    */
   private async resolveServiceFrameId(
     workspaceId: string,
     blockId: string,
   ): Promise<string | null> {
-    let current = await this.blocks.get(workspaceId, blockId)
-    for (let i = 0; current && i < 8; i++) {
-      if (current.level === 'frame' || !current.parentId) return current.id
-      current = await this.blocks.get(workspaceId, current.parentId)
-    }
-    return current?.id ?? null
+    const frame = await resolveServiceFrameBlock((id) => this.blocks.get(workspaceId, id), blockId)
+    return frame?.id ?? null
   }
 }

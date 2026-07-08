@@ -4038,6 +4038,13 @@ export function defineIntegrationConformance(harness: ConformanceHarness): void 
         })
         expect(badKey.status).toBeGreaterThanOrEqual(400)
 
+        // A reserved/toolchain env-var name (would clobber the harness environment) is rejected
+        // at the write boundary, not silently dropped at injection.
+        const reserved = await app.call('PUT', base, {
+          entries: [{ key: 'PATH', description: 'nope', value: 'x' }],
+        })
+        expect(reserved.status).toBeGreaterThanOrEqual(400)
+
         // Replacing with an empty set removes the row; the view is empty again.
         const cleared = await app.call<{ entries: unknown[] }>('PUT', base, { entries: [] })
         expect(cleared.status).toBe(200)

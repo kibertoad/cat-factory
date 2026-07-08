@@ -23,6 +23,36 @@ import * as v from 'valibot'
  * not starting with a digit). The operator names it as the system under test expects it —
  * e.g. `STRIPE_API_KEY` — and the agent references it as `$STRIPE_API_KEY`.
  */
+/**
+ * Toolchain-critical / reserved env-var names never accepted as a test-secret key: injecting one
+ * would clobber the harness's own environment (`PATH`/`NODE_OPTIONS`/`LD_PRELOAD`/…) or reconfigure
+ * its package manager (`npm_config_*`) or git (`GIT_*`). The harness (executor-harness `job.ts`)
+ * ALSO drops these defensively at parse; rejecting here means the operator gets a clear error at
+ * write time instead of a key that is silently never injected. Kept in step with the harness's
+ * `RESERVED_ENV_NAMES` / `RESERVED_ENV_PREFIXES` (the harness has no dependency on this package).
+ * Exact names match verbatim (Linux env is case-sensitive); the family prefixes match
+ * case-insensitively (npm reads `npm_config_*` regardless of case).
+ */
+const RESERVED_ENV_NAMES = new Set([
+  'PATH',
+  'HOME',
+  'NODE_OPTIONS',
+  'NODE_PATH',
+  'NODE_EXTRA_CA_CERTS',
+  'LD_PRELOAD',
+  'LD_LIBRARY_PATH',
+  'BASH_ENV',
+  'ENV',
+  'SHELL',
+  'IFS',
+])
+const RESERVED_ENV_PREFIXES = ['npm_config_', 'git_']
+function isReservedEnvName(key: string): boolean {
+  if (RESERVED_ENV_NAMES.has(key)) return true
+  const lower = key.toLowerCase()
+  return RESERVED_ENV_PREFIXES.some((p) => lower.startsWith(p))
+}
+
 export const testSecretKeySchema = v.pipe(
   v.string(),
   v.trim(),
@@ -31,6 +61,10 @@ export const testSecretKeySchema = v.pipe(
   v.regex(
     /^[A-Za-z_][A-Za-z0-9_]*$/,
     'must be a valid environment variable name (letters, digits and underscores, not starting with a digit)',
+  ),
+  v.check(
+    (key) => !isReservedEnvName(key),
+    'must not be a reserved/toolchain environment variable name (e.g. PATH, HOME, NODE_OPTIONS, npm_config_*, GIT_*)',
   ),
 )
 
