@@ -29,6 +29,7 @@ import {
   AiAgentExecutor,
   type AgentKindRegistry,
   defaultAgentKindRegistry,
+  defaultInitiativePresetRegistry,
   inlineWebSearchOptionsFromEnv,
   resolveAgentConfig,
   isProxyableProvider,
@@ -2218,6 +2219,12 @@ export function buildContainer(
   // `validateRegistrationsOnce`, and the ServerContainer's snapshot projection; the conformance
   // suite injects a pre-loaded one via `overrides`. Defaults to the built-ins-only registry.
   const agentKindRegistry = overrides.agentKindRegistry ?? defaultAgentKindRegistry()
+  // The app-owned initiative-preset registry (built-in generic / docs-refresh / tech-migration +
+  // any a deployment registered by reference). Threaded into createCore (initiative services +
+  // spawned-run preset context) and re-exposed on the ServerContainer for the snapshot descriptors
+  // + preset probe; the conformance suite injects a pre-loaded one via `overrides`.
+  const initiativePresetRegistry =
+    overrides.initiativePresetRegistry ?? defaultInitiativePresetRegistry()
 
   // Register the opt-in AWS EKS backends by reference (symmetric with the Node facade; a
   // pass-through until a workspace connects an `eks` backend). `register` is idempotent (keyed
@@ -2464,6 +2471,7 @@ export function buildContainer(
         agentKindRegistry,
       ),
     agentKindRegistry,
+    initiativePresetRegistry,
     workRunner: selectWorkRunner(env),
     executionEventPublisher: eventPublisher,
     spendPricing: config.spend,

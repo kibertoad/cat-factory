@@ -1,5 +1,5 @@
-import type { InitiativePresetRegistration } from '@cat-factory/kernel'
-import { INITIATIVE_PIPELINE_ID, registerInitiativePreset } from '@cat-factory/kernel'
+import type { InitiativePresetRegistration, InitiativePresetRegistry } from '@cat-factory/kernel'
+import { INITIATIVE_PIPELINE_ID } from '@cat-factory/kernel'
 import { MIGRATION_FRAGMENT_IDS } from '@cat-factory/prompt-fragments'
 import { MIGRATION_PHASE_IDS } from './phases.js'
 import { MIGRATION_PROMPT_ADDITIONS } from './prompt-additions.js'
@@ -268,15 +268,10 @@ export const TECH_MIGRATION_PRESET: InitiativePresetRegistration = {
 }
 
 /**
- * Register the tech-migration preset. Idempotent (the registry replaces by id), so importing this
- * module (which self-registers below, the `@cat-factory/gates` pattern) and calling this explicitly
- * are safe to combine. Tests that `clearRegisteredInitiativePresets()` call this to restore it.
+ * Register the tech-migration preset on an app-owned {@link InitiativePresetRegistry}. Preloaded by
+ * `defaultInitiativePresetRegistry()`, so every deployment carries it with no per-facade wiring —
+ * the two runtimes cannot drift on it. Idempotent (the registry replaces by id).
  */
-export function registerTechMigrationPreset(): void {
-  registerInitiativePreset(TECH_MIGRATION_PRESET)
+export function registerTechMigrationPreset(registry: InitiativePresetRegistry): void {
+  registry.register(TECH_MIGRATION_PRESET)
 }
-
-// Side-effect registration: importing `@cat-factory/agents` (which re-exports from this module) is
-// enough to make the migration preset available in every deployment — no per-facade wiring, so the
-// two runtimes cannot drift on it.
-registerTechMigrationPreset()

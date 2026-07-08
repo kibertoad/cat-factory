@@ -4404,6 +4404,13 @@
       "maxConcurrentField": "מקסימום משימות במקביל",
       "defaultPipelineField": "צינור ברירת מחדל",
       "failed": "לא ניתן לעדכן את היוזמה"
+    },
+    "checkpoint": {
+      "badge": "נקודת ביקורת",
+      "awaiting": "ממתין לבדיקה",
+      "cleared": "נבדק",
+      "pausedTitle": "מושהה לבדיקה",
+      "pausedBody": "השלב \"{phase}\" הושלם. בדקו למעלה את הפריטים וה-PR שנשמרו, ואז חדשו כדי להמשיך או בטלו כדי לעצור את היוזמה."
     }
   },
   "environmentWizard": {

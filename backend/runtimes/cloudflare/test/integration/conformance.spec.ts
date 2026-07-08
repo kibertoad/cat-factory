@@ -108,6 +108,11 @@ const harness: ConformanceHarness = {
         // custom-kind suite) via the CoreDependencies overrides the Worker build reads, so the
         // container resolves it by reference — the SAME instance the fake executor above got.
         ...(opts?.agentKindRegistry ? { agentKindRegistry: opts.agentKindRegistry } : {}),
+        // Inject the app-owned initiative-preset registry (pre-loaded with a custom preset in the
+        // custom-preset suite) via the CoreDependencies overrides the Worker build reads.
+        ...(opts?.initiativePresetRegistry
+          ? { initiativePresetRegistry: opts.initiativePresetRegistry }
+          : {}),
         ...fragmentLibraryDeps(),
         // A deterministic task source (fake 'jira') over the real D1 task repos, so the
         // shared suite can assert create-task-from-issue parity against D1 too. The suite may

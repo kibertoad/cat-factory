@@ -14,6 +14,7 @@ import type {
   ExecutionInstance,
   FrontendConfig,
   Initiative,
+  InitiativePresetRegistry,
   InitiativeRepository,
   PipelineStep,
   RequirementReviewRepository,
@@ -22,12 +23,7 @@ import type {
   TestSecretRef,
   WorkspaceRepository,
 } from '@cat-factory/kernel'
-import {
-  buildExcerpt,
-  CONTEXT_BUDGET,
-  getInitiativePreset,
-  resolveServiceFrameBlock,
-} from '@cat-factory/kernel'
+import { buildExcerpt, CONTEXT_BUDGET, resolveServiceFrameBlock } from '@cat-factory/kernel'
 import {
   CODE_AWARE_TRAIT,
   DOC_AWARE_TRAIT,
@@ -133,6 +129,8 @@ export interface AgentContextBuilderDeps {
   accountRepository: AccountRepository
   /** App-owned agent-kind registry: drives the `code-aware` fragment-folding decision. */
   agentKindRegistry: AgentKindRegistry
+  /** App-owned initiative-preset registry: resolves a spawned/planning run's preset steering. */
+  initiativePresetRegistry: InitiativePresetRegistry
   documents?: DocumentRepository
   /**
    * Optional: canonicalise a URL named in a block's description to the (source,
@@ -429,7 +427,7 @@ export class AgentContextBuilder {
     agentKind: string,
   ): NonNullable<AgentRunContext['initiative']>['preset'] | undefined {
     if (!initiative.presetId) return undefined
-    const registration = getInitiativePreset(initiative.presetId)
+    const registration = this.deps.initiativePresetRegistry.get(initiative.presetId)
     if (!registration) return undefined
     const promptAddition = registration.promptAdditions?.[agentKind]?.trim()
     if (!promptAddition) return undefined
@@ -451,7 +449,7 @@ export class AgentContextBuilder {
     agentKind: string,
   ): NonNullable<AgentRunContext['initiative']>['preset'] | undefined {
     if (!initiative.presetId) return undefined
-    const registration = getInitiativePreset(initiative.presetId)
+    const registration = this.deps.initiativePresetRegistry.get(initiative.presetId)
     if (!registration) return undefined
     const promptAddition = registration.promptAdditions?.[agentKind]?.trim()
     const phaseTemplate = registration.descriptor.phaseTemplate

@@ -216,10 +216,12 @@ import { BLUEPRINT_PIPELINE_ID } from '@cat-factory/kernel'
 import {
   type AgentKindRegistry,
   defaultAgentKindRegistry,
+  defaultInitiativePresetRegistry,
   FragmentLibraryService,
   FragmentSourceService,
   type ResolveFragmentInstallationId,
 } from '@cat-factory/agents'
+import type { InitiativePresetRegistry } from '@cat-factory/kernel'
 
 // Composition root for the domain layer. The worker's infrastructure builds the
 // concrete ports (D1 repositories, crypto id/rng, the AI agent executor) and
@@ -280,6 +282,16 @@ export interface CoreDependencies {
    * re-exposed on {@link Core} for the HTTP layer's snapshot projection.
    */
   agentKindRegistry?: AgentKindRegistry
+  /**
+   * The app-owned initiative-preset registry (built-in generic / docs-refresh / tech-migration
+   * plus any a deployment registered by reference). Optional + defaulted to
+   * `defaultInitiativePresetRegistry()` so existing construction sites (tests, harnesses) don't
+   * break; each facade injects the SAME instance so custom presets resolve consistently everywhere.
+   * Read by the initiative services (create / ingest / interviewer steering) + the spawned-run
+   * preset context, and re-exposed on {@link Core} for the HTTP layer's snapshot descriptors + the
+   * preset probe.
+   */
+  initiativePresetRegistry?: InitiativePresetRegistry
   /**
    * Optional: resolve a block's run repo (installation + repo + default branch) bound to
    * a checkout-free {@link RepoFiles}, so a registered custom kind's pre/post-op hooks
@@ -1128,6 +1140,12 @@ export interface Core {
    * projection reads the SAME instance the engine + executors use.
    */
   agentKindRegistry: AgentKindRegistry
+  /**
+   * The app-owned initiative-preset registry the engine resolved (the facade's injected instance,
+   * else the built-ins-only default). Re-exposed so the HTTP layer's workspace-snapshot descriptors
+   * + the preset probe read the SAME instance the initiative services use.
+   */
+  initiativePresetRegistry: InitiativePresetRegistry
   /**
    * The real-time event publisher the engine pushes transitions through. Exposed so
    * the runtime-neutral LLM proxy can push a compact `llmCall` activity event per
@@ -2402,6 +2420,10 @@ export function createCore(dependencies: CoreDependencies): Core {
   // deployment's custom kinds are visible) else a fresh built-ins-only registry. The SAME
   // instance is threaded into the engine and re-exposed on `Core` for the HTTP snapshot.
   const agentKindRegistry = dependencies.agentKindRegistry ?? defaultAgentKindRegistry()
+  // Resolve the app-owned initiative-preset registry ONCE (same reasoning as the agent-kind one):
+  // the facade's injected instance, else a fresh registry preloaded with the built-in presets.
+  const initiativePresetRegistry =
+    dependencies.initiativePresetRegistry ?? defaultInitiativePresetRegistry()
   const workRunner = dependencies.workRunner ?? new NoopWorkRunner()
   const executionEventPublisher = dependencies.executionEventPublisher ?? new NoopEventPublisher()
   // The cache bag the caching-initiative slices read through. A facade passes its own
@@ -2576,6 +2598,7 @@ export function createCore(dependencies: CoreDependencies): Core {
         workspaceRepository: dependencies.workspaceRepository,
         blockRepository: dependencies.blockRepository,
         initiativeRepository: dependencies.initiativeRepository,
+        initiativePresetRegistry,
         events: executionEventPublisher,
         clock: dependencies.clock,
         idGenerator: dependencies.idGenerator,
@@ -2590,6 +2613,7 @@ export function createCore(dependencies: CoreDependencies): Core {
   // facade wiring. `enabled` gates it: with no model provider the interviewer gate passes
   // through and planning runs off the raw block description.
   const initiativeInterviewService = new InitiativeInterviewService({
+    initiativePresetRegistry,
     modelProviderResolver: dependencies.modelProviderResolver,
     modelProvider: dependencies.modelProvider,
     modelRef: dependencies.requirementReviewModel ?? dependencies.documentPlannerModel,
@@ -2640,6 +2664,7 @@ export function createCore(dependencies: CoreDependencies): Core {
   const executionService = new ExecutionService({
     ...dependencies,
     agentKindRegistry,
+    initiativePresetRegistry,
     workRunner,
     executionEventPublisher,
     boardService,
@@ -2754,6 +2779,7 @@ export function createCore(dependencies: CoreDependencies): Core {
     executionService,
     spendService,
     agentKindRegistry,
+    initiativePresetRegistry,
     executionEventPublisher,
     ...(llmObservability ? { llmObservability } : {}),
     ...(dependencies.agentContextObservability

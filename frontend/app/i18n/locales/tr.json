@@ -4405,6 +4405,13 @@
       "maxConcurrentField": "Maks. es zamanli gorev",
       "defaultPipelineField": "Varsayilan pipeline",
       "failed": "Girisim guncellenemedi"
+    },
+    "checkpoint": {
+      "badge": "Kontrol noktası",
+      "awaiting": "İnceleme bekliyor",
+      "cleared": "İncelendi",
+      "pausedTitle": "İnceleme için duraklatıldı",
+      "pausedBody": "\"{phase}\" aşaması tamamlandı. Yukarıdaki işlenmiş yapıtları ve PR'leri inceleyin, ardından devam etmek için sürdürün ya da girişimi durdurmak için iptal edin."
     }
   },
   "environmentWizard": {

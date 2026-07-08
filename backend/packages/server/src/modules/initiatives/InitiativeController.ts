@@ -18,7 +18,6 @@ import {
   updateInitiativeItemContract,
   updateInitiativePolicyContract,
 } from '@cat-factory/contracts'
-import { getInitiativePreset } from '@cat-factory/kernel'
 import type { InitiativesModule } from '@cat-factory/orchestration'
 import { buildHonoRoute } from '@toad-contracts/hono'
 import { Hono } from 'hono'
@@ -81,7 +80,7 @@ export function initiativeController(): Hono<AppEnv> {
   buildHonoRoute(app, probeInitiativePresetContract, async (c) => {
     const { presetId } = c.req.valid('param')
     const { frameId } = c.req.valid('json')
-    const detect = getInitiativePreset(presetId)?.detect
+    const detect = c.get('container').initiativePresetRegistry.get(presetId)?.detect
     if (!detect) return c.json({}, 200)
     const resolve = c.get('container').resolveRunRepoContext
     if (!resolve) return c.json({}, 200)

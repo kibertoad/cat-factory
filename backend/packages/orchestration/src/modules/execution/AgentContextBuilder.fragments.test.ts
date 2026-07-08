@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest'
 import type { Block, ExecutionInstance, PipelineStep } from '@cat-factory/kernel'
+import { InitiativePresetRegistry } from '@cat-factory/kernel'
 import { AgentContextBuilder, type AgentContextBuilderDeps } from './AgentContextBuilder.js'
 import { defaultAgentKindRegistry } from '@cat-factory/agents'
 
@@ -59,6 +60,7 @@ function makeBuilder(over: Partial<AgentContextBuilderDeps> = {}): AgentContextB
     blockRepository: { get: async (_ws: string, id: string) => blocks.get(id) ?? null } as never,
     accountRepository: { get: async () => null } as never,
     agentKindRegistry: defaultAgentKindRegistry(),
+    initiativePresetRegistry: new InitiativePresetRegistry(),
     fragmentResolver: {
       resolveBodiesForRun: async (_ws: string, ids: string[]) =>
         ids

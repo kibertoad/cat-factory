@@ -1,6 +1,6 @@
-import { afterEach, describe, expect, it } from 'vitest'
+import { beforeEach, describe, expect, it } from 'vitest'
 import type { Block, ExecutionInstance, Initiative, PipelineStep } from '@cat-factory/kernel'
-import { clearRegisteredInitiativePresets, registerInitiativePreset } from '@cat-factory/kernel'
+import { InitiativePresetRegistry } from '@cat-factory/kernel'
 import type { InitiativePresetPhaseTemplate } from '@cat-factory/contracts'
 import { AgentContextBuilder, type AgentContextBuilderDeps } from './AgentContextBuilder.js'
 import { defaultAgentKindRegistry } from '@cat-factory/agents'
@@ -57,6 +57,13 @@ function instance(steps: PipelineStep[]): ExecutionInstance {
   } as unknown as ExecutionInstance
 }
 
+// A fresh app-owned registry per test (reset in `beforeEach`), injected into every builder — the
+// DI replacement for the old module-global register/clear.
+let presetRegistry = new InitiativePresetRegistry()
+beforeEach(() => {
+  presetRegistry = new InitiativePresetRegistry()
+})
+
 function makeBuilder(initiative: Initiative | null): AgentContextBuilder {
   const blocks = new Map<string, Block>([
     [FRAME.id, FRAME],
@@ -67,6 +74,7 @@ function makeBuilder(initiative: Initiative | null): AgentContextBuilder {
     blockRepository: { get: async (_ws: string, id: string) => blocks.get(id) ?? null } as never,
     accountRepository: { get: async () => null } as never,
     agentKindRegistry: defaultAgentKindRegistry(),
+    initiativePresetRegistry: presetRegistry,
     initiatives: { getByBlock: async () => initiative } as never,
   }
   return new AgentContextBuilder(deps as AgentContextBuilderDeps)
@@ -76,12 +84,10 @@ function initiativeEntity(): Initiative {
   return { id: 'i1', blockId: INIT_BLOCK.id, presetId: PRESET_ID } as unknown as Initiative
 }
 
-afterEach(() => clearRegisteredInitiativePresets())
-
 function register(
   over: { phaseTemplate?: InitiativePresetPhaseTemplate; planner?: string } = {},
 ): void {
-  registerInitiativePreset({
+  presetRegistry.register({
     descriptor: {
       id: PRESET_ID,
       presentation: { label: 'Migration', icon: 'i', color: '#000', description: 'x' },
@@ -188,6 +194,7 @@ function makeSpawnedBuilder(initiative: Initiative | null): {
     blockRepository: { get: async (_ws: string, id: string) => blocks.get(id) ?? null } as never,
     accountRepository: { get: async () => null } as never,
     agentKindRegistry: defaultAgentKindRegistry(),
+    initiativePresetRegistry: presetRegistry,
     initiatives: {
       getByBlock: async () => {
         count++
@@ -199,7 +206,7 @@ function makeSpawnedBuilder(initiative: Initiative | null): {
 }
 
 function registerCoder(addition: string): void {
-  registerInitiativePreset({
+  presetRegistry.register({
     descriptor: {
       id: PRESET_ID,
       presentation: { label: 'Migration', icon: 'i', color: '#000', description: 'x' },

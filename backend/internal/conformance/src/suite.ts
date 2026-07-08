@@ -61,10 +61,9 @@ import type {
 } from '@cat-factory/kernel'
 import {
   clearRegisteredGates,
-  clearRegisteredInitiativePresets,
   clearRegisteredStepResolvers,
+  InitiativePresetRegistry,
   registerGate,
-  registerInitiativePreset,
   registerStepResolver,
 } from '@cat-factory/kernel'
 import { afterEach, describe, expect, it } from 'vitest'
@@ -6911,10 +6910,12 @@ export function defineExecutionConformance(harness: ConformanceHarness): void {
         // preset's standing per-kind methodology in its agent context on EVERY runtime — the
         // Cloudflare facade resolves it from the D1 initiative store, Node/local from Drizzle,
         // both through the same `AgentContextBuilder`. A facade that failed to wire the initiative
-        // store into the context builder would silently ship a bare child prompt. The preset is a
-        // module-global registration today (slice 5 migrates it to DI); scope + clear it here.
+        // store into the context builder would silently ship a bare child prompt. The preset is
+        // registered on a fresh app-owned registry injected via `makeApp` — the DI seam that
+        // replaced the old module-global registration.
         const ADDITION = 'Follow the org connector architecture and consume the build handoff.'
-        registerInitiativePreset({
+        const initiativePresetRegistry = new InitiativePresetRegistry()
+        initiativePresetRegistry.register({
           descriptor: {
             id: 'preset_spawned_conf',
             presentation: {
@@ -6931,39 +6932,85 @@ export function defineExecutionConformance(harness: ConformanceHarness): void {
           },
           promptAdditions: { coder: ADDITION },
         })
-        try {
-          const app = harness.makeApp({ confidence: 1, echoPreset: true })
-          const { workspace } = await app.createWorkspace()
-          const wsId = workspace.id
+        const app = harness.makeApp(
+          { confidence: 1, echoPreset: true },
+          { initiativePresetRegistry },
+        )
+        const { workspace } = await app.createWorkspace()
+        const wsId = workspace.id
 
-          // Seed the initiative entity anchored to an initiative block id, then link the seeded
-          // task to it (an epic-style `initiativeId` membership — exactly what the loop's
-          // `buildTaskBlock` stamps on a spawned child).
-          const anchorBlockId = 'init_anchor'
-          await app.initiativeRepository().insert(wsId, spawnedInitiative(anchorBlockId))
-          await app.blockRepository().update(wsId, 'task_login', { initiativeId: anchorBlockId })
+        // Seed the initiative entity anchored to an initiative block id, then link the seeded
+        // task to it (an epic-style `initiativeId` membership — exactly what the loop's
+        // `buildTaskBlock` stamps on a spawned child).
+        const anchorBlockId = 'init_anchor'
+        await app.initiativeRepository().insert(wsId, spawnedInitiative(anchorBlockId))
+        await app.blockRepository().update(wsId, 'task_login', { initiativeId: anchorBlockId })
 
-          const pipeline = await app.call<Pipeline>('POST', `/workspaces/${wsId}/pipelines`, {
-            name: 'Coder only',
-            agentKinds: ['coder'],
-          })
-          const start = await app.call<ExecutionInstance>(
-            'POST',
-            `/workspaces/${wsId}/blocks/task_login/executions`,
-            { pipelineId: pipeline.body.id },
-          )
-          expect(start.status).toBe(201)
+        const pipeline = await app.call<Pipeline>('POST', `/workspaces/${wsId}/pipelines`, {
+          name: 'Coder only',
+          agentKinds: ['coder'],
+        })
+        const start = await app.call<ExecutionInstance>(
+          'POST',
+          `/workspaces/${wsId}/blocks/task_login/executions`,
+          { pipelineId: pipeline.body.id },
+        )
+        expect(start.status).toBe(201)
 
-          const ticked = await app.drive(wsId)
-          const exec = ticked.find((e) => e.blockId === 'task_login')!
-          const step = exec.steps.find((s) => s.agentKind === 'coder')!
-          expect(step.state).toBe('done')
-          // The coder was handed the preset label + its `coder` promptAddition (and nothing else —
-          // no goal/qa bleeds onto a spawned run).
-          expect(step.output).toContain(`[preset]Connector factory|${ADDITION}[/preset]`)
-        } finally {
-          clearRegisteredInitiativePresets()
-        }
+        const ticked = await app.drive(wsId)
+        const exec = ticked.find((e) => e.blockId === 'task_login')!
+        const step = exec.steps.find((s) => s.agentKind === 'coder')!
+        expect(step.state).toBe('done')
+        // The coder was handed the preset label + its `coder` promptAddition (and nothing else —
+        // no goal/qa bleeds onto a spawned run).
+        expect(step.output).toContain(`[preset]Connector factory|${ADDITION}[/preset]`)
+      })
+
+      it('serves an injected custom preset descriptor in the snapshot + accepts create-with-preset', async () => {
+        // D5: the app-owned initiative-preset registry the facade injects surfaces the custom
+        // preset in the workspace snapshot's `initiativePresets` (the SPA picker) AND is accepted
+        // by create-initiative — identically on every runtime, replacing the module-global registry.
+        const CUSTOM_ID = 'preset_conf_custom'
+        const initiativePresetRegistry = new InitiativePresetRegistry()
+        initiativePresetRegistry.register({
+          descriptor: {
+            id: CUSTOM_ID,
+            presentation: {
+              label: 'Conformance custom',
+              icon: 'i-lucide-x',
+              color: '#123456',
+              description: 'A conformance-injected custom preset.',
+            },
+            fields: [{ key: 'toolName', label: 'Tool', type: 'text', required: true }],
+            planningPipelineId: 'pl_initiative',
+            interview: 'full',
+            humanReviewDefault: true,
+            defaultFragmentIds: [],
+          },
+        })
+        const app = harness.makeApp({ confidence: 1 }, { initiativePresetRegistry })
+        const { workspace } = await app.createWorkspace()
+        const wsId = workspace.id
+
+        // The snapshot carries the injected descriptor (+ the built-in generic, always resolvable).
+        const snapshot = await app.call<WorkspaceSnapshot>('GET', `/workspaces/${wsId}`)
+        const presetIds = (snapshot.body.initiativePresets ?? []).map((p) => p.id)
+        expect(presetIds).toContain(CUSTOM_ID)
+        expect(presetIds).toContain('preset_generic')
+
+        // Create an initiative on the seeded service frame naming the injected preset — it is
+        // accepted (an unknown preset id would be a create-time ValidationError). Anchor it to a
+        // SEEDED service frame (`blk_auth`) rather than minting one over `POST /blocks`: raw
+        // service-frame creation is deliberately off the mothership-mode SPA path (the mothership
+        // persistence RPC does not proxy `serviceRepository.insert`), so a seeded frame keeps this
+        // assertion — about preset acceptance, not frame creation — identical on every runtime.
+        const created = await app.call('POST', `/workspaces/${wsId}/initiatives`, {
+          frameId: 'blk_auth',
+          title: 'Custom-preset initiative',
+          presetId: CUSTOM_ID,
+          presetInputs: { toolName: 'acme' },
+        })
+        expect(created.status).toBe(201)
       })
 
       it('restarts a run from a chosen step, preserving prior outputs and the block requirements', async () => {

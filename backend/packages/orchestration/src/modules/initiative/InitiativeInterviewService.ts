@@ -6,8 +6,8 @@ import type {
   ModelProviderResolver,
   ModelRef,
 } from '@cat-factory/kernel'
+import type { InitiativePresetRegistry } from '@cat-factory/kernel'
 import {
-  getInitiativePreset,
   INITIATIVE_INTERVIEWER_AGENT_KIND,
   inlineModelRef,
   resolveScopedModelProvider,
@@ -75,9 +75,9 @@ const INITIATIVE_RECOMMEND_SYSTEM_PROMPT =
  * interviewer prompt stays byte-for-byte unchanged. Checking `presetInputs` cardinality alone
  * would wrongly fire the steering below for that all-blank case once later rounds add real answers.
  */
-function formSeeded(initiative: Initiative): boolean {
+function formSeeded(initiative: Initiative, registry: InitiativePresetRegistry): boolean {
   if (!initiative.presetId || !initiative.presetInputs) return false
-  const preset = getInitiativePreset(initiative.presetId)
+  const preset = registry.get(initiative.presetId)
   if (!preset) return false
   // Only the COUNT matters here, so the id generator is irrelevant.
   return seedPresetInterviewQa(preset.descriptor, initiative.presetInputs, () => '').length > 0
@@ -94,9 +94,10 @@ function formSeeded(initiative: Initiative): boolean {
  */
 function presetInterviewerSteering(
   initiative: Initiative,
+  registry: InitiativePresetRegistry,
 ): { label: string; promptAddition: string } | undefined {
   if (!initiative.presetId) return undefined
-  const preset = getInitiativePreset(initiative.presetId)
+  const preset = registry.get(initiative.presetId)
   const promptAddition = preset?.promptAdditions?.[INITIATIVE_INTERVIEWER_AGENT_KIND]?.trim()
   if (!preset || !promptAddition) return undefined
   return { label: preset.descriptor.presentation.label, promptAddition }
@@ -104,6 +105,8 @@ function presetInterviewerSteering(
 
 /** What the interviewer needs to resolve its inline model + reach the provider. */
 export interface InitiativeInterviewDeps {
+  /** The app-owned initiative-preset registry (resolve a preset's interviewer steering by id). */
+  initiativePresetRegistry: InitiativePresetRegistry
   /** Resolve a ModelProvider for a workspace's credential scope (preferred). */
   modelProviderResolver?: ModelProviderResolver
   /** Static provider (e.g. a fake in tests) used when no resolver is set. */
@@ -213,7 +216,7 @@ export class InitiativeInterviewService {
     // frames what this interview must probe (e.g. the migration's fuzzy, form-uncapturable facts).
     // Rendered under the same `## Initiative preset: <label>` heading the analyst/planner fold uses.
     // Generic / preset-less initiatives register none, so the prompt is unchanged for them.
-    const steering = presetInterviewerSteering(initiative)
+    const steering = presetInterviewerSteering(initiative, this.deps.initiativePresetRegistry)
     if (steering) {
       lines.push('', `## Initiative preset: ${steering.label}`, '', steering.promptAddition)
     }
@@ -236,7 +239,7 @@ export class InitiativeInterviewService {
     // `formSeeded` re-derives this from the actual seeder, so `preset_generic` (empty form), a
     // preset-less initiative, and a preset whose visible fields were all left blank never trigger
     // it — their interviews stay byte-for-byte unchanged.
-    if (answered.length && formSeeded(initiative)) {
+    if (answered.length && formSeeded(initiative, this.deps.initiativePresetRegistry)) {
       lines.push(
         '',
         'The answers above include the intake-form responses the stakeholder already provided at ' +

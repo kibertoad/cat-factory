@@ -121,12 +121,7 @@ export {
 export {
   type InitiativePresetRegistration,
   GENERIC_INITIATIVE_PRESET_ID,
-  registerInitiativePreset,
-  registerInitiativePresets,
-  getInitiativePreset,
-  allInitiativePresets,
-  initiativePresetDescriptors,
-  clearRegisteredInitiativePresets,
+  InitiativePresetRegistry,
 } from './domain/initiative-preset-registry.js'
 
 // Installation-level extension point for custom polling gates + step-completion

@@ -3,6 +3,7 @@ import { promisify } from 'node:util'
 import type { serve } from '@hono/node-server'
 import {
   type AgentKindRegistry,
+  type InitiativePresetRegistry,
   DEFAULT_APP_CACHES_PROFILE,
   NodeRealtimeHub,
   createApp,
@@ -54,6 +55,13 @@ export async function startLocal(
      * Absent → the built-in-only default.
      */
     agentKindRegistry?: AgentKindRegistry
+    /**
+     * App-owned DI seam for custom initiative presets — a deployment news a
+     * `defaultInitiativePresetRegistry()`, registers its own presets on it, and passes it here.
+     * Threaded through to `buildLocalContainer` (both the Postgres and mothership paths).
+     * Absent → the built-in-only default (generic / docs-refresh / tech-migration).
+     */
+    initiativePresetRegistry?: InitiativePresetRegistry
     /**
      * App-owned backend registries (environment + runner kind → provider), registered BY
      * REFERENCE — the same seam the Node facade exposes on `buildContainer.backendRegistries`.
@@ -157,6 +165,7 @@ async function bootLocal(
       localized,
       options.host,
       options.agentKindRegistry,
+      options.initiativePresetRegistry,
       options.backendRegistries,
       options.defaultModelPresetId,
     )
@@ -171,6 +180,7 @@ async function bootLocal(
     env: localized,
     host: options.host,
     agentKindRegistry: options.agentKindRegistry,
+    initiativePresetRegistry: options.initiativePresetRegistry,
     // A mandatory value missing from the reused Node boot (DATABASE_URL) is caught inside `start()`,
     // so it never reaches this facade's own catch above — thread the same local-mode `.env`-CLI
     // advertisement through `start()`'s misconfiguration path so those problems get it too.
@@ -215,6 +225,7 @@ async function startLocalMothership(
   env: NodeJS.ProcessEnv,
   host?: string,
   agentKindRegistry?: AgentKindRegistry,
+  initiativePresetRegistry?: InitiativePresetRegistry,
   backendRegistries?: BackendRegistries,
   defaultModelPresetId?: string,
 ): Promise<Awaited<ReturnType<typeof serve>>> {
@@ -231,6 +242,7 @@ async function startLocalMothership(
     env,
     realtimeSink: realtimeHub,
     agentKindRegistry,
+    initiativePresetRegistry,
     backendRegistries,
     defaultModelPresetId,
   })
