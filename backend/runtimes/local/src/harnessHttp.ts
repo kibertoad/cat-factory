@@ -17,7 +17,7 @@ import type { RunnerJobView } from '@cat-factory/kernel'
 export const EVICTION_ERROR = 'Job not found (container evicted or crashed)'
 
 /** The shared-secret header sent on every harness call. */
-export const SECRET_HEADER = 'x-harness-secret'
+const SECRET_HEADER = 'x-harness-secret'
 
 /** Where a harness instance is reachable. */
 export interface HarnessEndpoint {
@@ -32,7 +32,7 @@ export const delay = (ms: number): Promise<void> =>
   new Promise<void>((resolve) => setTimeout(resolve, ms))
 
 /** A bounded, never-throwing read of a response body for an error message. */
-export async function safeText(res: Response): Promise<string> {
+async function safeText(res: Response): Promise<string> {
   try {
     return (await res.text()).slice(0, 500)
   } catch {

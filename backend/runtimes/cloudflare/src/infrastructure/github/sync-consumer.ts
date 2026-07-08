@@ -14,7 +14,7 @@ import { logger } from '../observability/logger'
 // fakes (mirroring the execution sweeper's style).
 
 /** Apply one queued message to the projections via the GitHub module. */
-export async function applyGitHubSyncMessage(
+async function applyGitHubSyncMessage(
   github: GitHubModule,
   message: GitHubSyncMessage,
 ): Promise<void> {

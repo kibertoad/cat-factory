@@ -912,7 +912,7 @@ function buildAccountSettings(
  * the Node/local facade. Shared by the container wiring and the retention cron so both build
  * the same backend.
  */
-export function cloudflareContentStorage(env: Env): {
+function cloudflareContentStorage(env: Env): {
   capability: ContentStorageCapability
   buildBlobBackend: BuildBlobBackend
 } {

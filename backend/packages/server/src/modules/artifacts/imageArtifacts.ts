@@ -9,7 +9,7 @@
  * execute when served inline same-origin) is rejected at the write boundary so the blob
  * endpoint can never become a stored-XSS vector. SVG is deliberately excluded.
  */
-export const ALLOWED_IMAGE_CONTENT_TYPES: ReadonlySet<string> = new Set([
+const ALLOWED_IMAGE_CONTENT_TYPES: ReadonlySet<string> = new Set([
   'image/png',
   'image/jpeg',
   'image/webp',

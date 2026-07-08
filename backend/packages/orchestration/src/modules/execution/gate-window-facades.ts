@@ -29,7 +29,7 @@ import type { ReviewGateController, ReviewKind } from './ReviewGateController.js
  * with the kind pre-applied, so the requirements / clarity windows honour the task's preset
  * identically. Shared by the pipeline gate and the off-path inspector "Run review" surface.
  */
-export class ReviewWindowActions<TReview extends ReviewCommon> {
+class ReviewWindowActions<TReview extends ReviewCommon> {
   constructor(
     protected readonly reviewGate: ReviewGateController,
     protected readonly kind: ReviewKind<TReview>,

@@ -21,7 +21,7 @@ const unavailable = <E extends AppEnv>(c: Context<E>) =>
   c.json({ error: { code: 'unavailable', message: 'Public API keys are not configured' } }, 503)
 
 /** Project a stored record onto the secret-free wire type. */
-export function publicApiKeyToWire(record: PublicApiKeyRecord): PublicApiKey {
+function publicApiKeyToWire(record: PublicApiKeyRecord): PublicApiKey {
   return {
     id: record.id,
     accountId: record.accountId,

@@ -18,7 +18,7 @@ export interface TesterQualityOutcome {
 }
 
 /** Render a Tester report as the read-only material the QC reviewer audits. */
-export function renderReportForQuality(report: TestReport): string {
+function renderReportForQuality(report: TestReport): string {
   const lines: string[] = []
   if (report.summary) lines.push(`Summary: ${report.summary}`, '')
   lines.push(`Greenlight: ${report.greenlight ? 'yes' : 'no'}`)

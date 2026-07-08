@@ -162,7 +162,7 @@ export interface InfraSetupLogger {
 }
 
 /** Cap on a single area probe so a slow/stuck backend read can't stall the whole board snapshot. */
-export const AREA_PROBE_TIMEOUT_MS = 2000
+const AREA_PROBE_TIMEOUT_MS = 2000
 
 export async function areaStatus(
   wired: boolean,

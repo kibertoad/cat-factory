@@ -8,7 +8,7 @@ import type { Logger, ServerContainer } from '@cat-factory/server'
 // initiatives module isn't wired.
 
 /** Default cadence for the Node initiative-loop sweep (the Worker uses a 2-minute cron). */
-export const INITIATIVE_LOOP_SWEEP_INTERVAL_MS = 60 * 1000
+const INITIATIVE_LOOP_SWEEP_INTERVAL_MS = 60 * 1000
 
 /**
  * The sweep interval, overridable via `INITIATIVE_LOOP_INTERVAL_MS` (milliseconds) — the same

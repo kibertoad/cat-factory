@@ -502,7 +502,7 @@ function buildNodeVcsIdentityRegistry(config: AppConfig): VcsIdentityRegistry {
  * warm container — the personal per-run activation for an individual vendor, the pooled token
  * otherwise — mirroring `ContainerAgentExecutor.resolveAuth`.
  */
-export interface ModelProviderResolverWrapDeps {
+interface ModelProviderResolverWrapDeps {
   leasePersonalSubscriptionToken?: (
     executionId: string,
     userId: string,

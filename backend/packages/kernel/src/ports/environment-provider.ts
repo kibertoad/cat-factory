@@ -45,7 +45,7 @@ export interface ProvisionContext {
 }
 
 /** Coordinates for resolving a RepoFiles bound to an arbitrary repo (separate manifests). */
-export interface RepoFilesCoords {
+interface RepoFilesCoords {
   owner: string
   repo: string
   /** Branch/tag/sha to read at; absent ⇒ that repo's default branch. */

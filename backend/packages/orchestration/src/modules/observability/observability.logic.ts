@@ -48,7 +48,7 @@ export function transportOverheadRatio(upstreamMs: number, overheadMs: number): 
  * there were no prompt tokens. A low rate on a multi-turn run flags a cache-less hot
  * path (e.g. a Workers-AI flavour) re-billing the whole prompt every turn.
  */
-export function cacheHitRate(cachedPromptTokens: number, promptTokens: number): number | null {
+function cacheHitRate(cachedPromptTokens: number, promptTokens: number): number | null {
   if (promptTokens <= 0) return null
   return Math.min(1, cachedPromptTokens / promptTokens)
 }

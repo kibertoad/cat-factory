@@ -18,7 +18,7 @@ import type { PropagatorLogger } from './propagator.js'
 export const DEFAULT_CACHE_CHANNEL_PREFIX = 'cat-factory:cache'
 
 /** Which of the two connections a pair opens — they get different resilience options. */
-export type CacheRedisRole = 'publisher' | 'subscriber'
+type CacheRedisRole = 'publisher' | 'subscriber'
 
 /** The slice of the ioredis surface layered-loader's notification classes use. */
 export interface CacheRedisClient {

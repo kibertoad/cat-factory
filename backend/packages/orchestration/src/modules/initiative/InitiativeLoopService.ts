@@ -596,7 +596,7 @@ export class InitiativeLoopService {
 }
 
 /** Build a {@link TaskEstimate} from an item's planner estimate, stamped for the spawned block. */
-export function estimateForItem(item: InitiativeItem, now: number): TaskEstimate | undefined {
+function estimateForItem(item: InitiativeItem, now: number): TaskEstimate | undefined {
   if (!item.estimate) return undefined
   return {
     complexity: item.estimate.complexity,

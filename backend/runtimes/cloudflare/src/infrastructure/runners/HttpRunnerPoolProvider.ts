@@ -1,8 +1,4 @@
 // Moved to the runtime-neutral @cat-factory/integrations package (so the Node
 // service can drive a self-hosted runner pool through the same implementation);
 // re-exported here for existing Worker imports.
-export {
-  HttpRunnerPoolProvider,
-  RunnerPoolApiError,
-  type HttpRunnerPoolProviderOptions,
-} from '@cat-factory/integrations'
+export { HttpRunnerPoolProvider, RunnerPoolApiError } from '@cat-factory/integrations'

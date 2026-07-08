@@ -1,7 +1,6 @@
 import {
   addUserApiKeyContract,
   addWorkspaceApiKeyContract,
-  apiKeyProviderSchema,
   listUserApiKeysContract,
   listWorkspaceApiKeysContract,
   removeUserApiKeyContract,
@@ -10,7 +9,6 @@ import {
 } from '@cat-factory/contracts'
 import type { ApiKeySummary } from '@cat-factory/integrations'
 import { buildHonoRoute } from '@toad-contracts/hono'
-import * as v from 'valibot'
 import { Hono } from 'hono'
 import type { Context } from 'hono'
 import type { AppEnv } from '../../http/env.js'
@@ -106,11 +104,4 @@ export function userApiKeyController(): Hono<AppEnv> {
   })
 
   return app
-}
-
-/** Parse a provider id from a query/path value, or undefined when absent/invalid. */
-export function parseApiKeyProvider(value: string | undefined) {
-  if (!value) return undefined
-  const parsed = v.safeParse(apiKeyProviderSchema, value)
-  return parsed.success ? parsed.output : undefined
 }
