@@ -1,3 +1,4 @@
+import { INITIATIVE_ITEM_TERMINAL_STATUSES } from '@cat-factory/contracts'
 import { describe, it, expect } from 'vitest'
 import type { InitiativeItem, InitiativePhase } from '~/types/domain'
 import { pendingCheckpointPhase } from './initiative'
@@ -60,5 +61,13 @@ describe('pendingCheckpointPhase', () => {
     const items = [item('a', 'p1', 'done'), item('b', 'p2', 'done'), item('c', 'p3', 'done')]
     // p1 already cleared → p2 is the pending one (even though p3 is also complete + uncleared).
     expect(pendingCheckpointPhase(phases, items)?.id).toBe('p2')
+  })
+
+  // Drift guard: the checkpoint fires on EVERY status the backend counts as terminal, because the
+  // frontend gates on the SAME `INITIATIVE_ITEM_TERMINAL_STATUSES` the engine does — not a local
+  // copy. If the backend adds a terminal status, this fires the checkpoint on it automatically.
+  it.each([...INITIATIVE_ITEM_TERMINAL_STATUSES])('fires on the terminal status %s', (status) => {
+    const phases = [phase({ id: 'p1', checkpoint: true })]
+    expect(pendingCheckpointPhase(phases, [item('a', 'p1', status)])?.id).toBe('p1')
   })
 })

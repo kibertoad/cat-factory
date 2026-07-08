@@ -427,7 +427,7 @@ Zero cat-factory changes beyond the slices above; zero org prompts shipped in ca
   `pendingCheckpoint` (unit-pinned in `initiative.spec.ts` so it can't drift) — it does not read a
   derived flag off the wire. It renders a per-phase checkpoint badge (awaiting-review / reviewed /
   upcoming) and, when `status === 'paused'` at a pending checkpoint, a banner (`data-testid=
-  initiative-checkpoint-pause`) with inline Resume/Cancel (reusing `initiatives.control` +
+initiative-checkpoint-pause`) with inline Resume/Cancel (reusing `initiatives.control` +
   `initiative.inspector.resume|cancel` copy — no new lifecycle). The initiative board card gained a
   live `data-status` for observability. New i18n keys live under `initiative.checkpoint.*`
   (translated across all 10 locales, parity-gated). E2E `initiative-checkpoint.spec.ts` reuses the

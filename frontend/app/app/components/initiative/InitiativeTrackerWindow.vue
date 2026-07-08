@@ -53,6 +53,12 @@ const checkpointPhase = computed(() =>
 const pausedAtCheckpoint = computed(
   () => initiative.value?.status === 'paused' && checkpointPhase.value !== null,
 )
+// The phase whose checkpoint is genuinely holding the initiative RIGHT NOW (paused for review) —
+// only then does its badge read "awaiting review". A phase whose items just settled but whose
+// pause hasn't landed yet stays an upcoming checkpoint, so the badge can't get ahead of the banner.
+const awaitingReviewPhaseId = computed(() =>
+  pausedAtCheckpoint.value ? (checkpointPhase.value?.id ?? null) : null,
+)
 
 /** Resume (GO) or cancel (NO_GO) an initiative paused at a checkpoint. */
 async function checkpointControl(action: 'resume' | 'cancel') {
@@ -323,7 +329,7 @@ async function savePolicy() {
                   :color="
                     phase.checkpointClearedAt
                       ? 'neutral'
-                      : checkpointPhase?.id === phase.id
+                      : awaitingReviewPhaseId === phase.id
                         ? 'warning'
                         : 'info'
                   "
@@ -335,7 +341,7 @@ async function savePolicy() {
                   {{
                     phase.checkpointClearedAt
                       ? t('initiative.checkpoint.cleared')
-                      : checkpointPhase?.id === phase.id
+                      : awaitingReviewPhaseId === phase.id
                         ? t('initiative.checkpoint.awaiting')
                         : t('initiative.checkpoint.badge')
                   }}

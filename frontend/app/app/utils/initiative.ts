@@ -1,3 +1,4 @@
+import { INITIATIVE_ITEM_TERMINAL_STATUSES } from '@cat-factory/contracts'
 import type {
   InitiativeFollowUp,
   InitiativeItem,
@@ -99,15 +100,15 @@ export function defaultPresetInputs(
   return inputs
 }
 
-/** Item statuses that count as settled — mirrors the backend terminal-status set. */
-const SETTLED: ReadonlySet<InitiativeItemStatus> = new Set(['done', 'skipped'])
-
 /** Completion rollup across an initiative's items, or null when there are none. */
 export function initiativeProgress(
   items: InitiativeItem[] | undefined,
 ): { settled: number; total: number } | null {
   if (!items || items.length === 0) return null
-  return { settled: items.filter((i) => SETTLED.has(i.status)).length, total: items.length }
+  return {
+    settled: items.filter((i) => INITIATIVE_ITEM_TERMINAL_STATUSES.has(i.status)).length,
+    total: items.length,
+  }
 }
 
 /**
@@ -115,8 +116,10 @@ export function initiativeProgress(
  * `pendingCheckpoint` (orchestration `initiative.logic.ts`) so the SPA recomputes the pending
  * checkpoint from the live entity — the same shape the loop pauses on — rather than reading a
  * derived flag off the wire: the FIRST phase, in declared order, flagged `checkpoint`, NOT yet
- * cleared (`checkpointClearedAt`), holding at least one item, with every item settled. An open
- * tracker window then follows the checkpoint as items settle without a reload.
+ * cleared (`checkpointClearedAt`), holding at least one item, with every item terminal. Uses the
+ * canonical `INITIATIVE_ITEM_TERMINAL_STATUSES` (the SAME set the backend gates on) so the
+ * terminal-status membership cannot drift from the engine, not just the ordering. An open tracker
+ * window then follows the checkpoint as items settle without a reload.
  */
 export function pendingCheckpointPhase(
   phases: InitiativePhase[] | undefined,
@@ -127,7 +130,7 @@ export function pendingCheckpointPhase(
     if (phase.checkpoint !== true || phase.checkpointClearedAt !== undefined) continue
     const phaseItems = all.filter((i) => i.phaseId === phase.id)
     if (phaseItems.length === 0) continue
-    if (phaseItems.every((i) => SETTLED.has(i.status))) return phase
+    if (phaseItems.every((i) => INITIATIVE_ITEM_TERMINAL_STATUSES.has(i.status))) return phase
   }
   return null
 }
