@@ -6,6 +6,7 @@ import type {
   IdGenerator,
   Initiative,
   InitiativeItem,
+  InitiativePhase,
   InitiativeRepository,
   PipelineRepository,
   ResolveRunRepoContext,
@@ -28,6 +29,7 @@ import {
   deriveCurrentPhase,
   effectiveMaxConcurrent,
   eligibleItemsToSpawn,
+  pendingCheckpoint,
   reconcileItem,
   selectInitiativePipeline,
 } from './initiative.logic.js'
@@ -157,6 +159,16 @@ export class InitiativeLoopService {
       const blocksById = await this.readSpawnedBlocks(workspaceId, initiative)
       initiative = (await this.reconcile(workspaceId, initiative, blocksById)) ?? initiative
 
+      // 1.5. Checkpoint — a completed checkpoint phase (D2) PAUSES the initiative for human review
+      //      before the next phase spawns, so the human can inspect the phase's output (e.g. a
+      //      research verdict) before more work runs. Checked BEFORE complete/spawn, or a checkpoint
+      //      on the LAST phase would silently auto-complete. Resume clears it (InitiativeService.resume).
+      const checkpoint = pendingCheckpoint(initiative)
+      if (checkpoint) {
+        await this.pauseAtCheckpoint(workspaceId, initiative, checkpoint, startRev)
+        return { spawned: 0, completed: false }
+      }
+
       // 2. Complete when every item is settled.
       if (allItemsSettled(initiative)) {
         await this.complete(workspaceId, initiative)
@@ -241,6 +253,37 @@ export class InitiativeLoopService {
     )
     if (newlyBlocked && updated) await this.notify(workspaceId, updated, 'item_blocked')
     return updated
+  }
+
+  // ---- Checkpoint ---------------------------------------------------------
+
+  /**
+   * Pause the initiative at a completed checkpoint phase: CAS the status to `paused`, re-checking
+   * the checkpoint on the freshly-read entity so a concurrent tick / resume can't be raced past
+   * (only THIS still-pending checkpoint pauses). On a real pause it best-effort re-commits the
+   * tracker (so the mirror shows the paused-at-checkpoint state) and raises the `checkpoint`
+   * notification. A no-op when the entity already moved on (not executing, or the checkpoint cleared).
+   */
+  private async pauseAtCheckpoint(
+    workspaceId: string,
+    initiative: Initiative,
+    phase: InitiativePhase,
+    startRev: number,
+  ): Promise<void> {
+    const paused = await this.deps.initiativeService.update(
+      workspaceId,
+      initiative.blockId,
+      (current) => {
+        if (current.status !== 'executing') return current
+        const pending = pendingCheckpoint(current)
+        return pending && pending.id === phase.id
+          ? { ...current, status: 'paused' as const }
+          : current
+      },
+    )
+    if (!paused || paused.status !== 'paused') return
+    await this.recommitTracker(workspaceId, initiative.blockId, startRev).catch(() => {})
+    await this.notify(workspaceId, paused, 'checkpoint', phase)
   }
 
   // ---- Complete -----------------------------------------------------------
@@ -509,7 +552,8 @@ export class InitiativeLoopService {
   private async notify(
     workspaceId: string,
     initiative: Initiative,
-    reason: 'item_blocked' | 'complete',
+    reason: 'item_blocked' | 'complete' | 'checkpoint',
+    phase?: InitiativePhase,
   ): Promise<void> {
     if (!this.deps.notificationService) return
     const items = initiative.items ?? []
@@ -520,13 +564,18 @@ export class InitiativeLoopService {
             title: `Initiative "${initiative.title}" complete`,
             body: `Every planned task is resolved (${items.length} item${items.length === 1 ? '' : 's'}).`,
           }
-        : {
-            title: `Initiative "${initiative.title}" needs attention`,
-            body:
-              blocked.length === 1
-                ? `A task was blocked (${blocked[0]!.title}). Retry or skip it to unblock the phase.`
-                : `${blocked.length} tasks are blocked. Retry or skip them to unblock the phase.`,
-          }
+        : reason === 'checkpoint'
+          ? {
+              title: `Initiative "${initiative.title}" paused for review`,
+              body: `Phase "${phase?.title ?? ''}" is complete — review its output, then resume or cancel the initiative.`,
+            }
+          : {
+              title: `Initiative "${initiative.title}" needs attention`,
+              body:
+                blocked.length === 1
+                  ? `A task was blocked (${blocked[0]!.title}). Retry or skip it to unblock the phase.`
+                  : `${blocked.length} tasks are blocked. Retry or skip them to unblock the phase.`,
+            }
     await this.deps.notificationService
       .raise(workspaceId, {
         type: 'initiative',

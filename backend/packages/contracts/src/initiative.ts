@@ -154,6 +154,20 @@ export const initiativePhaseSchema = v.object({
   maxConcurrent: v.optional(
     v.pipe(v.number(), v.integer(), v.minValue(1), v.maxValue(INITIATIVE_MAX_CONCURRENT)),
   ),
+  /**
+   * When true, the initiative PAUSES for human review once every item in this phase settles, before
+   * the next phase spawns (the D2 checkpoint — e.g. read a phase's committed research/verdict, then
+   * resume to continue or cancel). Stamped at ingest from a preset's phase template (the planner
+   * cannot unset a template-authored checkpoint), or authored directly by the planner on a draft
+   * phase (generic — usable without a preset). Absent ⇒ the phase advances unattended.
+   */
+  checkpoint: v.optional(v.boolean()),
+  /**
+   * Wall-clock ms when a human CLEARED this phase's checkpoint (stamped by `resume`). Absent ⇒ not
+   * yet cleared. A cleared checkpoint never re-fires, so the loop advances past a reviewed phase.
+   * Loop/entity bookkeeping — never planner- or template-authored; preserved across a re-plan/replay.
+   */
+  checkpointClearedAt: v.optional(v.number()),
 })
 export type InitiativePhase = v.InferOutput<typeof initiativePhaseSchema>
 
@@ -381,6 +395,11 @@ export const initiativePlanDraftSchema = v.object({
       maxConcurrent: v.optional(
         v.pipe(v.number(), v.integer(), v.minValue(1), v.maxValue(INITIATIVE_MAX_CONCURRENT)),
       ),
+      /**
+       * Planner-authored checkpoint request (see {@link initiativePhaseSchema}'s `checkpoint`). A
+       * preset's phase template can FORCE it on at ingest; the planner cannot unset a template one.
+       */
+      checkpoint: v.optional(v.boolean()),
     }),
   ),
   items: v.array(initiativeDraftItemSchema),

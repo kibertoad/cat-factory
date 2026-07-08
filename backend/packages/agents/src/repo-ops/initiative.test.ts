@@ -184,6 +184,24 @@ describe('renderInitiativeFiles', () => {
     expect(md).toContain('**One registry per PR** (planning)')
     expect(md).toContain('## Known caveats')
   })
+
+  it('annotates a checkpoint phase (pending vs cleared) in the tracker markdown (D2)', () => {
+    const entity = entityFromPlan()
+    const withCheckpoints: Initiative = {
+      ...entity,
+      phases: [
+        { ...entity.phases![0]!, checkpoint: true },
+        { ...entity.phases![1]!, checkpoint: true, checkpointClearedAt: Date.parse('2026-07-04') },
+      ],
+    }
+    const md = renderInitiativeTrackerMarkdown(withCheckpoints)
+    expect(md).toContain(
+      '> 🛑 Checkpoint — the initiative pauses for human review once every item in this phase settles.',
+    )
+    expect(md).toContain(
+      '> 🛑 Checkpoint cleared 2026-07-04 — the initiative resumed past this phase.',
+    )
+  })
 })
 
 describe('commitInitiativeTracker', () => {

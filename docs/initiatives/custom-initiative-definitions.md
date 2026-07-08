@@ -299,7 +299,7 @@ documented state in `example-custom-agent`).
 | --- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ------ | ---------- | ------- | ---- |
 | 0   | This tracker doc                                                                                                                                                                                                                                                                                                                                                                                                                         | —      | —          | ✅ done | #942 |
 | 1   | **Spawned-run preset prompt additions (D1, the pilot)**: `AgentContextBuilder` initiative-preset resolution for `block.initiativeId` blocks; shared `initiativePresetSection` render in `@cat-factory/agents` (standard + generic prompts); kernel context docs; unit + conformance                                                                                                                                                      | SYSTEM | —          | ✅ done | #944 |
-| 2   | **Phase checkpoints (D2)**: contracts (`checkpoint` on template/entity/draft phases + `checkpointClearedAt`), ingest stamping, pure `pendingCheckpoint`/`applyCheckpointCleared`, loop pause + `checkpoint` notification reason, resume clears, tracker.md renders checkpoints; unit + conformance                                                                                                                                       | SYSTEM | —          | ⬜ todo |      |
+| 2   | **Phase checkpoints (D2)**: contracts (`checkpoint` on template/entity/draft phases + `checkpointClearedAt`), ingest stamping, pure `pendingCheckpoint`/`applyCheckpointCleared`, loop pause + `checkpoint` notification reason, resume clears, tracker.md renders checkpoints; unit + conformance                                                                                                                                       | SYSTEM | —          | ✅ done | #948 |
 | 3   | **Checkpoint SPA touch + e2e**: phase checkpoint badge / paused-at-checkpoint explanation; e2e: checkpointed fake plan → pause → resume → next-phase spawn (extends the `FakeProfile.initiativePlan` seam — do not add a second one)                                                                                                                                                                                                     | SYSTEM | 2          | ⬜ todo |      |
 | 4   | **Planner preferred-pipelines fold (D4)**: `policyDefaults`-derived line in the plan-shape fold; prompt unit tests. Low prio — reassess after slices 1–2; drop if planner drift doesn't occur                                                                                                                                                                                                                                            | SYSTEM | —          | ⬜ todo |      |
 | 5   | **Preset-registry DI migration (D5)**: kernel registry class + default factory; `CoreDependencies` field; thread into the 3 orchestration read sites + `ServerContainer` for the 2 controllers; symmetric facade wiring (Worker/Node/local); delete free registration fns (breaking changeset); conformance custom-preset injection; update `registry-di-migration.md`                                                                   | SYSTEM | 1, 2       | ⬜ todo |      |
@@ -405,6 +405,22 @@ Zero cat-factory changes beyond the slices above; zero org prompts shipped in ca
   breaking changeset; changesets per touched package; README catalog + knip + guard
   scripts per the repo checklist.
 - **E2E reuses `FakeProfile.initiativePlan`** for planner output — never a second seam.
+- **Slice 2 landed:** `checkpoint` / `checkpointClearedAt` ride the phase (no migration — the
+  entity's `doc` blob), and the notification `initiativeReason` gained `'checkpoint'`. The pure
+  `pendingCheckpoint`/`applyCheckpointCleared` live in `initiative.logic.ts`; the loop calls
+  `pendingCheckpoint` in `tick` **after reconcile, before complete/spawn** (`pauseAtCheckpoint`
+  re-checks on the fresh entity inside the CAS so a concurrent resume can't be raced), and
+  `InitiativeService.resume` clears the pending checkpoint in the SAME CAS transform as
+  `paused → executing`. `normalizeDraftAgainstPhaseTemplate` FORCES a template `checkpoint: true`
+  onto the matched draft phase (planner can't unset it); `applyPlanDraft` carries a draft
+  `checkpoint` through and PRESERVES an existing phase's `checkpointClearedAt` across a re-plan;
+  `coerceInitiativePlan` carries a planner-authored `checkpoint` (the generic, preset-less path).
+  Conformance: the store round-trips the new phase fields, and `resume`-clears is driven over each
+  facade's real store (the pause itself is loop-driven, covered by the loop unit test). Note the
+  item-less-checkpoint-phase rule: a checkpoint phase with zero items never fires (nothing to
+  review) — it's skipped like any empty phase. NOT touched: the planner SYSTEM prompt (no prompt
+  guidance that the planner may author a checkpoint — presets drive it via the phase template;
+  revisit only if the generic planner-authored path proves useful in practice).
 - **Slice 1 landed:** the shared renderer is `initiativePresetSection(context)` in
   `@cat-factory/agents` `prompts/standard.ts` (NOT `catalog.ts` — it lives beside the sibling
   section helpers `environmentSection`/`involvedServicesSection` and is re-exported from the
