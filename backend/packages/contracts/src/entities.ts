@@ -2031,6 +2031,43 @@ export const budgetCapsSchema = v.object({
 })
 export type BudgetCaps = v.InferOutput<typeof budgetCapsSchema>
 
+/**
+ * One row of the usage report (the "Usage" settings tab): aggregated token usage for a
+ * `(billing, vendor, provider, model)` group over the current billing period. Covers BOTH
+ * metered API/proxy calls and flat-rate subscription harness usage. `costEstimate` is real
+ * for metered rows and illustrative for subscription rows (what the same tokens would have
+ * cost on the metered API — never a billed amount).
+ */
+export const usageBreakdownRowSchema = v.object({
+  /** `'metered'` (real per-token cost, in the spend budget) or `'subscription'` (flat-rate quota). */
+  billing: v.picklist(['metered', 'subscription']),
+  /** The subscription vendor (claude/codex/glm/kimi/deepseek) for a subscription row; null for metered. */
+  vendor: v.nullable(v.string()),
+  provider: v.string(),
+  model: v.string(),
+  inputTokens: v.number(),
+  outputTokens: v.number(),
+  /** Estimated cost in `UsageReport.currency`; illustrative for subscription rows. */
+  costEstimate: v.number(),
+  /** Number of recorded calls in this group. */
+  calls: v.number(),
+})
+export type UsageBreakdownRow = v.InferOutput<typeof usageBreakdownRowSchema>
+
+/**
+ * The workspace usage report for the current billing period: per-`(billing, vendor,
+ * provider, model)` rows plus the period start + currency the costs are expressed in. Both
+ * metered and subscription usage; the spend budget still counts only the metered rows.
+ */
+export const usageReportSchema = v.object({
+  /** Start of the current billing period (epoch ms; calendar month, UTC). */
+  periodStart: v.number(),
+  /** ISO 4217 currency `costEstimate` is expressed in. */
+  currency: v.string(),
+  rows: v.array(usageBreakdownRowSchema),
+})
+export type UsageReport = v.InferOutput<typeof usageReportSchema>
+
 // The workspace snapshot schema lives in ./snapshot — it references
 // `bootstrapJobSchema` from ./bootstrap, which itself imports from this file, so
 // keeping it here would be a circular import.

@@ -468,10 +468,27 @@ export interface AgentRunResult {
   custom?: unknown
   /**
    * Tokens the model consumed for this call. Reported by inline LLM executors so
-   * the spend safeguard can meter usage; absent for the container executor (whose
-   * proxy meters tokens itself, to avoid double-counting) and test fakes.
+   * the spend safeguard can meter usage; absent for the PROXY-metered container path
+   * (Pi, whose proxy meters tokens itself to avoid double-counting) and test fakes.
+   * ALSO reported by the container executor for a SUBSCRIPTION harness run (Claude
+   * Code / Codex, which bypass the proxy) — those are tagged {@link usageBilling}
+   * `'subscription'` so the engine records them for the usage report while the budget
+   * gate excludes them.
    */
   usage?: AgentTokenUsage
+  /**
+   * How {@link usage} should be metered: `'metered'` (a real per-token cost, summed by
+   * the budget gate — the default for inline executors) or `'subscription'` (a flat-rate
+   * quota harness call, counted for the usage report but excluded from every spend
+   * rollup). Only meaningful when `usage` is present. Absent ⇒ `'metered'`.
+   */
+  usageBilling?: 'metered' | 'subscription'
+  /**
+   * The subscription vendor (claude/codex/glm/kimi/deepseek) for a `'subscription'`
+   * {@link usageBilling} row, so the usage report can break usage down by vendor. Absent
+   * for metered usage.
+   */
+  usageVendor?: string
 }
 
 export interface AgentExecutor {

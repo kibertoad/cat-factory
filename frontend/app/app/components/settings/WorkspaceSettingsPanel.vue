@@ -13,6 +13,7 @@ import MergeThresholdsPanel from '~/components/settings/MergeThresholdsPanel.vue
 import IssueTrackerPanel from '~/components/settings/IssueTrackerPanel.vue'
 import ServiceFragmentDefaultsPanel from '~/components/settings/ServiceFragmentDefaultsPanel.vue'
 import BudgetSettings from '~/components/settings/BudgetSettings.vue'
+import UsageSettings from '~/components/settings/UsageSettings.vue'
 import IntegrationBackTitle from '~/components/layout/IntegrationBackTitle.vue'
 
 const { t, te } = useI18n()
@@ -45,6 +46,12 @@ const tabs = computed(() => [
     label: t('settings.workspaceSettings.tabs.budget'),
     icon: 'i-lucide-wallet',
     slot: 'budget',
+  },
+  {
+    value: 'usage',
+    label: t('settings.workspaceSettings.tabs.usage'),
+    icon: 'i-lucide-bar-chart-3',
+    slot: 'usage',
   },
   {
     value: 'merge',
@@ -329,6 +336,11 @@ async function save() {
         <!-- Budget (workspace / account / user tiers) -->
         <template #budget>
           <BudgetSettings />
+        </template>
+
+        <!-- Usage report (metered + subscription token usage this period) -->
+        <template #usage>
+          <UsageSettings />
         </template>
 
         <!-- Merge thresholds -->

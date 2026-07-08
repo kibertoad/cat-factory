@@ -110,6 +110,8 @@ describe('storage retention sweep', () => {
       inputTokens: 1,
       outputTokens: 1,
       costEstimate: 0,
+      billing: 'metered' as const,
+      vendor: null,
     }
     await repo.record({ ...base, id: 'tok_old', createdAt: NOW - 400 * DAY })
     await repo.record({ ...base, id: 'tok_fresh', createdAt: NOW - 1 * DAY })
@@ -220,6 +222,8 @@ describe('storage retention sweep', () => {
       inputTokens: 1,
       outputTokens: 1,
       costEstimate: 0,
+      billing: 'metered',
+      vendor: null,
       createdAt: NOW - 1000 * DAY,
     })
 

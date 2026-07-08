@@ -639,9 +639,20 @@
         "saveFailed": "Katalog konnte nicht gespeichert werden"
       }
     },
+    "usage": {
+      "body": "Token-Nutzung in diesem Abrechnungszeitraum – über gemessene API-Aufrufe und pauschale Abo-Harnesses (Claude Code, Codex, GLM sowie gepoolte Kimi & DeepSeek) hinweg.",
+      "period": "Aktueller Abrechnungszeitraum – seit {date}.",
+      "empty": "In diesem Zeitraum wurde noch keine Nutzung erfasst.",
+      "subscription": "Abonnements",
+      "metered": "Gemessene API",
+      "illustrative": "Die für Abonnements angezeigten Kosten sind Richtwerte – diese Tarife sind Pauschalpreise und werden nicht pro Token abgerechnet.",
+      "tokens": "{input} ein / {output} aus",
+      "calls": "{count} Aufrufe"
+    },
     "workspaceSettings": {
       "title": "Workspace-Einstellungen",
       "tabs": {
+        "usage": "Nutzung",
         "workspace": "Workspace",
         "budget": "Budget",
         "merge": "Merge-Schwellenwerte",
@@ -3580,6 +3591,7 @@
     }
   },
   "common": {
+    "loading": "Wird geladen…",
     "save": "Speichern",
     "cancel": "Abbrechen",
     "retry": "Erneut versuchen",

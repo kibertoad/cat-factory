@@ -951,6 +951,78 @@ export function defineCoreConformance(harness: ConformanceHarness): void {
         expect(after.body.currency).toBe('USD')
       })
 
+      it('counts subscription usage in /usage but excludes it from the spend budget (D1 ⇄ Postgres)', async () => {
+        type UsageRow = {
+          billing: string
+          vendor: string | null
+          provider: string
+          model: string
+          inputTokens: number
+          outputTokens: number
+          costEstimate: number
+          calls: number
+        }
+        type UsageReport = { periodStart: number; currency: string; rows: UsageRow[] }
+        type Spend = { inputTokens: number; outputTokens: number; costSpent: number }
+
+        // A subscription-harness run: the fake reports usage tagged 'subscription' (vendor
+        // claude) — the proxy-bypassing Claude Code / Codex path.
+        const sub = harness.makeApp({
+          usage: { inputTokens: 1000, outputTokens: 500 },
+          usageBilling: 'subscription',
+          usageVendor: 'claude',
+        })
+        const subWs = (await sub.createWorkspace()).workspace.id
+        const subPipe = await sub.call<Pipeline>('POST', `/workspaces/${subWs}/pipelines`, {
+          name: 'Code',
+          agentKinds: ['coder'],
+        })
+        const subStart = await sub.call(
+          'POST',
+          `/workspaces/${subWs}/blocks/task_login/executions`,
+          {
+            pipelineId: subPipe.body.id,
+          },
+        )
+        expect(subStart.status).toBe(201)
+        await sub.drive(subWs)
+
+        const subUsage = await sub.call<UsageReport>('GET', `/workspaces/${subWs}/usage`)
+        expect(subUsage.status).toBe(200)
+        const subRow = subUsage.body.rows.find((r) => r.billing === 'subscription')
+        expect(subRow).toBeDefined()
+        expect(subRow?.vendor).toBe('claude')
+        expect(subRow?.inputTokens).toBeGreaterThanOrEqual(1000)
+        // The load-bearing invariant: a flat-rate subscription call is counted in the report
+        // but NEVER in the spend budget (a quota plan costs nothing per token).
+        expect(subUsage.body.rows.every((r) => r.billing === 'subscription')).toBe(true)
+        const subSpend = await sub.call<Spend>('GET', `/workspaces/${subWs}/spend`)
+        expect(subSpend.body.inputTokens).toBe(0)
+        expect(subSpend.body.costSpent).toBe(0)
+
+        // A metered run (same usage, default billing) IS counted by both the report and the budget.
+        const met = harness.makeApp({ usage: { inputTokens: 1000, outputTokens: 500 } })
+        const metWs = (await met.createWorkspace()).workspace.id
+        const metPipe = await met.call<Pipeline>('POST', `/workspaces/${metWs}/pipelines`, {
+          name: 'Code',
+          agentKinds: ['coder'],
+        })
+        const metStart = await met.call(
+          'POST',
+          `/workspaces/${metWs}/blocks/task_login/executions`,
+          {
+            pipelineId: metPipe.body.id,
+          },
+        )
+        expect(metStart.status).toBe(201)
+        await met.drive(metWs)
+
+        const metSpend = await met.call<Spend>('GET', `/workspaces/${metWs}/spend`)
+        expect(metSpend.body.inputTokens).toBeGreaterThanOrEqual(1000)
+        const metUsage = await met.call<UsageReport>('GET', `/workspaces/${metWs}/usage`)
+        expect(metUsage.body.rows.some((r) => r.billing === 'metered')).toBe(true)
+      })
+
       it('round-trips the per-user (user-tier) budget (D1 ⇄ Postgres)', async () => {
         // The user-tier budget lives in the `user_settings` table (PK user_id). It is user-scoped,
         // so — like local model endpoints — it is exercised through the service directly (the

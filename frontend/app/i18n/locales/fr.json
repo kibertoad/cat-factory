@@ -23,6 +23,7 @@
     }
   },
   "common": {
+    "loading": "Chargement…",
     "save": "Enregistrer",
     "cancel": "Annuler",
     "retry": "Réessayer",
@@ -2193,9 +2194,20 @@
         "saveFailed": "Impossible d'enregistrer le catalogue"
       }
     },
+    "usage": {
+      "body": "Utilisation des jetons sur cette période de facturation, entre les appels d'API facturés et les abonnements forfaitaires (Claude Code, Codex, GLM et Kimi & DeepSeek mutualisés).",
+      "period": "Période de facturation en cours – depuis {date}.",
+      "empty": "Aucune utilisation enregistrée pour cette période.",
+      "subscription": "Abonnements",
+      "metered": "API facturée",
+      "illustrative": "Les coûts affichés pour les abonnements sont indicatifs : ces forfaits sont à tarif fixe et non facturés au jeton.",
+      "tokens": "{input} entrée / {output} sortie",
+      "calls": "{count} appels"
+    },
     "workspaceSettings": {
       "title": "Paramètres de l'espace de travail",
       "tabs": {
+        "usage": "Utilisation",
         "workspace": "Espace de travail",
         "budget": "Budget",
         "merge": "Seuils de fusion",

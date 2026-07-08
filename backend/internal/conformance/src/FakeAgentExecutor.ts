@@ -52,6 +52,14 @@ export interface FakeAgentOptions {
   /** Token usage reported per call, so the spend safeguard can be exercised. */
   usage?: { inputTokens: number; outputTokens: number }
   /**
+   * How {@link usage} is billed. `'subscription'` marks a flat-rate quota-harness run so the
+   * usage report counts it but the spend budget excludes it; omit (⇒ metered) for a real
+   * per-token cost that the budget sums. Lets the suite pin the metered-vs-subscription split.
+   */
+  usageBilling?: 'metered' | 'subscription'
+  /** The subscription vendor tagged onto a `'subscription'` {@link usageBilling} run. */
+  usageVendor?: string
+  /**
    * When set, the (generic-kind) agent echoes the description it was handed into its
    * output as `[desc]…[/desc]`, so a test can assert WHICH requirements text the engine
    * fed it — e.g. that a block's reworked requirements replaced its raw description.
@@ -231,6 +239,15 @@ export class FakeAgentExecutor implements AgentExecutor {
     return 'fake'
   }
 
+  /** The usage fields to spread onto a result: the token counts + optional billing tag. */
+  private usageFields(): Pick<AgentRunResult, 'usage' | 'usageBilling' | 'usageVendor'> {
+    return {
+      ...this.usageFields(),
+      ...(this.options.usageBilling ? { usageBilling: this.options.usageBilling } : {}),
+      ...(this.options.usageVendor ? { usageVendor: this.options.usageVendor } : {}),
+    }
+  }
+
   async run(context: AgentRunContext): Promise<AgentRunResult> {
     const raisesDecision =
       this.options.decisionOnSteps?.includes(context.stepIndex) && !context.resolvedDecision
@@ -240,7 +257,7 @@ export class FakeAgentExecutor implements AgentExecutor {
           question: `Decision for ${context.agentKind}?`,
           options: ['Option A', 'Option B'],
         },
-        usage: this.options.usage,
+        ...this.usageFields(),
       }
     }
 
@@ -286,7 +303,7 @@ export class FakeAgentExecutor implements AgentExecutor {
         return {
           output: 'I reviewed it and it looks fine overall, but my reply got cut off mid-',
           model: 'fake',
-          usage: this.options.usage,
+          ...this.usageFields(),
         }
       }
       const seq = this.options.companionRatings
@@ -313,7 +330,7 @@ export class FakeAgentExecutor implements AgentExecutor {
           ...(corroborated !== undefined ? { technicalCorroborated: corroborated } : {}),
         }),
         model: 'fake',
-        usage: this.options.usage,
+        ...this.usageFields(),
       }
     }
 
@@ -396,7 +413,7 @@ export class FakeAgentExecutor implements AgentExecutor {
         output: `[merger] assessed "${context.block.title}"`,
         model: 'fake',
         confidence: context.isFinalStep ? confidence : undefined,
-        usage: this.options.usage,
+        ...this.usageFields(),
         mergeAssessment,
       }
     }
@@ -421,7 +438,7 @@ export class FakeAgentExecutor implements AgentExecutor {
       output: `[${context.agentKind}] processed "${context.block.title}"${revisionSuffix}${descSuffix}${fragSuffix}${presetSuffix}`,
       model: 'fake',
       confidence: context.isFinalStep ? confidence : undefined,
-      usage: this.options.usage,
+      ...this.usageFields(),
       // Mimic the container "implementer" agent opening a PR for repo-operating work.
       ...(this.options.pullRequest ? { pullRequest: this.options.pullRequest } : {}),
       // ...and, for a multi-repo run, the PRs it opened in the connected services' repos.

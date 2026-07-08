@@ -23,6 +23,7 @@
     }
   },
   "common": {
+    "loading": "Loading…",
     "save": "Save",
     "cancel": "Cancel",
     "retry": "Retry",
@@ -2375,9 +2376,20 @@
         "saveFailed": "Could not save catalog"
       }
     },
+    "usage": {
+      "body": "Token usage this billing period, across metered API calls and flat-rate subscription harnesses (Claude Code, Codex, GLM, and pooled Kimi & DeepSeek).",
+      "period": "Current billing period — since {date}.",
+      "empty": "No usage recorded this period yet.",
+      "subscription": "Subscriptions",
+      "metered": "Metered API",
+      "illustrative": "Costs shown for subscriptions are illustrative — these plans are flat-rate, not billed per token.",
+      "tokens": "{input} in / {output} out",
+      "calls": "{count} calls"
+    },
     "workspaceSettings": {
       "title": "Workspace settings",
       "tabs": {
+        "usage": "Usage",
         "workspace": "Workspace",
         "budget": "Budget",
         "merge": "Merge thresholds",
