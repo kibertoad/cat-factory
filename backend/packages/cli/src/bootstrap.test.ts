@@ -1,6 +1,7 @@
 import { describe, expect, it, vi } from 'vitest'
 import { type CliOptions } from './args.js'
-import { bootstrap, type FileSystem } from './bootstrap.js'
+import { bootstrap } from './bootstrap.js'
+import { type FileSystem } from './fs.js'
 import { type Io } from './io.js'
 
 /** In-memory filesystem for asserting what the bootstrap writes. */
@@ -69,6 +70,9 @@ describe('bootstrap (non-interactive)', () => {
     expect(fs.files.get('/work/out/local/.env')).toContain('GITHUB_PAT=ghp_flag')
     // Generated secrets are deterministic with the fixed RNG.
     expect(fs.files.get('/work/out/local/.env')).toContain(`AUTH_SESSION_SECRET=${'01'.repeat(32)}`)
+    expect(fs.files.get('/work/out/local/.env')).toContain(
+      `HARNESS_SHARED_SECRET=${'01'.repeat(32)}`,
+    )
     expect(fs.files.get('/work/out/frontend/.env')).toContain(
       'NUXT_PUBLIC_API_BASE=http://localhost:8787',
     )
@@ -194,6 +198,7 @@ describe('bootstrap (interactive PAT flow)', () => {
     const env = fs.files.get('/work/out/local/.env') ?? ''
     expect(env).toMatch(/^AUTH_SESSION_SECRET=$/m)
     expect(env).toMatch(/^ENCRYPTION_KEY=$/m)
+    expect(env).toMatch(/^HARNESS_SHARED_SECRET=$/m)
     expect(warn).toHaveBeenCalled()
   })
 
