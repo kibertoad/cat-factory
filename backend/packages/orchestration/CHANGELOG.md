@@ -1,5 +1,28 @@
 # @cat-factory/orchestration
 
+## 0.98.1
+
+### Patch Changes
+
+- bcc843d: Initiatives: an initiative preset's per-agent-kind `promptAddition` now reaches the
+  runs SPAWNED by that initiative (a task's coder / tester / custom kind), not only the
+  initiative's own planning run. The `AgentContextBuilder` resolves the preset's steering
+  for any block carrying `initiativeId` (gated on it, so plain tasks pay nothing), and a
+  shared `initiativePresetSection` renderer folds the `## Initiative preset:` steering into
+  the standard-phase, generic custom-kind, and planning prompts alike — including a custom
+  kind that supplies its own user prompt (the steering is folded in ahead of it). This is the vehicle
+  for an org to attach standing role/task methodology to built-in agents without forking
+  them (slice 1 of the custom-initiative-definitions initiative). No behaviour changes for
+  non-initiative runs — their prompts stay byte-for-byte identical.
+- Updated dependencies [bcc843d]
+  - @cat-factory/agents@0.48.5
+  - @cat-factory/kernel@0.110.1
+  - @cat-factory/sandbox@0.9.42
+  - @cat-factory/caching@0.6.12
+  - @cat-factory/integrations@0.78.3
+  - @cat-factory/spend@0.11.18
+  - @cat-factory/workspaces@0.13.3
+
 ## 0.98.0
 
 ### Minor Changes

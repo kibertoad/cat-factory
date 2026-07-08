@@ -1,5 +1,12 @@
 # @cat-factory/gates
 
+## 0.4.32
+
+### Patch Changes
+
+- Updated dependencies [bcc843d]
+  - @cat-factory/kernel@0.110.1
+
 ## 0.4.31
 
 ### Patch Changes
