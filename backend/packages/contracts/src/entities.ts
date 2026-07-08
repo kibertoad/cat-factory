@@ -295,11 +295,11 @@ export const blockSchema = v.object({
   referenceRepos: v.optional(v.array(referenceRepoSchema)),
   /**
    * Id of the merge threshold preset selected for this task (see
-   * {@link mergeThresholdPresetSchema}). Drives the `merger` step's auto-merge
+   * {@link riskPolicySchema}). Drives the `merger` step's auto-merge
    * decision and the CI-fixer attempt budget. Absent means "use the workspace's
    * default preset".
    */
-  mergePresetId: v.optional(v.string()),
+  riskPolicyId: v.optional(v.string()),
   /**
    * Id of the model preset selected for this task (see {@link modelPresetSchema}).
    * Drives which model each agent step runs on (the preset's `overrides[kind] ??

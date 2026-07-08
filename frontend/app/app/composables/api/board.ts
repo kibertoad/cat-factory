@@ -47,7 +47,7 @@ export function boardApi({ send, ws }: ApiContext) {
         description?: string
         taskType?: CreateTaskType
         taskTypeFields?: TaskTypeFields
-        mergePresetId?: string
+        riskPolicyId?: string
         modelPresetId?: string
         pipelineId?: string
         agentConfig?: Record<string, string>

@@ -84,7 +84,7 @@ import type {
   SandboxGradeRepository,
 } from '@cat-factory/kernel'
 import type {
-  MergePresetRepository,
+  RiskPolicyRepository,
   SharedStackRepository,
   UserSettingsRepository,
   WorkspaceSettingsRepository,
@@ -190,7 +190,7 @@ import { KaizenService } from './modules/kaizen/KaizenService.js'
 import { ClarityReviewService } from './modules/clarity/ClarityReviewService.js'
 import { BrainstormService } from './modules/brainstorm/BrainstormService.js'
 import { NotificationService } from './modules/notifications/NotificationService.js'
-import { MergePresetService } from './modules/merge/MergePresetService.js'
+import { RiskPolicyService } from './modules/merge/RiskPolicyService.js'
 import { SandboxService } from './modules/sandbox/SandboxService.js'
 import { SandboxRunService } from './modules/sandbox/SandboxRunService.js'
 import { WorkspaceSettingsService } from './modules/settings/WorkspaceSettingsService.js'
@@ -783,7 +783,7 @@ export interface CoreDependencies {
   /** Seals registry tokens at rest (domain tag 'cat-factory:package-registries'). */
   packageRegistrySecretCipher?: SecretCipher
   /** Resolves a task's merge threshold preset (auto-merge ceilings + CI attempt budget). */
-  mergePresetRepository?: MergePresetRepository
+  riskPolicyRepository?: RiskPolicyRepository
   /** A workspace's shared stacks (long-lived compose infra a consumer environment attaches to). */
   sharedStackRepository?: SharedStackRepository
   /**
@@ -1028,8 +1028,8 @@ export interface SlackModule {
 }
 
 /** The merge-preset feature's service, present only when its repository is wired. */
-export interface MergePresetsModule {
-  service: MergePresetService
+export interface RiskPoliciesModule {
+  service: RiskPolicyService
 }
 
 /** The shared-stacks feature's service, present only when its repository is wired. */
@@ -1173,7 +1173,7 @@ export interface Core {
   /** Present only when the Slack repositories + cipher are wired (see CoreDependencies). */
   slack?: SlackModule
   /** Present only when the merge-preset repository is wired (see CoreDependencies). */
-  mergePresets?: MergePresetsModule
+  riskPolicies?: RiskPoliciesModule
   /** Present only when the shared-stack repository is wired (see CoreDependencies). */
   sharedStacks?: SharedStacksModule
   /** Present only when the host-probe seam is wired (local facade — see CoreDependencies). */
@@ -2123,11 +2123,11 @@ function createSlackModule(deps: CoreDependencies): SlackModule | undefined {
 }
 
 /** Assemble the merge-preset module when its repository is present. */
-function createMergePresetsModule(deps: CoreDependencies): MergePresetsModule | undefined {
-  const { mergePresetRepository } = deps
-  if (!mergePresetRepository) return undefined
-  const service = new MergePresetService({
-    mergePresetRepository,
+function createRiskPoliciesModule(deps: CoreDependencies): RiskPoliciesModule | undefined {
+  const { riskPolicyRepository } = deps
+  if (!riskPolicyRepository) return undefined
+  const service = new RiskPolicyService({
+    riskPolicyRepository,
     workspaceRepository: deps.workspaceRepository,
     idGenerator: deps.idGenerator,
     clock: deps.clock,
@@ -2551,7 +2551,7 @@ export function createCore(dependencies: CoreDependencies): Core {
   // pipeline-complete notifications during a run (when the module is configured).
   const notifications = createNotificationsModule(dependencies)
   const slack = createSlackModule(dependencies)
-  const mergePresets = createMergePresetsModule(dependencies)
+  const riskPolicies = createRiskPoliciesModule(dependencies)
   const sandbox = createSandboxModule(dependencies, agentKindRegistry)
   // Built before the execution engine so the per-service running-task limit can be
   // enforced at start() (and the escalation sweep can read the waiting threshold).
@@ -2768,7 +2768,7 @@ export function createCore(dependencies: CoreDependencies): Core {
     ...(brainstorm ? { brainstorm } : {}),
     ...(notifications ? { notifications } : {}),
     ...(slack ? { slack } : {}),
-    ...(mergePresets ? { mergePresets } : {}),
+    ...(riskPolicies ? { riskPolicies } : {}),
     ...(sharedStacks ? { sharedStacks } : {}),
     ...(preflight ? { preflight } : {}),
     ...(sandbox ? { sandbox } : {}),

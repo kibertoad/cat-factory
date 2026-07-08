@@ -17,7 +17,7 @@ import { githubController } from './modules/github/GitHubController.js'
 import { githubWebhookController } from './modules/github/GitHubWebhookController.js'
 import { vcsWebhookController } from './modules/vcs/VcsWebhookController.js'
 import { llmProxyController } from './modules/llmProxy/LlmProxyController.js'
-import { mergePresetController } from './modules/merge/MergePresetController.js'
+import { riskPolicyController } from './modules/merge/RiskPolicyController.js'
 import { sharedStackController } from './modules/sharedStack/SharedStackController.js'
 import { preflightController } from './modules/preflight/PreflightController.js'
 import { sandboxController } from './modules/sandbox/SandboxController.js'
@@ -155,7 +155,7 @@ export function registerCoreControllers<E extends AppEnv>(app: Hono<E>): void {
   app.route('/workspaces/:workspaceId', brainstormController())
   app.route('/workspaces/:workspaceId', initiativeController())
   app.route('/workspaces/:workspaceId', notificationController())
-  app.route('/workspaces/:workspaceId', mergePresetController())
+  app.route('/workspaces/:workspaceId', riskPolicyController())
   app.route('/workspaces/:workspaceId', sharedStackController())
   app.route('/workspaces/:workspaceId', preflightController())
   app.route('/workspaces/:workspaceId', sandboxController())

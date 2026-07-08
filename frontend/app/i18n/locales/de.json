@@ -390,11 +390,11 @@
         "body": "\"{name}\" wird entfernt. Dies kann nicht rückgängig gemacht werden."
       }
     },
-    "mergeThresholds": {
-      "intro": "Benannte Auto-Merge-Richtlinien, die eine Aufgabe wählen kann. Nachdem CI bestanden hat, bewertet der {merger}-Agent den PR nach Komplexität, Risiko und Auswirkung (0-100 %); der PR wird nur automatisch gemergt, wenn jeder Wert auf oder unter den Obergrenzen des Presets liegt, andernfalls wird eine Review-Benachrichtigung ausgelöst. Das Standard-Preset gilt für jede Aufgabe, die keines wählt.",
+    "riskPolicy": {
+      "intro": "Benannte Auto-Merge-Richtlinien, die eine Aufgabe wählen kann. Nachdem CI bestanden hat, bewertet der {merger}-Agent den PR nach Komplexität, Risiko und Auswirkung (0-100 %); der PR wird nur automatisch gemergt, wenn jeder Wert auf oder unter den Obergrenzen der Richtlinie liegt, andernfalls wird eine Review-Benachrichtigung ausgelöst. Die Standardrichtlinie gilt für jede Aufgabe, die keine wählt.",
       "mergerAgent": "merger",
       "confirmDelete": {
-        "title": "Dieses Merge-Preset löschen?",
+        "title": "Diese Risikorichtlinie löschen?",
         "body": "\"{name}\" wird entfernt. Aufgaben, die es verwenden, greifen auf den Workspace-Standard zurück."
       },
       "concern": {
@@ -403,11 +403,11 @@
         "medium": "Mittel",
         "high": "Hoch (nie anhalten)"
       },
-      "presetNamePlaceholder": "Preset-Name",
+      "presetNamePlaceholder": "Richtlinienname",
       "default": "Standard",
       "makeDefault": "Als Standard festlegen",
-      "deleteDefaultBlocked": "Das Standard-Preset kann nicht gelöscht werden",
-      "deletePreset": "Preset löschen",
+      "deleteDefaultBlocked": "Die Standardrichtlinie kann nicht gelöscht werden",
+      "deletePreset": "Richtlinie löschen",
       "field": {
         "maxComplexity": "Max. Komplexität %",
         "maxRisk": "Max. Risiko %",
@@ -417,9 +417,9 @@
         "maxRequirementConcernAllowed": "Auto-Pass bei Bedenken auf oder unter",
         "autoMerge": "Auto-Merge"
       },
-      "autoMergeOnHint": "Automatisch mergen, wenn innerhalb der Schwellenwerte.",
+      "autoMergeOnHint": "Automatisch mergen, wenn innerhalb der Richtliniengrenzen.",
       "autoMergeOffHint": "Den PR immer an ein menschliches Review weiterleiten.",
-      "newPreset": "Neues Preset",
+      "newPreset": "Neue Richtlinie",
       "create": {
         "name": "Name",
         "namePlaceholder": "z. B. Vorsichtig",
@@ -432,12 +432,12 @@
       },
       "add": "Hinzufügen",
       "toast": {
-        "saved": "Preset gespeichert",
-        "saveFailed": "Preset konnte nicht gespeichert werden",
-        "created": "Preset erstellt",
-        "createFailed": "Preset konnte nicht erstellt werden",
+        "saved": "Richtlinie gespeichert",
+        "saveFailed": "Richtlinie konnte nicht gespeichert werden",
+        "created": "Richtlinie erstellt",
+        "createFailed": "Richtlinie konnte nicht erstellt werden",
         "defaultFailed": "Standard konnte nicht festgelegt werden",
-        "deleteFailed": "Preset konnte nicht gelöscht werden"
+        "deleteFailed": "Richtlinie konnte nicht gelöscht werden"
       }
     },
     "observabilityConnection": {
@@ -644,7 +644,7 @@
       "tabs": {
         "workspace": "Workspace",
         "budget": "Budget",
-        "merge": "Merge-Schwellenwerte",
+        "merge": "Risikorichtlinien",
         "tracker": "Issue-Tracker",
         "fragments": "Dienst-Best-Practices"
       },
@@ -1163,9 +1163,9 @@
       "pipeline": "Pipeline",
       "pipelineEmpty": "Kein Standard. Wähle eine Pipeline, wenn du diese Aufgabe ausführst.",
       "pipelineHint": "Die Pipeline, die der Run-Button standardmäßig startet: die Abfolge der Agent-Schritte (zum Beispiel Spec, Code, Test, Merge), die für diese Aufgabe ausgeführt werden.",
-      "mergePolicy": "Merge-Richtlinie",
-      "mergePresetDetail": "{name}: automatisch mergen, wenn Komplexität ≤ {complexity}, Risiko ≤ {risk}, Wirkung ≤ {impact}; bis zu {attempts} CI-Fix-Versuche.",
-      "mergePresetEmpty": "Kein Preset konfiguriert. Der Merger löst für jeden PR eine Prüfbenachrichtigung aus.",
+      "mergePolicy": "Risikorichtlinie",
+      "riskPolicyDetail": "{name}: automatisch mergen, wenn Komplexität ≤ {complexity}, Risiko ≤ {risk}, Wirkung ≤ {impact}; bis zu {attempts} CI-Fix-Versuche.",
+      "riskPolicyEmpty": "Keine Risikorichtlinie konfiguriert. Der Merger löst für jeden PR eine Prüfbenachrichtigung aus.",
       "mergePolicyHint": "Entscheidet, wann ein fertiger Pull Request automatisch mergt, statt auf eine menschliche Prüfung zu warten, und wie viele CI-Fix-Versuche ein Lauf erhält.",
       "modelPreset": "Modell-Preset",
       "modelPresetHint": "Entscheidet, auf welchem KI-Modell jeder Agent-Schritt läuft.",
@@ -1726,7 +1726,7 @@
         "documentImport": "Aus Dokumenten importieren und spawnen",
         "taskImport": "Issues importieren",
         "fragments": "Kontextfragment-Bibliothek",
-        "mergeThresholds": "Merge-Schwellenwerte",
+        "mergeThresholds": "Risikorichtlinien",
         "workspaceSettings": "Workspace-Einstellungen",
         "modelConfiguration": "Modellkonfiguration",
         "serviceFragmentDefaults": "Standard-Best-Practices für Services",
@@ -1746,7 +1746,7 @@
         "taskSource": "task source tracker issues",
         "taskImport": "task import issues",
         "fragments": "prompt fragments best practice guidelines context",
-        "mergeThresholds": "merge policy preset auto-merge ci",
+        "mergeThresholds": "risikorichtlinie merge auto-merge ci iterationen",
         "workspaceSettings": "limit running tasks per service waiting escalation overdue notification timeout",
         "modelConfiguration": "model llm routing agent kind default preset configuration",
         "serviceFragmentDefaults": "fragment best practice guideline service default code-aware",
@@ -1974,7 +1974,7 @@
       "optional": "optional",
       "pipeline": "Pipeline",
       "chooseAtRunTime": "Zur Laufzeit auswählen",
-      "mergePolicy": "Merge-Richtlinie",
+      "mergePolicy": "Risikorichtlinie",
       "workspaceDefault": "Workspace-Standard",
       "defaultPreset": "Standard ({name}) — {thresholds}",
       "defaultModelPreset": "Standard ({name})",
@@ -3003,6 +3003,15 @@
     "recommendationRequested": "Empfehlung angefordert — prüfen Sie den Vorschlag unten.",
     "recommendedDefault": "Empfohlene Vorgabe: behalten, bearbeiten oder die Feststellung verwerfen.",
     "needsYourInput": "Benötigt Ihre Eingabe",
+    "mode": {
+      "answer": "Beantworten",
+      "dismiss": "Verwerfen",
+      "recommend": "Empfehlen"
+    },
+    "userAnswered": "Sie haben geantwortet",
+    "guidancePlaceholder": "Hinweise für die Empfehlung (optional)…",
+    "guidanceHint": "Ihre Eingabe lenkt die Empfehlung; sie wird als Orientierung verwendet, nicht als Antwort gespeichert.",
+    "dismissedHint": "Als irrelevant markiert; sie wird nicht übernommen.",
     "reopen": "Erneut öffnen",
     "recommendedAnswers": "Empfohlene Antworten",
     "recommendationProgress": "{ready} / {total} bereit",
@@ -4369,22 +4378,22 @@
       "archiveFailed": "Archivierung nicht möglich"
     }
   },
-  "mergePreset": {
+  "riskPolicy": {
     "health": {
-      "title": "Merge-Preset-Updates",
-      "allValid": "Alle integrierten Merge-Presets sind auf dem neuesten Stand.",
-      "newHeading": "Neue Presets verfügbar",
-      "newDescription": "Neue integrierte Merge-Presets sind verfügbar. Füge sie zur Bibliothek dieses Boards hinzu.",
+      "title": "Risikorichtlinien-Updates",
+      "allValid": "Alle integrierten Risikorichtlinien sind auf dem neuesten Stand.",
+      "newHeading": "Neue Richtlinien verfügbar",
+      "newDescription": "Neue integrierte Risikorichtlinien sind verfügbar. Füge sie zur Bibliothek dieses Boards hinzu.",
       "add": "Hinzufügen",
       "updatesHeading": "Updates verfügbar",
-      "updatesDescription": "Eine neuere Version dieser integrierten Merge-Presets ist verfügbar. Führe ein erneutes Seeding durch, um sie zu übernehmen (Standard und Reihenfolge bleiben erhalten).",
+      "updatesDescription": "Eine neuere Version dieser integrierten Risikorichtlinien ist verfügbar. Führe ein erneutes Seeding durch, um sie zu übernehmen (Standard und Reihenfolge bleiben erhalten).",
       "versionAvailable": "Version {from} → {to} verfügbar.",
       "reseed": "Erneut seeden",
       "reseedAll": "Alle aktualisieren ({count})",
       "dismiss": "Schließen",
       "done": "Fertig",
       "toast": {
-        "reseedFailed": "Merge-Preset konnte nicht erneut geseedet werden"
+        "reseedFailed": "Risikorichtlinie konnte nicht erneut geseedet werden"
       }
     }
   },

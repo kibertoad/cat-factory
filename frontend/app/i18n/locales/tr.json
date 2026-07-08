@@ -229,7 +229,7 @@
       "optional": "isteğe bağlı",
       "pipeline": "İşlem hattı",
       "chooseAtRunTime": "Çalıştırma sırasında seç",
-      "mergePolicy": "Birleştirme politikası",
+      "mergePolicy": "Risk ilkesi",
       "workspaceDefault": "Çalışma alanı varsayılanı",
       "defaultPreset": "Varsayılan ({name}) — {thresholds}",
       "defaultModelPreset": "Varsayılan ({name})",
@@ -858,9 +858,9 @@
       "pipeline": "Pipeline",
       "pipelineEmpty": "Varsayılan yok. Bu görevi çalıştırırken bir pipeline seçin.",
       "pipelineHint": "Çalıştır düğmesinin varsayılan olarak başlattığı pipeline: bu görev için yürütülen ajan adımları dizisi (örneğin spesifikasyon, kod, test, birleştirme).",
-      "mergePolicy": "Birleştirme politikası",
-      "mergePresetDetail": "{name}: karmaşıklık ≤ {complexity}, risk ≤ {risk}, etki ≤ {impact} olduğunda otomatik birleştir; en fazla {attempts} CI düzeltme denemesi.",
-      "mergePresetEmpty": "Yapılandırılmış ön ayar yok. Birleştirici her PR için bir inceleme bildirimi oluşturur.",
+      "mergePolicy": "Risk ilkesi",
+      "riskPolicyDetail": "{name}: karmaşıklık ≤ {complexity}, risk ≤ {risk}, etki ≤ {impact} olduğunda otomatik birleştir; en fazla {attempts} CI düzeltme denemesi.",
+      "riskPolicyEmpty": "Yapılandırılmış risk ilkesi yok. Birleştirici her PR için bir inceleme bildirimi oluşturur.",
       "mergePolicyHint": "Tamamlanan bir pull request'in insan incelemesi beklemeden ne zaman otomatik birleştirileceğini ve bir çalıştırmanın kaç CI düzeltme denemesi alacağını belirler.",
       "modelPreset": "Model ön ayarı",
       "modelPresetHint": "Her ajan adımının hangi yapay zeka modelinde çalışacağını belirler.",
@@ -1558,7 +1558,7 @@
         "documentImport": "Belgelerden içe aktar ve oluştur",
         "taskImport": "Sorunları içe aktar",
         "fragments": "Bağlam parçası kitaplığı",
-        "mergeThresholds": "Birleştirme eşikleri",
+        "mergeThresholds": "Risk ilkeleri",
         "workspaceSettings": "Çalışma alanı ayarları",
         "modelConfiguration": "Model yapılandırması",
         "serviceFragmentDefaults": "Varsayılan servis en iyi uygulamaları",
@@ -1578,7 +1578,7 @@
         "taskSource": "görev kaynak izleyici sorunlar",
         "taskImport": "görev içe aktar sorunlar",
         "fragments": "prompt parçaları en iyi uygulama yönergeler bağlam",
-        "mergeThresholds": "birleştirme politika ön ayar otomatik birleştirme ci",
+        "mergeThresholds": "risk ilkesi birleştirme otomatik birleştirme ci yinelemeler",
         "workspaceSettings": "limit servis başına çalışan görevler bekleme yükseltme gecikmiş bildirim zaman aşımı",
         "modelConfiguration": "model llm yönlendirme ajan türü varsayılan ön ayar yapılandırma",
         "serviceFragmentDefaults": "parça en iyi uygulama yönerge servis varsayılan kod-farkında",
@@ -2066,8 +2066,8 @@
         "body": "\"{name}\" kaldırılacak. Bu işlem geri alınamaz."
       }
     },
-    "mergeThresholds": {
-      "intro": "Bir görevin seçebileceği adlandırılmış otomatik birleştirme politikaları. CI geçtikten sonra {merger} aracısı PR'ı karmaşıklık, risk ve etki açısından puanlar (0-100%); PR yalnızca her puan ön ayarın üst sınırlarında veya altında olduğunda otomatik birleşir, aksi halde bir inceleme bildirimi oluşturulur. Varsayılan ön ayar, hiçbirini seçmeyen tüm görevleri yönetir.",
+    "riskPolicy": {
+      "intro": "Bir görevin seçebileceği adlandırılmış otomatik birleştirme politikaları. CI geçtikten sonra {merger} aracısı PR'ı karmaşıklık, risk ve etki açısından puanlar (0-100%); PR yalnızca her puan ilkenin üst sınırlarında veya altında olduğunda otomatik birleşir, aksi halde bir inceleme bildirimi oluşturulur. Varsayılan ilke, hiçbirini seçmeyen tüm görevleri yönetir.",
       "mergerAgent": "merger",
       "concern": {
         "none": "Yok (her zaman dur)",
@@ -2075,11 +2075,11 @@
         "medium": "Orta",
         "high": "Yüksek (asla durma)"
       },
-      "presetNamePlaceholder": "Ön ayar adı",
+      "presetNamePlaceholder": "İlke adı",
       "default": "Varsayılan",
       "makeDefault": "Varsayılan yap",
-      "deleteDefaultBlocked": "Varsayılan ön ayar silinemez",
-      "deletePreset": "Ön ayarı sil",
+      "deleteDefaultBlocked": "Varsayılan ilke silinemez",
+      "deletePreset": "İlkeyi sil",
       "field": {
         "maxComplexity": "Maks. karmaşıklık %",
         "maxRisk": "Maks. risk %",
@@ -2089,7 +2089,7 @@
         "maxRequirementConcernAllowed": "Şu düzeyde veya altında otomatik geç",
         "autoMerge": "Otomatik birleştirme"
       },
-      "newPreset": "Yeni ön ayar",
+      "newPreset": "Yeni ilke",
       "create": {
         "name": "Ad",
         "namePlaceholder": "örn. Temkinli",
@@ -2102,17 +2102,17 @@
       },
       "add": "Ekle",
       "toast": {
-        "saved": "Ön ayar kaydedildi",
-        "saveFailed": "Ön ayar kaydedilemedi",
-        "created": "Ön ayar oluşturuldu",
-        "createFailed": "Ön ayar oluşturulamadı",
+        "saved": "İlke kaydedildi",
+        "saveFailed": "İlke kaydedilemedi",
+        "created": "İlke oluşturuldu",
+        "createFailed": "İlke oluşturulamadı",
         "defaultFailed": "Varsayılan ayarlanamadı",
-        "deleteFailed": "Ön ayar silinemedi"
+        "deleteFailed": "İlke silinemedi"
       },
-      "autoMergeOnHint": "Eşiklerin içindeyken otomatik birleştir.",
+      "autoMergeOnHint": "İlke sınırları içindeyken otomatik birleştir.",
       "autoMergeOffHint": "PR'yi her zaman insan incelemesine gönder.",
       "confirmDelete": {
-        "title": "Bu birleştirme ön ayarı silinsin mi?",
+        "title": "Bu risk ilkesi silinsin mi?",
         "body": "\"{name}\" kaldırılacak. Onu kullanan görevler çalışma alanı varsayılanına döner."
       }
     },
@@ -2320,7 +2320,7 @@
       "tabs": {
         "workspace": "Çalışma alanı",
         "budget": "Bütçe",
-        "merge": "Birleştirme eşikleri",
+        "merge": "Risk ilkeleri",
         "tracker": "Sorun takipçisi",
         "fragments": "Servis en iyi uygulamaları"
       },
@@ -3306,6 +3306,15 @@
     "recommendationRequested": "Öneri istendi — aşağıdaki öneriyi inceleyin.",
     "recommendedDefault": "Önerilen varsayılan: koruyun, düzenleyin ya da bulguyu yok sayın.",
     "needsYourInput": "Sizin girdiniz gerekiyor",
+    "mode": {
+      "answer": "Yanıtla",
+      "dismiss": "Yok say",
+      "recommend": "Öner"
+    },
+    "userAnswered": "Yanıtladınız",
+    "guidancePlaceholder": "Öneri için yönlendirme (isteğe bağlı)…",
+    "guidanceHint": "Girdiğiniz metin öneriyi yönlendirir; yönlendirme olarak kullanılır, yanıt olarak kaydedilmez.",
+    "dismissedHint": "İlgisiz olarak işaretlendi; dahil edilmeyecek.",
     "reopen": "Yeniden aç",
     "recommendedAnswers": "Önerilen yanıtlar",
     "recommendationProgress": "{ready} / {total} hazır",
@@ -4271,22 +4280,22 @@
       "help": "Bu deponun türü: bir backend servisi, bir frontend uygulaması, paylaşılan bir kütüphane veya bir doküman deposu (yalnızca doküman/spike)."
     }
   },
-  "mergePreset": {
+  "riskPolicy": {
     "health": {
-      "title": "Birleştirme ön ayarı güncellemeleri",
-      "allValid": "Tüm yerleşik birleştirme ön ayarları güncel.",
-      "newHeading": "Yeni ön ayarlar mevcut",
-      "newDescription": "Yeni yerleşik birleştirme ön ayarları geldi. Bu panonun kütüphanesine ekleyin.",
+      "title": "Risk ilkesi güncellemeleri",
+      "allValid": "Tüm yerleşik risk ilkeleri güncel.",
+      "newHeading": "Yeni ilkeler mevcut",
+      "newDescription": "Yeni yerleşik risk ilkeleri geldi. Bu panonun kütüphanesine ekleyin.",
       "add": "Ekle",
       "updatesHeading": "Güncellemeler mevcut",
-      "updatesDescription": "Bu yerleşik birleştirme ön ayarlarının daha yeni bir sürümü geldi. Benimsemek için yeniden tohumlayın (varsayılan ve sıralama korunur).",
+      "updatesDescription": "Bu yerleşik risk ilkelerinin daha yeni bir sürümü geldi. Benimsemek için yeniden tohumlayın (varsayılan ve sıralama korunur).",
       "versionAvailable": "Sürüm {from} → {to} mevcut.",
       "reseed": "Yeniden tohumla",
       "reseedAll": "Tümünü güncelle ({count})",
       "dismiss": "Yoksay",
       "done": "Tamam",
       "toast": {
-        "reseedFailed": "Birleştirme ön ayarı yeniden tohumlanamadı"
+        "reseedFailed": "Risk ilkesi yeniden tohumlanamadı"
       }
     }
   },

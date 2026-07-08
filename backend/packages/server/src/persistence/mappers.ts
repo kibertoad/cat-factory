@@ -409,8 +409,9 @@ const blockFields: FieldMapper<Block, BlockPatch>[] = [
   // An empty string clears the selection (back to the routing default).
   optField('modelId', { clearOnEmpty: true }),
   optJsonField('pullRequest'),
-  // An empty string clears the selection (back to the workspace default preset).
-  optField('mergePresetId', { clearOnEmpty: true }),
+  // An empty string clears the selection (back to the workspace default policy).
+  // Domain property renamed to `riskPolicyId`; the physical column stays `merge_preset_id`.
+  optField('riskPolicyId', { column: 'merge_preset_id', clearOnEmpty: true }),
   // An empty string clears the selection (back to the workspace default model preset).
   optField('modelPresetId', { clearOnEmpty: true }),
   // An empty string clears the pinned pipeline selection.

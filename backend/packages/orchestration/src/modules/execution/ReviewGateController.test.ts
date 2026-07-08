@@ -110,7 +110,7 @@ function fakeDeps(over: Partial<ReviewGateControllerDeps> = {}) {
     blockRepository: { get: vi.fn(async () => BLOCK) },
     executionRepository: { get: vi.fn(async () => null), upsert: vi.fn(async () => {}) },
     workRunner: { signalDecision: vi.fn(async () => {}) },
-    resolveMergePreset: vi.fn(async () => PRESET),
+    resolveRiskPolicy: vi.fn(async () => PRESET),
     dispatchIterationCap: vi.fn(async () => {}),
     stateMachine,
     stepGraph,
@@ -325,7 +325,7 @@ describe('ReviewGateController public surface', () => {
   it('review resolves the preset and delegates to the kind', async () => {
     k.set(review({ status: 'ready' }))
     const out = await ctrl.review(k.kind, 'ws', 'blk_1')
-    expect(deps.resolveMergePreset).toHaveBeenCalled()
+    expect(deps.resolveRiskPolicy).toHaveBeenCalled()
     expect(k.kind.review).toHaveBeenCalledWith('ws', BLOCK, PRESET)
     expect(out.status).toBe('ready')
   })
@@ -394,6 +394,25 @@ describe('ReviewGateController public surface', () => {
     expect(deps.stateMachine.advancePastResolvedGate).not.toHaveBeenCalled()
   })
 
+  it('reReview pre-answers auto-answerable findings when it surfaces fresh ones', async () => {
+    // The off-path re-review is a new iteration round: it must auto-recommend just like the
+    // pipeline-driven cycle, so auto-recommendation happens on EVERY round that raises questions.
+    k.set(review({ status: 'merged' }))
+    ;(k.kind.reReview as ReturnType<typeof vi.fn>).mockResolvedValue(review({ status: 'ready' }))
+    await ctrl.reReview(k.kind, 'ws', 'blk_1')
+    expect(k.kind.autoRecommend).toHaveBeenCalledWith('ws', 'blk_1')
+  })
+
+  it('reReview does NOT auto-recommend when it converges (incorporated)', async () => {
+    k.set(review({ status: 'merged' }))
+    ;(k.kind.reReview as ReturnType<typeof vi.fn>).mockResolvedValue(
+      review({ status: 'incorporated' }),
+    )
+    deps.executionRepository.get = vi.fn(async () => null)
+    await ctrl.reReview(k.kind, 'ws', 'blk_1')
+    expect(k.kind.autoRecommend).not.toHaveBeenCalled()
+  })
+
   it('proceed settles the review and resumes the parked run', async () => {
     k.set(review({ status: 'exceeded' }))
     const parkedStep = step({
@@ -426,18 +445,17 @@ describe('ReviewGateController public surface', () => {
     })
     const inst = instance([parkedStep], { status: 'blocked' })
     deps.executionRepository.get = vi.fn(async () => inst)
-    await ctrl.requestRecommendations(k.kind, 'ws', 'blk_1', ['rri_1', 'rri_2'], 'prefer X')
+    await ctrl.requestRecommendations(k.kind, 'ws', 'blk_1', [
+      { itemId: 'rri_1', note: 'prefer X' },
+      { itemId: 'rri_2' },
+    ])
     // Placeholders are created synchronously; the slow Writer is offloaded, not run inline.
-    expect(k.kind.prepareRecommendations).toHaveBeenCalledWith(
-      'ws',
-      'rrv_1',
-      ['rri_1', 'rri_2'],
-      'prefer X',
-    )
-    expect(parkedStep.pendingRecommendation).toEqual({
-      itemIds: ['rri_1', 'rri_2'],
-      note: 'prefer X',
-    })
+    expect(k.kind.prepareRecommendations).toHaveBeenCalledWith('ws', 'rrv_1', [
+      { itemId: 'rri_1', note: 'prefer X' },
+      { itemId: 'rri_2' },
+    ])
+    // The step re-entry marker carries only the finding ids (notes ride the placeholders).
+    expect(parkedStep.pendingRecommendation).toEqual({ itemIds: ['rri_1', 'rri_2'] })
     expect(inst.status).toBe('running') // re-armed before signalling
     expect(deps.workRunner.signalDecision).toHaveBeenCalledWith(
       'ws',
@@ -451,7 +469,7 @@ describe('ReviewGateController public surface', () => {
   it('requestRecommendations runs the Writer inline when no run is parked', async () => {
     k.set(review({ status: 'ready' }))
     deps.executionRepository.get = vi.fn(async () => null)
-    await ctrl.requestRecommendations(k.kind, 'ws', 'blk_1', ['rri_1'])
+    await ctrl.requestRecommendations(k.kind, 'ws', 'blk_1', [{ itemId: 'rri_1' }])
     expect(k.kind.prepareRecommendations).toHaveBeenCalled()
     expect(k.kind.fillRecommendations).toHaveBeenCalledWith('ws', 'blk_1')
     expect(deps.workRunner.signalDecision).not.toHaveBeenCalled()
@@ -466,7 +484,7 @@ describe('ReviewGateController public surface', () => {
     }
     await expect(
       ctrl.requestRecommendations(noWriter as unknown as ReviewKind<FakeReview>, 'ws', 'blk_1', [
-        'x',
+        { itemId: 'x' },
       ]),
     ).rejects.toBeInstanceOf(ConflictError)
   })

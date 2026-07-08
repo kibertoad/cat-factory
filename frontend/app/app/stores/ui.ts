@@ -40,10 +40,10 @@ export const useUiStore = defineStore('ui', () => {
   const pipelineHealthOpen = ref(false)
   const pipelineHealthSeen = ref(false)
   // Merge-preset health startup advisory: lists built-ins with a newer catalog version (reseed)
-  // and new built-in presets the workspace can add. `mergePresetHealthSeen` gates auto-open to
+  // and new built-in presets the workspace can add. `riskPolicyHealthSeen` gates auto-open to
   // once per session so it does not re-pop on every snapshot re-hydration (mirrors pipelines).
-  const mergePresetHealthOpen = ref(false)
-  const mergePresetHealthSeen = ref(false)
+  const riskPolicyHealthOpen = ref(false)
+  const riskPolicyHealthSeen = ref(false)
   // Model-preset health startup advisory: lists built-ins with a newer catalog version (reseed)
   // and new built-in presets the workspace can add. `modelPresetHealthSeen` gates auto-open to
   // once per session so it does not re-pop on every snapshot re-hydration (mirrors pipelines).
@@ -313,19 +313,19 @@ export const useUiStore = defineStore('ui', () => {
   }
 
   /** Auto-open the merge-preset health advisory once per session (no-op after it's been shown). */
-  function maybeOpenMergePresetHealth() {
-    if (mergePresetHealthSeen.value) return
-    mergePresetHealthSeen.value = true
-    mergePresetHealthOpen.value = true
+  function maybeOpenRiskPolicyHealth() {
+    if (riskPolicyHealthSeen.value) return
+    riskPolicyHealthSeen.value = true
+    riskPolicyHealthOpen.value = true
   }
 
-  function openMergePresetHealth() {
-    mergePresetHealthSeen.value = true
-    mergePresetHealthOpen.value = true
+  function openRiskPolicyHealth() {
+    riskPolicyHealthSeen.value = true
+    riskPolicyHealthOpen.value = true
   }
 
-  function closeMergePresetHealth() {
-    mergePresetHealthOpen.value = false
+  function closeRiskPolicyHealth() {
+    riskPolicyHealthOpen.value = false
   }
 
   /** Auto-open the model-preset health advisory once per session (no-op after it's been shown). */
@@ -839,8 +839,8 @@ export const useUiStore = defineStore('ui', () => {
     builderOpen,
     pipelineHealthOpen,
     pipelineHealthSeen,
-    mergePresetHealthOpen,
-    mergePresetHealthSeen,
+    riskPolicyHealthOpen,
+    riskPolicyHealthSeen,
     modelPresetHealthOpen,
     modelPresetHealthSeen,
     decisionContext,
@@ -907,9 +907,9 @@ export const useUiStore = defineStore('ui', () => {
     maybeOpenPipelineHealth,
     openPipelineHealth,
     closePipelineHealth,
-    maybeOpenMergePresetHealth,
-    openMergePresetHealth,
-    closeMergePresetHealth,
+    maybeOpenRiskPolicyHealth,
+    openRiskPolicyHealth,
+    closeRiskPolicyHealth,
     maybeOpenModelPresetHealth,
     openModelPresetHealth,
     closeModelPresetHealth,

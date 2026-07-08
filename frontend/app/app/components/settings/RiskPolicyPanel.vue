@@ -1,11 +1,11 @@
 <script setup lang="ts">
 // Workspace settings: the merge-threshold preset library a task picks its
 // auto-merge policy from (the `merger` step compares a PR's assessment against the
-// resolved preset). Full CRUD over the mergePresets store — the same library the
+// resolved preset). Full CRUD over the riskPolicies store — the same library the
 // task inspector's "Merge policy" dropdown selects from. Exactly one preset is the
 // default; it cannot be deleted or un-defaulted (the backend enforces this too).
 import { computed, reactive, ref, watch } from 'vue'
-import type { MergeThresholdPreset, RequirementConcernLevel } from '~/types/merge'
+import type { RiskPolicy, RequirementConcernLevel } from '~/types/merge'
 
 const { t } = useI18n()
 
@@ -13,10 +13,10 @@ const { t } = useI18n()
 // the typecheck); each value is a LITERAL catalog key so the typed-message-keys check sees
 // it. Leaf keys mirror the enum value verbatim.
 const CONCERN_LABEL_KEYS: Record<RequirementConcernLevel, string> = {
-  none: 'settings.mergeThresholds.concern.none',
-  low: 'settings.mergeThresholds.concern.low',
-  medium: 'settings.mergeThresholds.concern.medium',
-  high: 'settings.mergeThresholds.concern.high',
+  none: 'settings.riskPolicy.concern.none',
+  low: 'settings.riskPolicy.concern.low',
+  medium: 'settings.riskPolicy.concern.medium',
+  high: 'settings.riskPolicy.concern.high',
 }
 
 // Concern-level options for the requirements auto-pass threshold (none < low < medium < high).
@@ -27,7 +27,7 @@ const CONCERN_LEVELS = computed<{ value: RequirementConcernLevel; label: string 
   { value: 'high', label: t(CONCERN_LABEL_KEYS.high) },
 ])
 
-const store = useMergePresetsStore()
+const store = useRiskPoliciesStore()
 const toast = useToast()
 const { confirm } = useConfirm()
 
@@ -45,7 +45,7 @@ interface Draft {
 }
 const drafts = reactive<Record<string, Draft>>({})
 
-function toDraft(p: MergeThresholdPreset): Draft {
+function toDraft(p: RiskPolicy): Draft {
   return {
     name: p.name,
     maxComplexity: Math.round(p.maxComplexity * 100),
@@ -78,7 +78,7 @@ function notifyError(title: string, e: unknown) {
   })
 }
 
-async function save(p: MergeThresholdPreset) {
+async function save(p: RiskPolicy) {
   const d = drafts[p.id]
   if (!d) return
   busy.value = p.id
@@ -94,32 +94,32 @@ async function save(p: MergeThresholdPreset) {
       autoMergeEnabled: d.autoMergeEnabled,
     })
     toast.add({
-      title: t('settings.mergeThresholds.toast.saved'),
+      title: t('settings.riskPolicy.toast.saved'),
       icon: 'i-lucide-check',
       color: 'success',
     })
   } catch (e) {
-    notifyError(t('settings.mergeThresholds.toast.saveFailed'), e)
+    notifyError(t('settings.riskPolicy.toast.saveFailed'), e)
   } finally {
     busy.value = null
   }
 }
 
-async function makeDefault(p: MergeThresholdPreset) {
+async function makeDefault(p: RiskPolicy) {
   busy.value = p.id
   try {
     await store.update(p.id, { isDefault: true })
   } catch (e) {
-    notifyError(t('settings.mergeThresholds.toast.defaultFailed'), e)
+    notifyError(t('settings.riskPolicy.toast.defaultFailed'), e)
   } finally {
     busy.value = null
   }
 }
 
-async function remove(p: MergeThresholdPreset) {
+async function remove(p: RiskPolicy) {
   const ok = await confirm({
-    title: t('settings.mergeThresholds.confirmDelete.title'),
-    description: t('settings.mergeThresholds.confirmDelete.body', { name: p.name }),
+    title: t('settings.riskPolicy.confirmDelete.title'),
+    description: t('settings.riskPolicy.confirmDelete.body', { name: p.name }),
     variant: 'destructive',
     confirmLabel: t('common.delete'),
     icon: 'i-lucide-trash-2',
@@ -129,7 +129,7 @@ async function remove(p: MergeThresholdPreset) {
   try {
     await store.remove(p.id)
   } catch (e) {
-    notifyError(t('settings.mergeThresholds.toast.deleteFailed'), e)
+    notifyError(t('settings.riskPolicy.toast.deleteFailed'), e)
   } finally {
     busy.value = null
   }
@@ -165,12 +165,12 @@ async function create() {
     draft.name = ''
     draft.autoMergeEnabled = true
     toast.add({
-      title: t('settings.mergeThresholds.toast.created'),
+      title: t('settings.riskPolicy.toast.created'),
       icon: 'i-lucide-check',
       color: 'success',
     })
   } catch (e) {
-    notifyError(t('settings.mergeThresholds.toast.createFailed'), e)
+    notifyError(t('settings.riskPolicy.toast.createFailed'), e)
   } finally {
     creating.value = false
   }
@@ -180,13 +180,13 @@ async function create() {
 <template>
   <div class="space-y-4">
     <i18n-t
-      keypath="settings.mergeThresholds.intro"
+      keypath="settings.riskPolicy.intro"
       tag="p"
       class="text-xs text-slate-400"
       scope="global"
     >
       <template #merger>
-        <span class="text-slate-300">{{ t('settings.mergeThresholds.mergerAgent') }}</span>
+        <span class="text-slate-300">{{ t('settings.riskPolicy.mergerAgent') }}</span>
       </template>
     </i18n-t>
 
@@ -200,10 +200,10 @@ async function create() {
           v-model="drafts[p.id]!.name"
           size="sm"
           class="flex-1"
-          :placeholder="t('settings.mergeThresholds.presetNamePlaceholder')"
+          :placeholder="t('settings.riskPolicy.presetNamePlaceholder')"
         />
         <UBadge v-if="p.isDefault" color="primary" variant="subtle" size="sm">
-          {{ t('settings.mergeThresholds.default') }}
+          {{ t('settings.riskPolicy.default') }}
         </UBadge>
         <UButton
           v-else
@@ -214,7 +214,7 @@ async function create() {
           :loading="busy === p.id"
           @click="makeDefault(p)"
         >
-          {{ t('settings.mergeThresholds.makeDefault') }}
+          {{ t('settings.riskPolicy.makeDefault') }}
         </UButton>
         <UButton
           color="error"
@@ -224,8 +224,8 @@ async function create() {
           :disabled="p.isDefault || busy === p.id"
           :title="
             p.isDefault
-              ? t('settings.mergeThresholds.deleteDefaultBlocked')
-              : t('settings.mergeThresholds.deletePreset')
+              ? t('settings.riskPolicy.deleteDefaultBlocked')
+              : t('settings.riskPolicy.deletePreset')
           "
           @click="remove(p)"
         />
@@ -234,7 +234,7 @@ async function create() {
       <div class="grid grid-cols-2 gap-3 sm:grid-cols-4">
         <label class="block">
           <span class="mb-1 block text-[10px] uppercase tracking-wide text-slate-500">
-            {{ t('settings.mergeThresholds.field.maxComplexity') }}
+            {{ t('settings.riskPolicy.field.maxComplexity') }}
           </span>
           <UInput
             v-model.number="drafts[p.id]!.maxComplexity"
@@ -246,7 +246,7 @@ async function create() {
         </label>
         <label class="block">
           <span class="mb-1 block text-[10px] uppercase tracking-wide text-slate-500">
-            {{ t('settings.mergeThresholds.field.maxRisk') }}
+            {{ t('settings.riskPolicy.field.maxRisk') }}
           </span>
           <UInput
             v-model.number="drafts[p.id]!.maxRisk"
@@ -258,7 +258,7 @@ async function create() {
         </label>
         <label class="block">
           <span class="mb-1 block text-[10px] uppercase tracking-wide text-slate-500">
-            {{ t('settings.mergeThresholds.field.maxImpact') }}
+            {{ t('settings.riskPolicy.field.maxImpact') }}
           </span>
           <UInput
             v-model.number="drafts[p.id]!.maxImpact"
@@ -270,7 +270,7 @@ async function create() {
         </label>
         <label class="block">
           <span class="mb-1 block text-[10px] uppercase tracking-wide text-slate-500">
-            {{ t('settings.mergeThresholds.field.ciMaxAttempts') }}
+            {{ t('settings.riskPolicy.field.ciMaxAttempts') }}
           </span>
           <UInput
             v-model.number="drafts[p.id]!.ciMaxAttempts"
@@ -282,7 +282,7 @@ async function create() {
         </label>
         <label class="block">
           <span class="mb-1 block text-[10px] uppercase tracking-wide text-slate-500">
-            {{ t('settings.mergeThresholds.field.maxRequirementIterations') }}
+            {{ t('settings.riskPolicy.field.maxRequirementIterations') }}
           </span>
           <UInput
             v-model.number="drafts[p.id]!.maxRequirementIterations"
@@ -294,7 +294,7 @@ async function create() {
         </label>
         <label class="block">
           <span class="mb-1 block text-[10px] uppercase tracking-wide text-slate-500">
-            {{ t('settings.mergeThresholds.field.maxRequirementConcernAllowed') }}
+            {{ t('settings.riskPolicy.field.maxRequirementConcernAllowed') }}
           </span>
           <USelect
             v-model="drafts[p.id]!.maxRequirementConcernAllowed"
@@ -309,11 +309,11 @@ async function create() {
         <USwitch
           v-model="drafts[p.id]!.autoMergeEnabled"
           size="sm"
-          :label="t('settings.mergeThresholds.field.autoMerge')"
+          :label="t('settings.riskPolicy.field.autoMerge')"
           :description="
             drafts[p.id]!.autoMergeEnabled
-              ? t('settings.mergeThresholds.autoMergeOnHint')
-              : t('settings.mergeThresholds.autoMergeOffHint')
+              ? t('settings.riskPolicy.autoMergeOnHint')
+              : t('settings.riskPolicy.autoMergeOffHint')
           "
         />
         <UButton
@@ -332,22 +332,22 @@ async function create() {
     <!-- create -->
     <div class="rounded-lg border border-dashed border-slate-700 p-3">
       <p class="mb-2 text-[11px] font-semibold uppercase tracking-wide text-slate-400">
-        {{ t('settings.mergeThresholds.newPreset') }}
+        {{ t('settings.riskPolicy.newPreset') }}
       </p>
       <div class="flex flex-wrap items-end gap-3">
         <label class="block min-w-40 flex-1">
           <span class="mb-1 block text-[10px] uppercase tracking-wide text-slate-500">
-            {{ t('settings.mergeThresholds.create.name') }}
+            {{ t('settings.riskPolicy.create.name') }}
           </span>
           <UInput
             v-model="draft.name"
             size="sm"
-            :placeholder="t('settings.mergeThresholds.create.namePlaceholder')"
+            :placeholder="t('settings.riskPolicy.create.namePlaceholder')"
           />
         </label>
         <label class="block w-20">
           <span class="mb-1 block text-[10px] uppercase tracking-wide text-slate-500">
-            {{ t('settings.mergeThresholds.create.complexity') }}
+            {{ t('settings.riskPolicy.create.complexity') }}
           </span>
           <UInput
             v-model.number="draft.maxComplexity"
@@ -359,25 +359,25 @@ async function create() {
         </label>
         <label class="block w-20">
           <span class="mb-1 block text-[10px] uppercase tracking-wide text-slate-500">
-            {{ t('settings.mergeThresholds.create.risk') }}
+            {{ t('settings.riskPolicy.create.risk') }}
           </span>
           <UInput v-model.number="draft.maxRisk" type="number" :min="0" :max="100" size="sm" />
         </label>
         <label class="block w-20">
           <span class="mb-1 block text-[10px] uppercase tracking-wide text-slate-500">
-            {{ t('settings.mergeThresholds.create.impact') }}
+            {{ t('settings.riskPolicy.create.impact') }}
           </span>
           <UInput v-model.number="draft.maxImpact" type="number" :min="0" :max="100" size="sm" />
         </label>
         <label class="block w-20">
           <span class="mb-1 block text-[10px] uppercase tracking-wide text-slate-500">
-            {{ t('settings.mergeThresholds.create.ciFix') }}
+            {{ t('settings.riskPolicy.create.ciFix') }}
           </span>
           <UInput v-model.number="draft.ciMaxAttempts" type="number" :min="0" :max="50" size="sm" />
         </label>
         <label class="block w-20">
           <span class="mb-1 block text-[10px] uppercase tracking-wide text-slate-500">
-            {{ t('settings.mergeThresholds.create.reqIter') }}
+            {{ t('settings.riskPolicy.create.reqIter') }}
           </span>
           <UInput
             v-model.number="draft.maxRequirementIterations"
@@ -389,7 +389,7 @@ async function create() {
         </label>
         <label class="block w-32">
           <span class="mb-1 block text-[10px] uppercase tracking-wide text-slate-500">
-            {{ t('settings.mergeThresholds.create.autoPass') }}
+            {{ t('settings.riskPolicy.create.autoPass') }}
           </span>
           <USelect
             v-model="draft.maxRequirementConcernAllowed"
@@ -401,7 +401,7 @@ async function create() {
         <USwitch
           v-model="draft.autoMergeEnabled"
           size="sm"
-          :label="t('settings.mergeThresholds.field.autoMerge')"
+          :label="t('settings.riskPolicy.field.autoMerge')"
         />
         <UButton
           color="primary"
@@ -411,7 +411,7 @@ async function create() {
           :disabled="!draft.name.trim()"
           @click="create"
         >
-          {{ t('settings.mergeThresholds.add') }}
+          {{ t('settings.riskPolicy.add') }}
         </UButton>
       </div>
     </div>

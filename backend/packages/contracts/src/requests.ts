@@ -123,7 +123,7 @@ export const addTaskSchema = v.object({
   taskTypeFields: v.optional(taskTypeFieldsSchema),
   // The merge threshold preset governing this task's auto-merge; omitted/empty →
   // the workspace default preset.
-  mergePresetId: v.optional(v.pipe(v.string(), v.maxLength(120))),
+  riskPolicyId: v.optional(v.pipe(v.string(), v.maxLength(120))),
   // The model preset governing which model each agent step runs on; omitted/empty →
   // the workspace default preset.
   modelPresetId: v.optional(v.pipe(v.string(), v.maxLength(120))),
@@ -158,7 +158,7 @@ export const updateBlockSchema = v.partial(
     // The selected model's catalog id; an empty string resets to the default.
     modelId: v.pipe(v.string(), v.maxLength(120)),
     // The merge threshold preset id; an empty string resets to the workspace default.
-    mergePresetId: v.pipe(v.string(), v.maxLength(120)),
+    riskPolicyId: v.pipe(v.string(), v.maxLength(120)),
     // The model preset id; an empty string resets to the workspace default preset.
     modelPresetId: v.pipe(v.string(), v.maxLength(120)),
     // The task's default pipeline id; an empty string clears the selection.

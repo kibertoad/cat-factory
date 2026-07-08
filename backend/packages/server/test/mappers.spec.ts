@@ -39,7 +39,7 @@ function fullBlock(): Block {
     fragmentIds: ['frag_a', 'frag_b'],
     modelId: 'gpt',
     pullRequest: { number: 7, url: 'https://gh/pr/7', branch: 'feat/x' },
-    mergePresetId: 'mp_1',
+    riskPolicyId: 'mp_1',
     pipelineId: 'pl_1',
     agentConfig: { 'playwright.e2eTarget': 'ci' },
     provisioning: { type: 'docker-compose', composePath: 'docker-compose.yml', localDevOnly: true },
@@ -102,10 +102,10 @@ describe('blockPatchToColumns', () => {
     expect(blockPatchToColumns({ position: { x: 1, y: 2 } })).toEqual({ pos_x: 1, pos_y: 2 })
   })
 
-  it('treats an empty string as "clear the selection" for modelId/mergePresetId/pipelineId', () => {
+  it('treats an empty string as "clear the selection" for modelId/riskPolicyId/pipelineId', () => {
     expect(blockPatchToColumns({ modelId: '' }).model_id).toBeNull()
     expect(blockPatchToColumns({ modelId: 'gpt' }).model_id).toBe('gpt')
-    expect(blockPatchToColumns({ mergePresetId: '' }).merge_preset_id).toBeNull()
+    expect(blockPatchToColumns({ riskPolicyId: '' }).merge_preset_id).toBeNull()
     expect(blockPatchToColumns({ pipelineId: '' }).pipeline_id).toBeNull()
   })
 

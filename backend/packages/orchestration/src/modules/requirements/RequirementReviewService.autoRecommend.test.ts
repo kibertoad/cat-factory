@@ -143,7 +143,7 @@ describe('RequirementReviewService.autoRecommend', () => {
     writerReturns('Retry idempotent calls up to 3 times with backoff.')
 
     // The non-auto path: prepare placeholders (no `auto`), then fill them.
-    await svc.prepareRecommendations('ws', 'rrv_1', [finding.id])
+    await svc.prepareRecommendations('ws', 'rrv_1', [{ itemId: finding.id }])
     const result = await svc.fillPendingRecommendations('ws', 'rrv_1')
 
     expect(result.produced).toBe(1)

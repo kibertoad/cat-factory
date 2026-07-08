@@ -27,6 +27,7 @@ import {
   updateRequirementItemStatusContract,
 } from '@cat-factory/contracts'
 import type {
+  RequestRecommendationItem,
   UpdateBrainstormItemStatusInput,
   UpdateClarityItemStatusInput,
 } from '@cat-factory/contracts'
@@ -109,19 +110,19 @@ export function reviewsApi({ send, ws }: ApiContext) {
         body: { choice },
       }),
 
-    // Ask the Requirement Writer to recommend grounded answers for a batch of findings (by
-    // item id). Returns the review with `pending` placeholder recommendations; they fill in
-    // (`ready`) asynchronously via the `requirements` stream as the Writer produces each.
+    // Ask the Requirement Writer to recommend grounded answers for a batch of findings. Each
+    // item carries its finding id plus optional per-finding guidance (the note the human typed
+    // before choosing "recommend something"). Returns the review with `pending` placeholder
+    // recommendations; they fill in (`ready`) asynchronously via the `requirements` stream.
     requestRecommendations: (
       workspaceId: string,
       blockId: string,
-      itemIds: string[],
-      note?: string,
+      items: RequestRecommendationItem[],
     ) =>
       send(requestRequirementRecommendationsContract, {
         pathPrefix: ws(workspaceId),
         pathParams: { blockId },
-        body: { itemIds, ...(note ? { note } : {}) },
+        body: { items },
       }),
 
     // Accept a recommendation (becomes the finding's answer), reject it, or re-request it

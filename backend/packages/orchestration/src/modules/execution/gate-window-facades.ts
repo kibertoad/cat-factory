@@ -4,6 +4,7 @@ import type {
   ClarityReview,
   ExecutionInstance,
   RequirementReview,
+  RequestRecommendationItem,
   ResolveRequirementsExceededChoice,
 } from '@cat-factory/kernel'
 import type { ReviewCommon } from '../review/IterativeReviewService.js'
@@ -87,10 +88,9 @@ export class RequirementReviewActions extends ReviewWindowActions<RequirementRev
   requestRecommendations(
     workspaceId: string,
     blockId: string,
-    itemIds: string[],
-    note?: string,
+    items: RequestRecommendationItem[],
   ): Promise<RequirementReview> {
-    return this.reviewGate.requestRecommendations(this.kind, workspaceId, blockId, itemIds, note)
+    return this.reviewGate.requestRecommendations(this.kind, workspaceId, blockId, items)
   }
 
   /**

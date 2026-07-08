@@ -5,6 +5,7 @@ import type {
   RequirementRecommendation,
   RequirementReview,
   RequirementReviewItem,
+  RequestRecommendationItem,
   ResolveRunRepoContext,
 } from '@cat-factory/kernel'
 import type { DocumentRepository, TaskRepository } from '@cat-factory/kernel'
@@ -192,11 +193,11 @@ export class RequirementReviewService extends IterativeReviewService<
       this.entityName,
       reviewId,
     )
-    const itemIds = review.items
+    const items = review.items
       .filter((i) => i.autoAnswerable === true && i.status === 'open')
-      .map((i) => i.id)
-    if (itemIds.length === 0) return review
-    await this.prepareRecommendations(workspaceId, reviewId, itemIds, undefined, { auto: true })
+      .map((i) => ({ itemId: i.id }))
+    if (items.length === 0) return review
+    await this.prepareRecommendations(workspaceId, reviewId, items, { auto: true })
     await this.fillPendingRecommendations(workspaceId, reviewId, opts)
     return assertFound(await this.repository.get(workspaceId, reviewId), this.entityName, reviewId)
   }
@@ -204,31 +205,31 @@ export class RequirementReviewService extends IterativeReviewService<
   /**
    * Prepare a recommendation batch SYNCHRONOUSLY: mark the targeted findings
    * `recommend_requested` and append one `pending` placeholder recommendation per finding
-   * (snapshotting the source finding by title/detail). The slow Writer LLM does NOT run here —
-   * {@link fillPendingRecommendations} fills the placeholders later, in the durable driver, so
-   * the human is handed straight back to the board. Returns the review with the placeholders so
-   * the SPA shows the "generating…" state immediately. Idempotent per finding: a finding that
-   * already carries a `pending` placeholder is not duplicated.
+   * (snapshotting the source finding by title/detail). Each item may carry its own `note` — the
+   * per-finding guidance the human typed before choosing "recommend something" — which is
+   * stamped onto that finding's placeholder to steer the Writer. The slow Writer LLM does NOT
+   * run here — {@link fillPendingRecommendations} fills the placeholders later, in the durable
+   * driver, so the human is handed straight back to the board. Returns the review with the
+   * placeholders so the SPA shows the "generating…" state immediately. Idempotent per finding: a
+   * finding that already carries a `pending` placeholder is not duplicated.
    */
   async prepareRecommendations(
     workspaceId: string,
     reviewId: string,
-    itemIds: string[],
-    note?: string,
+    items: RequestRecommendationItem[],
     opts: { auto?: boolean } = {},
   ): Promise<RequirementReview> {
-    const targetIds = new Set(itemIds)
+    const noteByItem = new Map(items.map((i) => [i.itemId, i.note?.trim() || null]))
     const review = assertFound(
       await this.repository.get(workspaceId, reviewId),
       this.entityName,
       reviewId,
     )
     const now = this.deps.clock.now()
-    const trimmedNote = note?.trim() || null
     const recommendations = [...review.recommendations]
     let changed = false
     for (const item of review.items) {
-      if (!targetIds.has(item.id) || item.status === 'dismissed') continue
+      if (!noteByItem.has(item.id) || item.status === 'dismissed') continue
       if (item.status !== 'recommend_requested') {
         item.status = 'recommend_requested'
         item.updatedAt = now
@@ -247,7 +248,7 @@ export class RequirementReviewService extends IterativeReviewService<
         recommendedText: '',
         ...(opts.auto ? { auto: true } : {}),
         status: 'pending',
-        note: trimmedNote,
+        note: noteByItem.get(item.id) ?? null,
         groundedInFragment: null,
         createdAt: now,
         updatedAt: now,

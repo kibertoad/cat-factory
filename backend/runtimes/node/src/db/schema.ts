@@ -1180,7 +1180,7 @@ export const workspaceSettings = pgTable('workspace_settings', {
 // the workspace default (`is_default`, exactly one per workspace — the repository
 // demotes the prior default when promoting a new one). `is_default` is 0/1 to mirror
 // the D1 integer flag. Carries the auto-merge ceilings + `ci_max_attempts`.
-export const mergeThresholdPresets = pgTable(
+export const riskPolicies = pgTable(
   'merge_threshold_presets',
   {
     workspace_id: text('workspace_id').notNull(),

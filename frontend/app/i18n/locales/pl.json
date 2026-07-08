@@ -229,7 +229,7 @@
       "optional": "opcjonalne",
       "pipeline": "Pipeline",
       "chooseAtRunTime": "Wybierz przy uruchomieniu",
-      "mergePolicy": "Zasady scalania",
+      "mergePolicy": "Zasada ryzyka",
       "workspaceDefault": "Domyślne dla obszaru roboczego",
       "defaultPreset": "Domyślny ({name}): {thresholds}",
       "defaultModelPreset": "Domyślny ({name})",
@@ -858,9 +858,9 @@
       "pipeline": "Potok",
       "pipelineEmpty": "Brak domyślnego. Wybierz potok przy uruchamianiu tego zadania.",
       "pipelineHint": "Potok uruchamiany domyślnie przyciskiem uruchamiania: sekwencja kroków agentów (np. specyfikacja, kod, testy, scalenie) wykonywana dla tego zadania.",
-      "mergePolicy": "Polityka scalania",
-      "mergePresetDetail": "{name}: automatyczne scalanie, gdy złożoność ≤ {complexity}, ryzyko ≤ {risk}, wpływ ≤ {impact}; do {attempts} prób naprawy CI.",
-      "mergePresetEmpty": "Brak skonfigurowanego presetu. Element scalający zgłasza powiadomienie o recenzji dla każdego PR.",
+      "mergePolicy": "Zasada ryzyka",
+      "riskPolicyDetail": "{name}: automatyczne scalanie, gdy złożoność ≤ {complexity}, ryzyko ≤ {risk}, wpływ ≤ {impact}; do {attempts} prób naprawy CI.",
+      "riskPolicyEmpty": "Nie skonfigurowano zasady ryzyka. Element scalający zgłasza powiadomienie o recenzji dla każdego PR.",
       "mergePolicyHint": "Decyduje, kiedy ukończony pull request jest scalany automatycznie zamiast czekać na ludzką recenzję, oraz ile prób naprawy CI otrzymuje uruchomienie.",
       "modelPreset": "Preset modelu",
       "modelPresetHint": "Decyduje, na jakim modelu AI działa każdy krok agenta.",
@@ -1558,7 +1558,7 @@
         "documentImport": "Importuj i utwórz z dokumentów",
         "taskImport": "Importuj zgłoszenia",
         "fragments": "Biblioteka fragmentów kontekstu",
-        "mergeThresholds": "Progi scalania",
+        "mergeThresholds": "Zasady ryzyka",
         "workspaceSettings": "Ustawienia obszaru roboczego",
         "modelConfiguration": "Konfiguracja modeli",
         "serviceFragmentDefaults": "Domyślne dobre praktyki usługi",
@@ -1578,7 +1578,7 @@
         "taskSource": "zadanie źródło śledzenie zgłoszenia",
         "taskImport": "zadanie importuj zgłoszenia",
         "fragments": "prompt fragmenty dobre praktyki wytyczne kontekst",
-        "mergeThresholds": "scalanie polityka preset automatyczne scalanie ci",
+        "mergeThresholds": "zasada ryzyka scalanie automatyczne scalanie ci iteracje",
         "workspaceSettings": "limit uruchomione zadania na usługę oczekiwanie eskalacja opóźnienie powiadomienie limit czasu",
         "modelConfiguration": "model llm routing typ agenta preset domyślny konfiguracja",
         "serviceFragmentDefaults": "fragment dobre praktyki wytyczna usługa domyślna świadoma kodu",
@@ -1944,8 +1944,8 @@
         "body": "\"{name}\" zostanie usunięty. Tej operacji nie można cofnąć."
       }
     },
-    "mergeThresholds": {
-      "intro": "Nazwane zasady automatycznego scalania, które zadanie może wybrać. Po przejściu CI agent {merger} ocenia PR pod kątem złożoności, ryzyka i wpływu (0-100%); PR jest scalany automatycznie tylko wtedy, gdy każdy wynik jest równy lub niższy od limitów ustawienia, w przeciwnym razie zgłaszane jest powiadomienie o przeglądzie. Ustawienie domyślne obowiązuje dla każdego zadania, które nie wybierze żadnego.",
+    "riskPolicy": {
+      "intro": "Nazwane zasady automatycznego scalania, które zadanie może wybrać. Po przejściu CI agent {merger} ocenia PR pod kątem złożoności, ryzyka i wpływu (0-100%); PR jest scalany automatycznie tylko wtedy, gdy każdy wynik jest równy lub niższy od limitów zasady, w przeciwnym razie zgłaszane jest powiadomienie o przeglądzie. Zasada domyślna obowiązuje dla każdego zadania, które nie wybierze żadnej.",
       "mergerAgent": "merger",
       "concern": {
         "none": "Brak (zawsze zatrzymaj)",
@@ -1953,11 +1953,11 @@
         "medium": "Średni",
         "high": "Wysoki (nigdy nie zatrzymuj)"
       },
-      "presetNamePlaceholder": "Nazwa ustawienia",
+      "presetNamePlaceholder": "Nazwa zasady",
       "default": "Domyślne",
       "makeDefault": "Ustaw jako domyślne",
-      "deleteDefaultBlocked": "Nie można usunąć ustawienia domyślnego",
-      "deletePreset": "Usuń ustawienie",
+      "deleteDefaultBlocked": "Nie można usunąć zasady domyślnej",
+      "deletePreset": "Usuń zasadę",
       "field": {
         "maxComplexity": "Maks. złożoność %",
         "maxRisk": "Maks. ryzyko %",
@@ -1967,7 +1967,7 @@
         "maxRequirementConcernAllowed": "Automatyczne zaliczenie zastrzeżeń do",
         "autoMerge": "Auto-scalanie"
       },
-      "newPreset": "Nowe ustawienie",
+      "newPreset": "Nowa zasada",
       "create": {
         "name": "Nazwa",
         "namePlaceholder": "np. Ostrożne",
@@ -1980,18 +1980,18 @@
       },
       "add": "Dodaj",
       "toast": {
-        "saved": "Ustawienie zapisane",
-        "saveFailed": "Nie można zapisać ustawienia",
-        "created": "Ustawienie utworzone",
-        "createFailed": "Nie można utworzyć ustawienia",
+        "saved": "Zasada zapisana",
+        "saveFailed": "Nie można zapisać zasady",
+        "created": "Zasada utworzona",
+        "createFailed": "Nie można utworzyć zasady",
         "defaultFailed": "Nie można ustawić jako domyślne",
-        "deleteFailed": "Nie można usunąć ustawienia"
+        "deleteFailed": "Nie można usunąć zasady"
       },
-      "autoMergeOnHint": "Scalaj automatycznie, gdy mieści się w progach.",
+      "autoMergeOnHint": "Scalaj automatycznie, gdy mieści się w limitach zasady.",
       "autoMergeOffHint": "Zawsze kieruj PR do recenzji człowieka.",
       "confirmDelete": {
-        "title": "Usunąć ten preset scalania?",
-        "body": "\"{name}\" zostanie usunięty. Zadania go używające wrócą do domyślnego ustawienia obszaru roboczego."
+        "title": "Usunąć tę zasadę ryzyka?",
+        "body": "\"{name}\" zostanie usunięty. Zadania go używające wrócą do domyślnej zasady obszaru roboczego."
       }
     },
     "observabilityConnection": {
@@ -2198,7 +2198,7 @@
       "tabs": {
         "workspace": "Obszar roboczy",
         "budget": "Budżet",
-        "merge": "Progi scalania",
+        "merge": "Zasady ryzyka",
         "tracker": "System zgłoszeń",
         "fragments": "Dobre praktyki usługi"
       },
@@ -3294,6 +3294,15 @@
     "recommendationRequested": "Poproszono o rekomendację — sprawdź sugestię poniżej.",
     "recommendedDefault": "Zalecana wartość domyślna: zachowaj ją, edytuj lub odrzuć uwagę.",
     "needsYourInput": "Wymaga Twojej reakcji",
+    "mode": {
+      "answer": "Odpowiedz",
+      "dismiss": "Odrzuć",
+      "recommend": "Zarekomenduj"
+    },
+    "userAnswered": "Odpowiedziano",
+    "guidancePlaceholder": "Wskazówki do rekomendacji (opcjonalnie)…",
+    "guidanceHint": "Twój tekst ukierunkowuje rekomendację; służy jako wskazówka i nie jest zapisywany jako odpowiedź.",
+    "dismissedHint": "Oznaczono jako nieistotne; nie zostanie uwzględnione.",
     "reopen": "Otwórz ponownie",
     "recommendedAnswers": "Rekomendowane odpowiedzi",
     "recommendationProgress": "{ready} / {total} gotowych",
@@ -4259,22 +4268,22 @@
       "help": "Czym jest to repozytorium: usługą backendową, aplikacją frontendową, współdzieloną biblioteką lub repozytorium dokumentacji (tylko dokumenty/spike'i)."
     }
   },
-  "mergePreset": {
+  "riskPolicy": {
     "health": {
-      "title": "Aktualizacje presetów scalania",
-      "allValid": "Wszystkie wbudowane presety scalania są aktualne.",
-      "newHeading": "Dostępne nowe presety",
-      "newDescription": "Pojawiły się nowe wbudowane presety scalania. Dodaj je do biblioteki tej tablicy.",
+      "title": "Aktualizacje zasad ryzyka",
+      "allValid": "Wszystkie wbudowane zasady ryzyka są aktualne.",
+      "newHeading": "Dostępne nowe zasady",
+      "newDescription": "Pojawiły się nowe wbudowane zasady ryzyka. Dodaj je do biblioteki tej tablicy.",
       "add": "Dodaj",
       "updatesHeading": "Dostępne aktualizacje",
-      "updatesDescription": "Dostępna jest nowsza wersja tych wbudowanych presetów scalania. Zregeneruj, aby ją przyjąć (domyślny i kolejność są zachowane).",
+      "updatesDescription": "Dostępna jest nowsza wersja tych wbudowanych zasad ryzyka. Zregeneruj, aby ją przyjąć (domyślna zasada i kolejność są zachowane).",
       "versionAvailable": "Dostępna wersja {from} → {to}.",
       "reseed": "Zregeneruj",
       "reseedAll": "Zaktualizuj wszystkie ({count})",
       "dismiss": "Odrzuć",
       "done": "Gotowe",
       "toast": {
-        "reseedFailed": "Nie udało się zregenerować presetu scalania"
+        "reseedFailed": "Nie udało się zregenerować zasady ryzyka"
       }
     }
   },

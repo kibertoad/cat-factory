@@ -17,7 +17,7 @@ import {
   classifyReleaseHealth,
   CONFLICT_RESOLVER_AGENT_KIND,
   CONFLICTS_AGENT_KIND,
-  DEFAULT_MERGE_PRESET,
+  DEFAULT_RISK_POLICY,
   describeFailingRepos,
   describeRegressedSignals,
   DOC_FIXER_AGENT_KIND,
@@ -382,7 +382,7 @@ export const postReleaseHealthGate = (ctx: GateContext): GateDefinition => ({
     // evaluateGate), so the probe doesn't re-load the block + re-resolve the merge preset on
     // every poll over the window.
     const windowMinutes =
-      gateState.watchWindowMinutes ?? DEFAULT_MERGE_PRESET.releaseWatchWindowMinutes
+      gateState.watchWindowMinutes ?? DEFAULT_RISK_POLICY.releaseWatchWindowMinutes
     const windowElapsed = ctx.clock.now() - since >= windowMinutes * 60_000
     const verdict = classifyReleaseHealth({ report, windowElapsed })
     if (verdict === 'pass') {
@@ -579,7 +579,7 @@ export const humanReviewGate = (ctx: GateContext): GateDefinition => ({
       gateState.pendingThreadIds = stillOpen.length > 0 ? stillOpen : null
     }
     const graceMinutes =
-      gateState.humanReviewGraceMinutes ?? DEFAULT_MERGE_PRESET.humanReviewGraceMinutes
+      gateState.humanReviewGraceMinutes ?? DEFAULT_RISK_POLICY.humanReviewGraceMinutes
     // Surface the approval progress for the UI (persisted via the caller's `...step.gate` spread),
     // and cache the static branch-protection required count so later polls skip re-reading it.
     // The UI derives the displayed "required" count from `requiredApprovingReviewCount` via the

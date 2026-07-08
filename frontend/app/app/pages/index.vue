@@ -71,8 +71,8 @@ const PipelineHealthModal = defineAsyncComponent(
   () => import('~/components/pipeline/PipelineHealthModal.vue'),
 )
 // Startup advisory for new / outdated built-in merge presets — same once-per-session pattern.
-const MergePresetHealthModal = defineAsyncComponent(
-  () => import('~/components/settings/MergePresetHealthModal.vue'),
+const RiskPolicyHealthModal = defineAsyncComponent(
+  () => import('~/components/settings/RiskPolicyHealthModal.vue'),
 )
 // Startup advisory for new / outdated built-in model presets — same once-per-session pattern.
 const ModelPresetHealthModal = defineAsyncComponent(
@@ -185,12 +185,12 @@ watch(
 )
 // Same advisory for built-in merge presets: surface new / outdated ones once per session. Defers
 // to the pipeline advisory when both fire, so at most one modal auto-opens on a given load.
-const { hasIssues: mergePresetIssues } = useMergePresetHealth()
+const { hasIssues: riskPolicyIssues } = useRiskPolicyHealth()
 watch(
-  () => [workspace.ready, mergePresetIssues.value, ui.pipelineHealthOpen],
+  () => [workspace.ready, riskPolicyIssues.value, ui.pipelineHealthOpen],
   () => {
-    if (workspace.ready && mergePresetIssues.value && !ui.pipelineHealthOpen) {
-      ui.maybeOpenMergePresetHealth()
+    if (workspace.ready && riskPolicyIssues.value && !ui.pipelineHealthOpen) {
+      ui.maybeOpenRiskPolicyHealth()
     }
   },
   { immediate: true },
@@ -200,13 +200,13 @@ watch(
 // to the pipeline + merge-preset advisories when they fire, so at most one modal auto-opens.
 const { hasIssues: modelPresetIssues } = useModelPresetHealth()
 watch(
-  () => [workspace.ready, modelPresetIssues.value, ui.pipelineHealthOpen, ui.mergePresetHealthOpen],
+  () => [workspace.ready, modelPresetIssues.value, ui.pipelineHealthOpen, ui.riskPolicyHealthOpen],
   () => {
     if (
       workspace.ready &&
       modelPresetIssues.value &&
       !ui.pipelineHealthOpen &&
-      !ui.mergePresetHealthOpen
+      !ui.riskPolicyHealthOpen
     ) {
       ui.maybeOpenModelPresetHealth()
     }
@@ -390,7 +390,7 @@ watch(
       <SlackPanel v-if="ui.slackOpen" />
       <FragmentLibraryPanel v-if="ui.fragmentLibraryOpen" />
       <PipelineHealthModal v-if="ui.pipelineHealthOpen" />
-      <MergePresetHealthModal v-if="ui.mergePresetHealthOpen" />
+      <RiskPolicyHealthModal v-if="ui.riskPolicyHealthOpen" />
       <ModelPresetHealthModal v-if="ui.modelPresetHealthOpen" />
       <IntegrationsHub v-if="ui.integrationsOpen" />
       <PersonalSetupModal v-if="ui.personalSetupOpen" />

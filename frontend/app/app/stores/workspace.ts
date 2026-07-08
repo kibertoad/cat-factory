@@ -13,7 +13,7 @@ import { usePipelinesStore } from '~/stores/pipelines'
 import { useExecutionStore } from '~/stores/execution'
 import { useAgentRunsStore } from '~/stores/agentRuns'
 import { useNotificationsStore } from '~/stores/notifications'
-import { useMergePresetsStore } from '~/stores/mergePresets'
+import { useRiskPoliciesStore } from '~/stores/riskPolicies'
 import { useSharedStacksStore } from '~/stores/sharedStacks'
 import { useWorkspaceSettingsStore } from '~/stores/workspaceSettings'
 import { useAgentConfigStore } from '~/stores/agentConfig'
@@ -120,9 +120,9 @@ export const useWorkspaceStore = defineStore(
       useAgentRunsStore().hydrate(snapshot.bootstrapJobs ?? [], snapshot.workspace.id)
       useAgentRunsStore().hydrateEnvConfigRepair(snapshot.envConfigRepairJobs ?? [])
       useNotificationsStore().hydrate(snapshot.notifications ?? [])
-      useMergePresetsStore().hydrate(
-        snapshot.mergePresets ?? [],
-        snapshot.mergePresetCatalogVersions,
+      useRiskPoliciesStore().hydrate(
+        snapshot.riskPolicies ?? [],
+        snapshot.riskPolicyCatalogVersions,
       )
       useSharedStacksStore().hydrate(snapshot.sharedStacks ?? [])
       useWorkspaceSettingsStore().hydrate(snapshot.settings)

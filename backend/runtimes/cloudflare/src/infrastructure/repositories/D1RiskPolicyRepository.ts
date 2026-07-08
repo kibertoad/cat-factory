@@ -1,8 +1,8 @@
-import type { MergePresetRepository } from '@cat-factory/kernel'
-import type { MergeThresholdPreset, RequirementConcernLevel } from '@cat-factory/contracts'
+import type { RiskPolicyRepository } from '@cat-factory/kernel'
+import type { RiskPolicy, RequirementConcernLevel } from '@cat-factory/contracts'
 import type { D1Database } from '@cloudflare/workers-types'
 
-interface MergePresetRow {
+interface RiskPolicyRow {
   id: string
   name: string
   max_complexity: number
@@ -21,7 +21,7 @@ interface MergePresetRow {
   created_at: number
 }
 
-function rowToPreset(row: MergePresetRow): MergeThresholdPreset {
+function rowToPreset(row: RiskPolicyRow): RiskPolicy {
   return {
     id: row.id,
     name: row.name,
@@ -48,32 +48,32 @@ function rowToPreset(row: MergePresetRow): MergeThresholdPreset {
  * default demotes every other in the workspace, in one statement before the
  * upsert. The default preset cannot be removed (the service keeps that rule).
  */
-export class D1MergePresetRepository implements MergePresetRepository {
+export class D1RiskPolicyRepository implements RiskPolicyRepository {
   private readonly db: D1Database
 
   constructor({ db }: { db: D1Database }) {
     this.db = db
   }
 
-  async get(workspaceId: string, id: string): Promise<MergeThresholdPreset | null> {
+  async get(workspaceId: string, id: string): Promise<RiskPolicy | null> {
     const row = await this.db
       .prepare(`SELECT * FROM merge_threshold_presets WHERE workspace_id = ? AND id = ?`)
       .bind(workspaceId, id)
-      .first<MergePresetRow>()
+      .first<RiskPolicyRow>()
     return row ? rowToPreset(row) : null
   }
 
-  async list(workspaceId: string): Promise<MergeThresholdPreset[]> {
+  async list(workspaceId: string): Promise<RiskPolicy[]> {
     const { results } = await this.db
       .prepare(
         `SELECT * FROM merge_threshold_presets WHERE workspace_id = ? ORDER BY created_at ASC`,
       )
       .bind(workspaceId)
-      .all<MergePresetRow>()
+      .all<RiskPolicyRow>()
     return results.map(rowToPreset)
   }
 
-  async getDefault(workspaceId: string): Promise<MergeThresholdPreset | null> {
+  async getDefault(workspaceId: string): Promise<RiskPolicy | null> {
     const row = await this.db
       .prepare(
         `SELECT * FROM merge_threshold_presets
@@ -81,11 +81,11 @@ export class D1MergePresetRepository implements MergePresetRepository {
            ORDER BY created_at ASC LIMIT 1`,
       )
       .bind(workspaceId)
-      .first<MergePresetRow>()
+      .first<RiskPolicyRow>()
     return row ? rowToPreset(row) : null
   }
 
-  async upsert(workspaceId: string, preset: MergeThresholdPreset): Promise<void> {
+  async upsert(workspaceId: string, preset: RiskPolicy): Promise<void> {
     // Promoting this preset to default demotes any other default first, so the
     // single-default invariant holds.
     if (preset.isDefault) {

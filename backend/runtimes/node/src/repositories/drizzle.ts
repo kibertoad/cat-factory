@@ -36,8 +36,8 @@ import type {
   LocalSettingsRepository,
   IncidentEnrichmentConnectionRecord,
   IncidentEnrichmentConnectionRepository,
-  MergePresetRepository,
-  MergeThresholdPreset,
+  RiskPolicyRepository,
+  RiskPolicy,
   SharedStack,
   SharedStackRepository,
   ObservabilityConnectionRecord,
@@ -189,7 +189,7 @@ import {
   provisioningLog,
   sharedStacks,
   memberships,
-  mergeThresholdPresets,
+  riskPolicies,
   releaseHealthConfigs,
   pipelineScheduleRuns,
   pipelineSchedules,
@@ -3462,9 +3462,9 @@ class DrizzleInitiativeRepository implements InitiativeRepository {
   }
 }
 
-type MergePresetRow = typeof mergeThresholdPresets.$inferSelect
+type RiskPolicyRow = typeof riskPolicies.$inferSelect
 
-function rowToMergePreset(row: MergePresetRow): MergeThresholdPreset {
+function rowToRiskPolicy(row: RiskPolicyRow): RiskPolicy {
   return {
     id: row.id,
     name: row.name,
@@ -3474,7 +3474,7 @@ function rowToMergePreset(row: MergePresetRow): MergeThresholdPreset {
     ciMaxAttempts: row.ci_max_attempts,
     maxRequirementIterations: row.max_requirement_iterations,
     maxRequirementConcernAllowed:
-      row.max_requirement_concern_allowed as MergeThresholdPreset['maxRequirementConcernAllowed'],
+      row.max_requirement_concern_allowed as RiskPolicy['maxRequirementConcernAllowed'],
     maxTesterQualityIterations: row.max_tester_quality_iterations,
     releaseWatchWindowMinutes: row.release_watch_window_minutes,
     releaseMaxAttempts: row.release_max_attempts,
@@ -3488,51 +3488,44 @@ function rowToMergePreset(row: MergePresetRow): MergeThresholdPreset {
 
 /**
  * Per-workspace merge threshold presets over Postgres (the Drizzle mirror of the
- * Worker's `D1MergePresetRepository`, migration 0024). Enforces the single-default
+ * Worker's `D1RiskPolicyRepository`, migration 0024). Enforces the single-default
  * invariant: promoting a preset to default demotes every other in the workspace
  * before the upsert. The default preset cannot be removed (the service keeps that
  * rule too; the DELETE also guards `is_default = 0`). Behaviourally identical to the
  * D1 repo so the cross-runtime conformance suite asserts the same preset resolution.
  */
-class DrizzleMergePresetRepository implements MergePresetRepository {
+class DrizzleRiskPolicyRepository implements RiskPolicyRepository {
   constructor(private readonly db: DrizzleDb) {}
 
-  async get(workspaceId: string, id: string): Promise<MergeThresholdPreset | null> {
+  async get(workspaceId: string, id: string): Promise<RiskPolicy | null> {
     const rows = await this.db
       .select()
-      .from(mergeThresholdPresets)
-      .where(
-        and(eq(mergeThresholdPresets.workspace_id, workspaceId), eq(mergeThresholdPresets.id, id)),
-      )
+      .from(riskPolicies)
+      .where(and(eq(riskPolicies.workspace_id, workspaceId), eq(riskPolicies.id, id)))
       .limit(1)
-    return rows[0] ? rowToMergePreset(rows[0]) : null
+    return rows[0] ? rowToRiskPolicy(rows[0]) : null
   }
 
-  async list(workspaceId: string): Promise<MergeThresholdPreset[]> {
+  async list(workspaceId: string): Promise<RiskPolicy[]> {
     const rows = await this.db
       .select()
-      .from(mergeThresholdPresets)
-      .where(eq(mergeThresholdPresets.workspace_id, workspaceId))
-      .orderBy(mergeThresholdPresets.created_at)
-    return rows.map(rowToMergePreset)
+      .from(riskPolicies)
+      .where(eq(riskPolicies.workspace_id, workspaceId))
+      .orderBy(riskPolicies.created_at)
+    return rows.map(rowToRiskPolicy)
   }
 
-  async getDefault(workspaceId: string): Promise<MergeThresholdPreset | null> {
+  async getDefault(workspaceId: string): Promise<RiskPolicy | null> {
     const rows = await this.db
       .select()
-      .from(mergeThresholdPresets)
-      .where(
-        and(
-          eq(mergeThresholdPresets.workspace_id, workspaceId),
-          eq(mergeThresholdPresets.is_default, 1),
-        ),
-      )
-      .orderBy(mergeThresholdPresets.created_at)
+      .from(riskPolicies)
+      .where(and(eq(riskPolicies.workspace_id, workspaceId), eq(riskPolicies.is_default, 1)))
+      .orderBy(riskPolicies.created_at)
       .limit(1)
-    return rows[0] ? rowToMergePreset(rows[0]) : null
+    return rows[0] ? rowToRiskPolicy(rows[0]) : null
   }
 
-  async upsert(workspaceId: string, preset: MergeThresholdPreset): Promise<void> {
+  async upsert(workspaceId: string, preset: RiskPolicy): Promise<void> {
     const values = {
       workspace_id: workspaceId,
       id: preset.id,
@@ -3558,20 +3551,20 @@ class DrizzleMergePresetRepository implements MergePresetRepository {
       // Promoting this preset to default demotes any other default first.
       if (preset.isDefault) {
         await tx
-          .update(mergeThresholdPresets)
+          .update(riskPolicies)
           .set({ is_default: 0 })
           .where(
             and(
-              eq(mergeThresholdPresets.workspace_id, workspaceId),
-              sql`${mergeThresholdPresets.id} <> ${preset.id}`,
+              eq(riskPolicies.workspace_id, workspaceId),
+              sql`${riskPolicies.id} <> ${preset.id}`,
             ),
           )
       }
       await tx
-        .insert(mergeThresholdPresets)
+        .insert(riskPolicies)
         .values(values)
         .onConflictDoUpdate({
-          target: [mergeThresholdPresets.workspace_id, mergeThresholdPresets.id],
+          target: [riskPolicies.workspace_id, riskPolicies.id],
           set: {
             name: values.name,
             max_complexity: values.max_complexity,
@@ -3594,12 +3587,12 @@ class DrizzleMergePresetRepository implements MergePresetRepository {
 
   async remove(workspaceId: string, id: string): Promise<void> {
     await this.db
-      .delete(mergeThresholdPresets)
+      .delete(riskPolicies)
       .where(
         and(
-          eq(mergeThresholdPresets.workspace_id, workspaceId),
-          eq(mergeThresholdPresets.id, id),
-          eq(mergeThresholdPresets.is_default, 0),
+          eq(riskPolicies.workspace_id, workspaceId),
+          eq(riskPolicies.id, id),
+          eq(riskPolicies.is_default, 0),
         ),
       )
   }
@@ -4637,7 +4630,7 @@ export interface CoreRepositories {
   clarityReviewRepository: ClarityReviewRepository
   brainstormSessionRepository: BrainstormSessionRepository
   initiativeRepository: InitiativeRepository
-  mergePresetRepository: MergePresetRepository
+  riskPolicyRepository: RiskPolicyRepository
   sharedStackRepository: SharedStackRepository
   workspaceSettingsRepository: WorkspaceSettingsRepository
   userSettingsRepository: UserSettingsRepository
@@ -4682,7 +4675,7 @@ export function createDrizzleRepositories(db: DrizzleDb, clock: Clock): CoreRepo
     clarityReviewRepository: new DrizzleClarityReviewRepository(db),
     brainstormSessionRepository: new DrizzleBrainstormSessionRepository(db),
     initiativeRepository: new DrizzleInitiativeRepository(db),
-    mergePresetRepository: new DrizzleMergePresetRepository(db),
+    riskPolicyRepository: new DrizzleRiskPolicyRepository(db),
     sharedStackRepository: new DrizzleSharedStackRepository(db),
     workspaceSettingsRepository: new DrizzleWorkspaceSettingsRepository(db),
     userSettingsRepository: new DrizzleUserSettingsRepository(db),

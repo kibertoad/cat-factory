@@ -1,49 +1,49 @@
 import {
-  createMergePresetContract,
+  createRiskPolicyContract,
   createModelPresetContract,
-  deleteMergePresetContract,
+  deleteRiskPolicyContract,
   deleteModelPresetContract,
-  listMergePresetsContract,
+  listRiskPoliciesContract,
   listModelPresetsContract,
-  reseedMergePresetContract,
+  reseedRiskPolicyContract,
   reseedModelPresetContract,
-  updateMergePresetContract,
+  updateRiskPolicyContract,
   updateModelPresetContract,
 } from '@cat-factory/contracts'
-import type { UpdateMergePresetInput } from '~/types/merge'
+import type { UpdateRiskPolicyInput } from '~/types/merge'
 import type { CreateModelPresetInput, UpdateModelPresetInput } from '~/types/model-presets'
 import type { SendParams } from './client'
 import type { ApiContext } from './context'
 
 // The merge-preset create body is typed from the contract's INPUT shape so the
 // valibot-defaulted fields (release/grace windows, isDefault) stay optional for callers
-// (the exported `CreateMergePresetInput` is the post-default OUTPUT shape).
-type CreateMergePresetBody = NonNullable<SendParams<typeof createMergePresetContract>['body']>
+// (the exported `CreateRiskPolicyInput` is the post-default OUTPUT shape).
+type CreateRiskPolicyBody = NonNullable<SendParams<typeof createRiskPolicyContract>['body']>
 
 /** The per-workspace preset libraries: merge-threshold policy + model->agent mapping. */
 export function presetsApi({ send, ws }: ApiContext) {
   return {
     // ---- merge threshold presets (per-task auto-merge policy library) -----
-    listMergePresets: (workspaceId: string) =>
-      send(listMergePresetsContract, { pathPrefix: ws(workspaceId) }),
+    listRiskPolicies: (workspaceId: string) =>
+      send(listRiskPoliciesContract, { pathPrefix: ws(workspaceId) }),
 
-    createMergePreset: (workspaceId: string, body: CreateMergePresetBody) =>
-      send(createMergePresetContract, { pathPrefix: ws(workspaceId), body }),
+    createRiskPolicy: (workspaceId: string, body: CreateRiskPolicyBody) =>
+      send(createRiskPolicyContract, { pathPrefix: ws(workspaceId), body }),
 
-    updateMergePreset: (workspaceId: string, presetId: string, body: UpdateMergePresetInput) =>
-      send(updateMergePresetContract, {
+    updateRiskPolicy: (workspaceId: string, presetId: string, body: UpdateRiskPolicyInput) =>
+      send(updateRiskPolicyContract, {
         pathPrefix: ws(workspaceId),
         pathParams: { presetId },
         body,
       }),
 
-    deleteMergePreset: (workspaceId: string, presetId: string) =>
-      send(deleteMergePresetContract, { pathPrefix: ws(workspaceId), pathParams: { presetId } }),
+    deleteRiskPolicy: (workspaceId: string, presetId: string) =>
+      send(deleteRiskPolicyContract, { pathPrefix: ws(workspaceId), pathParams: { presetId } }),
 
     // Restore a built-in preset to its current catalog definition (adopt an update, repair a
     // drifted one, or materialise a new built-in that appeared). Custom presets reject this.
-    reseedMergePreset: (workspaceId: string, presetId: string) =>
-      send(reseedMergePresetContract, { pathPrefix: ws(workspaceId), pathParams: { presetId } }),
+    reseedRiskPolicy: (workspaceId: string, presetId: string) =>
+      send(reseedRiskPolicyContract, { pathPrefix: ws(workspaceId), pathParams: { presetId } }),
 
     // ---- model presets (per-task model->agent mapping library) ------------
     listModelPresets: (workspaceId: string) =>

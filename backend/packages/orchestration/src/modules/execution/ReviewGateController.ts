@@ -5,6 +5,7 @@ import type {
   ExecutionRepository,
   PipelineStep,
   RequirementConcernLevel,
+  RequestRecommendationItem,
   ResolveRequirementsExceededChoice,
   WorkRunner,
 } from '@cat-factory/kernel'
@@ -18,7 +19,7 @@ import type { StepGraph } from './StepGraph.js'
 /**
  * The merge-preset knobs an iterative review consults: how many reviewer passes it
  * may run and the severity it tolerates before it must raise a finding for a human.
- * A structural subset of the full merge preset, so {@link ReviewGateControllerDeps.resolveMergePreset}
+ * A structural subset of the full merge preset, so {@link ReviewGateControllerDeps.resolveRiskPolicy}
  * can return the whole preset unchanged.
  */
 export interface ReviewPreset {
@@ -61,14 +62,15 @@ export interface ReviewKind<TReview extends ReviewCommon> {
   grantExtraRound(workspaceId: string, reviewId: string): Promise<TReview>
   /**
    * Requirements-only (the Requirement Writer): append `pending` placeholder recommendations
-   * for a batch of findings so the SPA shows "generating…" at once. The slow Writer runs later
-   * via {@link fillRecommendations}. Optional — absent on the clarity kind (no Writer).
+   * for a batch of findings so the SPA shows "generating…" at once. Each item carries its finding
+   * id plus optional per-finding guidance (the note the human typed before choosing "recommend").
+   * The slow Writer runs later via {@link fillRecommendations}. Optional — absent on the clarity
+   * kind (no Writer).
    */
   prepareRecommendations?(
     workspaceId: string,
     reviewId: string,
-    itemIds: string[],
-    note?: string,
+    items: RequestRecommendationItem[],
   ): Promise<TReview>
   /** Requirements-only: reset a settled recommendation back to `pending` for a re-request. Optional. */
   markRecommendationPending?(
@@ -101,7 +103,7 @@ export interface ReviewKind<TReview extends ReviewCommon> {
  * the gate flow drives (park / advance-past-resolved / finalize / persist / emit / progress /
  * start-finish a step) now come from the cohesive {@link RunStateMachine} + {@link StepGraph}
  * collaborators instead of a per-callback bag, so this is just the gate's own data access plus
- * the two genuinely gate-flow operations (`resolveMergePreset`, `dispatchIterationCap`).
+ * the two genuinely gate-flow operations (`resolveRiskPolicy`, `dispatchIterationCap`).
  */
 export interface ReviewGateControllerDeps {
   blockRepository: BlockRepository
@@ -111,7 +113,7 @@ export interface ReviewGateControllerDeps {
   stateMachine: RunStateMachine
   /** The pure step mutators (start/finish a step). */
   stepGraph: StepGraph
-  resolveMergePreset: (workspaceId: string, block: Block) => Promise<ReviewPreset>
+  resolveRiskPolicy: (workspaceId: string, block: Block) => Promise<ReviewPreset>
   dispatchIterationCap: (
     workspaceId: string,
     blockId: string,
@@ -247,7 +249,7 @@ export class ReviewGateController {
       'Block',
       blockId,
     )
-    const preset = await this.deps.resolveMergePreset(workspaceId, block)
+    const preset = await this.deps.resolveRiskPolicy(workspaceId, block)
     await kind.incorporate(workspaceId, blockId, review.id, feedback)
     // The fold is done; flag the SECOND stage (`reviewing`) so the board/window can show
     // "re-reviewing" distinctly from "incorporating" — either of the two LLM calls can be
@@ -336,7 +338,7 @@ export class ReviewGateController {
       'Block',
       blockId,
     )
-    const preset = await this.deps.resolveMergePreset(workspaceId, block)
+    const preset = await this.deps.resolveRiskPolicy(workspaceId, block)
     return kind.review(workspaceId, block, preset)
   }
 
@@ -406,16 +408,22 @@ export class ReviewGateController {
     kind: ReviewKind<TReview>,
     workspaceId: string,
     blockId: string,
-    itemIds: string[],
-    note?: string,
+    items: RequestRecommendationItem[],
   ): Promise<TReview> {
     if (!kind.prepareRecommendations || !kind.fillRecommendations) {
       throw new ConflictError('Recommendations are not supported for this review')
     }
     const current = await this.currentReview(kind, workspaceId, blockId)
-    const prepared = await kind.prepareRecommendations(workspaceId, current.id, itemIds, note)
+    const prepared = await kind.prepareRecommendations(workspaceId, current.id, items)
     await kind.emit(workspaceId, prepared)
-    return this.scheduleRecommendation(kind, workspaceId, blockId, itemIds, note, prepared)
+    return this.scheduleRecommendation(
+      kind,
+      workspaceId,
+      blockId,
+      items.map((i) => i.itemId),
+      undefined,
+      prepared,
+    )
   }
 
   /**
@@ -527,9 +535,17 @@ export class ReviewGateController {
       'Block',
       blockId,
     )
-    const preset = await this.deps.resolveMergePreset(workspaceId, block)
+    const preset = await this.deps.resolveRiskPolicy(workspaceId, block)
     const updated = await kind.reReview(workspaceId, review.id, preset)
-    if (updated.status === 'incorporated') await this.resumeRun(kind, workspaceId, blockId)
+    if (updated.status === 'incorporated') {
+      await this.resumeRun(kind, workspaceId, blockId)
+    } else if (updated.status === 'ready') {
+      // A re-review can surface fresh findings; pre-answer the auto-answerable ones just like the
+      // pipeline-driven cycle (see {@link runIncorporationCycle}), so auto-recommendation happens
+      // on EVERY iteration round that introduces new questions — not only the first. Off-path
+      // (no parked run) there is no step to opt out via `stepOptions.autoRecommend`, so it is on.
+      await this.maybeAutoRecommend(kind, workspaceId, blockId)
+    }
     return updated
   }
 

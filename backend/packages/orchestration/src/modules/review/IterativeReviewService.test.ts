@@ -209,7 +209,7 @@ describe('RequirementReviewService recommendations (Requirement Writer, async)',
 
     // The human answers finding A explicitly, then asks the Writer to recommend for finding B.
     await svc.replyToItem(WS, review.id, a.id, 'My explicit answer to A.')
-    const prepared = await svc.prepareRecommendations(WS, review.id, [b.id])
+    const prepared = await svc.prepareRecommendations(WS, review.id, [{ itemId: b.id }])
     // A `pending` placeholder appears at once (the async story); B is marked recommend_requested.
     expect(prepared.recommendations).toHaveLength(1)
     expect(prepared.recommendations[0]!.status).toBe('pending')
@@ -244,7 +244,7 @@ describe('RequirementReviewService recommendations (Requirement Writer, async)',
     script.push({ text: TWO_FINDINGS })
     const review = await svc.review(WS, BLOCK.id, {})
     const b = review.items[1]!
-    await svc.prepareRecommendations(WS, review.id, [b.id])
+    await svc.prepareRecommendations(WS, review.id, [{ itemId: b.id }])
 
     script.push({ throw: new Error('writer boom') })
     const { produced } = await svc.fillPendingRecommendations(WS, review.id, {})
@@ -259,7 +259,7 @@ describe('RequirementReviewService recommendations (Requirement Writer, async)',
     script.push({ text: TWO_FINDINGS })
     const review = await svc.review(WS, BLOCK.id, {})
     const b = review.items[1]!
-    await svc.prepareRecommendations(WS, review.id, [b.id])
+    await svc.prepareRecommendations(WS, review.id, [{ itemId: b.id }])
     script.push({
       text: JSON.stringify({
         recommendations: [{ itemId: b.id, recommendation: 'Answer for B.' }],
@@ -279,7 +279,7 @@ describe('RequirementReviewService recommendations (Requirement Writer, async)',
     script.push({ text: TWO_FINDINGS })
     const review = await svc.review(WS, BLOCK.id, {})
     const b = review.items[1]!
-    await svc.prepareRecommendations(WS, review.id, [b.id])
+    await svc.prepareRecommendations(WS, review.id, [{ itemId: b.id }])
     script.push({
       text: JSON.stringify({
         recommendations: [{ itemId: b.id, recommendation: 'Answer for B.' }],
@@ -308,7 +308,10 @@ describe('RequirementReviewService recommendations (Requirement Writer, async)',
     const [x, y] = review.items
     expect(review.items).toHaveLength(2)
 
-    const prepared = await svc.prepareRecommendations(WS, review.id, [x!.id, y!.id])
+    const prepared = await svc.prepareRecommendations(WS, review.id, [
+      { itemId: x!.id },
+      { itemId: y!.id },
+    ])
     // Two placeholders despite identical title+detail — keyed on the finding id, not the text.
     expect(prepared.recommendations).toHaveLength(2)
     expect(prepared.recommendations.map((r) => r.sourceFinding.itemId).sort()).toEqual(
@@ -349,7 +352,11 @@ describe('RequirementReviewService recommendations (Requirement Writer, async)',
     const review = await svc.review(WS, BLOCK.id, {})
     expect(review.items).toHaveLength(5)
     const ids = review.items.map((i) => i.id)
-    await svc.prepareRecommendations(WS, review.id, ids)
+    await svc.prepareRecommendations(
+      WS,
+      review.id,
+      ids.map((id) => ({ itemId: id })),
+    )
     const callsBeforeFill = script.calls.length // just the one reviewer pass so far
 
     // First chunk answers findings 0-3 in one response; the second chunk answers finding 4.
@@ -375,7 +382,7 @@ describe('RequirementReviewService recommendations (Requirement Writer, async)',
     script.push({ text: TWO_FINDINGS })
     const review = await svc.review(WS, BLOCK.id, {})
     const b = review.items[1]!
-    await svc.prepareRecommendations(WS, review.id, [b.id])
+    await svc.prepareRecommendations(WS, review.id, [{ itemId: b.id }])
 
     // Single-finding call: the model returns a recommendation but drops the echoed itemId
     // (common for one-item prompts). It must still be applied, not discarded as a failure.

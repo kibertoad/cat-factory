@@ -2423,7 +2423,7 @@ export function buildNodeContainer(options: NodeContainerOptions): ServerContain
     // merge gate resolves (block-pinned preset > workspace default). Wired
     // unconditionally, exactly like the Worker's `selectMergeLifecycleDeps`, so the
     // preset CRUD API + the merger step's threshold resolution work identically.
-    mergePresetRepository: repos.mergePresetRepository,
+    riskPolicyRepository: repos.riskPolicyRepository,
     // Shared stacks (long-lived compose infra a consumer environment attaches to). Wired
     // unconditionally like the merge presets so the CRUD API works identically on both
     // runtimes; the bring-up (`ensureUp`) needs a host daemon, so plain Node has no

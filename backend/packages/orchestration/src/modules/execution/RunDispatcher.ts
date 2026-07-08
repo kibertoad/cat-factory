@@ -41,7 +41,7 @@ import type {
 } from '@cat-factory/kernel'
 import {
   ConflictError,
-  DEFAULT_MERGE_PRESET,
+  DEFAULT_RISK_POLICY,
   getErrorMessage,
   getErrorReason,
   getProvider,
@@ -149,9 +149,9 @@ import type { BlueprintReconciler } from './ExecutionService.js'
 /**
  * The task's fully-resolved merge-threshold preset (block pin → workspace default →
  * built-in). The dispatcher only reads the gate-relevant fields; the full shape is kept so
- * a gate's `attemptBudget(preset)` sees every knob. Mirrors {@link ExecutionService.resolveMergePreset}.
+ * a gate's `attemptBudget(preset)` sees every knob. Mirrors {@link ExecutionService.resolveRiskPolicy}.
  */
-type ResolvedMergePreset = {
+type ResolvedRiskPolicy = {
   maxComplexity: number
   maxRisk: number
   maxImpact: number
@@ -282,7 +282,7 @@ export interface RunDispatcherDeps {
     initiatedBy?: string | null,
   ) => Promise<ProviderCapabilities>
   /** Resolve a task's merge preset (stays on the engine, shared with the merge subgraph). */
-  resolveMergePreset: (workspaceId: string, block: Block) => Promise<ResolvedMergePreset>
+  resolveRiskPolicy: (workspaceId: string, block: Block) => Promise<ResolvedRiskPolicy>
   /** Whether a resolved model id incurs metered monetary cost (the start gate's predicate). */
   modelIdIsMetered: (id: string | undefined, caps: ProviderCapabilities) => boolean
 }
@@ -299,7 +299,7 @@ export interface RunDispatcherDeps {
  * a fat per-callback bag. It composes the existing collaborators ({@link RunStateMachine} /
  * {@link StepGraph} / the five gate controllers / {@link MergeResolver}); the merge/auto-start
  * subgraph deliberately STAYS on the engine, reached only through the injected
- * `resolveMergePreset` callback + the {@link MergeResolver} (which itself closes over the
+ * `resolveRiskPolicy` callback + the {@link MergeResolver} (which itself closes over the
  * engine's `finalizeMerge`). `ExecutionService.stepInstance` / `pollAgentJob` / `pollGate`
  * delegate here; no behaviour changes in the move.
  */
@@ -341,10 +341,10 @@ export class RunDispatcher {
     workspaceId: string,
     initiatedBy?: string | null,
   ) => Promise<ProviderCapabilities>
-  private readonly resolveMergePreset: (
+  private readonly resolveRiskPolicy: (
     workspaceId: string,
     block: Block,
-  ) => Promise<ResolvedMergePreset>
+  ) => Promise<ResolvedRiskPolicy>
   private readonly modelIdIsMetered: (id: string | undefined, caps: ProviderCapabilities) => boolean
 
   /** Lazily-built polling-gate registry, keyed by `agentKind`. See {@link gateFor}. */
@@ -392,7 +392,7 @@ export class RunDispatcher {
     this.initiativeService = deps.initiativeService
     this.resolveRunRepoContext = deps.resolveRunRepoContext
     this.resolveProviderCapabilities = deps.resolveProviderCapabilities
-    this.resolveMergePreset = deps.resolveMergePreset
+    this.resolveRiskPolicy = deps.resolveRiskPolicy
     this.modelIdIsMetered = deps.modelIdIsMetered
   }
 
@@ -3056,7 +3056,7 @@ export class RunDispatcher {
     // Initialise the gate's state on first entry, resolving the attempt budget from the
     // task's merge preset (stable across polls once set).
     if (!step.gate) {
-      const preset = await this.resolveMergePreset(workspaceId, block)
+      const preset = await this.resolveRiskPolicy(workspaceId, block)
       step.gate = {
         phase: 'checking',
         attempts: 0,
@@ -3223,7 +3223,7 @@ export class RunDispatcher {
       ...step.gate,
       phase: 'working',
       attempts: (step.gate?.attempts ?? 0) + 1,
-      maxAttempts: step.gate?.maxAttempts ?? DEFAULT_MERGE_PRESET.ciMaxAttempts,
+      maxAttempts: step.gate?.maxAttempts ?? DEFAULT_RISK_POLICY.ciMaxAttempts,
       headSha: step.gate?.headSha ?? null,
       // Stash the instructions this helper was handed (the failing-check summary / conflict
       // reason / human fix prompt) so the attempt recorded at its completion can show WHAT

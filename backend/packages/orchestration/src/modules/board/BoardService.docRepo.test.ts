@@ -86,6 +86,27 @@ describe('BoardService document-repository task gating', () => {
     expect(task.fragmentIds).toBeUndefined()
   })
 
+  it('defaults a document task to the document-authoring pipeline (pl_document)', async () => {
+    // The full-build pipeline makes no sense for a document (no code / spec / tests), so a
+    // document task with no explicit pipeline is pinned to pl_document at creation.
+    const service = build('document')
+    const task = await service.addTask(WS, 'frame_docs', {
+      title: 'Write the RFC',
+      taskType: 'document',
+    })
+    expect(task.pipelineId).toBe('pl_document')
+  })
+
+  it('honours an explicit pipeline pick over the document default', async () => {
+    const service = build('document')
+    const task = await service.addTask(WS, 'frame_docs', {
+      title: 'Write the RFC',
+      taskType: 'document',
+      pipelineId: 'pl_document_quick',
+    })
+    expect(task.pipelineId).toBe('pl_document_quick')
+  })
+
   it('still accepts a feature task under a normal service frame', async () => {
     const service = build('service')
     const task = await service.addTask(WS, 'frame_docs', {
@@ -94,6 +115,8 @@ describe('BoardService document-repository task gating', () => {
     })
     expect(task.taskType).toBe('feature')
     expect(task.fragmentIds).toBeUndefined()
+    // A non-document task gets no type-default pipeline (falls through to the run-time picker).
+    expect(task.pipelineId).toBeUndefined()
   })
 })
 

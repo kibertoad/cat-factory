@@ -228,16 +228,28 @@ export const incorporateRequirementsSchema = v.object({
 export type IncorporateRequirementsInput = v.InferOutput<typeof incorporateRequirementsSchema>
 
 /**
- * Ask the Requirement Writer to recommend answers for a batch of findings (by item id).
- * Sent when the human marks findings "recommend something" instead of answering them. The
- * Writer runs ASYNCHRONOUSLY in the durable driver: the call returns at once with `pending`
- * placeholder recommendations, which fill in (`ready`) one by one and raise a notification
- * when the batch finishes. The optional `note` steers the whole batch ("prefer the existing
- * library", etc.).
+ * One finding the human asked the Requirement Writer to recommend an answer for, with OPTIONAL
+ * per-finding guidance. `note` is transformed from whatever the human typed into that finding's
+ * answer box before choosing "recommend something": it STEERS the suggestion for THIS finding
+ * ("prefer the existing library", a rough direction) rather than being the answer itself. Absent
+ * when the human asked for a recommendation without typing any direction.
+ */
+export const requestRecommendationItemSchema = v.object({
+  itemId: v.string(),
+  note: v.optional(v.pipe(v.string(), v.trim(), v.maxLength(4000))),
+})
+export type RequestRecommendationItem = v.InferOutput<typeof requestRecommendationItemSchema>
+
+/**
+ * Ask the Requirement Writer to recommend answers for a batch of findings. Sent when the human
+ * marks findings "recommend something" instead of answering them. Each entry carries its finding
+ * id plus OPTIONAL per-finding guidance (see {@link requestRecommendationItemSchema}), so two
+ * findings in the same batch can steer the Writer differently. The Writer runs ASYNCHRONOUSLY in
+ * the durable driver: the call returns at once with `pending` placeholder recommendations, which
+ * fill in (`ready`) one by one and raise a notification when the batch finishes.
  */
 export const requestRecommendationsSchema = v.object({
-  itemIds: v.pipe(v.array(v.string()), v.minLength(1)),
-  note: v.optional(v.pipe(v.string(), v.trim(), v.maxLength(4000))),
+  items: v.pipe(v.array(requestRecommendationItemSchema), v.minLength(1)),
 })
 export type RequestRecommendationsInput = v.InferOutput<typeof requestRecommendationsSchema>
 

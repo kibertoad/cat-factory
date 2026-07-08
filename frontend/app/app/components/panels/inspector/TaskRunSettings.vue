@@ -3,14 +3,14 @@ import { computed, onMounted } from 'vue'
 import { connectionNeighborIds } from '@cat-factory/contracts'
 import type { Block } from '~/types/domain'
 import type { WritebackOverride } from '~/types/tracker'
-import { mergePresetOptionLabel, mergePresetThresholds } from '~/utils/mergePreset'
+import { riskPolicyOptionLabel, riskPolicySummary } from '~/utils/riskPolicy'
 import { pipelineAllowedForManualStart } from '~/utils/pipeline'
 import InspectorSection from '~/components/panels/inspector/InspectorSection.vue'
 
 const props = defineProps<{ block: Block }>()
 
 const board = useBoardStore()
-const mergePresets = useMergePresetsStore()
+const riskPolicies = useRiskPoliciesStore()
 const modelPresets = useModelPresetsStore()
 const models = useModelsStore()
 const pipelines = usePipelinesStore()
@@ -65,28 +65,28 @@ function setAutoStartDependents(value: boolean) {
 // Which merge threshold preset governs this task's auto-merge decision + CI-fixer
 // budget. None selected → the workspace default preset. (The old confidence-based
 // auto-merge threshold is gone; the `merger` step gates on this policy instead.)
-const selectedPreset = computed(() => mergePresets.resolve(props.block.mergePresetId))
+const selectedPreset = computed(() => riskPolicies.resolve(props.block.riskPolicyId))
 const presetMenu = computed(() => [
   [
     {
-      label: mergePresets.defaultPreset
+      label: riskPolicies.defaultPreset
         ? t('inspector.runSettings.defaultPresetThresholds', {
-            name: mergePresets.defaultPreset.name,
-            thresholds: mergePresetThresholds(mergePresets.defaultPreset),
+            name: riskPolicies.defaultPreset.name,
+            thresholds: riskPolicySummary(riskPolicies.defaultPreset),
           })
         : t('inspector.runSettings.workspaceDefault'),
       icon: 'i-lucide-rotate-ccw',
       onSelect: () => setPreset(''),
     },
-    ...mergePresets.presets.map((p) => ({
-      label: mergePresetOptionLabel(p),
+    ...riskPolicies.presets.map((p) => ({
+      label: riskPolicyOptionLabel(p),
       icon: 'i-lucide-git-merge',
       onSelect: () => setPreset(p.id),
     })),
   ],
 ])
 function setPreset(id: string) {
-  board.updateBlock(props.block.id, { mergePresetId: id })
+  board.updateBlock(props.block.id, { riskPolicyId: id })
 }
 
 // ---- model preset ----------------------------------------------------------
@@ -316,7 +316,7 @@ const technicalLabel = computed(() => {
         </UDropdownMenu>
       </div>
       <div v-if="selectedPreset" class="text-[11px] text-slate-400">
-        <i18n-t keypath="inspector.runSettings.mergePresetDetail" tag="span" scope="global">
+        <i18n-t keypath="inspector.runSettings.riskPolicyDetail" tag="span" scope="global">
           <template #name>
             <span class="text-slate-300">{{ selectedPreset.name }}</span>
           </template>
@@ -325,12 +325,12 @@ const technicalLabel = computed(() => {
           <template #impact>{{ n(selectedPreset.maxImpact, { key: 'percent' }) }}</template>
           <template #attempts>{{ selectedPreset.ciMaxAttempts }}</template>
         </i18n-t>
-        <span v-if="!block.mergePresetId" class="text-slate-500">{{
+        <span v-if="!block.riskPolicyId" class="text-slate-500">{{
           t('inspector.runSettings.workspaceDefaultParen')
         }}</span>
       </div>
       <div v-else class="text-[11px] text-slate-500">
-        {{ t('inspector.runSettings.mergePresetEmpty') }}
+        {{ t('inspector.runSettings.riskPolicyEmpty') }}
       </div>
       <p class="mt-1 text-[11px] leading-snug text-slate-500">
         {{ t('inspector.runSettings.mergePolicyHint') }}
