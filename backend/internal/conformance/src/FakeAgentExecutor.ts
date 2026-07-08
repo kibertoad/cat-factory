@@ -64,6 +64,13 @@ export interface FakeAgentOptions {
    * running service's `serviceFragmentIds`.
    */
   echoFragments?: boolean
+  /**
+   * When set, the (generic-kind) agent echoes the initiative-preset steering it was handed
+   * as `[preset]label|promptAddition[/preset]`, so a test can assert the engine resolved the
+   * preset's per-kind methodology onto a SPAWNED run's context (D1). Empty `[preset][/preset]`
+   * when no preset reached the run.
+   */
+  echoPreset?: boolean
   /** A PR the (container-flavoured) agent reports opening, so persistence can be exercised. */
   pullRequest?: PullRequestRef
   /**
@@ -406,8 +413,12 @@ export class FakeAgentExecutor implements AgentExecutor {
     const fragSuffix = this.options.echoFragments
       ? ` [frags]${(context.block.resolvedFragments ?? []).map((f) => f.id).join(',')}[/frags]`
       : ''
+    const preset = context.initiative?.preset
+    const presetSuffix = this.options.echoPreset
+      ? ` [preset]${preset ? `${preset.label}|${preset.promptAddition ?? ''}` : ''}[/preset]`
+      : ''
     return {
-      output: `[${context.agentKind}] processed "${context.block.title}"${revisionSuffix}${descSuffix}${fragSuffix}`,
+      output: `[${context.agentKind}] processed "${context.block.title}"${revisionSuffix}${descSuffix}${fragSuffix}${presetSuffix}`,
       model: 'fake',
       confidence: context.isFinalStep ? confidence : undefined,
       usage: this.options.usage,

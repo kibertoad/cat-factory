@@ -20,6 +20,7 @@ import { D1RequirementReviewRepository } from '../../src/infrastructure/reposito
 import { D1ClarityReviewRepository } from '../../src/infrastructure/repositories/D1ClarityReviewRepository'
 import { D1ServiceRepository } from '../../src/infrastructure/repositories/D1ServiceRepository'
 import { D1BlockRepository } from '../../src/infrastructure/repositories/D1BlockRepository'
+import { D1InitiativeRepository } from '../../src/infrastructure/repositories/D1InitiativeRepository'
 import { D1NotificationRepository } from '../../src/infrastructure/repositories/D1NotificationRepository'
 import { D1DocumentRepository } from '../../src/infrastructure/repositories/D1DocumentRepository'
 import { D1DocInterviewRepository } from '../../src/infrastructure/repositories/D1DocInterviewRepository'
@@ -216,6 +217,7 @@ const harness: ConformanceHarness = {
       agentRunRepository: () =>
         buildContainer(env, { agentExecutor: new FakeAgentExecutor() }).agentRunRepository,
       blockRepository: () => new D1BlockRepository({ db: env.DB }),
+      initiativeRepository: () => new D1InitiativeRepository({ db: env.DB }),
       notificationRepository: () => new D1NotificationRepository({ db: env.DB }),
       documentRepository: () => new D1DocumentRepository({ db: env.DB }),
       docInterviewRepository: () => new D1DocInterviewRepository({ db: env.DB }),

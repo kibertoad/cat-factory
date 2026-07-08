@@ -87,6 +87,13 @@ runs:
     - name: Turbo remote cache (actions/cache-backed)
       if: ${{ inputs.turbo-cache == 'true' }}
       uses: rharkor/caching-for-turbo@75f8ebf4a43d2c60b23bc2a27082cfea94ffdad9 # v2.5.0
+      with:
+        # server-port 0 → the OS assigns a free ephemeral port instead of the
+        # hardcoded default 41230. Two jobs sharing a runner (or a leftover process
+        # from a prior job) collide on the fixed port with EADDRINUSE, which crashes
+        # the setup step before any build/test runs — an infra flake unrelated to the
+        # code under test. Auto-assignment removes the collision entirely.
+        server-port: 0
 
     # Skipped on an exact node_modules cache hit: the cache paths above cover every
     # directory install produces, so a restored cache IS the post-install state and

@@ -26,14 +26,13 @@ build-handoff artifact; (3) create the connector — essentially Coder under org
 instructions, PR out; (4) validate the connector — essentially Tester + CI gating under
 org instructions.
 
-The existing **initiative-preset seam** (`registerInitiativePreset`: descriptor + `detect`
-
-- `seedPlan` + `promptAdditions`, plus `phaseTemplate`, `policyDefaults`, spawn
-  decoration, per-run gate overrides) already covers most of this. This initiative closes
-  the remaining gaps **without inventing parallel mechanisms**, per the repo principle
-  "respect the existing seams" and the preset system's governing rule: **the loop never
-  branches on a preset id** — every deviation is descriptor data or a hook at a well-defined
-  moment.
+The existing **initiative-preset seam** (`registerInitiativePreset`: descriptor plus
+`detect`, `seedPlan`, `promptAdditions`, `phaseTemplate`, `policyDefaults`, spawn
+decoration, per-run gate overrides) already covers most of this. This initiative closes
+the remaining gaps **without inventing parallel mechanisms**, per the repo principle
+"respect the existing seams" and the preset system's governing rule: **the loop never
+branches on a preset id** — every deviation is descriptor data or a hook at a well-defined
+moment.
 
 **Locked decisions** (made with the product owner at design time):
 
@@ -175,8 +174,8 @@ plumbing in the engine.**
   - Entity bookkeeping: `InitiativePhase.checkpointClearedAt?: number` (set on resume), so
     a cleared checkpoint never re-fires; `applyPlanDraft` preserves it for an existing
     phase id (replay/re-plan safe).
-  - Pure logic (`initiative.logic.ts`): `pendingCheckpoint(initiative): InitiativePhase |
-null` — the first phase, in declared order, with `checkpoint === true`, all its items
+  - Pure logic (`initiative.logic.ts`): `pendingCheckpoint(initiative): InitiativePhase | null`
+    — the first phase, in declared order, with `checkpoint === true`, all its items
     terminal, and no `checkpointClearedAt`; plus `applyCheckpointCleared`.
   - Loop (`InitiativeLoopService.tick`): after reconcile, **before** complete/spawn — if
     `pendingCheckpoint` is non-null, CAS the status to `paused`, raise the existing
@@ -296,15 +295,15 @@ documented state in `example-custom-agent`).
 
 ## Per-slice status checklist
 
-| #   | Slice (each one PR)                                                                                                                                                                                                                                                                                                                                                                                                                      | Scope  | Depends on | Status  | PR  |
-| --- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ------ | ---------- | ------- | --- |
-| 0   | This tracker doc                                                                                                                                                                                                                                                                                                                                                                                                                         | —      | —          | ⬜ todo |     |
-| 1   | **Spawned-run preset prompt additions (D1, the pilot)**: `AgentContextBuilder` initiative-preset resolution for `block.initiativeId` blocks; shared `initiativePresetSection` render in `@cat-factory/agents` (standard + generic prompts); kernel context docs; unit + conformance                                                                                                                                                      | SYSTEM | —          | ⬜ todo |     |
-| 2   | **Phase checkpoints (D2)**: contracts (`checkpoint` on template/entity/draft phases + `checkpointClearedAt`), ingest stamping, pure `pendingCheckpoint`/`applyCheckpointCleared`, loop pause + `checkpoint` notification reason, resume clears, tracker.md renders checkpoints; unit + conformance                                                                                                                                       | SYSTEM | —          | ⬜ todo |     |
-| 3   | **Checkpoint SPA touch + e2e**: phase checkpoint badge / paused-at-checkpoint explanation; e2e: checkpointed fake plan → pause → resume → next-phase spawn (extends the `FakeProfile.initiativePlan` seam — do not add a second one)                                                                                                                                                                                                     | SYSTEM | 2          | ⬜ todo |     |
-| 4   | **Planner preferred-pipelines fold (D4)**: `policyDefaults`-derived line in the plan-shape fold; prompt unit tests. Low prio — reassess after slices 1–2; drop if planner drift doesn't occur                                                                                                                                                                                                                                            | SYSTEM | —          | ⬜ todo |     |
-| 5   | **Preset-registry DI migration (D5)**: kernel registry class + default factory; `CoreDependencies` field; thread into the 3 orchestration read sites + `ServerContainer` for the 2 controllers; symmetric facade wiring (Worker/Node/local); delete free registration fns (breaking changeset); conformance custom-preset injection; update `registry-di-migration.md`                                                                   | SYSTEM | 1, 2       | ⬜ todo |     |
-| 6   | **Worked example + docs (the consumer proof)**: extend `example-custom-agent` with a minimal 2-phase "research → apply" preset exercising ALL new seams (custom container-explore kind + verdict resolver + artifact postOp on a merging pipeline, `checkpoint: true` research phase, a `coder` promptAddition, `seedPlan`-derived artifact path); expand `backend/docs/initiative-presets.md` (consumer walkthrough); cross-doc updates | BOTH   | 1, 2, 5    | ⬜ todo |     |
+| #   | Slice (each one PR)                                                                                                                                                                                                                                                                                                                                                                                                                      | Scope  | Depends on | Status  | PR   |
+| --- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ------ | ---------- | ------- | ---- |
+| 0   | This tracker doc                                                                                                                                                                                                                                                                                                                                                                                                                         | —      | —          | ✅ done | #942 |
+| 1   | **Spawned-run preset prompt additions (D1, the pilot)**: `AgentContextBuilder` initiative-preset resolution for `block.initiativeId` blocks; shared `initiativePresetSection` render in `@cat-factory/agents` (standard + generic prompts); kernel context docs; unit + conformance                                                                                                                                                      | SYSTEM | —          | ✅ done | #944 |
+| 2   | **Phase checkpoints (D2)**: contracts (`checkpoint` on template/entity/draft phases + `checkpointClearedAt`), ingest stamping, pure `pendingCheckpoint`/`applyCheckpointCleared`, loop pause + `checkpoint` notification reason, resume clears, tracker.md renders checkpoints; unit + conformance                                                                                                                                       | SYSTEM | —          | ⬜ todo |      |
+| 3   | **Checkpoint SPA touch + e2e**: phase checkpoint badge / paused-at-checkpoint explanation; e2e: checkpointed fake plan → pause → resume → next-phase spawn (extends the `FakeProfile.initiativePlan` seam — do not add a second one)                                                                                                                                                                                                     | SYSTEM | 2          | ⬜ todo |      |
+| 4   | **Planner preferred-pipelines fold (D4)**: `policyDefaults`-derived line in the plan-shape fold; prompt unit tests. Low prio — reassess after slices 1–2; drop if planner drift doesn't occur                                                                                                                                                                                                                                            | SYSTEM | —          | ⬜ todo |      |
+| 5   | **Preset-registry DI migration (D5)**: kernel registry class + default factory; `CoreDependencies` field; thread into the 3 orchestration read sites + `ServerContainer` for the 2 controllers; symmetric facade wiring (Worker/Node/local); delete free registration fns (breaking changeset); conformance custom-preset injection; update `registry-di-migration.md`                                                                   | SYSTEM | 1, 2       | ⬜ todo |      |
+| 6   | **Worked example + docs (the consumer proof)**: extend `example-custom-agent` with a minimal 2-phase "research → apply" preset exercising ALL new seams (custom container-explore kind + verdict resolver + artifact postOp on a merging pipeline, `checkpoint: true` research phase, a `coder` promptAddition, `seedPlan`-derived artifact path); expand `backend/docs/initiative-presets.md` (consumer walkthrough); cross-doc updates | BOTH   | 1, 2, 5    | ⬜ todo |      |
 
 Pilot ordering: slice 1 is the pilot (highest-value, smallest blast radius, establishes
 the "widen an existing seam, don't add one" shape). 2 is independent and can run in
@@ -322,9 +321,9 @@ exactly as trusted as a custom agent):
 1. **Two custom agent kinds** (`registry.registerAll` on the app-owned
    `AgentKindRegistry`):
    - `acme-biz-analyst`: `agent: { surface: 'container-explore' }`, org system prompt
-     (multi-source research on the named tool), `structuredOutput =
-defineStructuredOutput(v.object({ verdict: picklist(['GO','GO_WITH_CAVEATS','NO_GO']),
-summary, findings, openQuestions }))`, `postOps: [renderResearchDocPostOp]` — renders
+     (multi-source research on the named tool), a `structuredOutput` schema
+     (`verdict: GO | GO_WITH_CAVEATS | NO_GO`, plus summary / findings / openQuestions),
+     `postOps: [renderResearchDocPostOp]` — renders
      `docs/research/research-<tool>.md` (verdict + findings + open questions) via
      `RepoFiles.commitFiles` with the byte-identical idempotency guard. A registered
      `StepCompletionResolver` folds "Verdict: NO_GO — …" into the step output so the
@@ -406,6 +405,17 @@ Zero cat-factory changes beyond the slices above; zero org prompts shipped in ca
   breaking changeset; changesets per touched package; README catalog + knip + guard
   scripts per the repo checklist.
 - **E2E reuses `FakeProfile.initiativePlan`** for planner output — never a second seam.
+- **Slice 1 landed:** the shared renderer is `initiativePresetSection(context)` in
+  `@cat-factory/agents` `prompts/standard.ts` (NOT `catalog.ts` — it lives beside the sibling
+  section helpers `environmentSection`/`involvedServicesSection` and is re-exported from the
+  package index). It renders ONLY `label` + `promptAddition` (never the phaseTemplate) and is
+  emitted from `renderStandardUserPrompt` (standard phases), `buildBaseUserPrompt` (generic custom
+  kinds), AND the server's `initiativeContextLines` (planning prompts) — so the preset section text
+  is byte-identical everywhere. `AgentContextBuilder.resolveSpawnedPresetContext` resolves the
+  spawned-run half (gated on `block.initiativeId`, one point-read, preset-only). The conformance
+  app now exposes `initiativeRepository()` (all 4 facade harness impls) so the suite can seed an
+  initiative + link a task's `initiativeId` without driving a planning loop; the `FakeAgentExecutor`
+  `echoPreset` option surfaces the resolved preset for the assertion.
 
 ## Out of scope
 
