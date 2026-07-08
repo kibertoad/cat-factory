@@ -1,5 +1,41 @@
 # @cat-factory/orchestration
 
+## 0.99.1
+
+### Patch Changes
+
+- 9aa9e19: Initiatives: phases can now declare a `checkpoint` (slice 2 of the
+  custom-initiative-definitions initiative). A checkpoint phase PAUSES the initiative for
+  human review once every one of its items settles, before the next phase spawns — so a
+  human can read the phase's committed output (e.g. a research doc + GO/NO_GO verdict) and
+  then resume to continue or cancel to stop. The engine never interprets an LLM verdict:
+  the pause is declarative phase data the loop reads, and resume is the acknowledgment.
+
+  - Contracts: `checkpoint?` on the plan/entity/draft phase and the preset phase-template
+    phase, plus `checkpointClearedAt?` bookkeeping on the entity phase; a new `checkpoint`
+    reason on the `initiative` notification.
+  - Ingest stamps a template-authored `checkpoint` onto the matched phase (forced on — the
+    planner cannot unset it), honours a planner-authored one on any draft phase (generic,
+    usable without a preset), and preserves `checkpointClearedAt` across a re-plan.
+  - The execution loop pauses at a completed, uncleared checkpoint phase (checked before
+    completion, so a last-phase checkpoint still pauses) and raises the notification;
+    `InitiativeService.resume` clears the checkpoint in the same CAS transform it resumes in.
+  - The in-repo tracker markdown annotates a checkpoint phase (pending vs cleared).
+
+  Non-checkpoint phases are byte-for-byte unchanged — a plan with no `checkpoint` advances
+  exactly as before.
+
+- Updated dependencies [9aa9e19]
+  - @cat-factory/contracts@0.121.1
+  - @cat-factory/agents@0.49.1
+  - @cat-factory/integrations@0.78.5
+  - @cat-factory/kernel@0.111.1
+  - @cat-factory/prompt-fragments@0.13.4
+  - @cat-factory/sandbox@0.9.44
+  - @cat-factory/spend@0.11.20
+  - @cat-factory/workspaces@0.13.5
+  - @cat-factory/caching@0.6.14
+
 ## 0.99.0
 
 ### Minor Changes

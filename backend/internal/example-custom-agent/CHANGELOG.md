@@ -1,5 +1,13 @@
 # @cat-factory/example-custom-agent
 
+## 0.0.176
+
+### Patch Changes
+
+- Updated dependencies [9aa9e19]
+  - @cat-factory/agents@0.49.1
+  - @cat-factory/kernel@0.111.1
+
 ## 0.0.175
 
 ### Patch Changes
