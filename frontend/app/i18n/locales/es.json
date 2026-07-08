@@ -4393,6 +4393,13 @@
       "maxConcurrentField": "Tareas concurrentes maximas",
       "defaultPipelineField": "Pipeline por defecto",
       "failed": "No se pudo actualizar la iniciativa"
+    },
+    "checkpoint": {
+      "badge": "Punto de control",
+      "awaiting": "Pendiente de revisión",
+      "cleared": "Revisado",
+      "pausedTitle": "En pausa para revisión",
+      "pausedBody": "La fase «{phase}» está completa. Revisa arriba los artefactos y las PR confirmados y luego reanuda para continuar o cancela para detener la iniciativa."
     }
   },
   "environmentWizard": {

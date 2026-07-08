@@ -2,6 +2,7 @@ import type {
   InitiativeFollowUp,
   InitiativeItem,
   InitiativeItemStatus,
+  InitiativePhase,
   InitiativePresetDescriptor,
   InitiativePresetInputs,
   InitiativeStatus,
@@ -107,4 +108,26 @@ export function initiativeProgress(
 ): { settled: number; total: number } | null {
   if (!items || items.length === 0) return null
   return { settled: items.filter((i) => SETTLED.has(i.status)).length, total: items.length }
+}
+
+/**
+ * The phase whose completed checkpoint (D2) is awaiting a human, or null. Mirrors the backend
+ * `pendingCheckpoint` (orchestration `initiative.logic.ts`) so the SPA recomputes the pending
+ * checkpoint from the live entity — the same shape the loop pauses on — rather than reading a
+ * derived flag off the wire: the FIRST phase, in declared order, flagged `checkpoint`, NOT yet
+ * cleared (`checkpointClearedAt`), holding at least one item, with every item settled. An open
+ * tracker window then follows the checkpoint as items settle without a reload.
+ */
+export function pendingCheckpointPhase(
+  phases: InitiativePhase[] | undefined,
+  items: InitiativeItem[] | undefined,
+): InitiativePhase | null {
+  const all = items ?? []
+  for (const phase of phases ?? []) {
+    if (phase.checkpoint !== true || phase.checkpointClearedAt !== undefined) continue
+    const phaseItems = all.filter((i) => i.phaseId === phase.id)
+    if (phaseItems.length === 0) continue
+    if (phaseItems.every((i) => SETTLED.has(i.status))) return phase
+  }
+  return null
 }

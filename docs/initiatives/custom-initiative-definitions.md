@@ -300,7 +300,7 @@ documented state in `example-custom-agent`).
 | 0   | This tracker doc                                                                                                                                                                                                                                                                                                                                                                                                                         | —      | —          | ✅ done | #942 |
 | 1   | **Spawned-run preset prompt additions (D1, the pilot)**: `AgentContextBuilder` initiative-preset resolution for `block.initiativeId` blocks; shared `initiativePresetSection` render in `@cat-factory/agents` (standard + generic prompts); kernel context docs; unit + conformance                                                                                                                                                      | SYSTEM | —          | ✅ done | #944 |
 | 2   | **Phase checkpoints (D2)**: contracts (`checkpoint` on template/entity/draft phases + `checkpointClearedAt`), ingest stamping, pure `pendingCheckpoint`/`applyCheckpointCleared`, loop pause + `checkpoint` notification reason, resume clears, tracker.md renders checkpoints; unit + conformance                                                                                                                                       | SYSTEM | —          | ✅ done | #949 |
-| 3   | **Checkpoint SPA touch + e2e**: phase checkpoint badge / paused-at-checkpoint explanation; e2e: checkpointed fake plan → pause → resume → next-phase spawn (extends the `FakeProfile.initiativePlan` seam — do not add a second one)                                                                                                                                                                                                     | SYSTEM | 2          | ⬜ todo |      |
+| 3   | **Checkpoint SPA touch + e2e**: phase checkpoint badge / paused-at-checkpoint explanation; e2e: checkpointed fake plan → pause → resume → next-phase spawn (extends the `FakeProfile.initiativePlan` seam — do not add a second one)                                                                                                                                                                                                     | SYSTEM | 2          | ✅ done | #952 |
 | 4   | **Planner preferred-pipelines fold (D4)**: `policyDefaults`-derived line in the plan-shape fold; prompt unit tests. Low prio — reassess after slices 1–2; drop if planner drift doesn't occur                                                                                                                                                                                                                                            | SYSTEM | —          | ⬜ todo |      |
 | 5   | **Preset-registry DI migration (D5)**: kernel registry class + default factory; `CoreDependencies` field; thread into the 3 orchestration read sites + `ServerContainer` for the 2 controllers; symmetric facade wiring (Worker/Node/local); delete free registration fns (breaking changeset); conformance custom-preset injection; update `registry-di-migration.md`                                                                   | SYSTEM | 1, 2       | ⬜ todo |      |
 | 6   | **Worked example + docs (the consumer proof)**: extend `example-custom-agent` with a minimal 2-phase "research → apply" preset exercising ALL new seams (custom container-explore kind + verdict resolver + artifact postOp on a merging pipeline, `checkpoint: true` research phase, a `coder` promptAddition, `seedPlan`-derived artifact path); expand `backend/docs/initiative-presets.md` (consumer walkthrough); cross-doc updates | BOTH   | 1, 2, 5    | ⬜ todo |      |
@@ -421,6 +421,21 @@ Zero cat-factory changes beyond the slices above; zero org prompts shipped in ca
   review) — it's skipped like any empty phase. NOT touched: the planner SYSTEM prompt (no prompt
   guidance that the planner may author a checkpoint — presets drive it via the phase template;
   revisit only if the generic planner-authored path proves useful in practice).
+- **Slice 3 landed:** SPA + e2e only — no backend/wire change. The tracker window
+  (`InitiativeTrackerWindow.vue`) recomputes the pending checkpoint LIVE from the entity via a
+  frontend `pendingCheckpointPhase` (`app/utils/initiative.ts`) that MIRRORS the backend
+  `pendingCheckpoint` (unit-pinned in `initiative.spec.ts` so it can't drift) — it does not read a
+  derived flag off the wire. It renders a per-phase checkpoint badge (awaiting-review / reviewed /
+  upcoming) and, when `status === 'paused'` at a pending checkpoint, a banner (`data-testid=
+  initiative-checkpoint-pause`) with inline Resume/Cancel (reusing `initiatives.control` +
+  `initiative.inspector.resume|cancel` copy — no new lifecycle). The initiative board card gained a
+  live `data-status` for observability. New i18n keys live under `initiative.checkpoint.*`
+  (translated across all 10 locales, parity-gated). E2E `initiative-checkpoint.spec.ts` reuses the
+  `FakeProfile.initiativePlan` seam + `preset_generic` (converging fake inline interviewer + planner
+  gate approved over REST) + a merger-tailed workspace pipeline (so a spawned item reaches `done` —
+  the terminal that fires the checkpoint): phase-1 done → card `paused` + phase-2 UNSPAWNED (proving
+  the gate) → tracker banner → Resume → phase-2 spawns. Added the `getInitiative` snapshot helper for
+  backend-only progression a spec can't see on the board.
 - **Slice 1 landed:** the shared renderer is `initiativePresetSection(context)` in
   `@cat-factory/agents` `prompts/standard.ts` (NOT `catalog.ts` — it lives beside the sibling
   section helpers `environmentSection`/`involvedServicesSection` and is re-exported from the
