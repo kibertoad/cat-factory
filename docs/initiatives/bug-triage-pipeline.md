@@ -142,27 +142,28 @@ to the "Phase B only for harness edits" convention — **zero harness changes / 
 ci-fixer fans out by reusing the existing `runMultiRepoCoding` sibling-checkout path via a widened
 `peerRepos` job body (the `coder`-only multi-repo dispatch gate now also fires for `ci-fixer`).
 
-| Item                                                                                                   | Status                                     |
-| ------------------------------------------------------------------------------------------------------ | ------------------------------------------ |
-| CI gate aggregates across PRs (`step.gate.headShas` map); fixer runs in the sibling-checkout container | done                                       |
-| Conflicts gate per PR; single-repo conflict-resolver dispatched at the first conflicted repo           | done (detection + `conflictTarget`; see †) |
-| Merger: combined-diff assessment + all-green-then-merge-all in provider-first order                    | done (merge-all; combined-diff, see ‡)     |
-| Mid-sequence merge failure → block `blocked` + notification enumerating merged vs unmerged             | done                                       |
-| Conformance: multi-PR gate + merge-all behaviour on both runtimes                                      | done (CI aggregate cross-runtime; §)       |
+| Item                                                                                                   | Status                              |
+| ------------------------------------------------------------------------------------------------------ | ----------------------------------- |
+| CI gate aggregates across PRs (`step.gate.headShas` map); fixer runs in the sibling-checkout container | done                                |
+| Conflicts gate per PR; single-repo conflict-resolver dispatched at the conflicted repo (own or peer)   | done (peer targeting landed; see †) |
+| Merger: combined-diff assessment + all-green-then-merge-all in provider-first order                    | done (combined-diff landed; see ‡)  |
+| Mid-sequence merge failure → block `blocked` + notification enumerating merged vs unmerged             | done                                |
+| Conformance: multi-PR gate + merge-all behaviour on both runtimes                                      | done (CI + conflicts; see §)        |
 
 Notes carried forward (mirrored in the service-connections tracker's Phase 4 rows):
 
-- **† Conflict-resolver peer targeting** — the conflicts gate detects conflicts across every PR and
-  stashes the first conflicted repo on `step.gate.conflictTarget`; dispatching the resolver AT a
-  peer repo is a follow-up. A peer-only conflict now fast-fails to the manual-resolution give-up
-  (the gate returns `escalatable: false` so the engine doesn't burn the attempt budget on the
-  own-repo resolver that can't reach it) rather than looping the wrong resolver. Relevant to
-  Phase F/G, which reuse the gate helpers.
-- **‡ Merger combined-diff** — the engine merges ALL PRs in provider-before-consumer order, but the
-  `merger` agent still scores the own-repo diff only (scoring the combined sibling-workspace diff
-  needs a harness bump — deferred to keep this phase harness-free).
-- **§** — multi-repo CI aggregation runs on both runtimes in conformance; merge-all ordering +
-  provider fan-out are unit-tested (`mergeOrder.logic.test.ts`, `multiRepoGateProviders.spec.ts`).
+- **† Conflict-resolver peer targeting — LANDED.** The conflicts gate now ESCALATES a peer-repo
+  conflict (no more `escalatable: false`), and the engine + `ContainerAgentExecutor` point the
+  single-repo `conflict-resolver` AT the conflicted peer (own or peer) via `step.gate.conflictTarget`
+  → `context.conflictTarget` → `resolveRepoTargets`. The own-repo path is unchanged.
+- **‡ Merger combined-diff — LANDED.** The `merger` scores the COMBINED cross-repo change: it clones
+  each `block.peerPullRequests` repo as a read-only sibling at its PR branch (full) and returns ONE
+  blended assessment. Needed a harness bump (per-peer `cloneBranch` + `full` on the read-only
+  multi-repo explore path).
+- **§** — multi-repo CI aggregation AND the conflicts gate's peer-conflict escalation run on every
+  runtime in conformance; merge-all ordering + provider fan-out are unit-tested
+  (`mergeOrder.logic.test.ts`, `multiRepoGateProviders.spec.ts`) and the merger combined-diff
+  dispatch in the server job-body spec.
 
 ### Phase D — issue-intake foundations (design §3, ports + persistence)
 

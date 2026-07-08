@@ -165,6 +165,14 @@ export interface AgentRunContext {
      */
     pullRequest?: PullRequestRef
     /**
+     * PRs opened in CONNECTED services' repos during a multi-repo run (service-connections
+     * phase 3), one per involved-service repo the coder changed — lifted verbatim from the
+     * block. The `merger` reads these to score the COMBINED diff: it clones each peer PR's
+     * repo as a read-only sibling at its PR branch and assesses the whole cross-repo change
+     * together (phase 4). Absent for a single-repo task.
+     */
+    peerPullRequests?: PeerPullRequest[]
+    /**
      * The task-estimator's triage of this block (complexity / risk / impact), when
      * a `task-estimator` step has run earlier in the pipeline. Read by the consensus
      * executor to gate the (expensive) multi-model process against the step's
@@ -279,6 +287,16 @@ export interface AgentRunContext {
    * Absent for non-doc tasks or a task with none attached.
    */
   referenceRepos?: ReferenceRepo[]
+  /**
+   * For a `conflict-resolver` the conflicts gate dispatched on a PEER-repo conflict
+   * (a multi-repo, service-connections task), which of the block's repos the resolver
+   * must target — set by the engine from the gate's `step.gate.conflictTarget` when the
+   * conflict is on a connected involved service's repo (`frameId` present). The container
+   * executor resolves THAT frame's repo (not the task's own service) and clones its PR
+   * (work) branch. Absent ⇒ the own-service repo (the single-repo default). Only the
+   * conflict-resolver reads it; every other kind ignores it.
+   */
+  conflictTarget?: { repo: string; frameId: string }
   /**
    * If this step previously raised a decision that a human has now resolved,
    * the resolved decision — so the agent can finish instead of re-raising it.
