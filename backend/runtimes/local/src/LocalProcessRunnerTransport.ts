@@ -87,6 +87,8 @@ function ephemeralPort(): Promise<number> {
 }
 
 export class LocalProcessRunnerTransport implements RunnerTransport {
+  /** Backend id recorded in run diagnostics (native host process, ambient CLI login). */
+  readonly backend = 'local-native'
   private readonly harnessEntry: string
   private readonly nodePath: string
   private readonly nodeArgs: string[]

@@ -1,6 +1,6 @@
 import { corsReflectsWhenUnset } from '@cat-factory/server'
 import { describe, expect, it } from 'vitest'
-import { applyLocalDefaults } from '../src/config.js'
+import { LOCAL_ENV_CLI_PROBLEM, applyLocalDefaults, withLocalEnvCliAdvice } from '../src/config.js'
 
 // Local mode REQUIRES three secrets (AUTH_SESSION_SECRET, ENCRYPTION_KEY, HARNESS_SHARED_SECRET) —
 // each must stay stable across restarts (a fresh session secret invalidates the persisted session
@@ -81,6 +81,32 @@ describe('[local] applyLocalDefaults secrets', () => {
     expect(() =>
       applyLocalDefaults({ ...SECRETS, HARNESS_SHARED_SECRET: 'a'.repeat(16) }),
     ).not.toThrow()
+  })
+})
+
+describe('[local] withLocalEnvCliAdvice', () => {
+  const DB_PROBLEM = {
+    key: 'DATABASE_URL',
+    summary: 'Postgres connection string.',
+    remedy: 'Set DATABASE_URL.',
+  }
+
+  it('prepends the .env-CLI advertisement above the per-variable problems', () => {
+    const problems = withLocalEnvCliAdvice([DB_PROBLEM])
+    expect(problems[0]).toEqual(LOCAL_ENV_CLI_PROBLEM)
+    // The original problems are preserved as the manual fallback, in order, after the advice.
+    expect(problems.slice(1)).toEqual([DB_PROBLEM])
+  })
+
+  it('advertises the `cat-factory env` CLI as the one-step fix', () => {
+    expect(LOCAL_ENV_CLI_PROBLEM.remedy).toMatch(/npx @cat-factory\/cli env/)
+  })
+
+  it('is idempotent — never adds a second advertisement when one is already present', () => {
+    const once = withLocalEnvCliAdvice([DB_PROBLEM])
+    const twice = withLocalEnvCliAdvice(once)
+    expect(twice).toEqual(once)
+    expect(twice.filter((p) => p.key === LOCAL_ENV_CLI_PROBLEM.key)).toHaveLength(1)
   })
 })
 

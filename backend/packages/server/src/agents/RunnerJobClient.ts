@@ -49,7 +49,12 @@ export class RunnerJobClient {
   /** Poll the job's current state from the same backend it dispatched to. */
   async poll(workspaceId: string | undefined, ref: RunnerJobRef): Promise<RunnerJobView> {
     const transport = await this.resolveTransport(workspaceId)
-    return transport.poll(ref)
+    const view = await transport.poll(ref)
+    // Stamp which backend served the job so the engine can record it in the run diagnostics.
+    // A composite router (native vs. container per job) sets `view.backend` itself — its choice
+    // wins; a plain transport just declares a static `backend`, applied here.
+    if (!view.backend && transport.backend) return { ...view, backend: transport.backend }
+    return view
   }
 
   /**

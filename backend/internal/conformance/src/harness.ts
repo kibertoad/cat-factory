@@ -16,6 +16,7 @@ import type {
   ExecutionEventPublisher,
   ExecutionInstance,
   ExecutionRepository,
+  InitiativeRepository,
   LlmCallActivity,
   NotificationRepository,
   ResolveBinaryArtifactStore,
@@ -183,6 +184,13 @@ export interface ConformanceApp {
    * on D1 and Postgres.
    */
   blockRepository(): BlockRepository
+  /**
+   * The facade's initiative repository over its real store. Lets the suite seed an initiative
+   * entity (with a registered preset) directly, so it can assert the engine folds that preset's
+   * per-kind steering onto a SPAWNED run's agent context (D1) — a spawned run is a task carrying
+   * `block.initiativeId`, which no HTTP route creates without driving a full planning loop.
+   */
+  initiativeRepository(): InitiativeRepository
   /**
    * The facade's notification repository over its real store, so the suite can assert the
    * escalation sweep's single-statement `escalateStaleOpen` flips exactly the overdue open

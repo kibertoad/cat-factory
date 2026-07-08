@@ -16,6 +16,7 @@ describe('buildLocalEnv', () => {
     databaseUrl: 'postgres://cat:cat@localhost:5432/catfactory',
     authSessionSecret: 'deadbeef',
     encryptionKey: 'YmFzZTY0',
+    harnessSharedSecret: 'cafef00d',
     harnessImage: 'ghcr.io/x/y:latest',
     port: 8787,
     corsAllowedOrigins: 'http://localhost:3000',
@@ -28,6 +29,7 @@ describe('buildLocalEnv', () => {
     expect(out).toContain('DATABASE_URL=postgres://cat:cat@localhost:5432/catfactory')
     expect(out).toContain('AUTH_SESSION_SECRET=deadbeef')
     expect(out).toContain('ENCRYPTION_KEY=YmFzZTY0')
+    expect(out).toContain('HARNESS_SHARED_SECRET=cafef00d')
     expect(out).toContain('LOCAL_HARNESS_IMAGE=ghcr.io/x/y:latest')
     expect(out).not.toContain('GITLAB_PAT=')
   })

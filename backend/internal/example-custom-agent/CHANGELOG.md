@@ -1,5 +1,78 @@
 # @cat-factory/example-custom-agent
 
+## 0.0.175
+
+### Patch Changes
+
+- Updated dependencies [63f7881]
+  - @cat-factory/kernel@0.111.0
+  - @cat-factory/agents@0.49.0
+
+## 0.0.174
+
+### Patch Changes
+
+- Updated dependencies [bcc843d]
+  - @cat-factory/agents@0.48.5
+  - @cat-factory/kernel@0.110.1
+
+## 0.0.173
+
+### Patch Changes
+
+- Updated dependencies [a2db337]
+- Updated dependencies [a2db337]
+  - @cat-factory/agents@0.48.4
+  - @cat-factory/kernel@0.110.0
+
+## 0.0.172
+
+### Patch Changes
+
+- Updated dependencies [35636d5]
+  - @cat-factory/agents@0.48.3
+
+## 0.0.171
+
+### Patch Changes
+
+- Updated dependencies [8319e52]
+  - @cat-factory/kernel@0.109.1
+  - @cat-factory/agents@0.48.2
+
+## 0.0.170
+
+### Patch Changes
+
+- Updated dependencies [8728bf7]
+- Updated dependencies [7157908]
+  - @cat-factory/kernel@0.109.0
+  - @cat-factory/agents@0.48.1
+
+## 0.0.169
+
+### Patch Changes
+
+- 629cf90: Initiative presets slice 9: the E2E baseline + a worked-example deployment preset.
+
+  - `@cat-factory/conformance`: `FakeAgentExecutor` gains an `initiativePlan` option so a
+    fake-driven initiative-planner step returns a plan draft (the planner otherwise faults a
+    planning run) — the seam an e2e/integration test uses to drive create-with-preset → auto-plan
+    → spawn.
+  - `@cat-factory/node-server`: the initiative-loop sweep interval is now overridable via
+    `INITIATIVE_LOOP_INTERVAL_MS` (default 60s unchanged).
+  - `@cat-factory/app`: `TaskCard` exposes a behaviour-neutral `data-task-type` attribute (the e2e
+    asserts a spawned document task carries its preset decoration).
+  - `@cat-factory/example-custom-agent`: adds `preset_org_audit`, a worked-example initiative preset
+    registered through the public `registerInitiativePreset` seam.
+
+## 0.0.168
+
+### Patch Changes
+
+- Updated dependencies [4775c40]
+  - @cat-factory/agents@0.48.0
+
 ## 0.0.167
 
 ### Patch Changes

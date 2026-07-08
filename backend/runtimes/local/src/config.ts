@@ -1,8 +1,41 @@
 import { loadNodeConfig } from '@cat-factory/node-server'
-import type { AppConfig } from '@cat-factory/server'
+import type { AppConfig, ConfigProblem } from '@cat-factory/server'
 import { ENV_HELP, base64urlToBytes, configProblem, requireEnv } from '@cat-factory/server'
 import { isOffValue } from './envFlags.js'
 import { resolveHostAlias } from './runtimes/index.js'
+
+// The one-shot fix we advertise whenever local mode can't boot for a missing/invalid mandatory
+// value: the bootstrap CLI's `env` subcommand generates a ready-to-run local-mode `.env` with ALL
+// required values (the three crypto secrets in the server's formats, DATABASE_URL, a minted VCS
+// PAT) in a single step, so a developer never has to satisfy each variable below by hand. It is a
+// genuinely local-only differentiator (it writes a LOCAL `.env`), so the shared Node/Worker
+// remedies deliberately do NOT mention it.
+const LOCAL_ENV_CLI_COMMAND = 'npx @cat-factory/cli env'
+
+/**
+ * The synthetic "generate the whole .env" problem prepended to a local-mode misconfiguration list,
+ * advertising the {@link LOCAL_ENV_CLI_COMMAND} one-shot fix ahead of the per-variable remedies
+ * (which stay as the manual fallback). Its `key` reads as a filename rather than an env-var name on
+ * purpose — it is not one variable but the file that carries them all.
+ */
+export const LOCAL_ENV_CLI_PROBLEM: ConfigProblem = {
+  key: '.env',
+  summary:
+    'Local mode needs a few crypto secrets and a Postgres DATABASE_URL. You can generate them all at once instead of setting each variable below by hand.',
+  remedy: `Run \`${LOCAL_ENV_CLI_COMMAND}\` to write a ready-to-run local-mode .env (every required value, gitignored) into the current directory, then restart.`,
+}
+
+/**
+ * Prepend the {@link LOCAL_ENV_CLI_PROBLEM} advertisement to a local-mode misconfiguration list so
+ * the one-step `.env` generator is offered above the individual per-variable remedies. Applied at
+ * every point local mode surfaces a {@link ConfigValidationError} — both the secrets validated here
+ * (via `applyLocalDefaults`) and DATABASE_URL validated in the reused Node boot. Idempotent: never
+ * adds a second copy when the advertisement is already present.
+ */
+export function withLocalEnvCliAdvice(problems: ConfigProblem[]): ConfigProblem[] {
+  if (problems.some((p) => p.key === LOCAL_ENV_CLI_PROBLEM.key)) return problems
+  return [LOCAL_ENV_CLI_PROBLEM, ...problems]
+}
 
 // Local mode defaults the auth gate OPEN and can be exposed on a LAN, so a weak
 // AUTH_SESSION_SECRET would leave sessions / machine / proxy tokens forgeable. The

@@ -3616,6 +3616,16 @@
     "next": "Weiter",
     "done": "Fertig"
   },
+  "clarification": {
+    "answerPlaceholder": "Ihre Antwort",
+    "notRelevant": "Nicht relevant",
+    "recommend": "Antwort vorschlagen",
+    "reopen": "Erneut öffnen",
+    "dismissed": "Als nicht relevant markiert",
+    "generating": "Vorschlag wird erstellt…",
+    "suggestion": "Vorgeschlagene Antwort",
+    "useSuggestion": "Diese Antwort verwenden"
+  },
   "nav": {
     "menu": "Navigationsmenü",
     "openMenu": "Menü öffnen",
@@ -4371,6 +4381,25 @@
       "done": "Fertig",
       "toast": {
         "reseedFailed": "Merge-Preset konnte nicht erneut geseedet werden"
+      }
+    }
+  },
+  "modelPreset": {
+    "health": {
+      "title": "Modell-Preset-Updates",
+      "allValid": "Alle integrierten Modell-Presets sind auf dem neuesten Stand.",
+      "newHeading": "Neue Presets verfügbar",
+      "newDescription": "Neue integrierte Modell-Presets sind verfügbar. Füge sie zur Bibliothek dieses Boards hinzu.",
+      "add": "Hinzufügen",
+      "updatesHeading": "Updates verfügbar",
+      "updatesDescription": "Eine neuere Version dieser integrierten Modell-Presets ist verfügbar. Führe ein erneutes Seeding durch, um sie zu übernehmen (Standard und Reihenfolge bleiben erhalten).",
+      "versionAvailable": "Version {from} → {to} verfügbar.",
+      "reseed": "Erneut seeden",
+      "reseedAll": "Alle aktualisieren ({count})",
+      "dismiss": "Schließen",
+      "done": "Fertig",
+      "toast": {
+        "reseedFailed": "Modell-Preset konnte nicht erneut geseedet werden"
       }
     }
   },

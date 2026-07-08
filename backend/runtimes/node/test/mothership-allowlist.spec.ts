@@ -95,7 +95,12 @@ type Reason =
 // allow-list fails the partition assertion below.
 const NON_REMOTE: Record<string, Record<string, Reason>> = {
   workspaceRepository: { create: 'onboarding', delete: 'sweeper' },
-  accountRepository: { create: 'onboarding', rename: 'admin', updateSettings: 'admin' },
+  accountRepository: {
+    create: 'onboarding',
+    ensurePersonal: 'onboarding',
+    rename: 'admin',
+    updateSettings: 'admin',
+  },
   membershipRepository: { upsert: 'admin', remove: 'admin' },
   userRepository: {
     get: 'pending',

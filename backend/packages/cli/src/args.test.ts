@@ -25,6 +25,15 @@ describe('parseArgs', () => {
     expect(opts.dir).toBe('out')
   })
 
+  it('parses the env command and its reused flags', () => {
+    const o = parseArgs(['env', '--dir', 'deploy/local', '--provider=gitlab', '--yes', '--force'])
+    expect(o.command).toBe('env')
+    expect(o.dir).toBe('deploy/local')
+    expect(o.provider).toBe('gitlab')
+    expect(o.yes).toBe(true)
+    expect(o.force).toBe(true)
+  })
+
   it('recognizes help and version', () => {
     expect(parseArgs(['--help']).command).toBe('help')
     expect(parseArgs(['-v']).command).toBe('version')

@@ -40,6 +40,12 @@ export interface LoggingRunnerTransportOptions {
 export class LoggingRunnerTransport implements RunnerTransport {
   constructor(private readonly opts: LoggingRunnerTransportOptions) {}
 
+  /** Delegate the backend id to the wrapped transport so the shared job client can stamp it
+   *  onto the poll view (this decorator sits at the resolveTransport seam in every facade). */
+  get backend(): string | undefined {
+    return this.opts.inner.backend
+  }
+
   async dispatch(
     ref: RunnerJobRef,
     spec: Record<string, unknown>,

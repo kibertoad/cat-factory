@@ -57,6 +57,8 @@ const READY_WAIT_MS = 120_000
 const READY_POLL_INTERVAL_MS = 1_500
 
 export class KubernetesRunnerTransport implements RunnerTransport {
+  /** Backend id recorded in run diagnostics (self-hosted runner pool on Kubernetes). */
+  readonly backend = 'runner-pool'
   private readonly client: KubernetesApiClient
 
   constructor(

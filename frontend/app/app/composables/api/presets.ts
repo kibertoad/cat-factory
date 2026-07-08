@@ -6,6 +6,7 @@ import {
   listMergePresetsContract,
   listModelPresetsContract,
   reseedMergePresetContract,
+  reseedModelPresetContract,
   updateMergePresetContract,
   updateModelPresetContract,
 } from '@cat-factory/contracts'
@@ -60,5 +61,10 @@ export function presetsApi({ send, ws }: ApiContext) {
 
     deleteModelPreset: (workspaceId: string, presetId: string) =>
       send(deleteModelPresetContract, { pathPrefix: ws(workspaceId), pathParams: { presetId } }),
+
+    // Restore a built-in model preset to its current catalog definition (adopt an update, repair
+    // a drifted one, or materialise a new built-in that appeared). Custom presets reject this.
+    reseedModelPreset: (workspaceId: string, presetId: string) =>
+      send(reseedModelPresetContract, { pathPrefix: ws(workspaceId), pathParams: { presetId } }),
   }
 }

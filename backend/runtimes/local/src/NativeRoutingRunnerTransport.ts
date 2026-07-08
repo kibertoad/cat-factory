@@ -61,7 +61,10 @@ export class NativeRoutingRunnerTransport implements RunnerTransport {
     // An evicted job never comes back on this transport — drop the route so the map can't
     // grow unboundedly on a long-lived dev server (a re-dispatch re-populates it anyway).
     if (view.state === 'failed' && view.error === EVICTION_ERROR) this.routed.delete(refKey(ref))
-    return view
+    // Stamp WHICH leg served the job (native host process vs. per-run container) so the run
+    // diagnostics record the true backend — this router picks per job, so it can't declare a
+    // single static `backend` the shared job client would stamp.
+    return view.backend ? view : { ...view, backend: transport.backend }
   }
 
   async release(ref: RunnerJobRef): Promise<void> {

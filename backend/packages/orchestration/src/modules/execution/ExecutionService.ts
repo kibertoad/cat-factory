@@ -26,6 +26,7 @@ import {
   companionFor,
   companionTargets,
   hasTrait,
+  INTERVIEW_GATE_TRAIT,
   isCompanionKind,
   isInlineModelStep,
 } from '@cat-factory/agents'
@@ -57,7 +58,7 @@ import {
   ValidationError,
   type SubscriptionVendor,
 } from '@cat-factory/kernel'
-import { DEFAULT_MERGE_PRESET, DOC_INTERVIEWER_AGENT_KIND } from '@cat-factory/kernel'
+import { DEFAULT_MERGE_PRESET } from '@cat-factory/kernel'
 import {
   REQUIREMENTS_REVIEW_AGENT_KIND,
   CLARITY_REVIEW_AGENT_KIND,
@@ -864,8 +865,12 @@ export class ExecutionService {
       clarityKind: this.clarityKind,
       requirementsBrainstormKind: this.requirementsBrainstormKind,
       architectureBrainstormKind: this.architectureBrainstormKind,
-      initiativeInterviewController: this.initiativeInterviewController,
-      docInterviewController: this.docInterviewController,
+      // The interview-gate controllers, dispatched by the `interview-gate` trait keyed on each
+      // controller's `agentKind` (a new interviewer wires its controller here — no engine branch).
+      interviewControllers: [
+        this.initiativeInterviewController,
+        this.docInterviewController,
+      ].filter((c): c is InitiativeInterviewController | DocInterviewController => !!c),
       runInitiatorScope: runInitiatorScopeFn,
       environmentProvisioning,
       ticketTrackerProvider,
@@ -1975,7 +1980,21 @@ export class ExecutionService {
       // The visual-confirmation gate is likewise re-entrant on a human action.
       const reentrantVisualConfirm =
         step.agentKind === VISUAL_CONFIRM_AGENT_KIND && !!step.visualConfirm?.pendingAction
-      if (!reentrantRequirements && !reentrantHumanTest && !reentrantVisualConfirm) {
+      // The interactive-interviewer gates (marked with the `interview-gate` trait) ride the shared
+      // InterviewGateController spine, which resumes by re-running the (slow) interviewer LLM in the
+      // durable driver: `continue`/`proceed` set `pendingInterview` on the parked step and wake the
+      // driver. Fall through so `InterviewGateController.evaluate` runs that pass instead of
+      // immediately re-parking — otherwise the interview never advances and the window stays stuck on
+      // the same questions. Trait-based (not kind-based) so a new interviewer needs no engine change.
+      const reentrantInterview =
+        hasTrait(step.agentKind, INTERVIEW_GATE_TRAIT, this.agentKindRegistry) &&
+        !!step.pendingInterview
+      if (
+        !reentrantRequirements &&
+        !reentrantHumanTest &&
+        !reentrantVisualConfirm &&
+        !reentrantInterview
+      ) {
         // Parked on either an agent-raised decision or a human approval gate; both
         // are addressed by the same durable event id.
         const pendingId = step.decision?.id ?? step.approval?.id
@@ -2150,9 +2169,9 @@ export class ExecutionService {
         'Resolve the visual-confirmation gate through its window (approve / request a fix), not the approval gate',
       )
     }
-    if (step.agentKind === DOC_INTERVIEWER_AGENT_KIND) {
+    if (hasTrait(step.agentKind, INTERVIEW_GATE_TRAIT, this.agentKindRegistry)) {
       throw new ConflictError(
-        'Resolve the document interview through its interview window, not the approval gate',
+        'Resolve the interview through its interview window, not the approval gate',
       )
     }
     if (step.companion?.exceeded) {

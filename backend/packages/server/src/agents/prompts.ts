@@ -1,5 +1,10 @@
 import type { AgentRunContext } from '@cat-factory/kernel'
-import { type AgentKindRegistry, FINAL_ANSWER_IN_REPLY, userPromptFor } from '@cat-factory/agents'
+import {
+  type AgentKindRegistry,
+  FINAL_ANSWER_IN_REPLY,
+  initiativePresetSection,
+  userPromptFor,
+} from '@cat-factory/agents'
 import {
   FRONTEND_WIREMOCK_PORT,
   resolveFrontendServePort,
@@ -277,10 +282,10 @@ function initiativeContextLines(
   // Preset steering FIRST — it frames the step's role for this initiative kind (e.g. "you are a
   // documentation gap-auditor"). The builder only sets `preset` when this kind has a (trimmed,
   // non-empty) `promptAddition` or a `phaseTemplate`; the generic preset has neither, so the
-  // generic prompt is unchanged.
-  if (init.preset?.promptAddition) {
-    lines.push('', `## Initiative preset: ${init.preset.label}`, '', init.preset.promptAddition)
-  }
+  // generic prompt is unchanged. The section text is the SHARED `initiativePresetSection` (D1),
+  // so the planning prompts and the spawned-run prompts render identical preset steering.
+  const presetSection = initiativePresetSection(context)
+  if (presetSection) lines.push(presetSection)
   // The required plan shape (planner only): a preset's declarative phase template, rendered so the
   // planner emits exactly the mandated phases. No template ⇒ nothing added.
   if (opts.includePlanShape && init.preset?.phaseTemplate) {

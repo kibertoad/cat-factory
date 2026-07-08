@@ -1,5 +1,84 @@
 # @cat-factory/workspaces
 
+## 0.13.4
+
+### Patch Changes
+
+- Updated dependencies [63f7881]
+  - @cat-factory/kernel@0.111.0
+  - @cat-factory/contracts@0.121.0
+
+## 0.13.3
+
+### Patch Changes
+
+- Updated dependencies [bcc843d]
+  - @cat-factory/kernel@0.110.1
+
+## 0.13.2
+
+### Patch Changes
+
+- Updated dependencies [a2db337]
+  - @cat-factory/contracts@0.120.0
+  - @cat-factory/kernel@0.110.0
+
+## 0.13.1
+
+### Patch Changes
+
+- 8319e52: Fix a first-sign-in race in `AccountService.ensurePersonalAccount` that 500'd
+  `GET /accounts` ("cannot reach backend") on a fresh DB.
+
+  The method was a non-atomic check-then-act: concurrent first-load requests all read
+  "no personal account yet", then all `INSERT`, so all but one failed with a duplicate-key
+  violation on the personal-account partial unique index (`idx_accounts_personal`) and the
+  error surfaced as an unhandled 500.
+
+  The create path is now atomic. A new `AccountRepository.ensurePersonal(account)` port
+  inserts-or-returns the surviving row — D1 via `INSERT OR IGNORE`, Postgres via
+  `ON CONFLICT DO NOTHING` — so concurrent first-sign-in callers all converge on the same
+  account with no rejection. Both runtimes implement it and a cross-runtime conformance
+  assertion fires the concurrent resolution and asserts a single account results.
+
+  The sibling paths are unaffected: `createOrg` is a deliberate non-idempotent create (org
+  accounts have no such unique index), and `ensureMembership` already writes through an
+  idempotent `upsert`.
+
+- Updated dependencies [8319e52]
+  - @cat-factory/kernel@0.109.1
+
+## 0.13.0
+
+### Minor Changes
+
+- 7157908: Model presets now support reseeding, mirroring pipelines and merge presets, plus a new
+  built-in "Claude Opus 4.8" preset (everything `claude-opus`).
+
+  - Built-in model presets carry stable catalog ids (`mdp_kimi` / `mdp_glm` / `mdp_claude`)
+    and a monotonic `version`. The workspace snapshot ships `modelPresetCatalogVersions`, and
+    `POST /workspaces/:ws/model-presets/:id/reseed` restores a built-in to the current catalog
+    (adopt an update, repair drift, or materialise a new built-in that appeared). The SPA gains
+    a once-per-session "model preset updates" advisory (reseed / add) like the pipeline and
+    merge-preset ones.
+  - The seeded workspace DEFAULT preset is now a deployment fact: Cloudflare and Node default to
+    Kimi K2.7 (Cloudflare-runnable on the bare baseline), local mode defaults to Claude Opus 4.8
+    (local runs subscription models via the ambient CLI / a leased personal credential). The
+    deployment default is applied only at first seed, so a user's later manual default choice is
+    always preserved.
+
+  Breaking (pre-1.0, no migration): model presets gain a nullable `version` column
+  (D1 `0043_model_preset_versioning`; Drizzle migration). Workspaces seeded before this change
+  hold the old index-based preset ids (`mdp-seed-0/1`); they are treated as custom presets, and
+  the three stable built-ins are offered via the reseed advisory rather than migrated in place.
+
+### Patch Changes
+
+- Updated dependencies [8728bf7]
+- Updated dependencies [7157908]
+  - @cat-factory/contracts@0.119.0
+  - @cat-factory/kernel@0.109.0
+
 ## 0.12.14
 
 ### Patch Changes

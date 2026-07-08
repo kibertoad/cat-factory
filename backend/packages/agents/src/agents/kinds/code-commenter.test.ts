@@ -28,14 +28,18 @@ function ctx(overrides: Partial<AgentRunContext> = {}): AgentRunContext {
 }
 
 describe('code-commenter agent kind', () => {
-  it('registers as a container-coding, work-branch, PR-opening kind in the docs category', () => {
-    // A `work` clone ⇒ branch off base, push the work branch and open a PR (coder-like).
+  it('registers as a container-coding, pr-or-work kind in the docs category', () => {
+    // `pr-or-work` ⇒ amend the block's PR in place when one exists (BAU pipeline step), else branch
+    // off base and open a PR (standalone / initiative sweep). Its no-op is a clean non-event.
     expect(registry.agentStep(CODE_COMMENTER_KIND)?.surface).toBe('container-coding')
-    expect(registry.agentStep(CODE_COMMENTER_KIND)?.clone?.branch).toBe('work')
+    expect(registry.agentStep(CODE_COMMENTER_KIND)?.clone?.branch).toBe('pr-or-work')
+    expect(registry.agentStep(CODE_COMMENTER_KIND)?.noChangesTolerated).toBe(true)
     // Container-coding kinds route to the container executor.
     expect(registry.requiresContainer(CODE_COMMENTER_KIND)).toBe(true)
-    // A first-class palette block in the docs category.
+    // A first-class palette block in the docs category, with a human-readable description.
     expect(registry.presentation(CODE_COMMENTER_KIND)?.category).toBe('docs')
+    expect(registry.presentation(CODE_COMMENTER_KIND)?.label).toBe('Code Commenter')
+    expect(registry.presentation(CODE_COMMENTER_KIND)?.description).toBeTruthy()
   })
 
   it('is doc-aware so the engine folds the writing-style fragments into its prompt', () => {
@@ -60,7 +64,13 @@ describe('code-commenter agent kind', () => {
     expect(prompt).toContain('CI step verifies')
   })
 
-  it("surfaces the spawn's targetPath as the code area to comment, and omits it when unset", () => {
+  it('actively maintains comments: updates drifted ones and removes noise', () => {
+    const prompt = systemPromptFor(CODE_COMMENTER_KIND, registry)
+    expect(prompt).toContain('Update comments that have drifted')
+    expect(prompt).toContain('DELETE noise comments that merely restate what the code already says')
+  })
+
+  it("surfaces the spawn's targetPath as the code area, and scopes to the PR when one is open", () => {
     const scoped = userPromptFor(
       ctx({ block: { ...ctx().block, taskTypeFields: { targetPath: 'packages/billing' } } }),
       registry,
@@ -68,9 +78,20 @@ describe('code-commenter agent kind', () => {
     )
     expect(scoped).toContain('Comment the code under: `packages/billing`.')
 
+    // BAU pipeline step: a PR is already open, so the pass is scoped to the PR's changed files.
+    const onPr = userPromptFor(
+      ctx({
+        block: { ...ctx().block, pullRequest: { number: 7, url: 'x', branch: 'cat-factory/b1' } },
+      }),
+      registry,
+      { materialized: true },
+    )
+    expect(onPr).toContain('Focus on the files this pull request changes')
+
+    // Standalone with neither a target path nor a PR: infer scope from the brief.
     const standalone = userPromptFor(ctx(), registry, { materialized: true })
     expect(standalone).not.toContain('Comment the code under:')
-    // The brief still carries the task title + description.
+    expect(standalone).not.toContain('Focus on the files this pull request changes')
     expect(standalone).toContain('Task: Billing Service')
     expect(standalone).toContain('Clarify the trickiest billing code.')
   })

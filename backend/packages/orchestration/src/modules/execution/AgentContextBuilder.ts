@@ -343,19 +343,40 @@ export class AgentContextBuilder {
   }
 
   /**
-   * The planning context for an `initiative`-level run: the interviewer's synthesized
-   * goal / constraints / non-goals + the answered Q&A digest, the analyst's codebase
-   * analysis, and — when the initiative was created from a PRESET — the preset's identity +
-   * frozen inputs + the per-kind planning-prompt steering resolved for `agentKind`. Returns
-   * undefined for non-initiative blocks, when no initiative store is wired, or when the block
-   * has no initiative entity yet.
+   * The initiative context a run carries, in one of two shapes:
+   *
+   * - An `initiative`-level (planning) run gets the FULL planning context: the interviewer's
+   *   synthesized goal / constraints / non-goals + the answered Q&A digest, the analyst's codebase
+   *   analysis, and — when created from a PRESET — the preset's per-kind planning-prompt steering +
+   *   declarative phase template, resolved for `agentKind` (analyst / planner).
+   * - A run whose block was SPAWNED by an initiative (a task/module/frame carrying
+   *   `block.initiativeId`) gets a PRESET-ONLY context — `{ preset: { label, promptAddition } }` —
+   *   so the org's standing per-kind methodology reaches the child coder / tester / custom kind
+   *   (D1). Deliberately NO goal/qa/analysis fold: the item description is the child's task
+   *   contract, and bleeding planning context into children regresses prompt hygiene + token
+   *   budgets.
+   *
+   * Returns undefined when no initiative store is wired, the block is neither initiative-level nor
+   * initiative-spawned, the initiative entity is missing, or — for a spawned run — the preset
+   * contributes no `promptAddition` for the running kind (so the child prompt stays byte-identical).
+   * The spawned branch is gated on `block.initiativeId`, so a plain task keeps the non-initiative
+   * hot path (zero extra reads); an initiative-spawned step does exactly one point-read (no loop →
+   * no N+1).
    */
   private async resolveInitiativeContext(
     workspaceId: string,
     block: Block,
     agentKind: string,
   ): Promise<AgentRunContext['initiative']> {
-    if (block.level !== 'initiative' || !this.deps.initiatives) return undefined
+    if (!this.deps.initiatives) return undefined
+    // A run spawned INSIDE an initiative (not the planning run itself): the preset steering only.
+    if (block.level !== 'initiative') {
+      if (!block.initiativeId) return undefined
+      const initiative = await this.deps.initiatives.getByBlock(workspaceId, block.initiativeId)
+      if (!initiative) return undefined
+      const preset = this.resolveSpawnedPresetContext(initiative, agentKind)
+      return preset ? { preset } : undefined
+    }
     const initiative = await this.deps.initiatives.getByBlock(workspaceId, block.id)
     if (!initiative) return undefined
     const qa = (initiative.qa ?? [])
@@ -370,6 +391,26 @@ export class AgentContextBuilder {
       ...(initiative.analysisSummary ? { analysisSummary: initiative.analysisSummary } : {}),
       ...(preset ? { preset } : {}),
     }
+  }
+
+  /**
+   * The preset steering an initiative-SPAWNED run carries: the registered preset's label + its
+   * `promptAdditions` entry for the RUNNING kind (coder / tester / a custom kind). Returns undefined
+   * — so the child prompt is byte-identical — when the entity carries no `presetId`, names an
+   * unknown preset, or the preset contributes no (trimmed, non-empty) addition for this kind. Unlike
+   * {@link resolveInitiativePresetContext} it never carries the `phaseTemplate` (that is planner-only
+   * plan shape, irrelevant to a spawned child).
+   */
+  private resolveSpawnedPresetContext(
+    initiative: Pick<Initiative, 'presetId'>,
+    agentKind: string,
+  ): NonNullable<AgentRunContext['initiative']>['preset'] | undefined {
+    if (!initiative.presetId) return undefined
+    const registration = getInitiativePreset(initiative.presetId)
+    if (!registration) return undefined
+    const promptAddition = registration.promptAdditions?.[agentKind]?.trim()
+    if (!promptAddition) return undefined
+    return { label: registration.descriptor.presentation.label, promptAddition }
   }
 
   /**

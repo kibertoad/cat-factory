@@ -117,7 +117,7 @@ export const notificationPayloadSchema = v.object({
    */
   targetUserId: v.optional(v.nullable(v.string())),
   /** Why the initiative loop raised the card, on an `initiative` notification. */
-  initiativeReason: v.optional(v.picklist(['item_blocked', 'complete'])),
+  initiativeReason: v.optional(v.picklist(['item_blocked', 'complete', 'checkpoint'])),
   /**
    * On a `merge_review` raised for a PARTIALLY-merged multi-repo task (service-connections
    * phase 4): the repos whose PRs DID merge before an intermediate merge failed. Cross-repo

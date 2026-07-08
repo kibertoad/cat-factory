@@ -7,18 +7,37 @@ import type { Logger, ServerContainer } from '@cat-factory/server'
 // child runs poke the loop directly; this interval is the backstop cadence. No-op when the
 // initiatives module isn't wired.
 
-/** How often the Node service ticks the initiative loop. */
+/** Default cadence for the Node initiative-loop sweep (the Worker uses a 2-minute cron). */
 export const INITIATIVE_LOOP_SWEEP_INTERVAL_MS = 60 * 1000
 
 /**
- * Start the periodic initiative-loop sweep. Runs once immediately then on a one-minute timer.
- * Best-effort: a failed sweep is logged and retried next tick, never thrown. Returns a stop
- * function that clears the timer.
+ * The sweep interval, overridable via `INITIATIVE_LOOP_INTERVAL_MS` (milliseconds) — the same
+ * shape as the other Node cadence knobs. Chiefly so a fast integration harness (the e2e suite)
+ * can drive the first spawn wave within its timeouts instead of waiting a whole minute for the
+ * backstop tick; a non-positive/unparseable value falls back to the default.
+ *
+ * Reads from the PASSED env (defaulting to `process.env`), NOT `process.env` unconditionally: the
+ * Node `start()` takes its config from an INJECTED `env` object that it never writes back to
+ * `process.env`, so a deployment (or the e2e backend) that sets the knob there would otherwise be
+ * silently ignored and the loop would run at the 60s backstop — which, since the e2e relies on the
+ * sweep (not the terminal poke) for the first spawn wave, timed a spawn out past the spec budget.
+ */
+export function resolveSweepInterval(env: NodeJS.ProcessEnv = process.env): number {
+  const raw = env.INITIATIVE_LOOP_INTERVAL_MS
+  const parsed = raw ? Number(raw) : Number.NaN
+  return Number.isFinite(parsed) && parsed > 0 ? parsed : INITIATIVE_LOOP_SWEEP_INTERVAL_MS
+}
+
+/**
+ * Start the periodic initiative-loop sweep. Runs once immediately then on the resolved interval
+ * (default one minute; see {@link resolveSweepInterval}). Best-effort: a failed sweep is logged
+ * and retried next tick, never thrown. Returns a stop function that clears the timer.
  */
 export function startInitiativeLoopSweeper(
   container: ServerContainer,
   clock: Clock,
   log: Logger,
+  intervalMs: number = resolveSweepInterval(),
 ): () => void {
   const initiatives = container.initiatives
   if (!initiatives) return () => {}
@@ -36,7 +55,7 @@ export function startInitiativeLoopSweeper(
     }
   }
   void tick()
-  const timer = setInterval(() => void tick(), INITIATIVE_LOOP_SWEEP_INTERVAL_MS)
+  const timer = setInterval(() => void tick(), intervalMs)
   timer.unref?.()
   return () => clearInterval(timer)
 }

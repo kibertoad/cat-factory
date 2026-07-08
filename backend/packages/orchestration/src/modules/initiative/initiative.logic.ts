@@ -9,6 +9,7 @@ import type {
   InitiativePhase,
   InitiativePlanDraft,
   InitiativeQa,
+  InitiativeQaStatus,
   PromoteInitiativeFollowUpInput,
   UpdateInitiativeItemInput,
 } from '@cat-factory/kernel'
@@ -172,8 +173,14 @@ export function normalizeDraftAgainstPhaseTemplate(
 ): InitiativePlanDraft {
   const templateIds = new Set(template.phases.map((p) => p.id))
   // Template ids are unique (the contract enforces it), so each template slot matches its draft
-  // phase(s) exactly once — iterating the template preserves template order.
-  const matched = template.phases.flatMap((tp) => draft.phases.filter((p) => p.id === tp.id))
+  // phase(s) exactly once — iterating the template preserves template order. A template-authored
+  // `checkpoint: true` is FORCED onto the matched draft phase (the planner cannot unset it); a
+  // template that doesn't checkpoint leaves the planner's own request intact.
+  const matched = template.phases.flatMap((tp) =>
+    draft.phases
+      .filter((p) => p.id === tp.id)
+      .map((p) => (tp.checkpoint === true ? { ...p, checkpoint: true } : p)),
+  )
   const extras = draft.phases.filter((p) => !p.id || !templateIds.has(p.id))
 
   const missing = template.phases.filter(
@@ -229,12 +236,24 @@ export function applyPlanDraft(
   const phaseIds = new Set<string>(
     draft.phases.map((p) => p.id).filter((id): id is string => id !== undefined),
   )
-  const phases: InitiativePhase[] = draft.phases.map((p) => ({
-    id: p.id ?? uniqueSlugId(p.title, phaseIds),
-    title: p.title,
-    goal: p.goal ?? '',
-    ...(p.maxConcurrent !== undefined ? { maxConcurrent: p.maxConcurrent } : {}),
-  }))
+  const existingPhases = new Map((initiative.phases ?? []).map((p) => [p.id, p]))
+  const phases: InitiativePhase[] = draft.phases.map((p) => {
+    const id = p.id ?? uniqueSlugId(p.title, phaseIds)
+    const prior = existingPhases.get(id)
+    return {
+      id,
+      title: p.title,
+      goal: p.goal ?? '',
+      ...(p.maxConcurrent !== undefined ? { maxConcurrent: p.maxConcurrent } : {}),
+      // The checkpoint FLAG follows the (already template-shaped) draft. The CLEARED-AT bookkeeping
+      // is loop state, never in the draft, so preserve it for an existing phase id — a re-plan/replay
+      // that dropped it would re-fire an already-reviewed checkpoint on the next tick.
+      ...(p.checkpoint === true ? { checkpoint: true } : {}),
+      ...(prior?.checkpointClearedAt !== undefined
+        ? { checkpointClearedAt: prior.checkpointClearedAt }
+        : {}),
+    }
+  })
 
   const existingItems = new Map((initiative.items ?? []).map((i) => [i.id, i]))
   const itemIds = new Set<string>(
@@ -390,15 +409,34 @@ export function coerceInterviewOutput(
   return { kind: 'questions', questions }
 }
 
-/** Only the answered exchanges — the digest that survives onto the tracker. */
+/** Only the answered exchanges — the digest that survives onto the tracker at convergence. */
 function answeredQa(initiative: Initiative): InitiativeQa[] {
   return (initiative.qa ?? []).filter((q) => (q.answer ?? '').trim().length > 0)
 }
 
 /**
- * Append a fresh round of pending questions: keep the answered digest, drop any prior-round
- * questions the human skipped, and add the new ones with stable ids. Bumps the interview
- * round and parks it `awaiting`.
+ * Whether a planning question still needs a human answer: not dismissed, and no answer yet.
+ * The single source of truth shared by the window (`pending`/`allAnswered`), the interviewer,
+ * and {@link retainedQa}, so a `dismissed` question never counts as blocking.
+ */
+export function isPendingQuestion(q: InitiativeQa): boolean {
+  return q.status !== 'dismissed' && (q.answer ?? '').trim().length === 0
+}
+
+/**
+ * Questions that survive into the NEXT interview round: everything that is no longer PENDING —
+ * i.e. the answered digest PLUS any the human marked `dismissed`. Keeping the dismissed ones
+ * (rather than dropping every unanswered question) is what lets the interviewer see they were
+ * deemed not-relevant and not re-ask them.
+ */
+function retainedQa(initiative: Initiative): InitiativeQa[] {
+  return (initiative.qa ?? []).filter((q) => !isPendingQuestion(q))
+}
+
+/**
+ * Append a fresh round of pending questions: keep the answered + dismissed digest, drop any
+ * prior-round questions the human left neither answered nor dismissed, and add the new ones with
+ * stable ids. Bumps the interview round and parks it `awaiting`.
  */
 export function applyInterviewQuestions(
   initiative: Initiative,
@@ -409,15 +447,52 @@ export function applyInterviewQuestions(
     id: nextId(),
     question: clampShort(question),
     answer: '',
+    status: 'open',
   }))
   return {
     ...initiative,
-    qa: [...answeredQa(initiative), ...pending],
+    qa: [...retainedQa(initiative), ...pending],
     interview: {
       round: (initiative.interview?.round ?? 0) + 1,
       maxRounds: initiative.interview?.maxRounds ?? INITIATIVE_MAX_INTERVIEW_ROUNDS,
       status: 'awaiting',
     },
+  }
+}
+
+/**
+ * Mark one question `dismissed` ("not relevant") or reopen it. Dismissing clears any drafted
+ * answer + AI recommendation (the question is being set aside, not answered). Matched by id;
+ * no-op if unknown. Part of the shared clarification surface the planning window borrows from
+ * requirements review.
+ */
+export function applyQuestionStatus(
+  initiative: Initiative,
+  questionId: string,
+  status: InitiativeQaStatus,
+): Initiative {
+  return {
+    ...initiative,
+    qa: (initiative.qa ?? []).map((q) => {
+      if (q.id !== questionId) return q
+      return status === 'dismissed'
+        ? { ...q, status, answer: '', recommendation: null }
+        : { ...q, status }
+    }),
+  }
+}
+
+/** Attach an AI-suggested answer to one question (the recommend action). No-op if unknown. */
+export function applyQuestionRecommendation(
+  initiative: Initiative,
+  questionId: string,
+  recommendation: string,
+): Initiative {
+  return {
+    ...initiative,
+    qa: (initiative.qa ?? []).map((q) =>
+      q.id === questionId ? { ...q, recommendation: clampShort(recommendation) } : q,
+    ),
   }
 }
 
@@ -503,7 +578,12 @@ export function seedPresetInterviewQa(
     if (value === undefined || value === false) continue
     const answer = renderInitiativePresetValue(field, value).trim()
     if (!answer) continue
-    qa.push({ id: nextId(), question: field.label.trim(), answer: clampShort(answer) })
+    qa.push({
+      id: nextId(),
+      question: field.label.trim(),
+      answer: clampShort(answer),
+      status: 'open',
+    })
   }
   return qa
 }
@@ -541,6 +621,47 @@ export function allItemsSettled(initiative: Initiative): boolean {
  */
 export function phaseIsHalted(initiative: Initiative, phaseId: string): boolean {
   return (initiative.items ?? []).some((i) => i.phaseId === phaseId && i.status === 'blocked')
+}
+
+/**
+ * The phase whose completed CHECKPOINT is awaiting a human, or null. A checkpoint phase (D2) pauses
+ * the initiative for review once ALL its items settle, before the next phase spawns. Returns the
+ * FIRST phase, in declared order, that is flagged `checkpoint`, has NOT already been cleared
+ * (`checkpointClearedAt`), holds at least one item, and has every item terminal (done/skipped).
+ *
+ * A phase still holding a non-terminal item — running, or BLOCKED (a halted phase) — is not a
+ * pending checkpoint: the checkpoint fires only after the phase genuinely completed, so a human must
+ * first retry/skip a blocked item. And because later-phase items never spawn until the current phase
+ * settles, an earlier still-running phase naturally keeps a later phase's checkpoint from firing early.
+ * An item-less checkpoint phase never fires (nothing was reviewed) — the loop skips it like any empty
+ * phase.
+ */
+export function pendingCheckpoint(initiative: Initiative): InitiativePhase | null {
+  const items = initiative.items ?? []
+  for (const phase of initiative.phases ?? []) {
+    if (phase.checkpoint !== true || phase.checkpointClearedAt !== undefined) continue
+    const phaseItems = items.filter((i) => i.phaseId === phase.id)
+    if (phaseItems.length === 0) continue
+    if (phaseItems.every((i) => INITIATIVE_ITEM_TERMINAL_STATUSES.has(i.status))) return phase
+  }
+  return null
+}
+
+/**
+ * Stamp a phase's checkpoint as cleared (the resume acknowledgment) so {@link pendingCheckpoint}
+ * never returns it again and the loop advances past the reviewed phase. No-op for an unknown id.
+ */
+export function applyCheckpointCleared(
+  initiative: Initiative,
+  phaseId: string,
+  now: number,
+): Initiative {
+  return {
+    ...initiative,
+    phases: (initiative.phases ?? []).map((p) =>
+      p.id === phaseId ? { ...p, checkpointClearedAt: now } : p,
+    ),
+  }
 }
 
 /**

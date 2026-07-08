@@ -2,6 +2,7 @@ import {
   createModelPresetContract,
   deleteModelPresetContract,
   listModelPresetsContract,
+  reseedModelPresetContract,
   updateModelPresetContract,
 } from '@cat-factory/contracts'
 import type { ModelPresetsModule } from '@cat-factory/orchestration'
@@ -57,6 +58,16 @@ export function modelPresetController(): Hono<AppEnv> {
     if (!presets) return unavailable(c)
     await presets.service.remove(param(c, 'workspaceId'), c.req.valid('param').presetId)
     return c.body(null, 204)
+  })
+
+  buildHonoRoute(app, reseedModelPresetContract, async (c) => {
+    const presets = requireModelPresets(c)
+    if (!presets) return unavailable(c)
+    const preset = await presets.service.reseed(
+      param(c, 'workspaceId'),
+      c.req.valid('param').presetId,
+    )
+    return c.json(preset, 200)
   })
 
   return app

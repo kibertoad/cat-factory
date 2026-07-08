@@ -75,6 +75,16 @@
     "next": "Next",
     "done": "Done"
   },
+  "clarification": {
+    "answerPlaceholder": "Your answer",
+    "notRelevant": "Not relevant",
+    "recommend": "Recommend an answer",
+    "reopen": "Reopen",
+    "dismissed": "Marked not relevant",
+    "generating": "Drafting a suggestion…",
+    "suggestion": "Suggested answer",
+    "useSuggestion": "Use this answer"
+  },
   "nav": {
     "menu": "Navigation menu",
     "openMenu": "Open menu",
@@ -3266,6 +3276,25 @@
       "done": "Done",
       "toast": {
         "reseedFailed": "Could not reseed merge preset"
+      }
+    }
+  },
+  "modelPreset": {
+    "health": {
+      "title": "Model preset updates",
+      "allValid": "All built-in model presets are up to date.",
+      "newHeading": "New presets available",
+      "newDescription": "New built-in model presets have shipped. Add them to this board's library.",
+      "add": "Add",
+      "updatesHeading": "Updates available",
+      "updatesDescription": "A newer version of these built-in model presets has shipped. Reseed to adopt it (the default and ordering are kept).",
+      "versionAvailable": "Version {from} → {to} available.",
+      "reseed": "Reseed",
+      "reseedAll": "Update all ({count})",
+      "dismiss": "Dismiss",
+      "done": "Done",
+      "toast": {
+        "reseedFailed": "Could not reseed model preset"
       }
     }
   },

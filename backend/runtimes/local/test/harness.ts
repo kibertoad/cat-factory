@@ -30,7 +30,12 @@ import type { AgentKindRegistry } from '@cat-factory/agents'
 import type { GateProviderOverrides } from '@cat-factory/gates'
 import type { BackendRegistries } from '@cat-factory/integrations'
 import type { Clock, ExecutionInstance, Service, WorkspaceSnapshot } from '@cat-factory/kernel'
-import { NoopBootstrapRunner, NoopEnvConfigRepairRunner, NoopWorkRunner } from '@cat-factory/kernel'
+import {
+  MODEL_PRESET_SEED_IDS,
+  NoopBootstrapRunner,
+  NoopEnvConfigRepairRunner,
+  NoopWorkRunner,
+} from '@cat-factory/kernel'
 import type {
   LocalRunner,
   UpsertLocalModelEndpointInput,
@@ -223,8 +228,13 @@ export function makeConformanceApp(
     db,
     env: TEST_ENV,
     overrides,
+    // Local mode's PRODUCTION default model preset is Claude (subscription-only, no Cloudflare
+    // flavour), but the conformance suite drives runs through the fake executor with only
+    // Cloudflare enabled, so pin the default to Kimi K2.7 here — a Cloudflare-served model the
+    // execution start guard accepts. (Real local mode keeps Claude; this only affects tests.)
+    defaultModelPresetId: MODEL_PRESET_SEED_IDS.kimi,
     // Default Cloudflare models ON for parity with the Worker test harness (which
-    // always binds `AI`). The built-in default model preset routes every agent kind to
+    // always binds `AI`). The pinned default model preset above routes every agent kind to
     // `kimi-k2.7` (a Cloudflare-served model), so the execution start guard needs that
     // provider available to start a run. The suite still forces this OFF for the
     // provider-key assertions that exercise the unconfigured path.
@@ -388,6 +398,7 @@ export function makeConformanceApp(
     executionRepository: () => container.executionRepository,
     agentRunRepository: () => container.agentRunRepository,
     blockRepository: () => createDrizzleRepositories(db, SEED_CLOCK).blockRepository,
+    initiativeRepository: () => createDrizzleRepositories(db, SEED_CLOCK).initiativeRepository,
     notificationRepository: () => new DrizzleNotificationRepository(db),
     documentRepository: () => new DrizzleDocumentRepository(db),
     docInterviewRepository: () => new DrizzleDocInterviewRepository(db),

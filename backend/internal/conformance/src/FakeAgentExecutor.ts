@@ -64,6 +64,13 @@ export interface FakeAgentOptions {
    * running service's `serviceFragmentIds`.
    */
   echoFragments?: boolean
+  /**
+   * When set, the (generic-kind) agent echoes the initiative-preset steering it was handed
+   * as `[preset]label|promptAddition[/preset]`, so a test can assert the engine resolved the
+   * preset's per-kind methodology onto a SPAWNED run's context (D1). Empty `[preset][/preset]`
+   * when no preset reached the run.
+   */
+  echoPreset?: boolean
   /** A PR the (container-flavoured) agent reports opening, so persistence can be exercised. */
   pullRequest?: PullRequestRef
   /**
@@ -156,6 +163,16 @@ export interface FakeAgentOptions {
    * without a real container. Omitted ⇒ a deterministic `{ ok: true }`.
    */
   customResult?: unknown
+  /**
+   * The multi-phase plan draft the `initiative-planner` step returns as `result.initiativePlan`
+   * (an {@link InitiativePlanDraft}); the engine ingests it via `InitiativeService.ingestPlan`.
+   * Set it whenever a test drives an initiative PLANNING pipeline to completion — the planner's
+   * post-completion resolver FAULTS the run when the plan is absent, so without this the fake's
+   * generic prose result would fail every planning run. The analyst/committer need no companion
+   * option: the analyst's benign prose feeds `recordAnalysis`, and the committer is a
+   * deterministic engine step that never calls the executor. Omitted ⇒ no plan channel.
+   */
+  initiativePlan?: unknown
   /**
    * Forward-looking follow-up / question items the async `coder` streams on its FIRST
    * running poll (the deterministic analogue of the harness tailing the sentinel file), so
@@ -349,6 +366,19 @@ export class FakeAgentExecutor implements AgentExecutor {
       }
     }
 
+    // The initiative PLANNER returns the multi-phase plan the engine ingests
+    // (`InitiativeService.ingestPlan` → the preset's phase-template normalizer + `seedPlan`),
+    // then the loop spawns the decorated tasks. Without this channel the planner's
+    // post-completion resolver faults the run (an absent plan is a hard error), so a test that
+    // drives create-with-preset → auto-plan → spawn supplies the draft via `initiativePlan`.
+    if (context.agentKind === 'initiative-planner' && this.options.initiativePlan !== undefined) {
+      return {
+        output: `[initiative-planner] planned "${context.block.title}"`,
+        model: 'fake',
+        initiativePlan: this.options.initiativePlan,
+      }
+    }
+
     const confidence = this.options.confidence ?? 1
 
     // The `merger` step returns a PR assessment the engine compares to the task's
@@ -383,8 +413,12 @@ export class FakeAgentExecutor implements AgentExecutor {
     const fragSuffix = this.options.echoFragments
       ? ` [frags]${(context.block.resolvedFragments ?? []).map((f) => f.id).join(',')}[/frags]`
       : ''
+    const preset = context.initiative?.preset
+    const presetSuffix = this.options.echoPreset
+      ? ` [preset]${preset ? `${preset.label}|${preset.promptAddition ?? ''}` : ''}[/preset]`
+      : ''
     return {
-      output: `[${context.agentKind}] processed "${context.block.title}"${revisionSuffix}${descSuffix}${fragSuffix}`,
+      output: `[${context.agentKind}] processed "${context.block.title}"${revisionSuffix}${descSuffix}${fragSuffix}${presetSuffix}`,
       model: 'fake',
       confidence: context.isFinalStep ? confidence : undefined,
       usage: this.options.usage,

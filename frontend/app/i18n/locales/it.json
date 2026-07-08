@@ -3616,6 +3616,16 @@
     "next": "Avanti",
     "done": "Fatto"
   },
+  "clarification": {
+    "answerPlaceholder": "La tua risposta",
+    "notRelevant": "Non pertinente",
+    "recommend": "Suggerisci una risposta",
+    "reopen": "Riapri",
+    "dismissed": "Contrassegnata come non pertinente",
+    "generating": "Creazione di un suggerimento…",
+    "suggestion": "Risposta suggerita",
+    "useSuggestion": "Usa questa risposta"
+  },
   "nav": {
     "menu": "Menu di navigazione",
     "openMenu": "Apri il menu",
@@ -4371,6 +4381,25 @@
       "done": "Fatto",
       "toast": {
         "reseedFailed": "Impossibile ripristinare il preset di merge"
+      }
+    }
+  },
+  "modelPreset": {
+    "health": {
+      "title": "Aggiornamenti dei preset di modello",
+      "allValid": "Tutti i preset di modello integrati sono aggiornati.",
+      "newHeading": "Nuovi preset disponibili",
+      "newDescription": "Sono stati rilasciati nuovi preset di modello integrati. Aggiungili alla libreria di questa board.",
+      "add": "Aggiungi",
+      "updatesHeading": "Aggiornamenti disponibili",
+      "updatesDescription": "È stata rilasciata una versione più recente di questi preset di modello integrati. Ripristina i valori iniziali per adottarla (il predefinito e l'ordinamento vengono mantenuti).",
+      "versionAvailable": "Versione {from} → {to} disponibile.",
+      "reseed": "Ripristina",
+      "reseedAll": "Aggiorna tutti ({count})",
+      "dismiss": "Ignora",
+      "done": "Fatto",
+      "toast": {
+        "reseedFailed": "Impossibile ripristinare il preset di modello"
       }
     }
   },

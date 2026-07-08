@@ -154,6 +154,20 @@ export const initiativePhaseSchema = v.object({
   maxConcurrent: v.optional(
     v.pipe(v.number(), v.integer(), v.minValue(1), v.maxValue(INITIATIVE_MAX_CONCURRENT)),
   ),
+  /**
+   * When true, the initiative PAUSES for human review once every item in this phase settles, before
+   * the next phase spawns (the D2 checkpoint — e.g. read a phase's committed research/verdict, then
+   * resume to continue or cancel). Stamped at ingest from a preset's phase template (the planner
+   * cannot unset a template-authored checkpoint), or authored directly by the planner on a draft
+   * phase (generic — usable without a preset). Absent ⇒ the phase advances unattended.
+   */
+  checkpoint: v.optional(v.boolean()),
+  /**
+   * Wall-clock ms when a human CLEARED this phase's checkpoint (stamped by `resume`). Absent ⇒ not
+   * yet cleared. A cleared checkpoint never re-fires, so the loop advances past a reviewed phase.
+   * Loop/entity bookkeeping — never planner- or template-authored; preserved across a re-plan/replay.
+   */
+  checkpointClearedAt: v.optional(v.number()),
 })
 export type InitiativePhase = v.InferOutput<typeof initiativePhaseSchema>
 
@@ -243,16 +257,36 @@ export const initiativeFollowUpSchema = v.object({
 export type InitiativeFollowUp = v.InferOutput<typeof initiativeFollowUpSchema>
 
 /**
+ * Lifecycle of one planning-interview question — the initiative half of the shared
+ * "clarification item" vocabulary (see `docs/initiatives/clarification-items.md`), mirroring the
+ * requirements-review item statuses the planning window reuses. `open` = awaiting an answer;
+ * `dismissed` = the stakeholder marked it not relevant (it no longer blocks continue/proceed and
+ * the interviewer is told not to re-ask). "Answered" is DERIVED from a non-empty `answer` (not a
+ * stored status), so the interviewer's answered-digest logic stays unchanged.
+ */
+export const initiativeQaStatusSchema = v.picklist(['open', 'dismissed'])
+export type InitiativeQaStatus = v.InferOutput<typeof initiativeQaStatusSchema>
+
+/**
  * A single planning-interview exchange, kept as a bounded digest on the tracker AND the
  * live state of the interactive interview: the interviewer appends a question with an empty
  * `answer` (a PENDING question the human must answer) and the human fills it in. A stable
  * `id` addresses the answer write; it is optional only so hand-authored/fixture Q&A without
  * one still parses (the interviewer always sets it).
+ *
+ * `status`/`recommendation` back the shared clarification surface the planning window borrows
+ * from requirements review: a question can be marked `dismissed` ("not relevant"), and the human
+ * can ask the interviewer to `recommend` a suggested answer (stored here, offered as "use this").
+ * Both default to the pre-existing shape, so older rows / fixtures parse unchanged.
  */
 export const initiativeQaSchema = v.object({
   id: v.optional(idField),
   question: shortProseField,
   answer: v.optional(shortProseField, ''),
+  /** `open` (default) or `dismissed`. Answered-ness is derived from a non-empty `answer`. */
+  status: v.optional(initiativeQaStatusSchema, 'open'),
+  /** An AI-suggested answer the human can adopt/edit, or null; set by the recommend action. */
+  recommendation: v.optional(v.nullable(shortProseField)),
 })
 export type InitiativeQa = v.InferOutput<typeof initiativeQaSchema>
 
@@ -361,6 +395,11 @@ export const initiativePlanDraftSchema = v.object({
       maxConcurrent: v.optional(
         v.pipe(v.number(), v.integer(), v.minValue(1), v.maxValue(INITIATIVE_MAX_CONCURRENT)),
       ),
+      /**
+       * Planner-authored checkpoint request (see {@link initiativePhaseSchema}'s `checkpoint`). A
+       * preset's phase template can FORCE it on at ingest; the planner cannot unset a template one.
+       */
+      checkpoint: v.optional(v.boolean()),
     }),
   ),
   items: v.array(initiativeDraftItemSchema),
@@ -413,6 +452,21 @@ export const answerInitiativeQuestionSchema = v.object({
   answer: shortProseField,
 })
 export type AnswerInitiativeQuestionInput = v.InferOutput<typeof answerInitiativeQuestionSchema>
+
+/** Mark a planning-interview question not-relevant (`dismissed`) or reopen it (`open`). */
+export const setInitiativeQuestionStatusSchema = v.object({
+  questionId: v.pipe(v.string(), v.trim(), v.minLength(1)),
+  status: initiativeQaStatusSchema,
+})
+export type SetInitiativeQuestionStatusInput = v.InferOutput<
+  typeof setInitiativeQuestionStatusSchema
+>
+
+/** Ask the interviewer to recommend a suggested answer for one pending planning question. */
+export const recommendInitiativeAnswerSchema = v.object({
+  questionId: v.pipe(v.string(), v.trim(), v.minLength(1)),
+})
+export type RecommendInitiativeAnswerInput = v.InferOutput<typeof recommendInitiativeAnswerSchema>
 
 // ---- Follow-up triage + item/policy editing (slice 4) ----------------------
 // Mid-flight human curation of an executing initiative. A follow-up harvested from a spawned

@@ -8,10 +8,13 @@ import {
   applyInterviewAnswer,
   applyInterviewOutcome,
   applyInterviewQuestions,
+  applyCheckpointCleared,
   applyItemEdit,
   applyPlanDraft,
   applyPolicyEdit,
   applyPromoteFollowUp,
+  applyQuestionRecommendation,
+  applyQuestionStatus,
   applyRevertClaim,
   applyRunHarvest,
   applySpawnClaim,
@@ -25,8 +28,10 @@ import {
   initiativeProgress,
   initiativeSlug,
   interviewAtCap,
+  isPendingQuestion,
   itemDependenciesMet,
   normalizeDraftAgainstPhaseTemplate,
+  pendingCheckpoint,
   phaseIsHalted,
   reconcileItem,
   seedPresetInterviewQa,
@@ -300,6 +305,30 @@ describe('normalizeDraftAgainstPhaseTemplate (T2)', () => {
     // Re-running over the output changes nothing.
     expect(normalizeDraftAgainstPhaseTemplate(template(), out).phases).toEqual(out.phases)
   })
+
+  it('stamps a template-authored checkpoint onto the matched phase; the planner cannot unset it (D2)', () => {
+    const tpl = template({
+      phases: [
+        { id: 'blast-zone', title: 'Blast zone', goal: '', required: true, checkpoint: true },
+        { id: 'coverage', title: 'Coverage', goal: '', required: true },
+        { id: 'delivery', title: 'Delivery', goal: '', required: true },
+      ],
+    })
+    // Even a draft that explicitly set `checkpoint: false` on the templated phase comes out true.
+    const d = withPhases(['blast-zone', 'coverage', 'delivery'])
+    d.phases[0]!.checkpoint = false
+    const out = normalizeDraftAgainstPhaseTemplate(tpl, d)
+    expect(out.phases.find((p) => p.id === 'blast-zone')?.checkpoint).toBe(true)
+    // A non-checkpoint template phase is left as the planner authored it (here: absent).
+    expect(out.phases.find((p) => p.id === 'coverage')?.checkpoint).toBeUndefined()
+  })
+
+  it("leaves a planner-authored checkpoint intact on a template phase the template didn't checkpoint", () => {
+    const d = withPhases(['blast-zone', 'coverage', 'delivery'])
+    d.phases[1]!.checkpoint = true
+    const out = normalizeDraftAgainstPhaseTemplate(template(), d)
+    expect(out.phases.find((p) => p.id === 'coverage')?.checkpoint).toBe(true)
+  })
 })
 
 describe('applyPlanDraft', () => {
@@ -386,6 +415,41 @@ describe('applyPlanDraft', () => {
     expect(next.phases![0]!.id).toBe('phase-one')
     expect(next.items![0]!.id).toBe('some-item')
   })
+
+  it('carries a draft checkpoint onto the persisted phase (D2)', () => {
+    const next = applyPlanDraft(
+      emptyEntity(),
+      draft({ phases: [{ id: 'p1', title: 'Phase one', goal: '', checkpoint: true }] }),
+      100,
+    )
+    expect(next.phases![0]!.checkpoint).toBe(true)
+    // No `checkpointClearedAt` on a fresh ingest.
+    expect(next.phases![0]!.checkpointClearedAt).toBeUndefined()
+  })
+
+  it('preserves an existing phase checkpointClearedAt across a re-plan (a cleared checkpoint cannot re-fire)', () => {
+    const first = applyPlanDraft(
+      emptyEntity(),
+      draft({ phases: [{ id: 'p1', title: 'Phase one', goal: '', checkpoint: true }] }),
+      100,
+    )
+    const cleared: Initiative = {
+      ...first,
+      status: 'executing',
+      phases: first.phases!.map((p) => ({ ...p, checkpointClearedAt: 150 })),
+    }
+    // A mid-flight re-plan (same phase id) must keep the cleared-at bookkeeping, not reset it.
+    const replanned = applyPlanDraft(
+      cleared,
+      draft({ phases: [{ id: 'p1', title: 'Phase one renamed', goal: '', checkpoint: true }] }),
+      200,
+    )
+    expect(replanned.phases![0]!).toMatchObject({
+      title: 'Phase one renamed',
+      checkpoint: true,
+      checkpointClearedAt: 150,
+    })
+  })
 })
 
 describe('derivations', () => {
@@ -423,6 +487,96 @@ describe('derivations', () => {
   it('slugifies titles safely', () => {
     expect(initiativeSlug('Migrate the API — v2!')).toBe('migrate-the-api-v2')
     expect(initiativeSlug('***')).toBe('initiative')
+  })
+})
+
+describe('pendingCheckpoint / applyCheckpointCleared (D2)', () => {
+  const withPhasesItems = (
+    phases: Initiative['phases'],
+    items: Initiative['items'],
+  ): Initiative => ({ ...emptyEntity(), status: 'executing', phases, items })
+
+  const done = (id: string, phaseId: string): InitiativeItem => ({
+    id,
+    phaseId,
+    title: id,
+    description: '',
+    dependsOn: [],
+    status: 'done',
+  })
+
+  it('returns a checkpoint phase once all its items settle', () => {
+    const init = withPhasesItems(
+      [
+        { id: 'p1', title: 'Research', goal: '', checkpoint: true },
+        { id: 'p2', title: 'Build', goal: '' },
+      ],
+      [done('a', 'p1'), { ...done('b', 'p2'), status: 'pending' }],
+    )
+    expect(pendingCheckpoint(init)?.id).toBe('p1')
+  })
+
+  it('does NOT fire while the checkpoint phase still has a running or blocked (halted) item', () => {
+    const running = withPhasesItems(
+      [{ id: 'p1', title: 'Research', goal: '', checkpoint: true }],
+      [done('a', 'p1'), { ...done('b', 'p1'), status: 'in_progress' }],
+    )
+    expect(pendingCheckpoint(running)).toBeNull()
+
+    const halted = withPhasesItems(
+      [{ id: 'p1', title: 'Research', goal: '', checkpoint: true }],
+      [done('a', 'p1'), { ...done('b', 'p1'), status: 'blocked' }],
+    )
+    expect(pendingCheckpoint(halted)).toBeNull()
+  })
+
+  it('does not fire for a cleared checkpoint (idempotent) or an item-less checkpoint phase', () => {
+    const cleared = withPhasesItems(
+      [{ id: 'p1', title: 'Research', goal: '', checkpoint: true, checkpointClearedAt: 5 }],
+      [done('a', 'p1')],
+    )
+    expect(pendingCheckpoint(cleared)).toBeNull()
+
+    const empty = withPhasesItems(
+      [{ id: 'p1', title: 'Research', goal: '', checkpoint: true }],
+      [done('a', 'p2')],
+    )
+    expect(pendingCheckpoint(empty)).toBeNull()
+  })
+
+  it('fires on a checkpointed LAST phase (before completion) so a human reviews the final output', () => {
+    const init = withPhasesItems(
+      [{ id: 'p1', title: 'Final', goal: '', checkpoint: true }],
+      [done('a', 'p1')],
+    )
+    expect(pendingCheckpoint(init)?.id).toBe('p1')
+  })
+
+  it('returns the FIRST uncleared checkpoint in declared order (a cleared earlier one is skipped)', () => {
+    const init = withPhasesItems(
+      [
+        { id: 'p1', title: 'One', goal: '', checkpoint: true, checkpointClearedAt: 5 },
+        { id: 'p2', title: 'Two', goal: '', checkpoint: true },
+      ],
+      [done('a', 'p1'), done('b', 'p2')],
+    )
+    expect(pendingCheckpoint(init)?.id).toBe('p2')
+  })
+
+  it('applyCheckpointCleared stamps only the named phase; unknown ids are a no-op', () => {
+    const init = withPhasesItems(
+      [
+        { id: 'p1', title: 'One', goal: '', checkpoint: true },
+        { id: 'p2', title: 'Two', goal: '', checkpoint: true },
+      ],
+      [done('a', 'p1'), done('b', 'p2')],
+    )
+    const cleared = applyCheckpointCleared(init, 'p1', 42)
+    expect(cleared.phases!.find((p) => p.id === 'p1')?.checkpointClearedAt).toBe(42)
+    expect(cleared.phases!.find((p) => p.id === 'p2')?.checkpointClearedAt).toBeUndefined()
+    // Clearing it means pendingCheckpoint no longer returns p1.
+    expect(pendingCheckpoint(cleared)?.id).toBe('p2')
+    expect(applyCheckpointCleared(init, 'ghost', 42)).toEqual(init)
   })
 })
 
@@ -472,8 +626,8 @@ describe('interview state transitions', () => {
     let id = 0
     const next = applyInterviewQuestions(emptyEntity(), ['Q1', 'Q2'], () => `iqa-${++id}`)
     expect(next.qa).toEqual([
-      { id: 'iqa-1', question: 'Q1', answer: '' },
-      { id: 'iqa-2', question: 'Q2', answer: '' },
+      { id: 'iqa-1', question: 'Q1', answer: '', status: 'open' },
+      { id: 'iqa-2', question: 'Q2', answer: '', status: 'open' },
     ])
     expect(next.interview).toEqual({ round: 1, maxRounds: 4, status: 'awaiting' })
   })
@@ -507,7 +661,7 @@ describe('interview state transitions', () => {
     })
     expect(done.goal).toBe('Ship it')
     expect(done.constraints).toEqual(['keep runtimes symmetric'])
-    expect(done.qa).toEqual([{ id: 'iqa-1', question: 'Q1', answer: 'A1' }])
+    expect(done.qa).toEqual([{ id: 'iqa-1', question: 'Q1', answer: 'A1', status: 'open' }])
     expect(done.interview?.status).toBe('done')
   })
 
@@ -526,6 +680,55 @@ describe('interview state transitions', () => {
     expect(applyAnalysis(emptyEntity(), '  The codebase is layered.  ').analysisSummary).toBe(
       'The codebase is layered.',
     )
+  })
+})
+
+describe('clarification actions (not-relevant / recommend)', () => {
+  // Fresh id counter per call so every `asked()` yields iqa-1 / iqa-2 deterministically.
+  const asked = () => {
+    let n = 0
+    return applyInterviewQuestions(emptyEntity(), ['Q1', 'Q2'], () => `iqa-${++n}`)
+  }
+
+  it('dismiss marks a question not-relevant and clears its answer + recommendation', () => {
+    let entity = asked()
+    entity = applyQuestionRecommendation(entity, 'iqa-1', 'a draft answer')
+    entity = applyQuestionStatus(entity, 'iqa-1', 'dismissed')
+    const q = entity.qa?.find((x) => x.id === 'iqa-1')
+    expect(q?.status).toBe('dismissed')
+    expect(q?.answer).toBe('')
+    expect(q?.recommendation).toBeNull()
+  })
+
+  it('reopen returns a dismissed question to open', () => {
+    let entity = asked()
+    entity = applyQuestionStatus(entity, 'iqa-1', 'dismissed')
+    entity = applyQuestionStatus(entity, 'iqa-1', 'open')
+    expect(entity.qa?.find((x) => x.id === 'iqa-1')?.status).toBe('open')
+  })
+
+  it('a dismissed question is NOT pending (does not block continue) but an unanswered open one is', () => {
+    let entity = asked()
+    entity = applyQuestionStatus(entity, 'iqa-1', 'dismissed')
+    const byId = (qid: string) => entity.qa!.find((x) => x.id === qid)!
+    expect(isPendingQuestion(byId('iqa-1'))).toBe(false)
+    expect(isPendingQuestion(byId('iqa-2'))).toBe(true)
+    expect(isPendingQuestion({ ...byId('iqa-2'), answer: 'done' })).toBe(false)
+  })
+
+  it('a follow-up round retains dismissed questions (so the interviewer does not re-ask them)', () => {
+    let entity = asked()
+    entity = applyQuestionStatus(entity, 'iqa-1', 'dismissed') // Q1 dismissed, Q2 untouched
+    const round2 = applyInterviewQuestions(entity, ['Q3'], () => 'iqa-3')
+    // Q1 (dismissed) survives; Q2 (neither answered nor dismissed) is dropped; Q3 is appended.
+    expect(round2.qa?.map((q) => q.question)).toEqual(['Q1', 'Q3'])
+    expect(round2.qa?.find((q) => q.question === 'Q1')?.status).toBe('dismissed')
+  })
+
+  it('applyQuestionRecommendation attaches a suggestion to the target question only', () => {
+    const entity = applyQuestionRecommendation(asked(), 'iqa-2', 'try option B')
+    expect(entity.qa?.find((q) => q.id === 'iqa-2')?.recommendation).toBe('try option B')
+    expect(entity.qa?.find((q) => q.id === 'iqa-1')?.recommendation).toBeUndefined()
   })
 })
 
@@ -1096,10 +1299,15 @@ describe('seedPresetInterviewQa', () => {
       seqIds(),
     )
     expect(qa).toEqual([
-      { id: 'iqa-1', question: 'Documentation types', answer: 'READMEs, Mermaid diagrams' },
-      { id: 'iqa-2', question: 'Placement', answer: 'Per service' },
-      { id: 'iqa-3', question: 'Docs root', answer: 'docs/' },
-      { id: 'iqa-4', question: 'Diagrams dir', answer: 'docs/diagrams' },
+      {
+        id: 'iqa-1',
+        question: 'Documentation types',
+        answer: 'READMEs, Mermaid diagrams',
+        status: 'open',
+      },
+      { id: 'iqa-2', question: 'Placement', answer: 'Per service', status: 'open' },
+      { id: 'iqa-3', question: 'Docs root', answer: 'docs/', status: 'open' },
+      { id: 'iqa-4', question: 'Diagrams dir', answer: 'docs/diagrams', status: 'open' },
     ])
   })
 
@@ -1115,7 +1323,7 @@ describe('seedPresetInterviewQa', () => {
 
   it('records a CHECKED checkbox as "Yes" and an empty multi-select as nothing', () => {
     expect(seedPresetInterviewQa(descriptor(), { humanReview: true }, seqIds())).toEqual([
-      { id: 'iqa-1', question: 'Human review', answer: 'Yes' },
+      { id: 'iqa-1', question: 'Human review', answer: 'Yes', status: 'open' },
     ])
     expect(seedPresetInterviewQa(descriptor(), { docTypes: [] }, seqIds())).toEqual([])
   })

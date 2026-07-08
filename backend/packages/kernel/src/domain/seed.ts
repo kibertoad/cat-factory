@@ -180,7 +180,11 @@ export function seedPipelines(): Pipeline[] {
     definePipeline({
       id: 'pl_full',
       name: 'Full build',
-      version: 2,
+      // `code-commenter` runs after the reviewer clears the implementation: it amends the coder's
+      // PR in place with comment-only edits (WHY-not-what, fixes drifted comments, drops noise), so
+      // basic comment hygiene is business-as-usual on every task. `ci` re-runs to prove the
+      // comment-only diff is behaviour-neutral. Version bumped for the code-commenter reseed.
+      version: 3,
       steps: [
         // Opt-in structured-dialogue option exploration before the requirements review.
         { kind: 'requirements-brainstorm', gate: true, enabled: false },
@@ -193,6 +197,7 @@ export function seedPipelines(): Pipeline[] {
         'researcher',
         'coder',
         'reviewer',
+        'code-commenter',
         'blueprints',
         'mocker',
         'deployer',
@@ -223,6 +228,8 @@ export function seedPipelines(): Pipeline[] {
       //   coder         → implement the feature on the implementation branch
       //   reviewer      → coder's companion: rate the change immediately, loop back
       //                   for rework before the map/test tail runs
+      //   code-commenter→ bring the changed code's in-source comments up to standard
+      //                   (why-not-what, fix drift, drop noise) on the same PR
       //   blueprints    → refresh the in-repo service map from the new code
       //   business-documenter → capture the domain rules the code now encodes
       //   tester        → define the unit / integration test strategy
@@ -234,8 +241,10 @@ export function seedPipelines(): Pipeline[] {
       name: 'Complex fullstack feature',
       // A `deployer` runs before the tester (k8s/custom only; a no-op otherwise). Human gates: the
       // two opt-in brainstorm dialogues, the requirements review, and — after its companion clears
-      // the quality bar — the architecture (on `architect-companion`). Version bumped for the reseed.
-      version: 2,
+      // the quality bar — the architecture (on `architect-companion`). A `code-commenter` runs after
+      // the reviewer to keep in-source comments up to standard on the same PR. Version bumped for
+      // the code-commenter reseed.
+      version: 3,
       steps: [
         // Opt-in structured-dialogue option exploration.
         { kind: 'requirements-brainstorm', gate: true, enabled: false },
@@ -250,6 +259,7 @@ export function seedPipelines(): Pipeline[] {
         'mocker',
         'coder',
         'reviewer',
+        'code-commenter',
         'blueprints',
         'business-documenter',
         'deployer',
@@ -640,8 +650,8 @@ export function seedPipelines(): Pipeline[] {
     // document a writer produces — so only the in-place comment annotator gets a new kind/pipeline.)
     {
       // Add/clarify why-not-what in-source comments with NO behaviour change: `code-commenter`
-      // edits only comments and opens a PR; the `ci` step is load-bearing here — it proves the
-      // diff is behaviour-neutral before `merger` ships it.
+      // edits only comments and (with no prior PR on a standalone run) opens one; the `ci` step is
+      // load-bearing here — it proves the diff is behaviour-neutral before `merger` ships it.
       id: 'pl_code_comments',
       name: 'Improve code comments',
       agentKinds: ['code-commenter', 'conflicts', 'ci', 'merger'],

@@ -1,5 +1,239 @@
 # @cat-factory/node-server
 
+## 0.87.6
+
+### Patch Changes
+
+- Updated dependencies [63f7881]
+  - @cat-factory/kernel@0.111.0
+  - @cat-factory/agents@0.49.0
+  - @cat-factory/server@0.103.0
+  - @cat-factory/orchestration@0.99.0
+  - @cat-factory/contracts@0.121.0
+  - @cat-factory/caching@0.6.13
+  - @cat-factory/consensus@0.10.13
+  - @cat-factory/eks@0.1.36
+  - @cat-factory/gates@0.4.33
+  - @cat-factory/gitlab@0.7.36
+  - @cat-factory/integrations@0.78.4
+  - @cat-factory/observability-langfuse@0.7.168
+  - @cat-factory/provider-bedrock@0.7.183
+  - @cat-factory/provider-cloudflare@0.7.184
+  - @cat-factory/provider-s3@0.2.118
+  - @cat-factory/spend@0.11.19
+  - @cat-factory/prompt-fragments@0.13.3
+
+## 0.87.5
+
+### Patch Changes
+
+- Updated dependencies [bcc843d]
+  - @cat-factory/orchestration@0.98.1
+  - @cat-factory/agents@0.48.5
+  - @cat-factory/server@0.102.1
+  - @cat-factory/kernel@0.110.1
+  - @cat-factory/consensus@0.10.12
+  - @cat-factory/provider-bedrock@0.7.182
+  - @cat-factory/provider-cloudflare@0.7.183
+  - @cat-factory/caching@0.6.12
+  - @cat-factory/eks@0.1.35
+  - @cat-factory/gates@0.4.32
+  - @cat-factory/gitlab@0.7.35
+  - @cat-factory/integrations@0.78.3
+  - @cat-factory/observability-langfuse@0.7.167
+  - @cat-factory/provider-s3@0.2.117
+  - @cat-factory/spend@0.11.18
+
+## 0.87.4
+
+### Patch Changes
+
+- 090ca89: Local mode now advertises the `cat-factory env` CLI when it fails to boot for a missing or invalid
+  mandatory config value. The misconfiguration fallback (both the terminal log and the SPA's "backend
+  misconfigured" screen) prepends a one-step remedy — `npx @cat-factory/cli env` generates a
+  ready-to-run local-mode `.env` with every required value at once — above the per-variable remedies,
+  so a developer can fix the whole file in one command instead of satisfying each secret/URL by hand.
+
+  It covers every mandatory value: the three crypto secrets validated by `applyLocalDefaults`
+  (`AUTH_SESSION_SECRET`, `ENCRYPTION_KEY`, `HARNESS_SHARED_SECRET`) and `DATABASE_URL`, which is
+  validated inside the reused Node boot. The Node facade's `start()` gains an optional
+  `augmentConfigProblems` seam that layers the facade-specific advice onto the problems it catches
+  itself; the hosted Node/Worker facades pass nothing, so their remedies are unchanged.
+
+## 0.87.3
+
+### Patch Changes
+
+- Updated dependencies [a2db337]
+- Updated dependencies [a2db337]
+  - @cat-factory/orchestration@0.98.0
+  - @cat-factory/agents@0.48.4
+  - @cat-factory/contracts@0.120.0
+  - @cat-factory/kernel@0.110.0
+  - @cat-factory/server@0.102.0
+  - @cat-factory/consensus@0.10.11
+  - @cat-factory/provider-bedrock@0.7.181
+  - @cat-factory/provider-cloudflare@0.7.182
+  - @cat-factory/eks@0.1.34
+  - @cat-factory/gates@0.4.31
+  - @cat-factory/gitlab@0.7.34
+  - @cat-factory/integrations@0.78.2
+  - @cat-factory/prompt-fragments@0.13.2
+  - @cat-factory/spend@0.11.17
+  - @cat-factory/caching@0.6.11
+  - @cat-factory/observability-langfuse@0.7.166
+  - @cat-factory/provider-s3@0.2.116
+
+## 0.87.2
+
+### Patch Changes
+
+- 35636d5: Honour `INITIATIVE_LOOP_INTERVAL_MS` when it is supplied through `start({ env })`. The initiative-
+  loop sweeper resolved its interval from `process.env` directly, but `start()` takes its config from
+  an injected `env` object it never writes back to `process.env` — so a deployment (or the e2e
+  backend) that set the knob via the injected env was silently ignored and the loop ran at the 60s
+  backstop. `resolveSweepInterval(env)` now reads the passed env and `start()` threads its own `env`
+  through. This deflakes an intermittent e2e failure where an initiative's first task spawn (which,
+  absent a terminal poke, waits for the sweep) landed ~60s later — past the spec's timeout.
+- Updated dependencies [35636d5]
+  - @cat-factory/agents@0.48.3
+  - @cat-factory/consensus@0.10.10
+  - @cat-factory/orchestration@0.97.2
+  - @cat-factory/provider-bedrock@0.7.180
+  - @cat-factory/provider-cloudflare@0.7.181
+  - @cat-factory/server@0.101.2
+
+## 0.87.1
+
+### Patch Changes
+
+- 8319e52: Fix a first-sign-in race in `AccountService.ensurePersonalAccount` that 500'd
+  `GET /accounts` ("cannot reach backend") on a fresh DB.
+
+  The method was a non-atomic check-then-act: concurrent first-load requests all read
+  "no personal account yet", then all `INSERT`, so all but one failed with a duplicate-key
+  violation on the personal-account partial unique index (`idx_accounts_personal`) and the
+  error surfaced as an unhandled 500.
+
+  The create path is now atomic. A new `AccountRepository.ensurePersonal(account)` port
+  inserts-or-returns the surviving row — D1 via `INSERT OR IGNORE`, Postgres via
+  `ON CONFLICT DO NOTHING` — so concurrent first-sign-in callers all converge on the same
+  account with no rejection. Both runtimes implement it and a cross-runtime conformance
+  assertion fires the concurrent resolution and asserts a single account results.
+
+  The sibling paths are unaffected: `createOrg` is a deliberate non-idempotent create (org
+  accounts have no such unique index), and `ensureMembership` already writes through an
+  idempotent `upsert`.
+
+- Updated dependencies [8319e52]
+  - @cat-factory/kernel@0.109.1
+  - @cat-factory/agents@0.48.2
+  - @cat-factory/caching@0.6.10
+  - @cat-factory/consensus@0.10.9
+  - @cat-factory/eks@0.1.33
+  - @cat-factory/gates@0.4.30
+  - @cat-factory/gitlab@0.7.33
+  - @cat-factory/integrations@0.78.1
+  - @cat-factory/observability-langfuse@0.7.165
+  - @cat-factory/orchestration@0.97.1
+  - @cat-factory/provider-bedrock@0.7.179
+  - @cat-factory/provider-cloudflare@0.7.180
+  - @cat-factory/provider-s3@0.2.115
+  - @cat-factory/server@0.101.1
+  - @cat-factory/spend@0.11.16
+
+## 0.87.0
+
+### Minor Changes
+
+- 7157908: Expose the seeded default model preset as a programmatic override on the deploy-app boot
+  seams, so a deployment can change its out-of-the-box default without editing library code.
+
+  - `start({ defaultModelPresetId })` (Node) and `startLocal({ defaultModelPresetId })` (local)
+    now accept the catalog id of the built-in preset a fresh workspace is seeded with as its
+    default; it is forwarded to `buildNodeContainer` / `buildLocalContainer` (both the Postgres
+    and mothership local paths). The Worker already honours `defaultModelPresetId` via
+    `createApp`'s / `buildContainer`'s `overrides`; that read is now explicit rather than
+    relying on the trailing spread.
+  - `MODEL_PRESET_SEED_IDS` and `DEFAULT_MODEL_PRESET_ID` are re-exported from all three facade
+    packages, so a wrapper can name a preset (`.kimi` / `.glm` / `.claude`) without a direct
+    `@cat-factory/kernel` import.
+
+  Applied only at the first seed of a workspace, so a user's later manual default choice is
+  always preserved. Facade defaults are unchanged (Node/Cloudflare → Kimi K2.7, local → Claude
+  Opus 4.8). Documented in the `deploy/{node,local,backend}` READMEs.
+
+- 7157908: Model presets now support reseeding, mirroring pipelines and merge presets, plus a new
+  built-in "Claude Opus 4.8" preset (everything `claude-opus`).
+
+  - Built-in model presets carry stable catalog ids (`mdp_kimi` / `mdp_glm` / `mdp_claude`)
+    and a monotonic `version`. The workspace snapshot ships `modelPresetCatalogVersions`, and
+    `POST /workspaces/:ws/model-presets/:id/reseed` restores a built-in to the current catalog
+    (adopt an update, repair drift, or materialise a new built-in that appeared). The SPA gains
+    a once-per-session "model preset updates" advisory (reseed / add) like the pipeline and
+    merge-preset ones.
+  - The seeded workspace DEFAULT preset is now a deployment fact: Cloudflare and Node default to
+    Kimi K2.7 (Cloudflare-runnable on the bare baseline), local mode defaults to Claude Opus 4.8
+    (local runs subscription models via the ambient CLI / a leased personal credential). The
+    deployment default is applied only at first seed, so a user's later manual default choice is
+    always preserved.
+
+  Breaking (pre-1.0, no migration): model presets gain a nullable `version` column
+  (D1 `0043_model_preset_versioning`; Drizzle migration). Workspaces seeded before this change
+  hold the old index-based preset ids (`mdp-seed-0/1`); they are treated as custom presets, and
+  the three stable built-ins are offered via the reseed advisory rather than migrated in place.
+
+### Patch Changes
+
+- Updated dependencies [8728bf7]
+- Updated dependencies [7157908]
+  - @cat-factory/contracts@0.119.0
+  - @cat-factory/kernel@0.109.0
+  - @cat-factory/server@0.101.0
+  - @cat-factory/orchestration@0.97.0
+  - @cat-factory/integrations@0.78.0
+  - @cat-factory/agents@0.48.1
+  - @cat-factory/consensus@0.10.8
+  - @cat-factory/eks@0.1.32
+  - @cat-factory/gates@0.4.29
+  - @cat-factory/gitlab@0.7.32
+  - @cat-factory/prompt-fragments@0.13.1
+  - @cat-factory/spend@0.11.15
+  - @cat-factory/caching@0.6.9
+  - @cat-factory/observability-langfuse@0.7.164
+  - @cat-factory/provider-bedrock@0.7.178
+  - @cat-factory/provider-cloudflare@0.7.179
+  - @cat-factory/provider-s3@0.2.114
+
+## 0.86.8
+
+### Patch Changes
+
+- 629cf90: Initiative presets slice 9: the E2E baseline + a worked-example deployment preset.
+
+  - `@cat-factory/conformance`: `FakeAgentExecutor` gains an `initiativePlan` option so a
+    fake-driven initiative-planner step returns a plan draft (the planner otherwise faults a
+    planning run) — the seam an e2e/integration test uses to drive create-with-preset → auto-plan
+    → spawn.
+  - `@cat-factory/node-server`: the initiative-loop sweep interval is now overridable via
+    `INITIATIVE_LOOP_INTERVAL_MS` (default 60s unchanged).
+  - `@cat-factory/app`: `TaskCard` exposes a behaviour-neutral `data-task-type` attribute (the e2e
+    asserts a spawned document task carries its preset decoration).
+  - `@cat-factory/example-custom-agent`: adds `preset_org_audit`, a worked-example initiative preset
+    registered through the public `registerInitiativePreset` seam.
+
+## 0.86.7
+
+### Patch Changes
+
+- Updated dependencies [4775c40]
+  - @cat-factory/agents@0.48.0
+  - @cat-factory/consensus@0.10.7
+  - @cat-factory/orchestration@0.96.3
+  - @cat-factory/provider-bedrock@0.7.177
+  - @cat-factory/provider-cloudflare@0.7.178
+  - @cat-factory/server@0.100.2
+
 ## 0.86.6
 
 ### Patch Changes

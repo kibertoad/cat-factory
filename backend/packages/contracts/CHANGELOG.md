@@ -1,5 +1,89 @@
 # @cat-factory/contracts
 
+## 0.121.0
+
+### Minor Changes
+
+- 63f7881: Code Commenter is now a business-as-usual step in the full build pipelines, keeping in-source
+  comments relevant and up to date on every task instead of only on a dedicated standalone run.
+
+  - **Full pipelines gain a `code-commenter` step** (`pl_full` and `pl_fullstack`, versions bumped
+    for the reseed): it runs right after the `reviewer` clears the implementation and edits comments
+    only — adding why-not-what comments, updating ones that have drifted from the code, and deleting
+    noise comments that merely restate what the code already says — with no behaviour change. The
+    existing `ci` step is the backstop that proves the comment-only diff is behaviour-neutral before
+    `merger` ships it.
+  - **One parametrized agent serves both use-cases.** A new adaptive clone mode `pr-or-work`
+    (`AgentCloneSpec.branch`) makes the Code Commenter amend the block's existing PR in place when
+    there is one (the BAU pipeline case — the well-commented code ships in the coder's own PR) and
+    fall back to branching off base and opening its own PR when there is none (a standalone
+    `pl_code_comments` run or an initiative-framed sweep of a legacy codebase). It is
+    `noChangesTolerated`, so a run that finds the comments already in good shape is a clean
+    non-event rather than a failure. No new agent kind, no executor-harness image change.
+  - The Code Commenter's prompt now actively **maintains** existing comments (fix/remove stale ones,
+    strip redundant ones) rather than only adding new ones, and scopes a BAU run to the files the
+    pull request changes.
+  - **Hardening:** `agentPresentationSchema.description` is now required and non-empty
+    (`minLength(1)`, like `label`/`icon`/`color`). The SPA renders a registered kind's description
+    verbatim in the pipeline builder palette with no fallback, so a blank one would have surfaced as
+    an empty description on a first-class palette block; this makes that impossible at the wire
+    boundary. Every existing agent kind already ships a description, so nothing changes for them.
+
+## 0.120.0
+
+### Minor Changes
+
+- a2db337: Planning-interview questions gain the same answer surface as requirements review, via a shared
+  clarification-item abstraction (see `docs/initiatives/clarification-items.md`).
+
+  A planning question can now be marked **not relevant** (dismissed — it stops blocking Continue and
+  the interviewer is told not to re-ask it) and the human can ask the interviewer to **recommend** a
+  suggested answer (drafted inline, adopted with "use this answer"). These reuse a new shared
+  `ClarificationItem` component rather than cloning the requirements UI. `InitiativeQa` gains
+  `status` + `recommendation`; no DB migration (the initiative persists as a JSON blob, so both
+  runtimes pick up the fields for free). The initiative board card also pulses while its interview is
+  awaiting answers, matching how a review gate surfaces attention on a task card.
+
+## 0.119.0
+
+### Minor Changes
+
+- 8728bf7: Capture per-run diagnostics on `agent_runs` for after-the-fact investigation. Each run now
+  records a `diagnostics` object (riding in the run's `detail` JSON, like `notes`/`frontendBindings`)
+  with the most recent container-step dispatch context — `agentKind`, resolved `model`, the `repo`
+  (owner/name/baseBranch/provider), the **execution backend** (`local-native` vs `local-container`
+  vs `runner-pool` vs `cloudflare-container` — the datum that distinguishes a native host-process run
+  from a sandboxed container), and the control-plane host `platform`. The backend is reported by the
+  runner transport (a new optional `RunnerTransport.backend` / `RunnerJobView.backend`, stamped by
+  the shared job client; the native/container router stamps its per-job leg).
+
+  Also preserves the harness's fine-grained failure `cause` (`git` / `api` / `no-usable-output` /
+  `no-changes`) on the failure's machine-readable `reason` instead of collapsing it to the coarse
+  `agent` kind — so a push/clone failure reads as `git`, not a generic agent error, without grepping
+  the transcript. No schema migration (the diagnostics ride in the existing `detail` column; the
+  cause rides on the existing `failure.reason`); mirrored across both runtimes with a cross-runtime
+  conformance round-trip assertion.
+
+- 7157908: Model presets now support reseeding, mirroring pipelines and merge presets, plus a new
+  built-in "Claude Opus 4.8" preset (everything `claude-opus`).
+
+  - Built-in model presets carry stable catalog ids (`mdp_kimi` / `mdp_glm` / `mdp_claude`)
+    and a monotonic `version`. The workspace snapshot ships `modelPresetCatalogVersions`, and
+    `POST /workspaces/:ws/model-presets/:id/reseed` restores a built-in to the current catalog
+    (adopt an update, repair drift, or materialise a new built-in that appeared). The SPA gains
+    a once-per-session "model preset updates" advisory (reseed / add) like the pipeline and
+    merge-preset ones.
+  - The seeded workspace DEFAULT preset is now a deployment fact: Cloudflare and Node default to
+    Kimi K2.7 (Cloudflare-runnable on the bare baseline), local mode defaults to Claude Opus 4.8
+    (local runs subscription models via the ambient CLI / a leased personal credential). The
+    deployment default is applied only at first seed, so a user's later manual default choice is
+    always preserved.
+
+  Breaking (pre-1.0, no migration): model presets gain a nullable `version` column
+  (D1 `0043_model_preset_versioning`; Drizzle migration). Workspaces seeded before this change
+  hold the old index-based preset ids (`mdp-seed-0/1`); they are treated as custom presets, and
+  the three stable built-ins are offered via the reseed advisory rather than migrated in place.
+
 ## 0.118.0
 
 ### Minor Changes

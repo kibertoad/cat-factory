@@ -2,6 +2,7 @@ import {
   type Block,
   BUG_TRIAGE_PIPELINE_ID,
   type ExecutionInstance,
+  type Initiative,
   type MergeThresholdPreset,
   type ModelPreset,
   type SandboxExperiment,
@@ -60,8 +61,10 @@ import type {
 } from '@cat-factory/kernel'
 import {
   clearRegisteredGates,
+  clearRegisteredInitiativePresets,
   clearRegisteredStepResolvers,
   registerGate,
+  registerInitiativePreset,
   registerStepResolver,
 } from '@cat-factory/kernel'
 import { afterEach, describe, expect, it } from 'vitest'
@@ -89,6 +92,37 @@ const EMPTY_BINARY_ARTIFACT_STORE: BinaryArtifactStore = {
 const STORAGE_ON: ResolveBinaryArtifactStore = () => Promise.resolve(EMPTY_BINARY_ARTIFACT_STORE)
 /** Storage off: the account has no content storage, so the start gate must refuse the run. */
 const STORAGE_OFF: ResolveBinaryArtifactStore = () => Promise.resolve(null)
+
+/**
+ * A minimal `executing` initiative entity created from the `preset_spawned_conf` preset, anchored to
+ * `anchorBlockId`. Seeded directly so the spawned-run preset-context assertion (D1) can link a task
+ * to it via `block.initiativeId` without driving a whole planning loop.
+ */
+function spawnedInitiative(anchorBlockId: string): Initiative {
+  return {
+    id: `initv-${anchorBlockId}`,
+    blockId: anchorBlockId,
+    slug: 'connector-factory',
+    title: 'Connector factory',
+    presetId: 'preset_spawned_conf',
+    goal: '',
+    constraints: [],
+    nonGoals: [],
+    qa: [],
+    analysisSummary: '',
+    phases: [],
+    items: [],
+    policy: null,
+    decisions: [],
+    deviations: [],
+    followUps: [],
+    caveats: [],
+    status: 'executing',
+    rev: 0,
+    createdAt: 1,
+    updatedAt: 1,
+  }
+}
 
 // The cross-runtime conformance suite: the KEY backend behaviour every deployment
 // facade must implement identically. It is parameterised by a `ConformanceHarness`,
@@ -361,6 +395,42 @@ export function defineCoreConformance(harness: ConformanceHarness): void {
         const afterForce = await repo.get(workspace.id, 'exec_cas')
         expect(afterForce?.status).toBe('paused')
         expect(afterForce?.rev).toBe(2)
+      })
+
+      // Run diagnostics (dispatch context — backend/model/repo — for after-the-fact
+      // investigation) ride in the `detail` JSON, so a repo that serialized `detail`
+      // differently would drop them. Asserted at the repository layer so D1 and Postgres
+      // are proven to round-trip the whole diagnostics object identically.
+      it('round-trips run diagnostics through upsert/get', async () => {
+        const app = harness.makeApp()
+        const repo = app.executionRepository()
+        const { workspace } = await app.createWorkspace()
+
+        const withDiagnostics: ExecutionInstance = {
+          id: 'exec_diag',
+          blockId: 'blk_diag',
+          pipelineId: 'pl',
+          pipelineName: 'Pipeline',
+          steps: [],
+          currentStep: 0,
+          status: 'running',
+          initiatedBy: null,
+          diagnostics: {
+            lastDispatch: {
+              stepIndex: 2,
+              agentKind: 'coder',
+              model: 'anthropic:claude-opus-4-8',
+              executionBackend: 'local-native',
+              repo: { owner: 'acme', name: 'widget', baseBranch: 'main', provider: 'github' },
+              at: 1_700_000_000_000,
+            },
+            host: { platform: 'win32' },
+          },
+        }
+        await repo.upsert(workspace.id, withDiagnostics)
+
+        const loaded = await repo.get(workspace.id, 'exec_diag')
+        expect(loaded?.diagnostics).toEqual(withDiagnostics.diagnostics)
       })
     })
 
@@ -1365,18 +1435,25 @@ export function defineCoreConformance(harness: ConformanceHarness): void {
         const { call, createWorkspace } = harness.makeApp()
         const { workspace } = await createWorkspace()
 
-        // A fresh workspace is lazily seeded with the built-in presets: Kimi K2.7
-        // (the default, everything Kimi) and GLM-5.2.
+        // A fresh workspace is lazily seeded with the built-in catalog: Kimi K2.7 (the
+        // Cloudflare-runnable default in the conformance harnesses, everything Kimi), GLM-5.2,
+        // and Claude Opus 4.8. Each built-in carries its catalog version.
         const initial = await call<ModelPreset[]>(
           'GET',
           `/workspaces/${workspace.id}/model-presets`,
         )
         expect(initial.status).toBe(200)
         const seeded = initial.body
-        expect(seeded.length).toBeGreaterThanOrEqual(2)
+        expect(seeded.length).toBeGreaterThanOrEqual(3)
         const def = seeded.find((p) => p.isDefault)
         expect(def?.baseModelId).toBe('kimi-k2.7')
+        expect(def?.version).toBe(1)
         expect(seeded.some((p) => p.baseModelId === 'glm')).toBe(true)
+        // The Claude-only built-in ships in the catalog (default only in local mode; here it's
+        // present but non-default since the conformance harnesses seed with Kimi as the default).
+        const claude = seeded.find((p) => p.id === 'mdp_claude')
+        expect(claude?.baseModelId).toBe('claude-opus')
+        expect(claude?.isDefault).toBe(false)
 
         // Create a new preset with a per-agent override and promote it to default.
         const created = await call<ModelPreset>(
@@ -1413,6 +1490,52 @@ export function defineCoreConformance(harness: ConformanceHarness): void {
         // The library rides along on the workspace snapshot.
         const snapshot = await call<WorkspaceSnapshot>('GET', `/workspaces/${workspace.id}`)
         expect((snapshot.body.modelPresets ?? []).some((p) => p.name === 'Mixed')).toBe(true)
+      })
+
+      it('ships catalog versions on the snapshot and reseeds a built-in (drift repair + new appeared)', async () => {
+        const { call, createWorkspace } = harness.makeApp()
+        const { workspace } = await createWorkspace()
+        const wsId = workspace.id
+        const base = `/workspaces/${wsId}/model-presets`
+
+        // The snapshot ships the built-in catalog versions so the SPA can offer a reseed.
+        const snap = await call<{ modelPresetCatalogVersions?: Record<string, number> }>(
+          'GET',
+          `/workspaces/${wsId}`,
+        )
+        expect(snap.body.modelPresetCatalogVersions).toMatchObject({
+          mdp_kimi: 1,
+          mdp_glm: 1,
+          mdp_claude: 1,
+        })
+
+        // Seed, then drift a built-in (rename + change its base model). Reseed must restore the
+        // canonical definition + version while preserving the user's default + ordering.
+        await call('GET', base)
+        await call('PATCH', `${base}/mdp_kimi`, { name: 'Tampered', baseModelId: 'glm' })
+        const reseeded = await call<ModelPreset>('POST', `${base}/mdp_kimi/reseed`)
+        expect(reseeded.status).toBe(200)
+        expect(reseeded.body.name).toBe('Kimi K2.7')
+        expect(reseeded.body.baseModelId).toBe('kimi-k2.7')
+        expect(reseeded.body.version).toBe(1)
+        // The default is preserved across a reseed (the conformance harnesses default to Kimi).
+        expect(reseeded.body.isDefault).toBe(true)
+
+        // Reseeding a NEW built-in the workspace doesn't have yet materialises it (the
+        // "appeared upstream" case): delete the claude preset, then reseed it back.
+        await call('DELETE', `${base}/mdp_claude`)
+        const afterDelete = await call<ModelPreset[]>('GET', base)
+        expect(afterDelete.body.some((p) => p.id === 'mdp_claude')).toBe(false)
+        const readded = await call<ModelPreset>('POST', `${base}/mdp_claude/reseed`)
+        expect(readded.status).toBe(200)
+        expect(readded.body.baseModelId).toBe('claude-opus')
+        // Re-materialising a non-default built-in must not steal the default from Kimi.
+        expect(readded.body.isDefault).toBe(false)
+
+        // A custom (non-catalog) preset cannot be reseeded — delete it instead.
+        const custom = await call<ModelPreset>('POST', base, { name: 'Custom', baseModelId: 'glm' })
+        const badReseed = await call('POST', `${base}/${custom.body.id}/reseed`)
+        expect(badReseed.status).toBe(422)
       })
     })
   })
@@ -6703,6 +6826,66 @@ export function defineExecutionConformance(harness: ConformanceHarness): void {
         expect(step.output).toContain(`[desc]${CLARIFIED}[/desc]`)
       })
 
+      it("folds an initiative preset's per-kind steering onto a spawned run's agent context", async () => {
+        // D1: a task SPAWNED by an initiative (carrying `block.initiativeId`) must receive the
+        // preset's standing per-kind methodology in its agent context on EVERY runtime — the
+        // Cloudflare facade resolves it from the D1 initiative store, Node/local from Drizzle,
+        // both through the same `AgentContextBuilder`. A facade that failed to wire the initiative
+        // store into the context builder would silently ship a bare child prompt. The preset is a
+        // module-global registration today (slice 5 migrates it to DI); scope + clear it here.
+        const ADDITION = 'Follow the org connector architecture and consume the build handoff.'
+        registerInitiativePreset({
+          descriptor: {
+            id: 'preset_spawned_conf',
+            presentation: {
+              label: 'Connector factory',
+              icon: 'i',
+              color: '#000',
+              description: 'x',
+            },
+            fields: [],
+            planningPipelineId: 'pl_initiative',
+            interview: 'full',
+            humanReviewDefault: true,
+            defaultFragmentIds: [],
+          },
+          promptAdditions: { coder: ADDITION },
+        })
+        try {
+          const app = harness.makeApp({ confidence: 1, echoPreset: true })
+          const { workspace } = await app.createWorkspace()
+          const wsId = workspace.id
+
+          // Seed the initiative entity anchored to an initiative block id, then link the seeded
+          // task to it (an epic-style `initiativeId` membership — exactly what the loop's
+          // `buildTaskBlock` stamps on a spawned child).
+          const anchorBlockId = 'init_anchor'
+          await app.initiativeRepository().insert(wsId, spawnedInitiative(anchorBlockId))
+          await app.blockRepository().update(wsId, 'task_login', { initiativeId: anchorBlockId })
+
+          const pipeline = await app.call<Pipeline>('POST', `/workspaces/${wsId}/pipelines`, {
+            name: 'Coder only',
+            agentKinds: ['coder'],
+          })
+          const start = await app.call<ExecutionInstance>(
+            'POST',
+            `/workspaces/${wsId}/blocks/task_login/executions`,
+            { pipelineId: pipeline.body.id },
+          )
+          expect(start.status).toBe(201)
+
+          const ticked = await app.drive(wsId)
+          const exec = ticked.find((e) => e.blockId === 'task_login')!
+          const step = exec.steps.find((s) => s.agentKind === 'coder')!
+          expect(step.state).toBe('done')
+          // The coder was handed the preset label + its `coder` promptAddition (and nothing else —
+          // no goal/qa bleeds onto a spawned run).
+          expect(step.output).toContain(`[preset]Connector factory|${ADDITION}[/preset]`)
+        } finally {
+          clearRegisteredInitiativePresets()
+        }
+      })
+
       it('restarts a run from a chosen step, preserving prior outputs and the block requirements', async () => {
         // "Restart from this step" re-runs the pipeline from a human-chosen step
         // (even on a finished run), keeping the earlier steps' outputs as handoff
@@ -8922,6 +9105,27 @@ export function defineMiscConformance(harness: ConformanceHarness): void {
         // Every listed account carries the caller's role(s) — proving the membership join, not
         // just the id resolve, survives the batched read.
         expect(accounts.every((a) => a.roles.length > 0)).toBe(true)
+      })
+
+      it('resolves ONE personal account under concurrent first sign-in (no duplicate-key race)', async () => {
+        const ob = harness.makeApp().onboarding()
+        const user = {
+          id: `usr_race_${crypto.randomUUID()}`,
+          login: 'race-owner',
+          name: 'Race Owner',
+        }
+        // Fire the first-load resolution many times at once: each runs ensurePersonalAccount
+        // before any INSERT commits, so a check-then-create would race to a duplicate-key 500
+        // on the personal-account unique index. The atomic get-or-create must instead converge
+        // every caller on the same single account, with no rejection.
+        const ids = await ob.concurrentPersonalAccounts(user, 8)
+        expect(ids).toHaveLength(8)
+        expect(new Set(ids).size).toBe(1)
+        // And a follow-up read returns that same one account — no orphan duplicates were left.
+        const after = await ob.accountsForUser(user)
+        const personal = after.filter((a) => a.type === 'personal')
+        expect(personal).toHaveLength(1)
+        expect(personal[0]?.id).toBe(ids[0])
       })
 
       it('invites + redeems org membership bound to the invited email', async () => {

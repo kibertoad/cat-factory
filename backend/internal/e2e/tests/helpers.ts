@@ -104,6 +104,36 @@ export async function createSimplePipeline(
   )
 }
 
+/** An initiative as the create endpoint returns it (only the fields the specs read). */
+export interface CreatedInitiative {
+  /** The initiative-level anchor block placed on the board (also the block planning runs against). */
+  block: { id: string }
+  /** The persisted initiative entity. */
+  initiative: { id: string; blockId: string }
+}
+
+/**
+ * Create an initiative under the service frame `frameId` from a preset — the same endpoint
+ * `CreateInitiativeModal` posts to. Returns the created entity + its anchor block, which the
+ * backend pushes onto the board live (`initiative-added`). Planning is started SEPARATELY via the
+ * ordinary execution endpoint against the anchor block with the preset's planning pipeline id
+ * (there is no dedicated "start planning" route) — see {@link startRun}.
+ */
+export async function createInitiative(
+  request: APIRequestContext,
+  workspaceId: string,
+  frameId: string,
+  presetId: string,
+  presetInputs?: Record<string, unknown>,
+  title = 'E2E initiative',
+): Promise<CreatedInitiative> {
+  return json<CreatedInitiative>(
+    await request.post(`${BACKEND_URL}/workspaces/${workspaceId}/initiatives`, {
+      data: { frameId, title, presetId, ...(presetInputs ? { presetInputs } : {}) },
+    }),
+  )
+}
+
 /** Start a run of `pipelineId` against `blockId`. */
 export async function startRun(
   request: APIRequestContext,
@@ -115,6 +145,70 @@ export async function startRun(
     await request.post(`${BACKEND_URL}/workspaces/${workspaceId}/blocks/${blockId}/executions`, {
       data: { pipelineId },
     }),
+  )
+}
+
+/** One run's step, as the workspace snapshot returns it (only the fields the specs read). */
+interface ExecutionStep {
+  agentKind: string
+  state: string
+  approval?: { id: string; status: string } | null
+}
+/** One execution instance from the snapshot (only the fields the specs read). */
+interface ExecutionInstance {
+  id: string
+  blockId: string
+  status: string
+  steps: ExecutionStep[]
+}
+/** A parked human-approval gate located on a block's live run. */
+export interface ParkedApproval {
+  executionId: string
+  approvalId: string
+}
+
+/**
+ * Find a block's currently-PARKED human-approval gate for the given step `agentKind`, or null.
+ * A `gate: true` pipeline step parks its run `blocked` with the step `waiting_decision` and a
+ * `pending` approval — the same generic gate `approval-gate.spec` drives through the UI. The
+ * initiative planner gate rides this exact mechanism, but no SPA surface exposes it for an
+ * initiative-level block, so its e2e approves it over REST (a trigger). Reads the run off the
+ * workspace snapshot (there is no per-block executions endpoint) and returns the parked run +
+ * approval ids to approve.
+ */
+export async function findParkedApproval(
+  request: APIRequestContext,
+  workspaceId: string,
+  blockId: string,
+  agentKind: string,
+): Promise<ParkedApproval | null> {
+  const snapshot = await json<{ executions: ExecutionInstance[] }>(
+    await request.get(`${BACKEND_URL}/workspaces/${workspaceId}`),
+  )
+  for (const instance of snapshot.executions) {
+    if (instance.blockId !== blockId) continue
+    const step = instance.steps.find(
+      (s) =>
+        s.agentKind === agentKind &&
+        s.state === 'waiting_decision' &&
+        s.approval?.status === 'pending',
+    )
+    if (step?.approval) return { executionId: instance.id, approvalId: step.approval.id }
+  }
+  return null
+}
+
+/** Approve a parked step gate over REST (the endpoint the step-detail "Approve" button calls). */
+export async function approveStep(
+  request: APIRequestContext,
+  workspaceId: string,
+  approval: ParkedApproval,
+): Promise<void> {
+  await json(
+    await request.post(
+      `${BACKEND_URL}/workspaces/${workspaceId}/executions/${approval.executionId}/steps/${approval.approvalId}/approve`,
+      { data: {} },
+    ),
   )
 }
 

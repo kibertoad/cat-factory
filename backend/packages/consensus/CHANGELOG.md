@@ -1,5 +1,64 @@
 # @cat-factory/consensus
 
+## 0.10.13
+
+### Patch Changes
+
+- Updated dependencies [63f7881]
+  - @cat-factory/kernel@0.111.0
+  - @cat-factory/agents@0.49.0
+  - @cat-factory/contracts@0.121.0
+
+## 0.10.12
+
+### Patch Changes
+
+- Updated dependencies [bcc843d]
+  - @cat-factory/agents@0.48.5
+  - @cat-factory/kernel@0.110.1
+
+## 0.10.11
+
+### Patch Changes
+
+- Updated dependencies [a2db337]
+- Updated dependencies [a2db337]
+  - @cat-factory/agents@0.48.4
+  - @cat-factory/contracts@0.120.0
+  - @cat-factory/kernel@0.110.0
+
+## 0.10.10
+
+### Patch Changes
+
+- Updated dependencies [35636d5]
+  - @cat-factory/agents@0.48.3
+
+## 0.10.9
+
+### Patch Changes
+
+- Updated dependencies [8319e52]
+  - @cat-factory/kernel@0.109.1
+  - @cat-factory/agents@0.48.2
+
+## 0.10.8
+
+### Patch Changes
+
+- Updated dependencies [8728bf7]
+- Updated dependencies [7157908]
+  - @cat-factory/contracts@0.119.0
+  - @cat-factory/kernel@0.109.0
+  - @cat-factory/agents@0.48.1
+
+## 0.10.7
+
+### Patch Changes
+
+- Updated dependencies [4775c40]
+  - @cat-factory/agents@0.48.0
+
 ## 0.10.6
 
 ### Patch Changes

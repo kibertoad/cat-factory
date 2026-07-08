@@ -66,6 +66,16 @@
     "next": "Suivant",
     "done": "Terminé"
   },
+  "clarification": {
+    "answerPlaceholder": "Votre réponse",
+    "notRelevant": "Non pertinent",
+    "recommend": "Proposer une réponse",
+    "reopen": "Rouvrir",
+    "dismissed": "Marquée comme non pertinente",
+    "generating": "Rédaction d'une suggestion…",
+    "suggestion": "Réponse suggérée",
+    "useSuggestion": "Utiliser cette réponse"
+  },
   "nav": {
     "menu": "Menu de navigation",
     "openMenu": "Ouvrir le menu",
@@ -4261,6 +4271,25 @@
       "done": "Terminé",
       "toast": {
         "reseedFailed": "Impossible de régénérer le preset de fusion"
+      }
+    }
+  },
+  "modelPreset": {
+    "health": {
+      "title": "Mises à jour des presets de modèle",
+      "allValid": "Tous les presets de modèle intégrés sont à jour.",
+      "newHeading": "Nouveaux presets disponibles",
+      "newDescription": "De nouveaux presets de modèle intégrés sont arrivés. Ajoutez-les à la bibliothèque de ce tableau.",
+      "add": "Ajouter",
+      "updatesHeading": "Mises à jour disponibles",
+      "updatesDescription": "Une version plus récente de ces presets de modèle intégrés est arrivée. Régénérez pour l'adopter (le preset par défaut et l'ordre sont conservés).",
+      "versionAvailable": "Version {from} → {to} disponible.",
+      "reseed": "Régénérer",
+      "reseedAll": "Tout mettre à jour ({count})",
+      "dismiss": "Ignorer",
+      "done": "Terminé",
+      "toast": {
+        "reseedFailed": "Impossible de régénérer le preset de modèle"
       }
     }
   },

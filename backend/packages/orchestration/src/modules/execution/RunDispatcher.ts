@@ -44,11 +44,9 @@ import {
   DEFAULT_MERGE_PRESET,
   getErrorMessage,
   getErrorReason,
-  DOC_INTERVIEWER_AGENT_KIND,
   getProvider,
   INITIATIVE_ANALYST_AGENT_KIND,
   INITIATIVE_COMMITTER_AGENT_KIND,
-  INITIATIVE_INTERVIEWER_AGENT_KIND,
   INITIATIVE_PLANNER_AGENT_KIND,
   isAsyncAgentExecutor,
   NotFoundError,
@@ -67,8 +65,10 @@ import {
 import {
   blueprintPostOp,
   commitInitiativeTracker,
+  hasTrait,
   isCompanionKind,
   isContainerBackedCompanion,
+  INTERVIEW_GATE_TRAIT,
   moduleSlug,
   runRepoOps,
   specPostOp,
@@ -128,8 +128,7 @@ import { CompanionController } from './CompanionController.js'
 import { HumanTestController } from './HumanTestController.js'
 import { MergeResolver } from './MergeResolver.js'
 import { ReviewGateController, type ReviewKind } from './ReviewGateController.js'
-import type { InitiativeInterviewController } from './InitiativeInterviewController.js'
-import type { DocInterviewController } from './DocInterviewController.js'
+import type { InterviewGateController } from './InterviewGateController.js'
 import { RunStateMachine } from './RunStateMachine.js'
 import { StepGraph } from './StepGraph.js'
 import { TesterController } from './TesterController.js'
@@ -261,10 +260,13 @@ export interface RunDispatcherDeps {
   clarityKind: ReviewKind<ClarityReview>
   requirementsBrainstormKind: ReviewKind<BrainstormSession>
   architectureBrainstormKind: ReviewKind<BrainstormSession>
-  /** The interactive-planning interviewer gate (slice 2); absent → the step passes through. */
-  initiativeInterviewController?: InitiativeInterviewController
-  /** The interactive document-interview gate (WS5); absent → the step passes through. */
-  docInterviewController?: DocInterviewController
+  /**
+   * The interactive-interviewer gates wired for this deployment (initiative-planning, document
+   * interview, …). Each rides the shared {@link InterviewGateController} spine and is routed by
+   * the `interview-gate` TRAIT, keyed on its own `agentKind` — so adding a new interviewer wires
+   * its controller here, with no new dispatch branch. Absent/unwired kinds pass through.
+   */
+  interviewControllers?: InterviewGateController<unknown>[]
   runInitiatorScope: RunInitiatorScope
   environmentProvisioning?: EnvironmentProvisioningService
   ticketTrackerProvider?: TicketTrackerProvider
@@ -324,8 +326,8 @@ export class RunDispatcher {
   private readonly clarityKind: ReviewKind<ClarityReview>
   private readonly requirementsBrainstormKind: ReviewKind<BrainstormSession>
   private readonly architectureBrainstormKind: ReviewKind<BrainstormSession>
-  private readonly initiativeInterviewController?: InitiativeInterviewController
-  private readonly docInterviewController?: DocInterviewController
+  /** Interview-gate controllers keyed by their `agentKind` — the trait-driven dispatch table. */
+  private readonly interviewControllers: Map<string, InterviewGateController<unknown>>
   private readonly runInitiatorScope: RunInitiatorScope
   private readonly environmentProvisioning?: EnvironmentProvisioningService
   private readonly ticketTrackerProvider?: TicketTrackerProvider
@@ -377,8 +379,9 @@ export class RunDispatcher {
     this.clarityKind = deps.clarityKind
     this.requirementsBrainstormKind = deps.requirementsBrainstormKind
     this.architectureBrainstormKind = deps.architectureBrainstormKind
-    this.initiativeInterviewController = deps.initiativeInterviewController
-    this.docInterviewController = deps.docInterviewController
+    this.interviewControllers = new Map(
+      (deps.interviewControllers ?? []).map((c) => [c.agentKind, c]),
+    )
     this.runInitiatorScope = deps.runInitiatorScope
     this.environmentProvisioning = deps.environmentProvisioning
     this.ticketTrackerProvider = deps.ticketTrackerProvider
@@ -471,6 +474,12 @@ export class RunDispatcher {
         // Surface web-search availability + provider on the step (run details), resolved
         // backend-side at dispatch. A static per-run fact, not gated by prompt telemetry.
         if (handle.search) step.search = handle.search
+        // Stamp after-the-fact investigation diagnostics for this dispatch: the step's
+        // agent kind, resolved model, and repo — the facts a failure post-mortem needs but
+        // that are otherwise spread across DB joins / the harness transcript. The execution
+        // backend (native vs. container) is unknown until the transport reports it on the
+        // first poll, so `pollAgentJob` fills it in then.
+        this.recordDispatchDiagnostics(instance, context, handle)
         // The dispatch returned, so the container is up and the job is accepted; the
         // live phase + the container id/url arrive on the first poll.
         step.container = { status: 'up' }
@@ -492,6 +501,55 @@ export class RunDispatcher {
 
     const result = await this.runAgent(context, options)
     return this.recordStepResult(workspaceId, instance, step, isFinalStep, result)
+  }
+
+  /**
+   * Stamp the run's investigation diagnostics from a container dispatch (the `lastDispatch`
+   * block + the control-plane host). Mutates `instance` in place; the caller upserts. Reflects
+   * the MOST RECENT dispatch — a run's failure is almost always in its latest step, and keeping
+   * one block (not a per-step history) keeps the record small. `executionBackend` is left for the
+   * first poll to fill (the transport reports it). Never carries a token/secret.
+   */
+  private recordDispatchDiagnostics(
+    instance: ExecutionInstance,
+    context: AgentRunContext,
+    handle: AgentJobHandle,
+  ): void {
+    // Orchestration is runtime-neutral (no @types/node), so read `process.platform` off globalThis
+    // with a guard rather than the bare global — undefined on a runtime that doesn't expose it
+    // (e.g. workerd), which just omits the host block. Best-effort investigation context.
+    const platform = (globalThis as { process?: { platform?: string } }).process?.platform
+    instance.diagnostics = {
+      ...instance.diagnostics,
+      lastDispatch: {
+        stepIndex: instance.currentStep,
+        agentKind: context.agentKind,
+        ...(handle.model ? { model: handle.model } : {}),
+        ...(handle.repo ? { repo: handle.repo } : {}),
+        at: this.clock.now(),
+      },
+      ...(platform ? { host: { platform } } : {}),
+    }
+  }
+
+  /**
+   * Fill in `diagnostics.lastDispatch.executionBackend` from the transport-reported backend on
+   * the first poll that carries it (native host process vs. sandboxed container — the datum that
+   * is otherwise indistinguishable after the fact). Idempotent: a no-op once set, or when the
+   * update carries no backend / the dispatch block is missing. Returns whether it changed
+   * anything (so the caller can skip a redundant upsert).
+   */
+  private recordBackendDiagnostics(
+    instance: ExecutionInstance,
+    backend: string | undefined,
+  ): boolean {
+    const dispatch = instance.diagnostics?.lastDispatch
+    if (!backend || !dispatch || dispatch.executionBackend === backend) return false
+    instance.diagnostics = {
+      ...instance.diagnostics,
+      lastDispatch: { ...dispatch, executionBackend: backend },
+    }
+    return true
   }
 
   /**
@@ -621,6 +679,9 @@ export class RunDispatcher {
       // (clone / agent / push) and the container's id/url the transport surfaced.
       if (this.applyContainerRunning(step, update)) changed = true
       if (this.applySubtaskProgress(step, update.subtasks)) changed = true
+      // The transport reports WHICH backend served the job on the first poll (native host
+      // process vs. sandboxed container) — record it in the run diagnostics.
+      if (this.recordBackendDiagnostics(instance, update.backend)) changed = true
       // Append any forward-looking items the Coder streamed since the last poll so the
       // Follow-up companion lights up + accrues items LIVE while the container still runs.
       if (this.appendStreamedFollowUps(step, update.followUps)) changed = true
@@ -784,6 +845,14 @@ export class RunDispatcher {
     }
 
     if (update.state === 'failed') {
+      // Preserve the transport-reported backend (native host process vs. sandboxed container)
+      // BEFORE branching on eviction: a first-poll failure/eviction may never have hit the
+      // running branch that normally records it, and an evicted run is exactly the case a
+      // post-mortem inspects ("which backend evicted this?"). Idempotent, so it's harmless when
+      // the running branch already stamped it; whichever path upserts below persists it — the
+      // eviction re-dispatch/exhausted upsert in recoverContainerEviction, or markContainerErrored
+      // on a genuine failure (failRun then re-reads from storage).
+      this.recordBackendDiagnostics(instance, update.backend)
       // A container eviction (the per-run container vanished, its in-memory job is gone) is
       // usually transient. The shared recovery drops the dead handle and returns `continue` so
       // the driver re-dispatches the SAME step to a fresh container, within the per-flavour
@@ -811,6 +880,11 @@ export class RunDispatcher {
         failureKind:
           agentFailureKindFromCause(update.failureCause) ?? classifyAgentFailure(update.error),
         detail: update.detail ?? update.error,
+        // Preserve the harness's FINE-GRAINED cause (git / api / no-usable-output / no-changes)
+        // that `failureKind` collapses to the coarse `agent` — recorded on the failure's
+        // machine-readable `reason` so a post-mortem sees it was e.g. a `git` push failure, not
+        // a generic agent error, without regrepping the transcript.
+        ...(update.failureCause ? { reason: update.failureCause } : {}),
       }
     }
 
@@ -2273,6 +2347,9 @@ export class RunDispatcher {
       case 'base':
         return baseBranch
       case 'pr':
+      // `pr-or-work` reads/writes the PR branch when one exists (amend in place), else the work
+      // branch — the same resolution as `pr`, so it shares this arm.
+      case 'pr-or-work':
         return prBranch ?? (await this.ensureWorkBranch(repo, workBranch, baseBranch))
       default:
         // 'work' (or unspecified): the work branch the container agent operates on. A PR
@@ -2507,42 +2584,26 @@ export class RunDispatcher {
         handle: ({ workspaceId, instance, step, block, isFinalStep }) =>
           this.runBugIntake(workspaceId, instance, step, block, isFinalStep),
       },
-      // The `initiative-interviewer` step interviews the human on goals/constraints — an
-      // inline LLM gate that PARKS the planning run on a decision-wait while they answer
-      // through the planning window, then synthesizes the brief onto the entity and advances
-      // (see {@link InitiativeInterviewController}). Pass-through when the interviewer isn't
-      // wired (no model / no initiative store), so pipelines + conformance run unchanged.
+      // The interactive-INTERVIEWER gates (`initiative-interviewer`, `doc-interviewer`, …): an
+      // inline LLM gate that PARKS the run on a decision-wait while the human answers the
+      // interviewer's questions through a dedicated window, then synthesizes a brief and advances
+      // (see {@link InterviewGateController}). Routed by the `interview-gate` TRAIT — the same
+      // marker the re-park + approval guards key off — and dispatched to the controller registered
+      // for the step's `agentKind`, so a new interviewer just carries the trait + wires its
+      // controller (no new branch here). Pass-through when the interviewer isn't wired (no model /
+      // no store) so pipelines + conformance run unchanged; a wired-but-unmatched trait kind is a
+      // pipeline authoring error, but we still advance rather than wedge the run.
       {
-        kind: INITIATIVE_INTERVIEWER_AGENT_KIND,
+        kind: 'interview-gate',
         order: 113,
-        canHandle: ({ step }) => step.agentKind === INITIATIVE_INTERVIEWER_AGENT_KIND,
-        handle: ({ workspaceId, instance, step, block, isFinalStep }) =>
-          this.initiativeInterviewController
-            ? this.initiativeInterviewController.evaluate(
-                workspaceId,
-                instance,
-                step,
-                block,
-                isFinalStep,
-              )
-            : // No initiative store wired: record an empty pass-through result so the step
-              // advances rather than wedging (an initiative pipeline can't meaningfully run
-              // without the store, but never leave the run stuck).
-              this.recordStepResult(workspaceId, instance, step, isFinalStep, { output: '' }),
-      },
-      // The `doc-interviewer` step converses with the human to refine a document's scope /
-      // structure — an inline LLM gate that PARKS the run on a decision-wait while they answer
-      // through the interview window, then synthesizes an authoring brief onto its session and
-      // advances (see {@link DocInterviewController}). Pass-through when the interviewer isn't
-      // wired (no model), so document pipelines + conformance run unchanged off the raw outline.
-      {
-        kind: DOC_INTERVIEWER_AGENT_KIND,
-        order: 114,
-        canHandle: ({ step }) => step.agentKind === DOC_INTERVIEWER_AGENT_KIND,
-        handle: ({ workspaceId, instance, step, block, isFinalStep }) =>
-          this.docInterviewController
-            ? this.docInterviewController.evaluate(workspaceId, instance, step, block, isFinalStep)
-            : this.recordStepResult(workspaceId, instance, step, isFinalStep, { output: '' }),
+        canHandle: ({ step }) =>
+          hasTrait(step.agentKind, INTERVIEW_GATE_TRAIT, this.agentKindRegistry),
+        handle: ({ workspaceId, instance, step, block, isFinalStep }) => {
+          const controller = this.interviewControllers.get(step.agentKind)
+          return controller
+            ? controller.evaluate(workspaceId, instance, step, block, isFinalStep)
+            : this.recordStepResult(workspaceId, instance, step, isFinalStep, { output: '' })
+        },
       },
       // The `initiative-committer` step persists an APPROVED initiative plan: it runs
       // strictly after the planner's human gate, flips the entity to `executing`, and

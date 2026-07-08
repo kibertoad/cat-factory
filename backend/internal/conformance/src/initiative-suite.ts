@@ -30,7 +30,7 @@ function initiative(
     goal: 'Move module-global registries to app-owned DI',
     constraints: ['keep the runtimes symmetric'],
     nonGoals: ['backwards compatibility'],
-    qa: [{ id: 'iqa-1', question: 'Scope?', answer: 'All registries' }],
+    qa: [{ id: 'iqa-1', question: 'Scope?', answer: 'All registries', status: 'open' }],
     interview: { round: 1, maxRounds: 4, status: 'done' },
     analysisSummary: 'Registries live in kernel/agents.',
     phases: [{ id: 'phase-1', title: 'Pilot', goal: 'Convert one registry' }],
@@ -291,6 +291,35 @@ export function defineInitiativeSuite(
       expect(read!.items![0]!.spawn).toEqual(decorated.items![0]!.spawn)
     })
 
+    it('round-trips phase checkpoint bookkeeping through the CAS (D2)', async () => {
+      // A checkpoint phase (D2) carries two new fields on the entity's `doc` blob: the `checkpoint`
+      // flag and the `checkpointClearedAt` acknowledgment stamp. Both stores must (de)serialise them
+      // intact — the loop reads `checkpoint`/`checkpointClearedAt` every tick to decide whether to
+      // pause, so a store that dropped either would pause forever or never pause at all.
+      const { initiatives } = makeRepos()
+      const { ws, block, id } = ids()
+      await initiatives.insert(ws, initiative({ id, blockId: block, slug: 'checkpoints' }))
+      const withCheckpoints: Initiative = {
+        ...initiative({ id, blockId: block, slug: 'checkpoints' }),
+        status: 'paused',
+        phases: [
+          { id: 'phase-1', title: 'Research', goal: '', checkpoint: true },
+          { id: 'phase-2', title: 'Build', goal: '', checkpoint: true, checkpointClearedAt: 42 },
+        ],
+        rev: 1,
+        updatedAt: 2,
+      }
+      expect(await initiatives.compareAndSwap(ws, withCheckpoints, 0)).toBe(true)
+
+      const read = await initiatives.get(ws, id)
+      expect(read).toEqual(withCheckpoints)
+      expect(read!.phases!.find((p) => p.id === 'phase-1')).toMatchObject({ checkpoint: true })
+      expect(read!.phases!.find((p) => p.id === 'phase-2')).toMatchObject({
+        checkpoint: true,
+        checkpointClearedAt: 42,
+      })
+    })
+
     it('delete removes the entity', async () => {
       const { initiatives } = makeRepos()
       const { ws, block, id } = ids()
@@ -406,6 +435,61 @@ export function defineInitiativeSuite(
         const persisted = await repos.initiatives.get(ws, id)
         expect(persisted!.status).toBe('planning')
         expect(persisted!.phases ?? []).toEqual([])
+      })
+    })
+
+    // Phase-checkpoint resume (D2). The pause is loop-driven, but the acknowledgment — `resume`
+    // flipping `paused → executing` AND stamping `checkpointClearedAt` in ONE CAS transform — is a
+    // runtime-neutral InitiativeService write; here it is driven over each facade's REAL store so the
+    // new `checkpointClearedAt` field round-trips through a genuine mutation on D1 and Postgres alike.
+    describe('phase-checkpoint resume (D2)', () => {
+      const makeService = (repos: {
+        initiatives: InitiativeRepository
+        blocks: BlockRepository
+      }): InitiativeService =>
+        new InitiativeService({
+          workspaceRepository: { get: async () => ({}) } as unknown as WorkspaceRepository,
+          blockRepository: repos.blocks,
+          initiativeRepository: repos.initiatives,
+          events: new NoopEventPublisher(),
+          clock: { now: () => 777 },
+          idGenerator: { next: (prefix: string) => `${prefix}-1` },
+        })
+
+      it('resume clears the pending checkpoint and advances to executing, persisted on the real store', async () => {
+        const repos = makeRepos()
+        const { ws, block, id } = ids()
+        // A paused initiative parked at a completed checkpoint phase (its one item done).
+        await repos.initiatives.insert(
+          ws,
+          initiative({
+            id,
+            blockId: block,
+            slug: 'checkpoint-resume',
+            status: 'paused',
+            phases: [{ id: 'phase-1', title: 'Research', goal: '', checkpoint: true }],
+            items: [
+              {
+                id: 'item-1',
+                phaseId: 'phase-1',
+                title: 'Research the tool',
+                description: '',
+                dependsOn: [],
+                status: 'done',
+              },
+            ],
+          }),
+        )
+
+        const resumed = await makeService(repos).resume(ws, block)
+        expect(resumed!.status).toBe('executing')
+        expect(resumed!.phases!.find((p) => p.id === 'phase-1')!.checkpointClearedAt).toBe(777)
+
+        // Read back THROUGH the real repository — the cleared-at stamp must survive the doc-blob
+        // round-trip on both stores (else a lagging sweep would re-pause the resumed initiative).
+        const persisted = await repos.initiatives.get(ws, id)
+        expect(persisted!.status).toBe('executing')
+        expect(persisted!.phases!.find((p) => p.id === 'phase-1')!.checkpointClearedAt).toBe(777)
       })
     })
 

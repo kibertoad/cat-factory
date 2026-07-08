@@ -66,6 +66,16 @@
     "next": "הבא",
     "done": "סיום"
   },
+  "clarification": {
+    "answerPlaceholder": "התשובה שלך",
+    "notRelevant": "לא רלוונטי",
+    "recommend": "המלץ על תשובה",
+    "reopen": "פתח מחדש",
+    "dismissed": "סומן כלא רלוונטי",
+    "generating": "מנסח הצעה…",
+    "suggestion": "תשובה מוצעת",
+    "useSuggestion": "השתמש בתשובה זו"
+  },
   "nav": {
     "menu": "תפריט ניווט",
     "openMenu": "פתח תפריט",
@@ -4272,6 +4282,25 @@
       "done": "בוצע",
       "toast": {
         "reseedFailed": "לא ניתן לזרוע מחדש את קביעת המיזוג"
+      }
+    }
+  },
+  "modelPreset": {
+    "health": {
+      "title": "עדכוני קביעות מודל",
+      "allValid": "כל קביעות המודל המובנות מעודכנות.",
+      "newHeading": "קביעות חדשות זמינות",
+      "newDescription": "הגיעו קביעות מודל מובנות חדשות. הוסף אותן לספריית הלוח הזה.",
+      "add": "הוסף",
+      "updatesHeading": "עדכונים זמינים",
+      "updatesDescription": "גרסה חדשה יותר של קביעות המודל המובנות האלה הגיעה. זרע מחדש כדי לאמץ אותה (ברירת המחדל והסדר נשמרים).",
+      "versionAvailable": "גרסה {from} → {to} זמינה.",
+      "reseed": "זרע מחדש",
+      "reseedAll": "עדכן הכל ({count})",
+      "dismiss": "התעלם",
+      "done": "בוצע",
+      "toast": {
+        "reseedFailed": "לא ניתן לזרוע מחדש את קביעת המודל"
       }
     }
   },

@@ -52,6 +52,7 @@ export {
   DOC_AWARE_TRAIT,
   SPEC_AWARE_TRAIT,
   BINARY_STORAGE_TRAIT,
+  INTERVIEW_GATE_TRAIT,
   SPEC_AWARE_GUIDANCE,
   STANDARD_AGENT_TRAITS,
   registerAgentTrait,
@@ -120,6 +121,7 @@ export {
   phaseForKind,
   standardSystemPrompt,
   renderStandardUserPrompt,
+  initiativePresetSection,
   CONTEXT_DIR,
 } from './agents/prompts/standard.js'
 export {
@@ -154,7 +156,7 @@ export {
   resolveDocumentTarget,
   type DocumentTarget,
 } from './agents/kinds/document.js'
-// The in-source comment annotator (`code-commenter`), pre-loaded by `defaultAgentKindRegistry()`
+// The in-source comment maintainer (`code-commenter`), pre-loaded by `defaultAgentKindRegistry()`
 // so it is a first-class kind in every deployment (Worker / Node / local) — the in-source-comments
 // leg of the docs-refresh preset (diagrams / READMEs reuse `doc-writer`, business rules reuse
 // `business-documenter`, so it is the one genuinely-new authoring capability the preset needs).
@@ -185,6 +187,12 @@ export {
   TECH_MIGRATION_PRESET,
   registerTechMigrationPreset,
 } from './presets/tech-migration/preset.js'
+// The canonical migration phase ids — the CONTRACT shared by the preset's `phaseTemplate`, its
+// `promptAdditions`, `seedMigrationPlan`, and the migration e2e (T10). Re-exported so a consumer
+// (notably the e2e's fake plan draft) references the ids by import rather than retyping a string
+// that could silently drift out of the template the ingest normalizer matches on.
+export { MIGRATION_PHASE_IDS, MIGRATION_PHASE_ID_ORDER } from './presets/tech-migration/phases.js'
+export type { MigrationPhaseId } from './presets/tech-migration/phases.js'
 // Per-`DocKind` document templates: the single source of truth for a kind's expected shape,
 // woven into the outliner/writer prompts and (later) read by the doc-quality gate. The
 // built-in `DOC_TEMPLATES` are the fallback; a deployment overrides via `registerDocTemplate`.

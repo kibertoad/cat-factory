@@ -20,6 +20,7 @@
 import { createServer } from 'node:http'
 import { AsyncFakeAgentExecutor } from '@cat-factory/conformance'
 import { buildNodeContainer, start } from '@cat-factory/node-server'
+import { fakeInlineModelResolver } from './fakeInlineModel.ts'
 import { E2eFakeAgentExecutor, E2eRepoBootstrapper, type FakeProfile } from './fakeProfile.ts'
 
 /** The options shape `AsyncFakeAgentExecutor`/`FakeAgentExecutor` accept (avoids importing
@@ -138,6 +139,11 @@ const env: NodeJS.ProcessEnv = {
   // faster cadence changes no outcome.
   JOB_POLL_INTERVAL: process.env.JOB_POLL_INTERVAL ?? '1 second',
   CI_POLL_INTERVAL: process.env.CI_POLL_INTERVAL ?? '1 second',
+  // Tick the initiative-execution loop every second instead of the 60s production backstop, so
+  // an initiative that reaches `executing` spawns its first decorated task within the suite's
+  // RUN_TERMINAL timeout (the planning run's terminal does NOT poke the loop — only the periodic
+  // sweep spawns the first wave, so a slow cadence would time the spec out).
+  INITIATIVE_LOOP_INTERVAL_MS: process.env.INITIATIVE_LOOP_INTERVAL_MS ?? '1000',
   ENCRYPTION_KEY: process.env.ENCRYPTION_KEY ?? ENCRYPTION_KEY,
   PORT: process.env.PORT ?? '8787',
   // The SPA is served from a different origin (the Nuxt dev server), so the browser's
@@ -169,6 +175,11 @@ await start({
       overrides: {
         agentExecutor,
         repoBootstrapper,
+        // Fake the INLINE LLM path too (the agent executor above only fakes CONTAINER steps). The
+        // full-interview `pl_initiative` pipeline runs its interviewer inline through this resolver;
+        // on the keyless e2e backend the real resolver would fault it, so serve a converging mock.
+        // See `fakeInlineModel.ts` — safe for existing specs (none assert on an inline-gate outcome).
+        modelProviderResolver: fakeInlineModelResolver,
       },
       // The built-in default model preset points every agent kind at a Cloudflare-served
       // model, so the execution start guard needs that provider marked available to start a

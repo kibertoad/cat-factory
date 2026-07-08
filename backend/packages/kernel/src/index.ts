@@ -35,6 +35,9 @@ export {
   DEFAULT_WORKSPACE_SETTINGS,
   DEFAULT_MODEL_PRESETS,
   DEFAULT_MODEL_PRESET,
+  DEFAULT_MODEL_PRESET_ID,
+  MODEL_PRESET_SEED_IDS,
+  seedModelPresets,
   modelForKindFromPreset,
   type ModelPresetSeed,
 } from './domain/catalog.js'

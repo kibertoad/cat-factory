@@ -44,6 +44,11 @@ export const useUiStore = defineStore('ui', () => {
   // once per session so it does not re-pop on every snapshot re-hydration (mirrors pipelines).
   const mergePresetHealthOpen = ref(false)
   const mergePresetHealthSeen = ref(false)
+  // Model-preset health startup advisory: lists built-ins with a newer catalog version (reseed)
+  // and new built-in presets the workspace can add. `modelPresetHealthSeen` gates auto-open to
+  // once per session so it does not re-pop on every snapshot re-hydration (mirrors pipelines).
+  const modelPresetHealthOpen = ref(false)
+  const modelPresetHealthSeen = ref(false)
   const decisionContext = ref<{ instanceId: string; decisionId: string } | null>(null)
 
   // Document-source integration modals, keyed by source. `documentImport` and
@@ -321,6 +326,22 @@ export const useUiStore = defineStore('ui', () => {
 
   function closeMergePresetHealth() {
     mergePresetHealthOpen.value = false
+  }
+
+  /** Auto-open the model-preset health advisory once per session (no-op after it's been shown). */
+  function maybeOpenModelPresetHealth() {
+    if (modelPresetHealthSeen.value) return
+    modelPresetHealthSeen.value = true
+    modelPresetHealthOpen.value = true
+  }
+
+  function openModelPresetHealth() {
+    modelPresetHealthSeen.value = true
+    modelPresetHealthOpen.value = true
+  }
+
+  function closeModelPresetHealth() {
+    modelPresetHealthOpen.value = false
   }
 
   function openDecision(instanceId: string, decisionId: string) {
@@ -820,6 +841,8 @@ export const useUiStore = defineStore('ui', () => {
     pipelineHealthSeen,
     mergePresetHealthOpen,
     mergePresetHealthSeen,
+    modelPresetHealthOpen,
+    modelPresetHealthSeen,
     decisionContext,
     documentConnect,
     documentImport,
@@ -887,6 +910,9 @@ export const useUiStore = defineStore('ui', () => {
     maybeOpenMergePresetHealth,
     openMergePresetHealth,
     closeMergePresetHealth,
+    maybeOpenModelPresetHealth,
+    openModelPresetHealth,
+    closeModelPresetHealth,
     openDecision,
     closeDecision,
     openApprovalDetail,

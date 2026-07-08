@@ -2,13 +2,16 @@ import { describe, expect, it } from 'vitest'
 import { generateSecrets } from './secrets.js'
 
 describe('generateSecrets', () => {
-  it('emits a 32-byte hex session secret and a base64 encryption key', () => {
-    const { authSessionSecret, encryptionKey } = generateSecrets()
+  it('emits a hex session secret, a base64 encryption key and a hex harness secret', () => {
+    const { authSessionSecret, encryptionKey, harnessSharedSecret } = generateSecrets()
     // 32 bytes hex = 64 chars, and the server requires >= 32 chars.
     expect(authSessionSecret).toMatch(/^[0-9a-f]{64}$/)
     expect(authSessionSecret.length).toBeGreaterThanOrEqual(32)
     // base64 of 32 bytes decodes back to 32 bytes (the cipher's minimum).
     expect(Buffer.from(encryptionKey, 'base64')).toHaveLength(32)
+    // 32 bytes hex = 64 chars, comfortably over the loader's >= 16 minimum.
+    expect(harnessSharedSecret).toMatch(/^[0-9a-f]{64}$/)
+    expect(harnessSharedSecret.length).toBeGreaterThanOrEqual(16)
   })
 
   it('uses the injected RNG deterministically', () => {

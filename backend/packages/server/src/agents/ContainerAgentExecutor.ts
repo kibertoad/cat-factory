@@ -643,7 +643,7 @@ export class ContainerAgentExecutor implements AsyncAgentExecutor {
    */
   async startJob(context: AgentRunContext): Promise<AgentJobHandle> {
     const { workspaceId, executionId } = this.requireIds(context)
-    const { body, model, provider, kind, subscriptionTokenId, search } =
+    const { body, model, provider, kind, subscriptionTokenId, search, repoSummary } =
       await this.buildJobBody(context)
     // The job's id is per-STEP (run id + agent kind), so sibling steps that share this
     // run's container never collide in the harness's per-kind job registries; the run
@@ -675,6 +675,7 @@ export class ContainerAgentExecutor implements AsyncAgentExecutor {
       workspaceId,
       agentKind: context.agentKind,
       search,
+      repo: repoSummary,
       ...(subscriptionTokenId ? { subscriptionTokenId } : {}),
     }
   }
@@ -719,6 +720,7 @@ export class ContainerAgentExecutor implements AsyncAgentExecutor {
       const containerMeta = {
         ...(view.phase ? { phase: view.phase } : {}),
         ...(view.container ? { container: view.container } : {}),
+        ...(view.backend ? { backend: view.backend } : {}),
       }
       return view.progress
         ? { state: 'running', subtasks: view.progress, ...followUps, ...containerMeta }
@@ -729,6 +731,7 @@ export class ContainerAgentExecutor implements AsyncAgentExecutor {
     const failureMeta = {
       ...(view.failureCause ? { failureCause: view.failureCause } : {}),
       ...(view.detail ? { detail: view.detail } : {}),
+      ...(view.backend ? { backend: view.backend } : {}),
     }
     // Completed OR failed: a subscription harness attaches its per-call telemetry to
     // BOTH — a failed token-spending run (no changes / unusable output / unresolved
@@ -910,6 +913,8 @@ export class ContainerAgentExecutor implements AsyncAgentExecutor {
     kind: RunnerDispatchKind
     subscriptionTokenId?: string
     search: WebSearchAvailability
+    /** The repo the job operates on, for the run diagnostics (owner/name/baseBranch + VCS provider). */
+    repoSummary: { owner: string; name: string; baseBranch?: string; provider?: string }
   }> {
     const { workspaceId, executionId, blockId } = this.requireIds(context)
     // Per-STEP harness job id: unique within the run so this step's job never aliases
@@ -1010,13 +1015,16 @@ export class ContainerAgentExecutor implements AsyncAgentExecutor {
     // Private-registry auth for the checkout's installs. Resolved per dispatch (like
     // ghToken) and spread into `common`, so every kind with a checkout gets it.
     const packageRegistries = (await this.deps.resolvePackageRegistries?.(workspaceId)) ?? []
+    // Resolve the repo origin once so both the harness `RepoSpec` and the diagnostics repo
+    // summary (returned below) agree on the VCS provider.
+    const origin = (this.deps.resolveRepoOrigin ?? githubRepoOrigin)(repo)
     const common = {
       jobId,
       model: ref.model,
       ...auth,
       ghToken,
       ...(packageRegistries.length ? { packageRegistries } : {}),
-      repo: buildRepoSpec(repo, (this.deps.resolveRepoOrigin ?? githubRepoOrigin)(repo)),
+      repo: buildRepoSpec(repo, origin),
       ...(this.deps.githubApiBase ? { githubApiBase: this.deps.githubApiBase } : {}),
       ...(contextFiles.length ? { contextFiles } : {}),
       ...(artifactUpload ? { artifactUpload } : {}),
@@ -1252,6 +1260,12 @@ export class ContainerAgentExecutor implements AsyncAgentExecutor {
       provider: ref.provider,
       kind,
       search,
+      repoSummary: {
+        owner: repo.owner,
+        name: repo.name,
+        ...(repo.baseBranch ? { baseBranch: repo.baseBranch } : {}),
+        provider: origin.provider,
+      },
     }
   }
 

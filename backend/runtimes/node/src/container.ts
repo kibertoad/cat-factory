@@ -85,6 +85,7 @@ import {
   type TaskSourceProvider,
   type WebSearchAvailability,
   CompositeNotificationChannel,
+  DEFAULT_MODEL_PRESET_ID,
   SUBSCRIPTION_VENDORS,
   isAmbientNativeVendor,
 } from '@cat-factory/kernel'
@@ -545,6 +546,13 @@ export interface NodeContainerOptions {
    * the remote (RPC-backed) org repos + the local credential repos.
    */
   repos?: ReturnType<typeof createDrizzleRepositories>
+  /**
+   * The catalog id of the built-in model preset a fresh workspace is seeded with as its
+   * DEFAULT. Node deploy defaults to `mdp_kimi` (Cloudflare-runnable on the bare baseline);
+   * the local facade passes `mdp_claude`. Applied only at first seed, so a user's later
+   * manual default choice is always preserved.
+   */
+  defaultModelPresetId?: string
   /**
    * Override the direct-vendor API-key pool's repository. When provided it REPLACES the
    * default Drizzle one, so a sibling facade can back the key pool with a different store
@@ -2384,6 +2392,10 @@ export function buildNodeContainer(options: NodeContainerOptions): ServerContain
     // Built only when configured; otherwise undefined and there is no external emission.
     llmTraceSink: buildLangfuseSink(config),
     modelPresetRepository: repos.modelPresetRepository,
+    // A fresh workspace's model-preset library is seeded with this built-in as the default
+    // (Node deploy → Kimi K2.7, the Cloudflare-runnable baseline; the local facade injects
+    // Claude). Applied only at first seed, so a user's later manual default choice wins.
+    defaultModelPresetId: options.defaultModelPresetId ?? DEFAULT_MODEL_PRESET_ID,
     serviceFragmentDefaultsRepository: repos.serviceFragmentDefaultsRepository,
     // Requirements-review feature (stateless reviewer + the requirements-rework
     // step). Wired identically to the Cloudflare facade's `selectRequirementsDeps`

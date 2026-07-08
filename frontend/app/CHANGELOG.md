@@ -1,5 +1,126 @@
 # @cat-factory/app
 
+## 0.109.1
+
+### Patch Changes
+
+- Updated dependencies [63f7881]
+  - @cat-factory/contracts@0.121.0
+
+## 0.109.0
+
+### Minor Changes
+
+- a2db337: Planning-interview questions gain the same answer surface as requirements review, via a shared
+  clarification-item abstraction (see `docs/initiatives/clarification-items.md`).
+
+  A planning question can now be marked **not relevant** (dismissed — it stops blocking Continue and
+  the interviewer is told not to re-ask it) and the human can ask the interviewer to **recommend** a
+  suggested answer (drafted inline, adopted with "use this answer"). These reuse a new shared
+  `ClarificationItem` component rather than cloning the requirements UI. `InitiativeQa` gains
+  `status` + `recommendation`; no DB migration (the initiative persists as a JSON blob, so both
+  runtimes pick up the fields for free). The initiative board card also pulses while its interview is
+  awaiting answers, matching how a review gate surfaces attention on a task card.
+
+### Patch Changes
+
+- a2db337: Fix initiative planning interview wedging after "Continue"/"Proceed", and surface a
+  "Run planning" start control on the initiative board card.
+
+  - **Engine:** the step re-park guard in `ExecutionService` never let a _resumed_
+    interactive-interviewer step (initiative planning + document interviewer) fall through to
+    its gate evaluation — it re-parked the run immediately, so pressing Continue/Proceed
+    loaded briefly and then hung on the same questions. The guard, the generic approve/reject
+    guard, AND the step-handler dispatch in `RunDispatcher` now all key off a new
+    `interview-gate` agent **trait** carried by both interviewer kinds — the dispatch routes
+    by trait to the controller registered for the step's `agentKind`, so a resumed interview
+    (one carrying `pendingInterview`) re-runs the interviewer in the durable driver instead of
+    wedging. Fully trait-based rather than kind-based, so a future interviewer just carries the
+    trait and wires its controller — no engine branch.
+  - **Board:** an initiative card now offers "Run planning" (and, while the interview is
+    parked, "Answer planning questions") directly on the board, mirroring a task card's
+    on-card Start affordance instead of hiding it behind selecting the block. The card and the
+    inspector share a single `useInitiativePlanning` composable (no duplicated planning logic):
+    the "Answer planning questions" affordance now keys on the interview's parked status alone
+    (so it stays reachable once every question is answered but before the human resumes), and
+    the optimistic start flag clears the moment the run takes over (so the button can't strand
+    itself spinning after a cancel).
+
+- Updated dependencies [a2db337]
+  - @cat-factory/contracts@0.120.0
+
+## 0.108.1
+
+### Patch Changes
+
+- 35636d5: Harden `workspace.refresh()` against an out-of-order full-refresh clobber. A `board`-type stream
+  event triggers a full snapshot refresh and `hydrate` REPLACES the block list; two refreshes can be
+  in flight at once (board events >300ms apart, or the on-connect resync racing a board event), so a
+  slower/staler fetch resolving AFTER a newer one would overwrite it and drop live-added state.
+  `refresh()` now stamps each call with a monotonic sequence (and re-checks the active board) and
+  commits only the latest-issued result, so the freshest snapshot always wins regardless of network
+  resolution order. Adds a store-level regression test. This closes a real latent race in the
+  live-push layer — defensive hardening, not tied to a specific reported symptom.
+
+## 0.108.0
+
+### Minor Changes
+
+- 7157908: Model presets now support reseeding, mirroring pipelines and merge presets, plus a new
+  built-in "Claude Opus 4.8" preset (everything `claude-opus`).
+
+  - Built-in model presets carry stable catalog ids (`mdp_kimi` / `mdp_glm` / `mdp_claude`)
+    and a monotonic `version`. The workspace snapshot ships `modelPresetCatalogVersions`, and
+    `POST /workspaces/:ws/model-presets/:id/reseed` restores a built-in to the current catalog
+    (adopt an update, repair drift, or materialise a new built-in that appeared). The SPA gains
+    a once-per-session "model preset updates" advisory (reseed / add) like the pipeline and
+    merge-preset ones.
+  - The seeded workspace DEFAULT preset is now a deployment fact: Cloudflare and Node default to
+    Kimi K2.7 (Cloudflare-runnable on the bare baseline), local mode defaults to Claude Opus 4.8
+    (local runs subscription models via the ambient CLI / a leased personal credential). The
+    deployment default is applied only at first seed, so a user's later manual default choice is
+    always preserved.
+
+  Breaking (pre-1.0, no migration): model presets gain a nullable `version` column
+  (D1 `0043_model_preset_versioning`; Drizzle migration). Workspaces seeded before this change
+  hold the old index-based preset ids (`mdp-seed-0/1`); they are treated as custom presets, and
+  the three stable built-ins are offered via the reseed advisory rather than migrated in place.
+
+### Patch Changes
+
+- Updated dependencies [8728bf7]
+- Updated dependencies [7157908]
+  - @cat-factory/contracts@0.119.0
+
+## 0.107.7
+
+### Patch Changes
+
+- 629cf90: Initiative presets slice 9: the E2E baseline + a worked-example deployment preset.
+
+  - `@cat-factory/conformance`: `FakeAgentExecutor` gains an `initiativePlan` option so a
+    fake-driven initiative-planner step returns a plan draft (the planner otherwise faults a
+    planning run) — the seam an e2e/integration test uses to drive create-with-preset → auto-plan
+    → spawn.
+  - `@cat-factory/node-server`: the initiative-loop sweep interval is now overridable via
+    `INITIATIVE_LOOP_INTERVAL_MS` (default 60s unchanged).
+  - `@cat-factory/app`: `TaskCard` exposes a behaviour-neutral `data-task-type` attribute (the e2e
+    asserts a spawned document task carries its preset decoration).
+  - `@cat-factory/example-custom-agent`: adds `preset_org_audit`, a worked-example initiative preset
+    registered through the public `registerInitiativePreset` seam.
+
+## 0.107.6
+
+### Patch Changes
+
+- 4775c40: Fix the initiative-preset create form so a default-ON checkbox (`default: 'true'`, e.g. the
+  tech-migration "Review each change before it merges" toggle) can persist an explicit `false` when
+  unchecked. Previously the shared renderer dropped a `false` checkbox value as "unset" (correct for a
+  default-OFF box, where absent === unchecked), which for a default-ON field was indistinguishable from
+  "untouched, still on" — so a consumer reading the opt-out as `humanReview !== false` (`seedMigrationPlan`)
+  could never observe the unchecked state and the toggle was dead. A default-OFF checkbox keeps the
+  drop-when-false behaviour, so it never freezes a redundant `false`.
+
 ## 0.107.5
 
 ### Patch Changes
