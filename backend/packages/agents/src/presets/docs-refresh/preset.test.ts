@@ -5,12 +5,10 @@ import {
   CODE_COMMENTS_PIPELINE_ID,
   DOCUMENT_QUICK_PIPELINE_ID,
   INITIATIVE_DOCS_PIPELINE_ID,
-  clearRegisteredInitiativePresets,
-  getInitiativePreset,
-  initiativePresetDescriptors,
+  InitiativePresetRegistry,
   seedPipelines,
 } from '@cat-factory/kernel'
-import { afterEach, describe, expect, it } from 'vitest'
+import { describe, expect, it } from 'vitest'
 import type { DocsRepoReader } from './docs-detect.logic.js'
 import {
   DOCS_REFRESH_PRESET,
@@ -19,18 +17,21 @@ import {
   registerDocsRefreshPreset,
 } from './preset.js'
 
-// The preset self-registers on import (the module side effect), so it is present without setup.
-// The phaseTemplate + template-shaped ingest normalization are generic machinery already covered by
-// the conformance suite; these tests pin the PRESET's own contract: a valid descriptor, the probe
-// mapping, and — the crux of slice 8 — `seedPlan` as spawn DECORATION only (never plan shape).
+// The preset is preloaded by `defaultInitiativePresetRegistry()`; `registerDocsRefreshPreset(registry)`
+// installs it on an app-owned registry. The phaseTemplate + template-shaped ingest normalization are
+// generic machinery already covered by the conformance suite; these tests pin the PRESET's own
+// contract: a valid descriptor, the probe mapping, and — the crux of slice 8 — `seedPlan` as spawn
+// DECORATION only (never plan shape).
 
 const preset = DOCS_REFRESH_PRESET
 
 describe('preset_docs_refresh — descriptor + registration', () => {
-  it('is a valid, self-registered preset with a probe', () => {
+  it('is a valid preset with a probe, registered on an app-owned registry', () => {
     expect(() => parseInitiativePresetDescriptor(preset.descriptor)).not.toThrow()
-    expect(getInitiativePreset(DOCS_REFRESH_PRESET_ID)).toBe(preset)
-    const descriptor = initiativePresetDescriptors().find((d) => d.id === DOCS_REFRESH_PRESET_ID)
+    const registry = new InitiativePresetRegistry()
+    registerDocsRefreshPreset(registry)
+    expect(registry.get(DOCS_REFRESH_PRESET_ID)).toBe(preset)
+    const descriptor = registry.descriptors().find((d) => d.id === DOCS_REFRESH_PRESET_ID)
     // `probe` is derived from the wired `detect` hook when descriptors are serialised for the SPA.
     expect(descriptor?.probe).toBe(true)
   })
@@ -54,15 +55,12 @@ describe('preset_docs_refresh — descriptor + registration', () => {
     }
   })
 
-  it('re-registration is idempotent after a clear (the generic preset always survives)', () => {
-    clearRegisteredInitiativePresets()
-    expect(getInitiativePreset(DOCS_REFRESH_PRESET_ID)).toBeUndefined()
-    registerDocsRefreshPreset()
-    expect(getInitiativePreset(DOCS_REFRESH_PRESET_ID)).toBe(preset)
+  it('an empty registry still resolves the built-in generic preset, not the docs-refresh one', () => {
+    const registry = new InitiativePresetRegistry()
+    expect(registry.get(DOCS_REFRESH_PRESET_ID)).toBeUndefined()
+    registerDocsRefreshPreset(registry)
+    expect(registry.get(DOCS_REFRESH_PRESET_ID)).toBe(preset)
   })
-
-  // The module side-effect ran at import; restore it for any downstream test in this file/run.
-  afterEach(() => registerDocsRefreshPreset())
 })
 
 describe('preset_docs_refresh — detect (probe mapping)', () => {

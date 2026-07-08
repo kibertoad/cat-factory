@@ -2,13 +2,10 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { type AgentKindRegistry, defaultAgentKindRegistry } from '@cat-factory/agents'
 import type { CommitFilesInput, GateStepState, RepoFiles } from '@cat-factory/kernel'
 import {
-  allInitiativePresets,
+  InitiativePresetRegistry,
   clearRegisteredGates,
-  clearRegisteredInitiativePresets,
   clearRegisteredPipelines,
   clearRegisteredStepResolvers,
-  getInitiativePreset,
-  initiativePresetDescriptors,
   registeredGateFactories,
   registeredStepResolverFactories,
   seedPipelines,
@@ -29,23 +26,23 @@ import {
   wireLicenseProvider,
 } from './index.js'
 
-// Agent kinds live on an app-owned registry (a fresh instance per test — no global to clear).
-// The pipeline/gate/step-resolver registries are still module-global, so clear those for
-// isolation and re-register before each test.
+// Agent kinds + initiative presets live on app-owned registries (a fresh instance per test — no
+// global to clear). The pipeline/gate/step-resolver registries are still module-global, so clear
+// those for isolation and re-register before each test.
 let registry: AgentKindRegistry
+let initiativePresetRegistry: InitiativePresetRegistry
 beforeEach(() => {
   clearRegisteredPipelines()
   clearRegisteredGates()
   clearRegisteredStepResolvers()
-  clearRegisteredInitiativePresets()
   registry = defaultAgentKindRegistry()
-  registerExampleCustomAgents(registry)
+  initiativePresetRegistry = new InitiativePresetRegistry()
+  registerExampleCustomAgents(registry, initiativePresetRegistry)
 })
 afterEach(() => {
   clearRegisteredPipelines()
   clearRegisteredGates()
   clearRegisteredStepResolvers()
-  clearRegisteredInitiativePresets()
   // The license provider is a module-level handle; clear it so a wired test can't leak.
   wireLicenseProvider(undefined)
 })
@@ -217,14 +214,18 @@ describe('example custom agents', () => {
 })
 
 describe('example org-audit initiative preset', () => {
-  it('registers the preset through the public registerInitiativePreset seam', () => {
+  it('registers the preset on the injected app-owned registry (replace-by-id)', () => {
     // The registration is the same object reference the registry hands back (replace-by-id).
-    expect(getInitiativePreset(ORG_AUDIT_PRESET_ID)).toBe(ORG_AUDIT_PRESET)
-    expect(allInitiativePresets().map((p) => p.descriptor.id)).toContain(ORG_AUDIT_PRESET_ID)
+    expect(initiativePresetRegistry.get(ORG_AUDIT_PRESET_ID)).toBe(ORG_AUDIT_PRESET)
+    expect(initiativePresetRegistry.all().map((p) => p.descriptor.id)).toContain(
+      ORG_AUDIT_PRESET_ID,
+    )
   })
 
   it('advertises a descriptor with probe:false (no detect hook) bound to a real planning pipeline', () => {
-    const descriptor = initiativePresetDescriptors().find((d) => d.id === ORG_AUDIT_PRESET_ID)
+    const descriptor = initiativePresetRegistry
+      .descriptors()
+      .find((d) => d.id === ORG_AUDIT_PRESET_ID)
     expect(descriptor).toBeTruthy()
     // No `detect` hook ⇒ the server-derived probe flag is false, so the SPA never fires a probe.
     expect(descriptor?.probe).toBe(false)

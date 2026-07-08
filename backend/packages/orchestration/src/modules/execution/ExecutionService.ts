@@ -31,7 +31,7 @@ import {
   isInlineModelStep,
 } from '@cat-factory/agents'
 import type { AgentKindRegistry } from '@cat-factory/agents'
-import type { RunInitiatorScope } from '@cat-factory/kernel'
+import type { InitiativePresetRegistry, RunInitiatorScope } from '@cat-factory/kernel'
 import {
   assertPipelineLaunchable,
   validatePipelineShape,
@@ -193,6 +193,12 @@ export interface ExecutionServiceDependencies {
    * `defaultAgentKindRegistry()` when a facade doesn't inject the shared instance.
    */
   agentKindRegistry: AgentKindRegistry
+  /**
+   * The app-owned initiative-preset registry, threaded into the context builder so a spawned /
+   * planning run resolves its preset steering. `createCore` defaults it to
+   * `defaultInitiativePresetRegistry()` when a facade doesn't inject the shared instance.
+   */
+  initiativePresetRegistry: InitiativePresetRegistry
   workRunner: WorkRunner
   executionEventPublisher: ExecutionEventPublisher
   boardService: BoardService
@@ -642,6 +648,7 @@ export class ExecutionService {
     runInitiatorScope,
     pokeInitiativeLoop,
     agentKindRegistry,
+    initiativePresetRegistry,
   }: ExecutionServiceDependencies) {
     // Forward-only: the run-initiator scope is consumed solely by RunDispatcher (below), so it
     // is hoisted to a local with its default applied rather than stored as a `this.` field.
@@ -684,6 +691,7 @@ export class ExecutionService {
       blockRepository,
       accountRepository,
       agentKindRegistry,
+      initiativePresetRegistry,
       documents: documentRepository,
       documentUrlResolver,
       tasks: taskRepository,

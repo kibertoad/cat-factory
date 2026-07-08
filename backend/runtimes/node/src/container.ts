@@ -2,6 +2,7 @@ import {
   AiAgentExecutor,
   type AgentKindRegistry,
   defaultAgentKindRegistry,
+  defaultInitiativePresetRegistry,
   LlmFragmentSelector,
   inlineWebSearchOptionsFromEnv,
   resolveAgentConfig,
@@ -174,7 +175,12 @@ import {
   registerGitLab,
   StaticGitLabTokenSource,
 } from '@cat-factory/gitlab'
-import type { AppCaches, PreviewTransport, VcsIdentityRegistry } from '@cat-factory/kernel'
+import type {
+  AppCaches,
+  InitiativePresetRegistry,
+  PreviewTransport,
+  VcsIdentityRegistry,
+} from '@cat-factory/kernel'
 import type { PgBoss } from 'pg-boss'
 import { loadNodeConfig } from './config.js'
 import type { DrizzleDb } from './db/client.js'
@@ -752,6 +758,13 @@ export interface NodeContainerOptions {
    * the conformance suite injects a pre-loaded one to assert the seam is symmetric.
    */
   agentKindRegistry?: AgentKindRegistry
+  /**
+   * The app-owned initiative-preset registry (built-in generic / docs-refresh / tech-migration +
+   * any a deployment registered by reference). Rides its own option like `agentKindRegistry`;
+   * defaults to `defaultInitiativePresetRegistry()`. Threaded into `createCore` + re-exposed on the
+   * ServerContainer; the conformance suite injects a pre-loaded one to assert the seam is symmetric.
+   */
+  initiativePresetRegistry?: InitiativePresetRegistry
   /**
    * Skip wrapping the resolved transport with the provisioning-log decorator. A sibling
    * facade that pre-wraps each transport branch with its OWN subsystem tag (local mode
@@ -1452,6 +1465,11 @@ export function buildNodeContainer(options: NodeContainerOptions): ServerContain
   // are visible) else the built-ins-only default. The SAME instance flows to the executors,
   // createCore and the ServerContainer snapshot projection.
   const agentKindRegistry = options.agentKindRegistry ?? defaultAgentKindRegistry()
+  // The app-owned initiative-preset registry: the injected instance else the built-ins-only
+  // default (generic / docs-refresh / tech-migration). Flows into createCore (initiative services
+  // + spawned-run preset context) and the ServerContainer snapshot descriptors + preset probe.
+  const initiativePresetRegistry =
+    options.initiativePresetRegistry ?? defaultInitiativePresetRegistry()
 
   // Register the opt-in AWS EKS backends by reference (the default registries stay AWS-free).
   // Reuses the native Kubernetes transport/provider behind a minted IAM apiserver token; a
@@ -2341,6 +2359,9 @@ export function buildNodeContainer(options: NodeContainerOptions): ServerContain
     // The app-owned agent-kind registry (built-ins + any deployment-registered kinds); the
     // engine reads it (traits / inline-surface / pre-post-op hooks) and re-exposes it on Core.
     agentKindRegistry,
+    // The app-owned initiative-preset registry; the initiative services read it and it is
+    // re-exposed on Core for the snapshot descriptors + preset probe.
+    initiativePresetRegistry,
     // The code-defined custom provision-type catalog, merged with the workspace rows by
     // `listCustomTypes` so a programmatically-registered type surfaces in the infra editor + the
     // per-service provisioning picker.

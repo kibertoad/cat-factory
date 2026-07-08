@@ -43,13 +43,17 @@ byte-for-byte as it always has.
 
 ## The seam
 
-A preset is one registration against the module-global registry, mirroring
-`registerPipeline` / `registerGate`:
+A preset is one registration against the **app-owned `InitiativePresetRegistry`**, mirroring the
+agent-kind registry (`AgentKindRegistry` / `defaultAgentKindRegistry()`). A deployment news the
+default registry (which preloads the built-ins), registers its own presets on it by reference, and
+injects it through the facade's composition seam — `createApp({ overrides: { initiativePresetRegistry } })`
+on the Worker, or the `initiativePresetRegistry` option on `start()` / `startLocal()`:
 
 ```ts
-import { registerInitiativePreset } from '@cat-factory/kernel'
+import { defaultInitiativePresetRegistry } from '@cat-factory/agents'
 
-registerInitiativePreset({
+const initiativePresetRegistry = defaultInitiativePresetRegistry()
+initiativePresetRegistry.register({
   descriptor: {
     id: 'preset_docs_refresh',
     presentation: {
@@ -157,9 +161,9 @@ the stored steps' `requiresApproval`.
 
 ## How a preset flows end to end
 
-1. **Snapshot** — `initiativePresetDescriptors()` (which stamps `probe: !!detect`) is attached to
-   the workspace snapshot in the shared `WorkspaceController` (both the create and GET handlers), so
-   every registered descriptor reaches the SPA with no per-facade wiring — exactly like
+1. **Snapshot** — `container.initiativePresetRegistry.descriptors()` (which stamps `probe: !!detect`)
+   is attached to the workspace snapshot in the shared `WorkspaceController` (both the create and GET
+   handlers), so every registered descriptor reaches the SPA with no per-facade wiring — exactly like
    `customAgentKinds`.
 2. **Create** — `CreateInitiativeModal.vue` is a preset picker (defaulting to `preset_generic`,
    hidden when it's the only preset) + a generic descriptor-driven form renderer
@@ -215,12 +219,14 @@ are code-carrying backend packages**, registered from a deployment's composition
 ## Registering a preset
 
 - **A built-in** (shipped in `@cat-factory/agents`, deliberate dogfood like `@cat-factory/gates`):
-  self-register as a module side effect at the bottom of the preset module
-  (`registerDocsRefreshPreset()`), and re-export it from the agents index so importing the package
-  evaluates the registration. No per-facade wiring — the two runtimes cannot drift on it.
-- **A deployment preset**: register from the deployment's composition root (the
-  `example-custom-agent` model — `registerExampleCustomAgents(registry)`), which the deployment
-  imports and calls when it builds the container.
+  add its `register…Preset(registry)` call to `defaultInitiativePresetRegistry()`
+  (`agents/src/presets/registry.ts`), which every facade news at composition — so the two runtimes
+  cannot drift on it, with no per-facade wiring. (The built-in generic preset is baked into the
+  `InitiativePresetRegistry` class itself, always resolvable.)
+- **A deployment preset**: register from the deployment's composition root on the app-owned registry
+  the facade injects (the `example-custom-agent` model — `registerExampleCustomAgents(agentKindRegistry,
+initiativePresetRegistry)`), then pass that registry into the facade build
+  (`createApp({ overrides: { initiativePresetRegistry } })` / `start({ initiativePresetRegistry })`).
 
 If a preset uses a `phaseTemplate`, define the phase ids **once** as a shared constant and reference
 them verbatim in the template, the `promptAdditions`, and `seedPlan` — the ids are a contract (the

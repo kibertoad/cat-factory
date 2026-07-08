@@ -165,23 +165,29 @@ export {
   CODE_COMMENTER_AGENT_KINDS,
   registerCodeCommenterAgent,
 } from './agents/kinds/code-commenter.js'
-// The Documentation-refresh initiative preset (initiative-presets slice 8), registered as a SIDE
-// EFFECT of importing this module (the `@cat-factory/gates` pattern) so the pilot preset is
-// available in every deployment with no per-facade wiring — the two runtimes cannot drift on it.
-// `detect` reuses slice 6's `detectDocsLayout`, `seedPlan` stamps per-item spawn decoration ONLY,
-// and `phaseTemplate` enforces the plan shape via the generic ingest normalizer (never `seedPlan`).
+// The app-owned initiative-preset registry factory: news an `InitiativePresetRegistry` (its class +
+// the generic built-in live in kernel) and preloads the docs-refresh + tech-migration built-ins.
+// This is the single place the built-ins are installed — no module-load side effect — so every
+// facade (and every test) gets its own instance; a deployment registers extra presets by reference
+// on the instance the composition root injects. Mirrors `defaultAgentKindRegistry()`.
+export { defaultInitiativePresetRegistry } from './presets/registry.js'
+// The Documentation-refresh initiative preset (initiative-presets slice 8), preloaded by
+// `defaultInitiativePresetRegistry()` so the pilot preset is available in every deployment with no
+// per-facade wiring — the two runtimes cannot drift on it. `detect` reuses slice 6's
+// `detectDocsLayout`, `seedPlan` stamps per-item spawn decoration ONLY, and `phaseTemplate`
+// enforces the plan shape via the generic ingest normalizer (never `seedPlan`).
 export {
   DOCS_REFRESH_PRESET_ID,
   DOCS_REFRESH_PRESET,
   registerDocsRefreshPreset,
   docsReviewGates,
 } from './presets/docs-refresh/preset.js'
-// The Technological-migration initiative preset (tech-migration slice T8), registered as a SIDE
-// EFFECT of importing this module (the same pattern as docs-refresh) so it is available in every
-// deployment with no per-facade wiring — the two runtimes cannot drift on it. It composes the
-// already-landed migration pieces: the `phaseTemplate` (five-phase methodology enforced by the
-// generic ingest normalizer), `seedMigrationPlan` as `seedPlan` (T7 spawn decoration +
-// confidence-case wiring), the T5 `promptAdditions`, and the T4 `MIGRATION_FRAGMENT_IDS`. No probe.
+// The Technological-migration initiative preset (tech-migration slice T8), preloaded by
+// `defaultInitiativePresetRegistry()` so it is available in every deployment with no per-facade
+// wiring — the two runtimes cannot drift on it. It composes the already-landed migration pieces:
+// the `phaseTemplate` (five-phase methodology enforced by the generic ingest normalizer),
+// `seedMigrationPlan` as `seedPlan` (T7 spawn decoration + confidence-case wiring), the T5
+// `promptAdditions`, and the T4 `MIGRATION_FRAGMENT_IDS`. No probe.
 export {
   TECH_MIGRATION_PRESET_ID,
   TECH_MIGRATION_PRESET,

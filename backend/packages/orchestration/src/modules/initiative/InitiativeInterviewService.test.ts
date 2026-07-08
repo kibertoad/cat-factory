@@ -1,8 +1,12 @@
-import { afterEach, beforeEach, describe, expect, it } from 'vitest'
+import { beforeEach, describe, expect, it } from 'vitest'
 import { MockLanguageModelV3 } from 'ai/test'
 import type { Block, Initiative, ModelProvider } from '@cat-factory/kernel'
-import { clearRegisteredInitiativePresets, registerInitiativePreset } from '@cat-factory/kernel'
+import { InitiativePresetRegistry } from '@cat-factory/kernel'
 import { InitiativeInterviewService } from './InitiativeInterviewService.js'
+
+// A fresh app-owned preset registry per test (reset + repopulated in each describe's `beforeEach`),
+// injected into every service — the DI replacement for the old module-global register/clear.
+let presetRegistry = new InitiativePresetRegistry()
 
 // The interviewer runs a real `generateText` over the model the `ModelProvider` resolves; inject a
 // deterministic `MockLanguageModelV3` (the AI SDK's own test double) that CAPTURES the prompt it is
@@ -13,7 +17,7 @@ import { InitiativeInterviewService } from './InitiativeInterviewService.js'
 const MIGRATION_PRESET_ID = 'preset_migration'
 /** A FULL-interview preset with two REQUIRED fields — a filled form seeds two qa exchanges. */
 function registerMigrationPreset() {
-  registerInitiativePreset({
+  presetRegistry.register({
     descriptor: {
       id: MIGRATION_PRESET_ID,
       presentation: {
@@ -43,7 +47,7 @@ const INTERVIEWER_STEERING = 'probe the downtime tolerance and cutover window'
  * relies on: the inline interviewer must fold the registered steering into its prompt.
  */
 function registerSteeredPreset() {
-  registerInitiativePreset({
+  presetRegistry.register({
     descriptor: {
       id: STEERED_PRESET_ID,
       presentation: {
@@ -69,7 +73,7 @@ const OPTIONAL_PRESET_ID = 'preset_optional_only'
  * that seeds NO qa. This is the case the old `presetInputs`-cardinality gate got wrong.
  */
 function registerOptionalOnlyPreset() {
-  registerInitiativePreset({
+  presetRegistry.register({
     descriptor: {
       id: OPTIONAL_PRESET_ID,
       presentation: {
@@ -116,6 +120,7 @@ const BLOCK = {
 
 function makeService(model: MockLanguageModelV3) {
   return new InitiativeInterviewService({
+    initiativePresetRegistry: presetRegistry,
     modelProvider: { resolve: () => model } satisfies ModelProvider,
     modelRef: { provider: 'fake', model: 'm' },
   })
@@ -151,11 +156,10 @@ const FORM_STEERING = 'intake-form responses'
 
 describe('InitiativeInterviewService — build-on-form steering (T3)', () => {
   beforeEach(() => {
-    clearRegisteredInitiativePresets()
+    presetRegistry = new InitiativePresetRegistry()
     registerMigrationPreset()
     registerOptionalOnlyPreset()
   })
-  afterEach(() => clearRegisteredInitiativePresets())
 
   it('tells the interviewer to build on the form when the initiative is form-backed', async () => {
     const cap = capturingModel()
@@ -225,11 +229,10 @@ describe('InitiativeInterviewService — build-on-form steering (T3)', () => {
 
 describe('InitiativeInterviewService — preset interviewer steering (T5)', () => {
   beforeEach(() => {
-    clearRegisteredInitiativePresets()
+    presetRegistry = new InitiativePresetRegistry()
     registerSteeredPreset()
     registerMigrationPreset()
   })
-  afterEach(() => clearRegisteredInitiativePresets())
 
   it('folds the registered interviewer promptAddition into the prompt', async () => {
     const cap = capturingModel()

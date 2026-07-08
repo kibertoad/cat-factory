@@ -6,7 +6,7 @@ import type {
   Pipeline,
   PipelineRepository,
 } from '@cat-factory/kernel'
-import { ConflictError, NoopEventPublisher } from '@cat-factory/kernel'
+import { ConflictError, InitiativePresetRegistry, NoopEventPublisher } from '@cat-factory/kernel'
 import { DEFAULT_DOCUMENT_STYLE_FRAGMENT_IDS } from '@cat-factory/prompt-fragments'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 import type { ExecutionService } from '../execution/ExecutionService.js'
@@ -170,6 +170,7 @@ function harness(opts: {
     workspaceRepository: {} as never,
     blockRepository: blocks,
     initiativeRepository: initiatives as never,
+    initiativePresetRegistry: new InitiativePresetRegistry(),
     events,
     clock,
     idGenerator,

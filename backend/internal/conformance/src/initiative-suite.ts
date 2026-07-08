@@ -5,13 +5,9 @@ import type {
   InitiativeRepository,
   WorkspaceRepository,
 } from '@cat-factory/kernel'
-import {
-  NoopEventPublisher,
-  clearRegisteredInitiativePresets,
-  registerInitiativePreset,
-} from '@cat-factory/kernel'
+import { InitiativePresetRegistry, NoopEventPublisher } from '@cat-factory/kernel'
 import { InitiativeService } from '@cat-factory/orchestration'
-import { afterEach, beforeEach, describe, expect, it } from 'vitest'
+import { describe, expect, it } from 'vitest'
 
 // Cross-runtime parity for the initiative store (the long-running multi-task work
 // container). The InitiativeService and the planning-pipeline steps are runtime-neutral,
@@ -332,33 +328,30 @@ export function defineInitiativeSuite(
     // Phase-template ingest normalization (initiative slice T2). The normalizer + InitiativeService
     // are runtime-neutral, but the RESULT — the reordered phases (or the untouched entity after a
     // rejected ingest) — is round-tripped through each facade's real store, so this proves both
-    // stores persist a template-shaped plan identically. Preset registration is a module-global
-    // side effect, so it is scoped + cleared here and the id is per-facade to avoid interference.
+    // stores persist a template-shaped plan identically. The preset is registered on a fresh
+    // app-owned registry (per-facade id) injected into the service — no module-global state.
     describe('phase-template ingest normalization (T2)', () => {
       const PRESET_ID = `preset_template_${name}`
-      beforeEach(() => {
-        clearRegisteredInitiativePresets()
-        registerInitiativePreset({
-          descriptor: {
-            id: PRESET_ID,
-            presentation: { label: 'Migration', icon: 'i', color: '#000', description: 'x' },
-            fields: [],
-            planningPipelineId: 'pl_initiative',
-            interview: 'full',
-            humanReviewDefault: true,
-            defaultFragmentIds: [],
-            phaseTemplate: {
-              phases: [
-                { id: 'blast-zone', title: 'Blast zone', goal: 'Enumerate.', required: true },
-                { id: 'coverage', title: 'Coverage', goal: '', required: true },
-                { id: 'delivery', title: 'Delivery', goal: '', required: true },
-              ],
-              allowAdditionalPhases: false,
-            },
+      const initiativePresetRegistry = new InitiativePresetRegistry()
+      initiativePresetRegistry.register({
+        descriptor: {
+          id: PRESET_ID,
+          presentation: { label: 'Migration', icon: 'i', color: '#000', description: 'x' },
+          fields: [],
+          planningPipelineId: 'pl_initiative',
+          interview: 'full',
+          humanReviewDefault: true,
+          defaultFragmentIds: [],
+          phaseTemplate: {
+            phases: [
+              { id: 'blast-zone', title: 'Blast zone', goal: 'Enumerate.', required: true },
+              { id: 'coverage', title: 'Coverage', goal: '', required: true },
+              { id: 'delivery', title: 'Delivery', goal: '', required: true },
+            ],
+            allowAdditionalPhases: false,
           },
-        })
+        },
       })
-      afterEach(() => clearRegisteredInitiativePresets())
 
       const makeService = (repos: {
         initiatives: InitiativeRepository
@@ -370,6 +363,7 @@ export function defineInitiativeSuite(
           workspaceRepository: { get: async () => ({}) } as unknown as WorkspaceRepository,
           blockRepository: repos.blocks,
           initiativeRepository: repos.initiatives,
+          initiativePresetRegistry,
           events: new NoopEventPublisher(),
           clock: { now: () => 1 },
           idGenerator: { next: (prefix: string) => `${prefix}-1` },
@@ -451,6 +445,8 @@ export function defineInitiativeSuite(
           workspaceRepository: { get: async () => ({}) } as unknown as WorkspaceRepository,
           blockRepository: repos.blocks,
           initiativeRepository: repos.initiatives,
+          // The resume path never reads a preset; a fresh registry satisfies the dependency.
+          initiativePresetRegistry: new InitiativePresetRegistry(),
           events: new NoopEventPublisher(),
           clock: { now: () => 777 },
           idGenerator: { next: (prefix: string) => `${prefix}-1` },

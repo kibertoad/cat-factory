@@ -13,14 +13,12 @@ import type {
   UpdateInitiativeItemInput,
   WorkspaceRepository,
 } from '@cat-factory/kernel'
-import {
-  ConflictError,
-  ValidationError,
-  assertFound,
-  getInitiativePreset,
-  requireWorkspace,
+import { ConflictError, ValidationError, assertFound, requireWorkspace } from '@cat-factory/kernel'
+import type {
+  InitiativePresetRegistry,
+  InitiativeQa,
+  InitiativeQaStatus,
 } from '@cat-factory/kernel'
-import type { InitiativeQa, InitiativeQaStatus } from '@cat-factory/kernel'
 import type { InitiativePresetInputs } from '@cat-factory/contracts'
 import {
   parseInitiativePlanDraft,
@@ -53,6 +51,8 @@ export interface InitiativeServiceDependencies {
   workspaceRepository: WorkspaceRepository
   blockRepository: BlockRepository
   initiativeRepository: InitiativeRepository
+  /** The app-owned initiative-preset registry (resolve a preset's descriptor + code hooks by id). */
+  initiativePresetRegistry: InitiativePresetRegistry
   events: ExecutionEventPublisher
   clock: Clock
   idGenerator: IdGenerator
@@ -100,7 +100,9 @@ export class InitiativeService {
     // Resolve + validate the initiative preset. Absent `presetId` ⇒ the preset-less generic
     // behaviour, byte-for-byte today's. An unknown preset / invalid form is a create-time
     // ValidationError, so nothing is written.
-    const preset = input.presetId ? getInitiativePreset(input.presetId) : undefined
+    const preset = input.presetId
+      ? this.deps.initiativePresetRegistry.get(input.presetId)
+      : undefined
     if (input.presetId && !preset) {
       throw new ValidationError(`Unknown initiative preset '${input.presetId}'`)
     }
@@ -257,7 +259,9 @@ export class InitiativeService {
   ): Promise<ReturnType<typeof parseInitiativePlanDraft> | null> {
     const initiative = await this.deps.initiativeRepository.getByBlock(workspaceId, blockId)
     if (!initiative) return null
-    const preset = initiative.presetId ? getInitiativePreset(initiative.presetId) : undefined
+    const preset = initiative.presetId
+      ? this.deps.initiativePresetRegistry.get(initiative.presetId)
+      : undefined
     const template = preset?.descriptor.phaseTemplate
     const normalize = (
       d: ReturnType<typeof parseInitiativePlanDraft>,
