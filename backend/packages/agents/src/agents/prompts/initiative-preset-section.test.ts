@@ -1,6 +1,6 @@
 import type { AgentRunContext } from '@cat-factory/kernel'
 import { describe, expect, it } from 'vitest'
-import { defaultAgentKindRegistry } from '../kinds/registry.js'
+import { AgentKindRegistry, defaultAgentKindRegistry } from '../kinds/registry.js'
 import { userPromptFor } from '../catalog.js'
 import { initiativePresetSection } from './standard.js'
 
@@ -96,5 +96,32 @@ describe('preset steering reaches spawned-run prompts', () => {
     expect(withPreset).toContain('## Initiative preset: Connector factory')
     expect(withPreset).toContain('Consume the build-handoff artifact.')
     expect(without).not.toContain('## Initiative preset')
+  })
+
+  it('folds into a custom kind that supplies its OWN user prompt (preset FIRST, prompt intact)', () => {
+    // A registered kind with a bespoke `userPrompt` used to bypass the preset section entirely.
+    // The org steering must reach it too — folded in ahead of the kind's own prompt text — while
+    // a non-initiative run leaves that self-authored prompt byte-for-byte unchanged.
+    const OWN_PROMPT = 'Audit the connector for compliance and report GO/NO_GO.'
+    const withPrompt = new AgentKindRegistry()
+    withPrompt.register({
+      kind: 'acme-compliance-auditor',
+      systemPrompt: 'You are a compliance auditor.',
+      userPrompt: () => OWN_PROMPT,
+    })
+    const custom = (over: Partial<AgentRunContext>) =>
+      userPromptFor(ctx({ agentKind: 'acme-compliance-auditor', ...over }), withPrompt, {
+        materialized: true,
+      })
+
+    const withPreset = custom({ initiative: { preset } })
+    expect(withPreset).toContain('## Initiative preset: Connector factory')
+    expect(withPreset).toContain('Consume the build-handoff artifact.')
+    // The kind's own prompt survives, and the preset frames it (preset text precedes the prompt).
+    expect(withPreset).toContain(OWN_PROMPT)
+    expect(withPreset.indexOf('## Initiative preset')).toBeLessThan(withPreset.indexOf(OWN_PROMPT))
+
+    // No initiative ⇒ the self-authored prompt is byte-for-byte unchanged.
+    expect(custom({})).toBe(OWN_PROMPT)
   })
 })

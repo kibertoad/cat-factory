@@ -171,9 +171,16 @@ function buildBaseUserPrompt(
   if (phase) return renderStandardUserPrompt(phase, context, opts)
 
   // A registered custom kind may supply its own user prompt; otherwise it falls through
-  // to the generic block-context prompt below, like any other non-standard-phase kind.
+  // to the generic block-context prompt below, like any other non-standard-phase kind. Even a
+  // self-authored prompt still gets the initiative-preset steering folded in FIRST — an
+  // initiative-spawned custom kind's standing org methodology frames its role before its own
+  // task text — so the preset addition reaches a custom kind however it builds its prompt.
+  // Empty on every non-initiative run ⇒ the custom prompt is byte-for-byte unchanged.
   const registered = registry.userPrompt(context)
-  if (registered !== undefined) return registered
+  if (registered !== undefined) {
+    const presetSection = initiativePresetSection(context)
+    return presetSection ? `${presetSection.trimStart()}\n\n${registered}` : registered
+  }
 
   const { block, pipelineName, priorOutputs, decisions, resolvedDecision } = context
   const lines: string[] = [
