@@ -685,8 +685,13 @@ export class LocalContainerRunnerTransport implements RunnerTransport {
       Array.from({ length: deficit }, async () => {
         try {
           this.scheduleIdleEviction(await this.startMember(false))
-        } catch {
-          // a failed pre-warm is logged-and-skipped; the pool fills on demand
+        } catch (err) {
+          // A failed pre-warm is skipped (the pool fills a member on demand instead), but
+          // surface WHY: a version-handshake mismatch throws here too, and swallowing it
+          // silently would hide the misconfiguration until the first real dispatch.
+          logger.warn(
+            `Local harness pool pre-warm skipped a member: ${err instanceof Error ? err.message : String(err)}`,
+          )
         }
       }),
     )

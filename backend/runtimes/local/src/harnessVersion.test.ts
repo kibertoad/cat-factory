@@ -1,5 +1,5 @@
-import { describe, expect, it } from 'vitest'
-import { decideHarnessVersion, parseImageVersion } from './harnessVersion.js'
+import { describe, expect, it, vi } from 'vitest'
+import { decideHarnessVersion, parseImageVersion, verifyHarnessVersion } from './harnessVersion.js'
 
 describe('parseImageVersion', () => {
   it('extracts a concrete version tag', () => {
@@ -80,5 +80,74 @@ describe('decideHarnessVersion', () => {
       source: { ref: '/path/to/dist/server.js', kind: 'native' },
     })
     expect(d.level === 'fail' && d.message).toContain('@cat-factory/executor-harness')
+  })
+})
+
+describe('verifyHarnessVersion', () => {
+  const endpoint = { host: '127.0.0.1', port: 8080 }
+  const source = { ref: 'ghcr.io/o/cat-factory-executor:1.40.0', kind: 'image' as const }
+
+  const health = (body: unknown): typeof fetch =>
+    (async () =>
+      ({ ok: true, json: async () => body }) as unknown as Response) as unknown as typeof fetch
+
+  const base = { endpoint, secret: 's', requestTimeoutMs: 1_000, custom: false, source }
+
+  it('is a no-op when there is no expected version (does not even probe)', async () => {
+    const fetchImpl = vi.fn()
+    await verifyHarnessVersion({
+      ...base,
+      fetchImpl: fetchImpl as unknown as typeof fetch,
+      expected: undefined,
+    })
+    expect(fetchImpl).not.toHaveBeenCalled()
+  })
+
+  it('resolves silently when the reported version matches', async () => {
+    const onWarn = vi.fn()
+    await expect(
+      verifyHarnessVersion({
+        ...base,
+        fetchImpl: health({ status: 'ok', version: '1.40.0' }),
+        expected: '1.40.0',
+        onWarn,
+      }),
+    ).resolves.toBeUndefined()
+    expect(onWarn).not.toHaveBeenCalled()
+  })
+
+  it('THROWS a loud, actionable error on a stock mismatch', async () => {
+    await expect(
+      verifyHarnessVersion({
+        ...base,
+        fetchImpl: health({ status: 'ok', version: '1.37.0' }),
+        expected: '1.40.0',
+      }),
+    ).rejects.toThrow(/version mismatch.*1\.40\.0.*1\.37\.0/s)
+  })
+
+  it('THROWS when the harness reports no version at all (predates the handshake)', async () => {
+    await expect(
+      verifyHarnessVersion({
+        ...base,
+        fetchImpl: health({ status: 'ok' }),
+        expected: '1.40.0',
+      }),
+    ).rejects.toThrow(/did not report a version/)
+  })
+
+  it('calls onWarn (does NOT throw) on a mismatch under a custom override', async () => {
+    const onWarn = vi.fn()
+    await expect(
+      verifyHarnessVersion({
+        ...base,
+        custom: true,
+        fetchImpl: health({ status: 'ok', version: '1.37.0' }),
+        expected: '1.40.0',
+        onWarn,
+      }),
+    ).resolves.toBeUndefined()
+    expect(onWarn).toHaveBeenCalledOnce()
+    expect(onWarn.mock.calls[0]?.[0]).toContain('custom harness override')
   })
 })
