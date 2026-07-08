@@ -85,6 +85,12 @@ reuse the rollup substrate (`totalsSince*`, per-workspace/account/user) that alr
      emit them; Pi is proxy-metered and has none). `RunDispatcher.recordStepResult` (which already
      owns `spend`) then records it with the right billing. This needs **zero new facade wiring**
      and can't double-count Pi.
+   - **Caveat — the ledger counts finished runs only.** A run that ends `failed` returns
+     `{ state: 'failed' }` with no `result`, so `RunDispatcher.recordStepResult` never meters it
+     (same as a failed metered step). So the Usage report excludes tokens burned by a failed
+     subscription run; that per-call detail still lands in `llm_call_metrics` (recorded on every
+     terminal state, success or failure) for run-level inspection. Fold failed-run tokens into the
+     report only if Part B needs it — it would mean metering off the failed poll, not the result.
 5. **Controller + contract.** `GET /workspaces/:ws/usage` → the breakdown for the current
    period (+ optional range). Contract in `@cat-factory/contracts`.
 6. **Frontend.** A `useUsageStore` (snapshot-fed for headline totals, endpoint-fed for the

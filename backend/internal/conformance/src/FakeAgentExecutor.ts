@@ -242,7 +242,7 @@ export class FakeAgentExecutor implements AgentExecutor {
   /** The usage fields to spread onto a result: the token counts + optional billing tag. */
   private usageFields(): Pick<AgentRunResult, 'usage' | 'usageBilling' | 'usageVendor'> {
     return {
-      ...this.usageFields(),
+      usage: this.options.usage,
       ...(this.options.usageBilling ? { usageBilling: this.options.usageBilling } : {}),
       ...(this.options.usageVendor ? { usageVendor: this.options.usageVendor } : {}),
     }
