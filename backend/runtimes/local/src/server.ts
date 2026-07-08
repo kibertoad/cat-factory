@@ -13,7 +13,7 @@ import {
 import { isConfigValidationError, logger } from '@cat-factory/server'
 import { validateRegistrationsOnce } from '@cat-factory/orchestration'
 import type { BackendRegistries } from '@cat-factory/integrations'
-import { applyLocalDefaults } from './config.js'
+import { applyLocalDefaults, withLocalEnvCliAdvice } from './config.js'
 import { buildLocalContainer } from './container.js'
 import { githubPatCreationUrl } from './github.js'
 import {
@@ -88,8 +88,12 @@ export async function startLocal(
     // bare "can't reach the backend" panel — keep the port reachable serving the fallback backend
     // so the UI explains exactly what to add to their .env. (The Postgres path's own config errors
     // are already handled inside `start()`; this covers the ones thrown by `applyLocalDefaults` and
-    // the mothership path, before `start()` runs.)
-    if (isConfigValidationError(err)) return serveMisconfigured(err.problems, env, options.host)
+    // the mothership path, before `start()` runs.) Advertise the one-step `.env` generator (the
+    // `cat-factory env` CLI) above the per-variable remedies — the same advice `start()` layers on
+    // the errors it catches itself (DATABASE_URL), via `augmentConfigProblems` below.
+    if (isConfigValidationError(err)) {
+      return serveMisconfigured(withLocalEnvCliAdvice(err.problems), env, options.host)
+    }
     throw err
   }
 }
@@ -167,6 +171,10 @@ async function bootLocal(
     env: localized,
     host: options.host,
     agentKindRegistry: options.agentKindRegistry,
+    // A mandatory value missing from the reused Node boot (DATABASE_URL) is caught inside `start()`,
+    // so it never reaches this facade's own catch above — thread the same local-mode `.env`-CLI
+    // advertisement through `start()`'s misconfiguration path so those problems get it too.
+    augmentConfigProblems: withLocalEnvCliAdvice,
     // Forward the deployment's default-preset choice: `start()` puts it on the `o` it hands the
     // `buildContainer` override below, so `buildLocalContainer` picks it up (undefined ⇒ local's
     // Claude default). Kept off the `buildLocalContainer` call directly so there is one path.

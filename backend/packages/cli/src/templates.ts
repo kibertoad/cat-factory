@@ -183,6 +183,9 @@ CORS_ALLOWED_ORIGINS=http://localhost:3000
 AUTH_SESSION_SECRET=
 # Generate with: openssl rand -base64 32
 ENCRYPTION_KEY=
+# Shared HMAC secret between the backend and the executor-harness (>= 16 chars). Required to boot.
+# Generate with: node -e "console.log(require('crypto').randomBytes(32).toString('hex'))"
+HARNESS_SHARED_SECRET=
 # A GitHub (classic, scopes: repo,workflow) or GitLab (scope: api,read_user) personal access token.
 ${tokenLines.join('\n')}
 # For a self-managed GitLab instance, also set GITLAB_API_BASE (e.g. https://gitlab.example.com/api/v4).

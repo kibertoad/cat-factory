@@ -15,8 +15,11 @@ export type K3sRuntime = (typeof K3S_RUNTIMES)[number]
 
 /** Parsed, validated CLI options. Unset optionals are resolved later (defaults / prompts). */
 export interface CliOptions {
-  /** The subcommand. `init` (the default when omitted) or `k3s` (guided local-cluster setup). */
-  command: 'init' | 'k3s' | 'help' | 'version'
+  /**
+   * The subcommand. `init` (the default when omitted) scaffolds a full project; `env` writes just
+   * a ready-to-run local-mode `.env`; `k3s` is the guided local-cluster setup.
+   */
+  command: 'init' | 'env' | 'k3s' | 'help' | 'version'
   dir?: string
   projectName?: string
   appTitle?: string
@@ -79,6 +82,12 @@ export function parseArgs(argv: string[]): CliOptions {
       case 'init':
         if (!commandSet) {
           opts.command = 'init'
+          commandSet = true
+        }
+        break
+      case 'env':
+        if (!commandSet) {
+          opts.command = 'env'
           commandSet = true
         }
         break
@@ -274,11 +283,15 @@ export const HELP_TEXT = `cat-factory — bootstrap a local cat-factory deployme
 
 Usage:
   cat-factory [init] [options]
+  cat-factory env [options]
   cat-factory k3s [options]
 
 Commands:
   init   Scaffold a local-mode backend (local/) + frontend SPA (frontend/): generate the
          crypto secrets, mint a GitHub/GitLab PAT (opens your browser), write gitignored .env.
+  env    Generate ONLY a ready-to-run local-mode .env in the current dir (or --dir): all three
+         crypto secrets, a minted GitHub/GitLab PAT, and the execution mode — so local mode
+         boots with no manual edits. Use it in an existing deployment dir (e.g. deploy/local).
   k3s    Guided local Kubernetes setup: probe the host for a usable cluster, then create (or
          reuse) one + a least-privilege ServiceAccount and print the values to wire the
          Local k3s environment handler. A k3s install needs sudo, so it is only ever printed.
@@ -302,6 +315,21 @@ Options (init):
   -f, --force             Overwrite existing files
   -h, --help              Show this help
   -v, --version           Show the CLI version
+
+Options (env):
+  -d, --dir <path>        Directory to write .env into (default: current directory)
+      --provider <p>      Source control: github | gitlab (default: github)
+      --token <token>     PAT value (skips the browser/paste flow)
+      --db-url <url>      Postgres DATABASE_URL
+      --port <n>          Backend HTTP port (default: 8787)
+      --harness-image <ref>  Executor-harness image (default: ghcr.io ...:latest)
+      --container-runtime <r>  Agent container runtime: docker | podman | orbstack | colima | apple
+      --execution-mode <m>  How agents run: pool (Docker container pool) | native (host CLI)
+      --native-harnesses <l>  Native mode: harnesses to run natively (claude-code,codex)
+      --harness-entry <p>  Native mode: path to the executor-harness server entry
+      --no-open           Don't open the browser (just print the token URL)
+  -y, --yes               Non-interactive: use defaults/flags, never prompt
+  -f, --force             Overwrite an existing .env
 
 Options (k3s):
       --cluster-name <n>  Name for a provisioned local cluster (default: cat-factory)

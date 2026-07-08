@@ -9,7 +9,9 @@ export {
   parseArgs,
   ArgError,
 } from './args.js'
-export { bootstrap, type BootstrapDeps, type FileSystem, BootstrapError } from './bootstrap.js'
+export { bootstrap, type BootstrapDeps, BootstrapError } from './bootstrap.js'
+export { type EnvCommandDeps, EnvCommandError, generateEnv } from './envCommand.js'
+export { type FileSystem } from './fs.js'
 export {
   COMMAND_NOT_FOUND,
   COMMAND_TIMED_OUT,
