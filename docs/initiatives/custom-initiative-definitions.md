@@ -302,7 +302,7 @@ documented state in `example-custom-agent`).
 | 2   | **Phase checkpoints (D2)**: contracts (`checkpoint` on template/entity/draft phases + `checkpointClearedAt`), ingest stamping, pure `pendingCheckpoint`/`applyCheckpointCleared`, loop pause + `checkpoint` notification reason, resume clears, tracker.md renders checkpoints; unit + conformance                                                                                                                                       | SYSTEM | —          | ✅ done | #949 |
 | 3   | **Checkpoint SPA touch + e2e**: phase checkpoint badge / paused-at-checkpoint explanation; e2e: checkpointed fake plan → pause → resume → next-phase spawn (extends the `FakeProfile.initiativePlan` seam — do not add a second one)                                                                                                                                                                                                     | SYSTEM | 2          | ✅ done | #954 |
 | 4   | **Planner preferred-pipelines fold (D4)**: `policyDefaults`-derived line in the plan-shape fold; prompt unit tests. Low prio — reassess after slices 1–2; drop if planner drift doesn't occur                                                                                                                                                                                                                                            | SYSTEM | —          | ⬜ todo |      |
-| 5   | **Preset-registry DI migration (D5)**: kernel registry class + default factory; `CoreDependencies` field; thread into the 3 orchestration read sites + `ServerContainer` for the 2 controllers; symmetric facade wiring (Worker/Node/local); delete free registration fns (breaking changeset); conformance custom-preset injection; update `registry-di-migration.md`                                                                   | SYSTEM | 1, 2       | ⬜ todo |      |
+| 5   | **Preset-registry DI migration (D5)**: kernel registry class + default factory; `CoreDependencies` field; thread into the 3 orchestration read sites + `ServerContainer` for the 2 controllers; symmetric facade wiring (Worker/Node/local); delete free registration fns (breaking changeset); conformance custom-preset injection; update `registry-di-migration.md`                                                                   | SYSTEM | 1, 2       | ✅ done | #960 |
 | 6   | **Worked example + docs (the consumer proof)**: extend `example-custom-agent` with a minimal 2-phase "research → apply" preset exercising ALL new seams (custom container-explore kind + verdict resolver + artifact postOp on a merging pipeline, `checkpoint: true` research phase, a `coder` promptAddition, `seedPlan`-derived artifact path); expand `backend/docs/initiative-presets.md` (consumer walkthrough); cross-doc updates | BOTH   | 1, 2, 5    | ⬜ todo |      |
 
 Pilot ordering: slice 1 is the pilot (highest-value, smallest blast radius, establishes
@@ -436,6 +436,29 @@ initiative-checkpoint-pause`) with inline Resume/Cancel (reusing `initiatives.co
   the terminal that fires the checkpoint): phase-1 done → card `paused` + phase-2 UNSPAWNED (proving
   the gate) → tracker banner → Resume → phase-2 spawns. Added the `getInitiative` snapshot helper for
   backend-only progression a spec can't see on the board.
+- **Slice 5 landed:** the initiative-preset registry is now app-owned DI, mirroring the agent-kind
+  pilot. The `InitiativePresetRegistry` CLASS + the built-in generic preset live in kernel
+  (`domain/initiative-preset-registry.ts`); the `defaultInitiativePresetRegistry()` FACTORY lives in
+  `@cat-factory/agents` (`presets/registry.ts`) because it preloads the docs-refresh + tech-migration
+  built-ins (which live in agents and can't be imported by kernel) — exactly the split the agent-kind
+  registry has (class-in-owner-package, default-factory-preloads-built-ins). The free
+  `registerInitiativePreset(s)` / `getInitiativePreset` / `allInitiativePresets` /
+  `initiativePresetDescriptors` / `clearRegisteredInitiativePresets` exports are DELETED (breaking
+  changeset). `CoreDependencies.initiativePresetRegistry?` (defaulted in `createCore`) is threaded
+  into `InitiativeService`, `InitiativeInterviewService` (the two module-level `formSeeded` /
+  `presetInterviewerSteering` free fns take the registry as a param), and `AgentContextBuilder` (via
+  `ExecutionService`); re-exposed on `Core` so `ServerContainer` carries it (through the `createCore`
+  spread — no separate attach) for `WorkspaceController.descriptors()` + `InitiativeController`'s
+  probe. Facades resolve `overrides.initiativePresetRegistry ?? defaultInitiativePresetRegistry()`
+  and drop it into `CoreDependencies` (Worker/Node; local inherits via `buildNodeContainer`'s
+  `...options` spread); the three `src/index.ts` re-export the DI seam. `registerExampleCustomAgents`
+  gained a second `initiativePresetRegistry` param. Conformance: `ConformanceAppOptions.initiativePresetRegistry`
+  (each facade harness threads it into its container build) + a new "serves an injected custom preset
+  descriptor in the snapshot + accepts create-with-preset" assertion; the spawned-run preset test +
+  the T2 ingest test now inject a fresh registry instead of the module global. GOTCHA carried in: the
+  preset registry is read ONLY inside `createCore` services + the two controllers (no executor/helper
+  reads), so — unlike `agentKindRegistry` — it needs NO threading into the facade executor-build
+  helpers; a single `CoreDependencies` field suffices.
 - **Slice 1 landed:** the shared renderer is `initiativePresetSection(context)` in
   `@cat-factory/agents` `prompts/standard.ts` (NOT `catalog.ts` — it lives beside the sibling
   section helpers `environmentSection`/`involvedServicesSection` and is re-exported from the

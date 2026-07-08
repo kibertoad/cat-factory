@@ -16,6 +16,7 @@ import type {
   ExecutionEventPublisher,
   ExecutionInstance,
   ExecutionRepository,
+  InitiativePresetRegistry,
   InitiativeRepository,
   LlmCallActivity,
   NotificationRepository,
@@ -424,6 +425,14 @@ export interface ConformanceAppOptions {
    * {@link FakeAgentExecutor}. Absent → the facade's default built-ins-only registry.
    */
   agentKindRegistry?: AgentKindRegistry
+  /**
+   * Inject the app-owned initiative-preset registry, pre-loaded with a CUSTOM preset, so the suite
+   * can assert a deployment-registered preset resolves identically on EVERY runtime (its snapshot
+   * descriptor + create-with-preset + its per-kind steering folded onto a spawned run) — replacing
+   * the old module-global registration. Each facade harness threads the SAME instance into its
+   * container build. Absent → the facade's default built-in-only registry.
+   */
+  initiativePresetRegistry?: InitiativePresetRegistry
   /**
    * Inject the test quality-control companion's inline reviewer (a deterministic fake in the
    * suite) so the full QC loop — audit a Tester report, loop the Tester on gaps, settle on an

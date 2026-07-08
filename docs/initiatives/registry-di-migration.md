@@ -49,20 +49,21 @@ The pilot — the environment-backend + runner-backend registries — is the tem
 
 ## Per-registry checklist
 
-| Registry               | Owning package                | File                                           | Status                                                                                              | PR      |
-| ---------------------- | ----------------------------- | ---------------------------------------------- | --------------------------------------------------------------------------------------------------- | ------- |
-| Environment backends   | integrations                  | `modules/environments/environment-backends.ts` | ✅ done                                                                                             | (pilot) |
-| Runner backends        | integrations                  | `modules/runners/runner-backends.ts`           | ✅ done                                                                                             | (pilot) |
-| User-secret kinds      | integrations                  | `modules/providers/userSecretKinds.ts`         | ✅ done                                                                                             |         |
-| Observability adapters | integrations                  | `modules/observability/registry.ts`            | ⚠️ partial (already injected into `RegistryReleaseHealthProvider`; uses a record, not a module Map) |         |
-| Gates                  | kernel + `@cat-factory/gates` | `kernel/domain/gate-registry.ts`               | ⬜ todo                                                                                             |         |
-| Provider tokens        | kernel                        | `domain/provider-registry.ts`                  | ⬜ todo                                                                                             |         |
-| Step resolvers         | kernel                        | `domain/step-resolver-registry.ts`             | ⬜ todo                                                                                             |         |
-| Pipelines              | kernel                        | `domain/pipeline-registry.ts`                  | ⬜ todo                                                                                             |         |
-| VCS providers          | kernel                        | `domain/vcs-registry.ts`                       | ⬜ todo                                                                                             |         |
-| Agent kinds            | agents                        | `agents/kinds/registry.ts`                     | ✅ done (spec: [`agent-kind-registry-di.md`](./agent-kind-registry-di.md))                          |         |
-| Agent traits           | agents                        | `agents/kinds/traits.ts`                       | ⬜ todo                                                                                             |         |
-| Model providers        | agents                        | `providers/registry.ts`                        | ✅ already instance-based (`CompositeModelProvider`)                                                |         |
+| Registry               | Owning package                | File                                           | Status                                                                                                | PR      |
+| ---------------------- | ----------------------------- | ---------------------------------------------- | ----------------------------------------------------------------------------------------------------- | ------- |
+| Environment backends   | integrations                  | `modules/environments/environment-backends.ts` | ✅ done                                                                                               | (pilot) |
+| Runner backends        | integrations                  | `modules/runners/runner-backends.ts`           | ✅ done                                                                                               | (pilot) |
+| User-secret kinds      | integrations                  | `modules/providers/userSecretKinds.ts`         | ✅ done                                                                                               |         |
+| Observability adapters | integrations                  | `modules/observability/registry.ts`            | ⚠️ partial (already injected into `RegistryReleaseHealthProvider`; uses a record, not a module Map)   |         |
+| Gates                  | kernel + `@cat-factory/gates` | `kernel/domain/gate-registry.ts`               | ⬜ todo                                                                                               |         |
+| Provider tokens        | kernel                        | `domain/provider-registry.ts`                  | ⬜ todo                                                                                               |         |
+| Step resolvers         | kernel                        | `domain/step-resolver-registry.ts`             | ⬜ todo                                                                                               |         |
+| Pipelines              | kernel                        | `domain/pipeline-registry.ts`                  | ⬜ todo                                                                                               |         |
+| VCS providers          | kernel                        | `domain/vcs-registry.ts`                       | ⬜ todo                                                                                               |         |
+| Agent kinds            | agents                        | `agents/kinds/registry.ts`                     | ✅ done (spec: [`agent-kind-registry-di.md`](./agent-kind-registry-di.md))                            |         |
+| Initiative presets     | kernel + agents               | `kernel/domain/initiative-preset-registry.ts`  | ✅ done (as part of [`custom-initiative-definitions.md`](./custom-initiative-definitions.md) slice 5) |         |
+| Agent traits           | agents                        | `agents/kinds/traits.ts`                       | ⬜ todo                                                                                               |         |
+| Model providers        | agents                        | `providers/registry.ts`                        | ✅ already instance-based (`CompositeModelProvider`)                                                  |         |
 
 ## Conventions / gotchas carried between iterations
 

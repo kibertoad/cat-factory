@@ -5,6 +5,18 @@
 > Durable source of truth for a multi-PR initiative. Read this first before picking up the
 > next slice; update the checklist at the end of each PR.
 
+> **⚠️ Superseded (2026-07-08): the preset registry moved to app-owned DI.** The module-global
+> `registerInitiativePreset(s)` / `getInitiativePreset` / `allInitiativePresets` /
+> `initiativePresetDescriptors` / `clearRegisteredInitiativePresets` free functions this doc
+> describes are **gone**. Presets now live on an app-owned `InitiativePresetRegistry` (kernel)
+> that the composition root news via `defaultInitiativePresetRegistry()` (`@cat-factory/agents`),
+> threads through `CoreDependencies`, and re-exposes on `Core` — mirroring the agent-kind
+> registry. See [`custom-initiative-definitions.md`](./custom-initiative-definitions.md) slice 5
+> (PR #960) and [`backend/docs/initiative-presets.md`](../../backend/docs/initiative-presets.md)
+> for the current seam. The per-slice notes below are retained as historical build context; where
+> they name a free function or "module-global" read, substitute the registry instance the facade
+> injects.
+
 ## Goal & rationale
 
 The product Initiative feature (`docs/initiatives/initiatives-feature.md`) plans a
@@ -105,11 +117,13 @@ defaultFragmentIds, policyDefaults?: Partial<InitiativeExecutionPolicy>, probe? 
      validated against the descriptor on create.
 2. **Kernel registry** — new
    `backend/packages/kernel/src/domain/initiative-preset-registry.ts`:
-   `registerInitiativePreset({ descriptor, detect?, seedPlan?, promptAdditions? })` —
-   module-global, replace-by-id, beside the pipeline/gate registries. `detect(repo: RepoFiles)`
-   is a deterministic, bounded, best-effort prefill probe; `seedPlan(draft, inputs)` is a pure
-   post-processor/validator of the planner's draft at ingest; `promptAdditions` is a
-   per-agent-kind map of planning-prompt steering text (data, not code).
+   `registry.register({ descriptor, detect?, seedPlan?, promptAdditions? })` on the app-owned
+   `InitiativePresetRegistry` (replace-by-id, mirroring the agent-kind registry — see the
+   superseded banner; the original shipping shape was a module-global free function).
+   `detect(repo: RepoFiles)` is a deterministic, bounded, best-effort prefill probe;
+   `seedPlan(draft, inputs)` is a pure post-processor/validator of the planner's draft at
+   ingest; `promptAdditions` is a per-agent-kind map of planning-prompt steering text (data,
+   not code).
 3. **Entity extension** — `Initiative.presetId` + `Initiative.presetInputs` and
    `InitiativeItem.spawn: { taskTypeFields?, fragmentIds?, agentConfig?, gates?, }` (+ the
    draft-item schema), all inside the `doc` blob. Rendered onto the in-repo `tracker.md` as a
