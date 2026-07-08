@@ -6,6 +6,7 @@ import { handleInline } from './inline.js'
 import { redactSecrets } from './git.js'
 import { JobRegistry, loadRunnerLimits, type JobResultBase, type RunOptions } from './runner.js'
 import { log } from './logger.js'
+import { HARNESS_VERSION } from './version.js'
 
 // The container's HTTP entry point. The Worker addresses one instance per run and
 // POSTs a job to /jobs (the body's `kind` selects which agent runs); the harness
@@ -109,7 +110,14 @@ function send(res: ServerResponse, status: number, body: unknown): void {
 const server = createServer((req, res) => {
   void (async () => {
     if (req.method === 'GET' && req.url === '/health') {
-      return send(res, 200, { status: 'ok' })
+      // Report the harness version so a backend can detect a stale/mismatched executor and
+      // fail loudly early (see version.ts). Unauthenticated like the rest of /health — the
+      // version is not a secret. An old image predating this field simply omits it, which the
+      // backend treats as a stale signal.
+      return send(res, 200, {
+        status: 'ok',
+        ...(HARNESS_VERSION ? { version: HARNESS_VERSION } : {}),
+      })
     }
     // All non-health endpoints are gated by the optional shared secret.
     if (!authorized(req)) {
