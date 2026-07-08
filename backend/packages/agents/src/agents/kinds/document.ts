@@ -52,7 +52,7 @@ export const DOC_OUTLINER_KIND = 'doc-outliner'
  * it specially — its registered system/user prompt is vestigial (the controller builds the real
  * interviewer prompt in DocInterviewService).
  */
-export const DOC_INTERVIEWER_KIND = DOC_INTERVIEWER_AGENT_KIND
+const DOC_INTERVIEWER_KIND = DOC_INTERVIEWER_AGENT_KIND
 export const DOC_WRITER_KIND = 'doc-writer'
 export const DOC_FINALIZER_KIND = 'doc-finalizer'
 /** The companion that reviews {@link DOC_WRITER_KIND}; its definition lives in ./companions. */

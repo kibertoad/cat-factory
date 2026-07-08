@@ -8,7 +8,7 @@ import type { Env } from '../env'
 import { buildContainer } from '../container'
 
 /** Params for a full-repo backfill of one installation. */
-export interface GitHubBackfillParams {
+interface GitHubBackfillParams {
   installationId: number
 }
 

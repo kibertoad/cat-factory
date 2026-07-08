@@ -2347,6 +2347,9 @@ export class RunDispatcher {
       case 'base':
         return baseBranch
       case 'pr':
+      // `pr-or-work` reads/writes the PR branch when one exists (amend in place), else the work
+      // branch — the same resolution as `pr`, so it shares this arm.
+      case 'pr-or-work':
         return prBranch ?? (await this.ensureWorkBranch(repo, workBranch, baseBranch))
       default:
         // 'work' (or unspecified): the work branch the container agent operates on. A PR
@@ -3198,10 +3201,18 @@ export class RunDispatcher {
       : [gate.helperPriorOutput?.(failureSummary ?? '')].filter(
           (o): o is { agentKind: string; output: string } => o != null,
         )
+    // When the conflicts gate detected the conflict on a PEER repo (multi-repo task), hand the
+    // conflict-resolver the target repo so the executor points it at THAT repo (own-service or
+    // a connected service) instead of always the own service. Own-repo conflicts leave it absent
+    // (`conflictTarget` carries no `frameId`), so the resolver targets the own repo as before.
+    const conflictTarget = step.gate?.conflictTarget
     const context: AgentRunContext = {
       ...base,
       agentKind: gate.helperKind,
       priorOutputs: [...base.priorOutputs, ...extras],
+      ...(conflictTarget?.frameId
+        ? { conflictTarget: { repo: conflictTarget.repo, frameId: conflictTarget.frameId } }
+        : {}),
     }
     const handle = await executor.startJob(context)
     step.jobId = handle.jobId

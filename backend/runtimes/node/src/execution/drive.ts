@@ -11,12 +11,7 @@ import {
   driveExecution as driveExecutionCore,
 } from '@cat-factory/orchestration'
 
-export type {
-  DriveConfig,
-  DriveLogger,
-  DriveOptions,
-  DriveOutcome,
-} from '@cat-factory/orchestration'
+export type { DriveConfig, DriveOptions, DriveOutcome } from '@cat-factory/orchestration'
 
 type ExecutionService = Parameters<typeof driveExecutionCore>[0]
 

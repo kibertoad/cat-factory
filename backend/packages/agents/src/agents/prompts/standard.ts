@@ -404,7 +404,7 @@ function clampToTokens(text: string, maxTokens: number): string {
  * architect/reviewer phases have no matching system rule, so they keep their normal,
  * spec-led behaviour.
  */
-export function technicalContextSection(context: AgentRunContext): string {
+function technicalContextSection(context: AgentRunContext): string {
   if (!context.block.technical) return ''
   return [
     '',

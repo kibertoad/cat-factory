@@ -8,7 +8,7 @@ import type { Logger, ServerContainer } from '@cat-factory/server'
 // isn't wired.
 
 /** How often the Node service checks for due schedules. */
-export const SCHEDULE_SWEEP_INTERVAL_MS = 60 * 1000
+const SCHEDULE_SWEEP_INTERVAL_MS = 60 * 1000
 
 /**
  * Start the periodic schedule sweep. Runs once immediately then on a one-minute

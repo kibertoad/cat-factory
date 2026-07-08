@@ -31,6 +31,7 @@ import { initiativeContentView } from '@cat-factory/agents'
 import { gridSlot } from '../board/board.logic.js'
 import {
   applyAnalysis,
+  applyCheckpointCleared,
   applyDismissFollowUp,
   applyInterviewAnswer,
   applyInterviewOutcome,
@@ -43,6 +44,7 @@ import {
   applyQuestionStatus,
   initiativeSlug,
   normalizeDraftAgainstPhaseTemplate,
+  pendingCheckpoint,
   seedPresetInterviewQa,
   validatePlanDraft,
 } from './initiative.logic.js'
@@ -337,11 +339,28 @@ export class InitiativeService {
     )
   }
 
-  /** Resume a paused initiative back to `executing` (the next sweep picks it up). */
+  /**
+   * Resume a paused initiative back to `executing` (the next sweep picks it up). When it was paused
+   * at a phase checkpoint (D2), resume IS the acknowledgment: stamp `checkpointClearedAt` on that
+   * phase in the SAME CAS transform, so the checkpoint never re-fires and the loop advances past the
+   * reviewed phase. Doing it here (not a separate write) means a lagging sweep can't re-pause the run
+   * between the resume and a distinct ack write.
+   *
+   * Resume is a BLANKET acknowledgment by design: it clears whatever checkpoint is currently pending,
+   * regardless of WHY the run was paused. So if a human {@link pause}d manually and the checkpoint
+   * phase's in-flight items then settled, resuming clears that checkpoint rather than immediately
+   * re-pausing at it on the next tick. There is deliberately no pause-reason bookkeeping — the two
+   * pause sources converge on "resume = continue past the reviewed phase".
+   */
   resume(workspaceId: string, blockId: string): Promise<Initiative | null> {
-    return this.mutate(workspaceId, blockId, (current) =>
-      current.status === 'paused' ? { ...current, status: 'executing' } : current,
-    )
+    return this.mutate(workspaceId, blockId, (current) => {
+      if (current.status !== 'paused') return current
+      const checkpoint = pendingCheckpoint(current)
+      const cleared = checkpoint
+        ? applyCheckpointCleared(current, checkpoint.id, this.deps.clock.now())
+        : current
+      return { ...cleared, status: 'executing' }
+    })
   }
 
   /**

@@ -35,7 +35,10 @@ interface Captured {
   kind: RunnerDispatchKind | undefined
 }
 
-function makeExecutor(): { executor: ContainerAgentExecutor; captured: Captured[] } {
+function makeExecutor(depsOverride: Partial<ContainerAgentExecutorDependencies> = {}): {
+  executor: ContainerAgentExecutor
+  captured: Captured[]
+} {
   const captured: Captured[] = []
   const transport: RunnerTransport = {
     async dispatch(ref, spec, kind) {
@@ -69,6 +72,7 @@ function makeExecutor(): { executor: ContainerAgentExecutor; captured: Captured[
     // Read-only agents only probe the work branch; return true so the read-only body
     // resolves to the shared work branch (the more interesting path).
     ensureWorkBranch: async () => true,
+    ...depsOverride,
   }
   return { executor: new ContainerAgentExecutor(deps), captured }
 }
@@ -77,6 +81,7 @@ function context(
   agentKind: string,
   overrides: Partial<AgentRunContext['block']> = {},
   service?: AgentRunContext['service'],
+  extra: Partial<AgentRunContext> = {},
 ): AgentRunContext {
   return {
     agentKind: agentKind as AgentRunContext['agentKind'],
@@ -96,6 +101,7 @@ function context(
     resolvedDecision: null,
     priorOutputs: [],
     decisions: [],
+    ...extra,
   }
 }
 
@@ -186,6 +192,31 @@ describe('ContainerAgentExecutor.buildJobBody (per-kind body shapes)', () => {
     expect(captured[0]).toMatchSnapshot()
   })
 
+  // The `code-commenter` kind clones `pr-or-work`: it AMENDS the coder's PR in place when one
+  // exists (the BAU pipeline step), and OPENS its own PR when there is none (a standalone /
+  // initiative sweep). One kind, two behaviours resolved from the block's PR at dispatch.
+  it('code-commenter amends the coder PR in place when one exists (BAU pipeline step)', async () => {
+    await executor.startJob(context('code-commenter', { pullRequest: PR }))
+    const spec = captured[0]!.spec
+    expect(spec.mode).toBe('coding')
+    expect(spec.branch).toBe('cat-factory/blk_1') // clones the PR head
+    expect(spec.pushBranch).toBe('cat-factory/blk_1') // pushes comment-only edits back onto it
+    expect(spec.newBranch).toBeUndefined() // no new branch — edits in place
+    expect(spec.pr).toBeUndefined() // opens no new PR
+    expect(spec.noChangesIsError).toBe(false) // "comments already fine" is a clean non-event
+  })
+
+  it('code-commenter opens its own PR when the block has none (standalone / initiative sweep)', async () => {
+    await executor.startJob(context('code-commenter'))
+    const spec = captured[0]!.spec
+    expect(spec.mode).toBe('coding')
+    expect(spec.branch).toBe('main') // branches off base
+    expect(spec.newBranch).toBe('cat-factory/blk_1') // onto a fresh work branch
+    expect(spec.pushBranch).toBe('cat-factory/blk_1')
+    expect(spec.pr).toBeDefined() // and opens a PR
+    expect(spec.noChangesIsError).toBe(false)
+  })
+
   // Read-only reference repos (doc-writer): a doc task with reference repos attached dispatches a
   // MULTI-REPO coding body carrying each reference as a READ-ONLY spec (repo only — no newBranch/pr)
   // plus a "Reference repositories" system-prompt section naming the sibling directories.
@@ -268,6 +299,145 @@ describe('ContainerAgentExecutor.buildJobBody (per-kind body shapes)', () => {
   it('omits packageRegistries when no resolver is wired', async () => {
     await executor.startJob(context('coder'))
     expect(captured[0]!.spec.packageRegistries).toBeUndefined()
+  })
+})
+
+describe('ContainerAgentExecutor multi-repo gate/merge targeting', () => {
+  // Service-connections phase 4 follow-ups: the conflict-resolver is dispatched AT a conflicted
+  // PEER repo, and the merger scores the COMBINED diff across every PR's repo. Both need the plural
+  // repo resolver wired so the executor can resolve a connected service's repo target.
+  const OWN_TARGET = { installationId: 7, owner: 'acme', name: 'widgets', baseBranch: 'main' }
+  const PEER_TARGET = { installationId: 7, owner: 'acme', name: 'billing', baseBranch: 'develop' }
+
+  // A plural resolver that returns the own service (primary) plus one peer resolved from
+  // `frm_peer`. It only returns the peer when that frame is among the requested involved ids,
+  // mirroring the real resolver (which resolves exactly the frames it is asked about).
+  const resolveRepoTargets = async (
+    _ws: string,
+    _blk: string,
+    frameIds: string[],
+    primary: typeof OWN_TARGET = OWN_TARGET,
+  ) => ({
+    checkouts: [
+      { target: primary, primary: true, involved: [] },
+      ...(frameIds.includes('frm_peer')
+        ? [{ target: PEER_TARGET, primary: false, involved: [{ frameId: 'frm_peer' }] }]
+        : []),
+    ],
+  })
+
+  it('conflict-resolver targets the conflicted PEER repo when the gate hands a conflictTarget', async () => {
+    const { executor, captured } = makeExecutor({ resolveRepoTargets })
+    await executor.startJob(
+      context('conflict-resolver', { pullRequest: PR }, undefined, {
+        conflictTarget: { repo: 'acme/billing', frameId: 'frm_peer' },
+      }),
+    )
+    const spec = captured[0]!.spec
+    // The harness clones the PEER repo (not the own `widgets`)…
+    expect(spec.repo).toMatchObject({ owner: 'acme', name: 'billing' })
+    // …merges the PEER's base in to surface its conflicts…
+    expect(spec.mergeBase).toBe('develop')
+    // …and resolves on the shared per-task work branch every repo's PR rides.
+    expect(spec.branch).toBe('cat-factory/blk_1')
+    expect(spec.pushBranch).toBe('cat-factory/blk_1')
+  })
+
+  it('conflict-resolver stays on the OWN repo when the conflictTarget has no frameId', async () => {
+    const { executor, captured } = makeExecutor({ resolveRepoTargets })
+    await executor.startJob(
+      context('conflict-resolver', { pullRequest: PR }, undefined, {
+        // An own-repo conflict carries no frameId (single-repo, implicit own target).
+        conflictTarget: { repo: 'acme/widgets' } as never,
+      }),
+    )
+    const spec = captured[0]!.spec
+    expect(spec.repo).toMatchObject({ owner: 'acme', name: 'widgets' })
+    expect(spec.mergeBase).toBe('main')
+  })
+
+  it('conflict-resolver resolves on the shared work branch when the OWN service has no PR (peer-only conflict)', async () => {
+    // Peer-only conflict: the own service was unchanged (no own `pullRequest`), only the connected
+    // peer conflicts. `prBranch` is therefore undefined, so the resolve branch must fall back to the
+    // shared per-task work branch (`cat-factory/<blockId>`) every repo's PR rides — otherwise the
+    // generic `pr`-clone path would clone the peer at its base branch (the wrong ref).
+    const { executor, captured } = makeExecutor({ resolveRepoTargets })
+    await executor.startJob(
+      context('conflict-resolver', {}, undefined, {
+        conflictTarget: { repo: 'acme/billing', frameId: 'frm_peer' },
+      }),
+    )
+    const spec = captured[0]!.spec
+    expect(spec.repo).toMatchObject({ owner: 'acme', name: 'billing' })
+    expect(spec.mergeBase).toBe('develop')
+    // The fallback (`prBranch ?? parts.workBranch`) pins clone/push to the shared work branch.
+    expect(spec.branch).toBe('cat-factory/blk_1')
+    expect(spec.pushBranch).toBe('cat-factory/blk_1')
+  })
+
+  it('conflict-resolver fails fast when the tagged peer repo cannot be resolved', async () => {
+    // A stale/missing repo projection row for the conflicted frame must NOT silently fall through
+    // to the own repo (which has no conflict) — that would loop the resolver until the whole attempt
+    // budget is spent on the wrong repo. Dispatch throws loudly instead.
+    const { executor } = makeExecutor({ resolveRepoTargets })
+    await expect(
+      executor.startJob(
+        context('conflict-resolver', { pullRequest: PR }, undefined, {
+          conflictTarget: { repo: 'acme/ghost', frameId: 'frm_missing' },
+        }),
+      ),
+    ).rejects.toThrow(/could not resolve the conflicted peer repo/)
+  })
+
+  const PEER_PR = {
+    repo: 'acme/billing',
+    frameId: 'frm_peer',
+    ref: { url: 'https://github.com/acme/billing/pull/3', number: 3, branch: 'cat-factory/blk_1' },
+  }
+
+  it('merger scores the COMBINED diff: peers cloned read-only (full) at their PR branch + a multi-repo section', async () => {
+    const { executor, captured } = makeExecutor({ resolveRepoTargets })
+    await executor.startJob(context('merger', { pullRequest: PR, peerPullRequests: [PEER_PR] }))
+    const spec = captured[0]!.spec
+    // Read-only explore, full clone (so `git diff origin/<base>...HEAD` has the merge base).
+    expect(spec.mode).toBe('explore')
+    expect(spec.full).toBe(true)
+    // The peer PR's repo is a read-only sibling checked out at ITS PR branch (no newBranch/pr).
+    expect(spec.peerRepos).toEqual([
+      {
+        repo: {
+          owner: 'acme',
+          name: 'billing',
+          baseBranch: 'develop',
+          cloneUrl: 'https://github.com/acme/billing.git',
+          provider: 'github',
+        },
+        frameId: 'frm_peer',
+        cloneBranch: 'cat-factory/blk_1',
+      },
+    ])
+    expect(spec.peerRepos).not.toMatchObject([{ newBranch: expect.anything() }])
+    expect(spec.peerRepos).not.toMatchObject([{ pr: expect.anything() }])
+    // The system prompt names both sibling checkouts + their per-repo diff commands…
+    const systemPrompt = spec.systemPrompt as string
+    expect(systemPrompt).toContain('## Multi-repo pull request')
+    expect(systemPrompt).toContain('acme__widgets/')
+    expect(systemPrompt).toContain('acme__billing/')
+    expect(systemPrompt).toContain('git diff origin/develop...HEAD')
+    // …and the user prompt is the combined-diff variant (ONE assessment across repos).
+    const userPrompt = spec.userPrompt as string
+    expect(userPrompt).toContain('spans MULTIPLE repositories')
+    expect(userPrompt).toContain('SINGLE')
+  })
+
+  it('merger stays single-repo when the task opened no peer PRs', async () => {
+    const { executor, captured } = makeExecutor({ resolveRepoTargets })
+    await executor.startJob(context('merger', { pullRequest: PR }))
+    const spec = captured[0]!.spec
+    expect(spec.peerRepos).toBeUndefined()
+    expect(spec.systemPrompt).not.toContain('## Multi-repo pull request')
+    // The single-repo prompt still names the own diff.
+    expect(spec.userPrompt as string).toContain('git diff origin/main...HEAD')
   })
 })
 

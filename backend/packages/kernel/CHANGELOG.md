@@ -1,5 +1,90 @@
 # @cat-factory/kernel
 
+## 0.112.1
+
+### Patch Changes
+
+- 7ee2530: Internal cleanup: prune dead/needless exports flagged by knip (no runtime behaviour
+  change). ~110 findings resolved — genuinely-dead symbols deleted (e.g. the unused
+  `ENVIRONMENT_ANALYSIS_PIPELINE_ID` / `INITIATIVE_BREAKDOWN_PIPELINE_ID` pipeline-id
+  constants, `isCiStatusProviderWired`, `parseApiKeyProvider`, unused re-export members of
+  the runtime facade barrels), and the `export` keyword dropped from symbols only used
+  inside their own module (repository classes, config constants, helper types). Also tidied
+  stale `knip.jsonc` baseline entries (removed no-longer-needed `ignore` / `ignoreDependencies`
+  and dead entry-glob patterns).
+
+  The residual knip warnings are now all DELIBERATE: the neutral `VcsClient` port type
+  re-export barrel, the Worker config-type barrel, the `providerEndpoints` base-URL group,
+  and a couple of types that must stay exported for declaration emit. Since backwards
+  compatibility is a non-goal pre-1.0, the removed exports (which nothing imported) are
+  dropped outright rather than deprecated.
+
+## 0.112.0
+
+### Minor Changes
+
+- f25d5e2: Complete the two deferred service-connections Phase 4 multi-repo follow-ups.
+
+  **Conflict-resolver peer targeting.** The `conflicts` gate now ESCALATES a conflict on a
+  connected involved service's PEER repo (previously it declined escalation and fast-failed the run
+  to a manual give-up). The gate still tags which repo conflicted (`conflictTarget`); the engine
+  threads that onto the dispatched `conflict-resolver`'s context, and the container executor points
+  the (single-repo) resolver at THAT peer repo — resolving its target, cloning its PR (work) branch,
+  and merging the peer's base in — instead of always the task's own service. An own-repo conflict is
+  unchanged (no `frameId` ⇒ the own service is the implicit target). Handles the peer-only case (own
+  service unchanged, so no own PR) by pinning the resolve branch to the shared work branch.
+
+  **Merger combined-diff.** The `merger` now scores the COMBINED cross-repo change on a multi-repo
+  task instead of only the own-repo diff. Driven by the PRs that actually exist
+  (`block.peerPullRequests`), it clones each peer PR's repo as a read-only sibling checkout at its PR
+  branch (full history) alongside the own service, and a "Multi-repo pull request" prompt section
+  plus the reworked merger prompts instruct it to diff each repo against its base and return ONE
+  blended complexity/risk/impact assessment covering the whole change. The read-only multi-repo
+  explore harness path gained per-peer `cloneBranch` selection and honours the job's `full` flag (a
+  new container capability — the executor-harness image is bumped), so the bug-investigator's
+  base-branch fan-out is unchanged while the merger checks each peer out at its PR head.
+
+## 0.111.1
+
+### Patch Changes
+
+- Updated dependencies [9aa9e19]
+  - @cat-factory/contracts@0.121.1
+
+## 0.111.0
+
+### Minor Changes
+
+- 63f7881: Code Commenter is now a business-as-usual step in the full build pipelines, keeping in-source
+  comments relevant and up to date on every task instead of only on a dedicated standalone run.
+
+  - **Full pipelines gain a `code-commenter` step** (`pl_full` and `pl_fullstack`, versions bumped
+    for the reseed): it runs right after the `reviewer` clears the implementation and edits comments
+    only — adding why-not-what comments, updating ones that have drifted from the code, and deleting
+    noise comments that merely restate what the code already says — with no behaviour change. The
+    existing `ci` step is the backstop that proves the comment-only diff is behaviour-neutral before
+    `merger` ships it.
+  - **One parametrized agent serves both use-cases.** A new adaptive clone mode `pr-or-work`
+    (`AgentCloneSpec.branch`) makes the Code Commenter amend the block's existing PR in place when
+    there is one (the BAU pipeline case — the well-commented code ships in the coder's own PR) and
+    fall back to branching off base and opening its own PR when there is none (a standalone
+    `pl_code_comments` run or an initiative-framed sweep of a legacy codebase). It is
+    `noChangesTolerated`, so a run that finds the comments already in good shape is a clean
+    non-event rather than a failure. No new agent kind, no executor-harness image change.
+  - The Code Commenter's prompt now actively **maintains** existing comments (fix/remove stale ones,
+    strip redundant ones) rather than only adding new ones, and scopes a BAU run to the files the
+    pull request changes.
+  - **Hardening:** `agentPresentationSchema.description` is now required and non-empty
+    (`minLength(1)`, like `label`/`icon`/`color`). The SPA renders a registered kind's description
+    verbatim in the pipeline builder palette with no fallback, so a blank one would have surfaced as
+    an empty description on a first-class palette block; this makes that impossible at the wire
+    boundary. Every existing agent kind already ships a description, so nothing changes for them.
+
+### Patch Changes
+
+- Updated dependencies [63f7881]
+  - @cat-factory/contracts@0.121.0
+
 ## 0.110.1
 
 ### Patch Changes

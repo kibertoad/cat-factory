@@ -69,28 +69,35 @@ tracker convention): the ci-fixer reuses the existing `runMultiRepoCoding` sibli
 harness path via a widened `peerRepos` job body — no runner-image bump. `step.gate.headShas` /
 `conflictTarget` ride the existing gate-state JSON (no migration).
 
-| Item                                                                                                   | Status                                     |
-| ------------------------------------------------------------------------------------------------------ | ------------------------------------------ |
-| CI gate aggregates across PRs (`step.gate.headShas` map); fixer runs in the sibling-checkout container | done                                       |
-| Conflicts gate per PR; single-repo conflict-resolver dispatched at the first conflicted repo           | done (detection + `conflictTarget`; see †) |
-| Merger: combined-diff assessment + all-green-then-merge-all in provider-first order                    | done (merge-all; combined-diff, see ‡)     |
-| Mid-sequence merge failure → block `blocked` + notification enumerating merged vs unmerged             | done                                       |
-| Conformance: multi-PR gate + merge-all behaviour on both runtimes                                      | done (CI aggregate cross-runtime; §)       |
+| Item                                                                                                   | Status                                 |
+| ------------------------------------------------------------------------------------------------------ | -------------------------------------- |
+| CI gate aggregates across PRs (`step.gate.headShas` map); fixer runs in the sibling-checkout container | done                                   |
+| Conflicts gate per PR; single-repo conflict-resolver dispatched at the conflicted repo (own or peer)   | done (peer targeting landed; see †)    |
+| Merger: combined-diff assessment + all-green-then-merge-all in provider-first order                    | done (combined-diff landed; see ‡)     |
+| Mid-sequence merge failure → block `blocked` + notification enumerating merged vs unmerged             | done                                   |
+| Conformance: multi-PR gate + merge-all behaviour on both runtimes                                      | done (CI aggregate + conflicts; see §) |
 
-- **† Conflict-resolver peer-repo targeting.** The conflicts gate now probes mergeability across
-  every PR and records the first conflicted repo on `step.gate.conflictTarget`. Dispatching the
-  single-repo conflict-resolver AT a peer repo (vs the own repo) is a follow-up: a peer-only
-  conflict fast-fails to the "resolve manually" give-up — the gate returns `escalatable: false`
-  so the engine skips the own-repo resolver (which can't reach the peer) instead of burning the
-  whole attempt budget on it — rather than auto-resolving. The own-repo conflict path is unchanged.
-- **‡ Merger combined-diff.** The engine merges ALL PRs (`orderPrsForMerge`), but the `merger`
-  agent still scores only the own-repo diff (unchanged harness — zero-harness-edit rule). Scoring
-  the combined sibling-workspace diff needs a harness bump and is a follow-up.
-- **§ Merge-all conformance.** Multi-repo CI aggregation + ci-fixer escalation is asserted on both
-  runtimes in the conformance suite; the merge-all ordering + provider fan-out are unit-tested
-  (`mergeOrder.logic.test.ts`, `multiRepoGateProviders.spec.ts`). A full merge-all conformance case
-  needs a fake `PullRequestMerger` wired through the harness (the merger isn't a gate provider) — a
-  follow-up.
+- **† Conflict-resolver peer-repo targeting — LANDED.** The conflicts gate now ESCALATES a
+  peer-repo conflict (it no longer returns `escalatable: false`); it tags the conflicted repo on
+  `step.gate.conflictTarget`, the engine threads that onto the dispatched `conflict-resolver`'s
+  `AgentRunContext`, and `ContainerAgentExecutor` points the (single-repo) resolver AT that peer
+  repo — resolving its target, cloning its PR (work) branch, and merging the peer's base in — via
+  `resolveRepoTargets`. The peer-only case (own service unchanged, no own PR) pins the resolve
+  branch to the shared work branch. Own-repo conflicts are unchanged (no `frameId` ⇒ implicit own
+  target). Asserted by the conflicts-gate conformance case (escalation) + the server job-body unit
+  test (peer repo/branch/mergeBase swap).
+- **‡ Merger combined-diff — LANDED.** The `merger` now scores the COMBINED cross-repo change:
+  driven by `block.peerPullRequests`, it clones each peer PR's repo as a read-only sibling at its
+  PR branch (full history) beside the own service, and a "Multi-repo pull request" prompt section +
+  the reworked merger prompts have it diff each repo vs its base and return ONE blended assessment.
+  Needed a harness bump — the read-only multi-repo explore path gained per-peer `cloneBranch` +
+  honours `full` (the bug-investigator's base-branch fan-out is unchanged). The engine's merge-all
+  (`orderPrsForMerge`) was already multi-repo aware.
+- **§ Multi-repo gate conformance.** Multi-repo CI aggregation + ci-fixer escalation AND the
+  conflicts gate escalating a peer conflict are asserted on every runtime in the conformance suite;
+  the merge-all ordering + provider fan-out are unit-tested (`mergeOrder.logic.test.ts`,
+  `multiRepoGateProviders.spec.ts`), and the merger's combined-diff dispatch (peer sibling
+  checkouts) is unit-tested in the server job-body spec (the fake executor never runs the harness).
 
 ## Conventions & gotchas carried between iterations
 

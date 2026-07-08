@@ -61,7 +61,7 @@ function clampBody(text: string): string {
 }
 
 /** Default cap on how many (newest) calls a list/export returns. */
-export const DEFAULT_LIST_LIMIT = 1000
+const DEFAULT_LIST_LIMIT = 1000
 
 /** What to store for a call's prompt when prompt recording is turned off: nothing. */
 const EMPTY_STORED_PROMPT: StoredPrompt = { promptText: '', promptPrefixCount: 0, promptHash: '' }

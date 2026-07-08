@@ -1,5 +1,59 @@
 # @cat-factory/contracts
 
+## 0.121.1
+
+### Patch Changes
+
+- 9aa9e19: Initiatives: phases can now declare a `checkpoint` (slice 2 of the
+  custom-initiative-definitions initiative). A checkpoint phase PAUSES the initiative for
+  human review once every one of its items settles, before the next phase spawns — so a
+  human can read the phase's committed output (e.g. a research doc + GO/NO_GO verdict) and
+  then resume to continue or cancel to stop. The engine never interprets an LLM verdict:
+  the pause is declarative phase data the loop reads, and resume is the acknowledgment.
+
+  - Contracts: `checkpoint?` on the plan/entity/draft phase and the preset phase-template
+    phase, plus `checkpointClearedAt?` bookkeeping on the entity phase; a new `checkpoint`
+    reason on the `initiative` notification.
+  - Ingest stamps a template-authored `checkpoint` onto the matched phase (forced on — the
+    planner cannot unset it), honours a planner-authored one on any draft phase (generic,
+    usable without a preset), and preserves `checkpointClearedAt` across a re-plan.
+  - The execution loop pauses at a completed, uncleared checkpoint phase (checked before
+    completion, so a last-phase checkpoint still pauses) and raises the notification;
+    `InitiativeService.resume` clears the checkpoint in the same CAS transform it resumes in.
+  - The in-repo tracker markdown annotates a checkpoint phase (pending vs cleared).
+
+  Non-checkpoint phases are byte-for-byte unchanged — a plan with no `checkpoint` advances
+  exactly as before.
+
+## 0.121.0
+
+### Minor Changes
+
+- 63f7881: Code Commenter is now a business-as-usual step in the full build pipelines, keeping in-source
+  comments relevant and up to date on every task instead of only on a dedicated standalone run.
+
+  - **Full pipelines gain a `code-commenter` step** (`pl_full` and `pl_fullstack`, versions bumped
+    for the reseed): it runs right after the `reviewer` clears the implementation and edits comments
+    only — adding why-not-what comments, updating ones that have drifted from the code, and deleting
+    noise comments that merely restate what the code already says — with no behaviour change. The
+    existing `ci` step is the backstop that proves the comment-only diff is behaviour-neutral before
+    `merger` ships it.
+  - **One parametrized agent serves both use-cases.** A new adaptive clone mode `pr-or-work`
+    (`AgentCloneSpec.branch`) makes the Code Commenter amend the block's existing PR in place when
+    there is one (the BAU pipeline case — the well-commented code ships in the coder's own PR) and
+    fall back to branching off base and opening its own PR when there is none (a standalone
+    `pl_code_comments` run or an initiative-framed sweep of a legacy codebase). It is
+    `noChangesTolerated`, so a run that finds the comments already in good shape is a clean
+    non-event rather than a failure. No new agent kind, no executor-harness image change.
+  - The Code Commenter's prompt now actively **maintains** existing comments (fix/remove stale ones,
+    strip redundant ones) rather than only adding new ones, and scopes a BAU run to the files the
+    pull request changes.
+  - **Hardening:** `agentPresentationSchema.description` is now required and non-empty
+    (`minLength(1)`, like `label`/`icon`/`color`). The SPA renders a registered kind's description
+    verbatim in the pipeline builder palette with no fallback, so a blank one would have surfaced as
+    an empty description on a first-class palette block; this makes that impossible at the wire
+    boundary. Every existing agent kind already ships a description, so nothing changes for them.
+
 ## 0.120.0
 
 ### Minor Changes

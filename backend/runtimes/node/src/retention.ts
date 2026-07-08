@@ -18,7 +18,7 @@ import { sweepBinaryArtifactRetention } from '@cat-factory/orchestration'
 import type { Logger, RetentionConfig } from '@cat-factory/server'
 
 /** Recurring-pipeline run history is kept ~1 week (the inspector's window). */
-export const SCHEDULE_RUN_RETENTION_MS = 7 * 24 * 60 * 60 * 1000
+const SCHEDULE_RUN_RETENTION_MS = 7 * 24 * 60 * 60 * 1000
 
 // Retention sweep for the Node facade's unbounded tables. The Worker prunes these from
 // its every-2-min cron (see the Worker's `sweepRetention`); the Node service has no
@@ -71,7 +71,7 @@ export interface RetentionResult {
  * pass keeps the tables bounded at negligible cost — each prune is an indexed range
  * delete that usually reclaims nothing.
  */
-export const RETENTION_SWEEP_INTERVAL_MS = 60 * 60 * 1000
+const RETENTION_SWEEP_INTERVAL_MS = 60 * 60 * 1000
 
 /** Delete rows older than `now - windowMs`, treating a non-positive window as "disabled". */
 async function prune(

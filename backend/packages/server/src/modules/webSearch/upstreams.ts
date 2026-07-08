@@ -6,7 +6,7 @@ import type { WebSearchResponse, WebSearchUpstream } from '../../runtime/gateway
 // target) while still allowing a public self-hosted instance over http or https. The
 // same policy guards the write boundary (AccountSettingsService), so a bad URL is
 // rejected when saved AND re-checked (with per-hop redirect revalidation) when fetched.
-export const WEB_SEARCH_URL_SAFETY_POLICY = { schemes: ['http', 'https'], allowHosts: [] } as const
+const WEB_SEARCH_URL_SAFETY_POLICY = { schemes: ['http', 'https'], allowHosts: [] } as const
 
 /** Assert an account-supplied web-search URL is not an SSRF vector. Throws on a bad host. */
 export function assertSafeWebSearchUrl(url: string): void {

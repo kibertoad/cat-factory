@@ -973,7 +973,7 @@ export interface BootstrapModule {
 }
 
 /** The env-config-repair feature's durable service, present only when its deps are wired. */
-export interface EnvConfigRepairModule {
+interface EnvConfigRepairModule {
   service: EnvConfigRepairService
 }
 
@@ -1023,7 +1023,7 @@ export interface IncidentEnrichmentModule {
 }
 
 /** The per-account deployment-settings service, present only when wired (facade-built). */
-export interface AccountSettingsModule {
+interface AccountSettingsModule {
   service: AccountSettingsService
 }
 
@@ -1063,7 +1063,7 @@ export interface WorkspaceSettingsModule {
 }
 
 /** The per-user-settings feature's service, present only when its repository is wired. */
-export interface UserSettingsModule {
+interface UserSettingsModule {
   service: UserSettingsService
 }
 

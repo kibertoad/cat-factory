@@ -12,7 +12,7 @@ import type {
 } from '@cat-factory/kernel'
 
 /** Recurring-pipeline run history is kept ~1 week (the inspector's window). */
-export const SCHEDULE_RUN_RETENTION_MS = 7 * 24 * 60 * 60 * 1000
+const SCHEDULE_RUN_RETENTION_MS = 7 * 24 * 60 * 60 * 1000
 
 // Retention sweep for the tables that don't self-limit (see
 // docs/storage-and-retention.md): the append-only `token_usage` ledger, the
@@ -22,7 +22,7 @@ export const SCHEDULE_RUN_RETENTION_MS = 7 * 24 * 60 * 60 * 1000
 // real D1 repositories (mirroring the execution sweeper's style).
 
 /** Per-table retention ages in milliseconds; 0 (or less) disables that table's pass. */
-export interface RetentionPolicy {
+interface RetentionPolicy {
   tokenUsageMs: number
   rateLimitMs: number
   commitMs: number

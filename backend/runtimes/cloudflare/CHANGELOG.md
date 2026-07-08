@@ -1,5 +1,100 @@
 # @cat-factory/worker
 
+## 0.78.8
+
+### Patch Changes
+
+- 7ee2530: Internal cleanup: prune dead/needless exports flagged by knip (no runtime behaviour
+  change). ~110 findings resolved — genuinely-dead symbols deleted (e.g. the unused
+  `ENVIRONMENT_ANALYSIS_PIPELINE_ID` / `INITIATIVE_BREAKDOWN_PIPELINE_ID` pipeline-id
+  constants, `isCiStatusProviderWired`, `parseApiKeyProvider`, unused re-export members of
+  the runtime facade barrels), and the `export` keyword dropped from symbols only used
+  inside their own module (repository classes, config constants, helper types). Also tidied
+  stale `knip.jsonc` baseline entries (removed no-longer-needed `ignore` / `ignoreDependencies`
+  and dead entry-glob patterns).
+
+  The residual knip warnings are now all DELIBERATE: the neutral `VcsClient` port type
+  re-export barrel, the Worker config-type barrel, the `providerEndpoints` base-URL group,
+  and a couple of types that must stay exported for declaration emit. Since backwards
+  compatibility is a non-goal pre-1.0, the removed exports (which nothing imported) are
+  dropped outright rather than deprecated.
+
+- Updated dependencies [7ee2530]
+  - @cat-factory/agents@0.49.3
+  - @cat-factory/consensus@0.10.16
+  - @cat-factory/gates@0.5.1
+  - @cat-factory/integrations@0.78.7
+  - @cat-factory/kernel@0.112.1
+  - @cat-factory/orchestration@0.100.1
+  - @cat-factory/server@0.104.1
+  - @cat-factory/provider-cloudflare@0.7.187
+  - @cat-factory/eks@0.1.39
+  - @cat-factory/caching@0.6.16
+  - @cat-factory/gitlab@0.7.39
+  - @cat-factory/observability-langfuse@0.7.171
+  - @cat-factory/spend@0.11.22
+
+## 0.78.7
+
+### Patch Changes
+
+- Updated dependencies [f25d5e2]
+  - @cat-factory/kernel@0.112.0
+  - @cat-factory/gates@0.5.0
+  - @cat-factory/orchestration@0.100.0
+  - @cat-factory/server@0.104.0
+  - @cat-factory/agents@0.49.2
+  - @cat-factory/caching@0.6.15
+  - @cat-factory/consensus@0.10.15
+  - @cat-factory/eks@0.1.38
+  - @cat-factory/gitlab@0.7.38
+  - @cat-factory/integrations@0.78.6
+  - @cat-factory/observability-langfuse@0.7.170
+  - @cat-factory/provider-cloudflare@0.7.186
+  - @cat-factory/spend@0.11.21
+
+## 0.78.6
+
+### Patch Changes
+
+- Updated dependencies [9aa9e19]
+  - @cat-factory/contracts@0.121.1
+  - @cat-factory/orchestration@0.99.1
+  - @cat-factory/agents@0.49.1
+  - @cat-factory/consensus@0.10.14
+  - @cat-factory/eks@0.1.37
+  - @cat-factory/gates@0.4.34
+  - @cat-factory/gitlab@0.7.37
+  - @cat-factory/integrations@0.78.5
+  - @cat-factory/kernel@0.111.1
+  - @cat-factory/prompt-fragments@0.13.4
+  - @cat-factory/server@0.103.1
+  - @cat-factory/spend@0.11.20
+  - @cat-factory/provider-cloudflare@0.7.185
+  - @cat-factory/caching@0.6.14
+  - @cat-factory/observability-langfuse@0.7.169
+
+## 0.78.5
+
+### Patch Changes
+
+- Updated dependencies [63f7881]
+  - @cat-factory/kernel@0.111.0
+  - @cat-factory/agents@0.49.0
+  - @cat-factory/server@0.103.0
+  - @cat-factory/orchestration@0.99.0
+  - @cat-factory/contracts@0.121.0
+  - @cat-factory/caching@0.6.13
+  - @cat-factory/consensus@0.10.13
+  - @cat-factory/eks@0.1.36
+  - @cat-factory/gates@0.4.33
+  - @cat-factory/gitlab@0.7.36
+  - @cat-factory/integrations@0.78.4
+  - @cat-factory/observability-langfuse@0.7.168
+  - @cat-factory/provider-cloudflare@0.7.184
+  - @cat-factory/spend@0.11.19
+  - @cat-factory/prompt-fragments@0.13.3
+
 ## 0.78.4
 
 ### Patch Changes

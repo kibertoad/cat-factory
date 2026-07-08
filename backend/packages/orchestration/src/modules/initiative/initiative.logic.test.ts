@@ -8,6 +8,7 @@ import {
   applyInterviewAnswer,
   applyInterviewOutcome,
   applyInterviewQuestions,
+  applyCheckpointCleared,
   applyItemEdit,
   applyPlanDraft,
   applyPolicyEdit,
@@ -30,6 +31,7 @@ import {
   isPendingQuestion,
   itemDependenciesMet,
   normalizeDraftAgainstPhaseTemplate,
+  pendingCheckpoint,
   phaseIsHalted,
   reconcileItem,
   seedPresetInterviewQa,
@@ -303,6 +305,30 @@ describe('normalizeDraftAgainstPhaseTemplate (T2)', () => {
     // Re-running over the output changes nothing.
     expect(normalizeDraftAgainstPhaseTemplate(template(), out).phases).toEqual(out.phases)
   })
+
+  it('stamps a template-authored checkpoint onto the matched phase; the planner cannot unset it (D2)', () => {
+    const tpl = template({
+      phases: [
+        { id: 'blast-zone', title: 'Blast zone', goal: '', required: true, checkpoint: true },
+        { id: 'coverage', title: 'Coverage', goal: '', required: true },
+        { id: 'delivery', title: 'Delivery', goal: '', required: true },
+      ],
+    })
+    // Even a draft that explicitly set `checkpoint: false` on the templated phase comes out true.
+    const d = withPhases(['blast-zone', 'coverage', 'delivery'])
+    d.phases[0]!.checkpoint = false
+    const out = normalizeDraftAgainstPhaseTemplate(tpl, d)
+    expect(out.phases.find((p) => p.id === 'blast-zone')?.checkpoint).toBe(true)
+    // A non-checkpoint template phase is left as the planner authored it (here: absent).
+    expect(out.phases.find((p) => p.id === 'coverage')?.checkpoint).toBeUndefined()
+  })
+
+  it("leaves a planner-authored checkpoint intact on a template phase the template didn't checkpoint", () => {
+    const d = withPhases(['blast-zone', 'coverage', 'delivery'])
+    d.phases[1]!.checkpoint = true
+    const out = normalizeDraftAgainstPhaseTemplate(template(), d)
+    expect(out.phases.find((p) => p.id === 'coverage')?.checkpoint).toBe(true)
+  })
 })
 
 describe('applyPlanDraft', () => {
@@ -389,6 +415,41 @@ describe('applyPlanDraft', () => {
     expect(next.phases![0]!.id).toBe('phase-one')
     expect(next.items![0]!.id).toBe('some-item')
   })
+
+  it('carries a draft checkpoint onto the persisted phase (D2)', () => {
+    const next = applyPlanDraft(
+      emptyEntity(),
+      draft({ phases: [{ id: 'p1', title: 'Phase one', goal: '', checkpoint: true }] }),
+      100,
+    )
+    expect(next.phases![0]!.checkpoint).toBe(true)
+    // No `checkpointClearedAt` on a fresh ingest.
+    expect(next.phases![0]!.checkpointClearedAt).toBeUndefined()
+  })
+
+  it('preserves an existing phase checkpointClearedAt across a re-plan (a cleared checkpoint cannot re-fire)', () => {
+    const first = applyPlanDraft(
+      emptyEntity(),
+      draft({ phases: [{ id: 'p1', title: 'Phase one', goal: '', checkpoint: true }] }),
+      100,
+    )
+    const cleared: Initiative = {
+      ...first,
+      status: 'executing',
+      phases: first.phases!.map((p) => ({ ...p, checkpointClearedAt: 150 })),
+    }
+    // A mid-flight re-plan (same phase id) must keep the cleared-at bookkeeping, not reset it.
+    const replanned = applyPlanDraft(
+      cleared,
+      draft({ phases: [{ id: 'p1', title: 'Phase one renamed', goal: '', checkpoint: true }] }),
+      200,
+    )
+    expect(replanned.phases![0]!).toMatchObject({
+      title: 'Phase one renamed',
+      checkpoint: true,
+      checkpointClearedAt: 150,
+    })
+  })
 })
 
 describe('derivations', () => {
@@ -426,6 +487,96 @@ describe('derivations', () => {
   it('slugifies titles safely', () => {
     expect(initiativeSlug('Migrate the API — v2!')).toBe('migrate-the-api-v2')
     expect(initiativeSlug('***')).toBe('initiative')
+  })
+})
+
+describe('pendingCheckpoint / applyCheckpointCleared (D2)', () => {
+  const withPhasesItems = (
+    phases: Initiative['phases'],
+    items: Initiative['items'],
+  ): Initiative => ({ ...emptyEntity(), status: 'executing', phases, items })
+
+  const done = (id: string, phaseId: string): InitiativeItem => ({
+    id,
+    phaseId,
+    title: id,
+    description: '',
+    dependsOn: [],
+    status: 'done',
+  })
+
+  it('returns a checkpoint phase once all its items settle', () => {
+    const init = withPhasesItems(
+      [
+        { id: 'p1', title: 'Research', goal: '', checkpoint: true },
+        { id: 'p2', title: 'Build', goal: '' },
+      ],
+      [done('a', 'p1'), { ...done('b', 'p2'), status: 'pending' }],
+    )
+    expect(pendingCheckpoint(init)?.id).toBe('p1')
+  })
+
+  it('does NOT fire while the checkpoint phase still has a running or blocked (halted) item', () => {
+    const running = withPhasesItems(
+      [{ id: 'p1', title: 'Research', goal: '', checkpoint: true }],
+      [done('a', 'p1'), { ...done('b', 'p1'), status: 'in_progress' }],
+    )
+    expect(pendingCheckpoint(running)).toBeNull()
+
+    const halted = withPhasesItems(
+      [{ id: 'p1', title: 'Research', goal: '', checkpoint: true }],
+      [done('a', 'p1'), { ...done('b', 'p1'), status: 'blocked' }],
+    )
+    expect(pendingCheckpoint(halted)).toBeNull()
+  })
+
+  it('does not fire for a cleared checkpoint (idempotent) or an item-less checkpoint phase', () => {
+    const cleared = withPhasesItems(
+      [{ id: 'p1', title: 'Research', goal: '', checkpoint: true, checkpointClearedAt: 5 }],
+      [done('a', 'p1')],
+    )
+    expect(pendingCheckpoint(cleared)).toBeNull()
+
+    const empty = withPhasesItems(
+      [{ id: 'p1', title: 'Research', goal: '', checkpoint: true }],
+      [done('a', 'p2')],
+    )
+    expect(pendingCheckpoint(empty)).toBeNull()
+  })
+
+  it('fires on a checkpointed LAST phase (before completion) so a human reviews the final output', () => {
+    const init = withPhasesItems(
+      [{ id: 'p1', title: 'Final', goal: '', checkpoint: true }],
+      [done('a', 'p1')],
+    )
+    expect(pendingCheckpoint(init)?.id).toBe('p1')
+  })
+
+  it('returns the FIRST uncleared checkpoint in declared order (a cleared earlier one is skipped)', () => {
+    const init = withPhasesItems(
+      [
+        { id: 'p1', title: 'One', goal: '', checkpoint: true, checkpointClearedAt: 5 },
+        { id: 'p2', title: 'Two', goal: '', checkpoint: true },
+      ],
+      [done('a', 'p1'), done('b', 'p2')],
+    )
+    expect(pendingCheckpoint(init)?.id).toBe('p2')
+  })
+
+  it('applyCheckpointCleared stamps only the named phase; unknown ids are a no-op', () => {
+    const init = withPhasesItems(
+      [
+        { id: 'p1', title: 'One', goal: '', checkpoint: true },
+        { id: 'p2', title: 'Two', goal: '', checkpoint: true },
+      ],
+      [done('a', 'p1'), done('b', 'p2')],
+    )
+    const cleared = applyCheckpointCleared(init, 'p1', 42)
+    expect(cleared.phases!.find((p) => p.id === 'p1')?.checkpointClearedAt).toBe(42)
+    expect(cleared.phases!.find((p) => p.id === 'p2')?.checkpointClearedAt).toBeUndefined()
+    // Clearing it means pendingCheckpoint no longer returns p1.
+    expect(pendingCheckpoint(cleared)?.id).toBe('p2')
+    expect(applyCheckpointCleared(init, 'ghost', 42)).toEqual(init)
   })
 })
 

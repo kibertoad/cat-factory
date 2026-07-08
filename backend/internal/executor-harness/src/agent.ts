@@ -686,15 +686,20 @@ async function runMultiRepoExplore(job: AgentJob, opts: RunOptions): Promise<Age
     { repo: job.repo, cloneBranch: job.branch, ghToken: job.ghToken },
     ...peers.map((peer) => ({
       repo: peer.repo,
-      cloneBranch: peer.repo.baseBranch,
+      // A read-only peer clones at its default branch (the bug-investigator) unless the job pins
+      // an explicit branch — the merger checks each peer out at its PR branch so the combined diff
+      // sees the PR change (`git diff origin/<base>...HEAD`).
+      cloneBranch: peer.cloneBranch ?? peer.repo.baseBranch,
       ghToken: peer.ghToken ?? job.ghToken,
     })),
   ].map((leg) => ({ ...leg, dirName: claimDir(leg.repo) }))
 
   return withWorkspace('explore-multi', async (root) => {
     // Clone phase: every repo (read-only) into its sibling dir under the workspace root. No
-    // work branch, no resume — the investigator only reads — so the legs are independent and
-    // clone in parallel (wall-clock is the slowest single clone, not the sum).
+    // work branch, no resume — the agent only reads — so the legs are independent and clone in
+    // parallel (wall-clock is the slowest single clone, not the sum). `full` is honoured per the
+    // job (the merger needs full history so `git diff origin/<base>...HEAD` has the merge base;
+    // the bug-investigator leaves it shallow).
     opts.onPhase?.('clone')
     await Promise.all(
       legs.map(async (leg) => {
@@ -708,6 +713,7 @@ async function runMultiRepoExplore(job: AgentJob, opts: RunOptions): Promise<Age
           repo: { ...leg.repo, baseBranch: leg.cloneBranch },
           ghToken: leg.ghToken,
           dir,
+          full: job.full,
           signal: opts.signal,
         })
       }),

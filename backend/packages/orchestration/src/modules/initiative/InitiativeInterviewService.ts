@@ -38,7 +38,7 @@ import {
 // ---------------------------------------------------------------------------
 
 /** Role prompt the interviewer runs under. Returns ONLY a JSON decision object. */
-export const INITIATIVE_INTERVIEW_SYSTEM_PROMPT =
+const INITIATIVE_INTERVIEW_SYSTEM_PROMPT =
   'You are a staff engineer INTERVIEWING a stakeholder to scope a long-running initiative (a ' +
   'cross-cutting refactor, a migration, a strangler conversion) BEFORE it is planned. You are ' +
   'given the initiative brief and the answers gathered so far. Decide whether you understand ' +
@@ -58,7 +58,7 @@ export const INITIATIVE_INTERVIEW_SYSTEM_PROMPT =
  * the stakeholder can adopt or edit (the planning analogue of the requirements Writer). Returns
  * ONLY the suggested answer prose — no preamble, no JSON.
  */
-export const INITIATIVE_RECOMMEND_SYSTEM_PROMPT =
+const INITIATIVE_RECOMMEND_SYSTEM_PROMPT =
   'You are a staff engineer helping scope a long-running initiative. You are given the ' +
   'initiative brief, the answers gathered so far, and ONE clarifying question the stakeholder ' +
   'wants a suggested answer for. Propose the most sensible answer you can, grounded in the brief ' +

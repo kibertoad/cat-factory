@@ -6,7 +6,7 @@ export interface DurableSleeper {
 }
 
 /** How many times to (re-)attempt the per-wake DI construction before giving up. */
-export const WORKFLOW_BUILD_ATTEMPTS = 3
+const WORKFLOW_BUILD_ATTEMPTS = 3
 /** Durable pause between construction attempts (a wake blip usually clears in seconds). */
 const BUILD_RETRY_DELAY: WorkflowSleepDuration = '5 seconds'
 

@@ -12,7 +12,7 @@ import type { Workflow } from '@cloudflare/workers-types'
 export type InstanceState = 'alive' | 'terminal' | 'missing'
 
 /** Tells the sweeper the state of a run's durable instance. */
-export interface WorkflowLookup {
+interface WorkflowLookup {
   instanceState(runId: string): Promise<InstanceState>
 }
 

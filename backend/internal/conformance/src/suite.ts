@@ -47,7 +47,9 @@ import type {
   DocumentRecord,
   EnvironmentProvider,
   GateProbe,
+  MergeabilityVerdict,
   Notification,
+  PullRequestMergeabilityProvider,
   PullRequestReviewProvider,
   PullRequestReviewSnapshot,
   RepoFiles,
@@ -2318,6 +2320,82 @@ export function defineAgentConformance(harness: ConformanceHarness): void {
         const failing = step.gate?.attemptLog?.[0]?.failingChecks ?? []
         expect(failing.map((c) => c.name)).toContain('peer-build')
         expect(failing.find((c) => c.name === 'peer-build')?.repo).toBe('o/peer')
+      })
+    })
+
+    describe('built-in conflicts gate (externalized to @cat-factory/gates)', () => {
+      // The `conflicts` gate probes PR mergeability and, on a conflict, loops the
+      // `conflict-resolver`. Driving it over a faked mergeability provider proves the externalized
+      // gate + its wire-handle behave identically on every runtime — and, for the multi-repo
+      // (service-connections phase 4) case, that a conflicted PEER PR now ESCALATES the resolver
+      // (tagged with the peer as its target) instead of fast-failing to a manual give-up.
+      afterEach(() => clearGateProviders())
+
+      // A multi-repo fake mergeability provider: an own-service PR plus one peer PR, each verdict
+      // supplied per-probe (a queue; last entry repeats), so a test can drive "peer conflicted →
+      // both mergeable" across the resolver round.
+      const makeFakeMultiRepoMergeability = (
+        rounds: [MergeabilityVerdict, MergeabilityVerdict][],
+      ): PullRequestMergeabilityProvider => {
+        let i = 0
+        return {
+          getMergeability: async () => {
+            const [own, peer] = rounds[Math.min(i, rounds.length - 1)] ?? ['mergeable', 'mergeable']
+            i += 1
+            return {
+              repos: [
+                { repo: 'o/own', headSha: 'ownsha', verdict: own },
+                { repo: 'o/peer', frameId: 'blk_email', headSha: 'peersha', verdict: peer },
+              ],
+            }
+          },
+        }
+      }
+
+      it('escalates a conflicted PEER PR to the conflict-resolver, then advances when both merge cleanly', async () => {
+        const app = harness.makeApp(
+          {
+            asyncKinds: ['coder', 'conflict-resolver'],
+            // A container-reusing runner (the resolver re-dispatch shape the per-round epoch fixes).
+            pooledContainer: true,
+            pullRequest: {
+              url: 'https://gh/o/own/pull/1',
+              number: 1,
+              branch: 'cat-factory/task_login',
+            },
+          },
+          // round 1: own mergeable, peer CONFLICTED → escalate; round 2: both mergeable → advance
+          {
+            gateProviders: {
+              mergeability: makeFakeMultiRepoMergeability([
+                ['mergeable', 'conflicted'],
+                ['mergeable', 'mergeable'],
+              ]),
+            },
+          },
+        )
+        const { workspace } = await app.createWorkspace()
+        const wsId = workspace.id
+
+        const pipeline = await app.call<Pipeline>('POST', `/workspaces/${wsId}/pipelines`, {
+          name: 'Build + conflicts',
+          agentKinds: ['coder', 'conflicts'],
+        })
+        const start = await app.call('POST', `/workspaces/${wsId}/blocks/task_login/executions`, {
+          pipelineId: pipeline.body.id,
+        })
+        expect(start.status).toBe(201)
+
+        const exec = (await app.drive(wsId)).find((e) => e.blockId === 'task_login')!
+        // Run COMPLETES (not blocked): previously a peer-only conflict declined escalation and
+        // fast-failed to a manual give-up (attempts 0, run failed). Now it escalates the resolver
+        // and, once the re-probe is clean, advances — so `done` + one attempt is the whole change.
+        expect(exec.status).toBe('done')
+        const step = exec.steps.find((s) => s.agentKind === 'conflicts')!
+        expect(step.state).toBe('done')
+        expect(step.gate?.attempts).toBe(1)
+        // (Which repo the resolver targets — the peer — is asserted in the server package's
+        // job-body unit test, since the gate resets `conflictTarget` to null on the passing probe.)
       })
     })
 
