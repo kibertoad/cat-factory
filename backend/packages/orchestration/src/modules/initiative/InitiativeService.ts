@@ -345,6 +345,12 @@ export class InitiativeService {
    * phase in the SAME CAS transform, so the checkpoint never re-fires and the loop advances past the
    * reviewed phase. Doing it here (not a separate write) means a lagging sweep can't re-pause the run
    * between the resume and a distinct ack write.
+   *
+   * Resume is a BLANKET acknowledgment by design: it clears whatever checkpoint is currently pending,
+   * regardless of WHY the run was paused. So if a human {@link pause}d manually and the checkpoint
+   * phase's in-flight items then settled, resuming clears that checkpoint rather than immediately
+   * re-pausing at it on the next tick. There is deliberately no pause-reason bookkeeping — the two
+   * pause sources converge on "resume = continue past the reviewed phase".
    */
   resume(workspaceId: string, blockId: string): Promise<Initiative | null> {
     return this.mutate(workspaceId, blockId, (current) => {

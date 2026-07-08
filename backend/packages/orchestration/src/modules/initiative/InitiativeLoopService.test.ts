@@ -523,5 +523,39 @@ describe('InitiativeLoopService', () => {
       expect(entity!.items!.find((i) => i.id === 'b')!.status).toBe('in_progress')
       expect(h.start).toHaveBeenCalledTimes(2)
     })
+
+    it('a tick that LOSES the pause CAS to a concurrent replica stays silent (no duplicate checkpoint card)', async () => {
+      // Two sweeper replicas can both read `executing` at tick time and both reach the checkpoint
+      // pause; the CAS lets only one win. The loser's `update` re-reads the now-`paused` entity and
+      // no-ops — but `update` still returns the (paused) entity, so a bare `status === 'paused'`
+      // guard would let the loser double-raise the card. Simulate the loser by intercepting the FIRST
+      // executing→paused CAS: commit the pause ourselves (the winner) and report the CAS as LOST to
+      // this caller, forcing the retry-then-no-op path. The losing tick must raise ZERO notifications.
+      const h = harness({ items: [item({ id: 'a', phaseId: 'p1' })] })
+      await h.initiatives.insert('ws-1', checkpointed())
+      await h.loop.runDue(clockNow)
+      const spawnedA = (await h.initiatives.getByBlock('ws-1', initiativeBlock.id))!.items!.find(
+        (i) => i.id === 'a',
+      )!.blockId!
+      await h.blocks.update('ws-1', spawnedA, { status: 'done' })
+
+      const realCas = h.initiatives.compareAndSwap
+      let intercepted = false
+      h.initiatives.compareAndSwap = async (ws, next, expectedRev) => {
+        if (!intercepted && next.status === 'paused') {
+          intercepted = true
+          await realCas(ws, next, expectedRev) // the concurrent winner commits the pause first
+          return false // ...but this caller lost the race
+        }
+        return realCas(ws, next, expectedRev)
+      }
+
+      await h.loop.runDue(clockNow) // reconcile → pendingCheckpoint → pauseAtCheckpoint loses, retries, no-ops
+
+      expect((await h.initiatives.getByBlock('ws-1', initiativeBlock.id))!.status).toBe('paused')
+      // The winner (a separate replica, not modelled here) raises the single card; this losing tick
+      // must add none. Pre-fix it raised a spurious second `checkpoint` notification.
+      expect(h.notes.filter((n) => n.reason === 'checkpoint')).toHaveLength(0)
+    })
   })
 })

@@ -342,7 +342,10 @@ export function renderInitiativeTrackerMarkdown(initiative: Initiative): string 
     if (phase.checkpoint) {
       lines.push(
         phase.checkpointClearedAt !== undefined
-          ? `> 🛑 Checkpoint cleared ${new Date(phase.checkpointClearedAt).toISOString().slice(0, 10)} — the initiative resumed past this phase.`
+          ? // The cleared-at date is rendered in UTC on purpose: this markdown is a COMMITTED artifact,
+            // so it must be timezone-deterministic (a local-time render would vary the committed file by
+            // the server's locale and churn the diff) rather than match any one operator's local day.
+            `> 🛑 Checkpoint cleared ${new Date(phase.checkpointClearedAt).toISOString().slice(0, 10)} — the initiative resumed past this phase.`
           : '> 🛑 Checkpoint — the initiative pauses for human review once every item in this phase settles.',
         '',
       )

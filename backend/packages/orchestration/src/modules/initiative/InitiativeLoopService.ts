@@ -263,6 +263,14 @@ export class InitiativeLoopService {
    * (only THIS still-pending checkpoint pauses). On a real pause it best-effort re-commits the
    * tracker (so the mirror shows the paused-at-checkpoint state) and raises the `checkpoint`
    * notification. A no-op when the entity already moved on (not executing, or the checkpoint cleared).
+   *
+   * The tracker/notification side effects fire ONLY when THIS call actually performed the
+   * transition. `update` returns the persisted entity even on a no-op transform, so an
+   * already-`paused` entity would otherwise pass a bare `status === 'paused'` guard and double-raise
+   * the card under concurrent cross-process ticks (two sweeper replicas both reading `executing` at
+   * tick time, one losing the CAS). `didPause` is (re)set inside the transform so it reflects only
+   * the committing/short-circuiting invocation — `update` re-runs the transform on a lost CAS, so a
+   * losing replica's flag lands `false` on its final (already-paused) read.
    */
   private async pauseAtCheckpoint(
     workspaceId: string,
@@ -270,20 +278,18 @@ export class InitiativeLoopService {
     phase: InitiativePhase,
     startRev: number,
   ): Promise<void> {
-    const paused = await this.deps.initiativeService.update(
-      workspaceId,
-      initiative.blockId,
-      (current) => {
-        if (current.status !== 'executing') return current
-        const pending = pendingCheckpoint(current)
-        return pending && pending.id === phase.id
-          ? { ...current, status: 'paused' as const }
-          : current
-      },
-    )
-    if (!paused || paused.status !== 'paused') return
+    let didPause = false
+    await this.deps.initiativeService.update(workspaceId, initiative.blockId, (current) => {
+      didPause = false
+      if (current.status !== 'executing') return current
+      const pending = pendingCheckpoint(current)
+      if (!pending || pending.id !== phase.id) return current
+      didPause = true
+      return { ...current, status: 'paused' as const }
+    })
+    if (!didPause) return
     await this.recommitTracker(workspaceId, initiative.blockId, startRev).catch(() => {})
-    await this.notify(workspaceId, paused, 'checkpoint', phase)
+    await this.notify(workspaceId, initiative, 'checkpoint', phase)
   }
 
   // ---- Complete -----------------------------------------------------------
