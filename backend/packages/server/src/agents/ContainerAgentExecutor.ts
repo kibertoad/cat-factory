@@ -1131,11 +1131,20 @@ export class ContainerAgentExecutor implements AsyncAgentExecutor {
       const peer = checkouts.find(
         (c) => !c.primary && c.involved.some((i) => i.frameId === conflictFrameId),
       )
-      if (peer) {
-        const origin = this.deps.resolveRepoOrigin ?? githubRepoOrigin
-        repoForKind = peer.target
-        commonForKind = { ...common, repo: buildRepoSpec(peer.target, origin(peer.target)) }
+      // Fail fast if the tagged peer can't be resolved (e.g. a stale/missing repo projection row):
+      // falling through would silently point the resolver at the OWN repo, which has no conflict, so
+      // every re-probe would re-dispatch until the whole attempt budget is spent on the wrong repo
+      // and the run gives up misattributing the failure. A loud dispatch error surfaces the
+      // inconsistency immediately instead.
+      if (!peer) {
+        throw new Error(
+          `Conflict-resolver could not resolve the conflicted peer repo (frame '${conflictFrameId}') ` +
+            `for block '${blockId}' — its repo projection may be missing or unlinked.`,
+        )
       }
+      const origin = this.deps.resolveRepoOrigin ?? githubRepoOrigin
+      repoForKind = peer.target
+      commonForKind = { ...common, repo: buildRepoSpec(peer.target, origin(peer.target)) }
     }
 
     // Merger combined-diff (service-connections phase 4 follow-up): a multi-repo task opened one PR

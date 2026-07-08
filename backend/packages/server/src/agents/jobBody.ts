@@ -515,7 +515,7 @@ export function renderMergerMultiRepoSection(
     "change: inspect EACH repository's diff against its base, weigh the whole cross-repo change",
     'together, and return ONE assessment covering all of them — NOT one assessment per repo.',
     '',
-    'Repositories (run each diff inside that repository’s own directory):',
+    "Repositories (run each diff inside that repository's own directory):",
   ]
   for (const r of repos) {
     const dir = siblingCheckoutDir(r.owner, r.name)

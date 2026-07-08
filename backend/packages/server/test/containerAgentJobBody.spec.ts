@@ -356,6 +356,39 @@ describe('ContainerAgentExecutor multi-repo gate/merge targeting', () => {
     expect(spec.mergeBase).toBe('main')
   })
 
+  it('conflict-resolver resolves on the shared work branch when the OWN service has no PR (peer-only conflict)', async () => {
+    // Peer-only conflict: the own service was unchanged (no own `pullRequest`), only the connected
+    // peer conflicts. `prBranch` is therefore undefined, so the resolve branch must fall back to the
+    // shared per-task work branch (`cat-factory/<blockId>`) every repo's PR rides — otherwise the
+    // generic `pr`-clone path would clone the peer at its base branch (the wrong ref).
+    const { executor, captured } = makeExecutor({ resolveRepoTargets })
+    await executor.startJob(
+      context('conflict-resolver', {}, undefined, {
+        conflictTarget: { repo: 'acme/billing', frameId: 'frm_peer' },
+      }),
+    )
+    const spec = captured[0]!.spec
+    expect(spec.repo).toMatchObject({ owner: 'acme', name: 'billing' })
+    expect(spec.mergeBase).toBe('develop')
+    // The fallback (`prBranch ?? parts.workBranch`) pins clone/push to the shared work branch.
+    expect(spec.branch).toBe('cat-factory/blk_1')
+    expect(spec.pushBranch).toBe('cat-factory/blk_1')
+  })
+
+  it('conflict-resolver fails fast when the tagged peer repo cannot be resolved', async () => {
+    // A stale/missing repo projection row for the conflicted frame must NOT silently fall through
+    // to the own repo (which has no conflict) — that would loop the resolver until the whole attempt
+    // budget is spent on the wrong repo. Dispatch throws loudly instead.
+    const { executor } = makeExecutor({ resolveRepoTargets })
+    await expect(
+      executor.startJob(
+        context('conflict-resolver', { pullRequest: PR }, undefined, {
+          conflictTarget: { repo: 'acme/ghost', frameId: 'frm_missing' },
+        }),
+      ),
+    ).rejects.toThrow(/could not resolve the conflicted peer repo/)
+  })
+
   const PEER_PR = {
     repo: 'acme/billing',
     frameId: 'frm_peer',
