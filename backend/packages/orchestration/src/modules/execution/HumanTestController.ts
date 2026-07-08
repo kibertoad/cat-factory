@@ -61,7 +61,7 @@ export interface HumanTestControllerDeps {
   /** Merge the repo default branch into the block's PR branch (server-side). */
   branchUpdater?: BranchUpdater
   /** The task's helper attempt budget (from the resolved merge preset). */
-  resolveMergePreset: (workspaceId: string, block: Block) => Promise<{ ciMaxAttempts: number }>
+  resolveRiskPolicy: (workspaceId: string, block: Block) => Promise<{ ciMaxAttempts: number }>
   /** The async instance/block spine (park/advance/finalize/persist/emit/progress/stop). */
   stateMachine: RunStateMachine
   /** The pure step mutators (start/finish a step). */
@@ -221,7 +221,7 @@ export class HumanTestController {
     step: PipelineStep,
     block: Block,
   ): Promise<AdvanceResult> {
-    const maxAttempts = (await this.deps.resolveMergePreset(workspaceId, block)).ciMaxAttempts
+    const maxAttempts = (await this.deps.resolveRiskPolicy(workspaceId, block)).ciMaxAttempts
     step.humanTest = {
       phase: 'provisioning',
       environment: null,

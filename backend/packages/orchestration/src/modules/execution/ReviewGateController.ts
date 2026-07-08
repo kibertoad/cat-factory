@@ -5,6 +5,7 @@ import type {
   ExecutionRepository,
   PipelineStep,
   RequirementConcernLevel,
+  RequestRecommendationItem,
   ResolveRequirementsExceededChoice,
   WorkRunner,
 } from '@cat-factory/kernel'
@@ -18,7 +19,7 @@ import type { StepGraph } from './StepGraph.js'
 /**
  * The merge-preset knobs an iterative review consults: how many reviewer passes it
  * may run and the severity it tolerates before it must raise a finding for a human.
- * A structural subset of the full merge preset, so {@link ReviewGateControllerDeps.resolveMergePreset}
+ * A structural subset of the full merge preset, so {@link ReviewGateControllerDeps.resolveRiskPolicy}
  * can return the whole preset unchanged.
  */
 export interface ReviewPreset {
@@ -61,14 +62,15 @@ export interface ReviewKind<TReview extends ReviewCommon> {
   grantExtraRound(workspaceId: string, reviewId: string): Promise<TReview>
   /**
    * Requirements-only (the Requirement Writer): append `pending` placeholder recommendations
-   * for a batch of findings so the SPA shows "generating…" at once. The slow Writer runs later
-   * via {@link fillRecommendations}. Optional — absent on the clarity kind (no Writer).
+   * for a batch of findings so the SPA shows "generating…" at once. Each item carries its finding
+   * id plus optional per-finding guidance (the note the human typed before choosing "recommend").
+   * The slow Writer runs later via {@link fillRecommendations}. Optional — absent on the clarity
+   * kind (no Writer).
    */
   prepareRecommendations?(
     workspaceId: string,
     reviewId: string,
-    itemIds: string[],
-    note?: string,
+    items: RequestRecommendationItem[],
   ): Promise<TReview>
   /** Requirements-only: reset a settled recommendation back to `pending` for a re-request. Optional. */
   markRecommendationPending?(
@@ -84,6 +86,14 @@ export interface ReviewKind<TReview extends ReviewCommon> {
    * or inline off-path. Optional.
    */
   fillRecommendations?(workspaceId: string, blockId: string): Promise<TReview>
+  /**
+   * Requirements-only (the auto-recommendation automation): for the block's current review,
+   * auto-generate + auto-accept recommendations for every OPEN finding the reviewer flagged
+   * answerable without a product owner. A no-op when nothing qualifies. Runs inline in the
+   * durable driver right after a reviewer pass raises findings. Optional — absent on the
+   * clarity kind (no Writer). See {@link RequirementReviewService.autoRecommend}.
+   */
+  autoRecommend?(workspaceId: string, blockId: string): Promise<void>
   /** Push a live review-changed event so an open window/inspector reflects the new status. */
   emit(workspaceId: string, review: TReview): Promise<void>
 }
@@ -93,7 +103,7 @@ export interface ReviewKind<TReview extends ReviewCommon> {
  * the gate flow drives (park / advance-past-resolved / finalize / persist / emit / progress /
  * start-finish a step) now come from the cohesive {@link RunStateMachine} + {@link StepGraph}
  * collaborators instead of a per-callback bag, so this is just the gate's own data access plus
- * the two genuinely gate-flow operations (`resolveMergePreset`, `dispatchIterationCap`).
+ * the two genuinely gate-flow operations (`resolveRiskPolicy`, `dispatchIterationCap`).
  */
 export interface ReviewGateControllerDeps {
   blockRepository: BlockRepository
@@ -103,7 +113,7 @@ export interface ReviewGateControllerDeps {
   stateMachine: RunStateMachine
   /** The pure step mutators (start/finish a step). */
   stepGraph: StepGraph
-  resolveMergePreset: (workspaceId: string, block: Block) => Promise<ReviewPreset>
+  resolveRiskPolicy: (workspaceId: string, block: Block) => Promise<ReviewPreset>
   dispatchIterationCap: (
     workspaceId: string,
     blockId: string,
@@ -148,6 +158,10 @@ export class ReviewGateController {
       return this.completeStep(workspaceId, instance, step, isFinalStep)
     }
 
+    // The auto-recommendation automation is on by default; a pipeline step opts out via
+    // `stepOptions.autoRecommend === false` (authored in the pipeline builder).
+    const autoRecommendEnabled = step.stepOptions?.autoRecommend !== false
+
     // Re-entry: the human asked the Requirement Writer to recommend answers for a batch of
     // findings (or re-requested one). Run the Writer here in the durable driver — filling the
     // `pending` placeholders one by one (progress streams to the window) and notifying when the
@@ -167,7 +181,13 @@ export class ReviewGateController {
     const pending = step.pendingIncorporation
     if (pending) {
       step.pendingIncorporation = null
-      const review = await this.runIncorporationCycle(kind, workspaceId, block.id, pending.feedback)
+      const review = await this.runIncorporationCycle(
+        kind,
+        workspaceId,
+        block.id,
+        pending.feedback,
+        autoRecommendEnabled,
+      )
       if (review.status === 'incorporated') {
         return this.completeStep(workspaceId, instance, step, isFinalStep)
       }
@@ -186,6 +206,13 @@ export class ReviewGateController {
     if (review.status === 'incorporated') {
       return this.completeStep(workspaceId, instance, step, isFinalStep)
     }
+    // Pre-answer the findings the reviewer judged answerable without a product owner, so the
+    // human is handed a mostly-filled review (only the genuine business decisions remain
+    // blank). Best-effort — a failure here must not wedge the parked run. Skipped on `exceeded`
+    // (the human is picking how to proceed, not answering findings).
+    if (review.status === 'ready' && autoRecommendEnabled) {
+      await this.maybeAutoRecommend(kind, workspaceId, block.id)
+    }
     if (review.status === 'exceeded')
       await this.deps.stateMachine.raiseDecisionRequired(workspaceId, instance)
     return this.deps.stateMachine.parkStepOnDecision(workspaceId, instance, step)
@@ -203,6 +230,7 @@ export class ReviewGateController {
     workspaceId: string,
     blockId: string,
     feedback?: string,
+    autoRecommendEnabled = true,
   ): Promise<TReview> {
     const review = await this.currentReview(kind, workspaceId, blockId)
     // Nothing to fold in (every finding dismissed, no answered replies, no redo
@@ -221,7 +249,7 @@ export class ReviewGateController {
       'Block',
       blockId,
     )
-    const preset = await this.deps.resolveMergePreset(workspaceId, block)
+    const preset = await this.deps.resolveRiskPolicy(workspaceId, block)
     await kind.incorporate(workspaceId, blockId, review.id, feedback)
     // The fold is done; flag the SECOND stage (`reviewing`) so the board/window can show
     // "re-reviewing" distinctly from "incorporating" — either of the two LLM calls can be
@@ -230,7 +258,34 @@ export class ReviewGateController {
     await kind.emit(workspaceId, reReviewing)
     const reviewed = await kind.reReview(workspaceId, review.id, preset)
     await kind.emit(workspaceId, reviewed)
+    // A re-review can surface fresh findings; pre-answer the auto-answerable ones just like the
+    // first pass, so the human only ever hand-answers the genuine business decisions.
+    if (reviewed.status === 'ready' && autoRecommendEnabled) {
+      await this.maybeAutoRecommend(kind, workspaceId, blockId)
+    }
     return reviewed
+  }
+
+  /**
+   * Run the auto-recommendation automation for a block's review when the kind supports it
+   * (requirements only). Best-effort: the recommendations are a convenience, so a Writer
+   * failure must never wedge the parked run — it just leaves those findings blank for the
+   * human. The service already emits live progress per chunk. Returns `true` when the kind
+   * supports the automation (so the caller knows the persisted review may have changed after
+   * the passed-in snapshot was taken), `false` when it is a no-op (unsupported kind).
+   */
+  private async maybeAutoRecommend<TReview extends ReviewCommon>(
+    kind: ReviewKind<TReview>,
+    workspaceId: string,
+    blockId: string,
+  ): Promise<boolean> {
+    if (!kind.autoRecommend) return false
+    try {
+      await kind.autoRecommend(workspaceId, blockId)
+    } catch {
+      // Best-effort: the review + its findings are already persisted and returned.
+    }
+    return true
   }
 
   /** Finish a review gate step and advance to the next step (or finish the run). */
@@ -286,7 +341,7 @@ export class ReviewGateController {
       'Block',
       blockId,
     )
-    const preset = await this.deps.resolveMergePreset(workspaceId, block)
+    const preset = await this.deps.resolveRiskPolicy(workspaceId, block)
     return kind.review(workspaceId, block, preset)
   }
 
@@ -356,16 +411,22 @@ export class ReviewGateController {
     kind: ReviewKind<TReview>,
     workspaceId: string,
     blockId: string,
-    itemIds: string[],
-    note?: string,
+    items: RequestRecommendationItem[],
   ): Promise<TReview> {
     if (!kind.prepareRecommendations || !kind.fillRecommendations) {
       throw new ConflictError('Recommendations are not supported for this review')
     }
     const current = await this.currentReview(kind, workspaceId, blockId)
-    const prepared = await kind.prepareRecommendations(workspaceId, current.id, itemIds, note)
+    const prepared = await kind.prepareRecommendations(workspaceId, current.id, items)
     await kind.emit(workspaceId, prepared)
-    return this.scheduleRecommendation(kind, workspaceId, blockId, itemIds, note, prepared)
+    return this.scheduleRecommendation(
+      kind,
+      workspaceId,
+      blockId,
+      items.map((i) => i.itemId),
+      undefined,
+      prepared,
+    )
   }
 
   /**
@@ -477,9 +538,25 @@ export class ReviewGateController {
       'Block',
       blockId,
     )
-    const preset = await this.deps.resolveMergePreset(workspaceId, block)
+    const preset = await this.deps.resolveRiskPolicy(workspaceId, block)
     const updated = await kind.reReview(workspaceId, review.id, preset)
-    if (updated.status === 'incorporated') await this.resumeRun(kind, workspaceId, blockId)
+    if (updated.status === 'incorporated') {
+      await this.resumeRun(kind, workspaceId, blockId)
+      return updated
+    }
+    if (updated.status === 'ready') {
+      // A re-review can surface fresh findings; pre-answer the auto-answerable ones just like the
+      // pipeline-driven cycle (see {@link runIncorporationCycle}), so auto-recommendation happens
+      // on EVERY iteration round that introduces new questions — not only the first. Off-path
+      // (no parked run) there is no step to opt out via `stepOptions.autoRecommend`, so it is on.
+      const ran = await this.maybeAutoRecommend(kind, workspaceId, blockId)
+      // Auto-recommendation mutates + persists the review (answering findings, accepting `auto`
+      // recs) AFTER `updated` was captured, and pushes the result over the live stream. Return the
+      // FRESH persisted review so this HTTP response matches the stream — otherwise the SPA's
+      // unguarded `store()` on the response clobbers the auto-answered state with this stale
+      // snapshot, and the pre-answered findings vanish from the window until the next event.
+      if (ran) return this.currentReview(kind, workspaceId, blockId)
+    }
     return updated
   }
 

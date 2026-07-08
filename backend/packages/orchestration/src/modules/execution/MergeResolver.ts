@@ -51,7 +51,7 @@ export interface MergeResolverDeps {
   blockRepository: BlockRepository
   notificationService?: NotificationService
   /** The task's resolved merge-threshold preset (block pin → workspace default → built-in). */
-  resolveMergePreset: (workspaceId: string, block: Block) => Promise<MergeThresholds>
+  resolveRiskPolicy: (workspaceId: string, block: Block) => Promise<MergeThresholds>
   /**
    * Merge the block's PR(s) for real then flip it `done` — throws on a COMPLETE failure
    * (nothing merged), returns `partial` when a multi-repo merge merged some then hit a
@@ -97,7 +97,7 @@ export class MergeResolver {
       assessment = null
     }
 
-    const preset = await this.deps.resolveMergePreset(workspaceId, block)
+    const preset = await this.deps.resolveRiskPolicy(workspaceId, block)
     const thresholds: MergeDecision['thresholds'] = {
       presetName: preset.name,
       maxComplexity: preset.maxComplexity,

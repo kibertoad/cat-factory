@@ -19,7 +19,7 @@ const INERT_STORES = [
   'useFragmentsStore',
   'useGitHubStore',
   'useInitiativesStore',
-  'useMergePresetsStore',
+  'useRiskPoliciesStore',
   'useModelPresetsStore',
   'useNotificationsStore',
   'usePipelinesStore',

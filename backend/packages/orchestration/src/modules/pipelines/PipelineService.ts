@@ -8,6 +8,7 @@ import type {
   ConsensusStepConfig,
   Pipeline,
   StepGating,
+  StepOptions,
   TesterQualityConfig,
 } from '@cat-factory/kernel'
 import { assertFound, ConflictError, seedPipelines, ValidationError } from '@cat-factory/kernel'
@@ -130,6 +131,7 @@ export class PipelineService {
       ...alignedGating(input.agentKinds, input.gating),
       ...alignedFollowUps(input.agentKinds, input.followUps),
       ...alignedTesterQuality(input.agentKinds, input.testerQuality),
+      ...alignedStepOptions(input.agentKinds, input.stepOptions),
       ...normalizedLabels(input.labels),
       ...(input.availability ? { availability: input.availability } : {}),
     }
@@ -173,6 +175,7 @@ export class PipelineService {
       ...(source.gating ? { gating: [...source.gating] } : {}),
       ...(source.followUps ? { followUps: [...source.followUps] } : {}),
       ...(source.testerQuality ? { testerQuality: [...source.testerQuality] } : {}),
+      ...(source.stepOptions ? { stepOptions: [...source.stepOptions] } : {}),
       ...(source.labels ? { labels: [...source.labels] } : {}),
       // Preserve the launch constraint: cloning the recurring-only bug-triage built-in keeps the
       // copy recurring-only (else a manual start of the copy — bug-intake step and all — would slip
@@ -205,6 +208,7 @@ export class PipelineService {
     const gating = input.gating ?? existing.gating
     const followUps = input.followUps ?? existing.followUps
     const testerQuality = input.testerQuality ?? existing.testerQuality
+    const stepOptions = input.stepOptions ?? existing.stepOptions
     const labels = input.labels ?? existing.labels
     const availability = input.availability ?? existing.availability
     assertSomeEnabled(agentKinds, enabled)
@@ -264,6 +268,7 @@ export class PipelineService {
       ...alignedGating(agentKinds, gating),
       ...alignedFollowUps(agentKinds, followUps),
       ...alignedTesterQuality(agentKinds, testerQuality),
+      ...alignedStepOptions(agentKinds, stepOptions),
       ...normalizedLabels(labels),
       ...(availability ? { availability } : {}),
       // `archived` is organization-only state, mutated via `organize` — preserved here.
@@ -409,6 +414,19 @@ function alignedTesterQuality(
 ): Pick<Pipeline, 'testerQuality'> {
   return testerQuality?.some((q) => q?.enabled === false || q?.gating?.enabled)
     ? { testerQuality: agentKinds.map((_, i) => testerQuality[i] ?? null) }
+    : {}
+}
+
+// Keep the per-step options bag aligned to agentKinds; only persist when at least one step
+// deviates from its defaults, i.e. carries a non-empty options object. Kept option-agnostic
+// (any own key ⇒ store it) so a new StepOptions field needs no change here — the client is
+// responsible for only setting non-default values (e.g. `autoRecommend: false`, never `true`).
+function alignedStepOptions(
+  agentKinds: string[],
+  stepOptions: (StepOptions | null)[] | undefined,
+): Pick<Pipeline, 'stepOptions'> {
+  return stepOptions?.some((o) => o && Object.keys(o).length > 0)
+    ? { stepOptions: agentKinds.map((_, i) => stepOptions[i] ?? null) }
     : {}
 }
 

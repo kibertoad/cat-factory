@@ -145,7 +145,7 @@ function makeRegistry(): {
     },
     // `upsert` is the lazy default-seed the board-load `list` read triggers (member-level write);
     // `get`/`remove` are the preset-library editor's read-one + delete.
-    mergePresetRepository: {
+    riskPolicyRepository: {
       list: async (ws: string) => [{ ws }],
       getDefault: async (ws: string) => ({ ws }),
       upsert: async () => undefined,
@@ -603,7 +603,7 @@ describe('board-load read surface (workspace-scoped)', () => {
   const READS: Array<{ repo: string; method: string; args: unknown[] }> = [
     { repo: 'workspaceMountRepository', method: 'listByWorkspace', args: [] },
     { repo: 'workspaceSettingsRepository', method: 'get', args: [] },
-    { repo: 'mergePresetRepository', method: 'list', args: [] },
+    { repo: 'riskPolicyRepository', method: 'list', args: [] },
     { repo: 'modelPresetRepository', method: 'list', args: [] },
     { repo: 'serviceFragmentDefaultsRepository', method: 'get', args: [] },
     { repo: 'pipelineScheduleRepository', method: 'list', args: [] },
@@ -802,7 +802,7 @@ describe('agent-context run-path + lazy-seed surface (workspace-scoped)', () => 
   // The lazy default-preset seeds a board load triggers (`*PresetService` ensure-default writes).
   // They return void, so assert they forward in scope and are scope-rejected out of scope.
   const SEED_WRITES: Array<{ repo: string; method: string }> = [
-    { repo: 'mergePresetRepository', method: 'upsert' },
+    { repo: 'riskPolicyRepository', method: 'upsert' },
     { repo: 'modelPresetRepository', method: 'upsert' },
   ]
   for (const { repo, method } of SEED_WRITES) {
@@ -880,8 +880,8 @@ describe('settings, preset & schedule management surface (workspace-scoped write
     { repo: 'workspaceSettingsRepository', method: 'upsert', args: [{ storeAgentContext: true }] },
     { repo: 'trackerSettingsRepository', method: 'put', args: [{}] },
     { repo: 'serviceFragmentDefaultsRepository', method: 'set', args: [['frag_1']] },
-    { repo: 'mergePresetRepository', method: 'get', args: ['preset_1'], echoes: true },
-    { repo: 'mergePresetRepository', method: 'remove', args: ['preset_1'] },
+    { repo: 'riskPolicyRepository', method: 'get', args: ['preset_1'], echoes: true },
+    { repo: 'riskPolicyRepository', method: 'remove', args: ['preset_1'] },
     { repo: 'modelPresetRepository', method: 'get', args: ['preset_1'], echoes: true },
     { repo: 'modelPresetRepository', method: 'remove', args: ['preset_1'] },
     { repo: 'pipelineScheduleRepository', method: 'get', args: ['sched_1'], echoes: true },

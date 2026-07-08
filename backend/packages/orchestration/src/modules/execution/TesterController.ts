@@ -7,7 +7,7 @@ import type {
   ExecutionInstance,
   PipelineStep,
 } from '@cat-factory/kernel'
-import { DEFAULT_MERGE_PRESET, isAsyncAgentExecutor } from '@cat-factory/kernel'
+import { DEFAULT_RISK_POLICY, isAsyncAgentExecutor } from '@cat-factory/kernel'
 import {
   type TestReport,
   type TesterAttempt,
@@ -90,7 +90,7 @@ export interface TesterControllerDeps {
   agentExecutor: AgentExecutor
   contextBuilder: AgentContextBuilder
   /** The task's CI/test + QC attempt budgets (from the resolved merge preset). */
-  resolveMergePreset: (
+  resolveRiskPolicy: (
     workspaceId: string,
     block: Block,
   ) => Promise<{ ciMaxAttempts: number; maxTesterQualityIterations: number }>
@@ -140,8 +140,8 @@ export class TesterController {
     }
     if (!step.test) {
       const preset = block
-        ? await this.deps.resolveMergePreset(workspaceId, block)
-        : DEFAULT_MERGE_PRESET
+        ? await this.deps.resolveRiskPolicy(workspaceId, block)
+        : DEFAULT_RISK_POLICY
       step.test = {
         phase: 'testing',
         attempts: 0,
@@ -552,7 +552,7 @@ export class TesterController {
     step.test = {
       phase: 'fixing',
       attempts: (step.test?.attempts ?? 0) + 1,
-      maxAttempts: step.test?.maxAttempts ?? DEFAULT_MERGE_PRESET.ciMaxAttempts,
+      maxAttempts: step.test?.maxAttempts ?? DEFAULT_RISK_POLICY.ciMaxAttempts,
       lastReport: report,
       // Preserve the inspectable fixer history across the rebuild — this round's entry is
       // appended when the fixer finishes (see recordFixerOutcome).

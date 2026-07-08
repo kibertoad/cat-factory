@@ -5,7 +5,7 @@ import type {
   BlueprintService,
   ExecutionInstance,
   FollowUpsStepState,
-  MergePresetRepository,
+  RiskPolicyRepository,
   PipelineStep,
   PullRequestMerger,
   StepReviewComment,
@@ -58,7 +58,7 @@ import {
   ValidationError,
   type SubscriptionVendor,
 } from '@cat-factory/kernel'
-import { DEFAULT_MERGE_PRESET } from '@cat-factory/kernel'
+import { DEFAULT_RISK_POLICY } from '@cat-factory/kernel'
 import {
   REQUIREMENTS_REVIEW_AGENT_KIND,
   CLARITY_REVIEW_AGENT_KIND,
@@ -432,9 +432,9 @@ export interface ExecutionServiceDependencies {
   pullRequestMerger?: PullRequestMerger
   /**
    * Optional: resolves a task's merge threshold preset (auto-merge ceilings + the
-   * CI-fixer attempt budget). Absent → the built-in {@link DEFAULT_MERGE_PRESET}.
+   * CI-fixer attempt budget). Absent → the built-in {@link DEFAULT_RISK_POLICY}.
    */
-  mergePresetRepository?: MergePresetRepository
+  riskPolicyRepository?: RiskPolicyRepository
   /**
    * Optional: runs the gate-probe / merge GitHub reads under the run initiator's
    * ambient context, so a per-user PAT (when set) is preferred over the deployment's
@@ -566,7 +566,7 @@ export class ExecutionService {
   private readonly workspaceSettingsService?: WorkspaceSettingsService
   private readonly prMerger?: PullRequestMerger
   private readonly notifications?: NotificationService
-  private readonly mergePresetRepository?: MergePresetRepository
+  private readonly riskPolicyRepository?: RiskPolicyRepository
   private readonly issueWriteback?: IssueWritebackProvider
   private readonly subscriptionActivations?: SubscriptionActivationRepository
   private readonly pokeInitiativeLoop?: (
@@ -642,7 +642,7 @@ export class ExecutionService {
     workspaceSettingsService,
     llmObservability,
     pullRequestMerger,
-    mergePresetRepository,
+    riskPolicyRepository,
     ticketTrackerProvider,
     issueWriteback,
     bugIntakeService,
@@ -714,7 +714,7 @@ export class ExecutionService {
     this.mergeResolver = new MergeResolver({
       blockRepository,
       notificationService,
-      resolveMergePreset: (ws, block) => this.resolveMergePreset(ws, block),
+      resolveRiskPolicy: (ws, block) => this.resolveRiskPolicy(ws, block),
       finalizeMerge: (ws, blockId) => this.finalizeMerge(ws, blockId),
     })
     this.companionController = new CompanionController({
@@ -733,7 +733,7 @@ export class ExecutionService {
       notificationService,
       agentExecutor,
       contextBuilder: this.contextBuilder,
-      resolveMergePreset: (ws, block) => this.resolveMergePreset(ws, block),
+      resolveRiskPolicy: (ws, block) => this.resolveRiskPolicy(ws, block),
       stateMachine: this.runStateMachine,
       // The test quality-control companion's inline reviewer (when wired); absent → QC
       // pass-through. Stamps its verdicts with the engine clock.
@@ -785,7 +785,7 @@ export class ExecutionService {
           }
         : {}),
       ...(branchUpdater ? { branchUpdater } : {}),
-      resolveMergePreset: (ws, block) => this.resolveMergePreset(ws, block),
+      resolveRiskPolicy: (ws, block) => this.resolveRiskPolicy(ws, block),
       stateMachine: this.runStateMachine,
       stepGraph: this.stepGraph,
       clockNow: () => this.clock.now(),
@@ -798,7 +798,7 @@ export class ExecutionService {
       contextBuilder: this.contextBuilder,
       notificationService,
       ...(resolveBinaryArtifactStore ? { resolveBinaryArtifactStore } : {}),
-      resolveMergePreset: (ws, block) => this.resolveMergePreset(ws, block),
+      resolveRiskPolicy: (ws, block) => this.resolveRiskPolicy(ws, block),
       stateMachine: this.runStateMachine,
       stepGraph: this.stepGraph,
       clockNow: () => this.clock.now(),
@@ -809,7 +809,7 @@ export class ExecutionService {
       workRunner,
       stateMachine: this.runStateMachine,
       stepGraph: this.stepGraph,
-      resolveMergePreset: (ws, block) => this.resolveMergePreset(ws, block),
+      resolveRiskPolicy: (ws, block) => this.resolveRiskPolicy(ws, block),
       dispatchIterationCap: (ws, blockId, choice, handlers) =>
         this.dispatchIterationCap(ws, blockId, choice, handlers),
     })
@@ -854,7 +854,7 @@ export class ExecutionService {
         })
       : undefined
     // The per-step dispatch + completion spine. Composes the collaborators built above; the
-    // merge subgraph stays on the engine, reached only through the injected `resolveMergePreset`
+    // merge subgraph stays on the engine, reached only through the injected `resolveRiskPolicy`
     // callback + the MergeResolver (which closes over the engine's `finalizeMerge`). The
     // controllers' `runAgent`/`previewStepModel`/`deployInputs`/`deployContext` closures resolve
     // through `this.runDispatcher` lazily, so this assignment trailing their construction is safe.
@@ -897,7 +897,7 @@ export class ExecutionService {
       initiativeService,
       resolveRunRepoContext,
       resolveProviderCapabilities,
-      resolveMergePreset: (ws, block) => this.resolveMergePreset(ws, block),
+      resolveRiskPolicy: (ws, block) => this.resolveRiskPolicy(ws, block),
       modelIdIsMetered: (id, caps) => this.modelIdIsMetered(id, caps),
     })
     // Group the per-feature gate-window actions into cohesive sub-facades (exposed as
@@ -914,7 +914,7 @@ export class ExecutionService {
     this.workspaceSettingsService = workspaceSettingsService
     this.prMerger = pullRequestMerger
     this.notifications = notificationService
-    this.mergePresetRepository = mergePresetRepository
+    this.riskPolicyRepository = riskPolicyRepository
     this.issueWriteback = issueWriteback
     this.subscriptionActivations = subscriptionActivationRepository
     this.pokeInitiativeLoop = pokeInitiativeLoop
@@ -1704,6 +1704,11 @@ export class ExecutionService {
           // Estimate gating: when set+enabled the step is skipped at runtime unless the
           // block estimate (written by an earlier task-estimator step) meets the threshold.
           ...(pipeline.gating?.[i] ? { gating: pipeline.gating[i] } : {}),
+          // The extensible per-step options bag (the new home for per-step parameters — see
+          // stepOptionsSchema). Copied from the pipeline at run start, keyed by the step's
+          // ORIGINAL index `i`, so it stays aligned to the kind even when earlier steps are
+          // disabled. Today it carries the requirements-review `autoRecommend` toggle.
+          ...(pipeline.stepOptions?.[i] ? { stepOptions: pipeline.stepOptions[i] } : {}),
           // A companion step carries its quality bar + rework budget, seeded from the
           // pipeline's per-step threshold (else the companion's default).
           ...(companionDef
@@ -1739,7 +1744,7 @@ export class ExecutionService {
                 testerQuality: {
                   enabled: true,
                   attempts: 0,
-                  maxAttempts: DEFAULT_MERGE_PRESET.maxTesterQualityIterations,
+                  maxAttempts: DEFAULT_RISK_POLICY.maxTesterQualityIterations,
                   verdicts: [],
                   ...(pipeline.testerQuality?.[i]?.gating
                     ? { gating: pipeline.testerQuality[i]!.gating }
@@ -2233,8 +2238,8 @@ export class ExecutionService {
       markReReviewing: (ws, reviewId) => require().markReReviewing(ws, reviewId),
       markIncorporating: (ws, reviewId) => require().markIncorporating(ws, reviewId),
       grantExtraRound: (ws, reviewId) => require().grantExtraRound(ws, reviewId),
-      prepareRecommendations: (ws, reviewId, itemIds, note) =>
-        require().prepareRecommendations(ws, reviewId, itemIds, note),
+      prepareRecommendations: (ws, reviewId, items) =>
+        require().prepareRecommendations(ws, reviewId, items),
       markRecommendationPending: (ws, reviewId, recId, note) =>
         require().markRecommendationPending(ws, reviewId, recId, note),
       fillRecommendations: async (ws, blockId) => {
@@ -2248,6 +2253,17 @@ export class ExecutionService {
           onProgress: (r) => this.events.requirementReviewChanged?.(ws, r) ?? Promise.resolve(),
         })
         return assertFound(await svc.getForBlock(ws, blockId), 'Requirement review', blockId)
+      },
+      autoRecommend: async (ws, blockId) => {
+        const svc = require()
+        const review = assertFound(
+          await svc.getForBlock(ws, blockId),
+          'Requirement review',
+          blockId,
+        )
+        await svc.autoRecommend(ws, review.id, {
+          onProgress: (r) => this.events.requirementReviewChanged?.(ws, r) ?? Promise.resolve(),
+        })
       },
       emit: (ws, review) => this.events.requirementReviewChanged?.(ws, review) ?? Promise.resolve(),
     }
@@ -2786,10 +2802,10 @@ export class ExecutionService {
 
   /**
    * Resolve the merge threshold preset that governs a task: its explicitly-picked
-   * preset, else the workspace default, else the built-in {@link DEFAULT_MERGE_PRESET}.
+   * preset, else the workspace default, else the built-in {@link DEFAULT_RISK_POLICY}.
    * Returns just the thresholds the engine compares against (+ the CI attempt budget).
    */
-  private async resolveMergePreset(
+  private async resolveRiskPolicy(
     workspaceId: string,
     block: Block,
   ): Promise<{
@@ -2806,15 +2822,15 @@ export class ExecutionService {
     humanReviewGraceMinutes: number
     autoMergeEnabled: boolean
   }> {
-    if (this.mergePresetRepository) {
-      if (block.mergePresetId) {
-        const picked = await this.mergePresetRepository.get(workspaceId, block.mergePresetId)
+    if (this.riskPolicyRepository) {
+      if (block.riskPolicyId) {
+        const picked = await this.riskPolicyRepository.get(workspaceId, block.riskPolicyId)
         if (picked) return picked
       }
-      const fallback = await this.mergePresetRepository.getDefault(workspaceId)
+      const fallback = await this.riskPolicyRepository.getDefault(workspaceId)
       if (fallback) return fallback
     }
-    return DEFAULT_MERGE_PRESET
+    return DEFAULT_RISK_POLICY
   }
 
   /**

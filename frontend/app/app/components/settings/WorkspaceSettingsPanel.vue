@@ -9,7 +9,7 @@
 // standalone modals).
 import { reactive, ref, watch } from 'vue'
 import type { CreateTaskType, TaskLimitMode } from '~/types/domain'
-import MergeThresholdsPanel from '~/components/settings/MergeThresholdsPanel.vue'
+import RiskPolicyPanel from '~/components/settings/RiskPolicyPanel.vue'
 import IssueTrackerPanel from '~/components/settings/IssueTrackerPanel.vue'
 import ServiceFragmentDefaultsPanel from '~/components/settings/ServiceFragmentDefaultsPanel.vue'
 import BudgetSettings from '~/components/settings/BudgetSettings.vue'
@@ -345,7 +345,7 @@ async function save() {
 
         <!-- Merge thresholds -->
         <template #merge>
-          <MergeThresholdsPanel />
+          <RiskPolicyPanel />
         </template>
 
         <!-- Issue tracker -->

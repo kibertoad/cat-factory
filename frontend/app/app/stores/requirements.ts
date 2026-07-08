@@ -1,6 +1,7 @@
 import { defineStore } from 'pinia'
 import { ref } from 'vue'
 import type {
+  RequestRecommendationItem,
   RequirementReview,
   ResolveRequirementsExceededChoice,
   ReviewItemStatus,
@@ -208,22 +209,17 @@ export const useRequirementsStore = defineStore('requirements', () => {
   }
 
   /**
-   * Ask the Requirement Writer to recommend answers for a batch of findings (by item id).
-   * ASYNCHRONOUS: returns at once with `pending` placeholder recommendations (the Writer runs
-   * per finding in the durable driver), which fill in (`ready`) via live `requirements` stream
-   * events; a notification calls the user back when the batch is ready. The board shows the
-   * `recommending` background stage while any placeholder is pending. Optional `note` steers the
-   * whole batch.
+   * Ask the Requirement Writer to recommend answers for a batch of findings. Each item carries
+   * its finding id plus optional per-finding guidance (the note the human typed before choosing
+   * "recommend something"). ASYNCHRONOUS: returns at once with `pending` placeholder
+   * recommendations (the Writer runs per finding in the durable driver), which fill in (`ready`)
+   * via live `requirements` stream events; a notification calls the user back when the batch is
+   * ready. The board shows the `recommending` background stage while any placeholder is pending.
    */
-  async function requestRecommendations(blockId: string, itemIds: string[], note?: string) {
+  async function requestRecommendations(blockId: string, items: RequestRecommendationItem[]) {
     withFlag(recommending, blockId, true)
     try {
-      const updated = await api.requestRecommendations(
-        workspace.requireId(),
-        blockId,
-        itemIds,
-        note,
-      )
+      const updated = await api.requestRecommendations(workspace.requireId(), blockId, items)
       if (updated) store(updated)
       return updated
     } finally {

@@ -21,14 +21,14 @@ import type {
 import { DOC_KINDS, DOC_KIND_FIELDS } from '~/types/domain'
 import ContextDocumentPicker from '~/components/documents/ContextDocumentPicker.vue'
 import ContextIssuePicker from '~/components/tasks/ContextIssuePicker.vue'
-import { mergePresetOptionLabel, mergePresetThresholds } from '~/utils/mergePreset'
+import { riskPolicyOptionLabel, riskPolicySummary } from '~/utils/riskPolicy'
 import { pipelineAllowedForManualStart } from '~/utils/pipeline'
 
 const ui = useUiStore()
 const board = useBoardStore()
 const documents = useDocumentsStore()
 const tasks = useTasksStore()
-const mergePresets = useMergePresetsStore()
+const riskPolicies = useRiskPoliciesStore()
 const modelPresets = useModelPresetsStore()
 const pipelines = usePipelinesStore()
 const agentConfig = useAgentConfigStore()
@@ -181,15 +181,15 @@ const recurringFrameId = computed(() => {
 
 // Run configuration picked up front. Empty string = use the default (workspace
 // default merge preset / no pinned pipeline).
-const mergePresetId = ref('')
+const riskPolicyId = ref('')
 const modelPresetId = ref('')
 const pipelineId = ref('')
 
 const defaultPresetLabel = computed(() =>
-  mergePresets.defaultPreset
+  riskPolicies.defaultPreset
     ? t('board.addTask.defaultPreset', {
-        name: mergePresets.defaultPreset.name,
-        thresholds: mergePresetThresholds(mergePresets.defaultPreset),
+        name: riskPolicies.defaultPreset.name,
+        thresholds: riskPolicySummary(riskPolicies.defaultPreset),
       })
     : t('board.addTask.workspaceDefault'),
 )
@@ -198,19 +198,19 @@ const presetMenu = computed(() => [
     {
       label: defaultPresetLabel.value,
       icon: 'i-lucide-rotate-ccw',
-      onSelect: () => (mergePresetId.value = ''),
+      onSelect: () => (riskPolicyId.value = ''),
     },
-    ...mergePresets.presets.map((p) => ({
-      label: mergePresetOptionLabel(p),
+    ...riskPolicies.presets.map((p) => ({
+      label: riskPolicyOptionLabel(p),
       icon: 'i-lucide-git-merge',
-      onSelect: () => (mergePresetId.value = p.id),
+      onSelect: () => (riskPolicyId.value = p.id),
     })),
   ],
 ])
 const selectedPresetLabel = computed(() => {
-  if (!mergePresetId.value) return defaultPresetLabel.value
-  const picked = mergePresets.presets.find((p) => p.id === mergePresetId.value)
-  return picked ? mergePresetOptionLabel(picked) : t('board.addTask.workspaceDefault')
+  if (!riskPolicyId.value) return defaultPresetLabel.value
+  const picked = riskPolicies.presets.find((p) => p.id === riskPolicyId.value)
+  return picked ? riskPolicyOptionLabel(picked) : t('board.addTask.workspaceDefault')
 })
 
 // Model preset: which model each agent runs on. Empty = workspace default preset.
@@ -383,7 +383,7 @@ watch(open, (isOpen) => {
   docOutlineHints.value = ''
   for (const key of Object.keys(docKindFieldValues) as DocKindFieldKey[])
     delete docKindFieldValues[key]
-  mergePresetId.value = ''
+  riskPolicyId.value = ''
   modelPresetId.value = ''
   pipelineId.value = ''
   agentConfigValues.value = {}
@@ -436,7 +436,7 @@ async function add() {
     const block = await board.addTask(containerId, title.value.trim(), fullDescription, {
       taskType: taskType.value as CreateTaskType,
       ...(typeFields ? { taskTypeFields: typeFields } : {}),
-      ...(mergePresetId.value ? { mergePresetId: mergePresetId.value } : {}),
+      ...(riskPolicyId.value ? { riskPolicyId: riskPolicyId.value } : {}),
       ...(modelPresetId.value ? { modelPresetId: modelPresetId.value } : {}),
       ...(pipelineId.value ? { pipelineId: pipelineId.value } : {}),
       ...(Object.keys(agentConfigValues.value).length

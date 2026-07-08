@@ -1,20 +1,20 @@
 <script setup lang="ts">
 // Startup advisory for built-in merge presets that drifted from the catalog. Opened once per
-// session from the board page when `useMergePresetHealth` reports any issue. Lists:
+// session from the board page when `useRiskPolicyHealth` reports any issue. Lists:
 //   • new built-in presets the workspace doesn't have yet (ADD them);
 //   • built-ins with a newer catalog version available (RESEED to adopt it).
 // Both fixes are the same reseed call (it creates or updates by catalog id). Detection is
-// client-side (see useMergePresetHealth); the actions hit the mergePresets store.
+// client-side (see useRiskPolicyHealth); the actions hit the riskPolicies store.
 const { t } = useI18n()
 const ui = useUiStore()
-const presets = useMergePresetsStore()
-const { newPresets, outdated, hasIssues } = useMergePresetHealth()
+const presets = useRiskPoliciesStore()
+const { newPresets, outdated, hasIssues } = useRiskPolicyHealth()
 const toast = useToast()
 
 const open = computed({
-  get: () => ui.mergePresetHealthOpen,
+  get: () => ui.riskPolicyHealthOpen,
   set: (v: boolean) => {
-    if (!v) ui.closeMergePresetHealth()
+    if (!v) ui.closeRiskPolicyHealth()
   },
 })
 
@@ -29,7 +29,7 @@ async function reseed(id: string) {
     await presets.reseed(id)
   } catch (e) {
     toast.add({
-      title: t('mergePreset.health.toast.reseedFailed'),
+      title: t('riskPolicy.health.toast.reseedFailed'),
       description: e instanceof Error ? e.message : String(e),
       icon: 'i-lucide-triangle-alert',
       color: 'error',
@@ -53,11 +53,11 @@ const reseedableCount = computed(
 </script>
 
 <template>
-  <UModal v-model:open="open" :title="t('mergePreset.health.title')" :ui="{ content: 'max-w-2xl' }">
+  <UModal v-model:open="open" :title="t('riskPolicy.health.title')" :ui="{ content: 'max-w-2xl' }">
     <template #body>
       <div v-if="!hasIssues" class="py-6 text-center text-sm text-slate-400">
         <UIcon name="i-lucide-check-circle-2" class="mx-auto mb-2 h-8 w-8 text-emerald-400" />
-        {{ t('mergePreset.health.allValid') }}
+        {{ t('riskPolicy.health.allValid') }}
       </div>
 
       <div v-else class="space-y-5">
@@ -66,10 +66,10 @@ const reseedableCount = computed(
           <div class="flex items-center gap-2">
             <UIcon name="i-lucide-sparkles" class="h-4 w-4 text-emerald-400" />
             <h3 class="text-sm font-semibold text-slate-200">
-              {{ t('mergePreset.health.newHeading') }}
+              {{ t('riskPolicy.health.newHeading') }}
             </h3>
           </div>
-          <p class="text-[11px] text-slate-500">{{ t('mergePreset.health.newDescription') }}</p>
+          <p class="text-[11px] text-slate-500">{{ t('riskPolicy.health.newDescription') }}</p>
           <ul class="space-y-2">
             <li
               v-for="i in newPresets"
@@ -90,7 +90,7 @@ const reseedableCount = computed(
                 :disabled="anyBusy"
                 @click="reseed(i.id)"
               >
-                {{ t('mergePreset.health.add') }}
+                {{ t('riskPolicy.health.add') }}
               </UButton>
             </li>
           </ul>
@@ -101,10 +101,10 @@ const reseedableCount = computed(
           <div class="flex items-center gap-2">
             <UIcon name="i-lucide-arrow-up-circle" class="h-4 w-4 text-amber-400" />
             <h3 class="text-sm font-semibold text-slate-200">
-              {{ t('mergePreset.health.updatesHeading') }}
+              {{ t('riskPolicy.health.updatesHeading') }}
             </h3>
           </div>
-          <p class="text-[11px] text-slate-500">{{ t('mergePreset.health.updatesDescription') }}</p>
+          <p class="text-[11px] text-slate-500">{{ t('riskPolicy.health.updatesDescription') }}</p>
           <ul class="space-y-2">
             <li
               v-for="i in outdated"
@@ -115,7 +115,7 @@ const reseedableCount = computed(
                 <span class="truncate text-sm font-medium text-slate-100">{{ i.name }}</span>
                 <p class="text-[11px] text-amber-400/80">
                   {{
-                    t('mergePreset.health.versionAvailable', {
+                    t('riskPolicy.health.versionAvailable', {
                       from: i.fromVersion ?? 0,
                       to: i.toVersion ?? 0,
                     })
@@ -131,7 +131,7 @@ const reseedableCount = computed(
                 :disabled="anyBusy"
                 @click="reseed(i.id)"
               >
-                {{ t('mergePreset.health.reseed') }}
+                {{ t('riskPolicy.health.reseed') }}
               </UButton>
             </li>
           </ul>
@@ -149,16 +149,16 @@ const reseedableCount = computed(
           :loading="anyBusy"
           @click="reseedAll"
         >
-          {{ t('mergePreset.health.reseedAll', { count: reseedableCount }) }}
+          {{ t('riskPolicy.health.reseedAll', { count: reseedableCount }) }}
         </UButton>
         <span v-else />
         <UButton
           color="neutral"
           variant="ghost"
           :disabled="anyBusy"
-          @click="ui.closeMergePresetHealth()"
+          @click="ui.closeRiskPolicyHealth()"
         >
-          {{ hasIssues ? t('mergePreset.health.dismiss') : t('mergePreset.health.done') }}
+          {{ hasIssues ? t('riskPolicy.health.dismiss') : t('riskPolicy.health.done') }}
         </UButton>
       </div>
     </template>

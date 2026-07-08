@@ -230,7 +230,7 @@
       "optional": "optionnel",
       "pipeline": "Pipeline",
       "chooseAtRunTime": "Choisir au lancement",
-      "mergePolicy": "Politique de fusion",
+      "mergePolicy": "Politique de risque",
       "workspaceDefault": "Valeur par défaut de l’espace",
       "defaultPreset": "Par défaut ({name}) : {thresholds}",
       "defaultModelPreset": "Par défaut ({name})",
@@ -859,9 +859,9 @@
       "pipeline": "Pipeline",
       "pipelineEmpty": "Aucune valeur par défaut. Choisissez un pipeline lorsque vous exécutez cette tâche.",
       "pipelineHint": "Le pipeline que le bouton Exécuter démarre par défaut : la séquence d'étapes d'agent (par exemple spécification, code, test, fusion) exécutée pour cette tâche.",
-      "mergePolicy": "Politique de fusion",
-      "mergePresetDetail": "{name} : fusion automatique lorsque la complexité ≤ {complexity}, le risque ≤ {risk}, l'impact ≤ {impact} ; jusqu'à {attempts} tentatives de correction CI.",
-      "mergePresetEmpty": "Aucun preset configuré. Le fusionneur déclenche une notification de revue pour chaque PR.",
+      "mergePolicy": "Politique de risque",
+      "riskPolicyDetail": "{name} : fusion automatique lorsque la complexité ≤ {complexity}, le risque ≤ {risk}, l'impact ≤ {impact} ; jusqu'à {attempts} tentatives de correction CI.",
+      "riskPolicyEmpty": "Aucune politique de risque configurée. Le fusionneur déclenche une notification de revue pour chaque PR.",
       "mergePolicyHint": "Décide quand une pull request terminée est fusionnée automatiquement au lieu d'attendre une revue humaine, et combien de tentatives de correction de CI une exécution obtient.",
       "modelPreset": "Preset de modèle",
       "modelPresetHint": "Décide avec quel modèle d'IA chaque étape d'agent s'exécute.",
@@ -1559,7 +1559,7 @@
         "documentImport": "Importer et générer depuis des documents",
         "taskImport": "Importer des tickets",
         "fragments": "Bibliothèque de fragments de contexte",
-        "mergeThresholds": "Seuils de fusion",
+        "mergeThresholds": "Politiques de risque",
         "workspaceSettings": "Paramètres de l'espace de travail",
         "modelConfiguration": "Configuration des modèles",
         "serviceFragmentDefaults": "Bonnes pratiques de service par défaut",
@@ -1579,7 +1579,7 @@
         "taskSource": "tâche source suivi tickets",
         "taskImport": "tâche importer tickets",
         "fragments": "prompt fragments bonnes pratiques directives contexte",
-        "mergeThresholds": "fusion politique préréglage fusion automatique ci",
+        "mergeThresholds": "politique de risque fusion fusion automatique ci itérations",
         "workspaceSettings": "limite tâches en cours par service attente escalade retard notification délai",
         "modelConfiguration": "modèle llm routage type d'agent préréglage par défaut configuration",
         "serviceFragmentDefaults": "fragment bonnes pratiques directive service par défaut sensible au code",
@@ -1945,8 +1945,8 @@
         "body": "\"{name}\" sera supprimé. Cette action est irréversible."
       }
     },
-    "mergeThresholds": {
-      "intro": "Politiques de fusion automatique nommées qu'une tâche peut choisir. Une fois la CI réussie, l'agent {merger} note la PR sur la complexité, le risque et l'impact (0-100%); la PR est fusionnée automatiquement uniquement lorsque chaque note est inférieure ou égale aux plafonds du préréglage, sinon une notification de revue est levée. Le préréglage par défaut régit toute tâche qui n'en choisit aucun.",
+    "riskPolicy": {
+      "intro": "Politiques de fusion automatique nommées qu'une tâche peut choisir. Une fois la CI réussie, l'agent {merger} note la PR sur la complexité, le risque et l'impact (0-100%); la PR est fusionnée automatiquement uniquement lorsque chaque note est inférieure ou égale aux plafonds de la politique, sinon une notification de revue est levée. La politique par défaut régit toute tâche qui n'en choisit aucun.",
       "mergerAgent": "merger",
       "concern": {
         "none": "Aucun (toujours arrêter)",
@@ -1954,11 +1954,11 @@
         "medium": "Moyen",
         "high": "Élevé (ne jamais arrêter)"
       },
-      "presetNamePlaceholder": "Nom du préréglage",
+      "presetNamePlaceholder": "Nom de la politique",
       "default": "Par défaut",
       "makeDefault": "Définir par défaut",
-      "deleteDefaultBlocked": "Le préréglage par défaut ne peut pas être supprimé",
-      "deletePreset": "Supprimer le préréglage",
+      "deleteDefaultBlocked": "La politique par défaut ne peut pas être supprimée",
+      "deletePreset": "Supprimer la politique",
       "field": {
         "maxComplexity": "Complexité max %",
         "maxRisk": "Risque max %",
@@ -1968,7 +1968,7 @@
         "maxRequirementConcernAllowed": "Validation auto. des préoccupations jusqu'à",
         "autoMerge": "Fusion automatique"
       },
-      "newPreset": "Nouveau préréglage",
+      "newPreset": "Nouvelle politique",
       "create": {
         "name": "Nom",
         "namePlaceholder": "p. ex. Prudent",
@@ -1981,18 +1981,18 @@
       },
       "add": "Ajouter",
       "toast": {
-        "saved": "Préréglage enregistré",
-        "saveFailed": "Impossible d'enregistrer le préréglage",
-        "created": "Préréglage créé",
-        "createFailed": "Impossible de créer le préréglage",
+        "saved": "Politique enregistrée",
+        "saveFailed": "Impossible d'enregistrer la politique",
+        "created": "Politique créée",
+        "createFailed": "Impossible de créer la politique",
         "defaultFailed": "Impossible de définir par défaut",
-        "deleteFailed": "Impossible de supprimer le préréglage"
+        "deleteFailed": "Impossible de supprimer la politique"
       },
-      "autoMergeOnHint": "Fusionner automatiquement si dans les seuils.",
+      "autoMergeOnHint": "Fusionner automatiquement si dans les limites de la politique.",
       "autoMergeOffHint": "Toujours envoyer la PR en revue humaine.",
       "confirmDelete": {
-        "title": "Supprimer ce préréglage de fusion ?",
-        "body": "\"{name}\" sera supprimé. Les tâches qui l'utilisent reviendront au préréglage par défaut de l'espace de travail."
+        "title": "Supprimer cette politique de risque ?",
+        "body": "\"{name}\" sera supprimé. Les tâches qui l'utilisent reviendront à la politique par défaut de l'espace de travail."
       }
     },
     "observabilityConnection": {
@@ -2210,7 +2210,7 @@
         "usage": "Utilisation",
         "workspace": "Espace de travail",
         "budget": "Budget",
-        "merge": "Seuils de fusion",
+        "merge": "Politiques de risque",
         "tracker": "Suivi des tickets",
         "fragments": "Bonnes pratiques du service"
       },
@@ -3059,6 +3059,8 @@
       "followUpDisableTooltip": "Compagnon de suivi activé. Coder repère les points en suspens / sous-tâches / questions ; cliquez pour le désactiver.",
       "testerQualityEnableTooltip": "Compagnon de qualité des tests désactivé. Cliquez pour l'activer (audite la couverture du rapport et relance le Testeur en cas de lacunes).",
       "testerQualityDisableTooltip": "Compagnon de qualité des tests activé. Audite la couverture du rapport avant le feu vert et relance le Testeur en cas de lacunes ; cliquez pour le désactiver.",
+      "autoRecommendEnableTooltip": "Recommandation automatique désactivée. Cliquez pour l'activer (le relecteur répond à l'avance aux constatations qui peuvent l'être à partir des bonnes pratiques / du contexte, en vous laissant les décisions métier).",
+      "autoRecommendDisableTooltip": "Recommandation automatique activée. Le relecteur répond à l'avance aux constatations qui peuvent l'être à partir des bonnes pratiques / du contexte ; cliquez pour la désactiver et répondre vous-même à chaque constatation.",
       "testerQualityLabel": "Compagnon de qualité des tests",
       "testerQualityGateTooltip": "N'exécuter l'audit de qualité que lorsque l'estimation de la tâche dépasse un seuil (nécessite un Estimateur de tâches en amont)",
       "moveUp": "Monter l'étape",
@@ -3302,6 +3304,17 @@
     "markedForRecommendation": "Marqué pour recommandation",
     "recommendSomething": "Recommander quelque chose",
     "recommendationRequested": "Recommandation demandée — consultez la suggestion ci-dessous.",
+    "recommendedDefault": "Valeur recommandée par défaut : conservez-la, modifiez-la ou rejetez la constatation.",
+    "needsYourInput": "Nécessite votre intervention",
+    "mode": {
+      "answer": "Répondre",
+      "dismiss": "Ignorer",
+      "recommend": "Recommander"
+    },
+    "userAnswered": "Vous avez répondu",
+    "guidancePlaceholder": "Consignes pour la recommandation (facultatif)…",
+    "guidanceHint": "Votre saisie oriente la recommandation ; elle sert d'indication et n'est pas enregistrée comme réponse.",
+    "dismissedHint": "Marqué comme non pertinent ; il ne sera pas intégré.",
     "reopen": "Rouvrir",
     "recommendedAnswers": "Réponses recommandées",
     "recommendationProgress": "{ready} / {total} prêtes",
@@ -4267,22 +4280,22 @@
       "help": "Ce qu'est ce dépôt : un service backend, une application frontend, une bibliothèque partagée ou un dépôt de documentation (documents/spikes uniquement)."
     }
   },
-  "mergePreset": {
+  "riskPolicy": {
     "health": {
-      "title": "Mises à jour des presets de fusion",
-      "allValid": "Tous les presets de fusion intégrés sont à jour.",
-      "newHeading": "Nouveaux presets disponibles",
-      "newDescription": "De nouveaux presets de fusion intégrés sont arrivés. Ajoutez-les à la bibliothèque de ce tableau.",
+      "title": "Mises à jour des politiques de risque",
+      "allValid": "Toutes les politiques de risque intégrées sont à jour.",
+      "newHeading": "Nouvelles politiques disponibles",
+      "newDescription": "De nouvelles politiques de risque intégrées sont arrivées. Ajoutez-les à la bibliothèque de ce tableau.",
       "add": "Ajouter",
       "updatesHeading": "Mises à jour disponibles",
-      "updatesDescription": "Une version plus récente de ces presets de fusion intégrés est arrivée. Régénérez pour l'adopter (le preset par défaut et l'ordre sont conservés).",
+      "updatesDescription": "Une version plus récente de ces politiques de risque intégrées est arrivée. Régénérez pour l'adopter (la politique par défaut et l'ordre sont conservés).",
       "versionAvailable": "Version {from} → {to} disponible.",
       "reseed": "Régénérer",
       "reseedAll": "Tout mettre à jour ({count})",
       "dismiss": "Ignorer",
       "done": "Terminé",
       "toast": {
-        "reseedFailed": "Impossible de régénérer le preset de fusion"
+        "reseedFailed": "Impossible de régénérer la politique de risque"
       }
     }
   },

@@ -355,7 +355,7 @@ export function workspaceController(): Hono<AppEnv> {
       // Open notifications + merge-preset library, so the board renders the inbox,
       // per-block badges and the task preset picker on load.
       notifications,
-      mergePresets,
+      riskPolicies,
       // The workspace's shared stacks (long-lived compose infra a consumer environment
       // attaches to), so the Infrastructure window renders the library + each stack's
       // live status on load.
@@ -393,7 +393,7 @@ export function workspaceController(): Hono<AppEnv> {
       container.bootstrap?.service.listJobs(workspaceId),
       container.envConfigRepair?.service.listJobs(workspaceId),
       container.notifications?.service.listOpen(workspaceId),
-      container.mergePresets?.service.list(workspaceId),
+      container.riskPolicies?.service.list(workspaceId),
       container.sharedStacks?.service.list(workspaceId),
       container.modelPresets?.service.list(workspaceId),
       container.serviceFragmentDefaults?.service.get(workspaceId),
@@ -453,7 +453,7 @@ export function workspaceController(): Hono<AppEnv> {
         ...(redacted.bootstrapJobs ? { bootstrapJobs: redacted.bootstrapJobs } : {}),
         ...(envConfigRepairJobs ? { envConfigRepairJobs } : {}),
         ...(redacted.notifications ? { notifications: redacted.notifications } : {}),
-        ...(mergePresets ? { mergePresets } : {}),
+        ...(riskPolicies ? { riskPolicies } : {}),
         ...(sharedStacks ? { sharedStacks } : {}),
         ...(modelPresets ? { modelPresets } : {}),
         ...(serviceFragmentDefaults ? { serviceFragmentDefaults } : {}),

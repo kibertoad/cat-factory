@@ -25,10 +25,10 @@ export { resolveWritebackFlag } from './domain/writeback.js'
 export { extractJson } from './domain/llm-output.js'
 export {
   BLOCK_TYPE_LABEL,
-  DEFAULT_MERGE_PRESET,
-  MERGE_PRESET_SEEDS,
-  seedMergePresets,
-  type MergePresetSeed,
+  DEFAULT_RISK_POLICY,
+  RISK_POLICY_SEEDS,
+  seedRiskPolicies,
+  type RiskPolicySeed,
   DEFAULT_CI_MAX_ATTEMPTS,
   DEFAULT_MAX_REQUIREMENT_ITERATIONS,
   CONTEXT_BUDGET,
@@ -85,7 +85,9 @@ export {
   BUG_TRIAGE_PIPELINE_ID,
   CODE_COMMENTS_PIPELINE_ID,
   BUSINESS_DOCS_PIPELINE_ID,
+  DOCUMENT_PIPELINE_ID,
   DOCUMENT_QUICK_PIPELINE_ID,
+  defaultPipelineIdForTaskType,
 } from './domain/seed.js'
 
 // Pure initiative vocabulary (agent-kind constants + pipeline-shape predicates),

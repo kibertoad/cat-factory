@@ -466,6 +466,28 @@ async function clone(p: Pipeline) {
                     "
                     @click="pipelines.toggleDraftTesterQuality(unit.index)"
                   />
+                  <!-- Auto-recommendation: the requirements reviewer pre-answers findings it
+                     judges answerable from universal practice / provided context, offering them
+                     as editable default answers (requirements-review steps only). On by default. -->
+                  <UButton
+                    v-if="unit.kind === 'requirements-review'"
+                    :icon="
+                      pipelines.draftAutoRecommendEnabled(unit.index)
+                        ? 'i-lucide-sparkles'
+                        : 'i-lucide-circle-slash'
+                    "
+                    :color="
+                      pipelines.draftAutoRecommendEnabled(unit.index) ? 'secondary' : 'neutral'
+                    "
+                    variant="ghost"
+                    size="xs"
+                    :title="
+                      pipelines.draftAutoRecommendEnabled(unit.index)
+                        ? t('pipeline.builder.autoRecommendDisableTooltip')
+                        : t('pipeline.builder.autoRecommendEnableTooltip')
+                    "
+                    @click="pipelines.toggleDraftAutoRecommend(unit.index)"
+                  />
                   <UButton
                     icon="i-lucide-chevron-up"
                     color="neutral"

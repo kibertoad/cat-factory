@@ -1,6 +1,6 @@
 import { defineStore } from 'pinia'
 import { computed, ref } from 'vue'
-import type { MergeThresholdPreset, UpdateMergePresetInput } from '~/types/domain'
+import type { RiskPolicy, UpdateRiskPolicyInput } from '~/types/domain'
 import { useWorkspaceStore } from '~/stores/workspace'
 
 /**
@@ -9,20 +9,20 @@ import { useWorkspaceStore } from '~/stores/workspace'
  * resolved preset). Hydrated from the workspace snapshot; managed via a small
  * settings UI. The backend always keeps at least one default preset.
  */
-export const useMergePresetsStore = defineStore('mergePresets', () => {
+export const useRiskPoliciesStore = defineStore('riskPolicies', () => {
   const api = useApi()
 
-  const presets = ref<MergeThresholdPreset[]>([])
+  const presets = ref<RiskPolicy[]>([])
   /**
-   * Current built-in catalog versions (`seedMergePresets()`), keyed by preset id, from the
+   * Current built-in catalog versions (`seedRiskPolicies()`), keyed by preset id, from the
    * workspace snapshot. The keys ARE the set of built-in ids: a stored preset whose id is a
    * key here is a built-in (and is outdated when its `version` is below the catalog value),
    * and a key with no matching stored preset is a NEW built-in the workspace can add. Drives
-   * `useMergePresetHealth`.
+   * `useRiskPolicyHealth`.
    */
   const catalogVersions = ref<Record<string, number>>({})
 
-  function hydrate(list: MergeThresholdPreset[], versions?: Record<string, number>) {
+  function hydrate(list: RiskPolicy[], versions?: Record<string, number>) {
     presets.value = [...list].sort((a, b) => a.createdAt - b.createdAt)
     if (versions) catalogVersions.value = versions
   }
@@ -31,7 +31,7 @@ export const useMergePresetsStore = defineStore('mergePresets', () => {
   const defaultPreset = computed(() => presets.value.find((p) => p.isDefault) ?? null)
 
   /** Resolve a task's effective preset by id, falling back to the default. */
-  function resolve(presetId: string | undefined): MergeThresholdPreset | null {
+  function resolve(presetId: string | undefined): RiskPolicy | null {
     if (presetId) {
       const picked = presets.value.find((p) => p.id === presetId)
       if (picked) return picked
@@ -39,23 +39,23 @@ export const useMergePresetsStore = defineStore('mergePresets', () => {
     return defaultPreset.value
   }
 
-  async function create(input: Parameters<typeof api.createMergePreset>[1]) {
+  async function create(input: Parameters<typeof api.createRiskPolicy>[1]) {
     const ws = useWorkspaceStore()
-    const created = await api.createMergePreset(ws.requireId(), input)
+    const created = await api.createRiskPolicy(ws.requireId(), input)
     await ws.refresh()
     return created
   }
 
-  async function update(presetId: string, patch: UpdateMergePresetInput) {
+  async function update(presetId: string, patch: UpdateRiskPolicyInput) {
     const ws = useWorkspaceStore()
-    const updated = await api.updateMergePreset(ws.requireId(), presetId, patch)
+    const updated = await api.updateRiskPolicy(ws.requireId(), presetId, patch)
     await ws.refresh()
     return updated
   }
 
   async function remove(presetId: string) {
     const ws = useWorkspaceStore()
-    await api.deleteMergePreset(ws.requireId(), presetId)
+    await api.deleteRiskPolicy(ws.requireId(), presetId)
     await ws.refresh()
   }
 
@@ -66,7 +66,7 @@ export const useMergePresetsStore = defineStore('mergePresets', () => {
    */
   async function reseed(presetId: string) {
     const ws = useWorkspaceStore()
-    const updated = await api.reseedMergePreset(ws.requireId(), presetId)
+    const updated = await api.reseedRiskPolicy(ws.requireId(), presetId)
     await ws.refresh()
     return updated
   }

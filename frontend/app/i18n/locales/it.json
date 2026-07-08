@@ -390,12 +390,12 @@
         "body": "\"{name}\" verra rimosso. Questa operazione non puo essere annullata."
       }
     },
-    "mergeThresholds": {
-      "intro": "Politiche di auto-merge con nome che un'attivita puo scegliere. Dopo il passaggio della CI, l'agente {merger} valuta la PR su complessita, rischio e impatto (0-100%); la PR viene mergiata automaticamente solo quando ogni punteggio e pari o inferiore ai limiti del preset, altrimenti viene sollevata una notifica di revisione. Il preset predefinito regola qualsiasi attivita che non ne sceglie nessuno.",
+    "riskPolicy": {
+      "intro": "Politiche di auto-merge con nome che un'attivita puo scegliere. Dopo il passaggio della CI, l'agente {merger} valuta la PR su complessita, rischio e impatto (0-100%); la PR viene mergiata automaticamente solo quando ogni punteggio e pari o inferiore ai limiti del criterio, altrimenti viene sollevata una notifica di revisione. Il criterio predefinito regola qualsiasi attivita che non ne sceglie nessuno.",
       "mergerAgent": "merger",
       "confirmDelete": {
-        "title": "Eliminare questo preset di merge?",
-        "body": "\"{name}\" verra rimosso. Le attivita che lo usano ricadono sul preset predefinito del workspace."
+        "title": "Eliminare questo criterio di rischio?",
+        "body": "\"{name}\" verra rimosso. Le attivita che lo usano ricadono sul criterio predefinito del workspace."
       },
       "concern": {
         "none": "Nessuno (interrompi sempre)",
@@ -403,11 +403,11 @@
         "medium": "Medio",
         "high": "Alto (non interrompere mai)"
       },
-      "presetNamePlaceholder": "Nome del preset",
+      "presetNamePlaceholder": "Nome del criterio",
       "default": "Predefinito",
       "makeDefault": "Imposta come predefinito",
-      "deleteDefaultBlocked": "Il preset predefinito non puo essere eliminato",
-      "deletePreset": "Elimina preset",
+      "deleteDefaultBlocked": "Il criterio predefinito non puo essere eliminato",
+      "deletePreset": "Elimina criterio",
       "field": {
         "maxComplexity": "Complessita max %",
         "maxRisk": "Rischio max %",
@@ -417,9 +417,9 @@
         "maxRequirementConcernAllowed": "Auto-pass per criticita pari o inferiori a",
         "autoMerge": "Auto-merge"
       },
-      "autoMergeOnHint": "Mergia automaticamente quando rientra nelle soglie.",
+      "autoMergeOnHint": "Mergia automaticamente quando rientra nei limiti del criterio.",
       "autoMergeOffHint": "Instrada sempre la PR a una revisione umana.",
-      "newPreset": "Nuovo preset",
+      "newPreset": "Nuovo criterio",
       "create": {
         "name": "Nome",
         "namePlaceholder": "es. Cauto",
@@ -432,12 +432,12 @@
       },
       "add": "Aggiungi",
       "toast": {
-        "saved": "Preset salvato",
-        "saveFailed": "Impossibile salvare il preset",
-        "created": "Preset creato",
-        "createFailed": "Impossibile creare il preset",
+        "saved": "Criterio salvato",
+        "saveFailed": "Impossibile salvare il criterio",
+        "created": "Criterio creato",
+        "createFailed": "Impossibile creare il criterio",
         "defaultFailed": "Impossibile impostare il predefinito",
-        "deleteFailed": "Impossibile eliminare il preset"
+        "deleteFailed": "Impossibile eliminare il criterio"
       }
     },
     "observabilityConnection": {
@@ -655,7 +655,7 @@
         "usage": "Utilizzo",
         "workspace": "Workspace",
         "budget": "Budget",
-        "merge": "Soglie di merge",
+        "merge": "Criteri di rischio",
         "tracker": "Tracker degli issue",
         "fragments": "Best practice dei servizi"
       },
@@ -1174,9 +1174,9 @@
       "pipeline": "Pipeline",
       "pipelineEmpty": "Nessun predefinito. Scegli una pipeline quando esegui questa attivita'.",
       "pipelineHint": "La pipeline che il pulsante Esegui avvia per impostazione predefinita: la sequenza di passaggi dell'agente (ad esempio spec, code, test, merge) eseguiti per questa attivita'.",
-      "mergePolicy": "Policy di merge",
-      "mergePresetDetail": "{name}: unione automatica quando complessita' ≤ {complexity}, rischio ≤ {risk}, impatto ≤ {impact}; fino a {attempts} tentativi di correzione CI.",
-      "mergePresetEmpty": "Nessun preset configurato. Il merger genera una notifica di revisione per ogni PR.",
+      "mergePolicy": "Criterio di rischio",
+      "riskPolicyDetail": "{name}: unione automatica quando complessita' ≤ {complexity}, rischio ≤ {risk}, impatto ≤ {impact}; fino a {attempts} tentativi di correzione CI.",
+      "riskPolicyEmpty": "Nessun criterio di rischio configurato. Il merger genera una notifica di revisione per ogni PR.",
       "mergePolicyHint": "Decide quando una pull request completata viene unita automaticamente invece di attendere una revisione umana, e quanti tentativi di correzione CI ottiene un'esecuzione.",
       "modelPreset": "Preset del modello",
       "modelPresetHint": "Decide su quale modello AI viene eseguito ogni passaggio dell'agente.",
@@ -1737,7 +1737,7 @@
         "documentImport": "Importa e genera da documenti",
         "taskImport": "Importa issue",
         "fragments": "Libreria dei frammenti di contesto",
-        "mergeThresholds": "Soglie di merge",
+        "mergeThresholds": "Criteri di rischio",
         "workspaceSettings": "Impostazioni del workspace",
         "modelConfiguration": "Configurazione del modello",
         "serviceFragmentDefaults": "Best practice predefinite del servizio",
@@ -1757,7 +1757,7 @@
         "taskSource": "task sorgente tracker issue",
         "taskImport": "task importa issue",
         "fragments": "frammenti di prompt best practice linee guida contesto",
-        "mergeThresholds": "policy di merge preset auto-merge ci",
+        "mergeThresholds": "criterio di rischio merge auto-merge ci iterazioni",
         "workspaceSettings": "limite task in esecuzione per servizio attesa escalation ritardo timeout notifica",
         "modelConfiguration": "modello llm routing tipo di agente preset predefinito configurazione",
         "serviceFragmentDefaults": "frammento best practice linea guida servizio predefinito code-aware",
@@ -1985,7 +1985,7 @@
       "optional": "opzionale",
       "pipeline": "Pipeline",
       "chooseAtRunTime": "Scegli al momento dell'esecuzione",
-      "mergePolicy": "Policy di merge",
+      "mergePolicy": "Criterio di rischio",
       "workspaceDefault": "Predefinito del workspace",
       "defaultPreset": "Predefinito ({name}) — {thresholds}",
       "defaultModelPreset": "Predefinito ({name})",
@@ -2840,6 +2840,8 @@
       "followUpDisableTooltip": "Companion di follow-up abilitato. Il Coder mette in evidenza questioni in sospeso / attivita collaterali / domande; fai clic per disabilitarlo.",
       "testerQualityEnableTooltip": "Companion di qualita dei test disabilitato. Fai clic per abilitarlo (controlla la copertura del report e riporta il Tester sulle lacune).",
       "testerQualityDisableTooltip": "Companion di qualita dei test abilitato. Controlla la copertura del report prima del via libera e riporta il Tester sulle lacune; fai clic per disabilitarlo.",
+      "autoRecommendEnableTooltip": "Raccomandazione automatica disattivata. Fai clic per attivarla (il revisore risponde in anticipo ai rilievi a cui si puo rispondere in base alle buone pratiche / al contesto, lasciando a te le decisioni di business).",
+      "autoRecommendDisableTooltip": "Raccomandazione automatica attivata. Il revisore risponde in anticipo ai rilievi a cui si puo rispondere in base alle buone pratiche / al contesto; fai clic per disattivarla e rispondere tu stesso a ogni rilievo.",
       "testerQualityLabel": "Companion di qualita dei test",
       "testerQualityGateTooltip": "Esegui il controllo di qualita solo quando la stima dell'attivita supera una soglia (richiede un Task Estimator in precedenza)",
       "moveUp": "Sposta lo step in alto",
@@ -3010,6 +3012,17 @@
     "markedForRecommendation": "Contrassegnato per raccomandazione",
     "recommendSomething": "Raccomanda qualcosa",
     "recommendationRequested": "Raccomandazione richiesta — rivedi il suggerimento qui sotto.",
+    "recommendedDefault": "Valore predefinito consigliato: mantienilo, modificalo o ignora il rilievo.",
+    "needsYourInput": "Richiede il tuo intervento",
+    "mode": {
+      "answer": "Rispondi",
+      "dismiss": "Ignora",
+      "recommend": "Raccomanda"
+    },
+    "userAnswered": "Hai risposto",
+    "guidancePlaceholder": "Indicazioni per la raccomandazione (facoltativo)…",
+    "guidanceHint": "Il tuo testo orienta la raccomandazione; viene usato come indicazione, non salvato come risposta.",
+    "dismissedHint": "Contrassegnato come irrilevante; non verrà incorporato.",
     "reopen": "Riapri",
     "recommendedAnswers": "Risposte raccomandate",
     "recommendationProgress": "{ready} / {total} pronte",
@@ -4384,22 +4397,22 @@
       "archiveFailed": "Impossibile archiviare"
     }
   },
-  "mergePreset": {
+  "riskPolicy": {
     "health": {
-      "title": "Aggiornamenti dei preset di merge",
-      "allValid": "Tutti i preset di merge integrati sono aggiornati.",
-      "newHeading": "Nuovi preset disponibili",
-      "newDescription": "Sono stati rilasciati nuovi preset di merge integrati. Aggiungili alla libreria di questa board.",
+      "title": "Aggiornamenti dei criteri di rischio",
+      "allValid": "Tutti i criteri di rischio integrati sono aggiornati.",
+      "newHeading": "Nuovi criteri disponibili",
+      "newDescription": "Sono stati rilasciati nuovi criteri di rischio integrati. Aggiungili alla libreria di questa board.",
       "add": "Aggiungi",
       "updatesHeading": "Aggiornamenti disponibili",
-      "updatesDescription": "È stata rilasciata una versione più recente di questi preset di merge integrati. Ripristina i valori iniziali per adottarla (il predefinito e l'ordinamento vengono mantenuti).",
+      "updatesDescription": "È stata rilasciata una versione più recente di questi criteri di rischio integrati. Ripristina i valori iniziali per adottarla (il predefinito e l'ordinamento vengono mantenuti).",
       "versionAvailable": "Versione {from} → {to} disponibile.",
       "reseed": "Ripristina",
       "reseedAll": "Aggiorna tutti ({count})",
       "dismiss": "Ignora",
       "done": "Fatto",
       "toast": {
-        "reseedFailed": "Impossibile ripristinare il preset di merge"
+        "reseedFailed": "Impossibile ripristinare il criterio di rischio"
       }
     }
   },

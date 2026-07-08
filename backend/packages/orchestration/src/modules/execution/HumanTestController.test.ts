@@ -67,7 +67,7 @@ function fakeDeps(over: Partial<HumanTestControllerDeps> = {}): HumanTestControl
     contextBuilder: {
       buildContext: vi.fn(async () => ({ agentKind: 'human-test', priorOutputs: [] })),
     } as never,
-    resolveMergePreset: vi.fn(async () => ({ ciMaxAttempts: 10 })),
+    resolveRiskPolicy: vi.fn(async () => ({ ciMaxAttempts: 10 })),
     // The spine primitives now come from the cohesive RunStateMachine + StepGraph
     // collaborators (debagged), so the fakes group under those two objects.
     stateMachine: {

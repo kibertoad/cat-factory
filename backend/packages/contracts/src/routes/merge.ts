@@ -1,59 +1,55 @@
 import { ContractNoBody, defineApiContract } from '@toad-contracts/valibot'
 import * as v from 'valibot'
-import {
-  createMergePresetSchema,
-  mergeThresholdPresetSchema,
-  updateMergePresetSchema,
-} from '../merge.js'
+import { createRiskPolicySchema, riskPolicySchema, updateRiskPolicySchema } from '../merge.js'
 import { errorResponses, singleStringParam } from './_shared.js'
 
 // ---------------------------------------------------------------------------
 // Merge threshold preset route contracts. Mounted under `/workspaces/:workspaceId`,
-// so the paths here are relative to that prefix. See MergePresetController in
+// so the paths here are relative to that prefix. See RiskPolicyController in
 // @cat-factory/server.
 // ---------------------------------------------------------------------------
 
-const mergePresetListSchema = v.array(mergeThresholdPresetSchema)
+const riskPolicyListSchema = v.array(riskPolicySchema)
 const presetIdParams = singleStringParam('presetId')
 
-export const listMergePresetsContract = defineApiContract({
+export const listRiskPoliciesContract = defineApiContract({
   method: 'get',
-  pathResolver: () => '/merge-presets',
-  responsesByStatusCode: { 200: mergePresetListSchema, ...errorResponses },
+  pathResolver: () => '/risk-policies',
+  responsesByStatusCode: { 200: riskPolicyListSchema, ...errorResponses },
 })
 
-export const createMergePresetContract = defineApiContract({
+export const createRiskPolicyContract = defineApiContract({
   method: 'post',
-  pathResolver: () => '/merge-presets',
-  requestBodySchema: createMergePresetSchema,
-  responsesByStatusCode: { 201: mergeThresholdPresetSchema, ...errorResponses },
+  pathResolver: () => '/risk-policies',
+  requestBodySchema: createRiskPolicySchema,
+  responsesByStatusCode: { 201: riskPolicySchema, ...errorResponses },
 })
 
-export const updateMergePresetContract = defineApiContract({
+export const updateRiskPolicyContract = defineApiContract({
   method: 'patch',
   requestPathParamsSchema: presetIdParams,
-  pathResolver: ({ presetId }) => `/merge-presets/${presetId}`,
-  requestBodySchema: updateMergePresetSchema,
-  responsesByStatusCode: { 200: mergeThresholdPresetSchema, ...errorResponses },
+  pathResolver: ({ presetId }) => `/risk-policies/${presetId}`,
+  requestBodySchema: updateRiskPolicySchema,
+  responsesByStatusCode: { 200: riskPolicySchema, ...errorResponses },
 })
 
-export const deleteMergePresetContract = defineApiContract({
+export const deleteRiskPolicyContract = defineApiContract({
   method: 'delete',
   requestPathParamsSchema: presetIdParams,
-  pathResolver: ({ presetId }) => `/merge-presets/${presetId}`,
+  pathResolver: ({ presetId }) => `/risk-policies/${presetId}`,
   responsesByStatusCode: { 204: ContractNoBody, ...errorResponses },
 })
 
 /**
- * Reseed a built-in merge preset from the current catalog (`seedMergePresets()`): adopt an
+ * Reseed a built-in merge preset from the current catalog (`seedRiskPolicies()`): adopt an
  * updated definition, repair a drifted one, or materialise a NEW built-in that appeared after
  * the workspace was created. The `presetId` is the catalog id (e.g. `mp_balanced`). Rejects an
  * id not in the catalog (a custom preset — delete it instead).
  */
-export const reseedMergePresetContract = defineApiContract({
+export const reseedRiskPolicyContract = defineApiContract({
   method: 'post',
   requestPathParamsSchema: presetIdParams,
-  pathResolver: ({ presetId }) => `/merge-presets/${presetId}/reseed`,
+  pathResolver: ({ presetId }) => `/risk-policies/${presetId}/reseed`,
   requestBodySchema: ContractNoBody,
-  responsesByStatusCode: { 200: mergeThresholdPresetSchema, ...errorResponses },
+  responsesByStatusCode: { 200: riskPolicySchema, ...errorResponses },
 })

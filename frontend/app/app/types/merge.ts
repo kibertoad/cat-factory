@@ -7,7 +7,7 @@
 export type {
   MergeAssessment,
   RequirementConcernLevel,
-  MergeThresholdPreset,
-  CreateMergePresetInput,
-  UpdateMergePresetInput,
+  RiskPolicy,
+  CreateRiskPolicyInput,
+  UpdateRiskPolicyInput,
 } from '@cat-factory/contracts'

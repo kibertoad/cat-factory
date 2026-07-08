@@ -248,7 +248,7 @@
       "optional": "optional",
       "pipeline": "Pipeline",
       "chooseAtRunTime": "Choose at run time",
-      "mergePolicy": "Merge policy",
+      "mergePolicy": "Risk policy",
       "workspaceDefault": "Workspace default",
       "defaultPreset": "Default ({name}) — {thresholds}",
       "defaultModelPreset": "Default ({name})",
@@ -913,9 +913,9 @@
       "pipeline": "Pipeline",
       "pipelineEmpty": "No default. Pick a pipeline when you run this task.",
       "pipelineHint": "The pipeline the Run button starts by default: the sequence of agent steps (for example spec, code, test, merge) executed for this task.",
-      "mergePolicy": "Merge policy",
-      "mergePresetDetail": "{name}: auto-merge when complexity ≤ {complexity}, risk ≤ {risk}, impact ≤ {impact}; up to {attempts} CI-fix attempts.",
-      "mergePresetEmpty": "No preset configured. The merger raises a review notification for every PR.",
+      "mergePolicy": "Risk policy",
+      "riskPolicyDetail": "{name}: auto-merge when complexity ≤ {complexity}, risk ≤ {risk}, impact ≤ {impact}; up to {attempts} CI-fix attempts.",
+      "riskPolicyEmpty": "No risk policy configured. The merger raises a review notification for every PR.",
       "mergePolicyHint": "Decides when a finished pull request merges automatically instead of waiting for a human review, and how many CI-fix attempts a run gets.",
       "modelPreset": "Model preset",
       "modelPresetHint": "Decides which AI model each agent step runs on.",
@@ -1616,7 +1616,7 @@
         "documentImport": "Import and spawn from documents",
         "taskImport": "Import issues",
         "fragments": "Context fragment library",
-        "mergeThresholds": "Merge thresholds",
+        "mergeThresholds": "Risk policies",
         "workspaceSettings": "Workspace settings",
         "modelConfiguration": "Model configuration",
         "serviceFragmentDefaults": "Default service best practices",
@@ -1636,7 +1636,7 @@
         "taskSource": "task source tracker issues",
         "taskImport": "task import issues",
         "fragments": "prompt fragments best practice guidelines context",
-        "mergeThresholds": "merge policy preset auto-merge ci",
+        "mergeThresholds": "risk policy merge auto-merge ci iterations",
         "workspaceSettings": "limit running tasks per service waiting escalation overdue notification timeout",
         "modelConfiguration": "model llm routing agent kind default preset configuration",
         "serviceFragmentDefaults": "fragment best practice guideline service default code-aware",
@@ -2127,11 +2127,11 @@
         "body": "\"{name}\" will be removed. This can't be undone."
       }
     },
-    "mergeThresholds": {
-      "intro": "Named auto-merge policies a task can choose. After CI passes, the {merger} agent scores the PR on complexity, risk and impact (0-100%); the PR auto-merges only when every score is at or below the preset's ceilings, otherwise a review notification is raised. The default preset governs any task that picks none.",
+    "riskPolicy": {
+      "intro": "Named auto-merge policies a task can choose. After CI passes, the {merger} agent scores the PR on complexity, risk and impact (0-100%); the PR auto-merges only when every score is at or below the policy's ceilings, otherwise a review notification is raised. The default policy governs any task that picks none.",
       "mergerAgent": "merger",
       "confirmDelete": {
-        "title": "Delete this merge preset?",
+        "title": "Delete this risk policy?",
         "body": "\"{name}\" will be removed. Tasks using it fall back to the workspace default."
       },
       "concern": {
@@ -2140,11 +2140,11 @@
         "medium": "Medium",
         "high": "High (never stop)"
       },
-      "presetNamePlaceholder": "Preset name",
+      "presetNamePlaceholder": "Policy name",
       "default": "Default",
       "makeDefault": "Make default",
-      "deleteDefaultBlocked": "The default preset cannot be deleted",
-      "deletePreset": "Delete preset",
+      "deleteDefaultBlocked": "The default policy cannot be deleted",
+      "deletePreset": "Delete policy",
       "field": {
         "maxComplexity": "Max complexity %",
         "maxRisk": "Max risk %",
@@ -2154,9 +2154,9 @@
         "maxRequirementConcernAllowed": "Auto-pass concerns at or below",
         "autoMerge": "Auto-merge"
       },
-      "autoMergeOnHint": "Merge automatically when within thresholds.",
+      "autoMergeOnHint": "Merge automatically when within the policy limits.",
       "autoMergeOffHint": "Always route the PR to a human review.",
-      "newPreset": "New preset",
+      "newPreset": "New policy",
       "create": {
         "name": "Name",
         "namePlaceholder": "e.g. Cautious",
@@ -2169,12 +2169,12 @@
       },
       "add": "Add",
       "toast": {
-        "saved": "Preset saved",
-        "saveFailed": "Could not save preset",
-        "created": "Preset created",
-        "createFailed": "Could not create preset",
+        "saved": "Policy saved",
+        "saveFailed": "Could not save policy",
+        "created": "Policy created",
+        "createFailed": "Could not create policy",
         "defaultFailed": "Could not set default",
-        "deleteFailed": "Could not delete preset"
+        "deleteFailed": "Could not delete policy"
       }
     },
     "observabilityConnection": {
@@ -2392,7 +2392,7 @@
         "usage": "Usage",
         "workspace": "Workspace",
         "budget": "Budget",
-        "merge": "Merge thresholds",
+        "merge": "Risk policies",
         "tracker": "Issue tracker",
         "fragments": "Service best practices"
       },
@@ -3146,6 +3146,8 @@
       "followUpDisableTooltip": "Follow-up companion enabled. Coder surfaces loose ends / side-tasks / questions; click to disable.",
       "testerQualityEnableTooltip": "Test quality companion disabled. Click to enable (audits the report for coverage and loops the Tester on gaps).",
       "testerQualityDisableTooltip": "Test quality companion enabled. Audits the report for coverage before greenlight and loops the Tester on gaps; click to disable.",
+      "autoRecommendEnableTooltip": "Auto-recommendation disabled. Click to enable (the reviewer pre-answers findings answerable from best practice / context, leaving business decisions for you).",
+      "autoRecommendDisableTooltip": "Auto-recommendation enabled. The reviewer pre-answers findings answerable from best practice / context; click to disable and answer every finding yourself.",
       "testerQualityLabel": "Test quality companion",
       "testerQualityGateTooltip": "Only run the quality audit when the task estimate clears a threshold (needs a Task Estimator earlier)",
       "moveUp": "Move step up",
@@ -3272,22 +3274,22 @@
       }
     }
   },
-  "mergePreset": {
+  "riskPolicy": {
     "health": {
-      "title": "Merge preset updates",
-      "allValid": "All built-in merge presets are up to date.",
-      "newHeading": "New presets available",
-      "newDescription": "New built-in merge presets have shipped. Add them to this board's library.",
+      "title": "Risk policy updates",
+      "allValid": "All built-in risk policies are up to date.",
+      "newHeading": "New policies available",
+      "newDescription": "New built-in risk policies have shipped. Add them to this board's library.",
       "add": "Add",
       "updatesHeading": "Updates available",
-      "updatesDescription": "A newer version of these built-in merge presets has shipped. Reseed to adopt it (the default and ordering are kept).",
+      "updatesDescription": "A newer version of these built-in risk policies has shipped. Reseed to adopt it (the default and ordering are kept).",
       "versionAvailable": "Version {from} → {to} available.",
       "reseed": "Reseed",
       "reseedAll": "Update all ({count})",
       "dismiss": "Dismiss",
       "done": "Done",
       "toast": {
-        "reseedFailed": "Could not reseed merge preset"
+        "reseedFailed": "Could not reseed risk policy"
       }
     }
   },
@@ -3427,6 +3429,17 @@
     "markedForRecommendation": "Marked for recommendation",
     "recommendSomething": "Recommend something",
     "recommendationRequested": "Recommendation requested — review the suggestion below.",
+    "recommendedDefault": "Recommended default — keep it, edit it, or dismiss the finding.",
+    "needsYourInput": "Needs your input",
+    "mode": {
+      "answer": "Answer",
+      "dismiss": "Dismiss",
+      "recommend": "Recommend"
+    },
+    "userAnswered": "You answered",
+    "guidancePlaceholder": "Guidance for the recommendation (optional)…",
+    "guidanceHint": "Your input steers the recommendation; it's used as guidance, not saved as the answer.",
+    "dismissedHint": "Marked irrelevant; it won't be incorporated.",
     "reopen": "Reopen",
     "recommendedAnswers": "Recommended answers",
     "recommendationProgress": "{ready} / {total} ready",

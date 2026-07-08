@@ -230,7 +230,7 @@
       "optional": "opcional",
       "pipeline": "Pipeline",
       "chooseAtRunTime": "Elegir al ejecutar",
-      "mergePolicy": "Política de fusión",
+      "mergePolicy": "Política de riesgo",
       "workspaceDefault": "Predeterminado del espacio",
       "defaultPreset": "Predeterminado ({name}): {thresholds}",
       "defaultModelPreset": "Predeterminado ({name})",
@@ -859,9 +859,9 @@
       "pipeline": "Pipeline",
       "pipelineEmpty": "Sin predeterminado. Elige un pipeline cuando ejecutes esta tarea.",
       "pipelineHint": "El pipeline que el botón Ejecutar inicia por defecto: la secuencia de pasos de agente (por ejemplo especificación, código, pruebas, fusión) que se ejecuta para esta tarea.",
-      "mergePolicy": "Política de fusión",
-      "mergePresetDetail": "{name}: fusión automática cuando complejidad ≤ {complexity}, riesgo ≤ {risk}, impacto ≤ {impact}; hasta {attempts} intentos de corrección de CI.",
-      "mergePresetEmpty": "No hay preajuste configurado. El fusionador genera una notificación de revisión para cada PR.",
+      "mergePolicy": "Política de riesgo",
+      "riskPolicyDetail": "{name}: fusión automática cuando complejidad ≤ {complexity}, riesgo ≤ {risk}, impacto ≤ {impact}; hasta {attempts} intentos de corrección de CI.",
+      "riskPolicyEmpty": "No hay política de riesgo configurada. El fusionador genera una notificación de revisión para cada PR.",
       "mergePolicyHint": "Decide cuándo un pull request terminado se fusiona automáticamente en lugar de esperar una revisión humana, y cuántos intentos de arreglo de CI tiene una ejecución.",
       "modelPreset": "Preajuste de modelo",
       "modelPresetHint": "Decide con qué modelo de IA se ejecuta cada paso de agente.",
@@ -1559,7 +1559,7 @@
         "documentImport": "Importar y generar desde documentos",
         "taskImport": "Importar incidencias",
         "fragments": "Biblioteca de fragmentos de contexto",
-        "mergeThresholds": "Umbrales de fusión",
+        "mergeThresholds": "Políticas de riesgo",
         "workspaceSettings": "Ajustes del espacio de trabajo",
         "modelConfiguration": "Configuración de modelos",
         "serviceFragmentDefaults": "Buenas prácticas del servicio por defecto",
@@ -1579,7 +1579,7 @@
         "taskSource": "tarea fuente rastreador incidencias",
         "taskImport": "tarea importar incidencias",
         "fragments": "prompt fragmentos buenas prácticas directrices contexto",
-        "mergeThresholds": "fusión política preajuste auto-fusión ci",
+        "mergeThresholds": "política de riesgo fusión auto-fusión ci iteraciones",
         "workspaceSettings": "límite tareas en ejecución por servicio espera escalado retraso notificación tiempo de espera",
         "modelConfiguration": "modelo llm enrutamiento tipo de agente preajuste por defecto configuración",
         "serviceFragmentDefaults": "fragmento buenas prácticas directriz servicio por defecto consciente del código",
@@ -1945,8 +1945,8 @@
         "body": "Se eliminará \"{name}\". Esta acción no se puede deshacer."
       }
     },
-    "mergeThresholds": {
-      "intro": "Políticas de fusión automática con nombre que una tarea puede elegir. Cuando CI pasa, el agente {merger} puntúa el PR en complejidad, riesgo e impacto (0-100%); el PR se fusiona automáticamente solo cuando cada puntuación está en o por debajo de los límites del ajuste, de lo contrario se genera una notificación de revisión. El ajuste predeterminado rige cualquier tarea que no elija ninguno.",
+    "riskPolicy": {
+      "intro": "Políticas de fusión automática con nombre que una tarea puede elegir. Cuando CI pasa, el agente {merger} puntúa el PR en complejidad, riesgo e impacto (0-100%); el PR se fusiona automáticamente solo cuando cada puntuación está en o por debajo de los límites de la política, de lo contrario se genera una notificación de revisión. La política predeterminada rige cualquier tarea que no elija ninguno.",
       "mergerAgent": "merger",
       "concern": {
         "none": "Ninguno (detener siempre)",
@@ -1954,11 +1954,11 @@
         "medium": "Medio",
         "high": "Alto (nunca detener)"
       },
-      "presetNamePlaceholder": "Nombre del ajuste",
+      "presetNamePlaceholder": "Nombre de la política",
       "default": "Predeterminado",
       "makeDefault": "Hacer predeterminado",
-      "deleteDefaultBlocked": "El ajuste predeterminado no se puede eliminar",
-      "deletePreset": "Eliminar ajuste",
+      "deleteDefaultBlocked": "La política predeterminada no se puede eliminar",
+      "deletePreset": "Eliminar política",
       "field": {
         "maxComplexity": "Complejidad máx. %",
         "maxRisk": "Riesgo máx. %",
@@ -1968,7 +1968,7 @@
         "maxRequirementConcernAllowed": "Aprobación automática de inquietudes hasta",
         "autoMerge": "Fusión automática"
       },
-      "newPreset": "Nuevo ajuste",
+      "newPreset": "Nueva política",
       "create": {
         "name": "Nombre",
         "namePlaceholder": "p. ej. Cauteloso",
@@ -1981,17 +1981,17 @@
       },
       "add": "Añadir",
       "toast": {
-        "saved": "Ajuste guardado",
-        "saveFailed": "No se pudo guardar el ajuste",
-        "created": "Ajuste creado",
-        "createFailed": "No se pudo crear el ajuste",
+        "saved": "Política guardada",
+        "saveFailed": "No se pudo guardar la política",
+        "created": "Política creada",
+        "createFailed": "No se pudo crear la política",
         "defaultFailed": "No se pudo establecer el predeterminado",
-        "deleteFailed": "No se pudo eliminar el ajuste"
+        "deleteFailed": "No se pudo eliminar la política"
       },
-      "autoMergeOnHint": "Fusionar automáticamente cuando esté dentro de los umbrales.",
+      "autoMergeOnHint": "Fusionar automáticamente cuando esté dentro de los límites de la política.",
       "autoMergeOffHint": "Enviar siempre el PR a revisión humana.",
       "confirmDelete": {
-        "title": "¿Eliminar este preset de fusión?",
+        "title": "¿Eliminar esta política de riesgo?",
         "body": "Se eliminará \"{name}\". Las tareas que lo usan volverán al valor predeterminado del espacio de trabajo."
       }
     },
@@ -2210,7 +2210,7 @@
         "usage": "Uso",
         "workspace": "Espacio de trabajo",
         "budget": "Presupuesto",
-        "merge": "Umbrales de fusión",
+        "merge": "Políticas de riesgo",
         "tracker": "Gestor de incidencias",
         "fragments": "Buenas prácticas del servicio"
       },
@@ -3059,6 +3059,8 @@
       "followUpDisableTooltip": "Compañero de seguimiento activado. Coder detecta cabos sueltos / subtareas / preguntas; haz clic para desactivarlo.",
       "testerQualityEnableTooltip": "Compañero de calidad de pruebas desactivado. Haz clic para activarlo (audita la cobertura del informe y reitera el Tester ante lagunas).",
       "testerQualityDisableTooltip": "Compañero de calidad de pruebas activado. Audita la cobertura del informe antes de la aprobación y reitera el Tester ante lagunas; haz clic para desactivarlo.",
+      "autoRecommendEnableTooltip": "Recomendación automática desactivada. Haz clic para activarla (el revisor responde de antemano los hallazgos que pueden responderse a partir de las buenas prácticas / el contexto, y te deja las decisiones de negocio).",
+      "autoRecommendDisableTooltip": "Recomendación automática activada. El revisor responde de antemano los hallazgos que pueden responderse a partir de las buenas prácticas / el contexto; haz clic para desactivarla y responder cada hallazgo tú mismo.",
       "testerQualityLabel": "Compañero de calidad de pruebas",
       "testerQualityGateTooltip": "Ejecutar la auditoría de calidad solo cuando la estimación de la tarea supere un umbral (requiere un Estimador de Tareas antes)",
       "moveUp": "Subir el paso",
@@ -3302,6 +3304,17 @@
     "markedForRecommendation": "Marcado para recomendación",
     "recommendSomething": "Recomendar algo",
     "recommendationRequested": "Recomendación solicitada — revisa la sugerencia más abajo.",
+    "recommendedDefault": "Valor recomendado por defecto: consérvalo, edítalo o descarta el hallazgo.",
+    "needsYourInput": "Necesita tu intervención",
+    "mode": {
+      "answer": "Responder",
+      "dismiss": "Descartar",
+      "recommend": "Recomendar"
+    },
+    "userAnswered": "Respondiste",
+    "guidancePlaceholder": "Orientación para la recomendación (opcional)…",
+    "guidanceHint": "Tu texto guía la recomendación; se usa como orientación, no se guarda como respuesta.",
+    "dismissedHint": "Marcado como irrelevante; no se incorporará.",
     "reopen": "Reabrir",
     "recommendedAnswers": "Respuestas recomendadas",
     "recommendationProgress": "{ready} / {total} listas",
@@ -4267,22 +4280,22 @@
       "help": "Qué es este repositorio: un servicio backend, una aplicación frontend, una biblioteca compartida o un repositorio de documentación (solo documentos/spikes)."
     }
   },
-  "mergePreset": {
+  "riskPolicy": {
     "health": {
-      "title": "Actualizaciones de presets de fusión",
-      "allValid": "Todos los presets de fusión integrados están actualizados.",
-      "newHeading": "Nuevos presets disponibles",
-      "newDescription": "Hay nuevos presets de fusión integrados. Añádelos a la biblioteca de este tablero.",
+      "title": "Actualizaciones de políticas de riesgo",
+      "allValid": "Todas las políticas de riesgo integradas están actualizadas.",
+      "newHeading": "Nuevas políticas disponibles",
+      "newDescription": "Hay nuevas políticas de riesgo integradas. Añádelas a la biblioteca de este tablero.",
       "add": "Añadir",
       "updatesHeading": "Actualizaciones disponibles",
-      "updatesDescription": "Hay una versión más reciente de estos presets de fusión integrados. Regenera para adoptarla (se conservan el predeterminado y el orden).",
+      "updatesDescription": "Hay una versión más reciente de estas políticas de riesgo integradas. Regenera para adoptarla (se conservan el predeterminado y el orden).",
       "versionAvailable": "Versión {from} → {to} disponible.",
       "reseed": "Regenerar",
       "reseedAll": "Actualizar todos ({count})",
       "dismiss": "Descartar",
       "done": "Hecho",
       "toast": {
-        "reseedFailed": "No se pudo regenerar el preset de fusión"
+        "reseedFailed": "No se pudo regenerar la política de riesgo"
       }
     }
   },

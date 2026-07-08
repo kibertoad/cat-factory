@@ -5,6 +5,7 @@ import type {
   RequirementRecommendation,
   RequirementReview,
   RequirementReviewItem,
+  RequestRecommendationItem,
   ResolveRunRepoContext,
 } from '@cat-factory/kernel'
 import type { DocumentRepository, TaskRepository } from '@cat-factory/kernel'
@@ -168,32 +169,67 @@ export class RequirementReviewService extends IterativeReviewService<
   }
 
   /**
+   * The auto-recommendation automation: for every OPEN finding the reviewer flagged
+   * `autoAnswerable` (answerable from universal best-practice / the provided context, no
+   * product owner needed), generate a grounded recommendation and AUTO-ACCEPT it as the
+   * finding's default answer — so the human is handed a pre-filled, editable/dismissable
+   * answer instead of a blank box. Findings that need a real business decision (not
+   * `autoAnswerable`) are left `open` for the human. Reuses the whole Requirement Writer
+   * path: prepare `auto` placeholders, then fill them (the fill step auto-accepts `auto`
+   * recommendations and suppresses the "recommendations to review" notification). A no-op
+   * when no finding qualifies. Runs inline in the durable driver (the requirements gate calls
+   * it right after a reviewer pass raises findings — see {@link ReviewGateController.evaluate}),
+   * so it may make the (slow) Writer LLM calls; that is the same place the reviewer LLM already
+   * runs. Degrades gracefully when the reviewer model can't be resolved (fill drops the
+   * placeholders and reopens the findings). Returns the resulting review.
+   */
+  async autoRecommend(
+    workspaceId: string,
+    reviewId: string,
+    opts: { onProgress?: (review: RequirementReview) => Promise<void> } = {},
+  ): Promise<RequirementReview> {
+    const review = assertFound(
+      await this.repository.get(workspaceId, reviewId),
+      this.entityName,
+      reviewId,
+    )
+    const items = review.items
+      .filter((i) => i.autoAnswerable === true && i.status === 'open')
+      .map((i) => ({ itemId: i.id }))
+    if (items.length === 0) return review
+    await this.prepareRecommendations(workspaceId, reviewId, items, { auto: true })
+    await this.fillPendingRecommendations(workspaceId, reviewId, opts)
+    return assertFound(await this.repository.get(workspaceId, reviewId), this.entityName, reviewId)
+  }
+
+  /**
    * Prepare a recommendation batch SYNCHRONOUSLY: mark the targeted findings
    * `recommend_requested` and append one `pending` placeholder recommendation per finding
-   * (snapshotting the source finding by title/detail). The slow Writer LLM does NOT run here —
-   * {@link fillPendingRecommendations} fills the placeholders later, in the durable driver, so
-   * the human is handed straight back to the board. Returns the review with the placeholders so
-   * the SPA shows the "generating…" state immediately. Idempotent per finding: a finding that
-   * already carries a `pending` placeholder is not duplicated.
+   * (snapshotting the source finding by title/detail). Each item may carry its own `note` — the
+   * per-finding guidance the human typed before choosing "recommend something" — which is
+   * stamped onto that finding's placeholder to steer the Writer. The slow Writer LLM does NOT
+   * run here — {@link fillPendingRecommendations} fills the placeholders later, in the durable
+   * driver, so the human is handed straight back to the board. Returns the review with the
+   * placeholders so the SPA shows the "generating…" state immediately. Idempotent per finding: a
+   * finding that already carries a `pending` placeholder is not duplicated.
    */
   async prepareRecommendations(
     workspaceId: string,
     reviewId: string,
-    itemIds: string[],
-    note?: string,
+    items: RequestRecommendationItem[],
+    opts: { auto?: boolean } = {},
   ): Promise<RequirementReview> {
-    const targetIds = new Set(itemIds)
+    const noteByItem = new Map(items.map((i) => [i.itemId, i.note?.trim() || null]))
     const review = assertFound(
       await this.repository.get(workspaceId, reviewId),
       this.entityName,
       reviewId,
     )
     const now = this.deps.clock.now()
-    const trimmedNote = note?.trim() || null
     const recommendations = [...review.recommendations]
     let changed = false
     for (const item of review.items) {
-      if (!targetIds.has(item.id) || item.status === 'dismissed') continue
+      if (!noteByItem.has(item.id) || item.status === 'dismissed') continue
       if (item.status !== 'recommend_requested') {
         item.status = 'recommend_requested'
         item.updatedAt = now
@@ -210,8 +246,9 @@ export class RequirementReviewService extends IterativeReviewService<
         id: this.deps.idGenerator.next('rec'),
         sourceFinding: { title: item.title, detail: item.detail, itemId: item.id },
         recommendedText: '',
+        ...(opts.auto ? { auto: true } : {}),
         status: 'pending',
-        note: trimmedNote,
+        note: noteByItem.get(item.id) ?? null,
         groundedInFragment: null,
         createdAt: now,
         updatedAt: now,
@@ -295,6 +332,11 @@ export class RequirementReviewService extends IterativeReviewService<
     }
 
     let produced = 0
+    // Only human-requested recommendations (which land in `ready` for a manual accept/reject)
+    // summon the human back. AUTO recommendations are accepted the moment they're produced —
+    // they become the finding's default answer with no card to act on — so they must NOT raise
+    // the "recommendations to review" notification (the findings notification already fired).
+    let readyForReview = 0
     for (const group of groups.values()) {
       for (let i = 0; i < group.length; i += RECOMMENDATION_CHUNK_SIZE) {
         const chunk = group.slice(i, i + RECOMMENDATION_CHUNK_SIZE)
@@ -345,8 +387,22 @@ export class RequirementReviewService extends IterativeReviewService<
               : undefined
             rec.recommendedText = suggestion.recommendation
             rec.groundedInFragment = standard ? { id: standard.id, title: standard.title } : null
-            rec.status = 'ready'
             rec.updatedAt = now
+            if (rec.auto) {
+              // Auto-recommendation: accept it immediately as the finding's default answer, so
+              // the human sees it pre-filled (editable / dismissable) rather than a card to act
+              // on. Mirrors `acceptRecommendation`, matching the finding against the fresh read.
+              rec.status = 'accepted'
+              const item = findSourceItem(review.items, ph.sourceFinding)
+              if (item) {
+                item.reply = suggestion.recommendation
+                item.status = 'answered'
+                item.updatedAt = now
+              }
+            } else {
+              rec.status = 'ready'
+              readyForReview += 1
+            }
             produced += 1
           } else {
             // The Writer failed for (or no longer matches) this finding: drop the dead placeholder
@@ -364,7 +420,8 @@ export class RequirementReviewService extends IterativeReviewService<
         await opts.onProgress?.(review)
       }
     }
-    if (produced > 0) await this.notifyRecommendationsReady(workspaceId, block, produced)
+    if (readyForReview > 0)
+      await this.notifyRecommendationsReady(workspaceId, block, readyForReview)
     return { produced }
   }
 
