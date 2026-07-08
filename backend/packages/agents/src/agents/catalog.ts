@@ -17,6 +17,7 @@ import { roleSystemPrompt } from './prompts/roles.js'
 import { FINAL_ANSWER_IN_REPLY } from './prompts/shared.js'
 import {
   environmentSection,
+  initiativePresetSection,
   involvedServicesSection,
   linkedContextSection,
   phaseForKind,
@@ -180,6 +181,10 @@ function buildBaseUserPrompt(
     `Block: ${block.title} (${block.type})`,
     `Description: ${block.description || '(none provided)'}`,
   ]
+  // Preset steering (an initiative-spawned custom kind's standing org methodology) FIRST — it
+  // frames the agent's role before the task specifics. Empty on every non-initiative run.
+  const presetSection = initiativePresetSection(context)
+  if (presetSection) lines.push(presetSection)
   // A companion grades a specific preceding producer; name it explicitly so the
   // model rates the right output rather than guessing among the prior-agent sections.
   const companionTarget = companionTargetSection(context)

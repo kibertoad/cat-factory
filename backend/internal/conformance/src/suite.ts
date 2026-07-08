@@ -2,6 +2,7 @@ import {
   type Block,
   BUG_TRIAGE_PIPELINE_ID,
   type ExecutionInstance,
+  type Initiative,
   type MergeThresholdPreset,
   type ModelPreset,
   type SandboxExperiment,
@@ -58,8 +59,10 @@ import type {
 } from '@cat-factory/kernel'
 import {
   clearRegisteredGates,
+  clearRegisteredInitiativePresets,
   clearRegisteredStepResolvers,
   registerGate,
+  registerInitiativePreset,
   registerStepResolver,
 } from '@cat-factory/kernel'
 import { afterEach, describe, expect, it } from 'vitest'
@@ -87,6 +90,37 @@ const EMPTY_BINARY_ARTIFACT_STORE: BinaryArtifactStore = {
 const STORAGE_ON: ResolveBinaryArtifactStore = () => Promise.resolve(EMPTY_BINARY_ARTIFACT_STORE)
 /** Storage off: the account has no content storage, so the start gate must refuse the run. */
 const STORAGE_OFF: ResolveBinaryArtifactStore = () => Promise.resolve(null)
+
+/**
+ * A minimal `executing` initiative entity created from the `preset_spawned_conf` preset, anchored to
+ * `anchorBlockId`. Seeded directly so the spawned-run preset-context assertion (D1) can link a task
+ * to it via `block.initiativeId` without driving a whole planning loop.
+ */
+function spawnedInitiative(anchorBlockId: string): Initiative {
+  return {
+    id: `initv-${anchorBlockId}`,
+    blockId: anchorBlockId,
+    slug: 'connector-factory',
+    title: 'Connector factory',
+    presetId: 'preset_spawned_conf',
+    goal: '',
+    constraints: [],
+    nonGoals: [],
+    qa: [],
+    analysisSummary: '',
+    phases: [],
+    items: [],
+    policy: null,
+    decisions: [],
+    deviations: [],
+    followUps: [],
+    caveats: [],
+    status: 'executing',
+    rev: 0,
+    createdAt: 1,
+    updatedAt: 1,
+  }
+}
 
 // The cross-runtime conformance suite: the KEY backend behaviour every deployment
 // facade must implement identically. It is parameterised by a `ConformanceHarness`,
@@ -6712,6 +6746,61 @@ export function defineExecutionConformance(harness: ConformanceHarness): void {
         expect(step.state).toBe('done')
         // The agent was handed the clarified report, not the seeded task's description.
         expect(step.output).toContain(`[desc]${CLARIFIED}[/desc]`)
+      })
+
+      it("folds an initiative preset's per-kind steering onto a spawned run's agent context", async () => {
+        // D1: a task SPAWNED by an initiative (carrying `block.initiativeId`) must receive the
+        // preset's standing per-kind methodology in its agent context on EVERY runtime — the
+        // Cloudflare facade resolves it from the D1 initiative store, Node/local from Drizzle,
+        // both through the same `AgentContextBuilder`. A facade that failed to wire the initiative
+        // store into the context builder would silently ship a bare child prompt. The preset is a
+        // module-global registration today (slice 5 migrates it to DI); scope + clear it here.
+        const ADDITION = 'Follow the org connector architecture and consume the build handoff.'
+        registerInitiativePreset({
+          descriptor: {
+            id: 'preset_spawned_conf',
+            presentation: { label: 'Connector factory', icon: 'i', color: '#000', description: 'x' },
+            fields: [],
+            planningPipelineId: 'pl_initiative',
+            interview: 'full',
+            humanReviewDefault: true,
+            defaultFragmentIds: [],
+          },
+          promptAdditions: { coder: ADDITION },
+        })
+        try {
+          const app = harness.makeApp({ confidence: 1, echoPreset: true })
+          const { workspace } = await app.createWorkspace()
+          const wsId = workspace.id
+
+          // Seed the initiative entity anchored to an initiative block id, then link the seeded
+          // task to it (an epic-style `initiativeId` membership — exactly what the loop's
+          // `buildTaskBlock` stamps on a spawned child).
+          const anchorBlockId = 'init_anchor'
+          await app.initiativeRepository().insert(wsId, spawnedInitiative(anchorBlockId))
+          await app.blockRepository().update(wsId, 'task_login', { initiativeId: anchorBlockId })
+
+          const pipeline = await app.call<Pipeline>('POST', `/workspaces/${wsId}/pipelines`, {
+            name: 'Coder only',
+            agentKinds: ['coder'],
+          })
+          const start = await app.call<ExecutionInstance>(
+            'POST',
+            `/workspaces/${wsId}/blocks/task_login/executions`,
+            { pipelineId: pipeline.body.id },
+          )
+          expect(start.status).toBe(201)
+
+          const ticked = await app.drive(wsId)
+          const exec = ticked.find((e) => e.blockId === 'task_login')!
+          const step = exec.steps.find((s) => s.agentKind === 'coder')!
+          expect(step.state).toBe('done')
+          // The coder was handed the preset label + its `coder` promptAddition (and nothing else —
+          // no goal/qa bleeds onto a spawned run).
+          expect(step.output).toContain(`[preset]Connector factory|${ADDITION}[/preset]`)
+        } finally {
+          clearRegisteredInitiativePresets()
+        }
       })
 
       it('restarts a run from a chosen step, preserving prior outputs and the block requirements', async () => {

@@ -281,6 +281,26 @@ export function involvedServicesSection(context: AgentRunContext): string {
 }
 
 /**
+ * Render the initiative-PRESET steering section — the `## Initiative preset: <label>` header plus
+ * the preset's per-agent-kind `promptAddition` (already resolved for the running kind by the
+ * engine's context builder). This is the standing, preset-level methodology an org attaches to a
+ * kind; on an initiative-SPAWNED run (coder / tester / a custom kind) it is the vehicle that
+ * carries that methodology into the child's prompt (D1) — item-level specifics ride the block
+ * `description` instead. Empty string when the run carries no preset addition (every
+ * non-initiative run, and initiative runs whose preset contributes no addition for this kind), so
+ * the prompt stays byte-for-byte unchanged. The preset's `phaseTemplate` is deliberately NOT
+ * rendered here — it is the planner's "required plan shape", folded only into the planner prompt.
+ * Shared by the standard-phase prompt, the generic custom-kind prompt, and the planning prompts so
+ * the section text has a single source of truth.
+ */
+export function initiativePresetSection(context: AgentRunContext): string {
+  const preset = context.initiative?.preset
+  const addition = preset?.promptAddition?.trim()
+  if (!preset || !addition) return ''
+  return ['', `## Initiative preset: ${preset.label}`, '', addition].join('\n')
+}
+
+/**
  * Directory in the agent's checkout where the harness materialises the full text of
  * each linked-context item (requirements / RFCs / PRDs / tracker issues), so a
  * container agent can read what it needs on demand rather than carrying every body in
@@ -381,6 +401,9 @@ export function renderStandardUserPrompt(
 ): string {
   const rendered =
     USER_TEMPLATES[phase](toView(context)) +
+    // Preset steering FIRST — it frames the agent's role for this initiative before the task
+    // specifics. Empty (so byte-identical) on every non-initiative run.
+    initiativePresetSection(context) +
     linkedContextSection(context, opts) +
     environmentSection(context) +
     involvedServicesSection(context) +

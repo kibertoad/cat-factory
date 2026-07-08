@@ -398,6 +398,7 @@ export function makeConformanceApp(
     executionRepository: () => container.executionRepository,
     agentRunRepository: () => container.agentRunRepository,
     blockRepository: () => createDrizzleRepositories(db, SEED_CLOCK).blockRepository,
+    initiativeRepository: () => createDrizzleRepositories(db, SEED_CLOCK).initiativeRepository,
     notificationRepository: () => new DrizzleNotificationRepository(db),
     documentRepository: () => new DrizzleDocumentRepository(db),
     docInterviewRepository: () => new DrizzleDocInterviewRepository(db),

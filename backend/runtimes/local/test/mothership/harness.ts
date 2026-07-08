@@ -438,6 +438,7 @@ export function makeMothershipConformanceApp(
     agentRunRepository: () => ms.container.agentRunRepository,
     // Direct-store probes read the mothership's authoritative Postgres, like seedService.
     blockRepository: () => mothershipRepos().blockRepository,
+    initiativeRepository: () => mothershipRepos().initiativeRepository,
     notificationRepository: () => new DrizzleNotificationRepository(db),
     documentRepository: () => new DrizzleDocumentRepository(db),
     docInterviewRepository: () => new DrizzleDocInterviewRepository(db),

@@ -299,11 +299,18 @@ export interface AgentRunContext {
     comments?: { quotedSource?: string; body: string }[]
   }
   /**
-   * The planning context an initiative-level run carries, resolved by the engine from the
-   * block's `initiatives` entity (slice 2). The interviewer's synthesized goal / constraints /
-   * non-goals and the Q&A digest, plus the analyst's codebase analysis — so the analyst and
-   * planner prompts are grounded in the human's intent and the prior step's findings. Absent
-   * on non-initiative runs (and when no initiative entity is wired).
+   * The initiative context a run carries, resolved by the engine from the block's `initiatives`
+   * entity. Two shapes:
+   *  - An initiative-LEVEL (planning) run carries the FULL planning context: the interviewer's
+   *    synthesized goal / constraints / non-goals + the Q&A digest, plus the analyst's codebase
+   *    analysis — so the analyst and planner prompts are grounded in the human's intent and the
+   *    prior step's findings.
+   *  - A run SPAWNED by an initiative (a task/module/frame carrying `block.initiativeId`) carries
+   *    a PRESET-ONLY context — just `preset` (label + the per-kind `promptAddition`) — so the org's
+   *    standing methodology reaches the child coder / tester / custom kind (D1). No goal/qa/analysis
+   *    is folded onto a spawned run: the item description is the child's task contract.
+   * Absent when no initiative entity is wired, the block is neither initiative-level nor
+   * initiative-spawned, or (spawned) the preset contributes no addition for the running kind.
    */
   initiative?: {
     goal?: string
