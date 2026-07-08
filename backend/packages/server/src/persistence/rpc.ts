@@ -31,7 +31,7 @@ export interface PersistenceRpcRequest {
 }
 
 /** The new `rev` of an in-place-mutated argument (the `execution` of `upsert`/`compareAndSwap`). */
-export interface MutatedArg {
+interface MutatedArg {
   arg: number
   rev: number
 }

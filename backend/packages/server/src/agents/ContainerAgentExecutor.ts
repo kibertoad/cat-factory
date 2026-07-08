@@ -117,13 +117,13 @@ export type EnsureWorkBranch = (
 ) => Promise<boolean>
 
 /** A subscription token leased from the workspace's pool for a vendor. */
-export interface LeasedSubscriptionToken {
+interface LeasedSubscriptionToken {
   tokenId: string
   secret: string
 }
 
 /** Lease the least-loaded subscription token for a vendor, or throw if none. */
-export type LeaseSubscriptionToken = (
+type LeaseSubscriptionToken = (
   workspaceId: string,
   vendor: SubscriptionVendor,
 ) => Promise<LeasedSubscriptionToken>
@@ -135,14 +135,14 @@ export type LeaseSubscriptionToken = (
  * their password). Returns just the raw secret — no token id, since there is no pool
  * rotation/usage to attribute for a single-user credential.
  */
-export type LeasePersonalSubscriptionToken = (
+type LeasePersonalSubscriptionToken = (
   executionId: string,
   userId: string,
   vendor: SubscriptionVendor,
 ) => Promise<{ secret: string }>
 
 /** Fold a finished subscription job's usage into the leased token + telemetry. */
-export type RecordSubscriptionUsage = (
+type RecordSubscriptionUsage = (
   workspaceId: string,
   tokenId: string,
   usage: { inputTokens: number; outputTokens: number },
@@ -156,7 +156,7 @@ export type RecordSubscriptionUsage = (
  * produces telemetry), unlike {@link RecordSubscriptionUsage}. The payload is the
  * orchestration recorder's own {@link HarnessCallsRecordInput}, so the two can't drift.
  */
-export type RecordHarnessCalls = (input: HarnessCallsRecordInput) => Promise<void>
+type RecordHarnessCalls = (input: HarnessCallsRecordInput) => Promise<void>
 
 /**
  * The repo spec every container job body carries: clone coordinates plus, for a

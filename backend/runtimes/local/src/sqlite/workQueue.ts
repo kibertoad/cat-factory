@@ -44,7 +44,7 @@ CREATE INDEX IF NOT EXISTS execution_work_queue_claimable
 `
 
 /** Open (creating if absent) the work-queue SQLite database and ensure its schema. */
-export function openWorkQueueDb(path: string): DatabaseSync {
+function openWorkQueueDb(path: string): DatabaseSync {
   return openSqliteDb(path, SCHEMA)
 }
 

@@ -7,11 +7,11 @@ import type { Logger, ServerContainer } from '@cat-factory/server'
 // re-drives `running` rows orphaned by a crashed sweep). No-op when Kaizen isn't wired.
 
 /** How often the Node service runs pending Kaizen gradings (matches the Worker's cron). */
-export const KAIZEN_SWEEP_INTERVAL_MS = 2 * 60 * 1000
+const KAIZEN_SWEEP_INTERVAL_MS = 2 * 60 * 1000
 /** A `running` grading older than this is re-driven (its sweep crashed mid-flight). */
-export const KAIZEN_STALE_MS = 10 * 60 * 1000
+const KAIZEN_STALE_MS = 10 * 60 * 1000
 /** Max gradings to run per pass (each is an LLM call; keep the batch small). */
-export const KAIZEN_SWEEP_BATCH = 5
+const KAIZEN_SWEEP_BATCH = 5
 
 /**
  * Start the periodic Kaizen grading sweep. Runs once immediately then on a one-minute

@@ -79,7 +79,7 @@ function mapStatus(status: ExecutionStatus): PublicJobStatus {
 }
 
 /** Project a persisted execution onto the external job resource (no block/board internals). */
-export function toPublicJob(execution: ExecutionInstance): PublicJob {
+function toPublicJob(execution: ExecutionInstance): PublicJob {
   const status = mapStatus(execution.status)
   // The deliverable is the LAST step that actually produced output — normally the terminal step,
   // but scanning from the end keeps the result meaningful for a multi-step public pipeline whose

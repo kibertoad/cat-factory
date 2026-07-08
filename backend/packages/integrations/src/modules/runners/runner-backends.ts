@@ -51,7 +51,7 @@ export interface RunnerBackendContext {
 }
 
 /** Capabilities/policies a backend validates its config against at the write boundary. */
-export interface RunnerBackendSafetyOptions {
+interface RunnerBackendSafetyOptions {
   /** Manifest SSRF policy. Absent ⇒ strict. */
   urlPolicy?: UrlSafetyPolicy
   /**
@@ -80,7 +80,7 @@ export interface RunnerBackendSafetyOptions {
  *  - `valuesFromConfig()` — invert a stored config back to the flat values (keyed by
  *    `fields()[].key`) for prefill.
  */
-export interface RunnerBackendForm {
+interface RunnerBackendForm {
   fields(): ProviderConfigField[]
   skeleton(): RunnerBackendConfig
   valuesFromConfig(config: RunnerBackendConfig): Record<string, string>

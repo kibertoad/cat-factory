@@ -33,9 +33,9 @@ export const defaultGenerate: GenerateFn = async (args: GenerateArgs): Promise<G
   }
 }
 
-export const ZERO_USAGE: ConsensusUsage = { inputTokens: 0, outputTokens: 0 }
+const ZERO_USAGE: ConsensusUsage = { inputTokens: 0, outputTokens: 0 }
 
-export function addUsage(a: ConsensusUsage, b: ConsensusUsage): ConsensusUsage {
+function addUsage(a: ConsensusUsage, b: ConsensusUsage): ConsensusUsage {
   return {
     inputTokens: a.inputTokens + b.inputTokens,
     outputTokens: a.outputTokens + b.outputTokens,

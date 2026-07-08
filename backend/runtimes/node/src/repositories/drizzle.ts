@@ -2824,7 +2824,7 @@ function rowToKaizenGrading(row: KaizenGradingRow): KaizenGrading {
  * are a JSON array. The unique (execution_id, step_index) index keeps scheduling
  * idempotent across durable re-drives.
  */
-export class DrizzleKaizenGradingRepository implements KaizenGradingRepository {
+class DrizzleKaizenGradingRepository implements KaizenGradingRepository {
   constructor(private readonly db: DrizzleDb) {}
 
   async upsert(workspaceId: string, grading: KaizenGrading): Promise<void> {
@@ -2974,7 +2974,7 @@ function rowToKaizenVerifiedCombo(row: KaizenVerifiedComboRow): KaizenVerifiedCo
  * Kaizen verified-combo progress over Postgres (the Drizzle mirror of the Worker's
  * `D1KaizenVerifiedComboRepository`, migration 0015).
  */
-export class DrizzleKaizenVerifiedComboRepository implements KaizenVerifiedComboRepository {
+class DrizzleKaizenVerifiedComboRepository implements KaizenVerifiedComboRepository {
   constructor(private readonly db: DrizzleDb) {}
 
   async getByKey(workspaceId: string, comboKey: string): Promise<KaizenVerifiedCombo | null> {
@@ -3087,7 +3087,7 @@ function rowToClarityReview(row: ClarityReviewRow): ClarityReview {
  * {@link D1ConsensusSessionRepository}. One row per (execution, step); the
  * participants/rounds/dissent live as JSON columns, upserted as the process streams.
  */
-export class DrizzleConsensusSessionRepository implements ConsensusSessionRepository {
+class DrizzleConsensusSessionRepository implements ConsensusSessionRepository {
   constructor(private readonly db: DrizzleDb) {}
 
   async get(workspaceId: string, id: string): Promise<ConsensusSession | null> {
@@ -3279,7 +3279,7 @@ function rowToBrainstormSession(row: BrainstormSessionRow): BrainstormSession {
  * stores. Keyed per (block, stage): a block may hold a live `requirements` AND `architecture`
  * session at once.
  */
-export class DrizzleBrainstormSessionRepository implements BrainstormSessionRepository {
+class DrizzleBrainstormSessionRepository implements BrainstormSessionRepository {
   constructor(private readonly db: DrizzleDb) {}
 
   async getByBlockStage(
@@ -3372,7 +3372,7 @@ const rowToInitiative = decodeInitiativeRow
  * cross-runtime conformance suite asserts the same CRUD + rev-guarded CAS against
  * both stores.
  */
-export class DrizzleInitiativeRepository implements InitiativeRepository {
+class DrizzleInitiativeRepository implements InitiativeRepository {
   constructor(private readonly db: DrizzleDb) {}
 
   async get(workspaceId: string, id: string): Promise<Initiative | null> {
@@ -3494,7 +3494,7 @@ function rowToMergePreset(row: MergePresetRow): MergeThresholdPreset {
  * rule too; the DELETE also guards `is_default = 0`). Behaviourally identical to the
  * D1 repo so the cross-runtime conformance suite asserts the same preset resolution.
  */
-export class DrizzleMergePresetRepository implements MergePresetRepository {
+class DrizzleMergePresetRepository implements MergePresetRepository {
   constructor(private readonly db: DrizzleDb) {}
 
   async get(workspaceId: string, id: string): Promise<MergeThresholdPreset | null> {
@@ -3662,7 +3662,7 @@ function rowToSharedStack(row: typeof sharedStacks.$inferSelect): SharedStack {
  * `allow_host_commands` as 0/1; behaviourally identical to the D1 repo so the cross-runtime
  * conformance suite asserts the same round-trip.
  */
-export class DrizzleSharedStackRepository implements SharedStackRepository {
+class DrizzleSharedStackRepository implements SharedStackRepository {
   constructor(private readonly db: DrizzleDb) {}
 
   async get(workspaceId: string, id: string): Promise<SharedStack | null> {
@@ -3739,7 +3739,7 @@ export class DrizzleSharedStackRepository implements SharedStackRepository {
 // fields are stored as text JSON, parsed defensively; behaviourally identical to the D1
 // repos so the cross-runtime conformance suite asserts the same Sandbox behaviour.
 
-export class DrizzleSandboxPromptVersionRepository implements SandboxPromptVersionRepository {
+class DrizzleSandboxPromptVersionRepository implements SandboxPromptVersionRepository {
   constructor(private readonly db: DrizzleDb) {}
 
   async get(workspaceId: string, id: string): Promise<SandboxPromptVersion | null> {
@@ -3830,7 +3830,7 @@ export class DrizzleSandboxPromptVersionRepository implements SandboxPromptVersi
   }
 }
 
-export class DrizzleSandboxFixtureRepository implements SandboxFixtureRepository {
+class DrizzleSandboxFixtureRepository implements SandboxFixtureRepository {
   constructor(private readonly db: DrizzleDb) {}
 
   async get(workspaceId: string, id: string): Promise<SandboxFixture | null> {
@@ -3886,7 +3886,7 @@ export class DrizzleSandboxFixtureRepository implements SandboxFixtureRepository
   }
 }
 
-export class DrizzleSandboxExperimentRepository implements SandboxExperimentRepository {
+class DrizzleSandboxExperimentRepository implements SandboxExperimentRepository {
   constructor(private readonly db: DrizzleDb) {}
 
   async get(workspaceId: string, id: string): Promise<SandboxExperiment | null> {
@@ -3965,7 +3965,7 @@ export class DrizzleSandboxExperimentRepository implements SandboxExperimentRepo
   }
 }
 
-export class DrizzleSandboxRunRepository implements SandboxRunRepository {
+class DrizzleSandboxRunRepository implements SandboxRunRepository {
   constructor(private readonly db: DrizzleDb) {}
 
   async get(workspaceId: string, id: string): Promise<SandboxRun | null> {
@@ -4073,7 +4073,7 @@ export class DrizzleSandboxRunRepository implements SandboxRunRepository {
   }
 }
 
-export class DrizzleSandboxGradeRepository implements SandboxGradeRepository {
+class DrizzleSandboxGradeRepository implements SandboxGradeRepository {
   constructor(private readonly db: DrizzleDb) {}
 
   async getByRun(workspaceId: string, runId: string): Promise<SandboxGrade | null> {
@@ -4254,7 +4254,7 @@ export class DrizzleWorkspaceSettingsRepository implements WorkspaceSettingsRepo
  * provider-specific credentials are stored as a sealed JSON blob (encrypted by the caller),
  * with a non-secret `summary` blob for display.
  */
-export class DrizzleObservabilityConnectionRepository implements ObservabilityConnectionRepository {
+class DrizzleObservabilityConnectionRepository implements ObservabilityConnectionRepository {
   constructor(private readonly db: DrizzleDb) {}
 
   async get(workspaceId: string): Promise<ObservabilityConnectionRecord | null> {
@@ -4311,7 +4311,7 @@ export class DrizzleObservabilityConnectionRepository implements ObservabilityCo
  * workspace; the registry entries are stored as ONE sealed JSON array (encrypted by the
  * caller), with a non-secret `summary` blob for display.
  */
-export class DrizzlePackageRegistryConnectionRepository implements PackageRegistryConnectionRepository {
+class DrizzlePackageRegistryConnectionRepository implements PackageRegistryConnectionRepository {
   constructor(private readonly db: DrizzleDb) {}
 
   async get(workspaceId: string): Promise<PackageRegistryConnectionRecord | null> {
@@ -4365,7 +4365,7 @@ export class DrizzlePackageRegistryConnectionRepository implements PackageRegist
  * workspace; both PagerDuty + incident.io credentials live in ONE sealed JSON blob
  * (encrypted by the caller), with a non-secret `summary` presence blob.
  */
-export class DrizzleIncidentEnrichmentConnectionRepository implements IncidentEnrichmentConnectionRepository {
+class DrizzleIncidentEnrichmentConnectionRepository implements IncidentEnrichmentConnectionRepository {
   constructor(private readonly db: DrizzleDb) {}
 
   async get(workspaceId: string): Promise<IncidentEnrichmentConnectionRecord | null> {
@@ -4418,7 +4418,7 @@ export class DrizzleIncidentEnrichmentConnectionRepository implements IncidentEn
  * `D1AccountSettingsRepository`, migration 0014). One row per account; `config` + `summary`
  * are non-secret JSON, the ONE sealed `secrets_cipher` blob is encrypted by the caller.
  */
-export class DrizzleAccountSettingsRepository implements AccountSettingsRepository {
+class DrizzleAccountSettingsRepository implements AccountSettingsRepository {
   constructor(private readonly db: DrizzleDb) {}
 
   async getByAccount(accountId: string): Promise<AccountSettingsRecord | null> {
@@ -4541,7 +4541,7 @@ function rowToReleaseHealthConfig(row: ReleaseHealthConfigRow): ReleaseHealthCon
  * Per-block monitor/SLO mapping for the post-release-health gate over Postgres (the
  * Drizzle mirror of the Worker's `D1ReleaseHealthConfigRepository`, migration 0003).
  */
-export class DrizzleReleaseHealthConfigRepository implements ReleaseHealthConfigRepository {
+class DrizzleReleaseHealthConfigRepository implements ReleaseHealthConfigRepository {
   constructor(private readonly db: DrizzleDb) {}
 
   async getByBlock(

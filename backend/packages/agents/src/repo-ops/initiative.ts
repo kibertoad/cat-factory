@@ -267,7 +267,7 @@ export function hashInitiative(initiative: Initiative): Promise<string> {
 }
 
 /** Render the lightweight `version.json` manifest. */
-export async function renderInitiativeVersionFile(
+async function renderInitiativeVersionFile(
   initiative: Initiative,
   meta: { version: number; generatedAt: string },
 ): Promise<RenderedFile> {

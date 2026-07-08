@@ -13,10 +13,10 @@
 // scaffold's `pnpm install` unresolvable. (The two libraries version independently.)
 export const LOCAL_SERVER_VERSION = '^0.34.0'
 export const APP_VERSION = '^0.66.0'
-export const NUXT_VERSION = '^4.4.8'
-export const TYPES_NODE_VERSION = '^26.0.1'
-export const TYPESCRIPT_VERSION = '7.0.1-rc'
-export const WRANGLER_VERSION = '^4.105.0'
+const NUXT_VERSION = '^4.4.8'
+const TYPES_NODE_VERSION = '^26.0.1'
+const TYPESCRIPT_VERSION = '7.0.1-rc'
+const WRANGLER_VERSION = '^4.105.0'
 
 /** Default executor-harness image agent jobs run as per-run containers. */
 export const DEFAULT_HARNESS_IMAGE = 'ghcr.io/kibertoad/cat-factory-executor:latest'

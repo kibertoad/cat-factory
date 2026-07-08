@@ -37,7 +37,7 @@ interface LocalSettingsRow {
 }
 
 /** Open (creating if absent) the local-settings SQLite database and ensure its schema. */
-export function openLocalSettingsDb(path: string): DatabaseSync {
+function openLocalSettingsDb(path: string): DatabaseSync {
   return openSqliteDb(path, SCHEMA)
 }
 
@@ -45,7 +45,7 @@ export function openLocalSettingsDb(path: string): DatabaseSync {
  * The local-mode operational settings singleton over `node:sqlite` — the local-sqlite mirror of
  * `DrizzleLocalSettingsRepository` (one row, fixed id, createdAt-preserving upsert).
  */
-export class SqliteLocalSettingsRepository implements LocalSettingsRepository {
+class SqliteLocalSettingsRepository implements LocalSettingsRepository {
   constructor(private readonly db: DatabaseSync) {}
 
   async get(): Promise<LocalSettingsRecord | null> {

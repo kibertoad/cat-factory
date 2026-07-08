@@ -100,7 +100,7 @@ export function unwrapLinearData<T>(status: number, ok: boolean, parsed: unknown
 }
 
 /** The header set every Linear GraphQL POST sends (API key raw, OAuth `Bearer`). */
-export function linearRequestHeaders(auth: LinearAuth): Record<string, string> {
+function linearRequestHeaders(auth: LinearAuth): Record<string, string> {
   return {
     authorization: linearAuthHeader(auth),
     accept: 'application/json',
