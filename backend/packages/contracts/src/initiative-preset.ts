@@ -141,6 +141,12 @@ export const initiativePresetTemplatePhaseSchema = v.object({
   goal: v.optional(v.pipe(v.string(), v.maxLength(INITIATIVE_SHORT_MAX)), ''),
   /** Whether ingest must reject a plan missing this phase (absent ⇒ optional). */
   required: v.optional(v.boolean()),
+  /**
+   * When true, the plan's matching phase pauses the initiative for human review once its items all
+   * settle (the D2 checkpoint). Stamped onto the persisted phase at ingest and FORCED on — the
+   * planner cannot unset a template-authored checkpoint. Absent ⇒ the phase advances unattended.
+   */
+  checkpoint: v.optional(v.boolean()),
 })
 export type InitiativePresetTemplatePhase = v.InferOutput<
   typeof initiativePresetTemplatePhaseSchema

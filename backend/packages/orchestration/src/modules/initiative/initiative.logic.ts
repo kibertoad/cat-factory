@@ -173,8 +173,14 @@ export function normalizeDraftAgainstPhaseTemplate(
 ): InitiativePlanDraft {
   const templateIds = new Set(template.phases.map((p) => p.id))
   // Template ids are unique (the contract enforces it), so each template slot matches its draft
-  // phase(s) exactly once — iterating the template preserves template order.
-  const matched = template.phases.flatMap((tp) => draft.phases.filter((p) => p.id === tp.id))
+  // phase(s) exactly once — iterating the template preserves template order. A template-authored
+  // `checkpoint: true` is FORCED onto the matched draft phase (the planner cannot unset it); a
+  // template that doesn't checkpoint leaves the planner's own request intact.
+  const matched = template.phases.flatMap((tp) =>
+    draft.phases
+      .filter((p) => p.id === tp.id)
+      .map((p) => (tp.checkpoint === true ? { ...p, checkpoint: true } : p)),
+  )
   const extras = draft.phases.filter((p) => !p.id || !templateIds.has(p.id))
 
   const missing = template.phases.filter(
@@ -230,12 +236,24 @@ export function applyPlanDraft(
   const phaseIds = new Set<string>(
     draft.phases.map((p) => p.id).filter((id): id is string => id !== undefined),
   )
-  const phases: InitiativePhase[] = draft.phases.map((p) => ({
-    id: p.id ?? uniqueSlugId(p.title, phaseIds),
-    title: p.title,
-    goal: p.goal ?? '',
-    ...(p.maxConcurrent !== undefined ? { maxConcurrent: p.maxConcurrent } : {}),
-  }))
+  const existingPhases = new Map((initiative.phases ?? []).map((p) => [p.id, p]))
+  const phases: InitiativePhase[] = draft.phases.map((p) => {
+    const id = p.id ?? uniqueSlugId(p.title, phaseIds)
+    const prior = existingPhases.get(id)
+    return {
+      id,
+      title: p.title,
+      goal: p.goal ?? '',
+      ...(p.maxConcurrent !== undefined ? { maxConcurrent: p.maxConcurrent } : {}),
+      // The checkpoint FLAG follows the (already template-shaped) draft. The CLEARED-AT bookkeeping
+      // is loop state, never in the draft, so preserve it for an existing phase id — a re-plan/replay
+      // that dropped it would re-fire an already-reviewed checkpoint on the next tick.
+      ...(p.checkpoint === true ? { checkpoint: true } : {}),
+      ...(prior?.checkpointClearedAt !== undefined
+        ? { checkpointClearedAt: prior.checkpointClearedAt }
+        : {}),
+    }
+  })
 
   const existingItems = new Map((initiative.items ?? []).map((i) => [i.id, i]))
   const itemIds = new Set<string>(
@@ -603,6 +621,47 @@ export function allItemsSettled(initiative: Initiative): boolean {
  */
 export function phaseIsHalted(initiative: Initiative, phaseId: string): boolean {
   return (initiative.items ?? []).some((i) => i.phaseId === phaseId && i.status === 'blocked')
+}
+
+/**
+ * The phase whose completed CHECKPOINT is awaiting a human, or null. A checkpoint phase (D2) pauses
+ * the initiative for review once ALL its items settle, before the next phase spawns. Returns the
+ * FIRST phase, in declared order, that is flagged `checkpoint`, has NOT already been cleared
+ * (`checkpointClearedAt`), holds at least one item, and has every item terminal (done/skipped).
+ *
+ * A phase still holding a non-terminal item — running, or BLOCKED (a halted phase) — is not a
+ * pending checkpoint: the checkpoint fires only after the phase genuinely completed, so a human must
+ * first retry/skip a blocked item. And because later-phase items never spawn until the current phase
+ * settles, an earlier still-running phase naturally keeps a later phase's checkpoint from firing early.
+ * An item-less checkpoint phase never fires (nothing was reviewed) — the loop skips it like any empty
+ * phase.
+ */
+export function pendingCheckpoint(initiative: Initiative): InitiativePhase | null {
+  const items = initiative.items ?? []
+  for (const phase of initiative.phases ?? []) {
+    if (phase.checkpoint !== true || phase.checkpointClearedAt !== undefined) continue
+    const phaseItems = items.filter((i) => i.phaseId === phase.id)
+    if (phaseItems.length === 0) continue
+    if (phaseItems.every((i) => INITIATIVE_ITEM_TERMINAL_STATUSES.has(i.status))) return phase
+  }
+  return null
+}
+
+/**
+ * Stamp a phase's checkpoint as cleared (the resume acknowledgment) so {@link pendingCheckpoint}
+ * never returns it again and the loop advances past the reviewed phase. No-op for an unknown id.
+ */
+export function applyCheckpointCleared(
+  initiative: Initiative,
+  phaseId: string,
+  now: number,
+): Initiative {
+  return {
+    ...initiative,
+    phases: (initiative.phases ?? []).map((p) =>
+      p.id === phaseId ? { ...p, checkpointClearedAt: now } : p,
+    ),
+  }
 }
 
 /**

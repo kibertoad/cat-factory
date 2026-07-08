@@ -161,6 +161,9 @@ export function coerceInitiativePlan(parsed: unknown): InitiativePlanDraft | nul
       title: title.slice(0, MAX_TITLE),
       goal: (asString(p.goal) ?? '').slice(0, MAX_SHORT),
       ...(maxConcurrent !== undefined ? { maxConcurrent } : {}),
+      // A planner-authored checkpoint (D2) — honored generically, without a preset. Only `true` is
+      // carried (a `false`/absent is the unattended default), mirroring the ingest/entity shape.
+      ...(p.checkpoint === true ? { checkpoint: true } : {}),
     })
     if (phases.length >= MAX_PHASES) break
   }
@@ -336,6 +339,17 @@ export function renderInitiativeTrackerMarkdown(initiative: Initiative): string 
   for (const phase of initiative.phases ?? []) {
     const phaseItems = items.filter((i) => i.phaseId === phase.id)
     lines.push('', `## Phase: ${phase.title}`, '')
+    if (phase.checkpoint) {
+      lines.push(
+        phase.checkpointClearedAt !== undefined
+          ? // The cleared-at date is rendered in UTC on purpose: this markdown is a COMMITTED artifact,
+            // so it must be timezone-deterministic (a local-time render would vary the committed file by
+            // the server's locale and churn the diff) rather than match any one operator's local day.
+            `> 🛑 Checkpoint cleared ${new Date(phase.checkpointClearedAt).toISOString().slice(0, 10)} — the initiative resumed past this phase.`
+          : '> 🛑 Checkpoint — the initiative pauses for human review once every item in this phase settles.',
+        '',
+      )
+    }
     if (phase.goal) lines.push(phase.goal, '')
     if (phaseItems.length === 0) {
       lines.push('_No items._')

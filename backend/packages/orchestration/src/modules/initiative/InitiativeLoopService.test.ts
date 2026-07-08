@@ -174,10 +174,13 @@ function harness(opts: {
     clock,
     idGenerator,
   })
-  const notes: Array<{ type: string; body: string }> = []
+  const notes: Array<{ type: string; body: string; reason?: string }> = []
   const notificationService = {
-    raise: async (_ws: string, input: { type: string; body: string }) => {
-      notes.push({ type: input.type, body: input.body })
+    raise: async (
+      _ws: string,
+      input: { type: string; body: string; payload?: { initiativeReason?: string } },
+    ) => {
+      notes.push({ type: input.type, body: input.body, reason: input.payload?.initiativeReason })
       return {} as never
     },
   } as unknown as NotificationService
@@ -447,5 +450,112 @@ describe('InitiativeLoopService', () => {
     const result = await h.loop.runDue(clockNow)
     expect(result.spawned).toBe(0)
     expect(h.start).not.toHaveBeenCalled()
+  })
+
+  // Phase checkpoints (D2): a phase flagged `checkpoint` PAUSES the initiative for human review once
+  // its items settle, before the next phase spawns. Resume clears it and advances.
+  describe('phase checkpoints (D2)', () => {
+    /** p1 (checkpoint) holds item a; p2 holds item b. Only p1 is current at first. */
+    const checkpointed = () =>
+      makeInitiative([item({ id: 'a', phaseId: 'p1' }), item({ id: 'b', phaseId: 'p2' })], {
+        phases: [
+          { id: 'p1', title: 'Phase one', goal: '', checkpoint: true },
+          { id: 'p2', title: 'Phase two', goal: '' },
+        ],
+      })
+
+    it('pauses at a completed checkpoint phase and raises the checkpoint notification', async () => {
+      const h = harness({ items: [item({ id: 'a', phaseId: 'p1' })] })
+      await h.initiatives.insert('ws-1', checkpointed())
+
+      await h.loop.runDue(clockNow) // spawns only item a (p1 is the current phase)
+      const entity1 = await h.initiatives.getByBlock('ws-1', initiativeBlock.id)
+      const spawnedA = entity1!.items!.find((i) => i.id === 'a')!.blockId!
+      await h.blocks.update('ws-1', spawnedA, { status: 'done' })
+
+      await h.loop.runDue(clockNow) // reconciles a done → checkpoint fires → pause
+
+      const entity = await h.initiatives.getByBlock('ws-1', initiativeBlock.id)
+      expect(entity!.status).toBe('paused')
+      // The next phase did NOT spawn while paused.
+      expect(entity!.items!.find((i) => i.id === 'b')!.status).toBe('pending')
+      expect(h.start).toHaveBeenCalledTimes(1)
+      // A `checkpoint` notification was raised (once).
+      const checkpointNotes = h.notes.filter((n) => n.reason === 'checkpoint')
+      expect(checkpointNotes).toHaveLength(1)
+      expect(checkpointNotes[0]!.body).toContain('Phase one')
+    })
+
+    it('does not re-fire the checkpoint on a subsequent tick while still paused', async () => {
+      const h = harness({ items: [item({ id: 'a', phaseId: 'p1' })] })
+      await h.initiatives.insert('ws-1', checkpointed())
+      await h.loop.runDue(clockNow)
+      const spawnedA = (await h.initiatives.getByBlock('ws-1', initiativeBlock.id))!.items!.find(
+        (i) => i.id === 'a',
+      )!.blockId!
+      await h.blocks.update('ws-1', spawnedA, { status: 'done' })
+      await h.loop.runDue(clockNow) // pauses
+
+      // A paused initiative is invisible to listExecuting, so runDue does nothing more.
+      await h.loop.runDue(clockNow)
+      expect(h.notes.filter((n) => n.reason === 'checkpoint')).toHaveLength(1)
+    })
+
+    it('resume clears the checkpoint and the next tick spawns the following phase', async () => {
+      const h = harness({
+        items: [item({ id: 'a', phaseId: 'p1' }), item({ id: 'b', phaseId: 'p2' })],
+      })
+      await h.initiatives.insert('ws-1', checkpointed())
+      await h.loop.runDue(clockNow)
+      const spawnedA = (await h.initiatives.getByBlock('ws-1', initiativeBlock.id))!.items!.find(
+        (i) => i.id === 'a',
+      )!.blockId!
+      await h.blocks.update('ws-1', spawnedA, { status: 'done' })
+      await h.loop.runDue(clockNow) // pauses at the checkpoint
+
+      // Resume is the acknowledgment: it flips to executing AND stamps the cleared-at.
+      const resumed = await h.service.resume('ws-1', initiativeBlock.id)
+      expect(resumed!.status).toBe('executing')
+      expect(resumed!.phases!.find((p) => p.id === 'p1')!.checkpointClearedAt).toBeDefined()
+
+      await h.loop.runDue(clockNow) // p1 checkpoint cleared → phase two spawns
+      const entity = await h.initiatives.getByBlock('ws-1', initiativeBlock.id)
+      expect(entity!.items!.find((i) => i.id === 'b')!.status).toBe('in_progress')
+      expect(h.start).toHaveBeenCalledTimes(2)
+    })
+
+    it('a tick that LOSES the pause CAS to a concurrent replica stays silent (no duplicate checkpoint card)', async () => {
+      // Two sweeper replicas can both read `executing` at tick time and both reach the checkpoint
+      // pause; the CAS lets only one win. The loser's `update` re-reads the now-`paused` entity and
+      // no-ops — but `update` still returns the (paused) entity, so a bare `status === 'paused'`
+      // guard would let the loser double-raise the card. Simulate the loser by intercepting the FIRST
+      // executing→paused CAS: commit the pause ourselves (the winner) and report the CAS as LOST to
+      // this caller, forcing the retry-then-no-op path. The losing tick must raise ZERO notifications.
+      const h = harness({ items: [item({ id: 'a', phaseId: 'p1' })] })
+      await h.initiatives.insert('ws-1', checkpointed())
+      await h.loop.runDue(clockNow)
+      const spawnedA = (await h.initiatives.getByBlock('ws-1', initiativeBlock.id))!.items!.find(
+        (i) => i.id === 'a',
+      )!.blockId!
+      await h.blocks.update('ws-1', spawnedA, { status: 'done' })
+
+      const realCas = h.initiatives.compareAndSwap
+      let intercepted = false
+      h.initiatives.compareAndSwap = async (ws, next, expectedRev) => {
+        if (!intercepted && next.status === 'paused') {
+          intercepted = true
+          await realCas(ws, next, expectedRev) // the concurrent winner commits the pause first
+          return false // ...but this caller lost the race
+        }
+        return realCas(ws, next, expectedRev)
+      }
+
+      await h.loop.runDue(clockNow) // reconcile → pendingCheckpoint → pauseAtCheckpoint loses, retries, no-ops
+
+      expect((await h.initiatives.getByBlock('ws-1', initiativeBlock.id))!.status).toBe('paused')
+      // The winner (a separate replica, not modelled here) raises the single card; this losing tick
+      // must add none. Pre-fix it raised a spurious second `checkpoint` notification.
+      expect(h.notes.filter((n) => n.reason === 'checkpoint')).toHaveLength(0)
+    })
   })
 })
