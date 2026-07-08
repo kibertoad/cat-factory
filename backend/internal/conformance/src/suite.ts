@@ -6927,6 +6927,7 @@ export function defineExecutionConformance(harness: ConformanceHarness): void {
         expect(frame.status).toBe(201)
         const created = await app.call('POST', `/workspaces/${wsId}/initiatives`, {
           frameId: frame.body.id,
+          title: 'Custom-preset initiative',
           presetId: CUSTOM_ID,
           presetInputs: { toolName: 'acme' },
         })
