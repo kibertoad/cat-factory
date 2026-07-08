@@ -1,5 +1,24 @@
 # @cat-factory/kernel
 
+## 0.112.1
+
+### Patch Changes
+
+- 7ee2530: Internal cleanup: prune dead/needless exports flagged by knip (no runtime behaviour
+  change). ~110 findings resolved — genuinely-dead symbols deleted (e.g. the unused
+  `ENVIRONMENT_ANALYSIS_PIPELINE_ID` / `INITIATIVE_BREAKDOWN_PIPELINE_ID` pipeline-id
+  constants, `isCiStatusProviderWired`, `parseApiKeyProvider`, unused re-export members of
+  the runtime facade barrels), and the `export` keyword dropped from symbols only used
+  inside their own module (repository classes, config constants, helper types). Also tidied
+  stale `knip.jsonc` baseline entries (removed no-longer-needed `ignore` / `ignoreDependencies`
+  and dead entry-glob patterns).
+
+  The residual knip warnings are now all DELIBERATE: the neutral `VcsClient` port type
+  re-export barrel, the Worker config-type barrel, the `providerEndpoints` base-URL group,
+  and a couple of types that must stay exported for declaration emit. Since backwards
+  compatibility is a non-goal pre-1.0, the removed exports (which nothing imported) are
+  dropped outright rather than deprecated.
+
 ## 0.112.0
 
 ### Minor Changes
