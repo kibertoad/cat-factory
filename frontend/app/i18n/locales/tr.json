@@ -23,6 +23,7 @@
     }
   },
   "common": {
+    "loading": "Yükleniyor…",
     "save": "Kaydet",
     "cancel": "İptal",
     "retry": "Yeniden dene",
@@ -2315,9 +2316,20 @@
         "saveFailed": "Katalog kaydedilemedi"
       }
     },
+    "usage": {
+      "body": "Bu fatura döneminde jeton kullanımı; ölçümlü API çağrıları ile sabit ücretli abonelikler (Claude Code, Codex, GLM ve havuzlanmış Kimi & DeepSeek) genelinde.",
+      "period": "Geçerli fatura dönemi – {date} tarihinden itibaren.",
+      "empty": "Bu dönemde henüz kullanım kaydedilmedi.",
+      "subscription": "Abonelikler",
+      "metered": "Ölçümlü API",
+      "illustrative": "Abonelikler için gösterilen maliyetler bilgi amaçlıdır; bu planlar sabit ücretlidir ve jeton başına faturalandırılmaz.",
+      "tokens": "{input} giriş / {output} çıkış",
+      "calls": "{count} çağrı"
+    },
     "workspaceSettings": {
       "title": "Çalışma alanı ayarları",
       "tabs": {
+        "usage": "Kullanım",
         "workspace": "Çalışma alanı",
         "budget": "Bütçe",
         "merge": "Birleştirme eşikleri",

@@ -5,6 +5,7 @@ import {
   getExecutionAgentContextContract,
   getExecutionLlmMetricsContract,
   getExecutionSearchQueriesContract,
+  getWorkspaceUsageContract,
   mergeBlockContract,
   rejectStepContract,
   requestStepChangesContract,
@@ -157,5 +158,9 @@ export function executionApi({ send, sendWith, ws, pwHeaders }: ApiContext) {
     // ---- spend safeguard --------------------------------------------------
     resumeSpend: (workspaceId: string) =>
       send(resumeSpendContract, { pathPrefix: ws(workspaceId) }),
+
+    // ---- usage report -----------------------------------------------------
+    getUsage: (workspaceId: string) =>
+      send(getWorkspaceUsageContract, { pathPrefix: ws(workspaceId) }),
   }
 }

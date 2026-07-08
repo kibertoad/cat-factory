@@ -23,6 +23,7 @@
     }
   },
   "common": {
+    "loading": "Cargando…",
     "save": "Guardar",
     "cancel": "Cancelar",
     "retry": "Reintentar",
@@ -2193,9 +2194,20 @@
         "saveFailed": "No se pudo guardar el catálogo"
       }
     },
+    "usage": {
+      "body": "Uso de tokens en este período de facturación, entre llamadas de API medidas y suscripciones de tarifa plana (Claude Code, Codex, GLM y Kimi & DeepSeek agrupados).",
+      "period": "Período de facturación actual: desde {date}.",
+      "empty": "Aún no se ha registrado uso en este período.",
+      "subscription": "Suscripciones",
+      "metered": "API medida",
+      "illustrative": "Los costes mostrados para las suscripciones son orientativos: estos planes son de tarifa plana y no se facturan por token.",
+      "tokens": "{input} entrada / {output} salida",
+      "calls": "{count} llamadas"
+    },
     "workspaceSettings": {
       "title": "Configuración del espacio de trabajo",
       "tabs": {
+        "usage": "Uso",
         "workspace": "Espacio de trabajo",
         "budget": "Presupuesto",
         "merge": "Umbrales de fusión",

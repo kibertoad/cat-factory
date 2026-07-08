@@ -639,9 +639,20 @@
         "saveFailed": "Impossibile salvare il catalogo"
       }
     },
+    "usage": {
+      "body": "Utilizzo dei token in questo periodo di fatturazione, tra chiamate API misurate e abbonamenti a tariffa fissa (Claude Code, Codex, GLM e Kimi & DeepSeek in pool).",
+      "period": "Periodo di fatturazione corrente – da {date}.",
+      "empty": "Nessun utilizzo registrato in questo periodo.",
+      "subscription": "Abbonamenti",
+      "metered": "API misurata",
+      "illustrative": "I costi mostrati per gli abbonamenti sono indicativi: questi piani sono a tariffa fissa e non fatturati per token.",
+      "tokens": "{input} in ingresso / {output} in uscita",
+      "calls": "{count} chiamate"
+    },
     "workspaceSettings": {
       "title": "Impostazioni del workspace",
       "tabs": {
+        "usage": "Utilizzo",
         "workspace": "Workspace",
         "budget": "Budget",
         "merge": "Soglie di merge",
@@ -3580,6 +3591,7 @@
     }
   },
   "common": {
+    "loading": "Caricamento…",
     "save": "Salva",
     "cancel": "Annulla",
     "retry": "Riprova",

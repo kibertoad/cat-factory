@@ -1211,8 +1211,11 @@ export class RunDispatcher {
     isFinalStep: boolean,
     result: AgentRunResult,
   ): Promise<AdvanceResult> {
-    // Meter the LLM call against the spend budget. Recorded whether the step
-    // completed or raised a decision — both consumed tokens.
+    // Meter the LLM call into the usage ledger. Recorded whether the step completed or
+    // raised a decision — both consumed tokens. A subscription-harness result is tagged
+    // `'subscription'` so it's counted for the usage report but EXCLUDED from the budget
+    // rollups (a flat-rate quota plan costs nothing per token); an inline metered call
+    // defaults to `'metered'` and is summed by the spend gate as before.
     if (result.usage) {
       await this.spend.record({
         workspaceId,
@@ -1220,6 +1223,8 @@ export class RunDispatcher {
         agentKind: step.agentKind,
         model: result.model ?? 'unknown',
         usage: result.usage,
+        billing: result.usageBilling ?? 'metered',
+        vendor: result.usageVendor ?? null,
       })
     }
 

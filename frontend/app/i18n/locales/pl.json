@@ -23,6 +23,7 @@
     }
   },
   "common": {
+    "loading": "Ładowanie…",
     "save": "Zapisz",
     "cancel": "Anuluj",
     "retry": "Ponów",
@@ -2193,9 +2194,20 @@
         "saveFailed": "Nie udało się zapisać katalogu"
       }
     },
+    "usage": {
+      "body": "Zużycie tokenów w tym okresie rozliczeniowym, obejmujące mierzone wywołania API oraz abonamenty ryczałtowe (Claude Code, Codex, GLM oraz współdzielone Kimi i DeepSeek).",
+      "period": "Bieżący okres rozliczeniowy – od {date}.",
+      "empty": "W tym okresie nie zarejestrowano jeszcze żadnego użycia.",
+      "subscription": "Abonamenty",
+      "metered": "Mierzone API",
+      "illustrative": "Koszty pokazane dla abonamentów mają charakter poglądowy – te plany są ryczałtowe i nie są rozliczane za token.",
+      "tokens": "{input} wej. / {output} wyj.",
+      "calls": "Wywołania: {count}"
+    },
     "workspaceSettings": {
       "title": "Ustawienia obszaru roboczego",
       "tabs": {
+        "usage": "Użycie",
         "workspace": "Obszar roboczy",
         "budget": "Budżet",
         "merge": "Progi scalania",

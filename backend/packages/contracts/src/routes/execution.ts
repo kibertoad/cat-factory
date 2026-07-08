@@ -1,6 +1,11 @@
 import { ContractNoBody, defineApiContract, withObjectKeys } from '@toad-contracts/valibot'
 import * as v from 'valibot'
-import { blockSchema, executionInstanceSchema, spendStatusSchema } from '../entities.js'
+import {
+  blockSchema,
+  executionInstanceSchema,
+  spendStatusSchema,
+  usageReportSchema,
+} from '../entities.js'
 import { resolveIterationCapSchema } from '../iteration-cap.js'
 import {
   agentContextSnapshotSchema,
@@ -84,6 +89,14 @@ export const resumeSpendContract = defineApiContract({
   pathResolver: () => '/spend/resume',
   requestBodySchema: ContractNoBody,
   responsesByStatusCode: { 200: executionInstanceListSchema, ...errorResponses },
+})
+
+// The usage report (Usage settings tab): token usage this period broken down by billing
+// kind / vendor / model — both metered API calls and flat-rate subscription harness usage.
+export const getWorkspaceUsageContract = defineApiContract({
+  method: 'get',
+  pathResolver: () => '/usage',
+  responsesByStatusCode: { 200: usageReportSchema, ...errorResponses },
 })
 
 // ---- run observability ----------------------------------------------------

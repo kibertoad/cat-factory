@@ -64,7 +64,13 @@ export type {
   ModelScope,
 } from './model-provider.js'
 export { inlineModelRef, resolveScopedModelProvider } from './model-provider.js'
-export type { TokenUsageRecord, TokenUsageRepository, TokenUsageTotals } from './token-usage.js'
+export type {
+  TokenUsageRecord,
+  TokenUsageRepository,
+  TokenUsageTotals,
+  UsageBilling,
+  UsageBreakdownRow,
+} from './token-usage.js'
 export type {
   LlmCallMetric,
   LlmCallMetricRepository,

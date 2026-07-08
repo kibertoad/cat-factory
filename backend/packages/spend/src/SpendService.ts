@@ -5,6 +5,8 @@ import type { Clock, IdGenerator } from '@cat-factory/kernel'
 import type {
   AccountRepository,
   TokenUsageRepository,
+  UsageBilling,
+  UsageBreakdownRow,
   UserSettingsRepository,
   WorkspaceSettingsRepository,
 } from '@cat-factory/kernel'
@@ -64,6 +66,14 @@ export interface RecordUsageInput {
   /** Model identifier as `provider:model` (as produced by AgentRunResult.model). */
   model: string
   usage: AgentTokenUsage
+  /**
+   * Metered (a real per-token cost the budget gate sums) or subscription (a flat-rate
+   * quota harness call, recorded for the usage report but excluded from spend). Absent ⇒
+   * `'metered'` (the inline/proxy metered path).
+   */
+  billing?: UsageBilling
+  /** The subscription vendor for a `'subscription'` row (claude/codex/glm/kimi/deepseek). */
+  vendor?: string | null
 }
 
 /** Which budget tiers to check when gating a run (the caller passes what ids it has). */
@@ -214,6 +224,9 @@ export class SpendService {
       ref.provider === 'openrouter' && this.dynamicPricesFor
         ? withDynamicPrices(base, await this.dynamicPricesFor(input.workspaceId))
         : base
+    // Priced for both billing kinds: a subscription row's cost is illustrative (the
+    // equivalent metered-API cost), never summed into a budget — the metered filter on
+    // the totals rollups is what keeps subscription usage out of the spend gate.
     const costEstimate = estimateCost(pricing, ref, input.usage)
     await this.tokenUsageRepository.record({
       id: this.idGenerator.next('tok'),
@@ -227,9 +240,30 @@ export class SpendService {
       inputTokens: input.usage.inputTokens,
       outputTokens: input.usage.outputTokens,
       costEstimate,
+      billing: input.billing ?? 'metered',
+      vendor: input.vendor ?? null,
       createdAt: this.clock.now(),
     })
     return costEstimate
+  }
+
+  /**
+   * The current billing period's usage report for a workspace: one aggregated row per
+   * `(billing, vendor, provider, model)` group, covering BOTH metered API/proxy calls and
+   * subscription harness usage. Powers the "Usage" settings tab. This is reporting, not
+   * gating — subscription rows are included here but excluded from {@link status} /
+   * {@link isOverBudget}. Returned rows are the repository's single GROUP BY (no N+1).
+   */
+  async usageBreakdown(
+    workspaceId: string,
+  ): Promise<{ periodStart: number; currency: string; rows: UsageBreakdownRow[] }> {
+    const pricing = await this.resolvePricing(workspaceId)
+    const periodStart = startOfMonthUtc(this.clock.now())
+    const rows = await this.tokenUsageRepository.usageBreakdownForWorkspace(
+      workspaceId,
+      periodStart,
+    )
+    return { periodStart, currency: pricing.currency, rows }
   }
 
   /** The current billing period's spend against the WORKSPACE budget. */

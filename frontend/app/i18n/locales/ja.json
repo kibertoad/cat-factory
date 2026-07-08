@@ -23,6 +23,7 @@
     }
   },
   "common": {
+    "loading": "読み込み中…",
     "save": "保存",
     "cancel": "キャンセル",
     "retry": "再試行",
@@ -2315,9 +2316,20 @@
         "saveFailed": "カタログを保存できませんでした"
       }
     },
+    "usage": {
+      "body": "この請求期間のトークン使用状況です。従量制の API 呼び出しと定額制のサブスクリプション（Claude Code、Codex、GLM、およびプール化された Kimi・DeepSeek）の両方を対象とします。",
+      "period": "現在の請求期間 — {date} 以降。",
+      "empty": "この期間の使用状況はまだ記録されていません。",
+      "subscription": "サブスクリプション",
+      "metered": "従量制 API",
+      "illustrative": "サブスクリプションに表示される料金は参考値です。これらのプランは定額制であり、トークン単位では課金されません。",
+      "tokens": "入力 {input} / 出力 {output}",
+      "calls": "{count} 回の呼び出し"
+    },
     "workspaceSettings": {
       "title": "ワークスペース設定",
       "tabs": {
+        "usage": "使用状況",
         "workspace": "ワークスペース",
         "budget": "予算",
         "merge": "マージしきい値",

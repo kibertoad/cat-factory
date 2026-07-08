@@ -466,6 +466,11 @@ export const tokenUsage = pgTable(
     input_tokens: integer('input_tokens').notNull().default(0),
     output_tokens: integer('output_tokens').notNull().default(0),
     cost_estimate: doublePrecision('cost_estimate').notNull().default(0),
+    // Metered (per-token cost, summed by the budget gate) vs subscription (flat-rate quota
+    // harness usage, counted for the usage report but excluded from every spend rollup).
+    billing: text('billing').notNull().default('metered'),
+    // The subscription vendor for a subscription row (claude/codex/glm/kimi/deepseek).
+    vendor: text('vendor'),
     created_at: bigint('created_at', { mode: 'number' }).notNull(),
   },
   (t) => [

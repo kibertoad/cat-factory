@@ -112,6 +112,8 @@ import type {
   TokenUsageRecord,
   TokenUsageRepository,
   TokenUsageTotals,
+  UsageBilling,
+  UsageBreakdownRow,
   TrackerSettings,
   TrackerSettingsRepository,
   UserIdentityRecord,
@@ -1320,8 +1322,46 @@ class DrizzleTokenUsageRepository implements TokenUsageRepository {
       input_tokens: usage.inputTokens,
       output_tokens: usage.outputTokens,
       cost_estimate: usage.costEstimate,
+      billing: usage.billing,
+      vendor: usage.vendor,
       created_at: usage.createdAt,
     })
+  }
+
+  async usageBreakdownForWorkspace(
+    workspaceId: string,
+    epochMs: number,
+  ): Promise<UsageBreakdownRow[]> {
+    // One GROUP BY over the workspace's current period — both billing kinds (the report
+    // shows total usage). Never a per-model loop. sum() of int columns is bigint; cast +
+    // coerce like the totals rollups. Ordered heaviest-first in SQL, mirroring the D1 repo.
+    const rows = await this.db
+      .select({
+        billing: tokenUsage.billing,
+        vendor: tokenUsage.vendor,
+        provider: tokenUsage.provider,
+        model: tokenUsage.model,
+        input: sql<string>`coalesce(sum(${tokenUsage.input_tokens}), 0)::bigint`,
+        output: sql<string>`coalesce(sum(${tokenUsage.output_tokens}), 0)::bigint`,
+        cost: sql<number>`coalesce(sum(${tokenUsage.cost_estimate}), 0)::float8`,
+        calls: sql<string>`count(*)::bigint`,
+      })
+      .from(tokenUsage)
+      .where(and(eq(tokenUsage.workspace_id, workspaceId), gte(tokenUsage.created_at, epochMs)))
+      .groupBy(tokenUsage.billing, tokenUsage.vendor, tokenUsage.provider, tokenUsage.model)
+      .orderBy(
+        sql`(coalesce(sum(${tokenUsage.input_tokens}), 0) + coalesce(sum(${tokenUsage.output_tokens}), 0)) desc`,
+      )
+    return rows.map((r) => ({
+      billing: (r.billing === 'subscription' ? 'subscription' : 'metered') as UsageBilling,
+      vendor: r.vendor,
+      provider: r.provider,
+      model: r.model,
+      inputTokens: Number(r.input ?? 0),
+      outputTokens: Number(r.output ?? 0),
+      costEstimate: r.cost ?? 0,
+      calls: Number(r.calls ?? 0),
+    }))
   }
 
   async totalsSince(epochMs: number): Promise<TokenUsageTotals> {
@@ -1336,7 +1376,7 @@ class DrizzleTokenUsageRepository implements TokenUsageRepository {
         cost: sql<number>`coalesce(sum(${tokenUsage.cost_estimate}), 0)::float8`,
       })
       .from(tokenUsage)
-      .where(gte(tokenUsage.created_at, epochMs))
+      .where(and(gte(tokenUsage.created_at, epochMs), eq(tokenUsage.billing, 'metered')))
     return {
       inputTokens: Number(row?.input ?? 0),
       outputTokens: Number(row?.output ?? 0),
@@ -1352,7 +1392,13 @@ class DrizzleTokenUsageRepository implements TokenUsageRepository {
         cost: sql<number>`coalesce(sum(${tokenUsage.cost_estimate}), 0)::float8`,
       })
       .from(tokenUsage)
-      .where(and(eq(tokenUsage.workspace_id, workspaceId), gte(tokenUsage.created_at, epochMs)))
+      .where(
+        and(
+          eq(tokenUsage.workspace_id, workspaceId),
+          gte(tokenUsage.created_at, epochMs),
+          eq(tokenUsage.billing, 'metered'),
+        ),
+      )
     return {
       inputTokens: Number(row?.input ?? 0),
       outputTokens: Number(row?.output ?? 0),
@@ -1368,7 +1414,13 @@ class DrizzleTokenUsageRepository implements TokenUsageRepository {
         cost: sql<number>`coalesce(sum(${tokenUsage.cost_estimate}), 0)::float8`,
       })
       .from(tokenUsage)
-      .where(and(eq(tokenUsage.account_id, accountId), gte(tokenUsage.created_at, epochMs)))
+      .where(
+        and(
+          eq(tokenUsage.account_id, accountId),
+          gte(tokenUsage.created_at, epochMs),
+          eq(tokenUsage.billing, 'metered'),
+        ),
+      )
     return {
       inputTokens: Number(row?.input ?? 0),
       outputTokens: Number(row?.output ?? 0),
@@ -1384,7 +1436,13 @@ class DrizzleTokenUsageRepository implements TokenUsageRepository {
         cost: sql<number>`coalesce(sum(${tokenUsage.cost_estimate}), 0)::float8`,
       })
       .from(tokenUsage)
-      .where(and(eq(tokenUsage.user_id, userId), gte(tokenUsage.created_at, epochMs)))
+      .where(
+        and(
+          eq(tokenUsage.user_id, userId),
+          gte(tokenUsage.created_at, epochMs),
+          eq(tokenUsage.billing, 'metered'),
+        ),
+      )
     return {
       inputTokens: Number(row?.input ?? 0),
       outputTokens: Number(row?.output ?? 0),

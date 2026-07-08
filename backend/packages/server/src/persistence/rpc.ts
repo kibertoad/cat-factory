@@ -533,6 +533,9 @@ export const REMOTE_PERSISTENCE_METHODS: PersistenceMethodTable = {
   },
   tokenUsageRepository: {
     totalsSinceForWorkspace: { scope: { kind: 'workspace', arg: 0 } },
+    // The usage report (Usage settings tab) — one workspace-scoped GROUP BY read, same
+    // scoping as the workspace spend rollup above.
+    usageBreakdownForWorkspace: { scope: { kind: 'workspace', arg: 0 } },
     // Account/user budget-tier rollups (docs/initiatives/tiered-budgets.md), read on the spend
     // gate + the snapshot. Account-scoped and self-user-scoped respectively, mirroring the
     // account read + the per-user settings read above. (Metered WRITEs — `record` — stay out of

@@ -3,6 +3,33 @@
 // to decide whether the configured budget has been exhausted. The domain
 // depends only on this interface — the worker implements it against D1.
 
+/**
+ * Whether a usage row is a real metered cost (a per-token API/proxy call, which the
+ * budget gate sums) or a flat-rate subscription call (Claude Code / Codex / GLM / pooled
+ * Kimi & DeepSeek). Subscription rows are counted for the usage report but EXCLUDED from
+ * every spend rollup — a quota plan costs nothing per token, so letting one into the
+ * budget gate would wrongly pause runs. See the usage-and-quota-tracking initiative.
+ */
+export type UsageBilling = 'metered' | 'subscription'
+
+/**
+ * One usage-report row: aggregated token usage for one `(billing, vendor, provider,
+ * model)` group over a window. `costEstimate` is illustrative for subscription rows (what
+ * the same tokens would have cost on the metered API) and never summed into a budget.
+ */
+export interface UsageBreakdownRow {
+  billing: UsageBilling
+  /** The subscription vendor for a subscription row; null for a metered row. */
+  vendor: string | null
+  provider: string
+  model: string
+  inputTokens: number
+  outputTokens: number
+  costEstimate: number
+  /** Number of recorded calls in this group. */
+  calls: number
+}
+
 /** One metered LLM call. `costEstimate` is in the deployment's spend currency. */
 export interface TokenUsageRecord {
   id: string
@@ -25,8 +52,18 @@ export interface TokenUsageRecord {
   model: string
   inputTokens: number
   outputTokens: number
-  /** Estimated cost of this call, priced at record time so history is stable. */
+  /**
+   * Estimated cost of this call, priced at record time so history is stable. For a
+   * subscription row this is illustrative (the equivalent metered-API cost), never budget.
+   */
   costEstimate: number
+  /**
+   * Metered (per-token API/proxy cost, summed by the budget gate) or subscription
+   * (flat-rate quota harness usage, counted for reporting but excluded from spend).
+   */
+  billing: UsageBilling
+  /** The subscription vendor for a subscription row (claude/codex/glm/kimi/deepseek); null for metered. */
+  vendor: string | null
   /** When the call was metered (epoch ms). */
   createdAt: number
 }
@@ -39,30 +76,37 @@ export interface TokenUsageTotals {
 }
 
 export interface TokenUsageRepository {
-  /** Append a metered call. */
+  /** Append a usage row (metered or subscription). */
   record(usage: TokenUsageRecord): Promise<void>
   /**
-   * Sum usage across all workspaces since `epochMs` (inclusive). Retained for the
+   * The usage report for one workspace since `epochMs` (inclusive): one aggregated row per
+   * `(billing, vendor, provider, model)` group, summed in SQL (a single GROUP BY — never a
+   * per-model loop). Includes BOTH metered and subscription rows, since the report shows
+   * total usage; the spend rollups below stay metered-only.
+   */
+  usageBreakdownForWorkspace(workspaceId: string, epochMs: number): Promise<UsageBreakdownRow[]>
+  /**
+   * Sum METERED usage across all workspaces since `epochMs` (inclusive). Retained for the
    * deployment-wide rollup; the per-workspace budget gate uses
-   * {@link totalsSinceForWorkspace}.
+   * {@link totalsSinceForWorkspace}. Subscription rows are excluded (they never cost).
    */
   totalsSince(epochMs: number): Promise<TokenUsageTotals>
   /**
-   * Sum usage for a single workspace since `epochMs` (inclusive). Budgets are
+   * Sum METERED usage for a single workspace since `epochMs` (inclusive). Budgets are
    * per-workspace, so the spend gate scopes its current-period rollup to the
-   * workspace whose run is about to execute.
+   * workspace whose run is about to execute. Subscription rows are excluded.
    */
   totalsSinceForWorkspace(workspaceId: string, epochMs: number): Promise<TokenUsageTotals>
   /**
-   * Sum usage for a single account since `epochMs` (inclusive) — the account-tier
+   * Sum METERED usage for a single account since `epochMs` (inclusive) — the account-tier
    * budget rollup, across every workspace the account owns. Reads the denormalized
-   * `account_id` column.
+   * `account_id` column. Subscription rows are excluded.
    */
   totalsSinceForAccount(accountId: string, epochMs: number): Promise<TokenUsageTotals>
   /**
-   * Sum usage for a single initiating user since `epochMs` (inclusive) — the
+   * Sum METERED usage for a single initiating user since `epochMs` (inclusive) — the
    * user-tier budget rollup, across every run they started. Reads the denormalized
-   * `user_id` column.
+   * `user_id` column. Subscription rows are excluded.
    */
   totalsSinceForUser(userId: string, epochMs: number): Promise<TokenUsageTotals>
   /**
