@@ -101,6 +101,7 @@ import type {
   IncidentEnrichmentConnectionRepository,
   PackageRegistryConnectionRepository,
   ReleaseHealthConfigRepository,
+  TestSecretRef,
   TicketTrackerProvider,
   IssueWritebackProvider,
   TrackerSettingsRepository,
@@ -784,6 +785,12 @@ export interface CoreDependencies {
   observabilityConnectionRepository?: ObservabilityConnectionRepository
   /** Stores per-block monitor/SLO mappings the post-release-health gate reads. */
   releaseHealthConfigRepository?: ReleaseHealthConfigRepository
+  /**
+   * Resolve the NON-secret refs (key + description) of the sensitive test credentials for a run
+   * block's service frame, folded into the tester prompt. Wired from the facade's
+   * `TestSecretsService`; absent ⇒ no advertised secrets. NEVER returns a value.
+   */
+  resolveTestSecretRefs?: (workspaceId: string, blockId: string) => Promise<TestSecretRef[]>
   /** Seals observability credentials at rest (domain tag 'cat-factory:observability'). */
   observabilitySecretCipher?: SecretCipher
   /** Stores a workspace's incident-enrichment connection (sealed PagerDuty + incident.io). */
@@ -2692,6 +2699,7 @@ export function createCore(dependencies: CoreDependencies): Core {
     brainstormServices: brainstorm?.services,
     kaizenScheduler: kaizen?.service,
     environmentProvisioning: environments?.provisioningService,
+    resolveTestSecretRefs: dependencies.resolveTestSecretRefs,
     environmentTeardown: environments?.teardownService,
     branchUpdater: dependencies.branchUpdater,
     blueprintReconciler,

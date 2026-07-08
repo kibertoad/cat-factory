@@ -101,6 +101,9 @@ export {
 } from './domain/initiative-logic.js'
 // The interactive document-review interviewer agent-kind constant (WS5).
 export { DOC_INTERVIEWER_AGENT_KIND } from './domain/doc-interview-logic.js'
+// Pure block-tree walks (the single home for service-frame resolution shared by the engine
+// context builder and the test-secrets store).
+export { resolveServiceFrameBlock } from './domain/block-tree.js'
 // Installation-level extension point for predefined pipelines (mirrors the custom
 // agent-kind / model-provider registry seams): a deployment registers extra pipelines at
 // startup and `seedPipelines()` seeds them into every new workspace.

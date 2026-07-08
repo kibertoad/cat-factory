@@ -23,6 +23,7 @@ import {
   phaseForKind,
   renderStandardUserPrompt,
   standardSystemPrompt,
+  testSecretsSection,
 } from './prompts/standard.js'
 
 // Prompt construction for the built-in agent kinds: turns an agent kind + block
@@ -208,6 +209,8 @@ function buildBaseUserPrompt(
   if (targetSection) lines.push(targetSection)
   const testerEnv = testerEnvironmentSection(context)
   if (testerEnv) lines.push(testerEnv)
+  const testSecrets = testSecretsSection(context)
+  if (testSecrets) lines.push(testSecrets)
   const mockFrontend = mockFrontendSection(context)
   if (mockFrontend) lines.push(mockFrontend)
   const allDecisions = resolvedDecision ? [...decisions, resolvedDecision] : decisions

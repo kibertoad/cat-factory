@@ -126,7 +126,7 @@ import type {
   WorkspaceRepository,
 } from '@cat-factory/kernel'
 import type { Clock, IdGenerator } from '@cat-factory/kernel'
-import type { AgentExecutor, ResolveRunRepoContext } from '@cat-factory/kernel'
+import type { AgentExecutor, ResolveRunRepoContext, TestSecretRef } from '@cat-factory/kernel'
 import { isAsyncAgentExecutor } from '@cat-factory/kernel'
 import type { WorkRunner } from '@cat-factory/kernel'
 import type { ExecutionEventPublisher } from '@cat-factory/kernel'
@@ -339,6 +339,12 @@ export interface ExecutionServiceDependencies {
    * (no LLM), and downstream steps discover the resulting env via it.
    */
   environmentProvisioning?: EnvironmentProvisioningService
+  /**
+   * Optional: resolve the NON-secret refs (key + description) of the sensitive test credentials
+   * for a run block's service frame, folded into the tester prompt by the context builder.
+   * Wired from the facade's `TestSecretsService`; absent ⇒ no advertised secrets. NEVER values.
+   */
+  resolveTestSecretRefs?: (workspaceId: string, blockId: string) => Promise<TestSecretRef[]>
   /**
    * Optional: resolves the binary-artifact store (UI screenshots + reference design images)
    * for a workspace's account; the `visual-confirmation` gate reads it. Absent (or resolving
@@ -624,6 +630,7 @@ export class ExecutionService {
     brainstormSessionRepository,
     fragmentResolver,
     environmentProvisioning,
+    resolveTestSecretRefs,
     environmentTeardown,
     branchUpdater,
     blueprintReconciler,
@@ -701,6 +708,7 @@ export class ExecutionService {
       brainstormSessions: brainstormSessionRepository,
       initiatives: initiativeRepository,
       environmentProvisioning,
+      resolveTestSecretRefs,
       fragmentResolver,
     })
     this.mergeResolver = new MergeResolver({

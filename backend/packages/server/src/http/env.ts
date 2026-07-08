@@ -18,6 +18,7 @@ import type {
   ProviderSubscriptionService,
   PublicApiKeyService,
   RunnerBackendRegistry,
+  TestSecretsService,
   UserSecretService,
 } from '@cat-factory/integrations'
 import type { Core } from '@cat-factory/orchestration'
@@ -113,6 +114,13 @@ export interface ServerContainer extends Core {
    * Present only when the facade wired the provider-subscription repository.
    */
   subscriptions?: ProviderSubscriptionService
+  /**
+   * The sensitive per-service test-credential store (sealed). Present only when the facade
+   * wired the test-secrets repository (needs ENCRYPTION_KEY). Backs the test-secrets CRUD
+   * controller; its resolution methods are also threaded into the engine (prompt refs) and
+   * the container executor (values, injected into the Tester out of band).
+   */
+  testSecrets?: TestSecretsService
   /**
    * The per-user individual-usage subscription store (Claude). Present only when the
    * facade wired the personal-subscription repositories (needs ENCRYPTION_KEY). Drives

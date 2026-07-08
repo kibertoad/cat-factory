@@ -47,6 +47,8 @@ import type {
   PackageRegistryConnectionRepository,
   ReleaseHealthConfigRecord,
   ReleaseHealthConfigRepository,
+  TestSecretRecord,
+  TestSecretsRepository,
   ModelPreset,
   ModelPresetRepository,
   ServiceFragmentDefaultsRepository,
@@ -191,6 +193,7 @@ import {
   memberships,
   mergeThresholdPresets,
   releaseHealthConfigs,
+  testSecrets,
   pipelineScheduleRuns,
   pipelineSchedules,
   pipelines,
@@ -4604,6 +4607,78 @@ class DrizzleReleaseHealthConfigRepository implements ReleaseHealthConfigReposit
   }
 }
 
+/**
+ * A service frame's sensitive test credentials over Postgres (the Drizzle mirror of the
+ * Worker's `D1TestSecretsRepository`, migration 0044). At most one row per (workspace, block);
+ * `credentials` is a sealed envelope of the `TestSecretEntry[]` JSON, `summary` a non-secret
+ * `TestSecretRef[]` display blob.
+ */
+export class DrizzleTestSecretsRepository implements TestSecretsRepository {
+  constructor(private readonly db: DrizzleDb) {}
+
+  async getByBlock(workspaceId: string, blockId: string): Promise<TestSecretRecord | null> {
+    const rows = await this.db
+      .select()
+      .from(testSecrets)
+      .where(and(eq(testSecrets.workspace_id, workspaceId), eq(testSecrets.block_id, blockId)))
+      .limit(1)
+    const row = rows[0]
+    if (!row) return null
+    return {
+      workspaceId: row.workspace_id,
+      blockId: row.block_id,
+      credentials: row.credentials,
+      summary: row.summary,
+      createdAt: row.created_at,
+      updatedAt: row.updated_at,
+    }
+  }
+
+  async listByWorkspace(workspaceId: string): Promise<TestSecretRecord[]> {
+    const rows = await this.db
+      .select()
+      .from(testSecrets)
+      .where(eq(testSecrets.workspace_id, workspaceId))
+      .orderBy(testSecrets.block_id)
+    return rows.map((row) => ({
+      workspaceId: row.workspace_id,
+      blockId: row.block_id,
+      credentials: row.credentials,
+      summary: row.summary,
+      createdAt: row.created_at,
+      updatedAt: row.updated_at,
+    }))
+  }
+
+  async upsert(record: TestSecretRecord): Promise<void> {
+    const values = {
+      workspace_id: record.workspaceId,
+      block_id: record.blockId,
+      credentials: record.credentials,
+      summary: record.summary,
+      created_at: record.createdAt,
+      updated_at: record.updatedAt,
+    }
+    await this.db
+      .insert(testSecrets)
+      .values(values)
+      .onConflictDoUpdate({
+        target: [testSecrets.workspace_id, testSecrets.block_id],
+        set: {
+          credentials: values.credentials,
+          summary: values.summary,
+          updated_at: values.updated_at,
+        },
+      })
+  }
+
+  async deleteByBlock(workspaceId: string, blockId: string): Promise<void> {
+    await this.db
+      .delete(testSecrets)
+      .where(and(eq(testSecrets.workspace_id, workspaceId), eq(testSecrets.block_id, blockId)))
+  }
+}
+
 export interface CoreRepositories {
   workspaceRepository: WorkspaceRepository
   accountRepository: AccountRepository
@@ -4644,6 +4719,7 @@ export interface CoreRepositories {
   incidentEnrichmentConnectionRepository: IncidentEnrichmentConnectionRepository
   accountSettingsRepository: AccountSettingsRepository
   releaseHealthConfigRepository: ReleaseHealthConfigRepository
+  testSecretsRepository: TestSecretsRepository
   provisioningLogRepository: ProvisioningLogRepository
 }
 
@@ -4689,6 +4765,7 @@ export function createDrizzleRepositories(db: DrizzleDb, clock: Clock): CoreRepo
     incidentEnrichmentConnectionRepository: new DrizzleIncidentEnrichmentConnectionRepository(db),
     accountSettingsRepository: new DrizzleAccountSettingsRepository(db),
     releaseHealthConfigRepository: new DrizzleReleaseHealthConfigRepository(db),
+    testSecretsRepository: new DrizzleTestSecretsRepository(db),
     provisioningLogRepository: new DrizzleProvisioningLogRepository(db),
   }
 }
