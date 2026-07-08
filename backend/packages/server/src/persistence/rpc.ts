@@ -305,13 +305,13 @@ export const REMOTE_PERSISTENCE_METHODS: PersistenceMethodTable = {
     get: { scope: { kind: 'selfUser', arg: 0 } },
     upsert: { scope: { kind: 'selfUser', arg: 0 } },
   },
-  mergePresetRepository: {
+  riskPolicyRepository: {
     list: { scope: { kind: 'workspace', arg: 0 } },
     // The merge lifecycle resolves a task's merge-threshold preset at run time
-    // (`resolveMergePreset` → the merger/requirements gate), reading the workspace default when
+    // (`resolveRiskPolicy` → the merger/requirements gate), reading the workspace default when
     // the task pins none. Workspace-scoped read on the run path.
     getDefault: { scope: { kind: 'workspace', arg: 0 } },
-    // `MergePresetService.list` lazily seeds the built-in default for a workspace that has
+    // `RiskPolicyService.list` lazily seeds the built-in default for a workspace that has
     // none (a write triggered by the board-load read). Member-level (the preset CRUD is not
     // admin-gated), workspace-scoped — the same policy as the block/pipeline mutations above.
     upsert: { scope: { kind: 'workspace', arg: 0 } },
@@ -338,7 +338,7 @@ export const REMOTE_PERSISTENCE_METHODS: PersistenceMethodTable = {
     // gate) reads the workspace's default model preset for the dispatched agent kind.
     getDefault: { scope: { kind: 'workspace', arg: 0 } },
     // `ModelPresetService.list` lazily seeds the built-in defaults for a workspace that has none
-    // (a write the board-load read triggers), exactly like `mergePresetRepository.upsert` above.
+    // (a write the board-load read triggers), exactly like `riskPolicyRepository.upsert` above.
     upsert: { scope: { kind: 'workspace', arg: 0 } },
     // The model-preset library editor's read-one + delete, the mirror of the merge-preset
     // management pair above. Member-level, workspace-scoped.
@@ -533,6 +533,9 @@ export const REMOTE_PERSISTENCE_METHODS: PersistenceMethodTable = {
   },
   tokenUsageRepository: {
     totalsSinceForWorkspace: { scope: { kind: 'workspace', arg: 0 } },
+    // The usage report (Usage settings tab) — one workspace-scoped GROUP BY read, same
+    // scoping as the workspace spend rollup above.
+    usageBreakdownForWorkspace: { scope: { kind: 'workspace', arg: 0 } },
     // Account/user budget-tier rollups (docs/initiatives/tiered-budgets.md), read on the spend
     // gate + the snapshot. Account-scoped and self-user-scoped respectively, mirroring the
     // account read + the per-user settings read above. (Metered WRITEs — `record` — stay out of

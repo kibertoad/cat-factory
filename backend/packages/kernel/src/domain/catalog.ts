@@ -28,7 +28,7 @@ export const DEFAULT_WORKSPACE_SETTINGS: WorkspaceSettings = {
  * `merge_review` notification is raised. `ciMaxAttempts` bounds how many times the
  * `ci-fixer` agent retries before the CI gate gives up.
  */
-export const DEFAULT_MERGE_PRESET = {
+export const DEFAULT_RISK_POLICY = {
   name: 'Balanced',
   maxComplexity: 0.5,
   maxRisk: 0.4,
@@ -58,11 +58,11 @@ export const DEFAULT_MERGE_PRESET = {
 /**
  * A built-in merge-preset template (no `createdAt` yet, but with a STABLE id so a
  * workspace's persisted copy can be matched against the catalog and reseeded). The
- * service stamps each with `createdAt` on first seed; {@link seedMergePresets} lists
+ * service stamps each with `createdAt` on first seed; {@link seedRiskPolicies} lists
  * the built-ins. Mirrors {@link ModelPresetSeed} / the pipeline seed shape, including
  * the monotonic `version` that drives the "reseed available" advisory.
  */
-export interface MergePresetSeed {
+export interface RiskPolicySeed {
   /** Stable catalog id (e.g. `mp_balanced`), used to match a stored copy for reseeding. */
   id: string
   name: string
@@ -97,21 +97,21 @@ export interface MergePresetSeed {
  * of one), add it here / bump its `version`; existing workspaces are then advised to
  * reseed (new presets appear, changed ones flag an update).
  */
-export const MERGE_PRESET_SEEDS: MergePresetSeed[] = [
+export const RISK_POLICY_SEEDS: RiskPolicySeed[] = [
   {
     id: 'mp_balanced',
-    name: DEFAULT_MERGE_PRESET.name,
-    maxComplexity: DEFAULT_MERGE_PRESET.maxComplexity,
-    maxRisk: DEFAULT_MERGE_PRESET.maxRisk,
-    maxImpact: DEFAULT_MERGE_PRESET.maxImpact,
-    ciMaxAttempts: DEFAULT_MERGE_PRESET.ciMaxAttempts,
-    maxRequirementIterations: DEFAULT_MERGE_PRESET.maxRequirementIterations,
-    maxRequirementConcernAllowed: DEFAULT_MERGE_PRESET.maxRequirementConcernAllowed,
-    maxTesterQualityIterations: DEFAULT_MERGE_PRESET.maxTesterQualityIterations,
-    releaseWatchWindowMinutes: DEFAULT_MERGE_PRESET.releaseWatchWindowMinutes,
-    releaseMaxAttempts: DEFAULT_MERGE_PRESET.releaseMaxAttempts,
-    humanReviewGraceMinutes: DEFAULT_MERGE_PRESET.humanReviewGraceMinutes,
-    autoMergeEnabled: DEFAULT_MERGE_PRESET.autoMergeEnabled,
+    name: DEFAULT_RISK_POLICY.name,
+    maxComplexity: DEFAULT_RISK_POLICY.maxComplexity,
+    maxRisk: DEFAULT_RISK_POLICY.maxRisk,
+    maxImpact: DEFAULT_RISK_POLICY.maxImpact,
+    ciMaxAttempts: DEFAULT_RISK_POLICY.ciMaxAttempts,
+    maxRequirementIterations: DEFAULT_RISK_POLICY.maxRequirementIterations,
+    maxRequirementConcernAllowed: DEFAULT_RISK_POLICY.maxRequirementConcernAllowed,
+    maxTesterQualityIterations: DEFAULT_RISK_POLICY.maxTesterQualityIterations,
+    releaseWatchWindowMinutes: DEFAULT_RISK_POLICY.releaseWatchWindowMinutes,
+    releaseMaxAttempts: DEFAULT_RISK_POLICY.releaseMaxAttempts,
+    humanReviewGraceMinutes: DEFAULT_RISK_POLICY.humanReviewGraceMinutes,
+    autoMergeEnabled: DEFAULT_RISK_POLICY.autoMergeEnabled,
     isDefault: true,
     version: 2,
   },
@@ -122,13 +122,13 @@ export const MERGE_PRESET_SEEDS: MergePresetSeed[] = [
     maxComplexity: 0,
     maxRisk: 0,
     maxImpact: 0,
-    ciMaxAttempts: DEFAULT_MERGE_PRESET.ciMaxAttempts,
-    maxRequirementIterations: DEFAULT_MERGE_PRESET.maxRequirementIterations,
+    ciMaxAttempts: DEFAULT_RISK_POLICY.ciMaxAttempts,
+    maxRequirementIterations: DEFAULT_RISK_POLICY.maxRequirementIterations,
     maxRequirementConcernAllowed: 'none',
-    maxTesterQualityIterations: DEFAULT_MERGE_PRESET.maxTesterQualityIterations,
-    releaseWatchWindowMinutes: DEFAULT_MERGE_PRESET.releaseWatchWindowMinutes,
-    releaseMaxAttempts: DEFAULT_MERGE_PRESET.releaseMaxAttempts,
-    humanReviewGraceMinutes: DEFAULT_MERGE_PRESET.humanReviewGraceMinutes,
+    maxTesterQualityIterations: DEFAULT_RISK_POLICY.maxTesterQualityIterations,
+    releaseWatchWindowMinutes: DEFAULT_RISK_POLICY.releaseWatchWindowMinutes,
+    releaseMaxAttempts: DEFAULT_RISK_POLICY.releaseMaxAttempts,
+    humanReviewGraceMinutes: DEFAULT_RISK_POLICY.humanReviewGraceMinutes,
     // The whole point of this preset: never auto-merge — always raise a human review.
     autoMergeEnabled: false,
     isDefault: false,
@@ -137,18 +137,18 @@ export const MERGE_PRESET_SEEDS: MergePresetSeed[] = [
 ]
 
 /** The built-in merge presets, fresh copies so callers can stamp ids/timestamps safely. */
-export function seedMergePresets(): MergePresetSeed[] {
-  return MERGE_PRESET_SEEDS.map((p) => ({ ...p }))
+export function seedRiskPolicies(): RiskPolicySeed[] {
+  return RISK_POLICY_SEEDS.map((p) => ({ ...p }))
 }
 
 /** Fallback CI-fixer attempt budget when no preset resolves (defensive default). */
-export const DEFAULT_CI_MAX_ATTEMPTS = DEFAULT_MERGE_PRESET.ciMaxAttempts
+export const DEFAULT_CI_MAX_ATTEMPTS = DEFAULT_RISK_POLICY.ciMaxAttempts
 
 /**
  * Fallback cap on the iterative requirements-review loop (reviewer passes) when no
  * preset resolves. One reviewer pass = one iteration; the initial review is iteration 1.
  */
-export const DEFAULT_MAX_REQUIREMENT_ITERATIONS = DEFAULT_MERGE_PRESET.maxRequirementIterations
+export const DEFAULT_MAX_REQUIREMENT_ITERATIONS = DEFAULT_RISK_POLICY.maxRequirementIterations
 
 /**
  * Budgets for the linked-context the engine assembles for an agent step. Container
@@ -174,7 +174,7 @@ export const CONTEXT_BUDGET = {
  * A built-in model-preset template (no `createdAt` yet, but with a STABLE id so a
  * workspace's persisted copy can be matched against the catalog and reseeded). The
  * service stamps each with `createdAt` + the resolved default flag on first seed;
- * {@link seedModelPresets} lists the built-ins. Mirrors {@link MergePresetSeed} /
+ * {@link seedModelPresets} lists the built-ins. Mirrors {@link RiskPolicySeed} /
  * the pipeline seed shape, including the monotonic `version` that drives the "reseed
  * available" advisory. WHICH built-in is the workspace default is a DEPLOYMENT fact
  * (see {@link DEFAULT_MODEL_PRESET_ID}), not baked into the seed.

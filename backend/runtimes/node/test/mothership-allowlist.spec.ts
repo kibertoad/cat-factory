@@ -236,7 +236,7 @@ const NON_REMOTE: Record<string, Record<string, Reason>> = {
   initiativeRepository: { listExecuting: 'sweeper' },
   // `get`/`remove` are now allow-listed (the preset-library management surface); `list`/`getDefault`/
   // `upsert` were already remotely callable — so the whole merge-preset repo is remote.
-  mergePresetRepository: {},
+  riskPolicyRepository: {},
   // `upsert` is now allow-listed (the workspace-settings panel save); `get` was already remote.
   workspaceSettingsRepository: {},
   // The whole observability / incident-enrichment connection + per-block release-health config

@@ -11,7 +11,7 @@ import { userSettingsSchema } from './user-settings.js'
 import { bootstrapJobSchema } from './bootstrap.js'
 import { envConfigRepairJobSchema } from './env-config-repair.js'
 import { notificationSchema } from './notifications.js'
-import { mergeThresholdPresetSchema } from './merge.js'
+import { riskPolicySchema } from './merge.js'
 import { agentConfigCatalogSchema } from './agent-config.js'
 import { modelPresetSchema } from './model-presets.js'
 import { serviceFragmentDefaultsSchema } from './service-fragment-defaults.js'
@@ -104,7 +104,7 @@ export const workspaceSnapshotSchema = v.object({
    * The workspace's merge threshold presets (the library a task picks its
    * auto-merge policy from). Attached by the worker, so optional on the wire.
    */
-  mergePresets: v.optional(v.array(mergeThresholdPresetSchema)),
+  riskPolicies: v.optional(v.array(riskPolicySchema)),
   /**
    * The workspace's shared stacks (long-lived compose infra a consumer environment
    * attaches to over an external network — the acme-shared-services shape). Carried in
@@ -202,14 +202,14 @@ export const workspaceSnapshotSchema = v.object({
    */
   pipelineCatalogVersions: v.optional(v.record(v.string(), v.number())),
   /**
-   * Current built-in merge-preset catalog versions (`seedMergePresets()`), keyed by preset id.
+   * Current built-in merge-preset catalog versions (`seedRiskPolicies()`), keyed by preset id.
    * The SPA compares each persisted built-in's `version` against this to detect a stale copy
    * (a newer definition is available) and a built-in id present here but absent from the
    * workspace's presets (a NEW built-in appeared), offering a reseed for either. Static,
    * workspace-independent; built by the shared `WorkspaceService.snapshot()` (automatically
    * symmetric across runtimes), optional on the wire for forward-compatibility.
    */
-  mergePresetCatalogVersions: v.optional(v.record(v.string(), v.number())),
+  riskPolicyCatalogVersions: v.optional(v.record(v.string(), v.number())),
   /**
    * Current built-in model-preset catalog versions (`seedModelPresets()`), keyed by preset id.
    * The SPA compares each persisted built-in's `version` against this to detect a stale copy

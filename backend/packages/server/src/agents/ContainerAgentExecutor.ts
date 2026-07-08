@@ -780,7 +780,20 @@ export class ContainerAgentExecutor implements AsyncAgentExecutor {
       if (this.recordedUsageJobs.size >= 10_000) this.recordedUsageJobs.clear()
       this.recordedUsageJobs.add(handle.jobId)
     }
-    return { state: 'done', result: toRunResult(result, handle.agentKind), ...followUps }
+    const runResult = toRunResult(result, handle.agentKind)
+    // A subscription harness (Claude Code / Codex / GLM / pooled Kimi & DeepSeek) bypasses
+    // the LLM proxy, so its tokens aren't metered there. It's the ONLY container path that
+    // emits per-call `callMetrics`, so their presence unambiguously marks a subscription
+    // run: stamp its usage onto the result tagged `'subscription'` so the engine records it
+    // in the durable usage ledger for the report — while the budget gate excludes it (a
+    // quota plan costs nothing per token). Pi (proxy-metered) has no `callMetrics`, so its
+    // usage stays off the result and the proxy remains its sole meter (no double-count).
+    if (result.callMetrics && result.callMetrics.length > 0 && result.usage) {
+      runResult.usage = result.usage
+      runResult.usageBilling = 'subscription'
+      runResult.usageVendor = handle.provider ?? providerOf(handle.model)
+    }
+    return { state: 'done', result: runResult, ...followUps }
   }
 
   /**

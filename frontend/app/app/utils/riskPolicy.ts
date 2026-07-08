@@ -1,4 +1,4 @@
-import type { MergeThresholdPreset } from '~/types/merge'
+import type { RiskPolicy } from '~/types/merge'
 
 /**
  * A compact one-line summary of a merge preset's auto-merge ceilings + CI-fix budget,
@@ -6,7 +6,7 @@ import type { MergeThresholdPreset } from '~/types/merge'
  * (not just its name) while choosing one. Percentages are the stored 0..1 ratios
  * rendered as whole percents.
  */
-export function mergePresetThresholds(p: MergeThresholdPreset): string {
+export function riskPolicySummary(p: RiskPolicy): string {
   // Auto-merge disabled: the thresholds don't apply, every PR goes to human review.
   if (!p.autoMergeEnabled) return `manual review only · ${p.ciMaxAttempts} CI fixes`
   const pct = (n: number) => `${Math.round(n * 100)}%`
@@ -16,6 +16,6 @@ export function mergePresetThresholds(p: MergeThresholdPreset): string {
 }
 
 /** The preset name followed by its thresholds, for a single-line dropdown option. */
-export function mergePresetOptionLabel(p: MergeThresholdPreset): string {
-  return `${p.name} — ${mergePresetThresholds(p)}`
+export function riskPolicyOptionLabel(p: RiskPolicy): string {
+  return `${p.name} — ${riskPolicySummary(p)}`
 }

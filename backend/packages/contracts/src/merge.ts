@@ -54,7 +54,7 @@ export type MergeAssessment = v.InferOutput<typeof mergeAssessmentSchema>
  * preset per workspace is the default (`isDefault`), used by any task that has not
  * picked one explicitly.
  */
-export const mergeThresholdPresetSchema = v.object({
+export const riskPolicySchema = v.object({
   id: v.string(),
   name: v.string(),
   /** Auto-merge only when the assessment's complexity is at or below this. */
@@ -116,7 +116,7 @@ export const mergeThresholdPresetSchema = v.object({
   /** The workspace's fallback preset, used by tasks that pick none. Exactly one is true. */
   isDefault: v.boolean(),
   /**
-   * Monotonic seed version for a BUILT-IN preset (`seedMergePresets()` assigns it). When the
+   * Monotonic seed version for a BUILT-IN preset (`seedRiskPolicies()` assigns it). When the
    * current catalog version for this id exceeds the persisted copy's `version`, the SPA offers
    * to reseed it. Absent on user-created presets (not version-tracked) and on rows persisted
    * before versioning existed (treated as 0).
@@ -124,7 +124,7 @@ export const mergeThresholdPresetSchema = v.object({
   version: v.optional(v.number()),
   createdAt: v.number(),
 })
-export type MergeThresholdPreset = v.InferOutput<typeof mergeThresholdPresetSchema>
+export type RiskPolicy = v.InferOutput<typeof riskPolicySchema>
 
 // ---- Request bodies -------------------------------------------------------
 
@@ -137,7 +137,7 @@ const releaseAttemptsSchema = v.pipe(v.number(), v.integer(), v.minValue(0), v.m
 const graceMinutesSchema = v.pipe(v.number(), v.integer(), v.minValue(0), v.maxValue(1440))
 
 /** Create a new merge threshold preset in a workspace. */
-export const createMergePresetSchema = v.object({
+export const createRiskPolicySchema = v.object({
   name: presetNameSchema,
   maxComplexity: scoreSchema,
   maxRisk: scoreSchema,
@@ -154,10 +154,10 @@ export const createMergePresetSchema = v.object({
   /** Make this the workspace default (demotes the previous default). */
   isDefault: v.optional(v.boolean(), false),
 })
-export type CreateMergePresetInput = v.InferOutput<typeof createMergePresetSchema>
+export type CreateRiskPolicyInput = v.InferOutput<typeof createRiskPolicySchema>
 
 /** Patch an existing merge threshold preset (all fields optional). */
-export const updateMergePresetSchema = v.object({
+export const updateRiskPolicySchema = v.object({
   name: v.optional(presetNameSchema),
   maxComplexity: v.optional(scoreSchema),
   maxRisk: v.optional(scoreSchema),
@@ -172,7 +172,7 @@ export const updateMergePresetSchema = v.object({
   autoMergeEnabled: v.optional(v.boolean()),
   isDefault: v.optional(v.boolean()),
 })
-export type UpdateMergePresetInput = v.InferOutput<typeof updateMergePresetSchema>
+export type UpdateRiskPolicyInput = v.InferOutput<typeof updateRiskPolicySchema>
 
 /** Parse-or-throw an assessment payload an agent returned (the engine validates it). */
 export function parseMergeAssessment(value: unknown): MergeAssessment {

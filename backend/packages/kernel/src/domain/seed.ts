@@ -702,11 +702,30 @@ export const CODE_COMMENTS_PIPELINE_ID = 'pl_code_comments'
 export const BUSINESS_DOCS_PIPELINE_ID = 'pl_business_docs'
 
 /**
+ * Pipeline id of the full document-authoring pipeline (`doc-researcher` → `doc-outliner` →
+ * `doc-interviewer` → `doc-writer` → auto-review → `doc-finalizer` → `doc-quality` → the
+ * mergeability / CI / merge tail). This is the DEFAULT pipeline a `taskType: 'document'` task is
+ * pinned to at creation ({@link defaultPipelineIdForTaskType}) — the full-build pipeline makes no
+ * sense for a document (no code / spec / tests).
+ */
+export const DOCUMENT_PIPELINE_ID = 'pl_document'
+
+/**
  * Pipeline id of the lean document pipeline (`doc-writer` → auto-review → `doc-quality` → the
  * mergeability / CI / merge tail). The docs-refresh preset (slice 8) spawns README + diagram tasks
  * onto it.
  */
 export const DOCUMENT_QUICK_PIPELINE_ID = 'pl_document_quick'
+
+/**
+ * The pipeline a task of the given task type should default to when the creator pins none. Only
+ * `document` tasks get a non-default today (the full-build `pl_full` is wrong for a document);
+ * every other task type falls through to the workspace's positional default. Returns `undefined`
+ * when there is no type-specific default, so the caller leaves `pipelineId` unset.
+ */
+export function defaultPipelineIdForTaskType(taskType: Block['taskType']): string | undefined {
+  return taskType === 'document' ? DOCUMENT_PIPELINE_ID : undefined
+}
 
 /** Pipeline ids of the built-in recurring-pipeline presets. */
 export const DEP_UPDATE_PIPELINE_ID = 'pl_dep_update'

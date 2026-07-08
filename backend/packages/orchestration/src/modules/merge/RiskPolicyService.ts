@@ -1,23 +1,23 @@
 import type {
   Clock,
-  CreateMergePresetInput,
+  CreateRiskPolicyInput,
   IdGenerator,
-  MergePresetRepository,
-  MergeThresholdPreset,
-  UpdateMergePresetInput,
+  RiskPolicyRepository,
+  RiskPolicy,
+  UpdateRiskPolicyInput,
   WorkspaceRepository,
 } from '@cat-factory/kernel'
 import {
   assertFound,
   ConflictError,
   requireWorkspace,
-  seedMergePresets,
+  seedRiskPolicies,
   ValidationError,
 } from '@cat-factory/kernel'
-import type { MergePresetSeed } from '@cat-factory/kernel'
+import type { RiskPolicySeed } from '@cat-factory/kernel'
 
-export interface MergePresetServiceDependencies {
-  mergePresetRepository: MergePresetRepository
+export interface RiskPolicyServiceDependencies {
+  riskPolicyRepository: RiskPolicyRepository
   workspaceRepository: WorkspaceRepository
   idGenerator: IdGenerator
   clock: Clock
@@ -27,36 +27,36 @@ export interface MergePresetServiceDependencies {
  * CRUD for a workspace's merge threshold presets (the library a task picks its
  * auto-merge policy from). Maintains the invariant that a workspace always has at
  * least one preset, exactly one of which is the default: {@link list} lazily seeds
- * the built-in catalog ({@link seedMergePresets}) on first use, and the default cannot
+ * the built-in catalog ({@link seedRiskPolicies}) on first use, and the default cannot
  * be deleted. The single-default promotion is enforced in the repository. {@link reseed}
  * restores a built-in to the current catalog (adopting an update, repairing drift, or
  * materialising a NEW built-in that appeared after the workspace was created).
  */
-export class MergePresetService {
-  private readonly presets: MergePresetRepository
+export class RiskPolicyService {
+  private readonly presets: RiskPolicyRepository
   private readonly workspaceRepository: WorkspaceRepository
   private readonly idGenerator: IdGenerator
   private readonly clock: Clock
 
-  constructor(deps: MergePresetServiceDependencies) {
-    this.presets = deps.mergePresetRepository
+  constructor(deps: RiskPolicyServiceDependencies) {
+    this.presets = deps.riskPolicyRepository
     this.workspaceRepository = deps.workspaceRepository
     this.idGenerator = deps.idGenerator
     this.clock = deps.clock
   }
 
   /** List a workspace's presets, seeding the built-in catalog if none exist yet. */
-  async list(workspaceId: string): Promise<MergeThresholdPreset[]> {
+  async list(workspaceId: string): Promise<RiskPolicy[]> {
     await requireWorkspace(this.workspaceRepository, workspaceId)
     await this.ensureSeeded(workspaceId)
     return this.presets.list(workspaceId)
   }
 
   /** Create a new preset. The first one (or one flagged default) becomes the default. */
-  async create(workspaceId: string, input: CreateMergePresetInput): Promise<MergeThresholdPreset> {
+  async create(workspaceId: string, input: CreateRiskPolicyInput): Promise<RiskPolicy> {
     await requireWorkspace(this.workspaceRepository, workspaceId)
     const existing = await this.presets.list(workspaceId)
-    const preset: MergeThresholdPreset = {
+    const preset: RiskPolicy = {
       id: this.idGenerator.next('mp'),
       name: input.name,
       maxComplexity: input.maxComplexity,
@@ -79,17 +79,13 @@ export class MergePresetService {
   }
 
   /** Patch a preset. Demoting the only default is rejected (one must remain). */
-  async update(
-    workspaceId: string,
-    id: string,
-    patch: UpdateMergePresetInput,
-  ): Promise<MergeThresholdPreset> {
+  async update(workspaceId: string, id: string, patch: UpdateRiskPolicyInput): Promise<RiskPolicy> {
     await requireWorkspace(this.workspaceRepository, workspaceId)
-    const existing = assertFound(await this.presets.get(workspaceId, id), 'MergePreset', id)
+    const existing = assertFound(await this.presets.get(workspaceId, id), 'RiskPolicy', id)
     if (existing.isDefault && patch.isDefault === false) {
       throw new ConflictError('Cannot unset the default preset; promote another preset instead.')
     }
-    const updated: MergeThresholdPreset = {
+    const updated: RiskPolicy = {
       ...existing,
       ...(patch.name !== undefined ? { name: patch.name } : {}),
       ...(patch.maxComplexity !== undefined ? { maxComplexity: patch.maxComplexity } : {}),
@@ -132,7 +128,7 @@ export class MergePresetService {
   }
 
   /**
-   * Restore a built-in preset to its current catalog definition ({@link seedMergePresets}).
+   * Restore a built-in preset to its current catalog definition ({@link seedRiskPolicies}).
    * Used to adopt an improved built-in, repair one whose persisted copy drifted, or
    * materialise a NEW built-in that appeared after this workspace was seeded (so it has the
    * old presets but not the new one). The canonical thresholds / `autoMergeEnabled` / `version`
@@ -143,12 +139,12 @@ export class MergePresetService {
    * `mp_balanced`) can never steal the default away from the user's chosen preset.
    * Rejects an id not in the catalog (a custom preset — delete it instead).
    */
-  async reseed(workspaceId: string, id: string): Promise<MergeThresholdPreset> {
+  async reseed(workspaceId: string, id: string): Promise<RiskPolicy> {
     await requireWorkspace(this.workspaceRepository, workspaceId)
-    const seed = seedMergePresets().find((p) => p.id === id)
+    const seed = seedRiskPolicies().find((p) => p.id === id)
     if (!seed) {
       throw new ValidationError(
-        `Merge preset '${id}' is not a built-in (or is no longer in the catalog), so it cannot be reseeded. Delete it instead.`,
+        `Risk policy '${id}' is not a built-in (or is no longer in the catalog), so it cannot be reseeded. Delete it instead.`,
       )
     }
     const existing = await this.presets.get(workspaceId, id)
@@ -158,7 +154,7 @@ export class MergePresetService {
     const isDefault = existing
       ? existing.isDefault
       : seed.isDefault && (await this.presets.getDefault(workspaceId)) === null
-    const preset: MergeThresholdPreset = {
+    const preset: RiskPolicy = {
       ...this.fromSeed(seed),
       isDefault,
       createdAt: existing?.createdAt ?? this.clock.now(),
@@ -174,7 +170,7 @@ export class MergePresetService {
     const now = this.clock.now()
     // Stamp createdAt by catalog order so `list` (ordered by created_at) preserves it.
     let offset = 0
-    for (const seed of seedMergePresets()) {
+    for (const seed of seedRiskPolicies()) {
       await this.presets.upsert(workspaceId, {
         ...this.fromSeed(seed),
         createdAt: now + offset++,
@@ -183,7 +179,7 @@ export class MergePresetService {
   }
 
   /** A catalog seed as a persisted preset (its stable id + version, without `createdAt`). */
-  private fromSeed(seed: MergePresetSeed): Omit<MergeThresholdPreset, 'createdAt'> {
+  private fromSeed(seed: RiskPolicySeed): Omit<RiskPolicy, 'createdAt'> {
     return {
       id: seed.id,
       name: seed.name,

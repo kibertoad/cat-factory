@@ -3,7 +3,7 @@ import {
   BUG_TRIAGE_PIPELINE_ID,
   type ExecutionInstance,
   type Initiative,
-  type MergeThresholdPreset,
+  type RiskPolicy,
   type ModelPreset,
   type SandboxExperiment,
   type SandboxFixture,
@@ -762,12 +762,14 @@ export function defineCoreConformance(harness: ConformanceHarness): void {
         expect(res.status).toBe(422)
       })
 
-      it('round-trips the per-step companion toggles (followUps + testerQuality) on every store', async () => {
+      it('round-trips the per-step companion toggles (followUps + testerQuality) + stepOptions on every store', async () => {
         // The pipeline builder's two per-step companion toggles live on their own JSON columns
         // (D1/Drizzle `follow_ups` + `tester_quality`), so a custom pipeline that opts a Coder
         // step OUT of the Follow-up companion and configures a Tester step's QC companion (an
         // estimate gate) must survive the store round-trip identically — otherwise the builder
-        // toggle silently reverts to the default on the next load.
+        // toggle silently reverts to the default on the next load. The newer extensible
+        // per-step options bag (`step_options` — home of the requirements-review `autoRecommend`
+        // toggle) rides the SAME symmetric-persistence contract and is asserted alongside them.
         const { call, createWorkspace } = harness.makeApp()
         const { workspace } = await createWorkspace()
         const wsId = workspace.id
@@ -783,6 +785,9 @@ export function defineCoreConformance(harness: ConformanceHarness): void {
             null,
             { enabled: true, gating: { enabled: true, minRisk: 0.6, onMissingEstimate: 'run' } },
           ],
+          // A per-step options bag opting one step out of auto-recommendation — the extensible
+          // seam that must round-trip through the single `step_options` column on both stores.
+          stepOptions: [null, { autoRecommend: false }, null],
         })
         expect(created.status).toBe(201)
         expect(created.body.followUps?.[1]).toBe(false)
@@ -790,8 +795,9 @@ export function defineCoreConformance(harness: ConformanceHarness): void {
           enabled: true,
           gating: { enabled: true, minRisk: 0.6, onMissingEstimate: 'run' },
         })
+        expect(created.body.stepOptions?.[1]).toEqual({ autoRecommend: false })
 
-        // A fresh snapshot read re-hydrates both columns from the store, identically on D1 ⇄ Postgres.
+        // A fresh snapshot read re-hydrates every column from the store, identically on D1 ⇄ Postgres.
         const snapshot = await call<WorkspaceSnapshot>('GET', `/workspaces/${wsId}`)
         const stored = snapshot.body.pipelines.find((p) => p.id === created.body.id)!
         expect(stored.followUps?.[1]).toBe(false)
@@ -799,6 +805,7 @@ export function defineCoreConformance(harness: ConformanceHarness): void {
           enabled: true,
           gating: { enabled: true, minRisk: 0.6, onMissingEstimate: 'run' },
         })
+        expect(stored.stepOptions?.[1]).toEqual({ autoRecommend: false })
       })
     })
 
@@ -949,6 +956,78 @@ export function defineCoreConformance(harness: ConformanceHarness): void {
         )
         expect(after.body.costLimit).toBe(250)
         expect(after.body.currency).toBe('USD')
+      })
+
+      it('counts subscription usage in /usage but excludes it from the spend budget (D1 ⇄ Postgres)', async () => {
+        type UsageRow = {
+          billing: string
+          vendor: string | null
+          provider: string
+          model: string
+          inputTokens: number
+          outputTokens: number
+          costEstimate: number
+          calls: number
+        }
+        type UsageReport = { periodStart: number; currency: string; rows: UsageRow[] }
+        type Spend = { inputTokens: number; outputTokens: number; costSpent: number }
+
+        // A subscription-harness run: the fake reports usage tagged 'subscription' (vendor
+        // claude) — the proxy-bypassing Claude Code / Codex path.
+        const sub = harness.makeApp({
+          usage: { inputTokens: 1000, outputTokens: 500 },
+          usageBilling: 'subscription',
+          usageVendor: 'claude',
+        })
+        const subWs = (await sub.createWorkspace()).workspace.id
+        const subPipe = await sub.call<Pipeline>('POST', `/workspaces/${subWs}/pipelines`, {
+          name: 'Code',
+          agentKinds: ['coder'],
+        })
+        const subStart = await sub.call(
+          'POST',
+          `/workspaces/${subWs}/blocks/task_login/executions`,
+          {
+            pipelineId: subPipe.body.id,
+          },
+        )
+        expect(subStart.status).toBe(201)
+        await sub.drive(subWs)
+
+        const subUsage = await sub.call<UsageReport>('GET', `/workspaces/${subWs}/usage`)
+        expect(subUsage.status).toBe(200)
+        const subRow = subUsage.body.rows.find((r) => r.billing === 'subscription')
+        expect(subRow).toBeDefined()
+        expect(subRow?.vendor).toBe('claude')
+        expect(subRow?.inputTokens).toBeGreaterThanOrEqual(1000)
+        // The load-bearing invariant: a flat-rate subscription call is counted in the report
+        // but NEVER in the spend budget (a quota plan costs nothing per token).
+        expect(subUsage.body.rows.every((r) => r.billing === 'subscription')).toBe(true)
+        const subSpend = await sub.call<Spend>('GET', `/workspaces/${subWs}/spend`)
+        expect(subSpend.body.inputTokens).toBe(0)
+        expect(subSpend.body.costSpent).toBe(0)
+
+        // A metered run (same usage, default billing) IS counted by both the report and the budget.
+        const met = harness.makeApp({ usage: { inputTokens: 1000, outputTokens: 500 } })
+        const metWs = (await met.createWorkspace()).workspace.id
+        const metPipe = await met.call<Pipeline>('POST', `/workspaces/${metWs}/pipelines`, {
+          name: 'Code',
+          agentKinds: ['coder'],
+        })
+        const metStart = await met.call(
+          'POST',
+          `/workspaces/${metWs}/blocks/task_login/executions`,
+          {
+            pipelineId: metPipe.body.id,
+          },
+        )
+        expect(metStart.status).toBe(201)
+        await met.drive(metWs)
+
+        const metSpend = await met.call<Spend>('GET', `/workspaces/${metWs}/spend`)
+        expect(metSpend.body.inputTokens).toBeGreaterThanOrEqual(1000)
+        const metUsage = await met.call<UsageReport>('GET', `/workspaces/${metWs}/usage`)
+        expect(metUsage.body.rows.some((r) => r.billing === 'metered')).toBe(true)
       })
 
       it('round-trips the per-user (user-tier) budget (D1 ⇄ Postgres)', async () => {
@@ -3317,11 +3396,11 @@ export function defineIntegrationConformance(harness: ConformanceHarness): void 
       it('seeds the built-in catalog, enforces the single-default invariant, and guards the default', async () => {
         const { call, createWorkspace } = harness.makeApp()
         const { workspace } = await createWorkspace()
-        const base = `/workspaces/${workspace.id}/merge-presets`
+        const base = `/workspaces/${workspace.id}/risk-policies`
 
         // First list lazily seeds the whole built-in catalog: Balanced (default, auto-merge on)
         // and "Manual review only" (non-default, auto-merge OFF).
-        const initial = await call<MergeThresholdPreset[]>('GET', base)
+        const initial = await call<RiskPolicy[]>('GET', base)
         expect(initial.status).toBe(200)
         expect(initial.body).toHaveLength(2)
         const balanced = initial.body.find((p) => p.id === 'mp_balanced')!
@@ -3340,7 +3419,7 @@ export function defineIntegrationConformance(harness: ConformanceHarness): void 
         const seededDefaultId = balanced.id
 
         // Add a non-default preset; the seeded default stays the default.
-        const lenient = await call<MergeThresholdPreset>('POST', base, {
+        const lenient = await call<RiskPolicy>('POST', base, {
           name: 'Lenient',
           maxComplexity: 0.9,
           maxRisk: 0.8,
@@ -3363,7 +3442,7 @@ export function defineIntegrationConformance(harness: ConformanceHarness): void 
 
         // Promote a brand-new preset to default; the previous default is demoted
         // (single-default invariant enforced by the repository).
-        const strict = await call<MergeThresholdPreset>('POST', base, {
+        const strict = await call<RiskPolicy>('POST', base, {
           name: 'Strict',
           maxComplexity: 0.3,
           maxRisk: 0.2,
@@ -3376,7 +3455,7 @@ export function defineIntegrationConformance(harness: ConformanceHarness): void 
         expect(strict.status).toBe(201)
         expect(strict.body.isDefault).toBe(true)
 
-        const afterPromote = await call<MergeThresholdPreset[]>('GET', base)
+        const afterPromote = await call<RiskPolicy[]>('GET', base)
         // Two seeded built-ins + Lenient + Strict.
         expect(afterPromote.body).toHaveLength(4)
         const defaults = afterPromote.body.filter((p) => p.isDefault)
@@ -3390,14 +3469,14 @@ export function defineIntegrationConformance(harness: ConformanceHarness): void 
         expect(delDefault.status).toBe(409)
 
         // A non-default preset can be patched and removed.
-        const renamed = await call<MergeThresholdPreset>('PATCH', `${base}/${lenient.body.id}`, {
+        const renamed = await call<RiskPolicy>('PATCH', `${base}/${lenient.body.id}`, {
           name: 'Lenient v2',
         })
         expect(renamed.status).toBe(200)
         expect(renamed.body.name).toBe('Lenient v2')
         const del = await call('DELETE', `${base}/${lenient.body.id}`)
         expect(del.status).toBe(204)
-        const final = await call<MergeThresholdPreset[]>('GET', base)
+        const final = await call<RiskPolicy[]>('GET', base)
         expect(final.body.map((p) => p.id).sort()).toEqual(
           [seededDefaultId, 'mp_manual_review', strict.body.id].sort(),
         )
@@ -3407,14 +3486,14 @@ export function defineIntegrationConformance(harness: ConformanceHarness): void 
         const { call, createWorkspace } = harness.makeApp()
         const { workspace } = await createWorkspace()
         const wsId = workspace.id
-        const base = `/workspaces/${wsId}/merge-presets`
+        const base = `/workspaces/${wsId}/risk-policies`
 
         // The snapshot ships the built-in catalog versions so the SPA can offer a reseed.
-        const snap = await call<{ mergePresetCatalogVersions?: Record<string, number> }>(
+        const snap = await call<{ riskPolicyCatalogVersions?: Record<string, number> }>(
           'GET',
           `/workspaces/${wsId}`,
         )
-        expect(snap.body.mergePresetCatalogVersions).toMatchObject({
+        expect(snap.body.riskPolicyCatalogVersions).toMatchObject({
           mp_balanced: 2,
           mp_manual_review: 2,
         })
@@ -3426,7 +3505,7 @@ export function defineIntegrationConformance(harness: ConformanceHarness): void 
           name: 'Tampered',
           autoMergeEnabled: false,
         })
-        const reseeded = await call<MergeThresholdPreset>('POST', `${base}/mp_balanced/reseed`)
+        const reseeded = await call<RiskPolicy>('POST', `${base}/mp_balanced/reseed`)
         expect(reseeded.status).toBe(200)
         expect(reseeded.body.name).toBe('Balanced')
         expect(reseeded.body.autoMergeEnabled).toBe(true)
@@ -3437,9 +3516,9 @@ export function defineIntegrationConformance(harness: ConformanceHarness): void 
         // Reseeding a NEW built-in the workspace doesn't have yet materialises it (the
         // "appeared upstream" case): delete the manual preset, then reseed it back.
         await call('DELETE', `${base}/mp_manual_review`)
-        const afterDelete = await call<MergeThresholdPreset[]>('GET', base)
+        const afterDelete = await call<RiskPolicy[]>('GET', base)
         expect(afterDelete.body.some((p) => p.id === 'mp_manual_review')).toBe(false)
-        const readded = await call<MergeThresholdPreset>('POST', `${base}/mp_manual_review/reseed`)
+        const readded = await call<RiskPolicy>('POST', `${base}/mp_manual_review/reseed`)
         expect(readded.status).toBe(200)
         expect(readded.body.autoMergeEnabled).toBe(false)
 
@@ -3447,7 +3526,7 @@ export function defineIntegrationConformance(harness: ConformanceHarness): void 
         // custom preset to default, delete the (now non-default) mp_balanced, then reseed it.
         // mp_balanced's seed is default-flagged, but the workspace already has a default, so the
         // reseed re-creates it as NON-default and the user's choice survives.
-        const custom = await call<MergeThresholdPreset>('POST', base, {
+        const custom = await call<RiskPolicy>('POST', base, {
           name: 'My default',
           maxComplexity: 0.5,
           maxRisk: 0.5,
@@ -3459,10 +3538,10 @@ export function defineIntegrationConformance(harness: ConformanceHarness): void 
         })
         expect(custom.body.isDefault).toBe(true)
         await call('DELETE', `${base}/mp_balanced`)
-        const rebalanced = await call<MergeThresholdPreset>('POST', `${base}/mp_balanced/reseed`)
+        const rebalanced = await call<RiskPolicy>('POST', `${base}/mp_balanced/reseed`)
         expect(rebalanced.status).toBe(200)
         expect(rebalanced.body.isDefault).toBe(false)
-        const afterReseed = await call<MergeThresholdPreset[]>('GET', base)
+        const afterReseed = await call<RiskPolicy[]>('GET', base)
         expect(afterReseed.body.filter((p) => p.isDefault).map((p) => p.id)).toEqual([
           custom.body.id,
         ])
@@ -7172,7 +7251,7 @@ export function defineExecutionConformance(harness: ConformanceHarness): void {
         const res = await app.call<RequirementReview>(
           'POST',
           `/workspaces/${wsId}/blocks/task_login/requirement-review/recommend`,
-          { itemIds: ['rri_seed_task_login'] },
+          { items: [{ itemId: 'rri_seed_task_login' }] },
         )
         expect(res.status).toBe(200)
         // The Writer couldn't run, so no recommendation survives and the finding is back to `open`
@@ -7428,7 +7507,7 @@ export function defineExecutionConformance(harness: ConformanceHarness): void {
         // The "Manual review only" built-in preset (`autoMergeEnabled: false`) is the
         // human-review-only policy: a task pinned to it must ALWAYS route its PR to a human,
         // regardless of how low the assessment scores are. This drives the full task-threshold
-        // wiring end-to-end — `block.mergePresetId` → `resolveMergePreset` repository lookup →
+        // wiring end-to-end — `block.riskPolicyId` → `resolveRiskPolicy` repository lookup →
         // `MergeResolver` — which the resolver unit test can't (it injects the preset directly).
         // A maximally-mergeable assessment (0/0/0 + a real rationale) would auto-merge under the
         // default preset; here it must NOT, proving the pinned preset — not the default — governs.
@@ -7445,14 +7524,11 @@ export function defineExecutionConformance(harness: ConformanceHarness): void {
         const wsId = workspace.id
         // Listing the catalog lazily seeds the built-ins so `mp_manual_review` is a real row the
         // task can pin (the resolver reads it back via the repository, which does not self-seed).
-        const presets = await app.call<MergeThresholdPreset[]>(
-          'GET',
-          `/workspaces/${wsId}/merge-presets`,
-        )
+        const presets = await app.call<RiskPolicy[]>('GET', `/workspaces/${wsId}/risk-policies`)
         expect(presets.body.some((p) => p.id === 'mp_manual_review')).toBe(true)
         // Pin the human-review-only preset on the task.
         await app.call('PATCH', `/workspaces/${wsId}/blocks/task_login`, {
-          mergePresetId: 'mp_manual_review',
+          riskPolicyId: 'mp_manual_review',
         })
         const pipeline = await app.call<Pipeline>('POST', `/workspaces/${wsId}/pipelines`, {
           name: 'Build + merger',
@@ -7501,22 +7577,18 @@ export function defineExecutionConformance(harness: ConformanceHarness): void {
         })
         const { workspace } = await app.createWorkspace()
         const wsId = workspace.id
-        const strict = await app.call<MergeThresholdPreset>(
-          'POST',
-          `/workspaces/${wsId}/merge-presets`,
-          {
-            name: 'Strict',
-            maxComplexity: 0.3,
-            maxRisk: 0.3,
-            maxImpact: 0.3,
-            ciMaxAttempts: 10,
-            maxRequirementIterations: 6,
-            maxRequirementConcernAllowed: 'none',
-          },
-        )
+        const strict = await app.call<RiskPolicy>('POST', `/workspaces/${wsId}/risk-policies`, {
+          name: 'Strict',
+          maxComplexity: 0.3,
+          maxRisk: 0.3,
+          maxImpact: 0.3,
+          ciMaxAttempts: 10,
+          maxRequirementIterations: 6,
+          maxRequirementConcernAllowed: 'none',
+        })
         expect(strict.status).toBe(201)
         await app.call('PATCH', `/workspaces/${wsId}/blocks/task_login`, {
-          mergePresetId: strict.body.id,
+          riskPolicyId: strict.body.id,
         })
         const pipeline = await app.call<Pipeline>('POST', `/workspaces/${wsId}/pipelines`, {
           name: 'Build + merger',

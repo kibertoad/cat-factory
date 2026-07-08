@@ -157,12 +157,7 @@ export function requirementReviewController(): Hono<AppEnv> {
     const body = c.req.valid('json')
     const updated = await c
       .get('container')
-      .executionService.requirementsReview.requestRecommendations(
-        workspaceId,
-        blockId,
-        body.itemIds,
-        body.note,
-      )
+      .executionService.requirementsReview.requestRecommendations(workspaceId, blockId, body.items)
     return c.json(updated, 200)
   })
 

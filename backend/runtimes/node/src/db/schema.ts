@@ -389,6 +389,10 @@ export const pipelines = pgTable(
     // agent_kinds: an `enabled: false` entry turns the QC companion off on a Tester step, an
     // entry with `gating` makes the coverage audit estimate-conditional (mirror of D1 0032).
     tester_quality: text('tester_quality'),
+    // Nullable JSON array of per-step options bags, parallel to agent_kinds: the extensible
+    // home for new per-step parameters (see `stepOptionsSchema`), replacing the one-column-per-
+    // knob pattern. Today carries only `autoRecommend` (mirror of D1 0044_pipeline_step_options).
+    step_options: text('step_options'),
     // Nullable JSON array of free-form organizational labels; `archived` (truthy) hides the
     // pipeline from the default library view (mirror of D1 0003).
     labels: text('labels'),
@@ -466,6 +470,11 @@ export const tokenUsage = pgTable(
     input_tokens: integer('input_tokens').notNull().default(0),
     output_tokens: integer('output_tokens').notNull().default(0),
     cost_estimate: doublePrecision('cost_estimate').notNull().default(0),
+    // Metered (per-token cost, summed by the budget gate) vs subscription (flat-rate quota
+    // harness usage, counted for the usage report but excluded from every spend rollup).
+    billing: text('billing').notNull().default('metered'),
+    // The subscription vendor for a subscription row (claude/codex/glm/kimi/deepseek).
+    vendor: text('vendor'),
     created_at: bigint('created_at', { mode: 'number' }).notNull(),
   },
   (t) => [
@@ -1176,7 +1185,7 @@ export const workspaceSettings = pgTable('workspace_settings', {
 // the workspace default (`is_default`, exactly one per workspace — the repository
 // demotes the prior default when promoting a new one). `is_default` is 0/1 to mirror
 // the D1 integer flag. Carries the auto-merge ceilings + `ci_max_attempts`.
-export const mergeThresholdPresets = pgTable(
+export const riskPolicies = pgTable(
   'merge_threshold_presets',
   {
     workspace_id: text('workspace_id').notNull(),

@@ -6,6 +6,7 @@ import {
   getExecutionLlmMetricsContract,
   getExecutionSearchQueriesContract,
   getSpendStatusContract,
+  getWorkspaceUsageContract,
   mergeBlockContract,
   rejectStepContract,
   requestStepChangesContract,
@@ -84,6 +85,16 @@ export function executionController(): Hono<AppEnv> {
   // Current spend-safeguard status (token usage vs budget for this period).
   buildHonoRoute(app, getSpendStatusContract, async (c) => {
     return c.json(await c.get('container').spendService.status(param(c, 'workspaceId')), 200)
+  })
+
+  // Usage report for this period: token usage broken down by billing kind / vendor /
+  // model — both metered API calls and flat-rate subscription harness usage. Powers the
+  // "Usage" settings tab. (Reporting only; the budget gate above still counts metered.)
+  buildHonoRoute(app, getWorkspaceUsageContract, async (c) => {
+    return c.json(
+      await c.get('container').spendService.usageBreakdown(param(c, 'workspaceId')),
+      200,
+    )
   })
 
   // LLM observability for a run: the full per-call detail (prompts, responses,

@@ -169,7 +169,7 @@ export const useBoardStore = defineStore('board', () => {
     options?: {
       taskType?: CreateTaskType
       taskTypeFields?: TaskTypeFields
-      mergePresetId?: string
+      riskPolicyId?: string
       modelPresetId?: string
       pipelineId?: string
       agentConfig?: Record<string, string>
@@ -182,7 +182,7 @@ export const useBoardStore = defineStore('board', () => {
       description,
       ...(options?.taskType ? { taskType: options.taskType } : {}),
       ...(options?.taskTypeFields ? { taskTypeFields: options.taskTypeFields } : {}),
-      ...(options?.mergePresetId ? { mergePresetId: options.mergePresetId } : {}),
+      ...(options?.riskPolicyId ? { riskPolicyId: options.riskPolicyId } : {}),
       ...(options?.modelPresetId ? { modelPresetId: options.modelPresetId } : {}),
       ...(options?.pipelineId ? { pipelineId: options.pipelineId } : {}),
       ...(options?.agentConfig ? { agentConfig: options.agentConfig } : {}),

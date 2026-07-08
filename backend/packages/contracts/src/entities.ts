@@ -295,11 +295,11 @@ export const blockSchema = v.object({
   referenceRepos: v.optional(v.array(referenceRepoSchema)),
   /**
    * Id of the merge threshold preset selected for this task (see
-   * {@link mergeThresholdPresetSchema}). Drives the `merger` step's auto-merge
+   * {@link riskPolicySchema}). Drives the `merger` step's auto-merge
    * decision and the CI-fixer attempt budget. Absent means "use the workspace's
    * default preset".
    */
-  mergePresetId: v.optional(v.string()),
+  riskPolicyId: v.optional(v.string()),
   /**
    * Id of the model preset selected for this task (see {@link modelPresetSchema}).
    * Drives which model each agent step runs on (the preset's `overrides[kind] ??
@@ -556,6 +556,30 @@ export const testerQualityConfigSchema = v.object({
 })
 export type TesterQualityConfig = v.InferOutput<typeof testerQualityConfigSchema>
 
+/**
+ * The extensible per-step options bag for the pipeline builder. Where the older per-step
+ * knobs each got their own index-aligned array (`gates`, `thresholds`, `enabled`,
+ * `consensus`, `gating`, `followUps`, `testerQuality`), EVERY NEW per-step parameter is a
+ * field on THIS object instead — persisted in one `step_options` JSON column parallel to
+ * {@link pipelineSchema.entries.agentKinds}, so a new knob needs no schema column or
+ * migration. A `null`/absent entry (or an empty object) means "all defaults" for that step.
+ * The legacy parallel arrays are being folded into this seam incrementally — see
+ * `docs/initiatives/pipeline-step-options.md`.
+ */
+export const stepOptionsSchema = v.object({
+  /**
+   * `requirements-review` only. When enabled (the default), the reviewer classifies each
+   * finding, and the ones it judges answerable from universal best-practice / the context
+   * already provided get a recommended answer AUTO-generated and offered as the finding's
+   * default answer (the human can override or dismiss it); findings that need a genuine
+   * business/product decision are left for the human. `false` disables the automation — the
+   * human answers (or manually requests recommendations for) every finding. Absent / `true`
+   * ⇒ enabled. Ignored on non-`requirements-review` steps.
+   */
+  autoRecommend: v.optional(v.boolean()),
+})
+export type StepOptions = v.InferOutput<typeof stepOptionsSchema>
+
 export const pipelineSchema = v.object({
   id: v.string(),
   name: v.string(),
@@ -624,6 +648,14 @@ export const pipelineSchema = v.object({
    * See {@link testerQualityConfigSchema}.
    */
   testerQuality: v.optional(v.array(v.nullable(testerQualityConfigSchema))),
+  /**
+   * Per-step options bag, parallel to {@link agentKinds}: the extensible home for NEW
+   * per-step parameters (see {@link stepOptionsSchema}), so a new knob no longer needs its
+   * own array/column. `null`/absent per entry ⇒ that step's defaults. Copied onto the run's
+   * step (`stepOptions`) at start, like {@link gates}. Today it carries only
+   * `autoRecommend` (the requirements-review auto-recommendation toggle).
+   */
+  stepOptions: v.optional(v.array(v.nullable(stepOptionsSchema))),
   /**
    * Free-form organizational labels for the saved-pipeline library (filter/search).
    * Absent ⇒ no labels. Applies to built-in and custom pipelines alike.
@@ -1714,6 +1746,12 @@ export const pipelineStepSchema = v.object({
    */
   gating: v.optional(v.nullable(stepGatingSchema)),
   /**
+   * Per-step options bag copied from the pipeline's `stepOptions` array at run start (see
+   * {@link stepOptionsSchema}). Absent ⇒ all defaults for this step. Read by the engine —
+   * e.g. the requirements-review gate consults `stepOptions.autoRecommend`.
+   */
+  stepOptions: v.optional(v.nullable(stepOptionsSchema)),
+  /**
    * True when this step was skipped at runtime because its `gating` was not satisfied
    * (the task estimate fell below the threshold). The step's `state` is `done` with no
    * output; the UI renders it as "skipped (gated)". Absent ⇒ the step ran normally.
@@ -2030,6 +2068,43 @@ export const budgetCapsSchema = v.object({
   currency: v.string(),
 })
 export type BudgetCaps = v.InferOutput<typeof budgetCapsSchema>
+
+/**
+ * One row of the usage report (the "Usage" settings tab): aggregated token usage for a
+ * `(billing, vendor, provider, model)` group over the current billing period. Covers BOTH
+ * metered API/proxy calls and flat-rate subscription harness usage. `costEstimate` is real
+ * for metered rows and illustrative for subscription rows (what the same tokens would have
+ * cost on the metered API — never a billed amount).
+ */
+export const usageBreakdownRowSchema = v.object({
+  /** `'metered'` (real per-token cost, in the spend budget) or `'subscription'` (flat-rate quota). */
+  billing: v.picklist(['metered', 'subscription']),
+  /** The subscription vendor (claude/codex/glm/kimi/deepseek) for a subscription row; null for metered. */
+  vendor: v.nullable(v.string()),
+  provider: v.string(),
+  model: v.string(),
+  inputTokens: v.number(),
+  outputTokens: v.number(),
+  /** Estimated cost in `UsageReport.currency`; illustrative for subscription rows. */
+  costEstimate: v.number(),
+  /** Number of recorded calls in this group. */
+  calls: v.number(),
+})
+export type UsageBreakdownRow = v.InferOutput<typeof usageBreakdownRowSchema>
+
+/**
+ * The workspace usage report for the current billing period: per-`(billing, vendor,
+ * provider, model)` rows plus the period start + currency the costs are expressed in. Both
+ * metered and subscription usage; the spend budget still counts only the metered rows.
+ */
+export const usageReportSchema = v.object({
+  /** Start of the current billing period (epoch ms; calendar month, UTC). */
+  periodStart: v.number(),
+  /** ISO 4217 currency `costEstimate` is expressed in. */
+  currency: v.string(),
+  rows: v.array(usageBreakdownRowSchema),
+})
+export type UsageReport = v.InferOutput<typeof usageReportSchema>
 
 // The workspace snapshot schema lives in ./snapshot — it references
 // `bootstrapJobSchema` from ./bootstrap, which itself imports from this file, so

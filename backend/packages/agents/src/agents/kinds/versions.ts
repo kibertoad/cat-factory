@@ -32,7 +32,7 @@ export interface VersionedPrompt {
 
 /** The currently-shipping version of each numbered prompt. */
 export const PROMPT_VERSIONS = {
-  'requirement-review': { id: 'requirement-review', version: 2, text: REVIEW_SYSTEM_PROMPT },
+  'requirement-review': { id: 'requirement-review', version: 3, text: REVIEW_SYSTEM_PROMPT },
   'requirement-rework': { id: 'requirement-rework', version: 2, text: REWORK_SYSTEM_PROMPT },
   'requirement-writer': { id: 'requirement-writer', version: 2, text: WRITER_SYSTEM_PROMPT },
   'clarity-review': { id: 'clarity-review', version: 1, text: CLARITY_REVIEW_SYSTEM_PROMPT },

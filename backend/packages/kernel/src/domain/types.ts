@@ -244,6 +244,7 @@ export type {
   ReplyReviewItemInput,
   UpdateReviewItemStatusInput,
   IncorporateRequirementsInput,
+  RequestRecommendationItem,
   RequestRecommendationsInput,
   ReRequestRecommendationInput,
   ResolveRequirementsExceededInput,
@@ -309,10 +310,10 @@ export type {
   MergeAxis,
   MergeDecision,
   MergeDecisionThresholds,
-  MergeThresholdPreset,
+  RiskPolicy,
   RequirementConcernLevel,
-  CreateMergePresetInput,
-  UpdateMergePresetInput,
+  CreateRiskPolicyInput,
+  UpdateRiskPolicyInput,
   // Shared stacks (long-lived compose infra a consumer environment attaches to).
   SharedStack,
   SharedStackStatus,
@@ -345,6 +346,8 @@ export type {
   TestConcernSeverity,
   // Test quality-control companion (per-Tester-step) config.
   TesterQualityConfig,
+  // Extensible per-step options bag (the new home for per-step pipeline parameters).
+  StepOptions,
   // Container provisioning vocabulary.
   CloudProvider,
   InstanceSize,

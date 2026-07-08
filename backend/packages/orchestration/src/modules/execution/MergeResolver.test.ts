@@ -44,7 +44,7 @@ function makeResolver(over: Partial<MergeResolverDeps> & { preset?: typeof PRESE
       update,
     } as unknown as MergeResolverDeps['blockRepository'],
     notificationService: { raise } as unknown as MergeResolverDeps['notificationService'],
-    resolveMergePreset: vi.fn().mockResolvedValue(over.preset ?? PRESET),
+    resolveRiskPolicy: vi.fn().mockResolvedValue(over.preset ?? PRESET),
     finalizeMerge,
   }
   return { resolver: new MergeResolver(deps), finalizeMerge, update, raise }

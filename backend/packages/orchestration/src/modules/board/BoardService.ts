@@ -9,7 +9,7 @@ import type {
 } from '@cat-factory/contracts'
 import type { Block, BlockType, Position, ServiceConnection } from '@cat-factory/kernel'
 import { assertFound, ValidationError } from '@cat-factory/kernel'
-import { BLOCK_TYPE_LABEL } from '@cat-factory/kernel'
+import { BLOCK_TYPE_LABEL, defaultPipelineIdForTaskType } from '@cat-factory/kernel'
 import type {
   BlockRepository,
   Clock,
@@ -481,9 +481,18 @@ export class BoardService {
     // Optional run configuration chosen at creation: which merge policy governs the
     // task's auto-merge, and the pipeline its Run controls default to. Empty strings
     // are treated as "not set" (workspace default preset / no pinned pipeline).
-    if (input.mergePresetId) block.mergePresetId = input.mergePresetId
+    if (input.riskPolicyId) block.riskPolicyId = input.riskPolicyId
     if (input.modelPresetId) block.modelPresetId = input.modelPresetId
+    // Pin the chosen pipeline, else fall back to the task type's default. A `document` task
+    // defaults to the document-authoring pipeline (`pl_document`) rather than the workspace's
+    // positional default (the full build pipeline), which makes no sense for a document — it
+    // produces no code and needs no spec/tests. Other task types get no type-default and fall
+    // through to the run-time picker's positional default.
     if (input.pipelineId) block.pipelineId = input.pipelineId
+    else {
+      const typeDefault = defaultPipelineIdForTaskType(taskType)
+      if (typeDefault) block.pipelineId = typeDefault
+    }
     // Task-level agent-contributed config values (e.g. the Tester's environment),
     // chosen on the creation form from the selected pipeline's contributing agents.
     if (input.agentConfig && Object.keys(input.agentConfig).length) {

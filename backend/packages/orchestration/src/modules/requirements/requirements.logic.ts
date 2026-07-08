@@ -98,7 +98,8 @@ export function buildReviewPrompt(ctx: RequirementsContext): string {
     '      "category": "gap|clarification|assumption|risk|question",',
     '      "severity": "low|medium|high",',
     '      "title": "short headline of the concern",',
-    '      "detail": "the full question / gap / challenge, phrased for a product owner"',
+    '      "detail": "the full question / gap / challenge, phrased for a product owner",',
+    '      "autoAnswerable": true | false',
     '    }',
     '  ]',
     '}',
@@ -106,6 +107,10 @@ export function buildReviewPrompt(ctx: RequirementsContext): string {
     'Assign a severity to EVERY item — no item may omit it. Use `high` for a gap or ' +
       'ambiguity that would block correct implementation, `medium` for one that risks ' +
       'rework or a wrong assumption, and `low` for a minor clarification or nice-to-have. ' +
+      'Set `autoAnswerable` on EVERY item: true only when a confident answer follows from ' +
+      'universal best practice or the context already provided (no product owner needed), ' +
+      'false when it needs a real business / product / domain decision or missing information ' +
+      '(when unsure, false). ' +
       'Raise between 0 and 20 items, ordered by severity (high first). If the requirements ' +
       'are genuinely complete and unambiguous, return an empty items array. Output JSON only.',
   ].join('\n')
@@ -159,6 +164,10 @@ export function coerceReviewItems(
       detail: detail || title,
       status: 'open',
       reply: null,
+      // The reviewer flags whether a finding is answerable without the product owner. Only a
+      // literal `true` enables the auto-recommendation; anything else (false / missing / a
+      // non-boolean from a sloppy model) is the safe default of "needs a human".
+      autoAnswerable: obj.autoAnswerable === true,
       createdAt: now,
       updatedAt: now,
     })

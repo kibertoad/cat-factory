@@ -126,9 +126,9 @@ export {
 // package); surfaced here for discovery alongside the NotificationService that consumes it.
 export type { RaiseNotificationInput } from '@cat-factory/kernel'
 export {
-  MergePresetService,
-  type MergePresetServiceDependencies,
-} from './modules/merge/MergePresetService.js'
+  RiskPolicyService,
+  type RiskPolicyServiceDependencies,
+} from './modules/merge/RiskPolicyService.js'
 export {
   SandboxService,
   type SandboxServiceDependencies,
@@ -263,7 +263,7 @@ export {
   type PreviewModule,
   type IncidentEnrichmentModule,
   type SlackModule,
-  type MergePresetsModule,
+  type RiskPoliciesModule,
   type SharedStacksModule,
   type PreflightsModule,
   type SandboxModule,

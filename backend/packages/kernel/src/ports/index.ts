@@ -64,7 +64,13 @@ export type {
   ModelScope,
 } from './model-provider.js'
 export { inlineModelRef, resolveScopedModelProvider } from './model-provider.js'
-export type { TokenUsageRecord, TokenUsageRepository, TokenUsageTotals } from './token-usage.js'
+export type {
+  TokenUsageRecord,
+  TokenUsageRepository,
+  TokenUsageTotals,
+  UsageBilling,
+  UsageBreakdownRow,
+} from './token-usage.js'
 export type {
   LlmCallMetric,
   LlmCallMetricRepository,
@@ -445,7 +451,7 @@ export type {
   SlackSettingsRepository,
   SlackMemberMappingRepository,
 } from './slack-repositories.js'
-export type { MergePresetRepository } from './merge-preset-repositories.js'
+export type { RiskPolicyRepository } from './risk-policy-repositories.js'
 export type { SharedStackRepository } from './shared-stack-repositories.js'
 export type { WorkspaceSettingsRepository } from './workspace-settings-repositories.js'
 export type { UserSettingsRepository } from './user-settings-repositories.js'

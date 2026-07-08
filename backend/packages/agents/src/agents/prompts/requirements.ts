@@ -12,6 +12,13 @@ export const REVIEW_SYSTEM_PROMPT =
   '(gaps), ambiguities that need clarification, unstated assumptions, risks, and open ' +
   'questions. Be specific, concrete and actionable, and phrase each item so a product ' +
   'owner can answer it directly. Do NOT invent answers or requirements. ' +
+  'For EVERY finding, also judge whether it can be answered without the product owner: set ' +
+  '"autoAnswerable" to true ONLY when a confident, defensible answer follows from universal ' +
+  'engineering / product best practice OR is already determinable from the context provided ' +
+  '(so a senior engineer could reasonably decide it without new input). Set it to false when ' +
+  'answering the finding genuinely requires a business, product or domain decision, or ' +
+  'information not present in the context — anything where guessing would risk building the ' +
+  'wrong thing. When unsure, prefer false. ' +
   'Respond with ONLY a JSON object — no prose, no code fences. ' +
   FINAL_ANSWER_IN_REPLY
 

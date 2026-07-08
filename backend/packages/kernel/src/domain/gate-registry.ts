@@ -3,7 +3,7 @@ import type {
   ExecutionInstance,
   GateAttempt,
   GateStepState,
-  MergeThresholdPreset,
+  RiskPolicy,
   PipelineStep,
 } from './types.js'
 import type { AgentRunResult } from '../ports/agent-executor.js'
@@ -187,7 +187,7 @@ export interface GateDefinition {
    * Optional: the attempt budget for this gate, resolved from the task's merge preset.
    * Defaults to `ciMaxAttempts` when omitted (the CI/conflicts gates use that).
    */
-  attemptBudget?(preset: Pick<MergeThresholdPreset, 'ciMaxAttempts' | 'releaseMaxAttempts'>): number
+  attemptBudget?(preset: Pick<RiskPolicy, 'ciMaxAttempts' | 'releaseMaxAttempts'>): number
   /**
    * Optional extra context handed to the helper agent on escalation (the CI gate
    * passes the failing-check summary; the conflicts gate passes nothing).

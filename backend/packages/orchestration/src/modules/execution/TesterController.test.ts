@@ -32,7 +32,7 @@ function makeController(over: Partial<TesterControllerDeps> = {}) {
     notificationService: { raise },
     agentExecutor: { runsAsync: () => true, startJob, pollJob: vi.fn(), stopJob: vi.fn() },
     contextBuilder: { buildContext: vi.fn() },
-    resolveMergePreset: async () => ({ ciMaxAttempts: 10 }),
+    resolveRiskPolicy: async () => ({ ciMaxAttempts: 10 }),
     stateMachine: {
       persistInstance,
       emitInstance: vi.fn(async () => {}),

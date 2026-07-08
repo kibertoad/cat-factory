@@ -23,6 +23,7 @@
     }
   },
   "common": {
+    "loading": "読み込み中…",
     "save": "保存",
     "cancel": "キャンセル",
     "retry": "再試行",
@@ -229,7 +230,7 @@
       "optional": "任意",
       "pipeline": "パイプライン",
       "chooseAtRunTime": "実行時に選択",
-      "mergePolicy": "マージポリシー",
+      "mergePolicy": "リスクポリシー",
       "workspaceDefault": "ワークスペースの既定",
       "defaultPreset": "既定（{name}）— {thresholds}",
       "defaultModelPreset": "既定（{name}）",
@@ -858,9 +859,9 @@
       "pipeline": "パイプライン",
       "pipelineEmpty": "既定なし。このタスクを実行するときにパイプラインを選択してください。",
       "pipelineHint": "実行ボタンが既定で開始するパイプライン: このタスクのために実行されるエージェントステップの並び (例: 仕様、コード、テスト、マージ)。",
-      "mergePolicy": "マージポリシー",
-      "mergePresetDetail": "{name}: 複雑度 ≤ {complexity}、リスク ≤ {risk}、影響度 ≤ {impact} のとき自動マージ。CI 修正は最大 {attempts} 回まで。",
-      "mergePresetEmpty": "プリセットが設定されていません。マージャーはすべての PR についてレビュー通知を発行します。",
+      "mergePolicy": "リスクポリシー",
+      "riskPolicyDetail": "{name}: 複雑度 ≤ {complexity}、リスク ≤ {risk}、影響度 ≤ {impact} のとき自動マージ。CI 修正は最大 {attempts} 回まで。",
+      "riskPolicyEmpty": "リスクポリシーが設定されていません。マージャーはすべての PR についてレビュー通知を発行します。",
       "mergePolicyHint": "完成したプルリクエストを人のレビューを待たずに自動マージする条件と、実行が得られる CI 修正の試行回数を決めます。",
       "modelPreset": "モデルプリセット",
       "modelPresetHint": "各エージェントステップがどの AI モデルで実行されるかを決めます。",
@@ -1558,7 +1559,7 @@
         "documentImport": "ドキュメントからインポートして生成",
         "taskImport": "Issue をインポート",
         "fragments": "コンテキストフラグメントライブラリ",
-        "mergeThresholds": "マージしきい値",
+        "mergeThresholds": "リスクポリシー",
         "workspaceSettings": "ワークスペース設定",
         "modelConfiguration": "モデル設定",
         "serviceFragmentDefaults": "デフォルトのサービスベストプラクティス",
@@ -1578,7 +1579,7 @@
         "taskSource": "task source tracker issues タスク ソース トラッカー Issue",
         "taskImport": "task import issues タスク インポート Issue",
         "fragments": "prompt fragments best practice guidelines context プロンプト フラグメント ベストプラクティス ガイドライン コンテキスト",
-        "mergeThresholds": "merge policy preset auto-merge ci マージ ポリシー プリセット 自動マージ CI",
+        "mergeThresholds": "リスクポリシー マージ 自動マージ ci 反復 risk policy merge auto-merge iterations",
         "workspaceSettings": "limit running tasks per service waiting escalation overdue notification timeout サービスごとの実行タスク上限 待機 エスカレーション 期限超過 通知 タイムアウト",
         "modelConfiguration": "model llm routing agent kind default preset configuration モデル LLM ルーティング エージェント種別 デフォルト プリセット 設定",
         "serviceFragmentDefaults": "fragment best practice guideline service default code-aware フラグメント ベストプラクティス ガイドライン サービス デフォルト コード対応",
@@ -2066,8 +2067,8 @@
         "body": "「{name}」が削除されます。 この操作は取り消せません。"
       }
     },
-    "mergeThresholds": {
-      "intro": "タスクが選択できる、名前付きの自動マージポリシーです。CI が通過すると、{merger} エージェントが PR を複雑度、リスク、影響度で採点します (0〜100%)。すべてのスコアがプリセットの上限以下のときのみ PR は自動マージされ、そうでない場合はレビュー通知が発行されます。デフォルトプリセットは、いずれも選択しなかったタスクに適用されます。",
+    "riskPolicy": {
+      "intro": "タスクが選択できる、名前付きの自動マージポリシーです。CI が通過すると、{merger} エージェントが PR を複雑度、リスク、影響度で採点します (0〜100%)。すべてのスコアがポリシーの上限以下のときのみ PR は自動マージされ、そうでない場合はレビュー通知が発行されます。デフォルトポリシーは、いずれも選択しなかったタスクに適用されます。",
       "mergerAgent": "merger",
       "concern": {
         "none": "なし (常に停止)",
@@ -2075,11 +2076,11 @@
         "medium": "中",
         "high": "高 (停止しない)"
       },
-      "presetNamePlaceholder": "プリセット名",
+      "presetNamePlaceholder": "ポリシー名",
       "default": "デフォルト",
       "makeDefault": "デフォルトにする",
-      "deleteDefaultBlocked": "デフォルトプリセットは削除できません",
-      "deletePreset": "プリセットを削除",
+      "deleteDefaultBlocked": "デフォルトポリシーは削除できません",
+      "deletePreset": "ポリシーを削除",
       "field": {
         "maxComplexity": "最大複雑度 %",
         "maxRisk": "最大リスク %",
@@ -2089,7 +2090,7 @@
         "maxRequirementConcernAllowed": "この水準以下の懸念を自動承認",
         "autoMerge": "自動マージ"
       },
-      "newPreset": "新しいプリセット",
+      "newPreset": "新しいポリシー",
       "create": {
         "name": "名前",
         "namePlaceholder": "例: 慎重",
@@ -2102,17 +2103,17 @@
       },
       "add": "追加",
       "toast": {
-        "saved": "プリセットを保存しました",
-        "saveFailed": "プリセットを保存できませんでした",
-        "created": "プリセットを作成しました",
-        "createFailed": "プリセットを作成できませんでした",
+        "saved": "ポリシーを保存しました",
+        "saveFailed": "ポリシーを保存できませんでした",
+        "created": "ポリシーを作成しました",
+        "createFailed": "ポリシーを作成できませんでした",
         "defaultFailed": "デフォルトを設定できませんでした",
-        "deleteFailed": "プリセットを削除できませんでした"
+        "deleteFailed": "ポリシーを削除できませんでした"
       },
-      "autoMergeOnHint": "しきい値内なら自動的にマージします。",
+      "autoMergeOnHint": "ポリシーの範囲内なら自動的にマージします。",
       "autoMergeOffHint": "常にPRを人間のレビューに回します。",
       "confirmDelete": {
-        "title": "このマージプリセットを削除しますか？",
+        "title": "このリスクポリシーを削除しますか？",
         "body": "「{name}」が削除されます。使用中のタスクはワークスペースの既定に戻ります。"
       }
     },
@@ -2315,12 +2316,23 @@
         "saveFailed": "カタログを保存できませんでした"
       }
     },
+    "usage": {
+      "body": "この請求期間のトークン使用状況です。従量制の API 呼び出しと定額制のサブスクリプション（Claude Code、Codex、GLM、およびプール化された Kimi・DeepSeek）の両方を対象とします。",
+      "period": "現在の請求期間 — {date} 以降。",
+      "empty": "この期間の使用状況はまだ記録されていません。",
+      "subscription": "サブスクリプション",
+      "metered": "従量制 API",
+      "illustrative": "サブスクリプションに表示される料金は参考値です。これらのプランは定額制であり、トークン単位では課金されません。",
+      "tokens": "入力 {input} / 出力 {output}",
+      "calls": "{count} 回の呼び出し"
+    },
     "workspaceSettings": {
       "title": "ワークスペース設定",
       "tabs": {
+        "usage": "使用状況",
         "workspace": "ワークスペース",
         "budget": "予算",
-        "merge": "マージしきい値",
+        "merge": "リスクポリシー",
         "tracker": "課題トラッカー",
         "fragments": "サービスのベストプラクティス"
       },
@@ -3059,6 +3071,8 @@
       "followUpDisableTooltip": "フォローアップコンパニオンが有効です。Coderが未解決事項/サブタスク/質問を提示します。クリックして無効化します。",
       "testerQualityEnableTooltip": "テスト品質コンパニオンは無効です。クリックして有効化します（レポートのカバレッジを監査し、不足があればテスターを再実行します）。",
       "testerQualityDisableTooltip": "テスト品質コンパニオンは有効です。承認前にレポートのカバレッジを監査し、不足があればテスターを再実行します。クリックして無効化します。",
+      "autoRecommendEnableTooltip": "自動推奨は無効です。クリックして有効にします（レビュアーがベストプラクティスやコンテキストから回答できる指摘に事前回答し、ビジネス上の判断はあなたに委ねます）。",
+      "autoRecommendDisableTooltip": "自動推奨は有効です。レビュアーがベストプラクティスやコンテキストから回答できる指摘に事前回答します。クリックして無効にすると、すべての指摘に自分で回答します。",
       "testerQualityLabel": "テスト品質コンパニオン",
       "testerQualityGateTooltip": "タスク見積もりがしきい値を超えた場合のみ品質監査を実行します（前段にタスク見積もりが必要）",
       "moveUp": "ステップを上に移動",
@@ -3302,6 +3316,17 @@
     "markedForRecommendation": "推奨対象としてマーク",
     "recommendSomething": "何か推奨してもらう",
     "recommendationRequested": "推奨をリクエストしました。下記の提案を確認してください。",
+    "recommendedDefault": "推奨される既定値です。そのまま使うか、編集するか、指摘を破棄してください。",
+    "needsYourInput": "あなたの入力が必要です",
+    "mode": {
+      "answer": "回答する",
+      "dismiss": "破棄",
+      "recommend": "推奨"
+    },
+    "userAnswered": "回答済み",
+    "guidancePlaceholder": "推奨のためのガイダンス（任意）…",
+    "guidanceHint": "入力内容は推奨の方向性を決めるガイダンスとして使われ、回答としては保存されません。",
+    "dismissedHint": "無関係としてマークされました。組み込まれません。",
     "reopen": "再オープン",
     "recommendedAnswers": "推奨された回答",
     "recommendationProgress": "{ready} / {total} 件準備完了",
@@ -4267,22 +4292,22 @@
       "help": "このリポジトリの種類: バックエンドサービス、フロントエンドアプリ、共有ライブラリ、またはドキュメントリポジトリ（ドキュメント/スパイクのみ）。"
     }
   },
-  "mergePreset": {
+  "riskPolicy": {
     "health": {
-      "title": "マージプリセットの更新",
-      "allValid": "組み込みのマージプリセットはすべて最新です。",
-      "newHeading": "新しいプリセットがあります",
-      "newDescription": "新しい組み込みマージプリセットが追加されました。このボードのライブラリに追加してください。",
+      "title": "リスクポリシーの更新",
+      "allValid": "組み込みのリスクポリシーはすべて最新です。",
+      "newHeading": "新しいポリシーがあります",
+      "newDescription": "新しい組み込みリスクポリシーが追加されました。このボードのライブラリに追加してください。",
       "add": "追加",
       "updatesHeading": "更新あり",
-      "updatesDescription": "これらの組み込みマージプリセットの新しいバージョンがあります。再シードして取り込みます（既定と並び順は保持されます）。",
+      "updatesDescription": "これらの組み込みリスクポリシーの新しいバージョンがあります。再シードして取り込みます（既定と並び順は保持されます）。",
       "versionAvailable": "バージョン {from} → {to} が利用可能です。",
       "reseed": "再シード",
       "reseedAll": "すべて更新 ({count})",
       "dismiss": "閉じる",
       "done": "完了",
       "toast": {
-        "reseedFailed": "マージプリセットを再シードできませんでした"
+        "reseedFailed": "リスクポリシーを再シードできませんでした"
       }
     }
   },
