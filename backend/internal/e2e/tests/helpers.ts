@@ -134,6 +134,32 @@ export async function createInitiative(
   )
 }
 
+/** An initiative as the workspace snapshot carries it (only the fields the specs read). */
+export interface InitiativeSnapshot {
+  id: string
+  blockId: string
+  status: string
+  phases: { id: string; title: string; checkpoint?: boolean; checkpointClearedAt?: number }[]
+  items: { id: string; phaseId: string; status: string; blockId?: string | null }[]
+}
+
+/**
+ * Read one initiative entity off the workspace snapshot by its anchor `blockId`, or null. There is
+ * no per-initiative REST endpoint the specs need, so — like {@link findParkedApproval} — this reads
+ * the snapshot the SPA itself hydrates from. Used to observe backend-only progression a spec can't
+ * see on the board (a phase's item settling, the just-spawned next-phase item's block id).
+ */
+export async function getInitiative(
+  request: APIRequestContext,
+  workspaceId: string,
+  blockId: string,
+): Promise<InitiativeSnapshot | null> {
+  const snapshot = await json<{ initiatives?: InitiativeSnapshot[] }>(
+    await request.get(`${BACKEND_URL}/workspaces/${workspaceId}`),
+  )
+  return (snapshot.initiatives ?? []).find((i) => i.blockId === blockId) ?? null
+}
+
 /** Start a run of `pipelineId` against `blockId`. */
 export async function startRun(
   request: APIRequestContext,

@@ -76,6 +76,7 @@ function onHandle(e: PointerEvent) {
     </div>
     <div
       data-testid="initiative-card"
+      :data-status="status"
       class="cursor-pointer rounded-b-lg border border-indigo-800/60 bg-indigo-950/40 p-3 transition hover:border-indigo-600"
       :class="[selected ? 'ring-2 ring-indigo-400/60' : '', awaitingAnswers ? 'board-pulse' : '']"
       @click.stop="select"
