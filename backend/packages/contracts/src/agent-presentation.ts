@@ -29,8 +29,13 @@ export const agentPresentationSchema = v.object({
   icon: v.pipe(v.string(), v.minLength(1), v.maxLength(120)),
   /** Accent colour (CSS hex/keyword). */
   color: v.pipe(v.string(), v.minLength(1), v.maxLength(40)),
-  /** One-line description shown in the palette / inspector. */
-  description: v.pipe(v.string(), v.maxLength(500)),
+  /**
+   * One-line description shown in the palette / inspector when the kind is selected. Required
+   * and non-empty (like label/icon/color): the SPA renders it verbatim as the palette entry's
+   * tooltip + inline text with no fallback, so a blank one would surface as an empty description
+   * on a first-class palette block.
+   */
+  description: v.pipe(v.string(), v.trim(), v.minLength(1), v.maxLength(500)),
   /** Palette section; omitted ⇒ the kind is not a standalone palette block (e.g. a companion). */
   category: v.optional(agentCategorySchema),
   /**

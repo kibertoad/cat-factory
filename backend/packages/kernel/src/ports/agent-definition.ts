@@ -52,8 +52,17 @@ export interface AgentOutputSpec {
 
 /** What a container agent clones (resolved to a concrete branch by the engine at dispatch). */
 export interface AgentCloneSpec {
-  /** Which branch to check out: the base branch, the block's PR branch, or the work branch. */
-  branch: 'base' | 'pr' | 'work'
+  /**
+   * Which branch to check out:
+   *   - `base` — the repo default branch.
+   *   - `pr`   — the block's PR branch, edited in place (a fixer: push back, open no new PR).
+   *   - `work` — the per-block work branch off base (a coder: push it, open a PR).
+   *   - `pr-or-work` — adaptive: behave like `pr` when the block already has a PR (amend it in
+   *     place, no new PR), else fall back to the `work` flow (branch off base, open a PR). Lets a
+   *     single kind serve both a BAU pipeline step (amend the coder's PR) and a standalone /
+   *     initiative run (open its own PR) — the comments-writer's dual use.
+   */
+  branch: 'base' | 'pr' | 'work' | 'pr-or-work'
   /** A monorepo subtree to sparse-checkout (storage optimisation); absent ⇒ whole repo. */
   sparsePaths?: string[]
   /** Full history (needed to diff against base / merge); absent ⇒ shallow. */

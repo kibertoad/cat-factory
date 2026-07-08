@@ -156,7 +156,7 @@ export {
   resolveDocumentTarget,
   type DocumentTarget,
 } from './agents/kinds/document.js'
-// The in-source comment annotator (`code-commenter`), pre-loaded by `defaultAgentKindRegistry()`
+// The in-source comment maintainer (`code-commenter`), pre-loaded by `defaultAgentKindRegistry()`
 // so it is a first-class kind in every deployment (Worker / Node / local) — the in-source-comments
 // leg of the docs-refresh preset (diagrams / READMEs reuse `doc-writer`, business rules reuse
 // `business-documenter`, so it is the one genuinely-new authoring capability the preset needs).
