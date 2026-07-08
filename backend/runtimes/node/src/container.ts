@@ -2796,6 +2796,13 @@ export function buildNodeContainer(options: NodeContainerOptions): ServerContain
       // node's artifact reads/writes come back `... is not wired`. The blob BYTES stay per-account
       // local; only the metadata is proxied.
       binaryArtifactMetadataStore: repos.binaryArtifactMetadataStore,
+      // The sensitive per-service test-credential store is org/durable state the engine reads via
+      // the `resolveTestSecretRefs` FUNCTION (never the repo directly), so it isn't in
+      // `CoreDependencies` either — fold it in explicitly, else a mothership-mode node's tester
+      // run-path read + the inspector CRUD come back `... is not wired`. Only the SEALED blob is
+      // proxied (decrypted service-side under the LOCAL key), like the observability/runner-pool
+      // connections.
+      testSecretsRepository: repos.testSecretsRepository,
     } as unknown as PersistenceRegistry,
     // App-owned backend registries, surfaced so the workspace snapshot's backend-kind
     // selectors (`environmentBackendKinds` / `runnerBackendKinds`) read the registered kinds.
