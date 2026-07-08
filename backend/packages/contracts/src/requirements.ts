@@ -62,6 +62,16 @@ export const requirementReviewItemSchema = v.object({
   status: reviewItemStatusSchema,
   /** The human's answer, or null while unanswered. */
   reply: v.nullable(v.string()),
+  /**
+   * The reviewer's classification of whether this finding can be answered confidently from
+   * universal engineering/product best practice or the context already provided (`true`), or
+   * whether it needs a genuine business/product decision the reviewer can't make (`false`).
+   * Drives the auto-recommendation automation (see {@link stepOptionsSchema.entries.autoRecommend}):
+   * only `autoAnswerable` findings get a recommended default answer generated for them. Absent
+   * on findings from a reviewer pass that predates the classification (treated as `false` — no
+   * auto-answer, safest).
+   */
+  autoAnswerable: v.optional(v.boolean()),
   createdAt: v.number(),
   updatedAt: v.number(),
 })
@@ -134,6 +144,15 @@ export const requirementRecommendationSchema = v.object({
   }),
   /** The suggested answer text. */
   recommendedText: v.string(),
+  /**
+   * True when this recommendation was generated AUTOMATICALLY (the auto-recommendation
+   * automation) rather than requested by a human. An auto recommendation is auto-accepted the
+   * moment it is produced — it becomes the finding's default answer (the finding flips to
+   * `answered`) instead of parking in `ready` for a manual accept/reject — and the UI badges it
+   * as an editable/dismissable recommended default. Absent/false ⇒ a human-requested
+   * recommendation (the original flow). See {@link stepOptionsSchema.entries.autoRecommend}.
+   */
+  auto: v.optional(v.boolean()),
   status: recommendationStatusSchema,
   /** A "do it differently" note the human attached when re-requesting, else null. */
   note: v.nullable(v.string()),

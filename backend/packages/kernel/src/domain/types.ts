@@ -340,6 +340,8 @@ export type {
   TestConcernSeverity,
   // Test quality-control companion (per-Tester-step) config.
   TesterQualityConfig,
+  // Extensible per-step options bag (the new home for per-step pipeline parameters).
+  StepOptions,
   // Container provisioning vocabulary.
   CloudProvider,
   InstanceSize,

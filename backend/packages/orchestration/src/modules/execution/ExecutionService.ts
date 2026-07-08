@@ -1688,6 +1688,11 @@ export class ExecutionService {
           // Estimate gating: when set+enabled the step is skipped at runtime unless the
           // block estimate (written by an earlier task-estimator step) meets the threshold.
           ...(pipeline.gating?.[i] ? { gating: pipeline.gating[i] } : {}),
+          // The extensible per-step options bag (the new home for per-step parameters — see
+          // stepOptionsSchema). Copied from the pipeline at run start, keyed by the step's
+          // ORIGINAL index `i`, so it stays aligned to the kind even when earlier steps are
+          // disabled. Today it carries the requirements-review `autoRecommend` toggle.
+          ...(pipeline.stepOptions?.[i] ? { stepOptions: pipeline.stepOptions[i] } : {}),
           // A companion step carries its quality bar + rework budget, seeded from the
           // pipeline's per-step threshold (else the companion's default).
           ...(companionDef
@@ -2232,6 +2237,17 @@ export class ExecutionService {
           onProgress: (r) => this.events.requirementReviewChanged?.(ws, r) ?? Promise.resolve(),
         })
         return assertFound(await svc.getForBlock(ws, blockId), 'Requirement review', blockId)
+      },
+      autoRecommend: async (ws, blockId) => {
+        const svc = require()
+        const review = assertFound(
+          await svc.getForBlock(ws, blockId),
+          'Requirement review',
+          blockId,
+        )
+        await svc.autoRecommend(ws, review.id, {
+          onProgress: (r) => this.events.requirementReviewChanged?.(ws, r) ?? Promise.resolve(),
+        })
       },
       emit: (ws, review) => this.events.requirementReviewChanged?.(ws, review) ?? Promise.resolve(),
     }

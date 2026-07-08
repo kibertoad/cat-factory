@@ -84,6 +84,14 @@ export interface ReviewKind<TReview extends ReviewCommon> {
    * or inline off-path. Optional.
    */
   fillRecommendations?(workspaceId: string, blockId: string): Promise<TReview>
+  /**
+   * Requirements-only (the auto-recommendation automation): for the block's current review,
+   * auto-generate + auto-accept recommendations for every OPEN finding the reviewer flagged
+   * answerable without a product owner. A no-op when nothing qualifies. Runs inline in the
+   * durable driver right after a reviewer pass raises findings. Optional — absent on the
+   * clarity kind (no Writer). See {@link RequirementReviewService.autoRecommend}.
+   */
+  autoRecommend?(workspaceId: string, blockId: string): Promise<void>
   /** Push a live review-changed event so an open window/inspector reflects the new status. */
   emit(workspaceId: string, review: TReview): Promise<void>
 }
@@ -148,6 +156,10 @@ export class ReviewGateController {
       return this.completeStep(workspaceId, instance, step, isFinalStep)
     }
 
+    // The auto-recommendation automation is on by default; a pipeline step opts out via
+    // `stepOptions.autoRecommend === false` (authored in the pipeline builder).
+    const autoRecommendEnabled = step.stepOptions?.autoRecommend !== false
+
     // Re-entry: the human asked the Requirement Writer to recommend answers for a batch of
     // findings (or re-requested one). Run the Writer here in the durable driver — filling the
     // `pending` placeholders one by one (progress streams to the window) and notifying when the
@@ -167,7 +179,13 @@ export class ReviewGateController {
     const pending = step.pendingIncorporation
     if (pending) {
       step.pendingIncorporation = null
-      const review = await this.runIncorporationCycle(kind, workspaceId, block.id, pending.feedback)
+      const review = await this.runIncorporationCycle(
+        kind,
+        workspaceId,
+        block.id,
+        pending.feedback,
+        autoRecommendEnabled,
+      )
       if (review.status === 'incorporated') {
         return this.completeStep(workspaceId, instance, step, isFinalStep)
       }
@@ -186,6 +204,13 @@ export class ReviewGateController {
     if (review.status === 'incorporated') {
       return this.completeStep(workspaceId, instance, step, isFinalStep)
     }
+    // Pre-answer the findings the reviewer judged answerable without a product owner, so the
+    // human is handed a mostly-filled review (only the genuine business decisions remain
+    // blank). Best-effort — a failure here must not wedge the parked run. Skipped on `exceeded`
+    // (the human is picking how to proceed, not answering findings).
+    if (review.status === 'ready' && autoRecommendEnabled) {
+      await this.maybeAutoRecommend(kind, workspaceId, block.id)
+    }
     if (review.status === 'exceeded')
       await this.deps.stateMachine.raiseDecisionRequired(workspaceId, instance)
     return this.deps.stateMachine.parkStepOnDecision(workspaceId, instance, step)
@@ -203,6 +228,7 @@ export class ReviewGateController {
     workspaceId: string,
     blockId: string,
     feedback?: string,
+    autoRecommendEnabled = true,
   ): Promise<TReview> {
     const review = await this.currentReview(kind, workspaceId, blockId)
     // Nothing to fold in (every finding dismissed, no answered replies, no redo
@@ -230,7 +256,31 @@ export class ReviewGateController {
     await kind.emit(workspaceId, reReviewing)
     const reviewed = await kind.reReview(workspaceId, review.id, preset)
     await kind.emit(workspaceId, reviewed)
+    // A re-review can surface fresh findings; pre-answer the auto-answerable ones just like the
+    // first pass, so the human only ever hand-answers the genuine business decisions.
+    if (reviewed.status === 'ready' && autoRecommendEnabled) {
+      await this.maybeAutoRecommend(kind, workspaceId, blockId)
+    }
     return reviewed
+  }
+
+  /**
+   * Run the auto-recommendation automation for a block's review when the kind supports it
+   * (requirements only). Best-effort: the recommendations are a convenience, so a Writer
+   * failure must never wedge the parked run — it just leaves those findings blank for the
+   * human. The service already emits live progress per chunk.
+   */
+  private async maybeAutoRecommend<TReview extends ReviewCommon>(
+    kind: ReviewKind<TReview>,
+    workspaceId: string,
+    blockId: string,
+  ): Promise<void> {
+    if (!kind.autoRecommend) return
+    try {
+      await kind.autoRecommend(workspaceId, blockId)
+    } catch {
+      // Best-effort: the review + its findings are already persisted and returned.
+    }
   }
 
   /** Finish a review gate step and advance to the next step (or finish the run). */

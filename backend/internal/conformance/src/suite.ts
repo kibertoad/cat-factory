@@ -763,12 +763,14 @@ export function defineCoreConformance(harness: ConformanceHarness): void {
         expect(res.status).toBe(422)
       })
 
-      it('round-trips the per-step companion toggles (followUps + testerQuality) on every store', async () => {
+      it('round-trips the per-step companion toggles (followUps + testerQuality) + stepOptions on every store', async () => {
         // The pipeline builder's two per-step companion toggles live on their own JSON columns
         // (D1/Drizzle `follow_ups` + `tester_quality`), so a custom pipeline that opts a Coder
         // step OUT of the Follow-up companion and configures a Tester step's QC companion (an
         // estimate gate) must survive the store round-trip identically — otherwise the builder
-        // toggle silently reverts to the default on the next load.
+        // toggle silently reverts to the default on the next load. The newer extensible
+        // per-step options bag (`step_options` — home of the requirements-review `autoRecommend`
+        // toggle) rides the SAME symmetric-persistence contract and is asserted alongside them.
         const { call, createWorkspace } = harness.makeApp()
         const { workspace } = await createWorkspace()
         const wsId = workspace.id
@@ -784,6 +786,9 @@ export function defineCoreConformance(harness: ConformanceHarness): void {
             null,
             { enabled: true, gating: { enabled: true, minRisk: 0.6, onMissingEstimate: 'run' } },
           ],
+          // A per-step options bag opting one step out of auto-recommendation — the extensible
+          // seam that must round-trip through the single `step_options` column on both stores.
+          stepOptions: [null, { autoRecommend: false }, null],
         })
         expect(created.status).toBe(201)
         expect(created.body.followUps?.[1]).toBe(false)
@@ -791,8 +796,9 @@ export function defineCoreConformance(harness: ConformanceHarness): void {
           enabled: true,
           gating: { enabled: true, minRisk: 0.6, onMissingEstimate: 'run' },
         })
+        expect(created.body.stepOptions?.[1]).toEqual({ autoRecommend: false })
 
-        // A fresh snapshot read re-hydrates both columns from the store, identically on D1 ⇄ Postgres.
+        // A fresh snapshot read re-hydrates every column from the store, identically on D1 ⇄ Postgres.
         const snapshot = await call<WorkspaceSnapshot>('GET', `/workspaces/${wsId}`)
         const stored = snapshot.body.pipelines.find((p) => p.id === created.body.id)!
         expect(stored.followUps?.[1]).toBe(false)
@@ -800,6 +806,7 @@ export function defineCoreConformance(harness: ConformanceHarness): void {
           enabled: true,
           gating: { enabled: true, minRisk: 0.6, onMissingEstimate: 'run' },
         })
+        expect(stored.stepOptions?.[1]).toEqual({ autoRecommend: false })
       })
     })
 

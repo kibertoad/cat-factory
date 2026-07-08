@@ -2,7 +2,7 @@ import { defineStore } from 'pinia'
 import { computed, ref } from 'vue'
 import type { AgentKind, Pipeline } from '~/types/domain'
 import type { ConsensusStepConfig, StepGating } from '~/types/consensus'
-import type { TesterQualityConfig } from '@cat-factory/contracts'
+import type { StepOptions, TesterQualityConfig } from '@cat-factory/contracts'
 import { companionForProducer, uid } from '~/utils/catalog'
 import { useWorkspaceStore } from '~/stores/workspace'
 
@@ -67,6 +67,13 @@ export const usePipelinesStore = defineStore('pipelines', () => {
    * entry with `gating` makes it conditional on the task estimate.
    */
   const draftTesterQuality = ref<(TesterQualityConfig | null)[]>([])
+  /**
+   * Per-step options bag, kept index-aligned with `draft`: the extensible home for new per-step
+   * parameters (see `StepOptions`). `null`/absent per step ⇒ that step's defaults. Today the only
+   * field is `autoRecommend` (requirements-review); by convention we store ONLY deviations from a
+   * default, so an entry exists only when a step opts out of something.
+   */
+  const draftStepOptions = ref<(StepOptions | null)[]>([])
   /** Organizational labels for the pipeline being assembled/edited. */
   const draftLabels = ref<string[]>([])
   const draftName = ref('New pipeline')
@@ -93,6 +100,7 @@ export const usePipelinesStore = defineStore('pipelines', () => {
     draftGating.value.splice(index, 0, null)
     draftFollowUps.value.splice(index, 0, null)
     draftTesterQuality.value.splice(index, 0, null)
+    draftStepOptions.value.splice(index, 0, null)
   }
 
   function addToDraft(kind: AgentKind) {
@@ -108,6 +116,7 @@ export const usePipelinesStore = defineStore('pipelines', () => {
     draftGating.value.splice(index, 1)
     draftFollowUps.value.splice(index, 1)
     draftTesterQuality.value.splice(index, 1)
+    draftStepOptions.value.splice(index, 1)
   }
 
   function moveInDraft(from: number, to: number) {
@@ -128,6 +137,8 @@ export const usePipelinesStore = defineStore('pipelines', () => {
     draftFollowUps.value.splice(to, 0, fu ?? null)
     const [tq] = draftTesterQuality.value.splice(from, 1)
     draftTesterQuality.value.splice(to, 0, tq ?? null)
+    const [so] = draftStepOptions.value.splice(from, 1)
+    draftStepOptions.value.splice(to, 0, so ?? null)
   }
 
   /** Whether the producer step at `index` currently has its companion attached after it. */
@@ -204,6 +215,7 @@ export const usePipelinesStore = defineStore('pipelines', () => {
     draftGating.value = reorder(draftGating.value)
     draftFollowUps.value = reorder(draftFollowUps.value)
     draftTesterQuality.value = reorder(draftTesterQuality.value)
+    draftStepOptions.value = reorder(draftStepOptions.value)
   }
 
   /** Toggle the consensus mechanism on the draft step at `index` (default config / off). */
@@ -259,6 +271,23 @@ export const usePipelinesStore = defineStore('pipelines', () => {
     draftEnabled.value[index] = draftEnabled.value[index] === false
   }
 
+  /** Whether auto-recommendation is on for the draft (requirements-review) step at `index`. */
+  function draftAutoRecommendEnabled(index: number): boolean {
+    return draftStepOptions.value[index]?.autoRecommend !== false
+  }
+
+  /**
+   * Toggle the requirements-review auto-recommendation on the draft step at `index`. It is on by
+   * default, so we store ONLY the opt-out (`{ autoRecommend: false }`); toggling back drops the
+   * flag. Merges with any other future StepOptions fields rather than clobbering the whole bag.
+   */
+  function toggleDraftAutoRecommend(index: number) {
+    const next: StepOptions = { ...draftStepOptions.value[index] }
+    if (draftAutoRecommendEnabled(index)) next.autoRecommend = false
+    else delete next.autoRecommend
+    draftStepOptions.value[index] = Object.keys(next).length ? next : null
+  }
+
   function clearDraft() {
     draft.value = []
     draftGates.value = []
@@ -268,6 +297,7 @@ export const usePipelinesStore = defineStore('pipelines', () => {
     draftGating.value = []
     draftFollowUps.value = []
     draftTesterQuality.value = []
+    draftStepOptions.value = []
     draftLabels.value = []
     draftName.value = 'New pipeline'
     editingId.value = null
@@ -285,6 +315,7 @@ export const usePipelinesStore = defineStore('pipelines', () => {
     draftTesterQuality.value = pipeline.agentKinds.map(
       (_, i) => pipeline.testerQuality?.[i] ?? null,
     )
+    draftStepOptions.value = pipeline.agentKinds.map((_, i) => pipeline.stepOptions?.[i] ?? null)
     draftLabels.value = [...(pipeline.labels ?? [])]
     draftName.value = pipeline.name
     editingId.value = pipeline.id
@@ -319,6 +350,11 @@ export const usePipelinesStore = defineStore('pipelines', () => {
       // ungated) is not worth persisting.
       ...(draftTesterQuality.value.some((q) => q?.enabled === false || q?.gating?.enabled)
         ? { testerQuality: [...draftTesterQuality.value] }
+        : {}),
+      // Only send stepOptions when at least one step deviates from its defaults (carries a
+      // non-empty options object) — the all-default case needs no array.
+      ...(draftStepOptions.value.some((o) => o && Object.keys(o).length > 0)
+        ? { stepOptions: [...draftStepOptions.value] }
         : {}),
       // Only send labels when there are any.
       ...(draftLabels.value.length ? { labels: [...draftLabels.value] } : {}),
@@ -393,6 +429,7 @@ export const usePipelinesStore = defineStore('pipelines', () => {
     draftGating,
     draftFollowUps,
     draftTesterQuality,
+    draftStepOptions,
     draftLabels,
     draftName,
     editingId,
@@ -410,6 +447,8 @@ export const usePipelinesStore = defineStore('pipelines', () => {
     toggleDraftFollowUps,
     toggleDraftTesterQuality,
     toggleDraftTesterQualityGating,
+    draftAutoRecommendEnabled,
+    toggleDraftAutoRecommend,
     toggleDraftEnabled,
     toggleDraftConsensus,
     setDraftConsensus,

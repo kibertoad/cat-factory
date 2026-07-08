@@ -389,6 +389,10 @@ export const pipelines = pgTable(
     // agent_kinds: an `enabled: false` entry turns the QC companion off on a Tester step, an
     // entry with `gating` makes the coverage audit estimate-conditional (mirror of D1 0032).
     tester_quality: text('tester_quality'),
+    // Nullable JSON array of per-step options bags, parallel to agent_kinds: the extensible
+    // home for new per-step parameters (see `stepOptionsSchema`), replacing the one-column-per-
+    // knob pattern. Today carries only `autoRecommend` (mirror of D1 0044_pipeline_step_options).
+    step_options: text('step_options'),
     // Nullable JSON array of free-form organizational labels; `archived` (truthy) hides the
     // pipeline from the default library view (mirror of D1 0003).
     labels: text('labels'),

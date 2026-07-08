@@ -262,6 +262,29 @@ const readyRecommendations = computed<RequirementRecommendation[]>(() =>
 const generatingRecommendations = computed<RequirementRecommendation[]>(() =>
   (review.value?.recommendations ?? []).filter((r) => r.status === 'pending'),
 )
+// Findings whose current answer is an AUTO-generated recommended default (an accepted `auto`
+// recommendation) — keyed by finding id. These are pre-filled by the auto-recommendation
+// automation for findings the reviewer judged answerable without a product owner; the human can
+// keep, edit or dismiss them. Matched by the snapshotted itemId first (findings churn across
+// re-reviews), then by title+detail. Precomputed so the template doesn't re-scan per finding.
+const autoDefaults = computed(() => {
+  const recs = (review.value?.recommendations ?? []).filter(
+    (r) => r.auto === true && r.status === 'accepted',
+  )
+  const map = new Map<string, RequirementRecommendation>()
+  for (const item of review.value?.items ?? []) {
+    const rec = recs.find(
+      (r) =>
+        r.sourceFinding.itemId === item.id ||
+        (r.sourceFinding.title === item.title && r.sourceFinding.detail === item.detail),
+    )
+    if (rec) map.set(item.id, rec)
+  }
+  return map
+})
+// True once the automation has pre-answered at least one finding — used to flag the REMAINING
+// open findings (the genuine business decisions the reviewer left for the human) as needing input.
+const hasAutoDefaults = computed(() => autoDefaults.value.size > 0)
 // "ready / total" progress for the in-flight batch (null when nothing is generating). Scoped to
 // the current wave via `createdAt` (all placeholders in one request share the timestamp), so
 // stale `ready` recommendations the human hasn't acted on from an earlier batch don't inflate it.
@@ -594,6 +617,20 @@ async function resolveExceeded(choice: 'extra-round' | 'proceed' | 'stop-reset')
                         <UBadge size="xs" variant="outline" color="neutral">
                           {{ CATEGORY_LABELS[item.category] }}
                         </UBadge>
+                        <!-- Once the automation has pre-answered some findings, flag the ones it
+                             left open as the genuine business decisions that need the human. -->
+                        <UBadge
+                          v-if="
+                            hasAutoDefaults &&
+                            item.status === 'open' &&
+                            item.autoAnswerable === false
+                          "
+                          size="xs"
+                          variant="subtle"
+                          color="warning"
+                        >
+                          {{ t('requirements.needsYourInput') }}
+                        </UBadge>
                         <UBadge
                           size="xs"
                           variant="soft"
@@ -623,6 +660,24 @@ async function resolveExceeded(choice: 'extra-round' | 'proceed' | 'stop-reset')
                            auto-saves on blur — no explicit save button. Disabled once the
                            requirements are settled / awaiting a higher-level decision. -->
                       <template v-if="item.status === 'open' || item.status === 'answered'">
+                        <!-- Auto-generated recommended default: the automation pre-filled this
+                             answer; the human can keep it, edit it below, or dismiss the finding. -->
+                        <div
+                          v-if="autoDefaults.get(item.id)"
+                          class="mt-2 flex flex-wrap items-center gap-1.5 text-xs text-indigo-300"
+                        >
+                          <UIcon name="i-lucide-sparkles" class="h-3.5 w-3.5 shrink-0" />
+                          <span>{{ t('requirements.recommendedDefault') }}</span>
+                          <UBadge
+                            v-if="autoDefaults.get(item.id)!.groundedInFragment"
+                            size="xs"
+                            variant="subtle"
+                            color="primary"
+                          >
+                            {{ t('requirements.currentStandard') }}:
+                            {{ autoDefaults.get(item.id)!.groundedInFragment!.title }}
+                          </UBadge>
+                        </div>
                         <UTextarea
                           v-model="drafts[item.id]"
                           :rows="2"

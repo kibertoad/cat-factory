@@ -3,6 +3,7 @@ import { agentConfigValuesSchema } from './agent-config.js'
 import { consensusStepConfigSchema, stepGatingSchema } from './consensus.js'
 import {
   referenceRepoSchema,
+  stepOptionsSchema,
   testerQualityConfigSchema,
   writebackOverrideSchema,
 } from './entities.js'
@@ -262,6 +263,12 @@ export const createPipelineSchema = v.object({
    * on the task estimate. Optional.
    */
   testerQuality: v.optional(v.array(v.nullable(testerQualityConfigSchema))),
+  /**
+   * Per-step options bag, parallel to {@link agentKinds}: the extensible home for new
+   * per-step parameters (see `stepOptionsSchema`). `null`/omitted per entry ⇒ that step's
+   * defaults. Today carries only `autoRecommend` (requirements-review). Optional.
+   */
+  stepOptions: v.optional(v.array(v.nullable(stepOptionsSchema))),
   /** Free-form organizational labels for the library. Optional. */
   labels: v.optional(v.array(v.pipe(v.string(), v.trim(), v.minLength(1), v.maxLength(40)))),
   /**
@@ -289,6 +296,7 @@ export const updatePipelineSchema = v.object({
   gating: v.optional(v.array(v.nullable(stepGatingSchema))),
   followUps: v.optional(v.array(v.nullable(v.boolean()))),
   testerQuality: v.optional(v.array(v.nullable(testerQualityConfigSchema))),
+  stepOptions: v.optional(v.array(v.nullable(stepOptionsSchema))),
   labels: v.optional(v.array(v.pipe(v.string(), v.trim(), v.minLength(1), v.maxLength(40)))),
   /** Change how the pipeline may be launched (see {@link createPipelineSchema}). Optional. */
   availability: v.optional(

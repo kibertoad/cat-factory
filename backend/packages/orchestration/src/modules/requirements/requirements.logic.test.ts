@@ -7,6 +7,7 @@ import type {
 import {
   buildReviewPrompt,
   coerceChunkRecommendations,
+  coerceReviewItems,
   disposeReview,
   hasNotesToIncorporate,
 } from './requirements.logic.js'
@@ -120,6 +121,38 @@ describe('buildReviewPrompt', () => {
     })
     expect(prompt).toContain('severity')
     expect(prompt).toContain('Assign a severity to EVERY item')
+  })
+
+  it('instructs the reviewer to classify each finding as autoAnswerable', () => {
+    const prompt = buildReviewPrompt({
+      block: { title: 'T', type: 'service', description: 'do a thing' },
+      docs: [],
+      tasks: [],
+    })
+    expect(prompt).toContain('autoAnswerable')
+  })
+})
+
+describe('coerceReviewItems', () => {
+  let n = 0
+  const newId = () => `id-${n++}`
+
+  it('carries the reviewer autoAnswerable classification, defaulting non-true to false', () => {
+    n = 0
+    const items = coerceReviewItems(
+      {
+        items: [
+          { title: 'a', detail: 'da', severity: 'high', autoAnswerable: true },
+          { title: 'b', detail: 'db', severity: 'high', autoAnswerable: false },
+          { title: 'c', detail: 'dc', severity: 'high' }, // missing ⇒ false
+          { title: 'd', detail: 'dd', severity: 'high', autoAnswerable: 'yes' }, // non-bool ⇒ false
+        ],
+      },
+      newId,
+      0,
+    )
+    const byTitle = Object.fromEntries(items.map((i) => [i.title, i.autoAnswerable]))
+    expect(byTitle).toEqual({ a: true, b: false, c: false, d: false })
   })
 })
 
