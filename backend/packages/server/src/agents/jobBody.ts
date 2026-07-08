@@ -250,11 +250,17 @@ export function buildRegisteredAgentBody(
 ): { body: Record<string, unknown>; kind: RunnerDispatchKind } {
   const { common, webTools, repo, workBranch, workBranchReady } = parts
   const prBranch = context.block.pullRequest?.branch
-  const onPr = step.clone?.branch === 'pr'
+  // Amend an EXISTING PR in place (fixer-like: push back, open no new PR) when the kind targets
+  // the PR branch, OR targets `pr-or-work` and a PR already exists. A `pr-or-work` kind with no PR
+  // yet falls back to the work-branch open-a-PR flow (coder-like) below — so one kind serves both
+  // a BAU pipeline step (amend the coder's PR) and a standalone/initiative run (open its own PR).
+  const onPr =
+    step.clone?.branch === 'pr' || (step.clone?.branch === 'pr-or-work' && Boolean(prBranch))
+  const wantsPr = step.clone?.branch === 'pr' || step.clone?.branch === 'pr-or-work'
   const exploreBranch =
     step.clone?.branch === 'base'
       ? repo.baseBranch
-      : onPr
+      : wantsPr
         ? (prBranch ?? repo.baseBranch)
         : workBranchReady
           ? workBranch

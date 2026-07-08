@@ -186,6 +186,31 @@ describe('ContainerAgentExecutor.buildJobBody (per-kind body shapes)', () => {
     expect(captured[0]).toMatchSnapshot()
   })
 
+  // The `code-commenter` kind clones `pr-or-work`: it AMENDS the coder's PR in place when one
+  // exists (the BAU pipeline step), and OPENS its own PR when there is none (a standalone /
+  // initiative sweep). One kind, two behaviours resolved from the block's PR at dispatch.
+  it('code-commenter amends the coder PR in place when one exists (BAU pipeline step)', async () => {
+    await executor.startJob(context('code-commenter', { pullRequest: PR }))
+    const spec = captured[0]!.spec
+    expect(spec.mode).toBe('coding')
+    expect(spec.branch).toBe('cat-factory/blk_1') // clones the PR head
+    expect(spec.pushBranch).toBe('cat-factory/blk_1') // pushes comment-only edits back onto it
+    expect(spec.newBranch).toBeUndefined() // no new branch — edits in place
+    expect(spec.pr).toBeUndefined() // opens no new PR
+    expect(spec.noChangesIsError).toBe(false) // "comments already fine" is a clean non-event
+  })
+
+  it('code-commenter opens its own PR when the block has none (standalone / initiative sweep)', async () => {
+    await executor.startJob(context('code-commenter'))
+    const spec = captured[0]!.spec
+    expect(spec.mode).toBe('coding')
+    expect(spec.branch).toBe('main') // branches off base
+    expect(spec.newBranch).toBe('cat-factory/blk_1') // onto a fresh work branch
+    expect(spec.pushBranch).toBe('cat-factory/blk_1')
+    expect(spec.pr).toBeDefined() // and opens a PR
+    expect(spec.noChangesIsError).toBe(false)
+  })
+
   // Read-only reference repos (doc-writer): a doc task with reference repos attached dispatches a
   // MULTI-REPO coding body carrying each reference as a READ-ONLY spec (repo only — no newBranch/pr)
   // plus a "Reference repositories" system-prompt section naming the sibling directories.

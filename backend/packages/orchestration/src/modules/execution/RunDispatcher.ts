@@ -2347,6 +2347,9 @@ export class RunDispatcher {
       case 'base':
         return baseBranch
       case 'pr':
+      // `pr-or-work` reads/writes the PR branch when one exists (amend in place), else the work
+      // branch — the same resolution as `pr`, so it shares this arm.
+      case 'pr-or-work':
         return prBranch ?? (await this.ensureWorkBranch(repo, workBranch, baseBranch))
       default:
         // 'work' (or unspecified): the work branch the container agent operates on. A PR
