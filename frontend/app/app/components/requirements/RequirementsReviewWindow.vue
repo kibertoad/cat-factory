@@ -773,8 +773,11 @@ async function resolveExceeded(choice: 'extra-round' | 'proceed' | 'stop-reset')
                               variant="subtle"
                               color="primary"
                             >
-                              {{ t('requirements.currentStandard') }}:
-                              {{ autoDefaults.get(item.id)!.groundedInFragment!.title }}
+                              {{
+                                t('requirements.currentStandard', {
+                                  title: autoDefaults.get(item.id)!.groundedInFragment!.title,
+                                })
+                              }}
                             </UBadge>
                           </div>
                           <UTextarea

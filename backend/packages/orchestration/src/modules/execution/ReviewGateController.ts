@@ -270,19 +270,22 @@ export class ReviewGateController {
    * Run the auto-recommendation automation for a block's review when the kind supports it
    * (requirements only). Best-effort: the recommendations are a convenience, so a Writer
    * failure must never wedge the parked run — it just leaves those findings blank for the
-   * human. The service already emits live progress per chunk.
+   * human. The service already emits live progress per chunk. Returns `true` when the kind
+   * supports the automation (so the caller knows the persisted review may have changed after
+   * the passed-in snapshot was taken), `false` when it is a no-op (unsupported kind).
    */
   private async maybeAutoRecommend<TReview extends ReviewCommon>(
     kind: ReviewKind<TReview>,
     workspaceId: string,
     blockId: string,
-  ): Promise<void> {
-    if (!kind.autoRecommend) return
+  ): Promise<boolean> {
+    if (!kind.autoRecommend) return false
     try {
       await kind.autoRecommend(workspaceId, blockId)
     } catch {
       // Best-effort: the review + its findings are already persisted and returned.
     }
+    return true
   }
 
   /** Finish a review gate step and advance to the next step (or finish the run). */
@@ -539,12 +542,20 @@ export class ReviewGateController {
     const updated = await kind.reReview(workspaceId, review.id, preset)
     if (updated.status === 'incorporated') {
       await this.resumeRun(kind, workspaceId, blockId)
-    } else if (updated.status === 'ready') {
+      return updated
+    }
+    if (updated.status === 'ready') {
       // A re-review can surface fresh findings; pre-answer the auto-answerable ones just like the
       // pipeline-driven cycle (see {@link runIncorporationCycle}), so auto-recommendation happens
       // on EVERY iteration round that introduces new questions — not only the first. Off-path
       // (no parked run) there is no step to opt out via `stepOptions.autoRecommend`, so it is on.
-      await this.maybeAutoRecommend(kind, workspaceId, blockId)
+      const ran = await this.maybeAutoRecommend(kind, workspaceId, blockId)
+      // Auto-recommendation mutates + persists the review (answering findings, accepting `auto`
+      // recs) AFTER `updated` was captured, and pushes the result over the live stream. Return the
+      // FRESH persisted review so this HTTP response matches the stream — otherwise the SPA's
+      // unguarded `store()` on the response clobbers the auto-answered state with this stale
+      // snapshot, and the pre-answered findings vanish from the window until the next event.
+      if (ran) return this.currentReview(kind, workspaceId, blockId)
     }
     return updated
   }

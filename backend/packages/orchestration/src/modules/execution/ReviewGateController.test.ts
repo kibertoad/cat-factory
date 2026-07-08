@@ -403,6 +403,23 @@ describe('ReviewGateController public surface', () => {
     expect(k.kind.autoRecommend).toHaveBeenCalledWith('ws', 'blk_1')
   })
 
+  it('reReview returns the FRESH persisted review after auto-recommendation, not the pre-auto snapshot', async () => {
+    // Auto-recommendation mutates + persists the review (answering findings) AFTER reReview's
+    // return value was captured, and pushes it over the live stream. The off-path response MUST
+    // reflect that fresh state — otherwise the SPA's unguarded store() on the response clobbers
+    // the auto-answered findings the stream already delivered, and they vanish from the window.
+    k.set(review({ status: 'merged' }))
+    const stale = review({ status: 'ready', iteration: 2 }) // reReview's return (findings open)
+    ;(k.kind.reReview as ReturnType<typeof vi.fn>).mockResolvedValue(stale)
+    const fresh = review({ status: 'ready', iteration: 2, updatedAt: 99 }) // what auto-recommend persisted
+    ;(k.kind.autoRecommend as ReturnType<typeof vi.fn>).mockImplementation(async () => {
+      k.set(fresh) // the automation persisted a newer review; getForBlock now returns it
+    })
+    const result = await ctrl.reReview(k.kind, 'ws', 'blk_1')
+    expect(result).toBe(fresh)
+    expect(result).not.toBe(stale)
+  })
+
   it('reReview does NOT auto-recommend when it converges (incorporated)', async () => {
     k.set(review({ status: 'merged' }))
     ;(k.kind.reReview as ReturnType<typeof vi.fn>).mockResolvedValue(
