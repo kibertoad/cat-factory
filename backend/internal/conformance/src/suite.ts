@@ -6918,15 +6918,14 @@ export function defineExecutionConformance(harness: ConformanceHarness): void {
         expect(presetIds).toContain(CUSTOM_ID)
         expect(presetIds).toContain('preset_generic')
 
-        // Create a service frame, then an initiative on it naming the injected preset — it is
-        // accepted (an unknown preset id would be a create-time ValidationError).
-        const frame = await app.call<Block>('POST', `/workspaces/${wsId}/blocks`, {
-          type: 'service',
-          position: { x: 3, y: 3 },
-        })
-        expect(frame.status).toBe(201)
+        // Create an initiative on the seeded service frame naming the injected preset — it is
+        // accepted (an unknown preset id would be a create-time ValidationError). Anchor it to a
+        // SEEDED service frame (`blk_auth`) rather than minting one over `POST /blocks`: raw
+        // service-frame creation is deliberately off the mothership-mode SPA path (the mothership
+        // persistence RPC does not proxy `serviceRepository.insert`), so a seeded frame keeps this
+        // assertion — about preset acceptance, not frame creation — identical on every runtime.
         const created = await app.call('POST', `/workspaces/${wsId}/initiatives`, {
-          frameId: frame.body.id,
+          frameId: 'blk_auth',
           title: 'Custom-preset initiative',
           presetId: CUSTOM_ID,
           presetInputs: { toolName: 'acme' },

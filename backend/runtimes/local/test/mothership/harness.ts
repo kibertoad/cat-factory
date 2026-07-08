@@ -191,6 +191,7 @@ export function makeMothershipConformanceApp(
     environmentProvider?: CoreDependencies['environmentProvider']
     resolveRepoFilesForCoords?: CoreDependencies['resolveRepoFilesForCoords']
     backendRegistries?: BackendRegistries
+    initiativePresetRegistry?: CoreDependencies['initiativePresetRegistry']
     testerQualityReviewer?: CoreDependencies['testerQualityReviewer']
     detectionConventions?: CoreDependencies['detectionConventions']
   },
@@ -282,6 +283,12 @@ export function makeMothershipConformanceApp(
     cloudflareModelsEnabled: opts?.cloudflareModelsEnabled ?? true,
     gateProviders: opts?.gateProviders,
     ...(opts?.backendRegistries ? { backendRegistries: opts.backendRegistries } : {}),
+    // Inject the app-owned initiative-preset registry (pre-loaded with a custom preset in the
+    // custom-preset suite) so the SUT container resolves it by reference on this runtime — the
+    // same DI seam the Worker/Node/local-standalone harnesses wire.
+    ...(opts?.initiativePresetRegistry
+      ? { initiativePresetRegistry: opts.initiativePresetRegistry }
+      : {}),
   })
   const app = createApp(container, SUT_ENV)
 
