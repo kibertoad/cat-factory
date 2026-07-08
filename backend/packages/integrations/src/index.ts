@@ -445,6 +445,11 @@ export {
   type ResolvedAccountSettings,
 } from './modules/accountSettings/AccountSettingsService.js'
 export {
+  TestSecretsService,
+  TEST_SECRETS_CIPHER_INFO,
+  type TestSecretsServiceDependencies,
+} from './modules/testSecrets/TestSecretsService.js'
+export {
   LocalSettingsService,
   type LocalSettingsServiceDependencies,
 } from './modules/localSettings/LocalSettingsService.js'

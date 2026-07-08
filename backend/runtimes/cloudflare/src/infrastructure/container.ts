@@ -29,6 +29,7 @@ import {
   AiAgentExecutor,
   type AgentKindRegistry,
   defaultAgentKindRegistry,
+  defaultInitiativePresetRegistry,
   inlineWebSearchOptionsFromEnv,
   resolveAgentConfig,
   isProxyableProvider,
@@ -73,6 +74,8 @@ import {
   INCIDENT_ENRICHMENT_CIPHER_INFO,
   AccountSettingsService,
   ACCOUNT_SETTINGS_CIPHER_INFO,
+  TestSecretsService,
+  TEST_SECRETS_CIPHER_INFO,
   createEmailSender,
 } from '@cat-factory/integrations'
 // Opt-in AWS EKS backends (runner + environment), registered by reference on BOTH facades so
@@ -234,6 +237,7 @@ import { D1WorkspaceSettingsRepository } from './repositories/D1WorkspaceSetting
 import { D1UserSettingsRepository } from './repositories/D1UserSettingsRepository'
 import { D1ObservabilityConnectionRepository } from './repositories/D1ObservabilityConnectionRepository'
 import { D1PackageRegistryConnectionRepository } from './repositories/D1PackageRegistryConnectionRepository'
+import { D1TestSecretsRepository } from './repositories/D1TestSecretsRepository'
 import { D1IncidentEnrichmentConnectionRepository } from './repositories/D1IncidentEnrichmentConnectionRepository'
 import { D1AccountSettingsRepository } from './repositories/D1AccountSettingsRepository'
 import { D1ReleaseHealthConfigRepository } from './repositories/D1ReleaseHealthConfigRepository'
@@ -849,6 +853,31 @@ function buildResolvePackageRegistries(
 }
 
 /**
+ * Build the SENSITIVE per-service test-credential store (sealed), or undefined when the shared
+ * encryption key is absent (the cipher must exist to seal/unseal). Backs the test-secrets CRUD
+ * controller, the engine's prompt refs (non-secret key + description), and the executor's
+ * out-of-band value injection into the Tester container. Stateless, so building a fresh instance
+ * per call site is safe (mirrors `buildResolvePackageRegistries`).
+ */
+function buildTestSecretsService(
+  env: Env,
+  db: D1Database,
+  clock: Clock,
+): TestSecretsService | undefined {
+  const encryptionKey = env.ENCRYPTION_KEY?.trim()
+  if (!encryptionKey) return undefined
+  return new TestSecretsService({
+    testSecretsRepository: new D1TestSecretsRepository({ db }),
+    secretCipher: new WebCryptoSecretCipher({
+      masterKeyBase64: encryptionKey,
+      info: TEST_SECRETS_CIPHER_INFO,
+    }),
+    blockRepository: new D1BlockRepository({ db }),
+    clock,
+  })
+}
+
+/**
  * Wire the per-workspace incident-enrichment integration (PagerDuty + incident.io). The
  * credentials moved out of env into a sealed per-workspace row; the provider resolves +
  * decrypts them at enrichment time. Wired whenever the shared encryption key is present
@@ -1448,6 +1477,12 @@ function buildContainerExecutor(
   // tool would just fail/return nothing). The per-account check runs off the account-settings
   // store (its own short-TTL cache).
   const resolvePackageRegistries = buildResolvePackageRegistries(env, db)
+  // Decrypt the service frame's sensitive test credentials onto the tester job body (out of band).
+  const testSecretsForDispatch = buildTestSecretsService(env, db, clock)
+  const resolveTestSecrets = testSecretsForDispatch
+    ? (workspaceId: string, blockId: string) =>
+        testSecretsForDispatch.resolveValuesForBlock(workspaceId, blockId)
+    : undefined
   const defaultWebSearchUpstream = buildDefaultWebSearchUpstream(env)
   const webSearchSettings = buildAccountSettings(env, db, clock)
   const resolveWebSearchAvailability =
@@ -1534,6 +1569,9 @@ function buildContainerExecutor(
     // Decrypt the workspace's private-registry entries onto the job body (rendered by
     // the harness into ~/.npmrc), so private dependencies resolve on install.
     ...(resolvePackageRegistries ? { resolvePackageRegistries } : {}),
+    // Decrypt the service frame's SENSITIVE test credentials onto the tester job body (out of
+    // band — injected as container env vars by the harness, never in the prompt/telemetry).
+    ...(resolveTestSecrets ? { resolveTestSecrets } : {}),
     githubApiBase: config.github.apiBase,
     // Forward container tool spans to Langfuse (when configured) as child spans under
     // the run trace — the same sink the LLM proxy fans generations out to.
@@ -2181,6 +2219,12 @@ export function buildContainer(
   // `validateRegistrationsOnce`, and the ServerContainer's snapshot projection; the conformance
   // suite injects a pre-loaded one via `overrides`. Defaults to the built-ins-only registry.
   const agentKindRegistry = overrides.agentKindRegistry ?? defaultAgentKindRegistry()
+  // The app-owned initiative-preset registry (built-in generic / docs-refresh / tech-migration +
+  // any a deployment registered by reference). Threaded into createCore (initiative services +
+  // spawned-run preset context) and re-exposed on the ServerContainer for the snapshot descriptors
+  // + preset probe; the conformance suite injects a pre-loaded one via `overrides`.
+  const initiativePresetRegistry =
+    overrides.initiativePresetRegistry ?? defaultInitiativePresetRegistry()
 
   // Register the opt-in AWS EKS backends by reference (symmetric with the Node facade; a
   // pass-through until a workspace connects an `eks` backend). `register` is idempotent (keyed
@@ -2256,6 +2300,10 @@ export function buildContainer(
   // shared by the container executor (lease + usage feedback) and the
   // vendor-credential controller, so both read the same pool.
   const subscriptions = buildSubscriptionService(env, db, clock)
+
+  // The sensitive per-service test-credential store (sealed) — shared by the test-secrets
+  // CRUD controller and the engine's prompt refs (the executor builds its own value resolver).
+  const testSecretsService = buildTestSecretsService(env, db, clock)
 
   // The per-user individual-usage subscription store (Claude) — shared by the
   // personal-subscription controller and the container executor's personal lease.
@@ -2423,6 +2471,7 @@ export function buildContainer(
         agentKindRegistry,
       ),
     agentKindRegistry,
+    initiativePresetRegistry,
     workRunner: selectWorkRunner(env),
     executionEventPublisher: eventPublisher,
     spendPricing: config.spend,
@@ -2459,6 +2508,14 @@ export function buildContainer(
     // future reorder. Applied only at first seed, so a user's later manual default choice wins.
     defaultModelPresetId: overrides.defaultModelPresetId ?? DEFAULT_MODEL_PRESET_ID,
     ...selectReleaseHealthDeps(env, config, db),
+    // Fold the service frame's SENSITIVE test-credential refs (key + description, never values)
+    // into the tester prompt; present only when ENCRYPTION_KEY is set.
+    ...(testSecretsService
+      ? {
+          resolveTestSecretRefs: (workspaceId: string, blockId: string) =>
+            testSecretsService.resolveRefsForBlock(workspaceId, blockId),
+        }
+      : {}),
     ...selectIncidentEnrichmentDeps(env, db),
     ...selectPackageRegistryDeps(env, db),
     ...(accountSettings ? { accountSettings } : {}),
@@ -2576,6 +2633,13 @@ export function buildContainer(
       // node's artifact reads/writes come back `... is not wired`. The blob BYTES stay per-account
       // local; only the metadata is proxied.
       binaryArtifactMetadataStore: new D1BinaryArtifactMetadataStore({ db }),
+      // The sensitive per-service test-credential store is org/durable state the engine reads via
+      // the `resolveTestSecretRefs` FUNCTION (never the repo directly), so it isn't in
+      // `CoreDependencies` either — fold it in explicitly, else a mothership-mode node's tester
+      // run-path read + the inspector CRUD come back `... is not wired`. Only the SEALED blob is
+      // proxied (decrypted service-side under the LOCAL key), like the observability/runner-pool
+      // connections.
+      testSecretsRepository: new D1TestSecretsRepository({ db }),
     } as unknown as PersistenceRegistry,
     // App-owned backend registries, surfaced so the workspace snapshot's backend-kind
     // selectors (`environmentBackendKinds` / `runnerBackendKinds`) read the registered kinds.
@@ -2587,6 +2651,9 @@ export function buildContainer(
     // Resolves the per-account binary-artifact store (screenshots) for the artifact
     // controllers + the visual-confirmation gate (configured per-account in the UI).
     resolveBinaryArtifactStore,
+    // The sensitive per-service test-credential store the shared test-secrets controller reads;
+    // present when the shared ENCRYPTION_KEY is configured.
+    ...(testSecretsService ? { testSecrets: testSecretsService } : {}),
     // The vendor-credential (subscription token pool) service the shared controller
     // reads; present when the shared ENCRYPTION_KEY is configured.
     subscriptions,

@@ -4406,6 +4406,13 @@
       "maxConcurrentField": "Maks. rownoczesnych zadan",
       "defaultPipelineField": "Domyslny pipeline",
       "failed": "Nie udalo sie zaktualizowac inicjatywy"
+    },
+    "checkpoint": {
+      "badge": "Punkt kontrolny",
+      "awaiting": "Oczekuje na przegląd",
+      "cleared": "Sprawdzono",
+      "pausedTitle": "Wstrzymano do przeglądu",
+      "pausedBody": "Faza „{phase}\" została ukończona. Przejrzyj powyżej zatwierdzone artefakty i PR-y, a następnie wznów, aby kontynuować, albo anuluj, aby zatrzymać inicjatywę."
     }
   },
   "environmentWizard": {

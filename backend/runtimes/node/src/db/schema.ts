@@ -1410,6 +1410,24 @@ export const releaseHealthConfigs = pgTable(
   (t) => [primaryKey({ columns: [t.workspace_id, t.block_id] })],
 )
 
+// Sensitive per-service test credentials (sealed; mirror of D1 migration 0044's
+// `test_secrets`). The SEALED sibling of the non-sensitive test-credential pools: a
+// third-party API token a Tester needs, delivered to the container out of band. `credentials`
+// is a sealed JSON blob of TestSecretEntry[] (domain tag 'cat-factory:test-secrets'); `summary`
+// is a non-secret TestSecretRef[] display blob. Keyed by the SERVICE FRAME block.
+export const testSecrets = pgTable(
+  'test_secrets',
+  {
+    workspace_id: text('workspace_id').notNull(),
+    block_id: text('block_id').notNull(),
+    credentials: text('credentials').notNull(),
+    summary: text('summary').notNull().default('[]'),
+    created_at: bigint('created_at', { mode: 'number' }).notNull(),
+    updated_at: bigint('updated_at', { mode: 'number' }).notNull(),
+  },
+  (t) => [primaryKey({ columns: [t.workspace_id, t.block_id] })],
+)
+
 // Document-source integration (mirror of D1 migration 0012). A `source`
 // discriminator tags every row so one pair of tables serves every provider. The
 // credential bag is encrypted at rest (a WebCryptoSecretCipher envelope), never sent

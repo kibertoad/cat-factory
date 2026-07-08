@@ -9,10 +9,11 @@ import type {
   AgentResult,
   InfraSetupRecord,
   ServiceInfraSpec,
+  TestSecretSpec,
 } from './job.js'
 import { standUpFrontend, tearDownFrontend } from './frontend-infra.js'
 import { configurePackageRegistries } from './package-registries.js'
-import { captureRedactedOutput, redactSecrets } from './redact.js'
+import { captureRedactedOutput, redactSecrets, registerKnownSecrets } from './redact.js'
 import {
   cloneRepo,
   commitAll,
@@ -409,6 +410,30 @@ async function runPreviewMode(job: AgentJob, opts: RunOptions): Promise<AgentRes
 }
 
 /**
+ * Inject the tester's sensitive secrets into the PROCESS environment so the agent's shell tools
+ * (spawned as child processes that inherit this env) can read `$KEY` — the out-of-band delivery
+ * channel. Each value is registered for redaction so it can't leak into captured output/logs.
+ * Returns a restore closure that puts the environment back afterward (warm-pool hygiene, so a
+ * later job on a reused container never inherits a prior run's secrets). Reserved/toolchain env
+ * names were already dropped at parse. A no-op when there are no secrets.
+ */
+function applyTestSecrets(secrets: TestSecretSpec[] | undefined): () => void {
+  if (!secrets?.length) return () => {}
+  registerKnownSecrets(secrets.map((s) => s.value))
+  const previous = new Map<string, string | undefined>()
+  for (const { key, value } of secrets) {
+    previous.set(key, process.env[key])
+    process.env[key] = value
+  }
+  return () => {
+    for (const [key, prior] of previous) {
+      if (prior === undefined) delete process.env[key]
+      else process.env[key] = prior
+    }
+  }
+}
+
+/**
  * Read-only exploration: clone `branch`, run the agent making no edits, and return its
  * prose report — or, when `output.kind==='structured'`, the parsed JSON object as
  * `custom` (the backend renders any artifact files from it in a post-op). An edit-free
@@ -473,6 +498,11 @@ async function runExploreMode(job: AgentJob, opts: RunOptions): Promise<AgentRes
         ? { infraSetup: managed.record }
         : {}
 
+      // Inject the tester's sensitive secrets into the environment (out of band) so the agent's
+      // shell can read them as `$KEY`; restore afterwards so a reused (warm-pool) container never
+      // leaks them to a later job. A no-op for non-tester runs (no `testSecrets`).
+      const restoreSecrets = applyTestSecrets(job.testSecrets)
+
       try {
         opts.onPhase?.('agent')
         logger.info('agent(explore): running agent', { serviceDirectory })
@@ -513,6 +543,7 @@ async function runExploreMode(job: AgentJob, opts: RunOptions): Promise<AgentRes
           { infra, infraSetupFields, logger, signal: opts.signal },
         )
       } finally {
+        restoreSecrets()
         if (managed) await managed.cleanup()
       }
     },

@@ -7,11 +7,10 @@ import type { AgentKind } from './types.js'
 import type { RepoFiles } from '../ports/repo-files.js'
 import { INITIATIVE_PIPELINE_ID } from './seed.js'
 
-// Installation-level extension point for initiative PRESETS, mirroring the pipeline / gate
-// registry seams (module-global, replace-by-id, registered as a startup import side effect).
-// A preset bundles a create-time FORM (its descriptor, rendered generically by the SPA), a
-// planning-pipeline binding, execution/fragment/review defaults, and CODE HOOKS a data-only
-// registry can't express:
+// Installation-level extension point for initiative PRESETS, mirroring the app-owned agent-kind
+// registry (`AgentKindRegistry` / `defaultAgentKindRegistry`). A preset bundles a create-time
+// FORM (its descriptor, rendered generically by the SPA), a planning-pipeline binding,
+// execution/fragment/review defaults, and CODE HOOKS a data-only registry can't express:
 //   - `detect`         — a deterministic, bounded, best-effort repo probe that PREFILLS the
 //                        form (over the checkout-free {@link RepoFiles} port). Never throws.
 //   - `seedPlan`       — a PURE post-processor/validator of the planner's draft at ingest
@@ -22,6 +21,13 @@ import { INITIATIVE_PIPELINE_ID } from './seed.js'
 // a custom agent kind: presets are code-carrying backend packages (the
 // `backend/internal/example-custom-agent` trust model). See
 // `docs/initiatives/initiative-presets-and-docs-refresh.md`.
+//
+// The composition root news ONE instance per app (`defaultInitiativePresetRegistry()`, in
+// `@cat-factory/agents` — it preloads the built-ins), threads it through `CoreDependencies`, and
+// every create/planning/snapshot read resolves it from there — so there is no module-global
+// `Map`, no `clear*()` test cruft, and no external-adapter module-identity gotcha: a deployment
+// registers extra presets by reference (`registry.register(registration)`) on the instance the
+// facade injects.
 
 /** The registration bundle for one initiative preset (descriptor + optional code hooks). */
 export interface InitiativePresetRegistration {
@@ -54,7 +60,8 @@ export const GENERIC_INITIATIVE_PRESET_ID = 'preset_generic'
  * "just the default preset". Empty form, the interviewer-driven `pl_initiative` pipeline, human
  * review on — i.e. exactly today's behaviour. Nothing in the planning/loop path branches on
  * "has preset"; a preset only ever ADDS context, so the generic one adds none. It has no code
- * hooks, so it is always available even after {@link clearRegisteredInitiativePresets}.
+ * hooks, so every {@link InitiativePresetRegistry} resolves it even with an otherwise-empty
+ * registry.
  */
 const GENERIC_INITIATIVE_PRESET: InitiativePresetRegistration = {
   descriptor: {
@@ -74,53 +81,54 @@ const GENERIC_INITIATIVE_PRESET: InitiativePresetRegistration = {
   },
 }
 
-// Process-wide registry, mirroring the pipeline / gate registry seams. Registration is a
-// startup import side effect, read when the create/planning flow + the snapshot builder resolve
-// presets. A preset registered AFTER those have run is invisible — register at startup.
-const registry = new Map<string, InitiativePresetRegistration>()
-
 /**
- * Register a custom initiative preset. A registration whose id matches an earlier one (or the
- * built-in `preset_generic`) replaces it, so a deployment can both add new presets and customize
- * the generic one.
+ * App-owned registry of initiative presets, mirroring {@link AgentKindRegistry}. The composition
+ * root news ONE instance per app (`defaultInitiativePresetRegistry()` in `@cat-factory/agents`,
+ * which preloads the built-in docs-refresh / tech-migration presets), threads it through
+ * `CoreDependencies`, and re-exposes it on `Core` for the HTTP layer's snapshot projection + the
+ * preset probe. The built-in generic preset is baked in (always resolvable) so an otherwise-empty
+ * registry still serves the default initiative; a deployment adds its own presets by reference
+ * (`register` / `registerAll`) on the instance the facade injects.
  */
-export function registerInitiativePreset(registration: InitiativePresetRegistration): void {
-  registry.set(registration.descriptor.id, registration)
-}
+export class InitiativePresetRegistry {
+  private readonly registry = new Map<string, InitiativePresetRegistration>()
 
-/** Register several initiative presets at once. */
-export function registerInitiativePresets(
-  registrations: Iterable<InitiativePresetRegistration>,
-): void {
-  for (const registration of registrations) registerInitiativePreset(registration)
-}
+  /**
+   * Register a custom initiative preset. A registration whose id matches an earlier one (or the
+   * built-in `preset_generic`) replaces it, so a deployment can both add new presets and customize
+   * the generic one.
+   */
+  register(registration: InitiativePresetRegistration): void {
+    this.registry.set(registration.descriptor.id, registration)
+  }
 
-/**
- * Resolve one preset by id, or `undefined` when unknown. The built-in `preset_generic` is always
- * resolvable (unless a registration overrode it), even with an otherwise-empty registry.
- */
-export function getInitiativePreset(id: string): InitiativePresetRegistration | undefined {
-  const registered = registry.get(id)
-  if (registered) return registered
-  return id === GENERIC_INITIATIVE_PRESET_ID ? GENERIC_INITIATIVE_PRESET : undefined
-}
+  /** Register several initiative presets at once. */
+  registerAll(registrations: Iterable<InitiativePresetRegistration>): void {
+    for (const registration of registrations) this.register(registration)
+  }
 
-/**
- * All presets (registration order), with the built-in `preset_generic` FIRST unless a
- * registration replaced it. This is what the snapshot builder serialises for the SPA picker.
- */
-export function allInitiativePresets(): InitiativePresetRegistration[] {
-  const registered = [...registry.values()]
-  if (registry.has(GENERIC_INITIATIVE_PRESET_ID)) return registered
-  return [GENERIC_INITIATIVE_PRESET, ...registered]
-}
+  /**
+   * Resolve one preset by id, or `undefined` when unknown. The built-in `preset_generic` is always
+   * resolvable (unless a registration overrode it), even with an otherwise-empty registry.
+   */
+  get(id: string): InitiativePresetRegistration | undefined {
+    const registered = this.registry.get(id)
+    if (registered) return registered
+    return id === GENERIC_INITIATIVE_PRESET_ID ? GENERIC_INITIATIVE_PRESET : undefined
+  }
 
-/** The serialisable descriptors of {@link allInitiativePresets}, with `probe` derived from `detect`. */
-export function initiativePresetDescriptors(): InitiativePresetDescriptor[] {
-  return allInitiativePresets().map((p) => ({ ...p.descriptor, probe: !!p.detect }))
-}
+  /**
+   * All presets (registration order), with the built-in `preset_generic` FIRST unless a
+   * registration replaced it. This is what the snapshot builder serialises for the SPA picker.
+   */
+  all(): InitiativePresetRegistration[] {
+    const registered = [...this.registry.values()]
+    if (this.registry.has(GENERIC_INITIATIVE_PRESET_ID)) return registered
+    return [GENERIC_INITIATIVE_PRESET, ...registered]
+  }
 
-/** Drop all registered presets (the built-in `preset_generic` survives). Intended for tests. */
-export function clearRegisteredInitiativePresets(): void {
-  registry.clear()
+  /** The serialisable descriptors of {@link all}, with `probe` derived from `detect`. */
+  descriptors(): InitiativePresetDescriptor[] {
+    return this.all().map((p) => ({ ...p.descriptor, probe: !!p.detect }))
+  }
 }

@@ -1,5 +1,61 @@
 # @cat-factory/agents
 
+## 0.51.0
+
+### Minor Changes
+
+- 0f3c88b: feat(testing): sealed sensitive test credentials, delivered to the Tester out of band
+
+  Add a SEALED per-service store for sensitive testing credentials (e.g. a third-party API
+  token a Tester needs), the sibling of the non-sensitive test-credential pools. Values are
+  encrypted at rest by the facade `SecretCipher` (info tag `cat-factory:test-secrets`, mirroring
+  `observability_connections`) and delivered to the Tester container **out of band**: decrypted at
+  dispatch, carried on a dedicated job-body field the agent-context snapshot allow-list omits, and
+  injected by the harness as container environment variables the agent reads (`$KEY`). The tester
+  prompt advertises only each secret's key + description (never the value). Per service frame,
+  resolved up the frame chain like release-health config; mirrored across both runtimes (D1 +
+  Drizzle) with a cross-runtime conformance assertion.
+
+  New API: `GET|PUT|DELETE /workspaces/:ws/services/:blockId/test-secrets` (values write-only).
+
+  This is Slice C of the tester-environment-access initiative; the Test Data Seeder agent
+  (Slice D) is a tracked follow-up. See docs/initiatives/tester-environment-access.md.
+
+### Patch Changes
+
+- Updated dependencies [0f3c88b]
+  - @cat-factory/contracts@0.122.0
+  - @cat-factory/kernel@0.114.0
+  - @cat-factory/prompt-fragments@0.13.6
+
+## 0.50.0
+
+### Minor Changes
+
+- ed77be6: Initiative-preset registry → app-owned DI (slice 5 of the custom-initiative-definitions
+  initiative; registry-DI-migration "Initiative presets" row). The module-global initiative-preset
+  registry is replaced by an app-owned `InitiativePresetRegistry` instance the composition root news,
+  threads through `CoreDependencies`, and re-exposes on `Core` — mirroring the agent-kind registry.
+  This removes the shared process state and the external-adapter module-identity gotcha: a deployment
+  registers its own presets by reference on the instance the facade injects.
+
+  BREAKING: the free `@cat-factory/kernel` exports `registerInitiativePreset`,
+  `registerInitiativePresets`, `getInitiativePreset`, `allInitiativePresets`,
+  `initiativePresetDescriptors`, and `clearRegisteredInitiativePresets` are removed. Use the new
+  `InitiativePresetRegistry` class (kernel) + `defaultInitiativePresetRegistry()` factory
+  (`@cat-factory/agents`, preloads the built-in generic / docs-refresh / tech-migration presets)
+  instead, and inject it via the facade's composition seam — `createApp({ overrides: {
+initiativePresetRegistry } })` on the Worker, or the `initiativePresetRegistry` option on `start()`
+  / `startLocal()`. `registerDocsRefreshPreset` / `registerTechMigrationPreset` now take the registry
+  as a parameter (no bottom-of-module self-registration). No data migration — pre-1.0, no back-compat.
+
+### Patch Changes
+
+- Updated dependencies [ed77be6]
+  - @cat-factory/kernel@0.113.0
+  - @cat-factory/contracts@0.121.2
+  - @cat-factory/prompt-fragments@0.13.5
+
 ## 0.49.3
 
 ### Patch Changes

@@ -3,6 +3,7 @@ import { defineStructuredOutput } from '@cat-factory/agents'
 import type {
   GateProbe,
   InitiativePresetRegistration,
+  InitiativePresetRegistry,
   RepoOp,
   StepCompletionResolver,
 } from '@cat-factory/kernel'
@@ -12,7 +13,6 @@ import {
   defineProviderToken,
   isProviderWired,
   registerGate,
-  registerInitiativePreset,
   registerPipeline,
   registerStepResolver,
   wireProvider,
@@ -294,7 +294,7 @@ const auditorSummaryResolver: StepCompletionResolver = {
 // "org compliance audit": the analyst inventories the services, the planner emits one audit item
 // per in-scope service, and `seedPlan` routes every item to this package's OWN `pl_org_audit`
 // pipeline — so a deployment can add a first-class initiative shape that runs its own agent kinds,
-// through the public `registerInitiativePreset` seam ALONE (no engine change, no per-facade wiring).
+// by registering it on the app-owned `InitiativePresetRegistry` (no engine change, no per-facade wiring).
 //
 // It mirrors the built-in `preset_docs_refresh` (`@cat-factory/agents`) but stays deliberately
 // minimal: `interview: 'full'` reuses the built-in `pl_initiative` planning pipeline (so there is
@@ -393,32 +393,35 @@ export const ORG_AUDIT_PRESET: InitiativePresetRegistration = {
 }
 
 /**
- * Register the org-compliance-audit initiative preset. Idempotent (the preset registry replaces by
- * id), and called from {@link registerExampleCustomAgents} — the deployment composition root — so a
- * deployment that opts into this package gets the preset in its create-initiative picker with no
- * further wiring. Tests that `clearRegisteredInitiativePresets()` call this to restore it.
+ * Register the org-compliance-audit initiative preset on the app-owned {@link InitiativePresetRegistry}
+ * the composition root injects. Idempotent (the preset registry replaces by id), and called from
+ * {@link registerExampleCustomAgents} — the deployment composition root — so a deployment that opts
+ * into this package gets the preset in its create-initiative picker with no further wiring.
  */
-export function registerOrgAuditPreset(): void {
-  registerInitiativePreset(ORG_AUDIT_PRESET)
+export function registerOrgAuditPreset(initiativePresetRegistry: InitiativePresetRegistry): void {
+  initiativePresetRegistry.register(ORG_AUDIT_PRESET)
 }
 
 /**
  * Register the example kinds on the app-owned {@link AgentKindRegistry} the composition root
- * injects, plus the `pl_org_audit` pipeline that chains them, the example `license-check`
- * gate + the auditor summary resolver, and the `preset_org_audit` initiative preset (all still on
- * the module-global pipeline/gate/step-resolver/preset registries — those registries have not
- * migrated to app-owned DI yet). Idempotent (registries replace by id/kind). Called explicitly from
- * a facade/test — there is no module-load side effect any more, since the agent-kind registry is an
- * app-owned instance, not a global.
+ * injects, and the `preset_org_audit` initiative preset on the app-owned {@link InitiativePresetRegistry},
+ * plus the `pl_org_audit` pipeline that chains them + the example `license-check` gate + the auditor
+ * summary resolver (the pipeline/gate/step-resolver registries are still module-global — those have
+ * not migrated to app-owned DI yet). Idempotent (registries replace by id/kind). Called explicitly
+ * from a facade/test — there is no module-load side effect any more, since the agent-kind + preset
+ * registries are app-owned instances, not globals.
  */
-export function registerExampleCustomAgents(registry: AgentKindRegistry): void {
+export function registerExampleCustomAgents(
+  registry: AgentKindRegistry,
+  initiativePresetRegistry: InitiativePresetRegistry,
+): void {
   registry.registerAll(EXAMPLE_AGENT_KINDS)
   registerPipeline({
     id: ORG_AUDIT_PIPELINE_ID,
     name: 'Org compliance audit',
     agentKinds: [ORG_REVIEWER_KIND, SECURITY_AUDITOR_KIND],
   })
-  registerOrgAuditPreset()
+  registerOrgAuditPreset(initiativePresetRegistry)
   // The custom polling gate — a deterministic precheck that escalates to `license-fixer`.
   registerGate(LICENSE_CHECK_KIND, (ctx) => ({
     kind: LICENSE_CHECK_KIND,

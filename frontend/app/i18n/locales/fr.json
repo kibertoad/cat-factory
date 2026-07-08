@@ -4406,6 +4406,13 @@
       "maxConcurrentField": "Taches simultanees maximales",
       "defaultPipelineField": "Pipeline par defaut",
       "failed": "Impossible de mettre a jour l'initiative"
+    },
+    "checkpoint": {
+      "badge": "Point de contrôle",
+      "awaiting": "En attente de revue",
+      "cleared": "Revu",
+      "pausedTitle": "En pause pour revue",
+      "pausedBody": "La phase « {phase} » est terminée. Examinez ci-dessus les artefacts et les PR validés, puis reprenez pour continuer ou annulez pour arrêter l'initiative."
     }
   },
   "environmentWizard": {

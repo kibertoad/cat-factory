@@ -4535,6 +4535,13 @@
       "maxConcurrentField": "Max concurrent tasks",
       "defaultPipelineField": "Default pipeline",
       "failed": "Could not update the initiative"
+    },
+    "checkpoint": {
+      "badge": "Checkpoint",
+      "awaiting": "Awaiting review",
+      "cleared": "Reviewed",
+      "pausedTitle": "Paused for review",
+      "pausedBody": "Phase \"{phase}\" is complete. Review its committed artifacts and PRs above, then resume to continue or cancel to stop the initiative."
     }
   },
   "environmentWizard": {

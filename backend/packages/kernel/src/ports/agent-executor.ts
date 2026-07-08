@@ -13,6 +13,7 @@ import type {
   ReferenceRepo,
   ServiceProvisioning,
   StepSubtasks,
+  TestSecretRef,
   StreamedFollowUp,
   TaskEstimate,
   TaskTypeFields,
@@ -278,6 +279,16 @@ export interface AgentRunContext {
     description?: string
     envUrl?: string
   }[]
+  /**
+   * The SENSITIVE test credentials configured for this run's service frame — as non-secret
+   * REFERENCES only (each key + its description), NEVER the values. Resolved by the engine
+   * from the service-frame's sealed test-secret store; present only for the tester kinds (the
+   * kinds that receive the values out-of-band). The tester prompt advertises these so the agent
+   * knows which environment variables are available and what each is for; the VALUES are
+   * decrypted at dispatch and injected into the container environment by the executor + harness,
+   * never rendered into the prompt or the telemetry snapshot. Absent when the service has none.
+   */
+  testSecrets?: TestSecretRef[]
   /**
    * Read-only reference repositories attached to a document-authoring task (the doc-writer
    * agent) — lifted verbatim by the engine from the task block's `referenceRepos`. The

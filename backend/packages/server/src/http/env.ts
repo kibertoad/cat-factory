@@ -18,10 +18,12 @@ import type {
   ProviderSubscriptionService,
   PublicApiKeyService,
   RunnerBackendRegistry,
+  TestSecretsService,
   UserSecretService,
 } from '@cat-factory/integrations'
 import type { Core } from '@cat-factory/orchestration'
 import type { AgentKindRegistry } from '@cat-factory/agents'
+import type { InitiativePresetRegistry } from '@cat-factory/kernel'
 import type { ResolveRepoTarget } from '../agents/ContainerAgentExecutor.js'
 import type { SessionPayload, SessionUser } from '../auth/signing.js'
 import type { AppConfig } from '../config/types.js'
@@ -83,6 +85,14 @@ export interface ServerContainer extends Core {
    */
   agentKindRegistry: AgentKindRegistry
   /**
+   * The app-owned initiative-preset registry (built-in generic / docs-refresh / tech-migration
+   * plus any a deployment registered by reference). The workspace snapshot reads its `descriptors()`
+   * for the SPA's initiative picker + form; the preset-probe endpoint reads `.get(id)?.detect`. The
+   * controllers thread the SAME instance the initiative services use. Always present — the facade
+   * attaches it (via the `Core` spread) alongside the agent-kind registry.
+   */
+  initiativePresetRegistry: InitiativePresetRegistry
+  /**
    * Resolve a block's run repo (installation + repo + default branch) bound to a
    * checkout-free {@link RepoFiles}. The engine uses it to run a registered kind's
    * pre/post-ops; the shared service-spec read controller reuses it to read the sharded
@@ -104,6 +114,13 @@ export interface ServerContainer extends Core {
    * Present only when the facade wired the provider-subscription repository.
    */
   subscriptions?: ProviderSubscriptionService
+  /**
+   * The sensitive per-service test-credential store (sealed). Present only when the facade
+   * wired the test-secrets repository (needs ENCRYPTION_KEY). Backs the test-secrets CRUD
+   * controller; its resolution methods are also threaded into the engine (prompt refs) and
+   * the container executor (values, injected into the Tester out of band).
+   */
+  testSecrets?: TestSecretsService
   /**
    * The per-user individual-usage subscription store (Claude). Present only when the
    * facade wired the personal-subscription repositories (needs ENCRYPTION_KEY). Drives

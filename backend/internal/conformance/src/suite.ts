@@ -61,10 +61,9 @@ import type {
 } from '@cat-factory/kernel'
 import {
   clearRegisteredGates,
-  clearRegisteredInitiativePresets,
   clearRegisteredStepResolvers,
+  InitiativePresetRegistry,
   registerGate,
-  registerInitiativePreset,
   registerStepResolver,
 } from '@cat-factory/kernel'
 import { afterEach, describe, expect, it } from 'vitest'
@@ -3981,6 +3980,86 @@ export function defineIntegrationConformance(harness: ConformanceHarness): void 
       })
     })
 
+    describe('sensitive per-service test credentials (sealed)', () => {
+      it('seals values, lists redacted refs, and removes — identically per store', async () => {
+        const app = harness.makeApp()
+        const { workspace } = await app.createWorkspace({ seed: true })
+        // Key by a demo-board block (the inspector edits a service frame; CRUD is exact-keyed
+        // by block id, so any seeded block id exercises the same store round-trip).
+        const base = `/workspaces/${workspace.id}/services/blk_auth/test-secrets`
+
+        const empty = await app.call<{ blockId: string; entries: unknown[] }>('GET', base)
+        // Facades without ENCRYPTION_KEY don't wire the store; nothing to assert there.
+        if (empty.status === 503) return
+        expect(empty.status).toBe(200)
+        expect(empty.body.entries).toEqual([])
+
+        // Seal two secrets. The view is REDACTED: key + description only — the VALUE must
+        // never appear on the wire (it is sealed at rest and delivered out of band).
+        const set = await app.call<{
+          blockId: string
+          entries: { key: string; description: string }[]
+        }>('PUT', base, {
+          entries: [
+            {
+              key: 'STRIPE_API_KEY',
+              description: 'Stripe test-mode secret key',
+              value: 'sk_test_SECRET_VALUE_1',
+            },
+            {
+              key: 'SENDGRID_TOKEN',
+              description: 'SendGrid sandbox token',
+              value: 'SG.SECRET_VALUE_2',
+            },
+          ],
+        })
+        expect(set.status).toBe(200)
+        expect(set.body.entries.map((e) => e.key)).toEqual(['STRIPE_API_KEY', 'SENDGRID_TOKEN'])
+        expect(JSON.stringify(set.body)).not.toContain('sk_test_SECRET_VALUE_1')
+        expect(JSON.stringify(set.body)).not.toContain('SG.SECRET_VALUE_2')
+
+        const listed = await app.call<{ entries: { key: string; description: string }[] }>(
+          'GET',
+          base,
+        )
+        expect(listed.status).toBe(200)
+        expect(listed.body.entries).toEqual([
+          { key: 'STRIPE_API_KEY', description: 'Stripe test-mode secret key' },
+          { key: 'SENDGRID_TOKEN', description: 'SendGrid sandbox token' },
+        ])
+        expect(JSON.stringify(listed.body)).not.toContain('SECRET_VALUE')
+
+        // A duplicate key is rejected at the write boundary (keys are unique per service).
+        const dup = await app.call('PUT', base, {
+          entries: [
+            { key: 'STRIPE_API_KEY', description: 'a', value: 'x1' },
+            { key: 'STRIPE_API_KEY', description: 'b', value: 'x2' },
+          ],
+        })
+        expect(dup.status).toBeGreaterThanOrEqual(400)
+
+        // A non-env-var key is rejected too.
+        const badKey = await app.call('PUT', base, {
+          entries: [{ key: '1-bad key', description: 'nope', value: 'x' }],
+        })
+        expect(badKey.status).toBeGreaterThanOrEqual(400)
+
+        // A reserved/toolchain env-var name (would clobber the harness environment) is rejected
+        // at the write boundary, not silently dropped at injection.
+        const reserved = await app.call('PUT', base, {
+          entries: [{ key: 'PATH', description: 'nope', value: 'x' }],
+        })
+        expect(reserved.status).toBeGreaterThanOrEqual(400)
+
+        // Replacing with an empty set removes the row; the view is empty again.
+        const cleared = await app.call<{ entries: unknown[] }>('PUT', base, { entries: [] })
+        expect(cleared.status).toBe(200)
+        expect(cleared.body.entries).toEqual([])
+        expect((await app.call('DELETE', base)).status).toBe(204)
+        expect((await app.call<{ entries: unknown[] }>('GET', base)).body.entries).toEqual([])
+      })
+    })
+
     describe('repo bootstrap', () => {
       it('round-trips reference architectures', async () => {
         const { call, createWorkspace } = harness.makeApp()
@@ -6838,10 +6917,12 @@ export function defineExecutionConformance(harness: ConformanceHarness): void {
         // preset's standing per-kind methodology in its agent context on EVERY runtime — the
         // Cloudflare facade resolves it from the D1 initiative store, Node/local from Drizzle,
         // both through the same `AgentContextBuilder`. A facade that failed to wire the initiative
-        // store into the context builder would silently ship a bare child prompt. The preset is a
-        // module-global registration today (slice 5 migrates it to DI); scope + clear it here.
+        // store into the context builder would silently ship a bare child prompt. The preset is
+        // registered on a fresh app-owned registry injected via `makeApp` — the DI seam that
+        // replaced the old module-global registration.
         const ADDITION = 'Follow the org connector architecture and consume the build handoff.'
-        registerInitiativePreset({
+        const initiativePresetRegistry = new InitiativePresetRegistry()
+        initiativePresetRegistry.register({
           descriptor: {
             id: 'preset_spawned_conf',
             presentation: {
@@ -6858,39 +6939,85 @@ export function defineExecutionConformance(harness: ConformanceHarness): void {
           },
           promptAdditions: { coder: ADDITION },
         })
-        try {
-          const app = harness.makeApp({ confidence: 1, echoPreset: true })
-          const { workspace } = await app.createWorkspace()
-          const wsId = workspace.id
+        const app = harness.makeApp(
+          { confidence: 1, echoPreset: true },
+          { initiativePresetRegistry },
+        )
+        const { workspace } = await app.createWorkspace()
+        const wsId = workspace.id
 
-          // Seed the initiative entity anchored to an initiative block id, then link the seeded
-          // task to it (an epic-style `initiativeId` membership — exactly what the loop's
-          // `buildTaskBlock` stamps on a spawned child).
-          const anchorBlockId = 'init_anchor'
-          await app.initiativeRepository().insert(wsId, spawnedInitiative(anchorBlockId))
-          await app.blockRepository().update(wsId, 'task_login', { initiativeId: anchorBlockId })
+        // Seed the initiative entity anchored to an initiative block id, then link the seeded
+        // task to it (an epic-style `initiativeId` membership — exactly what the loop's
+        // `buildTaskBlock` stamps on a spawned child).
+        const anchorBlockId = 'init_anchor'
+        await app.initiativeRepository().insert(wsId, spawnedInitiative(anchorBlockId))
+        await app.blockRepository().update(wsId, 'task_login', { initiativeId: anchorBlockId })
 
-          const pipeline = await app.call<Pipeline>('POST', `/workspaces/${wsId}/pipelines`, {
-            name: 'Coder only',
-            agentKinds: ['coder'],
-          })
-          const start = await app.call<ExecutionInstance>(
-            'POST',
-            `/workspaces/${wsId}/blocks/task_login/executions`,
-            { pipelineId: pipeline.body.id },
-          )
-          expect(start.status).toBe(201)
+        const pipeline = await app.call<Pipeline>('POST', `/workspaces/${wsId}/pipelines`, {
+          name: 'Coder only',
+          agentKinds: ['coder'],
+        })
+        const start = await app.call<ExecutionInstance>(
+          'POST',
+          `/workspaces/${wsId}/blocks/task_login/executions`,
+          { pipelineId: pipeline.body.id },
+        )
+        expect(start.status).toBe(201)
 
-          const ticked = await app.drive(wsId)
-          const exec = ticked.find((e) => e.blockId === 'task_login')!
-          const step = exec.steps.find((s) => s.agentKind === 'coder')!
-          expect(step.state).toBe('done')
-          // The coder was handed the preset label + its `coder` promptAddition (and nothing else —
-          // no goal/qa bleeds onto a spawned run).
-          expect(step.output).toContain(`[preset]Connector factory|${ADDITION}[/preset]`)
-        } finally {
-          clearRegisteredInitiativePresets()
-        }
+        const ticked = await app.drive(wsId)
+        const exec = ticked.find((e) => e.blockId === 'task_login')!
+        const step = exec.steps.find((s) => s.agentKind === 'coder')!
+        expect(step.state).toBe('done')
+        // The coder was handed the preset label + its `coder` promptAddition (and nothing else —
+        // no goal/qa bleeds onto a spawned run).
+        expect(step.output).toContain(`[preset]Connector factory|${ADDITION}[/preset]`)
+      })
+
+      it('serves an injected custom preset descriptor in the snapshot + accepts create-with-preset', async () => {
+        // D5: the app-owned initiative-preset registry the facade injects surfaces the custom
+        // preset in the workspace snapshot's `initiativePresets` (the SPA picker) AND is accepted
+        // by create-initiative — identically on every runtime, replacing the module-global registry.
+        const CUSTOM_ID = 'preset_conf_custom'
+        const initiativePresetRegistry = new InitiativePresetRegistry()
+        initiativePresetRegistry.register({
+          descriptor: {
+            id: CUSTOM_ID,
+            presentation: {
+              label: 'Conformance custom',
+              icon: 'i-lucide-x',
+              color: '#123456',
+              description: 'A conformance-injected custom preset.',
+            },
+            fields: [{ key: 'toolName', label: 'Tool', type: 'text', required: true }],
+            planningPipelineId: 'pl_initiative',
+            interview: 'full',
+            humanReviewDefault: true,
+            defaultFragmentIds: [],
+          },
+        })
+        const app = harness.makeApp({ confidence: 1 }, { initiativePresetRegistry })
+        const { workspace } = await app.createWorkspace()
+        const wsId = workspace.id
+
+        // The snapshot carries the injected descriptor (+ the built-in generic, always resolvable).
+        const snapshot = await app.call<WorkspaceSnapshot>('GET', `/workspaces/${wsId}`)
+        const presetIds = (snapshot.body.initiativePresets ?? []).map((p) => p.id)
+        expect(presetIds).toContain(CUSTOM_ID)
+        expect(presetIds).toContain('preset_generic')
+
+        // Create an initiative on the seeded service frame naming the injected preset — it is
+        // accepted (an unknown preset id would be a create-time ValidationError). Anchor it to a
+        // SEEDED service frame (`blk_auth`) rather than minting one over `POST /blocks`: raw
+        // service-frame creation is deliberately off the mothership-mode SPA path (the mothership
+        // persistence RPC does not proxy `serviceRepository.insert`), so a seeded frame keeps this
+        // assertion — about preset acceptance, not frame creation — identical on every runtime.
+        const created = await app.call('POST', `/workspaces/${wsId}/initiatives`, {
+          frameId: 'blk_auth',
+          title: 'Custom-preset initiative',
+          presetId: CUSTOM_ID,
+          presetInputs: { toolName: 'acme' },
+        })
+        expect(created.status).toBe(201)
       })
 
       it('restarts a run from a chosen step, preserving prior outputs and the block requirements', async () => {

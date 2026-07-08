@@ -28,7 +28,7 @@ import { handleGitHubSyncBatch, reconcileStaleRepos } from './infrastructure/git
 import { sweepExpiredEnvironments } from './infrastructure/environments/sweep'
 import { logger } from './infrastructure/observability/logger'
 import { sweepBinaryArtifactRetention, validateRegistrationsOnce } from '@cat-factory/orchestration'
-import { defaultAgentKindRegistry } from '@cat-factory/agents'
+import { defaultAgentKindRegistry, defaultInitiativePresetRegistry } from '@cat-factory/agents'
 import { DEFAULT_WORKSPACE_SETTINGS } from '@cat-factory/kernel'
 import { D1WorkspaceRepository } from './infrastructure/repositories/D1WorkspaceRepository'
 import { D1WorkspaceSettingsRepository } from './infrastructure/repositories/D1WorkspaceSettingsRepository'
@@ -69,6 +69,12 @@ export {
   defaultAgentKindRegistry,
   type AgentKindDefinition,
 } from '@cat-factory/agents'
+// Installation-level extension point for custom initiative presets (the same DI seam as agent
+// kinds): a deployment news a `defaultInitiativePresetRegistry()`, registers its own presets on it
+// by reference, and injects it into `buildContainer`/`createApp` via the `initiativePresetRegistry`
+// override — replacing the old module-global `registerInitiativePreset` side effect.
+export { defaultInitiativePresetRegistry } from '@cat-factory/agents'
+export { InitiativePresetRegistry, type InitiativePresetRegistration } from '@cat-factory/kernel'
 export { registerPipeline, registerPipelines, clearRegisteredPipelines } from '@cat-factory/kernel'
 // The built-in model-preset ids + the catalog fallback default. A custom Worker entry that builds
 // its own app can seed a different out-of-the-box default with
@@ -81,7 +87,11 @@ export { DEFAULT_MODEL_PRESET_ID, MODEL_PRESET_SEED_IDS } from '@cat-factory/ker
 // instance the engine uses, matching the Node/local facades. A deployment injecting custom
 // kinds registers them on this instance (or overrides it) before the first request.
 const agentKindRegistry = defaultAgentKindRegistry()
-const app = createApp({ overrides: { agentKindRegistry } })
+// One app-owned initiative-preset registry, shared by every per-request container (via the
+// `createApp` override). A deployment injecting custom presets registers them on this instance
+// (or overrides it) before the first request — the same seam as `agentKindRegistry`.
+const initiativePresetRegistry = defaultInitiativePresetRegistry()
+const app = createApp({ overrides: { agentKindRegistry, initiativePresetRegistry } })
 
 /** Compact, log-friendly shape for an unknown caught value. */
 function errInfo(error: unknown): { message: string; stack?: string } {

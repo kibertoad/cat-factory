@@ -16,6 +16,7 @@ import {
   INITIATIVE_ITEM_STATUS_LABEL_KEYS,
   INITIATIVE_STATUS_LABEL_KEYS,
   initiativeProgress,
+  pendingCheckpointPhase,
 } from '~/utils/initiative'
 
 const board = useBoardStore()
@@ -41,6 +42,33 @@ const progressPct = computed(() =>
     ? Math.round((progress.value.settled / progress.value.total) * 100)
     : 0,
 )
+
+// Phase checkpoints (D2): the phase whose completed checkpoint is awaiting review (recomputed
+// live from the entity — mirrors the loop's `pendingCheckpoint`), and whether the initiative is
+// currently PAUSED at it. The tracker is the review surface: it shows the phase's committed
+// artifacts + PRs, so a resume/cancel decision is taken right here.
+const checkpointPhase = computed(() =>
+  pendingCheckpointPhase(initiative.value?.phases, initiative.value?.items),
+)
+const pausedAtCheckpoint = computed(
+  () => initiative.value?.status === 'paused' && checkpointPhase.value !== null,
+)
+// The phase whose checkpoint is genuinely holding the initiative RIGHT NOW (paused for review) —
+// only then does its badge read "awaiting review". A phase whose items just settled but whose
+// pause hasn't landed yet stays an upcoming checkpoint, so the badge can't get ahead of the banner.
+const awaitingReviewPhaseId = computed(() =>
+  pausedAtCheckpoint.value ? (checkpointPhase.value?.id ?? null) : null,
+)
+
+/** Resume (GO) or cancel (NO_GO) an initiative paused at a checkpoint. */
+async function checkpointControl(action: 'resume' | 'cancel') {
+  if (!blockId.value) return
+  try {
+    await initiatives.control(blockId.value, action)
+  } catch (error) {
+    reportError(error)
+  }
+}
 
 const policyRules = computed(() => initiative.value?.policy?.rules ?? [])
 function ruleAxes(rule: { minComplexity?: number; minRisk?: number; minImpact?: number }): string {
@@ -205,6 +233,48 @@ async function savePolicy() {
           </div>
 
           <template v-else>
+            <!-- Paused at a phase checkpoint (D2): a completed checkpoint phase is awaiting
+                 review before the next phase spawns. Read the phase's artifacts/PRs below,
+                 then resume (continue) or cancel (stop) the initiative right here. -->
+            <section
+              v-if="pausedAtCheckpoint"
+              class="mb-4 rounded-lg border border-amber-500/40 bg-amber-500/10 p-3.5"
+              data-testid="initiative-checkpoint-pause"
+            >
+              <div class="flex items-start gap-2.5">
+                <UIcon
+                  name="i-lucide-pause-circle"
+                  class="mt-0.5 h-4 w-4 shrink-0 text-amber-300"
+                />
+                <div class="min-w-0 flex-1">
+                  <h3 class="text-[13px] font-semibold text-amber-200">
+                    {{ t('initiative.checkpoint.pausedTitle') }}
+                  </h3>
+                  <p class="mt-0.5 text-[12px] leading-relaxed text-amber-100/80">
+                    {{ t('initiative.checkpoint.pausedBody', { phase: checkpointPhase!.title }) }}
+                  </p>
+                  <div class="mt-2.5 flex flex-wrap gap-2">
+                    <button
+                      class="rounded bg-indigo-600 px-2.5 py-1 text-[11px] font-medium text-white hover:bg-indigo-500 disabled:opacity-50"
+                      :disabled="initiatives.controlling"
+                      data-testid="initiative-checkpoint-resume"
+                      @click="checkpointControl('resume')"
+                    >
+                      {{ t('initiative.inspector.resume') }}
+                    </button>
+                    <button
+                      class="rounded border border-rose-500/50 px-2.5 py-1 text-[11px] font-medium text-rose-300 hover:bg-rose-500/10 disabled:opacity-50"
+                      :disabled="initiatives.controlling"
+                      data-testid="initiative-checkpoint-cancel"
+                      @click="checkpointControl('cancel')"
+                    >
+                      {{ t('initiative.inspector.cancel') }}
+                    </button>
+                  </div>
+                </div>
+              </div>
+            </section>
+
             <!-- Goal & constraints -->
             <section v-if="initiative.goal" class="mb-4">
               <h3 class="mb-1 text-[11px] font-semibold uppercase tracking-wide text-slate-500">
@@ -249,8 +319,33 @@ async function savePolicy() {
 
             <!-- Phases + items -->
             <section v-for="phase in phases" :key="phase.id" class="mb-5">
-              <h3 class="mb-1 text-sm font-semibold text-slate-200">
-                {{ t('initiative.tracker.phase', { title: phase.title }) }}
+              <h3 class="mb-1 flex items-center gap-2 text-sm font-semibold text-slate-200">
+                <span>{{ t('initiative.tracker.phase', { title: phase.title }) }}</span>
+                <!-- Checkpoint annotation (D2): this phase pauses the initiative for human review
+                     once its items settle. Cleared → already reviewed; the pending one → awaiting
+                     review; otherwise an upcoming gate. -->
+                <UBadge
+                  v-if="phase.checkpoint"
+                  :color="
+                    phase.checkpointClearedAt
+                      ? 'neutral'
+                      : awaitingReviewPhaseId === phase.id
+                        ? 'warning'
+                        : 'info'
+                  "
+                  variant="subtle"
+                  size="sm"
+                  :data-testid="`initiative-phase-checkpoint-${phase.id}`"
+                >
+                  <UIcon name="i-lucide-flag" class="mr-1 h-3 w-3" />
+                  {{
+                    phase.checkpointClearedAt
+                      ? t('initiative.checkpoint.cleared')
+                      : awaitingReviewPhaseId === phase.id
+                        ? t('initiative.checkpoint.awaiting')
+                        : t('initiative.checkpoint.badge')
+                  }}
+                </UBadge>
               </h3>
               <p v-if="phase.goal" class="mb-2 text-[12px] text-slate-400">{{ phase.goal }}</p>
               <div class="overflow-x-auto rounded-lg border border-slate-800">

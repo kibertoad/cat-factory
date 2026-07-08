@@ -227,12 +227,12 @@ export const workspaceSnapshotSchema = v.object({
    */
   initiatives: v.optional(v.array(initiativeSchema)),
   /**
-   * The registered INITIATIVE PRESETS (built-in `preset_generic` + any a deployment mixed in via
-   * `registerInitiativePreset`), each a serialisable descriptor (form + planning-pipeline binding
-   * + defaults + `probe` flag). The SPA's create-initiative picker renders these and starts the
-   * chosen preset's `planningPipelineId`. Static (process-global registry), workspace-independent;
-   * attached by the shared `WorkspaceController` (so it is symmetric across runtimes), optional on
-   * the wire — the SPA falls back to the built-in generic pipeline when absent.
+   * The registered INITIATIVE PRESETS (built-in `preset_generic` + any a deployment registered by
+   * reference on the app-owned `InitiativePresetRegistry`), each a serialisable descriptor (form +
+   * planning-pipeline binding + defaults + `probe` flag). The SPA's create-initiative picker renders
+   * these and starts the chosen preset's `planningPipelineId`. Workspace-independent; attached by the
+   * shared `WorkspaceController` (so it is symmetric across runtimes), optional on the wire — the SPA
+   * falls back to the built-in generic pipeline when absent.
    */
   initiativePresets: v.optional(v.array(initiativePresetDescriptorSchema)),
   /**

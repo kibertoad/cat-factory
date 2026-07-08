@@ -4,14 +4,13 @@ import type {
   InitiativePlanDraft,
   InitiativePresetInputs,
 } from '@cat-factory/contracts'
-import type { InitiativePresetRegistration } from '@cat-factory/kernel'
+import type { InitiativePresetRegistration, InitiativePresetRegistry } from '@cat-factory/kernel'
 import {
   BUSINESS_DOCS_PIPELINE_ID,
   CODE_COMMENTS_PIPELINE_ID,
   DOCUMENT_QUICK_PIPELINE_ID,
   INITIATIVE_DOCS_PIPELINE_ID,
   joinRepoPath,
-  registerInitiativePreset,
 } from '@cat-factory/kernel'
 import { DEFAULT_DOCUMENT_STYLE_FRAGMENT_IDS, styleFragments } from '@cat-factory/prompt-fragments'
 import { fileSlug, mergeGateOverride, strInput, uniqueDocPath } from '../plan-helpers.js'
@@ -410,15 +409,10 @@ export const DOCS_REFRESH_PRESET: InitiativePresetRegistration = {
 }
 
 /**
- * Register the docs-refresh preset. Idempotent (the registry replaces by id), so importing this
- * module (which self-registers below, the `@cat-factory/gates` pattern) and calling this explicitly
- * are safe to combine. Tests that `clearRegisteredInitiativePresets()` call this to restore it.
+ * Register the docs-refresh preset on an app-owned {@link InitiativePresetRegistry}. Preloaded by
+ * `defaultInitiativePresetRegistry()`, so every deployment carries it with no per-facade wiring —
+ * the two runtimes cannot drift on it. Idempotent (the registry replaces by id).
  */
-export function registerDocsRefreshPreset(): void {
-  registerInitiativePreset(DOCS_REFRESH_PRESET)
+export function registerDocsRefreshPreset(registry: InitiativePresetRegistry): void {
+  registry.register(DOCS_REFRESH_PRESET)
 }
-
-// Side-effect registration: importing `@cat-factory/agents` (which re-exports from this module) is
-// enough to make the pilot preset available in every deployment — no per-facade wiring, so the two
-// runtimes cannot drift on it.
-registerDocsRefreshPreset()

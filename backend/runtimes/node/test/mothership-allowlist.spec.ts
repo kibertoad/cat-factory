@@ -250,6 +250,11 @@ const NON_REMOTE: Record<string, Record<string, Reason>> = {
   packageRegistryConnectionRepository: {},
   accountSettingsRepository: { getByAccount: 'pending', upsert: 'pending', listAll: 'sweeper' },
   releaseHealthConfigRepository: {},
+  // The sealed sensitive test-credential surface is allow-listed for the inspector CRUD +
+  // run-path frame read (`getByBlock`/`upsert`/`deleteByBlock` — the sealed blob rides the
+  // machine API, decrypted service-side under the LOCAL key). `listByWorkspace` has no consumer
+  // on any SPA/run path yet, so it stays pending until a slice needs it.
+  testSecretsRepository: { listByWorkspace: 'pending' },
   provisioningLogRepository: { append: 'telemetry', list: 'pending', deleteOlderThan: 'sweeper' },
   // --- non-core repositories -----------------------------------------------------
   // `get`/`insert`/`update` are now allow-listed (the bootstrap start / board-card poll / retry /

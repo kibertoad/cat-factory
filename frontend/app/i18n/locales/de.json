@@ -3560,6 +3560,13 @@
       "maxConcurrentField": "Max. gleichzeitige Aufgaben",
       "defaultPipelineField": "Standard-Pipeline",
       "failed": "Die Initiative konnte nicht aktualisiert werden"
+    },
+    "checkpoint": {
+      "badge": "Checkpoint",
+      "awaiting": "Warten auf Prüfung",
+      "cleared": "Geprüft",
+      "pausedTitle": "Pausiert zur Prüfung",
+      "pausedBody": "Phase „{phase}\" ist abgeschlossen. Prüfe oben die committeten Artefakte und PRs, setze dann fort, um weiterzumachen, oder brich die Initiative ab."
     }
   },
   "app": {

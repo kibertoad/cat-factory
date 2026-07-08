@@ -6,12 +6,10 @@ import {
 import {
   DOCUMENT_QUICK_PIPELINE_ID,
   INITIATIVE_PIPELINE_ID,
-  clearRegisteredInitiativePresets,
-  getInitiativePreset,
-  initiativePresetDescriptors,
+  InitiativePresetRegistry,
 } from '@cat-factory/kernel'
 import { MIGRATION_FRAGMENT_IDS } from '@cat-factory/prompt-fragments'
-import { afterEach, describe, expect, it } from 'vitest'
+import { describe, expect, it } from 'vitest'
 import { MIGRATION_PHASE_ID_ORDER, MIGRATION_PHASE_IDS } from './phases.js'
 import { MIGRATION_PROMPT_ADDITIONS } from './prompt-additions.js'
 import { seedMigrationPlan } from './seed-plan.js'
@@ -21,20 +19,23 @@ import {
   registerTechMigrationPreset,
 } from './preset.js'
 
-// The preset self-registers on import (the module side effect). These tests pin the PRESET's own
-// wiring contract — a valid descriptor, the five-phase template matching the canonical ids, the
-// conservative policy defaults, the interview + review posture, and that it composes the already-
-// tested T4/T5/T7 pieces. `seedMigrationPlan` and the phase-template ingest machinery have their own
-// suites; here we assert the descriptor is well-formed and the hooks are wired to the right pieces.
+// The preset is preloaded by `defaultInitiativePresetRegistry()`; `registerTechMigrationPreset(registry)`
+// installs it on an app-owned registry. These tests pin the PRESET's own wiring contract — a valid
+// descriptor, the five-phase template matching the canonical ids, the conservative policy defaults,
+// the interview + review posture, and that it composes the already-tested T4/T5/T7 pieces.
+// `seedMigrationPlan` and the phase-template ingest machinery have their own suites; here we assert
+// the descriptor is well-formed and the hooks are wired to the right pieces.
 
 const preset = TECH_MIGRATION_PRESET
 
 describe('preset_tech_migration — descriptor + registration', () => {
-  it('is a valid, self-registered preset with NO probe (no detect hook)', () => {
+  it('is a valid preset with NO probe (no detect hook), registered on an app-owned registry', () => {
     expect(() => parseInitiativePresetDescriptor(preset.descriptor)).not.toThrow()
-    expect(getInitiativePreset(TECH_MIGRATION_PRESET_ID)).toBe(preset)
+    const registry = new InitiativePresetRegistry()
+    registerTechMigrationPreset(registry)
+    expect(registry.get(TECH_MIGRATION_PRESET_ID)).toBe(preset)
     expect(preset.detect).toBeUndefined()
-    const descriptor = initiativePresetDescriptors().find((d) => d.id === TECH_MIGRATION_PRESET_ID)
+    const descriptor = registry.descriptors().find((d) => d.id === TECH_MIGRATION_PRESET_ID)
     // `probe` is derived from `detect`; there is none, so the SPA never fires a probe for it.
     expect(descriptor?.probe).toBe(false)
   })
@@ -63,15 +64,12 @@ describe('preset_tech_migration — descriptor + registration', () => {
     expect(preset.seedPlan).toBe(seedMigrationPlan)
   })
 
-  it('re-registration is idempotent after a clear (the generic preset always survives)', () => {
-    clearRegisteredInitiativePresets()
-    expect(getInitiativePreset(TECH_MIGRATION_PRESET_ID)).toBeUndefined()
-    registerTechMigrationPreset()
-    expect(getInitiativePreset(TECH_MIGRATION_PRESET_ID)).toBe(preset)
+  it('an empty registry does not resolve the tech-migration preset until registered', () => {
+    const registry = new InitiativePresetRegistry()
+    expect(registry.get(TECH_MIGRATION_PRESET_ID)).toBeUndefined()
+    registerTechMigrationPreset(registry)
+    expect(registry.get(TECH_MIGRATION_PRESET_ID)).toBe(preset)
   })
-
-  // The module side-effect ran at import; restore it for any downstream test in this file/run.
-  afterEach(() => registerTechMigrationPreset())
 })
 
 describe('preset_tech_migration — phase template (plan SHAPE)', () => {

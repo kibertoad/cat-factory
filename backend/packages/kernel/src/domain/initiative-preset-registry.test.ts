@@ -1,4 +1,4 @@
-import { afterEach, describe, expect, it } from 'vitest'
+import { describe, expect, it } from 'vitest'
 import {
   isPresetFieldVisible,
   isSafeRepoDirPath,
@@ -9,11 +9,7 @@ import {
 } from '@cat-factory/contracts'
 import {
   GENERIC_INITIATIVE_PRESET_ID,
-  allInitiativePresets,
-  clearRegisteredInitiativePresets,
-  getInitiativePreset,
-  initiativePresetDescriptors,
-  registerInitiativePreset,
+  InitiativePresetRegistry,
   type InitiativePresetRegistration,
 } from './initiative-preset-registry.js'
 
@@ -35,21 +31,34 @@ const descriptor = (
   ...over,
 })
 
-afterEach(() => clearRegisteredInitiativePresets())
-
 describe('initiative preset registry', () => {
   it('resolves the built-in generic preset with an empty registry', () => {
-    const generic = getInitiativePreset(GENERIC_INITIATIVE_PRESET_ID)
+    const registry = new InitiativePresetRegistry()
+    const generic = registry.get(GENERIC_INITIATIVE_PRESET_ID)
     expect(generic?.descriptor.planningPipelineId).toBe('pl_initiative')
     expect(generic?.descriptor.interview).toBe('full')
     expect(generic?.descriptor.humanReviewDefault).toBe(true)
-    expect(getInitiativePreset('nope')).toBeUndefined()
+    expect(registry.get('nope')).toBeUndefined()
   })
 
   it('lists the generic preset first, then registered ones in registration order', () => {
-    registerInitiativePreset({ descriptor: descriptor({ id: 'preset_a' }) })
-    registerInitiativePreset({ descriptor: descriptor({ id: 'preset_b' }) })
-    expect(allInitiativePresets().map((p) => p.descriptor.id)).toEqual([
+    const registry = new InitiativePresetRegistry()
+    registry.register({ descriptor: descriptor({ id: 'preset_a' }) })
+    registry.register({ descriptor: descriptor({ id: 'preset_b' }) })
+    expect(registry.all().map((p) => p.descriptor.id)).toEqual([
+      GENERIC_INITIATIVE_PRESET_ID,
+      'preset_a',
+      'preset_b',
+    ])
+  })
+
+  it('registers several presets at once via registerAll', () => {
+    const registry = new InitiativePresetRegistry()
+    registry.registerAll([
+      { descriptor: descriptor({ id: 'preset_a' }) },
+      { descriptor: descriptor({ id: 'preset_b' }) },
+    ])
+    expect(registry.all().map((p) => p.descriptor.id)).toEqual([
       GENERIC_INITIATIVE_PRESET_ID,
       'preset_a',
       'preset_b',
@@ -57,32 +66,30 @@ describe('initiative preset registry', () => {
   })
 
   it('replaces a preset registered under the same id, and can override the generic one', () => {
-    registerInitiativePreset({
-      descriptor: descriptor({ id: 'preset_a', planningPipelineId: 'pl_one' }),
-    })
-    registerInitiativePreset({
-      descriptor: descriptor({ id: 'preset_a', planningPipelineId: 'pl_two' }),
-    })
-    expect(getInitiativePreset('preset_a')?.descriptor.planningPipelineId).toBe('pl_two')
+    const registry = new InitiativePresetRegistry()
+    registry.register({ descriptor: descriptor({ id: 'preset_a', planningPipelineId: 'pl_one' }) })
+    registry.register({ descriptor: descriptor({ id: 'preset_a', planningPipelineId: 'pl_two' }) })
+    expect(registry.get('preset_a')?.descriptor.planningPipelineId).toBe('pl_two')
 
-    registerInitiativePreset({ descriptor: descriptor({ id: GENERIC_INITIATIVE_PRESET_ID }) })
-    expect(getInitiativePreset(GENERIC_INITIATIVE_PRESET_ID)?.descriptor.interview).toBe('skip')
+    registry.register({ descriptor: descriptor({ id: GENERIC_INITIATIVE_PRESET_ID }) })
+    expect(registry.get(GENERIC_INITIATIVE_PRESET_ID)?.descriptor.interview).toBe('skip')
     // Overriding the generic id means the built-in default is no longer PREPENDED — the
     // override appears in registration order (after the earlier preset_a) instead.
-    expect(allInitiativePresets().map((p) => p.descriptor.id)).toEqual([
+    expect(registry.all().map((p) => p.descriptor.id)).toEqual([
       'preset_a',
       GENERIC_INITIATIVE_PRESET_ID,
     ])
   })
 
   it('derives the wire `probe` flag from the presence of a `detect` hook', () => {
+    const registry = new InitiativePresetRegistry()
     const withDetect: InitiativePresetRegistration = {
       descriptor: descriptor({ id: 'preset_probe' }),
       detect: async () => ({}),
     }
-    registerInitiativePreset(withDetect)
-    registerInitiativePreset({ descriptor: descriptor({ id: 'preset_noprobe' }) })
-    const byId = new Map(initiativePresetDescriptors().map((d) => [d.id, d]))
+    registry.register(withDetect)
+    registry.register({ descriptor: descriptor({ id: 'preset_noprobe' }) })
+    const byId = new Map(registry.descriptors().map((d) => [d.id, d]))
     expect(byId.get('preset_probe')?.probe).toBe(true)
     expect(byId.get('preset_noprobe')?.probe).toBe(false)
   })

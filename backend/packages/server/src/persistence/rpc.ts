@@ -684,6 +684,18 @@ export const REMOTE_PERSISTENCE_METHODS: PersistenceMethodTable = {
     upsert: { scope: { kind: 'workspaceField', arg: 0 } },
     delete: { scope: { kind: 'workspace', arg: 0 } },
   },
+  // The SENSITIVE per-service test credentials, keyed by service-frame block like
+  // `releaseHealthConfigRepository` above. `credentials` rides a SEALED blob (sealed/decrypted
+  // in the service under the LOCAL key), so no plaintext crosses the machine API — the same
+  // precedent as the observability / package-registry connections. The inspector CRUD
+  // (`getByBlock`/`deleteByBlock`) + the run-path frame read (`getByBlock`) are workspace-scoped
+  // on arg0; the record-based `upsert` binds on its `workspaceId` FIELD. `listByWorkspace` has no
+  // consumer yet, so it stays pending (marked in the allow-list completeness test).
+  testSecretsRepository: {
+    getByBlock: { scope: { kind: 'workspace', arg: 0 } },
+    upsert: { scope: { kind: 'workspaceField', arg: 0 } },
+    deleteByBlock: { scope: { kind: 'workspace', arg: 0 } },
+  },
   incidentEnrichmentConnectionRepository: {
     get: { scope: { kind: 'workspace', arg: 0 } },
     upsert: { scope: { kind: 'workspaceField', arg: 0 } },

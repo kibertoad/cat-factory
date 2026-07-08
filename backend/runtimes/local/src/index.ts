@@ -57,6 +57,12 @@ export {
   defaultAgentKindRegistry,
   type AgentKindDefinition,
 } from '@cat-factory/agents'
+// Installation-level extension point for custom initiative presets (parity with the Node facade
+// + the agent-kind seam): a local deployment news a `defaultInitiativePresetRegistry()`, registers
+// its own presets on it by reference, and injects it via `startLocal()`'s `initiativePresetRegistry`
+// option — replacing the old module-global `registerInitiativePreset` side effect.
+export { defaultInitiativePresetRegistry } from '@cat-factory/agents'
+export { InitiativePresetRegistry, type InitiativePresetRegistration } from '@cat-factory/kernel'
 export { registerPipeline, registerPipelines, clearRegisteredPipelines } from '@cat-factory/kernel'
 // The built-in model-preset ids + the catalog fallback default, re-exported so a local deploy-app
 // wrapper can name a preset when passing `startLocal({ defaultModelPresetId })` without a direct

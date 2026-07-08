@@ -183,6 +183,13 @@ export async function start(
      */
     agentKindRegistry?: NodeContainerOptions['agentKindRegistry']
     /**
+     * App-owned DI seam for custom initiative presets (mirroring `agentKindRegistry`): a
+     * deployment news a `defaultInitiativePresetRegistry()`, registers its own presets on it by
+     * reference, and passes it here. Forwarded to `buildNodeContainer`. Absent → the built-in-only
+     * default (generic / docs-refresh / tech-migration).
+     */
+    initiativePresetRegistry?: NodeContainerOptions['initiativePresetRegistry']
+    /**
      * The address to bind the HTTP listener to. Defaults to `HOST` from the env, else
      * all interfaces. A facade or operator can pass `127.0.0.1` to keep the service off
      * the LAN — but note repo-operating agent containers reach this service's LLM proxy
@@ -286,6 +293,7 @@ async function bootServer(
     realtimeSink: realtimePropagator,
     caches,
     agentKindRegistry: options.agentKindRegistry,
+    initiativePresetRegistry: options.initiativePresetRegistry,
     // Forward the deployment's default-preset choice (undefined ⇒ the builder's facade
     // default). The local facade rides on this same field via its `buildContainer` override.
     defaultModelPresetId: options.defaultModelPresetId,

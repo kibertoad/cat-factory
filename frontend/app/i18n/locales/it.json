@@ -3560,6 +3560,13 @@
       "maxConcurrentField": "Massimo di attivita concorrenti",
       "defaultPipelineField": "Pipeline predefinita",
       "failed": "Impossibile aggiornare l'iniziativa"
+    },
+    "checkpoint": {
+      "badge": "Checkpoint",
+      "awaiting": "In attesa di revisione",
+      "cleared": "Revisionato",
+      "pausedTitle": "In pausa per la revisione",
+      "pausedBody": "La fase «{phase}» è completa. Rivedi sopra gli artefatti e le PR salvati, poi riprendi per continuare o annulla per interrompere l'iniziativa."
     }
   },
   "app": {

@@ -4418,6 +4418,13 @@
       "maxConcurrentField": "最大同時実行タスク数",
       "defaultPipelineField": "既定のパイプライン",
       "failed": "イニシアチブを更新できませんでした"
+    },
+    "checkpoint": {
+      "badge": "チェックポイント",
+      "awaiting": "レビュー待ち",
+      "cleared": "レビュー済み",
+      "pausedTitle": "レビューのため一時停止",
+      "pausedBody": "フェーズ「{phase}」が完了しました。上記のコミット済み成果物と PR を確認し、続行する場合は再開、中止する場合はイニシアチブをキャンセルしてください。"
     }
   },
   "environmentWizard": {

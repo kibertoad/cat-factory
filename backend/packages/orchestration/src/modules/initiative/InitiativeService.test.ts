@@ -7,13 +7,8 @@ import type {
   Workspace,
   WorkspaceRepository,
 } from '@cat-factory/kernel'
-import {
-  NoopEventPublisher,
-  ValidationError,
-  clearRegisteredInitiativePresets,
-  registerInitiativePreset,
-} from '@cat-factory/kernel'
-import { afterEach, beforeEach, describe, expect, it } from 'vitest'
+import { InitiativePresetRegistry, NoopEventPublisher, ValidationError } from '@cat-factory/kernel'
+import { beforeEach, describe, expect, it } from 'vitest'
 import { InitiativeService } from './InitiativeService.js'
 
 // The create flow's preset resolution + validation + skip-interview seeding, over in-memory
@@ -26,6 +21,9 @@ let clockNow = 1_000
 const clock = { now: () => clockNow }
 let idSeq = 0
 const idGenerator = { next: (prefix: string) => `${prefix}-${++idSeq}` }
+// A fresh app-owned preset registry per test (reset in each describe's `beforeEach`), injected into
+// every service — the DI replacement for the old module-global register/clear.
+let presetRegistry = new InitiativePresetRegistry()
 
 const frame: Block = {
   id: 'frame-1',
@@ -73,6 +71,7 @@ function makeService() {
     workspaceRepository,
     blockRepository,
     initiativeRepository,
+    initiativePresetRegistry: presetRegistry,
     events: new NoopEventPublisher(),
     clock,
     idGenerator,
@@ -82,7 +81,7 @@ function makeService() {
 
 const DOCS_PRESET_ID = 'preset_test_docs'
 function registerDocsPreset() {
-  registerInitiativePreset({
+  presetRegistry.register({
     descriptor: {
       id: DOCS_PRESET_ID,
       presentation: {
@@ -122,7 +121,7 @@ function registerDocsPreset() {
 const FULL_PRESET_ID = 'preset_test_migration'
 /** A FULL-interview preset with a form — its filled fields seed the qa for the interviewer (T3). */
 function registerFullPreset() {
-  registerInitiativePreset({
+  presetRegistry.register({
     descriptor: {
       id: FULL_PRESET_ID,
       presentation: {
@@ -147,9 +146,8 @@ describe('InitiativeService.create — presets', () => {
   beforeEach(() => {
     idSeq = 0
     clockNow = 1_000
-    clearRegisteredInitiativePresets()
+    presetRegistry = new InitiativePresetRegistry()
   })
-  afterEach(() => clearRegisteredInitiativePresets())
 
   it('absent presetId keeps today behaviour byte-for-byte (no preset fields, empty qa)', async () => {
     const { service } = makeService()
@@ -323,15 +321,14 @@ describe('InitiativeService.ingestPlan — seedPlan (slice 5)', () => {
   beforeEach(() => {
     idSeq = 0
     clockNow = 1_000
-    clearRegisteredInitiativePresets()
+    presetRegistry = new InitiativePresetRegistry()
   })
-  afterEach(() => clearRegisteredInitiativePresets())
 
   const PRESET_ID = 'preset_seedplan_test'
 
   /** Register a skip-interview preset whose optional `seedPlan` post-processes the draft. */
   function registerSeedingPreset(seedPlan?: InitiativePresetRegistration['seedPlan']) {
-    registerInitiativePreset({
+    presetRegistry.register({
       descriptor: {
         id: PRESET_ID,
         presentation: { label: 'Seeding preset', icon: 'i', color: '#000', description: 'x' },
@@ -442,15 +439,14 @@ describe('InitiativeService.ingestPlan — phase-template shaping ⨯ seedPlan (
   beforeEach(() => {
     idSeq = 0
     clockNow = 1_000
-    clearRegisteredInitiativePresets()
+    presetRegistry = new InitiativePresetRegistry()
   })
-  afterEach(() => clearRegisteredInitiativePresets())
 
   const PRESET_ID = 'preset_template_seedplan'
 
   /** Register a skip-interview preset with an exhaustive 3-phase template + an optional seedPlan. */
   function registerTemplatePreset(seedPlan?: InitiativePresetRegistration['seedPlan']) {
-    registerInitiativePreset({
+    presetRegistry.register({
       descriptor: {
         id: PRESET_ID,
         presentation: { label: 'Templated', icon: 'i', color: '#000', description: 'x' },

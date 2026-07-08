@@ -25,6 +25,7 @@ import { workspaceSettingsController } from './modules/settings/WorkspaceSetting
 import { localSettingsController } from './modules/localSettings/LocalSettingsController.js'
 import { mothershipConnectController } from './modules/localSettings/MothershipConnectController.js'
 import { releaseHealthController } from './modules/releaseHealth/ReleaseHealthController.js'
+import { testSecretsController } from './modules/testSecrets/TestSecretsController.js'
 import { packageRegistriesController } from './modules/packageRegistries/PackageRegistriesController.js'
 import { previewController } from './modules/preview/PreviewController.js'
 import { incidentEnrichmentController } from './modules/incidentEnrichment/IncidentEnrichmentController.js'
@@ -161,6 +162,7 @@ export function registerCoreControllers<E extends AppEnv>(app: Hono<E>): void {
   app.route('/workspaces/:workspaceId', sandboxController())
   app.route('/workspaces/:workspaceId', workspaceSettingsController())
   app.route('/workspaces/:workspaceId', releaseHealthController())
+  app.route('/workspaces/:workspaceId', testSecretsController())
   app.route('/workspaces/:workspaceId', packageRegistriesController())
   // Browsable frontend preview (local/node); 503 on the Worker (frontendPreview unsupported).
   app.route('/workspaces/:workspaceId', previewController())

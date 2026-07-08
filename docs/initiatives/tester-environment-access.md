@@ -1,5 +1,13 @@
 # Tester environment access: standardized coordinates + per-service test-credential pools
 
+> **Scope note (extended).** The original initiative (Slices A + B) covered the mechanical
+> coordinates and the **non-sensitive** test-credential pools. It has since grown two more
+> slices, driven by the need to test third-party integrations: **Slice C — sealed SENSITIVE
+> test credentials** (a 3rd-party API token a Tester needs, delivered out of band), and
+> **Slice D — the Test Data Seeder agent** (checks/seeds test data before the Tester, with a
+> human-intervention park loop). Slice C is the SEALED counterpart of Slice B and shares its
+> per-service-frame model; Slice D consumes BOTH cred stores.
+
 ## Goal & rationale
 
 A Tester run aborted with _"Ephemeral environment not provided/reachable — searched process
@@ -86,3 +94,65 @@ nobody enters real/production secrets.
 | Frontend: `stores/testCredentials.ts` + `ServiceTestCredentials.vue` inspector panel (incl. "service needs no auth" toggle)                                | todo   | —   |
 | **Explicit non-sensitive warning banner** (its own i18n key) + i18n keys in all locales                                                                    | todo   | —   |
 | Changesets (per touched published package)                                                                                                                 | todo   | —   |
+
+### Slice C — SENSITIVE test credentials (sealed; delivered out of band)
+
+The SEALED sibling of Slice B, for a genuinely secret testing credential (e.g. a third-party
+API token a Tester needs to exercise an integration). Unlike the Slice B pools, these are
+**sealed at rest** by the facade `SecretCipher` (info tag `cat-factory:test-secrets`, mirroring
+`observability_connections`) and delivered to the Tester container **out of band** — the value
+is decrypted at dispatch and injected as a container **environment variable** the agent's shell
+reads (`$KEY`); it is **never** rendered into the prompt text or the redacted telemetry snapshot
+(it rides a dedicated top-level job-body field, which the snapshot allow-list omits — the same
+mechanism as `packageRegistries`). The tester prompt advertises only each secret's **key +
+description** (the non-secret `TestSecretRef`), so the agent knows which env vars exist and what
+each is for. Per-service-frame + frame-chain resolution, exactly like Slice B / release-health.
+
+**Target pattern:** `observability_connections` for the sealed-blob + non-secret-summary shape;
+`release_health_configs` for the per-service-frame keying; `packageRegistries` on the
+`ContainerAgentExecutor` job body for the out-of-band, snapshot-omitted delivery channel.
+
+| Unit                                                                                                                                                     | Status | PR   |
+| -------------------------------------------------------------------------------------------------------------------------------------------------------- | ------ | ---- |
+| Contracts: `TestSecretEntry`/`TestSecretRef`/`ServiceTestSecretsView` + upsert input + `test-secrets` route contracts                                    | done   | this |
+| Kernel port `TestSecretsRepository` (`getByBlock`/`listByWorkspace`/`upsert`/`deleteByBlock`) + `AgentRunContext.testSecrets` (refs only)                | done   | this |
+| `TestSecretsService` (integrations, `cat-factory:test-secrets`) + `TestSecretsController` (server) `GET\|PUT\|DELETE .../services/:blockId/test-secrets` | done   | this |
+| D1 migration `0044_test_secrets` + `D1TestSecretsRepository`                                                                                             | done   | this |
+| Drizzle `testSecrets` table + migration + `DrizzleTestSecretsRepository`                                                                                 | done   | this |
+| Wire repo + cipher + service in Worker + Node (local inherits) + attach `ServerContainer.testSecrets`                                                    | done   | this |
+| `AgentContextBuilder.resolveTestSecretRefs` (frame walk, refs) → `context.testSecrets`; `testSecretsSection()` prompt (tester kinds)                     | done   | this |
+| Executor `resolveTestSecrets` (values) → tester job body `testSecrets`; harness injects as env vars (reserved-name guard + redaction) + image bump       | done   | this |
+| Cross-runtime conformance assertion (seal via API, read-back refs, no values leak) on both stores                                                        | done   | this |
+| Frontend: `stores/testSecrets.ts` + `ServiceTestSecrets.vue` inspector panel (SENSITIVE warning banner) + i18n in all locales                            | todo   | —    |
+| Changesets (per touched published package)                                                                                                               | done   | this |
+
+### Slice D — Test Data Seeder agent (follow-up; NOT in this PR)
+
+A new agent kind (`test-data-seeder`) placed IMMEDIATELY before the Tester in every build
+pipeline. It uses BOTH the non-sensitive pools (Slice B) and the sealed secrets (Slice C) to
+check whether the system under test holds enough test data and whether the available UI/API
+lets it seed more. If it can seed, it does and records what exists; if it CANNOT, it requires
+**human intervention** — it explains what data it needs, raises a notification, and PARKS until
+a human confirms the data was seeded manually, then resolves and advances to the Tester. Its
+result (a summary of available test data) is threaded to the Tester as a prior-output context.
+
+- **Reference pattern for the human-park loop:** `HumanTestController`
+  (`orchestration/.../execution/HumanTestController.ts`) — a non-LLM engine step where a human
+  is the verdict: fresh entry parks (`parkStepOnDecision`) + raises a notification; a REST action
+  re-arms the run (`instance.status='running'`) and `workRunner.signalDecision(...)`; the durable
+  driver re-enters and consumes the pending action. Also see the gate machinery
+  (`RunDispatcher.evaluateGate`/`pollGate`, `awaiting_gate`).
+- **Container agent kind:** a `container-*` kind registered via `registerAgentKind`
+  (`AgentKindRegistry`), with a harness handler that runs the seeding against the provisioned env
+  using the injected creds — OR a hybrid (deterministic pre/post-ops over `RepoFiles` + an LLM
+  step). Placed after `deployer`, before `tester-api`/`tester-ui`, in each `seedPipelines()`
+  built-in (bump each pipeline `version`); it must precede every env-consumer.
+- **Seeding intel (owner decision, this PR):** the "what test data would be useful for THIS task"
+  guidance comes from **extending the Researcher** — add a "test data needs" section to its
+  output; the Seeder reads it from `priorOutputs`. (Chosen over a dedicated analyst step to reuse
+  an existing pipeline stage.)
+- **Output → Tester context:** on resolve, set `step.output` to a description of the available
+  test data (`recordStepResult`); the engine folds every prior step's `output` into
+  `context.priorOutputs`, so the Tester receives it automatically.
+- Both cred stores (B + C) are resolved into the seeder dispatch the same way the Tester now
+  resolves Slice C (out-of-band values for the sealed set; in-prompt pools for Slice B).
