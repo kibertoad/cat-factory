@@ -351,11 +351,12 @@ export const usePipelinesStore = defineStore('pipelines', () => {
       ...(draftTesterQuality.value.some((q) => q?.enabled === false || q?.gating?.enabled)
         ? { testerQuality: [...draftTesterQuality.value] }
         : {}),
-      // Only send stepOptions when at least one step deviates from its defaults (carries a
-      // non-empty options object) — the all-default case needs no array.
-      ...(draftStepOptions.value.some((o) => o && Object.keys(o).length > 0)
-        ? { stepOptions: [...draftStepOptions.value] }
-        : {}),
+      // ALWAYS send stepOptions, unlike the legacy per-step arrays above. Those omit-when-default,
+      // which means an update can never CLEAR them (an omitted field reads as "keep existing"), so
+      // toggling the last opt-out back to its default on a saved pipeline would silently not
+      // persist. Sending the aligned array always lets `update` overwrite; the backend normalizes
+      // an all-default array away (stores nothing), so this is a no-op on create / all-default.
+      stepOptions: draftStepOptions.value.map((o) => o ?? null),
       // Only send labels when there are any.
       ...(draftLabels.value.length ? { labels: [...draftLabels.value] } : {}),
     }

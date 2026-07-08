@@ -73,6 +73,7 @@ function fakeKind() {
     prepareRecommendations: vi.fn(async () => current),
     markRecommendationPending: vi.fn(async () => current),
     fillRecommendations: vi.fn(async () => current),
+    autoRecommend: vi.fn(async () => {}),
     emit: vi.fn(async () => {}),
   } satisfies ReviewKind<FakeReview> & Record<string, unknown>
   return {
@@ -170,6 +171,67 @@ describe('ReviewGateController.evaluate', () => {
     expect(result).toEqual({ kind: 'awaiting_decision', decisionId: 'appr_1' })
     expect(deps.stateMachine.parkStepOnDecision).toHaveBeenCalledWith('ws', inst, s)
     expect(deps.stateMachine.raiseDecisionRequired).not.toHaveBeenCalled()
+  })
+
+  it('pre-answers auto-answerable findings before parking a fresh ready review (default on)', async () => {
+    k.set(review({ status: 'ready' }))
+    const s = step()
+    const inst = instance([s])
+    await ctrl.evaluate(k.kind, 'ws', inst, s, BLOCK, false)
+    expect(k.kind.autoRecommend).toHaveBeenCalledWith('ws', 'blk_1')
+    expect(deps.stateMachine.parkStepOnDecision).toHaveBeenCalledWith('ws', inst, s)
+  })
+
+  it('skips auto-recommendation when the step opts out via stepOptions.autoRecommend === false', async () => {
+    k.set(review({ status: 'ready' }))
+    const s = step({ stepOptions: { autoRecommend: false } } as Partial<PipelineStep>)
+    const inst = instance([s])
+    const result = await ctrl.evaluate(k.kind, 'ws', inst, s, BLOCK, false)
+    expect(k.kind.autoRecommend).not.toHaveBeenCalled()
+    // Opting out of the automation must not change the gate outcome — the run still parks.
+    expect(result).toEqual({ kind: 'awaiting_decision', decisionId: 'appr_1' })
+    expect(deps.stateMachine.parkStepOnDecision).toHaveBeenCalled()
+  })
+
+  it('does NOT auto-recommend when the fresh review hit the cap (exceeded)', async () => {
+    // On `exceeded` the human is picking how to proceed, not answering findings.
+    k.set(review({ status: 'exceeded' }))
+    const s = step()
+    const inst = instance([s])
+    await ctrl.evaluate(k.kind, 'ws', inst, s, BLOCK, false)
+    expect(k.kind.autoRecommend).not.toHaveBeenCalled()
+  })
+
+  it('swallows an auto-recommendation failure (best-effort) and still parks the run', async () => {
+    k.set(review({ status: 'ready' }))
+    ;(k.kind.autoRecommend as ReturnType<typeof vi.fn>).mockRejectedValue(new Error('writer down'))
+    const s = step()
+    const inst = instance([s])
+    const result = await ctrl.evaluate(k.kind, 'ws', inst, s, BLOCK, false)
+    expect(result).toEqual({ kind: 'awaiting_decision', decisionId: 'appr_1' })
+    expect(deps.stateMachine.parkStepOnDecision).toHaveBeenCalledWith('ws', inst, s)
+  })
+
+  it('re-entry: a re-review that surfaces fresh findings also auto-recommends', async () => {
+    k.set(review({ status: 'ready', items: [{ status: 'answered' } as never] }))
+    ;(k.kind.reReview as ReturnType<typeof vi.fn>).mockResolvedValue(review({ status: 'ready' }))
+    const s = step({ pendingIncorporation: { feedback: 'do X' } })
+    const inst = instance([s])
+    await ctrl.evaluate(k.kind, 'ws', inst, s, BLOCK, false)
+    expect(k.kind.autoRecommend).toHaveBeenCalledWith('ws', 'blk_1')
+    expect(deps.stateMachine.parkStepOnDecision).toHaveBeenCalled()
+  })
+
+  it('re-entry: a re-review that opts out via stepOptions does NOT auto-recommend', async () => {
+    k.set(review({ status: 'ready', items: [{ status: 'answered' } as never] }))
+    ;(k.kind.reReview as ReturnType<typeof vi.fn>).mockResolvedValue(review({ status: 'ready' }))
+    const s = step({
+      pendingIncorporation: { feedback: 'do X' },
+      stepOptions: { autoRecommend: false },
+    } as Partial<PipelineStep>)
+    const inst = instance([s])
+    await ctrl.evaluate(k.kind, 'ws', inst, s, BLOCK, false)
+    expect(k.kind.autoRecommend).not.toHaveBeenCalled()
   })
 
   it('raises a decision-required notification when a fresh review hits the cap', async () => {
