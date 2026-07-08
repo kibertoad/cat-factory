@@ -12,7 +12,6 @@ export {
   type CiVerdict,
   aggregateCi,
   isCiGreen,
-  listFailingChecks,
   describeFailingChecks,
 } from '@cat-factory/kernel'
 

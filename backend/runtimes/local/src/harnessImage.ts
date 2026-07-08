@@ -46,7 +46,7 @@ export function resolveRefreshMode(env: NodeJS.ProcessEnv): 'pull' | 'off' {
 /** One container-CLI invocation, normalised to an exit status + captured stdout. */
 export type ImageExec = (args: string[]) => Promise<{ status: number; stdout: string }>
 
-export interface HarnessImageLog {
+interface HarnessImageLog {
   info: (message: string) => void
   warn: (message: string) => void
 }

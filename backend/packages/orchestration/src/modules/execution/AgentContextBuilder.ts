@@ -49,7 +49,7 @@ import type { EnvironmentProvisioningService } from '@cat-factory/integrations'
  * companion's automatic rework (`step.rework`). The companion path wins when both are
  * present. Empty object when neither applies (no revision context).
  */
-export function buildRevisionContext(step: PipelineStep): {
+function buildRevisionContext(step: PipelineStep): {
   revision?: {
     previousProposal: string
     feedback: string

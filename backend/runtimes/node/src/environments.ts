@@ -7,7 +7,7 @@ import type { Logger, ServerContainer } from '@cat-factory/server'
 // the environments integration isn't wired (the container has no `environments` module).
 
 /** How often the Node service tears down expired environments. */
-export const ENVIRONMENT_SWEEP_INTERVAL_MS = 2 * 60 * 1000
+const ENVIRONMENT_SWEEP_INTERVAL_MS = 2 * 60 * 1000
 
 /**
  * Start the periodic environment TTL sweep. Runs once immediately then on a timer.

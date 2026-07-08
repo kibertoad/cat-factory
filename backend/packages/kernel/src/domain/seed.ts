@@ -683,12 +683,6 @@ export function seedPipelines(): Pipeline[] {
 /** Pipeline id of the blueprint-only run kicked off after a successful bootstrap. */
 export const BLUEPRINT_PIPELINE_ID = 'pl_blueprint'
 
-/** Pipeline id of the environment-analyst-only run the setup wizard uses to draft a stack recipe. */
-export const ENVIRONMENT_ANALYSIS_PIPELINE_ID = 'pl_environment_analysis'
-
-/** Pipeline id of the built-in public "break down an initiative" pipeline (public API). */
-export const INITIATIVE_BREAKDOWN_PIPELINE_ID = 'pl_initiative_breakdown'
-
 /** Pipeline id of the Initiative Planning pipeline (initiative blocks only). */
 export const INITIATIVE_PIPELINE_ID = 'pl_initiative'
 

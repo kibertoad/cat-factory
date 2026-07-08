@@ -8,7 +8,7 @@ import { escalateStaleNotifications, type Logger, type ServerContainer } from '@
 // no cron, so a timer drives it. No-op when the notifications module isn't wired.
 
 /** How often the Node service escalates long-waiting notifications. */
-export const NOTIFICATION_ESCALATION_INTERVAL_MS = 60 * 1000
+const NOTIFICATION_ESCALATION_INTERVAL_MS = 60 * 1000
 
 /**
  * Start the periodic notification-escalation sweep. Runs once immediately then on a

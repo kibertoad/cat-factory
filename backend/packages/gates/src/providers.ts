@@ -88,9 +88,6 @@ export function clearGateProviders(): void {
   }
 }
 
-/** Whether the CI status provider is wired (the `ci` gate's `wired()`). */
-export const isCiStatusProviderWired = (): boolean => isProviderWired(CI_STATUS_PROVIDER)
-
 /** Minimal structured-logger shape (the facade's pino logger satisfies it). */
 export interface GateWiringLogger {
   warn(obj: Record<string, unknown>, msg?: string): void

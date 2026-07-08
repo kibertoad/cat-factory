@@ -6,9 +6,9 @@ import { type HostState, type OfferId } from './k3s-probe.js'
 /** The namespace + ServiceAccount + long-lived token Secret the guided setup creates. */
 export const CAT_FACTORY_NAMESPACE = 'cat-factory'
 export const SERVICE_ACCOUNT_NAME = 'cat-factory'
-export const TOKEN_SECRET_NAME = 'cat-factory-token'
+const TOKEN_SECRET_NAME = 'cat-factory-token'
 /** The apiserver port k3d/kind is asked to publish (the kube default). */
-export const DEFAULT_API_PORT = 6443
+const DEFAULT_API_PORT = 6443
 
 /**
  * Watchdog budget (ms) for `k3d cluster create` / `kind create cluster`. These pull node images on
@@ -263,7 +263,7 @@ export interface ProvisionDeps {
 }
 
 /** Default poll budget for {@link readSaToken}: 20 attempts × 500ms = 10s. */
-export const DEFAULT_TOKEN_READ_ATTEMPTS = 20
+const DEFAULT_TOKEN_READ_ATTEMPTS = 20
 
 const realSleep = (ms: number): Promise<void> => new Promise((r) => setTimeout(r, ms))
 

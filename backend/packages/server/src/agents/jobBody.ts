@@ -234,7 +234,7 @@ function structuredOutputField(output: AgentStepSpec['output']): Record<string, 
  * branch) opens a PR. The clone target maps `base`/`pr`/`work` to a concrete branch
  * exactly as the built-in bodies do.
  */
-export function buildRegisteredAgentBody(
+function buildRegisteredAgentBody(
   context: AgentRunContext,
   parts: KindBodyParts,
   step: AgentStepSpec,
@@ -553,7 +553,7 @@ export function renderReferenceReposSection(primary: RepoTarget, references: Rep
  *     harness merges the base in to surface the conflicts, the agent resolves them, and the
  *     harness completes the merge commit + pushes back onto the same branch (no new PR).
  */
-export function buildMigratedBuiltInBody(
+function buildMigratedBuiltInBody(
   context: AgentRunContext,
   parts: KindBodyParts,
   roleSystemPrompt: string,

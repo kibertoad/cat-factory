@@ -12,7 +12,7 @@ export type { AuthConfig }
  * A secret below this length is treated as misconfigured (auth disabled → the
  * gate fails closed with 503) rather than silently accepted.
  */
-export const MIN_SESSION_SECRET_LENGTH = 32
+const MIN_SESSION_SECRET_LENGTH = 32
 
 /** Deployment environments where the AUTH_DEV_OPEN escape hatch is refused. */
 const PRODUCTION_ENVIRONMENTS = new Set(['production', 'prod', 'staging'])
