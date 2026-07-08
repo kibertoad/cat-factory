@@ -208,6 +208,14 @@ export async function start(
      * default choice is always preserved. Omitted ⇒ the facade default (Node → Kimi K2.7).
      */
     defaultModelPresetId?: string
+    /**
+     * Optional last-mile transform over the {@link ConfigProblem} list before the misconfiguration
+     * fallback is served, letting a sibling facade layer a facade-specific remedy onto the shared
+     * problems. Local mode passes one that advertises its `.env`-generating CLI (which the hosted
+     * Node/Worker facades have no analogue for) ABOVE the per-variable remedies. Absent ⇒ the
+     * problems are served verbatim.
+     */
+    augmentConfigProblems?: (problems: ConfigProblem[]) => ConfigProblem[]
   } = {},
 ): Promise<ReturnType<typeof serve>> {
   const env = options.env ?? process.env
@@ -218,7 +226,10 @@ export async function start(
     // bare "can't reach the backend" panel) — keep the port reachable serving the fallback backend
     // so the UI can tell the developer exactly what to fix. Any OTHER failure is a real crash and
     // is rethrown to the entrypoint (which exits non-zero).
-    if (isConfigValidationError(err)) return serveMisconfigured(err.problems, env, options.host)
+    if (isConfigValidationError(err)) {
+      const problems = options.augmentConfigProblems?.(err.problems) ?? err.problems
+      return serveMisconfigured(problems, env, options.host)
+    }
     throw err
   }
 }
