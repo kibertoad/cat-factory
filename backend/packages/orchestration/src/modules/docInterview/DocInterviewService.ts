@@ -49,7 +49,7 @@ import {
 // ---------------------------------------------------------------------------
 
 /** Role prompt the interviewer runs under. Returns ONLY a JSON decision object. */
-export const DOC_INTERVIEW_SYSTEM_PROMPT =
+const DOC_INTERVIEW_SYSTEM_PROMPT =
   'You are a documentation lead INTERVIEWING a stakeholder to refine a document BEFORE it is ' +
   'written. You are given the document brief, its proposed outline, and the answers gathered so ' +
   'far. Decide whether you understand the intended scope, audience, depth, structure and the ' +

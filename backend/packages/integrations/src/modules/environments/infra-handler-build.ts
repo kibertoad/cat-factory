@@ -26,7 +26,7 @@ import type {
  * `connectionMeta` only read the apiserver/sizing fields, never the source, so a stand-in
  * is safe — the REAL source is merged in at provision time (`resolveProviderForType`).
  */
-export const PLACEHOLDER_MANIFEST_SOURCE: KubernetesManifestSource = {
+const PLACEHOLDER_MANIFEST_SOURCE: KubernetesManifestSource = {
   type: 'colocated',
   path: '.',
 }

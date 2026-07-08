@@ -30,7 +30,7 @@ export interface DeployImageSpec {
 }
 
 /** One resolved entry inside an injected Secret / generated `.env`. */
-export interface DeploySecretEntrySpec {
+interface DeploySecretEntrySpec {
   key: string
   value: string
 }
@@ -41,7 +41,7 @@ export type DeploySecretInjectionSpec =
   | { mode: 'generatorEnvFile'; envFilePath: string; entries: DeploySecretEntrySpec[] }
 
 /** A resolved `--set path=value` for a helm release. */
-export interface DeployHelmSetSpec {
+interface DeployHelmSetSpec {
   path: string
   value: string
 }

@@ -32,7 +32,7 @@ export type RunnerJobProgress = StepSubtasks
  * harness reports it on a poll (drain-on-read). Structurally the harness's `FollowUpLine` /
  * the contracts' `StreamedFollowUp`; kept as a local shape so this port stays schema-free.
  */
-export interface RunnerJobFollowUp {
+interface RunnerJobFollowUp {
   kind: 'follow_up' | 'question'
   title: string
   detail?: string
@@ -118,7 +118,7 @@ export interface RunnerJobResult {
  * {@link RunnerJobResult.infraSetup}). Mirrors the harness's `InfraSetupRecord`; the engine
  * persists it on the Tester step (the contracts `testerInfraSetupSchema`) for the test window.
  */
-export interface RunnerInfraSetup {
+interface RunnerInfraSetup {
   /** Whether `docker compose up --wait` succeeded (the dependencies are up). */
   started: boolean
   /** The repo-relative compose file that was stood up. */

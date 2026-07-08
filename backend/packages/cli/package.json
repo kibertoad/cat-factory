@@ -1,6 +1,6 @@
 {
   "name": "@cat-factory/cli",
-  "version": "0.7.0",
+  "version": "0.7.1",
   "description": "Bootstrap CLI for the Agent Architecture Board: scaffold a local-mode deployment (Node/local backend + frontend SPA) on your own machine — generates the crypto secrets, populates and gitignores the .env files, and mints a GitHub/GitLab personal access token by opening the browser at the right pre-scoped URL.",
   "keywords": [
     "bootstrap",

@@ -28,7 +28,7 @@ CREATE TABLE IF NOT EXISTS machine_token (
 `
 
 /** The cached machine token plus the metadata the SPA / boot path reads for staleness + display. */
-export interface MachineTokenRecord {
+interface MachineTokenRecord {
   token: string
   nodeId: string
   userId: string
@@ -48,7 +48,7 @@ interface MachineTokenRow {
 }
 
 /** Open (creating if absent) the local machine-token SQLite database and ensure its schema. */
-export function openMachineTokenDb(path: string): DatabaseSync {
+function openMachineTokenDb(path: string): DatabaseSync {
   const db = new DatabaseSync(path)
   db.exec('PRAGMA journal_mode = WAL')
   db.exec('PRAGMA busy_timeout = 5000')
@@ -67,7 +67,7 @@ export interface LocalMachineTokenStore {
   close(): void
 }
 
-export class SqliteMachineTokenStore implements LocalMachineTokenStore {
+class SqliteMachineTokenStore implements LocalMachineTokenStore {
   constructor(private readonly db: DatabaseSync) {}
 
   read(): MachineTokenRecord | null {

@@ -12,7 +12,7 @@ import type { DocInterviewQa, DocInterviewSession } from '@cat-factory/contracts
 /** How many interviewer passes may run before the loop is force-converged. */
 export const DOC_INTERVIEW_MAX_ROUNDS = 4
 /** Upper bound on questions the interviewer may ask in one round (keeps the gate answerable). */
-export const DOC_INTERVIEW_MAX_QUESTIONS = 8
+const DOC_INTERVIEW_MAX_QUESTIONS = 8
 /** Clamp bounds, mirroring the strict wire schema's `shortProseField` / prose limits. */
 const SHORT_MAX = 2000
 const PROSE_MAX = 8000

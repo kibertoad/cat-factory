@@ -44,7 +44,7 @@ const sleep = (ms: number) => new Promise<void>((resolve) => setTimeout(resolve,
  * change, so a re-drive (retry/sweeper) safely resumes. Returns when the run is done or
  * failed, or when the poll budget is spent (the sweeper re-drives a still-running run).
  */
-export async function driveBootstrap(
+async function driveBootstrap(
   container: ServerContainer,
   workspaceId: string,
   jobId: string,

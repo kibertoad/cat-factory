@@ -1,5 +1,64 @@
 # @cat-factory/agents
 
+## 0.49.3
+
+### Patch Changes
+
+- 7ee2530: Internal cleanup: prune dead/needless exports flagged by knip (no runtime behaviour
+  change). ~110 findings resolved — genuinely-dead symbols deleted (e.g. the unused
+  `ENVIRONMENT_ANALYSIS_PIPELINE_ID` / `INITIATIVE_BREAKDOWN_PIPELINE_ID` pipeline-id
+  constants, `isCiStatusProviderWired`, `parseApiKeyProvider`, unused re-export members of
+  the runtime facade barrels), and the `export` keyword dropped from symbols only used
+  inside their own module (repository classes, config constants, helper types). Also tidied
+  stale `knip.jsonc` baseline entries (removed no-longer-needed `ignore` / `ignoreDependencies`
+  and dead entry-glob patterns).
+
+  The residual knip warnings are now all DELIBERATE: the neutral `VcsClient` port type
+  re-export barrel, the Worker config-type barrel, the `providerEndpoints` base-URL group,
+  and a couple of types that must stay exported for declaration emit. Since backwards
+  compatibility is a non-goal pre-1.0, the removed exports (which nothing imported) are
+  dropped outright rather than deprecated.
+
+- Updated dependencies [7ee2530]
+  - @cat-factory/kernel@0.112.1
+
+## 0.49.2
+
+### Patch Changes
+
+- Updated dependencies [f25d5e2]
+  - @cat-factory/kernel@0.112.0
+
+## 0.49.1
+
+### Patch Changes
+
+- 9aa9e19: Initiatives: phases can now declare a `checkpoint` (slice 2 of the
+  custom-initiative-definitions initiative). A checkpoint phase PAUSES the initiative for
+  human review once every one of its items settles, before the next phase spawns — so a
+  human can read the phase's committed output (e.g. a research doc + GO/NO_GO verdict) and
+  then resume to continue or cancel to stop. The engine never interprets an LLM verdict:
+  the pause is declarative phase data the loop reads, and resume is the acknowledgment.
+
+  - Contracts: `checkpoint?` on the plan/entity/draft phase and the preset phase-template
+    phase, plus `checkpointClearedAt?` bookkeeping on the entity phase; a new `checkpoint`
+    reason on the `initiative` notification.
+  - Ingest stamps a template-authored `checkpoint` onto the matched phase (forced on — the
+    planner cannot unset it), honours a planner-authored one on any draft phase (generic,
+    usable without a preset), and preserves `checkpointClearedAt` across a re-plan.
+  - The execution loop pauses at a completed, uncleared checkpoint phase (checked before
+    completion, so a last-phase checkpoint still pauses) and raises the notification;
+    `InitiativeService.resume` clears the checkpoint in the same CAS transform it resumes in.
+  - The in-repo tracker markdown annotates a checkpoint phase (pending vs cleared).
+
+  Non-checkpoint phases are byte-for-byte unchanged — a plan with no `checkpoint` advances
+  exactly as before.
+
+- Updated dependencies [9aa9e19]
+  - @cat-factory/contracts@0.121.1
+  - @cat-factory/kernel@0.111.1
+  - @cat-factory/prompt-fragments@0.13.4
+
 ## 0.49.0
 
 ### Minor Changes

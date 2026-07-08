@@ -1,5 +1,105 @@
 # @cat-factory/orchestration
 
+## 0.100.1
+
+### Patch Changes
+
+- 7ee2530: Internal cleanup: prune dead/needless exports flagged by knip (no runtime behaviour
+  change). ~110 findings resolved — genuinely-dead symbols deleted (e.g. the unused
+  `ENVIRONMENT_ANALYSIS_PIPELINE_ID` / `INITIATIVE_BREAKDOWN_PIPELINE_ID` pipeline-id
+  constants, `isCiStatusProviderWired`, `parseApiKeyProvider`, unused re-export members of
+  the runtime facade barrels), and the `export` keyword dropped from symbols only used
+  inside their own module (repository classes, config constants, helper types). Also tidied
+  stale `knip.jsonc` baseline entries (removed no-longer-needed `ignore` / `ignoreDependencies`
+  and dead entry-glob patterns).
+
+  The residual knip warnings are now all DELIBERATE: the neutral `VcsClient` port type
+  re-export barrel, the Worker config-type barrel, the `providerEndpoints` base-URL group,
+  and a couple of types that must stay exported for declaration emit. Since backwards
+  compatibility is a non-goal pre-1.0, the removed exports (which nothing imported) are
+  dropped outright rather than deprecated.
+
+- Updated dependencies [7ee2530]
+  - @cat-factory/agents@0.49.3
+  - @cat-factory/integrations@0.78.7
+  - @cat-factory/kernel@0.112.1
+  - @cat-factory/sandbox@0.9.46
+  - @cat-factory/caching@0.6.16
+  - @cat-factory/spend@0.11.22
+  - @cat-factory/workspaces@0.13.7
+
+## 0.100.0
+
+### Minor Changes
+
+- f25d5e2: Complete the two deferred service-connections Phase 4 multi-repo follow-ups.
+
+  **Conflict-resolver peer targeting.** The `conflicts` gate now ESCALATES a conflict on a
+  connected involved service's PEER repo (previously it declined escalation and fast-failed the run
+  to a manual give-up). The gate still tags which repo conflicted (`conflictTarget`); the engine
+  threads that onto the dispatched `conflict-resolver`'s context, and the container executor points
+  the (single-repo) resolver at THAT peer repo — resolving its target, cloning its PR (work) branch,
+  and merging the peer's base in — instead of always the task's own service. An own-repo conflict is
+  unchanged (no `frameId` ⇒ the own service is the implicit target). Handles the peer-only case (own
+  service unchanged, so no own PR) by pinning the resolve branch to the shared work branch.
+
+  **Merger combined-diff.** The `merger` now scores the COMBINED cross-repo change on a multi-repo
+  task instead of only the own-repo diff. Driven by the PRs that actually exist
+  (`block.peerPullRequests`), it clones each peer PR's repo as a read-only sibling checkout at its PR
+  branch (full history) alongside the own service, and a "Multi-repo pull request" prompt section
+  plus the reworked merger prompts instruct it to diff each repo against its base and return ONE
+  blended complexity/risk/impact assessment covering the whole change. The read-only multi-repo
+  explore harness path gained per-peer `cloneBranch` selection and honours the job's `full` flag (a
+  new container capability — the executor-harness image is bumped), so the bug-investigator's
+  base-branch fan-out is unchanged while the merger checks each peer out at its PR head.
+
+### Patch Changes
+
+- Updated dependencies [f25d5e2]
+  - @cat-factory/kernel@0.112.0
+  - @cat-factory/agents@0.49.2
+  - @cat-factory/caching@0.6.15
+  - @cat-factory/integrations@0.78.6
+  - @cat-factory/sandbox@0.9.45
+  - @cat-factory/spend@0.11.21
+  - @cat-factory/workspaces@0.13.6
+
+## 0.99.1
+
+### Patch Changes
+
+- 9aa9e19: Initiatives: phases can now declare a `checkpoint` (slice 2 of the
+  custom-initiative-definitions initiative). A checkpoint phase PAUSES the initiative for
+  human review once every one of its items settles, before the next phase spawns — so a
+  human can read the phase's committed output (e.g. a research doc + GO/NO_GO verdict) and
+  then resume to continue or cancel to stop. The engine never interprets an LLM verdict:
+  the pause is declarative phase data the loop reads, and resume is the acknowledgment.
+
+  - Contracts: `checkpoint?` on the plan/entity/draft phase and the preset phase-template
+    phase, plus `checkpointClearedAt?` bookkeeping on the entity phase; a new `checkpoint`
+    reason on the `initiative` notification.
+  - Ingest stamps a template-authored `checkpoint` onto the matched phase (forced on — the
+    planner cannot unset it), honours a planner-authored one on any draft phase (generic,
+    usable without a preset), and preserves `checkpointClearedAt` across a re-plan.
+  - The execution loop pauses at a completed, uncleared checkpoint phase (checked before
+    completion, so a last-phase checkpoint still pauses) and raises the notification;
+    `InitiativeService.resume` clears the checkpoint in the same CAS transform it resumes in.
+  - The in-repo tracker markdown annotates a checkpoint phase (pending vs cleared).
+
+  Non-checkpoint phases are byte-for-byte unchanged — a plan with no `checkpoint` advances
+  exactly as before.
+
+- Updated dependencies [9aa9e19]
+  - @cat-factory/contracts@0.121.1
+  - @cat-factory/agents@0.49.1
+  - @cat-factory/integrations@0.78.5
+  - @cat-factory/kernel@0.111.1
+  - @cat-factory/prompt-fragments@0.13.4
+  - @cat-factory/sandbox@0.9.44
+  - @cat-factory/spend@0.11.20
+  - @cat-factory/workspaces@0.13.5
+  - @cat-factory/caching@0.6.14
+
 ## 0.99.0
 
 ### Minor Changes

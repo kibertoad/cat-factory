@@ -8,7 +8,7 @@ import type { AdvanceQueueOptions, SweeperConfig } from './pgBossRunner.js'
 // + sweeper) so the timing is derived once and stays consistent.
 
 /** Parse a Workflows-style duration ("15 seconds", "5 minutes", "24 hours", "1 day") to ms. */
-export function durationMs(value: string, fallback: number): number {
+function durationMs(value: string, fallback: number): number {
   const m = /^(\d+)\s*(second|minute|hour|day)s?$/.exec(value.trim())
   if (!m) return fallback
   const n = Number(m[1])

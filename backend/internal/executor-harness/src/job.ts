@@ -78,6 +78,13 @@ export interface PeerRepoSpec {
    * (the bug-investigator), which only clones the peer to read it and never pushes.
    */
   newBranch?: string
+  /**
+   * The EXISTING branch to check the peer out at for a READ-ONLY explore fan-out (the `merger`
+   * scoring the combined diff clones each peer at its PR branch so the diff sees the PR change).
+   * Absent ⇒ the peer is cloned at its repo default branch (the bug-investigator). Ignored on the
+   * coding fan-out, which creates `newBranch` instead.
+   */
+  cloneBranch?: string
   /** Open a PR/MR in this peer when set AND the run changed the peer (skipped for a clean repo). */
   pr?: PrSpec
   /** Per-repo GitHub token; defaults to the job's `ghToken` (one installation per workspace today). */
@@ -236,6 +243,10 @@ function parsePeerRepos(value: unknown): PeerRepoSpec[] {
     // `newBranch` is required for a coding fan-out (it pushes to it) but ABSENT for a
     // read-only explore fan-out (bug-investigator) — validate it only when present.
     if (e.newBranch !== undefined) spec.newBranch = str(e.newBranch, `peerRepos[${i}].newBranch`)
+    // Read-only explore fan-out: the branch to check the peer out at (the merger's PR branch).
+    if (e.cloneBranch !== undefined) {
+      spec.cloneBranch = str(e.cloneBranch, `peerRepos[${i}].cloneBranch`)
+    }
     if (typeof e.frameId === 'string' && e.frameId) spec.frameId = e.frameId
     if (typeof e.ghToken === 'string' && e.ghToken) spec.ghToken = e.ghToken
     if (typeof e.pr === 'object' && e.pr !== null) {

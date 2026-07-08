@@ -126,7 +126,7 @@ CREATE TABLE IF NOT EXISTS subscription_activations (
 `
 
 /** Open (creating if absent) the local credential SQLite database and ensure its schema. */
-export function openLocalCredentialDb(path: string): DatabaseSync {
+function openLocalCredentialDb(path: string): DatabaseSync {
   return openSqliteDb(path, SCHEMA)
 }
 
@@ -179,7 +179,7 @@ function scopeMatch(scopes: ApiKeyScopeRef[]): { sql: string; params: string[] }
   return { sql: `(${sql})`, params }
 }
 
-export class SqliteProviderApiKeyRepository implements ProviderApiKeyRepository {
+class SqliteProviderApiKeyRepository implements ProviderApiKeyRepository {
   constructor(private readonly db: DatabaseSync) {}
 
   async listByScope(
@@ -380,7 +380,7 @@ function parseModels(json: string): string[] {
 const ENDPOINT_COLUMNS =
   'user_id, provider, label, base_url, api_key_cipher, models, created_at, updated_at'
 
-export class SqliteLocalModelEndpointRepository implements LocalModelEndpointRepository {
+class SqliteLocalModelEndpointRepository implements LocalModelEndpointRepository {
   constructor(private readonly db: DatabaseSync) {}
 
   async listByUser(userId: string): Promise<LocalModelEndpointRecord[]> {
@@ -485,7 +485,7 @@ const SUBSCRIPTION_TOKEN_COLUMNS =
  * (unlike the API-key pool there is no `leaseLeastUsed` here — the least-loaded pick lives in
  * `ProviderSubscriptionService`, which reads `listByVendor` then `markLeased`).
  */
-export class SqliteProviderSubscriptionTokenRepository implements ProviderSubscriptionTokenRepository {
+class SqliteProviderSubscriptionTokenRepository implements ProviderSubscriptionTokenRepository {
   constructor(private readonly db: DatabaseSync) {}
 
   async listByVendor(
@@ -628,7 +628,7 @@ const PERSONAL_SUBSCRIPTION_COLUMNS =
  * `PersonalSubscriptionService`; this store only ever sees the opaque outer blob, so the
  * password never touches the laptop's disk. `upsert` keeps one live row per (user, vendor).
  */
-export class SqlitePersonalSubscriptionRepository implements PersonalSubscriptionRepository {
+class SqlitePersonalSubscriptionRepository implements PersonalSubscriptionRepository {
   constructor(private readonly db: DatabaseSync) {}
 
   async getByUserVendor(
@@ -759,7 +759,7 @@ const SUBSCRIPTION_ACTIVATION_COLUMNS =
  * it without the user present; it is deleted when the run reaches a terminal state (and the TTL
  * sweep is the backstop). Kept LOCAL because it is decrypted by the LOCAL container executor.
  */
-export class SqliteSubscriptionActivationRepository implements SubscriptionActivationRepository {
+class SqliteSubscriptionActivationRepository implements SubscriptionActivationRepository {
   constructor(private readonly db: DatabaseSync) {}
 
   async get(

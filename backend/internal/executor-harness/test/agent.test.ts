@@ -138,6 +138,33 @@ describe('parseAgentJob', () => {
     // A read-only explore peer carries no work branch and no PR — it exists only to be read.
     expect(job.peerRepos?.[0]?.newBranch).toBeUndefined()
     expect(job.peerRepos?.[0]?.pr).toBeUndefined()
+    // No cloneBranch ⇒ the peer is cloned at its repo default branch (the bug-investigator).
+    expect(job.peerRepos?.[0]?.cloneBranch).toBeUndefined()
+  })
+
+  it('parses an explore peer cloneBranch (the merger checks each peer out at its PR branch)', () => {
+    // The merger scores the COMBINED diff, so each peer PR's repo is cloned read-only at its PR
+    // branch (not the default) — carried as `cloneBranch`, with no newBranch/pr (never pushed).
+    const job = parseAgentJob({
+      ...base,
+      mode: 'explore',
+      output: { kind: 'structured' },
+      peerRepos: [
+        {
+          repo: {
+            owner: 'acme',
+            name: 'billing',
+            baseBranch: 'develop',
+            cloneUrl: 'https://github.com/acme/billing.git',
+          },
+          frameId: 'frame-billing',
+          cloneBranch: 'cat-factory/blk_1',
+        },
+      ],
+    })
+    expect(job.peerRepos?.[0]?.cloneBranch).toBe('cat-factory/blk_1')
+    expect(job.peerRepos?.[0]?.newBranch).toBeUndefined()
+    expect(job.peerRepos?.[0]?.pr).toBeUndefined()
   })
 
   // Read-only reference repos (doc-writer): validated + host-allowlisted like the primary, and
