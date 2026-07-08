@@ -1,6 +1,6 @@
 # Initiative: Custom initiative definitions — org-registered presets, robust end-to-end
 
-**Status:** planned · **Owner:** orchestration · **Started:** 2026-07-07
+**Status:** near-complete (only slice 4, low-prio/droppable, remains) · **Owner:** orchestration · **Started:** 2026-07-07
 
 > Durable source of truth for a multi-PR initiative. Read this first before picking up the
 > next slice; update the checklist at the end of each PR. Companion docs:
@@ -295,15 +295,15 @@ documented state in `example-custom-agent`).
 
 ## Per-slice status checklist
 
-| #   | Slice (each one PR)                                                                                                                                                                                                                                                                                                                                                                                                                      | Scope  | Depends on | Status  | PR   |
-| --- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ------ | ---------- | ------- | ---- |
-| 0   | This tracker doc                                                                                                                                                                                                                                                                                                                                                                                                                         | —      | —          | ✅ done | #942 |
-| 1   | **Spawned-run preset prompt additions (D1, the pilot)**: `AgentContextBuilder` initiative-preset resolution for `block.initiativeId` blocks; shared `initiativePresetSection` render in `@cat-factory/agents` (standard + generic prompts); kernel context docs; unit + conformance                                                                                                                                                      | SYSTEM | —          | ✅ done | #944 |
-| 2   | **Phase checkpoints (D2)**: contracts (`checkpoint` on template/entity/draft phases + `checkpointClearedAt`), ingest stamping, pure `pendingCheckpoint`/`applyCheckpointCleared`, loop pause + `checkpoint` notification reason, resume clears, tracker.md renders checkpoints; unit + conformance                                                                                                                                       | SYSTEM | —          | ✅ done | #949 |
-| 3   | **Checkpoint SPA touch + e2e**: phase checkpoint badge / paused-at-checkpoint explanation; e2e: checkpointed fake plan → pause → resume → next-phase spawn (extends the `FakeProfile.initiativePlan` seam — do not add a second one)                                                                                                                                                                                                     | SYSTEM | 2          | ✅ done | #954 |
-| 4   | **Planner preferred-pipelines fold (D4)**: `policyDefaults`-derived line in the plan-shape fold; prompt unit tests. Low prio — reassess after slices 1–2; drop if planner drift doesn't occur                                                                                                                                                                                                                                            | SYSTEM | —          | ⬜ todo |      |
-| 5   | **Preset-registry DI migration (D5)**: kernel registry class + default factory; `CoreDependencies` field; thread into the 3 orchestration read sites + `ServerContainer` for the 2 controllers; symmetric facade wiring (Worker/Node/local); delete free registration fns (breaking changeset); conformance custom-preset injection; update `registry-di-migration.md`                                                                   | SYSTEM | 1, 2       | ✅ done | #960 |
-| 6   | **Worked example + docs (the consumer proof)**: extend `example-custom-agent` with a minimal 2-phase "research → apply" preset exercising ALL new seams (custom container-explore kind + verdict resolver + artifact postOp on a merging pipeline, `checkpoint: true` research phase, a `coder` promptAddition, `seedPlan`-derived artifact path); expand `backend/docs/initiative-presets.md` (consumer walkthrough); cross-doc updates | BOTH   | 1, 2, 5    | ⬜ todo |      |
+| #   | Slice (each one PR)                                                                                                                                                                                                                                                                                                                                                                                                               | Scope  | Depends on | Status  | PR   |
+| --- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ------ | ---------- | ------- | ---- |
+| 0   | This tracker doc                                                                                                                                                                                                                                                                                                                                                                                                                  | —      | —          | ✅ done | #942 |
+| 1   | **Spawned-run preset prompt additions (D1, the pilot)**: `AgentContextBuilder` initiative-preset resolution for `block.initiativeId` blocks; shared `initiativePresetSection` render in `@cat-factory/agents` (standard + generic prompts); kernel context docs; unit + conformance                                                                                                                                               | SYSTEM | —          | ✅ done | #944 |
+| 2   | **Phase checkpoints (D2)**: contracts (`checkpoint` on template/entity/draft phases + `checkpointClearedAt`), ingest stamping, pure `pendingCheckpoint`/`applyCheckpointCleared`, loop pause + `checkpoint` notification reason, resume clears, tracker.md renders checkpoints; unit + conformance                                                                                                                                | SYSTEM | —          | ✅ done | #949 |
+| 3   | **Checkpoint SPA touch + e2e**: phase checkpoint badge / paused-at-checkpoint explanation; e2e: checkpointed fake plan → pause → resume → next-phase spawn (extends the `FakeProfile.initiativePlan` seam — do not add a second one)                                                                                                                                                                                              | SYSTEM | 2          | ✅ done | #954 |
+| 4   | **Planner preferred-pipelines fold (D4)**: `policyDefaults`-derived line in the plan-shape fold; prompt unit tests. Low prio — reassess after slices 1–2; drop if planner drift doesn't occur                                                                                                                                                                                                                                     | SYSTEM | —          | ⬜ todo |      |
+| 5   | **Preset-registry DI migration (D5)**: kernel registry class + default factory; `CoreDependencies` field; thread into the 3 orchestration read sites + `ServerContainer` for the 2 controllers; symmetric facade wiring (Worker/Node/local); delete free registration fns (breaking changeset); conformance custom-preset injection; update `registry-di-migration.md`                                                            | SYSTEM | 1, 2       | ✅ done | #960 |
+| 6   | **Worked example + docs (the consumer proof)**: extend `example-custom-agent` with a minimal 2-phase "research → apply" preset exercising ALL new seams (custom structured kind + verdict resolver + artifact postOp on a merging pipeline, `checkpoint: true` research phase, a `coder` promptAddition, `seedPlan`-derived artifact path); expand `backend/docs/initiative-presets.md` (consumer walkthrough); cross-doc updates | BOTH   | 1, 2, 5    | ✅ done | #TBD |
 
 Pilot ordering: slice 1 is the pilot (highest-value, smallest blast radius, establishes
 the "widen an existing seam, don't add one" shape). 2 is independent and can run in
@@ -470,6 +470,27 @@ initiative-checkpoint-pause`) with inline Resume/Cancel (reusing `initiatives.co
   app now exposes `initiativeRepository()` (all 4 facade harness impls) so the suite can seed an
   initiative + link a task's `initiativeId` without driving a planning loop; the `FakeAgentExecutor`
   `echoPreset` option surfaces the resolved preset for the assertion.
+- **Slice 6 landed (the acceptance proof):** `example-custom-agent` gained `preset_org_research` — a
+  minimal 2-phase "research → apply" methodology exercising every new seam: a `checkpoint: true`
+  research phase, a custom structured research kind + verdict resolver + artifact postOp on a merging
+  pipeline (`pl_org_research`), spawned-run `promptAdditions` for the built-in `coder` AND the custom
+  `org-researcher` (D1), and a `seedPlan`-DERIVED report path stamped on the research item's
+  `spawn.taskTypeFields.targetPath` (producer) + baked into the apply item's description (consumer).
+  `backend/docs/initiative-presets.md` gained the consumer walkthrough + a "Cross-phase artifacts"
+  section; `custom-agents.md` cross-links. New pipelines `pl_org_research`/`pl_org_apply` +
+  `registerOrgResearchPreset`; all unit-tested (mocked `RepoFiles`), no engine/facade change.
+  **CORRECTION to D3's premise carried forward:** D3 described the research producer as a
+  **`container-explore`** kind on a merging pipeline. That does NOT work — the CI gate + merger read
+  `block.pullRequest`, which the engine records ONLY from a step's `result.pullRequest`, and a
+  read-only explore step opens no PR (so its committing post-op lands on a branch the merge tail never
+  gates — the `pl_org_audit` shape, fine only for a terminal report). The artifact must reach the next
+  phase's clone via a MERGED PR (a direct commit to base is rejected by branch protection). So the
+  producer is a **`container-coding`** kind (opens the PR → recorded → merge tail acts) that ALSO
+  returns a `structuredOutput` verdict as `custom` — the `repro-test` structured-coding precedent
+  (`jobBody.ts`) — with the post-op rendering the canonical report onto that PR branch. If a future
+  slice wants a genuine explore-only producing step to drive a merge, that needs an ENGINE change
+  (record a post-op-opened PR on the block); it was deliberately NOT taken on here (out of the
+  "worked example + docs" scope).
 
 ## Out of scope
 

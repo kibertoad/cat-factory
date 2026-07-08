@@ -16,13 +16,19 @@ import {
   EXAMPLE_AGENT_KINDS,
   LICENSE_CHECK_KIND,
   LICENSE_FIXER_KIND,
+  ORG_APPLY_PIPELINE_ID,
   ORG_AUDIT_PIPELINE_ID,
   ORG_AUDIT_PRESET,
   ORG_AUDIT_PRESET_ID,
+  ORG_RESEARCH_KIND,
+  ORG_RESEARCH_PIPELINE_ID,
+  ORG_RESEARCH_PRESET,
+  ORG_RESEARCH_PRESET_ID,
   ORG_REVIEWER_KIND,
   SECURITY_AUDITOR_KIND,
   registerExampleCustomAgents,
   renderComplianceReport,
+  renderResearchReport,
   wireLicenseProvider,
 } from './index.js'
 
@@ -283,5 +289,197 @@ describe('example org-audit initiative preset', () => {
     expect(decorated.items[0]?.pipelineId).toBe(ORG_AUDIT_PIPELINE_ID)
     expect(decorated.items[1]?.pipelineId).toBeUndefined()
     expect(decorated.phases.map((p) => p.id)).toEqual(['org-audit'])
+  })
+})
+
+describe('example org research-and-apply preset', () => {
+  it('registers the research kind as a structured container-coding producer', () => {
+    // container-CODING (not explore) so it opens a real, mergeable PR — the merge tail can only
+    // gate a PR the step reported via `result.pullRequest` (the `repro-test` structured-coding shape).
+    expect(registry.agentStep(ORG_RESEARCH_KIND)?.surface).toBe('container-coding')
+    expect(registry.agentStep(ORG_RESEARCH_KIND)?.output?.kind).toBe('structured')
+    expect(registry.requiresContainer(ORG_RESEARCH_KIND)).toBe(true)
+    expect(registry.get(ORG_RESEARCH_KIND)?.presentation?.resultView).toBe('generic-structured')
+  })
+
+  it('registers a verdict resolver that folds the verdict into the step output', async () => {
+    const resolver = registeredStepResolverFactories()
+      .find((r) => r.kind === ORG_RESEARCH_KIND)!
+      .factory(stubResolverContext())
+    const resolution = await resolver.resolve({
+      workspaceId: 'ws',
+      instance: { id: 'exec' } as never,
+      step: {} as never,
+      result: { output: 'done', custom: { verdict: 'NO_GO', summary: 'Vendor API is retiring.' } },
+      isFinalStep: false,
+    })
+    // The human reads this at the checkpoint — a NO_GO is their cue to CANCEL the initiative.
+    expect(resolution?.output).toContain('NO_GO')
+    expect(resolution?.output).toContain('Vendor API is retiring.')
+  })
+
+  it('renders a deterministic research report from the verdict', () => {
+    const md = renderResearchReport({
+      verdict: 'GO_WITH_CAVEATS',
+      summary: 'Feasible with an adapter.',
+      findings: [{ title: 'No native pagination', detail: 'Wrap the cursor API.' }],
+      openQuestions: ['Rate limits under burst?'],
+    })
+    expect(md).toContain('# Feasibility research')
+    expect(md).toContain('**Verdict:** GO_WITH_CAVEATS')
+    expect(md).toContain('Feasible with an adapter.')
+    expect(md).toContain('**No native pagination**')
+    expect(md).toContain('- Rate limits under burst?')
+    // Pure: same input → identical bytes.
+    expect(
+      renderResearchReport({
+        verdict: 'GO_WITH_CAVEATS',
+        summary: 'Feasible with an adapter.',
+        findings: [{ title: 'No native pagination', detail: 'Wrap the cursor API.' }],
+        openQuestions: ['Rate limits under burst?'],
+      }),
+    ).toBe(md)
+  })
+
+  it('post-op commits the report to the seedPlan-derived targetPath on the PR branch', async () => {
+    const commitFiles = vi.fn<(input: CommitFilesInput) => Promise<{ sha: string }>>(async () => ({
+      sha: 'sha',
+    }))
+    const getFile = vi.fn(async () => null)
+    const repo = { getFile, commitFiles } as unknown as RepoFiles
+    const [postOp] = registry.postOps(ORG_RESEARCH_KIND)
+    expect(postOp).toBeTruthy()
+
+    await postOp!({
+      repo,
+      branch: 'cat-factory/blk_1',
+      // The engine threads the item's `spawn.taskTypeFields` onto the block, so the post-op reads
+      // the SAME `targetPath` the seedPlan derived + stamped.
+      context: {
+        agentKind: ORG_RESEARCH_KIND,
+        block: { taskTypeFields: { targetPath: 'docs/research/research-acme.md' } },
+      } as never,
+      result: { output: 'done', custom: { verdict: 'GO', summary: 'Clear.' } },
+    })
+
+    expect(commitFiles).toHaveBeenCalledTimes(1)
+    const input = commitFiles.mock.calls[0]![0]!
+    expect(input.branch).toBe('cat-factory/blk_1')
+    expect(input.files[0]!.path).toBe('docs/research/research-acme.md')
+    expect(input.files[0]!.content).toContain('**Verdict:** GO')
+  })
+
+  it('post-op is idempotent and a no-op on an unparseable result', async () => {
+    const [postOp] = registry.postOps(ORG_RESEARCH_KIND)
+    const content = renderResearchReport({ verdict: 'GO', findings: [], openQuestions: [] })
+    const commitFiles = vi.fn(async () => ({ sha: 'sha' }))
+    // Byte-identical report already on the branch ⇒ the guard skips the commit (replay-safe).
+    const repo = {
+      getFile: vi.fn(async () => ({ content, sha: 'blob' })),
+      commitFiles,
+    } as unknown as RepoFiles
+    await postOp!({
+      repo,
+      branch: 'cat-factory/blk_1',
+      context: { agentKind: ORG_RESEARCH_KIND, block: {} } as never,
+      result: { output: 'done', custom: { verdict: 'GO' } },
+    })
+    expect(commitFiles).not.toHaveBeenCalled()
+
+    // Nothing parseable ⇒ no report committed.
+    const commitFiles2 = vi.fn(async () => ({ sha: 'sha' }))
+    await postOp!({
+      repo: { commitFiles: commitFiles2 } as unknown as RepoFiles,
+      branch: 'cat-factory/blk_1',
+      context: { agentKind: ORG_RESEARCH_KIND, block: {} } as never,
+      result: { output: 'no json' },
+    })
+    expect(commitFiles2).not.toHaveBeenCalled()
+  })
+
+  it('registers both merging pipelines chaining the kinds + the merge tail', () => {
+    const research = seedPipelines().find((p) => p.id === ORG_RESEARCH_PIPELINE_ID)
+    expect(research?.agentKinds).toEqual([ORG_RESEARCH_KIND, 'conflicts', 'ci', 'merger'])
+    const apply = seedPipelines().find((p) => p.id === ORG_APPLY_PIPELINE_ID)
+    expect(apply?.agentKinds).toEqual(['coder', 'conflicts', 'ci', 'merger'])
+  })
+
+  it('declares a checkpoint research phase and a required apply phase', () => {
+    const template = ORG_RESEARCH_PRESET.descriptor.phaseTemplate
+    expect(template?.allowAdditionalPhases).toBe(false)
+    expect(template?.phases.map((p) => p.id)).toEqual(['research', 'apply'])
+    // The research phase PAUSES the initiative for human review of the committed report (D2).
+    expect(template?.phases[0]?.checkpoint).toBe(true)
+    expect(template?.phases[0]?.required).toBe(true)
+    expect(template?.phases[1]?.checkpoint).toBeUndefined()
+    expect(template?.phases[1]?.required).toBe(true)
+  })
+
+  it('advertises a full-interview descriptor bound to a real planning pipeline (probe:false)', () => {
+    expect(initiativePresetRegistry.get(ORG_RESEARCH_PRESET_ID)).toBe(ORG_RESEARCH_PRESET)
+    const descriptor = initiativePresetRegistry
+      .descriptors()
+      .find((d) => d.id === ORG_RESEARCH_PRESET_ID)
+    expect(descriptor?.probe).toBe(false)
+    expect(descriptor?.interview).toBe('full')
+    expect(descriptor?.planningPipelineId).toBe('pl_initiative')
+    expect(seedPipelines().some((p) => p.id === descriptor?.planningPipelineId)).toBe(true)
+  })
+
+  it('steers the spawned coder + custom research kind via promptAdditions (slice 1 reach)', () => {
+    // The `coder` (built-in) and `org-researcher` (custom) additions reach the SPAWNED runs — org
+    // methodology folded onto the children without forking either kind.
+    expect(ORG_RESEARCH_PRESET.promptAdditions?.coder).toBeTruthy()
+    expect(ORG_RESEARCH_PRESET.promptAdditions?.[ORG_RESEARCH_KIND]).toBeTruthy()
+  })
+
+  it('seedPlan derives the report path from the frozen topic and routes each phase', () => {
+    const decorated = ORG_RESEARCH_PRESET.seedPlan!(
+      {
+        goal: '',
+        constraints: [],
+        nonGoals: [],
+        analysisSummary: '',
+        phases: [
+          { id: 'research', title: 'Research', goal: '' },
+          { id: 'apply', title: 'Apply', goal: '' },
+        ],
+        items: [
+          {
+            id: 'r1',
+            phaseId: 'research',
+            title: 'Research the Acme API',
+            description: '',
+            dependsOn: [],
+          },
+          {
+            id: 'a1',
+            phaseId: 'apply',
+            title: 'Build the connector',
+            description: 'Implement it.',
+            dependsOn: ['r1'],
+          },
+        ],
+        policy: {
+          maxConcurrent: 1,
+          defaultPipelineId: 'pl_quick',
+          rules: [],
+          onMissingEstimate: 'default',
+        },
+        decisions: [],
+        caveats: [],
+      },
+      { topic: 'the Acme API', docsRoot: 'docs/research' },
+    )
+
+    const derivedPath = 'docs/research/research-the-acme-api.md'
+    // The research item routes to the merging research pipeline and carries the derived path so the
+    // post-op renders to it; the apply item routes to the apply pipeline and NAMES the same path.
+    expect(decorated.items[0]?.pipelineId).toBe(ORG_RESEARCH_PIPELINE_ID)
+    expect(decorated.items[0]?.spawn?.taskTypeFields?.targetPath).toBe(derivedPath)
+    expect(decorated.items[1]?.pipelineId).toBe(ORG_APPLY_PIPELINE_ID)
+    expect(decorated.items[1]?.description).toContain(derivedPath)
+    // seedPlan never touches phase shape.
+    expect(decorated.phases.map((p) => p.id)).toEqual(['research', 'apply'])
   })
 })

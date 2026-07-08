@@ -216,6 +216,64 @@ It follows the trust model of the rest of the package: a preset carries code (`d
 and can steer agents + read repos, so it is exactly as trusted as a custom agent — **custom presets
 are code-carrying backend packages**, registered from a deployment's composition root.
 
+## A multi-phase deployment example (`preset_org_research`)
+
+The same package also registers `preset_org_research` — a minimal two-phase **"research → apply"**
+methodology that is the acceptance proof for the custom-initiative-definitions initiative (it
+exercises checkpoints, spawned-run prompt steering, a verdict resolver, and a cross-phase artifact,
+none of which `preset_org_audit` touched). It is the stripped-down shape of the connector-factory
+use case, and every piece is assembled from the public seams alone:
+
+- **`fields`** — a required `topic` text field (the thing to research) + a `docsRoot` `path`.
+- **`phaseTemplate`** — two required phases, no extras: a **`research`** phase marked
+  **`checkpoint: true`** and an **`apply`** phase. The checkpoint pauses the initiative once the
+  research item settles (merges), so a human reads the committed report before the apply phase spawns
+  — resume on GO, **cancel on NO_GO** (the engine never interprets the verdict; see below).
+- **The research producer** is the package's `org-researcher` agent kind, run on the package's own
+  `pl_org_research = [org-researcher, conflicts, ci, merger]` — a **merging** pipeline, which is what
+  makes the report a cross-phase artifact: the merge tail lands it on the default branch the apply
+  phase's coder later clones. `org-researcher` is a **`container-coding`** kind with a
+  `structuredOutput` verdict (`GO` / `GO_WITH_CAVEATS` / `NO_GO`), whose **`postOp`** renders the
+  canonical report from the verdict and commits it onto the PR branch, and whose registered
+  **step resolver** folds the verdict into the step output so the tracker + the checkpoint read
+  "Verdict: NO_GO — …" at a glance. (It is `container-coding`, not `container-explore`, for a
+  load-bearing reason — see "Cross-phase artifacts" below.)
+- **`seedPlan`** — DECORATION only: it DERIVES the report path from the frozen `topic`
+  (`docs/research/research-<slug>.md`), routes the research item to `pl_org_research` and stamps the
+  path on its `spawn.taskTypeFields.targetPath` (which the post-op reads), and routes the apply
+  item(s) to `pl_org_apply = [coder, conflicts, ci, merger]` while baking the SAME path into their
+  description (which the coder reads from its checkout). Producer and consumer derive the path from
+  one source and cannot drift.
+- **`promptAdditions`** — the analyst/planner steering rides the PLANNING run, while the `coder`
+  (built-in) and `org-researcher` (custom) additions reach the SPAWNED runs via the spawned-run
+  prompt-additions seam (slice 1): org methodology folded onto the children without forking either
+  kind.
+
+### Cross-phase artifacts — the artifact must reach the next phase's clone
+
+A later phase's container agents clone the **default branch**, so a research artifact is visible to
+the apply phase only if it LANDS THERE. Two facts make the producer a **`container-coding`** kind
+rather than the `container-explore` the audit example uses:
+
+1. The artifact must land through a **merged PR** (a direct commit to the default branch would be
+   rejected by branch protection). So the producing pipeline carries the universal
+   `conflicts → ci → merger` tail.
+2. The CI gate + the merger read `block.pullRequest`, which the engine records **only** from a
+   step's `result.pullRequest`. A read-only `container-explore` step opens no PR, so its committing
+   post-op would land on a branch the merge tail never gates (the `pl_org_audit` shape — fine for a
+   terminal report, wrong for a cross-phase artifact). A **`container-coding`** step opens the PR
+   (recorded → merge tail acts), and — per the `repro-test` precedent — can STILL return a
+   `structuredOutput` JSON `custom` alongside its pushed commit, which the post-op renders the
+   canonical report from. The container writes a working draft (so the PR is non-empty); the post-op
+   supplies the deterministic canonical formatting in backend TypeScript.
+
+The verdict gate is the same "structured assessment vs a human decision" shape as
+`requirements-review` auto-pass and `on-call`: the org kind returns a machine-readable verdict, the
+engine surfaces it, and a HUMAN acts on it at the checkpoint (resume/cancel). The engine never
+auto-cancels on a machine verdict — a business GO/NO_GO is a human decision by design (an org that
+wants a hard machine stop can have its resolver FAIL the run instead, which blocks the item and halts
+the phase).
+
 ## Registering a preset
 
 - **A built-in** (shipped in `@cat-factory/agents`, deliberate dogfood like `@cat-factory/gates`):
