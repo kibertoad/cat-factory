@@ -1,5 +1,39 @@
 # @cat-factory/local-server
 
+## 0.62.0
+
+### Minor Changes
+
+- 0f3c88b: feat(testing): sealed sensitive test credentials, delivered to the Tester out of band
+
+  Add a SEALED per-service store for sensitive testing credentials (e.g. a third-party API
+  token a Tester needs), the sibling of the non-sensitive test-credential pools. Values are
+  encrypted at rest by the facade `SecretCipher` (info tag `cat-factory:test-secrets`, mirroring
+  `observability_connections`) and delivered to the Tester container **out of band**: decrypted at
+  dispatch, carried on a dedicated job-body field the agent-context snapshot allow-list omits, and
+  injected by the harness as container environment variables the agent reads (`$KEY`). The tester
+  prompt advertises only each secret's key + description (never the value). Per service frame,
+  resolved up the frame chain like release-health config; mirrored across both runtimes (D1 +
+  Drizzle) with a cross-runtime conformance assertion.
+
+  New API: `GET|PUT|DELETE /workspaces/:ws/services/:blockId/test-secrets` (values write-only).
+
+  This is Slice C of the tester-environment-access initiative; the Test Data Seeder agent
+  (Slice D) is a tracked follow-up. See docs/initiatives/tester-environment-access.md.
+
+### Patch Changes
+
+- Updated dependencies [0f3c88b]
+  - @cat-factory/contracts@0.122.0
+  - @cat-factory/kernel@0.114.0
+  - @cat-factory/agents@0.51.0
+  - @cat-factory/integrations@0.79.0
+  - @cat-factory/orchestration@0.101.0
+  - @cat-factory/server@0.105.0
+  - @cat-factory/node-server@0.88.0
+  - @cat-factory/executor-harness@1.39.2
+  - @cat-factory/gitlab@0.7.41
+
 ## 0.61.10
 
 ### Patch Changes
