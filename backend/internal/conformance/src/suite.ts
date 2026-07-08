@@ -6759,7 +6759,12 @@ export function defineExecutionConformance(harness: ConformanceHarness): void {
         registerInitiativePreset({
           descriptor: {
             id: 'preset_spawned_conf',
-            presentation: { label: 'Connector factory', icon: 'i', color: '#000', description: 'x' },
+            presentation: {
+              label: 'Connector factory',
+              icon: 'i',
+              color: '#000',
+              description: 'x',
+            },
             fields: [],
             planningPipelineId: 'pl_initiative',
             interview: 'full',

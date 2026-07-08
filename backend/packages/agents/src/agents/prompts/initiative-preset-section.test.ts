@@ -38,7 +38,10 @@ describe('initiativePresetSection', () => {
     const out = initiativePresetSection(
       ctx({
         initiative: {
-          preset: { label: 'Connector factory', promptAddition: 'Follow the org connector layout.' },
+          preset: {
+            label: 'Connector factory',
+            promptAddition: 'Follow the org connector layout.',
+          },
         },
       }),
     )
@@ -68,10 +71,15 @@ describe('initiativePresetSection', () => {
 })
 
 describe('preset steering reaches spawned-run prompts', () => {
-  const preset = { label: 'Connector factory', promptAddition: 'Consume the build-handoff artifact.' }
+  const preset = {
+    label: 'Connector factory',
+    promptAddition: 'Consume the build-handoff artifact.',
+  }
 
   it('folds into a standard-phase (coder) user prompt', () => {
-    const withPreset = userPromptFor(ctx({ initiative: { preset } }), registry, { materialized: true })
+    const withPreset = userPromptFor(ctx({ initiative: { preset } }), registry, {
+      materialized: true,
+    })
     const without = userPromptFor(ctx(), registry, { materialized: true })
     expect(withPreset).toContain('## Initiative preset: Connector factory')
     expect(withPreset).toContain('Consume the build-handoff artifact.')
@@ -80,7 +88,9 @@ describe('preset steering reaches spawned-run prompts', () => {
 
   it('folds into a generic custom-kind user prompt', () => {
     const custom = (over: Partial<AgentRunContext>) =>
-      userPromptFor(ctx({ agentKind: 'acme-biz-analyst', ...over }), registry, { materialized: true })
+      userPromptFor(ctx({ agentKind: 'acme-biz-analyst', ...over }), registry, {
+        materialized: true,
+      })
     const withPreset = custom({ initiative: { preset } })
     const without = custom({})
     expect(withPreset).toContain('## Initiative preset: Connector factory')
