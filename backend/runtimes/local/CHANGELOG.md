@@ -1,5 +1,42 @@
 # @cat-factory/local-server
 
+## 0.64.0
+
+### Minor Changes
+
+- 57979b0: feat(local): fail loudly when the executor harness version doesn't match the backend
+
+  Add a version handshake so a stale or mismatched executor is surfaced clearly and early
+  instead of as a cryptic downstream error (the class of bug where a since-removed git flag
+  reappears in an old image and breaks every authenticated clone/push with `fatal: unable to
+get password from user`).
+
+  - The harness now self-reports its version on `/health` (baked into the image as a file next
+    to `dist/`, since the image ships no `package.json`; read from `package.json` in native/npm
+    installs).
+  - Both local runner transports (per-run/pooled container and native host process) verify the
+    running harness against the version this backend build is matched to
+    (`RECOMMENDED_HARNESS_IMAGE`) as soon as it becomes healthy. A mismatch — or a harness too
+    old to report a version at all — fails the dispatch with an actionable message (re-pull the
+    image / update the package). A custom override (`LOCAL_HARNESS_IMAGE` / `LOCAL_HARNESS_ENTRY`)
+    downgrades the mismatch to a warning, mirroring the boot-time custom-image notice.
+
+  Bumps the executor-harness image tag (harness `src/**` + `Dockerfile` changed) and the local
+  mode pin to `cat-factory-executor:1.40.0`.
+
+### Patch Changes
+
+- Updated dependencies [a51a498]
+- Updated dependencies [57979b0]
+  - @cat-factory/orchestration@0.102.1
+  - @cat-factory/kernel@0.115.1
+  - @cat-factory/node-server@0.89.1
+  - @cat-factory/executor-harness@1.41.0
+  - @cat-factory/server@0.106.1
+  - @cat-factory/agents@0.52.1
+  - @cat-factory/gitlab@0.7.43
+  - @cat-factory/integrations@0.79.2
+
 ## 0.63.0
 
 ### Minor Changes
