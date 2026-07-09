@@ -379,9 +379,6 @@ export class ReviewGateController {
       return this.runIncorporationCycle(kind, workspaceId, blockId, feedback)
     }
 
-    // Flag the review `incorporating` first (a review-row write; done ONCE, outside the CAS
-    // retry loop so a re-applied `mutateInstance` callback can't double-write it).
-    const updated = await kind.markIncorporating(workspaceId, review.id)
     // Record the intent + re-arm the run under OPTIMISTIC CONCURRENCY (race-audit 2.2
     // controller-half): a blind full-row upsert here would clobber a concurrent driver poll
     // (or a second human action) that moved the row. Re-arm BEFORE signalling the driver: the
@@ -408,6 +405,11 @@ export class ReviewGateController {
         approvalId = step.approval.id
       },
     )
+    // Flag the review `incorporating` only AFTER the CAS has won — a review-row write done ONCE,
+    // after the retry loop, so a re-applied `mutateInstance` callback can't double-write it AND a
+    // contended give-up (the gate advanced away → the `ConflictError` above) never leaves the
+    // review orphaned in `incorporating` with no driver left to progress it.
+    const updated = await kind.markIncorporating(workspaceId, review.id)
     await this.deps.stateMachine.emitInstance(workspaceId, instance)
     await kind.emit(workspaceId, updated)
     await this.deps.workRunner.signalDecision(workspaceId, instance.id, approvalId, 'incorporate')

@@ -208,6 +208,7 @@ export class HumanTestController {
     // would clobber a concurrent driver write (a rebuild's `readEnvAndPark`) that landed during
     // the teardown, since the teardown is exactly the OCC window. The mutate re-finds the active
     // gate on fresh state and re-applies the (idempotent) env-forget; the teardown never re-runs.
+    const tornDownEnvId = found.step.humanTest?.environment?.id
     await this.teardownCurrent(workspaceId, found.step.humanTest!)
     const instance = await this.deps.stateMachine.mutateInstance(
       workspaceId,
@@ -226,7 +227,12 @@ export class HumanTestController {
           // Mid-rebuild (the upstream deployer is re-running): just forget the env locally — the
           // re-entry (`readEnvAndPark`) reads the freshly-rebuilt one, or degrades if none stood up.
           ht.environment = null
-        } else if (ht.environment) {
+        } else if (ht.environment && ht.environment.id === tornDownEnvId) {
+          // Stamp `torn_down` ONLY when the env still on the fresh snapshot is the SAME one we
+          // actually tore down. A concurrent rebuild (`readEnvAndPark`) that swapped in a fresh
+          // env during the teardown window left a DIFFERENT env here — leaving that live env
+          // untouched (rather than falsely marking it torn_down) is correct: we never tore it
+          // down. The human can destroy the fresh one again.
           ht.environment = { ...ht.environment, status: 'torn_down' }
         }
       },

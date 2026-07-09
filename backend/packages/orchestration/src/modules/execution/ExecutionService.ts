@@ -2500,11 +2500,14 @@ export class ExecutionService {
             s.companion.maxAttempts += 1
             s.companion.exceeded = undefined
             const producer = inst.steps[this.stepGraph.companionProducerIndex(inst, i)]
+            // Capture the approval id BEFORE `loopCompanionProducer`: it resets the companion
+            // step for re-run (`resetStepForRerun`), which NULLS `s.approval`, so reading
+            // `s.approval.id` after would throw. The signal targets the gate's original approval.
+            signalId = s.approval.id
             this.stepGraph.loopCompanionProducer(inst, i, {
               previousProposal: producer?.output ?? '',
               feedback: s.companion.verdicts.at(-1)?.feedback ?? '',
             })
-            signalId = s.approval.id
           },
         )
         result = persisted
