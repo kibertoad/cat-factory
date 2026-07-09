@@ -81,9 +81,14 @@ never accidentally ride yours. There is no API that pools or shares these tokens
 
 **The client-side password cache.** To stay low-friction the typed password is cached in the
 browser (`localStorage`, single key, ~40h TTL) so a start/retry rides along without a
-re-prompt. This does not weaken at-rest protection, which is carried by the system
-encryption, not by how long the password lives on the user's own device: the server never
-stores the password, and the cache is useless to an external attacker without the system key.
+re-prompt. Every gated action (start / confirm / retry) re-validates the cache against an **8h
+expiry buffer**: a key with less than that runway left is _withheld_ (treated as absent) so
+the server's 428 gate re-challenges and the user re-enters **early** — refreshing the full
+window while they are present at the action, rather than letting the key lapse mid-pipeline and
+surface as a broken run that asks for a retry. This does not weaken at-rest protection, which
+is carried by the system encryption, not by how long the password lives on the user's own
+device: the server never stores the password, and the cache is useless to an external attacker
+without the system key.
 (An XSS attacker on the origin who could read the cache could already act as the signed-in
 user, but still cannot recover the raw token, which is never returned to the client.) The
 password rides to the server as a request header (`X-Personal-Password`), like the bearer
@@ -98,7 +103,9 @@ so the window is kept tight: the default TTL is **~12h**, and a healthy run **de
 activation the moment it finishes**, so in the common case the window is far shorter. The TTL
 can stay short without ever re-prompting a working user because an actively-tended run
 **re-mints** the activation on each interaction (resolve a decision / approve a step / retry)
-from the cached password, so the TTL only ever bounds a stuck or abandoned run, never a live
+from the cached password — the interaction hard-gates exactly like start/retry, so a healthy
+(≥8h) key re-mints silently while a within-buffer/lapsed one prompts for early re-entry rather
+than coasting. The TTL only ever bounds a stuck or abandoned run, never a live
 one. It also has to outlast a fully-autonomous run (which has no human touch-points to
 re-mint at), which 12h comfortably does; the expiry sweep reclaims any straggler as a
 backstop. Even at its widest the exposure only matters to a system-key holder, the actor
@@ -116,11 +123,13 @@ token in an active run is marginal incremental exposure.
    unlocks every vendor it touches with a single password.
 3. **Password supplied per session, not stored server-side**: cached client-side with a
    ~40h TTL for low friction (§3) and carried as the `X-Personal-Password` header, never a
-   body field. Restricted to printable ASCII so it is header-safe.
+   body field. Restricted to printable ASCII so it is header-safe. Re-validated against an 8h
+   expiry buffer on every gated action, so the user re-enters early instead of mid-pipeline.
 4. **Short, transparently-extended per-run activations**: system-key-only, scoped to the
    run, ~12h TTL, deleted on completion (or when the block's run is replaced), re-minted from
-   the cached password on each user interaction so a live run never lapses, TTL-swept as a
-   backstop (§3).
+   the cached password on each user interaction (which hard-gates like start/retry, so a
+   within-buffer/lapsed key prompts for early re-entry) so a live run never lapses, TTL-swept
+   as a backstop (§3).
 5. **No unattended use.** A recurring schedule whose block resolves to an individual-usage
    model (by pin _or_ workspace default) is refused at fire time (no one is present to
    unlock it).
@@ -155,9 +164,10 @@ Each async container step:
     → system.decrypt(activation) → raw token handed to the runner transport
 
 Interact with a live run (resolve decision / approve / request changes):
-  POST … (same X-Personal-Password header, ridden from the cache, no prompt)
-    → remintActivations: re-mint the run's activation(s) BEFORE advancing, so the
-      short TTL never lapses a run the user is actively tending
+  POST … (same X-Personal-Password header, ridden from the cache; a within-buffer/
+          lapsed key is withheld → 428 → the client re-prompts early)
+    → activateForInteraction: gate (like start/retry) + re-mint the run's activation(s)
+      BEFORE advancing, so the short TTL never lapses a run the user is actively tending
 
 Run finishes (done/failed), or is replaced by a new run on the block:
   ExecutionService deletes the run's subscription_activations immediately
