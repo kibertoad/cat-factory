@@ -21,7 +21,12 @@ import { createServer } from 'node:http'
 import { AsyncFakeAgentExecutor } from '@cat-factory/conformance'
 import { buildNodeContainer, start } from '@cat-factory/node-server'
 import { fakeInlineModelResolver } from './fakeInlineModel.ts'
-import { E2eFakeAgentExecutor, E2eRepoBootstrapper, type FakeProfile } from './fakeProfile.ts'
+import {
+  E2eFakeAgentExecutor,
+  E2eGateProviders,
+  E2eRepoBootstrapper,
+  type FakeProfile,
+} from './fakeProfile.ts'
 
 /** The options shape `AsyncFakeAgentExecutor`/`FakeAgentExecutor` accept (avoids importing
  * the kernel `AgentKind` type, which isn't a dependency of this test-only package). */
@@ -81,6 +86,12 @@ const baseOptions: FakeOptions = {
 const profiles = new Map<string, FakeProfile>()
 const agentExecutor = new E2eFakeAgentExecutor(baseOptions, profiles)
 const repoBootstrapper = new E2eRepoBootstrapper(profiles)
+// The built-in gates (`ci`/`conflicts`/`post-release-health`) read their data source through a
+// wired provider; unwired they pass through (as today). Wiring these per-workspace fakes lets a
+// spec drive the real gate → helper-agent engine loop (red CI → ci-fixer → green, a conflicted
+// PR → conflict-resolver, a regressed release → on-call). They only run when a pipeline includes
+// the gate step, so the pre-existing specs are unaffected.
+const gateProviders = new E2eGateProviders(profiles)
 
 // A tiny, test-ONLY HTTP control channel (a separate listener, so it never couples to the
 // shared Hono app or its CORS/auth). A spec `POST`s `{ workspaceId, profile }` from Node
@@ -145,6 +156,12 @@ const env: NodeJS.ProcessEnv = {
   // sweep spawns the first wave, so a slow cadence would time the spec out).
   INITIATIVE_LOOP_INTERVAL_MS: process.env.INITIATIVE_LOOP_INTERVAL_MS ?? '1000',
   ENCRYPTION_KEY: process.env.ENCRYPTION_KEY ?? ENCRYPTION_KEY,
+  // Wire the release-health module (the observability connection repo + management API), so the
+  // post-release-health spec can connect an observability provider and create a pipeline carrying
+  // the observability-gated `post-release-health` step (rejected otherwise). The gate's runtime
+  // verdict comes from the per-workspace fake ReleaseHealthProvider (E2eGateProviders), not a real
+  // Datadog call — this only unlocks the pipeline-authoring gate + the connection seam.
+  OBSERVABILITY_ENABLED: process.env.OBSERVABILITY_ENABLED ?? 'true',
   PORT: process.env.PORT ?? '8787',
   // The SPA is served from a different origin (the Nuxt dev server), so the browser's
   // cross-origin REST calls need this allow-listed. The WebSocket upgrade is authorised
@@ -185,5 +202,12 @@ await start({
       // model, so the execution start guard needs that provider marked available to start a
       // run. The fake agent never actually calls a model. Mirrors the conformance harness.
       cloudflareModelsEnabled: true,
+      // Wire the per-workspace fake gate providers (applied AFTER the build's
+      // `clearGateProviders()`), so a spec's gate-bearing pipeline drives the real gate loop.
+      gateProviders: {
+        ciStatus: gateProviders.ciStatus,
+        mergeability: gateProviders.mergeability,
+        releaseHealth: gateProviders.releaseHealth,
+      },
     }),
 })

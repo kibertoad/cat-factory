@@ -43,7 +43,6 @@ import type {
   BinaryArtifactStore,
   CiStatusProvider,
   DeployCloneTarget,
-  DocQualityProvider,
   DocumentRecord,
   EnvironmentProvider,
   GateProbe,
@@ -70,6 +69,7 @@ import { afterEach, describe, expect, it } from 'vitest'
 import type { ConformanceHarness } from './harness.js'
 import { FakeTesterQualityReviewer } from './FakeTesterQualityReviewer.js'
 import { FakeTaskSourceProvider } from './FakeTaskSourceProvider.js'
+import { makeFakeCi, makeFakeDocQuality } from './fakeGateProviders.js'
 
 // Binary-storage start-gate helpers (see the `visual-confirmation` / UI-tester tests).
 // The Worker test env binds R2 (storage ON by default) while Node/local default to OFF and
@@ -2444,37 +2444,13 @@ export function defineAgentConformance(harness: ConformanceHarness): void {
       // wire-handle, or a facade's import drifted, this fails instead of shipping.
       afterEach(() => clearGateProviders())
 
-      // A fake CI provider whose check verdict is supplied per-probe (a queue; the last entry
-      // repeats), so a test can drive green / red→green like the registered-gate test does.
-      // It is injected THROUGH `makeApp` (`gateProviders`), not wired directly: a facade build
-      // resets the deployment-global gate providers up-front and the Worker rebuilds the
-      // container per request, so a directly-wired provider would be cleared before the gate
-      // probes. Threading it into the build re-wires it on every rebuild, on every runtime.
-      const makeFakeCi = (greens: boolean[]): CiStatusProvider => {
-        let i = 0
-        return {
-          getStatus: async () => {
-            const green = greens[Math.min(i, greens.length - 1)] ?? true
-            i += 1
-            return {
-              repos: [
-                {
-                  repo: 'o/r',
-                  headSha: 'sha',
-                  checks: [
-                    {
-                      name: 'build',
-                      status: 'completed',
-                      conclusion: green ? 'success' : 'failure',
-                      url: null,
-                    },
-                  ],
-                },
-              ],
-            }
-          },
-        }
-      }
+      // The single-repo fake CI provider (`makeFakeCi`, imported from `./fakeGateProviders`)
+      // supplies its check verdict per-probe (a queue; the last entry repeats), so a test can
+      // drive green / red→green like the registered-gate test does. It is injected THROUGH
+      // `makeApp` (`gateProviders`), not wired directly: a facade build resets the
+      // deployment-global gate providers up-front and the Worker rebuilds the container per
+      // request, so a directly-wired provider would be cleared before the gate probes.
+      // Threading it into the build re-wires it on every rebuild, on every runtime.
 
       // A multi-repo (service-connections phase 4) fake CI provider: the task opened an
       // own-service PR AND one peer PR, and the gate aggregates the verdict across BOTH. Each
@@ -2756,24 +2732,8 @@ export function defineAgentConformance(harness: ConformanceHarness): void {
       // identically on every runtime — a drift fails here instead of shipping.
       afterEach(() => clearGateProviders())
 
-      // A fake doc-quality provider whose verdict is supplied per-probe (a queue; last repeats).
-      const makeFakeDocQuality = (oks: boolean[]): DocQualityProvider => {
-        let i = 0
-        return {
-          check: async () => {
-            const ok = oks[Math.min(i, oks.length - 1)] ?? true
-            i += 1
-            return ok
-              ? { ok: true, headSha: 'sha', path: 'docs/prd/x.md', findings: [] }
-              : {
-                  ok: false,
-                  headSha: 'sha',
-                  path: 'docs/prd/x.md',
-                  findings: ['Missing required section: "Success Metrics".'],
-                }
-          },
-        }
-      }
+      // The fake doc-quality provider (`makeFakeDocQuality`, imported from
+      // `./fakeGateProviders`) supplies its verdict per-probe (a queue; last repeats).
 
       it('passes through on a well-formed document without spinning up doc-fixer', async () => {
         const app = harness.makeApp(
