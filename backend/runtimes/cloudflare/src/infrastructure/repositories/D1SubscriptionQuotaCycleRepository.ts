@@ -4,7 +4,7 @@ import type {
   SubscriptionQuotaScope,
   SubscriptionQuotaWindowKind,
 } from '@cat-factory/kernel'
-import { subscriptionVendorSchema } from '@cat-factory/contracts'
+import { type SubscriptionVendor, subscriptionVendorSchema } from '@cat-factory/contracts'
 import { decodeEnum } from '@cat-factory/server'
 import type { D1Database } from '@cloudflare/workers-types'
 
@@ -53,7 +53,7 @@ export class D1SubscriptionQuotaCycleRepository implements SubscriptionQuotaCycl
       id: string
       scope: SubscriptionQuotaScope
       scopeId: string
-      vendor: string
+      vendor: SubscriptionVendor
       windowKind: SubscriptionQuotaWindowKind
     },
     usage: { inputTokens: number; outputTokens: number },
@@ -110,7 +110,7 @@ export class D1SubscriptionQuotaCycleRepository implements SubscriptionQuotaCycl
   async listByScopeVendor(
     scope: SubscriptionQuotaScope,
     scopeId: string,
-    vendor: string,
+    vendor: SubscriptionVendor,
   ): Promise<SubscriptionQuotaCycleRecord[]> {
     const { results } = await this.db
       .prepare(

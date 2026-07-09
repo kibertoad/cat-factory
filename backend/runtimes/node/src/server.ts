@@ -359,6 +359,7 @@ async function bootServer(
       agentSearchQueryRepository: repos.agentSearchQueryRepository,
       pipelineScheduleRepository: repos.pipelineScheduleRepository,
       subscriptionActivationRepository: new DrizzleSubscriptionActivationRepository(db),
+      subscriptionQuotaCycleRepository: repos.subscriptionQuotaCycleRepository,
       provisioningLogRepository: repos.provisioningLogRepository,
       passwordResetTokenRepository: repos.passwordResetTokenRepository,
       commitRepository: new DrizzleCommitProjectionRepository(db),

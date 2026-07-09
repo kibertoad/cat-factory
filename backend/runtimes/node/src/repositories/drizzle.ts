@@ -134,6 +134,7 @@ import type {
 } from '@cat-factory/kernel'
 import { LLM_WARNING_FINISH_REASONS } from '@cat-factory/kernel'
 import {
+  type SubscriptionVendor,
   agentRunKindSchema,
   decodeInitiativeRow,
   isWebSearchProvider,
@@ -4401,7 +4402,7 @@ class DrizzleSubscriptionQuotaCycleRepository implements SubscriptionQuotaCycleR
       id: string
       scope: SubscriptionQuotaScope
       scopeId: string
-      vendor: string
+      vendor: SubscriptionVendor
       windowKind: SubscriptionQuotaWindowKind
     },
     usage: { inputTokens: number; outputTokens: number },
@@ -4443,7 +4444,7 @@ class DrizzleSubscriptionQuotaCycleRepository implements SubscriptionQuotaCycleR
   async listByScopeVendor(
     scope: SubscriptionQuotaScope,
     scopeId: string,
-    vendor: string,
+    vendor: SubscriptionVendor,
   ): Promise<SubscriptionQuotaCycleRecord[]> {
     const rows = await this.db
       .select()

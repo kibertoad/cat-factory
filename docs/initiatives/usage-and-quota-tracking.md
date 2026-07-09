@@ -134,6 +134,11 @@ The pilot landed the modeled quota model end-to-end; B2/B3 extend it rather than
   — the SAME atomic-CASE pattern as `provider_subscription_tokens.recordUsage`. D1 migration `0047`
   ⇄ Drizzle `subscriptionQuotaCycles` + generated migration; the repo is a `CoreRepositories`
   member so both the container and the conformance suite get it.
+- **Retention**: idle cycles are pruned by BOTH facades' retention sweeps (Worker cron
+  `sweepRetention` ⇄ Node `sweepRetention` timer) on a FIXED 30-day window — deliberately far
+  beyond the 7-day weekly window so a live cycle is never deleted mid-window. It is NOT a
+  configurable retention knob (the row naturally resets, so 30 days only reclaims long-dead
+  scopes). Any Part-B addition that persists more quota state wires its own prune here too.
 - **Recording seam**: `ContainerAgentExecutor.pollJob` records via the `recordSubscriptionQuotaUsage`
   dep, gated on the SAME subscription-run signal as billing (`result.callMetrics` present) — for
   BOTH pooled (scope = `handle.subscriptionTokenId`) and personal (scope = `handle.initiatedByUserId`,
