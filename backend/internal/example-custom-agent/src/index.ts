@@ -169,6 +169,16 @@ const renderReportPostOp: RepoOp = async (ctx) => {
 // JSON `custom` outcome (see `jobBody.ts`). The container writes a working draft (so the PR is
 // non-empty); the post-op then renders the CANONICAL report from the verdict, keeping the
 // mechanical formatting in backend TypeScript per the custom-agents governing principle.
+//
+// LOAD-BEARING DEPENDENCY a copying deployment must honour: this kind commits on the WORK branch
+// and opens the PR, so the harness treats a no-file-change run as a FAILURE (`noChangesIsError` in
+// `jobBody.ts` — a work-branch coder without `noChangesTolerated`). That failure aborts the step
+// BEFORE `recordStepResult` runs the post-op, so the canonical report never lands and the
+// checkpoint has nothing to review. Hence the system prompt below explicitly instructs the agent to
+// COMMIT A SHORT WORKING DRAFT — the draft is what keeps the run past the no-op guard so the post-op
+// can render the authoritative report on top of it. (Flipping to `noChangesTolerated: true` is NOT
+// a fix: the branch would be empty at PR-open time — the post-op commits only afterwards — so the
+// PR could open empty or be refused. A committed draft is the robust shape.)
 // ---------------------------------------------------------------------------
 
 /** The custom research kind + the id its committed report lands under (derived per-run). */
@@ -611,8 +621,10 @@ function researchDocPath(topic: string, docsRoot: string): string {
     topic
       .toLowerCase()
       .replace(/[^a-z0-9]+/g, '-')
-      .replace(/^-+|-+$/g, '')
-      .slice(0, 60) || 'topic'
+      .slice(0, 60)
+      // Trim AFTER slicing too: a 60-char cut can land right after a `-`, leaving a trailing
+      // dash (`research-foo-bar-.md`). Still a safe path, just ugly — re-trim for a clean slug.
+      .replace(/^-+|-+$/g, '') || 'topic'
   return `${docsRoot.replace(/\/+$/, '')}/research-${slug}.md`
 }
 
