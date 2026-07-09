@@ -126,6 +126,7 @@ import type {
   UserSettings,
   UserSettingsRepository,
   IdentityProvider,
+  ServiceRehome,
   Workspace,
   WorkspaceRepository,
   WorkspaceVisibility,
@@ -306,8 +307,29 @@ class DrizzleWorkspaceRepository implements WorkspaceRepository {
     await this.db.update(workspaces).set({ description }).where(eq(workspaces.id, id))
   }
 
-  async delete(id: string): Promise<void> {
+  async delete(id: string, rehome: ServiceRehome[] = []): Promise<void> {
     await this.db.transaction(async (tx) => {
+      // Re-home shared services FIRST: move each service's blocks + run history to a surviving
+      // mounting board by re-stamping their `workspace_id`. Blocks are keyed by `service_id`, so
+      // after the move the service's frame no longer lives in THIS workspace — the reclaim below
+      // then skips it, leaving the service, its subtree and every OTHER board's mount intact. A
+      // shared service therefore outlives its home board's deletion. Mirror any change in the
+      // Cloudflare facade's D1WorkspaceRepository.delete.
+      for (const { serviceId, toWorkspaceId } of rehome) {
+        await tx
+          .update(agentRuns)
+          .set({ workspace_id: toWorkspaceId })
+          .where(
+            inArray(
+              agentRuns.block_id,
+              tx.select({ id: blocks.id }).from(blocks).where(eq(blocks.service_id, serviceId)),
+            ),
+          )
+        await tx
+          .update(blocks)
+          .set({ workspace_id: toWorkspaceId })
+          .where(eq(blocks.service_id, serviceId))
+      }
       // Reclaim the account-owned services this workspace HOMES (+ every board's mount of them)
       // BEFORE the blocks they reference are dropped. A deleted board that leaves its services
       // behind is not a cosmetic leak: `services` is account-scoped and looked up by
@@ -2599,6 +2621,16 @@ class DrizzleWorkspaceMountRepository implements WorkspaceMountRepository {
       .select()
       .from(workspaceServices)
       .where(eq(workspaceServices.service_id, serviceId))
+      .orderBy(workspaceServices.created_at)
+    return rows.map(rowToMount)
+  }
+
+  async listByServiceIds(serviceIds: string[]): Promise<WorkspaceMount[]> {
+    if (serviceIds.length === 0) return []
+    const rows = await this.db
+      .select()
+      .from(workspaceServices)
+      .where(inArray(workspaceServices.service_id, serviceIds))
       .orderBy(workspaceServices.created_at)
     return rows.map(rowToMount)
   }

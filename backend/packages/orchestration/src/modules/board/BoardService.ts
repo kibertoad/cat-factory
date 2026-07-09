@@ -19,6 +19,7 @@ import type {
   GroupCacheHandle,
   InitiativeRepository,
   RepoProjectionRepository,
+  Service,
   ServiceFragmentDefaultsRepository,
   ServiceRepository,
   WorkspaceMountRepository,
@@ -368,9 +369,15 @@ export class BoardService {
     // service MUST name its subdirectory so execution can scope agents to it. The link
     // is the account-owned Service, so a duplicate is detected via `getByRepo`.
     if (!repo.isMonorepo && this.serviceRepository) {
-      const existing = await this.serviceRepository.getByRepo(repo.installationId, repo.githubId)
+      // Dedup ACCOUNT-scoped (not just same-installation): a service is account-owned and shared
+      // across the org's boards, so an existing whole-repo service for this repo anywhere in the
+      // account must be MOUNTED here — not duplicated by minting a rival (which could happen if two
+      // boards reach the repo through different installations). Mounting gives both boards one
+      // shared subtree + task list (composeBoard); idempotent when already on this board. Monorepos
+      // are exempt — each subdirectory is its own service (handled by the directory guard below).
+      const existing = await this.findAccountWholeRepoService(workspaceId, repo.githubId)
       if (existing) {
-        throw new ValidationError('This repository is already linked to a board service')
+        return this.mountExistingService(workspaceId, existing, input.position)
       }
     }
     if (repo.isMonorepo && !directory) {
@@ -416,6 +423,67 @@ export class BoardService {
     await this.blockRepository.insert(workspaceId, block, serviceId)
     await this.emitBoardChanged(workspaceId, 'block-added', block.id)
     return block
+  }
+
+  /**
+   * The account's existing WHOLE-REPO (non-monorepo, no subdirectory) service for a repo, or null.
+   * Account-scoped so it dedups a shared repo across the org regardless of which installation each
+   * board reached it through. Requires the service repo to be wired.
+   */
+  private async findAccountWholeRepoService(
+    workspaceId: string,
+    repoGithubId: number,
+  ): Promise<Service | null> {
+    if (!this.serviceRepository) return null
+    const account = (await this.workspaceRepository.accountOf(workspaceId)) ?? null
+    const services = await this.serviceRepository.listByAccount(account)
+    return services.find((s) => s.repoGithubId === repoGithubId && !s.directory) ?? null
+  }
+
+  /**
+   * Mount an EXISTING account-owned service onto `workspaceId` and return its frame block —
+   * the shared-service path taken by {@link addServiceFromRepo} when the repo already backs a
+   * service. Mounting (not re-creating) is how two boards in one org work on the same service
+   * with a shared subtree/task list. Same-org only; idempotent when already mounted here.
+   */
+  private async mountExistingService(
+    workspaceId: string,
+    service: Service,
+    position?: { x: number; y: number },
+  ): Promise<Block> {
+    if (!this.workspaceMountRepository) {
+      throw new ValidationError('This repository is already linked to a board service')
+    }
+    // A service is shared strictly within its account — never mount one from another org.
+    const account = await this.workspaceRepository.accountOf(workspaceId)
+    if ((account ?? null) !== (service.accountId ?? null)) {
+      throw new ValidationError(
+        'This repository is already linked to a service in another organization',
+      )
+    }
+    const home = await this.blockRepository.findById(service.frameBlockId)
+    if (!home) {
+      // The service's frame block is gone (a stale orphan). Surface a clean error rather than
+      // mounting a dead frame; the delete cascade normally reclaims such orphans.
+      throw new ValidationError('This repository is already linked to a board service')
+    }
+    const existingMount = await this.workspaceMountRepository.get(workspaceId, service.id)
+    if (!existingMount) {
+      const existingMounts = await this.workspaceMountRepository.listByWorkspace(workspaceId)
+      // Lay a new mount out on a 5-wide grid (matching ServiceMountService) when no explicit
+      // position is given, so shared services don't pile onto the same point.
+      const n = existingMounts.length
+      await this.workspaceMountRepository.upsert({
+        workspaceId,
+        serviceId: service.id,
+        position: position ?? { x: 80 + (n % 5) * 48, y: 80 + Math.floor(n / 5) * 48 },
+        size: null,
+        createdAt: this.clock.now(),
+      })
+      // Fan out from the frame's HOME so every board mounting the shared service refreshes.
+      await this.emitBoardChanged(home.workspaceId, 'block-added', home.block.id)
+    }
+    return home.block
   }
 
   /**

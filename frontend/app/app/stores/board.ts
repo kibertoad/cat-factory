@@ -161,7 +161,10 @@ export const useBoardStore = defineStore('board', () => {
   /**
    * Import an existing GitHub repo (the App is installed + it's projected) as a
    * service frame, with no bootstrap run. The backend links the repo to the new
-   * frame and returns it `ready`; we upsert it onto the board.
+   * frame and returns it `ready`; we upsert it onto the board. When the repo already
+   * backs an org service, the backend MOUNTS that shared service here instead of
+   * minting a rival — so refresh the snapshot to pull in the shared frame's subtree
+   * + its mount layout (a fresh import has no subtree, but the reconcile is harmless).
    */
   async function addServiceFromRepo(
     repoGithubId: number,
@@ -180,6 +183,7 @@ export const useBoardStore = defineStore('board', () => {
       ...(opts?.position ? { position: opts.position } : {}),
     })
     upsert(block)
+    await useWorkspaceStore().refresh()
     return block
   }
 

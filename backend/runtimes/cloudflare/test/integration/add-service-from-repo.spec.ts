@@ -58,7 +58,7 @@ describe('add service from existing repo', () => {
     ).toBe(101)
   })
 
-  it('rejects importing a repo that is already on the board', async () => {
+  it('re-importing a repo already on THIS board returns the existing frame (idempotent)', async () => {
     const installationId = uniqueInstallationId()
     const app = makeApp(
       new FakeAgentExecutor(),
@@ -73,10 +73,13 @@ describe('add service from existing repo', () => {
     })
     expect(first.status).toBe(201)
 
-    const again = await app.call('POST', `/workspaces/${ws}/blocks/from-repo`, {
+    // A repo already backing a service is now SHARED by mounting, not rejected. Re-adding it on the
+    // board that already homes it is a no-op that returns the same frame (idempotent).
+    const again = await app.call<Block>('POST', `/workspaces/${ws}/blocks/from-repo`, {
       repoGithubId: 101,
     })
-    expect(again.status).toBe(422)
+    expect(again.status).toBe(201)
+    expect(again.body.id).toBe(first.body.id)
   })
 
   it('unlinks the repo when its service frame is deleted, so it can be re-added', async () => {
