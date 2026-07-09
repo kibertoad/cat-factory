@@ -114,6 +114,14 @@ export interface TesterControllerDeps {
  * after a fixer job finishes. Extracted out of `ExecutionService`; the shared engine writes
  * (block reads, container reclaim, instance persistence/emit) stay on the engine and are
  * injected via {@link TesterControllerDeps}.
+ *
+ * Every instance write here runs on the DURABLE-DRIVER path (the `tester-verdict` completion
+ * interceptor / the fixer-completion re-dispatch), after a slow quality-reviewer LLM call or
+ * a container dispatch, so it goes through {@link RunStateMachine.casPersist} rather than a
+ * blind upsert: a concurrent human action (a `stopRun`/`cancel`) landing in that window loses
+ * the CAS, throws `RunContendedError`, and is caught by the driver's `redriveOnContention`
+ * envelope and re-driven on fresh state — never clobbering the human write or resurrecting a
+ * cancelled run (race-audit 2.2 controller-half).
  */
 export class TesterController {
   constructor(private readonly deps: TesterControllerDeps) {}
@@ -287,7 +295,7 @@ export class TesterController {
 
     // Adequate report ⇒ proceed to the normal greenlight/fixer decision.
     if (outcome.adequate) {
-      await this.deps.stateMachine.persistInstance(workspaceId, instance)
+      await this.deps.stateMachine.casPersist(workspaceId, instance)
       return null
     }
 
@@ -310,7 +318,7 @@ export class TesterController {
 
     // Budget spent (or no async executor to re-run) ⇒ stop gating and proceed with the report.
     qc.exceeded = true
-    await this.deps.stateMachine.persistInstance(workspaceId, instance)
+    await this.deps.stateMachine.casPersist(workspaceId, instance)
     return null
   }
 
@@ -354,7 +362,7 @@ export class TesterController {
     step.container = { status: 'starting' }
     step.subtasks = undefined
     if (step.test) step.test.phase = 'testing'
-    await this.deps.stateMachine.persistInstance(workspaceId, instance)
+    await this.deps.stateMachine.casPersist(workspaceId, instance)
     await this.deps.stateMachine.emitInstance(workspaceId, instance)
 
     const handle = await executor.startJob(context)
@@ -363,7 +371,7 @@ export class TesterController {
     // The dispatch returned, so the container is up; the live phase + id/url arrive on the
     // first poll, surfaced via the same `container` projection identically to the Coder.
     step.container = { status: 'up' }
-    await this.deps.stateMachine.persistInstance(workspaceId, instance)
+    await this.deps.stateMachine.casPersist(workspaceId, instance)
     await this.deps.stateMachine.emitInstance(workspaceId, instance)
     return { kind: 'awaiting_job', jobId: step.jobId, stepIndex: instance.currentStep }
   }
@@ -409,7 +417,7 @@ export class TesterController {
     attempts: number,
   ): Promise<AdvanceResult> {
     step.output = output
-    await this.deps.stateMachine.persistInstance(workspaceId, instance)
+    await this.deps.stateMachine.casPersist(workspaceId, instance)
     await this.raiseTestFailed(workspaceId, instance, block, error, attempts)
     // Carry the precise classification (`agent`, not the generic container `job_failed`)
     // and the Tester's own summary to the driver's single `failRun` funnel; failing the
@@ -432,7 +440,7 @@ export class TesterController {
     reason: string,
   ): Promise<AdvanceResult> {
     step.output = reason
-    await this.deps.stateMachine.persistInstance(workspaceId, instance)
+    await this.deps.stateMachine.casPersist(workspaceId, instance)
     await this.raiseTestAborted(workspaceId, instance, block, reason)
     return {
       kind: 'job_failed',
@@ -558,7 +566,7 @@ export class TesterController {
       // appended when the fixer finishes (see recordFixerOutcome).
       ...(step.test?.attemptLog ? { attemptLog: step.test.attemptLog } : {}),
     }
-    await this.deps.stateMachine.persistInstance(workspaceId, instance)
+    await this.deps.stateMachine.casPersist(workspaceId, instance)
     await this.deps.stateMachine.emitInstance(workspaceId, instance)
 
     const handle = await executor.startJob(context)
@@ -567,7 +575,7 @@ export class TesterController {
     // The fixer's container is up once the dispatch returns; the live phase + id/url arrive
     // on the first poll.
     step.container = { status: 'up' }
-    await this.deps.stateMachine.persistInstance(workspaceId, instance)
+    await this.deps.stateMachine.casPersist(workspaceId, instance)
     await this.deps.stateMachine.emitInstance(workspaceId, instance)
     return { kind: 'awaiting_job', jobId: step.jobId, stepIndex: instance.currentStep }
   }

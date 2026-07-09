@@ -6,7 +6,7 @@ import type {
   PipelineStep,
   WorkRunner,
 } from '@cat-factory/kernel'
-import { assertFound } from '@cat-factory/kernel'
+import { assertFound, ConflictError } from '@cat-factory/kernel'
 import type { AdvanceResult } from './advance.js'
 import type { RunStateMachine } from './RunStateMachine.js'
 import type { StepGraph } from './StepGraph.js'
@@ -186,15 +186,34 @@ export class InterviewGateController<TEntity> {
   ): Promise<TEntity> {
     const parked = await this.findParkedStep(workspaceId, blockId)
     if (parked) {
-      const { instance, step } = parked
-      step.pendingInterview = intent.proceed ? { proceed: true } : {}
-      // Re-arm BEFORE signalling: the park left the run `blocked`, and `advanceInstance`
-      // no-ops unless it is `running`/`paused`, so a woken driver would otherwise return
-      // without re-entering the gate.
-      if (instance.status === 'blocked') instance.status = 'running'
-      await this.deps.stateMachine.persistInstance(workspaceId, instance)
+      // Optimistic-concurrency human-action write (race-audit 2.2 controller-half): record the
+      // intent under `mutateInstance` (load fresh → re-find the parked interviewer step → mutate
+      // → CAS) so a concurrent driver poll / a second resume can't be clobbered by a blind
+      // full-row upsert. The signal + emit run once after, on the winning snapshot.
+      let approvalId = ''
+      const instance = await this.deps.stateMachine.mutateInstance(
+        workspaceId,
+        parked.instance.id,
+        (inst) => {
+          const step = inst.steps.find(
+            (s) =>
+              s.agentKind === this.kind.agentKind &&
+              s.state === 'waiting_decision' &&
+              s.approval?.status === 'pending',
+          )
+          if (!step?.approval) {
+            throw new ConflictError('No interview is currently awaiting input')
+          }
+          step.pendingInterview = intent.proceed ? { proceed: true } : {}
+          // Re-arm BEFORE signalling: the park left the run `blocked`, and `advanceInstance`
+          // no-ops unless it is `running`/`paused`, so a woken driver would otherwise return
+          // without re-entering the gate.
+          if (inst.status === 'blocked') inst.status = 'running'
+          approvalId = step.approval.id
+        },
+      )
       await this.deps.stateMachine.emitInstance(workspaceId, instance)
-      await this.deps.workRunner.signalDecision(workspaceId, instance.id, step.approval!.id, choice)
+      await this.deps.workRunner.signalDecision(workspaceId, instance.id, approvalId, choice)
     }
     return this.requireCurrent(this.kind.current(workspaceId, blockId), blockId)
   }
@@ -236,7 +255,7 @@ export class InterviewGateController<TEntity> {
     if (isFinalStep) {
       instance.status = 'done'
       await this.deps.stateMachine.finalizeBlock(workspaceId, instance, undefined)
-      await this.deps.stateMachine.persistInstance(workspaceId, instance)
+      await this.deps.stateMachine.casPersist(workspaceId, instance)
       await this.deps.stateMachine.emitInstance(workspaceId, instance)
       await this.deps.stateMachine.stopRunContainer(workspaceId, instance)
       return { kind: 'done' }
@@ -245,7 +264,7 @@ export class InterviewGateController<TEntity> {
     const next = instance.steps[instance.currentStep]
     if (next) this.deps.stepGraph.startStep(next)
     await this.deps.stateMachine.updateBlockProgress(workspaceId, instance, 'in_progress')
-    await this.deps.stateMachine.persistInstance(workspaceId, instance)
+    await this.deps.stateMachine.casPersist(workspaceId, instance)
     await this.deps.stateMachine.emitInstance(workspaceId, instance)
     return { kind: 'continue' }
   }

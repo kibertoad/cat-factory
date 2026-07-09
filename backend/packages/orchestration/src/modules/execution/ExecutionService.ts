@@ -2162,7 +2162,8 @@ export class ExecutionService {
   // call them) and the kind builders supply each subject's differentiators. Three shared
   // state-machine primitives stay here — they are reused by the generic approval path and
   // the companion iteration-cap gate, so they have a single home: {@link parkStepOnDecision},
-  // {@link advancePastResolvedGate} and {@link dispatchIterationCap}.
+  // the `advanceRunPastGate`/`settleAdvancedGate` split (run under `mutateInstance`), and
+  // {@link dispatchIterationCap}.
 
   /**
    * Two gates park on a `step.approval` but are NOT generic prose approvals — they are
@@ -2455,62 +2456,99 @@ export class ExecutionService {
     choice: IterationCapChoice,
   ): Promise<ExecutionInstance> {
     await this.requireWorkspace(workspaceId)
-    // NOTE (optimistic concurrency): unlike the other human-action handlers (resolveDecision /
-    // requestChanges / rejectStep / requestHumanReviewFix), this one is NOT yet routed through
-    // `mutateInstance`. Its two branches persist through the shared gate-resume plumbing
-    // (`dispatchIterationCap` → `advancePastResolvedGate`), which owns its own upsert + signal +
-    // emit, so CAS-guarding it cleanly requires splitting that shared helper into a pure-mutation
-    // part and a side-effect part. Tracked as the remaining slice of the lost-update fix; the
-    // window is small (a human resolving a companion iteration-cap racing the driver).
-    const instance = assertFound(
+    // Optimistic-concurrency human-action write (race-audit 2.2 controller-half): both non-cancel
+    // branches persist under `mutateInstance` (load fresh → re-find the gate → mutate → CAS), so a
+    // concurrent driver poll — or a `stopRun`/`cancel` racing this resolve — can't be clobbered by a
+    // blind full-row upsert, and a cancelled run is never resurrected. The pure in-memory mutation
+    // runs inside the CAS; the non-idempotent side effects (block writes, `technical` inference,
+    // driver signal, emit) run once after, on the winning snapshot — the same pure/side-effect split
+    // `approveStep` and the review gate-resume use. The validation snapshot below gives a fast
+    // 404/409 (and the idempotent already-resolved early return).
+    const snapshot = assertFound(
       await this.executionRepository.get(workspaceId, executionId),
       'Execution',
       executionId,
     )
-    const stepIndex = instance.steps.findIndex((s) => s.approval?.id === approvalId)
-    const step = instance.steps[stepIndex]
-    if (!step || !step.approval) throw new NotFoundError('Approval', approvalId)
-    if (!step.companion?.exceeded) {
+    const snapStep = snapshot.steps.find((s) => s.approval?.id === approvalId)
+    if (!snapStep || !snapStep.approval) throw new NotFoundError('Approval', approvalId)
+    if (!snapStep.companion?.exceeded) {
       throw new ConflictError(`Approval '${approvalId}' is not a companion iteration-cap gate`)
     }
-    if (step.approval.status === 'approved') return instance
+    if (snapStep.approval.status === 'approved') return snapshot
 
-    await this.dispatchIterationCap(workspaceId, instance.blockId, choice, {
-      // Grant one more automatic rework: raise the budget by one, clear the cap flag, then
-      // loop the producer back through the companion to re-grade (`rerunProducerThrough`
-      // un-parks the gate by resetting the companion step). The last verdict's feedback
-      // drives the rework, the same way the automatic loop folds the live assessment in.
+    // The state the caller sees: the winning post-mutation snapshot for extra-round/proceed, or
+    // the pre-cancel snapshot for stop-reset (the run row is deleted, so there's nothing to re-read).
+    let result = snapshot
+    await this.dispatchIterationCap(workspaceId, snapshot.blockId, choice, {
+      // Grant one more automatic rework: raise the budget by one, clear the cap flag, then loop
+      // the producer back through the companion to re-grade (`loopCompanionProducer` re-arms the
+      // run `running`). The last verdict's feedback drives the rework.
       extraRound: async () => {
-        step.companion!.maxAttempts += 1
-        step.companion!.exceeded = undefined
-        const producer = instance.steps[this.stepGraph.companionProducerIndex(instance, stepIndex)]
-        this.stepGraph.loopCompanionProducer(instance, stepIndex, {
-          previousProposal: producer?.output ?? '',
-          feedback: step.companion!.verdicts.at(-1)?.feedback ?? '',
-        })
-        await this.runStateMachine.updateBlockProgress(workspaceId, instance, 'in_progress')
-        await this.executionRepository.upsert(workspaceId, instance)
-        await this.workRunner.signalDecision(workspaceId, instance.id, approvalId, 'extra-round')
-        await this.runStateMachine.emitInstance(workspaceId, instance)
+        let signalId: string | undefined
+        const persisted = await this.runStateMachine.mutateInstance(
+          workspaceId,
+          executionId,
+          (inst) => {
+            const i = inst.steps.findIndex((s) => s.approval?.id === approvalId)
+            const s = inst.steps[i]
+            if (!s?.companion || !s.approval) throw new NotFoundError('Approval', approvalId)
+            // Another writer already resolved this gate: no-op (idempotent) and skip the signal.
+            if (s.approval.status === 'approved') {
+              signalId = undefined
+              return
+            }
+            s.companion.maxAttempts += 1
+            s.companion.exceeded = undefined
+            const producer = inst.steps[this.stepGraph.companionProducerIndex(inst, i)]
+            this.stepGraph.loopCompanionProducer(inst, i, {
+              previousProposal: producer?.output ?? '',
+              feedback: s.companion.verdicts.at(-1)?.feedback ?? '',
+            })
+            signalId = s.approval.id
+          },
+        )
+        result = persisted
+        if (!signalId) return
+        await this.runStateMachine.updateBlockProgress(workspaceId, persisted, 'in_progress')
+        await this.workRunner.signalDecision(workspaceId, persisted.id, signalId, 'extra-round')
+        await this.runStateMachine.emitInstance(workspaceId, persisted)
       },
       // Proceed: accept the producer's current output and advance past the gate.
       proceed: async () => {
-        step.companion!.exceeded = undefined
-        step.approval!.status = 'approved'
+        let stepIndex = -1
+        const persisted = await this.runStateMachine.mutateInstance(
+          workspaceId,
+          executionId,
+          (inst) => {
+            stepIndex = inst.steps.findIndex((s) => s.approval?.id === approvalId)
+            const s = inst.steps[stepIndex]
+            if (!s?.companion || !s.approval) throw new NotFoundError('Approval', approvalId)
+            if (s.approval.status === 'approved') {
+              stepIndex = -1
+              return
+            }
+            s.companion.exceeded = undefined
+            s.approval.status = 'approved'
+            this.runStateMachine.advanceRunPastGate(inst, stepIndex)
+          },
+        )
+        result = persisted
+        if (stepIndex === -1) return
         // The spec-companion never reached its automatic PASS branch, but both signals are
         // persisted (the producer's `noBusinessSpecs` + this step's `technicalCorroborated`),
         // so infer the block's `technical` label here too — best-effort, human-authority
-        // preserved — before advancing.
+        // preserved — before settling the advance.
+        const step = persisted.steps[stepIndex]!
         if (step.agentKind === 'spec-companion') {
           const producer =
-            instance.steps[this.stepGraph.companionProducerIndex(instance, stepIndex)]
-          const block = await this.blockRepository.get(workspaceId, instance.blockId)
+            persisted.steps[this.stepGraph.companionProducerIndex(persisted, stepIndex)]
+          const block = await this.blockRepository.get(workspaceId, persisted.blockId)
           if (producer && block) await this.inferBlockTechnical(workspaceId, block, producer, step)
         }
-        await this.runStateMachine.advancePastResolvedGate(workspaceId, instance, stepIndex)
+        await this.runStateMachine.settleAdvancedGate(workspaceId, persisted, stepIndex)
       },
     })
-    return instance
+    return result
   }
 
   // ---- clarity-review context helpers (bug-report triage) ------------------

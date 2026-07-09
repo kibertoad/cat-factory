@@ -146,18 +146,13 @@ export class RunStateMachine {
     this.pokeInitiativeLoop = deps.pokeInitiativeLoop
   }
 
-  /** Persist the instance (the single write seam shared by the engine + controllers). */
-  persistInstance(workspaceId: string, instance: ExecutionInstance): Promise<void> {
-    return this.executionRepository.upsert(workspaceId, instance)
-  }
-
   /**
-   * Persist a DURABLE-DRIVER instance mutation under OPTIMISTIC CONCURRENCY instead of a blind
-   * force-write. The driver loads a run, makes a LONG outbound call (a container poll up to
-   * 30 s / a GitHub gate probe / a deploy provision), mutates the instance in memory, then
-   * writes it back — a window in which a concurrent human action (a CAS'd
-   * `requestHumanReviewFix` / `approveStep` / `resolveDecision`) or a `cancel` / `stopRun` can
-   * move or delete the row. A blind `upsert` (see {@link persistInstance}) would silently
+   * Persist a DURABLE-DRIVER (or gate-controller) instance mutation under OPTIMISTIC CONCURRENCY
+   * instead of a blind force-write. The driver loads a run, makes a LONG outbound call (a
+   * container poll up to 30 s / a GitHub gate probe / a deploy provision) or an inline gate LLM,
+   * mutates the instance in memory, then writes it back — a window in which a concurrent human
+   * action (a CAS'd `requestHumanReviewFix` / `approveStep` / `resolveDecision`) or a `cancel` /
+   * `stopRun` can move or delete the row. A blind `executionRepository.upsert` would silently
    * clobber that write, or RE-INSERT a row `cancel` deleted as a zombie run.
    * `compareAndSwap` instead writes ONLY when the stored `rev` still matches the one loaded
    * onto this instance, and NEVER inserts — so on a lost race it returns `false` and this
@@ -355,11 +350,14 @@ export class RunStateMachine {
   }
 
   /**
-   * The pure in-memory half of {@link advancePastResolvedGate}: stamp the gate step done
-   * and move the run cursor (final step → run `done`; else start the next step). No
-   * persistence and no external effects, so it is safe inside a {@link mutateInstance}
-   * callback (which may re-run the mutation on a CAS retry). Returns whether the gate
-   * was the final step.
+   * The pure in-memory half of advancing past a resolved gate (paired with its side-effect
+   * counterpart {@link settleAdvancedGate}): stamp the gate step done and move the run cursor
+   * (final step → run `done`; else start the next step). No persistence and no external
+   * effects, so it is safe inside a {@link mutateInstance} callback (which may re-run the
+   * mutation on a CAS retry). Every gate-resume path — the engine's follow-up resolvers,
+   * `resolveCompanionExceeded`, and the review gate's `resumeRun` — runs this under
+   * `mutateInstance` then calls {@link settleAdvancedGate} on the winning snapshot. Returns
+   * whether the gate was the final step.
    */
   advanceRunPastGate(instance: ExecutionInstance, stepIndex: number): boolean {
     const step = instance.steps[stepIndex]!
@@ -395,29 +393,6 @@ export class RunStateMachine {
     } else {
       await this.updateBlockProgress(workspaceId, instance, 'in_progress')
     }
-    await this.workRunner.signalDecision(workspaceId, instance.id, decisionId, 'approved')
-    await this.emitInstance(workspaceId, instance)
-  }
-
-  /**
-   * Finish a gate step whose decision a human resolved and advance the run: stamp the step
-   * done, finalize the block (final step) or start the next, persist, signal the durable
-   * driver that the decision is `approved`, and emit.
-   */
-  async advancePastResolvedGate(
-    workspaceId: string,
-    instance: ExecutionInstance,
-    stepIndex: number,
-  ): Promise<void> {
-    const decisionId = instance.steps[stepIndex]!.approval!.id
-    const isFinalStep = this.advanceRunPastGate(instance, stepIndex)
-    if (isFinalStep) {
-      await this.finalizeBlock(workspaceId, instance, undefined)
-      await this.stopRunContainer(workspaceId, instance)
-    } else {
-      await this.updateBlockProgress(workspaceId, instance, 'in_progress')
-    }
-    await this.executionRepository.upsert(workspaceId, instance)
     await this.workRunner.signalDecision(workspaceId, instance.id, decisionId, 'approved')
     await this.emitInstance(workspaceId, instance)
   }

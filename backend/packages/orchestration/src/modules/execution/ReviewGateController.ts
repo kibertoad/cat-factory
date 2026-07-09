@@ -302,7 +302,7 @@ export class ReviewGateController {
     if (isFinalStep) {
       instance.status = 'done'
       await this.deps.stateMachine.finalizeBlock(workspaceId, instance, undefined)
-      await this.deps.stateMachine.persistInstance(workspaceId, instance)
+      await this.deps.stateMachine.casPersist(workspaceId, instance)
       await this.deps.stateMachine.emitInstance(workspaceId, instance)
       await this.deps.stateMachine.stopRunContainer(workspaceId, instance)
       return { kind: 'done' }
@@ -311,7 +311,7 @@ export class ReviewGateController {
     const next = instance.steps[instance.currentStep]
     if (next) this.deps.stepGraph.startStep(next)
     await this.deps.stateMachine.updateBlockProgress(workspaceId, instance, 'in_progress')
-    await this.deps.stateMachine.persistInstance(workspaceId, instance)
+    await this.deps.stateMachine.casPersist(workspaceId, instance)
     await this.deps.stateMachine.emitInstance(workspaceId, instance)
     return { kind: 'continue' }
   }
@@ -379,24 +379,38 @@ export class ReviewGateController {
       return this.runIncorporationCycle(kind, workspaceId, blockId, feedback)
     }
 
-    const { instance, step } = parked
-    step.pendingIncorporation = feedback ? { feedback } : {}
-    // Re-arm the run BEFORE signalling the driver: the park left it `blocked`, but
-    // `advanceInstance` no-ops unless the run is `running`/`paused`, so a woken driver
-    // would otherwise return `noop` (and the workflow would end) WITHOUT running the
-    // re-entrant incorporate + re-review cycle — leaving the review stuck `incorporating`
-    // forever. Mirrors every other resume path (e.g. `advancePastResolvedGate`).
-    if (instance.status === 'blocked') instance.status = 'running'
+    // Flag the review `incorporating` first (a review-row write; done ONCE, outside the CAS
+    // retry loop so a re-applied `mutateInstance` callback can't double-write it).
     const updated = await kind.markIncorporating(workspaceId, review.id)
-    await this.deps.stateMachine.persistInstance(workspaceId, instance)
+    // Record the intent + re-arm the run under OPTIMISTIC CONCURRENCY (race-audit 2.2
+    // controller-half): a blind full-row upsert here would clobber a concurrent driver poll
+    // (or a second human action) that moved the row. Re-arm BEFORE signalling the driver: the
+    // park left it `blocked`, but `advanceInstance` no-ops unless the run is `running`/`paused`,
+    // so a woken driver would otherwise return `noop` WITHOUT running the re-entrant incorporate
+    // + re-review cycle — leaving the review stuck `incorporating`. The signal + emit run once
+    // after, on the winning snapshot.
+    let approvalId = ''
+    const instance = await this.deps.stateMachine.mutateInstance(
+      workspaceId,
+      parked.instance.id,
+      (inst) => {
+        const step = inst.steps.find(
+          (s) =>
+            s.agentKind === kind.agentKind &&
+            s.state === 'waiting_decision' &&
+            s.approval?.status === 'pending',
+        )
+        if (!step?.approval) {
+          throw new ConflictError('The review is no longer awaiting incorporation')
+        }
+        step.pendingIncorporation = feedback ? { feedback } : {}
+        if (inst.status === 'blocked') inst.status = 'running'
+        approvalId = step.approval.id
+      },
+    )
     await this.deps.stateMachine.emitInstance(workspaceId, instance)
     await kind.emit(workspaceId, updated)
-    await this.deps.workRunner.signalDecision(
-      workspaceId,
-      instance.id,
-      step.approval!.id,
-      'incorporate',
-    )
+    await this.deps.workRunner.signalDecision(workspaceId, instance.id, approvalId, 'incorporate')
     return updated
   }
 
@@ -482,20 +496,33 @@ export class ReviewGateController {
     note: string | undefined,
     prepared: TReview,
   ): Promise<TReview> {
-    const { instance, step } = parked
-    step.pendingRecommendation = { itemIds, ...(note ? { note } : {}) }
-    // Re-arm the run BEFORE signalling (the park left it `blocked`; `advanceInstance` no-ops
-    // unless `running`/`paused`) so the woken driver actually re-enters the gate. Mirrors
-    // {@link incorporate}.
-    if (instance.status === 'blocked') instance.status = 'running'
-    await this.deps.stateMachine.persistInstance(workspaceId, instance)
-    await this.deps.stateMachine.emitInstance(workspaceId, instance)
-    await this.deps.workRunner.signalDecision(
+    // Record the intent + re-arm the run under OPTIMISTIC CONCURRENCY (race-audit 2.2
+    // controller-half), mirroring {@link incorporate}: a blind full-row upsert here would
+    // clobber a concurrent driver poll that moved the row. Re-arm BEFORE signalling (the park
+    // left it `blocked`; `advanceInstance` no-ops unless `running`/`paused`) so the woken driver
+    // actually re-enters the gate. The signal + emit run once after, on the winning snapshot.
+    const agentKind = parked.step.agentKind
+    let approvalId = ''
+    const instance = await this.deps.stateMachine.mutateInstance(
       workspaceId,
-      instance.id,
-      step.approval!.id,
-      'recommend',
+      parked.instance.id,
+      (inst) => {
+        const step = inst.steps.find(
+          (s) =>
+            s.agentKind === agentKind &&
+            s.state === 'waiting_decision' &&
+            s.approval?.status === 'pending',
+        )
+        if (!step?.approval) {
+          throw new ConflictError('The review is no longer awaiting a recommendation')
+        }
+        step.pendingRecommendation = { itemIds, ...(note ? { note } : {}) }
+        if (inst.status === 'blocked') inst.status = 'running'
+        approvalId = step.approval.id
+      },
     )
+    await this.deps.stateMachine.emitInstance(workspaceId, instance)
+    await this.deps.workRunner.signalDecision(workspaceId, instance.id, approvalId, 'recommend')
     return prepared
   }
 
@@ -609,16 +636,35 @@ export class ReviewGateController {
   ): Promise<void> {
     const block = await this.deps.blockRepository.get(workspaceId, blockId)
     if (!block?.executionId) return
-    const instance = await this.deps.executionRepository.get(workspaceId, block.executionId)
-    if (!instance) return
-    const idx = instance.steps.findIndex(
-      (s) =>
-        s.agentKind === kind.agentKind &&
-        s.state === 'waiting_decision' &&
-        s.approval?.status === 'pending',
+    const executionId = block.executionId
+    const isGate = (s: PipelineStep) =>
+      s.agentKind === kind.agentKind &&
+      s.state === 'waiting_decision' &&
+      s.approval?.status === 'pending'
+    // Off-path (an inspector review with no live pipeline) / already-advanced: nothing to
+    // resume. Pre-read so this stays a best-effort no-op rather than entering the CAS loop (or
+    // faulting on a gone run) when there is no parked gate — matching the prior resume.
+    const current = await this.deps.executionRepository.get(workspaceId, executionId)
+    if (!current || !current.steps.some(isGate)) return
+    // Advance past the resolved gate under OPTIMISTIC CONCURRENCY (race-audit 2.2 controller-half):
+    // the pure in-memory advance (`advanceRunPastGate`) runs inside the CAS; its non-idempotent
+    // side effects (`settleAdvancedGate`: block writes + driver signal + emit) run once after, on
+    // the winning snapshot — the same split the engine's `approveStep` / follow-up resolvers use.
+    let stepIndex = -1
+    const instance = await this.deps.stateMachine.mutateInstance(
+      workspaceId,
+      executionId,
+      (inst) => {
+        stepIndex = inst.steps.findIndex(isGate)
+        // The gate advanced out from under us between the pre-read and this CAS attempt: no-op
+        // (a harmless rev bump); `settleAdvancedGate` is skipped below.
+        if (stepIndex === -1) return
+        inst.steps[stepIndex]!.approval!.status = 'approved'
+        this.deps.stateMachine.advanceRunPastGate(inst, stepIndex)
+      },
     )
-    if (idx === -1) return
-    instance.steps[idx]!.approval!.status = 'approved'
-    await this.deps.stateMachine.advancePastResolvedGate(workspaceId, instance, idx)
+    if (stepIndex !== -1) {
+      await this.deps.stateMachine.settleAdvancedGate(workspaceId, instance, stepIndex)
+    }
   }
 }
