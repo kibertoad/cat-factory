@@ -1,5 +1,13 @@
 # @cat-factory/spend
 
+## 0.12.5
+
+### Patch Changes
+
+- Updated dependencies [eeadc97]
+  - @cat-factory/kernel@0.117.2
+  - @cat-factory/contracts@0.123.1
+
 ## 0.12.4
 
 ### Patch Changes

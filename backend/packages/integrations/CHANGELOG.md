@@ -1,5 +1,13 @@
 # @cat-factory/integrations
 
+## 0.80.2
+
+### Patch Changes
+
+- Updated dependencies [eeadc97]
+  - @cat-factory/kernel@0.117.2
+  - @cat-factory/contracts@0.123.1
+
 ## 0.80.1
 
 ### Patch Changes
