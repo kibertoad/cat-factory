@@ -1,5 +1,11 @@
 # @cat-factory/server
 
+## 0.106.2
+
+### Patch Changes
+
+- @cat-factory/orchestration@0.102.2
+
 ## 0.106.1
 
 ### Patch Changes

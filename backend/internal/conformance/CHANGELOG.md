@@ -1,5 +1,12 @@
 # @cat-factory/conformance
 
+## 0.10.77
+
+### Patch Changes
+
+- @cat-factory/orchestration@0.102.2
+- @cat-factory/server@0.106.2
+
 ## 0.10.76
 
 ### Patch Changes
