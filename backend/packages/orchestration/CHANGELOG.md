@@ -1,5 +1,12 @@
 # @cat-factory/orchestration
 
+## 0.102.2
+
+### Patch Changes
+
+- Updated dependencies [ddb0b68]
+  - @cat-factory/workspaces@0.13.12
+
 ## 0.102.1
 
 ### Patch Changes
