@@ -18,6 +18,7 @@ import type {
   BlockRepository,
   ExecutionRepository,
   PipelineRepository,
+  ServiceRehome,
   ServiceRepository,
   WorkspaceMountRepository,
   WorkspaceRepository,
@@ -198,10 +199,40 @@ export class WorkspaceService {
     // production drives by run id, and the conformance/test harness now enumerates runs via
     // `executionRepository.listByWorkspace`, not this projection.
     const internalBlockIds = new Set(localBlocks.filter((b) => b.internal).map((b) => b.id))
-    const visibleBlocks = localBlocks.filter((b) => !internalBlockIds.has(b.id))
-    const visibleExecutions = localExecutions.filter((e) => !internalBlockIds.has(e.blockId))
-    const blocks = await this.composeBoard(visibleBlocks, mounts)
-    const executions = await this.composeExecutions(visibleExecutions, mounts)
+    // Archived services: an archived top-level frame plus its whole subtree drop out of the
+    // board projection (like `internal`), but the frame itself is surfaced under
+    // `archivedServices` so the SPA can list + restore it. Restore is a flag flip, so nothing
+    // is destroyed — the subtree reappears on the next refresh.
+    //
+    // This is derived in TWO passes because a service can be SHARED across boards: a frame homed
+    // here (in `localBlocks`) and one archived on its HOME board but mounted here (pulled in only
+    // by `composeBoard` below) must BOTH be hidden — otherwise archiving a shared service leaves
+    // it fully visible on every other board that mounts it.
+    //   Pass 1 (local): hide the internal blocks + every LOCAL archived frame's subtree. This is
+    //   the reliable source for a home board's own archived services and their executions (those
+    //   subtrees never survive into `composed`, so they can't be re-derived from it).
+    const localArchivedFrames = localBlocks.filter(isArchivedServiceFrame)
+    const localHidden = hiddenSubtreeIds(localBlocks, localArchivedFrames, internalBlockIds)
+    const visibleBlocks = localBlocks.filter((b) => !localHidden.has(b.id))
+    const composed = await this.composeBoard(visibleBlocks, mounts)
+    //   Pass 2 (composed): a FOREIGN service archived on its home board reaches this board only via
+    //   its mount, so `composeBoard` re-fetches its (archived) subtree via `listByServices`. Seed
+    //   the final hide-set with pass 1's ids and grow it over the composed board so that foreign
+    //   frame + subtree are dropped here too. A local frame re-pulled as "foreign" is already in
+    //   `localHidden`, so it is not double-counted as a fresh foreign archive.
+    const foreignArchivedFrames = composed.filter(
+      (b) => isArchivedServiceFrame(b) && !localHidden.has(b.id),
+    )
+    const hiddenBlockIds = hiddenSubtreeIds(composed, foreignArchivedFrames, localHidden)
+    const blocks = composed.filter((b) => !hiddenBlockIds.has(b.id))
+    // Compose over ALL local executions, then drop the hidden ones (local subtree via `localHidden`,
+    // foreign archived subtree via the composed pass) — a foreign archived run reaches this list
+    // through `composeExecutions`' mount pull, so filtering only local executions would leak it.
+    const composedExecutions = await this.composeExecutions(localExecutions, mounts)
+    const executions = composedExecutions.filter((e) => !hiddenBlockIds.has(e.blockId))
+    // Every archived service this board can list/restore: its own homed frames + any shared frame
+    // it mounts that was archived on its home board.
+    const archivedFrames = [...localArchivedFrames, ...foreignArchivedFrames]
     // The current built-in catalog versions, so the SPA can flag a workspace's stale
     // built-in copies and offer a reseed (see WorkspaceSnapshot.pipelineCatalogVersions).
     const pipelineCatalogVersions = Object.fromEntries(
@@ -229,6 +260,7 @@ export class WorkspaceService {
       pipelineCatalogVersions,
       riskPolicyCatalogVersions,
       modelPresetCatalogVersions,
+      ...(archivedFrames.length ? { archivedServices: archivedFrames } : {}),
     }
   }
 
@@ -301,6 +333,78 @@ export class WorkspaceService {
 
   async delete(id: string): Promise<void> {
     await this.require(id)
-    await this.workspaceRepository.delete(id)
+    // Re-home the SHARED services this board homes: a service another board still mounts must NOT
+    // be destroyed just because its home board is deleted (both teams lose the shared subtree).
+    // Resolve, per homed service, whether a surviving board mounts it and hand the cascade a
+    // re-home plan; services with no other mount fall through to the normal reclaim.
+    const rehome = await this.planSharedServiceRehome(id)
+    await this.workspaceRepository.delete(id, rehome)
   }
+
+  /**
+   * For a board about to be deleted, decide which of the account-owned services it HOMES should be
+   * re-homed (rather than destroyed) because another board still mounts them. Returns one entry per
+   * such service naming the surviving board to inherit it (the earliest-created external mount, so
+   * the choice is deterministic). A service mounted by no other board is omitted — the delete
+   * cascade reclaims it as before. No-op (empty) when the service repos aren't wired.
+   */
+  private async planSharedServiceRehome(id: string): Promise<ServiceRehome[]> {
+    if (!this.serviceRepository || !this.workspaceMountRepository) return []
+    const blocks = await this.blockRepository.listByWorkspace(id)
+    const frameIds = blocks
+      .filter((b) => b.level === 'frame' && b.parentId === null)
+      .map((b) => b.id)
+    if (frameIds.length === 0) return []
+    const homed = await this.serviceRepository.listByFrameBlocks(frameIds)
+    if (homed.length === 0) return []
+    // One batched mount read for every homed service (not a listByService per service).
+    const mounts = await this.workspaceMountRepository.listByServiceIds(homed.map((s) => s.id))
+    const externalByService = new Map<string, WorkspaceMount[]>()
+    for (const m of mounts) {
+      if (m.workspaceId === id) continue // the home board's own mount is going away with it
+      const list = externalByService.get(m.serviceId)
+      if (list) list.push(m)
+      else externalByService.set(m.serviceId, [m])
+    }
+    const rehome: ServiceRehome[] = []
+    for (const service of homed) {
+      const external = externalByService.get(service.id)
+      if (!external || external.length === 0) continue
+      const target = external.reduce((a, b) => (a.createdAt <= b.createdAt ? a : b))
+      rehome.push({ serviceId: service.id, toWorkspaceId: target.workspaceId })
+    }
+    return rehome
+  }
+}
+
+/** An archived top-level service frame — the only kind of block that carries the archive marker. */
+function isArchivedServiceFrame(b: Block): boolean {
+  return Boolean(b.archived) && b.level === 'frame' && b.parentId === null
+}
+
+/**
+ * The ids to drop from the board projection: everything in `seedIds` (the already-hidden set —
+ * the headless `internal` blocks, and on the second pass the local archived subtree), plus every
+ * frame in `hiddenFrames` AND its whole subtree (tasks/modules reach the board only through their
+ * frame, so a hidden frame must take its descendants with it). Pure BFS over the `parentId` tree,
+ * seeded with `seedIds` + the `hiddenFrames` ids.
+ */
+function hiddenSubtreeIds(
+  blocks: Block[],
+  hiddenFrames: Block[],
+  seedIds: Set<string>,
+): Set<string> {
+  const hidden = new Set<string>(seedIds)
+  for (const f of hiddenFrames) hidden.add(f.id)
+  let grew = true
+  while (grew) {
+    grew = false
+    for (const b of blocks) {
+      if (b.parentId && hidden.has(b.parentId) && !hidden.has(b.id)) {
+        hidden.add(b.id)
+        grew = true
+      }
+    }
+  }
+  return hidden
 }

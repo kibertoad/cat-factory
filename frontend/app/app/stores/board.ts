@@ -42,6 +42,10 @@ export const useBoardStore = defineStore('board', () => {
       params ?? {},
     )
   const blocks = ref<Block[]>([])
+  // Archived service frames (`archived === true`): hidden from the board but preserved and
+  // restorable with no expiry. Hydrated from the snapshot's `archivedServices`; the frames
+  // themselves are NOT in `blocks` (the snapshot filters an archived frame + its subtree out).
+  const archived = ref<Block[]>([])
 
   // Pure derivations (hierarchy, status/progress, sizing) live in the composable.
   const queries = useBlockQueries(blocks)
@@ -117,6 +121,28 @@ export const useBoardStore = defineStore('board', () => {
     blocks.value = applyPendingRemovals(reconciled)
   }
 
+  /** Replace the archived-services list from the snapshot (absent ⇒ none). */
+  function hydrateArchived(next: Block[] = []) {
+    archived.value = [...next]
+  }
+
+  /**
+   * Archive a service (hide it + its subtree, restorable with no expiry) — the non-destructive
+   * alternative to deleting a service that still has unfinished tasks. The acting tab isn't
+   * echoed its own coarse board event, so re-hydrate explicitly to drop the frame from the board
+   * and surface it under the archived list.
+   */
+  async function archiveService(id: string) {
+    await api.archiveBlock(useWorkspaceStore().requireId(), id)
+    await useWorkspaceStore().refresh()
+  }
+
+  /** Restore an archived service back onto the board. Re-hydrates to pull its subtree back in. */
+  async function restoreService(id: string) {
+    await api.restoreBlock(useWorkspaceStore().requireId(), id)
+    await useWorkspaceStore().refresh()
+  }
+
   /** Insert or replace a block returned by the backend. */
   function upsert(block: Block) {
     // A live event for a block awaiting its deferred delete must not resurrect it.
@@ -135,7 +161,10 @@ export const useBoardStore = defineStore('board', () => {
   /**
    * Import an existing GitHub repo (the App is installed + it's projected) as a
    * service frame, with no bootstrap run. The backend links the repo to the new
-   * frame and returns it `ready`; we upsert it onto the board.
+   * frame and returns it `ready`; we upsert it onto the board. When the repo already
+   * backs an org service, the backend MOUNTS that shared service here instead of
+   * minting a rival — so refresh the snapshot to pull in the shared frame's subtree
+   * + its mount layout (a fresh import has no subtree, but the reconcile is harmless).
    */
   async function addServiceFromRepo(
     repoGithubId: number,
@@ -154,6 +183,7 @@ export const useBoardStore = defineStore('board', () => {
       ...(opts?.position ? { position: opts.position } : {}),
     })
     upsert(block)
+    await useWorkspaceStore().refresh()
     return block
   }
 
@@ -408,6 +438,13 @@ export const useBoardStore = defineStore('board', () => {
         // the window then leaves the run untouched instead of restoring an already-cancelled one.
         await opts.onCommit?.(pending.wsId)
         await api.removeBlock(pending.wsId, id)
+        // A service frame's delete also reclaims its account-owned service server-side, but this
+        // tab is not echoed its own coarse `board` event, so nothing re-hydrates the service
+        // catalog here — drop the deleted service locally so the add-service picker stops flagging
+        // its repo as "already on board" (a no-op for a task/module). Only after the commit, so a
+        // still-linked repo is never briefly presented as addable.
+        if (useWorkspaceStore().workspaceId === pending.wsId)
+          useServicesStore().dropByFrameBlock(id)
         // Stop filtering the subtree only after the server has actually dropped it, so a
         // snapshot that raced the in-flight delete can't briefly resurrect it.
         for (const b of pending.snap.removed) pendingDoomed.delete(b.id)
@@ -573,7 +610,9 @@ export const useBoardStore = defineStore('board', () => {
 
   return {
     blocks,
+    archived,
     hydrate,
+    hydrateArchived,
     upsert,
     ...queries,
     addBlock,
@@ -586,6 +625,8 @@ export const useBoardStore = defineStore('board', () => {
     detach,
     reattach,
     removeBlock,
+    archiveService,
+    restoreService,
     previewMove,
     moveBlock,
     updateBlock,

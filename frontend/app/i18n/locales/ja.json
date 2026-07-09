@@ -109,7 +109,11 @@
       "unlinkFailed": "依存関係を削除できませんでした",
       "recurringDeleteFailed": "定期パイプラインを削除できませんでした",
       "deleted": "\"{name}\" を削除しました",
-      "moved": "\"{name}\" を移動しました"
+      "moved": "\"{name}\" を移動しました",
+      "archived": "「{name}」をアーカイブしました",
+      "restored": "「{name}」を復元しました",
+      "archiveFailed": "サービスをアーカイブできませんでした",
+      "restoreFailed": "サービスを復元できませんでした"
     },
     "repoTypes": {
       "service": "サービス",
@@ -134,7 +138,8 @@
       "zoomOut": "縮小",
       "zoomIn": "拡大",
       "fitView": "内容に合わせる",
-      "resetZoom": "ズームを100%にリセット"
+      "resetZoom": "ズームを100%にリセット",
+      "archivedServices": "アーカイブ済みサービス"
     },
     "canvas": {
       "emptyTitle": "ボードが空です",
@@ -1097,6 +1102,11 @@
           "body": "「{name}」、そのスケジュール、実行履歴が削除されます。この操作は取り消せません。"
         },
         "containerBodyWithCount": "「{name}」とその中の {count} 件の項目が削除されます。この操作は取り消せません。 | 「{name}」とその中の {count} 件の項目が削除されます。この操作は取り消せません。"
+      },
+      "archiveService": "サービスをアーカイブ",
+      "confirmArchive": {
+        "title": "このサービスをアーカイブしますか？",
+        "body": "「{name}」とそのタスクはボードから非表示になります。いつでも復元できます。"
       }
     }
   },

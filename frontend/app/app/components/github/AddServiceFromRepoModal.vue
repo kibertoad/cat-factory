@@ -65,13 +65,19 @@ watch(
 // The integration is on but this workspace isn't bound yet — connect first.
 const needsGitHub = computed(() => github.available === true && !github.connected)
 
-// Repos already backing a board service can't be added again — UNLESS they're a
-// monorepo, which can host several services (each at its own subdirectory). Derived from
-// the account's service catalog (each service carries the repo it targets), since the repo
-// projection no longer carries a repo→block link.
+// Repos whose service is ALREADY mounted on THIS board can't be added again — adding here would
+// be a no-op. A repo whose service lives on ANOTHER board in the org stays addable: adding it
+// MOUNTS the shared service onto this board (backend `addServiceFromRepo`). Monorepos are exempt
+// (each subdirectory is its own service). Derived from the account's catalog cross-referenced with
+// this board's mounts (`byServiceId`), since the repo projection carries no repo→block link.
 const onBoardIds = computed(
   () =>
-    new Set(services.catalog.map((s) => s.repoGithubId).filter((id): id is number => id != null)),
+    new Set(
+      services.catalog
+        .filter((s) => services.byServiceId[s.id])
+        .map((s) => s.repoGithubId)
+        .filter((id): id is number => id != null),
+    ),
 )
 
 // Map an available repo to a combobox item. The label carries the private/monorepo/

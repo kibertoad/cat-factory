@@ -167,6 +167,13 @@ export const workspaceSnapshotSchema = v.object({
   mounts: v.optional(v.array(workspaceMountSchema)),
   serviceCatalog: v.optional(v.array(serviceSchema)),
   /**
+   * Archived service frames (`archived === true`) — hidden from `blocks` but surfaced here so
+   * the SPA can list them in an "Archived services" panel and restore any one (no expiry). Only
+   * the frame blocks are carried, not their hidden subtrees; a restore flips the frame's flag
+   * and the whole subtree reappears on the next refresh. Attached alongside `blocks`.
+   */
+  archivedServices: v.optional(v.array(blockSchema)),
+  /**
    * The workspace's runtime settings (the human-wait escalation threshold + the
    * per-service running-task limit policy). Lazily seeded from the defaults; attached
    * by the facade, so optional on the wire.

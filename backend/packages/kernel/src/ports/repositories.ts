@@ -44,7 +44,20 @@ export interface WorkspaceRepository {
   rename(id: string, name: string): Promise<void>
   /** Update a board's description (null clears it). */
   setDescription(id: string, description: string | null): Promise<void>
-  delete(id: string): Promise<void>
+  /**
+   * Delete a board and cascade its owned rows. `rehome` re-homes SHARED services this board homes
+   * that another board still mounts: each entry moves a service's blocks (and their run history)
+   * to a surviving mounting workspace BEFORE the cascade, so a shared service outlives its home
+   * board's deletion instead of being destroyed for every team that mounts it. A service with no
+   * surviving mount is omitted (the cascade reclaims it). Empty/absent ⇒ the plain cascade.
+   */
+  delete(id: string, rehome?: ServiceRehome[]): Promise<void>
+}
+
+/** Move a homed service's content to a surviving mounting board on its home-board deletion. */
+export interface ServiceRehome {
+  serviceId: string
+  toWorkspaceId: string
 }
 
 /**

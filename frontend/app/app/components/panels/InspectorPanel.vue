@@ -186,10 +186,17 @@ const runMenu = computed(() => {
 
 // Delegate to the shared confirm-gated deletion so the button and the keyboard shortcut
 // (Delete/Backspace) follow the exact same prompt + optimistic-delete + rollback path.
-const { deleteBlock } = useBlockDeletion()
+const { deleteBlock, archiveBlock } = useBlockDeletion()
 function remove() {
   void deleteBlock(block.value)
 }
+function archive() {
+  void archiveBlock(block.value)
+}
+// A service (top-level frame) can be archived — hidden but restorable with no expiry.
+const isServiceFrame = computed(
+  () => block.value?.level === 'frame' && block.value?.parentId === null,
+)
 
 // ---- failed agent run (bootstrap or execution) ------------------------------
 // A block whose current run failed surfaces the shared failure banner + retry,
@@ -546,11 +553,24 @@ const showOriginalDescription = ref(false)
           {{ t('panels.inspector.focus') }}
         </UButton>
         <UButton
+          v-if="isServiceFrame"
+          color="neutral"
+          variant="ghost"
+          size="sm"
+          icon="i-lucide-archive"
+          :class="isServiceFrame ? 'ms-auto' : ''"
+          data-testid="inspector-archive"
+          :title="t('panels.inspector.archiveService')"
+          @click="archive"
+        >
+          {{ t('panels.inspector.archiveService') }}
+        </UButton>
+        <UButton
           color="error"
           variant="ghost"
           size="sm"
           icon="i-lucide-trash-2"
-          class="ms-auto"
+          :class="isServiceFrame ? '' : 'ms-auto'"
           data-testid="inspector-delete"
           :title="deleteLabel"
           @click="remove"

@@ -1412,7 +1412,12 @@
       "viewRequirements": "Anforderungen anzeigen",
       "reRun": "Erneut ausführen",
       "run": "Ausführen",
-      "focus": "Fokussieren"
+      "focus": "Fokussieren",
+      "archiveService": "Dienst archivieren",
+      "confirmArchive": {
+        "title": "Diesen Dienst archivieren?",
+        "body": "„{name}“ und seine Aufgaben werden vom Board ausgeblendet. Du kannst den Dienst jederzeit wiederherstellen."
+      }
     }
   },
   "layout": {
@@ -1864,7 +1869,11 @@
       "unlinkFailed": "Abhängigkeit konnte nicht entfernt werden",
       "recurringDeleteFailed": "Wiederkehrende Pipeline konnte nicht gelöscht werden",
       "deleted": "\"{name}\" gelöscht",
-      "moved": "\"{name}\" verschoben"
+      "moved": "\"{name}\" verschoben",
+      "archived": "Archiviert: „{name}“",
+      "restored": "Wiederhergestellt: „{name}“",
+      "archiveFailed": "Dienst konnte nicht archiviert werden",
+      "restoreFailed": "Dienst konnte nicht wiederhergestellt werden"
     },
     "repoTypes": {
       "service": "Service",
@@ -1889,7 +1898,8 @@
       "zoomOut": "Verkleinern",
       "zoomIn": "Vergrößern",
       "fitView": "Board an Inhalt anpassen",
-      "resetZoom": "Zoom auf 100 % zurücksetzen"
+      "resetZoom": "Zoom auf 100 % zurücksetzen",
+      "archivedServices": "Archivierte Dienste"
     },
     "canvas": {
       "emptyTitle": "Ihr Board ist leer",

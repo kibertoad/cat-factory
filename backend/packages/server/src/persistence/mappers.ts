@@ -109,6 +109,8 @@ export interface BlockRow {
   tracker_resolve_on_merge?: string | null
   /** Headless marker: 1 ⇒ a public-API "initiative" anchor block excluded from the board; null ⇒ normal. */
   internal?: number | null
+  /** Archive marker: 1 ⇒ an archived service frame hidden from the board (restorable); null ⇒ normal. */
+  archived?: number | null
 }
 
 // ---------------------------------------------------------------------------
@@ -542,6 +544,8 @@ const blockFields: FieldMapper<Block, BlockPatch>[] = [
   optField('trackerResolveOnMerge', { clearOnEmpty: true }),
   // Headless public-API "initiative" anchor: 1/0 column, set once at insert (never patched).
   optBoolIntField('internal'),
+  // Archive marker for a service frame: 1/0 column, toggled by archive/restore.
+  optBoolIntField('archived'),
 ]
 
 const blockMapper = makeEntityMapper<Block, BlockPatch, BlockRow>(blockFields)

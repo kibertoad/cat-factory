@@ -109,7 +109,11 @@
       "unlinkFailed": "Impossible de supprimer la dépendance",
       "recurringDeleteFailed": "Impossible de supprimer le pipeline récurrent",
       "deleted": "\"{name}\" supprimé",
-      "moved": "\"{name}\" déplacé"
+      "moved": "\"{name}\" déplacé",
+      "archived": "Archivé « {name} »",
+      "restored": "Restauré « {name} »",
+      "archiveFailed": "Impossible d'archiver le service",
+      "restoreFailed": "Impossible de restaurer le service"
     },
     "repoTypes": {
       "service": "Service",
@@ -134,7 +138,8 @@
       "zoomOut": "Dézoomer",
       "zoomIn": "Zoomer",
       "fitView": "Ajuster au contenu",
-      "resetZoom": "Réinitialiser le zoom à 100 %"
+      "resetZoom": "Réinitialiser le zoom à 100 %",
+      "archivedServices": "Services archivés"
     },
     "canvas": {
       "emptyTitle": "Votre tableau est vide",
@@ -1097,6 +1102,11 @@
           "body": "\"{name}\", sa planification et son historique d'exécution seront supprimés. Cette action est irréversible."
         },
         "containerBodyWithCount": "\"{name}\" et le {count} élément qu'il contient seront supprimés. Cette action est irréversible. | \"{name}\" et les {count} éléments qu'il contient seront supprimés. Cette action est irréversible."
+      },
+      "archiveService": "Archiver le service",
+      "confirmArchive": {
+        "title": "Archiver ce service ?",
+        "body": "« {name} » et ses tâches seront masqués du tableau. Vous pouvez le restaurer à tout moment."
       }
     }
   },

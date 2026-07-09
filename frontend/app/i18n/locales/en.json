@@ -124,7 +124,11 @@
       "unlinkFailed": "Could not remove dependency",
       "recurringDeleteFailed": "Could not delete recurring pipeline",
       "deleted": "Deleted \"{name}\"",
-      "moved": "Moved \"{name}\""
+      "moved": "Moved \"{name}\"",
+      "archived": "Archived \"{name}\"",
+      "restored": "Restored \"{name}\"",
+      "archiveFailed": "Couldn't archive the service",
+      "restoreFailed": "Couldn't restore the service"
     },
     "repoTypes": {
       "service": "Service",
@@ -152,7 +156,8 @@
       "zoomOut": "Zoom out",
       "zoomIn": "Zoom in",
       "fitView": "Fit board to content",
-      "resetZoom": "Reset zoom to 100%"
+      "resetZoom": "Reset zoom to 100%",
+      "archivedServices": "Archived services"
     },
     "canvas": {
       "emptyTitle": "Your board is empty",
@@ -1151,7 +1156,12 @@
       "viewRequirements": "View Requirements",
       "reRun": "Re-run",
       "run": "Run",
-      "focus": "Focus"
+      "focus": "Focus",
+      "archiveService": "Archive service",
+      "confirmArchive": {
+        "title": "Archive this service?",
+        "body": "\"{name}\" and its tasks will be hidden from the board. You can restore it at any time."
+      }
     }
   },
   "observability": {

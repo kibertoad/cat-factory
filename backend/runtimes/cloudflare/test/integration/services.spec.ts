@@ -118,6 +118,109 @@ describe('in-org shared services', () => {
     expect(bSnap.body.blocks.find((x) => x.id === task.body.id)?.title).toBe('Renamed on A')
   })
 
+  it('archiving a shared service on its home board hides it on the mounting board too', async () => {
+    // Regression: `archived` is set on the HOME frame, but a mounting board pulls the frame in via
+    // `composeBoard`'s foreign subtree fetch — so the archive filter must be re-derived over the
+    // COMPOSED board, not just the local blocks, or the archived service stays fully visible on
+    // every board that mounts it.
+    const { call, createWorkspace } = makeApp()
+    const a = await createWorkspace({ seed: false })
+    const b = await createWorkspace({ seed: false })
+
+    const frame = await call<Block>('POST', `/workspaces/${a.workspace.id}/blocks`, {
+      type: 'service',
+      position: { x: 0, y: 0 },
+    })
+    const task = await call<Block>(
+      'POST',
+      `/workspaces/${a.workspace.id}/blocks/${frame.body.id}/tasks`,
+      { title: 'Shared task' },
+    )
+    const service = await serviceFor(call, a.workspace.id, frame.body.id)
+    await call('POST', `/workspaces/${b.workspace.id}/services/${service.id}`, {
+      position: { x: 200, y: 50 },
+    })
+
+    // Archive on A (the home). B mounts it, so it must disappear from B's board + surface under B's
+    // archived list for restore.
+    const archived = await call<Block>(
+      'POST',
+      `/workspaces/${a.workspace.id}/blocks/${frame.body.id}/archive`,
+    )
+    expect(archived.status).toBe(200)
+
+    let bSnap = (await call<WorkspaceSnapshot>('GET', `/workspaces/${b.workspace.id}`)).body
+    expect(bSnap.blocks.find((x) => x.id === frame.body.id)).toBeUndefined()
+    expect(bSnap.blocks.find((x) => x.id === task.body.id)).toBeUndefined()
+    expect(bSnap.archivedServices?.find((x) => x.id === frame.body.id)).toBeTruthy()
+
+    // Restore from the MOUNTING board (the endpoint resolves the service's home) — the whole
+    // subtree returns to both boards.
+    const restored = await call<Block>(
+      'POST',
+      `/workspaces/${b.workspace.id}/blocks/${frame.body.id}/restore`,
+    )
+    expect(restored.status).toBe(200)
+
+    bSnap = (await call<WorkspaceSnapshot>('GET', `/workspaces/${b.workspace.id}`)).body
+    expect(bSnap.blocks.find((x) => x.id === frame.body.id)).toBeTruthy()
+    expect(bSnap.blocks.find((x) => x.id === task.body.id)).toBeTruthy()
+    expect(bSnap.archivedServices?.find((x) => x.id === frame.body.id)).toBeFalsy()
+  })
+
+  it('re-homes a shared service to a surviving board when its home board is deleted', async () => {
+    // A shared service must NOT be destroyed just because its HOME board is deleted — another team
+    // still mounts it. The delete cascade re-homes the service's subtree to a surviving mounting
+    // board so it lives on there (rather than being reclaimed for everyone).
+    const { call, createWorkspace } = makeApp()
+    const a = await createWorkspace({ seed: false })
+    const b = await createWorkspace({ seed: false })
+
+    const frame = await call<Block>('POST', `/workspaces/${a.workspace.id}/blocks`, {
+      type: 'service',
+      position: { x: 0, y: 0 },
+    })
+    const task = await call<Block>(
+      'POST',
+      `/workspaces/${a.workspace.id}/blocks/${frame.body.id}/tasks`,
+      { title: 'Shared task' },
+    )
+    const service = await serviceFor(call, a.workspace.id, frame.body.id)
+    await call('POST', `/workspaces/${b.workspace.id}/services/${service.id}`, {
+      position: { x: 10, y: 10 },
+    })
+
+    // Delete the HOME board A. B still mounts the service → it survives, re-homed to B.
+    const del = await call('DELETE', `/workspaces/${a.workspace.id}`)
+    expect(del.status).toBe(204)
+
+    const catalog = await call<Service[]>('GET', `/workspaces/${b.workspace.id}/services/catalog`)
+    expect(catalog.body.map((s) => s.id)).toContain(service.id)
+
+    const bSnap = (await call<WorkspaceSnapshot>('GET', `/workspaces/${b.workspace.id}`)).body
+    expect(bSnap.blocks.find((x) => x.id === frame.body.id)).toBeTruthy()
+    expect(bSnap.blocks.find((x) => x.id === task.body.id)?.title).toBe('Shared task')
+  })
+
+  it('reclaims an UNSHARED service when its only board is deleted (no re-home)', async () => {
+    // The counter-case: a service no other board mounts is still fully reclaimed on delete, so its
+    // repo is re-addable (the original regression this cascade fixes).
+    const { call, createWorkspace } = makeApp()
+    const a = await createWorkspace({ seed: false })
+    const b = await createWorkspace({ seed: false })
+
+    const frame = await call<Block>('POST', `/workspaces/${a.workspace.id}/blocks`, {
+      type: 'service',
+      position: { x: 0, y: 0 },
+    })
+    const service = await serviceFor(call, a.workspace.id, frame.body.id)
+
+    await call('DELETE', `/workspaces/${a.workspace.id}`)
+
+    const catalog = await call<Service[]>('GET', `/workspaces/${b.workspace.id}/services/catalog`)
+    expect(catalog.body.map((s) => s.id)).not.toContain(service.id)
+  })
+
   it("surfaces a shared service's recurring schedule on the workspace that mounts it", async () => {
     const { call, createWorkspace } = makeApp()
     const a = await createWorkspace({ seed: false })

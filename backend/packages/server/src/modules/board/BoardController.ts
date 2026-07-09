@@ -4,10 +4,12 @@ import {
   addModuleContract,
   addServiceFromRepoContract,
   addTaskContract,
+  archiveBlockContract,
   assignEpicContract,
   moveBlockContract,
   removeBlockContract,
   reparentBlockContract,
+  restoreBlockContract,
   toggleDependencyContract,
   updateBlockContract,
 } from '@cat-factory/contracts'
@@ -156,6 +158,22 @@ export function boardController(): Hono<AppEnv> {
     await container.executionService.teardownForBlockTree(workspaceId, blockId)
     await container.boardService.removeBlock(workspaceId, blockId)
     return c.body(null, 204)
+  })
+
+  // Archive a service (hide it + its subtree, restorable with no expiry) — the non-destructive
+  // alternative to deleting a service that still has unfinished tasks.
+  buildHonoRoute(app, archiveBlockContract, async (c) => {
+    const block = await c
+      .get('container')
+      .boardService.archiveBlock(param(c, 'workspaceId'), c.req.valid('param').blockId)
+    return c.json(block, 200)
+  })
+
+  buildHonoRoute(app, restoreBlockContract, async (c) => {
+    const block = await c
+      .get('container')
+      .boardService.restoreBlock(param(c, 'workspaceId'), c.req.valid('param').blockId)
+    return c.json(block, 200)
   })
 
   buildHonoRoute(app, toggleDependencyContract, async (c) => {

@@ -62,6 +62,13 @@ export interface WorkspaceMountRepository {
    */
   listByService(serviceId: string): Promise<WorkspaceMount[]>
   /**
+   * Every mount of ANY of the given services, in a single (chunked) query — the batched form of
+   * {@link WorkspaceMountRepository.listByService}. Backs the workspace-delete re-home decision
+   * (which surviving board still mounts each homed service) without an N+1 per service. Empty
+   * input → empty result.
+   */
+  listByServiceIds(serviceIds: string[]): Promise<WorkspaceMount[]>
+  /**
    * The workspace ids that mount the service owning `blockId` (homed in `originWorkspaceId`),
    * resolved in a SINGLE join — the real-time fan-out's hot path. Folds the
    * "block → its service → the workspaces mounting it" lookup into one query instead of

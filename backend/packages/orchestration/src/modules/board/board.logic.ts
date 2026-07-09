@@ -31,6 +31,16 @@ export function serviceOf(blocks: Block[], block: Block): Block | undefined {
 }
 
 /**
+ * Task-level descendants of `rootId` that have NOT finished (`status !== 'done'` — the sole
+ * terminal block status). Backs the "can't delete a service with unfinished work, archive it
+ * instead" guard: a non-empty result means the frame must be archived rather than deleted.
+ */
+export function unfinishedTasksUnder(blocks: Block[], rootId: string): Block[] {
+  const subtree = descendantIds(blocks, rootId)
+  return blocks.filter((b) => subtree.has(b.id) && b.level === 'task' && b.status !== 'done')
+}
+
+/**
  * Every descendant id of `rootId` (tasks, modules and their tasks), including
  * the root itself — used to cascade a delete.
  */

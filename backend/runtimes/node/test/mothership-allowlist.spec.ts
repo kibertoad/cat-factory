@@ -213,9 +213,12 @@ const NON_REMOTE: Record<string, Record<string, Reason>> = {
   workspaceMountRepository: {
     // `listByWorkspace`/`countByServiceIds`/`get`/`upsert`/`update`/`remove` are allow-listed (the
     // shared-service mount management surface). The real-time fan-out reads
-    // (`listByService`/`listWorkspaceIdsMountingBlock`) and the frame-deletion batch cleanup
-    // (`removeByServices`) stay off the SPA path — mothership-internal / a later slice.
+    // (`listByService`/`listWorkspaceIdsMountingBlock`), the frame-deletion batch cleanup
+    // (`removeByServices`), and the board-delete cascade's batched mount read
+    // (`listByServiceIds`, used by `planSharedServiceRehome`) stay off the SPA path —
+    // mothership-internal / a later slice.
     listByService: 'pending',
+    listByServiceIds: 'pending',
     listWorkspaceIdsMountingBlock: 'pending',
     removeByServices: 'pending',
   },

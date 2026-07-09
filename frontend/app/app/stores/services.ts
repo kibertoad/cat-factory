@@ -46,6 +46,23 @@ export const useServicesStore = defineStore('services', () => {
     return (serviceByFrameBlock.value[frameBlockId]?.mountCount ?? 0) > 1
   }
 
+  /**
+   * Drop the account-owned service (and this board's mount) backing a just-deleted frame.
+   * The acting tab is deliberately NOT echoed its own coarse `board` event (see
+   * `useWorkspaceStream`), so a service-frame delete never triggers a snapshot re-hydrate
+   * here — without this the deleted service lingers in `catalog`, which the add-service
+   * picker reads to flag a repo as "already on board", so the repo can't be re-added until
+   * a full refresh. Called once the delete has COMMITTED server-side (the service is gone),
+   * so it can never briefly present a still-linked repo as addable. A no-op for a task/module
+   * id (nothing in the catalog matches its frame).
+   */
+  function dropByFrameBlock(frameBlockId: string) {
+    const service = catalog.value.find((s) => s.frameBlockId === frameBlockId)
+    if (!service) return
+    catalog.value = catalog.value.filter((s) => s.id !== service.id)
+    mounts.value = mounts.value.filter((m) => m.serviceId !== service.id)
+  }
+
   async function mount(serviceId: string, position?: { x: number; y: number }) {
     const ws = useWorkspaceStore()
     const created = await api.mountService(ws.requireId(), serviceId, position ? { position } : {})
@@ -79,6 +96,7 @@ export const useServicesStore = defineStore('services', () => {
     serviceByFrameBlock,
     mountable,
     isSharedFrame,
+    dropByFrameBlock,
     hydrate,
     mount,
     unmount,

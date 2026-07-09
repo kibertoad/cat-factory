@@ -44,6 +44,34 @@ const mountableItems = computed(() =>
   }),
 )
 
+async function restoreService(id: string, title: string) {
+  try {
+    await board.restoreService(id)
+    toast.add({
+      title: t('board.toast.restored', { name: title }),
+      icon: 'i-lucide-archive-restore',
+      color: 'neutral',
+    })
+  } catch (e) {
+    toast.add({
+      title: t('board.toast.restoreFailed'),
+      description: e instanceof Error ? e.message : String(e),
+      color: 'error',
+    })
+  }
+}
+
+// Archived services — hidden from the board but restorable here with no expiry.
+const archivedItems = computed(() =>
+  board.archived.map((b) => ({
+    label: b.title,
+    icon: 'i-lucide-box',
+    onSelect: () => {
+      void restoreService(b.id, b.title)
+    },
+  })),
+)
+
 const zoomPct = computed(() => Math.round(ui.zoom * 100))
 // Disable the zoom buttons once the camera hits a clamp (Vue Flow pins the zoom exactly
 // at the limit, so a small epsilon guards against float drift). UX-16.
@@ -183,6 +211,21 @@ const decisionItems = computed(() =>
     <UDropdownMenu v-if="mountableItems.length" :items="mountableItems">
       <UButton color="neutral" variant="ghost" size="sm" icon="i-lucide-plus-circle">
         <span class="hidden sm:inline">{{ t('board.toolbar.addService') }}</span>
+      </UButton>
+    </UDropdownMenu>
+
+    <!-- archived services: hidden from the board, restorable with no expiry -->
+    <UDropdownMenu v-if="archivedItems.length" :items="archivedItems">
+      <UButton
+        color="neutral"
+        variant="ghost"
+        size="sm"
+        icon="i-lucide-archive"
+        :title="t('board.toolbar.archivedServices')"
+        data-testid="board-archived-services"
+      >
+        <span class="hidden sm:inline">{{ t('board.toolbar.archivedServices') }}</span>
+        <span>{{ n(archivedItems.length) }}</span>
       </UButton>
     </UDropdownMenu>
 

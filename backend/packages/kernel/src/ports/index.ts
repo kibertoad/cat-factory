@@ -4,6 +4,7 @@ export type {
   ExecutionRepository,
   PipelineRepository,
   RunRef,
+  ServiceRehome,
   WorkspaceRepository,
   WorkspaceVisibility,
 } from './repositories.js'

@@ -109,7 +109,11 @@
       "unlinkFailed": "No se pudo eliminar la dependencia",
       "recurringDeleteFailed": "No se pudo eliminar el pipeline recurrente",
       "deleted": "\"{name}\" eliminado",
-      "moved": "\"{name}\" movido"
+      "moved": "\"{name}\" movido",
+      "archived": "Archivado «{name}»",
+      "restored": "Restaurado «{name}»",
+      "archiveFailed": "No se pudo archivar el servicio",
+      "restoreFailed": "No se pudo restaurar el servicio"
     },
     "repoTypes": {
       "service": "Servicio",
@@ -134,7 +138,8 @@
       "zoomOut": "Alejar",
       "zoomIn": "Acercar",
       "fitView": "Ajustar al contenido",
-      "resetZoom": "Restablecer zoom al 100%"
+      "resetZoom": "Restablecer zoom al 100%",
+      "archivedServices": "Servicios archivados"
     },
     "canvas": {
       "emptyTitle": "Tu tablero está vacío",
@@ -1097,6 +1102,11 @@
           "body": "Se eliminarán \"{name}\", su programación y su historial de ejecución. Esta acción no se puede deshacer."
         },
         "containerBodyWithCount": "Se eliminará \"{name}\" y el {count} elemento que contiene. Esta acción no se puede deshacer. | Se eliminará \"{name}\" y los {count} elementos que contiene. Esta acción no se puede deshacer."
+      },
+      "archiveService": "Archivar servicio",
+      "confirmArchive": {
+        "title": "¿Archivar este servicio?",
+        "body": "«{name}» y sus tareas se ocultarán del tablero. Puedes restaurarlo en cualquier momento."
       }
     }
   },
