@@ -15,6 +15,7 @@ import {
   type RunnerDispatchKind,
   type RunnerDispatchOptions,
   type RunnerJobRef,
+  type SubscriptionQuotaTarget,
   type SubscriptionVendor,
   type TestSecretEntry,
   type WebSearchAvailability,
@@ -25,6 +26,7 @@ import {
   renderTaskContext,
   SUBSCRIPTION_VENDORS,
   isIndividualVendor,
+  isSubscriptionVendor,
 } from '@cat-factory/kernel'
 import { resolveInstanceTypeId } from '@cat-factory/contracts'
 import {
@@ -147,6 +149,17 @@ type LeasePersonalSubscriptionToken = (
 type RecordSubscriptionUsage = (
   workspaceId: string,
   tokenId: string,
+  usage: { inputTokens: number; outputTokens: number },
+) => Promise<void>
+
+/**
+ * Fold a finished subscription job's usage into the MODELED quota-cycle counters
+ * (usage-and-quota-tracking, Part B). Unlike {@link RecordSubscriptionUsage} this counts
+ * BOTH pooled runs (scope = the leased token) and personal runs (scope = the initiator),
+ * so it is keyed by a {@link SubscriptionQuotaTarget}, not a pooled token id.
+ */
+type RecordSubscriptionQuotaUsage = (
+  target: SubscriptionQuotaTarget,
   usage: { inputTokens: number; outputTokens: number },
 ) => Promise<void>
 
@@ -483,6 +496,13 @@ export interface ContainerAgentExecutorDependencies {
   /** Attribute a finished subscription job's usage to its leased token (usage-aware rotation). */
   recordSubscriptionUsage?: RecordSubscriptionUsage
   /**
+   * Fold a finished subscription harness's usage into the MODELED quota-cycle counters
+   * (usage-and-quota-tracking, Part B). Counted for BOTH pooled runs (scope = the leased
+   * token) and personal runs (scope = the initiator), so — unlike {@link recordSubscriptionUsage}
+   * — it is NOT gated on a pooled token id. Best-effort; absent ⇒ no quota tracking.
+   */
+  recordSubscriptionQuotaUsage?: RecordSubscriptionQuotaUsage
+  /**
    * Record a finished subscription harness's per-call telemetry into `llm_call_metrics`
    * (the proxy-bypassing analogue of the LLM proxy's per-call rows for Pi). Best-effort;
    * absent ⇒ no subscription-harness call telemetry is captured. See {@link RecordHarnessCalls}.
@@ -623,6 +643,14 @@ export class ContainerAgentExecutor implements AsyncAgentExecutor {
    */
   private readonly recordedCallMetricJobs = new Set<string>()
 
+  /**
+   * Job ids whose subscription usage has already been folded into the modeled quota
+   * cycle. Separate from {@link recordedUsageJobs} because quota tracking counts BOTH
+   * pooled and personal runs (not gated on a pooled token id). Same replay-safety
+   * rationale + bound as the usage guard.
+   */
+  private readonly recordedQuotaJobs = new Set<string>()
+
   /** Resolves which model + subscription path a step runs on (routing policy). */
   private readonly modelRouter: ModelRouter
 
@@ -688,6 +716,7 @@ export class ContainerAgentExecutor implements AsyncAgentExecutor {
       search,
       repo: repoSummary,
       ...(subscriptionTokenId ? { subscriptionTokenId } : {}),
+      ...(context.initiatedByUserId ? { initiatedByUserId: context.initiatedByUserId } : {}),
     }
   }
 
@@ -779,6 +808,31 @@ export class ContainerAgentExecutor implements AsyncAgentExecutor {
       // unboundedly (clearing only risks a benign re-record on a later retry).
       if (this.recordedUsageJobs.size >= 10_000) this.recordedUsageJobs.clear()
       this.recordedUsageJobs.add(handle.jobId)
+    }
+    // Fold the SAME subscription usage into the modeled quota-cycle counters (Part B), for
+    // BOTH pooled and personal runs. A subscription run is the one reporting per-call
+    // metrics (Pi is proxy-metered and has none), and the handle's provider is the vendor
+    // slug. Scope = the leased pool token when present, else the run initiator (personal).
+    // Best-effort, once per job id so a replayed poll can't double-count.
+    const quotaVendor = handle.provider ?? providerOf(handle.model)
+    if (
+      result.callMetrics &&
+      result.callMetrics.length > 0 &&
+      result.usage &&
+      this.deps.recordSubscriptionQuotaUsage &&
+      isSubscriptionVendor(quotaVendor) &&
+      !this.recordedQuotaJobs.has(handle.jobId)
+    ) {
+      const target: SubscriptionQuotaTarget | null = handle.subscriptionTokenId
+        ? { scope: 'pooled', scopeId: handle.subscriptionTokenId, vendor: quotaVendor }
+        : handle.initiatedByUserId
+          ? { scope: 'user', scopeId: handle.initiatedByUserId, vendor: quotaVendor }
+          : null
+      if (target) {
+        await this.deps.recordSubscriptionQuotaUsage(target, result.usage)
+        if (this.recordedQuotaJobs.size >= 10_000) this.recordedQuotaJobs.clear()
+        this.recordedQuotaJobs.add(handle.jobId)
+      }
     }
     const runResult = toRunResult(result, handle.agentKind)
     // A subscription harness (Claude Code / Codex / GLM / pooled Kimi & DeepSeek) bypasses

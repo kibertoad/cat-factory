@@ -76,6 +76,13 @@ export {
   isAllowedByFamilyPolicy,
 } from './domain/models.js'
 export {
+  SUBSCRIPTION_QUOTA_WINDOWS,
+  SUBSCRIPTION_QUOTA_CEILINGS,
+  subscriptionQuotaWindowMs,
+  subscriptionQuotaCeiling,
+  isSubscriptionVendor,
+} from './domain/subscription-quota.js'
+export {
   seedBlocks,
   seedPipelines,
   BLUEPRINT_PIPELINE_ID,
