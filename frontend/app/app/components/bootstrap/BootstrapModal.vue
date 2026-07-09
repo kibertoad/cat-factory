@@ -22,7 +22,7 @@ const { confirmAction, toastDone } = useConfirmAction()
 const open = computed({
   get: () => ui.bootstrapOpen,
   set: (v: boolean) => {
-    if (!v) ui.closeBootstrap()
+    if (!v) void requestClose()
   },
 })
 
@@ -83,6 +83,23 @@ const selectedType = ref<FrameRepoType>('service')
 const typeItems = useFrameRepoTypeItems()
 
 const usingReference = computed(() => mode.value === 'reference')
+
+// UX-18: prompt before discarding a half-filled launch form on Escape / backdrop / the X.
+// The modal keeps its fields across opens (no reset watcher), so the baseline is whatever
+// the form held when it opened — a close only prompts once the user has typed something
+// new. Only the typed launch fields are guarded; the reference-architecture sub-form has
+// its own Cancel/Save. Declared here (below the launch-form refs) because the guard reads
+// its initial baseline synchronously.
+const { requestClose } = useUnsavedGuard({
+  open,
+  close: () => ui.closeBootstrap(),
+  saving: () => launching.value,
+  snapshot: () => ({
+    repoName: repoName.value.trim(),
+    description: description.value.trim(),
+    instructions: instructions.value.trim(),
+  }),
+})
 
 // Mirror of the backend `slugField` rule (@cat-factory/contracts bootstrap
 // schema): the new repo name is a SINGLE GitHub name segment — no "owner/"

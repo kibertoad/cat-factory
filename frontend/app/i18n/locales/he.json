@@ -65,7 +65,13 @@
     "undo": "בטל",
     "back": "חזרה",
     "next": "הבא",
-    "done": "סיום"
+    "done": "סיום",
+    "discard": {
+      "title": "לבטל את השינויים?",
+      "body": "ביצעת שינויים שלא נשמרו. לסגור ולאבד אותם?",
+      "confirm": "לבטל",
+      "keep": "להמשיך לערוך"
+    }
   },
   "clarification": {
     "answerPlaceholder": "התשובה שלך",
@@ -907,7 +913,8 @@
     "decision": {
       "title": "נדרשת החלטה",
       "agentOnBlock": "{agent} על {block}",
-      "visualizationHint": "זוהי הצגה חזותית. כל בחירה פשוט ממשיכה את הצינור."
+      "visualizationHint": "זוהי הצגה חזותית. כל בחירה פשוט ממשיכה את הצינור.",
+      "resolveFailed": "לא ניתן היה לשמור את ההחלטה שלך"
     },
     "stepRestart": {
       "restartFromStep": "הפעל מחדש את הצינור משלב זה",

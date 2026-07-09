@@ -21,7 +21,7 @@ const { t } = useI18n()
 const open = computed({
   get: () => ui.addRecurringFrameId !== null,
   set: (v: boolean) => {
-    if (!v) ui.closeAddRecurring()
+    if (!v) void requestClose()
   },
 })
 
@@ -129,6 +129,33 @@ watch(open, (isOpen) => {
   intakeInProgressLabel.value = ''
   // Load the connected task sources so the intake source picker is populated.
   void tasks.probe()
+})
+
+// UX-18: prompt before discarding typed input on Escape / backdrop / Cancel. Registered
+// after the reset watcher so the baseline is the seeded form (the default pipeline + the
+// workspace tracker settings are the clean starting point, not a spurious edit).
+const { requestClose } = useUnsavedGuard({
+  open,
+  close: () => ui.closeAddRecurring(),
+  saving: () => saving.value,
+  snapshot: () => ({
+    name: name.value.trim(),
+    description: description.value.trim(),
+    pipelineId: pipelineId.value,
+    onDemand: onDemand.value,
+    recurrence: recurrence.value,
+    trackerKind: trackerKind.value,
+    jiraProjectKey: jiraProjectKey.value.trim(),
+    linearTeamId: linearTeamId.value.trim(),
+    intakeSource: intakeSource.value,
+    intakeJiraProjectKey: intakeJiraProjectKey.value.trim(),
+    intakeLinearTeamId: intakeLinearTeamId.value.trim(),
+    intakeGithubRepo: intakeGithubRepo.value.trim(),
+    intakeTitleFragment: intakeTitleFragment.value.trim(),
+    intakeLabels: intakeLabels.value.trim(),
+    intakeIssueType: intakeIssueType.value.trim(),
+    intakeInProgressLabel: intakeInProgressLabel.value.trim(),
+  }),
 })
 
 // The board field required for the picked source must be filled before a bug-intake schedule saves.
@@ -423,7 +450,7 @@ async function add() {
 
     <template #footer>
       <div class="flex w-full justify-end gap-2">
-        <UButton color="neutral" variant="ghost" @click="ui.closeAddRecurring()">{{
+        <UButton color="neutral" variant="ghost" @click="requestClose()">{{
           t('common.cancel')
         }}</UButton>
         <UButton

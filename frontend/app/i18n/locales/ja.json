@@ -65,7 +65,13 @@
     "undo": "元に戻す",
     "back": "戻る",
     "next": "次へ",
-    "done": "完了"
+    "done": "完了",
+    "discard": {
+      "title": "変更を破棄しますか？",
+      "body": "保存されていない変更があります。閉じて破棄しますか？",
+      "confirm": "破棄",
+      "keep": "編集を続ける"
+    }
   },
   "clarification": {
     "answerPlaceholder": "回答を入力",
@@ -907,7 +913,8 @@
     "decision": {
       "title": "判断が必要",
       "agentOnBlock": "{block} の {agent}",
-      "visualizationHint": "これは可視化です。どの選択でもパイプラインを再開するだけです。"
+      "visualizationHint": "これは可視化です。どの選択でもパイプラインを再開するだけです。",
+      "resolveFailed": "決定を記録できませんでした"
     },
     "stepRestart": {
       "restartFromStep": "このステップからパイプラインを再開",

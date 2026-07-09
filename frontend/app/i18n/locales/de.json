@@ -1217,7 +1217,8 @@
     "decision": {
       "title": "Entscheidung erforderlich",
       "agentOnBlock": "{agent} auf {block}",
-      "visualizationHint": "Dies ist eine Visualisierung. Jede Wahl setzt einfach die Pipeline fort."
+      "visualizationHint": "Dies ist eine Visualisierung. Jede Wahl setzt einfach die Pipeline fort.",
+      "resolveFailed": "Entscheidung konnte nicht gespeichert werden"
     },
     "stepRestart": {
       "restartFromStep": "Pipeline ab diesem Schritt neu starten",
@@ -3656,7 +3657,13 @@
     "undo": "Rückgängig",
     "back": "Zurück",
     "next": "Weiter",
-    "done": "Fertig"
+    "done": "Fertig",
+    "discard": {
+      "title": "Änderungen verwerfen?",
+      "body": "Du hast Änderungen vorgenommen, die noch nicht gespeichert wurden. Schließen und verlieren?",
+      "confirm": "Verwerfen",
+      "keep": "Weiter bearbeiten"
+    }
   },
   "clarification": {
     "answerPlaceholder": "Ihre Antwort",

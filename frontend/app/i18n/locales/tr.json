@@ -65,7 +65,13 @@
     "undo": "Geri al",
     "back": "Geri",
     "next": "İleri",
-    "done": "Bitti"
+    "done": "Bitti",
+    "discard": {
+      "title": "Değişiklikler atılsın mı?",
+      "body": "Kaydedilmemiş değişiklikleriniz var. Kapatıp bunları kaybedecek misiniz?",
+      "confirm": "At",
+      "keep": "Düzenlemeye devam et"
+    }
   },
   "clarification": {
     "answerPlaceholder": "Yanıtınız",
@@ -907,7 +913,8 @@
     "decision": {
       "title": "Karar gerekiyor",
       "agentOnBlock": "{block} üzerinde {agent}",
-      "visualizationHint": "Bu bir görselleştirmedir. Herhangi bir seçim pipeline'ı yeniden başlatır."
+      "visualizationHint": "Bu bir görselleştirmedir. Herhangi bir seçim pipeline'ı yeniden başlatır.",
+      "resolveFailed": "Kararınız kaydedilemedi"
     },
     "stepRestart": {
       "restartFromStep": "Pipeline'ı bu adımdan yeniden başlat",

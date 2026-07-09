@@ -13,7 +13,9 @@ mini-steps, focus-visible rings, reduced-motion guards); the secret-input reveal
 (UX-19/20 — the `SecretInput` primitive: every password field and every plaintext secret
 textarea now masks by default with an eye toggle); the board zoom/canvas navigation cluster
 (UX-07/08/09/14/15/16 — labeled+clamp-disabled zoom controls, a click-to-reset-100% readout,
-double-click-to-focus a frame, and a nudge on blank-canvas pipeline drops). This
+double-click-to-focus a frame, and a nudge on blank-canvas pipeline drops); and the
+modal-safety cluster (UX-18/25 — the `useUnsavedGuard` confirm-before-discard seam on the
+content-heavy modals + DecisionModal double-submit protection). This
 document catalogs UX papercuts
 (small annoyances, missing affordances, rough edges) found in the SPA
 (`frontend/app/app`) during a systematic sweep on 2026-07-02. Every finding was
@@ -161,14 +163,14 @@ per-file patches:
 
 | ID    | Sev | Status | Finding                                                                            |
 | ----- | --- | ------ | ---------------------------------------------------------------------------------- |
-| UX-18 | P1  | todo   | Content-heavy modals discard all typed input on Escape/backdrop click              |
+| UX-18 | P1  | done   | Content-heavy modals discard all typed input on Escape/backdrop click              |
 | UX-19 | P2  | done   | No show/hide toggle on any password/secret field (systemic)                        |
 | UX-20 | P2  | done   | Provider API key entered in a plaintext, unmasked textarea (several surfaces)      |
 | UX-21 | P2  | todo   | `unlinkSource` (fragment library) destroys a synced source with no confirmation    |
 | UX-22 | P2  | todo   | Reset-password validation is submit-only, no inline feedback                       |
 | UX-23 | P2  | todo   | Slack member-mapping rows keyed by index; incomplete rows silently dropped on save |
 | UX-24 | P2  | todo   | Datadog connection can't be updated without re-pasting both write-only keys        |
-| UX-25 | P2  | todo   | DecisionModal options: fire-and-forget, no pending state, double-click hazard      |
+| UX-25 | P2  | done   | DecisionModal options: fire-and-forget, no pending state, double-click hazard      |
 | UX-26 | P3  | todo   | No autofocus on first field of login/reset/connect modals                          |
 | UX-27 | P3  | todo   | Disabled submit buttons don't state why (min-length rules invisible)               |
 | UX-28 | P3  | todo   | No character counters where the backend enforces length limits                     |
@@ -176,13 +178,18 @@ per-file patches:
 | UX-30 | P3  | todo   | Slack "Add to Slack" OAuth button has no pending state                             |
 | UX-31 | P3  | todo   | "Edit" on list items doesn't scroll/focus the offscreen edit form                  |
 
-- **UX-18 — Dirty modals discard input.** `components/board/AddTaskModal.vue`
-  (open computed :34-39, reset watcher :321-358) — Escape or backdrop click wipes
-  title, description, per-type fields, and attached context docs/issues. Same
-  pattern: `RecurringPipelineModal.vue:19-24`, `bootstrap/BootstrapModal.vue:20-25`,
-  credential modals. Fix: dirty flag + confirm-before-discard, or
-  non-dismissible-when-dirty. This is the single most damaging papercut for
-  heavy users. (Review-window variant: UX-33; settings variant: UX-58.)
+- **UX-18 — Dirty modals discard input. DONE.** A shared `composables/useUnsavedGuard.ts`
+  seam routes a controlled `UModal`'s dismiss paths (Escape, backdrop, Cancel) through a
+  dirty check: it snapshots the form's user-owned state each time the modal opens and, on a
+  close request, only prompts (`common.discard.*` confirm) when the current snapshot diverges
+  — an unchanged form, or a submit in flight, closes immediately as before. The modal's
+  `open` setter calls `requestClose()` instead of the store close, and the Cancel button does
+  too. Wired into `AddTaskModal.vue`, `RecurringPipelineModal.vue`, and `BootstrapModal.vue`
+  (the three that wiped title/description/per-type fields/attached context on an accidental
+  Escape/backdrop). The `snapshot()` deliberately excludes async-resolved fields (AddTask's
+  issue bodies are compared by stable context key, not the mutated body) and cheap toggles.
+  The settings-panel variant (UX-53) can reuse the same seam. (Review-window variant: UX-33
+  is done via `useResultView`'s `onClose`.)
 - **UX-19 — No reveal toggle. DONE.** A shared `common/SecretInput.vue` primitive (mirroring
   `IconButton`/`CopyButton`) wraps `UInput` with a masked default (`type="password"`) and a
   trailing eye-toggle button (labeled + `aria-pressed` via the new `common.reveal`/`common.hide`
@@ -214,10 +221,13 @@ per-file patches:
   disables save unless both write-only keys are present, so changing only `site`
   requires re-pasting both secrets — while the panel's own incident section (:75)
   supports "blank = keep existing". Fix: same blank-keeps semantics.
-- **UX-25 — DecisionModal double-submit.** `panels/DecisionModal.vue:26-30` —
-  `choose()` neither awaits `execution.resolveDecision` nor disables options and
-  closes immediately; a failed resolve closes silently, and a fast double-click can
-  dispatch two resolutions. Fix: local `resolving` flag, await, surface errors.
+- **UX-25 — DecisionModal double-submit. DONE.** `panels/DecisionModal.vue` `choose()` now
+  tracks a `resolvingOption` ref: it awaits `execution.resolveDecision`, ignores a re-click
+  while one is in flight, disables every option (spinner on the chosen one) until it settles,
+  and on failure keeps the modal open with a `panels.decision.resolveFailed` error toast
+  instead of closing silently. A fast double-click can no longer dispatch two resolutions.
+  The modal's own dismiss affordances (Escape / backdrop) are locked while a resolve is in
+  flight too, so the "in-flight" story is complete rather than only covering the buttons.
   (Independently flagged by two audit passes.)
 - **UX-26 — Missing autofocus.** `LoginScreen.vue:314`, `ResetPasswordScreen.vue:79`,
   `DocumentSourceConnectModal`, `DocumentImportModal`, `BootstrapModal` first
@@ -573,6 +583,19 @@ w-72 … lg:flex">`, so below `lg` (laptop split-screen, tablet) the human could
   plain-text `<pre>`/`<p whitespace-pre-wrap>`. It's the inline counterpart to the full
   segmented reader (`parseOutputOutline`) used by `AgentStepDetail`. Pair copy-able output
   (JSON, prose) with the shared `common/CopyButton.vue`.
+- **Content-heavy `UModal`s guard against discarding typed input via `useUnsavedGuard`
+  (never a bare store-close on dismiss).** A controlled `UModal` whose `open` is a
+  store-backed writable computed routes its dismiss paths — the setter's `if (!v) …`, and any
+  Cancel button — through the composable's `requestClose()` instead of the store close action.
+  The guard snapshots the form's user-owned state each time the modal opens (register it AFTER
+  the component's reset watcher, and — because it reads the baseline synchronously — AFTER the
+  refs the `snapshot()` closes over are declared, or it hits a TDZ), then prompts
+  (`common.discard.*`) only when the current snapshot diverges. Keep `snapshot()` to stable
+  user-owned values: exclude fields a background fetch rewrites (compare a stable id/key, not
+  an async-resolved body) and skip cheap toggles that aren't real "work". An unchanged form, or
+  a submit in flight (`saving`), closes immediately — the common path is unchanged. This is the
+  `UModal` counterpart to UX-33's `useResultView.onClose` draft flush, and the same seam should
+  carry the settings-panel variant (UX-53).
 - **Flush unsaved draft input on the close path via `useResultView`'s `onClose` hook**
   (not per-close-button handlers). A result-view window that holds editable draft state
   (the review windows) passes `onClose: () => void flushDrafts()`; the composable fires it
