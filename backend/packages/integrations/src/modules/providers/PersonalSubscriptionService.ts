@@ -12,7 +12,6 @@ import type {
 import {
   CredentialRequiredError,
   getErrorMessage,
-  INDIVIDUAL_VENDORS,
   isIndividualVendor,
   ValidationError,
 } from '@cat-factory/kernel'
@@ -263,44 +262,6 @@ export class PersonalSubscriptionService {
         this.deps.clock.now(),
       )) !== null
     )
-  }
-
-  /**
-   * On user interaction with a run (approve/retry/etc.), extend its activation TTL when
-   * it is at least half spent, so an actively-tended long run doesn't lapse. No-op when
-   * the run has no activation.
-   */
-  async refreshActivations(executionId: string, userId: string): Promise<void> {
-    const now = this.deps.clock.now()
-    for (const vendor of await this.activatedVendors(executionId, userId, now)) {
-      await this.deps.subscriptionActivationRepository.refresh(
-        executionId,
-        userId,
-        vendor,
-        now + this.activationTtlMs,
-      )
-    }
-  }
-
-  private async activatedVendors(
-    executionId: string,
-    userId: string,
-    now: number,
-  ): Promise<SubscriptionVendor[]> {
-    const out: SubscriptionVendor[] = []
-    // Only individual-usage vendors are ever activated; refresh those that are present
-    // and at least half through their TTL. Driven off INDIVIDUAL_VENDORS (the kernel's
-    // single source of truth) so a newly individual-only vendor is covered automatically.
-    for (const vendor of INDIVIDUAL_VENDORS) {
-      const a = await this.deps.subscriptionActivationRepository.get(
-        executionId,
-        userId,
-        vendor,
-        now,
-      )
-      if (a && a.expiresAt - now <= this.activationTtlMs / 2) out.push(vendor)
-    }
-    return out
   }
 
   /** Delete every activation for a finished run (called when a run terminates). */

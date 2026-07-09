@@ -799,20 +799,6 @@ class SqliteSubscriptionActivationRepository implements SubscriptionActivationRe
       )
   }
 
-  async refresh(
-    executionId: string,
-    userId: string,
-    vendor: SubscriptionVendor,
-    expiresAt: number,
-  ): Promise<void> {
-    this.db
-      .prepare(
-        `UPDATE subscription_activations SET expires_at = ?
-         WHERE execution_id = ? AND user_id = ? AND vendor = ?`,
-      )
-      .run(expiresAt, executionId, userId, vendor)
-  }
-
   async deleteByExecution(executionId: string): Promise<void> {
     this.db.prepare('DELETE FROM subscription_activations WHERE execution_id = ?').run(executionId)
   }

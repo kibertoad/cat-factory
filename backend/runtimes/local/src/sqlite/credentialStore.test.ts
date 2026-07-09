@@ -560,13 +560,6 @@ describe('SqliteSubscriptionActivationRepository', () => {
     expect(got).toMatchObject({ tokenCipher: 'sealed:2', expiresAt: 9000 })
   })
 
-  it('refreshes the TTL of an existing activation', async () => {
-    const repo = store.subscriptionActivationRepository
-    await repo.upsert(activation({ expiresAt: 5000 }))
-    await repo.refresh('ex_1', 'usr_1', 'claude', 20_000)
-    expect(await repo.get('ex_1', 'usr_1', 'claude', 10_000)).toMatchObject({ expiresAt: 20_000 })
-  })
-
   it('deletes all activations for a finished execution', async () => {
     const repo = store.subscriptionActivationRepository
     await repo.upsert(activation({ id: 'a', executionId: 'ex_1', vendor: 'claude' }))
