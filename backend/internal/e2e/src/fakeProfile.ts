@@ -286,8 +286,14 @@ export class E2eGateProviders {
   private readonly ciByWs = new Map<string, FakeCiProvider>()
   private readonly mrgByWs = new Map<string, FakeMergeabilityProvider>()
   private readonly relByWs = new Map<string, FakeReleaseHealthProvider>()
+  private readonly profiles: ReadonlyMap<string, FakeProfile>
 
-  constructor(private readonly profiles: ReadonlyMap<string, FakeProfile>) {}
+  // A plain field + body assignment, NOT a `private readonly` parameter property: the e2e
+  // backend runs under Node type-stripping, whose strip-only mode rejects parameter properties
+  // (`ERR_UNSUPPORTED_TYPESCRIPT_SYNTAX`). Mirrors E2eRepoBootstrapper / E2eFakeAgentExecutor.
+  constructor(profiles: ReadonlyMap<string, FakeProfile>) {
+    this.profiles = profiles
+  }
 
   private forCi(workspaceId: string): FakeCiProvider {
     let inst = this.ciByWs.get(workspaceId)

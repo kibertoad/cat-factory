@@ -175,7 +175,11 @@ export async function connectObservability(
     await request.put(`${BACKEND_URL}/workspaces/${workspaceId}/observability/connection`, {
       data: {
         provider: 'datadog',
-        credentials: { site: 'datadoghq.com', apiKey: 'e2e-fake-api-key', appKey: 'e2e-fake-app-key' },
+        credentials: {
+          site: 'datadoghq.com',
+          apiKey: 'e2e-fake-api-key',
+          appKey: 'e2e-fake-app-key',
+        },
       },
     }),
   )
