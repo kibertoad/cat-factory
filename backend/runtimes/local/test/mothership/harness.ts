@@ -25,6 +25,7 @@ import {
   createDbClient,
   createDrizzleRepositories,
   migrate,
+  schema,
 } from '@cat-factory/node-server'
 import {
   type PersistenceRpcClient,
@@ -126,6 +127,20 @@ export async function setupMothershipDb(): Promise<DrizzleDb> {
   if (worker) await recreateDatabase(url, worker.dbName)
   const { db, pool } = createDbClient(worker?.url ?? url)
   await migrate(db, pool)
+  // The mothership enforces the accounts/memberships → users(id) FKs, so the fixed org owner
+  // the machine token is signed for (CONF_USER) must exist as a real users row before any
+  // createOrg. Production always mints it at login; the machine-token harness bypasses login,
+  // so seed it once per db. Idempotent.
+  await db
+    .insert(schema.users)
+    .values({
+      id: CONF_USER.id,
+      name: CONF_USER.name,
+      email: null,
+      avatar_url: null,
+      created_at: Date.now(),
+    })
+    .onConflictDoNothing()
   return db
 }
 

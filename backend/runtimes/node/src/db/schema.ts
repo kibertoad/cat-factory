@@ -81,7 +81,11 @@ export const users = pgTable(
 export const userIdentities = pgTable(
   'user_identities',
   {
-    user_id: text('user_id').notNull(),
+    // ON DELETE RESTRICT: a users row can't be removed while a login identity still points
+    // at it — the DB-level guard against the dangling-identity orphaning incident.
+    user_id: text('user_id')
+      .notNull()
+      .references(() => users.id, { onDelete: 'restrict' }),
     provider: text('provider').notNull(),
     subject: text('subject').notNull(),
     secret: text('secret'),
@@ -102,7 +106,8 @@ export const accounts = pgTable(
     name: text('name').notNull(),
     github_account_login: text('github_account_login'),
     // The user who owns a personal account (its account-of-one). Null for orgs.
-    owner_user_id: text('owner_user_id'),
+    // ON DELETE RESTRICT: can't drop a user that still owns a personal account.
+    owner_user_id: text('owner_user_id').references(() => users.id, { onDelete: 'restrict' }),
     created_at: bigint('created_at', { mode: 'number' }).notNull(),
     // The default cloud provider new services in this account inherit.
     default_cloud_provider: text('default_cloud_provider'),
@@ -122,7 +127,10 @@ export const memberships = pgTable(
   'memberships',
   {
     account_id: text('account_id').notNull(),
-    user_id: text('user_id').notNull(),
+    // ON DELETE RESTRICT: a users row can't be removed while it still holds a membership.
+    user_id: text('user_id')
+      .notNull()
+      .references(() => users.id, { onDelete: 'restrict' }),
     // Combinable roles (admin / developer / product) as a CSV; defaults to developer.
     roles: text('roles').notNull().default('developer'),
     created_at: bigint('created_at', { mode: 'number' }).notNull(),
@@ -1686,7 +1694,11 @@ export const personalSubscriptions = pgTable(
   'personal_subscriptions',
   {
     id: text('id').primaryKey(),
-    user_id: text('user_id').notNull(),
+    // ON DELETE RESTRICT: can't drop a user that still owns a personal subscription
+    // (the orphaned `psub_X -> usr_OLD` row from the incident).
+    user_id: text('user_id')
+      .notNull()
+      .references(() => users.id, { onDelete: 'restrict' }),
     vendor: text('vendor').notNull(),
     label: text('label').notNull(),
     token_cipher: text('token_cipher').notNull(),
@@ -1813,7 +1825,10 @@ export const subscriptionActivations = pgTable(
   {
     id: text('id').primaryKey(),
     execution_id: text('execution_id').notNull(),
-    user_id: text('user_id').notNull(),
+    // ON DELETE RESTRICT: a users row can't be removed while it still has a run activation.
+    user_id: text('user_id')
+      .notNull()
+      .references(() => users.id, { onDelete: 'restrict' }),
     vendor: text('vendor').notNull(),
     token_cipher: text('token_cipher').notNull(),
     created_at: bigint('created_at', { mode: 'number' }).notNull(),

@@ -48,6 +48,18 @@ function token(u: TestUser): Promise<string> {
   return new HmacSigner(SECRET).sign(payload)
 }
 
+// A session token always stands for an already-authenticated user, so in production its
+// `users` row exists (created at login). These specs mint tokens directly, so seed the row
+// explicitly — otherwise the `accounts.owner_user_id → users(id)` foreign key rejects the
+// `ensurePersonalAccount` insert the first authenticated request triggers. Idempotent.
+async function seedUser(u: TestUser): Promise<void> {
+  await authEnv.DB.prepare(
+    'INSERT OR IGNORE INTO users (id, name, email, avatar_url, created_at) VALUES (?, ?, ?, ?, ?)',
+  )
+    .bind(u.id, u.login, null, null, Date.now())
+    .run()
+}
+
 function makeApp(overrides?: Partial<CoreDependencies>) {
   // Inject a fake agent so building the container never trips the sandbox
   // prerequisite guard (RUNNERS_ENABLED is set in the test bindings).
@@ -58,6 +70,7 @@ function makeApp(overrides?: Partial<CoreDependencies>) {
     path: string,
     body?: unknown,
   ): Promise<{ status: number; body: T }> {
+    await seedUser(u)
     const headers: Record<string, string> = { authorization: `Bearer ${await token(u)}` }
     if (body !== undefined) headers['content-type'] = 'application/json'
     const res = await app.fetch(
