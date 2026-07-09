@@ -669,6 +669,27 @@
       "clearFailed": "Nie udało się wyczyścić mapowania",
       "configNoun": "konfigurację kondycji wydania"
     },
+    "testSecrets": {
+      "title": "Poświadczenia testowe (wrażliwe)",
+      "sectionHint": "Wrażliwe poświadczenia potrzebne Testerowi do korzystania z zewnętrznego systemu, od którego zależy ta usługa, np. klucz API dostawcy płatności. Są przechowywane w postaci zaszyfrowanej i wstrzykiwane do środowiska Testera jako zmienne; nigdy nie pojawiają się w promptach ani w logach.",
+      "warning": "To prawdziwe, wrażliwe sekrety. Są przechowywane w postaci zaszyfrowanej i przekazywane Testerowi jako zmienne środowiskowe, nigdy w promptcie ani w telemetrii przebiegu. Nie wprowadzaj poświadczeń produkcyjnych, których nie możesz zmienić.",
+      "replaceNote": "Zapis zastępuje cały zestaw dla tej usługi. Uwzględnij każde poświadczenie, które chcesz zachować, i ponownie wprowadź jego wartość; wszystko pominięte zostanie usunięte.",
+      "key": "Nazwa zmiennej",
+      "keyInvalid": "Używaj liter, cyfr i podkreśleń i nie zaczynaj od cyfry.",
+      "description": "Opis",
+      "descriptionPlaceholder": "Do czego służy to poświadczenie",
+      "value": "Wartość",
+      "valuePlaceholder": "Tajna wartość",
+      "addRow": "Dodaj poświadczenie",
+      "removeRow": "Usuń poświadczenie",
+      "save": "Zapisz poświadczenia",
+      "clear": "Wyczyść wszystko",
+      "savedToast": "Zapisano poświadczenia testowe",
+      "saveFailed": "Nie udało się zapisać poświadczeń testowych",
+      "clearFailed": "Nie udało się wyczyścić poświadczeń testowych",
+      "configNoun": "wrażliwe poświadczenia testowe",
+      "duplicateKey": "Każda nazwa zmiennej musi być unikalna."
+    },
     "testConfig": {
       "title": "Infrastruktura testowa",
       "hint": "Jak stawiane jest środowisko testowe dla tej usługi, gdy potok musi ją uruchomić: bez infrastruktury, plik Docker Compose, manifesty Kubernetes lub niestandardowy typ manifestu.",

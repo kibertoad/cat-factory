@@ -669,6 +669,27 @@
       "clearFailed": "Eşleme temizlenemedi",
       "configNoun": "sürüm sağlığı yapılandırması"
     },
+    "testSecrets": {
+      "title": "Test kimlik bilgileri (hassas)",
+      "sectionHint": "Test Aracısının, bu hizmetin bağlı olduğu bir üçüncü taraf sistemi kullanması için gereken hassas kimlik bilgileri; örneğin bir ödeme sağlayıcısının API anahtarı. Bekleme sırasında şifrelenir ve Test Aracısının ortamına değişken olarak enjekte edilir; istemlerde veya günlüklerde asla gösterilmez.",
+      "warning": "Bunlar gerçek, hassas sırlardır. Bekleme sırasında şifrelenir ve Test Aracısına ortam değişkenleri olarak iletilir; asla bir isteme ya da çalıştırma telemetrisine konmaz. Değiştiremeyeceğiniz üretim kimlik bilgilerini girmeyin.",
+      "replaceNote": "Kaydetmek, bu hizmete ait kümenin tamamını değiştirir. Tutmak istediğiniz her kimlik bilgisini ekleyin ve değerini yeniden girin; dışarıda bırakılan her şey kaldırılır.",
+      "key": "Değişken adı",
+      "keyInvalid": "Harf, rakam ve alt çizgi kullanın ve rakamla başlamayın.",
+      "description": "Açıklama",
+      "descriptionPlaceholder": "Bu kimlik bilgisi ne için",
+      "value": "Değer",
+      "valuePlaceholder": "Gizli değer",
+      "addRow": "Kimlik bilgisi ekle",
+      "removeRow": "Kimlik bilgisini kaldır",
+      "save": "Kimlik bilgilerini kaydet",
+      "clear": "Tümünü temizle",
+      "savedToast": "Test kimlik bilgileri kaydedildi",
+      "saveFailed": "Test kimlik bilgileri kaydedilemedi",
+      "clearFailed": "Test kimlik bilgileri temizlenemedi",
+      "configNoun": "hassas test kimlik bilgileri",
+      "duplicateKey": "Her değişken adı benzersiz olmalıdır."
+    },
     "testConfig": {
       "title": "Test altyapısı",
       "hint": "Bir pipeline bu servisi çalıştırmak istediğinde test ortamının nasıl kurulacağı: altyapısız, bir Docker Compose dosyası, Kubernetes manifestoları veya özel bir manifest türü.",

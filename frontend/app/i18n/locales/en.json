@@ -723,6 +723,27 @@
       "clearFailed": "Could not clear the mapping",
       "configNoun": "the release health configuration"
     },
+    "testSecrets": {
+      "title": "Test credentials (sensitive)",
+      "sectionHint": "Sensitive credentials the Tester needs to exercise a third-party system this service depends on, e.g. a payment provider's API key. They are encrypted at rest and injected into the Tester's environment as variables; they are never shown in prompts or logs.",
+      "warning": "These are real, sensitive secrets. They are encrypted at rest and passed to the Tester as environment variables, never put in a prompt or the run's telemetry. Don't enter production credentials you can't rotate.",
+      "replaceNote": "Saving replaces the entire set for this service. Include every credential you want to keep and re-enter its value; anything left out is removed.",
+      "key": "Variable name",
+      "keyInvalid": "Use letters, digits and underscores, and don't start with a digit.",
+      "description": "Description",
+      "descriptionPlaceholder": "What this credential is for",
+      "value": "Value",
+      "valuePlaceholder": "Secret value",
+      "addRow": "Add credential",
+      "removeRow": "Remove credential",
+      "save": "Save credentials",
+      "clear": "Clear all",
+      "savedToast": "Test credentials saved",
+      "saveFailed": "Could not save the test credentials",
+      "clearFailed": "Could not clear the test credentials",
+      "configNoun": "the sensitive test credentials",
+      "duplicateKey": "Each variable name must be unique."
+    },
     "testConfig": {
       "title": "Test infrastructure",
       "hint": "How a test environment is stood up for this service when a pipeline needs to run it: no infrastructure, a Docker Compose file, Kubernetes manifests, or a custom manifest type.",

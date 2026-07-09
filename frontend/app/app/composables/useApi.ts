@@ -35,6 +35,7 @@ import { reviewsApi } from './api/reviews'
 import { slackApi } from './api/slack'
 import { specApi } from './api/spec'
 import { tasksApi } from './api/tasks'
+import { testSecretsApi } from './api/testSecrets'
 import { userSecretsApi } from './api/userSecrets'
 import { userSettingsApi } from './api/userSettings'
 import { workspacesApi } from './api/workspaces'
@@ -123,6 +124,7 @@ export function useApi() {
     ...docInterviewApi(ctx),
     ...provisioningLogsApi(ctx),
     ...releaseHealthApi(ctx),
+    ...testSecretsApi(ctx),
     ...packageRegistriesApi(ctx),
     ...previewApi(ctx),
     ...environmentsApi(ctx),

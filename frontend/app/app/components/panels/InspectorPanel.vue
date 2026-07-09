@@ -8,6 +8,7 @@ import TaskAgentConfig from '~/components/panels/inspector/TaskAgentConfig.vue'
 import ServiceTestConfig from '~/components/panels/inspector/ServiceTestConfig.vue'
 import ServiceFragments from '~/components/panels/inspector/ServiceFragments.vue'
 import ServiceReleaseHealthConfig from '~/components/panels/inspector/ServiceReleaseHealthConfig.vue'
+import ServiceTestSecrets from '~/components/panels/inspector/ServiceTestSecrets.vue'
 import FrontendConfig from '~/components/panels/inspector/FrontendConfig.vue'
 import ServiceConnections from '~/components/panels/inspector/ServiceConnections.vue'
 import ContainerSummary from '~/components/panels/inspector/ContainerSummary.vue'
@@ -495,6 +496,9 @@ const showOriginalDescription = ref(false)
 
       <!-- service (frame): test infra + provisioning configuration -->
       <ServiceTestConfig v-if="isFrame" :key="`test-config-${block.id}`" :block="block" />
+
+      <!-- service (frame): SENSITIVE test credentials (sealed, injected out of band) -->
+      <ServiceTestSecrets v-if="isFrame" :key="`test-secrets-${block.id}`" :block="block" />
 
       <!-- service (frame): best-practice fragments for code-aware agents -->
       <ServiceFragments v-if="isFrame" :key="`fragments-${block.id}`" :block="block" />
