@@ -69,7 +69,7 @@ import { afterEach, describe, expect, it } from 'vitest'
 import type { ConformanceHarness } from './harness.js'
 import { FakeTesterQualityReviewer } from './FakeTesterQualityReviewer.js'
 import { FakeTaskSourceProvider } from './FakeTaskSourceProvider.js'
-import { makeFakeCi, makeFakeDocQuality } from './fakeGateProviders.js'
+import { makeFakeCi, makeFakeDocQuality, makeFakeReleaseHealth } from './fakeGateProviders.js'
 
 // Binary-storage start-gate helpers (see the `visual-confirmation` / UI-tester tests).
 // The Worker test env binds R2 (storage ON by default) while Node/local default to OFF and
@@ -2784,6 +2784,70 @@ export function defineAgentConformance(harness: ConformanceHarness): void {
         expect(step.state).toBe('done')
         expect(step.gate?.attempts).toBe(1)
         expect(step.gate?.attemptLog?.[0]?.outcome).toBe('completed')
+      })
+    })
+
+    describe('built-in post-release-health gate (externalized to @cat-factory/gates)', () => {
+      // The post-release-health gate watches a MERGED release's observability signals and, on a
+      // regression, escalates the INVESTIGATE-don't-fix `on-call` helper (which reverts nothing),
+      // then settles the gate via its `resolveHelperCompletion` hook — raising a
+      // `release_regression` notification instead of re-probing. Driving it over a faked
+      // ReleaseHealthProvider proves the externalized gate + its wire-handle + the on-call helper's
+      // structured assessment channel + the release-regression notification behave identically on
+      // every runtime; a facade that wired the release-health path into only one runtime fails here
+      // instead of shipping. The gate only watches a release that actually shipped, so the merger
+      // auto-merges first (`confidence: 1` → block `done`); a `regressed` probe then escalates.
+      afterEach(() => clearGateProviders())
+
+      it('escalates on-call on a regressed release and raises a release_regression notification', async () => {
+        const app = harness.makeApp(
+          {
+            confidence: 1,
+            asyncKinds: ['on-call'],
+            onCallAssessment: {
+              culpritConfidence: 0.9,
+              recommendation: 'revert',
+              rationale: 'the released diff correlates with the regressed signal',
+              evidence: [],
+            },
+            pullRequest: { url: 'https://github.com/o/r/pull/1', number: 1, branch: 'feat/login' },
+          },
+          { gateProviders: { releaseHealth: makeFakeReleaseHealth(['regressed']) } },
+        )
+        const { workspace } = await app.createWorkspace()
+        const wsId = workspace.id
+
+        // The gate is observability-gated: a pipeline carrying it is rejected at CREATE unless the
+        // workspace has an observability connection. The credentials are never used at runtime (the
+        // verdict comes from the fake provider) — only the connection ROW is required.
+        const conn = await app.call('PUT', `/workspaces/${wsId}/observability/connection`, {
+          provider: 'datadog',
+          credentials: { site: 'datadoghq.com', apiKey: 'k', appKey: 'a' },
+        })
+        expect(conn.status).toBe(200)
+
+        const pipeline = await app.call<Pipeline>('POST', `/workspaces/${wsId}/pipelines`, {
+          name: 'Build + merge + post-release-health',
+          agentKinds: ['coder', 'merger', 'post-release-health'],
+        })
+        const start = await app.call('POST', `/workspaces/${wsId}/blocks/task_login/executions`, {
+          pipelineId: pipeline.body.id,
+        })
+        expect(start.status).toBe(201)
+
+        const exec = (await app.drive(wsId)).find((e) => e.blockId === 'task_login')!
+        // The merger auto-merged (→ block `done`), the gate probed `regressed` and escalated the
+        // on-call helper, whose completion settled the gate (it re-probes nothing) so the run
+        // finished. One escalation, and the block stays merged.
+        expect(exec.status).toBe('done')
+        const step = exec.steps.find((s) => s.agentKind === 'post-release-health')!
+        expect(step.state).toBe('done')
+        expect(step.gate?.attempts).toBe(1)
+        expect((await app.blockRepository().get(wsId, 'task_login'))?.status).toBe('done')
+
+        // The investigation raised exactly the human-actionable release-regression notification.
+        const open = await app.notificationRepository().listOpen(wsId)
+        expect(open.map((n) => n.type)).toContain('release_regression')
       })
     })
 

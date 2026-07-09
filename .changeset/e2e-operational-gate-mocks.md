@@ -13,3 +13,9 @@ so the post-release-health gate's INVESTIGATE-don't-fix helper returns a structu
 (the generic prose fall-through left it null). These back the new operational-gate + agent-loop
 e2e specs (CI→ci-fixer, conflicts→conflict-resolver, post-release-health→on-call, Tester→Fixer,
 companion rework, follow-up gate).
+
+Adds a cross-runtime conformance assertion for the post-release-health gate: a merged release
+(merger auto-merges → block `done`) whose observability signal probes `regressed` escalates the
+`on-call` helper and raises a `release_regression` notification, driven over the shared
+`makeFakeReleaseHealth`. Both facades enable the observability integration in their test env so the
+gate + its wire-handle + the on-call assessment channel can't drift on only one runtime.

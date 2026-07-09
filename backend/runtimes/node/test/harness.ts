@@ -58,6 +58,11 @@ const TEST_ENV: NodeJS.ProcessEnv = {
   // with the Worker test env); the conformance Slack CRUD asserts persistence parity,
   // and the channel bails (best-effort) when a workspace has no Slack connection.
   SLACK_ENABLED: 'true',
+  // Enable the observability integration (release-health module + connection API) so the
+  // post-release-health gate conformance can connect a provider and create a pipeline carrying
+  // the observability-gated `post-release-health` step. Parity with the Worker test env; the
+  // gate's runtime verdict comes from a faked ReleaseHealthProvider, not a real Datadog call.
+  OBSERVABILITY_ENABLED: 'true',
   // The ephemeral-environment integration wires from ENCRYPTION_KEY (no flag), parity with
   // the Worker test env; the conformance env CRUD asserts persistence parity.
   // Opt into the prompt-fragment library (ADR 0006) so its module wires up; the
