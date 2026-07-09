@@ -1,5 +1,35 @@
 # @cat-factory/worker
 
+## 0.81.5
+
+### Patch Changes
+
+- 6b968bb: fix(notifications): claim a notification atomically before acting (race-audit 3.1)
+
+  Acting on a human-actionable notification (confirm+merge a `merge_review`/`pipeline_complete`,
+  retry a `ci_failed`/`test_failed`) now atomically claims the open card (`open` → `acted`)
+  BEFORE running its side effect, so two concurrent acts — a double-click, two members' inboxes,
+  an HTTP retry — can no longer both fire the merge/retry. The new
+  `NotificationRepository.claimForAction` is a single conditional `UPDATE … WHERE status='open'
+RETURNING *` (the `PasswordResetTokenRepository.consume` shape) mirrored on both runtimes
+  (D1 ⇄ Drizzle); only the writer that wins the flip runs the side effect. A failing side effect
+  reverts the card to `open` so the action stays retryable, without the double-fire window.
+
+- Updated dependencies [6b968bb]
+  - @cat-factory/kernel@0.117.3
+  - @cat-factory/orchestration@0.102.8
+  - @cat-factory/server@0.107.4
+  - @cat-factory/agents@0.52.6
+  - @cat-factory/caching@0.6.25
+  - @cat-factory/consensus@0.10.25
+  - @cat-factory/eks@0.1.48
+  - @cat-factory/gates@0.5.10
+  - @cat-factory/gitlab@0.7.48
+  - @cat-factory/integrations@0.80.3
+  - @cat-factory/observability-langfuse@0.7.180
+  - @cat-factory/provider-cloudflare@0.7.196
+  - @cat-factory/spend@0.12.6
+
 ## 0.81.4
 
 ### Patch Changes
