@@ -1,5 +1,18 @@
 # @cat-factory/orchestration
 
+## 0.102.4
+
+### Patch Changes
+
+- Updated dependencies [be54a32]
+  - @cat-factory/kernel@0.117.0
+  - @cat-factory/integrations@0.80.0
+  - @cat-factory/agents@0.52.3
+  - @cat-factory/caching@0.6.22
+  - @cat-factory/sandbox@0.9.52
+  - @cat-factory/spend@0.12.3
+  - @cat-factory/workspaces@0.13.14
+
 ## 0.102.3
 
 ### Patch Changes
