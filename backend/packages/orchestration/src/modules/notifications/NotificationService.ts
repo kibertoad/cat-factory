@@ -28,8 +28,10 @@ export interface NotificationServiceDependencies {
  * Owns the lifecycle of human-actionable notifications: the canonical D1-backed
  * store (so the inbox + snapshot can render them) plus delivery to the configured
  * channel(s). The *action* a notification triggers (merge a PR, confirm a
- * pipeline, retry a run) is performed by the worker's controller; this service
- * only raises, lists and resolves — keeping it free of execution/GitHub concerns.
+ * pipeline, retry a run) is performed by a caller-supplied side effect at the
+ * controller; this service raises, lists, acts (atomically claiming the card
+ * before that side effect runs — see {@link act}), resolves and escalates —
+ * keeping it free of execution/GitHub concerns.
  */
 export class NotificationService {
   private readonly notifications: NotificationRepository
