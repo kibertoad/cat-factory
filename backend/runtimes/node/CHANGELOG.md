@@ -1,5 +1,110 @@
 # @cat-factory/node-server
 
+## 0.89.0
+
+### Minor Changes
+
+- b83bcc8: Requirements review: auto-recommend answers for findings that don't need a business decision.
+
+  The requirements reviewer now classifies each finding it raises as `autoAnswerable` — answerable
+  confidently from universal engineering/product best practice or the context already provided
+  (vs. needing a genuine business/product decision). For the `autoAnswerable` findings, the
+  Requirement Writer AUTO-generates a grounded recommendation and it is auto-accepted as the
+  finding's **default answer** (pre-filled, editable, dismissable), so the human only hand-answers
+  the findings that genuinely need their input. Findings needing a business decision are left blank
+  and flagged "needs your input"; the human still drives incorporation. The reviewer prompt is
+  bumped to `requirement-review@v3`.
+
+  The behaviour is configurable per pipeline step: a new **auto-recommendation** toggle on the
+  `requirements-review` step in the pipeline builder (**on by default**). Disabling it reverts to
+  the fully-manual flow (answer or request recommendations for every finding).
+
+  This introduces the extensible per-step **`stepOptions`** seam — a single JSON bag
+  (`pipelines.step_options`, parallel to `agentKinds`) that is the going-forward home for new
+  per-step pipeline parameters, replacing the "one array + one column per knob" pattern
+  (`autoRecommend` is its pilot field). See `docs/initiatives/pipeline-step-options.md` for
+  folding the legacy per-step arrays (`gates`/`thresholds`/`enabled`/`consensus`/`gating`/
+  `followUps`/`testerQuality`) into it.
+
+  Persistence: a new nullable `step_options` column on `pipelines`, mirrored across the D1 and
+  Drizzle stores (no data migration — absent ⇒ all defaults). Requirement-review items and
+  recommendations gain optional `autoAnswerable` / `auto` fields (stored in the existing JSON
+  columns, no migration).
+
+- b83bcc8: Requirements review UX + per-task risk policy rename + document default pipeline.
+
+  **Requirements review — per-finding recommendation guidance & inline recommendations.** Each
+  finding now has an explicit 3-way selector (Answer / Dismiss / Recommend) in place of the old
+  button row. Typing an answer marks the finding "You answered"; choosing **Recommend** carries
+  whatever you typed over as **per-finding guidance** that steers the Requirement Writer's
+  suggestion (shown on-screen as guidance, not saved as the answer). Recommendations now render
+  **inline inside their source finding card** — generating spinner, the ready suggestion with
+  accept/reject/re-request — instead of a separate section below. The request-recommendations wire
+  contract changes from `{ itemIds, note }` to `{ items: [{ itemId, note? }] }` so each finding in a
+  batch can steer the Writer differently.
+
+  **Auto-recommendation on every round.** Auto-recommendation now also runs after an off-path
+  re-review (not only the pipeline-driven incorporation cycle), so every iteration round that
+  introduces new questions gets its auto-answerable findings pre-answered.
+
+  **"Merge threshold preset" renamed to "Risk policy".** The per-task/per-workspace preset governs
+  merge ceilings, CI-fixer attempts, requirement/tester iteration caps and release-health watch — a
+  broader risk-management surface than "merge". It is renamed to **Risk policy** across the wire
+  contracts, kernel/domain types, services, HTTP routes (`/workspaces/:ws/merge-presets` →
+  `/risk-policies`), repositories, and the SPA (store/util/panel/i18n). `Block.mergePresetId` →
+  `Block.riskPolicyId`. Iteration caps stay on the policy (per your risk-management model) — no
+  functional change. The physical DB table/column names are retained internally (mapped to the new
+  domain names), so there is no data migration.
+
+  **Document tasks default to the document pipeline.** A `taskType: 'document'` task now defaults to
+  the document-authoring pipeline (`pl_document`) instead of the full-build pipeline, which produces
+  no code and needs no spec/tests. Overridable per task as before.
+
+- a0c6934: Token-usage tracking for BOTH metered API traffic and flat-rate subscription harnesses
+  (usage-and-quota-tracking initiative, Part A). The `token_usage` spend ledger gains a
+  `billing` discriminator (`metered` | `subscription`) + `vendor` column, and subscription
+  harness usage (Claude Code / Codex / GLM / pooled Kimi & DeepSeek) — previously kept out of
+  the ledger entirely — is now recorded durably for reporting. The budget gate is unchanged:
+  every spend rollup (`status` / `isOverBudget` / the account & user tiers) filters
+  `billing = 'metered'`, so a flat-rate quota call is counted for the usage report but never
+  inflates spend or trips a budget.
+
+  New `GET /workspaces/:ws/usage` returns the current period's usage broken down by
+  `(billing, vendor, provider, model)`, surfaced in a new "Usage" tab in Workspace Settings
+  (both metered and subscription usage, with per-model progress bars). Subscription cost is
+  illustrative (the equivalent metered-API cost), never billed.
+
+  D1 migration `0044_usage_billing.sql` ⇄ the Drizzle schema + generated migration; the
+  cross-runtime conformance suite pins the metered-vs-subscription split on both stores. No
+  data migration — existing rows default to `metered`.
+
+  (The `@cat-factory/executor-harness` bump is a test-only type fix — its fake
+  `TokenUsageRepository` gains the new `usageBreakdownForWorkspace` method; nothing in the
+  runner image changed.)
+
+### Patch Changes
+
+- Updated dependencies [b83bcc8]
+- Updated dependencies [b83bcc8]
+- Updated dependencies [a0c6934]
+  - @cat-factory/contracts@0.123.0
+  - @cat-factory/kernel@0.115.0
+  - @cat-factory/agents@0.52.0
+  - @cat-factory/orchestration@0.102.0
+  - @cat-factory/server@0.106.0
+  - @cat-factory/spend@0.12.0
+  - @cat-factory/consensus@0.10.19
+  - @cat-factory/eks@0.1.42
+  - @cat-factory/gates@0.5.4
+  - @cat-factory/gitlab@0.7.42
+  - @cat-factory/integrations@0.79.1
+  - @cat-factory/prompt-fragments@0.13.7
+  - @cat-factory/caching@0.6.19
+  - @cat-factory/observability-langfuse@0.7.174
+  - @cat-factory/provider-bedrock@0.7.189
+  - @cat-factory/provider-cloudflare@0.7.190
+  - @cat-factory/provider-s3@0.2.124
+
 ## 0.88.0
 
 ### Minor Changes
