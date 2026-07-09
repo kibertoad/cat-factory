@@ -1,5 +1,19 @@
 # @cat-factory/conformance
 
+## 0.10.81
+
+### Patch Changes
+
+- Updated dependencies [eeadc97]
+  - @cat-factory/kernel@0.117.2
+  - @cat-factory/contracts@0.123.1
+  - @cat-factory/orchestration@0.102.6
+  - @cat-factory/server@0.107.2
+  - @cat-factory/agents@0.52.5
+  - @cat-factory/gates@0.5.9
+  - @cat-factory/integrations@0.80.2
+  - @cat-factory/prompt-fragments@0.13.8
+
 ## 0.10.80
 
 ### Patch Changes

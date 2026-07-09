@@ -1,5 +1,14 @@
 # @cat-factory/consensus
 
+## 0.10.24
+
+### Patch Changes
+
+- Updated dependencies [eeadc97]
+  - @cat-factory/kernel@0.117.2
+  - @cat-factory/contracts@0.123.1
+  - @cat-factory/agents@0.52.5
+
 ## 0.10.23
 
 ### Patch Changes
