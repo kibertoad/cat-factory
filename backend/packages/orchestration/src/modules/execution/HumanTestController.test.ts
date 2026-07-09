@@ -1,5 +1,6 @@
 import { describe, expect, it, vi } from 'vitest'
 import type { Block, ExecutionInstance, PipelineStep } from '@cat-factory/kernel'
+import { NotFoundError } from '@cat-factory/kernel'
 import { HumanTestController, type HumanTestControllerDeps } from './HumanTestController.js'
 
 // The controller owns the human-testing gate's control flow only; every engine primitive +
@@ -59,7 +60,7 @@ function fakeExecutor() {
 }
 
 function fakeDeps(over: Partial<HumanTestControllerDeps> = {}): HumanTestControllerDeps {
-  return {
+  const deps: HumanTestControllerDeps = {
     blockRepository: { get: vi.fn(async () => BLOCK) } as never,
     executionRepository: { get: vi.fn(async () => null), upsert: vi.fn(async () => {}) } as never,
     workRunner: { signalDecision: vi.fn(async () => {}) } as never,
@@ -79,7 +80,25 @@ function fakeDeps(over: Partial<HumanTestControllerDeps> = {}): HumanTestControl
       updateBlockProgress: vi.fn(async () => {}),
       finalizeBlock: vi.fn(async () => {}),
       stopRunContainer: vi.fn(async () => {}),
-      persistInstance: vi.fn(async () => {}),
+      // OCC seams (race-audit 2.2 controller-half): `casPersist` for the driver-path writes;
+      // `mutateInstance` late-binds `deps.executionRepository` (tests override it) → runs the
+      // pure mutation → returns it, a faithful stand-in for the real load/CAS-retry.
+      casPersist: vi.fn(async () => {}),
+      mutateInstance: vi.fn(
+        async (
+          ws: string,
+          execId: string,
+          mutate: (i: ExecutionInstance) => void | Promise<void>,
+        ) => {
+          const repo = deps.executionRepository as unknown as {
+            get: (ws: string, id: string) => Promise<ExecutionInstance | null>
+          }
+          const inst = await repo.get(ws, execId)
+          if (!inst) throw new NotFoundError('Execution', execId)
+          await mutate(inst)
+          return inst
+        },
+      ),
       emitInstance: vi.fn(async () => {}),
     } as never,
     stepGraph: {
@@ -110,6 +129,7 @@ function fakeDeps(over: Partial<HumanTestControllerDeps> = {}): HumanTestControl
     clockNow: () => 1000,
     ...over,
   }
+  return deps
 }
 
 describe('HumanTestController', () => {

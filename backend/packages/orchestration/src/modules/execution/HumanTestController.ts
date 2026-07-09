@@ -115,7 +115,11 @@ export class HumanTestController {
       // and unless the cleared `pendingAction` is already in storage it would re-consume the
       // action and dispatch a SECOND helper. Persisting now makes the dispatch at-most-once
       // (a crash between here and the dispatch merely drops the action; the human re-requests).
-      await this.deps.stateMachine.persistInstance(workspaceId, instance)
+      // Driver-path write ⇒ `casPersist`: a concurrent `stopRun`/`cancel` moving/deleting the
+      // row loses the CAS and re-drives on fresh state rather than resurrecting it (race-audit
+      // 2.2 controller-half). The at-most-once guard holds either way — a refused CAS means no
+      // dispatch happened this pass, so the re-drive consumes the action exactly once.
+      await this.deps.stateMachine.casPersist(workspaceId, instance)
       return this.handleAction(workspaceId, instance, step, block, isFinalStep, action)
     }
     if (!ht) return this.begin(workspaceId, instance, step, block)
@@ -197,17 +201,42 @@ export class HumanTestController {
     // Destroy is allowed both while parked (awaiting_human) AND during a deployer-driven rebuild
     // (the transient `provisioning` phase a loop-back sets) — a human must be able to drop the env
     // at either point.
-    const { instance, step } = this.requireParked(await this.findActive(workspaceId, blockId))
-    const ht = step.humanTest!
-    await this.teardownCurrent(workspaceId, ht)
-    if (ht.phase === 'provisioning') {
-      // Mid-rebuild (the upstream deployer is re-running): just forget the env locally — the
-      // re-entry (`readEnvAndPark`) reads the freshly-rebuilt one, or degrades if none stood up.
-      ht.environment = null
-    } else if (ht.environment) {
-      ht.environment = { ...ht.environment, status: 'torn_down' }
-    }
-    await this.deps.stateMachine.persistInstance(workspaceId, instance)
+    const found = this.requireParked(await this.findActive(workspaceId, blockId))
+    // Slow provider teardown FIRST, off the located snapshot's env id (idempotent — a
+    // re-torn-down env is a no-op and the TTL sweep backs it up). Then forget the env locally
+    // under `mutateInstance` (race-audit 2.2 controller-half): a blind full-row upsert here
+    // would clobber a concurrent driver write (a rebuild's `readEnvAndPark`) that landed during
+    // the teardown, since the teardown is exactly the OCC window. The mutate re-finds the active
+    // gate on fresh state and re-applies the (idempotent) env-forget; the teardown never re-runs.
+    const tornDownEnvId = found.step.humanTest?.environment?.id
+    await this.teardownCurrent(workspaceId, found.step.humanTest!)
+    const instance = await this.deps.stateMachine.mutateInstance(
+      workspaceId,
+      found.instance.id,
+      (inst) => {
+        const step = inst.steps.find(
+          (s) =>
+            s.agentKind === HUMAN_TEST_AGENT_KIND &&
+            (s.humanTest?.phase === 'awaiting_human' || s.humanTest?.phase === 'provisioning'),
+        )
+        if (!step?.humanTest) {
+          throw new ConflictError('No human-test gate is currently awaiting input')
+        }
+        const ht = step.humanTest
+        if (ht.phase === 'provisioning') {
+          // Mid-rebuild (the upstream deployer is re-running): just forget the env locally — the
+          // re-entry (`readEnvAndPark`) reads the freshly-rebuilt one, or degrades if none stood up.
+          ht.environment = null
+        } else if (ht.environment && ht.environment.id === tornDownEnvId) {
+          // Stamp `torn_down` ONLY when the env still on the fresh snapshot is the SAME one we
+          // actually tore down. A concurrent rebuild (`readEnvAndPark`) that swapped in a fresh
+          // env during the teardown window left a DIFFERENT env here — leaving that live env
+          // untouched (rather than falsely marking it torn_down) is correct: we never tore it
+          // down. The human can destroy the fresh one again.
+          ht.environment = { ...ht.environment, status: 'torn_down' }
+        }
+      },
+    )
     await this.deps.stateMachine.emitInstance(workspaceId, instance)
     return instance
   }
@@ -409,7 +438,7 @@ export class HumanTestController {
         at: this.deps.clockNow(),
       },
     ]
-    await this.deps.stateMachine.persistInstance(workspaceId, instance)
+    await this.deps.stateMachine.casPersist(workspaceId, instance)
     await this.deps.stateMachine.emitInstance(workspaceId, instance)
     return { kind: 'awaiting_job', jobId: step.jobId, stepIndex: instance.currentStep }
   }
@@ -465,7 +494,7 @@ export class HumanTestController {
     this.deps.stepGraph.rerunRange(instance, deployerIndex, humanTestIndex)
     step.humanTest = preserved
     if (instance.status === 'blocked') instance.status = 'running'
-    await this.deps.stateMachine.persistInstance(workspaceId, instance)
+    await this.deps.stateMachine.casPersist(workspaceId, instance)
     await this.deps.stateMachine.emitInstance(workspaceId, instance)
     return { kind: 'continue' }
   }
@@ -510,7 +539,7 @@ export class HumanTestController {
     if (isFinalStep) {
       instance.status = 'done'
       await this.deps.stateMachine.finalizeBlock(workspaceId, instance, undefined)
-      await this.deps.stateMachine.persistInstance(workspaceId, instance)
+      await this.deps.stateMachine.casPersist(workspaceId, instance)
       await this.deps.stateMachine.emitInstance(workspaceId, instance)
       await this.deps.stateMachine.stopRunContainer(workspaceId, instance)
       return { kind: 'done' }
@@ -519,7 +548,7 @@ export class HumanTestController {
     const next = instance.steps[instance.currentStep]
     if (next) this.deps.stepGraph.startStep(next)
     await this.deps.stateMachine.updateBlockProgress(workspaceId, instance, 'in_progress')
-    await this.deps.stateMachine.persistInstance(workspaceId, instance)
+    await this.deps.stateMachine.casPersist(workspaceId, instance)
     await this.deps.stateMachine.emitInstance(workspaceId, instance)
     return { kind: 'continue' }
   }
@@ -534,26 +563,42 @@ export class HumanTestController {
     blockId: string,
     action: NonNullable<HumanTestStepState['pendingAction']>,
   ): Promise<ExecutionInstance> {
-    const { instance, step } = this.requireParked(await this.findParked(workspaceId, blockId))
-    const ht = step.humanTest!
-    // Honour the resolved fix-attempt ceiling (the sibling Tester gate enforces the same
-    // `ciMaxAttempts`). The human stays in control of the other actions (confirm / pull main /
-    // recreate); only the findings-driven fix loop is capped, so it can't run away.
-    if (action.type === 'request-fix' && ht.attempts >= ht.maxAttempts) {
-      throw new ConflictError(
-        `This task has reached its fix-attempt limit (${ht.maxAttempts}); confirm the change, pull main, or recreate the environment instead.`,
-      )
-    }
-    ht.pendingAction = action
-    if (instance.status === 'blocked') instance.status = 'running'
-    await this.deps.stateMachine.persistInstance(workspaceId, instance)
-    await this.deps.stateMachine.emitInstance(workspaceId, instance)
-    await this.deps.workRunner.signalDecision(
+    const found = this.requireParked(await this.findParked(workspaceId, blockId))
+    // Optimistic-concurrency human-action write (race-audit 2.2 controller-half): record the
+    // intent under `mutateInstance` — load fresh, re-find the parked gate, apply the mutation,
+    // CAS — so a concurrent driver write (a poll fold) or a second human action can't be
+    // clobbered by a blind full-row upsert. The non-idempotent signal + emit run once after, on
+    // the winning snapshot. The cap/parked guards throw a domain error that propagates unretried.
+    let approvalId = ''
+    const instance = await this.deps.stateMachine.mutateInstance(
       workspaceId,
-      instance.id,
-      step.approval!.id,
-      'human-test',
+      found.instance.id,
+      (inst) => {
+        const step = inst.steps.find(
+          (s) =>
+            s.agentKind === HUMAN_TEST_AGENT_KIND &&
+            s.state === 'waiting_decision' &&
+            s.approval?.status === 'pending',
+        )
+        if (!step?.humanTest || !step.approval) {
+          throw new ConflictError('No human-test gate is currently awaiting input')
+        }
+        const ht = step.humanTest
+        // Honour the resolved fix-attempt ceiling (the sibling Tester gate enforces the same
+        // `ciMaxAttempts`). The human stays in control of the other actions (confirm / pull
+        // main / recreate); only the findings-driven fix loop is capped, so it can't run away.
+        if (action.type === 'request-fix' && ht.attempts >= ht.maxAttempts) {
+          throw new ConflictError(
+            `This task has reached its fix-attempt limit (${ht.maxAttempts}); confirm the change, pull main, or recreate the environment instead.`,
+          )
+        }
+        ht.pendingAction = action
+        if (inst.status === 'blocked') inst.status = 'running'
+        approvalId = step.approval.id
+      },
     )
+    await this.deps.stateMachine.emitInstance(workspaceId, instance)
+    await this.deps.workRunner.signalDecision(workspaceId, instance.id, approvalId, 'human-test')
     return instance
   }
 
