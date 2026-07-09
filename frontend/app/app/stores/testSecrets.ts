@@ -51,6 +51,9 @@ export const useTestSecretsStore = defineStore('testSecrets', () => {
    * SAME block. `load()` forces a refresh.
    */
   async function ensureLoaded(blockId: string) {
+    // Store known-unconfigured (a definitive 503) is a deployment-level fact — don't re-probe
+    // per service frame; the panel is hidden anyway.
+    if (available.value === false) return
     if (byBlock.value[blockId] !== undefined) return
     if (!inFlight.has(blockId)) {
       inFlight.set(

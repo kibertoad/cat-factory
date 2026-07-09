@@ -51,11 +51,14 @@ watch(
   { immediate: true },
 )
 
-// A valid POSIX env-var name (mirrors the contract's testSecretKeySchema regex). The reserved/
-// toolchain-name rejection lives server-side and surfaces as a save error — we don't duplicate it.
+// A valid POSIX env-var name (mirrors the contract's testSecretKeySchema regex + max length).
+// The reserved/toolchain-name rejection lives server-side and surfaces as a save error — we
+// don't duplicate the harness's reserved-name list here.
 const KEY_RE = /^[A-Za-z_][A-Za-z0-9_]*$/
+const KEY_MAX = 128
 function keyValid(key: string): boolean {
-  return KEY_RE.test(key.trim())
+  const k = key.trim()
+  return KEY_RE.test(k) && k.length <= KEY_MAX
 }
 
 // Keys that appear more than once (trimmed) — flagged inline and block saving.
@@ -140,6 +143,7 @@ async function clearAll() {
     :hint="t('inspector.testSecrets.sectionHint')"
     :count="configured.length"
     warning
+    default-open
     data-testid="service-test-secrets"
   >
     <template #actions>
