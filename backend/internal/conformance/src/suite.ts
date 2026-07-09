@@ -1684,6 +1684,43 @@ export function defineCoreConformance(harness: ConformanceHarness): void {
         // Idempotent: a second sweep finds nothing left to flip.
         expect(await repo.escalateStaleOpen(wsId, 10_000)).toEqual([])
       })
+
+      it('claimForAction atomically flips open→acted exactly once (act double-fire guard)', async () => {
+        const app = harness.makeApp()
+        const { workspace } = await app.createWorkspace()
+        const wsId = workspace.id
+        const repo = app.notificationRepository()
+        const card: Notification = {
+          id: 'ntf_act',
+          type: 'merge_review',
+          status: 'open',
+          severity: 'normal',
+          blockId: null,
+          executionId: null,
+          title: 'merge?',
+          body: 'body',
+          payload: null,
+          createdAt: 1_000,
+          resolvedAt: null,
+        }
+        await repo.upsert(wsId, card)
+
+        // Two concurrent claims race the conditional UPDATE; exactly one wins the flip and
+        // gets the row back (its side effect would run), the other is handed null and skips it.
+        const [a, b] = await Promise.all([
+          repo.claimForAction(wsId, 'ntf_act', 5_000),
+          repo.claimForAction(wsId, 'ntf_act', 6_000),
+        ])
+        const winners = [a, b].filter((n) => n !== null)
+        expect(winners).toHaveLength(1)
+        expect(winners[0]?.status).toBe('acted')
+
+        // The card is now acted; a later claim (or a re-click) finds it non-open → null.
+        const persisted = await repo.get(wsId, 'ntf_act')
+        expect(persisted?.status).toBe('acted')
+        expect(persisted?.resolvedAt).toBe(winners[0]?.resolvedAt)
+        expect(await repo.claimForAction(wsId, 'ntf_act', 7_000)).toBeNull()
+      })
     })
 
     describe('model presets', () => {

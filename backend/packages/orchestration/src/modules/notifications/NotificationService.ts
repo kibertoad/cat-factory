@@ -114,6 +114,50 @@ export class NotificationService {
     )
   }
 
+  /**
+   * Act on a notification EXACTLY ONCE under concurrency: atomically claim the OPEN card
+   * (`open` → `acted`) BEFORE running its `sideEffect` (merge the PR / retry the run), so two
+   * concurrent acts — a double-click, two members' inboxes, an HTTP retry — can't both fire
+   * the side effect. The winner of the atomic flip runs it; a loser (or an already-resolved
+   * card) returns the settled row untouched. The side effect lives at the call site (the
+   * controller) so this service stays free of execution/GitHub concerns.
+   *
+   * If the side effect throws, the card is reverted to `open` (and re-delivered) so the human
+   * can retry, then the error propagates — preserving the pre-fix "failed action stays
+   * retryable" behaviour without the double-fire window it had.
+   */
+  async act(
+    workspaceId: string,
+    id: string,
+    sideEffect: (notification: Notification) => Promise<void>,
+  ): Promise<Notification> {
+    await requireWorkspace(this.workspaceRepository, workspaceId)
+    const existing = assertFound(await this.notifications.get(workspaceId, id), 'Notification', id)
+    // Fast path: an already-resolved card is a no-op (idempotent), skipping the claim entirely.
+    if (existing.status !== 'open') return existing
+
+    const claimed = await this.notifications.claimForAction(workspaceId, id, this.clock.now())
+    if (!claimed) {
+      // A concurrent act won the flip between our read and the claim — it owns the side effect.
+      // Return the now-settled row rather than acting again.
+      return assertFound(await this.notifications.get(workspaceId, id), 'Notification', id)
+    }
+
+    try {
+      await sideEffect(claimed)
+    } catch (err) {
+      // The action failed; reopen the card so the human can retry, then surface the error. The
+      // card is `acted` (not `open`) during the side effect, so the escalation sweep can't touch
+      // it and this revert can't lose an escalation.
+      const reopened: Notification = { ...claimed, status: 'open', resolvedAt: null }
+      await this.notifications.upsert(workspaceId, reopened)
+      await this.deliver(workspaceId, reopened)
+      throw err
+    }
+    await this.deliver(workspaceId, claimed)
+    return claimed
+  }
+
   /** Resolve a notification (the human acted on it or dismissed it). Idempotent. */
   async resolve(
     workspaceId: string,

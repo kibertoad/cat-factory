@@ -22,6 +22,17 @@ export interface NotificationRepository {
    * (dismiss/act/escalate) and block-less cards. */
   upsert(workspaceId: string, notification: Notification): Promise<void>
   /**
+   * ATOMICALLY claim an OPEN notification for its action: flip `open` → `acted` (stamping
+   * `resolvedAt`) in ONE conditional statement and return the claimed row, or `null` when the
+   * card was NOT open (already acted/dismissed, or gone). The `act` double-fire guard — two
+   * concurrent acts on the same card (double-click, two members' inboxes, an HTTP retry) race
+   * here and only the winner gets the row back, so the notification's side effect (merge the
+   * PR / retry the run) runs EXACTLY once; the loser sees `null` and skips it. Modeled on
+   * {@link PasswordResetTokenRepository.consume}. The service reverts to `open` (via `upsert`)
+   * if the side effect then throws, so a failed action stays retryable.
+   */
+  claimForAction(workspaceId: string, id: string, resolvedAt: number): Promise<Notification | null>
+  /**
    * ATOMICALLY create-or-refresh the SINGLE open notification of `notification.type` for
    * its block, enforced by a partial unique index on `(workspace_id, block_id, type)`
    * WHERE status='open'. Block-scoped `raise()` routes here so two concurrent raises can't

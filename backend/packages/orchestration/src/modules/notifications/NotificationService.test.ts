@@ -34,6 +34,15 @@ function fakeRepo() {
     async upsert(_ws, n) {
       rows.set(n.id, { ...n })
     },
+    async claimForAction(_ws, id, resolvedAt) {
+      // Mirror the real repos' conditional UPDATE ... RETURNING: flip `open` → `acted` only
+      // when the row is still open, returning the claimed row (null otherwise).
+      const existing = rows.get(id)
+      if (!existing || existing.status !== 'open') return null
+      const claimed: Notification = { ...existing, status: 'acted', resolvedAt }
+      rows.set(id, claimed)
+      return { ...claimed }
+    },
     async escalateStaleOpen(_ws, cutoff) {
       // Mirror the real repos' single UPDATE ... RETURNING: flip every open, still-normal
       // card created at or before the cutoff and return the escalated rows.
@@ -79,7 +88,12 @@ function makeService(now: () => number) {
   let seq = 0
   const idGenerator: IdGenerator = { next: (p = 'id') => `${p}_${++seq}` }
   const clock: Clock = { now }
-  const workspaceRepository = {} as unknown as WorkspaceRepository
+  // `act` guards on the workspace existing; a stub whose `get` resolves is enough here.
+  const workspaceRepository = {
+    async get(id: string) {
+      return { id } as unknown
+    },
+  } as unknown as WorkspaceRepository
   const delivered: Notification[] = []
   const service = new NotificationService({
     notificationRepository: repo,
@@ -211,6 +225,79 @@ describe('NotificationService', () => {
     expect(open).toHaveLength(1)
     expect(open[0]?.title).toBe('still waiting')
     expect(await service.get(WS, result.id)).not.toBeNull()
+  })
+
+  it('act claims the card, runs the side effect once, and marks it acted + delivered', async () => {
+    const { service, rows, delivered } = makeService(() => time)
+    const raised = await service.raise(WS, raiseInput({ type: 'merge_review' }))
+
+    let calls = 0
+    const acted = await service.act(WS, raised.id, async () => {
+      calls++
+    })
+    expect(calls).toBe(1)
+    expect(acted.status).toBe('acted')
+    expect(acted.resolvedAt).toBe(time)
+    expect(rows.get(raised.id)?.status).toBe('acted')
+    expect(delivered.at(-1)?.status).toBe('acted')
+  })
+
+  it('act on an already-resolved card is a no-op (idempotent, no double side effect)', async () => {
+    const { service, rows } = makeService(() => time)
+    const raised = await service.raise(WS, raiseInput({ type: 'merge_review' }))
+    await service.act(WS, raised.id, async () => {})
+
+    let calls = 0
+    const again = await service.act(WS, raised.id, async () => {
+      calls++
+    })
+    expect(calls).toBe(0)
+    expect(again.status).toBe('acted')
+    expect(rows.get(raised.id)?.status).toBe('acted')
+  })
+
+  it('two concurrent acts fire the side effect EXACTLY once (atomic claim)', async () => {
+    const { service } = makeService(() => time)
+    const raised = await service.raise(WS, raiseInput({ type: 'merge_review' }))
+
+    let calls = 0
+    const [a, b] = await Promise.all([
+      service.act(WS, raised.id, async () => {
+        calls++
+      }),
+      service.act(WS, raised.id, async () => {
+        calls++
+      }),
+    ])
+    // The atomic `open` → `acted` claim admits only one act; the loser skips its side effect
+    // and returns the settled row.
+    expect(calls).toBe(1)
+    expect(a.status).toBe('acted')
+    expect(b.status).toBe('acted')
+  })
+
+  it('act reopens the card and rethrows when the side effect fails, staying retryable', async () => {
+    const { service, rows, delivered } = makeService(() => time)
+    const raised = await service.raise(WS, raiseInput({ type: 'ci_failed' }))
+
+    await expect(
+      service.act(WS, raised.id, async () => {
+        throw new Error('retry failed')
+      }),
+    ).rejects.toThrow('retry failed')
+
+    // Reverted to open so the human can act again, and re-delivered as open.
+    expect(rows.get(raised.id)?.status).toBe('open')
+    expect(rows.get(raised.id)?.resolvedAt).toBeNull()
+    expect(delivered.at(-1)?.status).toBe('open')
+
+    // A follow-up act now succeeds and settles it.
+    let calls = 0
+    const acted = await service.act(WS, raised.id, async () => {
+      calls++
+    })
+    expect(calls).toBe(1)
+    expect(acted.status).toBe('acted')
   })
 
   it('re-raise preserves an already-escalated severity and the original createdAt', async () => {
