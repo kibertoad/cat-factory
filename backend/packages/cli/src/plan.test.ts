@@ -10,7 +10,6 @@ const input: BootstrapInput = {
   apiBase: 'http://localhost:8787',
   port: 8787,
   corsAllowedOrigins: 'http://localhost:3000',
-  harnessImage: 'ghcr.io/x/y:latest',
   containerRuntime: 'docker',
   authSessionSecret: 'sess',
   encryptionKey: 'enc',
@@ -56,6 +55,21 @@ describe('buildPlan', () => {
     expect(env).toContain('GITHUB_PAT=ghp_secret')
     expect(env).toContain('AUTH_SESSION_SECRET=sess')
     expect(env).toContain('ENCRYPTION_KEY=enc')
+  })
+
+  it('leaves LOCAL_HARNESS_IMAGE unset by default, and no docker-pull command in the README', () => {
+    const { byPath } = plan()
+    expect(byPath.get('local/.env')?.content ?? '').toMatch(/^# LOCAL_HARNESS_IMAGE=/m)
+    expect(byPath.get('local/.env.example')?.content ?? '').toMatch(/^# LOCAL_HARNESS_IMAGE=/m)
+    const readme = byPath.get('README.md')?.content ?? ''
+    // The README explains the auto-pull instead of instructing a manual `docker pull <image>`.
+    expect(readme).toContain('pulls the executor-harness image it was built against automatically')
+    expect(readme).not.toMatch(/docker pull \S+\/\S+/)
+  })
+
+  it('pins LOCAL_HARNESS_IMAGE active when one is supplied', () => {
+    const env = plan({ harnessImage: 'ghcr.io/x/y:1.2.3' }).byPath.get('local/.env')?.content ?? ''
+    expect(env).toMatch(/^LOCAL_HARNESS_IMAGE=ghcr\.io\/x\/y:1\.2\.3$/m)
   })
 
   it('derives the docker-compose db from the DATABASE_URL', () => {

@@ -55,7 +55,8 @@ Three shapes of catalog entry fall out of this:
   the Cloudflare variant runs a cut context (e.g. GLM-5.2 24K) while the
   direct/subscription variant gets the full window (GLM-5.2 200K). `contextTokens` on
   the `ModelRef` surfaces this in the picker.
-- **Subscription-only** — `claude-opus`, `claude-sonnet`, `gpt-5.5`, `gpt-5.4`. No
+- **Subscription-only** — `claude-fable`, `claude-opus`, `claude-sonnet`, `gpt-5.5`,
+  `gpt-5.4`. No
   Cloudflare/direct base; the subscription harness is the _only_ way to run them, so
   they require a connected vendor token (§6) and there is **no inline fallback** (§5).
 - **Local (per-user)** — locally-run models on a user's own runner (Ollama / LM Studio /

@@ -8,11 +8,20 @@ import type {
   PipelineScheduleRepository,
   ProvisioningLogRepository,
   RateLimitRepository,
+  SubscriptionQuotaCycleRepository,
   TokenUsageRepository,
 } from '@cat-factory/kernel'
 
 /** Recurring-pipeline run history is kept ~1 week (the inspector's window). */
 const SCHEDULE_RUN_RETENTION_MS = 7 * 24 * 60 * 60 * 1000
+
+/**
+ * Idle subscription quota-cycle rows are pruned after 30 days. A fixed window (not the
+ * configurable retention policy), deliberately far beyond the longest quota window (the
+ * 7-day weekly one) so a live cycle is never deleted mid-window — a row untouched for
+ * 30 days has long since reset and only holds stale counters.
+ */
+const SUBSCRIPTION_QUOTA_CYCLE_RETENTION_MS = 30 * 24 * 60 * 60 * 1000
 
 // Retention sweep for the tables that don't self-limit (see
 // docs/storage-and-retention.md): the append-only `token_usage` ledger, the
@@ -45,6 +54,8 @@ export interface RetentionDeps {
   agentContextSnapshotRepository: AgentContextSnapshotRepository
   /** Agent-search queries; pruned on the same window as the LLM call telemetry. */
   agentSearchQueryRepository: AgentSearchQueryRepository
+  /** Idle modeled subscription quota-cycle counters, pruned to a fixed 30-day window. */
+  subscriptionQuotaCycleRepository: SubscriptionQuotaCycleRepository
   /** Optional: prunes recurring-pipeline run history to {@link SCHEDULE_RUN_RETENTION_MS}. */
   pipelineScheduleRepository?: PipelineScheduleRepository
   /** Optional: the provisioning event log (only when the PROVISIONING_DB binding is present). */
@@ -63,6 +74,7 @@ export interface RetentionResult {
   llmCallMetrics: number
   agentContextSnapshots: number
   agentSearchQueries: number
+  subscriptionQuotaCycles: number
   scheduleRuns: number
   provisioningLog: number
   passwordResetTokens: number
@@ -90,6 +102,7 @@ export async function sweepRetention({
   llmCallMetricRepository,
   agentContextSnapshotRepository,
   agentSearchQueryRepository,
+  subscriptionQuotaCycleRepository,
   pipelineScheduleRepository,
   provisioningLogRepository,
   passwordResetTokenRepository,
@@ -113,6 +126,10 @@ export async function sweepRetention({
     // Same window as the LLM call telemetry (performed web-search queries).
     agentSearchQueries: await prune(policy.llmCallMetricsMs, now, (c) =>
       agentSearchQueryRepository.deleteOlderThan(c),
+    ),
+    // Idle quota cycles past the fixed 30-day window (well beyond the weekly one).
+    subscriptionQuotaCycles: await prune(SUBSCRIPTION_QUOTA_CYCLE_RETENTION_MS, now, (c) =>
+      subscriptionQuotaCycleRepository.deleteOlderThan(c),
     ),
     scheduleRuns: pipelineScheduleRepository
       ? await prune(SCHEDULE_RUN_RETENTION_MS, now, (c) =>

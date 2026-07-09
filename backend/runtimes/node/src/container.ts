@@ -48,6 +48,8 @@ import {
   OBSERVABILITY_CIPHER_INFO,
   RegistryReleaseHealthProvider,
   defaultObservabilityRegistry,
+  RegistrySubscriptionQuotaProvider,
+  defaultSubscriptionQuotaRegistry,
   WorkspaceIncidentEnrichmentProvider,
   INCIDENT_ENRICHMENT_CIPHER_INFO,
   AccountSettingsService,
@@ -81,6 +83,7 @@ import {
   type SubscriptionActivationRepository,
   type TaskConnectionRepository,
   type TaskSourceProvider,
+  type SubscriptionQuotaTarget,
   type WebSearchAvailability,
   CompositeNotificationChannel,
   DEFAULT_MODEL_PRESET_ID,
@@ -892,6 +895,10 @@ function buildNodeContainerExecutor(
   resolvePackageRegistries?: (workspaceId: string) => Promise<JobPackageRegistrySpec[]>,
   resolveTestSecrets?: (workspaceId: string, blockId: string) => Promise<TestSecretEntry[]>,
   recordHarnessCalls?: (input: HarnessCallsRecordInput) => Promise<void>,
+  recordSubscriptionQuotaUsage?: (
+    target: SubscriptionQuotaTarget,
+    usage: { inputTokens: number; outputTokens: number },
+  ) => Promise<void>,
 ): AgentExecutor | null {
   // The harness reaches models only through this service's LLM proxy; `PUBLIC_URL`
   // is this service's externally reachable base (the runner pool / local container
@@ -958,6 +965,9 @@ function buildNodeContainerExecutor(
     // Per-call telemetry for the subscription harnesses (proxy-bypassing), recorded
     // into `llm_call_metrics` alongside the proxy-metered Pi rows.
     ...(recordHarnessCalls ? { recordHarnessCalls } : {}),
+    // Modeled subscription quota-cycle tracking (Part B): fold a finished subscription
+    // run's tokens into the rolling windows, for BOTH pooled and personal runs.
+    ...(recordSubscriptionQuotaUsage ? { recordSubscriptionQuotaUsage } : {}),
     // Individual-usage harnesses (Claude) lease the run-initiator's OWN activated
     // personal credential; absent ⇒ such models fail loudly at dispatch.
     ...(personalSubscriptions
@@ -1717,6 +1727,16 @@ export function buildNodeContainer(options: NodeContainerOptions): ServerContain
     ? (workspaceId: string, blockId: string) =>
         testSecretsService.resolveRefsForBlock(workspaceId, blockId)
     : undefined
+  // Modeled subscription quota-cycle provider (usage-and-quota-tracking, Part B): folds a
+  // finished subscription run's tokens into rolling windows (real reads land in B2). The
+  // registry of REAL vendor adapters is empty today, so every vendor reports modeled.
+  const subscriptionQuotaProvider = new RegistrySubscriptionQuotaProvider({
+    subscriptionQuotaCycleRepository: repos.subscriptionQuotaCycleRepository,
+    idGenerator,
+    clock,
+    registry: defaultSubscriptionQuotaRegistry,
+  })
+
   const container = buildNodeContainerExecutor(
     env,
     config,
@@ -1737,6 +1757,7 @@ export function buildNodeContainer(options: NodeContainerOptions): ServerContain
     resolvePackageRegistries,
     resolveTestSecrets,
     recordHarnessCalls,
+    (target, usage) => subscriptionQuotaProvider.recordUsage(target, usage),
   )
 
   // Always a composite: inline kinds run as one-shot LLM calls; repo-operating kinds

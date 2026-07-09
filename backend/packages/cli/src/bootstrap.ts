@@ -71,7 +71,9 @@ export async function bootstrap(options: CliOptions, deps: BootstrapDeps = {}): 
       ? defaultApiBase
       : await io.question('Backend API base (for the SPA)', defaultApiBase))
 
-  const harnessImage = options.harnessImage ?? OPTION_DEFAULTS.harnessImage
+  // Undefined unless the user explicitly pinned one with --harness-image: an unset
+  // LOCAL_HARNESS_IMAGE lets the backend run its matched, tested version (see the generated .env).
+  const harnessImage = options.harnessImage
   const containerRuntime = await resolveContainerRuntime(options, io)
   const corsAllowedOrigins = 'http://localhost:3000'
 
@@ -171,7 +173,8 @@ function printNextSteps(io: Io, input: NextStepsInput): void {
     '  Frontend SPA: http://localhost:3000',
     '',
     'Reminders:',
-    `  - Pull the executor image:  docker pull ${OPTION_DEFAULTS.harnessImage}`,
+    '  - The backend pulls its matched executor-harness image automatically on first boot — no',
+    '    manual docker pull needed (pin LOCAL_HARNESS_IMAGE in local/.env only to lock a version).',
     '  - Configure at least one model provider in local/.env (e.g. CLOUDFLARE_ACCOUNT_ID + CLOUDFLARE_API_TOKEN).',
   ]
   if (input.execution.mode === 'native') {
@@ -180,7 +183,7 @@ function printNextSteps(io: Io, input: NextStepsInput): void {
       .join(' / ')
     lines.push(
       `  - Native mode: install + log in to the ${clis} CLI on this host (the harness server`,
-      '    is bundled; the image above still runs non-native steps).',
+      '    is bundled; the harness image still runs non-native steps).',
     )
   } else {
     lines.push(

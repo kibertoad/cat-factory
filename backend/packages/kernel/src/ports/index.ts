@@ -423,6 +423,19 @@ export type {
   ReleaseHealthConfigRepository,
 } from './release-health-repositories.js'
 export type {
+  SubscriptionQuotaScope,
+  SubscriptionQuotaWindowKind,
+  SubscriptionQuotaCycleRecord,
+  SubscriptionQuotaCycleRepository,
+} from './subscription-quota-repositories.js'
+export type {
+  SubscriptionQuotaSource,
+  SubscriptionQuotaWindow,
+  SubscriptionQuotaCycle,
+  SubscriptionQuotaTarget,
+  SubscriptionQuotaProvider,
+} from './subscription-quota.js'
+export type {
   IncidentEnrichmentConnectionRecord,
   IncidentEnrichmentConnectionRepository,
 } from './incident-enrichment-repositories.js'

@@ -92,7 +92,9 @@ export class VisualConfirmationController {
       vc.pendingAction = null
       // Checkpoint the consumed action BEFORE any slow/side-effecting work (a fixer dispatch
       // is a real container), so a retry can't re-consume it and dispatch a second helper.
-      await this.deps.stateMachine.persistInstance(workspaceId, instance)
+      // Driver-path write ⇒ `casPersist`: a concurrent `stopRun`/`cancel` loses the CAS and
+      // re-drives on fresh state rather than resurrecting the row (race-audit 2.2 controller-half).
+      await this.deps.stateMachine.casPersist(workspaceId, instance)
       return this.handleAction(workspaceId, instance, step, block, isFinalStep, action)
     }
     if (!vc) return this.begin(workspaceId, instance, step, block, isFinalStep)
@@ -313,7 +315,7 @@ export class VisualConfirmationController {
         at: this.deps.clockNow(),
       },
     ]
-    await this.deps.stateMachine.persistInstance(workspaceId, instance)
+    await this.deps.stateMachine.casPersist(workspaceId, instance)
     await this.deps.stateMachine.emitInstance(workspaceId, instance)
     return { kind: 'awaiting_job', jobId: step.jobId, stepIndex: instance.currentStep }
   }
@@ -398,7 +400,7 @@ export class VisualConfirmationController {
     if (isFinalStep) {
       instance.status = 'done'
       await this.deps.stateMachine.finalizeBlock(workspaceId, instance, undefined)
-      await this.deps.stateMachine.persistInstance(workspaceId, instance)
+      await this.deps.stateMachine.casPersist(workspaceId, instance)
       await this.deps.stateMachine.emitInstance(workspaceId, instance)
       await this.deps.stateMachine.stopRunContainer(workspaceId, instance)
       return { kind: 'done' }
@@ -407,7 +409,7 @@ export class VisualConfirmationController {
     const next = instance.steps[instance.currentStep]
     if (next) this.deps.stepGraph.startStep(next)
     await this.deps.stateMachine.updateBlockProgress(workspaceId, instance, 'in_progress')
-    await this.deps.stateMachine.persistInstance(workspaceId, instance)
+    await this.deps.stateMachine.casPersist(workspaceId, instance)
     await this.deps.stateMachine.emitInstance(workspaceId, instance)
     return { kind: 'continue' }
   }
@@ -421,21 +423,42 @@ export class VisualConfirmationController {
     blockId: string,
     action: NonNullable<VisualConfirmStepState['pendingAction']>,
   ): Promise<ExecutionInstance> {
-    const { instance, step } = this.requireParked(await this.findParked(workspaceId, blockId))
-    const vc = step.visualConfirm!
-    if (action.type === 'request-fix' && vc.attempts >= vc.maxAttempts) {
-      throw new ConflictError(
-        `This task has reached its fix-attempt limit (${vc.maxAttempts}); approve the change or review it manually.`,
-      )
-    }
-    vc.pendingAction = action
-    if (instance.status === 'blocked') instance.status = 'running'
-    await this.deps.stateMachine.persistInstance(workspaceId, instance)
+    const found = this.requireParked(await this.findParked(workspaceId, blockId))
+    // Optimistic-concurrency human-action write (race-audit 2.2 controller-half): record the
+    // intent under `mutateInstance` (load fresh → re-find the parked gate → mutate → CAS) so a
+    // concurrent driver poll / a second human action can't be clobbered by a blind full-row
+    // upsert. The signal + emit run once after, on the winning snapshot; the cap/parked guards
+    // throw a domain error that propagates unretried.
+    let approvalId = ''
+    const instance = await this.deps.stateMachine.mutateInstance(
+      workspaceId,
+      found.instance.id,
+      (inst) => {
+        const step = inst.steps.find(
+          (s) =>
+            s.agentKind === VISUAL_CONFIRM_AGENT_KIND &&
+            s.state === 'waiting_decision' &&
+            s.approval?.status === 'pending',
+        )
+        if (!step?.visualConfirm || !step.approval) {
+          throw new ConflictError('No visual-confirmation gate is currently awaiting input')
+        }
+        const vc = step.visualConfirm
+        if (action.type === 'request-fix' && vc.attempts >= vc.maxAttempts) {
+          throw new ConflictError(
+            `This task has reached its fix-attempt limit (${vc.maxAttempts}); approve the change or review it manually.`,
+          )
+        }
+        vc.pendingAction = action
+        if (inst.status === 'blocked') inst.status = 'running'
+        approvalId = step.approval.id
+      },
+    )
     await this.deps.stateMachine.emitInstance(workspaceId, instance)
     await this.deps.workRunner.signalDecision(
       workspaceId,
       instance.id,
-      step.approval!.id,
+      approvalId,
       'visual-confirmation',
     )
     return instance

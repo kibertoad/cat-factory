@@ -15,6 +15,7 @@ import { D1AgentContextSnapshotRepository } from './infrastructure/repositories/
 import { D1AgentSearchQueryRepository } from './infrastructure/repositories/D1AgentSearchQueryRepository'
 import { D1ProvisioningLogRepository } from './infrastructure/repositories/D1ProvisioningLogRepository'
 import { D1PipelineScheduleRepository } from './infrastructure/repositories/D1PipelineScheduleRepository'
+import { D1SubscriptionQuotaCycleRepository } from './infrastructure/repositories/D1SubscriptionQuotaCycleRepository'
 import { D1PasswordResetTokenRepository } from './infrastructure/repositories/D1PasswordResetTokenRepository'
 import { buildContainer, buildCloudflareArtifactStoreResolver } from './infrastructure/container'
 import { escalateStaleNotifications } from '@cat-factory/server'
@@ -179,6 +180,8 @@ export default {
             db: telemetryDb,
           }),
           agentSearchQueryRepository: new D1AgentSearchQueryRepository({ db: telemetryDb }),
+          // Modeled subscription quota-cycle counters live in the main DB (migration 0047).
+          subscriptionQuotaCycleRepository: new D1SubscriptionQuotaCycleRepository({ db: env.DB }),
           pipelineScheduleRepository: new D1PipelineScheduleRepository({ db: env.DB }),
           passwordResetTokenRepository: new D1PasswordResetTokenRepository({ db: env.DB }),
           // Prune the separate provisioning-log database when its binding is present.

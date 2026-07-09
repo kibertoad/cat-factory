@@ -18,8 +18,12 @@ const TYPES_NODE_VERSION = '^26.0.1'
 const TYPESCRIPT_VERSION = '7.0.1-rc'
 const WRANGLER_VERSION = '^4.105.0'
 
-/** Default executor-harness image agent jobs run as per-run containers. */
-export const DEFAULT_HARNESS_IMAGE = 'ghcr.io/kibertoad/cat-factory-executor:latest'
+/**
+ * An illustrative (commented) `LOCAL_HARNESS_IMAGE` value. Only shown as an example — the CLI
+ * leaves the var UNSET by default so the backend runs the version it was released against; the
+ * `<version>` is a placeholder, never a real pin (and deliberately NOT a mutable `:latest` tag).
+ */
+export const HARNESS_IMAGE_EXAMPLE = 'ghcr.io/kibertoad/cat-factory-executor:<version>'
 
 /** The container runtimes the local facade understands (`LOCAL_CONTAINER_RUNTIME`). */
 export const CONTAINER_RUNTIMES = ['docker', 'podman', 'orbstack', 'colima', 'apple'] as const
@@ -133,9 +137,40 @@ export interface LocalEnvExampleInput {
   containerRuntime?: ContainerRuntime
   databaseUrl?: string
   port?: number
+  /**
+   * An explicit harness-image pin. Normally UNSET (the CLI omits `--harness-image`), which
+   * documents the var as commented-out so the backend runs its matched version; a value here
+   * is written active because the developer deliberately chose to lock to it.
+   */
   harnessImage?: string
   executionMode?: ExecutionMode
   nativeHarnesses?: NativeHarness[]
+}
+
+/**
+ * Why `LOCAL_HARNESS_IMAGE` should normally stay UNSET, and when to pin it. Un-prefixed lines so
+ * both the static example (which adds `# `) and the populated `.env` (`buildLocalEnv`, whose
+ * renderer adds it) explain the var identically.
+ */
+export const HARNESS_IMAGE_GUIDANCE = [
+  'The executor-harness image agent jobs run as per-run containers. OPTIONAL — leave it',
+  'UNSET (recommended) to run the image version this @cat-factory/local-server build was',
+  'released and tested against, pulled fresh at boot so it never goes stale. Pin it here',
+  'ONLY to lock to a specific version — reproducing a bug on an older image, or testing a',
+  'hotfix on a newer one — accepting that image and backend versions are not guaranteed',
+  'compatible across that boundary. Avoid a mutable tag like `:latest`: it can pull an',
+  'image newer than this backend supports.',
+] as const
+
+/**
+ * The `LOCAL_HARNESS_IMAGE` block for the static `.env.example`. Unset (the default) documents the
+ * var commented-out with {@link HARNESS_IMAGE_GUIDANCE}; a pin is written active.
+ */
+export const harnessImageEnvLines = (harnessImage?: string): string[] => {
+  const guidance = HARNESS_IMAGE_GUIDANCE.map((line) => `# ${line}`)
+  return harnessImage
+    ? [...guidance, `LOCAL_HARNESS_IMAGE=${harnessImage}`]
+    : [...guidance, `# LOCAL_HARNESS_IMAGE=${HARNESS_IMAGE_EXAMPLE}`]
 }
 
 export const localEnvExample = (input: LocalEnvExampleInput = {}): string => {
@@ -144,7 +179,7 @@ export const localEnvExample = (input: LocalEnvExampleInput = {}): string => {
     containerRuntime = 'docker',
     databaseUrl = 'postgres://cat:cat@localhost:5432/catfactory',
     port = 8787,
-    harnessImage = DEFAULT_HARNESS_IMAGE,
+    harnessImage,
     executionMode = 'pool',
     nativeHarnesses,
   } = input
@@ -168,7 +203,7 @@ export const localEnvExample = (input: LocalEnvExampleInput = {}): string => {
           '# LOCAL_HARNESS_ENTRY=',
         ]
       : [
-          '# Execution mode: PREWARMED DOCKER POOL — per-run containers from LOCAL_HARNESS_IMAGE.',
+          '# Execution mode: PREWARMED DOCKER POOL — per-run containers from the harness image.',
           '# Warm-pool sizing lives in the UI (Integrations > "Local mode"); recommended: size 3,',
           '# pre-warm 1, idle 10m. To switch to native host agents instead, set:',
           '# LOCAL_NATIVE_AGENTS=claude-code,codex',
@@ -190,7 +225,7 @@ HARNESS_SHARED_SECRET=
 ${tokenLines.join('\n')}
 # For a self-managed GitLab instance, also set GITLAB_API_BASE (e.g. https://gitlab.example.com/api/v4).
 # GITLAB_API_BASE=
-LOCAL_HARNESS_IMAGE=${harnessImage}
+${harnessImageEnvLines(harnessImage).join('\n')}
 # Container runtime that spawns agent jobs: ${CONTAINER_RUNTIMES.join(' | ')}.
 LOCAL_CONTAINER_RUNTIME=${containerRuntime}
 ${executionLines.join('\n')}
