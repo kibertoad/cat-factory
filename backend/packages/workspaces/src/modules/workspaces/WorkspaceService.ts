@@ -198,9 +198,22 @@ export class WorkspaceService {
     // production drives by run id, and the conformance/test harness now enumerates runs via
     // `executionRepository.listByWorkspace`, not this projection.
     const internalBlockIds = new Set(localBlocks.filter((b) => b.internal).map((b) => b.id))
-    const visibleBlocks = localBlocks.filter((b) => !internalBlockIds.has(b.id))
-    const visibleExecutions = localExecutions.filter((e) => !internalBlockIds.has(e.blockId))
-    const blocks = await this.composeBoard(visibleBlocks, mounts)
+    // Archived services: an archived top-level frame plus its whole subtree drop out of the
+    // board projection (like `internal`), but the frame itself is surfaced under
+    // `archivedServices` so the SPA can list + restore it. Restore is a flag flip, so nothing
+    // is destroyed — the subtree reappears on the next refresh.
+    const archivedFrames = localBlocks.filter(
+      (b) => b.archived && b.level === 'frame' && b.parentId === null,
+    )
+    const hiddenBlockIds = hiddenSubtreeIds(localBlocks, archivedFrames, internalBlockIds)
+    const visibleBlocks = localBlocks.filter((b) => !hiddenBlockIds.has(b.id))
+    const visibleExecutions = localExecutions.filter((e) => !hiddenBlockIds.has(e.blockId))
+    // Re-apply the hidden filter AFTER composition: an archived LOCAL frame is dropped from
+    // `visibleBlocks`, which makes its own mount look "foreign" to composeBoard — it would then
+    // re-fetch the archived subtree via `listByServices`. Filtering the composed result keeps a
+    // hidden frame (and its subtree) off the board regardless of that re-pull.
+    const composed = await this.composeBoard(visibleBlocks, mounts)
+    const blocks = composed.filter((b) => !hiddenBlockIds.has(b.id))
     const executions = await this.composeExecutions(visibleExecutions, mounts)
     // The current built-in catalog versions, so the SPA can flag a workspace's stale
     // built-in copies and offer a reseed (see WorkspaceSnapshot.pipelineCatalogVersions).
@@ -229,6 +242,7 @@ export class WorkspaceService {
       pipelineCatalogVersions,
       riskPolicyCatalogVersions,
       modelPresetCatalogVersions,
+      ...(archivedFrames.length ? { archivedServices: archivedFrames } : {}),
     }
   }
 
@@ -303,4 +317,30 @@ export class WorkspaceService {
     await this.require(id)
     await this.workspaceRepository.delete(id)
   }
+}
+
+/**
+ * The ids to drop from the board projection: the headless `internal` blocks, plus every
+ * archived service frame AND its whole subtree (tasks/modules reach the board only through
+ * their frame, so an archived frame must take its descendants with it). Pure BFS over the
+ * `parentId` tree, seeded with the internal + archived-frame ids.
+ */
+function hiddenSubtreeIds(
+  blocks: Block[],
+  archivedFrames: Block[],
+  internalBlockIds: Set<string>,
+): Set<string> {
+  const hidden = new Set<string>(internalBlockIds)
+  for (const f of archivedFrames) hidden.add(f.id)
+  let grew = true
+  while (grew) {
+    grew = false
+    for (const b of blocks) {
+      if (b.parentId && hidden.has(b.parentId) && !hidden.has(b.id)) {
+        hidden.add(b.id)
+        grew = true
+      }
+    }
+  }
+  return hidden
 }

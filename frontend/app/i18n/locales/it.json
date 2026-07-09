@@ -1412,7 +1412,12 @@
       "viewRequirements": "Visualizza requisiti",
       "reRun": "Riesegui",
       "run": "Esegui",
-      "focus": "Metti a fuoco"
+      "focus": "Metti a fuoco",
+      "archiveService": "Archivia servizio",
+      "confirmArchive": {
+        "title": "Archiviare questo servizio?",
+        "body": "\"{name}\" e le sue attività verranno nascosti dalla board. Puoi ripristinarlo in qualsiasi momento."
+      }
     }
   },
   "layout": {
@@ -1864,7 +1869,11 @@
       "unlinkFailed": "Impossibile rimuovere la dipendenza",
       "recurringDeleteFailed": "Impossibile eliminare la pipeline ricorrente",
       "deleted": "Eliminato \"{name}\"",
-      "moved": "Spostato \"{name}\""
+      "moved": "Spostato \"{name}\"",
+      "archived": "Archiviato \"{name}\"",
+      "restored": "Ripristinato \"{name}\"",
+      "archiveFailed": "Impossibile archiviare il servizio",
+      "restoreFailed": "Impossibile ripristinare il servizio"
     },
     "repoTypes": {
       "service": "Servizio",
@@ -1889,7 +1898,8 @@
       "zoomOut": "Riduci lo zoom",
       "zoomIn": "Aumenta lo zoom",
       "fitView": "Adatta la board al contenuto",
-      "resetZoom": "Reimposta lo zoom al 100%"
+      "resetZoom": "Reimposta lo zoom al 100%",
+      "archivedServices": "Servizi archiviati"
     },
     "canvas": {
       "emptyTitle": "La tua board è vuota",

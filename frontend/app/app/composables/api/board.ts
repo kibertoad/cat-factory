@@ -4,6 +4,7 @@ import {
   addModuleContract,
   addServiceFromRepoContract,
   addTaskContract,
+  archiveBlockContract,
   assignEpicContract,
   clonePipelineContract,
   createPipelineContract,
@@ -14,6 +15,7 @@ import {
   removeBlockContract,
   reparentBlockContract,
   reseedPipelineContract,
+  restoreBlockContract,
   toggleDependencyContract,
   updateBlockContract,
   updatePipelineContract,
@@ -86,6 +88,13 @@ export function boardApi({ send, ws }: ApiContext) {
 
     removeBlock: (workspaceId: string, blockId: string) =>
       send(removeBlockContract, { pathPrefix: ws(workspaceId), pathParams: { blockId } }),
+
+    // Archive a service (hide it + its subtree, restorable with no expiry) instead of deleting.
+    archiveBlock: (workspaceId: string, blockId: string) =>
+      send(archiveBlockContract, { pathPrefix: ws(workspaceId), pathParams: { blockId } }),
+
+    restoreBlock: (workspaceId: string, blockId: string) =>
+      send(restoreBlockContract, { pathPrefix: ws(workspaceId), pathParams: { blockId } }),
 
     toggleDependency: (workspaceId: string, blockId: string, body: { sourceId: string }) =>
       send(toggleDependencyContract, {

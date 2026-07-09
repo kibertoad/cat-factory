@@ -92,8 +92,31 @@ export class D1WorkspaceRepository implements WorkspaceRepository {
   }
 
   async delete(id: string): Promise<void> {
-    // Cascade explicitly: D1 does not enforce foreign keys by default.
+    // Cascade explicitly: D1 does not enforce foreign keys by default. The service/mount rows
+    // MUST be reclaimed BEFORE the blocks they reference are dropped (their subqueries read
+    // `blocks`). A deleted board that leaves its account-owned services behind is not a cosmetic
+    // leak: `services` is account-scoped and looked up by (installation_id, repo_github_id), so a
+    // dangling service (its frame block gone) keeps the SAME repo from being re-added on any other
+    // board in the account — the exact "already linked / already exists" failure a board delete
+    // used to cause. Mirror any change in the Node facade's DrizzleWorkspaceRepository.delete.
     await this.db.batch([
+      // Every board's mount of a service this workspace HOMES (its frame block lives here).
+      this.db
+        .prepare(
+          `DELETE FROM workspace_services WHERE service_id IN
+             (SELECT id FROM services WHERE frame_block_id IN
+               (SELECT id FROM blocks WHERE workspace_id = ?))`,
+        )
+        .bind(id),
+      // This workspace's OWN mounts of services homed elsewhere (shared services it mounted).
+      this.db.prepare('DELETE FROM workspace_services WHERE workspace_id = ?').bind(id),
+      // The account-owned services this workspace homes — the repo↔frame link that must be freed.
+      this.db
+        .prepare(
+          'DELETE FROM services WHERE frame_block_id IN (SELECT id FROM blocks WHERE workspace_id = ?)',
+        )
+        .bind(id),
+      this.db.prepare('DELETE FROM environments WHERE workspace_id = ?').bind(id),
       // agent_runs holds both execution and bootstrap runs (migration 0019).
       this.db.prepare('DELETE FROM agent_runs WHERE workspace_id = ?').bind(id),
       this.db.prepare('DELETE FROM blocks WHERE workspace_id = ?').bind(id),

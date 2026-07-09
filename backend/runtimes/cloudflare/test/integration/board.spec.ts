@@ -122,16 +122,49 @@ describe('board', () => {
   })
 
   it('deletes idempotently — a gone or unknown block is a 204, not a 404', async () => {
-    // First delete tears the subtree down; a second delete (or a delete of a never-existed id)
-    // must NOT 404. A thing not existing can't block cleanup of whatever DID survive.
-    const first = await app.call('DELETE', `/workspaces/${wsId}/blocks/blk_auth`)
+    // First delete removes the (childless) service; a second delete (or a delete of a never-existed
+    // id) must NOT 404. A thing not existing can't block cleanup of whatever DID survive.
+    // `blk_frontend` is a service with no tasks, so it is deletable (a service WITH unfinished
+    // tasks must be archived instead — see below).
+    const first = await app.call('DELETE', `/workspaces/${wsId}/blocks/blk_frontend`)
     expect(first.status).toBe(204)
 
-    const again = await app.call('DELETE', `/workspaces/${wsId}/blocks/blk_auth`)
+    const again = await app.call('DELETE', `/workspaces/${wsId}/blocks/blk_frontend`)
     expect(again.status).toBe(204)
 
     const unknown = await app.call('DELETE', `/workspaces/${wsId}/blocks/blk_does_not_exist`)
     expect(unknown.status).toBe(204)
+  })
+
+  it('refuses to delete a service with unfinished tasks, but archives + restores it', async () => {
+    // blk_auth has two planned (unfinished) tasks, so a destructive delete is rejected.
+    const del = await app.call('DELETE', `/workspaces/${wsId}/blocks/blk_auth`)
+    expect(del.status).toBe(422)
+
+    // Archiving hides the service + its whole subtree from the board and surfaces it for restore.
+    const archived = await app.call<Block>('POST', `/workspaces/${wsId}/blocks/blk_auth/archive`)
+    expect(archived.status).toBe(200)
+    expect(archived.body.archived).toBe(true)
+
+    let snap = (await app.call<WorkspaceSnapshot>('GET', `/workspaces/${wsId}`)).body
+    expect(snap.blocks.find((b) => b.id === 'blk_auth')).toBeUndefined()
+    expect(snap.blocks.find((b) => b.id === 'task_login')).toBeUndefined()
+    expect(snap.archivedServices?.find((b) => b.id === 'blk_auth')).toBeTruthy()
+
+    // Restoring brings the whole subtree back onto the board.
+    const restored = await app.call<Block>('POST', `/workspaces/${wsId}/blocks/blk_auth/restore`)
+    expect(restored.status).toBe(200)
+    expect(restored.body.archived).toBeFalsy()
+
+    snap = (await app.call<WorkspaceSnapshot>('GET', `/workspaces/${wsId}`)).body
+    expect(snap.blocks.find((b) => b.id === 'blk_auth')).toBeTruthy()
+    expect(snap.blocks.find((b) => b.id === 'task_login')).toBeTruthy()
+    expect(snap.archivedServices?.find((b) => b.id === 'blk_auth')).toBeFalsy()
+  })
+
+  it('rejects archiving a non-service block', async () => {
+    const res = await app.call('POST', `/workspaces/${wsId}/blocks/task_login/archive`)
+    expect(res.status).toBe(422)
   })
 
   it('removes a module and its nested tasks', async () => {

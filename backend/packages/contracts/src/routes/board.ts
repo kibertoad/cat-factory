@@ -98,6 +98,22 @@ export const removeBlockContract = defineApiContract({
   responsesByStatusCode: { 204: ContractNoBody, ...errorResponses },
 })
 
+export const archiveBlockContract = defineApiContract({
+  method: 'post',
+  requestPathParamsSchema: blockIdParams,
+  pathResolver: ({ blockId }) => `/blocks/${blockId}/archive`,
+  requestBodySchema: ContractNoBody,
+  responsesByStatusCode: { 200: blockSchema, ...errorResponses },
+})
+
+export const restoreBlockContract = defineApiContract({
+  method: 'post',
+  requestPathParamsSchema: blockIdParams,
+  pathResolver: ({ blockId }) => `/blocks/${blockId}/restore`,
+  requestBodySchema: ContractNoBody,
+  responsesByStatusCode: { 200: blockSchema, ...errorResponses },
+})
+
 export const toggleDependencyContract = defineApiContract({
   method: 'post',
   requestPathParamsSchema: blockIdParams,

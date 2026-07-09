@@ -348,6 +348,16 @@ export const blockSchema = v.object({
    */
   internal: v.optional(v.boolean()),
   /**
+   * Archive marker for a service frame: when `true` the service (its frame + whole subtree)
+   * is hidden from the board projection but fully preserved — it can be restored at any time
+   * with NO expiry. Archiving is the alternative to deleting a service that still has
+   * unfinished tasks (deletion is rejected for those; archive, then restore later). The
+   * snapshot filters an archived frame and its descendants out of `blocks`/`executions` and
+   * surfaces it under `archivedServices` instead. Only meaningful on top-level service frames
+   * (`level:'frame'`, `parentId:null`). Absent / false ⇒ a normal, board-visible block.
+   */
+  archived: v.optional(v.boolean()),
+  /**
    * Redaction marker set ONLY in the per-viewer workspace snapshot (never persisted): when
    * `true`, this service frame is backed by a repo the requesting user cannot reach (a repo
    * linked via ANOTHER member's personal access token, `GitHubRepo.linkedVia === 'user_pat'`,

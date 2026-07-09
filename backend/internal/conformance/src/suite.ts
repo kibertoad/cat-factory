@@ -5814,12 +5814,49 @@ export function defineIntegrationConformance(harness: ConformanceHarness): void 
         const { workspace } = await app.createWorkspace()
         // A block not existing must never block deletion: a repeated delete, and a delete of an
         // id that never existed, both clean up best-effort and return 204 rather than 404.
-        const first = await app.call('DELETE', `/workspaces/${workspace.id}/blocks/blk_auth`)
+        // `blk_frontend` is a childless service (deletable); a service WITH unfinished tasks is
+        // archived instead of deleted (asserted separately).
+        const first = await app.call('DELETE', `/workspaces/${workspace.id}/blocks/blk_frontend`)
         expect(first.status).toBe(204)
-        const again = await app.call('DELETE', `/workspaces/${workspace.id}/blocks/blk_auth`)
+        const again = await app.call('DELETE', `/workspaces/${workspace.id}/blocks/blk_frontend`)
         expect(again.status).toBe(204)
         const unknown = await app.call('DELETE', `/workspaces/${workspace.id}/blocks/blk_nope`)
         expect(unknown.status).toBe(204)
+      })
+
+      it('refuses to delete a service with unfinished tasks and archives/restores it', async () => {
+        const app = harness.makeApp()
+        const { workspace } = await app.createWorkspace()
+        const ws = workspace.id
+        // blk_auth carries planned (unfinished) tasks, so a destructive delete is rejected.
+        const del = await app.call('DELETE', `/workspaces/${ws}/blocks/blk_auth`)
+        expect(del.status).toBe(422)
+
+        // Archiving hides the service + its whole subtree from the board and surfaces it for restore
+        // — the `archived` column must persist + read back identically on every store.
+        const archived = await app.call<{ archived?: boolean }>(
+          'POST',
+          `/workspaces/${ws}/blocks/blk_auth/archive`,
+        )
+        expect(archived.status).toBe(200)
+        expect(archived.body.archived).toBe(true)
+
+        let snap = (await app.call<WorkspaceSnapshot>('GET', `/workspaces/${ws}`)).body
+        expect(snap.blocks.find((b) => b.id === 'blk_auth')).toBeUndefined()
+        expect(snap.blocks.find((b) => b.id === 'task_login')).toBeUndefined()
+        expect(snap.archivedServices?.find((b) => b.id === 'blk_auth')).toBeTruthy()
+
+        const restored = await app.call<{ archived?: boolean }>(
+          'POST',
+          `/workspaces/${ws}/blocks/blk_auth/restore`,
+        )
+        expect(restored.status).toBe(200)
+        expect(restored.body.archived).toBeFalsy()
+
+        snap = (await app.call<WorkspaceSnapshot>('GET', `/workspaces/${ws}`)).body
+        expect(snap.blocks.find((b) => b.id === 'blk_auth')).toBeTruthy()
+        expect(snap.blocks.find((b) => b.id === 'task_login')).toBeTruthy()
+        expect(snap.archivedServices?.find((b) => b.id === 'blk_auth')).toBeFalsy()
       })
     })
   })

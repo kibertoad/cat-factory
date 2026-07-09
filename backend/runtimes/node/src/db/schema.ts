@@ -307,6 +307,10 @@ export const blocks = pgTable(
     // Headless marker (mirrors the D1 `blocks.internal` column): 1 ⇒ a public-API "initiative"
     // anchor block, excluded from every board projection. Null/absent ⇒ a normal, visible block.
     internal: integer('internal'),
+    // Archive marker (mirrors the D1 `blocks.archived` column): 1 ⇒ an archived service frame,
+    // hidden from the board projection with its whole subtree but fully preserved and restorable
+    // with no expiry. Null/absent ⇒ a normal, visible block.
+    archived: integer('archived'),
     // Monotonic insert sequence (Postgres has no SQLite rowid): block list reads come
     // back in insertion order — sibling order in the board tree, deterministic
     // snapshots — matching the Cloudflare facade (which orders by `rowid`).

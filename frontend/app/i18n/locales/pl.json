@@ -109,7 +109,11 @@
       "unlinkFailed": "Nie udało się usunąć zależności",
       "recurringDeleteFailed": "Nie udało się usunąć cyklicznego pipeline'u",
       "deleted": "Usunięto \"{name}\"",
-      "moved": "Przeniesiono \"{name}\""
+      "moved": "Przeniesiono \"{name}\"",
+      "archived": "Zarchiwizowano „{name}”",
+      "restored": "Przywrócono „{name}”",
+      "archiveFailed": "Nie udało się zarchiwizować usługi",
+      "restoreFailed": "Nie udało się przywrócić usługi"
     },
     "repoTypes": {
       "service": "Usługa",
@@ -134,7 +138,8 @@
       "zoomOut": "Pomniejsz",
       "zoomIn": "Powiększ",
       "fitView": "Dopasuj do zawartości",
-      "resetZoom": "Zresetuj powiększenie do 100%"
+      "resetZoom": "Zresetuj powiększenie do 100%",
+      "archivedServices": "Zarchiwizowane usługi"
     },
     "canvas": {
       "emptyTitle": "Twoja tablica jest pusta",
@@ -1097,6 +1102,11 @@
           "body": "\"{name}\", jego harmonogram i historia uruchomień zostaną usunięte. Tej operacji nie można cofnąć."
         },
         "containerBodyWithCount": "\"{name}\" i {count} element w środku zostaną usunięte. Tej operacji nie można cofnąć. | \"{name}\" i {count} elementy w środku zostaną usunięte. Tej operacji nie można cofnąć. | \"{name}\" i {count} elementów w środku zostanie usuniętych. Tej operacji nie można cofnąć."
+      },
+      "archiveService": "Archiwizuj usługę",
+      "confirmArchive": {
+        "title": "Zarchiwizować tę usługę?",
+        "body": "„{name}” i jej zadania zostaną ukryte z tablicy. Możesz przywrócić usługę w dowolnej chwili."
       }
     }
   },

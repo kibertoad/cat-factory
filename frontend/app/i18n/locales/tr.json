@@ -109,7 +109,11 @@
       "unlinkFailed": "Bağımlılık kaldırılamadı",
       "recurringDeleteFailed": "Yinelenen pipeline silinemedi",
       "deleted": "\"{name}\" silindi",
-      "moved": "\"{name}\" taşındı"
+      "moved": "\"{name}\" taşındı",
+      "archived": "\"{name}\" arşivlendi",
+      "restored": "\"{name}\" geri yüklendi",
+      "archiveFailed": "Hizmet arşivlenemedi",
+      "restoreFailed": "Hizmet geri yüklenemedi"
     },
     "repoTypes": {
       "service": "Servis",
@@ -134,7 +138,8 @@
       "zoomOut": "Uzaklaştır",
       "zoomIn": "Yakınlaştır",
       "fitView": "İçeriğe sığdır",
-      "resetZoom": "Yakınlaştırmayı %100'e sıfırla"
+      "resetZoom": "Yakınlaştırmayı %100'e sıfırla",
+      "archivedServices": "Arşivlenen hizmetler"
     },
     "canvas": {
       "emptyTitle": "Panonuz boş",
@@ -1097,6 +1102,11 @@
           "body": "\"{name}\", zamanlaması ve çalıştırma geçmişi kaldırılacak. Bu işlem geri alınamaz."
         },
         "containerBodyWithCount": "\"{name}\" ve içindeki {count} öğe kaldırılacak. Bu işlem geri alınamaz. | \"{name}\" ve içindeki {count} öğe kaldırılacak. Bu işlem geri alınamaz."
+      },
+      "archiveService": "Hizmeti arşivle",
+      "confirmArchive": {
+        "title": "Bu hizmet arşivlensin mi?",
+        "body": "\"{name}\" ve görevleri panodan gizlenecek. İstediğin zaman geri yükleyebilirsin."
       }
     }
   },

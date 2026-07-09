@@ -34,6 +34,7 @@ import {
   serviceConnectionsError,
   serviceOf,
   tasksOf,
+  unfinishedTasksUnder,
   wouldCreateCycle,
 } from './board.logic.js'
 import { DEFAULT_DOCUMENT_STYLE_FRAGMENT_IDS } from '@cat-factory/prompt-fragments'
@@ -105,6 +106,8 @@ export type BoardChangeReason =
   | 'block-moved'
   | 'block-reparented'
   | 'block-removed'
+  | 'block-archived'
+  | 'block-restored'
   | 'epic-assigned'
   | 'dependency-toggled'
 
@@ -956,6 +959,20 @@ export class BoardService {
     const blocks = await this.blockRepository.listByWorkspace(homeWorkspaceId)
     const doomed = descendantIds(blocks, id)
 
+    // A service frame that still has unfinished work must NOT be deleted (that would discard
+    // in-flight tasks + their history) — it is archived instead (hidden, restorable with no
+    // expiry). Only guard a real, still-present top-level frame: a dangling/already-gone id
+    // (idempotent re-delete, a leaf task, a module) falls through to the normal cleanup below.
+    const target = blocks.find((b) => b.id === id)
+    if (target?.level === 'frame' && target.parentId === null) {
+      const unfinished = unfinishedTasksUnder(blocks, id)
+      if (unfinished.length > 0) {
+        throw new ValidationError(
+          `This service has ${unfinished.length} unfinished task(s); archive it instead of deleting.`,
+        )
+      }
+    }
+
     await this.executionRepository.deleteByBlock(homeWorkspaceId, id)
     // Drop the account-owned service (and every workspace's mount of it) for any doomed
     // service frame, so deleting a frame doesn't leave an orphaned service lingering in the
@@ -1013,6 +1030,34 @@ export class BoardService {
     for (const ws of fanoutTargets) {
       await this.emitBoardChanged(ws, 'block-removed', null)
     }
+  }
+
+  /**
+   * Archive a service frame: hide it (and its whole subtree) from the board projection while
+   * preserving every row, so it can be restored later with no expiry. This is the non-destructive
+   * alternative to {@link removeBlock} for a service that still has unfinished work. Only a
+   * top-level service frame can be archived (tasks/modules are hidden with their frame); a
+   * non-frame target is rejected. Fans out to every board mounting a shared service.
+   */
+  async archiveBlock(workspaceId: string, id: string): Promise<Block> {
+    return this.setArchived(workspaceId, id, true)
+  }
+
+  /** Restore an archived service frame back onto the board. The inverse of {@link archiveBlock}. */
+  async restoreBlock(workspaceId: string, id: string): Promise<Block> {
+    return this.setArchived(workspaceId, id, false)
+  }
+
+  private async setArchived(workspaceId: string, id: string, archived: boolean): Promise<Block> {
+    await this.requireWorkspace(workspaceId)
+    const { homeWorkspaceId, block } = await this.resolveBlock(workspaceId, id)
+    if (block.level !== 'frame' || block.parentId !== null) {
+      throw new ValidationError('Only a service can be archived')
+    }
+    await this.blockRepository.update(homeWorkspaceId, id, { archived })
+    // Origin = the block's HOME so archiving a shared service fans out to every board mounting it.
+    await this.emitBoardChanged(homeWorkspaceId, archived ? 'block-archived' : 'block-restored', id)
+    return assertFound(await this.blockRepository.get(homeWorkspaceId, id), 'Block', id)
   }
 
   /** Toggle a dependency edge: target dependsOn source. */

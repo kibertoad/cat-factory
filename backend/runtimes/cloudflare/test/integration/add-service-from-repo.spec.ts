@@ -112,6 +112,35 @@ describe('add service from existing repo', () => {
     expect(again.body.id).not.toBe(first.body.id)
   })
 
+  it("reclaims a board's services on workspace delete, so the repo re-adds on another board", async () => {
+    // Regression: deleting a whole board (workspace) used to leave its account-owned `services`
+    // rows behind. `services` is looked up by (installation_id, repo_github_id) with no workspace
+    // scope, so the dangling service kept the SAME repo from being re-added on any other board.
+    const installationId = uniqueInstallationId()
+    const app = makeApp(
+      new FakeAgentExecutor(),
+      githubDeps({ client: clientWithRepo(installationId) }),
+    )
+    const a = (await app.createWorkspace()).workspace.id
+    await app.call('POST', `/workspaces/${a}/github/connect`, { installationId })
+    const first = await app.call<Block>('POST', `/workspaces/${a}/blocks/from-repo`, {
+      repoGithubId: 101,
+    })
+    expect(first.status).toBe(201)
+
+    // Delete the entire board.
+    const del = await app.call('DELETE', `/workspaces/${a}`)
+    expect(del.status).toBe(204)
+
+    // A brand-new board can add the same repo again — no dangling service from the old board.
+    const b = (await app.createWorkspace()).workspace.id
+    await app.call('POST', `/workspaces/${b}/github/connect`, { installationId })
+    const again = await app.call<Block>('POST', `/workspaces/${b}/blocks/from-repo`, {
+      repoGithubId: 101,
+    })
+    expect(again.status).toBe(201)
+  })
+
   it('flags a linked repo as a monorepo via PATCH', async () => {
     const installationId = uniqueInstallationId()
     const app = makeApp(

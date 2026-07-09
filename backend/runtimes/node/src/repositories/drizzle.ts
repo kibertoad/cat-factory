@@ -184,6 +184,7 @@ import {
   agentSearchQueries,
   agentRuns,
   blocks,
+  environments,
   consensusSessions,
   incidentEnrichmentConnections,
   observabilityConnections,
@@ -300,6 +301,25 @@ class DrizzleWorkspaceRepository implements WorkspaceRepository {
 
   async delete(id: string): Promise<void> {
     await this.db.transaction(async (tx) => {
+      // Reclaim the account-owned services this workspace HOMES (+ every board's mount of them)
+      // BEFORE the blocks they reference are dropped. A deleted board that leaves its services
+      // behind is not a cosmetic leak: `services` is account-scoped and looked up by
+      // (installation_id, repo_github_id), so a dangling service (its frame block gone) keeps the
+      // SAME repo from being re-added on any other board in the account. Mirror any change in the
+      // Cloudflare facade's D1WorkspaceRepository.delete.
+      const homed = await tx
+        .select({ id: services.id })
+        .from(services)
+        .innerJoin(blocks, eq(services.frame_block_id, blocks.id))
+        .where(eq(blocks.workspace_id, id))
+      const serviceIds = homed.map((r) => r.id)
+      if (serviceIds.length) {
+        await tx.delete(workspaceServices).where(inArray(workspaceServices.service_id, serviceIds))
+        await tx.delete(services).where(inArray(services.id, serviceIds))
+      }
+      // This workspace's OWN mounts of services homed elsewhere (shared services it mounted).
+      await tx.delete(workspaceServices).where(eq(workspaceServices.workspace_id, id))
+      await tx.delete(environments).where(eq(environments.workspace_id, id))
       await tx.delete(agentRuns).where(eq(agentRuns.workspace_id, id))
       await tx.delete(blocks).where(eq(blocks.workspace_id, id))
       await tx.delete(pipelines).where(eq(pipelines.workspace_id, id))
