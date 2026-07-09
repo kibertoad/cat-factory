@@ -19,6 +19,13 @@ import type {
 // sent as the `X-Personal-Password` header — and the user is only re-prompted once it
 // expires (or is wrong).
 //
+// Every gated action (start / retry / confirm) re-validates the cache against an 8h EXPIRY
+// BUFFER: a key with less than that runway left is withheld (treated as absent) so the
+// server's 428 gate re-challenges EARLY and the modal refreshes the full window. This is
+// what keeps a key from lapsing MID-PIPELINE — the run breaks with a retry only if the key
+// was allowed to run down while the user wasn't looking, so we ask for re-entry while they
+// still are (at the start/confirm/retry they just triggered), not later.
+//
 // Caching here is a DELIBERATE convenience choice, not a security weakness. The password
 // layer exists to prevent ACCIDENTAL misuse (a credential can't be silently pooled); the
 // real at-rest protection is the server's system encryption, which the cache doesn't touch.
@@ -30,6 +37,12 @@ import type {
 
 /** How long a typed password stays cached before the user is re-prompted (40h). */
 const PASSWORD_TTL_MS = 40 * 60 * 60 * 1000
+/**
+ * Runway a cached password must still have for a gated action to ride it. Within this
+ * window of expiry the key is withheld so the action re-challenges and refreshes the cache
+ * EARLY — a buffer wide enough that a pipeline kicked off now won't outlive the key (8h).
+ */
+const PASSWORD_EXPIRY_BUFFER_MS = 8 * 60 * 60 * 1000
 const CACHE_KEY = 'cf.personal-pw'
 
 /** A credential prompt the UI must satisfy (set when the server replies 428). */
@@ -98,7 +111,13 @@ export const usePersonalSubscriptionsStore = defineStore('personalSubscriptions'
   const renewals = computed(() => subscriptions.value.filter((s) => s.renewSoon))
 
   // --- client-side password cache (single localStorage key + TTL) ------------
-  function getCachedPassword(): string | undefined {
+  /**
+   * The cached password, or `undefined` when there is none to ride. `bufferMs` withholds a
+   * still-valid key that is within that window of expiry (WITHOUT dropping it) so a gated
+   * action re-challenges early; a truly-expired key is always removed. Default `0` = the
+   * plain "is it still valid right now" read.
+   */
+  function getCachedPassword(bufferMs = 0): string | undefined {
     if (typeof localStorage === 'undefined') return undefined
     try {
       const raw = localStorage.getItem(CACHE_KEY)
@@ -108,6 +127,9 @@ export const usePersonalSubscriptionsStore = defineStore('personalSubscriptions'
         localStorage.removeItem(CACHE_KEY)
         return undefined
       }
+      // Within the buffer the key is still valid — keep it, but withhold it so the action
+      // re-challenges and refreshes the full window before it can lapse mid-pipeline.
+      if (Date.now() + bufferMs > expiresAt) return undefined
       return password
     } catch {
       return undefined
@@ -147,9 +169,11 @@ export const usePersonalSubscriptionsStore = defineStore('personalSubscriptions'
    */
   async function withCredential(action: (password?: string) => Promise<void>): Promise<boolean> {
     // First attempt may carry no password (non-individual runs) or the single cached one;
-    // the server only consults it when the block needs it.
+    // the server only consults it when the block needs it. A key within the expiry buffer
+    // is withheld so an individual-usage action 428s and re-prompts EARLY (refreshing the
+    // window) rather than riding a key that could lapse mid-pipeline.
     try {
-      await action(getCachedPassword())
+      await action(getCachedPassword(PASSWORD_EXPIRY_BUFFER_MS))
       return true
     } catch (error) {
       const credential = parseCredentialError(error)

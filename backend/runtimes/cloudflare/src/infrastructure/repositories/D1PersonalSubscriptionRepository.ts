@@ -216,21 +216,6 @@ export class D1SubscriptionActivationRepository implements SubscriptionActivatio
       .run()
   }
 
-  async refresh(
-    executionId: string,
-    userId: string,
-    vendor: SubscriptionVendor,
-    expiresAt: number,
-  ): Promise<void> {
-    await this.db
-      .prepare(
-        `UPDATE subscription_activations SET expires_at = ?
-          WHERE execution_id = ? AND user_id = ? AND vendor = ?`,
-      )
-      .bind(expiresAt, executionId, userId, vendor)
-      .run()
-  }
-
   async deleteByExecution(executionId: string): Promise<void> {
     await this.db
       .prepare('DELETE FROM subscription_activations WHERE execution_id = ?')

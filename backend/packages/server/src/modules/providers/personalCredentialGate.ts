@@ -36,43 +36,28 @@ async function resolvePersonalVendorPredicate(
 }
 
 /**
- * Best-effort, transparent re-mint of a run's individual-usage activation(s) when a user
- * interacts with it (resolve decision / approve / request changes). Runs BEFORE the engine
- * advances and dispatches the next step, so a freshly-minted activation is in place even if
- * the previous one lapsed under its short TTL — keeping an actively-tended run alive without
- * re-prompting. Driven off the cached password on the header; a wrong/absent one is ignored
- * (the next dispatch then 428s and the client re-prompts on retry). Never throws, and skips
- * entirely for non-individual runs (no password work on the common path).
+ * Re-mint a run's individual-usage activation(s) when a user interacts with it (resolve
+ * decision / approve / request changes / resolve-exceeded). Runs BEFORE the engine advances
+ * and dispatches the next step, so a fresh full-TTL activation is in place even if the prior
+ * one lapsed. Unlike a silent best-effort refresh, this HARD-GATES exactly like start/retry:
+ * a needed-but-absent/withheld password throws `428 credential_required` so the client
+ * re-prompts EARLY (while the user is present at this interaction) instead of letting the run
+ * break mid-pipeline on the next dispatch. No-op for a non-individual run (empty vendor set),
+ * so the common path never prompts. See `getCachedPassword`'s 8h expiry buffer on the client.
  */
-export async function remintActivations<E extends AppEnv>(
+export async function activateForInteraction<E extends AppEnv>(
   c: Context<E>,
   workspaceId: string,
   executionId: string,
 ): Promise<void> {
-  const container = c.get('container')
-  const personal = container.personalSubscriptions
-  const user = c.get('user')
-  if (!personal || !user) return
-  try {
-    const vendors = await container.executionService.individualVendorsForRun(
-      workspaceId,
-      executionId,
-      await resolvePersonalVendorPredicate(container, user),
-    )
-    if (vendors.length === 0) return
-    const password = readPersonalPassword(c)
-    if (password) {
-      // Re-mint from the password — robust even when the prior activation already expired.
-      for (const vendor of vendors) {
-        await personal.activateForRun(executionId, user.id, vendor, password)
-      }
-    } else {
-      // No password on hand — just extend any still-live activation (no-op if expired).
-      await personal.refreshActivations(executionId, user.id)
-    }
-  } catch {
-    // Best-effort: a lapsed run surfaces 428 at the next dispatch, which the client retries.
-  }
+  const { activate } = await personalGateForRun(
+    c.get('container'),
+    workspaceId,
+    executionId,
+    c.get('user'),
+    readPersonalPassword(c),
+  )
+  await activate?.(executionId)
 }
 
 // Shared gate for the individual-usage restricted mode (Claude / GLM / ChatGPT-Codex).

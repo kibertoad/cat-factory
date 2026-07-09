@@ -91,13 +91,6 @@ export interface SubscriptionActivationRepository {
   ): Promise<SubscriptionActivationRecord | null>
   /** Create or replace the activation for a run+user+vendor. */
   upsert(record: SubscriptionActivationRecord): Promise<void>
-  /** Extend an existing activation's TTL (refresh on interaction). No-op if absent. */
-  refresh(
-    executionId: string,
-    userId: string,
-    vendor: SubscriptionVendor,
-    expiresAt: number,
-  ): Promise<void>
   /** Delete every activation for a finished run. */
   deleteByExecution(executionId: string): Promise<void>
   /** Delete activations whose TTL has passed (the expiry sweep). Returns the count. */

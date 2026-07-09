@@ -219,35 +219,29 @@ export const useExecutionStore = defineStore('execution', () => {
     }
   }
 
-  // Interacting with a running individual-usage run (resolve/approve/request-changes) rides
-  // the CACHED personal password along transparently so the server can re-mint the run's
-  // short-TTL activation before advancing — no prompt here (the user is only re-prompted on
-  // start/retry, once the cache lapses). For a non-individual run the server ignores it.
+  // Interacting with a running individual-usage run (resolve/approve/request-changes) advances
+  // + re-dispatches the run, so the server re-mints its short-TTL activation from the personal
+  // password first. It rides the cached password transparently, and — like start/retry — is
+  // gated through `withCredential`: a within-buffer/lapsed cache re-prompts EARLY here (while
+  // the user is present) rather than letting the run break mid-pipeline. For a non-individual
+  // run the server ignores it and nothing prompts.
   async function resolveDecision(instanceId: string, decisionId: string, choice: string) {
     const ws = useWorkspaceStore()
     const personal = usePersonalSubscriptionsStore()
-    await api.resolveDecision(
-      ws.requireId(),
-      instanceId,
-      decisionId,
-      { choice },
-      personal.getCachedPassword(),
-    )
-    await ws.refresh()
+    return await personal.withCredential(async (password) => {
+      await api.resolveDecision(ws.requireId(), instanceId, decisionId, { choice }, password)
+      await ws.refresh()
+    })
   }
 
   /** Approve a step's gated proposal (optionally edited); the run advances. */
   async function approveStep(instanceId: string, approvalId: string, proposal?: string) {
     const ws = useWorkspaceStore()
     const personal = usePersonalSubscriptionsStore()
-    await api.approveStep(
-      ws.requireId(),
-      instanceId,
-      approvalId,
-      { proposal },
-      personal.getCachedPassword(),
-    )
-    await ws.refresh()
+    return await personal.withCredential(async (password) => {
+      await api.approveStep(ws.requireId(), instanceId, approvalId, { proposal }, password)
+      await ws.refresh()
+    })
   }
 
   /** Request changes on a gated proposal; the step re-runs with the review. */
@@ -258,14 +252,10 @@ export const useExecutionStore = defineStore('execution', () => {
   ) {
     const ws = useWorkspaceStore()
     const personal = usePersonalSubscriptionsStore()
-    await api.requestStepChanges(
-      ws.requireId(),
-      instanceId,
-      approvalId,
-      review,
-      personal.getCachedPassword(),
-    )
-    await ws.refresh()
+    return await personal.withCredential(async (password) => {
+      await api.requestStepChanges(ws.requireId(), instanceId, approvalId, review, password)
+      await ws.refresh()
+    })
   }
 
   /** Reject a gated proposal; the run stops entirely (a retryable failure). */
@@ -278,8 +268,9 @@ export const useExecutionStore = defineStore('execution', () => {
   /**
    * Resolve a companion step parked at its rework cap: extra-round (one more pass) /
    * proceed (advance with the current output) / stop-reset (cancel + reset the task).
-   * Rides the cached personal password so the server can re-mint the run's activation
-   * before re-dispatching on extra-round/proceed.
+   * Rides the cached personal password (gated through `withCredential`, so a within-buffer
+   * cache re-prompts early) for the server to re-mint the run's activation before
+   * re-dispatching on extra-round/proceed.
    */
   async function resolveCompanionExceeded(
     instanceId: string,
@@ -288,14 +279,16 @@ export const useExecutionStore = defineStore('execution', () => {
   ) {
     const ws = useWorkspaceStore()
     const personal = usePersonalSubscriptionsStore()
-    await api.resolveCompanionExceeded(
-      ws.requireId(),
-      instanceId,
-      approvalId,
-      { choice },
-      personal.getCachedPassword(),
-    )
-    await ws.refresh()
+    return await personal.withCredential(async (password) => {
+      await api.resolveCompanionExceeded(
+        ws.requireId(),
+        instanceId,
+        approvalId,
+        { choice },
+        password,
+      )
+      await ws.refresh()
+    })
   }
 
   /** How many approval gates anywhere are awaiting a human. */
