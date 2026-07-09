@@ -288,6 +288,28 @@ export const MODEL_CATALOG: SelectableModel[] = [
   // Subscription-only models: run in the Claude Code / Codex harness with a pooled
   // subscription token (Claude Pro/Max, ChatGPT Plus/Pro), direct to the vendor.
   {
+    id: 'claude-fable',
+    family: 'claude',
+    label: 'Claude Fable 5',
+    description:
+      "Anthropic's most capable model — run via Claude Code on your Claude subscription, " +
+      'or pay-as-you-go through OpenRouter (billed at Anthropic rates).',
+    openrouter: {
+      ref: { provider: 'openrouter', model: 'anthropic/claude-fable-5', contextTokens: 1_000_000 },
+      keyEnv: 'OPENROUTER_API_KEY',
+      providerLabel: 'OpenRouter',
+    },
+    subscription: {
+      ref: {
+        provider: 'anthropic',
+        model: 'claude-fable-5',
+        harness: 'claude-code',
+        contextTokens: 1_000_000,
+      },
+      vendor: 'claude',
+    },
+  },
+  {
     id: 'claude-opus',
     family: 'claude',
     label: 'Claude Opus 4.8',
