@@ -128,10 +128,10 @@ export function buildNodePublicApiKeyService(
 }
 
 /**
- * Build the per-USER individual-usage subscription service (Claude) for the Node/local
- * facade (Postgres-backed), or undefined when the shared ENCRYPTION_KEY is absent.
- * Double-encrypts the credential (password layer inside the system layer). Mirrors the
- * Worker's buildPersonalSubscriptionService.
+ * The per-USER locally-run model endpoints store (Ollama / LM Studio / …) for the
+ * Node/local facade (Postgres-backed), or undefined when the shared ENCRYPTION_KEY is
+ * absent (the optional bearer key is sealed with the single system cipher). Mirror of
+ * the Worker's `buildLocalModelEndpointService`.
  */
 export function buildNodeLocalModelEndpointService(
   env: NodeJS.ProcessEnv,
