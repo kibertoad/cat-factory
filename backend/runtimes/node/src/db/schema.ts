@@ -1646,6 +1646,37 @@ export const providerSubscriptionTokens = pgTable(
   (t) => [index('idx_provider_subs_pool').on(t.workspace_id, t.vendor, t.deleted_at)],
 )
 
+// Subscription quota-cycle counters (mirror of D1 migration 0047): the MODELED
+// rolling-window usage behind "how much of a subscription's quota cycle is left"
+// (usage-and-quota-tracking, Part B). One row per (scope, scope_id, vendor, window_kind):
+// scope 'pooled' → a provider_subscription_tokens id; scope 'user' → a user id. Each
+// window accumulates the same tokens but resets on its own cadence (window_started_at is
+// the first-use anchor, re-stamped when the window ages out). Never billed.
+export const subscriptionQuotaCycles = pgTable(
+  'subscription_quota_cycles',
+  {
+    id: text('id').primaryKey(),
+    scope: text('scope').notNull(),
+    scope_id: text('scope_id').notNull(),
+    vendor: text('vendor').notNull(),
+    window_kind: text('window_kind').notNull(),
+    window_started_at: bigint('window_started_at', { mode: 'number' }).notNull(),
+    input_tokens: bigint('input_tokens', { mode: 'number' }).notNull().default(0),
+    output_tokens: bigint('output_tokens', { mode: 'number' }).notNull().default(0),
+    request_count: integer('request_count').notNull().default(0),
+    updated_at: bigint('updated_at', { mode: 'number' }).notNull(),
+  },
+  (t) => [
+    uniqueIndex('idx_subscription_quota_cycles_key').on(
+      t.scope,
+      t.scope_id,
+      t.vendor,
+      t.window_kind,
+    ),
+    index('idx_subscription_quota_cycles_window').on(t.window_started_at),
+  ],
+)
+
 // Direct-provider API-key pool: UI-onboarded vendor API keys scoped to an
 // account, workspace, or user (mirror of D1 migration 0042). The key is stored as
 // an opaque SecretCipher envelope — never plaintext.
