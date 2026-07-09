@@ -140,7 +140,15 @@ registers:
 - **`security-auditor`** — a `container-explore` structured auditor whose `postOp` renders
   `compliance/REPORT.md` from the agent's JSON and commits it via `RepoFiles`, presenting
   through `generic-structured`.
-- the **`pl_org_audit`** pipeline chaining them.
+- **`org-researcher`** — a `container-coding` structured researcher (the producing kind of the
+  `preset_org_research` initiative preset) that returns a `GO`/`GO_WITH_CAVEATS`/`NO_GO` verdict
+  and whose `postOp` renders the canonical feasibility report onto the PR branch it opened. It is
+  `container-coding` (not `container-explore`) so it opens a real, mergeable PR — the only way a
+  post-op-rendered artifact reaches a later initiative phase's clone (see
+  [`initiative-presets.md`](./initiative-presets.md) → "Cross-phase artifacts").
+- the **`pl_org_audit`**, **`pl_org_research`** and **`pl_org_apply`** pipelines chaining them, plus
+  the **`preset_org_audit`** and **`preset_org_research`** initiative presets (see
+  [`initiative-presets.md`](./initiative-presets.md)).
 
 A deployment opts in by importing it once for its side effect (e.g. from `deploy/local`):
 
