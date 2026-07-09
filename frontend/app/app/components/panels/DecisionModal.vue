@@ -17,17 +17,19 @@ const decision = computed(() => step.value?.decision ?? null)
 const block = computed(() => (instance.value ? board.getBlock(instance.value.blockId) : undefined))
 const agent = computed(() => (step.value ? agentKindMeta(step.value.agentKind) : null))
 
-const open = computed({
-  get: () => !!ctx.value && !!decision.value,
-  set: (v: boolean) => {
-    if (!v) ui.closeDecision()
-  },
-})
-
 // UX-25: which option is being resolved (null = idle). Guards against a fire-and-forget
 // double-submit — the resolve is awaited, all options disable while it runs, and a failed
 // resolve keeps the modal open with an error toast instead of closing silently.
 const resolvingOption = ref<string | null>(null)
+
+const open = computed({
+  get: () => !!ctx.value && !!decision.value,
+  set: (v: boolean) => {
+    // While a resolve is in flight the options are disabled, so the dismiss affordances
+    // (Escape / backdrop) are locked too — the awaited resolve settles the modal itself.
+    if (!v && !resolvingOption.value) ui.closeDecision()
+  },
+})
 
 async function choose(option: string) {
   if (!ctx.value || resolvingOption.value) return

@@ -226,6 +226,8 @@ per-file patches:
   while one is in flight, disables every option (spinner on the chosen one) until it settles,
   and on failure keeps the modal open with a `panels.decision.resolveFailed` error toast
   instead of closing silently. A fast double-click can no longer dispatch two resolutions.
+  The modal's own dismiss affordances (Escape / backdrop) are locked while a resolve is in
+  flight too, so the "in-flight" story is complete rather than only covering the buttons.
   (Independently flagged by two audit passes.)
 - **UX-26 — Missing autofocus.** `LoginScreen.vue:314`, `ResetPasswordScreen.vue:79`,
   `DocumentSourceConnectModal`, `DocumentImportModal`, `BootstrapModal` first
