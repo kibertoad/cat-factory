@@ -396,6 +396,124 @@ export function defineCoreConformance(harness: ConformanceHarness): void {
         expect(afterForce?.rev).toBe(2)
       })
 
+      // Race-audit 2.3: `cancel()` deletes the run row, and a stale in-flight driver write must
+      // NOT bring it back. `compareAndSwap` only ever UPDATEs an existing row (never inserts), so
+      // a driver holding a pre-cancel snapshot can't resurrect the deleted run as a zombie —
+      // proven identically on D1 and Postgres. (A blind `upsert` WOULD re-insert it, which is why
+      // the durable driver's writes moved to `compareAndSwap`.)
+      it('compareAndSwap never resurrects a deleted run (no zombie)', async () => {
+        const app = harness.makeApp()
+        const repo = app.executionRepository()
+        const { workspace } = await app.createWorkspace()
+
+        const base: ExecutionInstance = {
+          id: 'exec_zombie',
+          blockId: 'blk_zombie',
+          pipelineId: 'pl',
+          pipelineName: 'Pipeline',
+          steps: [],
+          currentStep: 0,
+          status: 'running',
+          initiatedBy: null,
+        }
+        await repo.upsert(workspace.id, base)
+        // The durable driver loaded this snapshot (rev 0)…
+        const driverSnapshot = await repo.get(workspace.id, 'exec_zombie')
+        expect(driverSnapshot?.rev).toBe(0)
+
+        // …then a human cancelled the run mid-poll (the row is deleted).
+        await repo.deleteByBlock(workspace.id, 'blk_zombie')
+        expect(await repo.get(workspace.id, 'exec_zombie')).toBeNull()
+
+        // The driver's post-poll write lands on the now-absent row: refused, NO insert.
+        driverSnapshot!.status = 'blocked'
+        expect(await repo.compareAndSwap(workspace.id, driverSnapshot!)).toBe(false)
+        // The run stays gone — not resurrected as a zombie `running` (or `blocked`) row.
+        expect(await repo.get(workspace.id, 'exec_zombie')).toBeNull()
+        expect(await repo.getByBlock(workspace.id, 'blk_zombie')).toBeNull()
+      })
+
+      // Race-audit 2.3: `markFailed` must not clobber a run that already reached a TERMINAL state.
+      // A `stopRun` racing a run that just merged (`done`) reads a stale snapshot, so the SQL write
+      // is the authoritative guard — `done`/`failed` rows are left untouched, so a merged task is
+      // never re-marked `failed`. Proven identically on D1 and Postgres.
+      it('markFailed refuses to re-fail a terminal (done) run', async () => {
+        const app = harness.makeApp()
+        const repo = app.executionRepository()
+        const { workspace } = await app.createWorkspace()
+
+        const merged: ExecutionInstance = {
+          id: 'exec_done',
+          blockId: 'blk_done',
+          pipelineId: 'pl',
+          pipelineName: 'Pipeline',
+          steps: [],
+          currentStep: 0,
+          status: 'done',
+          initiatedBy: null,
+        }
+        await repo.upsert(workspace.id, merged)
+
+        await repo.markFailed(workspace.id, 'exec_done', {
+          kind: 'cancelled',
+          message: 'Stopped by the user.',
+          detail: null,
+          hint: null,
+          occurredAt: 1,
+          lastSubtasks: null,
+        })
+        // The done run is untouched — a just-merged task is not re-marked failed.
+        expect((await repo.get(workspace.id, 'exec_done'))?.status).toBe('done')
+      })
+
+      // Race-audit 2.3 (the DRIVER-clobbers-terminal direction, dual of the guard above):
+      // `markFailed` BUMPS `rev`, so an in-flight driver `casPersist` that loaded the run
+      // BEFORE a `stopRun`/`failRun` can no longer resurrect it. Without the bump the terminal
+      // write left `rev` untouched, so a stale `casPersist` writing a NON-terminal status
+      // (a `pollGate` pending write, a dispatch write, …) would still MATCH the unchanged `rev`
+      // and flip the stopped run back to `running`. Proven identically on D1 and Postgres.
+      it('markFailed bumps rev so a stale driver write cannot resurrect a stopped run', async () => {
+        const app = harness.makeApp()
+        const repo = app.executionRepository()
+        const { workspace } = await app.createWorkspace()
+
+        const base: ExecutionInstance = {
+          id: 'exec_stopped',
+          blockId: 'blk_stopped',
+          pipelineId: 'pl',
+          pipelineName: 'Pipeline',
+          steps: [],
+          currentStep: 0,
+          status: 'running',
+          initiatedBy: null,
+        }
+        await repo.upsert(workspace.id, base)
+        // The durable driver loaded this snapshot (rev 0) and is mid-probe…
+        const driverSnapshot = await repo.get(workspace.id, 'exec_stopped')
+        expect(driverSnapshot?.rev).toBe(0)
+
+        // …then the human hit Stop: `failRun` → `markFailed` records the terminal failure.
+        await repo.markFailed(workspace.id, 'exec_stopped', {
+          kind: 'cancelled',
+          message: 'Stopped by the user.',
+          detail: null,
+          hint: null,
+          occurredAt: 1,
+          lastSubtasks: null,
+        })
+        const stopped = await repo.get(workspace.id, 'exec_stopped')
+        expect(stopped?.status).toBe('failed')
+        // The terminal write bumped `rev`, so the driver's snapshot is now stale.
+        expect(stopped?.rev).toBe(1)
+
+        // The driver's post-probe write (a non-terminal `running`, from its pre-stop snapshot)
+        // is refused — it holds the pre-fail rev, so the CAS misses.
+        driverSnapshot!.status = 'running'
+        expect(await repo.compareAndSwap(workspace.id, driverSnapshot!)).toBe(false)
+        // The run stays failed — NOT resurrected as a zombie `running` row.
+        expect((await repo.get(workspace.id, 'exec_stopped'))?.status).toBe('failed')
+      })
+
       // Run diagnostics (dispatch context — backend/model/repo — for after-the-fact
       // investigation) ride in the `detail` JSON, so a repo that serialized `detail`
       // differently would drop them. Asserted at the repository layer so D1 and Postgres
@@ -2307,6 +2425,62 @@ export function defineAgentConformance(harness: ConformanceHarness): void {
         expect(step.state).toBe('done')
         expect(step.gate?.attempts ?? 0).toBe(0)
         expect(step.output).toContain('CI gate passed')
+      })
+
+      // Race-audit 2.2 driver-half / 2.3 END-TO-END: a human cancels the run WHILE the gate is
+      // mid-probe (the driver's load→CAS window). The gate's post-probe write then lands on the
+      // row `cancel()` deleted. A blind `upsert` would RE-INSERT a zombie `running` run; the
+      // CAS-guarded driver write is refused, thrown as `RunContendedError`, caught at the poll
+      // entry point, and re-driven — which no-ops on the now-gone run. Proven on every runtime.
+      it('a cancel during a gate poll cannot resurrect the run (driver writes are CAS-guarded)', async () => {
+        // Fires exactly once, on the first probe, via the real HTTP cancel surface — reproducing
+        // a human cancel landing inside the gate's probe→persist window.
+        let cancel: (() => Promise<void>) | null = null
+        const provider: CiStatusProvider = {
+          getStatus: async () => {
+            if (cancel) {
+              const fire = cancel
+              cancel = null
+              await fire()
+            }
+            // CI still in-flight → the gate takes its `pending` branch, whose persist is the
+            // write that now hits the deleted row.
+            return {
+              repos: [
+                {
+                  repo: 'o/r',
+                  headSha: 'sha',
+                  checks: [{ name: 'build', status: 'in_progress', conclusion: null, url: null }],
+                },
+              ],
+            }
+          },
+        }
+        const app = harness.makeApp(
+          { asyncKinds: ['coder'] },
+          { gateProviders: { ciStatus: provider } },
+        )
+        const { workspace } = await app.createWorkspace()
+        const wsId = workspace.id
+        cancel = async () => {
+          await app.call('DELETE', `/workspaces/${wsId}/blocks/task_login/executions`)
+        }
+
+        const pipeline = await app.call<Pipeline>('POST', `/workspaces/${wsId}/pipelines`, {
+          name: 'Build + CI',
+          agentKinds: ['coder', 'ci'],
+        })
+        const start = await app.call('POST', `/workspaces/${wsId}/blocks/task_login/executions`, {
+          pipelineId: pipeline.body.id,
+        })
+        expect(start.status).toBe(201)
+
+        // Drives coder → done → ci gate → probe (cancels) → pending-write refused → re-drive → stop.
+        await app.drive(wsId)
+
+        // The run stays cancelled (no zombie re-insert) and the block is back to `planned`.
+        expect(await app.executionRepository().getByBlock(wsId, 'task_login')).toBeNull()
+        expect((await app.blockRepository().get(wsId, 'task_login'))?.status).toBe('planned')
       })
 
       it('escalates to ci-fixer on red CI, then advances when it re-probes green', async () => {

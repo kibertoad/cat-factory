@@ -93,6 +93,24 @@ export class CredentialRequiredError extends DomainError {
   }
 }
 
+/**
+ * INTERNAL control-flow signal (NOT a wire/HTTP error): a durable-driver write lost an
+ * optimistic-concurrency race — the run row was advanced by a concurrent writer (a human
+ * action) or removed/terminated (a `cancel`/`stopRun`) since the driver loaded it, so its
+ * `compareAndSwap` refused to land. The driver's entry points ({@link ExecutionService}
+ * `advanceInstance` / `RunDispatcher` `pollAgentJob` / `pollGate` / `resolveGatePollExhaustion`)
+ * catch this and re-drive on FRESH state (returning `{ kind: 'continue' }`) instead of
+ * clobbering the winner with the stale snapshot. Deliberately a plain `Error` (not a
+ * {@link DomainError}): it must never reach the HTTP boundary — a leak should fail loudly in
+ * tests, not be mapped to a status code.
+ */
+export class RunContendedError extends Error {
+  constructor(executionId: string) {
+    super(`Execution '${executionId}' was modified concurrently; re-drive on fresh state`)
+    this.name = new.target.name
+  }
+}
+
 /** Resolve a maybe-null lookup or throw a {@link NotFoundError}. */
 export function assertFound<T>(value: T | null | undefined, entity: string, id: string): T {
   if (value === null || value === undefined) throw new NotFoundError(entity, id)

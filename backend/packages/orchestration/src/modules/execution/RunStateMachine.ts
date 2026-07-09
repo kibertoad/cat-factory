@@ -18,6 +18,7 @@ import {
   ConflictError,
   isAsyncAgentExecutor,
   isInitiativeAgentKind,
+  RunContendedError,
 } from '@cat-factory/kernel'
 import { MERGER_AGENT_KIND } from './ci.logic.js'
 import { type InitiativeRunHarvest, extractRunHarvest } from '../initiative/initiative.logic.js'
@@ -148,6 +149,32 @@ export class RunStateMachine {
   /** Persist the instance (the single write seam shared by the engine + controllers). */
   persistInstance(workspaceId: string, instance: ExecutionInstance): Promise<void> {
     return this.executionRepository.upsert(workspaceId, instance)
+  }
+
+  /**
+   * Persist a DURABLE-DRIVER instance mutation under OPTIMISTIC CONCURRENCY instead of a blind
+   * force-write. The driver loads a run, makes a LONG outbound call (a container poll up to
+   * 30 s / a GitHub gate probe / a deploy provision), mutates the instance in memory, then
+   * writes it back — a window in which a concurrent human action (a CAS'd
+   * `requestHumanReviewFix` / `approveStep` / `resolveDecision`) or a `cancel` / `stopRun` can
+   * move or delete the row. A blind `upsert` (see {@link persistInstance}) would silently
+   * clobber that write, or RE-INSERT a row `cancel` deleted as a zombie run.
+   * `compareAndSwap` instead writes ONLY when the stored `rev` still matches the one loaded
+   * onto this instance, and NEVER inserts — so on a lost race it returns `false` and this
+   * throws {@link RunContendedError}. The driver's entry points ({@link RunDispatcher}
+   * `pollAgentJob` / `pollGate` / `resolveGatePollExhaustion` and `ExecutionService`
+   * `advanceInstance`) catch it and re-drive on FRESH state (returning `{ kind: 'continue' }`)
+   * — behaviourally "re-apply the mechanical mutation on the winning snapshot" without an
+   * inline retry loop, since the driver reloads on every entry and the engine is replay-safe
+   * (race-audit 2.2 driver-half / 2.3). The one site that must NOT lose its in-memory delta on
+   * a re-drive — the running-poll fold, whose streamed follow-ups are drain-on-read — uses
+   * {@link mutateInstance} instead, which reload-and-re-applies in place. Human-action
+   * handlers likewise use {@link mutateInstance} (they must retry, not abort).
+   */
+  async casPersist(workspaceId: string, instance: ExecutionInstance): Promise<void> {
+    if (!(await this.executionRepository.compareAndSwap(workspaceId, instance))) {
+      throw new RunContendedError(instance.id)
+    }
   }
 
   /**
@@ -507,7 +534,12 @@ export class RunStateMachine {
     // so there should only ever be one write — but this guards against a future path that
     // both records a failure and returns `job_failed`, which would otherwise clobber the
     // good record with a generic one (the companion-rejected regression).
-    if (instance.status === 'failed') return
+    // `done` is terminal too: a `stopRun` racing a run that just COMPLETED (the merger merged
+    // the PR, block `done`) must NOT re-mark it `failed`/`blocked` — the PR merged. This read
+    // is best-effort (a status can advance to `done` between here and the `markFailed` write),
+    // so `markFailed` itself is SQL-guarded against `done`/`failed` as the authoritative check
+    // (race-audit 2.3).
+    if (instance.status === 'failed' || instance.status === 'done') return
     const failure: AgentFailure = {
       kind,
       message,

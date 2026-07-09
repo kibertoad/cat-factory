@@ -8,6 +8,7 @@ export {
   ValidationError,
   ConflictError,
   CredentialRequiredError,
+  RunContendedError,
   assertFound,
   getErrorMessage,
   getErrorReason,

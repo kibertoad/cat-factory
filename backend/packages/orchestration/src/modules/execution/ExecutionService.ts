@@ -54,6 +54,7 @@ import {
   NotFoundError,
   type ProviderCapabilities,
   resolveModelRef,
+  RunContendedError,
   subscriptionOptionFor,
   ValidationError,
   type SubscriptionVendor,
@@ -1922,25 +1923,36 @@ export class ExecutionService {
     executionId: string,
     options: AdvanceOptions = {},
   ): Promise<AdvanceResult> {
-    const instance = await this.executionRepository.get(workspaceId, executionId)
-    // A paused run is still drivable: the spend gate in stepInstance resumes it
-    // once the budget frees up (or re-pauses it otherwise).
-    if (!instance || (instance.status !== 'running' && instance.status !== 'paused')) {
-      return { kind: 'noop' }
+    try {
+      const instance = await this.executionRepository.get(workspaceId, executionId)
+      // A paused run is still drivable: the spend gate in stepInstance resumes it
+      // once the budget frees up (or re-pauses it otherwise).
+      if (!instance || (instance.status !== 'running' && instance.status !== 'paused')) {
+        return { kind: 'noop' }
+      }
+      const result = await this.stepInstance(workspaceId, instance, options)
+      // Whenever a run parks waiting for a human, make sure there is an open notification
+      // for it — runs no longer time out, so the (escalating) notification is the only
+      // signal a human is needed. Best-effort and non-clobbering (see the helper).
+      // Conversely, once the run advances past the decision (the human responded, or it
+      // auto-passed, or the run reached a terminal state) clear that waiting card so the
+      // escalation sweep can't later flip a settled decision red ("Overdue").
+      if (result.kind === 'awaiting_decision') {
+        await this.runStateMachine.ensureWaitingNotification(workspaceId, instance)
+      } else {
+        await this.runStateMachine.clearWaitingNotification(workspaceId, instance)
+      }
+      return result
+    } catch (error) {
+      // A driver-owned write lost an optimistic-concurrency race (a concurrent human action
+      // moved the row, or a cancel/stop removed/terminated it). RE-DRIVE on fresh state rather
+      // than clobbering the winner: `continue` re-enters advanceInstance, which reloads and
+      // either re-applies the mechanical step on the winning snapshot or no-ops on a
+      // gone/terminal run (race-audit 2.2 driver-half / 2.3). Every other error still funnels
+      // to the driver's failRun path.
+      if (error instanceof RunContendedError) return { kind: 'continue' }
+      throw error
     }
-    const result = await this.stepInstance(workspaceId, instance, options)
-    // Whenever a run parks waiting for a human, make sure there is an open notification
-    // for it — runs no longer time out, so the (escalating) notification is the only
-    // signal a human is needed. Best-effort and non-clobbering (see the helper).
-    // Conversely, once the run advances past the decision (the human responded, or it
-    // auto-passed, or the run reached a terminal state) clear that waiting card so the
-    // escalation sweep can't later flip a settled decision red ("Overdue").
-    if (result.kind === 'awaiting_decision') {
-      await this.runStateMachine.ensureWaitingNotification(workspaceId, instance)
-    } else {
-      await this.runStateMachine.clearWaitingNotification(workspaceId, instance)
-    }
-    return result
   }
 
   /** Advance a single running instance by one step, persisting the result. */
@@ -1970,7 +1982,7 @@ export class ExecutionService {
       if (!(await this.runDispatcher.currentStepIsNonMetered(workspaceId, instance, step))) {
         if (instance.status !== 'paused') {
           instance.status = 'paused'
-          await this.executionRepository.upsert(workspaceId, instance)
+          await this.runStateMachine.casPersist(workspaceId, instance)
           await this.runStateMachine.emitInstance(workspaceId, instance)
         }
         return { kind: 'paused' }
@@ -2021,7 +2033,7 @@ export class ExecutionService {
         const pendingId = step.decision?.id ?? step.approval?.id
         if (pendingId) {
           instance.status = 'blocked'
-          await this.executionRepository.upsert(workspaceId, instance)
+          await this.runStateMachine.casPersist(workspaceId, instance)
           await this.runStateMachine.emitInstance(workspaceId, instance)
           return { kind: 'awaiting_decision', decisionId: pendingId }
         }
