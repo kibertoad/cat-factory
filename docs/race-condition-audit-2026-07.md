@@ -187,6 +187,13 @@ patches are the in-repo model).
 > `failed` run — it can no longer resurrect a stopped run as a zombie `running` row. Cross-runtime
 > conformance asserts CAS-never-resurrects, the markFailed done-guard, AND the rev-bump-vs-stale-
 > driver-write.
+>
+> **Follow-up (block projection):** the run ROW was guarded above, but `failRun` still projected the
+> failure onto the BLOCK unconditionally, so a stop landing right as the merger flipped the run `done`
+> left `markFailed` correctly no-op'ing while the block was forced to `blocked` — the same clobber one
+> layer out. `failRun` now re-reads the authoritative post-`markFailed` run status and only drops the
+> block to `blocked` when the run actually became `failed` (pinned by a `RunStateMachine.failRun` unit
+> test).
 
 ### 2.3 `cancel()`/`stopRun()` vs an in-flight driver iteration: run resurrection and terminal-state clobber — CONFIRMED mechanism (Node; narrower on Cloudflare)
 

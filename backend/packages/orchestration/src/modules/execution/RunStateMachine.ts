@@ -528,14 +528,24 @@ export class RunStateMachine {
       stepIndex: instance.currentStep,
     }
     await this.executionRepository.markFailed(workspaceId, executionId, failure)
-    // Progress reflects how far the pipeline got before failing.
-    const done = instance.steps.filter((s) => s.state === 'done').length
-    const progress = instance.steps.length > 0 ? done / instance.steps.length : 0
-    await this.blockRepository.update(workspaceId, instance.blockId, {
-      status: 'blocked',
-      progress,
-    })
+    // Re-read the AUTHORITATIVE post-write run: `markFailed` is SQL-guarded against a
+    // `done`/`failed` row, so a `stopRun` racing a run that just merged (the merger flipped
+    // the run `done` in the load→write window above) leaves the row `done` — the terminal
+    // guard on line 517 read a stale snapshot and can't catch that. Project the failure onto
+    // the BLOCK only when the run actually transitioned to `failed`; otherwise flipping the
+    // block to `blocked` here would clobber the `done` a merged task's block already carries,
+    // resurfacing the exact "looks failed but the PR merged" inconsistency this audit closes
+    // for the run row — the block projection is the same clobber one layer out (race-audit 2.3).
     const failed = await this.executionRepository.get(workspaceId, executionId)
+    if (failed?.status === 'failed') {
+      // Progress reflects how far the pipeline got before failing.
+      const done = failed.steps.filter((s) => s.state === 'done').length
+      const progress = failed.steps.length > 0 ? done / failed.steps.length : 0
+      await this.blockRepository.update(workspaceId, failed.blockId, {
+        status: 'blocked',
+        progress,
+      })
+    }
     if (failed) await this.emitInstance(workspaceId, failed)
   }
 
