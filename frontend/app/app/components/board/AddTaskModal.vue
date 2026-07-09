@@ -40,7 +40,7 @@ const { linkPending } = useContextLinking()
 const open = computed({
   get: () => ui.addTaskContainerId !== null,
   set: (v: boolean) => {
-    if (!v) ui.closeAddTask()
+    if (!v) void requestClose()
   },
 })
 
@@ -403,6 +403,34 @@ watch(open, (isOpen) => {
   tasks.loadTasks().catch(() => {})
   // Fetch any staged search-hit issue's body so its description shows read-only below.
   resolvePendingIssueBodies().catch(() => {})
+})
+
+// UX-18: prompt before discarding typed input on Escape / backdrop / Cancel. Registered
+// after the reset watcher so the baseline is the seeded form (a prefill is the clean
+// starting point, not a spurious edit). The snapshot covers the user-owned fields — the
+// cheap task-type / technical toggles are excluded, and only the *stable* context keys are
+// compared so the async issue-body resolution never reads as a change.
+const { requestClose } = useUnsavedGuard({
+  open,
+  close: () => ui.closeAddTask(),
+  saving: () => saving.value,
+  snapshot: () => ({
+    title: title.value.trim(),
+    description: description.value.trim(),
+    severity: severity.value,
+    stepsToReproduce: stepsToReproduce.value.trim(),
+    timeboxHours: timeboxHours.value ?? null,
+    docKind: docKind.value,
+    docAudience: docAudience.value.trim(),
+    docTargetPath: docTargetPath.value.trim(),
+    docOutlineHints: docOutlineHints.value.trim(),
+    docKindFieldValues: { ...docKindFieldValues },
+    riskPolicyId: riskPolicyId.value,
+    modelPresetId: modelPresetId.value,
+    pipelineId: pipelineId.value,
+    agentConfig: { ...agentConfigValues.value },
+    context: pendingContext.value.map(contextKey),
+  }),
 })
 
 // A recurring task only needs a target frame (its details are filled in the schedule
@@ -921,7 +949,7 @@ async function add() {
 
     <template #footer>
       <div class="flex w-full justify-end gap-2">
-        <UButton color="neutral" variant="ghost" @click="ui.closeAddTask()">{{
+        <UButton color="neutral" variant="ghost" @click="requestClose()">{{
           t('common.cancel')
         }}</UButton>
         <UButton

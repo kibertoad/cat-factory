@@ -65,7 +65,13 @@
     "undo": "Cofnij",
     "back": "Wstecz",
     "next": "Dalej",
-    "done": "Gotowe"
+    "done": "Gotowe",
+    "discard": {
+      "title": "Odrzucić zmiany?",
+      "body": "Masz niezapisane zmiany. Zamknąć i je utracić?",
+      "confirm": "Odrzuć",
+      "keep": "Kontynuuj edycję"
+    }
   },
   "clarification": {
     "answerPlaceholder": "Twoja odpowiedź",
@@ -907,7 +913,8 @@
     "decision": {
       "title": "Wymagana decyzja",
       "agentOnBlock": "{agent} na {block}",
-      "visualizationHint": "To jest wizualizacja. Każdy wybór po prostu wznawia potok."
+      "visualizationHint": "To jest wizualizacja. Każdy wybór po prostu wznawia potok.",
+      "resolveFailed": "Nie udało się zapisać decyzji"
     },
     "stepRestart": {
       "restartFromStep": "Uruchom ponownie potok od tego kroku",

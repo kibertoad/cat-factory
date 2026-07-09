@@ -1217,7 +1217,8 @@
     "decision": {
       "title": "Decisione richiesta",
       "agentOnBlock": "{agent} su {block}",
-      "visualizationHint": "Questa e' una visualizzazione. Qualsiasi scelta riprende semplicemente la pipeline."
+      "visualizationHint": "Questa e' una visualizzazione. Qualsiasi scelta riprende semplicemente la pipeline.",
+      "resolveFailed": "Impossibile registrare la tua decisione"
     },
     "stepRestart": {
       "restartFromStep": "Riavvia la pipeline da questo passaggio",
@@ -3656,7 +3657,13 @@
     "undo": "Annulla",
     "back": "Indietro",
     "next": "Avanti",
-    "done": "Fatto"
+    "done": "Fatto",
+    "discard": {
+      "title": "Ignorare le modifiche?",
+      "body": "Hai apportato modifiche non salvate. Chiudere e perderle?",
+      "confirm": "Ignora",
+      "keep": "Continua a modificare"
+    }
   },
   "clarification": {
     "answerPlaceholder": "La tua risposta",

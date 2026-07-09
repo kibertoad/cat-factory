@@ -65,7 +65,13 @@
     "undo": "Deshacer",
     "back": "Atrás",
     "next": "Siguiente",
-    "done": "Listo"
+    "done": "Listo",
+    "discard": {
+      "title": "¿Descartar los cambios?",
+      "body": "Has hecho cambios que no se han guardado. ¿Cerrar y perderlos?",
+      "confirm": "Descartar",
+      "keep": "Seguir editando"
+    }
   },
   "clarification": {
     "answerPlaceholder": "Tu respuesta",
@@ -907,7 +913,8 @@
     "decision": {
       "title": "Se requiere una decisión",
       "agentOnBlock": "{agent} en {block}",
-      "visualizationHint": "Esto es una visualización. Cualquier elección simplemente reanuda el pipeline."
+      "visualizationHint": "Esto es una visualización. Cualquier elección simplemente reanuda el pipeline.",
+      "resolveFailed": "No se pudo registrar tu decisión"
     },
     "stepRestart": {
       "restartFromStep": "Reiniciar el pipeline desde este paso",

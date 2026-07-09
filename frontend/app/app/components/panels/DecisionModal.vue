@@ -4,6 +4,7 @@ import { agentKindMeta } from '~/utils/catalog'
 const execution = useExecutionStore()
 const board = useBoardStore()
 const ui = useUiStore()
+const toast = useToast()
 const { t } = useI18n()
 
 const ctx = computed(() => ui.decisionContext)
@@ -23,10 +24,33 @@ const open = computed({
   },
 })
 
-function choose(option: string) {
-  if (!ctx.value) return
-  execution.resolveDecision(ctx.value.instanceId, ctx.value.decisionId, option)
-  ui.closeDecision()
+// UX-25: which option is being resolved (null = idle). Guards against a fire-and-forget
+// double-submit — the resolve is awaited, all options disable while it runs, and a failed
+// resolve keeps the modal open with an error toast instead of closing silently.
+const resolvingOption = ref<string | null>(null)
+
+async function choose(option: string) {
+  if (!ctx.value || resolvingOption.value) return
+  resolvingOption.value = option
+  try {
+    // `resolveDecision` returns false when a required-credential prompt is cancelled — keep
+    // the modal open in that case so the choice isn't silently dropped.
+    const resolved = await execution.resolveDecision(
+      ctx.value.instanceId,
+      ctx.value.decisionId,
+      option,
+    )
+    if (resolved) ui.closeDecision()
+  } catch (e) {
+    toast.add({
+      title: t('panels.decision.resolveFailed'),
+      description: e instanceof Error ? e.message : String(e),
+      icon: 'i-lucide-triangle-alert',
+      color: 'error',
+    })
+  } finally {
+    resolvingOption.value = null
+  }
 }
 </script>
 
@@ -65,6 +89,8 @@ function choose(option: string) {
             block
             data-testid="decision-option"
             class="justify-start"
+            :loading="resolvingOption === opt"
+            :disabled="resolvingOption !== null && resolvingOption !== opt"
             @click="choose(opt)"
           >
             {{ opt }}

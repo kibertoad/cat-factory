@@ -74,7 +74,13 @@
     "undo": "Undo",
     "back": "Back",
     "next": "Next",
-    "done": "Done"
+    "done": "Done",
+    "discard": {
+      "title": "Discard your changes?",
+      "body": "You've made changes that haven't been saved. Close this and lose them?",
+      "confirm": "Discard",
+      "keep": "Keep editing"
+    }
   },
   "clarification": {
     "answerPlaceholder": "Your answer",
@@ -961,7 +967,8 @@
     "decision": {
       "title": "Decision required",
       "agentOnBlock": "{agent} on {block}",
-      "visualizationHint": "This is a visualization. Any choice simply resumes the pipeline."
+      "visualizationHint": "This is a visualization. Any choice simply resumes the pipeline.",
+      "resolveFailed": "Couldn't record your decision"
     },
     "stepRestart": {
       "restartFromStep": "Restart pipeline from this step",

@@ -65,7 +65,13 @@
     "undo": "Annuler",
     "back": "Retour",
     "next": "Suivant",
-    "done": "Terminé"
+    "done": "Terminé",
+    "discard": {
+      "title": "Ignorer vos modifications ?",
+      "body": "Vous avez effectué des modifications non enregistrées. Fermer et les perdre ?",
+      "confirm": "Ignorer",
+      "keep": "Continuer l'édition"
+    }
   },
   "clarification": {
     "answerPlaceholder": "Votre réponse",
@@ -907,7 +913,8 @@
     "decision": {
       "title": "Décision requise",
       "agentOnBlock": "{agent} sur {block}",
-      "visualizationHint": "Ceci est une visualisation. Tout choix reprend simplement le pipeline."
+      "visualizationHint": "Ceci est une visualisation. Tout choix reprend simplement le pipeline.",
+      "resolveFailed": "Impossible d'enregistrer votre décision"
     },
     "stepRestart": {
       "restartFromStep": "Redémarrer le pipeline à partir de cette étape",
