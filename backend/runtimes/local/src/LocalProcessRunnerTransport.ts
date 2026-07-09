@@ -7,8 +7,10 @@ import type {
   RunnerJobView,
   RunnerTransport,
 } from '@cat-factory/kernel'
+import { logger } from '@cat-factory/server'
 import { sanitizedChildEnv } from './childEnv.js'
 import { requireHarnessSharedSecret } from './config.js'
+import { recommendedHarnessVersion, verifyHarnessVersion } from './harnessVersion.js'
 import {
   EVICTION_ERROR,
   type HarnessEndpoint,
@@ -67,6 +69,19 @@ export interface LocalProcessRunnerTransportOptions {
   spawnImpl?: typeof spawn
   /** Injectable free-port picker — defaults to an ephemeral OS port (overridable in tests). */
   pickPort?: () => Promise<number>
+  /**
+   * The harness version this backend is matched to (the tag of `RECOMMENDED_HARNESS_IMAGE`).
+   * When set, a freshly-healthy harness is version-checked against it; a mismatch fails the
+   * dispatch loudly. Undefined ⇒ no check.
+   */
+  expectedVersion?: string
+  /**
+   * The operator pointed `LOCAL_HARNESS_ENTRY` at a custom build, so a version mismatch is a
+   * WARNING rather than a hard stop.
+   */
+  allowVersionMismatch?: boolean
+  /** Where a soft (custom-override) version warning is surfaced. Default: no-op. */
+  onVersionWarning?: (message: string) => void
   /** How long to wait for the harness `/health` after spawn. Default 30s. */
   readyTimeoutMs?: number
   /** Per-HTTP-call timeout. Default 30s. */
@@ -100,6 +115,9 @@ export class LocalProcessRunnerTransport implements RunnerTransport {
   private readonly pickPort: () => Promise<number>
   private readonly readyTimeoutMs: number
   private readonly requestTimeoutMs: number
+  private readonly expectedVersion?: string
+  private readonly allowVersionMismatch: boolean
+  private readonly onVersionWarning?: (message: string) => void
 
   /** The single long-lived harness process, started lazily and reused across all runs. */
   private proc: { child: ChildProcess; port: number; exited: boolean } | undefined
@@ -122,6 +140,9 @@ export class LocalProcessRunnerTransport implements RunnerTransport {
     this.pickPort = options.pickPort ?? ephemeralPort
     this.readyTimeoutMs = options.readyTimeoutMs ?? 30_000
     this.requestTimeoutMs = options.requestTimeoutMs ?? 30_000
+    this.expectedVersion = options.expectedVersion
+    this.allowVersionMismatch = options.allowVersionMismatch ?? false
+    this.onVersionWarning = options.onVersionWarning
   }
 
   async dispatch(
@@ -266,8 +287,8 @@ export class LocalProcessRunnerTransport implements RunnerTransport {
     return handle
   }
 
-  private waitForHealth(port: number, handle: { exited: boolean }): Promise<void> {
-    return waitForHarnessHealth({
+  private async waitForHealth(port: number, handle: { exited: boolean }): Promise<void> {
+    await waitForHarnessHealth({
       fetchImpl: this.fetchImpl,
       endpoint: endpointFor(port),
       readyTimeoutMs: this.readyTimeoutMs,
@@ -276,6 +297,19 @@ export class LocalProcessRunnerTransport implements RunnerTransport {
       isDead: () => handle.exited,
       deadError: 'the native harness process exited before becoming healthy',
       timeoutError: `Timed out waiting for the native harness on 127.0.0.1:${port} to become healthy`,
+    })
+    // Safety net: verify the spawned harness matches the version this backend expects, failing
+    // the dispatch loudly on a skew (e.g. an outdated installed @cat-factory/executor-harness)
+    // instead of surfacing it later as a cryptic git/agent error.
+    await verifyHarnessVersion({
+      fetchImpl: this.fetchImpl,
+      endpoint: endpointFor(port),
+      secret: this.sharedSecret,
+      requestTimeoutMs: this.requestTimeoutMs,
+      expected: this.expectedVersion,
+      custom: this.allowVersionMismatch,
+      source: { ref: this.harnessEntry, kind: 'native' },
+      onWarn: this.onVersionWarning,
     })
   }
 }
@@ -328,5 +362,10 @@ export function createLocalProcessTransportFromEnv(
     ...(nodeArgs ? { nodeArgs } : {}),
     sharedSecret: requireHarnessSharedSecret(env),
     ...(allowedHosts ? { env: { GITHUB_ALLOWED_HOSTS: allowedHosts } } : {}),
+    // Version handshake: check the spawned harness against the matched version. An explicit
+    // LOCAL_HARNESS_ENTRY is a deliberate custom build, so a mismatch there is a warning.
+    expectedVersion: recommendedHarnessVersion(),
+    allowVersionMismatch: !!env.LOCAL_HARNESS_ENTRY?.trim(),
+    onVersionWarning: (message) => logger.warn(message),
   })
 }

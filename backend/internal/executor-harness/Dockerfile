@@ -37,6 +37,17 @@ RUN --mount=type=secret,id=extra_ca,target=/tmp/extra_ca.crt \
     sh -eu -c 'if [ -s /tmp/extra_ca.crt ]; then export NODE_EXTRA_CA_CERTS=/tmp/extra_ca.crt; fi; \
     npx tsc -p tsconfig.json'
 
+# ---- version: capture the package version for /health self-reporting ------
+# The runtime image ships NO package.json (see above), but the harness reports its
+# version on /health so a backend can detect a stale/mismatched executor and fail loudly
+# (see src/version.ts). Extract just the version string here — a plain JSON read, no npm,
+# so the `workspace:*` deps that stopped us copying package.json into the build stage are
+# irrelevant — and copy the resulting file into the runtime image next to dist/.
+FROM node:26-trixie-slim@sha256:a1d9d671994fc2d26e297ac56b4b1522a8bc7fa71c43b14cd1b1fe6c5116f7dc AS version
+WORKDIR /v
+COPY package.json ./
+RUN node -p "require('./package.json').version" > harness-version.txt
+
 # ---- runtime: git + the Pi CLI + the compiled wrapper --------------------
 # Pinned to the SAME digest as the build stage above (see that note to bump).
 FROM node:26-trixie-slim@sha256:a1d9d671994fc2d26e297ac56b4b1522a8bc7fa71c43b14cd1b1fe6c5116f7dc AS runtime
@@ -111,6 +122,9 @@ WORKDIR /app
 # Copy the compiled wrapper owned by the unprivileged user (no recursive chown
 # layer). Done before USER so the build artifact lands owned correctly.
 COPY --chown=harness:harness --from=build /app/dist ./dist
+# The baked version string (read by src/version.ts one level up from dist/) so /health can
+# self-report it. Shipped as a file because the image carries no package.json.
+COPY --chown=harness:harness --from=version /v/harness-version.txt ./harness-version.txt
 # The entrypoint that starts rootless dockerd (best-effort) then the server.
 COPY --chown=harness:harness entrypoint.sh ./entrypoint.sh
 RUN chmod +x ./entrypoint.sh

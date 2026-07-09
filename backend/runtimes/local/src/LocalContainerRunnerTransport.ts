@@ -10,6 +10,7 @@ import type {
 } from '@cat-factory/kernel'
 import { resolveDockerResources } from '@cat-factory/contracts'
 import type { LocalSettings } from '@cat-factory/contracts'
+import { logger } from '@cat-factory/server'
 import {
   EVICTION_ERROR,
   type HarnessEndpoint,
@@ -31,7 +32,8 @@ import {
 } from './runtimes/index.js'
 import { requireHarnessSharedSecret } from './config.js'
 import { harnessAllowedHosts } from './github.js'
-import { resolveHarnessImage } from './harnessImage.js'
+import { RECOMMENDED_HARNESS_IMAGE, resolveHarnessImage } from './harnessImage.js'
+import { recommendedHarnessVersion, verifyHarnessVersion } from './harnessVersion.js'
 
 const execFileAsync = promisify(execFile)
 
@@ -110,6 +112,19 @@ export interface LocalContainerRunnerTransportOptions {
   fetchImpl?: typeof fetch
   /** How long to wait for the container's endpoint + `/health` after start. Default 60s. */
   readyTimeoutMs?: number
+  /**
+   * The harness version this backend is matched to (the tag of {@link RECOMMENDED_HARNESS_IMAGE}).
+   * When set, a freshly-healthy container is version-checked against it and a mismatch fails the
+   * dispatch loudly (see {@link verifyHarnessVersion}). Undefined ⇒ no check.
+   */
+  expectedVersion?: string
+  /**
+   * The operator pinned a custom image (not the matched default), so a version mismatch is a
+   * WARNING rather than a hard stop — they opted into running a different harness.
+   */
+  allowVersionMismatch?: boolean
+  /** Where a soft (custom-override) version warning is surfaced. Default: no-op. */
+  onVersionWarning?: (message: string) => void
   /** Per-HTTP-call timeout. Default 30s. */
   requestTimeoutMs?: number
   /**
@@ -189,6 +204,11 @@ export class LocalContainerRunnerTransport implements RunnerTransport {
   private readonly fetchImpl: typeof fetch
   private readonly readyTimeoutMs: number
   private readonly requestTimeoutMs: number
+  private readonly expectedVersion?: string
+  private readonly allowVersionMismatch: boolean
+  private readonly onVersionWarning?: (message: string) => void
+  /** Set once the running harness's version has been verified, so we check only once. */
+  private versionVerified = false
   /** Poll cadence for a one-shot inline job (see {@link runInline}). */
   private readonly inlinePollIntervalMs = 400
   private readonly privilegedTestJobs: boolean
@@ -229,6 +249,9 @@ export class LocalContainerRunnerTransport implements RunnerTransport {
     this.fetchImpl = options.fetchImpl ?? fetch
     this.readyTimeoutMs = options.readyTimeoutMs ?? 60_000
     this.requestTimeoutMs = options.requestTimeoutMs ?? 30_000
+    this.expectedVersion = options.expectedVersion
+    this.allowVersionMismatch = options.allowVersionMismatch ?? false
+    this.onVersionWarning = options.onVersionWarning
     this.privilegedTestJobs = options.privilegedTestJobs ?? true
     this.poolSize = 0
     this.poolMax = 0
@@ -662,8 +685,13 @@ export class LocalContainerRunnerTransport implements RunnerTransport {
       Array.from({ length: deficit }, async () => {
         try {
           this.scheduleIdleEviction(await this.startMember(false))
-        } catch {
-          // a failed pre-warm is logged-and-skipped; the pool fills on demand
+        } catch (err) {
+          // A failed pre-warm is skipped (the pool fills a member on demand instead), but
+          // surface WHY: a version-handshake mismatch throws here too, and swallowing it
+          // silently would hide the misconfiguration until the first real dispatch.
+          logger.warn(
+            `Local harness pool pre-warm skipped a member: ${err instanceof Error ? err.message : String(err)}`,
+          )
         }
       }),
     )
@@ -765,14 +793,14 @@ export class LocalContainerRunnerTransport implements RunnerTransport {
     }
   }
 
-  private waitForHealth(endpoint: ContainerEndpoint, containerId: string): Promise<void> {
+  private async waitForHealth(endpoint: ContainerEndpoint, containerId: string): Promise<void> {
     // Reuse the shared `/health` poll loop (it checks liveness BEFORE each probe, so a dead
     // container fails fast instead of waiting out a slow `/health`). The container-specific
     // bits are injected: `isDead` consults the runtime, and the error messages are lazy thunks
     // that fold in the container's own boot logs — composed ONLY on the failure branch so a
     // healthy boot never pays the extra `logs` CLI call. The old behaviour spun the whole ready
     // timeout against a dead container, then threw a generic, root-cause-less error.
-    return waitForHarnessHealth({
+    await waitForHarnessHealth({
       fetchImpl: this.fetchImpl,
       endpoint,
       readyTimeoutMs: this.readyTimeoutMs,
@@ -789,6 +817,23 @@ export class LocalContainerRunnerTransport implements RunnerTransport {
           `harness at ${endpoint.host}:${endpoint.port} did not become healthy before the start timeout`,
         ),
     })
+    // Safety net: the container is up, but is it the harness this backend expects? Every local
+    // container runs the SAME image, so verify once — a mismatch (a stale mutable tag serving old
+    // code, an image that predates the version handshake) fails THIS dispatch loudly with an
+    // actionable message instead of surfacing later as a cryptic git/agent error mid-run.
+    if (!this.versionVerified) {
+      await verifyHarnessVersion({
+        fetchImpl: this.fetchImpl,
+        endpoint,
+        secret: this.sharedSecret,
+        requestTimeoutMs: this.requestTimeoutMs,
+        expected: this.expectedVersion,
+        custom: this.allowVersionMismatch,
+        source: { ref: this.image, kind: 'image' },
+        onWarn: this.onVersionWarning,
+      })
+      this.versionVerified = true
+    }
   }
 
   /**
@@ -865,6 +910,12 @@ export function createLocalContainerTransportFromEnv(
     adapter: createRuntimeAdapter(env),
     sharedSecret: requireHarnessSharedSecret(env),
     network: env.LOCAL_DOCKER_NETWORK?.trim() || undefined,
+    // Version handshake: check the running harness against the matched version, and treat a
+    // mismatch as a hard stop UNLESS the operator pinned a custom image (then it's a warning,
+    // like the boot-time custom-image notice in refreshHarnessImage).
+    expectedVersion: recommendedHarnessVersion(),
+    allowVersionMismatch: image !== RECOMMENDED_HARNESS_IMAGE,
+    onVersionWarning: (message) => logger.warn(message),
     // Default on: the Tester stands its docker-compose infra up via Docker-in-Docker,
     // which needs a privileged job container. Set to `false` for runtimes that run
     // nested containers without it (e.g. rootless Podman).

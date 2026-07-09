@@ -163,6 +163,32 @@ export async function harnessHealthy(
 }
 
 /**
+ * The `version` a harness self-reports on `/health`, or undefined when it doesn't (an old
+ * harness predating the field, or any error). Used by the version handshake (see
+ * harnessVersion.ts) to detect a stale/mismatched executor. Never throws — an undefined
+ * result is itself meaningful (treated as a stale signal by the caller).
+ */
+export async function fetchHarnessVersion(
+  fetchImpl: typeof fetch,
+  endpoint: HarnessEndpoint,
+  secret: string,
+  requestTimeoutMs: number,
+): Promise<string | undefined> {
+  try {
+    const res = await fetchImpl(harnessUrl(endpoint, '/health'), {
+      method: 'GET',
+      headers: { [SECRET_HEADER]: secret },
+      signal: AbortSignal.timeout(Math.min(requestTimeoutMs, 5_000)),
+    })
+    if (!res.ok) return undefined
+    const body = (await res.json().catch(() => ({}))) as { version?: unknown }
+    return typeof body.version === 'string' && body.version.trim() ? body.version.trim() : undefined
+  } catch {
+    return undefined
+  }
+}
+
+/**
  * An error message that may be composed lazily (only on the failure branch). The container
  * transport's messages fold in a tail of the container's own logs — an extra CLI call we
  * must NOT pay on every healthy boot — so it passes a thunk that runs only when the loop
