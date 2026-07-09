@@ -1,6 +1,6 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 import type { Block, ExecutionInstance, PipelineStep } from '@cat-factory/kernel'
-import { ConflictError, ValidationError } from '@cat-factory/kernel'
+import { ConflictError, NotFoundError, ValidationError } from '@cat-factory/kernel'
 import {
   ReviewGateController,
   type ReviewGateControllerDeps,
@@ -87,17 +87,39 @@ function fakeKind() {
 function fakeDeps(over: Partial<ReviewGateControllerDeps> = {}) {
   // The spine primitives now come from the cohesive RunStateMachine + StepGraph
   // collaborators (debagged), so the fakes group under those two objects.
+  const executionRepository = {
+    get: vi.fn(async (_ws: string, _id: string): Promise<ExecutionInstance | null> => null),
+    upsert: vi.fn(async () => {}),
+  }
   const stateMachine = {
     parkStepOnDecision: vi.fn(async (_ws, _i, s: PipelineStep) => {
       s.state = 'waiting_decision'
       return { kind: 'awaiting_decision', decisionId: 'appr_1' } as const
     }),
-    advancePastResolvedGate: vi.fn(async () => {}),
+    // The OCC seams (race-audit 2.2 controller-half): `casPersist` is the driver-path
+    // conditional write; `mutateInstance` loads fresh → runs the pure mutation → returns it (a
+    // faithful stand-in for the load/CAS-retry), so the human-action handlers can be asserted.
+    casPersist: vi.fn(async () => {}),
+    mutateInstance: vi.fn(
+      async (
+        ws: string,
+        execId: string,
+        mutate: (i: ExecutionInstance) => void | Promise<void>,
+      ) => {
+        const inst = await executionRepository.get(ws, execId)
+        if (!inst) throw new NotFoundError('Execution', execId)
+        await mutate(inst)
+        return inst
+      },
+    ),
+    // The pure/side-effect gate-advance split `resumeRun` now uses instead of the deleted
+    // combined `advancePastResolvedGate`.
+    advanceRunPastGate: vi.fn((_i: ExecutionInstance, _idx: number) => false),
+    settleAdvancedGate: vi.fn(async () => {}),
     raiseDecisionRequired: vi.fn(async () => {}),
     updateBlockProgress: vi.fn(async () => {}),
     finalizeBlock: vi.fn(async () => {}),
     stopRunContainer: vi.fn(async () => {}),
-    persistInstance: vi.fn(async () => {}),
     emitInstance: vi.fn(async () => {}),
   }
   const stepGraph = {
@@ -108,7 +130,7 @@ function fakeDeps(over: Partial<ReviewGateControllerDeps> = {}) {
   }
   const deps = {
     blockRepository: { get: vi.fn(async () => BLOCK) },
-    executionRepository: { get: vi.fn(async () => null), upsert: vi.fn(async () => {}) },
+    executionRepository,
     workRunner: { signalDecision: vi.fn(async () => {}) },
     resolveRiskPolicy: vi.fn(async () => PRESET),
     dispatchIterationCap: vi.fn(async () => {}),
@@ -384,14 +406,14 @@ describe('ReviewGateController public surface', () => {
     })
     deps.executionRepository.get = vi.fn(async () => instance([parkedStep]))
     await ctrl.reReview(k.kind, 'ws', 'blk_1')
-    expect(deps.stateMachine.advancePastResolvedGate).toHaveBeenCalled()
+    expect(deps.stateMachine.settleAdvancedGate).toHaveBeenCalled()
   })
 
   it('reReview that still has findings does NOT resume', async () => {
     k.set(review({ status: 'merged' }))
     ;(k.kind.reReview as ReturnType<typeof vi.fn>).mockResolvedValue(review({ status: 'ready' }))
     await ctrl.reReview(k.kind, 'ws', 'blk_1')
-    expect(deps.stateMachine.advancePastResolvedGate).not.toHaveBeenCalled()
+    expect(deps.stateMachine.settleAdvancedGate).not.toHaveBeenCalled()
   })
 
   it('reReview pre-answers auto-answerable findings when it surfaces fresh ones', async () => {
@@ -439,7 +461,7 @@ describe('ReviewGateController public surface', () => {
     deps.executionRepository.get = vi.fn(async () => instance([parkedStep]))
     const out = await ctrl.proceed(k.kind, 'ws', 'blk_1')
     expect(k.kind.markIncorporated).toHaveBeenCalled()
-    expect(deps.stateMachine.advancePastResolvedGate).toHaveBeenCalled()
+    expect(deps.stateMachine.settleAdvancedGate).toHaveBeenCalled()
     expect(out.status).toBe('incorporated')
   })
 

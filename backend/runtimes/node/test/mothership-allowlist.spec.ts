@@ -166,6 +166,15 @@ const NON_REMOTE: Record<string, Record<string, Reason>> = {
     listByExecution: 'pending',
     deleteOlderThan: 'sweeper',
   },
+  // Modeled subscription quota-cycle counters (usage-and-quota-tracking, Part B): the
+  // windowed usage write + its scoped read are provider-mediated telemetry that never
+  // crosses the per-call RPC (the B3 quota endpoint reads through the provider's `report`,
+  // not this repo directly); the retention prune is a sweeper op.
+  subscriptionQuotaCycleRepository: {
+    recordUsage: 'telemetry',
+    listByScopeVendor: 'telemetry',
+    deleteOlderThan: 'sweeper',
+  },
   // The visual-confirmation gate's artifact METADATA surface is now allow-listed (insert/get/
   // listByExecution/countByExecution/listByBlock/delete — the controllers + gate reads/writes);
   // only the retention sweep stays mothership-internal (the mothership owns durable-state

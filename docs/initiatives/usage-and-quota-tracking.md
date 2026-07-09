@@ -109,9 +109,43 @@ reuse the rollup substrate (`totalsSince*`, per-workspace/account/user) that alr
 | A3  | Reporting API                   | `GET /workspaces/:ws/usage` controller + `usageReportSchema` contract + rpc allow-list; `SpendService.usageBreakdown` (currency + rows)                                                                                                             | ✅ done | (part-a) |
 | A4  | Usage tab (frontend)            | `useUsageStore`, `UsageSettings.vue`, `WorkspaceSettingsPanel` tab, i18n (`en` + all 9 locales, real translations), `getUsage` api client                                                                                                           | ✅ done | (part-a) |
 | A5  | Conformance + changesets        | metered-vs-subscription split assertion on both runtimes (`FakeAgentExecutor` `usageBilling`/`usageVendor` option); changeset                                                                                                                       | ✅ done | (part-a) |
-| B1  | Quota port + modeled provider   | `SubscriptionQuotaProvider` port + adapter registry + modeled (first-use) window fallback; `subscription_quota_cycles` table (D1 ⇄ Drizzle); persist per user/pooled-token                                                                          | ⬜ todo |          |
+| B1  | Quota port + modeled provider   | `SubscriptionQuotaProvider` port + adapter registry + modeled (first-use) window fallback; `subscription_quota_cycles` table (D1 ⇄ Drizzle); persist per user/pooled-token                                                                          | ✅ done | (part-b) |
 | B2  | Real Claude/GLM reads (harness) | executor-harness calls `/api/oauth/usage` (Claude) + `/api/monitor/usage/quota/limit` (GLM), returns a quota snapshot on `RunnerJobResult`; **image bump** + the 3 pinned tags + `RECOMMENDED_HARNESS_IMAGE`                                        | ⬜ todo |          |
 | B3  | Quota API + UI                  | quota endpoint(s); per-user quota bars in "My setup" + next to budget spend when a single individual-vendor preset is active; pooled-token quota in the Usage tab                                                                                   | ⬜ todo |          |
+
+## B1 reference implementation (the shape every Part-B slice follows)
+
+The pilot landed the modeled quota model end-to-end; B2/B3 extend it rather than reinvent it.
+
+- **Port + repo** live in kernel: `ports/subscription-quota.ts` (`SubscriptionQuotaProvider`,
+  `SubscriptionQuotaCycle`/`Window`/`Target`, `SubscriptionQuotaSource`) and
+  `ports/subscription-quota-repositories.ts` (`SubscriptionQuotaCycleRepository`,
+  `SubscriptionQuotaScope` = `pooled`|`user`, `SubscriptionQuotaWindowKind` = `5h`|`weekly`). The
+  window catalog + modeled ceilings + `isSubscriptionVendor` are pure domain
+  (`domain/subscription-quota.ts`, `SUBSCRIPTION_QUOTA_WINDOWS` / `SUBSCRIPTION_QUOTA_CEILINGS`).
+- **Composite provider** = `RegistrySubscriptionQuotaProvider` (`@cat-factory/integrations`,
+  `modules/subscriptionQuota/`), mirroring `RegistryReleaseHealthProvider`: it owns persistence,
+  the modeled fallback, and the reduction; a per-vendor `SubscriptionQuotaAdapter` (in
+  `defaultSubscriptionQuotaRegistry`, EMPTY until B2) supplies the real read. `report` prefers a
+  registered adapter and degrades to modeled on a null/throwing read — a best-effort vendor read
+  never fails a caller.
+- **Table** `subscription_quota_cycles`: one row per `(scope, scope_id, vendor, window_kind)`, a
+  windowed UPSERT (`recordUsage`) that anchors the window at first use and resets it once aged out
+  — the SAME atomic-CASE pattern as `provider_subscription_tokens.recordUsage`. D1 migration `0047`
+  ⇄ Drizzle `subscriptionQuotaCycles` + generated migration; the repo is a `CoreRepositories`
+  member so both the container and the conformance suite get it.
+- **Retention**: idle cycles are pruned by BOTH facades' retention sweeps (Worker cron
+  `sweepRetention` ⇄ Node `sweepRetention` timer) on a FIXED 30-day window — deliberately far
+  beyond the 7-day weekly window so a live cycle is never deleted mid-window. It is NOT a
+  configurable retention knob (the row naturally resets, so 30 days only reclaims long-dead
+  scopes). Any Part-B addition that persists more quota state wires its own prune here too.
+- **Recording seam**: `ContainerAgentExecutor.pollJob` records via the `recordSubscriptionQuotaUsage`
+  dep, gated on the SAME subscription-run signal as billing (`result.callMetrics` present) — for
+  BOTH pooled (scope = `handle.subscriptionTokenId`) and personal (scope = `handle.initiatedByUserId`,
+  newly threaded onto the handle) runs, once per job id. Wired unconditionally in every facade's
+  container (NOT inside the pooled-`subscriptions` block — personal runs have no pooled service).
+- **Conformance**: `defineSubscriptionQuotaSuite` (invoked from both runtimes' spec files) pins the
+  windowed accumulate/reset, per-window-kind independence, scoping, and prune on both stores.
 
 ## Conventions / gotchas carried between iterations
 
@@ -132,6 +166,12 @@ reuse the rollup substrate (`totalsSince*`, per-workspace/account/user) that alr
 - **Vendor derives from the model ref**, via `subscriptionVendorForRef` /
   `individualVendorForModelId` (kernel `domain/models.ts`) — do not re-hardcode a vendor
   list at the call site.
+- **The modeled ceilings are invented estimates, and the UI must say so.** No subscription
+  vendor publishes an absolute token cap (only relative %), so `SUBSCRIPTION_QUOTA_CEILINGS`
+  (kernel) are best-effort round numbers used ONLY to render a progress bar; they are
+  overridable via the provider's `ceilings` option and superseded per-vendor by a B2 real read.
+  A `null` ceiling reports usage + reset with NO percentage. B3 must label a modeled window as
+  an estimate (never present it as a real quota).
 - **Part B real reads = an image bump.** The harness side-channel calls change the runner
   image; bump `@cat-factory/executor-harness` + the three pinned tags
   (`deploy/backend/package.json`, `deploy/backend/wrangler.toml`, `RECOMMENDED_HARNESS_IMAGE`)

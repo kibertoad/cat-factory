@@ -425,6 +425,19 @@ export {
   normalizeDatadogSite,
   datadogApiBase,
 } from './modules/datadog/datadog.logic.js'
+
+// Subscription quota-cycle tracking (usage-and-quota-tracking, Part B): the pluggable
+// provider that folds a run's tokens into rolling windows and reports "how much of the
+// cycle is left" — real numbers where a vendor adapter is registered (Part B2), modeled
+// (first-use window + config ceilings) otherwise.
+export {
+  RegistrySubscriptionQuotaProvider,
+  type RegistrySubscriptionQuotaProviderDependencies,
+  type SubscriptionQuotaAdapter,
+  type SubscriptionQuotaRegistry,
+  type SubscriptionQuotaCeilingOverrides,
+} from './modules/subscriptionQuota/RegistrySubscriptionQuotaProvider.js'
+export { defaultSubscriptionQuotaRegistry } from './modules/subscriptionQuota/registry.js'
 export {
   PagerDutyEnrichmentProvider,
   type PagerDutyEnrichmentProviderOptions,

@@ -514,6 +514,66 @@ export function defineCoreConformance(harness: ConformanceHarness): void {
         expect((await repo.get(workspace.id, 'exec_stopped'))?.status).toBe('failed')
       })
 
+      // Race-audit 2.2 controller-half: the gate-window CONTROLLERS (review incorporate/proceed,
+      // human-test/visual-confirm/interview signal, companion resolve-exceeded) no longer blind-
+      // upsert — they persist their human-action write through `RunStateMachine.mutateInstance`,
+      // which on a lost race RELOADS the winning snapshot and RE-APPLIES its (pure) mutation so
+      // BOTH edits survive, rather than the loser clobbering the winner (the last-write-wins bug).
+      // This models that reload-and-retry at the repository layer, proven identically on D1 and
+      // Postgres: a human action and the durable driver both load rev 0; the driver's write lands
+      // first; the human's stale write is refused; it reloads and re-applies, and the run carries
+      // BOTH mutations.
+      it('mutateInstance-style reload-and-retry lands both a driver write and a racing human write', async () => {
+        const app = harness.makeApp()
+        const repo = app.executionRepository()
+        const { workspace } = await app.createWorkspace()
+
+        const base: ExecutionInstance = {
+          id: 'exec_occ',
+          blockId: 'blk_occ',
+          pipelineId: 'pl',
+          pipelineName: 'Pipeline',
+          steps: [
+            {
+              agentKind: 'reviewer',
+              state: 'waiting_decision',
+              progress: 0,
+              approval: { id: 'appr_occ', status: 'pending', proposal: '' },
+            },
+          ] as unknown as ExecutionInstance['steps'],
+          currentStep: 0,
+          status: 'blocked',
+          initiatedBy: null,
+        }
+        await repo.upsert(workspace.id, base)
+
+        // A human action (the controller) and the durable driver both load the same rev 0.
+        const humanSnapshot = (await repo.get(workspace.id, 'exec_occ'))!
+        const driverSnapshot = (await repo.get(workspace.id, 'exec_occ'))!
+        expect(humanSnapshot.rev).toBe(0)
+        expect(driverSnapshot.rev).toBe(0)
+
+        // The driver's write lands first (e.g. a poll fold flipping the run back to `running`).
+        driverSnapshot.status = 'running'
+        expect(await repo.compareAndSwap(workspace.id, driverSnapshot)).toBe(true)
+
+        // The human's write from the now-stale rev 0 is REFUSED — a blind upsert would have
+        // reverted the driver's `running` back to `blocked` (the clobber this fix removes).
+        humanSnapshot.steps[0]!.approval!.status = 'approved'
+        expect(await repo.compareAndSwap(workspace.id, humanSnapshot)).toBe(false)
+
+        // `mutateInstance` reloads the winning snapshot and re-applies the pure mutation.
+        const reloaded = (await repo.get(workspace.id, 'exec_occ'))!
+        expect(reloaded.status).toBe('running') // the driver's write survived
+        reloaded.steps[0]!.approval!.status = 'approved'
+        expect(await repo.compareAndSwap(workspace.id, reloaded)).toBe(true)
+
+        // BOTH edits are present: the driver's status flip AND the human's approval.
+        const settled = (await repo.get(workspace.id, 'exec_occ'))!
+        expect(settled.status).toBe('running')
+        expect(settled.steps[0]!.approval!.status).toBe('approved')
+      })
+
       // Run diagnostics (dispatch context — backend/model/repo — for after-the-fact
       // investigation) ride in the `detail` JSON, so a repo that serialized `detail`
       // differently would drop them. Asserted at the repository layer so D1 and Postgres

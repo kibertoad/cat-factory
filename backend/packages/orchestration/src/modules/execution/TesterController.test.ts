@@ -25,7 +25,7 @@ const instance = (step: PipelineStep): ExecutionInstance =>
 
 function makeController(over: Partial<TesterControllerDeps> = {}) {
   const raise = vi.fn(async () => ({}) as never)
-  const persistInstance = vi.fn(async () => {})
+  const casPersist = vi.fn(async () => {})
   const startJob = vi.fn(async (_context?: unknown) => ({ jobId: 'j1' }))
   const deps = {
     blockRepository: { get: async () => block() },
@@ -34,13 +34,13 @@ function makeController(over: Partial<TesterControllerDeps> = {}) {
     contextBuilder: { buildContext: vi.fn() },
     resolveRiskPolicy: async () => ({ ciMaxAttempts: 10 }),
     stateMachine: {
-      persistInstance,
+      casPersist,
       emitInstance: vi.fn(async () => {}),
       stopRunContainer: vi.fn(async () => {}),
     },
     ...over,
   } as unknown as TesterControllerDeps
-  return { controller: new TesterController(deps), raise, persistInstance, startJob }
+  return { controller: new TesterController(deps), raise, casPersist, startJob }
 }
 
 describe('TesterController auto-abort on a failed ephemeral environment', () => {

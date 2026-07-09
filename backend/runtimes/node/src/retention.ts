@@ -9,6 +9,7 @@ import type {
   PipelineScheduleRepository,
   ProvisioningLogRepository,
   SubscriptionActivationRepository,
+  SubscriptionQuotaCycleRepository,
   TokenUsageRepository,
   WorkspaceRepository,
   WorkspaceSettingsRepository,
@@ -19,6 +20,14 @@ import type { Logger, RetentionConfig } from '@cat-factory/server'
 
 /** Recurring-pipeline run history is kept ~1 week (the inspector's window). */
 const SCHEDULE_RUN_RETENTION_MS = 7 * 24 * 60 * 60 * 1000
+
+/**
+ * Idle subscription quota-cycle rows are pruned after 30 days. A fixed window (not the
+ * configurable retention policy), deliberately far beyond the longest quota window (the
+ * 7-day weekly one) so a live cycle is never deleted mid-window — a row untouched for
+ * 30 days has long since reset and only holds stale counters.
+ */
+const SUBSCRIPTION_QUOTA_CYCLE_RETENTION_MS = 30 * 24 * 60 * 60 * 1000
 
 // Retention sweep for the Node facade's unbounded tables. The Worker prunes these from
 // its every-2-min cron (see the Worker's `sweepRetention`); the Node service has no
@@ -42,6 +51,8 @@ export interface RetentionRepos {
   // Personal-credential per-run activations whose TTL has passed (individual-usage
   // subscriptions). Mirrors the Worker's activation-sweeper cron.
   subscriptionActivationRepository: Pick<SubscriptionActivationRepository, 'deleteExpired'>
+  // Idle modeled subscription quota-cycle counters, pruned to a fixed 30-day window.
+  subscriptionQuotaCycleRepository: Pick<SubscriptionQuotaCycleRepository, 'deleteOlderThan'>
   // High-churn provisioning event log (its own Postgres schema); always wired on Node.
   provisioningLogRepository: Pick<ProvisioningLogRepository, 'deleteOlderThan'>
   // Password-reset tokens past their own TTL (single-use + 1h expiry, so tiny).
@@ -61,6 +72,7 @@ export interface RetentionResult {
   agentSearchQueries: number
   scheduleRuns: number
   activations: number
+  subscriptionQuotaCycles: number
   provisioningLog: number
   passwordResetTokens: number
   commits: number
@@ -114,6 +126,10 @@ export async function sweepRetention(
     ),
     // Delete activations whose own TTL (expires_at) has passed — `now`, not a window.
     activations: await repos.subscriptionActivationRepository.deleteExpired(now),
+    // Idle quota cycles past the fixed 30-day window (well beyond the weekly one).
+    subscriptionQuotaCycles: await prune(SUBSCRIPTION_QUOTA_CYCLE_RETENTION_MS, now, (c) =>
+      repos.subscriptionQuotaCycleRepository.deleteOlderThan(c),
+    ),
     provisioningLog: await prune(retention.provisioningLogMs, now, (c) =>
       repos.provisioningLogRepository.deleteOlderThan(c),
     ),

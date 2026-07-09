@@ -1,5 +1,58 @@
 # @cat-factory/orchestration
 
+## 0.102.4
+
+### Patch Changes
+
+- Updated dependencies [be54a32]
+  - @cat-factory/kernel@0.117.0
+  - @cat-factory/integrations@0.80.0
+  - @cat-factory/agents@0.52.3
+  - @cat-factory/caching@0.6.22
+  - @cat-factory/sandbox@0.9.52
+  - @cat-factory/spend@0.12.3
+  - @cat-factory/workspaces@0.13.14
+
+## 0.102.3
+
+### Patch Changes
+
+- 2924e32: Finish the optimistic-concurrency (rev/CAS) migration — the CONTROLLER half (race-audit 2.2/2.3).
+
+  The driver half already routed the durable driver's writes through `RunStateMachine.casPersist`
+  (abort-and-re-drive on a lost race) and the single-action human handlers through `mutateInstance`.
+  The six gate-window controllers, however, still force-wrote the entire serialized instance via the
+  blind `persistInstance` — so a concurrent human action (or a `stopRun`/`cancel`) landing in a
+  controller's read→write window could silently clobber the winner or resurrect a deleted run. This
+  closes that half:
+
+  - **Driver-path controller writes → `casPersist`.** The gate `evaluate` / `completeStep` / dispatch
+    / apply-assessment paths in `CompanionController`, `TesterController`, `HumanTestController`,
+    `InterviewGateController`, `VisualConfirmationController`, and `ReviewGateController` run inside the
+    driver's `advanceInstance` / `redriveOnContention` envelope, so a lost race throws
+    `RunContendedError` and re-drives on fresh state — exactly like `handleAgentStep`.
+  - **HTTP human-action handlers → `mutateInstance`.** Review `incorporate` / `offloadRecommendation` /
+    `resumeRun`, human-test & visual-confirm `signalAction` + `destroyEnvironment`, interview `resume`,
+    and `ExecutionService.resolveCompanionExceeded` now load fresh, re-find the parked gate, apply the
+    pure mutation under `compareAndSwap`, and run their non-idempotent side effects (driver signal /
+    emit / dispatch / env teardown) once after, on the winning snapshot.
+  - **Gate-resume split.** The blind combined `RunStateMachine.advancePastResolvedGate` is deleted;
+    every gate-resume path now uses the pure `advanceRunPastGate` (inside `mutateInstance`) +
+    the side-effect `settleAdvancedGate`.
+
+  Cross-runtime conformance adds a repository-layer assertion for the `mutateInstance` reload-and-retry
+  contract — a racing human write reloads and lands alongside the driver's write instead of clobbering
+  it — proven identically on D1 and Postgres.
+
+- Updated dependencies [51869b8]
+  - @cat-factory/kernel@0.116.0
+  - @cat-factory/spend@0.12.2
+  - @cat-factory/agents@0.52.2
+  - @cat-factory/caching@0.6.21
+  - @cat-factory/integrations@0.79.3
+  - @cat-factory/sandbox@0.9.51
+  - @cat-factory/workspaces@0.13.13
+
 ## 0.102.2
 
 ### Patch Changes

@@ -32,7 +32,8 @@ export interface BootstrapInput {
   apiBase: string
   port: number
   corsAllowedOrigins: string
-  harnessImage: string
+  /** An explicit harness-image pin, or undefined to let the backend use its matched version. */
+  harnessImage?: string
   containerRuntime: ContainerRuntime
   /** How agent jobs execute: a Docker container pool (default) or native host agents. */
   executionMode?: ExecutionMode
@@ -149,10 +150,9 @@ with \`cat-factory init\`. It has two parts:
 
 - Node.js 24+ (the backend entry runs TypeScript via type stripping).
 - A container runtime (Docker/Podman/OrbStack/Colima) for Postgres and the agent containers.
-- The executor-harness image pulled locally:
-  \`\`\`sh
-  docker pull ${input.harnessImage}
-  \`\`\`
+  The backend pulls the executor-harness image it was built against automatically on first
+  boot, so no manual \`docker pull\` is needed — pin \`LOCAL_HARNESS_IMAGE\` in \`local/.env\`
+  only if you want to lock to a specific version.
 
 ## Install
 

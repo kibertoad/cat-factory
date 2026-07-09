@@ -58,9 +58,11 @@ export { slugifyProjectName } from './slug.js'
 export {
   CONTAINER_RUNTIMES,
   type ContainerRuntime,
-  DEFAULT_HARNESS_IMAGE,
   EXECUTION_MODES,
   type ExecutionMode,
+  HARNESS_IMAGE_EXAMPLE,
+  HARNESS_IMAGE_GUIDANCE,
+  harnessImageEnvLines,
   NATIVE_HARNESSES,
   type NativeHarness,
 } from './templates.js'

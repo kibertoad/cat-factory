@@ -17,7 +17,6 @@ describe('buildLocalEnv', () => {
     authSessionSecret: 'deadbeef',
     encryptionKey: 'YmFzZTY0',
     harnessSharedSecret: 'cafef00d',
-    harnessImage: 'ghcr.io/x/y:latest',
     port: 8787,
     corsAllowedOrigins: 'http://localhost:3000',
     containerRuntime: 'docker' as const,
@@ -30,8 +29,26 @@ describe('buildLocalEnv', () => {
     expect(out).toContain('AUTH_SESSION_SECRET=deadbeef')
     expect(out).toContain('ENCRYPTION_KEY=YmFzZTY0')
     expect(out).toContain('HARNESS_SHARED_SECRET=cafef00d')
-    expect(out).toContain('LOCAL_HARNESS_IMAGE=ghcr.io/x/y:latest')
     expect(out).not.toContain('GITLAB_PAT=')
+  })
+
+  it('leaves LOCAL_HARNESS_IMAGE unset (commented) by default, never suggesting :latest', () => {
+    const out = buildLocalEnv({ ...base, provider: 'github' })
+    // The var is documented but commented out, so the backend runs its matched version.
+    expect(out).toMatch(/^# LOCAL_HARNESS_IMAGE=/m)
+    expect(out).not.toMatch(/^LOCAL_HARNESS_IMAGE=/m)
+    expect(out).toContain('leave it')
+    // A mutable :latest tag is never suggested as the value to use.
+    expect(out).not.toContain('LOCAL_HARNESS_IMAGE=ghcr.io/kibertoad/cat-factory-executor:latest')
+  })
+
+  it('writes LOCAL_HARNESS_IMAGE active when an explicit pin is supplied', () => {
+    const out = buildLocalEnv({
+      ...base,
+      provider: 'github',
+      harnessImage: 'ghcr.io/x/y:1.2.3',
+    })
+    expect(out).toMatch(/^LOCAL_HARNESS_IMAGE=ghcr\.io\/x\/y:1\.2\.3$/m)
   })
 
   it('writes the gitlab token under GITLAB_PAT', () => {

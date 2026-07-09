@@ -121,10 +121,23 @@ runtimes with a conformance assertion.
 > resurrected (`compareAndSwap` never inserts). The `pollAgentJob` running-fold uses `mutateInstance`
 > (its streamed follow-ups are drain-on-read, so a re-drive would lose them), and `RunDispatcher`'s
 > own follow-up human actions (`driveFollowUpsAfterDecision`) moved to `mutateInstance`. Cross-runtime
-> conformance asserts the driver can't clobber/resurrect. **Still open:** the gate-window CONTROLLER
-> writes (`ReviewGateController`/`TesterController`/`CompanionController`/`HumanTestController`/
-> `InterviewGateController`/`VisualConfirmationController` still call `persistInstance`) — the
-> controller half of this finding, a distinct later slice.
+> conformance asserts the driver can't clobber/resurrect.
+>
+> **Status: ADDRESSED (controller half too).** The six gate-window controllers no longer call the
+> blind `persistInstance`: their DRIVER-path writes (the gate `evaluate`/`completeStep`/dispatch/
+> apply-assessment paths, which run inside the `advanceInstance` / `redriveOnContention` envelope)
+> now use `casPersist` — exactly like `handleAgentStep` — so a lost race re-drives instead of
+> clobbering; and their HTTP HUMAN-ACTION handlers (review `incorporate`/`offloadRecommendation`/
+> `resumeRun`, human-test/visual-confirm `signalAction` + `destroyEnvironment`, interview `resume`,
+> and `ExecutionService.resolveCompanionExceeded`) now route through `mutateInstance` (load fresh →
+> re-find the parked gate → apply the pure mutation → CAS; non-idempotent signal/emit/dispatch run
+> once after, on the winning snapshot). The gate-resume plumbing was split into the pure
+> `advanceRunPastGate` + the side-effect `settleAdvancedGate` (both already existed), so the blind
+> combined `advancePastResolvedGate` is deleted — every gate-resume path (engine follow-ups,
+> `resolveCompanionExceeded`, `resumeRun`) shares the CAS-guarded split. `RunStateMachine.persistInstance`
+> is now unused by these paths. Cross-runtime conformance adds a repository-layer assertion for the
+> `mutateInstance` reload-and-retry contract (a racing human write reloads and lands alongside the
+> driver's write instead of clobbering it), proven identically on D1 and Postgres.
 
 ### 2.2 The optimistic-concurrency (rev/CAS) migration is one-sided: blind whole-row upserts clobber CAS-protected writes — CONFIRMED
 
@@ -489,16 +502,16 @@ already-shipped `rev`; (b) generation-check `workspace.refresh()`/`hydrate` (fix
 
 1. ~~**Spend-resume on Cloudflare** (1.1)~~ + ~~BootstrapWorkflow re-drive (1.2)~~ — **DONE.**
 2. ~~**One live run per block at the DB** (2.1)~~ — **DONE** (partial unique index + `insertLive`).
-3. **Finish the OCC migration** (2.2/2.3) — **driver half DONE**: `approveStep` routes through
-   `mutateInstance`, and the durable driver's post-poll writes are now CAS-or-re-drive (`casPersist`
-   - `RunContendedError` → `continue`), so Stop/cancel can't be undone by an in-flight poll.
-     `failRun`/`markFailed` won't re-fail a merged (`done`) run, and `markFailed` bumps `rev` so an
-     in-flight driver `casPersist` can't resurrect a `stopRun`-failed run either (both terminal-clobber
-     directions closed). **Remaining:** route the gate-window CONTROLLERS
-     (`ReviewGateController`/`TesterController`/…) — AND the still-blind `resolveCompanionExceeded`
-     (its shared `dispatchIterationCap` → `advancePastResolvedGate` plumbing owns the upsert, so
-     CAS-guarding it needs that helper split into pure-mutation + side-effect halves) — through
-     `mutateInstance` (the controller half).
+3. ~~**Finish the OCC migration** (2.2/2.3)~~ — **DONE (driver + controller halves).** Driver half:
+   `approveStep` routes through `mutateInstance`, and the durable driver's post-poll writes are
+   CAS-or-re-drive (`casPersist` + `RunContendedError` → `continue`), so Stop/cancel can't be undone
+   by an in-flight poll; `failRun`/`markFailed` won't re-fail a merged (`done`) run, and `markFailed`
+   bumps `rev` so a stale `casPersist` can't resurrect a `stopRun`-failed run (both terminal-clobber
+   directions closed). Controller half: the six gate-window controllers' driver-path writes moved to
+   `casPersist` and their HTTP human-action handlers (incl. `resolveCompanionExceeded`) to
+   `mutateInstance`; the gate-resume plumbing was split into `advanceRunPastGate` + `settleAdvancedGate`
+   and the blind `advancePastResolvedGate` deleted. A repository-layer conformance assertion pins the
+   `mutateInstance` reload-and-retry contract on both runtimes.
 4. **CAS the notification status flip before the side effect** (3.1) — **still open**; the
    escalation-sweep half (3.2) is **DONE** (`escalateStaleOpen` conditional update).
 5. **rev/CAS or item-targeted writes for the review repositories** (2.5).
