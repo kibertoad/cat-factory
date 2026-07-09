@@ -973,6 +973,27 @@
       "clearFailed": "Zuordnung konnte nicht geleert werden",
       "configNoun": "die Release-Health-Konfiguration"
     },
+    "testSecrets": {
+      "title": "Test-Anmeldedaten (sensibel)",
+      "sectionHint": "Sensible Anmeldedaten, die der Tester benötigt, um ein von diesem Dienst genutztes Drittsystem anzusprechen, z. B. den API-Schlüssel eines Zahlungsanbieters. Sie werden verschlüsselt gespeichert und dem Tester als Umgebungsvariablen übergeben; sie erscheinen nie in Prompts oder Protokollen.",
+      "warning": "Dies sind echte, sensible Geheimnisse. Sie werden verschlüsselt gespeichert und dem Tester als Umgebungsvariablen übergeben, niemals in einem Prompt oder der Telemetrie des Laufs. Gib keine Produktionsdaten ein, die du nicht rotieren kannst.",
+      "replaceNote": "Beim Speichern wird der gesamte Satz für diesen Dienst ersetzt. Nimm jede Anmeldung auf, die du behalten möchtest, und gib ihren Wert erneut ein; alles Ausgelassene wird entfernt.",
+      "key": "Variablenname",
+      "keyInvalid": "Verwende Buchstaben, Ziffern und Unterstriche und beginne nicht mit einer Ziffer.",
+      "description": "Beschreibung",
+      "descriptionPlaceholder": "Wofür diese Anmeldung dient",
+      "value": "Wert",
+      "valuePlaceholder": "Geheimer Wert",
+      "addRow": "Anmeldung hinzufügen",
+      "removeRow": "Anmeldung entfernen",
+      "save": "Anmeldedaten speichern",
+      "clear": "Alle löschen",
+      "savedToast": "Test-Anmeldedaten gespeichert",
+      "saveFailed": "Test-Anmeldedaten konnten nicht gespeichert werden",
+      "clearFailed": "Test-Anmeldedaten konnten nicht gelöscht werden",
+      "configNoun": "die sensiblen Test-Anmeldedaten",
+      "duplicateKey": "Jeder Variablenname muss eindeutig sein."
+    },
     "testConfig": {
       "title": "Testinfrastruktur",
       "hint": "Wie eine Testumgebung für diesen Service aufgesetzt wird, wenn eine Pipeline ihn ausführen muss: keine Infrastruktur, eine Docker-Compose-Datei, Kubernetes-Manifeste oder ein benutzerdefinierter Manifesttyp.",

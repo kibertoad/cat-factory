@@ -669,6 +669,27 @@
       "clearFailed": "Impossible d'effacer le mappage",
       "configNoun": "la configuration de santé de la version"
     },
+    "testSecrets": {
+      "title": "Identifiants de test (sensibles)",
+      "sectionHint": "Identifiants sensibles dont le Testeur a besoin pour solliciter un système tiers utilisé par ce service, par exemple la clé d'API d'un prestataire de paiement. Ils sont chiffrés au repos et injectés dans l'environnement du Testeur sous forme de variables ; ils n'apparaissent jamais dans les prompts ni les journaux.",
+      "warning": "Ce sont de vrais secrets sensibles. Ils sont chiffrés au repos et transmis au Testeur comme variables d'environnement, jamais dans un prompt ni dans la télémétrie de l'exécution. N'entrez pas d'identifiants de production que vous ne pouvez pas renouveler.",
+      "replaceNote": "L'enregistrement remplace l'ensemble complet pour ce service. Incluez chaque identifiant à conserver et saisissez à nouveau sa valeur ; tout ce qui est omis est supprimé.",
+      "key": "Nom de variable",
+      "keyInvalid": "Utilisez des lettres, des chiffres et des tirets bas, et ne commencez pas par un chiffre.",
+      "description": "Description",
+      "descriptionPlaceholder": "À quoi sert cet identifiant",
+      "value": "Valeur",
+      "valuePlaceholder": "Valeur secrète",
+      "addRow": "Ajouter un identifiant",
+      "removeRow": "Supprimer l'identifiant",
+      "save": "Enregistrer les identifiants",
+      "clear": "Tout effacer",
+      "savedToast": "Identifiants de test enregistrés",
+      "saveFailed": "Impossible d'enregistrer les identifiants de test",
+      "clearFailed": "Impossible d'effacer les identifiants de test",
+      "configNoun": "les identifiants de test sensibles",
+      "duplicateKey": "Chaque nom de variable doit être unique."
+    },
     "testConfig": {
       "title": "Infrastructure de test",
       "hint": "Comment un environnement de test est mis en place pour ce service quand un pipeline doit l'exécuter : sans infrastructure, un fichier Docker Compose, des manifestes Kubernetes ou un type de manifeste personnalisé.",
