@@ -245,10 +245,19 @@ export class D1ExecutionRepository implements ExecutionRepository {
     // is the authoritative first-write-wins / no-re-fail-a-merged-run check — `failRun`'s
     // in-memory guard reads a snapshot that can be stale by the time this write lands
     // (race-audit 2.3).
+    //
+    // BUMP `rev` on the terminal write so it participates in the driver's optimistic
+    // concurrency: a `casPersist` from an in-flight driver iteration that loaded the run
+    // BEFORE this `stopRun`/`failRun` still holds the pre-fail `rev`, so bumping it here makes
+    // that stale write miss its `rev = ?` guard → `RunContendedError` → re-drive → the reload
+    // sees `failed` and no-ops. Without the bump `markFailed` left `rev` untouched, so a stale
+    // `casPersist` writing a non-terminal status (`pollGate` pending, dispatch, …) would MATCH
+    // the unchanged `rev` and RESURRECT the stopped run as `running` (race-audit 2.3, the
+    // driver-clobbers-terminal direction — the dual of the SQL status guard above).
     await this.db
       .prepare(
         `UPDATE agent_runs
-           SET status = 'failed', error = ?, failure = ?, updated_at = ?
+           SET status = 'failed', error = ?, failure = ?, updated_at = ?, rev = rev + 1
          WHERE workspace_id = ? AND id = ? AND kind = 'execution'
            AND status NOT IN ('done', 'failed')`,
       )

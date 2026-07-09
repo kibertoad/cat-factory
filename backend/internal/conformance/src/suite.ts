@@ -466,6 +466,54 @@ export function defineCoreConformance(harness: ConformanceHarness): void {
         expect((await repo.get(workspace.id, 'exec_done'))?.status).toBe('done')
       })
 
+      // Race-audit 2.3 (the DRIVER-clobbers-terminal direction, dual of the guard above):
+      // `markFailed` BUMPS `rev`, so an in-flight driver `casPersist` that loaded the run
+      // BEFORE a `stopRun`/`failRun` can no longer resurrect it. Without the bump the terminal
+      // write left `rev` untouched, so a stale `casPersist` writing a NON-terminal status
+      // (a `pollGate` pending write, a dispatch write, …) would still MATCH the unchanged `rev`
+      // and flip the stopped run back to `running`. Proven identically on D1 and Postgres.
+      it('markFailed bumps rev so a stale driver write cannot resurrect a stopped run', async () => {
+        const app = harness.makeApp()
+        const repo = app.executionRepository()
+        const { workspace } = await app.createWorkspace()
+
+        const base: ExecutionInstance = {
+          id: 'exec_stopped',
+          blockId: 'blk_stopped',
+          pipelineId: 'pl',
+          pipelineName: 'Pipeline',
+          steps: [],
+          currentStep: 0,
+          status: 'running',
+          initiatedBy: null,
+        }
+        await repo.upsert(workspace.id, base)
+        // The durable driver loaded this snapshot (rev 0) and is mid-probe…
+        const driverSnapshot = await repo.get(workspace.id, 'exec_stopped')
+        expect(driverSnapshot?.rev).toBe(0)
+
+        // …then the human hit Stop: `failRun` → `markFailed` records the terminal failure.
+        await repo.markFailed(workspace.id, 'exec_stopped', {
+          kind: 'cancelled',
+          message: 'Stopped by the user.',
+          detail: null,
+          hint: null,
+          occurredAt: 1,
+          lastSubtasks: null,
+        })
+        const stopped = await repo.get(workspace.id, 'exec_stopped')
+        expect(stopped?.status).toBe('failed')
+        // The terminal write bumped `rev`, so the driver's snapshot is now stale.
+        expect(stopped?.rev).toBe(1)
+
+        // The driver's post-probe write (a non-terminal `running`, from its pre-stop snapshot)
+        // is refused — it holds the pre-fail rev, so the CAS misses.
+        driverSnapshot!.status = 'running'
+        expect(await repo.compareAndSwap(workspace.id, driverSnapshot!)).toBe(false)
+        // The run stays failed — NOT resurrected as a zombie `running` row.
+        expect((await repo.get(workspace.id, 'exec_stopped'))?.status).toBe('failed')
+      })
+
       // Run diagnostics (dispatch context — backend/model/repo — for after-the-fact
       // investigation) ride in the `detail` JSON, so a repo that serialized `detail`
       // differently would drop them. Asserted at the repository layer so D1 and Postgres

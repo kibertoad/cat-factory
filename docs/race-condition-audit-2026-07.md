@@ -163,13 +163,17 @@ driver's post-poll writes CAS-with-retry (re-apply the mechanical mutation on fr
 state) or narrow them to field-level patches (the bootstrap-job `json_set` column
 patches are the in-repo model).
 
-> **Status: ADDRESSED.** The driver's writes are now `compareAndSwap` (never inserts), so an
-> in-flight `pollAgentJob`/`pollGate` that loaded a pre-cancel snapshot can no longer re-insert the
-> deleted row — its stale write is refused and the run stays cancelled (see 2.2). And `failRun`'s
-> terminal guard now treats `done` as terminal too, with `markFailed` SQL-guarded (`AND status NOT
-IN ('done','failed')`) on BOTH runtimes, so a `stopRun` racing a run that just merged can't
-> re-mark it `failed`/`blocked`. Cross-runtime conformance asserts CAS-never-resurrects + the
-> markFailed done-guard.
+> **Status: ADDRESSED (both directions).** The driver's writes are now `compareAndSwap` (never
+> inserts), so an in-flight `pollAgentJob`/`pollGate` that loaded a pre-cancel snapshot can no longer
+> re-insert the deleted row — its stale write is refused and the run stays cancelled (see 2.2). The
+> terminal-clobber is closed in BOTH directions on BOTH runtimes: (a) `failRun`'s guard now treats
+> `done` as terminal and `markFailed` is SQL-guarded (`AND status NOT IN ('done','failed')`), so a
+> `stopRun` racing a just-merged run can't re-mark it `failed`/`blocked`; and (b) `markFailed` now
+> BUMPS `rev`, so an in-flight driver `casPersist` that loaded the run before the `stopRun` holds a
+> stale `rev`, misses its CAS guard, throws `RunContendedError`, re-drives, and no-ops on the now-
+> `failed` run — it can no longer resurrect a stopped run as a zombie `running` row. Cross-runtime
+> conformance asserts CAS-never-resurrects, the markFailed done-guard, AND the rev-bump-vs-stale-
+> driver-write.
 
 ### 2.3 `cancel()`/`stopRun()` vs an in-flight driver iteration: run resurrection and terminal-state clobber — CONFIRMED mechanism (Node; narrower on Cloudflare)
 
@@ -485,12 +489,16 @@ already-shipped `rev`; (b) generation-check `workspace.refresh()`/`hydrate` (fix
 
 1. ~~**Spend-resume on Cloudflare** (1.1)~~ + ~~BootstrapWorkflow re-drive (1.2)~~ — **DONE.**
 2. ~~**One live run per block at the DB** (2.1)~~ — **DONE** (partial unique index + `insertLive`).
-3. **Finish the OCC migration** (2.2/2.3) — **driver half DONE**: `approveStep`/
-   `resolveCompanionExceeded` route through `mutateInstance`, and the durable driver's post-poll
-   writes are now CAS-or-re-drive (`casPersist` + `RunContendedError` → `continue`), so Stop/cancel
-   can't be undone by an in-flight poll and `failRun`/`markFailed` won't re-fail a merged run.
-   **Remaining:** route the gate-window CONTROLLERS (`ReviewGateController`/`TesterController`/…)
-   through `mutateInstance` (the controller half).
+3. **Finish the OCC migration** (2.2/2.3) — **driver half DONE**: `approveStep` routes through
+   `mutateInstance`, and the durable driver's post-poll writes are now CAS-or-re-drive (`casPersist`
+   - `RunContendedError` → `continue`), so Stop/cancel can't be undone by an in-flight poll.
+     `failRun`/`markFailed` won't re-fail a merged (`done`) run, and `markFailed` bumps `rev` so an
+     in-flight driver `casPersist` can't resurrect a `stopRun`-failed run either (both terminal-clobber
+     directions closed). **Remaining:** route the gate-window CONTROLLERS
+     (`ReviewGateController`/`TesterController`/…) — AND the still-blind `resolveCompanionExceeded`
+     (its shared `dispatchIterationCap` → `advancePastResolvedGate` plumbing owns the upsert, so
+     CAS-guarding it needs that helper split into pure-mutation + side-effect halves) — through
+     `mutateInstance` (the controller half).
 4. **CAS the notification status flip before the side effect** (3.1) — **still open**; the
    escalation-sweep half (3.2) is **DONE** (`escalateStaleOpen` conditional update).
 5. **rev/CAS or item-targeted writes for the review repositories** (2.5).

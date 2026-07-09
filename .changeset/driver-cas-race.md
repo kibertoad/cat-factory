@@ -16,7 +16,11 @@ Every driver write now goes through `RunStateMachine.casPersist` (a `compareAndS
 inserts) and throws the internal `RunContendedError` on a lost race; the four driver entry points
 (`advanceInstance`/`pollAgentJob`/`pollGate`/`resolveGatePollExhaustion`) catch it and re-drive on
 fresh state. The `pollAgentJob` running-fold and `RunDispatcher`'s own follow-up human actions use
-`mutateInstance` (reload + re-apply). `RunStateMachine.failRun` now treats `done` as terminal and
-`markFailed` is SQL-guarded (`status NOT IN ('done','failed')`) on both runtimes, so a `stopRun`
-racing a just-merged run can't re-mark it `failed`. Cross-runtime conformance asserts the driver
-can't clobber a concurrent write or resurrect a cancelled run.
+`mutateInstance` (reload + re-apply). The terminal-state clobber is closed in both directions on
+both runtimes: `RunStateMachine.failRun` now treats `done` as terminal and `markFailed` is
+SQL-guarded (`status NOT IN ('done','failed')`), so a `stopRun` racing a just-merged run can't
+re-mark it `failed`; and `markFailed` bumps `rev`, so an in-flight driver `casPersist` that loaded
+the run before the `stopRun` holds a stale `rev`, misses its CAS guard, re-drives, and no-ops on the
+now-`failed` run — it can't resurrect a stopped run as a zombie `running` row. Cross-runtime
+conformance asserts the driver can't clobber a concurrent write, resurrect a cancelled run, re-fail a
+merged run, or resurrect a stopped run.
