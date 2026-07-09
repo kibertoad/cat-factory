@@ -256,6 +256,17 @@ A direct consequence of 2.2, called out separately because the effect is user-vi
 
 ## 3. Medium — engine and runtime findings
 
+> **Status: ADDRESSED.** The `act` endpoint now atomically claims the card BEFORE the side
+> effect: `NotificationService.act` flips `open` → `acted` via the new
+> `NotificationRepository.claimForAction` (a single conditional `UPDATE … WHERE status='open'
+RETURNING *`, the `PasswordResetTokenRepository.consume` shape), and only the writer that
+> wins the flip runs `mergePr`/`retry`; a concurrent act is handed `null` and returns the
+> settled row without re-firing. A failing side effect reverts the card to `open` (and
+> re-delivers) so the action stays retryable, without the double-fire window. Mirrored on both
+> runtimes (D1 ⇄ Drizzle) with a repository-layer conformance assertion (exactly one of two
+> concurrent claims wins) plus service-level unit tests. The escalation-sweep half (3.2) was
+> already `escalateStaleOpen`.
+
 ### 3.1 Notification `act` double-fires the side effect — CONFIRMED
 
 - `NotificationController.ts:43-73`: read → check `status !== 'open'` → perform side
@@ -519,8 +530,9 @@ already-shipped `rev`; (b) generation-check `workspace.refresh()`/`hydrate` (fix
    `mutateInstance`; the gate-resume plumbing was split into `advanceRunPastGate` + `settleAdvancedGate`
    and the blind `advancePastResolvedGate` deleted. A repository-layer conformance assertion pins the
    `mutateInstance` reload-and-retry contract on both runtimes.
-4. **CAS the notification status flip before the side effect** (3.1) — **still open**; the
-   escalation-sweep half (3.2) is **DONE** (`escalateStaleOpen` conditional update).
+4. ~~**CAS the notification status flip before the side effect** (3.1)~~ — **DONE**
+   (`claimForAction` atomic `open` → `acted` claim before the side effect, both runtimes +
+   conformance); the escalation-sweep half (3.2) was already **DONE** (`escalateStaleOpen`).
 5. **rev/CAS or item-targeted writes for the review repositories** (2.5).
 6. **Frontend**: `rev`-guard `execution.hydrate`, generation-check `workspace.refresh`,
    replicate the bootstrap guard onto env-config-repair (4.1–4.5).

@@ -126,6 +126,29 @@ export class DrizzleNotificationRepository implements NotificationRepository {
       })
   }
 
+  async claimForAction(
+    workspaceId: string,
+    id: string,
+    resolvedAt: number,
+  ): Promise<Notification | null> {
+    // Atomic act-claim: flip `open` → `acted` in one conditional UPDATE and return the row.
+    // Only the writer that matched `status = 'open'` gets a row back — a concurrent act finds
+    // the card already non-open and is handed null, so the side effect fires exactly once.
+    // Mirrors the D1 twin.
+    const rows = await this.db
+      .update(notifications)
+      .set({ status: 'acted', resolved_at: resolvedAt })
+      .where(
+        and(
+          eq(notifications.workspace_id, workspaceId),
+          eq(notifications.id, id),
+          eq(notifications.status, 'open'),
+        ),
+      )
+      .returning()
+    return rows[0] ? rowToNotification(rows[0]) : null
+  }
+
   async escalateStaleOpen(workspaceId: string, cutoff: number): Promise<Notification[]> {
     // One statement flips every overdue open card and returns the rows for re-delivery —
     // the sweep never loops per-row upserts. Mirrors the D1 twin.

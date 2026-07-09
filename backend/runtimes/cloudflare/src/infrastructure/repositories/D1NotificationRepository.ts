@@ -134,6 +134,25 @@ export class D1NotificationRepository implements NotificationRepository {
       .run()
   }
 
+  async claimForAction(
+    workspaceId: string,
+    id: string,
+    resolvedAt: number,
+  ): Promise<Notification | null> {
+    // Atomic act-claim: flip `open` → `acted` in one conditional UPDATE and return the row.
+    // Only the writer that matched `status = 'open'` gets a row back — a concurrent act finds
+    // the card already non-open and is handed null, so the side effect fires exactly once.
+    const row = await this.db
+      .prepare(
+        `UPDATE notifications SET status = 'acted', resolved_at = ?
+           WHERE workspace_id = ? AND id = ? AND status = 'open'
+         RETURNING *`,
+      )
+      .bind(resolvedAt, workspaceId, id)
+      .first<NotificationRow>()
+    return row ? rowToNotification(row) : null
+  }
+
   async escalateStaleOpen(workspaceId: string, cutoff: number): Promise<Notification[]> {
     // One statement flips every overdue open card and returns the rows for re-delivery —
     // the sweep never loops per-row upserts.

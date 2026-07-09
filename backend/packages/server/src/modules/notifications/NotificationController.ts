@@ -3,7 +3,6 @@ import {
   dismissNotificationContract,
   listNotificationsContract,
 } from '@cat-factory/contracts'
-import { NotFoundError } from '@cat-factory/kernel'
 import type { NotificationsModule } from '@cat-factory/orchestration'
 import { buildHonoRoute } from '@toad-contracts/hono'
 import { Hono } from 'hono'
@@ -39,37 +38,39 @@ export function notificationController(): Hono<AppEnv> {
     return c.json(await notifications.service.listOpen(param(c, 'workspaceId')), 200)
   })
 
-  // Act on a notification: run its side-effect, then mark it acted.
+  // Act on a notification: atomically claim it (`open` → `acted`), then run its side-effect
+  // exactly once. `service.act` performs the claim BEFORE the side-effect so two concurrent
+  // acts (double-click, two inboxes, HTTP retry) can't both merge/retry; a failed side-effect
+  // reopens the card so the human can retry.
   buildHonoRoute(app, actNotificationContract, async (c) => {
     const notifications = requireNotifications(c)
     if (!notifications) return unavailable(c)
     const workspaceId = param(c, 'workspaceId')
     const id = c.req.valid('param').notificationId
-    const notification = await notifications.service.get(workspaceId, id)
-    if (!notification) throw new NotFoundError('Notification', id)
-    if (notification.status !== 'open') return c.json(notification, 200)
-
     const container = c.get('container')
-    switch (notification.type) {
-      case 'merge_review':
-      case 'pipeline_complete':
-        // Confirm + merge the PR for real (block is `pr_ready` → `done`). Runs under
-        // the acting user's ambient context so their per-user PAT (when set) merges.
-        if (notification.blockId) {
-          await runWithInitiator(c.get('user')?.id, () =>
-            container.executionService.mergePr(workspaceId, notification.blockId!),
-          )
-        }
-        break
-      case 'ci_failed':
-      case 'test_failed':
-        // Re-run the failed pipeline once CI / the tests are presumably fixed.
-        if (notification.executionId) {
-          await container.executionService.retry(workspaceId, notification.executionId)
-        }
-        break
-    }
-    return c.json(await notifications.service.resolve(workspaceId, id, 'act'), 200)
+    const userId = c.get('user')?.id
+    const acted = await notifications.service.act(workspaceId, id, async (notification) => {
+      switch (notification.type) {
+        case 'merge_review':
+        case 'pipeline_complete':
+          // Confirm + merge the PR for real (block is `pr_ready` → `done`). Runs under
+          // the acting user's ambient context so their per-user PAT (when set) merges.
+          if (notification.blockId) {
+            await runWithInitiator(userId, () =>
+              container.executionService.mergePr(workspaceId, notification.blockId!),
+            )
+          }
+          break
+        case 'ci_failed':
+        case 'test_failed':
+          // Re-run the failed pipeline once CI / the tests are presumably fixed.
+          if (notification.executionId) {
+            await container.executionService.retry(workspaceId, notification.executionId)
+          }
+          break
+      }
+    })
+    return c.json(acted, 200)
   })
 
   // Dismiss a notification without acting on it.

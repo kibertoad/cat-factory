@@ -480,6 +480,10 @@ export const REMOTE_PERSISTENCE_METHODS: PersistenceMethodTable = {
     // (`NotificationService`), not `upsertOpenForBlock`. Workspace-scoped, member-level (the
     // inbox act/dismiss endpoints are not admin-gated) — same policy as the writes above.
     upsert: { scope: { kind: 'workspace', arg: 0 } },
+    // The inbox `act` flow atomically claims the open card (`open` → `acted`) BEFORE running
+    // its side effect, so a mothership node must proxy the claim like the surrounding
+    // get/upsert. Workspace-scoped, member-level — same policy as `upsert`.
+    claimForAction: { scope: { kind: 'workspace', arg: 0 } },
     // The escalation sweep's batched write (a local node runs the sweep too, so it must proxy
     // like the listOpen + per-row upsert loop it replaced). Workspace-scoped like `upsert`.
     escalateStaleOpen: { scope: { kind: 'workspace', arg: 0 } },
