@@ -3,6 +3,8 @@ import {
   CONTAINER_RUNTIMES,
   type ContainerRuntime,
   type ExecutionMode,
+  HARNESS_IMAGE_EXAMPLE,
+  HARNESS_IMAGE_GUIDANCE,
   NATIVE_HARNESSES,
   type NativeHarness,
 } from './templates.js'
@@ -36,7 +38,12 @@ export interface LocalEnvInput {
   encryptionKey: string
   /** Shared HMAC secret between the backend and the executor-harness (`HARNESS_SHARED_SECRET`). */
   harnessSharedSecret: string
-  harnessImage: string
+  /**
+   * An explicit harness-image pin. Normally UNSET — `LOCAL_HARNESS_IMAGE` is then written
+   * commented-out so the backend runs its matched version; a value here is written active
+   * because the developer deliberately chose to lock to it (e.g. testing/hotfix).
+   */
+  harnessImage?: string
   port: number
   corsAllowedOrigins: string
   provider: VcsProvider
@@ -107,13 +114,12 @@ export function buildLocalEnv(input: LocalEnvInput): string {
       key: tokenVar,
       value: input.token ?? '',
     },
+    // Unset by default: written commented-out so the backend runs its matched version. Only an
+    // explicit --harness-image pin makes this active (see HARNESS_IMAGE_GUIDANCE).
     {
-      comment: [
-        'The executor-harness image agent jobs run as per-run containers.',
-        'Pull it first: docker pull ghcr.io/kibertoad/cat-factory-executor:latest',
-      ],
-      key: 'LOCAL_HARNESS_IMAGE',
-      value: input.harnessImage,
+      comment: [...HARNESS_IMAGE_GUIDANCE],
+      key: input.harnessImage ? 'LOCAL_HARNESS_IMAGE' : '# LOCAL_HARNESS_IMAGE',
+      value: input.harnessImage ?? HARNESS_IMAGE_EXAMPLE,
     },
     {
       comment: [`Container runtime used to spawn agent jobs: ${CONTAINER_RUNTIMES.join(' | ')}.`],

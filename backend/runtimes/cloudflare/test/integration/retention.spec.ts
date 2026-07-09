@@ -7,6 +7,7 @@ import { D1AgentSearchQueryRepository } from '../../src/infrastructure/repositor
 import { D1CommitProjectionRepository } from '../../src/infrastructure/repositories/D1CommitProjectionRepository'
 import { D1LlmCallMetricRepository } from '../../src/infrastructure/repositories/D1LlmCallMetricRepository'
 import { D1RateLimitRepository } from '../../src/infrastructure/repositories/D1RateLimitRepository'
+import { D1SubscriptionQuotaCycleRepository } from '../../src/infrastructure/repositories/D1SubscriptionQuotaCycleRepository'
 import { D1TokenUsageRepository } from '../../src/infrastructure/repositories/D1TokenUsageRepository'
 import { sweepRetention } from '../../src/infrastructure/workflows/retention'
 
@@ -39,6 +40,8 @@ function deps() {
     llmCallMetricRepository: new D1LlmCallMetricRepository({ db: telemetryDb }),
     agentContextSnapshotRepository: new D1AgentContextSnapshotRepository({ db: telemetryDb }),
     agentSearchQueryRepository: new D1AgentSearchQueryRepository({ db: telemetryDb }),
+    // Subscription quota-cycle counters live in the main DB (migration 0047).
+    subscriptionQuotaCycleRepository: new D1SubscriptionQuotaCycleRepository({ db }),
     clock,
     policy: POLICY,
   }
@@ -245,11 +248,39 @@ describe('storage retention sweep', () => {
       llmCallMetrics: 0,
       agentContextSnapshots: 0,
       agentSearchQueries: 0,
+      // The quota-cycle prune uses a FIXED 30-day window, not the policy — but no
+      // quota rows are seeded here, so it reclaims nothing.
+      subscriptionQuotaCycles: 0,
       scheduleRuns: 0,
       provisioningLog: 0,
       passwordResetTokens: 0,
     })
     expect(await countRows('token_usage', 'id = ?', 'tok_disabled')).toBe(1)
+  })
+
+  it('prunes idle subscription_quota_cycles past the fixed 30-day window but keeps fresh ones', async () => {
+    const repo = new D1SubscriptionQuotaCycleRepository({ db: env.DB })
+    const FIVE_H = 5 * 60 * 60 * 1000
+    // An idle cycle anchored 40 days ago (well past the 30-day prune window)...
+    await repo.recordUsage(
+      { id: 'sqc_old', scope: 'user', scopeId: 'u_ret_old', vendor: 'claude', windowKind: '5h' },
+      { inputTokens: 1, outputTokens: 1 },
+      NOW - 40 * DAY,
+      FIVE_H,
+    )
+    // ...and a fresh one anchored 2 days ago (inside the window).
+    await repo.recordUsage(
+      { id: 'sqc_new', scope: 'user', scopeId: 'u_ret_new', vendor: 'claude', windowKind: '5h' },
+      { inputTokens: 1, outputTokens: 1 },
+      NOW - 2 * DAY,
+      FIVE_H,
+    )
+
+    const result = await sweepRetention(deps())
+
+    expect(result.subscriptionQuotaCycles).toBeGreaterThanOrEqual(1)
+    expect(await countRows('subscription_quota_cycles', 'id = ?', 'sqc_old')).toBe(0)
+    expect(await countRows('subscription_quota_cycles', 'id = ?', 'sqc_new')).toBe(1)
   })
 })
 

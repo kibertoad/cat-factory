@@ -1,7 +1,6 @@
 import {
   CONTAINER_RUNTIMES,
   type ContainerRuntime,
-  DEFAULT_HARNESS_IMAGE,
   EXECUTION_MODES,
   type ExecutionMode,
   NATIVE_HARNESSES,
@@ -268,7 +267,8 @@ export const OPTION_DEFAULTS = {
   // (`http://localhost:<port>`) in bootstrap.ts so a custom --port can't leave the frontend
   // pointed at the wrong backend.
   port: 8787,
-  harnessImage: DEFAULT_HARNESS_IMAGE,
+  // No harnessImage default: an unset LOCAL_HARNESS_IMAGE lets the backend run the version it was
+  // built against. `--harness-image` overrides it only when the user deliberately pins one.
   containerRuntime: 'docker' as ContainerRuntime,
   executionMode: 'pool' as ExecutionMode,
   // `k3s` command defaults.
@@ -305,7 +305,7 @@ Options (init):
       --db-url <url>      Postgres DATABASE_URL
       --api-base <url>   Backend API base for the SPA (default: http://localhost:<port>)
       --port <n>          Backend HTTP port (default: 8787; also sets the SPA's api-base)
-      --harness-image <ref>  Executor-harness image (default: ghcr.io ...:latest)
+      --harness-image <ref>  Pin the executor-harness image (default: unset — the backend runs the version it was built against)
       --container-runtime <r>  Agent container runtime: docker | podman | orbstack | colima | apple
       --execution-mode <m>  How agents run: pool (Docker container pool) | native (host CLI)
       --native-harnesses <l>  Native mode: harnesses to run natively (claude-code,codex)
@@ -322,7 +322,7 @@ Options (env):
       --token <token>     PAT value (skips the browser/paste flow)
       --db-url <url>      Postgres DATABASE_URL
       --port <n>          Backend HTTP port (default: 8787)
-      --harness-image <ref>  Executor-harness image (default: ghcr.io ...:latest)
+      --harness-image <ref>  Pin the executor-harness image (default: unset — the backend runs the version it was built against)
       --container-runtime <r>  Agent container runtime: docker | podman | orbstack | colima | apple
       --execution-mode <m>  How agents run: pool (Docker container pool) | native (host CLI)
       --native-harnesses <l>  Native mode: harnesses to run natively (claude-code,codex)

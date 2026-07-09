@@ -47,6 +47,10 @@ import type {
   PackageRegistryConnectionRepository,
   ReleaseHealthConfigRecord,
   ReleaseHealthConfigRepository,
+  SubscriptionQuotaCycleRecord,
+  SubscriptionQuotaCycleRepository,
+  SubscriptionQuotaScope,
+  SubscriptionQuotaWindowKind,
   TestSecretRecord,
   TestSecretsRepository,
   ModelPreset,
@@ -130,9 +134,11 @@ import type {
 } from '@cat-factory/kernel'
 import { LLM_WARNING_FINISH_REASONS } from '@cat-factory/kernel'
 import {
+  type SubscriptionVendor,
   agentRunKindSchema,
   decodeInitiativeRow,
   isWebSearchProvider,
+  subscriptionVendorSchema,
 } from '@cat-factory/contracts'
 import {
   decodeEnum,
@@ -195,6 +201,7 @@ import {
   memberships,
   riskPolicies,
   releaseHealthConfigs,
+  subscriptionQuotaCycles,
   testSecrets,
   pipelineScheduleRuns,
   pipelineSchedules,
@@ -4383,6 +4390,100 @@ class DrizzleObservabilityConnectionRepository implements ObservabilityConnectio
 }
 
 /**
+ * Postgres-backed modeled subscription quota-cycle counters (the Drizzle mirror of the
+ * Worker's `D1SubscriptionQuotaCycleRepository`, migration 0047), column-for-column so
+ * behaviour matches across stores.
+ */
+class DrizzleSubscriptionQuotaCycleRepository implements SubscriptionQuotaCycleRepository {
+  constructor(private readonly db: DrizzleDb) {}
+
+  async recordUsage(
+    key: {
+      id: string
+      scope: SubscriptionQuotaScope
+      scopeId: string
+      vendor: SubscriptionVendor
+      windowKind: SubscriptionQuotaWindowKind
+    },
+    usage: { inputTokens: number; outputTokens: number },
+    at: number,
+    windowMs: number,
+  ): Promise<void> {
+    // Windowed UPSERT (mirrors the D1 repo): INSERT anchors a fresh window at `at`; on
+    // conflict, an active window (younger than `windowMs`) accumulates and a stale one
+    // resets to `at`. Every SET RHS reads the row's pre-update values, so referencing
+    // `window_started_at` in the counter branches is safe though it's also reassigned.
+    const cols = subscriptionQuotaCycles
+    const active = sql`(${at} - ${cols.window_started_at} < ${windowMs})`
+    await this.db
+      .insert(cols)
+      .values({
+        id: key.id,
+        scope: key.scope,
+        scope_id: key.scopeId,
+        vendor: key.vendor,
+        window_kind: key.windowKind,
+        window_started_at: at,
+        input_tokens: usage.inputTokens,
+        output_tokens: usage.outputTokens,
+        request_count: 1,
+        updated_at: at,
+      })
+      .onConflictDoUpdate({
+        target: [cols.scope, cols.scope_id, cols.vendor, cols.window_kind],
+        set: {
+          window_started_at: sql`CASE WHEN ${active} THEN ${cols.window_started_at} ELSE ${at} END`,
+          input_tokens: sql`CASE WHEN ${active} THEN ${cols.input_tokens} ELSE 0 END + ${usage.inputTokens}`,
+          output_tokens: sql`CASE WHEN ${active} THEN ${cols.output_tokens} ELSE 0 END + ${usage.outputTokens}`,
+          request_count: sql`CASE WHEN ${active} THEN ${cols.request_count} ELSE 0 END + 1`,
+          updated_at: at,
+        },
+      })
+  }
+
+  async listByScopeVendor(
+    scope: SubscriptionQuotaScope,
+    scopeId: string,
+    vendor: SubscriptionVendor,
+  ): Promise<SubscriptionQuotaCycleRecord[]> {
+    const rows = await this.db
+      .select()
+      .from(subscriptionQuotaCycles)
+      .where(
+        and(
+          eq(subscriptionQuotaCycles.scope, scope),
+          eq(subscriptionQuotaCycles.scope_id, scopeId),
+          eq(subscriptionQuotaCycles.vendor, vendor),
+        ),
+      )
+    return rows.map((row) => ({
+      id: row.id,
+      scope: row.scope as SubscriptionQuotaScope,
+      scopeId: row.scope_id,
+      vendor: decodeEnum(subscriptionVendorSchema, row.vendor, {
+        table: 'subscription_quota_cycles',
+        column: 'vendor',
+        id: row.id,
+      }),
+      windowKind: row.window_kind as SubscriptionQuotaWindowKind,
+      windowStartedAt: row.window_started_at,
+      inputTokens: row.input_tokens,
+      outputTokens: row.output_tokens,
+      requestCount: row.request_count,
+      updatedAt: row.updated_at,
+    }))
+  }
+
+  async deleteOlderThan(epochMs: number): Promise<number> {
+    const deleted = await this.db
+      .delete(subscriptionQuotaCycles)
+      .where(lt(subscriptionQuotaCycles.window_started_at, epochMs))
+      .returning({ id: subscriptionQuotaCycles.id })
+    return deleted.length
+  }
+}
+
+/**
  * A workspace's private package-registry connection over Postgres (the Drizzle mirror
  * of the Worker's `D1PackageRegistryConnectionRepository`, migration 0034). One row per
  * workspace; the registry entries are stored as ONE sealed JSON array (encrypted by the
@@ -4795,6 +4896,7 @@ export interface CoreRepositories {
   incidentEnrichmentConnectionRepository: IncidentEnrichmentConnectionRepository
   accountSettingsRepository: AccountSettingsRepository
   releaseHealthConfigRepository: ReleaseHealthConfigRepository
+  subscriptionQuotaCycleRepository: SubscriptionQuotaCycleRepository
   testSecretsRepository: TestSecretsRepository
   provisioningLogRepository: ProvisioningLogRepository
 }
@@ -4841,6 +4943,7 @@ export function createDrizzleRepositories(db: DrizzleDb, clock: Clock): CoreRepo
     incidentEnrichmentConnectionRepository: new DrizzleIncidentEnrichmentConnectionRepository(db),
     accountSettingsRepository: new DrizzleAccountSettingsRepository(db),
     releaseHealthConfigRepository: new DrizzleReleaseHealthConfigRepository(db),
+    subscriptionQuotaCycleRepository: new DrizzleSubscriptionQuotaCycleRepository(db),
     testSecretsRepository: new DrizzleTestSecretsRepository(db),
     provisioningLogRepository: new DrizzleProvisioningLogRepository(db),
   }

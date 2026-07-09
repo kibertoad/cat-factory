@@ -17,6 +17,7 @@ function fakeRepos(): {
     llmCallMetrics: number | null
     agentContextSnapshots: number | null
     agentSearchQueries: number | null
+    subscriptionQuotaCycles: number | null
     provisioningLog: number | null
     commits: number | null
   }
@@ -26,6 +27,7 @@ function fakeRepos(): {
     llmCallMetrics: null as number | null,
     agentContextSnapshots: null as number | null,
     agentSearchQueries: null as number | null,
+    subscriptionQuotaCycles: null as number | null,
     provisioningLog: null as number | null,
     commits: null as number | null,
   }
@@ -63,6 +65,13 @@ function fakeRepos(): {
       pipelineScheduleRepository: { pruneRunsBefore: async () => 0 },
       // Expired personal-credential activations (deleted by `now`, not a window).
       subscriptionActivationRepository: { deleteExpired: async () => 2 },
+      // Idle quota cycles pruned to the fixed 30-day window.
+      subscriptionQuotaCycleRepository: {
+        deleteOlderThan: async (c) => {
+          cutoffs.subscriptionQuotaCycles = c
+          return 8
+        },
+      },
       provisioningLogRepository: {
         deleteOlderThan: async (c) => {
           cutoffs.provisioningLog = c
@@ -106,6 +115,7 @@ describe('sweepRetention', () => {
     expect(cutoffs.agentSearchQueries).toBe(now - 3 * DAY) // same window as llmCallMetrics
     expect(cutoffs.provisioningLog).toBe(now - 14 * DAY)
     expect(cutoffs.commits).toBe(now - 90 * DAY)
+    expect(cutoffs.subscriptionQuotaCycles).toBe(now - 30 * DAY) // fixed 30-day window
     expect(result).toEqual({
       tokenUsage: 3,
       llmCallMetrics: 7,
@@ -113,6 +123,7 @@ describe('sweepRetention', () => {
       agentSearchQueries: 6,
       scheduleRuns: 0,
       activations: 2,
+      subscriptionQuotaCycles: 8,
       provisioningLog: 5,
       passwordResetTokens: 1,
       commits: 4,
@@ -134,6 +145,7 @@ describe('sweepRetention', () => {
       agentSearchQueries: 0,
       scheduleRuns: 0,
       activations: 2,
+      subscriptionQuotaCycles: 8,
       provisioningLog: 5,
       passwordResetTokens: 1,
       commits: 4,

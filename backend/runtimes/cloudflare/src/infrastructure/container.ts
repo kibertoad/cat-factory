@@ -70,6 +70,8 @@ import {
   OBSERVABILITY_CIPHER_INFO,
   RegistryReleaseHealthProvider,
   defaultObservabilityRegistry,
+  RegistrySubscriptionQuotaProvider,
+  defaultSubscriptionQuotaRegistry,
   WorkspaceIncidentEnrichmentProvider,
   INCIDENT_ENRICHMENT_CIPHER_INFO,
   AccountSettingsService,
@@ -236,6 +238,7 @@ import {
 import { D1WorkspaceSettingsRepository } from './repositories/D1WorkspaceSettingsRepository'
 import { D1UserSettingsRepository } from './repositories/D1UserSettingsRepository'
 import { D1ObservabilityConnectionRepository } from './repositories/D1ObservabilityConnectionRepository'
+import { D1SubscriptionQuotaCycleRepository } from './repositories/D1SubscriptionQuotaCycleRepository'
 import { D1PackageRegistryConnectionRepository } from './repositories/D1PackageRegistryConnectionRepository'
 import { D1TestSecretsRepository } from './repositories/D1TestSecretsRepository'
 import { D1IncidentEnrichmentConnectionRepository } from './repositories/D1IncidentEnrichmentConnectionRepository'
@@ -1461,6 +1464,15 @@ function buildContainerExecutor(
       recordPrompts: config.observability.recordPrompts,
     }),
   )
+  // Modeled subscription quota-cycle provider (usage-and-quota-tracking, Part B): folds a
+  // finished subscription run's tokens into rolling windows (real vendor reads land in B2,
+  // so its adapter registry is empty today — every vendor reports modeled).
+  const subscriptionQuotaProvider = new RegistrySubscriptionQuotaProvider({
+    subscriptionQuotaCycleRepository: new D1SubscriptionQuotaCycleRepository({ db }),
+    idGenerator: new CryptoIdGenerator(),
+    clock,
+    registry: defaultSubscriptionQuotaRegistry,
+  })
   // Prefer the run initiator's per-user PAT (when stored) over the App token, so the
   // container's clone/push/PR is attributed to them. Falls back to the App token.
   const resolveUserGitHubToken = buildResolveUserGitHubToken(env, db, clock)
@@ -1551,6 +1563,10 @@ function buildContainerExecutor(
     // Per-call telemetry for the subscription harnesses (proxy-bypassing), recorded
     // into `llm_call_metrics` alongside the proxy-metered Pi rows.
     recordHarnessCalls,
+    // Modeled subscription quota-cycle tracking (Part B): fold a finished subscription
+    // run's tokens into the rolling windows, for BOTH pooled and personal runs.
+    recordSubscriptionQuotaUsage: (target, usage) =>
+      subscriptionQuotaProvider.recordUsage(target, usage),
     // Individual-usage harnesses (Claude) lease the run-initiator's OWN activated
     // personal credential; absent ⇒ such models fail loudly at dispatch.
     ...(personalSubscriptions

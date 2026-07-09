@@ -58,7 +58,9 @@ export async function generateEnv(options: CliOptions, deps: EnvCommandDeps = {}
       ? OPTION_DEFAULTS.databaseUrl
       : await io.question('Postgres DATABASE_URL', OPTION_DEFAULTS.databaseUrl))
   const port = options.port ?? OPTION_DEFAULTS.port
-  const harnessImage = options.harnessImage ?? OPTION_DEFAULTS.harnessImage
+  // Undefined unless the user explicitly pinned one with --harness-image: an unset
+  // LOCAL_HARNESS_IMAGE lets the backend run its matched, tested version (see the generated .env).
+  const harnessImage = options.harnessImage
   const containerRuntime = await resolveContainerRuntime(options, io)
   const corsAllowedOrigins = 'http://localhost:3000'
   const execution = await resolveExecution(options, io)
@@ -137,7 +139,8 @@ function printNextSteps(io: Io, input: NextStepsInput): void {
     'If you ran this in a bare directory, wire up a deployment first (see `cat-factory init`).',
     '',
     'Reminders:',
-    `  - Pull the executor image:  docker pull ${OPTION_DEFAULTS.harnessImage}`,
+    '  - The backend pulls its matched executor-harness image automatically on first boot — no',
+    '    manual docker pull needed (pin LOCAL_HARNESS_IMAGE in the .env only to lock a version).',
     '  - No model-provider key is needed to boot — add providers/keys in the UI after sign-in',
     '    (or uncomment CLOUDFLARE_* / ANTHROPIC_API_KEY / OPENAI_API_KEY in the .env).',
   ]
@@ -147,7 +150,7 @@ function printNextSteps(io: Io, input: NextStepsInput): void {
       .join(' / ')
     lines.push(
       `  - Native mode: install + log in to the ${clis} CLI on this host (the harness server`,
-      '    is bundled; the image above still runs non-native steps).',
+      '    is bundled; the harness image still runs non-native steps).',
     )
   } else {
     lines.push(

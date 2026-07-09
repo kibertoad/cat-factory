@@ -559,6 +559,13 @@ export interface AgentJobHandle {
    */
   subscriptionTokenId?: string
   /**
+   * The run initiator's user id, carried so the poll site can attribute a PERSONAL
+   * (individual-usage) subscription run's quota usage to the right user — the personal
+   * path leases no pooled token, so {@link subscriptionTokenId} is absent for it. Set by
+   * the executor at dispatch; absent for runs with no known initiator (system paths).
+   */
+  initiatedByUserId?: string
+  /**
    * The model provider/vendor the job runs on (e.g. `claude`, `codex`, `openai`),
    * known at dispatch. Carried so the poll site can stamp it on the per-call telemetry
    * a subscription harness reports (which the proxy would otherwise supply). Absent ⇒

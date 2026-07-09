@@ -30,6 +30,7 @@ const back = useIntegrationBack(open)
 // refs in the backend MODEL_CATALOG. Only the ones present in the live browse list are
 // ticked, so a recommendation never enables a slug OpenRouter doesn't actually serve.
 const RECOMMENDED_SLUGS = [
+  'anthropic/claude-fable-5',
   'anthropic/claude-opus-4.8',
   'openai/gpt-5.5',
   'google/gemini-3-pro',
