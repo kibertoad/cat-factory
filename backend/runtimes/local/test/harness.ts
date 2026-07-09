@@ -287,7 +287,13 @@ export function makeConformanceApp(
   async function createOrgWorkspace(
     options: { name?: string; seed?: boolean } = {},
   ): Promise<WorkspaceSnapshot> {
-    const user = { id: 'usr_org-owner', login: 'org-owner', name: 'Org Owner' }
+    // The org creator must be a real users row — the accounts/memberships FKs to users(id)
+    // reject a nonexistent owner. Production always mints it at login, so do the same here
+    // (mirrors the conformance `makeOrgOwner` probe) instead of a phantom id.
+    const owner = await container.userService.findOrCreateByIdentity('github', 'org-owner', {
+      name: 'Org Owner',
+    })
+    const user = { id: owner.id, login: 'org-owner', name: 'Org Owner' }
     const name = options.name ?? 'Org board'
     const org = await container.accountService.createOrg(user, { name: `${name} org` })
     return container.workspaceService.create({ name, seed: options.seed ?? false }, user.id, org.id)

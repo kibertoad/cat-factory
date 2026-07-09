@@ -25,11 +25,14 @@ still reference it:
 - `user_identities.user_id → users(id)`
 - `accounts.owner_user_id → users(id)`
 - `personal_subscriptions.user_id → users(id)`
+- `memberships.user_id → users(id)`
+- `subscription_activations.user_id → users(id)`
 
-Node/Postgres: three validating `ADD CONSTRAINT` FKs (Drizzle schema + generated migration).
-Cloudflare/D1: migration `0046_user_identity_foreign_keys.sql` rebuilds the three tables with the
-FKs and also corrects `personal_subscriptions.user_id` from `INTEGER` to `TEXT` (matching the
-canonical `usr_*` id and the Postgres column).
+Node/Postgres: five validating `ADD CONSTRAINT` FKs (Drizzle schema + generated migration).
+Cloudflare/D1: migration `0046_user_identity_foreign_keys.sql` rebuilds the five tables with the
+FKs (deferring FK enforcement to commit via `PRAGMA defer_foreign_keys`, like `0001_init`) and
+also corrects `user_id` on `personal_subscriptions`, `memberships`, and `subscription_activations`
+from `INTEGER` to `TEXT` (matching the canonical `usr_*` id and the Postgres columns).
 
 No data migration. On a database that already contains orphaned rows, the validating Postgres
 constraint (or the D1 table-copy) will fail at boot — that is the intended loud surfacing of

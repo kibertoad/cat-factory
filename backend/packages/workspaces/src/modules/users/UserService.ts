@@ -92,10 +92,10 @@ export class UserService {
     const orphanedIdentity = await this.deps.userRepository.getIdentity(provider, subject)
     if (orphanedIdentity) {
       throw new Error(
-        `Dangling identity: (${provider}, ${orphanedIdentity.userId}) — the identity ` +
-          `'${provider}:${subject}' references a user that no longer exists. Refusing to ` +
-          `fork a new account (which would orphan the original). A users row was removed ` +
-          `without clearing its identity; restore the user or delete the stale identity.`,
+        `Dangling identity '${provider}:${subject}' references user ` +
+          `'${orphanedIdentity.userId}', which no longer exists. Refusing to fork a new ` +
+          `account (which would orphan the original). A users row was removed without ` +
+          `clearing its identity; restore the user or delete the stale identity.`,
       )
     }
 

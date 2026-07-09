@@ -1,7 +1,7 @@
 {
   "version": "8",
   "dialect": "postgres",
-  "id": "292408a3-9646-4acc-9dda-91dcff510e6d",
+  "id": "37440530-ec1d-4ee2-88af-c063e2ab2c83",
   "prevIds": [
     "527216e9-74fc-4c9b-b402-bb9e214fe07e",
     "68a98725-4d09-4666-b0ff-337fce5ca664"
@@ -14166,10 +14166,44 @@
       ],
       "onUpdate": "NO ACTION",
       "onDelete": "RESTRICT",
+      "name": "memberships_user_id_users_id_fkey",
+      "entityType": "fks",
+      "schema": "public",
+      "table": "memberships"
+    },
+    {
+      "nameExplicit": false,
+      "columns": [
+        "user_id"
+      ],
+      "schemaTo": "public",
+      "tableTo": "users",
+      "columnsTo": [
+        "id"
+      ],
+      "onUpdate": "NO ACTION",
+      "onDelete": "RESTRICT",
       "name": "personal_subscriptions_user_id_users_id_fkey",
       "entityType": "fks",
       "schema": "public",
       "table": "personal_subscriptions"
+    },
+    {
+      "nameExplicit": false,
+      "columns": [
+        "user_id"
+      ],
+      "schemaTo": "public",
+      "tableTo": "users",
+      "columnsTo": [
+        "id"
+      ],
+      "onUpdate": "NO ACTION",
+      "onDelete": "RESTRICT",
+      "name": "subscription_activations_user_id_users_id_fkey",
+      "entityType": "fks",
+      "schema": "public",
+      "table": "subscription_activations"
     },
     {
       "nameExplicit": false,

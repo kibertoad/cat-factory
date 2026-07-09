@@ -6,6 +6,7 @@ import {
   type DrizzleDb,
   buildNodeContainer,
   createApp as createNodeApp,
+  schema,
 } from '@cat-factory/node-server'
 import { HmacSigner, TOKEN_AUDIENCE } from '@cat-factory/server'
 import { MODEL_PRESET_SEED_IDS } from '@cat-factory/kernel'
@@ -149,6 +150,20 @@ describe('mothership mode — functional integration (real RPC backend)', () => 
     // The mothership backend + its machine API, over real Postgres.
     const mothership = buildNodeContainer({ db, env: MOTHERSHIP_ENV })
     mothershipApp = createNodeApp(mothership, MOTHERSHIP_ENV)
+
+    // The accounts/memberships → users(id) FKs require the org owner (whom the machine token
+    // is signed for) to exist as a real users row. Production mints it at login; this test
+    // bypasses login, so seed it before createOrg. Idempotent.
+    await db
+      .insert(schema.users)
+      .values({
+        id: ORG_OWNER.id,
+        name: ORG_OWNER.name,
+        email: null,
+        avatar_url: null,
+        created_at: Date.now(),
+      })
+      .onConflictDoNothing()
 
     // Seed an ORG-owned workspace with the demo board directly on the mothership (dev-open has
     // no signed-in user, so go through the services, exactly like the conformance org helper).

@@ -127,7 +127,10 @@ export const memberships = pgTable(
   'memberships',
   {
     account_id: text('account_id').notNull(),
-    user_id: text('user_id').notNull(),
+    // ON DELETE RESTRICT: a users row can't be removed while it still holds a membership.
+    user_id: text('user_id')
+      .notNull()
+      .references(() => users.id, { onDelete: 'restrict' }),
     // Combinable roles (admin / developer / product) as a CSV; defaults to developer.
     roles: text('roles').notNull().default('developer'),
     created_at: bigint('created_at', { mode: 'number' }).notNull(),
@@ -1822,7 +1825,10 @@ export const subscriptionActivations = pgTable(
   {
     id: text('id').primaryKey(),
     execution_id: text('execution_id').notNull(),
-    user_id: text('user_id').notNull(),
+    // ON DELETE RESTRICT: a users row can't be removed while it still has a run activation.
+    user_id: text('user_id')
+      .notNull()
+      .references(() => users.id, { onDelete: 'restrict' }),
     vendor: text('vendor').notNull(),
     token_cipher: text('token_cipher').notNull(),
     created_at: bigint('created_at', { mode: 'number' }).notNull(),

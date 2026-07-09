@@ -1,16 +1,23 @@
 -- Referential integrity for the user-identity lineage (the account-orphaning incident).
 --
 -- Previously NOTHING referenced users(id) at the DB level, so a users row could be removed
--- while its identity, personal account, and personal subscription lived on — a dangling
--- identity that the login path then silently forked a fresh (empty) account around. Add
--- ON DELETE RESTRICT foreign keys so a users row can no longer be dropped while any of
--- those still reference it; an unsafe delete now fails loudly instead of orphaning.
+-- while its identity, personal account, personal subscription, memberships, and run
+-- activations lived on — a dangling identity that the login path then silently forked a
+-- fresh (empty) account around. Add ON DELETE RESTRICT foreign keys so a users row can no
+-- longer be dropped while any of those still reference it; an unsafe delete now fails
+-- loudly instead of orphaning.
 --
 -- SQLite cannot ALTER a table to add a constraint, so each table is rebuilt via the
 -- standard create-new / copy / drop / rename dance and its indexes recreated. The current
 -- (post-migration) column shapes are reproduced exactly — including accounts.spend_monthly_limit
--- (added in 0042). personal_subscriptions.user_id is also corrected from INTEGER to TEXT
--- to match the canonical `usr_*` users.id (the Postgres side is already text).
+-- (added in 0042). user_id on personal_subscriptions, memberships, and subscription_activations
+-- is also corrected from INTEGER to TEXT to match the canonical `usr_*` users.id (the Postgres
+-- side is already text).
+--
+-- defer_foreign_keys holds FK enforcement until this transaction commits, so the drop/rename
+-- steps of the rebuild dance don't trip an intermediate constraint check (mirrors 0001_init).
+
+PRAGMA defer_foreign_keys=TRUE;
 
 -- user_identities.user_id -> users(id)
 CREATE TABLE user_identities_new (
@@ -71,3 +78,37 @@ CREATE UNIQUE INDEX idx_personal_subs_user_vendor
 CREATE INDEX idx_personal_subs_expiry
   ON personal_subscriptions (expires_at)
   WHERE deleted_at IS NULL;
+
+-- memberships.user_id -> users(id)  (also INTEGER -> TEXT)
+CREATE TABLE memberships_new (
+  account_id TEXT    NOT NULL,
+  user_id    TEXT    NOT NULL REFERENCES users(id) ON DELETE RESTRICT,
+  roles      TEXT    NOT NULL DEFAULT 'developer',
+  created_at INTEGER NOT NULL,
+  PRIMARY KEY (account_id, user_id)
+);
+INSERT INTO memberships_new (account_id, user_id, roles, created_at)
+  SELECT account_id, user_id, roles, created_at FROM memberships;
+DROP TABLE memberships;
+ALTER TABLE memberships_new RENAME TO memberships;
+CREATE INDEX idx_memberships_user ON memberships (user_id);
+
+-- subscription_activations.user_id -> users(id)  (also INTEGER -> TEXT)
+CREATE TABLE subscription_activations_new (
+  id            TEXT    NOT NULL,
+  execution_id  TEXT    NOT NULL,
+  user_id       TEXT    NOT NULL REFERENCES users(id) ON DELETE RESTRICT,
+  vendor        TEXT    NOT NULL,
+  token_cipher  TEXT    NOT NULL,
+  created_at    INTEGER NOT NULL,
+  expires_at    INTEGER NOT NULL,
+  PRIMARY KEY (id)
+);
+INSERT INTO subscription_activations_new (id, execution_id, user_id, vendor, token_cipher, created_at, expires_at)
+  SELECT id, execution_id, user_id, vendor, token_cipher, created_at, expires_at FROM subscription_activations;
+DROP TABLE subscription_activations;
+ALTER TABLE subscription_activations_new RENAME TO subscription_activations;
+CREATE UNIQUE INDEX idx_sub_activations_run
+  ON subscription_activations (execution_id, user_id, vendor);
+CREATE INDEX idx_sub_activations_expiry
+  ON subscription_activations (expires_at);
