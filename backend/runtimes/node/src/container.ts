@@ -28,16 +28,11 @@ import {
   type BackendRegistries,
   type EnvironmentBackendRegistry,
   type RunnerBackendRegistry,
-  type UserSecretKindRegistry,
   HttpRunnerPoolProvider,
   NotionProvider,
   ApiKeyService,
-  PublicApiKeyService,
   LocalModelEndpointService,
-  OpenRouterCatalogService,
-  usdRateForSpendCurrency,
   PersonalSubscriptionService,
-  UserSecretService,
   ProviderSubscriptionService,
   RunnerPoolConnectionService,
   ProvisioningLogRecorder,
@@ -135,7 +130,6 @@ import {
   PatPreferringAppRegistry,
   runWithInitiator,
   WebCryptoPasswordHasher,
-  WebCryptoPersonalSecretCipher,
   WebCryptoSecretCipher,
   WebCryptoWebhookVerifier,
   buildInfrastructureCapabilities,
@@ -207,17 +201,8 @@ import {
   DrizzlePullRequestProjectionRepository,
   DrizzleRepoProjectionRepository,
 } from './repositories/github.js'
-import { DrizzleProviderSubscriptionTokenRepository } from './repositories/providerSubscription.js'
-import { DrizzleProviderApiKeyRepository } from './repositories/providerApiKey.js'
-import { DrizzlePublicApiKeyRepository } from './repositories/publicApiKey.js'
-import {
-  DrizzlePersonalSubscriptionRepository,
-  DrizzleSubscriptionActivationRepository,
-} from './repositories/personalSubscription.js'
-import { DrizzleLocalModelEndpointRepository } from './repositories/localModelEndpoint.js'
-import { DrizzleUserSecretRepository } from './repositories/userSecret.js'
+import { DrizzleSubscriptionActivationRepository } from './repositories/personalSubscription.js'
 import { DrizzleUserRepoAccessRepository } from './repositories/userRepoAccess.js'
-import { DrizzleProviderModelCatalogRepository } from './repositories/providerModelCatalog.js'
 import { createDrizzleRepositories, createDrizzleSandboxDeps } from './repositories/drizzle.js'
 import { PostgresBinaryBlobBackend } from './storage/PostgresBinaryBlobBackend.js'
 import { FilesystemBinaryBlobBackend } from './storage/FilesystemBinaryBlobBackend.js'
@@ -253,6 +238,15 @@ import {
   DrizzleTaskSourceSettingsRepository,
 } from './repositories/tasks.js'
 import { CryptoIdGenerator, SystemClock } from './runtime.js'
+import {
+  buildNodeApiKeyService,
+  buildNodeLocalModelEndpointService,
+  buildNodeOpenRouterCatalogService,
+  buildNodePersonalSubscriptionService,
+  buildNodePublicApiKeyService,
+  buildNodeSubscriptionService,
+  buildNodeUserSecretService,
+} from './wireCredentialServices.js'
 
 // HKDF domain tag separating runner-pool scheduler secrets from any other use of
 // the same master key (mirrors the Worker's `cat-factory:runners`).
@@ -1140,203 +1134,6 @@ function selectNodeEnvConfigRepairer(deps: {
     model,
     proxyBaseUrl: `${publicUrl.replace(/\/+$/, '')}/v1`,
     githubApiBase: deps.config.github.apiBase,
-  })
-}
-
-/**
- * Build the workspace subscription-token pool service for the Node/local facade
- * (Postgres-backed), or undefined when the shared ENCRYPTION_KEY is absent. Tokens
- * are sealed under a subscriptions-scoped HKDF info of the shared master key.
- */
-function buildNodeSubscriptionService(
-  env: NodeJS.ProcessEnv,
-  db: DrizzleDb | undefined,
-  workspaceRepository: CoreDependencies['workspaceRepository'],
-  idGenerator: CoreDependencies['idGenerator'],
-  clock: Clock,
-  // Mothership mode injects the local `node:sqlite` credential store here, so the pooled
-  // subscription tokens stay on the laptop (the LOCAL container executor leases + decrypts
-  // them). Else the Drizzle repo over `db`, and the service turns off without either.
-  repositoryOverride?: ProviderSubscriptionTokenRepository,
-): ProviderSubscriptionService | undefined {
-  const masterKeyBase64 = env.ENCRYPTION_KEY?.trim()
-  if (!masterKeyBase64) return undefined
-  const providerSubscriptionTokenRepository =
-    repositoryOverride ?? (db ? new DrizzleProviderSubscriptionTokenRepository(db) : undefined)
-  if (!providerSubscriptionTokenRepository) return undefined
-  return new ProviderSubscriptionService({
-    providerSubscriptionTokenRepository,
-    workspaceRepository,
-    secretCipher: new WebCryptoSecretCipher({
-      masterKeyBase64,
-      info: 'cat-factory:provider-subscriptions',
-    }),
-    idGenerator,
-    clock,
-  })
-}
-
-/**
- * Build the direct-provider API-key pool (account/workspace/user) for the Node/local
- * facade (Postgres-backed), or undefined when the shared ENCRYPTION_KEY is absent.
- * Keys are sealed under an api-keys-scoped HKDF info of the shared master key. Mirrors
- * the Worker's buildApiKeyService.
- */
-function buildNodeApiKeyService(
-  env: NodeJS.ProcessEnv,
-  db: DrizzleDb | undefined,
-  workspaceRepository: CoreDependencies['workspaceRepository'],
-  idGenerator: CoreDependencies['idGenerator'],
-  clock: Clock,
-  // Mothership mode injects the local `node:sqlite` credential store here, so the key pool
-  // stays on the laptop (the mothership's key never reaches it). Else the Drizzle repo over `db`.
-  repositoryOverride?: ProviderApiKeyRepository,
-): ApiKeyService | undefined {
-  const masterKeyBase64 = env.ENCRYPTION_KEY?.trim()
-  if (!masterKeyBase64) return undefined
-  const providerApiKeyRepository =
-    repositoryOverride ?? (db ? new DrizzleProviderApiKeyRepository(db) : undefined)
-  if (!providerApiKeyRepository) return undefined
-  return new ApiKeyService({
-    providerApiKeyRepository,
-    workspaceRepository,
-    secretCipher: new WebCryptoSecretCipher({
-      masterKeyBase64,
-      info: 'cat-factory:provider-api-keys',
-    }),
-    idGenerator,
-    clock,
-  })
-}
-
-/**
- * Build the INBOUND public-API key store for the Node/local facade (Postgres-backed), or
- * undefined when the shared ENCRYPTION_KEY is absent. Uses ENCRYPTION_KEY as the HMAC pepper for
- * the one-way secret hash (a public-API key is verified, never decrypted). Mirrors the Worker's
- * buildPublicApiKeyService.
- */
-function buildNodePublicApiKeyService(
-  env: NodeJS.ProcessEnv,
-  db: DrizzleDb | undefined,
-  idGenerator: CoreDependencies['idGenerator'],
-  clock: Clock,
-): PublicApiKeyService | undefined {
-  const pepper = env.ENCRYPTION_KEY?.trim()
-  if (!pepper || !db) return undefined
-  return new PublicApiKeyService({
-    repository: new DrizzlePublicApiKeyRepository(db),
-    pepper,
-    idGenerator,
-    clock,
-  })
-}
-
-/**
- * Build the per-USER individual-usage subscription service (Claude) for the Node/local
- * facade (Postgres-backed), or undefined when the shared ENCRYPTION_KEY is absent.
- * Double-encrypts the credential (password layer inside the system layer). Mirrors the
- * Worker's buildPersonalSubscriptionService.
- */
-function buildNodeLocalModelEndpointService(
-  env: NodeJS.ProcessEnv,
-  db: DrizzleDb | undefined,
-  clock: Clock,
-  // The symmetric local-sqlite credential seam (mothership mode); else Drizzle over `db`.
-  repositoryOverride?: LocalModelEndpointRepository,
-): LocalModelEndpointService | undefined {
-  const masterKeyBase64 = env.ENCRYPTION_KEY?.trim()
-  if (!masterKeyBase64) return undefined
-  const localModelEndpointRepository =
-    repositoryOverride ?? (db ? new DrizzleLocalModelEndpointRepository(db) : undefined)
-  if (!localModelEndpointRepository) return undefined
-  return new LocalModelEndpointService({
-    localModelEndpointRepository,
-    secretCipher: new WebCryptoSecretCipher({
-      masterKeyBase64,
-      info: 'cat-factory:local-model-endpoints',
-    }),
-    clock,
-  })
-}
-
-/**
- * Build the per-USER generic secret service (a GitHub PAT today), or undefined when the
- * shared ENCRYPTION_KEY is absent. Single system-cipher (no password layer); also backs
- * `ResolveUserGitHubToken`. Mirror of the Worker's `buildUserSecretService`.
- */
-function buildNodeUserSecretService(
-  env: NodeJS.ProcessEnv,
-  db: DrizzleDb | undefined,
-  clock: Clock,
-  userSecretKindRegistry: UserSecretKindRegistry,
-): UserSecretService | undefined {
-  const masterKeyBase64 = env.ENCRYPTION_KEY?.trim()
-  // No Postgres (mothership mode): the per-user secret store is not yet a local-sqlite
-  // bucket (PR 3), so it is off.
-  if (!masterKeyBase64 || !db) return undefined
-  return new UserSecretService({
-    userSecretRepository: new DrizzleUserSecretRepository(db),
-    secretCipher: new WebCryptoSecretCipher({ masterKeyBase64, info: 'cat-factory:user-secret' }),
-    clock,
-    userSecretKindRegistry,
-  })
-}
-
-/**
- * The per-WORKSPACE OpenRouter dynamic-catalog service, or undefined when the API-key pool
- * isn't wired (no ENCRYPTION_KEY) — refresh leases the workspace's pooled OpenRouter key.
- * Mirror of the Worker's `buildOpenRouterCatalogService`.
- */
-function buildNodeOpenRouterCatalogService(
-  env: NodeJS.ProcessEnv,
-  db: DrizzleDb | undefined,
-  clock: Clock,
-  apiKeys: ApiKeyService | undefined,
-  spendCurrency: string,
-): OpenRouterCatalogService | undefined {
-  // The dynamic-catalog projection is Postgres-only for now (PR 3), so it is off without a db
-  // even though the API-key pool (which it leases through) may be local-sqlite-backed.
-  if (!apiKeys || !db) return undefined
-  return new OpenRouterCatalogService({
-    providerModelCatalogRepository: new DrizzleProviderModelCatalogRepository(db),
-    apiKeys,
-    clock,
-    baseUrl: baseUrlForNode('openrouter', env),
-    // OpenRouter quotes USD; convert to the deployment's spend currency so persisted prices
-    // (and the spend overlay) match the rest of the budget table.
-    usdToCurrencyRate: usdRateForSpendCurrency(spendCurrency),
-  })
-}
-
-function buildNodePersonalSubscriptionService(
-  env: NodeJS.ProcessEnv,
-  db: DrizzleDb | undefined,
-  idGenerator: CoreDependencies['idGenerator'],
-  clock: Clock,
-  // Mothership mode injects the local `node:sqlite` credential store for BOTH repos (they stay on
-  // the laptop — the double-encrypted personal credential + its per-run activation are leased +
-  // decrypted by the LOCAL container executor). Both must come from the same store, so both are
-  // overridden together; else the Drizzle repos over `db`, and the service is off without either.
-  personalOverride?: PersonalSubscriptionRepository,
-  activationOverride?: SubscriptionActivationRepository,
-): PersonalSubscriptionService | undefined {
-  const masterKeyBase64 = env.ENCRYPTION_KEY?.trim()
-  if (!masterKeyBase64) return undefined
-  const personalSubscriptionRepository =
-    personalOverride ?? (db ? new DrizzlePersonalSubscriptionRepository(db) : undefined)
-  const subscriptionActivationRepository =
-    activationOverride ?? (db ? new DrizzleSubscriptionActivationRepository(db) : undefined)
-  if (!personalSubscriptionRepository || !subscriptionActivationRepository) return undefined
-  return new PersonalSubscriptionService({
-    personalSubscriptionRepository,
-    subscriptionActivationRepository,
-    secretCipher: new WebCryptoSecretCipher({
-      masterKeyBase64,
-      info: 'cat-factory:personal-subscriptions',
-    }),
-    personalCipher: new WebCryptoPersonalSecretCipher(),
-    idGenerator,
-    clock,
   })
 }
 
