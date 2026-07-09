@@ -218,24 +218,6 @@ export class DrizzleSubscriptionActivationRepository implements SubscriptionActi
       })
   }
 
-  async refresh(
-    executionId: string,
-    userId: string,
-    vendor: SubscriptionVendor,
-    expiresAt: number,
-  ): Promise<void> {
-    await this.db
-      .update(subscriptionActivations)
-      .set({ expires_at: expiresAt })
-      .where(
-        and(
-          eq(subscriptionActivations.execution_id, executionId),
-          eq(subscriptionActivations.user_id, userId),
-          eq(subscriptionActivations.vendor, vendor),
-        ),
-      )
-  }
-
   async deleteByExecution(executionId: string): Promise<void> {
     await this.db
       .delete(subscriptionActivations)

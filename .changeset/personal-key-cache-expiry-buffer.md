@@ -2,6 +2,10 @@
 '@cat-factory/app': patch
 '@cat-factory/server': patch
 '@cat-factory/integrations': patch
+'@cat-factory/kernel': patch
+'@cat-factory/worker': patch
+'@cat-factory/node-server': patch
+'@cat-factory/local-server': patch
 ---
 
 Validate the personal-subscription password cache against an 8h expiry buffer on every
@@ -20,3 +24,8 @@ broken run that asks for a retry.
   password is needed but absent/withheld) instead of a silent best-effort re-mint, so an
   early re-entry can be surfaced mid-run. The `remintActivations` helper is removed.
 - `@cat-factory/integrations`: removed the now-unused `PersonalSubscriptionService.refreshActivations`.
+- `@cat-factory/kernel` + the runtime facades (`@cat-factory/worker`, `@cat-factory/node-server`,
+  `@cat-factory/local-server`): dropped the now-dead `SubscriptionActivationRepository.refresh`
+  port method and its D1 / Drizzle / SQLite implementations — its only caller
+  (`refreshActivations`) is gone, so activations are now only ever minted at full TTL via
+  `activateForRun`, never TTL-extended in place.

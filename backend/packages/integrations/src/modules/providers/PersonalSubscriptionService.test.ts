@@ -93,17 +93,6 @@ class FakeActs implements SubscriptionActivationRepository {
     if (i >= 0) this.rows[i] = { ...record }
     else this.rows.push({ ...record })
   }
-  async refresh(
-    executionId: string,
-    userId: string,
-    vendor: SubscriptionVendor,
-    expiresAt: number,
-  ) {
-    const r = this.rows.find(
-      (x) => x.executionId === executionId && x.userId === userId && x.vendor === vendor,
-    )
-    if (r) r.expiresAt = expiresAt
-  }
   async deleteByExecution(executionId: string) {
     this.rows = this.rows.filter((r) => r.executionId !== executionId)
   }
