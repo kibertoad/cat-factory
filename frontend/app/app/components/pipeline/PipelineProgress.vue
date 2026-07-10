@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import type { AgentState, ExecutionInstance } from '~/types/domain'
 import type { PipelineStep } from '~/types/execution'
-import { agentKindMeta, FOLLOW_UP_COMPANION_META } from '~/utils/catalog'
+import { agentKindMeta, FOLLOW_UP_COMPANION_META, FORK_DECISION_META } from '~/utils/catalog'
 import {
   subtaskIconClass,
   gateCompanionFor,
@@ -66,6 +66,12 @@ function followUpLabel(step: PipelineStep): string {
   return pending > 0
     ? t('pipeline.progress.followUp.toDecide', { count: pending })
     : t('pipeline.progress.followUp.allDecided')
+}
+
+/** The active fork-decision phase status on a coder step (proposing / awaiting a choice). */
+function forkPhase(step: PipelineStep): 'proposing' | 'awaiting_choice' | null {
+  const status = step.forkDecision?.status
+  return status === 'proposing' || status === 'awaiting_choice' ? status : null
 }
 
 // --- restart from a step -----------------------------------------------------
@@ -540,6 +546,40 @@ const ITEM_ICON: Record<string, string> = {
               :class="followUpPending(s) > 0 ? 'text-pink-300' : 'text-slate-400'"
             >
               {{ followUpLabel(s) }}
+            </span>
+          </button>
+
+          <!-- Implementation-fork decision phase (Coder step): a spinner while the proposer
+               surfaces approaches, then a clickable chip to choose one. -->
+          <button
+            v-if="forkPhase(s)"
+            type="button"
+            class="mt-3 flex w-full items-center gap-2 rounded-lg border border-dashed px-2.5 py-1.5 text-start transition hover:border-violet-400/60"
+            :class="
+              forkPhase(s) === 'awaiting_choice'
+                ? 'border-violet-500/50 bg-violet-500/10 followup-blink'
+                : 'border-slate-700/70 bg-slate-900/40'
+            "
+            :disabled="forkPhase(s) === 'proposing'"
+            @click="ui.openForkDecision(instance.id, i)"
+          >
+            <span
+              class="flex h-6 w-6 shrink-0 items-center justify-center rounded-md border border-violet-500/40 bg-violet-500/15"
+            >
+              <UIcon
+                :name="
+                  forkPhase(s) === 'proposing' ? 'i-lucide-loader-circle' : FORK_DECISION_META.icon
+                "
+                class="h-3 w-3 text-violet-300"
+                :class="forkPhase(s) === 'proposing' ? 'animate-spin' : ''"
+              />
+            </span>
+            <span class="min-w-0 flex-1 truncate text-[12px] text-slate-300">
+              {{
+                forkPhase(s) === 'proposing'
+                  ? t('pipeline.progress.forkDecision.proposing')
+                  : t('pipeline.progress.forkDecision.choose')
+              }}
             </span>
           </button>
 

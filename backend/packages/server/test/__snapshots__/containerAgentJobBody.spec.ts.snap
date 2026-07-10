@@ -197,6 +197,7 @@ Approach:
 - Handle errors and edge cases explicitly; validate input at the boundary.
 - Keep the implementation cohesive and minimal — no speculative abstraction.
 - Note any follow-ups or assumptions you had to make.
+- If the task context pins a CHOSEN IMPLEMENTATION APPROACH, implement that approach faithfully — do not silently switch to an alternative; if it proves unworkable, surface a follow-up rather than drifting into a rejected alternative.
 - If the task context flags it as TECHNICAL (a refactor / non-functional / internal change), the task definition and any incorporated requirements are the PRIMARY source of truth: implement to them, and treat the committed \`spec/\` only as a regression-spotting reference (do not invent behaviour to match a spec the task did not ask to change). Otherwise the specification leads as usual.
 
 Definition of done: a focused, complete implementation that builds and passes its relevant tests locally.

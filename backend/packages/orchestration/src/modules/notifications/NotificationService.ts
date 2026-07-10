@@ -195,7 +195,11 @@ export class NotificationService {
    * Idempotent + best-effort: a no-op when no such card is open.
    */
   async clearWaitingDecision(workspaceId: string, blockId: string): Promise<void> {
-    for (const type of ['decision_required', 'followup_pending'] as const) {
+    for (const type of [
+      'decision_required',
+      'followup_pending',
+      'fork_decision_pending',
+    ] as const) {
       const existing = await this.notifications.findOpenByBlock(workspaceId, blockId, type)
       if (!existing) continue
       const resolved: Notification = {

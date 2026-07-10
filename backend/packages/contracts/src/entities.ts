@@ -4,6 +4,7 @@ import { agentConfigValuesSchema } from './agent-config.js'
 import { testConcernSchema, testReportSchema, testerInfraSetupSchema } from './testing.js'
 import { consensusStepConfigSchema, stepGatingSchema, taskEstimateSchema } from './consensus.js'
 import { followUpsStepStateSchema } from './followUp.js'
+import { forkDecisionStepStateSchema } from './forkDecision.js'
 import { cloudProviderSchema, instanceSizeSchema } from './compute-provisioning.js'
 import { releaseSignalSchema } from './release.js'
 import {
@@ -1785,6 +1786,25 @@ export const pipelineStepSchema = v.object({
    * {@link followUpsStepStateSchema}. Absent for non-`coder` steps / when the companion is off.
    */
   followUps: v.optional(v.nullable(followUpsStepStateSchema)),
+  /**
+   * Live implementation-fork decision state while a `coder` step runs its optional
+   * two-phase flow: the proposer explore job (`proposing`), the human park
+   * (`awaiting_choice` / `answering`), the resolved choice (`chosen`), or one of the
+   * pass-through terminals (`single_path` / `skipped`). Created lazily by the engine
+   * when the phase activates — the config lives on the block + the risk policy, never
+   * on the step. Absent for non-`coder` steps / when the phase never activated. See
+   * {@link forkDecisionStepStateSchema}.
+   */
+  forkDecision: v.optional(v.nullable(forkDecisionStepStateSchema)),
+  /**
+   * Transient re-entry marker carried on a parked `coder` step whose fork decision is
+   * `answering`: set when the human sends a chat message so the run is signalled to
+   * wake and the durable driver, on re-entering, runs the inline chat LLM and appends
+   * the assistant reply (the LLM work that must not block the HTTP request). Cleared
+   * once that async cycle completes. Documented beside `pendingIncorporation` /
+   * `pendingInterview`. Absent when no chat turn is pending.
+   */
+  pendingForkChat: v.optional(v.nullable(v.object({ messageId: v.string() }))),
   /**
    * Transient rework feedback carried on a PRODUCER step while it is being re-run by
    * a downstream companion (the analogue of an approval's `changes_requested`

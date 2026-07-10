@@ -30,6 +30,7 @@ export const RESULT_VIEW_IDS = [
   'initiative-tracker',
   'initiative-planning',
   'doc-interview',
+  'fork-decision',
 ] as const
 
 export type ResultViewId = (typeof RESULT_VIEW_IDS)[number]

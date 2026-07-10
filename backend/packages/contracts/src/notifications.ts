@@ -32,6 +32,11 @@ import { onCallAssessmentSchema, releaseSignalSchema } from './release.js'
 //                          Informational + a deep-link to the parked task (where the human
 //                          can also request a freeform fix); the gate waits indefinitely and
 //                          the severity sweep escalates the card the longer it waits.
+//   - `fork_decision_pending`— the optional implementation-fork phase on a Coder step
+//                          surfaced materially different ways to implement the task and the
+//                          run parked for a human to choose. Informational + a deep-link to the
+//                          parked task (where the fork-decision window lets the human pick /
+//                          type a custom approach / chat); `act` just marks it read.
 //   - `initiative`       — the initiative execution loop needs a human: a spawned task was
 //                          blocked (its phase is halted until it is retried/skipped), or the
 //                          initiative finished (every planned task resolved). Informational +
@@ -66,6 +71,7 @@ export const notificationTypeSchema = v.picklist([
   'visual_confirmation_ready',
   'human_review',
   'followup_pending',
+  'fork_decision_pending',
   'initiative',
 ])
 export type NotificationType = v.InferOutput<typeof notificationTypeSchema>
@@ -104,6 +110,8 @@ export const notificationPayloadSchema = v.object({
   pipelineName: v.optional(v.string()),
   /** Number of open findings, on a `requirement_review`. */
   findingCount: v.optional(v.number()),
+  /** Number of materially different implementation forks surfaced, on a `fork_decision_pending`. */
+  forkCount: v.optional(v.number()),
   /** The `on-call` agent's assessment, on a `release_regression`. */
   onCallAssessment: v.optional(onCallAssessmentSchema),
   /** The monitors/SLOs that regressed, on a `release_regression`. */

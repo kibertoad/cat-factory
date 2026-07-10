@@ -3646,6 +3646,9 @@ function rowToRiskPolicy(row: RiskPolicyRow): RiskPolicy {
     releaseMaxAttempts: row.release_max_attempts,
     humanReviewGraceMinutes: row.human_review_grace_minutes,
     autoMergeEnabled: row.auto_merge_enabled === 1,
+    forkDecision: row.fork_decision
+      ? (JSON.parse(row.fork_decision) as RiskPolicy['forkDecision'])
+      : null,
     isDefault: row.is_default === 1,
     ...(row.version != null ? { version: row.version } : {}),
     createdAt: row.created_at,
@@ -3707,6 +3710,7 @@ class DrizzleRiskPolicyRepository implements RiskPolicyRepository {
       release_max_attempts: preset.releaseMaxAttempts,
       human_review_grace_minutes: preset.humanReviewGraceMinutes,
       auto_merge_enabled: preset.autoMergeEnabled ? 1 : 0,
+      fork_decision: preset.forkDecision ? JSON.stringify(preset.forkDecision) : null,
       version: preset.version ?? null,
       is_default: preset.isDefault ? 1 : 0,
       created_at: preset.createdAt,
@@ -3744,6 +3748,7 @@ class DrizzleRiskPolicyRepository implements RiskPolicyRepository {
             release_max_attempts: values.release_max_attempts,
             human_review_grace_minutes: values.human_review_grace_minutes,
             auto_merge_enabled: values.auto_merge_enabled,
+            fork_decision: values.fork_decision,
             version: values.version,
             is_default: values.is_default,
           },

@@ -1,5 +1,5 @@
 import type { AgentRunRef } from '@cat-factory/kernel'
-import type { AdvanceResult } from '@cat-factory/orchestration'
+import type { AdvanceOptions, AdvanceResult } from '@cat-factory/orchestration'
 import { env } from 'cloudflare:test'
 import { describe, expect, it } from 'vitest'
 import { buildContainer } from '../../src/infrastructure/container'
@@ -17,6 +17,28 @@ const clock = { now: () => Date.now() }
 async function seedWorkspace() {
   const { workspace } = await makeApp().createWorkspace()
   return workspace.id
+}
+
+/**
+ * Drive a run until a step actually halts (a result other than `continue`), mirroring the
+ * durable driver's re-entry loop. A `coder` step spends its FIRST advance resolving the
+ * (default-off) implementation-fork decision phase — recording `skipped` and returning
+ * `continue` — so the Coder agent's own work (its decision pause / throw / error-swallow)
+ * lands on the NEXT advance. Looping here keeps these single-step assertions robust to that
+ * extra mechanical cycle, exactly as the "one step at a time to done" test already does.
+ */
+async function advanceUntilHalt(
+  c: ReturnType<typeof buildContainer>,
+  wsId: string,
+  executionId: string,
+  options?: AdvanceOptions,
+): Promise<AdvanceResult> {
+  let result: AdvanceResult = { kind: 'continue' }
+  let steps = 0
+  while (result.kind === 'continue' && steps++ < 20) {
+    result = await c.executionService.advanceInstance(wsId, executionId, options)
+  }
+  return result
 }
 
 describe('durable execution: advanceInstance', () => {
@@ -53,7 +75,7 @@ describe('durable execution: advanceInstance', () => {
     })
     const instance = await c.executionService.start(wsId, 'task_login', 'pl_quick')
 
-    const result = await c.executionService.advanceInstance(wsId, instance.id)
+    const result = await advanceUntilHalt(c, wsId, instance.id)
     expect(result.kind).toBe('awaiting_decision')
     if (result.kind === 'awaiting_decision') expect(result.decisionId).toMatch(/^dec/)
   })
@@ -75,7 +97,7 @@ describe('durable execution: agent failure handling', () => {
     const instance = await c.executionService.start(wsId, 'task_login', 'pl_quick')
 
     await expect(
-      c.executionService.advanceInstance(wsId, instance.id, { rethrowAgentErrors: true }),
+      advanceUntilHalt(c, wsId, instance.id, { rethrowAgentErrors: true }),
     ).rejects.toThrow('boom')
   })
 
@@ -87,7 +109,7 @@ describe('durable execution: agent failure handling', () => {
     })
     const instance = await c.executionService.start(wsId, 'task_login', 'pl_quick')
 
-    const result = await c.executionService.advanceInstance(wsId, instance.id)
+    const result = await advanceUntilHalt(c, wsId, instance.id)
     expect(result.kind === 'continue' || result.kind === 'done').toBe(true)
 
     const repo = new D1ExecutionRepository({ db: env.DB, clock })
@@ -145,7 +167,7 @@ describe('durable execution: WorkRunner signalling', () => {
     const instance = await c.executionService.start(wsId, 'task_login', 'pl_quick')
     expect(workRunner.started).toContainEqual({ workspaceId: wsId, executionId: instance.id })
 
-    const advanced = await c.executionService.advanceInstance(wsId, instance.id)
+    const advanced = await advanceUntilHalt(c, wsId, instance.id)
     expect(advanced.kind).toBe('awaiting_decision')
     const decisionId = advanced.kind === 'awaiting_decision' ? advanced.decisionId : ''
     await c.executionService.resolveDecision(wsId, instance.id, decisionId, 'Option A')

@@ -1,4 +1,24 @@
-import type { BlockType, ModelPreset, RequirementConcernLevel, WorkspaceSettings } from './types.js'
+import type {
+  BlockType,
+  ModelPreset,
+  RequirementConcernLevel,
+  StepGating,
+  WorkspaceSettings,
+} from './types.js'
+
+/**
+ * The implementation-fork decision gate as seeded on the built-in presets: DISABLED by
+ * default (fork surfacing is off in `auto` mode until an operator turns it on), but with
+ * sensible thresholds primed so flipping `enabled` on is a single toggle. `onMissingEstimate:
+ * 'run'` means "propose even without an estimate" (fail toward asking).
+ */
+const DEFAULT_FORK_DECISION_GATING: StepGating = {
+  enabled: false,
+  minComplexity: 0.5,
+  minRisk: 0.4,
+  minImpact: 0.4,
+  onMissingEstimate: 'run',
+}
 
 // Static catalogs and constants used across the domain.
 
@@ -53,6 +73,8 @@ export const DEFAULT_RISK_POLICY = {
   humanReviewGraceMinutes: 10,
   // Auto-merge is allowed: a within-threshold, credibly-explained assessment merges the PR.
   autoMergeEnabled: true,
+  // Implementation-fork decision gate: disabled by default (see DEFAULT_FORK_DECISION_GATING).
+  forkDecision: DEFAULT_FORK_DECISION_GATING,
 } as const
 
 /**
@@ -78,6 +100,8 @@ export interface RiskPolicySeed {
   humanReviewGraceMinutes: number
   /** When false, the `merger` step never auto-merges — every PR is routed to human review. */
   autoMergeEnabled: boolean
+  /** Estimate gating for the implementation-fork decision phase; disabled on the built-ins. */
+  forkDecision: StepGating | null
   /** The workspace's fallback preset, used by tasks that pick none. Exactly one is true. */
   isDefault: boolean
   /**
@@ -112,8 +136,9 @@ export const RISK_POLICY_SEEDS: RiskPolicySeed[] = [
     releaseMaxAttempts: DEFAULT_RISK_POLICY.releaseMaxAttempts,
     humanReviewGraceMinutes: DEFAULT_RISK_POLICY.humanReviewGraceMinutes,
     autoMergeEnabled: DEFAULT_RISK_POLICY.autoMergeEnabled,
+    forkDecision: { ...DEFAULT_FORK_DECISION_GATING },
     isDefault: true,
-    version: 2,
+    version: 3,
   },
   {
     id: 'mp_manual_review',
@@ -131,8 +156,9 @@ export const RISK_POLICY_SEEDS: RiskPolicySeed[] = [
     humanReviewGraceMinutes: DEFAULT_RISK_POLICY.humanReviewGraceMinutes,
     // The whole point of this preset: never auto-merge — always raise a human review.
     autoMergeEnabled: false,
+    forkDecision: { ...DEFAULT_FORK_DECISION_GATING },
     isDefault: false,
-    version: 2,
+    version: 3,
   },
 ]
 

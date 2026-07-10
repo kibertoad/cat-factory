@@ -809,6 +809,31 @@ export const useUiStore = defineStore('ui', () => {
       stepIndex: idx,
     }
   }
+  // Open the implementation-fork decision window for a run's coder step (from the inspector /
+  // pipeline chip / `fork_decision_pending` notification). Resolves the coder step index from
+  // the run when not given, preferring the step parked awaiting a choice.
+  function openForkDecision(instanceId: string, stepIndex: number | null = null) {
+    const execution = useExecutionStore()
+    const instance = execution.getInstance(instanceId)
+    if (!instance) return
+    const resolveIdx = () => {
+      const awaiting = instance.steps.findIndex(
+        (s) => s.agentKind === 'coder' && s.forkDecision?.status === 'awaiting_choice',
+      )
+      if (awaiting >= 0) return awaiting
+      const current = instance.steps[instance.currentStep]
+      if (current?.agentKind === 'coder' && current.forkDecision) return instance.currentStep
+      return instance.steps.findIndex((s) => s.agentKind === 'coder' && s.forkDecision)
+    }
+    const idx = stepIndex ?? resolveIdx()
+    if (idx < 0) return
+    resultView.value = {
+      view: 'fork-decision',
+      blockId: instance.blockId,
+      instanceId,
+      stepIndex: idx,
+    }
+  }
   function closeResultView() {
     resultView.value = null
   }
@@ -1006,6 +1031,7 @@ export const useUiStore = defineStore('ui', () => {
     openInitiativeTracker,
     openInitiativePlanning,
     openFollowUps,
+    openForkDecision,
     closeRequirementReview,
     openStepDetail,
     closeStepDetail,

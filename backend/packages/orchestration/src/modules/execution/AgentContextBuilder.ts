@@ -41,6 +41,7 @@ import {
 } from './frontend-infra.logic.js'
 import { connectionDescription } from '@cat-factory/contracts'
 import { frameOf, validInvolvedServiceFrames } from './frame.logic.js'
+import { buildImplementationChoice } from './forkDecision.logic.js'
 import { isTesterKind } from './ci.logic.js'
 import { getFragment } from '@cat-factory/prompt-fragments'
 import { extractReferences } from '@cat-factory/integrations'
@@ -98,7 +99,15 @@ function buildRevisionContext(step: PipelineStep): {
  * to a prior round's completed job. A step with neither (dispatched once) is epoch 0.
  */
 export function dispatchEpochFor(step: PipelineStep): number {
-  return step.test?.attempts ?? step.gate?.attempts ?? 0
+  const base = step.test?.attempts ?? step.gate?.attempts ?? 0
+  // The optional fork-decision phase dispatches the read-only proposer on the coder step
+  // BEFORE the Coder itself (Phase A then Phase B). Both dispatch on the same step, so once
+  // the phase resolves (`chosen` / `single_path`) bump the epoch by one — the Phase-B Coder
+  // then gets a distinct harness job id and never re-attaches to the proposer's completed job
+  // on a container-reusing transport (the same guarantee fixer/helper rounds get).
+  const status = step.forkDecision?.status
+  const forkResolved = status === 'chosen' || status === 'single_path'
+  return base + (forkResolved ? 1 : 0)
 }
 
 /**
@@ -292,7 +301,21 @@ export class AgentContextBuilder {
       isFinalStep,
       // The future-looking Follow-up companion is enabled for this (coder) step: the
       // container executor appends the follow-up guidance + sets the harness to stream items.
-      ...(step.followUps?.enabled ? { followUpCompanion: true } : {}),
+      // Gated on the EFFECTIVE dispatched kind matching the step's own kind, so a HELPER
+      // dispatch off the coder step (the fork-proposer) never inherits the Coder's follow-up
+      // streaming guidance.
+      ...(step.followUps?.enabled && agentKind === step.agentKind
+        ? { followUpCompanion: true }
+        : {}),
+      // The chosen implementation fork (Phase B): folded ONLY when dispatching the step's own
+      // coder kind (never on the proposer helper dispatch). Absent when the phase was skipped /
+      // a single path / not configured. See {@link buildImplementationChoice}.
+      ...(agentKind === step.agentKind
+        ? (() => {
+            const choice = buildImplementationChoice(step.forkDecision)
+            return choice ? { implementationChoice: choice } : {}
+          })()
+        : {}),
       // Consensus config for this step (copied onto the step at run start). Read only
       // by the optional consensus executor, which decides — possibly gated on the
       // block estimate below — whether to run the multi-model process. Absent ⇒ standard.

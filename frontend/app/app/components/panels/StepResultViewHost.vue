@@ -22,6 +22,7 @@ import ConsensusSessionWindow from '~/components/consensus/ConsensusSessionWindo
 import GenericStructuredResultView from '~/components/panels/GenericStructuredResultView.vue'
 import ServiceSpecWindow from '~/components/spec/ServiceSpecWindow.vue'
 import FollowUpWindow from '~/components/followUp/FollowUpWindow.vue'
+import ForkDecisionWindow from '~/components/forkDecision/ForkDecisionWindow.vue'
 import MergerResultView from '~/components/panels/MergerResultView.vue'
 import InitiativeTrackerWindow from '~/components/initiative/InitiativeTrackerWindow.vue'
 import InitiativePlanningWindow from '~/components/initiative/InitiativePlanningWindow.vue'
@@ -52,6 +53,10 @@ const STEP_RESULT_VIEWS: Record<string, Component> = {
   // The future-looking Follow-up companion: the Coder's surfaced loose ends / questions.
   // Opened directly via `ui.openFollowUps` (the blinking chip + the `followup_pending` card).
   'follow-ups': FollowUpWindow,
+  // The implementation-fork decision: the proposer's materially different approaches + the
+  // human's pick / custom approach. Opened directly via `ui.openForkDecision` (the pipeline
+  // chip, the inspector button, and the `fork_decision_pending` card).
+  'fork-decision': ForkDecisionWindow,
   // The merger's verdict: the PR's complexity/risk/impact scores + the engine's auto-merge
   // or awaiting-review decision (and why), instead of the agent's raw JSON.
   merger: MergerResultView,
