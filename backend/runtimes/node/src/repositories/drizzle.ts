@@ -593,6 +593,8 @@ class DrizzleExecutionRepository implements ExecutionRepository {
   async listLive(workspaceId: string): Promise<LiveRunSummary[]> {
     // Lean live-run projection: block_id + status + id only, NEVER the heavy `detail` column.
     // Served by idx_agent_runs_ws_kind_status (workspace_id, kind, status). Mirrors the D1 repo.
+    // Unordered: both consumers (dispatch guard's block-id Set, resumePaused's id loop) are
+    // order-agnostic.
     const rows = await this.db
       .select({ id: agentRuns.id, blockId: agentRuns.block_id, status: agentRuns.status })
       .from(agentRuns)
@@ -603,7 +605,6 @@ class DrizzleExecutionRepository implements ExecutionRepository {
           inArray(agentRuns.status, ['running', 'blocked', 'paused']),
         ),
       )
-      .orderBy(agentRuns.created_at)
     return rows.map((r) => ({
       id: r.id,
       blockId: r.blockId ?? '',
