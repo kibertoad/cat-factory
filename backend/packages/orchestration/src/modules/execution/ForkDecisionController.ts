@@ -10,7 +10,7 @@ import type {
   PipelineStep,
   WorkRunner,
 } from '@cat-factory/kernel'
-import { assertFound, ConflictError, ValidationError } from '@cat-factory/kernel'
+import { ConflictError, ValidationError } from '@cat-factory/kernel'
 import type { NotificationService } from '../notifications/NotificationService.js'
 import type { AdvanceResult } from './advance.js'
 import {

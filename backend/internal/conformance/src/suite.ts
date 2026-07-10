@@ -3860,7 +3860,7 @@ export function defineIntegrationConformance(harness: ConformanceHarness): void 
         const manual = initial.body.find((p) => p.id === 'mp_manual_review')!
         expect(balanced.isDefault).toBe(true)
         expect(balanced.autoMergeEnabled).toBe(true)
-        expect(balanced.version).toBe(2)
+        expect(balanced.version).toBe(3)
         // The QC-companion budget round-trips with its default through both stores.
         expect(balanced.maxTesterQualityIterations).toBe(3)
         // "Manual review only" fully prevents auto-merge: every PR is routed to human review.
@@ -3947,8 +3947,8 @@ export function defineIntegrationConformance(harness: ConformanceHarness): void 
           `/workspaces/${wsId}`,
         )
         expect(snap.body.riskPolicyCatalogVersions).toMatchObject({
-          mp_balanced: 2,
-          mp_manual_review: 2,
+          mp_balanced: 3,
+          mp_manual_review: 3,
         })
 
         // Seed, then drift a built-in (turn its auto-merge OFF + rename). Reseed must restore the
