@@ -9,6 +9,7 @@ import {
   FakeTaskSourceProvider,
   RecordingEventPublisher,
   fakeBuildPreviewJob,
+  adminDatabaseUrl,
   deriveWorkerDatabase,
   driveWorkspace,
   makeIncorporatedClarityReview,
@@ -86,21 +87,31 @@ export async function setupTestDb(): Promise<DrizzleDb> {
   if (!url) {
     throw new Error('DATABASE_URL is required to run the Node conformance/integration tests')
   }
+  // Require a per-worker database: never fall back to migrating the base DATABASE_URL. A test
+  // run must only ever create/migrate a `<base>_node_<id>` database, so it can't pollute or
+  // desync a developer's dev DB (the drizzle-kit 1.0 ledger↔schema split originates exactly here).
   const worker = deriveWorkerDatabase(url, 'node', process.env.VITEST_WORKER_ID)
-  if (worker) await ensureDatabase(url, worker.dbName)
-  const { db, pool } = createDbClient(worker?.url ?? url)
+  if (!worker) {
+    throw new Error(
+      'The Node test suite requires a VITEST_WORKER_ID-scoped database; refusing to run against ' +
+        'the base DATABASE_URL. Run via vitest (which sets VITEST_WORKER_ID).',
+    )
+  }
+  await ensureDatabase(url, worker.dbName)
+  const { db, pool } = createDbClient(worker.url)
   await migrate(db, pool)
   return db
 }
 
 /**
- * Create `dbName` if it does not already exist, over an admin connection to the base
- * `DATABASE_URL` (`CREATE DATABASE` cannot run inside a transaction, so this uses the
- * pool's autocommit path). Tolerates the duplicate-database race (error `42P04`) when two
- * workers create their databases at once.
+ * Create `dbName` if it does not already exist, over an admin connection to the `postgres`
+ * maintenance database (NOT the app's base DATABASE_URL — see `adminDatabaseUrl`), so the
+ * admin pool never touches a developer's dev DB. `CREATE DATABASE` cannot run inside a
+ * transaction, so this uses the pool's autocommit path. Tolerates the duplicate-database race
+ * (error `42P04`) when two workers create their databases at once.
  */
-async function ensureDatabase(adminUrl: string, dbName: string): Promise<void> {
-  const { pool } = createDbClient(adminUrl)
+async function ensureDatabase(baseUrl: string, dbName: string): Promise<void> {
+  const { pool } = createDbClient(adminDatabaseUrl(baseUrl))
   try {
     const existing = await pool.query('SELECT 1 FROM pg_database WHERE datname = $1', [dbName])
     if (existing.rowCount === 0) {

@@ -52,6 +52,23 @@ section). You don't need `GITHUB_PAT` to boot: with it unset the service starts 
 UI shows a banner linking to GitHub's token page (scopes pre-selected); set the token
 and restart to actually run repo-operating agent steps.
 
+### Recovering a wedged database
+
+Boot validates its migration state and **fails fast** with an actionable message if the
+migration ledger is ahead of the actual schema (the drizzle-kit 1.0 ledger↔schema split —
+most often from a hand `DROP SCHEMA public CASCADE` or a stray test run against this DB).
+To recover, reset to a clean slate and re-migrate on the next boot — this **permanently
+deletes all data** in `DATABASE_URL`:
+
+```sh
+pnpm --filter @cat-factory/node-server db:reset   # DROPS ALL DATA in DATABASE_URL
+pnpm start
+```
+
+`db:reset` drops all app-owned schemas together (`public`, `telemetry`, `sandbox`,
+`provisioning`, the `drizzle` ledger, and pg-boss's `pgboss`) so the ledger can never
+outlive the data — never hand-drop `public` alone, which is what causes the split.
+
 ## The executor-harness image (pinned + auto-refreshed)
 
 Every agent step runs in a per-run container built from the executor-harness image, which

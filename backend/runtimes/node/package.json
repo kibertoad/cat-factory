@@ -33,6 +33,7 @@
     "db:generate": "drizzle-kit generate",
     "db:check": "drizzle-kit check",
     "db:rebase-snapshot": "node scripts/rebase-migration-snapshot.mjs",
+    "db:reset": "node scripts/db-reset.mjs",
     "test": "vitest run",
     "test:run": "vitest run"
   },

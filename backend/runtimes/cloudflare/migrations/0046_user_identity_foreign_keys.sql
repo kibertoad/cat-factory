@@ -16,10 +16,18 @@
 --
 -- defer_foreign_keys holds FK enforcement until this transaction commits, so the drop/rename
 -- steps of the rebuild dance don't trip an intermediate constraint check (mirrors 0001_init).
+--
+-- Heal pre-existing orphans FIRST: on any DB old enough to predate these FKs a users row could
+-- be deleted while its dependents lived on, and the deferred FK check on commit would then fail
+-- the whole migration. Delete the dangling dependents (NULL the nullable accounts.owner_user_id)
+-- from each source table before it is copied, so the rebuild carries only referentially-valid
+-- rows. Mirrors the Postgres 20260709061125_old_santa_claus heal; losing orphaned rows is
+-- acceptable (backwards compatibility is a non-goal).
 
 PRAGMA defer_foreign_keys=TRUE;
 
 -- user_identities.user_id -> users(id)
+DELETE FROM user_identities WHERE user_id NOT IN (SELECT id FROM users);
 CREATE TABLE user_identities_new (
   user_id TEXT NOT NULL REFERENCES users(id) ON DELETE RESTRICT,
   provider TEXT NOT NULL,
@@ -36,6 +44,7 @@ ALTER TABLE user_identities_new RENAME TO user_identities;
 CREATE INDEX idx_user_identities_user ON user_identities (user_id);
 
 -- accounts.owner_user_id -> users(id)  (nullable: null for org accounts)
+UPDATE accounts SET owner_user_id = NULL WHERE owner_user_id IS NOT NULL AND owner_user_id NOT IN (SELECT id FROM users);
 CREATE TABLE accounts_new (
   id                     TEXT    NOT NULL PRIMARY KEY,
   type                   TEXT    NOT NULL,
@@ -55,6 +64,7 @@ CREATE UNIQUE INDEX idx_accounts_personal
   WHERE type = 'personal';
 
 -- personal_subscriptions.user_id -> users(id)  (also INTEGER -> TEXT)
+DELETE FROM personal_subscriptions WHERE user_id NOT IN (SELECT id FROM users);
 CREATE TABLE personal_subscriptions_new (
   id            TEXT    NOT NULL,
   user_id       TEXT    NOT NULL REFERENCES users(id) ON DELETE RESTRICT,
@@ -80,6 +90,7 @@ CREATE INDEX idx_personal_subs_expiry
   WHERE deleted_at IS NULL;
 
 -- memberships.user_id -> users(id)  (also INTEGER -> TEXT)
+DELETE FROM memberships WHERE user_id NOT IN (SELECT id FROM users);
 CREATE TABLE memberships_new (
   account_id TEXT    NOT NULL,
   user_id    TEXT    NOT NULL REFERENCES users(id) ON DELETE RESTRICT,
@@ -94,6 +105,7 @@ ALTER TABLE memberships_new RENAME TO memberships;
 CREATE INDEX idx_memberships_user ON memberships (user_id);
 
 -- subscription_activations.user_id -> users(id)  (also INTEGER -> TEXT)
+DELETE FROM subscription_activations WHERE user_id NOT IN (SELECT id FROM users);
 CREATE TABLE subscription_activations_new (
   id            TEXT    NOT NULL,
   execution_id  TEXT    NOT NULL,

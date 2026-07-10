@@ -255,9 +255,15 @@ async function bootServer(
   const { db, pool } = createDbClient(databaseUrl)
   const boss = new PgBoss(databaseUrl)
   // Migrations (Drizzle, app schema) and pg-boss's own schema provisioning are
-  // independent — neither reads the other's tables — so run them concurrently and
-  // overlap the two heaviest blocking boot steps instead of serializing them.
-  await Promise.all([migrate(db, pool), boss.start()])
+  // independent — neither reads the other's tables. Run the app migration FIRST and on its
+  // own: a migration failure (drift guard / a bad lineage) is then the clean, unambiguous
+  // top-level rejection the entrypoint reports, rather than racing pg-boss's own schema
+  // provisioning inside a `Promise.all` (which would half-provision pg-boss on a doomed boot
+  // and could mask the real migration error). The small overlap we give up is worth the
+  // debuggability. `migrate()` throws a MigrationFailedError / DbSchemaInconsistentError with
+  // a recovery hint when the DB is wedged.
+  await migrate(db, pool)
+  await boss.start()
 
   // Build the repositories once and share them with both the container and the
   // retention sweeper (so the sweeper prunes the very stores the app writes to).
