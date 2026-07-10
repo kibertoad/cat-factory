@@ -738,7 +738,10 @@ export class RunDispatcher {
               await applyRunningFold(fresh)
             },
           )
-          await this.runStateMachine.emitInstance(workspaceId, persisted)
+          // Progress-only fold (subtask ticks / streamed follow-ups): skip the per-run
+          // LLM-metrics GROUP BY so a live container's poll cadence doesn't re-aggregate
+          // the run on every tick. The rollup refreshes on the step-boundary/terminal emit.
+          await this.runStateMachine.emitInstance(workspaceId, persisted, { rollUpMetrics: false })
         } catch (error) {
           // The run was cancelled/removed mid-poll (`NotFoundError`) or stayed hot-contended
           // past the retry budget (`ConflictError`) — re-drive on fresh state rather than
@@ -1878,7 +1881,9 @@ export class RunDispatcher {
       }
       if (changed) {
         await this.runStateMachine.casPersist(workspaceId, instance)
-        await this.runStateMachine.emitInstance(workspaceId, instance)
+        // Progress-only deploy-job fold: skip the LLM-metrics rollup (same reason as the
+        // agent running fold above — a deploy job makes no LLM calls anyway).
+        await this.runStateMachine.emitInstance(workspaceId, instance, { rollUpMetrics: false })
       }
       return { kind: 'awaiting_job', jobId: step.jobId!, stepIndex: instance.currentStep }
     }
