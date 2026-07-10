@@ -8,6 +8,7 @@ import {
   FakeRepoBootstrapper,
   FakeTaskSourceProvider,
   RecordingEventPublisher,
+  adminDatabaseUrl,
   deriveWorkerDatabase,
   fakeBuildPreviewJob,
   driveWorkspace,
@@ -109,20 +110,29 @@ export async function setupTestDb(): Promise<DrizzleDb> {
   if (!url) {
     throw new Error('DATABASE_URL is required to run the local conformance tests')
   }
+  // Require a per-worker database: never fall back to migrating the base DATABASE_URL, so a
+  // test run can't pollute or desync a developer's dev DB (see the Node harness).
   const worker = deriveWorkerDatabase(url, 'local', process.env.VITEST_WORKER_ID)
-  if (worker) await ensureDatabase(url, worker.dbName)
-  const { db, pool } = createDbClient(worker?.url ?? url)
+  if (!worker) {
+    throw new Error(
+      'The local test suite requires a VITEST_WORKER_ID-scoped database; refusing to run against ' +
+        'the base DATABASE_URL. Run via vitest (which sets VITEST_WORKER_ID).',
+    )
+  }
+  await ensureDatabase(url, worker.dbName)
+  const { db, pool } = createDbClient(worker.url)
   await migrate(db, pool)
   return db
 }
 
 /**
- * Create `dbName` if absent, over an admin connection to the base `DATABASE_URL`
- * (`CREATE DATABASE` cannot run in a transaction). Tolerates the duplicate-database race
- * (`42P04`) when two workers create their databases concurrently.
+ * Create `dbName` if absent, over an admin connection to the `postgres` maintenance database
+ * (NOT the app's base DATABASE_URL — see `adminDatabaseUrl`). `CREATE DATABASE` cannot run in
+ * a transaction. Tolerates the duplicate-database race (`42P04`) when two workers create their
+ * databases concurrently.
  */
-async function ensureDatabase(adminUrl: string, dbName: string): Promise<void> {
-  const { pool } = createDbClient(adminUrl)
+async function ensureDatabase(baseUrl: string, dbName: string): Promise<void> {
+  const { pool } = createDbClient(adminDatabaseUrl(baseUrl))
   try {
     const existing = await pool.query('SELECT 1 FROM pg_database WHERE datname = $1', [dbName])
     if (existing.rowCount === 0) {

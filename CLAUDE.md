@@ -336,6 +336,52 @@ shell/CI** (`Interactive prompts require a TTY terminal`).
 Keep the symmetric D1 migration (a fresh numbered `*.sql` under
 `backend/runtimes/cloudflare/migrations/`) in step, per "Keep the runtimes symmetric".
 
+## Migration safety: boot drift-guard, recovery, and self-healing FK migrations
+
+The Node facade boots by running `migrate()` (`backend/runtimes/node/src/db/migrate.ts`)
+BEFORE `boss.start()` (sequential, not a `Promise.all` — a migration failure is then the
+clean top-level rejection, not a race with pg-boss's own schema provisioning). `migrate()`
+is hardened against the two states that used to brick boot with an opaque Postgres error:
+
+- **Ledger↔schema drift (fail fast, then reset).** In drizzle-kit 1.0 the
+  `__drizzle_migrations` ledger lives in its OWN `drizzle` schema, so a hand
+  `DROP SCHEMA public CASCADE` (or a stray test run against a dev DB) wipes `public.*` while
+  the ledger keeps claiming every migration is applied — the next `ALTER TABLE` migration then
+  dies with a bare `42P01`. `migrate()` probes for this up front (`assertSchemaConsistent`:
+  ledger non-empty but anchor tables `public.accounts`/`public.workspaces` missing) and throws
+  a `DbSchemaInconsistentError` naming the condition + the recovery. Any other apply failure is
+  rethrown as a `MigrationFailedError` that maps the pg code (`42P01`/`23503`/`42P07`) to a
+  human cause + hint. Recovery is deliberate + destructive, never automatic:
+  `pnpm --filter @cat-factory/node-server db:reset` (`scripts/db-reset.mjs`) drops ALL
+  app-owned schemas TOGETHER — `public`, `telemetry`, `sandbox`, `provisioning`, the `drizzle`
+  ledger, and pg-boss's `pgboss` — so the ledger can never outlive the data. Never hand-drop
+  `public` alone; that is what creates the split. (Node-Postgres-specific — D1 has no boot-time
+  drizzle migrator.)
+- **Self-healing FK migrations (both runtimes).** A migration that adds an `ON DELETE RESTRICT`
+  foreign key MUST first delete/NULL any pre-existing orphans that would violate it, or it
+  hard-fails with `23503` on any DB old enough to predate the FK. Heal-then-constrain: `DELETE
+FROM <child> WHERE <fk> NOT IN (SELECT id FROM <parent>)` (or `UPDATE … SET <fk> = NULL` for a
+  nullable column) before `ADD CONSTRAINT`. Mirror it across BOTH runtimes (the Postgres
+  `migration.sql` AND the D1 rebuild in `backend/runtimes/cloudflare/migrations/`), per "Keep
+  the runtimes symmetric". Deleting orphaned experimental data is acceptable here (backwards
+  compatibility is a non-goal); do NOT hide the orphaning by swallowing the error instead.
+
+- **Configurable schemas for a SHARED database (Node).** All default to the prior behaviour, so
+  a stock deployment is unchanged; set them when cat-factory shares a Postgres with other
+  services. `DB_SCHEMA` relocates the default (`public`) app tables via the connection
+  `search_path` (`createDbClient` sets `options=-c search_path=…`; `migrate()` `CREATE SCHEMA
+IF NOT EXISTS`es it) — for databases with no usable `public`. `DB_MIGRATIONS_SCHEMA` moves the
+  drizzle ledger off the top-level `drizzle` schema so it can't collide with another
+  drizzle-using service's `drizzle.__drizzle_migrations` (passed as the migrator's
+  `migrationsSchema`). `DB_PGBOSS_SCHEMA` moves pg-boss's queue schema. Each must be a plain
+  lowercase identifier; `db:reset` reads the same env so it drops exactly the schemas the deployment owns.
+  The named app schemas (`telemetry`/`sandbox`/`provisioning`) are fixed `pgSchema(...)` names,
+  not configurable (changing them would mean regenerating migrations). Node-Postgres-specific.
+
+Test harnesses NEVER touch the base `DATABASE_URL` DB: they require a per-vitest-worker
+database (`deriveWorkerDatabase` must resolve) and use the `postgres` maintenance DB for the
+admin `CREATE DATABASE` connection, so running the suite can't pollute or desync a dev DB.
+
 ## Layout
 
 > Naming/vocabulary traps (block vs task vs card, `runtimes/cloudflare` = `@cat-factory/worker`,

@@ -42,7 +42,7 @@ export {
   defineExecutionConformance,
   defineMiscConformance,
 } from './suite.js'
-export { deriveWorkerDatabase, type WorkerDatabase } from './test-db.js'
+export { deriveWorkerDatabase, adminDatabaseUrl, type WorkerDatabase } from './test-db.js'
 export { defineLlmMetricsSuite } from './llm-metrics-suite.js'
 export { defineSubscriptionQuotaSuite } from './subscription-quota-suite.js'
 export { defineBinaryArtifactsSuite, MemoryBinaryBlobBackend } from './binary-artifacts-suite.js'
