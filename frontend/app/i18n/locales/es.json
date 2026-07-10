@@ -669,6 +669,27 @@
       "clearFailed": "No se pudo limpiar la asignación",
       "configNoun": "la configuración de salud de la versión"
     },
+    "testSecrets": {
+      "title": "Credenciales de prueba (sensibles)",
+      "sectionHint": "Credenciales sensibles que el Tester necesita para usar un sistema de terceros del que depende este servicio, p. ej. la clave de API de una pasarela de pago. Se almacenan cifradas y se inyectan en el entorno del Tester como variables; nunca se muestran en prompts ni en registros.",
+      "warning": "Son secretos reales y sensibles. Se almacenan cifrados y se pasan al Tester como variables de entorno, nunca en un prompt ni en la telemetría de la ejecución. No introduzcas credenciales de producción que no puedas rotar.",
+      "replaceNote": "Al guardar se reemplaza el conjunto completo de este servicio. Incluye cada credencial que quieras conservar y vuelve a introducir su valor; lo que se omita se elimina.",
+      "key": "Nombre de variable",
+      "keyInvalid": "Usa letras, dígitos y guiones bajos, y no empieces por un dígito.",
+      "description": "Descripción",
+      "descriptionPlaceholder": "Para qué sirve esta credencial",
+      "value": "Valor",
+      "valuePlaceholder": "Valor secreto",
+      "addRow": "Añadir credencial",
+      "removeRow": "Eliminar credencial",
+      "save": "Guardar credenciales",
+      "clear": "Borrar todo",
+      "savedToast": "Credenciales de prueba guardadas",
+      "saveFailed": "No se pudieron guardar las credenciales de prueba",
+      "clearFailed": "No se pudieron borrar las credenciales de prueba",
+      "configNoun": "las credenciales de prueba sensibles",
+      "duplicateKey": "Cada nombre de variable debe ser único."
+    },
     "testConfig": {
       "title": "Infraestructura de pruebas",
       "hint": "Cómo se levanta un entorno de prueba para este servicio cuando un pipeline necesita ejecutarlo: sin infraestructura, un archivo de Docker Compose, manifiestos de Kubernetes o un tipo de manifiesto personalizado.",

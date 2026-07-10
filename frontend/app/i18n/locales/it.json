@@ -973,6 +973,27 @@
       "clearFailed": "Impossibile cancellare il mapping",
       "configNoun": "la configurazione dello stato di rilascio"
     },
+    "testSecrets": {
+      "title": "Credenziali di test (sensibili)",
+      "sectionHint": "Credenziali sensibili di cui il Tester ha bisogno per interagire con un sistema di terze parti da cui dipende questo servizio, ad esempio la chiave API di un fornitore di pagamenti. Sono cifrate a riposo e iniettate nell'ambiente del Tester come variabili; non compaiono mai nei prompt né nei log.",
+      "warning": "Sono segreti reali e sensibili. Vengono cifrati a riposo e passati al Tester come variabili d'ambiente, mai in un prompt o nella telemetria dell'esecuzione. Non inserire credenziali di produzione che non puoi ruotare.",
+      "replaceNote": "Il salvataggio sostituisce l'intero insieme per questo servizio. Includi ogni credenziale che vuoi mantenere e reinserisci il suo valore; tutto ciò che viene omesso viene rimosso.",
+      "key": "Nome variabile",
+      "keyInvalid": "Usa lettere, cifre e trattini bassi e non iniziare con una cifra.",
+      "description": "Descrizione",
+      "descriptionPlaceholder": "A cosa serve questa credenziale",
+      "value": "Valore",
+      "valuePlaceholder": "Valore segreto",
+      "addRow": "Aggiungi credenziale",
+      "removeRow": "Rimuovi credenziale",
+      "save": "Salva credenziali",
+      "clear": "Cancella tutto",
+      "savedToast": "Credenziali di test salvate",
+      "saveFailed": "Impossibile salvare le credenziali di test",
+      "clearFailed": "Impossibile cancellare le credenziali di test",
+      "configNoun": "le credenziali di test sensibili",
+      "duplicateKey": "Ogni nome di variabile deve essere univoco."
+    },
     "testConfig": {
       "title": "Infrastruttura di test",
       "hint": "Come viene predisposto un ambiente di test per questo servizio quando una pipeline deve eseguirlo: nessuna infrastruttura, un file Docker Compose, manifest Kubernetes, o un tipo di manifest personalizzato.",

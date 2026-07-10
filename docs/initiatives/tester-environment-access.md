@@ -63,6 +63,15 @@ nobody enters real/production secrets.
 - Pre-existing (unrelated) `@cat-factory/server` **test-file** typecheck errors exist on `main`
   (`WebCryptoSecretCipher.spec.ts`, `ensureWorkBranch.spec.ts`, `web-search-upstreams.spec.ts`) —
   not caused by this work.
+- **Slice C frontend (`fe`): the panel is a FULL-SET-REPLACE editor, by construction.** The
+  backend `set` replaces the whole sealed blob and values are write-only (`GET` returns only
+  key + description refs, never a value), so `ServiceTestSecrets.vue` can't do per-entry edits:
+  it prefills the row list from the configured refs (values blank) and PUTs the entire set on
+  save. Save is disabled until EVERY row has a value, so an existing secret can never be blanked
+  by accident — but adding one secret means re-entering the others' values. This is faithful to
+  the shipped contract, not a bug. If that re-entry cost bites, the clean fix is a BACKEND slice:
+  make `value` optional-on-update and merge-by-key server-side (omitted value ⇒ keep the sealed
+  one), mirrored on both runtimes + a conformance assertion — not a frontend workaround.
 
 ## Status checklist
 
@@ -123,7 +132,7 @@ each is for. Per-service-frame + frame-chain resolution, exactly like Slice B / 
 | `AgentContextBuilder.resolveTestSecretRefs` (frame walk, refs) → `context.testSecrets`; `testSecretsSection()` prompt (tester kinds)                     | done   | this |
 | Executor `resolveTestSecrets` (values) → tester job body `testSecrets`; harness injects as env vars (reserved-name guard + redaction) + image bump       | done   | this |
 | Cross-runtime conformance assertion (seal via API, read-back refs, no values leak) on both stores                                                        | done   | this |
-| Frontend: `stores/testSecrets.ts` + `ServiceTestSecrets.vue` inspector panel (SENSITIVE warning banner) + i18n in all locales                            | todo   | —    |
+| Frontend: `stores/testSecrets.ts` + `ServiceTestSecrets.vue` inspector panel (SENSITIVE warning banner) + i18n in all locales                            | done   | fe   |
 | Changesets (per touched published package)                                                                                                               | done   | this |
 
 ### Slice D — Test Data Seeder agent (follow-up; NOT in this PR)
