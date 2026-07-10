@@ -160,6 +160,31 @@ export async function getInitiative(
   return (snapshot.initiatives ?? []).find((i) => i.blockId === blockId) ?? null
 }
 
+/**
+ * Connect a (fake) observability provider for the workspace — the `PUT /observability/connection`
+ * the Integrations panel posts to. The `post-release-health` gate is observability-gated: a
+ * pipeline carrying it is rejected at CREATE unless the workspace has a connection, so a spec that
+ * builds such a pipeline calls this first. The credentials are never used at runtime (the gate's
+ * verdict comes from the fake release-health provider); only the connection ROW is required.
+ */
+export async function connectObservability(
+  request: APIRequestContext,
+  workspaceId: string,
+): Promise<void> {
+  await json(
+    await request.put(`${BACKEND_URL}/workspaces/${workspaceId}/observability/connection`, {
+      data: {
+        provider: 'datadog',
+        credentials: {
+          site: 'datadoghq.com',
+          apiKey: 'e2e-fake-api-key',
+          appKey: 'e2e-fake-app-key',
+        },
+      },
+    }),
+  )
+}
+
 /** Start a run of `pipelineId` against `blockId`. */
 export async function startRun(
   request: APIRequestContext,

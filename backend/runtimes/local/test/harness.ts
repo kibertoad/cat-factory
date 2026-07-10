@@ -80,6 +80,11 @@ const TEST_ENV: NodeJS.ProcessEnv = {
   // the local facade (parity with the Node/Worker test envs); the conformance Slack
   // CRUD asserts persistence parity and the channel bails when no Slack is connected.
   SLACK_ENABLED: 'true',
+  // Enable the observability integration (release-health module + connection API) so the
+  // post-release-health gate conformance can connect a provider and create a pipeline carrying
+  // the observability-gated `post-release-health` step. Parity with the Node/Worker test envs; the
+  // gate's runtime verdict comes from a faked ReleaseHealthProvider, not a real Datadog call.
+  OBSERVABILITY_ENABLED: 'true',
   // The ephemeral-environment integration wires from ENCRYPTION_KEY (no flag), parity with
   // the Node/Worker test envs, so the conformance env CRUD asserts persistence parity here too.
   // Opt into the prompt-fragment library (ADR 0006) so its module wires up (parity
@@ -171,6 +176,17 @@ export function makeConformanceApp(
       : new FakeAgentExecutor(agentExecutorOptions),
     workRunner: new NoopWorkRunner(),
     bootstrapRunner: new NoopBootstrapRunner(),
+    // Run the shared conformance suite with the merger UNWIRED, exactly like the Node/Worker
+    // harnesses (both drive it GitHub-off). Local mode is the only facade that carries a
+    // GITHUB_PAT here (github-pat.spec.ts needs the PAT-backed connection/repo wiring), which
+    // makes `buildLocalContainer` wire a REAL `GitHubPullRequestMerger` from that PAT. When a
+    // task's block has a PR (this suite's post-release-health case sets one) and the merger
+    // auto-merges at `confidence: 1`, that real merger would attempt a live github.com merge
+    // with the fake `test-pat` and fail — leaving the block `pr_ready` instead of `done`, so
+    // the downstream post-release-health gate finds nothing deployed to watch. Neutralising it
+    // here (overrides win, spread last in `buildNodeContainer`) restores the board-only flip to
+    // `done` the suite is built around, keeping the merge lifecycle identical across facades.
+    pullRequestMerger: undefined,
     // Deterministic bootstrapper so the suite drives the bootstrap lifecycle through the
     // local composition root without GitHub/Docker (driven via driveBootstrap).
     repoBootstrapper: new FakeRepoBootstrapper(),

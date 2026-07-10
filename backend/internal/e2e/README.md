@@ -8,11 +8,12 @@ and the real WebSocket push transport.
 Only the **external** dependencies are faked, so the suite is deterministic, needs no
 secrets, no Docker and no network:
 
-| External dep                         | Faked with                                                                       |
-| ------------------------------------ | -------------------------------------------------------------------------------- |
-| LLMs + per-run agent containers      | `FakeAgentExecutor` (the canonical conformance fake) — no LLM HTTP, no Docker    |
-| repo bootstrap                       | `FakeRepoBootstrapper`                                                           |
-| GitHub App / email / Slack / Datadog | left **off** (all opt-in; the board renders and gates pass through without them) |
+| External dep                       | Faked with                                                                                                                                                                                                                                                         |
+| ---------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| LLMs + per-run agent containers    | `FakeAgentExecutor` (the canonical conformance fake) — no LLM HTTP, no Docker                                                                                                                                                                                      |
+| repo bootstrap                     | `FakeRepoBootstrapper`                                                                                                                                                                                                                                             |
+| CI / mergeability / release-health | per-workspace fake gate providers (`E2eGateProviders`) wired via `buildNodeContainer`'s `gateProviders` seam — so a spec can drive the `ci`/`conflicts`/`post-release-health` gate → helper-agent loop (a gate with no scripted verdict passes through, as before) |
+| GitHub App / email / Slack         | left **off** (all opt-in; the board renders and the un-scripted gates pass through without them)                                                                                                                                                                   |
 
 Everything else is production code: the controllers, the (dev-open) auth gate, the
 durable execution worker + sweepers, and the per-workspace real-time hub. So a run
@@ -49,6 +50,12 @@ LIVE pushed UI updates** (no reloads, no fragile canvas drag/zoom). Shared setup
 | `initiative-preset.spec.ts`     | The initiative-PRESET flow: create an initiative from a preset (docs-refresh) over REST → its anchor card appears live → the fake-planned run auto-plans (analyst → planner → committer, unattended) and the loop spawns a first-class DECORATED `document` task on the board, all over the WebSocket. The S9 baseline the tech-migration preset E2E extends.                                                                                                                                                                                                                           |
 | `tech-migration-preset.spec.ts` | The tech-migration PRESET flow (the second real preset): create a FULL-interview initiative over REST → the `pl_initiative` run's interviewer converges on the seeded qa (fake inline model) → the planner returns a five-phase migration plan the generic ingest normalizer accepts → approve the parked planner gate over REST → the loop spawns the phase-1 blast-zone report as a DECORATED `document` task live. Exercises the interviewer + planner-gate + template-shape + `seedMigrationPlan` decoration the docs-refresh baseline does not.                                    |
 | `initiative-checkpoint.spec.ts` | The phase CHECKPOINT flow (custom-initiative D2): a planner-authored `checkpoint: true` phase pauses the initiative once its item reaches `done` (merger-tailed pipeline) → the anchor card flips to `paused` live and phase two has NOT spawned → the tracker window shows the checkpoint pause banner + "awaiting review" phase badge → **Resume (GO)** from the banner spawns phase two's task live, while a sibling spec takes the **Cancel (NO_GO)** branch (card → `cancelled`, phase two never spawns). Proves the checkpoint genuinely gates the next phase in both directions. |
+| `ci-gate.spec.ts`               | The CI gate → ci-fixer loop: a `ci` step probes RED via the fake CI provider (`ciStatus: [false, true]`) → dispatches the `ci-fixer` container agent → re-probes GREEN → the ci step reaches `done` live and the task settles `pr_ready`. The operational GitHub gate flow that used to pass through (GitHub off).                                                                                                                                                                                                                                                                      |
+| `conflicts-gate.spec.ts`        | The conflicts gate → conflict-resolver loop: a `conflicts` step probes `conflicted` via the fake mergeability provider (`mergeability: ['conflicted','mergeable']`) → dispatches the `conflict-resolver` → re-probes clean → the step clears `done` live and the task settles `pr_ready`.                                                                                                                                                                                                                                                                                               |
+| `post-release-health.spec.ts`   | The post-release-health gate → on-call escalation: the merger auto-merges (`confidence: 1`), the gate probes `regressed` via the fake release-health provider (`releaseHealth: ['regressed']`) → escalates the async `on-call` agent → raises a `release_regression` notification live (bell + item). Asserts the whole path through that pushed notification — the gate escalates only once the release actually merged — which is robust to the auto-merge relocating the task into its module. The flagship operational scenario the new mocks unlock.                               |
+| `tester-fixer.spec.ts`          | The Tester→Fixer loop: a `tester-api` step returns a report that withholds its greenlight (`testReports: [notGreen, green]`) → the engine dispatches the `fixer` and re-tests → the second report greenlights → the tester step reaches `done` live and the task settles `pr_ready`.                                                                                                                                                                                                                                                                                                    |
+| `rework-loop.spec.ts`           | The companion rework loop: a persistently-failing `reviewer` grade (`companionRating: 0.4`) loops the `coder` on its automatic budget, then parks the run at the iteration cap → the task goes `blocked` live and a `decision_required` notification lands in the inbox.                                                                                                                                                                                                                                                                                                                |
+| `followup-gate.spec.ts`         | The Follow-up companion gate: the async `coder` surfaces a forward-looking follow-up (`followUps: [...]`) → the run parks `blocked` at the Coder's completion → a `followup_pending` notification lands in the inbox live.                                                                                                                                                                                                                                                                                                                                                              |
 
 ### Per-run fake behaviour (the `setFakeProfile` seam)
 
@@ -66,7 +73,18 @@ await setFakeProfile(request, workspaceId, { decisionOnSteps: [], dispatchThrowK
 `asyncKinds`, `dispatchThrowKinds`, `asyncPolls`, `bootstrapProgress`, `bootstrapFailWith`,
 `customResult`, `initiativePlan` (the plan draft the fake `initiative-planner` returns, so an
 initiative planning run reaches `executing` and the loop spawns the decorated tasks — the planner
-faults without one). A workspace with no profile gets the base backend behaviour, so the
+faults without one). Two families were added for the operational-gate + agent-loop specs:
+
+- **Operational-gate verdict scripts** (consumed by `E2eGateProviders`, one queue per probe, last
+  entry repeats): `ciStatus` (`boolean[]`, green/red), `mergeability`
+  (`('mergeable'|'conflicted'|'unknown')[]`), `releaseHealth` (`('healthy'|'pending'|'regressed')[]`).
+- **Agent-loop knobs** (forwarded straight into the fake agent): `testReports` (Tester→Fixer),
+  `companionRatings` / `companionRating` / `companionMalformed` (companion rework), `followUps`
+  (the Follow-up gate), `pollFailKinds` / `pollFailCause` (structured async poll failure),
+  `mergeAssessment`, `onCallAssessment` (post-release-health → on-call), `pullRequest`,
+  `pooledContainer`.
+
+A workspace with no profile gets the base backend behaviour, so the
 pre-existing specs are unchanged. The channel is a tiny separate HTTP listener on `PORT + 1` (`E2E_CONTROL_PORT`),
 posted to from Node (Playwright's `request`), never from the browser — see
 [`src/testServer.ts`](./src/testServer.ts) + [`src/fakeProfile.ts`](./src/fakeProfile.ts).

@@ -143,6 +143,19 @@ export interface FakeAgentOptions {
    */
   mergeAssessment?: { complexity: number; risk: number; impact: number; rationale: string }
   /**
+   * The assessment the `on-call` step reports as `result.onCallAssessment` — the
+   * post-release-health gate's INVESTIGATE-don't-fix helper. On a release regression the gate
+   * escalates the on-call agent; its completion is resolved specially (`resolveHelperCompletion`)
+   * to raise a `release_regression` notification carrying this assessment. Omitted ⇒ a
+   * deterministic default so the notification payload always carries a recommendation.
+   */
+  onCallAssessment?: {
+    culpritConfidence: number
+    recommendation: 'revert' | 'hold' | 'monitor'
+    rationale: string
+    evidence?: string[]
+  }
+  /**
    * A SEQUENCE of test reports the `tester` step returns, one per successive Tester
    * call (the last repeats once exhausted). Lets a test drive the Tester→Fixer loop:
    * e.g. a first report that withholds its greenlight (the engine loops the `fixer`),
@@ -415,6 +428,25 @@ export class FakeAgentExecutor implements AgentExecutor {
         confidence: context.isFinalStep ? confidence : undefined,
         ...this.usageFields(),
         mergeAssessment,
+      }
+    }
+
+    // The `on-call` step (the post-release-health gate's helper) INVESTIGATES a release
+    // regression and returns a structured assessment — it makes no commits and reverts
+    // nothing. The engine coerces this into `result.onCallAssessment`, which the gate's
+    // `resolveHelperCompletion` folds into the `release_regression` notification. Without this
+    // channel the generic prose fall-through would leave the assessment null.
+    if (context.agentKind === 'on-call') {
+      return {
+        output: `[on-call] investigated "${context.block.title}"`,
+        model: 'fake',
+        onCallAssessment: this.options.onCallAssessment ?? {
+          culpritConfidence: 0.8,
+          recommendation: 'hold',
+          rationale: 'fake: the regression correlates with the released diff',
+          evidence: [],
+        },
+        ...this.usageFields(),
       }
     }
 

@@ -26,7 +26,7 @@ symmetric D1 ⇄ Drizzle + conformance work (already scoped in round 1's item 8)
 - **Every resource identifier that crosses a trust boundary must be re-authorized at the
   boundary it enters**, not just at the outer gate. The central gate (`http/authGate.ts`)
   authorizes `/workspaces/:workspaceId/*` and `/accounts/:accountId/*` membership; any
-  *secondary* id taken from the body/query (e.g. `viaWorkspaceId`) must be independently
+  _secondary_ id taken from the body/query (e.g. `viaWorkspaceId`) must be independently
   checked against the gated scope. SEC-1 is the reference fix (`accountOf(id) === :accountId`).
 - **Any provider that fetches an org/user-supplied URL must go through the shared
   redirect-revalidating fetch** (`integrations/.../shared/safe-fetch.ts` `safeFetch`, or
@@ -40,19 +40,19 @@ symmetric D1 ⇄ Drizzle + conformance work (already scoped in round 1's item 8)
 
 Priority is fix-order (P0 = do first). Severity is impact-if-exploited.
 
-| ID    | Item                                                              | Severity | Priority | Status  | PR  |
-| ----- | ----------------------------------------------------------------- | -------- | -------- | ------- | --- |
-| SEC-1 | Cross-tenant doc disclosure via unchecked `viaWorkspaceId`        | High     | P0       | ⏳ todo | —   |
-| SEC-2 | Inline model-provider local-runner fetch skips redirect guard     | Med/High | P0       | ⏳ todo | —   |
-| SEC-3 | Local-runner allow-list grants full RFC1918 on multi-tenant Node  | Medium   | P1       | ⏳ todo | —   |
-| SEC-4 | Password throttle: per-email key fanout + spoofable XFF + per-node | Medium   | P1       | ⏳ todo | —   |
-| SEC-5 | Machine-token revocation store (carry-forward round-1 item 8)      | Medium   | P1       | ⏳ todo | —   |
-| SEC-6 | `agent_context_snapshots` bodies not run through `redactSecrets`   | Low      | P2       | ⏳ todo | —   |
-| SEC-7 | Confluence provider keeps Basic-auth across cross-origin redirect  | Low      | P2       | ⏳ todo | —   |
-| SEC-8 | Harness `contextFiles[].path` not re-validated at `writeFile` sink | Low      | P2       | ⏳ todo | —   |
-| SEC-9 | Webhook + LLM-proxy bodies buffered with no explicit `bodyLimit`   | Low      | P2       | ⏳ todo | —   |
-| SEC-10| Initiative `slug` has no charset restriction                       | Low      | P2       | ⏳ todo | —   |
-| SEC-11| `safeSegment('..')` preserves a traversal segment                  | Very Low | P3       | ⏳ todo | —   |
+| ID     | Item                                                               | Severity | Priority | Status  | PR  |
+| ------ | ------------------------------------------------------------------ | -------- | -------- | ------- | --- |
+| SEC-1  | Cross-tenant doc disclosure via unchecked `viaWorkspaceId`         | High     | P0       | ⏳ todo | —   |
+| SEC-2  | Inline model-provider local-runner fetch skips redirect guard      | Med/High | P0       | ⏳ todo | —   |
+| SEC-3  | Local-runner allow-list grants full RFC1918 on multi-tenant Node   | Medium   | P1       | ⏳ todo | —   |
+| SEC-4  | Password throttle: per-email key fanout + spoofable XFF + per-node | Medium   | P1       | ⏳ todo | —   |
+| SEC-5  | Machine-token revocation store (carry-forward round-1 item 8)      | Medium   | P1       | ⏳ todo | —   |
+| SEC-6  | `agent_context_snapshots` bodies not run through `redactSecrets`   | Low      | P2       | ⏳ todo | —   |
+| SEC-7  | Confluence provider keeps Basic-auth across cross-origin redirect  | Low      | P2       | ⏳ todo | —   |
+| SEC-8  | Harness `contextFiles[].path` not re-validated at `writeFile` sink | Low      | P2       | ⏳ todo | —   |
+| SEC-9  | Webhook + LLM-proxy bodies buffered with no explicit `bodyLimit`   | Low      | P2       | ⏳ todo | —   |
+| SEC-10 | Initiative `slug` has no charset restriction                       | Low      | P2       | ⏳ todo | —   |
+| SEC-11 | `safeSegment('..')` preserves a traversal segment                  | Very Low | P3       | ⏳ todo | —   |
 
 Non-blocking notes (no code fix scoped) are listed under "Notes & accepted risks".
 
@@ -63,6 +63,7 @@ Non-blocking notes (no code fix scoped) are listed under "Notes & accepted risks
 ### SEC-1 (High) — Cross-tenant document disclosure via unchecked `viaWorkspaceId`
 
 **Where.**
+
 - Route: `backend/packages/server/src/modules/fragmentLibrary/FragmentLibraryController.ts:124-143`
   (`createDocumentFragment`) and `:146-164` (`refreshPromptFragment`), account scope
   (mounted at `app.route('/accounts/:accountId', fragmentLibraryController('account'))`,
@@ -83,6 +84,7 @@ one membership was proven for). The workspace-scope variant is safe — it force
 
 **Exploit.** Any authenticated user is a member of their own personal account. Where the
 documents integration is configured for another tenant:
+
 1. `POST /accounts/<my-account>/document-fragments` with body
    `{ source: "confluence", ref: "<any page id>", viaWorkspaceId: "ws_victim" }`
    where `ws_victim` belongs to a different tenant's account.
@@ -96,10 +98,12 @@ reach — a cross-tenant confidentiality breach.
 
 **Fix.** In both account-scope handlers, before calling the service, require `viaWorkspaceId`
 to belong to the gated account:
+
 ```ts
 const owner = await c.get('container').workspaceService.accountOf(viaWorkspaceId)
 if (owner !== param(c, 'accountId')) throw new NotFoundError('Workspace not found')
 ```
+
 `accountOf` already exists on the workspace repository/service (used by the auth gate itself,
 `http/authGate.ts:71`). Account members are entitled to that account's workspace connections,
 so equality to the gated `accountId` is sufficient. Add a `server` integration test that a
@@ -163,6 +167,7 @@ exposure. Decide the intended deployment model first (this is partly a product d
 (`passwordAttemptLimited`, `clientIp`), used at `:468`, `:511`, `:696`, `:718`.
 
 **Three compounding weaknesses.**
+
 - **Per-node in-memory state.** The limiter is a module-global `Map`. On Cloudflare each
   isolate has its own; on Node each replica does (multi-replica is a supported deployment).
   The effective cap is `MAX_ATTEMPTS × nodes`, not 10 — the code itself calls it "a speed bump."
@@ -307,13 +312,13 @@ provider permits an owner/repo literally named `..` (and a single `..` can't esc
 ## Conventions & gotchas carried forward
 
 - **Re-authorize every secondary id from the body/query against the gated scope** (SEC-1). The
-  outer gate only proves the `:accountId`/`:workspaceId` in the *path*; a `viaWorkspaceId`,
+  outer gate only proves the `:accountId`/`:workspaceId` in the _path_; a `viaWorkspaceId`,
   target block id, etc. taken from the payload is a fresh trust boundary.
 - **Never hand a bare `fetch` (or the AI-SDK default fetch) an org/user-supplied URL.** Route
   it through the shared `safeFetch` / `fetchLocalRunner` so redirects are revalidated per hop
   and credentials are stripped cross-origin (SEC-2, SEC-7). The proxy path being hardened does
   not mean a parallel inline path is.
-- **Keep `redactSecrets` on *every* telemetry body sink** (SEC-6) — a new sink that stores
+- **Keep `redactSecrets` on _every_ telemetry body sink** (SEC-6) — a new sink that stores
   prompt/file text must scrub, not just clamp. And keep the rules O(n) (round-1 gotcha).
 - **Re-validate filesystem paths at the `writeFile` sink** even when an upstream producer
   sanitizes (SEC-8) — the contract type (`v.string()`) is the real boundary, not a comment.
