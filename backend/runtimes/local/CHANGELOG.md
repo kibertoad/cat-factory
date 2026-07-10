@@ -1,5 +1,14 @@
 # @cat-factory/local-server
 
+## 0.64.9
+
+### Patch Changes
+
+- Updated dependencies [87f835a]
+  - @cat-factory/server@0.107.5
+  - @cat-factory/node-server@0.90.6
+  - @cat-factory/executor-harness@1.41.0
+
 ## 0.64.8
 
 ### Patch Changes
