@@ -207,14 +207,28 @@ export class RunStateMachine {
     throw new ConflictError(`Execution '${executionId}' is being modified concurrently; retry`)
   }
 
-  async emitInstance(workspaceId: string, instance: ExecutionInstance): Promise<void> {
+  async emitInstance(
+    workspaceId: string,
+    instance: ExecutionInstance,
+    options: { rollUpMetrics?: boolean } = {},
+  ): Promise<void> {
     // Stamp each step with the run id so a lone step (in a pushed event, a log line, a
     // detail view) is self-describing for debugging; the value always equals the run id.
     for (const step of instance.steps) step.runId = instance.id
+    // The metrics rollup is a per-agent-kind GROUP BY over the whole run's
+    // `llm_call_metrics`, so running it on EVERY emit makes the drive loop pay
+    // O(emits × calls-in-run): the frequent progress-only poll folds (a subtask tick or
+    // a streamed follow-up while a container runs) re-aggregate the run just to redraw a
+    // progress bar. Those folds pass `rollUpMetrics: false`; the rollup then refreshes
+    // only on the emits that actually surface a settled step — step-boundary and terminal
+    // (`done`/`failed`) transitions. The SPA carries the last rollup forward across the
+    // metric-less folds, so the board's per-step metrics bar doesn't blank between
+    // boundaries (this is live telemetry, not slow-moving config, so no cache slice).
+    const rollUpMetrics = options.rollUpMetrics ?? true
     // The metrics rollup and the block fetch are independent, so run them concurrently
-    // — the rollup adds no serial latency to the (frequent) emit path.
+    // — the rollup adds no serial latency to the emit path when it does run.
     const [, block] = await Promise.all([
-      this.attachStepMetrics(workspaceId, instance),
+      rollUpMetrics ? this.attachStepMetrics(workspaceId, instance) : Promise.resolve(),
       this.blockRepository.get(workspaceId, instance.blockId),
     ])
     // A HEADLESS internal anchor block (a public-API "initiative" run) must NEVER reach the SPA:
