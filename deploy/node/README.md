@@ -81,6 +81,22 @@ split in the first place.
 > the `deploy/backend/.wrangler` state dir, or `wrangler d1 execute <db> --local` a fresh
 > schema) and re-apply migrations.
 
+## Sharing a database with other services
+
+By default cat-factory owns the `public` (app tables), `drizzle` (migration ledger), `pgboss`,
+`telemetry`, `sandbox`, and `provisioning` schemas of its database. If you must run it on a
+database shared with other services, three schema names are configurable so cat-factory can't
+collide with a schema another service owns (each must be a plain identifier):
+
+| Env                    | Default   | What it moves                                                                                                                                                                          |
+| ---------------------- | --------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `DB_SCHEMA`            | `public`  | The default app tables (relocated via the connection `search_path`). Set this when the database has no usable `public` schema.                                                         |
+| `DB_MIGRATIONS_SCHEMA` | `drizzle` | The drizzle migration ledger (`__drizzle_migrations`). Set this so cat-factory's ledger can't collide with **another drizzle-using service's** default `drizzle.__drizzle_migrations`. |
+| `DB_PGBOSS_SCHEMA`     | `pgboss`  | pg-boss's durable-job queue schema.                                                                                                                                                    |
+
+The named app schemas (`telemetry` / `sandbox` / `provisioning`) are fixed and not configurable.
+`db:reset` reads the same variables, so it drops exactly the schemas the deployment owns.
+
 ## Choosing the default model preset
 
 Every workspace's model-preset library is seeded on first use with three built-ins

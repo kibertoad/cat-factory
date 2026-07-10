@@ -1,7 +1,12 @@
 import { fileURLToPath } from 'node:url'
 import { migrate as drizzleMigrate } from 'drizzle-orm/node-postgres/migrator'
 import type { Pool } from 'pg'
-import type { DrizzleDb } from './client.js'
+import {
+  DEFAULT_DB_SCHEMA,
+  DEFAULT_MIGRATIONS_SCHEMA,
+  type DrizzleDb,
+  resolveDbSchema,
+} from './client.js'
 
 // Apply the drizzle-kit migration lineage in `../drizzle` on boot. The schema's single
 // source of truth is `./schema.ts`; `pnpm db:generate` diffs it and emits the next SQL
@@ -19,17 +24,21 @@ const migrationsFolder = fileURLToPath(new URL('../../drizzle', import.meta.url)
 // A fixed key for the advisory lock that serialises concurrent boots (see migrate).
 const MIGRATION_LOCK_KEY = 776_712_001
 
-// The drizzle-kit 1.0 migrator records applied migrations in this table (its own `drizzle`
-// schema, NOT `public`). Crucially, a `DROP SCHEMA public CASCADE` leaves this ledger
-// intact, so the ledger can outlive the very tables it claims to have created — see
-// `assertSchemaConsistent`.
-const LEDGER = 'drizzle.__drizzle_migrations'
+// The drizzle-kit 1.0 migrator records applied migrations in the `__drizzle_migrations` table
+// of its migrations schema (configurable via `migrationsSchema`, default `drizzle` — NOT
+// `public`). Crucially, dropping the app schema (a hand `DROP SCHEMA … CASCADE`, a stray test
+// run) leaves this ledger intact, so the ledger can outlive the very tables it claims to have
+// created — see `assertSchemaConsistent`.
+const ledgerRef = (migrationsSchema: string): string =>
+  `"${migrationsSchema}"."__drizzle_migrations"`
 
 // Tables that MUST exist once the baseline migration is recorded as applied. If the ledger
 // is non-empty but these are gone, the database is in the split state described above and
 // cannot be migrated forward (the next `ALTER TABLE`/FK migration would fail with a bare
-// `42P01`). We probe a couple of stable, early-created anchors rather than the full set.
-const ANCHOR_TABLES = ['public.accounts', 'public.workspaces'] as const
+// `42P01`). We probe a couple of stable, early-created anchors rather than the full set. They
+// are qualified with the configured schema (default `public`) since they are the tables the
+// `search_path`-relocated default schema holds.
+const ANCHOR_TABLES = ['accounts', 'workspaces'] as const
 
 const RESET_HINT =
   'Recover with `pnpm --filter @cat-factory/node-server db:reset` ' +
@@ -79,28 +88,37 @@ function asPgError(err: unknown): PgError {
 /**
  * Guard against the ledger↔schema split BEFORE handing off to the migrator. Skips silently
  * on a fresh database (no ledger table, or an empty ledger) — there is nothing to apply
- * onto yet, so a missing `public.accounts` is expected and the migrator will create it.
+ * onto yet, so a missing `<schema>.accounts` is expected and the migrator will create it. The
+ * anchors are probed in the configured schema (default `public`) — the schema the
+ * `search_path`-relocated default tables live in.
  */
-async function assertSchemaConsistent(pool: Pool): Promise<void> {
-  const ledgerExists = await pool.query(`SELECT to_regclass('${LEDGER}') AS reg`)
+async function assertSchemaConsistent(
+  pool: Pool,
+  schema: string,
+  migrationsSchema: string,
+): Promise<void> {
+  const ledger = ledgerRef(migrationsSchema)
+  const ledgerExists = await pool.query(`SELECT to_regclass('${ledger}') AS reg`)
   if (!ledgerExists.rows[0]?.reg) return // fresh DB: migrator will bootstrap the ledger + tables
 
-  const { rows } = await pool.query(`SELECT count(*)::int AS n FROM ${LEDGER}`)
+  const { rows } = await pool.query(`SELECT count(*)::int AS n FROM ${ledger}`)
   const applied = rows[0]?.n ?? 0
   if (applied === 0) return // ledger present but empty — still a clean slate
 
+  const qualified = ANCHOR_TABLES.map((t) => `${schema}.${t}`)
   const anchors = await pool.query(
-    `SELECT ${ANCHOR_TABLES.map((t, i) => `to_regclass('${t}') AS a${i}`).join(', ')}`,
+    `SELECT ${qualified.map((t, i) => `to_regclass($${i + 1}) AS a${i}`).join(', ')}`,
+    qualified,
   )
-  const missing = ANCHOR_TABLES.filter((_, i) => !anchors.rows[0]?.[`a${i}`])
+  const missing = qualified.filter((_, i) => !anchors.rows[0]?.[`a${i}`])
   if (missing.length === 0) return
 
   throw new DbSchemaInconsistentError(
-    `Database is inconsistent: the migration ledger (${LEDGER}) records ${applied} applied ` +
+    `Database is inconsistent: the migration ledger (${ledger}) records ${applied} applied ` +
       `migration(s) but expected table(s) ${missing.join(', ')} are missing. This usually means ` +
-      `the ledger's own \`drizzle\` schema survived a \`DROP SCHEMA public CASCADE\` (or a stray ` +
-      `test run), leaving the recorded history ahead of the actual schema. The database cannot be ` +
-      `migrated forward in this state. ${RESET_HINT}`,
+      `the ledger's own schema survived a \`DROP SCHEMA … CASCADE\` (or a stray test run), ` +
+      `leaving the recorded history ahead of the actual schema. The database cannot be migrated ` +
+      `forward in this state. ${RESET_HINT}`,
   )
 }
 
@@ -146,18 +164,42 @@ export function explainMigrationFailure(err: unknown): MigrationFailedError {
  * idempotent against its `__drizzle_migrations` ledger, so the loser of the lock race
  * simply finds nothing to apply.
  *
- * Before applying, we probe for the ledger↔schema split (see {@link assertSchemaConsistent})
- * and, on any apply failure, rethrow a {@link MigrationFailedError} whose message names the
- * likely cause and the recovery path — so a wedged DB reports what to do instead of a bare
- * Postgres error deep inside an `ALTER TABLE`.
+ * Before applying, we ensure the configured schema exists (so a non-`public` deployment can
+ * boot against an empty database — the `search_path`-relocated tables land there), probe for
+ * the ledger↔schema split (see {@link assertSchemaConsistent}), and, on any apply failure,
+ * rethrow a {@link MigrationFailedError} whose message names the likely cause and the recovery
+ * path — so a wedged DB reports what to do instead of a bare Postgres error deep inside an
+ * `ALTER TABLE`.
+ *
+ * `opts.schema` (default `public`, the deployment's `DB_SCHEMA`) is where the unqualified app
+ * tables live; `opts.migrationsSchema` (default `drizzle`, the deployment's
+ * `DB_MIGRATIONS_SCHEMA`) is where the migration ledger lives — set it to a service-dedicated
+ * name on a SHARED database so cat-factory's ledger can't collide with another drizzle-using
+ * service's `drizzle.__drizzle_migrations`. The migrator creates the migrations schema itself.
  */
-export async function migrate(db: DrizzleDb, pool: Pool): Promise<void> {
+export async function migrate(
+  db: DrizzleDb,
+  pool: Pool,
+  opts: { schema?: string; migrationsSchema?: string } = {},
+): Promise<void> {
+  const resolved = resolveDbSchema(opts.schema)
+  const migrationsSchema = resolveDbSchema(
+    opts.migrationsSchema,
+    DEFAULT_MIGRATIONS_SCHEMA,
+    'DB_MIGRATIONS_SCHEMA',
+  )
   const lock = await pool.connect()
   try {
     await lock.query('SELECT pg_advisory_lock($1)', [MIGRATION_LOCK_KEY])
-    await assertSchemaConsistent(pool)
+    // Ensure the target schema exists before the migrator's unqualified `CREATE TABLE`s run
+    // (the pool's search_path points here). Skipped for `public`, which always exists — and
+    // avoids needing CREATE-on-public privilege on a stock deployment.
+    if (resolved !== DEFAULT_DB_SCHEMA) {
+      await lock.query(`CREATE SCHEMA IF NOT EXISTS "${resolved}"`)
+    }
+    await assertSchemaConsistent(pool, resolved, migrationsSchema)
     try {
-      await drizzleMigrate(db, { migrationsFolder })
+      await drizzleMigrate(db, { migrationsFolder, migrationsSchema })
     } catch (err) {
       throw explainMigrationFailure(err)
     }

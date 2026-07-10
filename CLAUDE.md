@@ -366,6 +366,18 @@ FROM <child> WHERE <fk> NOT IN (SELECT id FROM <parent>)` (or `UPDATE … SET <f
   the runtimes symmetric". Deleting orphaned experimental data is acceptable here (backwards
   compatibility is a non-goal); do NOT hide the orphaning by swallowing the error instead.
 
+- **Configurable schemas for a SHARED database (Node).** All default to the prior behaviour, so
+  a stock deployment is unchanged; set them when cat-factory shares a Postgres with other
+  services. `DB_SCHEMA` relocates the default (`public`) app tables via the connection
+  `search_path` (`createDbClient` sets `options=-c search_path=…`; `migrate()` `CREATE SCHEMA
+IF NOT EXISTS`es it) — for databases with no usable `public`. `DB_MIGRATIONS_SCHEMA` moves the
+  drizzle ledger off the top-level `drizzle` schema so it can't collide with another
+  drizzle-using service's `drizzle.__drizzle_migrations` (passed as the migrator's
+  `migrationsSchema`). `DB_PGBOSS_SCHEMA` moves pg-boss's queue schema. Each must be a plain
+  identifier; `db:reset` reads the same env so it drops exactly the schemas the deployment owns.
+  The named app schemas (`telemetry`/`sandbox`/`provisioning`) are fixed `pgSchema(...)` names,
+  not configurable (changing them would mean regenerating migrations). Node-Postgres-specific.
+
 Test harnesses NEVER touch the base `DATABASE_URL` DB: they require a per-vitest-worker
 database (`deriveWorkerDatabase` must resolve) and use the `postgres` maintenance DB for the
 admin `CREATE DATABASE` connection, so running the suite can't pollute or desync a dev DB.

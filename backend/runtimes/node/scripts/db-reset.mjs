@@ -23,10 +23,29 @@
 
 import { Pool } from 'pg'
 
-// The app-owned schemas from src/db/schema.ts (`pgSchema(...)`), plus the migrator ledger
-// (`drizzle`) and pg-boss's queue schema (`pgboss`). Dropping the ledger alongside the data
-// is the whole point — it guarantees they can't desync.
-const APP_SCHEMAS = ['public', 'telemetry', 'sandbox', 'provisioning', 'drizzle', 'pgboss']
+// The app-owned schemas: the default table schema (DB_SCHEMA, default `public`), the named
+// schemas from src/db/schema.ts (`pgSchema(...)`), the migrator ledger (DB_MIGRATIONS_SCHEMA,
+// default `drizzle`), and pg-boss's queue schema (DB_PGBOSS_SCHEMA, default `pgboss`). Dropping
+// the ledger alongside the data is the whole point — it guarantees they can't desync. The
+// configurable ones must match the server's env so a shared-database deployment resets exactly
+// the schemas it owns (and nothing a co-tenant service owns).
+const SCHEMA_IDENTIFIER = /^[a-zA-Z_][a-zA-Z0-9_]*$/
+function schemaEnv(name, fallback) {
+  const value = (process.env[name] || fallback).trim() || fallback
+  if (!SCHEMA_IDENTIFIER.test(value)) {
+    console.error(`Invalid ${name} "${value}": must be a plain Postgres identifier.`)
+    process.exit(1)
+  }
+  return value
+}
+const APP_SCHEMAS = [
+  schemaEnv('DB_SCHEMA', 'public'),
+  'telemetry',
+  'sandbox',
+  'provisioning',
+  schemaEnv('DB_MIGRATIONS_SCHEMA', 'drizzle'),
+  schemaEnv('DB_PGBOSS_SCHEMA', 'pgboss'),
+]
 
 function databaseNameOf(connectionString) {
   try {

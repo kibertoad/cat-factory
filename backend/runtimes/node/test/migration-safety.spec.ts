@@ -53,14 +53,16 @@ const dbName = `cat_factory_migsafety_${workerId}`
 
 describe.runIf(baseUrl)('migrate() drift guard', () => {
   let client: DbClient
-  const adminUrl = adminDatabaseUrl(baseUrl as string)
-  const workerUrl = (() => {
-    const u = new URL(baseUrl as string)
-    u.pathname = `/${dbName}`
-    return u.toString()
-  })()
+  // Computed in beforeAll, not at describe-body eval time: a skipped `runIf` still executes the
+  // describe callback during collection, where `baseUrl` may be undefined.
+  let adminUrl: string
+  let workerUrl: string
 
   beforeAll(async () => {
+    adminUrl = adminDatabaseUrl(baseUrl as string)
+    const u = new URL(baseUrl as string)
+    u.pathname = `/${dbName}`
+    workerUrl = u.toString()
     const { pool: admin } = createDbClient(adminUrl)
     try {
       await admin.query(`DROP DATABASE IF EXISTS "${dbName}" WITH (FORCE)`)
@@ -95,5 +97,67 @@ describe.runIf(baseUrl)('migrate() drift guard', () => {
     await client.pool.query('CREATE SCHEMA public')
     await expect(migrate(client.db, client.pool)).rejects.toBeInstanceOf(DbSchemaInconsistentError)
     await expect(migrate(client.db, client.pool)).rejects.toThrow(/db:reset/)
+  })
+})
+
+// Validates the shared-database seam: relocate the default tables (DB_SCHEMA) AND the migration
+// ledger (DB_MIGRATIONS_SCHEMA) off `public`/`drizzle`, and assert NOTHING lands in the defaults.
+const schemaDbName = `cat_factory_migschema_${workerId}`
+
+describe.runIf(baseUrl)('migrate() with configured schemas', () => {
+  const APP_SCHEMA = 'cf_app'
+  const MIG_SCHEMA = 'cf_mig'
+  let client: DbClient
+  let adminUrl: string
+
+  beforeAll(async () => {
+    adminUrl = adminDatabaseUrl(baseUrl as string)
+    const { pool: admin } = createDbClient(adminUrl)
+    try {
+      await admin.query(`DROP DATABASE IF EXISTS "${schemaDbName}" WITH (FORCE)`)
+      await admin.query(`CREATE DATABASE "${schemaDbName}"`)
+    } finally {
+      await admin.end()
+    }
+    const workerUrl = (() => {
+      const u = new URL(baseUrl as string)
+      u.pathname = `/${schemaDbName}`
+      return u.toString()
+    })()
+    // Pool opens with search_path → APP_SCHEMA, so the migrator's unqualified CREATE TABLEs land there.
+    client = createDbClient(workerUrl, APP_SCHEMA)
+  })
+
+  afterAll(async () => {
+    await client?.pool.end()
+    const { pool: admin } = createDbClient(adminUrl)
+    try {
+      await admin.query(`DROP DATABASE IF EXISTS "${schemaDbName}" WITH (FORCE)`)
+    } finally {
+      await admin.end()
+    }
+  })
+
+  it('creates app tables in DB_SCHEMA and the ledger in DB_MIGRATIONS_SCHEMA, leaking nothing to public/drizzle', async () => {
+    await expect(
+      migrate(client.db, client.pool, { schema: APP_SCHEMA, migrationsSchema: MIG_SCHEMA }),
+    ).resolves.toBeUndefined()
+
+    const q = async (regclass: string): Promise<unknown> =>
+      (await client.pool.query('SELECT to_regclass($1) AS r', [regclass])).rows[0]?.r
+
+    // App tables live in APP_SCHEMA — and NOT in public.
+    expect(await q(`${APP_SCHEMA}.accounts`)).toBeTruthy()
+    expect(await q('public.accounts')).toBeNull()
+    // The ledger lives in MIG_SCHEMA — and NOT in the default `drizzle` schema.
+    expect(await q(`${MIG_SCHEMA}.__drizzle_migrations`)).toBeTruthy()
+    expect(await q('drizzle.__drizzle_migrations')).toBeNull()
+    // The explicitly-namespaced schemas are unaffected by the relocation.
+    expect(await q('telemetry.llm_call_metrics')).toBeTruthy()
+
+    // Idempotent re-run is a clean no-op against the configured schemas.
+    await expect(
+      migrate(client.db, client.pool, { schema: APP_SCHEMA, migrationsSchema: MIG_SCHEMA }),
+    ).resolves.toBeUndefined()
   })
 })

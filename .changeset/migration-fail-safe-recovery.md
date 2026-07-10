@@ -19,10 +19,17 @@ remediation path.
   recovery command. Boot runs `migrate()` before `boss.start()` (no longer racing them in a
   `Promise.all`) so the migration error is the clean top-level rejection.
 - **`db:reset` recovery command (Node).** `pnpm --filter @cat-factory/node-server db:reset`
-  drops all app-owned schemas together — `public`, `telemetry`, `sandbox`, `provisioning`, the
-  `drizzle` ledger, and pg-boss's `pgboss` — so the ledger can never outlive the data. This is
-  the sanctioned recovery; never hand-drop `public` alone (that is what causes the split).
-  **DESTRUCTIVE** — it deletes all data in `DATABASE_URL`.
+  drops all app-owned schemas together — the app schema, `telemetry`, `sandbox`,
+  `provisioning`, the migration ledger, and pg-boss's queue schema — so the ledger can never
+  outlive the data. This is the sanctioned recovery; never hand-drop `public` alone (that is
+  what causes the split). **DESTRUCTIVE** — it deletes all data in `DATABASE_URL`.
+- **Configurable schemas for a shared database (Node).** New optional env vars, all defaulting
+  to the prior behaviour: `DB_SCHEMA` relocates the default (`public`) app tables via the
+  connection `search_path` (for databases with no usable `public`); `DB_MIGRATIONS_SCHEMA` moves
+  the drizzle migration ledger off the top-level `drizzle` schema so it can't collide with
+  another drizzle-using service's `drizzle.__drizzle_migrations`; `DB_PGBOSS_SCHEMA` moves
+  pg-boss's queue schema. `db:reset` honours the same vars. The named app schemas
+  (`telemetry`/`sandbox`/`provisioning`) remain fixed.
 - **Self-healing FK migrations (both runtimes).** The `ON DELETE RESTRICT` FK migrations now
   delete/NULL pre-existing orphans before `ADD CONSTRAINT`, so a database old enough to predate
   the FKs migrates instead of hard-failing on `23503`. Applied symmetrically to the Postgres
