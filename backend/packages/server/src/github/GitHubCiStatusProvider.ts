@@ -54,10 +54,9 @@ export class GitHubCiStatusProvider implements CiStatusProvider {
         const branch = pr.ref.branch
         if (!branch) return { repo: repoFull, headSha: null, checks: [] }
         const ref = { owner, repo: name }
-        const commits = await this.deps.githubClient.listCommits(installationId, ref, {
-          sha: branch,
-        })
-        const headSha = commits.items[0]?.sha ?? null
+        // Exact single-ref lookup for the branch head — one `git/ref` read instead of
+        // paging the branch's commit list just to take `items[0]` (which could pull pages).
+        const headSha = await this.deps.githubClient.branchHeadSha(installationId, ref, branch)
         if (!headSha) return { repo: repoFull, headSha: null, checks: [] }
         const checks = await this.deps.githubClient.listCheckRuns(installationId, ref, headSha)
         return {

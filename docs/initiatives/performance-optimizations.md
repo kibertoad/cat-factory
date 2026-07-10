@@ -1,6 +1,6 @@
 # Initiative: performance optimizations (prioritized)
 
-**Status:** planned — analysis complete, no slices landed yet · **Owner:** core · **Started:** 2026-07-09
+**Status:** in progress — item 2 landed (gate-poll GitHub reads) · **Owner:** core · **Started:** 2026-07-09
 
 > This is the durable source of truth for a multi-PR initiative. Read it first before
 > picking up the next slice; update the checklist at the end of each PR.
@@ -47,31 +47,31 @@ symmetric" (CLAUDE.md).
 
 ## Per-item checklist
 
-| #   | Pri | Area         | Finding (short)                                                                                                                     | Status  | PR  |
-| --- | --- | ------------ | ----------------------------------------------------------------------------------------------------------------------------------- | ------- | --- |
-| 1   | P1  | engine       | `emitInstance` runs LLM-metrics GROUP BY on every emit (incl. progress ticks)                                                       | ⬜ todo |     |
-| 2   | P1  | gateways     | Gate polls: uncached `repoId()` + PAT re-resolved per `request()` + `listCommits` head lookup                                       | ⬜ todo |     |
-| 3   | P1  | persistence  | Execution lists `SELECT *` (incl. `detail` JSON) + JS status filter on dispatch guard; missing `(workspace_id, kind, status)` index | ⬜ todo |     |
-| 4   | P1  | dispatch     | `buildJobBody` serializes ~6 independent I/O steps per dispatch                                                                     | ⬜ todo |     |
-| 5   | P1  | frontend     | Board snapshot embeds full step outputs the board never reads                                                                       | ⬜ todo |     |
-| 6   | P1  | frontend     | Coarse `board` event forces full-snapshot refresh; payload already carries `blockId`                                                | ⬜ todo |     |
-| 7   | P2  | caching      | `SpendService` three banned TTL `Map`s (pricing / account / user limits)                                                            | ⬜ todo |     |
-| 8   | P2  | caching      | `AccountSettingsService` legacy 30s `Map` (the named anti-pattern)                                                                  | ⬜ todo |     |
-| 9   | P2  | caching      | `WorkspaceSettingsService.get` uncached; read per recorded LLM call                                                                 | ⬜ todo |     |
-| 10  | P2  | frontend     | Shared `useBlockQueries` index invalidates ALL BlockNodes on every execution event                                                  | ⬜ todo |     |
-| 11  | P2  | frontend     | Two unconditional 60fps RAF loops doing DOM measurement while idle                                                                  | ⬜ todo |     |
-| 12  | P2  | integrations | `GitHubSyncService`: serial per-workspace fan-out + serial resource syncs                                                           | ⬜ todo |     |
-| 13  | P2  | engine       | `AgentContextBuilder` re-walks block ancestry per resolver, sequentially                                                            | ⬜ todo |     |
-| 14  | P2  | events       | `FanOutEventPublisher` forwards to N mounted workspaces serially                                                                    | ⬜ todo |     |
-| 15  | P3  | engine       | `autoStartDependents`: per-dependent pipeline point-read in loop                                                                    | ⬜ todo |     |
-| 16  | P3  | engine       | `InitiativeLoopService.spawnItem`: per-item pipeline point-read in loop                                                             | ⬜ todo |     |
-| 17  | P3  | board        | `BoardScanService` reconcile: `addModule` re-lists whole board per module                                                           | ⬜ todo |     |
-| 18  | P3  | board        | Block delete: teardown + remove each re-list the whole board                                                                        | ⬜ todo |     |
-| 19  | P3  | persistence  | `notifications.listOpen` unbounded `SELECT *` (body+payload) on snapshot                                                            | ⬜ todo |     |
-| 20  | P3  | frontend     | `board.hydrate` JSON.stringifies every block per refresh; global decision/approval maps rebuilt per event; no node virtualization   | ⬜ todo |     |
-| 21  | P3  | persistence  | `password_reset_tokens.deleteExpired` full-table scan (no `expires_at` index)                                                       | ⬜ todo |     |
-| 22  | P3  | spend        | `isOverBudget`: up to 3 live SUM aggregates per proxied LLM call (design decision)                                                  | ⬜ todo |     |
-| 23  | P3  | engine       | `resolveRiskPolicy` re-reads merge preset per gate evaluation (optional slice)                                                      | ⬜ todo |     |
+| #   | Pri | Area         | Finding (short)                                                                                                                     | Status  | PR                                                        |
+| --- | --- | ------------ | ----------------------------------------------------------------------------------------------------------------------------------- | ------- | --------------------------------------------------------- |
+| 1   | P1  | engine       | `emitInstance` runs LLM-metrics GROUP BY on every emit (incl. progress ticks)                                                       | ⬜ todo |                                                           |
+| 2   | P1  | gateways     | Gate polls: uncached `repoId()` + PAT re-resolved per `request()` + `listCommits` head lookup                                       | ✅ done | [#993](https://github.com/kibertoad/cat-factory/pull/993) |
+| 3   | P1  | persistence  | Execution lists `SELECT *` (incl. `detail` JSON) + JS status filter on dispatch guard; missing `(workspace_id, kind, status)` index | ⬜ todo |                                                           |
+| 4   | P1  | dispatch     | `buildJobBody` serializes ~6 independent I/O steps per dispatch                                                                     | ⬜ todo |                                                           |
+| 5   | P1  | frontend     | Board snapshot embeds full step outputs the board never reads                                                                       | ⬜ todo |                                                           |
+| 6   | P1  | frontend     | Coarse `board` event forces full-snapshot refresh; payload already carries `blockId`                                                | ⬜ todo |                                                           |
+| 7   | P2  | caching      | `SpendService` three banned TTL `Map`s (pricing / account / user limits)                                                            | ⬜ todo |                                                           |
+| 8   | P2  | caching      | `AccountSettingsService` legacy 30s `Map` (the named anti-pattern)                                                                  | ⬜ todo |                                                           |
+| 9   | P2  | caching      | `WorkspaceSettingsService.get` uncached; read per recorded LLM call                                                                 | ⬜ todo |                                                           |
+| 10  | P2  | frontend     | Shared `useBlockQueries` index invalidates ALL BlockNodes on every execution event                                                  | ⬜ todo |                                                           |
+| 11  | P2  | frontend     | Two unconditional 60fps RAF loops doing DOM measurement while idle                                                                  | ⬜ todo |                                                           |
+| 12  | P2  | integrations | `GitHubSyncService`: serial per-workspace fan-out + serial resource syncs                                                           | ⬜ todo |                                                           |
+| 13  | P2  | engine       | `AgentContextBuilder` re-walks block ancestry per resolver, sequentially                                                            | ⬜ todo |                                                           |
+| 14  | P2  | events       | `FanOutEventPublisher` forwards to N mounted workspaces serially                                                                    | ⬜ todo |                                                           |
+| 15  | P3  | engine       | `autoStartDependents`: per-dependent pipeline point-read in loop                                                                    | ⬜ todo |                                                           |
+| 16  | P3  | engine       | `InitiativeLoopService.spawnItem`: per-item pipeline point-read in loop                                                             | ⬜ todo |                                                           |
+| 17  | P3  | board        | `BoardScanService` reconcile: `addModule` re-lists whole board per module                                                           | ⬜ todo |                                                           |
+| 18  | P3  | board        | Block delete: teardown + remove each re-list the whole board                                                                        | ⬜ todo |                                                           |
+| 19  | P3  | persistence  | `notifications.listOpen` unbounded `SELECT *` (body+payload) on snapshot                                                            | ⬜ todo |                                                           |
+| 20  | P3  | frontend     | `board.hydrate` JSON.stringifies every block per refresh; global decision/approval maps rebuilt per event; no node virtualization   | ⬜ todo |                                                           |
+| 21  | P3  | persistence  | `password_reset_tokens.deleteExpired` full-table scan (no `expires_at` index)                                                       | ⬜ todo |                                                           |
+| 22  | P3  | spend        | `isOverBudget`: up to 3 live SUM aggregates per proxied LLM call (design decision)                                                  | ⬜ todo |                                                           |
+| 23  | P3  | engine       | `resolveRiskPolicy` re-reads merge preset per gate evaluation (optional slice)                                                      | ⬜ todo |                                                           |
 
 ## Detailed findings
 

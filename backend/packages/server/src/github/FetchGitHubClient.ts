@@ -69,6 +69,16 @@ const MAX_PAGES = 10
 /** Neutral default colour for a label we create on the fly (GitHub requires a colour). */
 const DEFAULT_LABEL_COLOR = 'ededed'
 
+// (installationId, owner, repo) → numeric repo id. GitHub never reassigns a repo's numeric
+// id, so this mapping is immutable and safe to memoize per-process — sparing a
+// `GET /repos/{owner}/{repo}` on every payload that omits the id (branches / issues /
+// commits / check runs backfill it purely for that number, several times per gate/sync
+// tick). Same justified process-level memo as `ownerAppCache` in `GitHubAppRegistry`.
+const repoIdCache = new Map<string, number>()
+
+const repoIdCacheKey = (installationId: number, ref: GitHubRepoRef): string =>
+  `${installationId}:${ref.owner}/${ref.repo}`
+
 export interface FetchGitHubClientDependencies {
   /**
    * Mints the per-call token. The App registry (resolving which App's credentials to
@@ -1180,10 +1190,18 @@ export class FetchGitHubClient implements GitHubClient {
     return (payload.data ?? ({} as T)) as T
   }
 
-  /** Lazily resolve a repo's numeric id (needed where the payload omits it). */
+  /** Lazily resolve a repo's numeric id (needed where the payload omits it). Memoized
+   * per `(installationId, owner, repo)` — the mapping is immutable, so repeated backfills
+   * (list branches / issues / commits / check runs) reuse the single `/repos` read. */
   private async repoId(installationId: number, ref: GitHubRepoRef): Promise<number> {
+    const key = repoIdCacheKey(installationId, ref)
+    const cached = repoIdCache.get(key)
+    if (cached !== undefined) return cached
     const { json } = await this.request(`/repos/${ref.owner}/${ref.repo}`, { installationId })
-    return (json as { id?: number }).id ?? 0
+    const id = (json as { id?: number }).id ?? 0
+    // Only cache a resolved id; a 0 means the payload omitted it, so let a later call retry.
+    if (id !== 0) repoIdCache.set(key, id)
+    return id
   }
 
   /** Follow `Link` pagination, mapping each page, until exhausted/capped/`stop`. */
