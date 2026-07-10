@@ -3962,7 +3962,7 @@ export function defineIntegrationConformance(harness: ConformanceHarness): void 
         expect(reseeded.status).toBe(200)
         expect(reseeded.body.name).toBe('Balanced')
         expect(reseeded.body.autoMergeEnabled).toBe(true)
-        expect(reseeded.body.version).toBe(2)
+        expect(reseeded.body.version).toBe(3)
         // The default is preserved across a reseed.
         expect(reseeded.body.isDefault).toBe(true)
 
