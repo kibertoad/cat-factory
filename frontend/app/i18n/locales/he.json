@@ -4571,7 +4571,7 @@
   },
   "forkDecision": {
     "title": "בחר גישת מימוש",
-    "titleWithBlock": "בחר גישה — {title}",
+    "titleWithBlock": "בחר גישה עבור {title}",
     "subtitle": "דרכים שונות מהותית לממש משימה זו, לפני כתיבת קוד כלשהו.",
     "seam": "היכן זה נוגע:",
     "recommended": "מומלץ",

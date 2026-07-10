@@ -23,11 +23,28 @@ export const useForkDecisionStore = defineStore('forkDecision', () => {
   /** The last error message from an action, surfaced inline; cleared on the next action. */
   const error = ref<string | null>(null)
 
-  /** Reflect an authoritative fork-decision state onto the run's Coder step. */
+  /**
+   * Reflect an authoritative fork-decision state onto the run's Coder step. A pipeline may
+   * carry more than one `coder` step, so target the step this decision is about rather than
+   * the first one that happens to hold fork state: prefer the step that is still live
+   * (proposing / awaiting the choice / answering), then the current step, and only then fall
+   * back to the first step carrying fork state. The stream corrects any mismatch, but this
+   * keeps the immediate optimistic echo on the right step.
+   */
   function reflect(executionId: string, state: ForkDecisionStepState | null): void {
     if (!state) return
     const instance = execution.getInstance(executionId)
-    const step = instance?.steps.find((s) => s.forkDecision)
+    if (!instance) return
+    const isLive = (s: (typeof instance.steps)[number]) =>
+      s.agentKind === 'coder' &&
+      (s.forkDecision?.status === 'awaiting_choice' ||
+        s.forkDecision?.status === 'answering' ||
+        s.forkDecision?.status === 'proposing')
+    const current = instance.steps[instance.currentStep]
+    const step =
+      instance.steps.find(isLive) ??
+      (current?.agentKind === 'coder' && current.forkDecision ? current : undefined) ??
+      instance.steps.find((s) => s.forkDecision)
     if (step) step.forkDecision = state
   }
 

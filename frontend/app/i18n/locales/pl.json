@@ -4560,7 +4560,7 @@
   },
   "forkDecision": {
     "title": "Wybierz podejście do implementacji",
-    "titleWithBlock": "Wybierz podejście — {title}",
+    "titleWithBlock": "Wybierz podejście dla {title}",
     "subtitle": "Zasadniczo różne sposoby realizacji tego zadania, zanim powstanie kod.",
     "seam": "Gdzie to sięga:",
     "recommended": "Zalecane",

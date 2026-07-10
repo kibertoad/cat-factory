@@ -4572,7 +4572,7 @@
   },
   "forkDecision": {
     "title": "Bir uygulama yaklaşımı seçin",
-    "titleWithBlock": "Bir yaklaşım seçin — {title}",
+    "titleWithBlock": "{title} için bir yaklaşım seçin",
     "subtitle": "Kod yazılmadan önce bu görevi gerçekleştirmenin esaslı biçimde farklı yolları.",
     "seam": "Nereye dokunuyor:",
     "recommended": "Önerilen",

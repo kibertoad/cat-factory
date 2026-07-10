@@ -4572,7 +4572,7 @@
   },
   "forkDecision": {
     "title": "実装アプローチを選択",
-    "titleWithBlock": "アプローチを選択 — {title}",
+    "titleWithBlock": "{title} のアプローチを選択",
     "subtitle": "コードを書く前に、このタスクを実装する本質的に異なる方法を示します。",
     "seam": "影響範囲:",
     "recommended": "推奨",

@@ -4572,7 +4572,7 @@
   },
   "forkDecision": {
     "title": "Implementierungsansatz wählen",
-    "titleWithBlock": "Ansatz wählen — {title}",
+    "titleWithBlock": "Ansatz für {title} wählen",
     "subtitle": "Grundlegend verschiedene Wege, diese Aufgabe umzusetzen, bevor Code geschrieben wird.",
     "seam": "Betroffene Stelle:",
     "recommended": "Empfohlen",

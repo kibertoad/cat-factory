@@ -4572,7 +4572,7 @@
   },
   "forkDecision": {
     "title": "Scegli un approccio di implementazione",
-    "titleWithBlock": "Scegli un approccio — {title}",
+    "titleWithBlock": "Scegli un approccio per {title}",
     "subtitle": "Modi sostanzialmente diversi di implementare questa attività, prima di scrivere codice.",
     "seam": "Dove incide:",
     "recommended": "Consigliato",

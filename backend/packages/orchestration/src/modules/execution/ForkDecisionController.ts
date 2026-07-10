@@ -75,16 +75,26 @@ export class ForkDecisionController {
     const usable = proposal ? usableForks(proposal) : []
     const maxChatTurns = step.forkDecision?.maxChatTurns ?? DEFAULT_FORK_MAX_CHAT_TURNS
     if (!proposal || proposal.singlePath || usable.length < 2) {
+      // A single path (the escape hatch fired, or fewer than two materially different
+      // approaches survived): no park. Still fold the one explored approach into the Coder so
+      // it runs "against the one returned fork" (the documented intent) instead of discarding
+      // the proposer's work — mint the usable fork(s) and bind the recommended one as the
+      // chosen directive. Nothing to bind when no usable fork survived (missing/degenerate
+      // proposal), in which case the Coder runs exactly as before the feature existed.
+      const minted =
+        usable.length > 0 ? mintForks(usable, () => this.deps.idGenerator.next('fork')) : []
+      const picked = minted.find((f) => f.recommended) ?? minted[0]
       step.forkDecision = {
         status: 'single_path',
         seamSummary: proposal?.seamSummary ?? null,
-        forks: [],
+        forks: minted,
         singlePathReason:
           proposal?.singlePathReason ??
           (proposal ? 'Only one materially different approach was found.' : null),
         chat: [],
         maxChatTurns,
         model: model ?? null,
+        ...(picked ? { chosen: { forkId: picked.id, at: this.deps.clock.now() } } : {}),
       }
       // Re-arm the SAME step so the driver re-enters and dispatches the Coder (Phase B).
       this.deps.stepGraph.resetStepForRerun(step)

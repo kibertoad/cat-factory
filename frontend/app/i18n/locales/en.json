@@ -4689,7 +4689,7 @@
   },
   "forkDecision": {
     "title": "Choose an implementation approach",
-    "titleWithBlock": "Choose an approach — {title}",
+    "titleWithBlock": "Choose an approach for {title}",
     "subtitle": "Materially different ways to implement this task, before any code is written.",
     "seam": "Where it lands:",
     "recommended": "Recommended",

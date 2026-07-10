@@ -4560,7 +4560,7 @@
   },
   "forkDecision": {
     "title": "Elige un enfoque de implementación",
-    "titleWithBlock": "Elige un enfoque — {title}",
+    "titleWithBlock": "Elige un enfoque para {title}",
     "subtitle": "Formas sustancialmente distintas de implementar esta tarea, antes de escribir código.",
     "seam": "Dónde impacta:",
     "recommended": "Recomendado",
