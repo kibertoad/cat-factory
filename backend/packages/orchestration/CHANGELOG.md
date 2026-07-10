@@ -1,5 +1,66 @@
 # @cat-factory/orchestration
 
+## 0.104.1
+
+### Patch Changes
+
+- e254ef5: Perf: roll up per-step LLM metrics only on step-boundary/terminal emits, not on every progress fold (performance-optimizations item 1).
+
+  - `RunStateMachine.emitInstance` now takes a `{ rollUpMetrics }` option (default `true`). The
+    metrics rollup is a per-agent-kind GROUP BY over the whole run's `llm_call_metrics`, so running
+    it on every emit made the drive loop pay O(emits × calls-in-run) — the frequent progress-only
+    poll folds (a subtask tick or a streamed follow-up while a container runs) re-aggregated the run
+    just to redraw a progress bar. The two running-progress poll folds in `RunDispatcher`
+    (`pollAgentJobInner`'s container fold and `pollDeployerJob`'s deploy fold) now pass
+    `rollUpMetrics: false`; the rollup refreshes only on the emits that surface a settled step.
+  - `step.metrics` is live-only, derived state (never persisted; absent from the snapshot), so the
+    SPA execution store now carries the last-known per-step rollup forward when an incoming instance
+    omits it (`upsert`/`hydrate`), per the live-push coherence rules — a metric-less running fold no
+    longer blanks the board's per-step metrics bar between boundaries. Pinned with store-level unit
+    tests.
+
+## 0.104.0
+
+### Minor Changes
+
+- 127fe3e: Apriori branches (slice 2): working mode.
+
+  A task's single optional `working` apriori branch now drives the run — the agents start from
+  and keep committing into that pre-existing branch instead of minting `cat-factory/<blockId>`,
+  and the PR opens from it, the CI gate polls it, and the merger merges it. See
+  `docs/initiatives/apriori-branches.md`.
+
+  - **Context**: the engine lifts the block's `aprioriBranches` verbatim onto the agent run
+    context (`AgentRunContext.aprioriBranches`), a pure projection like `referenceRepos`.
+  - **Work-branch swap**: `ContainerAgentExecutor.buildJobBody` and the two `RunDispatcher`
+    repo-op sites (`resolveRepoOpBranch` + the spec-writer `builtInRepoOpBranch`) resolve the
+    work branch as `resolveAprioriWorkingBranch(...) ?? cat-factory/<blockId>`, so every
+    downstream builder (`newBranch` / `pushBranch` / explore fallback / PR head) rides the
+    user's branch. The base-branch rejection is a single shared `resolveAprioriWorkingBranch`
+    helper (`@cat-factory/contracts`) so the executor and dispatcher rejections can't drift.
+  - **Probe, never create**: an apriori working branch must already exist — it is probed
+    (`ensureWorkBranch(..., { create: false })`, or a checkout-free `headSha`), and a missing
+    branch fails the dispatch loudly rather than being silently created off base. A working
+    branch equal to the repo base is rejected.
+  - **Merge teardown guard**: `GitHubPullRequestMerger` only deletes a merged head branch when
+    it is a platform `cat-factory/*` branch — a user-provided apriori branch is never torn down
+    (reusing a merged apriori branch on a later task intentionally resumes it).
+  - **Conformance**: a cross-runtime assertion that a custom kind's post-op commits onto the
+    task's apriori working branch instead of `cat-factory/<blockId>` on both stores.
+
+### Patch Changes
+
+- Updated dependencies [127fe3e]
+  - @cat-factory/contracts@0.124.1
+  - @cat-factory/kernel@0.117.6
+  - @cat-factory/agents@0.52.9
+  - @cat-factory/integrations@0.80.6
+  - @cat-factory/prompt-fragments@0.13.10
+  - @cat-factory/sandbox@0.9.58
+  - @cat-factory/spend@0.12.9
+  - @cat-factory/workspaces@0.13.20
+  - @cat-factory/caching@0.6.28
+
 ## 0.103.1
 
 ### Patch Changes

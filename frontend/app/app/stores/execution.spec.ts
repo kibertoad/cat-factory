@@ -134,3 +134,55 @@ describe('execution store snapshot/event reconcile', () => {
     expect(store.getInstance('e1')?.status).toBe('done')
   })
 })
+
+/** A run whose steps carry an (optional) per-step metrics rollup. */
+function runWithMetrics(
+  id: string,
+  rev: number,
+  steps: Array<{ agentKind: string; metrics?: { calls: number } | null }>,
+): ExecutionInstance {
+  return { id, blockId: `blk_${id}`, steps, status: 'running', rev } as unknown as ExecutionInstance
+}
+
+describe('execution store metrics preservation (live-only rollup)', () => {
+  let store: ReturnType<typeof useExecutionStore>
+  beforeEach(() => {
+    store = useExecutionStore()
+  })
+
+  it('a metric-less running-fold event does not blank the last-known step metrics', () => {
+    // A step-boundary emit carried the rollup...
+    store.upsert(runWithMetrics('e1', 1, [{ agentKind: 'coder', metrics: { calls: 3 } }]))
+    // ...a later progress-only fold (higher rev) omits it — the backend skips the rollup there.
+    store.upsert(runWithMetrics('e1', 2, [{ agentKind: 'coder' }]))
+    const step = store.getInstance('e1')!.steps[0] as unknown as { metrics?: { calls: number } }
+    expect(step.metrics?.calls).toBe(3)
+    expect(store.getInstance('e1')?.rev).toBe(2) // the fold still won (progress/subtasks applied)
+  })
+
+  it('a fresh rollup overrides the preserved value', () => {
+    store.upsert(runWithMetrics('e1', 1, [{ agentKind: 'coder', metrics: { calls: 3 } }]))
+    store.upsert(runWithMetrics('e1', 2, [{ agentKind: 'coder' }])) // fold: preserved
+    store.upsert(runWithMetrics('e1', 3, [{ agentKind: 'coder', metrics: { calls: 7 } }]))
+    const step = store.getInstance('e1')!.steps[0] as unknown as { metrics?: { calls: number } }
+    expect(step.metrics?.calls).toBe(7)
+  })
+
+  it('does not carry metrics across a reshaped step (agentKind mismatch at the index)', () => {
+    store.upsert(runWithMetrics('e1', 1, [{ agentKind: 'coder', metrics: { calls: 3 } }]))
+    // A different kind at index 0 must not inherit the coder's rollup.
+    store.upsert(runWithMetrics('e1', 2, [{ agentKind: 'reviewer' }]))
+    const step = store.getInstance('e1')!.steps[0] as unknown as { metrics?: { calls: number } }
+    expect(step.metrics).toBeUndefined()
+  })
+
+  it('preserves metrics through a lagging full refresh that omits them (hydrate)', () => {
+    // Establish the workspace first (a fresh-workspace hydrate replaces outright by design).
+    store.hydrate([runWithMetrics('e1', 1, [{ agentKind: 'coder' }])], 'ws1')
+    store.upsert(runWithMetrics('e1', 2, [{ agentKind: 'coder', metrics: { calls: 5 } }]))
+    // A snapshot never carries metrics (never persisted); a same-rev refresh must not blank it.
+    store.hydrate([runWithMetrics('e1', 2, [{ agentKind: 'coder' }])], 'ws1')
+    const step = store.getInstance('e1')!.steps[0] as unknown as { metrics?: { calls: number } }
+    expect(step.metrics?.calls).toBe(5)
+  })
+})
