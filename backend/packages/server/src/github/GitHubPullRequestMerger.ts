@@ -68,8 +68,12 @@ export class GitHubPullRequestMerger implements PullRequestMerger {
       // Tear down the merged work branch (deterministic per task, `cat-factory/<blockId>`);
       // leaving it strands a resumable-but-merged branch (see the single-repo note that used
       // to live here). Best-effort — a failed delete must never undo the completed merge.
+      // NEVER delete a user-provided APRIORI working branch: it is theirs (not a platform
+      // `cat-factory/*` branch), so only tear down branches under that prefix. Reusing a
+      // merged apriori branch on a later task intentionally RESUMES it (the new PR diff
+      // carries only the new commits).
       const branch = entry.ref.branch
-      if (branch) {
+      if (branch?.startsWith('cat-factory/')) {
         await this.deps.githubClient
           .deleteBranch(installationId, ref, branch)
           .catch((e: unknown) => {

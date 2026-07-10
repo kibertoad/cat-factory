@@ -345,6 +345,11 @@ export class AgentContextBuilder {
       // the executor clones them as read-only siblings for the doc-writer. A pure projection
       // (identities are self-contained), so no repo reads here.
       ...(block.referenceRepos?.length ? { referenceRepos: block.referenceRepos } : {}),
+      // Pre-existing branches attached to this task as run input (apriori branches), lifted
+      // verbatim from the block — a pure projection (identities are self-contained). The
+      // executor swaps a `working` entry in for the deterministic work branch; the reference
+      // entries steer a later harness fetch. Absent when the task attaches none.
+      ...(block.aprioriBranches?.length ? { aprioriBranches: block.aprioriBranches } : {}),
       ...(initiative ? { initiative } : {}),
       priorOutputs,
       decisions: instance.steps

@@ -163,6 +163,28 @@ export function aprioriWorkingBranch(branches: AprioriBranch[] | undefined): str
   return branches?.find((b) => b.mode === 'working')?.name
 }
 
+/**
+ * The task's `working` apriori branch resolved against the run's repo base branch: returns the
+ * branch name (or undefined when none is set), throwing when it equals the base — a run that
+ * builds inside the base would have nothing to diff and no PR to open. This is a RUNTIME check
+ * (the base branch is a repo fact unknown at the write boundary), shared by the dispatch sites
+ * that swap in the work branch (`ContainerAgentExecutor` + the `RunDispatcher` repo-ops) so
+ * their rejection can't drift apart.
+ */
+export function resolveAprioriWorkingBranch(
+  branches: AprioriBranch[] | undefined,
+  baseBranch: string,
+): string | undefined {
+  const working = aprioriWorkingBranch(branches)
+  if (working && working === baseBranch) {
+    throw new Error(
+      `Apriori working branch '${working}' is the repo's base branch; ` +
+        `pick an existing feature branch to build inside, not the base.`,
+    )
+  }
+  return working
+}
+
 /** The `reference` apriori branch names of a task (possibly empty). */
 export function aprioriReferenceBranches(branches: AprioriBranch[] | undefined): string[] {
   return branches?.filter((b) => b.mode === 'reference').map((b) => b.name) ?? []
