@@ -2,6 +2,7 @@ import * as v from 'valibot'
 import { agentConfigValuesSchema } from './agent-config.js'
 import { consensusStepConfigSchema, stepGatingSchema } from './consensus.js'
 import {
+  aprioriBranchSchema,
   referenceRepoSchema,
   stepOptionsSchema,
   testerQualityConfigSchema,
@@ -187,6 +188,11 @@ export const updateBlockSchema = v.partial(
     // Task-level (document tasks): read-only reference repos for the `doc-writer` agent; an
     // empty array clears them. Capped so a clone fan-out stays bounded, not data-sized.
     referenceRepos: v.pipe(v.array(referenceRepoSchema), v.maxLength(20)),
+    // Task-level: pre-existing branches of the task's primary target repo handed to the run
+    // (one optional `working` branch + any `reference` branches); an empty array clears them.
+    // The single-working / no-duplicate / mode-disjoint / frozen-after-PR invariants are
+    // enforced in BoardService.updateBlock. Capped so a reference-fetch fan-out stays bounded.
+    aprioriBranches: v.pipe(v.array(aprioriBranchSchema), v.maxLength(20)),
     // Per-task issue-tracker writeback overrides; null clears the override (inherit
     // the workspace setting). 'on'/'off' force the behaviour for this task.
     trackerCommentOnPrOpen: v.nullable(writebackOverrideSchema),
