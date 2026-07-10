@@ -1,6 +1,6 @@
 <script setup lang="ts">
 // Pre-existing branches of a task's PRIMARY target repo handed to the run as input, in two
-// deliberately-disjoint modes (see `docs/initiatives/apriori-branches.md`):
+// deliberately-disjoint modes (see `backend/docs/adr/0021-apriori-branches.md`):
 //
 //  - `reference` — read-only context (a spike / prototype / prior-art branch). The consuming
 //    agents may read it (log/diff/open files) but never commit to or push it.
@@ -41,15 +41,25 @@ watch(
   { immediate: true },
 )
 
-const attached = computed<AprioriBranch[]>(() => props.block.aprioriBranches ?? [])
-const attachedNames = computed(() => new Set(attached.value.map((b) => b.name)))
-const workingName = computed(() => aprioriWorkingBranch(attached.value))
-
 // Write-boundary mirrors:
 //  - a PR pins the run's branch, so the working entry is FROZEN (references stay editable);
 //  - a multi-repo task (any involved service) BLOCKS working mode entirely.
 const hasPullRequest = computed(() => !!props.block.pullRequest)
 const isMultiRepo = computed(() => (props.block.involvedServiceIds ?? []).length > 0)
+
+// A working entry set while single-repo becomes invalid the moment the task gains a second
+// involved service (the backend rejects a working entry on a multi-repo task). Rather than let
+// that stale entry ride along and fail the NEXT write wholesale, demote any working entry to
+// `reference` on a multi-repo task — applied both to what we render and to what we persist, so
+// the invariant is mirrored (not surfaced as a rejected write) and self-heals on the next save.
+function normalize(entries: AprioriBranch[]): AprioriBranch[] {
+  if (!isMultiRepo.value) return entries
+  return entries.map((b) => (b.mode === 'working' ? { ...b, mode: 'reference' } : b))
+}
+
+const attached = computed<AprioriBranch[]>(() => normalize(props.block.aprioriBranches ?? []))
+const attachedNames = computed(() => new Set(attached.value.map((b) => b.name)))
+const workingName = computed(() => aprioriWorkingBranch(attached.value))
 
 function isProtected(name: string): boolean {
   return repoBranches.value.find((b) => b.name === name)?.protected === true
@@ -61,7 +71,7 @@ function isBaseBranch(name: string): boolean {
 }
 
 function save(next: AprioriBranch[]) {
-  board.updateBlock(props.block.id, { aprioriBranches: next })
+  board.updateBlock(props.block.id, { aprioriBranches: normalize(next) })
 }
 
 // ---- add / remove -----------------------------------------------------------

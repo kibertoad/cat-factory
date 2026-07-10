@@ -378,7 +378,7 @@ export const blockSchema = v.object({
   referenceRepos: v.optional(v.array(referenceRepoSchema)),
   /**
    * Task-level: pre-existing branches of the task's PRIMARY target repo handed to the run
-   * as input (see {@link aprioriBranchSchema} and `docs/initiatives/apriori-branches.md`).
+   * as input (see {@link aprioriBranchSchema} and `backend/docs/adr/0021-apriori-branches.md`).
    * At most one `working` entry (the branch the run builds inside instead of minting
    * `cat-factory/<blockId>`); any number of `reference` entries (read-only context). The
    * write boundary (`BoardService.updateBlock`) drops this on non-task blocks and enforces
