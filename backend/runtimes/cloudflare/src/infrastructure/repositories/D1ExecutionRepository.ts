@@ -1,4 +1,10 @@
-import type { AgentFailure, Clock, ExecutionRepository, RunRef } from '@cat-factory/kernel'
+import type {
+  AgentFailure,
+  Clock,
+  ExecutionRepository,
+  LiveRunSummary,
+  RunRef,
+} from '@cat-factory/kernel'
 import type { ExecutionInstance } from '@cat-factory/contracts'
 import { tryDecodeRows } from '@cat-factory/server'
 import type { D1Database } from '@cloudflare/workers-types'
@@ -32,6 +38,21 @@ export class D1ExecutionRepository implements ExecutionRepository {
       .all<ExecutionRow>()
     // Snapshot-facing list read: drop a corrupt run rather than failing the whole board load.
     return tryDecodeRows(results, rowToExecution, runContext)
+  }
+
+  async listLive(workspaceId: string): Promise<LiveRunSummary[]> {
+    // Lean live-run projection: block_id + status + id only, NEVER the heavy `detail` column.
+    // Served by idx_agent_runs_ws_kind_status (workspace_id, kind, status).
+    const { results } = await this.db
+      .prepare(
+        `SELECT id, block_id, status FROM agent_runs
+         WHERE workspace_id = ? AND kind = 'execution'
+           AND status IN ('running', 'blocked', 'paused')
+         ORDER BY created_at`,
+      )
+      .bind(workspaceId)
+      .all<{ id: string; block_id: string; status: LiveRunSummary['status'] }>()
+    return results.map((r) => ({ id: r.id, blockId: r.block_id, status: r.status }))
   }
 
   async listByService(serviceId: string): Promise<ExecutionInstance[]> {

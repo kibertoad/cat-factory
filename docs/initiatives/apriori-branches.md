@@ -64,10 +64,9 @@ swap:
 
 1. `ContainerAgentExecutor.buildJobBody`:
    `workBranch = aprioriWorkingBranch(context) ?? `cat-factory/${blockId}``. Everything
-   downstream is free — `jobBody.ts` builders all read `parts.workBranch`
-   (`newBranch`/`pushBranch`/explore fallback/`pr-or-work`), the PR opens
-   head=apriori-branch base=`repo.baseBranch`, `applyResult` records
-   `pullRequest.branch`, and the CI gate/merger operate on the PR head unchanged.
+downstream is free — `jobBody.ts`builders all read`parts.workBranch`
+(`newBranch`/`pushBranch`/explore fallback/`pr-or-work`), the PR opens
+head=apriori-branch base=`repo.baseBranch`, `applyResult`records`pullRequest.branch`, and the CI gate/merger operate on the PR head unchanged.
 2. The branch MUST already exist: probe via `ensureWorkBranch(..., { create: false })`;
    a missing branch **fails the dispatch loudly**, naming the branch — never silently
    created, never fallen back from. Also reject `working === repo.baseBranch`.
@@ -92,7 +91,7 @@ are never to be committed to or pushed.
 Consumer kinds: `coder`, `spec-writer`, `doc-writer`, and the read-only design/analysis
 kinds — NOT the PR-cloning fix/assess kinds (ci-fixer / conflict-resolver / tester /
 merger already carry the work in the PR they clone). At dispatch, probe each reference
-branch and drop missing ones with a logged warning (contrast: a missing *working* branch
+branch and drop missing ones with a logged warning (contrast: a missing _working_ branch
 fails loudly — it is the starting point, not garnish).
 
 ### UI (slice 4)
@@ -106,14 +105,14 @@ distinct badge for the single working entry, the working picker disabled with a 
 
 ## Per-slice checklist
 
-| # | Slice                                                                                                                                | Key files                                                                                                             | Status  | PR  |
-| - | ------------------------------------------------------------------------------------------------------------------------------------ | --------------------------------------------------------------------------------------------------------------------- | ------- | --- |
-| 1 | Tracker doc + contracts (`aprioriBranchSchema`, helpers, `updateBlockSchema`) + persistence (mapper entry, D1 migration, Drizzle column) + `BoardService` write-boundary rules + conformance round-trip | `contracts/src/entities.ts`, `contracts/src/requests.ts`, `server/src/persistence/mappers.ts`, `runtimes/*/…`, `orchestration/…/BoardService.ts`, `conformance/src/suite.ts` | ⬜ todo |     |
-| 2 | Working mode: context threading + `workBranch` override + probe-only ensure (executor + `RunDispatcher` ×3 sites) + merger deletion guard + tests | `kernel/src/ports/agent-executor.ts`, `orchestration/…/AgentContextBuilder.ts`, `server/src/agents/ContainerAgentExecutor.ts`, `orchestration/…/RunDispatcher.ts`, `server/src/github/GitHubPullRequestMerger.ts` | ⬜ todo |     |
-| 3 | Reference mode: harness `referenceBranches` fetch (⇒ image bump) + `jobBody` prompt section + per-kind gating + dispatch probe        | `executor-harness/src/{job,git,coding-agent,agent}.ts`, `server/src/agents/{jobBody,ContainerAgentExecutor}.ts`         | ⬜ todo |     |
-| 4 | UI + i18n: `TaskAprioriBranches.vue` in `TaskRunSettings.vue`, branch picker off the projection, mode toggle/badges, all locales       | `frontend/app/app/components/panels/inspector/…`, `frontend/app/i18n/locales/*`                                         | ⬜ todo |     |
-| — | Deferred: working mode + multi-repo (`involvedServiceIds`) — needs `parts.workBranch` split into primary/peer values                   |                                                                                                                         | ⬜ deferred |     |
-| — | Deferred: cross-repo reference branches (optional user-picked `branch` on `referenceRepoSchema`)                                       |                                                                                                                         | ⬜ deferred |     |
+| #   | Slice                                                                                                                                                                                                   | Key files                                                                                                                                                                                                         | Status      | PR  |
+| --- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ----------- | --- |
+| 1   | Tracker doc + contracts (`aprioriBranchSchema`, helpers, `updateBlockSchema`) + persistence (mapper entry, D1 migration, Drizzle column) + `BoardService` write-boundary rules + conformance round-trip | `contracts/src/entities.ts`, `contracts/src/requests.ts`, `server/src/persistence/mappers.ts`, `runtimes/*/…`, `orchestration/…/BoardService.ts`, `conformance/src/suite.ts`                                      | ⬜ todo     |     |
+| 2   | Working mode: context threading + `workBranch` override + probe-only ensure (executor + `RunDispatcher` ×3 sites) + merger deletion guard + tests                                                       | `kernel/src/ports/agent-executor.ts`, `orchestration/…/AgentContextBuilder.ts`, `server/src/agents/ContainerAgentExecutor.ts`, `orchestration/…/RunDispatcher.ts`, `server/src/github/GitHubPullRequestMerger.ts` | ⬜ todo     |     |
+| 3   | Reference mode: harness `referenceBranches` fetch (⇒ image bump) + `jobBody` prompt section + per-kind gating + dispatch probe                                                                          | `executor-harness/src/{job,git,coding-agent,agent}.ts`, `server/src/agents/{jobBody,ContainerAgentExecutor}.ts`                                                                                                   | ⬜ todo     |     |
+| 4   | UI + i18n: `TaskAprioriBranches.vue` in `TaskRunSettings.vue`, branch picker off the projection, mode toggle/badges, all locales                                                                        | `frontend/app/app/components/panels/inspector/…`, `frontend/app/i18n/locales/*`                                                                                                                                   | ⬜ todo     |     |
+| —   | Deferred: working mode + multi-repo (`involvedServiceIds`) — needs `parts.workBranch` split into primary/peer values                                                                                    |                                                                                                                                                                                                                   | ⬜ deferred |     |
+| —   | Deferred: cross-repo reference branches (optional user-picked `branch` on `referenceRepoSchema`)                                                                                                        |                                                                                                                                                                                                                   | ⬜ deferred |     |
 
 ## Decisions log
 

@@ -1,6 +1,6 @@
 # Initiative: performance optimizations (prioritized)
 
-**Status:** in progress — item 2 landed (gate-poll GitHub reads) · **Owner:** core · **Started:** 2026-07-09
+**Status:** in progress — items 2, 3 landed (gate-poll GitHub reads · live-run projection) · **Owner:** core · **Started:** 2026-07-09
 
 > This is the durable source of truth for a multi-PR initiative. Read it first before
 > picking up the next slice; update the checklist at the end of each PR.
@@ -51,7 +51,7 @@ symmetric" (CLAUDE.md).
 | --- | --- | ------------ | ----------------------------------------------------------------------------------------------------------------------------------- | ------- | --------------------------------------------------------- |
 | 1   | P1  | engine       | `emitInstance` runs LLM-metrics GROUP BY on every emit (incl. progress ticks)                                                       | ⬜ todo |                                                           |
 | 2   | P1  | gateways     | Gate polls: uncached `repoId()` + PAT re-resolved per `request()` + `listCommits` head lookup                                       | ✅ done | [#993](https://github.com/kibertoad/cat-factory/pull/993) |
-| 3   | P1  | persistence  | Execution lists `SELECT *` (incl. `detail` JSON) + JS status filter on dispatch guard; missing `(workspace_id, kind, status)` index | ⬜ todo |                                                           |
+| 3   | P1  | persistence  | Execution lists `SELECT *` (incl. `detail` JSON) + JS status filter on dispatch guard; missing `(workspace_id, kind, status)` index | ✅ done | [#996](https://github.com/kibertoad/cat-factory/pull/996) |
 | 4   | P1  | dispatch     | `buildJobBody` serializes ~6 independent I/O steps per dispatch                                                                     | ⬜ todo |                                                           |
 | 5   | P1  | frontend     | Board snapshot embeds full step outputs the board never reads                                                                       | ⬜ todo |                                                           |
 | 6   | P1  | frontend     | Coarse `board` event forces full-snapshot refresh; payload already carries `blockId`                                                | ⬜ todo |                                                           |
@@ -142,6 +142,14 @@ Add the supporting index in the SAME slice (both runtimes):
 `(workspace_id, block_id)`, `(service_id)` — serve neither the guard nor `resumePaused`).
 Consider a `detail`-free projection for the snapshot list as a follow-up if the board
 cards prove not to need full steps (couples with item 5).
+
+**Landed (#996):** shipped as `ExecutionRepository.listLive(workspaceId) → LiveRunSummary[]`
+(`{ id, blockId, status }`) rather than the tentative `listLiveBlockIds`/`{ blockId, status }`
+name above — `resumePaused` needs the paused runs' `id` as well as the guard's `blockId`, so
+the projection carries both. Filters `status IN ('running','blocked','paused')` in SQL, mirrored
+D1 ⇄ Drizzle with a conformance assertion, plus the `idx_agent_runs_ws_kind_status` index (D1
+migration `0048` ⇄ Drizzle) and a mothership-allow-list entry (workspace-scoped read). The
+snapshot-list `detail`-free projection remains the noted follow-up (couples with item 5).
 
 ### 4. `buildJobBody` serializes independent dispatch work — P1 (latency)
 
