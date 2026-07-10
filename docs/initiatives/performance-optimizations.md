@@ -1,6 +1,6 @@
 # Initiative: performance optimizations (prioritized)
 
-**Status:** in progress — items 2, 3 landed (gate-poll GitHub reads · live-run projection) · **Owner:** core · **Started:** 2026-07-09
+**Status:** in progress — items 1, 2, 3 landed (emit metrics rollup · gate-poll GitHub reads · live-run projection) · **Owner:** core · **Started:** 2026-07-09
 
 > This is the durable source of truth for a multi-PR initiative. Read it first before
 > picking up the next slice; update the checklist at the end of each PR.
@@ -49,7 +49,7 @@ symmetric" (CLAUDE.md).
 
 | #   | Pri | Area         | Finding (short)                                                                                                                     | Status  | PR                                                        |
 | --- | --- | ------------ | ----------------------------------------------------------------------------------------------------------------------------------- | ------- | --------------------------------------------------------- |
-| 1   | P1  | engine       | `emitInstance` runs LLM-metrics GROUP BY on every emit (incl. progress ticks)                                                       | ⬜ todo |                                                           |
+| 1   | P1  | engine       | `emitInstance` runs LLM-metrics GROUP BY on every emit (incl. progress ticks)                                                       | ✅ done | branch `claude/performance-tracker-next-phase-cvbcmh`     |
 | 2   | P1  | gateways     | Gate polls: uncached `repoId()` + PAT re-resolved per `request()` + `listCommits` head lookup                                       | ✅ done | [#993](https://github.com/kibertoad/cat-factory/pull/993) |
 | 3   | P1  | persistence  | Execution lists `SELECT *` (incl. `detail` JSON) + JS status filter on dispatch guard; missing `(workspace_id, kind, status)` index | ✅ done | [#996](https://github.com/kibertoad/cat-factory/pull/996) |
 | 4   | P1  | dispatch     | `buildJobBody` serializes ~6 independent I/O steps per dispatch                                                                     | ⬜ todo |                                                           |
@@ -90,6 +90,17 @@ adjacent "no serial latency" comment).
 step-boundary transitions; skip `attachStepMetrics` on progress-only folds (the running
 fold already computes a change reason — gate on "step advanced", not "subtasks changed").
 No cache slice: this is live telemetry, not slow-moving config.
+
+**Landed (branch `claude/performance-tracker-next-phase-cvbcmh`):** `emitInstance` gained a
+`{ rollUpMetrics }` option (default `true`); the two progress-only poll folds in `RunDispatcher`
+(`pollAgentJobInner`'s container running fold and `pollDeployerJob`'s deploy fold) pass
+`rollUpMetrics: false`, so the per-run GROUP BY no longer runs on every poll tick — only on the
+step-boundary/terminal emits that surface a settled step. Because `step.metrics` is live-only,
+never-persisted, derived state (absent from the snapshot and now from running-fold events), the
+SPA execution store carries the last-known per-step rollup forward when an incoming instance omits
+it (`upsert`/`hydrate`), per the live-push coherence rules — so a metric-less fold no longer blanks
+the board's per-step metrics bar between boundaries. Pinned with backend
+(`RunStateMachine.emit.test.ts`) and store (`stores/execution.spec.ts`) unit tests.
 
 ### 2. Gate poll path: uncached `repoId()` + per-request PAT re-resolve — P1
 

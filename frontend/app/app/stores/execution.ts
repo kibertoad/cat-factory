@@ -41,6 +41,33 @@ export const useExecutionStore = defineStore('execution', () => {
   }
 
   /**
+   * Carry forward each step's LLM-metrics rollup (`step.metrics`) when an incoming
+   * instance omits it. Metrics is DERIVED, LIVE-ONLY state: the backend attaches it only
+   * on step-boundary/terminal emits (not on the frequent progress-only running folds — a
+   * perf optimisation that skips the per-run metrics GROUP BY on every poll tick) and
+   * never persists it, so it rides neither the snapshot nor a running-fold event. A plain
+   * REPLACE would blank the per-step metrics bar on every progress tick; per the live-push
+   * coherence rules a REPLACE must not drop live-only state, so preserve the last-known
+   * rollup per step. Steps are positionally stable within a run (same id ⇒ same shape), so
+   * match by index; the agentKind guard is belt-and-suspenders against a reshaped list.
+   */
+  function withPreservedMetrics(
+    incoming: ExecutionInstance,
+    cached: ExecutionInstance | undefined,
+  ): ExecutionInstance {
+    if (!cached) return incoming
+    let changed = false
+    const steps = incoming.steps.map((step, i) => {
+      if (step.metrics != null) return step
+      const prior = cached.steps[i]
+      if (prior?.metrics == null || prior.agentKind !== step.agentKind) return step
+      changed = true
+      return { ...step, metrics: prior.metrics }
+    })
+    return changed ? { ...incoming, steps } : incoming
+  }
+
+  /**
    * Reconcile the cached executions with a server snapshot for `workspaceId`. A snapshot
    * is authoritative EXCEPT where a live `execution` event already advanced (or ADDED) a
    * run past what this (possibly stale) read observed — the same two clobber hazards the
@@ -81,7 +108,8 @@ export const useExecutionStore = defineStore('execution', () => {
     const held = new Map(instances.value.map((e) => [e.id, e]))
     const reconciled = next.map((incoming) => {
       const current = held.get(incoming.id)
-      return current && revOf(current) > revOf(incoming) ? current : incoming
+      if (current && revOf(current) > revOf(incoming)) return current
+      return withPreservedMetrics(incoming, current)
     })
     // Preserve a cached-only run UNLESS it is the terminal predecessor a retry replaced: a
     // finished (`done`/`failed`) run whose block the snapshot now covers under a fresh id.
@@ -101,7 +129,8 @@ export const useExecutionStore = defineStore('execution', () => {
   function upsert(instance: ExecutionInstance) {
     const i = instances.value.findIndex((e) => e.id === instance.id)
     if (i >= 0) {
-      if (revOf(instance) >= revOf(instances.value[i]!)) instances.value[i] = instance
+      if (revOf(instance) >= revOf(instances.value[i]!))
+        instances.value[i] = withPreservedMetrics(instance, instances.value[i]!)
     } else instances.value.push(instance)
   }
 

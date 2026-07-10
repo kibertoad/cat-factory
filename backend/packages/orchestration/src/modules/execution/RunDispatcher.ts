@@ -62,6 +62,7 @@ import {
   frontendOriginsForService,
   parseBlueprintService,
   parseSpecDoc,
+  resolveAprioriWorkingBranch,
 } from '@cat-factory/contracts'
 import {
   blueprintPostOp,
@@ -738,7 +739,10 @@ export class RunDispatcher {
               await applyRunningFold(fresh)
             },
           )
-          await this.runStateMachine.emitInstance(workspaceId, persisted)
+          // Progress-only fold (subtask ticks / streamed follow-ups): skip the per-run
+          // LLM-metrics GROUP BY so a live container's poll cadence doesn't re-aggregate
+          // the run on every tick. The rollup refreshes on the step-boundary/terminal emit.
+          await this.runStateMachine.emitInstance(workspaceId, persisted, { rollUpMetrics: false })
         } catch (error) {
           // The run was cancelled/removed mid-poll (`NotFoundError`) or stayed hot-contended
           // past the retry budget (`ConflictError`) — re-drive on fresh state rather than
@@ -1878,7 +1882,9 @@ export class RunDispatcher {
       }
       if (changed) {
         await this.runStateMachine.casPersist(workspaceId, instance)
-        await this.runStateMachine.emitInstance(workspaceId, instance)
+        // Progress-only deploy-job fold: skip the LLM-metrics rollup (same reason as the
+        // agent running fold above — a deploy job makes no LLM calls anyway).
+        await this.runStateMachine.emitInstance(workspaceId, instance, { rollUpMetrics: false })
       }
       return { kind: 'awaiting_job', jobId: step.jobId!, stepIndex: instance.currentStep }
     }
@@ -2415,7 +2421,11 @@ export class RunDispatcher {
   ): Promise<string> {
     const { repo, baseBranch } = runRepo
     const prBranch = block.pullRequest?.branch
-    const workBranch = `cat-factory/${block.id}`
+    // An apriori WORKING branch overrides the deterministic work branch: the backend op must
+    // read/write the SAME branch the container agent builds inside. It is probe-only (a
+    // missing branch fails loudly, never a silent create — the mirror of the executor).
+    const aprioriWork = this.aprioriWorkBranch(block, baseBranch)
+    const workBranch = aprioriWork ?? `cat-factory/${block.id}`
     switch (step?.clone?.branch) {
       case 'base':
         return baseBranch
@@ -2423,15 +2433,25 @@ export class RunDispatcher {
       // `pr-or-work` reads/writes the PR branch when one exists (amend in place), else the work
       // branch — the same resolution as `pr`, so it shares this arm.
       case 'pr-or-work':
-        return prBranch ?? (await this.ensureWorkBranch(repo, workBranch, baseBranch))
+        return prBranch ?? (await this.ensureWorkBranch(repo, workBranch, baseBranch, aprioriWork))
       default:
         // 'work' (or unspecified): the work branch the container agent operates on. A PR
         // is normally opened on that branch, but even before one exists we ensure it so
         // the backend op and the container agent share the same branch.
         return prBranch && prBranch !== workBranch
           ? prBranch
-          : await this.ensureWorkBranch(repo, workBranch, baseBranch)
+          : await this.ensureWorkBranch(repo, workBranch, baseBranch, aprioriWork)
     }
+  }
+
+  /**
+   * The task's apriori WORKING branch (an existing branch it names as the run's starting
+   * point), or undefined when none is set. Rejects the degenerate case where it equals the
+   * repo base — the run would have nothing to diff / no PR to open — via the same shared
+   * `resolveAprioriWorkingBranch` guard the executor uses, so the two rejections can't drift.
+   */
+  private aprioriWorkBranch(block: Block, baseBranch: string): string | undefined {
+    return resolveAprioriWorkingBranch(block.aprioriBranches, baseBranch)
   }
 
   /**
@@ -2441,13 +2461,24 @@ export class RunDispatcher {
    * the SAME branch the container agent does instead of the default branch. Falls back to
    * the base branch only when the repo has no default-branch head to fork from (an empty
    * repo), so the caller always gets a real branch.
+   *
+   * `apriori` (the resolved apriori working branch name, when this run has one) flips the
+   * behaviour to PROBE-ONLY: an apriori branch must pre-exist, so a missing one throws
+   * loudly rather than being silently created off base (the mirror of the executor's rule).
    */
   private async ensureWorkBranch(
     repo: RepoFiles,
     workBranch: string,
     baseBranch: string,
+    apriori?: string,
   ): Promise<string> {
     if (await repo.headSha(workBranch)) return workBranch
+    if (apriori) {
+      throw new Error(
+        `Apriori working branch '${workBranch}' does not exist on the target repo; ` +
+          `push it before starting the run (the platform never creates an apriori branch).`,
+      )
+    }
     const baseSha = await repo.headSha(baseBranch)
     if (!baseSha) return baseBranch
     await repo.createBranch(workBranch, baseSha)
@@ -2586,7 +2617,13 @@ export class RunDispatcher {
     runRepo: RunRepoContext,
   ): Promise<string> {
     if (agentKind === SPEC_WRITER_AGENT_KIND) {
-      return this.ensureWorkBranch(runRepo.repo, `cat-factory/${block.id}`, runRepo.baseBranch)
+      // The spec-writer commits onto the run's WORK branch — the apriori working branch when
+      // the task names one (probe-only, must pre-exist), else the deterministic per-block
+      // branch. Miss this swap and the spec lands on a phantom `cat-factory/<blockId>` while
+      // the agent explored the apriori branch.
+      const aprioriWork = this.aprioriWorkBranch(block, runRepo.baseBranch)
+      const workBranch = aprioriWork ?? `cat-factory/${block.id}`
+      return this.ensureWorkBranch(runRepo.repo, workBranch, runRepo.baseBranch, aprioriWork)
     }
     return block.pullRequest?.branch ?? runRepo.baseBranch
   }
