@@ -112,6 +112,38 @@ describe('BoardService service-connection guards', () => {
     ).rejects.toThrow(/not connected/)
   })
 
+  it('rejects making a task multi-repo when it already carries a working apriori branch', async () => {
+    // Reverse-direction guard: "no working branch on a multi-repo task" is a cross-field rule,
+    // so patching involvedServiceIds must re-check it even when aprioriBranches is NOT in the
+    // patch — otherwise a working branch would silently survive on a now-multi-repo task.
+    const { service } = build([
+      block('own', { serviceConnections: [{ serviceBlockId: 'provider' }] }),
+      block('provider'),
+      block('t', {
+        level: 'task',
+        parentId: 'own',
+        aprioriBranches: [{ name: 'feature/x', mode: 'working' }],
+      }),
+    ])
+    await expect(
+      service.updateBlock(WS, 't', { involvedServiceIds: ['provider'] }),
+    ).rejects.toThrow(/multi-repo/)
+  })
+
+  it('allows making a task multi-repo when it only carries reference apriori branches', async () => {
+    const { service } = build([
+      block('own', { serviceConnections: [{ serviceBlockId: 'provider' }] }),
+      block('provider'),
+      block('t', {
+        level: 'task',
+        parentId: 'own',
+        aprioriBranches: [{ name: 'spike/x', mode: 'reference' }],
+      }),
+    ])
+    const updated = await service.updateBlock(WS, 't', { involvedServiceIds: ['provider'] })
+    expect(updated.involvedServiceIds).toEqual(['provider'])
+  })
+
   it('drops involvedServiceIds silently on a frame-level patch', async () => {
     const { service, updates } = build([block('a'), block('b')])
     await service.updateBlock(WS, 'a', { title: 'Renamed', involvedServiceIds: ['b'] })
