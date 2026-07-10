@@ -45,7 +45,7 @@ container dispatches on the same pipeline step**:
 
 - **Phase A (propose):** when the option is active, the engine dispatches a new registered
   structured explore kind **`fork-proposer`** (`container-explore`, read-only clone of the
-  base branch — the `bug-investigator.ts` template) *as a helper off the coder step*, via the
+  base branch — the `bug-investigator.ts` template) _as a helper off the coder step_, via the
   existing `options.agentKind` override in `AgentContextBuilder.buildContext` (the same
   mechanism gate helpers and the Tester's fixer use). Its structured JSON is recorded into a
   new `step.forkDecision` state; the run parks on the standard durable decision-wait
@@ -113,8 +113,22 @@ carries the auto-merge ceilings, `ciMaxAttempts`, `maxRequirementIterations`,
 `BUILTIN_CONFIG_CONTRIBUTIONS`) — a new `coder` entry:
 
 ```ts
-{ id: 'coder.forkDecision', agentKind: 'coder', type: 'select',
-  options: [auto | always | off], default: 'auto' }
+{
+  id: 'coder.forkDecision',
+  agentKind: 'coder',
+  label: 'Implementation-fork decision',
+  description:
+    'Surface materially different implementation approaches before the Coder writes code and park for a human choice. `auto` gates on the task risk policy; `always` proposes regardless; `off` never proposes.',
+  type: 'select',
+  // AgentConfigDescriptor options are `{ value, label }` objects (see the
+  // `playwright.e2eTarget` descriptor in `configs.ts`), not bare tokens.
+  options: [
+    { value: 'auto', label: 'Auto (gate on risk policy)' },
+    { value: 'always', label: 'Always propose' },
+    { value: 'off', label: 'Off' },
+  ],
+  default: 'auto',
+}
 ```
 
 This reuses the task-creation + inspector rendering (`TaskAgentConfig.vue`) and the
@@ -153,7 +167,7 @@ pattern):
   `v.check`), an optional steering `note` on a picked fork, `at`.
 - `forkDecisionStepStateSchema` — the live state on the run's coder step:
   `{ status, seamSummary?, forks[], singlePathReason?, chat[], maxChatTurns (default 15),
-  chosen?, model? }`. `seamSummary` is the proposer's read of where the change lands
+chosen?, model? }`. `seamSummary` is the proposer's read of where the change lands
   (grounding for the human + the chat); `maxChatTurns` bounds inline LLM spend and step-row
   size; `model` records the proposing model for transparency.
 - Request bodies: `forkChatRequestSchema` `{ text (trimmed, 1..4000) }`; `chooseForkSchema`
@@ -198,7 +212,7 @@ helpers in `forkDecision.logic.ts` (unit-tested), wired via `RunDispatcherDeps`,
    gate (§ Configuration). Not satisfied → `step.forkDecision = { status: 'skipped' }`, fall
    through (Coder runs). Satisfied → `status: 'proposing'`, dispatch the `fork-proposer`
    explore job **on this step** (`contextBuilder.buildContext(…, { agentKind:
-   FORK_PROPOSER_KIND })` + the async-dispatch tail of `handleAgentStep`, factored into a
+FORK_PROPOSER_KIND })` + the async-dispatch tail of `handleAgentStep`, factored into a
    shared private dispatch helper rather than duplicated), return `awaiting_job`.
 3. **Proposal completion** — `buildStepCompletionInterceptors()` gains a `fork-proposal`
    interceptor (`canIntercept` on `status === 'proposing'`; runs after spend metering, before
@@ -258,11 +272,11 @@ Execution-scoped, mirroring the follow-up routes (`contracts/src/routes/followUp
 under `/workspaces/:workspaceId`; new `server/src/modules/forkDecision/ForkDecisionController.ts`
 delegating through `ExecutionService` pass-throughs (the follow-up delegation pattern):
 
-| Contract                  | Method/path                                          | Body                     | 200                                     |
-| ------------------------- | ---------------------------------------------------- | ------------------------ | --------------------------------------- |
-| `getForkDecisionContract` | `GET /executions/:executionId/fork-decision`         | —                        | `v.nullable(forkDecisionStepStateSchema)` |
-| `forkChatContract`        | `POST /executions/:executionId/fork-decision/chat`   | `forkChatRequestSchema`  | `forkDecisionStepStateSchema`            |
-| `chooseForkContract`      | `POST /executions/:executionId/fork-decision/choose` | `chooseForkSchema`       | `forkDecisionStepStateSchema`            |
+| Contract                  | Method/path                                          | Body                    | 200                                       |
+| ------------------------- | ---------------------------------------------------- | ----------------------- | ----------------------------------------- |
+| `getForkDecisionContract` | `GET /executions/:executionId/fork-decision`         | —                       | `v.nullable(forkDecisionStepStateSchema)` |
+| `forkChatContract`        | `POST /executions/:executionId/fork-decision/chat`   | `forkChatRequestSchema` | `forkDecisionStepStateSchema`             |
+| `chooseForkContract`      | `POST /executions/:executionId/fork-decision/choose` | `chooseForkSchema`      | `forkDecisionStepStateSchema`             |
 
 - The GET resolves the "active" fork step with an `activeForkDecisionStep` helper mirroring
   `activeFollowUpStep` (pipelines with multiple coder steps).
@@ -305,7 +319,9 @@ delegating through `ExecutionService` pass-throughs (the follow-up delegation pa
 
 `agents/src/agents/kinds/fork-proposer.ts`, registered in `defaultAgentKindRegistry`:
 `agent: { surface: 'container-explore', clone: { branch: 'base' } }`, `fanOutMultiRepo` (a
-cross-service task's forks may differ per repo), a lenient `defineStructuredOutput` (the
+cross-service task's forks may differ per repo — but see open question 4: the choose/park/window
+flow is single-choice, so the per-repo fan-out UX must be resolved before PR 1), a lenient
+`defineStructuredOutput` (the
 `bugInvestigation` shape) over
 `{ seamSummary, forks: [{ title, summary, approach, tradeoffs, riskNotes, recommended }],
 singlePath, singlePathReason }`. **No `presentation`** — it is never a palette step; its
@@ -374,7 +390,7 @@ have chosen; a few sentences per answer.
   fork config must pass unchanged.
 - **The proposer is a helper dispatch on the coder step** — mind context-flag leakage: any
   step-scoped flag keyed off the step's kind (e.g. `followUpCompanion`) must check the
-  *effective* dispatched kind, or the proposer inherits Coder-only guidance.
+  _effective_ dispatched kind, or the proposer inherits Coder-only guidance.
 - **`maxChatTurns` is a hard budget** (409 past it) — the chat is grounded on a fixed
   proposal, not a container; unbounded turns only add spend and step-row bloat.
 - **Prompt edits bump versions** — the `build` prompt change is a version bump; Kaizen keys
@@ -382,24 +398,24 @@ have chosen; a few sentences per answer.
 
 ## Per-item status
 
-| Area                                                                                                                                              | Status | PR   |
-| ------------------------------------------------------------------------------------------------------------------------------------------------- | ------ | ---- |
-| Contracts: `forkDecision.ts` (option/chat/status/choice/state + request bodies), `pipelineStepSchema.forkDecision` + `pendingForkChat`, notification type, result-view id | todo   | PR 1 |
-| Contracts + kernel: `riskPolicySchema.forkDecision` (reusing `stepGatingSchema`) + preset request contracts + `DEFAULT_RISK_POLICY`/seeds + version bump | todo   | PR 1 |
-| Kernel: `AgentRunContext.implementationChoice`                                                                                                     | todo   | PR 1 |
-| Agents: `fork-proposer` kind (structured explore, `bug-investigator` template) + registry entry + prompt versions (`build` v4, `fork-proposer` v1) | todo   | PR 1 |
-| Agents: `coder.forkDecision` tri-state in `BUILTIN_CONFIG_CONTRIBUTIONS`                                                                           | todo   | PR 1 |
-| Agents: `implementationChoiceSection` + `SYSTEM_PROMPTS.build` line                                                                                | todo   | PR 1 |
+| Area                                                                                                                                                                                                                                                  | Status | PR   |
+| ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ------ | ---- |
+| Contracts: `forkDecision.ts` (option/chat/status/choice/state + request bodies), `pipelineStepSchema.forkDecision` + `pendingForkChat`, notification type, result-view id                                                                             | todo   | PR 1 |
+| Contracts + kernel: `riskPolicySchema.forkDecision` (reusing `stepGatingSchema`) + preset request contracts + `DEFAULT_RISK_POLICY`/seeds + version bump                                                                                              | todo   | PR 1 |
+| Kernel: `AgentRunContext.implementationChoice`                                                                                                                                                                                                        | todo   | PR 1 |
+| Agents: `fork-proposer` kind (structured explore, `bug-investigator` template) + registry entry + prompt versions (`build` v4, `fork-proposer` v1)                                                                                                    | todo   | PR 1 |
+| Agents: `coder.forkDecision` tri-state in `BUILTIN_CONFIG_CONTRIBUTIONS`                                                                                                                                                                              | todo   | PR 1 |
+| Agents: `implementationChoiceSection` + `SYSTEM_PROMPTS.build` line                                                                                                                                                                                   | todo   | PR 1 |
 | Orchestration: `ForkDecisionController` + `forkDecision.logic` (gate resolve, propose dispatch, completion interceptor, choose) + `RunDispatcher` wiring + `dispatchEpochFor` + `AgentContextBuilder` fold (+ `followUpCompanion` effective-kind fix) | todo   | PR 1 |
-| Orchestration: `fork_decision_pending` notification raise + act handler                                                                            | todo   | PR 1 |
-| Server: routes/contracts (`GET`/`choose`) + `ForkDecisionController` (HTTP) + `ExecutionService` pass-throughs                                     | todo   | PR 1 |
-| Frontend: `ForkDecisionWindow` (no chat) + store + result-view registration + routing/buttons/chips + risk-policy editor fields + i18n (all locales) + data-testids | todo   | PR 1 |
-| Conformance: gate-skip / propose→park→choose→coder / single-path auto-advance / unwired pass-through, on all facades                               | todo   | PR 1 |
-| Unit tests: `forkDecision.logic`, controller (ReviewGateController-test shape), store/window                                                       | todo   | PR 1 |
-| Chat: `pendingForkChat` marker + `stepInstance` re-entry guard + `ForkChatService` (DocInterview model resolution + metering) + chat endpoint + window thread + budget + prompt (`fork-chat` v1) | todo   | PR 2 |
-| Conformance: chat re-entry (fake model) + graceful no-model degradation                                                                            | todo   | PR 2 |
-| e2e: park → choose → resume happy path against the fake executor (+ testids)                                                                       | todo   | PR 2 |
-| CLAUDE.md flow-notes paragraph (fork-decision park in the run lifecycle)                                                                           | todo   | PR 2 |
+| Orchestration: `fork_decision_pending` notification raise + act handler                                                                                                                                                                               | todo   | PR 1 |
+| Server: routes/contracts (`GET`/`choose`) + `ForkDecisionController` (HTTP) + `ExecutionService` pass-throughs                                                                                                                                        | todo   | PR 1 |
+| Frontend: `ForkDecisionWindow` (no chat) + store + result-view registration + routing/buttons/chips + risk-policy editor fields + i18n (all locales) + data-testids                                                                                   | todo   | PR 1 |
+| Conformance: gate-skip / propose→park→choose→coder / single-path auto-advance / unwired pass-through, on all facades                                                                                                                                  | todo   | PR 1 |
+| Unit tests: `forkDecision.logic`, controller (ReviewGateController-test shape), store/window                                                                                                                                                          | todo   | PR 1 |
+| Chat: `pendingForkChat` marker + `stepInstance` re-entry guard + `ForkChatService` (DocInterview model resolution + metering) + chat endpoint + window thread + budget + prompt (`fork-chat` v1)                                                      | todo   | PR 2 |
+| Conformance: chat re-entry (fake model) + graceful no-model degradation                                                                                                                                                                               | todo   | PR 2 |
+| e2e: park → choose → resume happy path against the fake executor (+ testids)                                                                                                                                                                          | todo   | PR 2 |
+| CLAUDE.md flow-notes paragraph (fork-decision park in the run lifecycle)                                                                                                                                                                              | todo   | PR 2 |
 
 ## Follow-ups (out of scope)
 
@@ -421,3 +437,12 @@ have chosen; a few sentences per answer.
 3. **Multiple coder steps in one pipeline** — the active-step resolution mirrors
    `activeFollowUpStep`; each coder step with the option active gets its own phase. Confirm
    during implementation that this matches expectations for the rare multi-coder pipelines.
+4. **Multi-repo fan-out UX** — `fork-proposer` carries `fanOutMultiRepo`, so a cross-service
+   task can yield a _different_ fork set per repo, but the proposed choose/park/window flow
+   presents ONE fork list and records ONE `forkDecision.chosen` on the step. This must be
+   resolved before PR 1 rather than deferred. Default (recommended): scope PR 1 to
+   **single-repo tasks** — drop `fanOutMultiRepo` from the proposer (surface forks for the
+   run's primary repo only, like the single `implementationChoice` the coder context folds
+   in) and add per-repo forks as an explicit follow-up, so the MVP's window/state model stays
+   a single choice. Alternatively, model `forkDecision` as a per-repo map (forks + chosen keyed
+   by `repoId`) with a per-repo section in the window — a larger PR-1 surface.
