@@ -65,6 +65,26 @@ describe('PatPreferringAppRegistry PAT scope memo', () => {
     expect(perms).toEqual({ contents: 'write' })
   })
 
+  it('does not memoize a rejected resolve — a transient failure retries within the scope', async () => {
+    // First resolve rejects (transient DB/decrypt error), the retry succeeds. The memo must
+    // NOT pin the rejection for the rest of the scope; only the success path is deduped.
+    const resolve = vi
+      .fn<ResolveUserGitHubToken>()
+      .mockRejectedValueOnce(new Error('transient'))
+      .mockResolvedValue('pat-123')
+    const registry = new PatPreferringAppRegistry(innerSource(), resolve)
+
+    await runWithInitiator('user_1', async () => {
+      await expect(registry.installationToken(42)).rejects.toThrow('transient')
+      // The eviction lets a subsequent request in the same scope resolve for real.
+      expect(await registry.installationToken(42)).toBe('pat-123')
+      // And the now-successful value IS memoized for the rest of the scope.
+      expect(await registry.installationToken(42)).toBe('pat-123')
+    })
+
+    expect(resolve).toHaveBeenCalledTimes(2)
+  })
+
   it('resolves directly (no memo) outside any initiator scope', async () => {
     const resolve = vi.fn<ResolveUserGitHubToken>(async () => 'pat-123')
     const registry = new PatPreferringAppRegistry(innerSource(), resolve)

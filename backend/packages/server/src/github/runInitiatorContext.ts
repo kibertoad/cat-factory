@@ -16,7 +16,7 @@ interface InitiatorContext {
   initiatedBy?: string
   // Per-scope memo of the initiator's resolved PAT, keyed by user id. One
   // `runWithInitiator` scope is exactly one gate probe / merge boundary, so a probe that
-  // fans out into several GitHub requests (e.g. the CI gate: listCommits + listCheckRuns,
+  // fans out into several GitHub requests (e.g. the CI gate: branchHeadSha + listCheckRuns,
   // each re-minting via `request()`) resolves the PAT once — a single DB read + decrypt —
   // instead of once per request. The scope never outlives the freshness window of that
   // one call, so there is no staleness concern.
@@ -40,6 +40,10 @@ export function currentInitiator(): string | undefined {
  * probe / merge that fans out into several GitHub requests pays a single `resolve` (DB read
  * + decrypt) rather than one per request. Outside any `runWithInitiator` scope it just
  * calls `resolve` directly (no caching — nothing to scope the memo to).
+ *
+ * Only the SUCCESS path is memoized: a rejected resolve is evicted so a transient failure
+ * on the first request doesn't poison every later request in the scope (that would be a
+ * regression vs. the old resolve-per-call behaviour).
  */
 export function resolveInitiatorTokenCached(
   resolve: ResolveUserGitHubToken,
@@ -50,7 +54,10 @@ export function resolveInitiatorTokenCached(
   const memo = (ctx.tokenMemo ??= new Map())
   const cached = memo.get(initiatedBy)
   if (cached) return cached
-  const pending = resolve(initiatedBy)
+  const pending = resolve(initiatedBy).catch((err) => {
+    memo.delete(initiatedBy)
+    throw err
+  })
   memo.set(initiatedBy, pending)
   return pending
 }
