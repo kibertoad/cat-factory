@@ -28,7 +28,7 @@ import {
   isIndividualVendor,
   isSubscriptionVendor,
 } from '@cat-factory/kernel'
-import { resolveInstanceTypeId } from '@cat-factory/contracts'
+import { aprioriWorkingBranch, resolveInstanceTypeId } from '@cat-factory/contracts'
 import {
   type AgentKindRegistry,
   type AgentRouting,
@@ -1035,24 +1035,55 @@ export class ContainerAgentExecutor implements AsyncAgentExecutor {
       initiatedBy: context.initiatedByUserId,
     })
 
-    // The shared per-task work branch every agent in this pipeline operates on. Its name
-    // is deterministic from the block id (so a retry/replay/sweeper re-drive always targets
-    // the SAME branch with no extra persistence), and once a PR is open it IS this branch.
-    // Ensure it up front (mechanical, idempotent) so even the read-only design agents clone
-    // the branch the earlier writers committed to — e.g. the spec-writer's in-repo `spec/`.
-    // Writers create it from base when absent; read-only agents only probe (a missing
+    // The shared per-task work branch every agent in this pipeline operates on. By default
+    // its name is deterministic from the block id (so a retry/replay/sweeper re-drive always
+    // targets the SAME branch with no extra persistence), and once a PR is open it IS this
+    // branch. Ensure it up front (mechanical, idempotent) so even the read-only design agents
+    // clone the branch the earlier writers committed to — e.g. the spec-writer's in-repo
+    // `spec/`. Writers create it from base when absent; read-only agents only probe (a missing
     // branch ⇒ nothing to read yet ⇒ fall back to base), so a code-less pipeline never
     // orphans an empty ref. Once this block already has a PR, the branch IS that PR's
     // branch, so we skip the round-trip entirely.
-    const workBranch = `cat-factory/${blockId}`
-    const workBranchReady =
-      context.block.pullRequest?.branch === workBranch
-        ? true
-        : this.deps.ensureWorkBranch
-          ? await this.deps.ensureWorkBranch(repo, workBranch, {
-              create: !isReadOnlyAgentKind(context.agentKind),
-            })
-          : false
+    // An apriori WORKING branch (an existing branch the task names as its starting point)
+    // overrides the deterministic `cat-factory/<blockId>` work branch: the run builds inside
+    // it, the PR opens from it, and the CI gate / merger ride it. Unlike the platform branch,
+    // it must ALREADY exist — it is probed (never created), a missing branch fails the
+    // dispatch loudly, and it may never be the repo's own base branch (the run would have
+    // nothing to diff / no PR to open).
+    const aprioriWork = aprioriWorkingBranch(context.aprioriBranches)
+    if (aprioriWork && aprioriWork === repo.baseBranch) {
+      throw new Error(
+        `Apriori working branch '${aprioriWork}' is the repo's base branch; ` +
+          `pick an existing feature branch to build inside, not the base.`,
+      )
+    }
+    const workBranch = aprioriWork ?? `cat-factory/${blockId}`
+    let workBranchReady: boolean
+    if (context.block.pullRequest?.branch === workBranch) {
+      workBranchReady = true
+    } else if (aprioriWork) {
+      // Apriori working branch: probe only (create: false). It must pre-exist — a missing
+      // branch is a loud dispatch failure, never a silent create off base (which would look
+      // exactly like the agent ignoring the user's branch). When probing isn't wired
+      // (tests / no GitHub), trust the caller and treat it as ready so the harness resumes it.
+      if (this.deps.ensureWorkBranch) {
+        const exists = await this.deps.ensureWorkBranch(repo, workBranch, { create: false })
+        if (!exists) {
+          throw new Error(
+            `Apriori working branch '${workBranch}' does not exist on ` +
+              `${repo.owner}/${repo.name}; push it before starting the run ` +
+              `(the platform never creates an apriori branch).`,
+          )
+        }
+      }
+      workBranchReady = true
+    } else {
+      workBranchReady = this.deps.ensureWorkBranch
+        ? await this.deps.ensureWorkBranch(repo, workBranch, {
+            create: !isReadOnlyAgentKind(context.agentKind),
+          })
+        : false
+    }
 
     // Resolve the per-job auth the harness carries: the proxy session token for Pi,
     // or a leased subscription token for Claude Code / Codex. `auth` is spread into

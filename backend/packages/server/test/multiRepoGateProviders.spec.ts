@@ -121,6 +121,22 @@ describe('GitHubPullRequestMerger (multi-repo merge-all)', () => {
     expect(deleteBranch).toHaveBeenCalledTimes(2)
   })
 
+  it('never tears down a user-provided apriori working branch (only cat-factory/* branches)', async () => {
+    const mergePullRequest = vi.fn(async () => {})
+    const deleteBranch = vi.fn(async () => {})
+    const merger = new GitHubPullRequestMerger({
+      githubClient: { mergePullRequest, deleteBranch } as unknown as GitHubClient,
+      resolveRepoTarget: async () => OWN_TARGET,
+      blockRepository: { get: async () => MULTI_BLOCK } as any,
+    })
+    const outcome = await merger.mergePullRequests('ws', 'task_login', [
+      { ref: { url: '', number: 1, branch: 'feature/spike' } },
+    ])
+    expect(outcome.failed).toBeNull()
+    expect(outcome.merged).toHaveLength(1) // the PR still merges…
+    expect(deleteBranch).not.toHaveBeenCalled() // …but the user's branch is left intact
+  })
+
   it('stops at the first failure and reports merged vs skipped (non-atomic partial merge)', async () => {
     // The peer merges, then the own-service merge throws → the own PR is `failed`; nothing is
     // skipped after it. The engine leaves the block blocked + notifies from this split.
@@ -134,8 +150,12 @@ describe('GitHubPullRequestMerger (multi-repo merge-all)', () => {
       blockRepository: { get: async () => MULTI_BLOCK } as any,
     })
     const outcome = await merger.mergePullRequests('ws', 'task_login', [
-      { repo: 'o/email', frameId: 'frm_email', ref: { url: '', number: 7, branch: 'b' } },
-      { ref: { url: '', number: 1, branch: 'b' } },
+      {
+        repo: 'o/email',
+        frameId: 'frm_email',
+        ref: { url: '', number: 7, branch: 'cat-factory/login' },
+      },
+      { ref: { url: '', number: 1, branch: 'cat-factory/login' } },
     ])
     expect(outcome.merged.map((e) => e.repo)).toEqual(['o/email'])
     expect(outcome.failed?.entry.repo).toBeUndefined() // the own-service PR failed
