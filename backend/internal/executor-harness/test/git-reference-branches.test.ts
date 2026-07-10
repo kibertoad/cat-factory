@@ -1,10 +1,10 @@
 import { execFile } from 'node:child_process'
-import { mkdtemp, rm, writeFile } from 'node:fs/promises'
+import { mkdtemp, readFile, rm, writeFile } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { promisify } from 'node:util'
 import { afterEach, beforeEach, describe, expect, it } from 'vitest'
-import { cloneRepo, fetchReferenceBranches } from '../src/git.js'
+import { REFERENCE_WORKTREE_DIR, cloneRepo, fetchReferenceBranches } from '../src/git.js'
 
 const exec = promisify(execFile)
 
@@ -65,6 +65,24 @@ describe('fetchReferenceBranches', () => {
     expect(show).toContain('idea')
     // The checkout's own HEAD is untouched (still on main; no spike file in the working tree).
     expect((await g(work, 'rev-parse', '--abbrev-ref', 'HEAD')).stdout.trim()).toBe('main')
+  })
+
+  it('excludes the suggested reference-worktree dir so a checked-out ref is never staged', async () => {
+    await cloneMain()
+    await fetchReferenceBranches({
+      dir: work,
+      branches: ['spike/prior-art'],
+      ghToken: 'unused-for-file-origin',
+    })
+    // The dedicated worktree prefix is added to the per-clone exclude.
+    const exclude = await readFile(join(work, '.git', 'info', 'exclude'), 'utf8')
+    expect(exclude).toContain(`${REFERENCE_WORKTREE_DIR}/`)
+    // Check the reference branch out as a worktree exactly as the prompt suggests, then confirm a
+    // broad `git add -A` does NOT stage it (no stray embedded gitlink lands in the agent's commit).
+    await g(work, 'worktree', 'add', `${REFERENCE_WORKTREE_DIR}/spike`, 'origin/spike/prior-art')
+    await g(work, 'add', '-A')
+    const staged = (await g(work, 'diff', '--cached', '--name-only')).stdout.trim()
+    expect(staged).toBe('')
   })
 
   it('warn-and-skips a branch that does not exist, keeping the others', async () => {

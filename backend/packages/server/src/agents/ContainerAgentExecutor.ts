@@ -38,6 +38,7 @@ import {
   type AgentRouting,
   agentTuningFor,
   DOC_WRITER_KIND,
+  READ_ONLY_AGENT_KINDS,
   defaultAgentKindRegistry,
   isProxyableProvider,
   isReadOnlyAgentKind,
@@ -388,6 +389,12 @@ const MULTI_REPO_FANOUT_BUILTIN_KINDS: ReadonlySet<string> = new Set([
 const REFERENCE_REPO_KINDS: ReadonlySet<string> = new Set([DOC_WRITER_KIND])
 
 /**
+ * The read-only bug-triage kind excluded from the reference-branch consumers below: it clones the
+ * REPORTED PR/commit as its subject, so an unrelated prior-art reference branch is noise for it.
+ */
+const BUG_INVESTIGATOR_AGENT_KIND = 'bug-investigator'
+
+/**
  * The kinds that consume a task's read-only apriori REFERENCE branches (the apriori-branches
  * reference mode) — the branches are fetched into the primary checkout's `origin/<b>` refs so the
  * agent can inspect a spike/prototype/prior-art branch it must never commit to. The consumers are
@@ -396,16 +403,16 @@ const REFERENCE_REPO_KINDS: ReadonlySet<string> = new Set([DOC_WRITER_KIND])
  * Deliberately EXCLUDES the PR-cloning fix/assess kinds (ci-fixer / conflict-resolver / tester /
  * merger): they already carry the work in the PR branch they clone, so a reference branch is noise
  * — and folding it in would spend prompt tokens and a fetch on a branch they will not use.
+ *
+ * The design/analysis members are DERIVED from the authoritative {@link READ_ONLY_AGENT_KINDS}
+ * (minus `bug-investigator`) rather than re-listed as literals, so a newly-registered read-only
+ * design kind is picked up here automatically without a second hard-coded list to keep in step.
  */
 const REFERENCE_BRANCH_KINDS: ReadonlySet<string> = new Set([
   IMPLEMENTER_AGENT_KIND,
   SPEC_WRITER_AGENT_KIND,
   DOC_WRITER_KIND,
-  // The read-only DESIGN/ANALYSIS kinds (no exported constants — they live only in the
-  // `READ_ONLY_AGENT_KINDS` set, which also holds `bug-investigator`, a bug-triage kind we
-  // deliberately exclude here, so we can't reuse that set wholesale).
-  'architect',
-  'analysis',
+  ...[...READ_ONLY_AGENT_KINDS].filter((k) => k !== BUG_INVESTIGATOR_AGENT_KIND),
 ])
 
 /** A safe, collision-free `<base>.md` filename for a materialised context file. */
