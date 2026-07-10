@@ -387,6 +387,96 @@ describe('ContainerAgentExecutor apriori working branch', () => {
   })
 })
 
+// Apriori REFERENCE branches: a task names existing branches of its OWN repo as read-only
+// prior-art. The consumer kinds (coder / spec-writer / doc-writer / architect / analysis) receive
+// them as a `referenceBranches` job field (fetched into `origin/<b>` by the harness) + a "Reference
+// branches" system-prompt section; a missing one is DROPPED at dispatch (probe-only, asymmetric
+// with a missing WORKING branch, which fails loudly).
+describe('ContainerAgentExecutor apriori reference branches', () => {
+  const REFS: NonNullable<AgentRunContext['aprioriBranches']> = [
+    { name: 'spike/prior-art', mode: 'reference' },
+    { name: 'proto/v2', mode: 'reference' },
+  ]
+
+  it('coder (coding body) carries referenceBranches + a section, never a branch/PR for them', async () => {
+    const { executor, captured } = makeExecutor()
+    await executor.startJob({ ...context('coder'), aprioriBranches: REFS })
+    const spec = captured[0]!.spec
+    expect(spec.mode).toBe('coding')
+    expect(spec.referenceBranches).toEqual(['spike/prior-art', 'proto/v2'])
+    // The work branch is unchanged — reference branches never become the run's HEAD.
+    expect(spec.newBranch).toBe('cat-factory/blk_1')
+    expect(spec.pushBranch).toBe('cat-factory/blk_1')
+    const systemPrompt = spec.systemPrompt as string
+    expect(systemPrompt).toContain('## Reference branches')
+    expect(systemPrompt).toContain('origin/spike/prior-art')
+    expect(systemPrompt).toContain('origin/proto/v2')
+  })
+
+  it('architect (explore body) carries referenceBranches + a section', async () => {
+    const { executor, captured } = makeExecutor()
+    await executor.startJob({ ...context('architect'), aprioriBranches: REFS })
+    const spec = captured[0]!.spec
+    expect(spec.mode).toBe('explore')
+    expect(spec.referenceBranches).toEqual(['spike/prior-art', 'proto/v2'])
+    expect(spec.systemPrompt as string).toContain('## Reference branches')
+  })
+
+  it('spec-writer (structured explore) carries referenceBranches', async () => {
+    const { executor, captured } = makeExecutor()
+    await executor.startJob({ ...context('spec-writer'), aprioriBranches: REFS })
+    expect(captured[0]!.spec.referenceBranches).toEqual(['spike/prior-art', 'proto/v2'])
+  })
+
+  it('a non-consumer kind (merger) ignores reference branches (kind gate)', async () => {
+    const { executor, captured } = makeExecutor()
+    await executor.startJob({
+      ...context('merger', { pullRequest: PR }),
+      aprioriBranches: REFS,
+    })
+    expect(captured[0]!.spec.referenceBranches).toBeUndefined()
+    expect(captured[0]!.spec.systemPrompt as string).not.toContain('## Reference branches')
+  })
+
+  it('drops a reference branch that no longer exists (probe reports it missing)', async () => {
+    const { executor, captured } = makeExecutor({
+      ensureWorkBranch: async (_repo, branch) => branch !== 'proto/v2',
+    })
+    await executor.startJob({ ...context('coder'), aprioriBranches: REFS })
+    expect(captured[0]!.spec.referenceBranches).toEqual(['spike/prior-art'])
+  })
+
+  it('emits no referenceBranches field when all named branches are missing', async () => {
+    const { executor, captured } = makeExecutor({ ensureWorkBranch: async () => false })
+    await executor.startJob({ ...context('coder'), aprioriBranches: REFS })
+    expect(captured[0]!.spec.referenceBranches).toBeUndefined()
+    expect(captured[0]!.spec.systemPrompt as string).not.toContain('## Reference branches')
+  })
+
+  it('never fetches the working branch as a reference (dedup vs the resolved work branch)', async () => {
+    // A working + reference pair where the reference happens to equal the resolved work branch is
+    // excluded from the fetch list (the agent already builds ON that branch).
+    const { executor, captured } = makeExecutor()
+    await executor.startJob({
+      ...context('coder'),
+      aprioriBranches: [
+        { name: 'feature/spike', mode: 'working' },
+        { name: 'feature/spike', mode: 'reference' },
+        { name: 'proto/v2', mode: 'reference' },
+      ],
+    })
+    const spec = captured[0]!.spec
+    expect(spec.newBranch).toBe('feature/spike')
+    expect(spec.referenceBranches).toEqual(['proto/v2'])
+  })
+
+  it('forwards named branches unprobed when ensureWorkBranch is unwired (tests / no GitHub)', async () => {
+    const { executor, captured } = makeExecutor({ ensureWorkBranch: undefined })
+    await executor.startJob({ ...context('coder'), aprioriBranches: REFS })
+    expect(captured[0]!.spec.referenceBranches).toEqual(['spike/prior-art', 'proto/v2'])
+  })
+})
+
 describe('ContainerAgentExecutor multi-repo gate/merge targeting', () => {
   // Service-connections phase 4 follow-ups: the conflict-resolver is dispatched AT a conflicted
   // PEER repo, and the merger scores the COMBINED diff across every PR's repo. Both need the plural

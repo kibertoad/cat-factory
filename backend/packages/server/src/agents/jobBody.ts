@@ -100,6 +100,22 @@ export interface KindBodyParts {
    * or commit them). Appended to the doc-writer's system prompt; absent otherwise.
    */
   referenceReposSection?: string
+  /**
+   * READ-ONLY reference BRANCH names of the PRIMARY repo (the apriori-branches reference mode) —
+   * fetched by the harness into `origin/<b>` after checkout so the agent can inspect a prior-art
+   * branch it must never commit to. Distinct from {@link referenceRepos} (separate sibling repos):
+   * these are branches of the run's own repo, so they ride the primary checkout with no sibling
+   * leg. Present only for the consumer kinds (coder / spec-writer / doc-writer / read-only design +
+   * analysis) on a task with reference branches attached; forwarded on both the coding + explore
+   * bodies.
+   */
+  referenceBranches?: string[]
+  /**
+   * The backend-rendered "Reference branches" system-prompt section (which branches are attached
+   * as read-only references, how to read them via `origin/<b>`, and that the agent must never
+   * commit to or push them). Appended to the consumer kind's system prompt; absent otherwise.
+   */
+  referenceBranchesSection?: string
 }
 
 /**
@@ -310,6 +326,7 @@ function buildRegisteredAgentBody(
     // clones each and skips it in the push phase. Kept as its own binding so the `undefined`-when-
     // empty spread below reads the same as `peerRepos`.
     const referenceRepos = parts.referenceRepos?.length ? parts.referenceRepos : undefined
+    const referenceBranches = parts.referenceBranches?.length ? parts.referenceBranches : undefined
     return {
       kind: 'agent',
       body: {
@@ -318,6 +335,7 @@ function buildRegisteredAgentBody(
         systemPrompt: appendSections(roleSystemPrompt, [
           parts.multiRepoSection,
           parts.referenceReposSection,
+          parts.referenceBranchesSection,
         ]),
         userPrompt,
         branch: onPr ? (prBranch ?? repo.baseBranch) : repo.baseBranch,
@@ -327,6 +345,7 @@ function buildRegisteredAgentBody(
         ...(noChangesIsError ? {} : { noChangesIsError: false }),
         ...(peerRepos ? { peerRepos } : {}),
         ...(referenceRepos ? { referenceRepos } : {}),
+        ...(referenceBranches ? { referenceBranches } : {}),
         ...(step.clone?.full ? { full: true } : {}),
         // A structured coding kind (repro-test) returns a JSON outcome alongside its pushed
         // commit; forward the output spec so the harness parses the final reply into `custom`
@@ -361,17 +380,22 @@ function buildRegisteredAgentBody(
         ...(p.cloneBranch ? { cloneBranch: p.cloneBranch } : {}),
       }))
     : undefined
+  const exploreReferenceBranches = parts.referenceBranches?.length
+    ? parts.referenceBranches
+    : undefined
   return {
     kind: 'agent',
     body: {
       ...common,
       mode: 'explore',
-      systemPrompt: parts.multiRepoSection
-        ? `${roleSystemPrompt}\n\n${parts.multiRepoSection}`
-        : roleSystemPrompt,
+      systemPrompt: appendSections(roleSystemPrompt, [
+        parts.multiRepoSection,
+        parts.referenceBranchesSection,
+      ]),
       userPrompt,
       branch: exploreBranch,
       ...(explorePeers ? { peerRepos: explorePeers } : {}),
+      ...(exploreReferenceBranches ? { referenceBranches: exploreReferenceBranches } : {}),
       ...(step.clone?.full ? { full: true } : {}),
       ...structuredOutputField(step.output),
       ...webTools,
@@ -581,6 +605,64 @@ export function renderReferenceReposSection(primary: RepoTarget, references: Rep
   ]
   for (const ref of references) {
     lines.push(`- ${siblingRepoLabel(ref.owner, ref.name)}`)
+  }
+  return lines.join('\n')
+}
+
+/** A safe, short slug for a branch name, for the suggested `git worktree` directory. MUST NOT
+ * collide with the harness's checkout dirs (`.cat-reference/` is a dedicated prefix). */
+function referenceBranchSlug(branch: string): string {
+  return (
+    branch
+      .toLowerCase()
+      .replace(/[^a-z0-9]+/g, '-')
+      .replace(/^-+|-+$/g, '')
+      .slice(0, 60) || 'ref'
+  )
+}
+
+/**
+ * Render the "Reference branches" system-prompt section for the apriori-branches reference mode.
+ * The named branches are pre-existing branches of the SAME repo the agent is working in, fetched
+ * by the harness into `origin/<b>` refs BEFORE the agent runs. They are prior-art / spike /
+ * prototype branches: the agent reads them to learn from them, but must NEVER commit to, push, or
+ * base its work on them (its work branch is its HEAD). The read commands use TWO-dot diffs
+ * (`git diff origin/<b>`) because the primary clone is shallow — a three-dot diff needs the merge
+ * base, which isn't present. A `multiRepo` layout means the checkout root is not itself a git repo,
+ * so the commands are run inside the agent's own repository directory (named in the multi-repo
+ * section). Byte-identical rendering is not shared with the harness (the harness only fetches the
+ * refs; this text is the sole guidance), so there is no cross-module invariant here.
+ */
+export function renderReferenceBranchesSection(
+  branches: string[],
+  opts: { multiRepo?: boolean } = {},
+): string {
+  const cwdNote = opts.multiRepo
+    ? " Run these commands inside YOUR repository's directory (named in the multi-repo section " +
+      'above), since more than one repository is checked out and the workspace root is not a git ' +
+      'repository.'
+    : ''
+  const lines = [
+    '## Reference branches',
+    '',
+    'This task has pre-existing branches of THIS repository attached as READ-ONLY reference points',
+    '(a spike, a prototype, or prior-art work). They are already fetched into their `origin/<branch>`',
+    `tracking refs.${cwdNote}`,
+    '',
+    'Inspect them to learn from or continue their ideas — but you must NEVER commit to, push, or',
+    'reset your work onto them. Keep building on your own work branch (your current HEAD); these',
+    'branches are inputs to read, not branches to write.',
+    '',
+    'Attached reference branches:',
+  ]
+  for (const branch of branches) {
+    const slug = referenceBranchSlug(branch)
+    lines.push(
+      `- \`${branch}\` — read it via \`git log origin/${branch}\`, ` +
+        `\`git diff origin/${branch}\` (two-dot; the clone is shallow, so avoid three-dot \`...\`), ` +
+        `\`git show origin/${branch}:<path>\`, or check it out alongside your work with ` +
+        `\`git worktree add .cat-reference/${slug} origin/${branch}\`.`,
+    )
   }
   return lines.join('\n')
 }

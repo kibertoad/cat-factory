@@ -16,6 +16,7 @@ import {
   commitTrackedEdits,
   createBranch,
   excludeFromGit,
+  fetchReferenceBranches,
   headCommit,
   listUntrackedFiles,
   openPullRequest,
@@ -85,6 +86,12 @@ export interface CodingAgentSpec extends HarnessAuthFields {
    * only for the implementer (`coder`) dispatch; absent ⇒ no tailing (e.g. the CI-fixer).
    */
   streamFollowUps?: boolean
+  /**
+   * READ-ONLY reference branches of THIS repo (the apriori-branches reference mode): fetched
+   * into `origin/<b>` after the checkout so the agent can inspect them but never commits to
+   * them. Best-effort per branch. Absent/empty ⇒ none fetched.
+   */
+  referenceBranches?: string[]
 }
 
 /** The outcome of a coding agent run, before each caller maps it to its own result shape. */
@@ -202,6 +209,26 @@ export async function runCodingAgent(
         })
         if (spec.newBranch) await createBranch(dir, spec.newBranch, signal)
       }
+
+      // Fetch any read-only reference branches into their `origin/<b>` refs so the agent can
+      // inspect them (log/diff/show) without git network credentials of its own. Best-effort per
+      // branch: a vanished branch is warned + skipped, never fatal. The work branch above is the
+      // agent's HEAD; these are only readable siblings it never commits to.
+      if (spec.referenceBranches?.length) {
+        const fetched = await fetchReferenceBranches({
+          dir,
+          branches: spec.referenceBranches,
+          ghToken: spec.ghToken,
+          signal,
+          onSkip: (branch, reason) =>
+            logger.warn('coding-agent: reference branch fetch skipped', { branch, reason }),
+        })
+        logger.info('coding-agent: fetched reference branches', {
+          requested: spec.referenceBranches.length,
+          fetched: fetched.length,
+        })
+      }
+
       // The branch tip before the agent runs this time. A FRESH run produced work iff
       // the branch advances past it; a RESUMED run already carries prior work, so it is
       // never a no-op regardless of what this pass adds. Captured BEFORE the resume base
@@ -599,6 +626,27 @@ export async function runMultiRepoCoding(
             base: leg.cloneBranch,
           })
         }
+      }
+    }
+
+    // Reference branches attach to the PRIMARY repo, so fetch them into the primary sibling
+    // checkout's `origin/<b>` refs (best-effort per branch). The backend's reference-branches
+    // prompt section names the primary repo's directory to run the read commands in.
+    if (job.referenceBranches?.length) {
+      const primaryLeg = legs.find((l) => l.primary)
+      if (primaryLeg?.dir) {
+        const fetched = await fetchReferenceBranches({
+          dir: primaryLeg.dir,
+          branches: job.referenceBranches,
+          ghToken: primaryLeg.ghToken,
+          signal,
+          onSkip: (branch, reason) =>
+            logger.warn('multi-repo: reference branch fetch skipped', { branch, reason }),
+        })
+        logger.info('multi-repo: fetched reference branches', {
+          requested: job.referenceBranches.length,
+          fetched: fetched.length,
+        })
       }
     }
 

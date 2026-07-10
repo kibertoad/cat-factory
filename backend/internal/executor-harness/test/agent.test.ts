@@ -217,6 +217,32 @@ describe('parseAgentJob', () => {
     ).toThrow(/referenceRepos\[0\]\.repo\.cloneUrl/)
   })
 
+  // Apriori REFERENCE branches (reference mode): plain branch names of the PRIMARY repo, fetched
+  // into `origin/<b>` post-checkout. A simple string list — no repo/host validation (they are
+  // branches of the already-validated primary), non-strings dropped.
+  it('parses referenceBranches (string list, non-strings dropped)', () => {
+    const job = parseAgentJob({
+      ...base,
+      mode: 'coding',
+      newBranch: 'cat-factory/blk',
+      referenceBranches: ['spike/prior-art', 'proto/v2', '', 42, null],
+    })
+    expect(job.referenceBranches).toEqual(['spike/prior-art', 'proto/v2'])
+  })
+
+  it('omits referenceBranches when absent or empty', () => {
+    expect(parseAgentJob({ ...base, mode: 'coding' }).referenceBranches).toBeUndefined()
+    expect(
+      parseAgentJob({ ...base, mode: 'coding', referenceBranches: [] }).referenceBranches,
+    ).toBeUndefined()
+  })
+
+  it('rejects a non-array referenceBranches', () => {
+    expect(() => parseAgentJob({ ...base, mode: 'coding', referenceBranches: 'spike' })).toThrow(
+      /referenceBranches/,
+    )
+  })
+
   it('accepts a structured explore job', () => {
     const job = parseAgentJob({
       ...base,
