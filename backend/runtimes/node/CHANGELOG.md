@@ -1,5 +1,13 @@
 # @cat-factory/node-server
 
+## 0.90.10
+
+### Patch Changes
+
+- Updated dependencies [e254ef5]
+  - @cat-factory/orchestration@0.104.1
+  - @cat-factory/server@0.107.9
+
 ## 0.90.9
 
 ### Patch Changes
