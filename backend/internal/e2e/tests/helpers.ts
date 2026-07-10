@@ -118,13 +118,27 @@ async function json<T>(res: {
   return (await res.json()) as T
 }
 
-/** Create a workspace seeded with the sample architecture (frames + the runnable `task_login`). */
+/**
+ * Create a workspace seeded with the sample architecture (frames + the runnable `task_login`).
+ *
+ * Also connects the (faked) GitHub App for the new workspace. The e2e backend runs with the
+ * GitHub App faked ON (see `src/fakeGitHub.ts`), and the SPA HARD-GATES the board behind a
+ * `GitHubOnboarding` screen whenever the App is enabled backend-side but the workspace has no
+ * installation (`pages/index.vue` — `needsGitHubInstall`). So a GitHub-connected workspace is
+ * now the e2e baseline: without this seed EVERY board-opening spec would sit on the onboarding
+ * gate and `openBoard` would time out. Seeding it here (the single workspace factory every spec
+ * and the `seededBoard` fixture route through) keeps the board reachable; it adds NO board block
+ * (only the installation + repo/branch projection rows), so the seeded architecture is unchanged.
+ * Idempotent, so a spec that also calls `seedGitHub` explicitly (e.g. `github.spec.ts`) is safe.
+ */
 export async function createSeededWorkspace(
   request: APIRequestContext,
 ): Promise<WorkspaceSnapshot> {
-  return json<WorkspaceSnapshot>(
+  const snapshot = await json<WorkspaceSnapshot>(
     await request.post(`${BACKEND_URL}/workspaces`, { data: { seed: true } }),
   )
+  await seedGitHub(request, snapshot.workspace.id)
+  return snapshot
 }
 
 /**
