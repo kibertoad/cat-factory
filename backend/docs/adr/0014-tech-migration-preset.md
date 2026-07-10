@@ -30,7 +30,7 @@ Ship the **`preset_tech_migration`** initiative preset, built on one new generic
 capability, **preset phase templates**:
 
 - A preset descriptor may declare an optional `phaseTemplate` (`{ phases: [{ id, title,
-  goal, required? }], allowAdditionalPhases? }`) as plain wire data. The planner's prompt
+goal, required? }], allowAdditionalPhases? }`) as plain wire data. The planner's prompt
   fold renders the required phase ids/titles/goals verbatim when a template is present; a
   pure ingest-time normalizer reorders known phases into template order and rejects (via
   `ValidationError`) a missing required phase or a disallowed extra one. No preset id is

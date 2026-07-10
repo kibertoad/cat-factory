@@ -5,7 +5,7 @@ import type {
   GitHubIssueDetail,
 } from '@cat-factory/kernel'
 import { GitHubIssuesProvider } from '@cat-factory/integrations'
-import { FakeGitHubClient } from '../fakes/FakeGitHubClient'
+import { FakeGitHubClient } from '@cat-factory/conformance'
 
 // Pure unit test for the GitHub-issues task-source provider: it resolves the
 // installation that owns the issue's repo (by account login), reads the issue via

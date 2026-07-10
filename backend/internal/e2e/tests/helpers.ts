@@ -37,6 +37,47 @@ export async function setFakeProfile(
   if (!res.ok()) throw new Error(`fake-profile control ${res.status()}: ${await res.text()}`)
 }
 
+/** The deterministic repo the faked GitHub integration exposes (source of truth: `src/fakeGitHub.ts`). */
+export const GITHUB_REPO = { githubId: 424242, owner: 'octo', name: 'demo' } as const
+
+/**
+ * Make `workspaceId` a GitHub-connected workspace with the seeded repo + branches (see
+ * `src/fakeGitHub.ts`), by writing the installation + projection rows over the control channel.
+ * Call BEFORE opening the board so the SPA loads the connected state. The GitHub App is faked
+ * ON with no real credentials, so this is the analogue of `setFakeProfile` for GitHub state.
+ */
+export async function seedGitHub(request: APIRequestContext, workspaceId: string): Promise<void> {
+  const res = await request.post(`${CONTROL_URL}/github-seed`, { data: { workspaceId } })
+  if (!res.ok()) throw new Error(`github-seed control ${res.status()}: ${await res.text()}`)
+}
+
+/** Import a repo as a board service frame (the `POST /blocks/from-repo` the add-service modal calls). */
+export async function addServiceFromRepo(
+  request: APIRequestContext,
+  workspaceId: string,
+  repoGithubId: number,
+): Promise<Block> {
+  return json<Block>(
+    await request.post(`${BACKEND_URL}/workspaces/${workspaceId}/blocks/from-repo`, {
+      data: { repoGithubId },
+    }),
+  )
+}
+
+/** Add a task under a frame/module (the `POST /blocks/:id/tasks` the add-task modal calls). */
+export async function createTask(
+  request: APIRequestContext,
+  workspaceId: string,
+  parentId: string,
+  title = 'E2E task',
+): Promise<Block> {
+  return json<Block>(
+    await request.post(`${BACKEND_URL}/workspaces/${workspaceId}/blocks/${parentId}/tasks`, {
+      data: { title },
+    }),
+  )
+}
+
 // Shared timeouts for LIVE (WebSocket-pushed) assertions. A live run advances through
 // several durable pg-boss steps, so web-first assertions need headroom over the default
 // 5s — but we still want NO fixed sleeps. Named here so every spec uses the same budget.

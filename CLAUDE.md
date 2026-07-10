@@ -122,7 +122,7 @@ numbered **Architecture Decision Record** under [`backend/docs/adr/`](./backend/
 (`NNNN-slug.md`, sequential — take the next free number). Trim the tracker down to the
 high-level decision: **Context** (the problem), **Decision** (what was built and how the
 pieces fit), **Rationale** (the non-obvious choices, condensed from the tracker's decisions
-log + gotchas), and **Consequences** (cross-cutting effects + anything deliberately *not*
+log + gotchas), and **Consequences** (cross-cutting effects + anything deliberately _not_
 pursued, so a future reader knows the deferrals were intentional). Drop the slice-by-slice
 checklist and per-file tables. Then `git rm` the `docs/initiatives/<name>.md` tracker in the
 same PR — the ADR supersedes it (see ADRs 0010–0021, each a converted initiative). Header
