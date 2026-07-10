@@ -268,6 +268,20 @@ Each capability has a deeper write-up; start here and follow the link.
 - [0004 — Self-hosted runner pool](./backend/docs/adr/0004-self-hosted-runner-pool.md)
 - [0005 — Two-app tiering for repository creation](./backend/docs/adr/0005-two-app-repo-provisioning.md)
 - [0006 — Tenant-scoped prompt-fragment library](./backend/docs/adr/0006-prompt-fragment-library.md)
+- [0007 — Service-owned provisioning (what/where ÷ how split)](./backend/docs/adr/0007-per-service-provisioning.md)
+- [0008 — Local k3s guided setup](./backend/docs/adr/0008-local-k3s-guided-setup.md)
+- [0009 — Mothership mode: persistence RPC, not direct frontend calls](./backend/docs/adr/0009-mothership-persistence-rpc.md)
+- [0010 — Deferred from-scratch k3d cluster-create coverage](./backend/docs/adr/0010-defer-k3d-create-coverage.md)
+- [0011 — Inline tester quality-control (QC) companion](./backend/docs/adr/0011-tester-quality-companion.md)
+- [0012 — Docker Compose build-from-source support](./backend/docs/adr/0012-compose-build-from-source.md)
+- [0013 — Initiatives: long-running multi-task work containers](./backend/docs/adr/0013-initiatives-feature.md)
+- [0014 — Technological-migration initiative preset](./backend/docs/adr/0014-tech-migration-preset.md)
+- [0015 — Deployer as the sole environment provisioner](./backend/docs/adr/0015-deployer-single-provisioner.md)
+- [0016 — Initiative presets (registrable planning-shape extension)](./backend/docs/adr/0016-initiative-presets.md)
+- [0017 — Documentation-type tasks as first-class authoring](./backend/docs/adr/0017-document-task-improvements.md)
+- [0018 — App-owned AgentKindRegistry (no module-global registry)](./backend/docs/adr/0018-agent-kind-registry-di.md)
+- [0019 — Frontend blocks, self-contained UI testing, dev previews](./backend/docs/adr/0019-frontend-preview-ui-testing.md)
+- [0020 — Tiered spend budgets (account / workspace / user)](./backend/docs/adr/0020-tiered-spend-budgets.md)
 
 ## Deployment
 
