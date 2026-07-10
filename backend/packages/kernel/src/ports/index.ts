@@ -2,6 +2,7 @@ export type {
   BlockPatch,
   BlockRepository,
   ExecutionRepository,
+  LiveRunSummary,
   PipelineRepository,
   RunRef,
   ServiceRehome,

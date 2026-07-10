@@ -765,6 +765,33 @@ export function defineCoreConformance(harness: ConformanceHarness): void {
         expect(pausedIds.has('exec_sweep_blocked')).toBe(false)
         expect(pausedIds.has('exec_sweep_done')).toBe(false)
         expect(pausedIds.has('exec_sweep_failed')).toBe(false)
+
+        // A LIVE run of a DIFFERENT kind (a bootstrap job stays `running` until driven) shares
+        // the `agent_runs` table but must NOT leak into the execution projection — `listLive`
+        // filters `kind = 'execution'`. Seed one via the real bootstrap route (the
+        // FakeRepoBootstrapper reports connected, so the pre-flight passes) and leave it running.
+        const bootstrap = await app.call<{ status: string }>(
+          'POST',
+          `/workspaces/${workspace.id}/bootstrap/jobs`,
+          { repoName: 'listlive-kind-probe', instructions: 'Scaffold a small HTTP service.' },
+        )
+        expect(bootstrap.body.status).toBe('running')
+
+        // `listLive` (workspace-scoped) returns the lean {id,blockId,status} projection of the
+        // LIVE runs (running/blocked/paused) — never terminal, never a non-execution kind —
+        // backing the dispatch guard + resumePaused. It maps block ids and carries status
+        // without decoding `detail`.
+        const liveRows = await execs.listLive(workspace.id)
+        const liveById = new Map(liveRows.map((r) => [r.id, r]))
+        expect(new Set(liveById.keys())).toEqual(
+          new Set(['exec_sweep_running', 'exec_sweep_blocked', 'exec_sweep_paused']),
+        )
+        expect(liveById.get('exec_sweep_running')?.status).toBe('running')
+        expect(liveById.get('exec_sweep_running')?.blockId).toBe('blk_exec_sweep_running')
+        expect(liveById.get('exec_sweep_paused')?.status).toBe('paused')
+        // A workspace with no live runs projects to an empty list.
+        const emptyWs = await app.createWorkspace()
+        expect(await execs.listLive(emptyWs.workspace.id)).toEqual([])
       })
     })
 

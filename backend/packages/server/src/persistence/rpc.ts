@@ -210,6 +210,8 @@ export const REMOTE_PERSISTENCE_METHODS: PersistenceMethodTable = {
   },
   executionRepository: {
     listByWorkspace: { scope: { kind: 'workspace', arg: 0 } },
+    // Lean live-run projection backing the dispatch guard + resumePaused (workspace-scoped read).
+    listLive: { scope: { kind: 'workspace', arg: 0 } },
     get: { scope: { kind: 'workspace', arg: 0 } },
     getByBlock: { scope: { kind: 'workspace', arg: 0 } },
     upsert: { scope: { kind: 'workspace', arg: 0 }, revWriteBack: 1 },

@@ -1872,12 +1872,10 @@ export class ExecutionService {
       return false
     }
 
-    const executions = await this.executionRepository.listByWorkspace(workspaceId)
-    const liveBlockIds = new Set(
-      executions
-        .filter((e) => e.status === 'running' || e.status === 'blocked' || e.status === 'paused')
-        .map((e) => e.blockId),
-    )
+    // Lean projection of the workspace's live runs (block + status only) — avoids loading and
+    // JSON-decoding every historical run's `detail` just to read the handful of live block ids.
+    const live = await this.executionRepository.listLive(workspaceId)
+    const liveBlockIds = new Set(live.map((e) => e.blockId))
     const siblingTasks = all.filter((b) => b.level === 'task' && b.id !== block.id && underFrame(b))
 
     if (settings.taskLimitMode === 'shared') {
@@ -3406,8 +3404,9 @@ export class ExecutionService {
    */
   async resumePaused(workspaceId: string): Promise<ExecutionInstance[]> {
     await this.requireWorkspace(workspaceId)
-    const instances = await this.executionRepository.listByWorkspace(workspaceId)
-    const paused = instances.filter((e) => e.status === 'paused')
+    // Lean projection: only the paused runs' ids are needed to re-drive them — no `detail` decode.
+    const live = await this.executionRepository.listLive(workspaceId)
+    const paused = live.filter((e) => e.status === 'paused')
     for (const p of paused) {
       // Optimistic-concurrency write: only flip + re-drive a run that is STILL paused at
       // write time, so a resume racing the driver (or a concurrent resume) can't clobber a
