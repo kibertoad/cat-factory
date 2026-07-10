@@ -460,6 +460,10 @@ export const agentRuns = pgTable(
     index('idx_agent_runs_status_lease').on(t.status, t.updated_at),
     index('idx_agent_runs_block').on(t.workspace_id, t.block_id),
     index('idx_agent_runs_service').on(t.service_id),
+    // Serves the lean live-run projection `ExecutionRepository.listLive`
+    // (workspace_id = ? AND kind = 'execution' AND status IN (running/blocked/paused)) backing the
+    // per-service task-concurrency dispatch guard + resumePaused. Mirrors D1 migration 0048.
+    index('idx_agent_runs_ws_kind_status').on(t.workspace_id, t.kind, t.status),
     // At most ONE live execution run per block — the one-run-per-block invariant the engine
     // relied on via a racy delete-then-insert, now enforced atomically so two concurrent
     // starts can't create two live runs (two drivers, two containers). Partial (only live

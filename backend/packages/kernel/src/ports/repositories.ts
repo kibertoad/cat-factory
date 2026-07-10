@@ -2,6 +2,7 @@ import type {
   AgentFailure,
   Block,
   ExecutionInstance,
+  ExecutionStatus,
   Pipeline,
   Workspace,
 } from '../domain/types.js'
@@ -140,8 +141,30 @@ export interface RunRef {
   id: string
 }
 
+/**
+ * A lightweight projection of a LIVE execution run — its id, block, and status — with the
+ * heavy serialized `detail` (pipeline + per-step state) column deliberately NOT decoded.
+ * Returned by {@link ExecutionRepository.listLive} for hot paths that need only the live
+ * rows' block/status/id and would otherwise pay to load + JSON-decode every historical run.
+ */
+export interface LiveRunSummary {
+  id: string
+  blockId: string
+  status: ExecutionStatus
+}
+
 export interface ExecutionRepository {
   listByWorkspace(workspaceId: string): Promise<ExecutionInstance[]>
+  /**
+   * The workspace's LIVE execution runs (`running`/`blocked`/`paused`) as a lean
+   * {@link LiveRunSummary} projection — `{ id, blockId, status }` per row, NEVER the heavy
+   * `detail` column. Backs the per-service task-concurrency dispatch guard (needs the live
+   * blocks) and `resumePaused` (needs the paused runs' ids), both of which previously loaded
+   * and JSON-decoded EVERY historical run in the workspace via {@link listByWorkspace} only to
+   * discard all but the handful of live rows — so this scales with concurrency, not run history.
+   * Served by the `(workspace_id, kind, status)` index. Empty when no run is live.
+   */
+  listLive(workspaceId: string): Promise<LiveRunSummary[]>
   /**
    * Every execution belonging to a service, regardless of which workspace it ran under.
    * Backs the board snapshot for a service mounted from another workspace in the same org,

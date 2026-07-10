@@ -1,0 +1,1 @@
+CREATE INDEX "idx_agent_runs_ws_kind_status" ON "agent_runs" ("workspace_id","kind","status");
