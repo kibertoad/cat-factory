@@ -20,7 +20,7 @@
 //
 // Run directly via Node type stripping: `node src/testServer.ts` (Playwright's webServer
 // boots it). Reads `DATABASE_URL` (required) and a couple of optional knobs (below).
-import { createServer, type IncomingMessage } from 'node:http'
+import { createServer, type IncomingMessage, type ServerResponse } from 'node:http'
 import { AsyncFakeAgentExecutor } from '@cat-factory/conformance'
 import {
   buildNodeContainer,
@@ -123,32 +123,37 @@ let seedDb: DrizzleDb | null = null
 // SAME derivation the `setFakeProfile` helper uses, so PORT drives both ends. Bound to
 // loopback: it's reached only from the local Playwright process, never publicly.
 const controlPort = Number(process.env.E2E_CONTROL_PORT ?? Number(process.env.PORT ?? '8787') + 1)
+// Reject on a socket error so a caller gets a fast 400 instead of a hung request that only
+// surfaces as a spec timeout.
 const readBody = (req: IncomingMessage): Promise<string> =>
-  new Promise((resolve) => {
+  new Promise((resolve, reject) => {
     const chunks: Buffer[] = []
     req.on('data', (c) => chunks.push(c as Buffer))
     req.on('end', () => resolve(Buffer.concat(chunks).toString('utf8')))
+    req.on('error', reject)
   })
+
+const fail = (res: ServerResponse, status: number, err: unknown): void => {
+  res.writeHead(status).end(err instanceof Error ? err.message : String(err))
+}
 
 const controlServer = createServer((req, res) => {
   if (req.method === 'POST' && req.url === '/fake-profile') {
-    void readBody(req).then((raw) => {
-      try {
+    void readBody(req)
+      .then((raw) => {
         const body = JSON.parse(raw) as { workspaceId: string; profile: FakeProfile }
         profiles.set(body.workspaceId, body.profile ?? {})
         res.writeHead(204).end()
-      } catch (err) {
-        res.writeHead(400).end(err instanceof Error ? err.message : String(err))
-      }
-    })
+      })
+      .catch((err) => fail(res, 400, err))
     return
   }
   // Seed a workspace's GitHub connection + repo/branch projections (see fakeGitHub.ts), so the
   // SPA loads a connected GitHub with repos + branches. Fired from a spec's Node request context
   // BEFORE it opens the board.
   if (req.method === 'POST' && req.url === '/github-seed') {
-    void readBody(req).then(async (raw) => {
-      try {
+    void readBody(req)
+      .then(async (raw) => {
         if (!seedDb) {
           res.writeHead(503).end('github seed: db not ready')
           return
@@ -156,10 +161,8 @@ const controlServer = createServer((req, res) => {
         const body = JSON.parse(raw) as { workspaceId: string; seed?: GitHubSeed }
         await seedGitHubForWorkspace(seedDb, body.workspaceId, body.seed ?? {})
         res.writeHead(204).end()
-      } catch (err) {
-        res.writeHead(400).end(err instanceof Error ? err.message : String(err))
-      }
-    })
+      })
+      .catch((err) => fail(res, 400, err))
     return
   }
   res.writeHead(404).end()

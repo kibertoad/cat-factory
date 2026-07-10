@@ -58,6 +58,11 @@ export function installationIdFor(workspaceId: string): number {
  * link) for any workspace; the per-workspace connection + projection state that the SPA reads
  * on load is seeded separately by {@link seedGitHubForWorkspace}. Reads never mutate it, so one
  * shared instance across the serial suite is safe.
+ *
+ * NOTE: its canned `installationId: 1` is NOT workspace-safe — driving the real interactive
+ * connect flow (instead of {@link seedGitHubForWorkspace}) would persist id `1` for every
+ * workspace and collide on the installation PK. Specs must seed via `seedGitHub`, which uses the
+ * per-workspace {@link installationIdFor}; the connect flow is out of scope until it needs one.
  */
 export function createE2eGitHubClient(): FakeGitHubClient {
   const client = new FakeGitHubClient()
