@@ -30,7 +30,7 @@ Key mechanics:
 
 - **Persisted, explicit `build` flag** (`ComposeEnvironmentConfig.build` /
   `ServiceProvisioning.composeBuild`) — the provider keys purely on this flag and never
-  inspects file content to decide to build; autodetection only *recommends* the flag.
+  inspects file content to decide to build; autodetection only _recommends_ the flag.
 - **One source of truth for the safety predicates** (`hasBuildDirective`, `bindMountSource`,
   `escapesCheckout`) shared by provisioning and autodetection.
 - **A clone seam on `ComposeRuntime`** (`checkout` / `writeCheckoutFile`), implemented only in

@@ -9,7 +9,7 @@ import {
   type SessionPayload,
 } from '../../src/infrastructure/auth/signing'
 import { githubDeps, uniqueInstallationId } from '../helpers'
-import { FakeGitHubClient } from '../fakes/FakeGitHubClient'
+import { FakeGitHubClient } from '@cat-factory/conformance'
 import { FakeAgentExecutor } from '../fakes/FakeAgentExecutor'
 
 // Account tenancy is an authenticated concept, so these run with auth ENABLED —

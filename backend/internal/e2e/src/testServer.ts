@@ -6,8 +6,11 @@
 //   - LLMs + per-run agent containers  → the canonical deterministic FakeAgentExecutor
 //     (the same one the cross-runtime conformance suite drives). No LLM HTTP, no Docker.
 //   - repo bootstrap                   → FakeRepoBootstrapper (no GitHub, no container).
-//   - GitHub App / email / Slack / Datadog → left OFF (all opt-in; the server boots and
-//     the board renders without them, and the gates/providers pass through).
+//   - GitHub App                       → faked ON with the canonical FakeGitHubClient + the
+//     real Drizzle projection repos, wired through `overrides` with NO real credentials (see
+//     fakeGitHub.ts). `seedGitHub` (control channel) connects a workspace with a repo + branches.
+//   - email / Slack / Datadog          → left OFF (all opt-in; the server boots and the board
+//     renders without them, and the gates/providers pass through).
 //
 // Everything else is production: the controllers, the auth gate (open in dev), the
 // durable pg-boss execution worker + sweepers, and the per-workspace real-time hub that
@@ -17,9 +20,21 @@
 //
 // Run directly via Node type stripping: `node src/testServer.ts` (Playwright's webServer
 // boots it). Reads `DATABASE_URL` (required) and a couple of optional knobs (below).
-import { createServer } from 'node:http'
+import { createServer, type IncomingMessage } from 'node:http'
 import { AsyncFakeAgentExecutor } from '@cat-factory/conformance'
-import { buildNodeContainer, start } from '@cat-factory/node-server'
+import {
+  buildNodeContainer,
+  DrizzleBranchProjectionRepository,
+  DrizzleCheckRunProjectionRepository,
+  DrizzleCommitProjectionRepository,
+  type DrizzleDb,
+  DrizzleGitHubInstallationRepository,
+  DrizzleIssueProjectionRepository,
+  DrizzlePullRequestProjectionRepository,
+  DrizzleRepoProjectionRepository,
+  start,
+} from '@cat-factory/node-server'
+import { createE2eGitHubClient, type GitHubSeed, seedGitHubForWorkspace } from './fakeGitHub.ts'
 import { fakeInlineModelResolver } from './fakeInlineModel.ts'
 import {
   E2eFakeAgentExecutor,
@@ -93,6 +108,14 @@ const repoBootstrapper = new E2eRepoBootstrapper(profiles)
 // the gate step, so the pre-existing specs are unaffected.
 const gateProviders = new E2eGateProviders(profiles)
 
+// GitHub App integration, faked ON with NO real credentials (see fakeGitHub.ts). The shared
+// catalogued fake client backs the interactive connect/link flows; per-workspace connection +
+// projection state is seeded directly over the `/github-seed` control route below. `db` is only
+// available inside `buildContainer`, so it's captured there and read by that route (which only
+// fires after boot). Both are consumed by controllers, so one shared client is safe.
+const githubClient = createE2eGitHubClient()
+let seedDb: DrizzleDb | null = null
+
 // A tiny, test-ONLY HTTP control channel (a separate listener, so it never couples to the
 // shared Hono app or its CORS/auth). A spec `POST`s `{ workspaceId, profile }` from Node
 // (Playwright's request context — not the browser), keyed to its own freshly-seeded
@@ -100,17 +123,38 @@ const gateProviders = new E2eGateProviders(profiles)
 // SAME derivation the `setFakeProfile` helper uses, so PORT drives both ends. Bound to
 // loopback: it's reached only from the local Playwright process, never publicly.
 const controlPort = Number(process.env.E2E_CONTROL_PORT ?? Number(process.env.PORT ?? '8787') + 1)
-const controlServer = createServer((req, res) => {
-  if (req.method === 'POST' && req.url === '/fake-profile') {
+const readBody = (req: IncomingMessage): Promise<string> =>
+  new Promise((resolve) => {
     const chunks: Buffer[] = []
     req.on('data', (c) => chunks.push(c as Buffer))
-    req.on('end', () => {
+    req.on('end', () => resolve(Buffer.concat(chunks).toString('utf8')))
+  })
+
+const controlServer = createServer((req, res) => {
+  if (req.method === 'POST' && req.url === '/fake-profile') {
+    void readBody(req).then((raw) => {
       try {
-        const body = JSON.parse(Buffer.concat(chunks).toString('utf8')) as {
-          workspaceId: string
-          profile: FakeProfile
-        }
+        const body = JSON.parse(raw) as { workspaceId: string; profile: FakeProfile }
         profiles.set(body.workspaceId, body.profile ?? {})
+        res.writeHead(204).end()
+      } catch (err) {
+        res.writeHead(400).end(err instanceof Error ? err.message : String(err))
+      }
+    })
+    return
+  }
+  // Seed a workspace's GitHub connection + repo/branch projections (see fakeGitHub.ts), so the
+  // SPA loads a connected GitHub with repos + branches. Fired from a spec's Node request context
+  // BEFORE it opens the board.
+  if (req.method === 'POST' && req.url === '/github-seed') {
+    void readBody(req).then(async (raw) => {
+      try {
+        if (!seedDb) {
+          res.writeHead(503).end('github seed: db not ready')
+          return
+        }
+        const body = JSON.parse(raw) as { workspaceId: string; seed?: GitHubSeed }
+        await seedGitHubForWorkspace(seedDb, body.workspaceId, body.seed ?? {})
         res.writeHead(204).end()
       } catch (err) {
         res.writeHead(400).end(err instanceof Error ? err.message : String(err))
@@ -186,8 +230,14 @@ await start({
   // pg-boss `boss` (so the REAL durable runner drives runs — NOT the Noop runner) and the
   // `realtimeSink` (so the REAL NodeEventPublisher pushes live events to the browser); we
   // only add the overrides, so everything else stays production.
-  buildContainer: (opts) =>
-    buildNodeContainer({
+  buildContainer: (opts) => {
+    // `start()` always supplies the Drizzle `db`; capture it for the `/github-seed` control route
+    // and build the GitHub projection repos over it. Wiring these + the fake client through
+    // `overrides` turns the GitHub module ON with no real App (see fakeGitHub.ts).
+    const db = opts.db
+    if (!db) throw new Error('[e2e] expected start() to supply a Drizzle db')
+    seedDb = db
+    return buildNodeContainer({
       ...opts,
       overrides: {
         agentExecutor,
@@ -197,6 +247,18 @@ await start({
         // on the keyless e2e backend the real resolver would fault it, so serve a converging mock.
         // See `fakeInlineModel.ts` — safe for existing specs (none assert on an inline-gate outcome).
         modelProviderResolver: fakeInlineModelResolver,
+        // GitHub App faked ON via overrides (no GITHUB_APP_ID/private key): the fake client + the
+        // real Drizzle projection repos + a pass-through webhook verifier. The read endpoints serve
+        // from the projections; `seedGitHubForWorkspace` populates them per workspace.
+        githubClient,
+        githubInstallationRepository: new DrizzleGitHubInstallationRepository(db),
+        repoProjectionRepository: new DrizzleRepoProjectionRepository(db),
+        branchProjectionRepository: new DrizzleBranchProjectionRepository(db),
+        pullRequestProjectionRepository: new DrizzlePullRequestProjectionRepository(db),
+        issueProjectionRepository: new DrizzleIssueProjectionRepository(db),
+        commitProjectionRepository: new DrizzleCommitProjectionRepository(db),
+        checkRunProjectionRepository: new DrizzleCheckRunProjectionRepository(db),
+        webhookVerifier: { verify: async () => true },
       },
       // The built-in default model preset points every agent kind at a Cloudflare-served
       // model, so the execution start guard needs that provider marked available to start a
@@ -209,5 +271,6 @@ await start({
         mergeability: gateProviders.mergeability,
         releaseHealth: gateProviders.releaseHealth,
       },
-    }),
+    })
+  },
 })
