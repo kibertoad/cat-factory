@@ -1,5 +1,47 @@
 # @cat-factory/orchestration
 
+## 0.104.0
+
+### Minor Changes
+
+- 127fe3e: Apriori branches (slice 2): working mode.
+
+  A task's single optional `working` apriori branch now drives the run — the agents start from
+  and keep committing into that pre-existing branch instead of minting `cat-factory/<blockId>`,
+  and the PR opens from it, the CI gate polls it, and the merger merges it. See
+  `docs/initiatives/apriori-branches.md`.
+
+  - **Context**: the engine lifts the block's `aprioriBranches` verbatim onto the agent run
+    context (`AgentRunContext.aprioriBranches`), a pure projection like `referenceRepos`.
+  - **Work-branch swap**: `ContainerAgentExecutor.buildJobBody` and the two `RunDispatcher`
+    repo-op sites (`resolveRepoOpBranch` + the spec-writer `builtInRepoOpBranch`) resolve the
+    work branch as `resolveAprioriWorkingBranch(...) ?? cat-factory/<blockId>`, so every
+    downstream builder (`newBranch` / `pushBranch` / explore fallback / PR head) rides the
+    user's branch. The base-branch rejection is a single shared `resolveAprioriWorkingBranch`
+    helper (`@cat-factory/contracts`) so the executor and dispatcher rejections can't drift.
+  - **Probe, never create**: an apriori working branch must already exist — it is probed
+    (`ensureWorkBranch(..., { create: false })`, or a checkout-free `headSha`), and a missing
+    branch fails the dispatch loudly rather than being silently created off base. A working
+    branch equal to the repo base is rejected.
+  - **Merge teardown guard**: `GitHubPullRequestMerger` only deletes a merged head branch when
+    it is a platform `cat-factory/*` branch — a user-provided apriori branch is never torn down
+    (reusing a merged apriori branch on a later task intentionally resumes it).
+  - **Conformance**: a cross-runtime assertion that a custom kind's post-op commits onto the
+    task's apriori working branch instead of `cat-factory/<blockId>` on both stores.
+
+### Patch Changes
+
+- Updated dependencies [127fe3e]
+  - @cat-factory/contracts@0.124.1
+  - @cat-factory/kernel@0.117.6
+  - @cat-factory/agents@0.52.9
+  - @cat-factory/integrations@0.80.6
+  - @cat-factory/prompt-fragments@0.13.10
+  - @cat-factory/sandbox@0.9.58
+  - @cat-factory/spend@0.12.9
+  - @cat-factory/workspaces@0.13.20
+  - @cat-factory/caching@0.6.28
+
 ## 0.103.1
 
 ### Patch Changes
