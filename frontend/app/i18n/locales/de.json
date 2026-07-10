@@ -1227,6 +1227,20 @@
       "involvedServicesEmpty": "Keine verbundenen Services. Verbinde Services am Service-Frame, um sie hier auszuwählen.",
       "involvedServiceStale": "Nicht mehr mit dem Service dieser Aufgabe verbunden; wird bei der nächsten Änderung entfernt."
     },
+    "aprioriBranches": {
+      "title": "Vorhandene Branches",
+      "mode": {
+        "reference": "Referenz",
+        "working": "Arbeitsbranch"
+      },
+      "remove": "{branch} entfernen",
+      "searchPlaceholder": "Vorhandenen Branch hinzufügen…",
+      "connectFirst": "Verbinde GitHub, um vorhandene Branches hinzuzufügen.",
+      "protectedWarning": "{branch} ist ein geschützter Branch. Pushes aus dem Lauf werden möglicherweise abgelehnt.",
+      "multiRepoHint": "Der Arbeitsmodus ist nicht verfügbar, solange diese Aufgabe mehr als einen Service umfasst.",
+      "frozenHint": "Der Arbeitsbranch ist gesperrt, da für diese Aufgabe bereits ein Pull Request existiert.",
+      "hint": "Übergib dieser Aufgabe vorhandene Branches ihres Repositorys. Ein Referenzbranch ist schreibgeschützter Kontext, den die Agenten einsehen dürfen; im einzelnen Arbeitsbranch baut der Lauf weiter, statt einen neuen Branch anzulegen."
+    },
     "referenceRepos": {
       "title": "Referenz-Repositories",
       "remove": "{repo} entfernen",

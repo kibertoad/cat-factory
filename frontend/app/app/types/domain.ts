@@ -29,6 +29,7 @@ export type {
   Block,
   PullRequestRef,
   ReferenceRepo,
+  AprioriBranch,
   CloudProvider,
   InstanceSize,
   ProvisionType,

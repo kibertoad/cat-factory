@@ -923,6 +923,20 @@
       "involvedServicesEmpty": "接続済みのサービスはありません。ここで選択するには、サービスフレームでサービスを接続してください。",
       "involvedServiceStale": "このタスクのサービスとの接続が解除されています。次回の変更時に削除されます。"
     },
+    "aprioriBranches": {
+      "title": "既存のブランチ",
+      "mode": {
+        "reference": "参照",
+        "working": "作業"
+      },
+      "remove": "{branch} を削除",
+      "searchPlaceholder": "既存のブランチを追加…",
+      "connectFirst": "既存のブランチを追加するには GitHub を接続してください。",
+      "protectedWarning": "{branch} は保護されたブランチです。実行からのプッシュは拒否される場合があります。",
+      "multiRepoHint": "このタスクが複数のサービスにまたがる間は、作業モードを利用できません。",
+      "frozenHint": "このタスクには既にプルリクエストが存在するため、作業ブランチはロックされています。",
+      "hint": "このタスクにリポジトリの既存ブランチを渡します。参照ブランチはエージェントが閲覧できる読み取り専用のコンテキストです。唯一の作業ブランチでは、新しいブランチを作成せずに実行がそこで作業を続けます。"
+    },
     "referenceRepos": {
       "title": "Reference repositories",
       "remove": "Remove {repo}",

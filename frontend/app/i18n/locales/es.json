@@ -923,6 +923,20 @@
       "involvedServicesEmpty": "No hay servicios conectados. Conecta servicios en el marco del servicio para seleccionarlos aquí.",
       "involvedServiceStale": "Ya no está conectado al servicio de esta tarea; se eliminará con el próximo cambio."
     },
+    "aprioriBranches": {
+      "title": "Ramas existentes",
+      "mode": {
+        "reference": "Referencia",
+        "working": "Trabajo"
+      },
+      "remove": "Eliminar {branch}",
+      "searchPlaceholder": "Añadir una rama existente…",
+      "connectFirst": "Conecta GitHub para añadir ramas existentes.",
+      "protectedWarning": "{branch} es una rama protegida. Los envíos de la ejecución podrían ser rechazados.",
+      "multiRepoHint": "El modo de trabajo no está disponible mientras esta tarea involucre más de un servicio.",
+      "frozenHint": "La rama de trabajo está bloqueada porque ya existe una solicitud de incorporación para esta tarea.",
+      "hint": "Entrega a esta tarea ramas ya existentes de su repositorio. Una rama de referencia es contexto de solo lectura que los agentes pueden inspeccionar; en la única rama de trabajo la ejecución sigue construyendo en lugar de crear una rama nueva."
+    },
     "referenceRepos": {
       "title": "Repositorios de referencia",
       "remove": "Quitar {repo}",

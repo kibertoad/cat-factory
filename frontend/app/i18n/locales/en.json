@@ -977,6 +977,20 @@
       "involvedServicesEmpty": "No connected services. Connect services on the service frame to select them here.",
       "involvedServiceStale": "No longer connected to this task's service; it is dropped on the next change."
     },
+    "aprioriBranches": {
+      "title": "Existing branches",
+      "mode": {
+        "reference": "Reference",
+        "working": "Working"
+      },
+      "remove": "Remove {branch}",
+      "searchPlaceholder": "Add an existing branch…",
+      "connectFirst": "Connect GitHub to add existing branches.",
+      "protectedWarning": "{branch} is a protected branch. Pushes from the run may be rejected.",
+      "multiRepoHint": "Working mode is unavailable while this task involves more than one service.",
+      "frozenHint": "The working branch is locked because a pull request already exists for this task.",
+      "hint": "Hand this task pre-existing branches of its repository. A reference branch is read-only context the agents may inspect; the single working branch is where the run keeps building instead of a new branch."
+    },
     "referenceRepos": {
       "title": "Reference repositories",
       "remove": "Remove {repo}",
