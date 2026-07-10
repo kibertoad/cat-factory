@@ -282,6 +282,20 @@ function parseReferenceRepos(value: unknown): ReferenceRepoSpec[] {
   })
 }
 
+/**
+ * Parse the optional `referenceBranches` list: pre-existing branch NAMES of the PRIMARY repo the
+ * agent may read but never commit to (the apriori-branches reference mode). Unlike
+ * {@link parseReferenceRepos} these are not sibling repos — they are fetched into the primary
+ * checkout's `origin/<b>` refs (see {@link fetchReferenceBranches}). A non-string / empty entry is
+ * dropped; an absent list yields `[]`. Kept simple (no git-ref grammar check) because the backend
+ * validated the name at the write boundary and probed its existence at dispatch.
+ */
+function parseReferenceBranches(value: unknown): string[] {
+  if (value === undefined || value === null) return []
+  if (!Array.isArray(value)) throw new Error("Invalid job: 'referenceBranches' must be an array")
+  return value.filter((v): v is string => typeof v === 'string' && v.length > 0)
+}
+
 /** Parse the optional `repo.provider` discriminator (defaults to undefined ⇒ host inference). */
 function parseVcsProvider(value: unknown): 'github' | 'gitlab' | undefined {
   if (value === undefined || value === null) return undefined
@@ -698,6 +712,16 @@ export interface AgentJob extends HarnessAuthFields {
    */
   referenceRepos?: ReferenceRepoSpec[]
   /**
+   * Pre-existing branch names of the PRIMARY repo attached to the task as READ-ONLY reference
+   * points (the apriori-branches reference mode). After the primary checkout the harness fetches
+   * each into its `origin/<b>` tracking ref (best-effort per branch) so the agent can inspect it —
+   * `git log origin/<b>`, two-dot `git diff origin/<b>`, `git show origin/<b>:<path>` — but never
+   * commits to or pushes it (that guarantee lives in the prompt guidance, not a git constraint).
+   * Distinct from {@link referenceRepos}: those are separate sibling repos; these are branches of
+   * the same primary repo. Absent ⇒ none. Consumed by the coding + explore flows.
+   */
+  referenceBranches?: string[]
+  /**
    * Coding mode: whether a no-op run (nothing changed) is a failure. The implementer
    * fails on a no-op; the in-place fixers (ci-fix / fix-tests) treat it as a non-fatal
    * no-op. Default true.
@@ -1100,6 +1124,7 @@ export function parseAgentJob(input: unknown): AgentJob {
   const infra = parseAgentInfraSpec(o.infra)
   const peerRepos = parsePeerRepos(o.peerRepos)
   const referenceRepos = parseReferenceRepos(o.referenceRepos)
+  const referenceBranches = parseReferenceBranches(o.referenceBranches)
   const bootstrap = parseAgentBootstrapSpec(o.bootstrap)
   const contextFiles = parseContextFiles(o.contextFiles)
   const packageRegistries = parsePackageRegistries(o.packageRegistries)
@@ -1134,6 +1159,7 @@ export function parseAgentJob(input: unknown): AgentJob {
     ...(pr ? { pr } : {}),
     ...(peerRepos.length ? { peerRepos } : {}),
     ...(referenceRepos.length ? { referenceRepos } : {}),
+    ...(referenceBranches.length ? { referenceBranches } : {}),
     ...(o.noChangesIsError === false ? { noChangesIsError: false } : {}),
     ...(o.persistentCheckout === true ? { persistentCheckout: true } : {}),
     ...(o.streamFollowUps === true ? { streamFollowUps: true } : {}),

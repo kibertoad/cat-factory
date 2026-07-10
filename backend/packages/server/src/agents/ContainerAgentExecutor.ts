@@ -28,12 +28,17 @@ import {
   isIndividualVendor,
   isSubscriptionVendor,
 } from '@cat-factory/kernel'
-import { resolveAprioriWorkingBranch, resolveInstanceTypeId } from '@cat-factory/contracts'
+import {
+  aprioriReferenceBranches,
+  resolveAprioriWorkingBranch,
+  resolveInstanceTypeId,
+} from '@cat-factory/contracts'
 import {
   type AgentKindRegistry,
   type AgentRouting,
   agentTuningFor,
   DOC_WRITER_KIND,
+  READ_ONLY_AGENT_KINDS,
   defaultAgentKindRegistry,
   isProxyableProvider,
   isReadOnlyAgentKind,
@@ -45,11 +50,13 @@ import {
   buildKindBody,
   renderMergerMultiRepoSection,
   renderMultiRepoWorkspaceSection,
+  renderReferenceBranchesSection,
   renderReferenceReposSection,
 } from './jobBody.js'
 import {
   CONFLICT_RESOLVER_AGENT_KIND,
   MERGER_AGENT_KIND,
+  SPEC_WRITER_AGENT_KIND,
   UI_TESTER_AGENT_KIND,
   isTesterKind,
   type HarnessCallsRecordInput,
@@ -380,6 +387,33 @@ const MULTI_REPO_FANOUT_BUILTIN_KINDS: ReadonlySet<string> = new Set([
  * folded into the fan-out path. Only the document writer reads them today.
  */
 const REFERENCE_REPO_KINDS: ReadonlySet<string> = new Set([DOC_WRITER_KIND])
+
+/**
+ * The read-only bug-triage kind excluded from the reference-branch consumers below: it clones the
+ * REPORTED PR/commit as its subject, so an unrelated prior-art reference branch is noise for it.
+ */
+const BUG_INVESTIGATOR_AGENT_KIND = 'bug-investigator'
+
+/**
+ * The kinds that consume a task's read-only apriori REFERENCE branches (the apriori-branches
+ * reference mode) — the branches are fetched into the primary checkout's `origin/<b>` refs so the
+ * agent can inspect a spike/prototype/prior-art branch it must never commit to. The consumers are
+ * the kinds that read/plan/author against the primary repo — the implementer (`coder`), the
+ * spec-writer, the doc-writer, and the read-only design/analysis kinds (`architect` / `analysis`).
+ * Deliberately EXCLUDES the PR-cloning fix/assess kinds (ci-fixer / conflict-resolver / tester /
+ * merger): they already carry the work in the PR branch they clone, so a reference branch is noise
+ * — and folding it in would spend prompt tokens and a fetch on a branch they will not use.
+ *
+ * The design/analysis members are DERIVED from the authoritative {@link READ_ONLY_AGENT_KINDS}
+ * (minus `bug-investigator`) rather than re-listed as literals, so a newly-registered read-only
+ * design kind is picked up here automatically without a second hard-coded list to keep in step.
+ */
+const REFERENCE_BRANCH_KINDS: ReadonlySet<string> = new Set([
+  IMPLEMENTER_AGENT_KIND,
+  SPEC_WRITER_AGENT_KIND,
+  DOC_WRITER_KIND,
+  ...[...READ_ONLY_AGENT_KINDS].filter((k) => k !== BUG_INVESTIGATOR_AGENT_KIND),
+])
 
 /** A safe, collision-free `<base>.md` filename for a materialised context file. */
 function contextFileName(base: string, used: Set<string>): string {
@@ -1362,6 +1396,42 @@ export class ContainerAgentExecutor implements AsyncAgentExecutor {
       }
     }
 
+    // Read-only apriori REFERENCE branches (the apriori-branches reference mode): existing branches
+    // of the PRIMARY repo the task names as prior-art the agent may READ but never write. Unlike
+    // the reference REPOS above, these are not sibling checkouts — they ride the primary clone as
+    // `origin/<b>` refs the harness fetches before the agent runs (see the harness
+    // `fetchReferenceBranches`). Only the consumer kinds (coder / spec-writer / doc-writer /
+    // architect / analysis) receive them. Each is PROBED at dispatch (create:false) and a missing
+    // branch is DROPPED — asymmetric with a missing WORKING branch (which fails loudly): a
+    // reference is garnish, so a stale/typo'd one is silently omitted rather than failing the run.
+    // When probing isn't wired (tests / no GitHub) every named branch is forwarded and the harness
+    // fetch is best-effort. A run that already carries a PR still reads reference branches (they are
+    // context, independent of the work branch).
+    let referenceBranches: string[] | undefined
+    let referenceBranchesSection: string | undefined
+    if (REFERENCE_BRANCH_KINDS.has(context.agentKind)) {
+      const named = aprioriReferenceBranches(context.aprioriBranches)
+      // Drop any that collide with the resolved work branch (a reference and the working branch are
+      // disjoint by the write boundary, but never fetch/announce the branch the agent builds on).
+      const candidates = named.filter((b) => b !== workBranch)
+      let present: string[]
+      if (this.deps.ensureWorkBranch) {
+        const probe = this.deps.ensureWorkBranch
+        const existence = await Promise.all(
+          candidates.map((b) => probe(repo, b, { create: false })),
+        )
+        present = candidates.filter((_b, i) => existence[i])
+      } else {
+        present = candidates
+      }
+      if (present.length > 0) {
+        referenceBranches = present
+        referenceBranchesSection = renderReferenceBranchesSection(present, {
+          multiRepo: Boolean(multiRepoSection || referenceReposSection),
+        })
+      }
+    }
+
     const { body, kind } = buildKindBody(
       promptContext,
       {
@@ -1375,6 +1445,8 @@ export class ContainerAgentExecutor implements AsyncAgentExecutor {
         ...(multiRepoSection ? { multiRepoSection } : {}),
         ...(referenceRepos ? { referenceRepos } : {}),
         ...(referenceReposSection ? { referenceReposSection } : {}),
+        ...(referenceBranches ? { referenceBranches } : {}),
+        ...(referenceBranchesSection ? { referenceBranchesSection } : {}),
       },
       this.agentKindRegistry,
     )

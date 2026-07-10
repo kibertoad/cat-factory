@@ -18,6 +18,7 @@ import {
   cloneRepo,
   commitAll,
   conflictDiff,
+  fetchReferenceBranches,
   hasAgentChanges,
   headCommit,
   mergeBranch,
@@ -474,6 +475,24 @@ async function runExploreMode(job: AgentJob, opts: RunOptions): Promise<AgentRes
         workDir = await cloneServiceCheckout(dir, job, opts.signal)
       }
 
+      // Fetch any read-only reference branches into `origin/<b>` so a read-only agent (architect /
+      // analysis / spec-writer) can inspect a prior-art branch without git network credentials of
+      // its own. Best-effort per branch; the run makes no commits regardless.
+      if (job.referenceBranches?.length) {
+        const fetched = await fetchReferenceBranches({
+          dir,
+          branches: job.referenceBranches,
+          ghToken: job.ghToken,
+          signal: opts.signal,
+          onSkip: (branch, reason) =>
+            logger.warn('agent(explore): reference branch fetch skipped', { branch, reason }),
+        })
+        logger.info('agent(explore): fetched reference branches', {
+          requested: job.referenceBranches.length,
+          fetched: fetched.length,
+        })
+      }
+
       // Optional infra stand-up (the tester): bring the service's docker-compose
       // dependencies up at the repo root for the duration of the run, tearing them down in
       // the `finally`. A stand-up failure is non-fatal — it's surfaced to the agent as a
@@ -719,6 +738,26 @@ async function runMultiRepoExplore(job: AgentJob, opts: RunOptions): Promise<Age
       }),
     )
 
+    // Reference branches attach to the PRIMARY repo (the first leg): fetch them into its sibling
+    // checkout's `origin/<b>` refs so the agent can read a prior-art branch. Best-effort per branch.
+    if (job.referenceBranches?.length) {
+      const primary = legs[0]
+      if (primary) {
+        const fetched = await fetchReferenceBranches({
+          dir: join(root, primary.dirName),
+          branches: job.referenceBranches,
+          ghToken: primary.ghToken,
+          signal: opts.signal,
+          onSkip: (branch, reason) =>
+            logger.warn('multi-repo-explore: reference branch fetch skipped', { branch, reason }),
+        })
+        logger.info('multi-repo-explore: fetched reference branches', {
+          requested: job.referenceBranches.length,
+          fetched: fetched.length,
+        })
+      }
+    }
+
     opts.onPhase?.('agent')
     logger.info('multi-repo-explore: running agent', { repos: legs.map((l) => l.dirName) })
     const run = await runAgentInWorkspace(
@@ -828,6 +867,7 @@ async function runSingleRepoCoding(job: AgentJob, opts: RunOptions): Promise<Age
       guardLimits: job.guardLimits,
       ...(job.persistentCheckout ? { persistentCheckout: true } : {}),
       ...(job.streamFollowUps ? { streamFollowUps: true } : {}),
+      ...(job.referenceBranches?.length ? { referenceBranches: job.referenceBranches } : {}),
     },
     opts,
   )

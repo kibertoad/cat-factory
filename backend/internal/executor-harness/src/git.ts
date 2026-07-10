@@ -698,6 +698,59 @@ export async function refreshFromBaseIfClean(
 }
 
 /**
+ * The directory the reference-branches prompt section suggests for a `git worktree add` checkout of
+ * a reference branch alongside the agent's own work. Excluded from the checkout (below) so the
+ * embedded worktree can never be staged into the agent's PR — mirrors the `.cat-context/` treatment
+ * in {@link file://./pi.ts}. Kept in step with the same literal in the backend's
+ * `renderReferenceBranchesSection` (a separate package, so a shared constant isn't feasible).
+ */
+export const REFERENCE_WORKTREE_DIR = '.cat-reference'
+
+/**
+ * Fetch pre-existing REFERENCE branches into their `origin/<b>` tracking refs, so the agent can
+ * inspect them read-only (`git log origin/<b>`, two-dot `git diff origin/<b>`,
+ * `git show origin/<b>:<path>`) without any git network credentials of its own. The primary
+ * checkout is a shallow single-branch clone, so these refs aren't present until fetched — and the
+ * harness (which holds the per-job token) is the only place that can reach the remote. Uses an
+ * explicit destination refspec (`+refs/heads/<b>:refs/remotes/origin/<b>`) and `--no-tags` so a
+ * reference branch's tags don't pollute the checkout. Best-effort PER branch: a fetch failure (a
+ * branch deleted since dispatch, a transient network error) is reported via `onSkip` and skipped,
+ * never fatal — a reference branch is context, not the run's starting point (contrast the WORKING
+ * branch, whose absence fails the dispatch loudly). Returns the branch names that fetched cleanly.
+ *
+ * On any successful fetch it locally excludes {@link REFERENCE_WORKTREE_DIR} from this checkout, so
+ * if the agent follows the prompt's suggested `git worktree add .cat-reference/<b>` a broad
+ * `git add -A` can never embed that worktree as a stray gitlink in the run's PR.
+ */
+export async function fetchReferenceBranches(opts: {
+  dir: string
+  branches: string[]
+  ghToken: string
+  signal?: AbortSignal
+  /** Called once per branch that failed to fetch, so the caller (which owns a logger) can warn. */
+  onSkip?: (branch: string, reason: string) => void
+}): Promise<string[]> {
+  const { dir, branches, ghToken, signal, onSkip } = opts
+  if (branches.length === 0) return []
+  const env = await authEnv(ghToken)
+  const fetched: string[] = []
+  for (const branch of branches) {
+    try {
+      await git(
+        ['fetch', '--no-tags', 'origin', `+refs/heads/${branch}:refs/remotes/origin/${branch}`],
+        { cwd: dir, signal, env },
+      )
+      fetched.push(branch)
+    } catch (err) {
+      onSkip?.(branch, err instanceof Error ? err.message : String(err))
+    }
+  }
+  // Keep the suggested reference-worktree dir out of the agent's commits (best-effort, per-clone).
+  if (fetched.length > 0) await excludeFromGit(dir, `${REFERENCE_WORKTREE_DIR}/`, signal)
+  return fetched
+}
+
+/**
  * Push the work branch to origin. The remote URL carries only the username, so
  * the token is supplied here via the askpass env (never in argv).
  */
