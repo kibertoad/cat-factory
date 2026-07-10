@@ -33,8 +33,11 @@ const paged = <T>(items: T[]) => ({ items, hasMore: false, cursor: null }) as an
 
 describe('GitHubCiStatusProvider (multi-repo)', () => {
   it('reports per-PR checks across own + peer repos under the own installation', async () => {
-    const listCommits = vi.fn(async (_i: number, ref: { owner: string; repo: string }) =>
-      paged([{ sha: `${ref.repo}-sha` }]),
+    // The head is resolved via a single exact-ref lookup (branchHeadSha), not by paging the
+    // branch's commit list.
+    const branchHeadSha = vi.fn(
+      async (_i: number, ref: { owner: string; repo: string }, _branch: string) =>
+        `${ref.repo}-sha`,
     )
     const listCheckRuns = vi.fn(async (_i: number, ref: { owner: string; repo: string }) =>
       paged([
@@ -47,7 +50,7 @@ describe('GitHubCiStatusProvider (multi-repo)', () => {
       ]),
     )
     const provider = new GitHubCiStatusProvider({
-      githubClient: { listCommits, listCheckRuns } as unknown as GitHubClient,
+      githubClient: { branchHeadSha, listCheckRuns } as unknown as GitHubClient,
       resolveRepoTarget: async () => OWN_TARGET,
       blockRepository: { get: async () => MULTI_BLOCK } as any,
     })
@@ -58,7 +61,11 @@ describe('GitHubCiStatusProvider (multi-repo)', () => {
     expect(report.repos[1]).toMatchObject({ headSha: 'email-sha' })
     expect(report.repos[1]!.checks[0]).toMatchObject({ name: 'email-build', conclusion: 'failure' })
     // Every PR is read under the own repo's installation id (one installation per workspace).
-    expect(listCommits).toHaveBeenCalledTimes(2)
+    expect(branchHeadSha).toHaveBeenCalledTimes(2)
+    expect(branchHeadSha.mock.calls.map((c) => [c[1].repo, c[2]])).toEqual([
+      ['own', 'cat-factory/login'],
+      ['email', 'cat-factory/login'],
+    ])
     expect(listCheckRuns.mock.calls.every((c) => c[0] === 42)).toBe(true)
   })
 })
