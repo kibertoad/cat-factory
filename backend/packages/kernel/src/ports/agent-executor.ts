@@ -83,6 +83,23 @@ export interface AgentRunContext {
    * process or delegate to the standard single-actor agent. Absent ⇒ standard agent.
    */
   consensus?: ConsensusStepConfig | null
+  /**
+   * The implementation approach a human chose in the optional fork-decision phase on the
+   * Coder step, folded into the Coder's prompt as a binding directive. Set by the engine
+   * from the step's `forkDecision.chosen` when dispatching the step's OWN coder kind (never
+   * on a helper dispatch like the proposer, and absent when the phase was skipped / a
+   * single path / not configured). `source` distinguishes a picked proposed fork from the
+   * human's own free-text approach; `alternativesConsidered` lists the titles of the
+   * rejected proposed forks so the Coder does not drift back into them.
+   */
+  implementationChoice?: {
+    source: 'proposed' | 'custom'
+    title: string
+    approach: string
+    note?: string
+    /** Titles of the rejected alternatives, so the coder doesn't drift into them. */
+    alternativesConsidered: string[]
+  }
   block: {
     /** Stable block id (set by the engine; used by repo-aware executors). */
     id?: string

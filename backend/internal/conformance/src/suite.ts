@@ -2,6 +2,7 @@ import {
   type Block,
   BUG_TRIAGE_PIPELINE_ID,
   type ExecutionInstance,
+  type ForkDecisionStepState,
   type Initiative,
   type RiskPolicy,
   type ModelPreset,
@@ -3859,7 +3860,7 @@ export function defineIntegrationConformance(harness: ConformanceHarness): void 
         const manual = initial.body.find((p) => p.id === 'mp_manual_review')!
         expect(balanced.isDefault).toBe(true)
         expect(balanced.autoMergeEnabled).toBe(true)
-        expect(balanced.version).toBe(2)
+        expect(balanced.version).toBe(3)
         // The QC-companion budget round-trips with its default through both stores.
         expect(balanced.maxTesterQualityIterations).toBe(3)
         // "Manual review only" fully prevents auto-merge: every PR is routed to human review.
@@ -3946,8 +3947,8 @@ export function defineIntegrationConformance(harness: ConformanceHarness): void 
           `/workspaces/${wsId}`,
         )
         expect(snap.body.riskPolicyCatalogVersions).toMatchObject({
-          mp_balanced: 2,
-          mp_manual_review: 2,
+          mp_balanced: 3,
+          mp_manual_review: 3,
         })
 
         // Seed, then drift a built-in (turn its auto-merge OFF + rename). Reseed must restore the
@@ -3961,7 +3962,7 @@ export function defineIntegrationConformance(harness: ConformanceHarness): void 
         expect(reseeded.status).toBe(200)
         expect(reseeded.body.name).toBe('Balanced')
         expect(reseeded.body.autoMergeEnabled).toBe(true)
-        expect(reseeded.body.version).toBe(2)
+        expect(reseeded.body.version).toBe(3)
         // The default is preserved across a reseed.
         expect(reseeded.body.isDefault).toBe(true)
 
@@ -7719,6 +7720,157 @@ export function defineExecutionConformance(harness: ConformanceHarness): void {
         // The unanswered finding fails the guard (a `validation` domain error → 422) before
         // any model call or run signal — identically on both facades.
         expect(res.status).toBe(422)
+      })
+
+      // ---- Implementation-fork decision phase (Coder step) ----------------
+      // The optional fork-decision phase surfaces materially different implementation
+      // approaches before the Coder writes code and parks for a human choice. It rides the
+      // coder step's `forkDecision` state (no side table), so the propose→park→choose→coder
+      // loop, the single-path auto-advance, and the default pass-through must all behave
+      // identically on every facade. The read-only `fork-proposer` is a structured kind, so
+      // the shared fake returns `customResult` as its proposal — no real container needed.
+
+      it('passes through (skips) the fork phase when the risk policy gate is off (the default)', async () => {
+        // Tri-state `auto` + the built-in preset's DISABLED fork gating ⇒ never propose. The
+        // Coder runs directly; the step records `skipped` and the run never parks. This is the
+        // default every existing pipeline gets, so it must not regress.
+        const app = harness.makeApp()
+        const { workspace } = await app.createWorkspace()
+        const wsId = workspace.id
+        const pipeline = await app.call<Pipeline>('POST', `/workspaces/${wsId}/pipelines`, {
+          name: 'Code only',
+          agentKinds: ['coder'],
+        })
+        const start = await app.call<ExecutionInstance>(
+          'POST',
+          `/workspaces/${wsId}/blocks/task_login/executions`,
+          { pipelineId: pipeline.body.id },
+        )
+        expect(start.status).toBe(201)
+        const exec = (await app.drive(wsId)).find((e) => e.blockId === 'task_login')!
+        expect(exec.status).toBe('done')
+        const coder = exec.steps.find((s) => s.agentKind === 'coder')!
+        expect(coder.state).toBe('done')
+        expect(coder.output).toContain('[coder]')
+        expect(coder.forkDecision?.status).toBe('skipped')
+      })
+
+      it('proposes, parks, and re-runs the Coder with the chosen fork folded in', async () => {
+        // Tri-state `always` forces the phase; the structured proposer returns two materially
+        // different forks (via `customResult`), so the run PARKS. The human reads the forks and
+        // chooses one; the Coder then dispatches (Phase B) and the run completes.
+        const app = harness.makeApp({
+          customResult: {
+            seamSummary: 'the login mapper seam',
+            forks: [
+              {
+                title: 'Patch the call site',
+                summary: 'targeted fix',
+                approach: 'edit AuthController directly',
+                tradeoffs: ['fast', 'localized'],
+                recommended: true,
+              },
+              {
+                title: 'Refactor the seam',
+                summary: 'introduce an abstraction',
+                approach: 'extract a SessionGateway',
+                tradeoffs: ['cleaner', 'wider blast radius'],
+              },
+            ],
+            singlePath: false,
+          },
+        })
+        const { workspace } = await app.createWorkspace()
+        const wsId = workspace.id
+        const task = await app.call<Block>(
+          'POST',
+          `/workspaces/${wsId}/blocks/mod_sessions/tasks`,
+          {
+            title: 'Fork task',
+            agentConfig: { 'coder.forkDecision': 'always' },
+          },
+        )
+        const pipeline = await app.call<Pipeline>('POST', `/workspaces/${wsId}/pipelines`, {
+          name: 'Fork + code',
+          agentKinds: ['coder'],
+        })
+        const start = await app.call<ExecutionInstance>(
+          'POST',
+          `/workspaces/${wsId}/blocks/${task.body.id}/executions`,
+          { pipelineId: pipeline.body.id },
+        )
+        expect(start.status).toBe(201)
+
+        // Drive to the park: the coder step waits on the human's fork choice.
+        const parked = (await app.drive(wsId)).find((e) => e.blockId === task.body.id)!
+        expect(parked.status).toBe('blocked')
+        const parkedCoder = parked.steps.find((s) => s.agentKind === 'coder')!
+        expect(parkedCoder.state).toBe('waiting_decision')
+        expect(parkedCoder.forkDecision?.status).toBe('awaiting_choice')
+        expect(parkedCoder.forkDecision?.forks).toHaveLength(2)
+
+        // The GET route returns the same live state.
+        const view = await app.call<ForkDecisionStepState | null>(
+          'GET',
+          `/workspaces/${wsId}/executions/${parked.id}/fork-decision`,
+        )
+        expect(view.status).toBe(200)
+        expect(view.body?.status).toBe('awaiting_choice')
+        const chosenId = view.body!.forks![0]!.id
+
+        // Choose a proposed fork; the run re-arms and the Coder dispatches (Phase B).
+        const choose = await app.call<ForkDecisionStepState>(
+          'POST',
+          `/workspaces/${wsId}/executions/${parked.id}/fork-decision/choose`,
+          { forkId: chosenId },
+        )
+        expect(choose.status).toBe(200)
+        expect(choose.body.status).toBe('chosen')
+
+        const done = (await app.drive(wsId)).find((e) => e.blockId === task.body.id)!
+        expect(done.status).toBe('done')
+        const finalCoder = done.steps.find((s) => s.agentKind === 'coder')!
+        expect(finalCoder.state).toBe('done')
+        expect(finalCoder.forkDecision?.status).toBe('chosen')
+        expect(finalCoder.forkDecision?.chosen?.forkId).toBe(chosenId)
+      })
+
+      it('auto-advances a single path without parking', async () => {
+        // The proposer's escape hatch (`singlePath`) fires for a trivial/obvious task: no park,
+        // the Coder dispatches directly, and the step records `single_path`.
+        const app = harness.makeApp({
+          customResult: {
+            seamSummary: 'obvious one-liner',
+            forks: [],
+            singlePath: true,
+            singlePathReason: 'Any competent engineer would implement it the same way.',
+          },
+        })
+        const { workspace } = await app.createWorkspace()
+        const wsId = workspace.id
+        const task = await app.call<Block>(
+          'POST',
+          `/workspaces/${wsId}/blocks/mod_sessions/tasks`,
+          {
+            title: 'Trivial fork task',
+            agentConfig: { 'coder.forkDecision': 'always' },
+          },
+        )
+        const pipeline = await app.call<Pipeline>('POST', `/workspaces/${wsId}/pipelines`, {
+          name: 'Fork + code (single path)',
+          agentKinds: ['coder'],
+        })
+        const start = await app.call<ExecutionInstance>(
+          'POST',
+          `/workspaces/${wsId}/blocks/${task.body.id}/executions`,
+          { pipelineId: pipeline.body.id },
+        )
+        expect(start.status).toBe(201)
+        const exec = (await app.drive(wsId)).find((e) => e.blockId === task.body.id)!
+        expect(exec.status).toBe('done')
+        const coder = exec.steps.find((s) => s.agentKind === 'coder')!
+        expect(coder.state).toBe('done')
+        expect(coder.forkDecision?.status).toBe('single_path')
       })
 
       it('wires the async recommend endpoint and degrades it identically when the Writer cannot run', async () => {

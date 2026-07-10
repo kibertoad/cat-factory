@@ -857,7 +857,8 @@
       "empty": {
         "title": "実行履歴はまだありません",
         "body": "パイプラインを開始すると、ここに実行履歴が表示されます。"
-      }
+      },
+      "chooseApproach": "アプローチを選択"
     },
     "structure": {
       "title": "構造",
@@ -1476,7 +1477,8 @@
         "human_review": "既読にする",
         "followup_pending": "既読にする",
         "initiative": "既読にする",
-        "markRead": "既読にする"
+        "markRead": "既読にする",
+        "fork_decision_pending": "既読にする"
       },
       "toast": {
         "acted": "対応済みにしました",
@@ -2153,6 +2155,18 @@
       "confirmDelete": {
         "title": "このリスクポリシーを削除しますか？",
         "body": "「{name}」が削除されます。使用中のタスクはワークスペースの既定に戻ります。"
+      },
+      "forkDecision": {
+        "label": "実装分岐の決定",
+        "hint": "自動モードでは、タスク見積もりがしきい値に達したときに本質的に異なるアプローチを提案し、選択のため一時停止します。",
+        "minComplexity": "最小 複雑度",
+        "minRisk": "最小 リスク",
+        "minImpact": "最小 影響度",
+        "onMissingLabel": "見積もりなし",
+        "onMissing": {
+          "run": "それでも提案",
+          "skip": "スキップ"
+        }
       }
     },
     "observabilityConnection": {
@@ -3216,7 +3230,11 @@
       "subtasksInProgress": "· {count}件処理中",
       "clickToRead": "クリックしてこのエージェントの出力を読む",
       "reviewApprove": "{agent}の提案をレビューして承認",
-      "resolve": "解決: {question}"
+      "resolve": "解決: {question}",
+      "forkDecision": {
+        "proposing": "アプローチを提案中…",
+        "choose": "アプローチを選択"
+      }
     },
     "health": {
       "title": "パイプラインの状態",
@@ -4550,6 +4568,35 @@
     "trial": {
       "hint": "レシピをテストするため、この環境を今すぐプロビジョニングすることもできます。",
       "run": "お試しプロビジョニング"
+    }
+  },
+  "forkDecision": {
+    "title": "実装アプローチを選択",
+    "titleWithBlock": "{title} のアプローチを選択",
+    "subtitle": "コードを書く前に、このタスクを実装する本質的に異なる方法を示します。",
+    "seam": "影響範囲:",
+    "recommended": "推奨",
+    "riskNotes": "リスク:",
+    "noteLabel": "指示メモ（任意）",
+    "notePlaceholder": "実装時に留意すべきこと…",
+    "choose": "このアプローチを使う",
+    "proposing": {
+      "title": "アプローチを検討中…",
+      "hint": "コードを読み、本質的に異なる実装方法を探しています。"
+    },
+    "singlePath": {
+      "title": "明確なアプローチは 1 つ"
+    },
+    "chosen": {
+      "title": "アプローチを選択済み",
+      "note": "メモ: {note}"
+    },
+    "custom": {
+      "title": "独自のアプローチを入力",
+      "placeholder": "どのように実装したいか記述してください…"
+    },
+    "empty": {
+      "title": "決定する項目はありません"
     }
   }
 }

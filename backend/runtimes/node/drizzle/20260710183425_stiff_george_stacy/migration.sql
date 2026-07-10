@@ -1,0 +1,1 @@
+ALTER TABLE "merge_threshold_presets" ADD COLUMN "fork_decision" text;

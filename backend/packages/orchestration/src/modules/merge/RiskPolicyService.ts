@@ -70,6 +70,7 @@ export class RiskPolicyService {
       releaseMaxAttempts: input.releaseMaxAttempts,
       humanReviewGraceMinutes: input.humanReviewGraceMinutes,
       autoMergeEnabled: input.autoMergeEnabled,
+      forkDecision: input.forkDecision ?? null,
       // The very first preset must be the default; otherwise honour the request.
       isDefault: existing.length === 0 ? true : input.isDefault,
       createdAt: this.clock.now(),
@@ -111,6 +112,7 @@ export class RiskPolicyService {
         ? { humanReviewGraceMinutes: patch.humanReviewGraceMinutes }
         : {}),
       ...(patch.autoMergeEnabled !== undefined ? { autoMergeEnabled: patch.autoMergeEnabled } : {}),
+      ...(patch.forkDecision !== undefined ? { forkDecision: patch.forkDecision } : {}),
       ...(patch.isDefault !== undefined ? { isDefault: patch.isDefault } : {}),
     }
     await this.presets.upsert(workspaceId, updated)
@@ -194,6 +196,7 @@ export class RiskPolicyService {
       releaseMaxAttempts: seed.releaseMaxAttempts,
       humanReviewGraceMinutes: seed.humanReviewGraceMinutes,
       autoMergeEnabled: seed.autoMergeEnabled,
+      forkDecision: seed.forkDecision,
       isDefault: seed.isDefault,
       version: seed.version,
     }

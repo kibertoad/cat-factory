@@ -66,6 +66,9 @@ const MENTION_AUDIENCE: Record<NotificationType, MentionAudience> = {
   // The Coder surfaced follow-ups/questions to triage: tell the task's creator (who decides
   // file / send back / answer / dismiss).
   followup_pending: { roles: [], includeCreator: true },
+  // The fork-decision phase surfaced materially different implementation approaches: tell the
+  // task's creator (who picks the approach before the Coder starts).
+  fork_decision_pending: { roles: [], includeCreator: true },
   // An initiative needs attention (a blocked task, or completion): tell the creator (who owns
   // the initiative) and the engineers driving its work.
   initiative: { roles: ['engineering'], includeCreator: true },
@@ -153,6 +156,7 @@ const TYPE_LABEL: Record<NotificationType, string> = {
   visual_confirmation_ready: ':camera: Ready for visual confirmation',
   human_review: ':bust_in_silhouette: Awaiting code review',
   followup_pending: ':compass: Follow-ups to decide',
+  fork_decision_pending: ':fork_and_knife: Choose an implementation approach',
   initiative: ':world_map: Initiative update',
 }
 

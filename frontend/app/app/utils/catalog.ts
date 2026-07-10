@@ -709,6 +709,17 @@ export const FOLLOW_UP_COMPANION_META = {
 }
 
 /**
+ * Display metadata for the implementation-fork decision phase on a Coder step (a per-step
+ * phase, not an agent kind of its own — the read-only `fork-proposer` is never a palette
+ * block). Drives the fork-decision window header + the pipeline phase chip.
+ */
+export const FORK_DECISION_META = {
+  label: 'Implementation-fork decision',
+  icon: 'i-lucide-git-fork',
+  color: '#a78bfa',
+}
+
+/**
  * Whether a Coder step has the Follow-up companion enabled, given the pipeline's per-step
  * `followUps` toggle at index `i`. Enabled by default on a `coder` step (only `false`
  * disables it); ignored on other kinds.

@@ -72,6 +72,7 @@ export { type AgentTuning, type AgentGuardTuning, agentTuningFor } from './agent
 // creation / inspector, frozen once the contributing step runs).
 export {
   PLAYWRIGHT_E2E_TARGET_CONFIG_ID,
+  CODER_FORK_DECISION_CONFIG_ID,
   configContributionsFor,
   configContributionCatalog,
 } from './agents/kinds/configs.js'
@@ -238,6 +239,14 @@ export {
   type BugInvestigation,
   registerBugInvestigatorAgent,
 } from './agents/kinds/bug-investigator.js'
+export {
+  FORK_PROPOSER_KIND,
+  FORK_PROPOSER_AGENT_KINDS,
+  FORK_PROPOSER_SYSTEM_PROMPT,
+  forkProposal,
+  type ForkProposalOutput,
+  registerForkProposerAgent,
+} from './agents/kinds/fork-proposer.js'
 export {
   ENVIRONMENT_ANALYST_KIND,
   ENVIRONMENT_ANALYST_AGENT_KINDS,

@@ -1,5 +1,5 @@
 import type { RiskPolicyRepository } from '@cat-factory/kernel'
-import type { RiskPolicy, RequirementConcernLevel } from '@cat-factory/contracts'
+import type { RiskPolicy, RequirementConcernLevel, StepGating } from '@cat-factory/contracts'
 import type { D1Database } from '@cloudflare/workers-types'
 
 interface RiskPolicyRow {
@@ -16,6 +16,7 @@ interface RiskPolicyRow {
   release_max_attempts: number
   human_review_grace_minutes: number
   auto_merge_enabled: number
+  fork_decision: string | null
   version: number | null
   is_default: number
   created_at: number
@@ -36,6 +37,7 @@ function rowToPreset(row: RiskPolicyRow): RiskPolicy {
     releaseMaxAttempts: row.release_max_attempts,
     humanReviewGraceMinutes: row.human_review_grace_minutes,
     autoMergeEnabled: row.auto_merge_enabled === 1,
+    forkDecision: row.fork_decision ? (JSON.parse(row.fork_decision) as StepGating) : null,
     isDefault: row.is_default === 1,
     ...(row.version != null ? { version: row.version } : {}),
     createdAt: row.created_at,
@@ -104,8 +106,8 @@ export class D1RiskPolicyRepository implements RiskPolicyRepository {
             max_requirement_iterations, max_requirement_concern_allowed,
             max_tester_quality_iterations,
             release_watch_window_minutes, release_max_attempts, human_review_grace_minutes,
-            auto_merge_enabled, version, is_default, created_at)
-         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+            auto_merge_enabled, fork_decision, version, is_default, created_at)
+         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
          ON CONFLICT (workspace_id, id) DO UPDATE SET
            name = excluded.name,
            max_complexity = excluded.max_complexity,
@@ -119,6 +121,7 @@ export class D1RiskPolicyRepository implements RiskPolicyRepository {
            release_max_attempts = excluded.release_max_attempts,
            human_review_grace_minutes = excluded.human_review_grace_minutes,
            auto_merge_enabled = excluded.auto_merge_enabled,
+           fork_decision = excluded.fork_decision,
            version = excluded.version,
            is_default = excluded.is_default`,
       )
@@ -137,6 +140,7 @@ export class D1RiskPolicyRepository implements RiskPolicyRepository {
         preset.releaseMaxAttempts,
         preset.humanReviewGraceMinutes,
         preset.autoMergeEnabled ? 1 : 0,
+        preset.forkDecision ? JSON.stringify(preset.forkDecision) : null,
         preset.version ?? null,
         preset.isDefault ? 1 : 0,
         preset.createdAt,

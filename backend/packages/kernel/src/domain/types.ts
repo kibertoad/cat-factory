@@ -258,6 +258,16 @@ export type {
   FollowUpsStepState,
   AnswerFollowUpInput,
   StreamedFollowUp,
+  // Implementation-fork decision shapes: the materially different approaches the proposer
+  // surfaces + the live step state the engine parks/loops on + the human's choice.
+  ForkOption,
+  ForkChatMessage,
+  ForkDecisionStatus,
+  ForkChoice,
+  ForkDecisionStepState,
+  ForkChatRequestInput,
+  ChooseForkInput,
+  ForkProposal,
   // Clarity-review (bug-report triage reviewer agent) shapes — reuse the requirements
   // review item/status shapes, differ only in subject + the persisted document field.
   ClarityReviewItem,

@@ -16,6 +16,9 @@ import type {
   ExecutionRepository,
   FollowUpItem,
   FollowUpsStepState,
+  ForkProposal,
+  ForkDecisionStepState,
+  ChooseForkInput,
   GateContext,
   GateDefinition,
   GateHelperJobResult,
@@ -27,6 +30,7 @@ import type {
   RepoFiles,
   RepoOp,
   RequirementConcernLevel,
+  StepGating,
   RequirementReview,
   ResolveRunRepoContext,
   ResolverContext,
@@ -67,6 +71,7 @@ import {
 import {
   blueprintPostOp,
   commitInitiativeTracker,
+  FORK_PROPOSER_KIND,
   hasTrait,
   isCompanionKind,
   isContainerBackedCompanion,
@@ -130,6 +135,13 @@ import { CompanionController } from './CompanionController.js'
 import { HumanTestController } from './HumanTestController.js'
 import { MergeResolver } from './MergeResolver.js'
 import { ReviewGateController, type ReviewKind } from './ReviewGateController.js'
+import { ForkDecisionController } from './ForkDecisionController.js'
+import {
+  DEFAULT_FORK_MAX_CHAT_TURNS,
+  forkPhasePending,
+  resolveForkTriState,
+  shouldProposeForkAuto,
+} from './forkDecision.logic.js'
 import type { InterviewGateController } from './InterviewGateController.js'
 import { RunStateMachine } from './RunStateMachine.js'
 import { StepGraph } from './StepGraph.js'
@@ -163,6 +175,7 @@ type ResolvedRiskPolicy = {
   releaseWatchWindowMinutes: number
   releaseMaxAttempts: number
   humanReviewGraceMinutes: number
+  forkDecision?: StepGating | null
 }
 
 /**
@@ -258,6 +271,7 @@ export interface RunDispatcherDeps {
   humanTestController: HumanTestController
   visualConfirmationController: VisualConfirmationController
   reviewGate: ReviewGateController
+  forkDecisionController: ForkDecisionController
   requirementsKind: ReviewKind<RequirementReview>
   clarityKind: ReviewKind<ClarityReview>
   requirementsBrainstormKind: ReviewKind<BrainstormSession>
@@ -324,6 +338,7 @@ export class RunDispatcher {
   private readonly humanTestController: HumanTestController
   private readonly visualConfirmationController: VisualConfirmationController
   private readonly reviewGate: ReviewGateController
+  private readonly forkDecisionController: ForkDecisionController
   private readonly requirementsKind: ReviewKind<RequirementReview>
   private readonly clarityKind: ReviewKind<ClarityReview>
   private readonly requirementsBrainstormKind: ReviewKind<BrainstormSession>
@@ -377,6 +392,7 @@ export class RunDispatcher {
     this.humanTestController = deps.humanTestController
     this.visualConfirmationController = deps.visualConfirmationController
     this.reviewGate = deps.reviewGate
+    this.forkDecisionController = deps.forkDecisionController
     this.requirementsKind = deps.requirementsKind
     this.clarityKind = deps.clarityKind
     this.requirementsBrainstormKind = deps.requirementsBrainstormKind
@@ -427,7 +443,10 @@ export class RunDispatcher {
    * what the dispatch chain falls through to; all the deterministic / gate / inline-review
    * kinds are claimed earlier by their own handlers (see {@link buildStepHandlerRegistry}).
    */
-  private async handleAgentStep(ctx: StepHandlerContext): Promise<AdvanceResult> {
+  private async handleAgentStep(
+    ctx: StepHandlerContext,
+    dispatchKind?: string,
+  ): Promise<AdvanceResult> {
     const { workspaceId, instance, step, block, isFinalStep, options } = ctx
 
     // Async (container) steps don't block: dispatch the job and park. The durable
@@ -435,12 +454,18 @@ export class RunDispatcher {
     // than a single durable step's timeout, while each step stays short. A set
     // `jobId` means a prior (possibly replayed) dispatch already started the job,
     // so we re-attach instead of starting a duplicate.
+    //
+    // `dispatchKind` overrides the dispatched agent kind WITHOUT changing `step.agentKind`
+    // — used by the fork-decision phase to dispatch the read-only `fork-proposer` explore
+    // job as a HELPER off the coder step (Phase A). The completion still records against the
+    // coder step, and the fork-proposal interceptor keys on `step.agentKind` + the fork state.
     const context = await this.contextBuilder.buildContext(
       workspaceId,
       instance,
       step,
       isFinalStep,
       block,
+      dispatchKind ? { agentKind: dispatchKind } : undefined,
     )
     // A registered custom kind's PRE-ops run deterministic backend repo work before the
     // agent dispatches (e.g. read a baseline `spec/` shard into the prompt). Gated on the
@@ -2855,6 +2880,20 @@ export class RunDispatcher {
             options,
           ),
       },
+      // The optional implementation-fork decision phase on a Coder step (Phase A): when the
+      // per-task tri-state + the risk-policy gate call for it, dispatch the read-only
+      // `fork-proposer` explore job as a helper off THIS coder step. Claims the step only
+      // while the phase is pending (tri-state not `off`, not yet resolved); once resolved
+      // (`chosen` / `single_path` / `skipped`) it falls through so the Coder dispatches
+      // normally (Phase B). A parked `awaiting_choice` step is short-circuited by the
+      // run-lifecycle re-entry guard before this handler runs. See {@link handleForkDecisionPhase}.
+      {
+        kind: 'fork-decision',
+        order: 170,
+        canHandle: ({ step, block }) =>
+          forkPhasePending(step, resolveForkTriState(block.agentConfig)),
+        handle: (ctx) => this.handleForkDecisionPhase(ctx),
+      },
       // The generic container/inline-agent step — claims every step no more-specific handler
       // did. Highest order so it always runs last. See {@link handleAgentStep}.
       {
@@ -2916,6 +2955,29 @@ export class RunDispatcher {
             companionBlock,
             isFinalStep,
             result,
+          )
+        },
+      },
+      // The `fork-proposer` explore job (Phase A of the fork decision) just finished on a
+      // coder step. Its structured `result.custom` is the proposal; record it onto the step's
+      // `forkDecision` and either park for the human to choose (≥2 usable forks) or auto-advance
+      // a single path — never the normal output/PR/follow-up/approval completion (none applies
+      // to the proposer). Keyed on the coder step carrying `forkDecision.status === 'proposing'`.
+      {
+        kind: 'fork-proposal',
+        order: 105,
+        canIntercept: ({ step }) =>
+          step.agentKind === 'coder' && step.forkDecision?.status === 'proposing',
+        intercept: ({ workspaceId, instance, step, result }) => {
+          const proposal = this.agentKindRegistry
+            .structuredOutput(FORK_PROPOSER_KIND)
+            ?.safeParse(result.custom) as ForkProposal | undefined
+          return this.forkDecisionController.recordProposal(
+            workspaceId,
+            instance,
+            step,
+            proposal,
+            step.model,
           )
         },
       },
@@ -3479,6 +3541,66 @@ export class RunDispatcher {
     const instance = await this.executionRepository.get(workspaceId, executionId)
     if (!instance) throw new NotFoundError('Execution', executionId)
     return this.activeFollowUpStep(instance)?.step.followUps ?? null
+  }
+
+  // ---- Implementation-fork decision phase (Phase A dispatch) --------------
+  // The proposer explore job runs as a HELPER off the coder step; its completion is handled
+  // by the `fork-proposal` interceptor + {@link ForkDecisionController.recordProposal}, and the
+  // human's choice by {@link ForkDecisionController.choose}. This method only owns the FRESH
+  // entry: resolve the tri-state + risk-policy gate, then either dispatch the proposer or fall
+  // through by marking the phase skipped so the Coder dispatches on the next re-drive.
+
+  /**
+   * Run the fork-decision phase for a coder step. On fresh entry resolve whether to propose
+   * (tri-state `off` → skip; `always` → propose; `auto` → the risk-policy fork gate against the
+   * block's estimate). Not proposing → record `skipped` and `continue` so the driver re-enters
+   * and dispatches the Coder. Proposing → dispatch the read-only `fork-proposer` explore job on
+   * this step (Phase A) via {@link handleAgentStep} with a dispatch-kind override; its
+   * completion is intercepted. A re-drive while `proposing` re-attaches to the running job.
+   */
+  private async handleForkDecisionPhase(ctx: StepHandlerContext): Promise<AdvanceResult> {
+    const { workspaceId, instance, step, block } = ctx
+    if (!step.forkDecision) {
+      const tri = resolveForkTriState(block.agentConfig)
+      let propose = tri === 'always'
+      if (tri === 'auto') {
+        const policy = await this.resolveRiskPolicy(workspaceId, block)
+        propose = shouldProposeForkAuto(policy.forkDecision, block.estimate)
+      }
+      if (!propose) {
+        step.forkDecision = {
+          status: 'skipped',
+          forks: [],
+          chat: [],
+          maxChatTurns: DEFAULT_FORK_MAX_CHAT_TURNS,
+        }
+        await this.runStateMachine.casPersist(workspaceId, instance)
+        await this.runStateMachine.emitInstance(workspaceId, instance)
+        return { kind: 'continue' }
+      }
+      step.forkDecision = {
+        status: 'proposing',
+        forks: [],
+        chat: [],
+        maxChatTurns: DEFAULT_FORK_MAX_CHAT_TURNS,
+      }
+    }
+    // Dispatch (or re-attach to) the proposer as a helper off this coder step.
+    return this.handleAgentStep(ctx, FORK_PROPOSER_KIND)
+  }
+
+  /** Read a run's active implementation-fork decision state, or null. */
+  getForkDecision(workspaceId: string, executionId: string): Promise<ForkDecisionStepState | null> {
+    return this.forkDecisionController.getActive(workspaceId, executionId)
+  }
+
+  /** Resolve the human's implementation-fork choice, re-running the Coder with it folded in. */
+  chooseFork(
+    workspaceId: string,
+    executionId: string,
+    input: ChooseForkInput,
+  ): Promise<ForkDecisionStepState> {
+    return this.forkDecisionController.choose(workspaceId, executionId, input)
   }
 
   /**

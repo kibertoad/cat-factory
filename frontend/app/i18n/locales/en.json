@@ -911,7 +911,8 @@
       "companionOf": "{label} (companion)",
       "merged": "Merged",
       "open": "Open",
-      "mergePr": "Merge PR"
+      "mergePr": "Merge PR",
+      "chooseApproach": "Choose approach"
     },
     "structure": {
       "title": "Structure",
@@ -1539,7 +1540,8 @@
         "human_review": "Mark read",
         "followup_pending": "Mark read",
         "initiative": "Mark read",
-        "markRead": "Mark read"
+        "markRead": "Mark read",
+        "fork_decision_pending": "Mark read"
       }
     },
     "aiProvidersBanner": {
@@ -2213,6 +2215,18 @@
         "createFailed": "Could not create policy",
         "defaultFailed": "Could not set default",
         "deleteFailed": "Could not delete policy"
+      },
+      "forkDecision": {
+        "label": "Implementation-fork decision",
+        "hint": "In auto mode, propose materially different approaches (and pause for a choice) when the task estimate meets a threshold.",
+        "minComplexity": "Min complexity",
+        "minRisk": "Min risk",
+        "minImpact": "Min impact",
+        "onMissingLabel": "No estimate",
+        "onMissing": {
+          "run": "Propose anyway",
+          "skip": "Skip"
+        }
       }
     },
     "observabilityConnection": {
@@ -3291,7 +3305,11 @@
       "subtasksInProgress": "· {count} in progress",
       "clickToRead": "Click to read this agent's output",
       "reviewApprove": "Review & approve {agent}'s proposal",
-      "resolve": "Resolve: {question}"
+      "resolve": "Resolve: {question}",
+      "forkDecision": {
+        "proposing": "Proposing approaches…",
+        "choose": "Choose an approach"
+      }
     },
     "health": {
       "title": "Pipeline health",
@@ -4667,6 +4685,35 @@
     "trial": {
       "hint": "Optionally provision this environment now to test the recipe.",
       "run": "Trial provision"
+    }
+  },
+  "forkDecision": {
+    "title": "Choose an implementation approach",
+    "titleWithBlock": "Choose an approach for {title}",
+    "subtitle": "Materially different ways to implement this task, before any code is written.",
+    "seam": "Where it lands:",
+    "recommended": "Recommended",
+    "riskNotes": "Risk:",
+    "noteLabel": "Steering note (optional)",
+    "notePlaceholder": "Anything the implementer should keep in mind…",
+    "choose": "Use this approach",
+    "proposing": {
+      "title": "Surfacing approaches…",
+      "hint": "Reading the code to find the materially different ways to build this."
+    },
+    "singlePath": {
+      "title": "One clear approach"
+    },
+    "chosen": {
+      "title": "Approach chosen",
+      "note": "Note: {note}"
+    },
+    "custom": {
+      "title": "Enter your own approach",
+      "placeholder": "Describe how you want this implemented…"
+    },
+    "empty": {
+      "title": "Nothing to decide"
     }
   }
 }

@@ -12,6 +12,7 @@ import {
   REQUIREMENTS_BRAINSTORM_SYSTEM_PROMPT,
 } from '../prompts/brainstorm.js'
 import { KAIZEN_SYSTEM_PROMPT } from '../prompts/kaizen.js'
+import { FORK_PROPOSER_SYSTEM_PROMPT } from './fork-proposer.js'
 
 // Versioned registry of the built-in agent system prompts. The goal is simple
 // change management: every prompt the product ships is identified as
@@ -57,9 +58,10 @@ export const PROMPT_VERSIONS = {
     version: 1,
     text: ARCHITECTURE_BRAINSTORM_REWORK_SYSTEM_PROMPT,
   },
-  build: { id: 'build', version: 3, text: standardSystemPrompt('build') },
+  build: { id: 'build', version: 4, text: standardSystemPrompt('build') },
   review: { id: 'review', version: 2, text: standardSystemPrompt('review') },
   kaizen: { id: 'kaizen', version: 1, text: KAIZEN_SYSTEM_PROMPT },
+  'fork-proposer': { id: 'fork-proposer', version: 1, text: FORK_PROPOSER_SYSTEM_PROMPT },
 } as const satisfies Record<string, VersionedPrompt>
 
 /** Ids of the prompts currently under version control. */
@@ -84,6 +86,7 @@ const PHASE_PROMPT_IDS: Partial<Record<StandardPhase, PromptId>> = {
 const NON_PHASE_PROMPT_IDS: Record<string, PromptId> = {
   'requirements-review': 'requirement-review',
   clarity: 'clarity-review',
+  'fork-proposer': 'fork-proposer',
 }
 
 /**
