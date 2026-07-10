@@ -857,7 +857,8 @@
       "empty": {
         "title": "Aún no hay ejecuciones",
         "body": "Inicia un pipeline para ver el historial de ejecución aquí."
-      }
+      },
+      "chooseApproach": "Elegir enfoque"
     },
     "structure": {
       "title": "Estructura",
@@ -1476,7 +1477,8 @@
         "human_review": "Marcar como leída",
         "followup_pending": "Marcar como leída",
         "initiative": "Marcar como leída",
-        "markRead": "Marcar como leída"
+        "markRead": "Marcar como leída",
+        "fork_decision_pending": "Marcar como leído"
       },
       "toast": {
         "acted": "Marcado como resuelto",
@@ -2031,6 +2033,18 @@
       "confirmDelete": {
         "title": "¿Eliminar esta política de riesgo?",
         "body": "Se eliminará \"{name}\". Las tareas que lo usan volverán al valor predeterminado del espacio de trabajo."
+      },
+      "forkDecision": {
+        "label": "Decisión de bifurcación de implementación",
+        "hint": "En modo automático, propone enfoques sustancialmente distintos (y se detiene para elegir) cuando la estimación de la tarea alcanza un umbral.",
+        "minComplexity": "Complejidad mín.",
+        "minRisk": "Riesgo mín.",
+        "minImpact": "Impacto mín.",
+        "onMissingLabel": "Sin estimación",
+        "onMissing": {
+          "run": "Proponer igualmente",
+          "skip": "Omitir"
+        }
       }
     },
     "observabilityConnection": {
@@ -3204,7 +3218,11 @@
       "subtasksInProgress": "· {count} en progreso",
       "clickToRead": "Haz clic para leer la salida de este agente",
       "reviewApprove": "Revisar y aprobar la propuesta de {agent}",
-      "resolve": "Resolver: {question}"
+      "resolve": "Resolver: {question}",
+      "forkDecision": {
+        "proposing": "Proponiendo enfoques…",
+        "choose": "Elegir un enfoque"
+      }
     },
     "health": {
       "title": "Estado de los pipelines",
@@ -4538,6 +4556,35 @@
     "trial": {
       "hint": "Opcionalmente, aprovisiona este entorno ahora para probar la receta.",
       "run": "Aprovisionamiento de prueba"
+    }
+  },
+  "forkDecision": {
+    "title": "Elige un enfoque de implementación",
+    "titleWithBlock": "Elige un enfoque — {title}",
+    "subtitle": "Formas sustancialmente distintas de implementar esta tarea, antes de escribir código.",
+    "seam": "Dónde impacta:",
+    "recommended": "Recomendado",
+    "riskNotes": "Riesgo:",
+    "noteLabel": "Nota de orientación (opcional)",
+    "notePlaceholder": "Algo que la implementación deba tener en cuenta…",
+    "choose": "Usar este enfoque",
+    "proposing": {
+      "title": "Buscando enfoques…",
+      "hint": "Leyendo el código para encontrar las formas sustancialmente distintas de construir esto."
+    },
+    "singlePath": {
+      "title": "Un único enfoque claro"
+    },
+    "chosen": {
+      "title": "Enfoque elegido",
+      "note": "Nota: {note}"
+    },
+    "custom": {
+      "title": "Introduce tu propio enfoque",
+      "placeholder": "Describe cómo quieres que se implemente…"
+    },
+    "empty": {
+      "title": "Nada que decidir"
     }
   }
 }

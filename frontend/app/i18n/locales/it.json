@@ -438,6 +438,18 @@
         "createFailed": "Impossibile creare il criterio",
         "defaultFailed": "Impossibile impostare il predefinito",
         "deleteFailed": "Impossibile eliminare il criterio"
+      },
+      "forkDecision": {
+        "label": "Decisione di biforcazione dell'implementazione",
+        "hint": "In modalità auto, proponi approcci sostanzialmente diversi (e mettiti in pausa per una scelta) quando la stima dell'attività raggiunge una soglia.",
+        "minComplexity": "Complessità min.",
+        "minRisk": "Rischio min.",
+        "minImpact": "Impatto min.",
+        "onMissingLabel": "Nessuna stima",
+        "onMissing": {
+          "run": "Proponi comunque",
+          "skip": "Salta"
+        }
       }
     },
     "observabilityConnection": {
@@ -1161,7 +1173,8 @@
       "companionOf": "{label} (companion)",
       "merged": "Unita",
       "open": "Aperta",
-      "mergePr": "Unisci PR"
+      "mergePr": "Unisci PR",
+      "chooseApproach": "Scegli approccio"
     },
     "structure": {
       "title": "Struttura",
@@ -1649,7 +1662,8 @@
         "human_review": "Segna come letto",
         "followup_pending": "Segna come letto",
         "initiative": "Segna come letto",
-        "markRead": "Segna come letto"
+        "markRead": "Segna come letto",
+        "fork_decision_pending": "Segna come letto"
       }
     },
     "aiProvidersBanner": {
@@ -2979,7 +2993,11 @@
       "subtasksInProgress": "· {count} in corso",
       "clickToRead": "Fai clic per leggere l'output di questo agente",
       "reviewApprove": "Rivedi e approva la proposta di {agent}",
-      "resolve": "Risolvi: {question}"
+      "resolve": "Risolvi: {question}",
+      "forkDecision": {
+        "proposing": "Proposta di approcci…",
+        "choose": "Scegli un approccio"
+      }
     },
     "health": {
       "title": "Stato delle pipeline",
@@ -4551,5 +4569,34 @@
   "palette": {
     "hint": "Clicca su un agente per aggiungerlo alla pipeline.",
     "customAgents": "Agenti personalizzati"
+  },
+  "forkDecision": {
+    "title": "Scegli un approccio di implementazione",
+    "titleWithBlock": "Scegli un approccio — {title}",
+    "subtitle": "Modi sostanzialmente diversi di implementare questa attività, prima di scrivere codice.",
+    "seam": "Dove incide:",
+    "recommended": "Consigliato",
+    "riskNotes": "Rischio:",
+    "noteLabel": "Nota di indirizzo (facoltativa)",
+    "notePlaceholder": "Qualcosa che l'implementazione dovrebbe tenere presente…",
+    "choose": "Usa questo approccio",
+    "proposing": {
+      "title": "Individuazione degli approcci…",
+      "hint": "Lettura del codice per trovare i modi sostanzialmente diversi di realizzarlo."
+    },
+    "singlePath": {
+      "title": "Un approccio chiaro"
+    },
+    "chosen": {
+      "title": "Approccio scelto",
+      "note": "Nota: {note}"
+    },
+    "custom": {
+      "title": "Inserisci il tuo approccio",
+      "placeholder": "Descrivi come vuoi che venga implementato…"
+    },
+    "empty": {
+      "title": "Nulla da decidere"
+    }
   }
 }

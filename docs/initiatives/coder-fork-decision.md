@@ -1,8 +1,16 @@
 # Initiative: Coder implementation-fork decision (design)
 
-> **Status: design only — no implementation has landed yet.** This document is the agreed
-> design + the per-item checklist for the implementation PRs. Update the checklist and the
-> "Conventions & gotchas" section as each slice lands.
+> **Status: PR 1 landed (backend + frontend, no chat).** The propose → park → choose → Coder
+> loop, the single-path auto-advance, the risk-policy gate + per-task tri-state, and the whole
+> UI (window, routing, notification, risk-policy editor, i18n) are implemented and covered by
+> the cross-runtime conformance suite (asserted against real Postgres on the Node facade).
+> **PR 2 remains: grounded chat** (`pendingForkChat` re-entry + `ForkChatService` + the chat
+> endpoint/thread + the `fork-chat` prompt) and the e2e spec. Update the checklist and the
+> "Conventions & gotchas" section as each further slice lands.
+>
+> **Open question 4 resolved (single-repo scope):** PR 1 surfaces forks for the run's primary
+> repo only — the `fork-proposer` kind deliberately does NOT set `fanOutMultiRepo`, so the
+> window/state model stays a single choice. Per-repo fork sets are a future follow-up.
 
 ## Goal & rationale
 
@@ -400,18 +408,19 @@ have chosen; a few sentences per answer.
 
 | Area                                                                                                                                                                                                                                                  | Status | PR   |
 | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ------ | ---- |
-| Contracts: `forkDecision.ts` (option/chat/status/choice/state + request bodies), `pipelineStepSchema.forkDecision` + `pendingForkChat`, notification type, result-view id                                                                             | todo   | PR 1 |
-| Contracts + kernel: `riskPolicySchema.forkDecision` (reusing `stepGatingSchema`) + preset request contracts + `DEFAULT_RISK_POLICY`/seeds + version bump                                                                                              | todo   | PR 1 |
-| Kernel: `AgentRunContext.implementationChoice`                                                                                                                                                                                                        | todo   | PR 1 |
-| Agents: `fork-proposer` kind (structured explore, `bug-investigator` template) + registry entry + prompt versions (`build` v4, `fork-proposer` v1)                                                                                                    | todo   | PR 1 |
-| Agents: `coder.forkDecision` tri-state in `BUILTIN_CONFIG_CONTRIBUTIONS`                                                                                                                                                                              | todo   | PR 1 |
-| Agents: `implementationChoiceSection` + `SYSTEM_PROMPTS.build` line                                                                                                                                                                                   | todo   | PR 1 |
-| Orchestration: `ForkDecisionController` + `forkDecision.logic` (gate resolve, propose dispatch, completion interceptor, choose) + `RunDispatcher` wiring + `dispatchEpochFor` + `AgentContextBuilder` fold (+ `followUpCompanion` effective-kind fix) | todo   | PR 1 |
-| Orchestration: `fork_decision_pending` notification raise + act handler                                                                                                                                                                               | todo   | PR 1 |
-| Server: routes/contracts (`GET`/`choose`) + `ForkDecisionController` (HTTP) + `ExecutionService` pass-throughs                                                                                                                                        | todo   | PR 1 |
-| Frontend: `ForkDecisionWindow` (no chat) + store + result-view registration + routing/buttons/chips + risk-policy editor fields + i18n (all locales) + data-testids                                                                                   | todo   | PR 1 |
-| Conformance: gate-skip / propose→park→choose→coder / single-path auto-advance / unwired pass-through, on all facades                                                                                                                                  | todo   | PR 1 |
-| Unit tests: `forkDecision.logic`, controller (ReviewGateController-test shape), store/window                                                                                                                                                          | todo   | PR 1 |
+| Contracts: `forkDecision.ts` (option/chat/status/choice/state + request bodies), `pipelineStepSchema.forkDecision` + `pendingForkChat`, notification type, result-view id                                                                             | done   | PR 1 |
+| Contracts + kernel: `riskPolicySchema.forkDecision` (reusing `stepGatingSchema`) + preset request contracts + `DEFAULT_RISK_POLICY`/seeds + version bump                                                                                              | done   | PR 1 |
+| Kernel: `AgentRunContext.implementationChoice`                                                                                                                                                                                                        | done   | PR 1 |
+| Agents: `fork-proposer` kind (structured explore, `bug-investigator` template) + registry entry + prompt versions (`build` v4, `fork-proposer` v1)                                                                                                    | done   | PR 1 |
+| Agents: `coder.forkDecision` tri-state in `BUILTIN_CONFIG_CONTRIBUTIONS`                                                                                                                                                                              | done   | PR 1 |
+| Agents: `implementationChoiceSection` + `SYSTEM_PROMPTS.build` line                                                                                                                                                                                   | done   | PR 1 |
+| Orchestration: `ForkDecisionController` + `forkDecision.logic` (gate resolve, propose dispatch, completion interceptor, choose) + `RunDispatcher` wiring + `dispatchEpochFor` + `AgentContextBuilder` fold (+ `followUpCompanion` effective-kind fix) | done   | PR 1 |
+| Orchestration: `fork_decision_pending` notification raise + act handler                                                                                                                                                                               | done   | PR 1 |
+| Server: routes/contracts (`GET`/`choose`) + `ForkDecisionController` (HTTP) + `ExecutionService` pass-throughs                                                                                                                                        | done   | PR 1 |
+| Frontend: `ForkDecisionWindow` (no chat) + store + result-view registration + routing/buttons/chips + risk-policy editor fields + i18n (all locales) + data-testids                                                                                   | done   | PR 1 |
+| Conformance: gate-skip / propose→park→choose→coder / single-path auto-advance / unwired pass-through, on all facades                                                                                                                                  | done   | PR 1 |
+| Unit tests: `forkDecision.logic`, controller (via conformance against real Postgres), store/window                                                                                                                                                    | done   | PR 1 |
+| Persistence: `merge_threshold_presets.fork_decision` column (D1 migration `0049` ⇄ Drizzle) + repo mappers, both facades                                                                                                                              | done   | PR 1 |
 | Chat: `pendingForkChat` marker + `stepInstance` re-entry guard + `ForkChatService` (DocInterview model resolution + metering) + chat endpoint + window thread + budget + prompt (`fork-chat` v1)                                                      | todo   | PR 2 |
 | Conformance: chat re-entry (fake model) + graceful no-model degradation                                                                                                                                                                               | todo   | PR 2 |
 | e2e: park → choose → resume happy path against the fake executor (+ testids)                                                                                                                                                                          | todo   | PR 2 |

@@ -1,4 +1,5 @@
 import * as v from 'valibot'
+import { stepGatingSchema } from './consensus.js'
 
 // ---------------------------------------------------------------------------
 // Merge-policy wire contracts. After a pipeline's implementation work is done
@@ -113,6 +114,17 @@ export const riskPolicySchema = v.object({
    * (the historical behaviour: auto-merge a within-threshold, explained assessment).
    */
   autoMergeEnabled: v.boolean(),
+  /**
+   * Estimate gating for the optional implementation-fork decision phase on the Coder step
+   * (the same three axes / `onMissingEstimate` as any other {@link stepGatingSchema}). When
+   * present and `enabled`, a task whose Coder config resolves to `auto` surfaces materially
+   * different implementation approaches and parks for a human whenever ANY supplied axis of
+   * its estimate is met/exceeded; `onMissingEstimate: 'run'` proposes even without an
+   * estimate (fail toward asking). Absent/disabled ⇒ fork surfacing is off in `auto` mode
+   * (a task can still force it via its `always` tri-state). Disabled by default on the
+   * built-in presets.
+   */
+  forkDecision: v.optional(v.nullable(stepGatingSchema)),
   /** The workspace's fallback preset, used by tasks that pick none. Exactly one is true. */
   isDefault: v.boolean(),
   /**
@@ -151,6 +163,8 @@ export const createRiskPolicySchema = v.object({
   humanReviewGraceMinutes: v.optional(graceMinutesSchema, 10),
   /** Allow auto-merge of a within-threshold, explained assessment (default true). */
   autoMergeEnabled: v.optional(v.boolean(), true),
+  /** Estimate gating for the implementation-fork decision phase; absent ⇒ off in `auto` mode. */
+  forkDecision: v.optional(v.nullable(stepGatingSchema)),
   /** Make this the workspace default (demotes the previous default). */
   isDefault: v.optional(v.boolean(), false),
 })
@@ -170,6 +184,7 @@ export const updateRiskPolicySchema = v.object({
   releaseMaxAttempts: v.optional(releaseAttemptsSchema),
   humanReviewGraceMinutes: v.optional(graceMinutesSchema),
   autoMergeEnabled: v.optional(v.boolean()),
+  forkDecision: v.optional(v.nullable(stepGatingSchema)),
   isDefault: v.optional(v.boolean()),
 })
 export type UpdateRiskPolicyInput = v.InferOutput<typeof updateRiskPolicySchema>

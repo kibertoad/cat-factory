@@ -10,6 +10,7 @@ import type { AgentTrait } from './traits.js'
 import type { AgentTuning } from './tuning.js'
 import type { StructuredOutput } from './structured-output.js'
 import { registerBugInvestigatorAgent } from './bug-investigator.js'
+import { registerForkProposerAgent } from './fork-proposer.js'
 import { registerReproTestAgent } from './repro-test.js'
 import { registerDocumentAgents } from './document.js'
 import { registerCodeCommenterAgent } from './code-commenter.js'
@@ -264,6 +265,7 @@ export class AgentKindRegistry {
 export function defaultAgentKindRegistry(): AgentKindRegistry {
   const registry = new AgentKindRegistry()
   registerBugInvestigatorAgent(registry)
+  registerForkProposerAgent(registry)
   registerReproTestAgent(registry)
   registerDocumentAgents(registry)
   registerCodeCommenterAgent(registry)

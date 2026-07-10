@@ -60,6 +60,10 @@ const META: Record<Notification['type'], { icon: string; color: Accent }> = {
   // Clicking the title opens the Follow-up companion window for the run (see `reveal`); "act"
   // just marks it read (items are decided in that window — file / send back / answer — not here).
   followup_pending: { icon: 'i-lucide-compass', color: 'warning' },
+  // The fork-decision phase surfaced materially different implementation approaches. Clicking
+  // the title opens the fork-decision window (see `reveal`); "act" just marks it read (the
+  // choice is made in that window — pick a fork / enter a custom approach — not here).
+  fork_decision_pending: { icon: 'i-lucide-git-fork', color: 'warning' },
   // The initiative loop needs attention (a blocked task, or completion). Clicking the title
   // opens the initiative tracker window; "act" just marks it read.
   initiative: { icon: 'i-lucide-milestone', color: 'primary' },
@@ -81,6 +85,7 @@ const ACTION_KEYS: Record<Notification['type'], string> = {
   visual_confirmation_ready: 'layout.notifications.action.visual_confirmation_ready',
   human_review: 'layout.notifications.action.human_review',
   followup_pending: 'layout.notifications.action.followup_pending',
+  fork_decision_pending: 'layout.notifications.action.fork_decision_pending',
   initiative: 'layout.notifications.action.initiative',
 }
 
@@ -151,6 +156,7 @@ function reveal(n: Notification) {
   else if (n.type === 'visual_confirmation_ready') revealVisualConfirm(n)
   else if (n.type === 'human_review') revealHumanReview(n)
   else if (n.type === 'followup_pending') revealFollowUps(n)
+  else if (n.type === 'fork_decision_pending') revealForkDecision(n)
   else if (n.type === 'initiative') ui.openInitiativeTracker(n.blockId)
   else ui.select(n.blockId)
 }
@@ -173,6 +179,15 @@ function revealHumanReview(n: Notification) {
  */
 function revealFollowUps(n: Notification) {
   if (n.executionId && execution.getInstance(n.executionId)) ui.openFollowUps(n.executionId)
+  else if (n.blockId) ui.select(n.blockId)
+}
+
+/**
+ * Open the implementation-fork decision window for a run parked awaiting a fork choice.
+ * Falls back to focusing the block when the run isn't loaded.
+ */
+function revealForkDecision(n: Notification) {
+  if (n.executionId && execution.getInstance(n.executionId)) ui.openForkDecision(n.executionId)
   else if (n.blockId) ui.select(n.blockId)
 }
 

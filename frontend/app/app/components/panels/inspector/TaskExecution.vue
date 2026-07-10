@@ -136,6 +136,11 @@ function openStep(i: number) {
   if (instance.value) ui.openStepDetail(instance.value.id, i)
 }
 
+// Open the implementation-fork decision window for a coder step parked awaiting a choice.
+function openForkFor(i: number) {
+  if (instance.value) ui.openForkDecision(instance.value.id, i)
+}
+
 // Stop the run WITHOUT deleting it: halts the container + driver and records a
 // `cancelled` failure, leaving the run readable + retryable (the block goes
 // `blocked`). The destructive reset (delete the run, return the task to `planned`)
@@ -334,6 +339,22 @@ async function mergePr() {
               @click="openApprovalFor(s.approval.id)"
             >
               {{ t('inspector.execution.decide') }}
+            </UButton>
+            <!-- A coder step parked on the implementation-fork decision: pick an approach
+                 (or enter a custom one) in the dedicated window, not a plain approval. -->
+            <UButton
+              v-else-if="
+                s.approval &&
+                s.approval.status === 'pending' &&
+                s.forkDecision?.status === 'awaiting_choice'
+              "
+              color="primary"
+              variant="soft"
+              size="xs"
+              icon="i-lucide-git-fork"
+              @click="openForkFor(i)"
+            >
+              {{ t('inspector.execution.chooseApproach') }}
             </UButton>
             <UButton
               v-else-if="s.approval && s.approval.status === 'pending'"

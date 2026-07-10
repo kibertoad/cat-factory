@@ -1225,6 +1225,9 @@ export const riskPolicies = pgTable(
     human_review_grace_minutes: integer('human_review_grace_minutes').notNull().default(10),
     // When 0 the `merger` step never auto-merges — every PR is routed to human review.
     auto_merge_enabled: integer('auto_merge_enabled').notNull().default(1),
+    // Estimate gating for the implementation-fork decision phase, a JSON `StepGating` blob
+    // (mirror of D1's `fork_decision` TEXT column). NULL ⇒ off in `auto` mode.
+    fork_decision: text('fork_decision'),
     // Monotonic catalog version for a built-in preset (NULL on custom; treated as 0).
     version: integer('version'),
     is_default: integer('is_default').notNull().default(0),

@@ -56,6 +56,7 @@ const routes = reactive<Record<NotificationType, SlackRoute>>({
   visual_confirmation_ready: { enabled: false, channel: '' },
   human_review: { enabled: false, channel: '' },
   followup_pending: { enabled: false, channel: '' },
+  fork_decision_pending: { enabled: false, channel: '' },
   initiative: { enabled: false, channel: '' },
 })
 const mentionsEnabled = ref(false)

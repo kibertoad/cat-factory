@@ -857,7 +857,8 @@
       "empty": {
         "title": "Aucune exécution pour l'instant",
         "body": "Lancez un pipeline pour voir l'historique d'exécution ici."
-      }
+      },
+      "chooseApproach": "Choisir l'approche"
     },
     "structure": {
       "title": "Structure",
@@ -1476,7 +1477,8 @@
         "human_review": "Marquer comme lu",
         "followup_pending": "Marquer comme lu",
         "initiative": "Marquer comme lu",
-        "markRead": "Marquer comme lu"
+        "markRead": "Marquer comme lu",
+        "fork_decision_pending": "Marquer comme lu"
       },
       "toast": {
         "acted": "Marqué comme traité",
@@ -2031,6 +2033,18 @@
       "confirmDelete": {
         "title": "Supprimer cette politique de risque ?",
         "body": "\"{name}\" sera supprimé. Les tâches qui l'utilisent reviendront à la politique par défaut de l'espace de travail."
+      },
+      "forkDecision": {
+        "label": "Décision de bifurcation d'implémentation",
+        "hint": "En mode auto, proposer des approches foncièrement différentes (et faire une pause pour choisir) quand l'estimation de la tâche atteint un seuil.",
+        "minComplexity": "Complexité min.",
+        "minRisk": "Risque min.",
+        "minImpact": "Impact min.",
+        "onMissingLabel": "Aucune estimation",
+        "onMissing": {
+          "run": "Proposer quand même",
+          "skip": "Ignorer"
+        }
       }
     },
     "observabilityConnection": {
@@ -3204,7 +3218,11 @@
       "subtasksInProgress": "· {count} en cours",
       "clickToRead": "Cliquez pour lire la sortie de cet agent",
       "reviewApprove": "Revoir et approuver la proposition de {agent}",
-      "resolve": "Résoudre : {question}"
+      "resolve": "Résoudre : {question}",
+      "forkDecision": {
+        "proposing": "Proposition d'approches…",
+        "choose": "Choisir une approche"
+      }
     },
     "health": {
       "title": "État des pipelines",
@@ -4538,6 +4556,35 @@
     "trial": {
       "hint": "Provisionnez éventuellement cet environnement maintenant pour tester la recette.",
       "run": "Provisionnement d'essai"
+    }
+  },
+  "forkDecision": {
+    "title": "Choisir une approche d'implémentation",
+    "titleWithBlock": "Choisir une approche — {title}",
+    "subtitle": "Des façons foncièrement différentes de réaliser cette tâche, avant d'écrire du code.",
+    "seam": "Où cela intervient :",
+    "recommended": "Recommandé",
+    "riskNotes": "Risque :",
+    "noteLabel": "Note d'orientation (facultatif)",
+    "notePlaceholder": "Ce que l'implémentation doit garder à l'esprit…",
+    "choose": "Utiliser cette approche",
+    "proposing": {
+      "title": "Recherche des approches…",
+      "hint": "Lecture du code pour trouver les façons foncièrement différentes de le construire."
+    },
+    "singlePath": {
+      "title": "Une approche évidente"
+    },
+    "chosen": {
+      "title": "Approche choisie",
+      "note": "Note : {note}"
+    },
+    "custom": {
+      "title": "Saisir votre propre approche",
+      "placeholder": "Décrivez comment vous voulez que ce soit implémenté…"
+    },
+    "empty": {
+      "title": "Rien à décider"
     }
   }
 }

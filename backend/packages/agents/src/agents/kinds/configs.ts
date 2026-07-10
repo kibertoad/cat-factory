@@ -9,7 +9,26 @@ import type { AgentKindRegistry } from './registry.js'
 /** The acceptance/e2e execution target: project CI, or the ephemeral env. */
 export const PLAYWRIGHT_E2E_TARGET_CONFIG_ID = 'playwright.e2eTarget'
 
+/** The Coder's implementation-fork decision tri-state (auto / always / off). */
+export const CODER_FORK_DECISION_CONFIG_ID = 'coder.forkDecision'
+
 const BUILTIN_CONFIG_CONTRIBUTIONS: Partial<Record<AgentKind, AgentConfigDescriptor[]>> = {
+  coder: [
+    {
+      id: CODER_FORK_DECISION_CONFIG_ID,
+      agentKind: 'coder',
+      label: 'Implementation-fork decision',
+      description:
+        'Surface materially different implementation approaches before the Coder writes code and park for a human choice. `auto` gates on the task risk policy; `always` proposes regardless; `off` never proposes.',
+      type: 'select',
+      options: [
+        { value: 'auto', label: 'Auto (gate on risk policy)' },
+        { value: 'always', label: 'Always propose' },
+        { value: 'off', label: 'Off' },
+      ],
+      default: 'auto',
+    },
+  ],
   playwright: [
     {
       id: PLAYWRIGHT_E2E_TARGET_CONFIG_ID,

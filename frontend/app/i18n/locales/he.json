@@ -857,7 +857,8 @@
       "empty": {
         "title": "אין הרצות עדיין",
         "body": "התחל pipeline כדי לראות כאן את היסטוריית ההרצות."
-      }
+      },
+      "chooseApproach": "בחר גישה"
     },
     "structure": {
       "title": "מבנה",
@@ -1476,7 +1477,8 @@
         "human_review": "סמן כנקרא",
         "followup_pending": "סמן כנקרא",
         "initiative": "סמן כנקרא",
-        "markRead": "סמן כנקרא"
+        "markRead": "סמן כנקרא",
+        "fork_decision_pending": "סמן כנקרא"
       },
       "toast": {
         "acted": "סומן כטופל",
@@ -2152,6 +2154,18 @@
       "confirmDelete": {
         "title": "למחוק את מדיניות הסיכון הזו?",
         "body": "\"{name}\" תימחק. משימות המשתמשות בה יחזרו לברירת המחדל של סביבת העבודה."
+      },
+      "forkDecision": {
+        "label": "החלטת פיצול מימוש",
+        "hint": "במצב אוטומטי, הצע גישות שונות מהותית (והשהה לבחירה) כאשר הערכת המשימה מגיעה לסף.",
+        "minComplexity": "מורכבות מזערית",
+        "minRisk": "סיכון מזערי",
+        "minImpact": "השפעה מזערית",
+        "onMissingLabel": "אין הערכה",
+        "onMissing": {
+          "run": "הצע בכל זאת",
+          "skip": "דלג"
+        }
       }
     },
     "observabilityConnection": {
@@ -3215,7 +3229,11 @@
       "subtasksInProgress": "· {count} בתהליך",
       "clickToRead": "לחץ כדי לקרוא את הפלט של הסוכן הזה",
       "reviewApprove": "בדוק ואשר את ההצעה של {agent}",
-      "resolve": "פתור: {question}"
+      "resolve": "פתור: {question}",
+      "forkDecision": {
+        "proposing": "מציע גישות…",
+        "choose": "בחר גישה"
+      }
     },
     "health": {
       "title": "בריאות הצינור",
@@ -4549,6 +4567,35 @@
     "trial": {
       "hint": "אפשר להקצות סביבה זו כעת כדי לבדוק את המתכון.",
       "run": "הקצאת ניסיון"
+    }
+  },
+  "forkDecision": {
+    "title": "בחר גישת מימוש",
+    "titleWithBlock": "בחר גישה — {title}",
+    "subtitle": "דרכים שונות מהותית לממש משימה זו, לפני כתיבת קוד כלשהו.",
+    "seam": "היכן זה נוגע:",
+    "recommended": "מומלץ",
+    "riskNotes": "סיכון:",
+    "noteLabel": "הערת הכוונה (רשות)",
+    "notePlaceholder": "כל דבר שכדאי שהמממש ייקח בחשבון…",
+    "choose": "השתמש בגישה זו",
+    "proposing": {
+      "title": "מזהה גישות…",
+      "hint": "קורא את הקוד כדי למצוא את הדרכים השונות מהותית לבנות זאת."
+    },
+    "singlePath": {
+      "title": "גישה ברורה אחת"
+    },
+    "chosen": {
+      "title": "הגישה נבחרה",
+      "note": "הערה: {note}"
+    },
+    "custom": {
+      "title": "הזן גישה משלך",
+      "placeholder": "תאר כיצד ברצונך שזה ימומש…"
+    },
+    "empty": {
+      "title": "אין מה להחליט"
     }
   }
 }

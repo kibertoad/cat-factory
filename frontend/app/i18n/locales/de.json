@@ -438,6 +438,18 @@
         "createFailed": "Richtlinie konnte nicht erstellt werden",
         "defaultFailed": "Standard konnte nicht festgelegt werden",
         "deleteFailed": "Richtlinie konnte nicht gelöscht werden"
+      },
+      "forkDecision": {
+        "label": "Implementierungs-Weichenentscheidung",
+        "hint": "Im Auto-Modus grundlegend verschiedene Ansätze vorschlagen (und für eine Wahl pausieren), wenn die Aufgabenschätzung einen Schwellenwert erreicht.",
+        "minComplexity": "Min. Komplexität",
+        "minRisk": "Min. Risiko",
+        "minImpact": "Min. Auswirkung",
+        "onMissingLabel": "Keine Schätzung",
+        "onMissing": {
+          "run": "Trotzdem vorschlagen",
+          "skip": "Überspringen"
+        }
       }
     },
     "observabilityConnection": {
@@ -1161,7 +1173,8 @@
       "companionOf": "{label} (Begleiter)",
       "merged": "Gemergt",
       "open": "Öffnen",
-      "mergePr": "PR mergen"
+      "mergePr": "PR mergen",
+      "chooseApproach": "Ansatz wählen"
     },
     "structure": {
       "title": "Struktur",
@@ -1649,7 +1662,8 @@
         "human_review": "Als gelesen markieren",
         "followup_pending": "Als gelesen markieren",
         "initiative": "Als gelesen markieren",
-        "markRead": "Als gelesen markieren"
+        "markRead": "Als gelesen markieren",
+        "fork_decision_pending": "Als gelesen markieren"
       }
     },
     "aiProvidersBanner": {
@@ -2979,7 +2993,11 @@
       "subtasksInProgress": "· {count} in Arbeit",
       "clickToRead": "Klicken, um die Ausgabe dieses Agenten zu lesen",
       "reviewApprove": "Vorschlag von {agent} prüfen & freigeben",
-      "resolve": "Klären: {question}"
+      "resolve": "Klären: {question}",
+      "forkDecision": {
+        "proposing": "Ansätze werden vorgeschlagen…",
+        "choose": "Ansatz wählen"
+      }
     },
     "health": {
       "title": "Pipeline-Zustand",
@@ -4551,5 +4569,34 @@
   "palette": {
     "hint": "Klicke auf einen Agenten, um ihn an die Pipeline anzuhängen.",
     "customAgents": "Benutzerdefinierte Agenten"
+  },
+  "forkDecision": {
+    "title": "Implementierungsansatz wählen",
+    "titleWithBlock": "Ansatz wählen — {title}",
+    "subtitle": "Grundlegend verschiedene Wege, diese Aufgabe umzusetzen, bevor Code geschrieben wird.",
+    "seam": "Betroffene Stelle:",
+    "recommended": "Empfohlen",
+    "riskNotes": "Risiko:",
+    "noteLabel": "Hinweis (optional)",
+    "notePlaceholder": "Was die Umsetzung berücksichtigen soll…",
+    "choose": "Diesen Ansatz verwenden",
+    "proposing": {
+      "title": "Ansätze werden ermittelt…",
+      "hint": "Der Code wird gelesen, um die grundlegend verschiedenen Umsetzungswege zu finden."
+    },
+    "singlePath": {
+      "title": "Ein klarer Ansatz"
+    },
+    "chosen": {
+      "title": "Ansatz gewählt",
+      "note": "Hinweis: {note}"
+    },
+    "custom": {
+      "title": "Eigenen Ansatz eingeben",
+      "placeholder": "Beschreibe, wie dies umgesetzt werden soll…"
+    },
+    "empty": {
+      "title": "Nichts zu entscheiden"
+    }
   }
 }

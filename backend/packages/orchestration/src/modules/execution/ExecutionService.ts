@@ -5,6 +5,8 @@ import type {
   BlueprintService,
   ExecutionInstance,
   FollowUpsStepState,
+  ForkDecisionStepState,
+  ChooseForkInput,
   RiskPolicyRepository,
   PipelineStep,
   PullRequestMerger,
@@ -85,6 +87,7 @@ import { inferTechnicalLabel } from './technical.logic.js'
 import { MergeResolver, type FinalizeMergeResult } from './MergeResolver.js'
 import { orderPrsForMerge } from './mergeOrder.logic.js'
 import { ReviewGateController, type ReviewKind } from './ReviewGateController.js'
+import { ForkDecisionController } from './ForkDecisionController.js'
 import {
   BrainstormActions,
   ClarityReviewActions,
@@ -113,6 +116,7 @@ import type { BrainstormService } from '../brainstorm/BrainstormService.js'
 import type {
   IterationCapChoice,
   RequirementConcernLevel,
+  StepGating,
   RequirementReview,
   ClarityReview,
   BrainstormSession,
@@ -542,6 +546,8 @@ export class ExecutionService {
   private readonly visualConfirmationController: VisualConfirmationController
   /** Drives both iterative review gates (requirements + clarity); kind-parameterised. */
   private readonly reviewGate: ReviewGateController
+  /** Drives the human-facing half of the implementation-fork decision phase on the Coder step. */
+  private readonly forkDecisionController: ForkDecisionController
   /** The requirements subject for {@link reviewGate}. */
   private readonly requirementsKind: ReviewKind<RequirementReview>
   /** The clarity (bug-report triage) subject for {@link reviewGate}. */
@@ -814,6 +820,16 @@ export class ExecutionService {
       dispatchIterationCap: (ws, blockId, choice, handlers) =>
         this.dispatchIterationCap(ws, blockId, choice, handlers),
     })
+    this.forkDecisionController = new ForkDecisionController({
+      blockRepository,
+      executionRepository,
+      workRunner,
+      stateMachine: this.runStateMachine,
+      stepGraph: this.stepGraph,
+      idGenerator,
+      clock,
+      notificationService,
+    })
     this.requirementsKind = this.buildRequirementsKind()
     this.clarityKind = this.buildClarityKind()
     this.requirementsBrainstormKind = this.buildBrainstormKind(
@@ -878,6 +894,7 @@ export class ExecutionService {
       humanTestController: this.humanTestController,
       visualConfirmationController: this.visualConfirmationController,
       reviewGate: this.reviewGate,
+      forkDecisionController: this.forkDecisionController,
       requirementsKind: this.requirementsKind,
       clarityKind: this.clarityKind,
       requirementsBrainstormKind: this.requirementsBrainstormKind,
@@ -2091,6 +2108,20 @@ export class ExecutionService {
     return this.runDispatcher.getFollowUps(workspaceId, executionId)
   }
 
+  /** @see RunDispatcher.getForkDecision */
+  getForkDecision(workspaceId: string, executionId: string): Promise<ForkDecisionStepState | null> {
+    return this.runDispatcher.getForkDecision(workspaceId, executionId)
+  }
+
+  /** @see RunDispatcher.chooseFork */
+  chooseFork(
+    workspaceId: string,
+    executionId: string,
+    input: ChooseForkInput,
+  ): Promise<ForkDecisionStepState> {
+    return this.runDispatcher.chooseFork(workspaceId, executionId, input)
+  }
+
   /** @see RunDispatcher.fileFollowUp */
   fileFollowUp(
     workspaceId: string,
@@ -2872,6 +2903,7 @@ export class ExecutionService {
     releaseMaxAttempts: number
     humanReviewGraceMinutes: number
     autoMergeEnabled: boolean
+    forkDecision?: StepGating | null
   }> {
     if (this.riskPolicyRepository) {
       if (block.riskPolicyId) {

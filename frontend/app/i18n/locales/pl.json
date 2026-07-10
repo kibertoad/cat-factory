@@ -857,7 +857,8 @@
       "empty": {
         "title": "Brak uruchomień",
         "body": "Uruchom pipeline, aby zobaczyć tutaj historię uruchomień."
-      }
+      },
+      "chooseApproach": "Wybierz podejście"
     },
     "structure": {
       "title": "Struktura",
@@ -1476,7 +1477,8 @@
         "human_review": "Oznacz jako przeczytane",
         "followup_pending": "Oznacz jako przeczytane",
         "initiative": "Oznacz jako przeczytane",
-        "markRead": "Oznacz jako przeczytane"
+        "markRead": "Oznacz jako przeczytane",
+        "fork_decision_pending": "Oznacz jako przeczytane"
       },
       "toast": {
         "acted": "Oznaczono jako obsłużone",
@@ -2031,6 +2033,18 @@
       "confirmDelete": {
         "title": "Usunąć tę zasadę ryzyka?",
         "body": "\"{name}\" zostanie usunięty. Zadania go używające wrócą do domyślnej zasady obszaru roboczego."
+      },
+      "forkDecision": {
+        "label": "Decyzja o rozgałęzieniu implementacji",
+        "hint": "W trybie auto proponuj zasadniczo różne podejścia (i wstrzymaj się na wybór), gdy szacunek zadania osiągnie próg.",
+        "minComplexity": "Min. złożoność",
+        "minRisk": "Min. ryzyko",
+        "minImpact": "Min. wpływ",
+        "onMissingLabel": "Brak szacunku",
+        "onMissing": {
+          "run": "Zaproponuj mimo to",
+          "skip": "Pomiń"
+        }
       }
     },
     "observabilityConnection": {
@@ -3204,7 +3218,11 @@
       "subtasksInProgress": "· {count} w toku",
       "clickToRead": "Kliknij, aby przeczytać wynik tego agenta",
       "reviewApprove": "Przejrzyj i zatwierdź propozycję agenta {agent}",
-      "resolve": "Rozstrzygnij: {question}"
+      "resolve": "Rozstrzygnij: {question}",
+      "forkDecision": {
+        "proposing": "Proponowanie podejść…",
+        "choose": "Wybierz podejście"
+      }
     },
     "health": {
       "title": "Stan pipeline'ów",
@@ -4538,6 +4556,35 @@
     "trial": {
       "hint": "Opcjonalnie udostępnij to środowisko teraz, aby przetestować przepis.",
       "run": "Udostępnienie próbne"
+    }
+  },
+  "forkDecision": {
+    "title": "Wybierz podejście do implementacji",
+    "titleWithBlock": "Wybierz podejście — {title}",
+    "subtitle": "Zasadniczo różne sposoby realizacji tego zadania, zanim powstanie kod.",
+    "seam": "Gdzie to sięga:",
+    "recommended": "Zalecane",
+    "riskNotes": "Ryzyko:",
+    "noteLabel": "Wskazówka (opcjonalnie)",
+    "notePlaceholder": "Coś, o czym implementacja powinna pamiętać…",
+    "choose": "Użyj tego podejścia",
+    "proposing": {
+      "title": "Ustalanie podejść…",
+      "hint": "Czytanie kodu, aby znaleźć zasadniczo różne sposoby realizacji."
+    },
+    "singlePath": {
+      "title": "Jedno oczywiste podejście"
+    },
+    "chosen": {
+      "title": "Wybrano podejście",
+      "note": "Uwaga: {note}"
+    },
+    "custom": {
+      "title": "Wpisz własne podejście",
+      "placeholder": "Opisz, jak chcesz to zaimplementować…"
+    },
+    "empty": {
+      "title": "Nie ma czego decydować"
     }
   }
 }

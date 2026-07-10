@@ -92,6 +92,7 @@ const SYSTEM_PROMPTS: Record<StandardPhase, string> = {
     '- Handle errors and edge cases explicitly; validate input at the boundary.',
     '- Keep the implementation cohesive and minimal — no speculative abstraction.',
     '- Note any follow-ups or assumptions you had to make.',
+    '- If the task context pins a CHOSEN IMPLEMENTATION APPROACH, implement that approach faithfully — do not silently switch to an alternative; if it proves unworkable, surface a follow-up rather than drifting into a rejected alternative.',
     '- If the task context flags it as TECHNICAL (a refactor / non-functional / internal change), the task definition and any incorporated requirements are the PRIMARY source of truth: implement to them, and treat the committed `spec/` only as a regression-spotting reference (do not invent behaviour to match a spec the task did not ask to change). Otherwise the specification leads as usual.',
     '',
     BUILD_DELIVERY_GATE,
@@ -415,6 +416,38 @@ function technicalContextSection(context: AgentRunContext): string {
   ].join('\n')
 }
 
+/**
+ * Render the CHOSEN IMPLEMENTATION APPROACH section when the fork-decision phase resolved to
+ * a human choice (see {@link AgentRunContext.implementationChoice}), or an empty string
+ * otherwise. It pins the chosen approach as a binding directive and names the rejected
+ * alternatives so the Coder does not drift back into them. Only the build user prompt appends
+ * it — the matching static rule lives in the BUILD system prompt. Empty (so byte-identical) on
+ * every run where no fork was chosen (skipped / single path / not configured).
+ */
+function implementationChoiceSection(context: AgentRunContext): string {
+  const choice = context.implementationChoice
+  if (!choice) return ''
+  const lines = [
+    '',
+    'CHOSEN IMPLEMENTATION APPROACH (binding — a human picked this before you started):',
+    `Title: ${choice.title}`,
+    '',
+    choice.approach,
+  ]
+  if (choice.note && choice.note.trim().length > 0) {
+    lines.push('', `Steering note from the human: ${choice.note.trim()}`)
+  }
+  if (choice.alternativesConsidered.length > 0) {
+    lines.push(
+      '',
+      `Alternatives considered and rejected: ${choice.alternativesConsidered.join('; ')}.`,
+      'Implement the chosen approach faithfully. Do NOT drift into a rejected alternative; if',
+      'the chosen approach proves unworkable, surface a follow-up rather than silently switching.',
+    )
+  }
+  return lines.join('\n')
+}
+
 /** Render the built-out user prompt for a standard phase from the run context. */
 export function renderStandardUserPrompt(
   phase: StandardPhase,
@@ -431,7 +464,10 @@ export function renderStandardUserPrompt(
     involvedServicesSection(context) +
     // Only the implementer (build) acts on the TECHNICAL marker — its system prompt carries
     // the matching rule. The architect/reviewer have no such rule, so don't change their prompt.
-    (phase === 'build' ? technicalContextSection(context) : '')
+    (phase === 'build' ? technicalContextSection(context) : '') +
+    // Only the implementer (build) acts on a chosen implementation fork; its system prompt
+    // carries the matching rule. Empty on every non-fork run.
+    (phase === 'build' ? implementationChoiceSection(context) : '')
   // Collapse the blank lines that conditionals leave behind, then trim.
   return rendered.replace(/\n{3,}/g, '\n\n').trim()
 }

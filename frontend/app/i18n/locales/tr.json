@@ -857,7 +857,8 @@
       "empty": {
         "title": "Henüz çalıştırma yok",
         "body": "Çalıştırma geçmişini burada görmek için bir pipeline başlatın."
-      }
+      },
+      "chooseApproach": "Yaklaşım seç"
     },
     "structure": {
       "title": "Yapı",
@@ -1476,7 +1477,8 @@
         "human_review": "Okundu işaretle",
         "followup_pending": "Okundu işaretle",
         "initiative": "Okundu işaretle",
-        "markRead": "Okundu işaretle"
+        "markRead": "Okundu işaretle",
+        "fork_decision_pending": "Okundu olarak işaretle"
       },
       "toast": {
         "acted": "İşlendi olarak işaretlendi",
@@ -2153,6 +2155,18 @@
       "confirmDelete": {
         "title": "Bu risk ilkesi silinsin mi?",
         "body": "\"{name}\" kaldırılacak. Onu kullanan görevler çalışma alanı varsayılanına döner."
+      },
+      "forkDecision": {
+        "label": "Uygulama çatallanma kararı",
+        "hint": "Otomatik modda, görev tahmini bir eşiğe ulaştığında esaslı biçimde farklı yaklaşımlar öner (ve seçim için duraklat).",
+        "minComplexity": "Min. karmaşıklık",
+        "minRisk": "Min. risk",
+        "minImpact": "Min. etki",
+        "onMissingLabel": "Tahmin yok",
+        "onMissing": {
+          "run": "Yine de öner",
+          "skip": "Atla"
+        }
       }
     },
     "observabilityConnection": {
@@ -3216,7 +3230,11 @@
       "subtasksInProgress": "· {count} devam ediyor",
       "clickToRead": "Bu ajanın çıktısını okumak için tıklayın",
       "reviewApprove": "{agent} adlı ajanın önerisini incele ve onayla",
-      "resolve": "Çöz: {question}"
+      "resolve": "Çöz: {question}",
+      "forkDecision": {
+        "proposing": "Yaklaşımlar öneriliyor…",
+        "choose": "Bir yaklaşım seçin"
+      }
     },
     "health": {
       "title": "Pipeline sağlığı",
@@ -4550,6 +4568,35 @@
     "trial": {
       "hint": "Tarifi test etmek için bu ortamı isteğe bağlı olarak şimdi sağlayabilirsin.",
       "run": "Deneme sağlaması"
+    }
+  },
+  "forkDecision": {
+    "title": "Bir uygulama yaklaşımı seçin",
+    "titleWithBlock": "Bir yaklaşım seçin — {title}",
+    "subtitle": "Kod yazılmadan önce bu görevi gerçekleştirmenin esaslı biçimde farklı yolları.",
+    "seam": "Nereye dokunuyor:",
+    "recommended": "Önerilen",
+    "riskNotes": "Risk:",
+    "noteLabel": "Yönlendirme notu (isteğe bağlı)",
+    "notePlaceholder": "Uygulamanın dikkate alması gereken şeyler…",
+    "choose": "Bu yaklaşımı kullan",
+    "proposing": {
+      "title": "Yaklaşımlar belirleniyor…",
+      "hint": "Bunu inşa etmenin esaslı biçimde farklı yollarını bulmak için kod okunuyor."
+    },
+    "singlePath": {
+      "title": "Tek net yaklaşım"
+    },
+    "chosen": {
+      "title": "Yaklaşım seçildi",
+      "note": "Not: {note}"
+    },
+    "custom": {
+      "title": "Kendi yaklaşımınızı girin",
+      "placeholder": "Bunun nasıl uygulanmasını istediğinizi açıklayın…"
+    },
+    "empty": {
+      "title": "Karar verilecek bir şey yok"
     }
   }
 }

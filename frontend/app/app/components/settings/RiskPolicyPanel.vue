@@ -6,6 +6,7 @@
 // default; it cannot be deleted or un-defaulted (the backend enforces this too).
 import { computed, reactive, ref, watch } from 'vue'
 import type { RiskPolicy, RequirementConcernLevel } from '~/types/merge'
+import type { StepGating } from '@cat-factory/contracts'
 
 const { t } = useI18n()
 
@@ -42,8 +43,31 @@ interface Draft {
   maxRequirementIterations: number
   maxRequirementConcernAllowed: RequirementConcernLevel
   autoMergeEnabled: boolean
+  // Implementation-fork decision gating (edited 0..100, stored 0..1); disabled ⇒ off in `auto`.
+  forkEnabled: boolean
+  forkMinComplexity: number
+  forkMinRisk: number
+  forkMinImpact: number
+  forkOnMissing: 'run' | 'skip'
 }
 const drafts = reactive<Record<string, Draft>>({})
+
+// On-missing-estimate options for the fork gating group (fail toward asking / skipping).
+const ON_MISSING_OPTIONS = computed<{ value: 'run' | 'skip'; label: string }[]>(() => [
+  { value: 'run', label: t('settings.riskPolicy.forkDecision.onMissing.run') },
+  { value: 'skip', label: t('settings.riskPolicy.forkDecision.onMissing.skip') },
+])
+
+/** Build the `StepGating` payload for the fork-decision gate from a draft (or null when off). */
+function forkGating(d: Draft): StepGating {
+  return {
+    enabled: d.forkEnabled,
+    minComplexity: d.forkMinComplexity / 100,
+    minRisk: d.forkMinRisk / 100,
+    minImpact: d.forkMinImpact / 100,
+    onMissingEstimate: d.forkOnMissing,
+  }
+}
 
 function toDraft(p: RiskPolicy): Draft {
   return {
@@ -55,6 +79,11 @@ function toDraft(p: RiskPolicy): Draft {
     maxRequirementIterations: p.maxRequirementIterations,
     maxRequirementConcernAllowed: p.maxRequirementConcernAllowed,
     autoMergeEnabled: p.autoMergeEnabled,
+    forkEnabled: p.forkDecision?.enabled ?? false,
+    forkMinComplexity: Math.round((p.forkDecision?.minComplexity ?? 0.5) * 100),
+    forkMinRisk: Math.round((p.forkDecision?.minRisk ?? 0.4) * 100),
+    forkMinImpact: Math.round((p.forkDecision?.minImpact ?? 0.4) * 100),
+    forkOnMissing: p.forkDecision?.onMissingEstimate ?? 'run',
   }
 }
 
@@ -92,6 +121,7 @@ async function save(p: RiskPolicy) {
       maxRequirementIterations: d.maxRequirementIterations,
       maxRequirementConcernAllowed: d.maxRequirementConcernAllowed,
       autoMergeEnabled: d.autoMergeEnabled,
+      forkDecision: forkGating(d),
     })
     toast.add({
       title: t('settings.riskPolicy.toast.saved'),
@@ -146,6 +176,11 @@ const draft = reactive<Draft>({
   maxRequirementIterations: 6,
   maxRequirementConcernAllowed: 'none',
   autoMergeEnabled: true,
+  forkEnabled: false,
+  forkMinComplexity: 50,
+  forkMinRisk: 40,
+  forkMinImpact: 40,
+  forkOnMissing: 'run',
 })
 
 async function create() {
@@ -161,6 +196,7 @@ async function create() {
       maxRequirementIterations: draft.maxRequirementIterations,
       maxRequirementConcernAllowed: draft.maxRequirementConcernAllowed,
       autoMergeEnabled: draft.autoMergeEnabled,
+      forkDecision: forkGating(draft),
     })
     draft.name = ''
     draft.autoMergeEnabled = true
@@ -305,6 +341,61 @@ async function create() {
         </label>
       </div>
 
+      <!-- Implementation-fork decision gate: propose materially different approaches before the
+           Coder writes code (in `auto` tri-state, gated on the task estimate). -->
+      <div class="mt-3 rounded-md border border-slate-800 bg-slate-900/40 p-3">
+        <USwitch
+          v-model="drafts[p.id]!.forkEnabled"
+          size="sm"
+          :label="t('settings.riskPolicy.forkDecision.label')"
+          :description="t('settings.riskPolicy.forkDecision.hint')"
+        />
+        <div v-if="drafts[p.id]!.forkEnabled" class="mt-3 grid grid-cols-2 gap-3 sm:grid-cols-4">
+          <label class="block">
+            <span class="mb-1 block text-[10px] uppercase tracking-wide text-slate-500">
+              {{ t('settings.riskPolicy.forkDecision.minComplexity') }}
+            </span>
+            <UInput
+              v-model.number="drafts[p.id]!.forkMinComplexity"
+              type="number"
+              size="sm"
+              :min="0"
+              :max="100"
+            />
+          </label>
+          <label class="block">
+            <span class="mb-1 block text-[10px] uppercase tracking-wide text-slate-500">
+              {{ t('settings.riskPolicy.forkDecision.minRisk') }}
+            </span>
+            <UInput
+              v-model.number="drafts[p.id]!.forkMinRisk"
+              type="number"
+              size="sm"
+              :min="0"
+              :max="100"
+            />
+          </label>
+          <label class="block">
+            <span class="mb-1 block text-[10px] uppercase tracking-wide text-slate-500">
+              {{ t('settings.riskPolicy.forkDecision.minImpact') }}
+            </span>
+            <UInput
+              v-model.number="drafts[p.id]!.forkMinImpact"
+              type="number"
+              size="sm"
+              :min="0"
+              :max="100"
+            />
+          </label>
+          <label class="block">
+            <span class="mb-1 block text-[10px] uppercase tracking-wide text-slate-500">
+              {{ t('settings.riskPolicy.forkDecision.onMissingLabel') }}
+            </span>
+            <USelect v-model="drafts[p.id]!.forkOnMissing" :items="ON_MISSING_OPTIONS" size="sm" />
+          </label>
+        </div>
+      </div>
+
       <div class="mt-3 flex items-center justify-between gap-3">
         <USwitch
           v-model="drafts[p.id]!.autoMergeEnabled"
@@ -402,6 +493,11 @@ async function create() {
           v-model="draft.autoMergeEnabled"
           size="sm"
           :label="t('settings.riskPolicy.field.autoMerge')"
+        />
+        <USwitch
+          v-model="draft.forkEnabled"
+          size="sm"
+          :label="t('settings.riskPolicy.forkDecision.label')"
         />
         <UButton
           color="primary"
