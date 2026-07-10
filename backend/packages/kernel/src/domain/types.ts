@@ -35,6 +35,7 @@ export type {
   PullRequestRef,
   PeerPullRequest,
   ReferenceRepo,
+  AprioriBranch,
   SpendStatus,
   StepApproval,
   StepReviewComment,

@@ -28,6 +28,7 @@ import type {
 import type { IdGenerator } from '@cat-factory/kernel'
 import { registerServiceForFrame, requireWorkspace } from '@cat-factory/kernel'
 import {
+  aprioriBranchesError,
   canReparent,
   descendantIds,
   gridSlot,
@@ -844,6 +845,24 @@ export class BoardService {
     if (effective.referenceRepos !== undefined && !isDocumentTask) {
       const { referenceRepos: _ignored, ...rest } = effective
       effective = rest
+    }
+    // `aprioriBranches` is a task-level input (pre-existing branches of the target repo).
+    // Dropped on non-tasks; on a task the cross-entry invariants (single working, no dupes,
+    // mode-disjoint, frozen-after-PR, multi-repo exclusion) are validated against the task's
+    // CURRENT state plus the effective `involvedServiceIds` this patch resolves to.
+    if (effective.aprioriBranches !== undefined) {
+      if (block.level !== 'task') {
+        const { aprioriBranches: _ignored, ...rest } = effective
+        effective = rest
+      } else {
+        const effectiveInvolved = effective.involvedServiceIds ?? block.involvedServiceIds ?? []
+        const error = aprioriBranchesError(
+          effective.aprioriBranches,
+          block,
+          effectiveInvolved.length > 0,
+        )
+        if (error) throw new ValidationError(error)
+      }
     }
     await this.blockRepository.update(homeWorkspaceId, id, effective)
     // Origin = the block's HOME so editing a shared block fans out to every board mounting it.
