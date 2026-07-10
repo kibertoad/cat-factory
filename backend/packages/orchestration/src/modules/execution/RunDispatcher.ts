@@ -59,10 +59,10 @@ import {
   sameSubtasks,
 } from '@cat-factory/kernel'
 import {
-  aprioriWorkingBranch,
   frontendOriginsForService,
   parseBlueprintService,
   parseSpecDoc,
+  resolveAprioriWorkingBranch,
 } from '@cat-factory/contracts'
 import {
   blueprintPostOp,
@@ -2442,17 +2442,11 @@ export class RunDispatcher {
   /**
    * The task's apriori WORKING branch (an existing branch it names as the run's starting
    * point), or undefined when none is set. Rejects the degenerate case where it equals the
-   * repo base — the run would have nothing to diff / no PR to open — mirroring the executor.
+   * repo base — the run would have nothing to diff / no PR to open — via the same shared
+   * `resolveAprioriWorkingBranch` guard the executor uses, so the two rejections can't drift.
    */
   private aprioriWorkBranch(block: Block, baseBranch: string): string | undefined {
-    const working = aprioriWorkingBranch(block.aprioriBranches)
-    if (working && working === baseBranch) {
-      throw new Error(
-        `Apriori working branch '${working}' is the repo's base branch; ` +
-          `pick an existing feature branch to build inside, not the base.`,
-      )
-    }
-    return working
+    return resolveAprioriWorkingBranch(block.aprioriBranches, baseBranch)
   }
 
   /**

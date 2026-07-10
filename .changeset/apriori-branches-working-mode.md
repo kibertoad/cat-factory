@@ -1,5 +1,6 @@
 ---
 '@cat-factory/orchestration': minor
+'@cat-factory/contracts': patch
 '@cat-factory/kernel': patch
 '@cat-factory/server': patch
 '@cat-factory/conformance': patch
@@ -16,8 +17,10 @@ and the PR opens from it, the CI gate polls it, and the merger merges it. See
   context (`AgentRunContext.aprioriBranches`), a pure projection like `referenceRepos`.
 - **Work-branch swap**: `ContainerAgentExecutor.buildJobBody` and the two `RunDispatcher`
   repo-op sites (`resolveRepoOpBranch` + the spec-writer `builtInRepoOpBranch`) resolve the
-  work branch as `aprioriWorkingBranch(...) ?? cat-factory/<blockId>`, so every downstream
-  builder (`newBranch` / `pushBranch` / explore fallback / PR head) rides the user's branch.
+  work branch as `resolveAprioriWorkingBranch(...) ?? cat-factory/<blockId>`, so every
+  downstream builder (`newBranch` / `pushBranch` / explore fallback / PR head) rides the
+  user's branch. The base-branch rejection is a single shared `resolveAprioriWorkingBranch`
+  helper (`@cat-factory/contracts`) so the executor and dispatcher rejections can't drift.
 - **Probe, never create**: an apriori working branch must already exist — it is probed
   (`ensureWorkBranch(..., { create: false })`, or a checkout-free `headSha`), and a missing
   branch fails the dispatch loudly rather than being silently created off base. A working

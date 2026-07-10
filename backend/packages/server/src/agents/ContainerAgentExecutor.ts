@@ -28,7 +28,7 @@ import {
   isIndividualVendor,
   isSubscriptionVendor,
 } from '@cat-factory/kernel'
-import { aprioriWorkingBranch, resolveInstanceTypeId } from '@cat-factory/contracts'
+import { resolveAprioriWorkingBranch, resolveInstanceTypeId } from '@cat-factory/contracts'
 import {
   type AgentKindRegistry,
   type AgentRouting,
@@ -1050,13 +1050,7 @@ export class ContainerAgentExecutor implements AsyncAgentExecutor {
     // it must ALREADY exist — it is probed (never created), a missing branch fails the
     // dispatch loudly, and it may never be the repo's own base branch (the run would have
     // nothing to diff / no PR to open).
-    const aprioriWork = aprioriWorkingBranch(context.aprioriBranches)
-    if (aprioriWork && aprioriWork === repo.baseBranch) {
-      throw new Error(
-        `Apriori working branch '${aprioriWork}' is the repo's base branch; ` +
-          `pick an existing feature branch to build inside, not the base.`,
-      )
-    }
+    const aprioriWork = resolveAprioriWorkingBranch(context.aprioriBranches, repo.baseBranch)
     const workBranch = aprioriWork ?? `cat-factory/${blockId}`
     let workBranchReady: boolean
     if (context.block.pullRequest?.branch === workBranch) {
