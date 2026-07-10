@@ -1525,6 +1525,61 @@ export function defineCoreConformance(harness: ConformanceHarness): void {
         expect(cleared.body.referenceRepos).toBeUndefined()
       })
 
+      it("round-trips a task's apriori branches (the JSON column) on every store", async () => {
+        const { call, createWorkspace } = harness.makeApp()
+        const { workspace } = await createWorkspace()
+        const wsId = workspace.id
+
+        // `aprioriBranches` is a task-level JSON column carrying the pre-existing branches handed
+        // to the run (one optional `working` branch + any `reference` branches). BoardService
+        // validates the cross-entry invariants and drops it on non-task blocks; a runtime that
+        // forgot to map the column drops it on write, so this checks it survives PATCH + a fresh
+        // snapshot read, and that clearing writes NULL (an empty array comes back absent).
+        const task = await call<Block>('POST', `/workspaces/${wsId}/blocks/blk_auth/tasks`, {
+          title: 'Continue the spike branch',
+        })
+        expect(task.status).toBe(201)
+        const taskId = task.body.id
+
+        const aprioriBranches = [
+          { name: 'feature/checkout-v2', mode: 'working' as const },
+          { name: 'spike/payments', mode: 'reference' as const },
+        ]
+        const set = await call<Block>('PATCH', `/workspaces/${wsId}/blocks/${taskId}`, {
+          aprioriBranches,
+        })
+        expect(set.status).toBe(200)
+        expect(set.body.aprioriBranches).toEqual(aprioriBranches)
+
+        const snap = await call<WorkspaceSnapshot>('GET', `/workspaces/${wsId}`)
+        expect(snap.body.blocks.find((b) => b.id === taskId)?.aprioriBranches).toEqual(
+          aprioriBranches,
+        )
+
+        // Two working entries are rejected at the write boundary (single-working invariant).
+        const twoWorking = await call<Block>('PATCH', `/workspaces/${wsId}/blocks/${taskId}`, {
+          aprioriBranches: [
+            { name: 'a', mode: 'working' },
+            { name: 'b', mode: 'working' },
+          ],
+        })
+        expect(twoWorking.status).toBe(422)
+
+        // An unsafe git ref name is rejected by the contract schema (400, not the 422 write
+        // boundary) — a value that would break the harness fetch/checkout never persists.
+        const unsafe = await call<Block>('PATCH', `/workspaces/${wsId}/blocks/${taskId}`, {
+          aprioriBranches: [{ name: 'bad name~with^stuff', mode: 'reference' }],
+        })
+        expect(unsafe.status).toBe(400)
+
+        // Clearing with an empty array writes NULL, so the field comes back absent.
+        const cleared = await call<Block>('PATCH', `/workspaces/${wsId}/blocks/${taskId}`, {
+          aprioriBranches: [],
+        })
+        expect(cleared.status).toBe(200)
+        expect(cleared.body.aprioriBranches).toBeUndefined()
+      })
+
       it("records a multi-repo run's peer pull requests on the block (both stores)", async () => {
         // Service-connections phase 3: a coder run over a task with a connected involved service
         // opens a PR in the peer's repo too. The container reports it as `peerPullRequests`

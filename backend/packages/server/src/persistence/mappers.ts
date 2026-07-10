@@ -516,6 +516,23 @@ const blockFields: FieldMapper<Block, BlockPatch>[] = [
       }
     },
   },
+  // A task's apriori branches (pre-existing branches handed to the run as input). Patch treats
+  // an empty array as "clear them" (write NULL, not "[]"), mirroring `reference_repos` and the
+  // other JSON-array block columns.
+  {
+    read: (row, out) => {
+      if (row.apriori_branches != null)
+        out.aprioriBranches = JSON.parse(row.apriori_branches as string)
+    },
+    insert: (b, out) => {
+      out.apriori_branches = b.aprioriBranches?.length ? JSON.stringify(b.aprioriBranches) : null
+    },
+    patch: (p, out) => {
+      if (p.aprioriBranches !== undefined) {
+        out.apriori_branches = p.aprioriBranches?.length ? JSON.stringify(p.aprioriBranches) : null
+      }
+    },
+  },
   // `createdBy` is set at insert time and never patched. LEGACY: a pre-#94 numeric id is
   // dropped to null on read (see the LEGACY USER-ID REPAIR note; remove after 2026-07-15).
   legacyUserIdField('createdBy'),

@@ -108,6 +108,67 @@ export const referenceRepoSchema = v.object({
 export type ReferenceRepo = v.InferOutput<typeof referenceRepoSchema>
 
 /**
+ * A conservative git-ref-name safety check (a subset of `git check-ref-format --branch`).
+ * Rejects the shapes that would break the harness's `git fetch`/checkout of a caller-named
+ * branch or let a value smuggle in flags/paths: whitespace, the special chars git forbids
+ * in a ref component (`~ ^ : ? * [ \`), a `..` sequence, the `@{` reflog syntax, a bare `@`,
+ * a leading/trailing/doubled `/`, a leading `-` (would read as a flag), an ASCII control
+ * char, and the `.lock` suffix. Not exhaustive against every git edge case, but enough that a
+ * stored value is a plausible branch name and never a shell/flag/path-injection vector.
+ */
+export function isSafeGitBranchName(name: string): boolean {
+  if (name.length === 0) return false
+  if (name === '@') return false
+  if (name.startsWith('-') || name.startsWith('/') || name.endsWith('/')) return false
+  if (name.endsWith('.lock')) return false
+  if (name.includes('..') || name.includes('//') || name.includes('@{')) return false
+  const forbidden = '~^:?*[\\'
+  for (const ch of name) {
+    const code = ch.codePointAt(0) ?? 0
+    // Control chars (0x00-0x1f), space (0x20), DEL (0x7f), and the chars git forbids in a
+    // ref component (~ ^ : ? * [ backslash).
+    if (code <= 0x20 || code === 0x7f || forbidden.includes(ch)) return false
+  }
+  return true
+}
+
+const branchNameSchema = v.pipe(
+  v.string(),
+  v.minLength(1),
+  v.maxLength(200),
+  v.check(isSafeGitBranchName, 'Not a valid git branch name'),
+)
+
+/**
+ * A pre-existing branch of a task's PRIMARY target repo handed to the run as input. Two
+ * deliberately-disjoint modes (see `docs/initiatives/apriori-branches.md`):
+ *
+ * - `reference` — provided purely as context (a spike / prototype / prior-art branch). The
+ *   agent may read it (log/diff/open files) but NEVER commits to or pushes it.
+ * - `working` — the branch the run keeps building inside: it starts from and continues
+ *   committing into this branch instead of minting `cat-factory/<blockId>` off the default,
+ *   and the PR/CI-gate/merger all ride it. At most ONE working entry per task (enforced at
+ *   the write boundary in `BoardService.updateBlock`).
+ */
+export const aprioriBranchSchema = v.object({
+  /** The existing branch name on the primary target repo. */
+  name: branchNameSchema,
+  /** `reference` = read-only context; `working` = the branch the run builds inside. */
+  mode: v.picklist(['reference', 'working']),
+})
+export type AprioriBranch = v.InferOutput<typeof aprioriBranchSchema>
+
+/** The single `working` apriori branch of a task, or undefined when none is set. */
+export function aprioriWorkingBranch(branches: AprioriBranch[] | undefined): string | undefined {
+  return branches?.find((b) => b.mode === 'working')?.name
+}
+
+/** The `reference` apriori branch names of a task (possibly empty). */
+export function aprioriReferenceBranches(branches: AprioriBranch[] | undefined): string[] {
+  return branches?.filter((b) => b.mode === 'reference').map((b) => b.name) ?? []
+}
+
+/**
  * Per-task override for an issue-tracker writeback action (see the workspace-level
  * `writebackCommentOnPrOpen` / `writebackResolveOnMerge` in tracker settings).
  * `on`/`off` force the behaviour for this task; absent ⇒ inherit the workspace setting.
@@ -293,6 +354,16 @@ export const blockSchema = v.object({
    * their own clone identity, and are structurally unpushable. Absent on non-doc tasks.
    */
   referenceRepos: v.optional(v.array(referenceRepoSchema)),
+  /**
+   * Task-level: pre-existing branches of the task's PRIMARY target repo handed to the run
+   * as input (see {@link aprioriBranchSchema} and `docs/initiatives/apriori-branches.md`).
+   * At most one `working` entry (the branch the run builds inside instead of minting
+   * `cat-factory/<blockId>`); any number of `reference` entries (read-only context). The
+   * write boundary (`BoardService.updateBlock`) drops this on non-task blocks and enforces
+   * the single-working / no-duplicate / not-frozen-after-PR invariants. Absent ⇒ the run
+   * starts from the repo default branch as usual.
+   */
+  aprioriBranches: v.optional(v.array(aprioriBranchSchema)),
   /**
    * Id of the merge threshold preset selected for this task (see
    * {@link riskPolicySchema}). Drives the `merger` step's auto-merge

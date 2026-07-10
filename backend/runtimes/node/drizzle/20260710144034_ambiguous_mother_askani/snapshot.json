@@ -1,10 +1,11 @@
 {
-  "dialect": "postgres",
-  "id": "aabbadc8-fa9f-40b3-979f-a9be53e01106",
-  "prevIds": [
-    "e903bae4-b880-498e-8b29-32b17a7d69c0"
-  ],
   "version": "8",
+  "dialect": "postgres",
+  "id": "e903bae4-b880-498e-8b29-32b17a7d69c0",
+  "prevIds": [
+    "8ee22fd2-abf5-4ed7-9ff1-ba7afd97d843",
+    "92451d62-925d-47bd-ba7e-ec39c823d061"
+  ],
   "ddl": [
     {
       "name": "provisioning",
@@ -11935,41 +11936,6 @@
       "method": "btree",
       "concurrently": false,
       "name": "idx_agent_runs_service",
-      "entityType": "indexes",
-      "schema": "public",
-      "table": "agent_runs"
-    },
-    {
-      "nameExplicit": true,
-      "columns": [
-        {
-          "value": "workspace_id",
-          "isExpression": false,
-          "asc": true,
-          "nullsFirst": false,
-          "opclass": null
-        },
-        {
-          "value": "kind",
-          "isExpression": false,
-          "asc": true,
-          "nullsFirst": false,
-          "opclass": null
-        },
-        {
-          "value": "status",
-          "isExpression": false,
-          "asc": true,
-          "nullsFirst": false,
-          "opclass": null
-        }
-      ],
-      "isUnique": false,
-      "where": null,
-      "with": "",
-      "method": "btree",
-      "concurrently": false,
-      "name": "idx_agent_runs_ws_kind_status",
       "entityType": "indexes",
       "schema": "public",
       "table": "agent_runs"

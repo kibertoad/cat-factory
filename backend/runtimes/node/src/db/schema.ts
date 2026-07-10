@@ -282,6 +282,10 @@ export const blocks = pgTable(
     // Task-level (document tasks): read-only reference repos for the `doc-writer` agent —
     // serialized JSON array of { githubId, owner, name, defaultBranch, installationId? }.
     reference_repos: text('reference_repos'),
+    // Task-level: pre-existing branches of the primary target repo handed to the run as input
+    // — serialized JSON array of { name, mode: 'reference' | 'working' }. One optional
+    // `working` branch the run builds inside; any number of read-only `reference` branches.
+    apriori_branches: text('apriori_branches'),
     // The account-owned service this block belongs to (migration 0031); will become the
     // physical scope key once the repositories switch off workspace_id.
     service_id: text('service_id'),

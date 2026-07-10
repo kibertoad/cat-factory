@@ -28,6 +28,7 @@ import type {
 import type { IdGenerator } from '@cat-factory/kernel'
 import { registerServiceForFrame, requireWorkspace } from '@cat-factory/kernel'
 import {
+  aprioriBranchesError,
   canReparent,
   descendantIds,
   gridSlot,
@@ -844,6 +845,27 @@ export class BoardService {
     if (effective.referenceRepos !== undefined && !isDocumentTask) {
       const { referenceRepos: _ignored, ...rest } = effective
       effective = rest
+    }
+    // `aprioriBranches` is a task-level input (pre-existing branches of the target repo).
+    // Dropped on non-tasks; on a task the cross-entry invariants (single working, no dupes,
+    // mode-disjoint, frozen-after-PR, multi-repo exclusion) are validated against the task's
+    // CURRENT state plus the effective `involvedServiceIds` this patch resolves to.
+    if (effective.aprioriBranches !== undefined && block.level !== 'task') {
+      const { aprioriBranches: _ignored, ...rest } = effective
+      effective = rest
+    }
+    // The multi-repo exclusion is a cross-field invariant (a `working` branch is barred once a
+    // task involves peer services), so it must be re-checked whenever EITHER field is patched —
+    // otherwise adding `involvedServiceIds` to a task that already carries a working branch would
+    // slip past the guard. Revalidate against the effective branch list + involved set on a task.
+    if (
+      block.level === 'task' &&
+      (effective.aprioriBranches !== undefined || effective.involvedServiceIds !== undefined)
+    ) {
+      const effectiveBranches = effective.aprioriBranches ?? block.aprioriBranches ?? []
+      const effectiveInvolved = effective.involvedServiceIds ?? block.involvedServiceIds ?? []
+      const error = aprioriBranchesError(effectiveBranches, block, effectiveInvolved.length > 0)
+      if (error) throw new ValidationError(error)
     }
     await this.blockRepository.update(homeWorkspaceId, id, effective)
     // Origin = the block's HOME so editing a shared block fans out to every board mounting it.

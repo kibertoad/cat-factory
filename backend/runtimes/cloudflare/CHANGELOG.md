@@ -1,5 +1,47 @@
 # @cat-factory/worker
 
+## 0.81.7
+
+### Patch Changes
+
+- 08a7da2: Apriori branches (slice 1): data model + write-boundary + persistence.
+
+  A task (`Block`) can now name pre-existing branches of its primary target repo via a new
+  optional `aprioriBranches` field — an array of `{ name, mode: 'reference' | 'working' }`.
+  `reference` branches are read-only context; the single optional `working` branch is the one
+  the run keeps building inside (later slices). See `docs/initiatives/apriori-branches.md`.
+
+  - **Contracts**: `aprioriBranchSchema` + `AprioriBranch`, the `aprioriWorkingBranch` /
+    `aprioriReferenceBranches` helpers, an `isSafeGitBranchName` git-ref-safety check, the new
+    `blockSchema` field, and `aprioriBranches` on `updateBlockSchema` (capped at 20). Re-exported
+    from `@cat-factory/kernel`.
+  - **Persistence**: a shared `apriori_branches` JSON text column mirroring `reference_repos`
+    (empty-array-is-NULL) — D1 migration `0048_apriori_branches.sql` ⇄ Drizzle schema column +
+    generated migration, picked up by both stores through the shared `blockFields` mapper.
+  - **Write boundary**: `BoardService.updateBlock` drops the field on non-task blocks and enforces
+    the cross-entry invariants via `aprioriBranchesError` — at most one `working` entry, no
+    duplicate names, the working entry frozen once a PR exists, and no working entry on a
+    multi-repo (`involvedServiceIds`) task.
+  - **Conformance**: a cross-runtime round-trip asserting the column survives PATCH + snapshot
+    read on both stores, clears to absent, and rejects the invalid shapes.
+
+- Updated dependencies [08a7da2]
+  - @cat-factory/contracts@0.124.0
+  - @cat-factory/orchestration@0.103.0
+  - @cat-factory/kernel@0.117.4
+  - @cat-factory/server@0.107.6
+  - @cat-factory/agents@0.52.7
+  - @cat-factory/consensus@0.10.26
+  - @cat-factory/eks@0.1.49
+  - @cat-factory/gates@0.5.11
+  - @cat-factory/gitlab@0.7.49
+  - @cat-factory/integrations@0.80.4
+  - @cat-factory/prompt-fragments@0.13.9
+  - @cat-factory/spend@0.12.7
+  - @cat-factory/caching@0.6.26
+  - @cat-factory/observability-langfuse@0.7.181
+  - @cat-factory/provider-cloudflare@0.7.197
+
 ## 0.81.6
 
 ### Patch Changes
