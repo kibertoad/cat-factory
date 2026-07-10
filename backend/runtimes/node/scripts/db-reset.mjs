@@ -29,11 +29,13 @@ import { Pool } from 'pg'
 // the ledger alongside the data is the whole point — it guarantees they can't desync. The
 // configurable ones must match the server's env so a shared-database deployment resets exactly
 // the schemas it owns (and nothing a co-tenant service owns).
-const SCHEMA_IDENTIFIER = /^[a-zA-Z_][a-zA-Z0-9_]*$/
+// Lowercase-only, mirroring `resolveDbSchema` in src/db/client.ts (see the note there on why
+// mixed case is rejected). Keep the two guards in step.
+const SCHEMA_IDENTIFIER = /^[a-z_][a-z0-9_]*$/
 function schemaEnv(name, fallback) {
   const value = (process.env[name] || fallback).trim() || fallback
   if (!SCHEMA_IDENTIFIER.test(value)) {
-    console.error(`Invalid ${name} "${value}": must be a plain Postgres identifier.`)
+    console.error(`Invalid ${name} "${value}": must be a plain lowercase Postgres identifier.`)
     process.exit(1)
   }
   return value
@@ -74,9 +76,12 @@ async function main() {
   const pool = new Pool({ connectionString: url })
   try {
     // One statement so it is atomic: either the whole reset lands or none of it does.
-    // Dropping + recreating `public` last leaves a usable default schema for the next boot.
+    // Always leave a usable `public` behind for the next boot. `IF NOT EXISTS` matters when
+    // DB_SCHEMA relocated the app tables off `public`: `public` is then NOT in APP_SCHEMAS (so it
+    // was never dropped) and a bare `CREATE SCHEMA "public"` would fail with 42P06, rolling back
+    // the whole reset. The relocated DB_SCHEMA itself is re-created by migrate() on next boot.
     const drops = APP_SCHEMAS.map((s) => `DROP SCHEMA IF EXISTS "${s}" CASCADE;`).join('\n')
-    await pool.query(`${drops}\nCREATE SCHEMA "public";`)
+    await pool.query(`${drops}\nCREATE SCHEMA IF NOT EXISTS "public";`)
     console.warn(`  done. Restart the server (pnpm start) to re-migrate ${dbName} from scratch.`)
   } finally {
     await pool.end()

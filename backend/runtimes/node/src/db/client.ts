@@ -10,8 +10,11 @@ export const DEFAULT_MIGRATIONS_SCHEMA = 'drizzle'
 // Postgres identifier guard for the configurable schemas. Schema names are interpolated into
 // SQL that is NOT parameterizable (the libpq `options=-c search_path=…` connection string and
 // `CREATE SCHEMA`/`to_regclass` DDL), so we restrict them to a plain identifier to keep them
-// injection-safe.
-const SCHEMA_IDENTIFIER = /^[a-zA-Z_][a-zA-Z0-9_]*$/
+// injection-safe. Lowercase only, deliberately: we quote the name in `CREATE SCHEMA "x"` (case
+// preserving) but the libpq `search_path` option is unquoted (Postgres folds it to lowercase),
+// so a mixed-case name would create one schema and point the connection at a differently-cased
+// one. Restricting to lowercase keeps the two in step. (Mirrored in scripts/db-reset.mjs.)
+const SCHEMA_IDENTIFIER = /^[a-z_][a-z0-9_]*$/
 
 /**
  * Validate + normalise a configured schema name, falling back to `fallback` when unset.
@@ -26,7 +29,7 @@ export function resolveDbSchema(
   if (!value) return fallback
   if (!SCHEMA_IDENTIFIER.test(value)) {
     throw new Error(
-      `Invalid ${label} "${value}": must be a plain Postgres identifier ([A-Za-z_][A-Za-z0-9_]*).`,
+      `Invalid ${label} "${value}": must be a plain lowercase Postgres identifier ([a-z_][a-z0-9_]*).`,
     )
   }
   return value
@@ -46,8 +49,11 @@ function makeDbClient(connectionString: string, schema?: string) {
   const pool = new Pool({
     connectionString,
     // Only override search_path off the default: a stock `public` deployment keeps the exact
-    // prior behaviour (no connection options set).
-    ...(resolved === DEFAULT_DB_SCHEMA ? {} : { options: `-c search_path=${resolved}` }),
+    // prior behaviour (no connection options set). We keep `public` on the path as a fallback so
+    // shared objects (extensions, types installed there) still resolve; a non-existent `public`
+    // in search_path is silently ignored by Postgres, so this is safe even where `public` was the
+    // reason to relocate. `resolved` is first, so the migrator's unqualified CREATEs land there.
+    ...(resolved === DEFAULT_DB_SCHEMA ? {} : { options: `-c search_path=${resolved},public` }),
   })
   // node-postgres emits 'error' on an IDLE client when the backend drops the
   // connection (Postgres restart, failover, idle timeout). An unhandled 'error' on

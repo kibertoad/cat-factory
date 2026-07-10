@@ -374,7 +374,7 @@ IF NOT EXISTS`es it) — for databases with no usable `public`. `DB_MIGRATIONS_S
   drizzle ledger off the top-level `drizzle` schema so it can't collide with another
   drizzle-using service's `drizzle.__drizzle_migrations` (passed as the migrator's
   `migrationsSchema`). `DB_PGBOSS_SCHEMA` moves pg-boss's queue schema. Each must be a plain
-  identifier; `db:reset` reads the same env so it drops exactly the schemas the deployment owns.
+  lowercase identifier; `db:reset` reads the same env so it drops exactly the schemas the deployment owns.
   The named app schemas (`telemetry`/`sandbox`/`provisioning`) are fixed `pgSchema(...)` names,
   not configurable (changing them would mean regenerating migrations). Node-Postgres-specific.
 

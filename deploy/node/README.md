@@ -86,7 +86,7 @@ split in the first place.
 By default cat-factory owns the `public` (app tables), `drizzle` (migration ledger), `pgboss`,
 `telemetry`, `sandbox`, and `provisioning` schemas of its database. If you must run it on a
 database shared with other services, three schema names are configurable so cat-factory can't
-collide with a schema another service owns (each must be a plain identifier):
+collide with a schema another service owns (each must be a plain lowercase identifier):
 
 | Env                    | Default   | What it moves                                                                                                                                                                          |
 | ---------------------- | --------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |

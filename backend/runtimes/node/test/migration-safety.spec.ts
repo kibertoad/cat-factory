@@ -1,3 +1,6 @@
+import { execFile } from 'node:child_process'
+import { fileURLToPath } from 'node:url'
+import { promisify } from 'node:util'
 import { adminDatabaseUrl } from '@cat-factory/conformance'
 import { afterAll, beforeAll, describe, expect, it } from 'vitest'
 import { type DbClient, createDbClient } from '../src/db/client.js'
@@ -159,5 +162,68 @@ describe.runIf(baseUrl)('migrate() with configured schemas', () => {
     await expect(
       migrate(client.db, client.pool, { schema: APP_SCHEMA, migrationsSchema: MIG_SCHEMA }),
     ).resolves.toBeUndefined()
+  })
+})
+
+// db:reset must survive a relocated DB_SCHEMA: `public` is then NOT among the dropped schemas, so
+// the trailing `CREATE SCHEMA public` has to be IF-NOT-EXISTS or the whole atomic reset rolls back
+// (regression guard for the 42P06 footgun). Runs the real script as a subprocess.
+const resetDbName = `cat_factory_reset_${workerId}`
+const execFileAsync = promisify(execFile)
+const resetScript = fileURLToPath(new URL('../scripts/db-reset.mjs', import.meta.url))
+
+describe.runIf(baseUrl)('db:reset with a relocated DB_SCHEMA', () => {
+  const APP_SCHEMA = 'cf_reset_app'
+  let adminUrl: string
+  let resetUrl: string
+
+  beforeAll(async () => {
+    adminUrl = adminDatabaseUrl(baseUrl as string)
+    const u = new URL(baseUrl as string)
+    u.pathname = `/${resetDbName}`
+    resetUrl = u.toString()
+    const { pool: admin } = createDbClient(adminUrl)
+    try {
+      await admin.query(`DROP DATABASE IF EXISTS "${resetDbName}" WITH (FORCE)`)
+      await admin.query(`CREATE DATABASE "${resetDbName}"`)
+    } finally {
+      await admin.end()
+    }
+    // Seed a co-tenant-style layout: the app relocated to APP_SCHEMA, `public` present (as another
+    // service might own it). db:reset must drop APP_SCHEMA but leave `public` intact.
+    const { pool } = createDbClient(resetUrl)
+    try {
+      await pool.query(`CREATE SCHEMA "${APP_SCHEMA}"`)
+      await pool.query(`CREATE TABLE "${APP_SCHEMA}".marker (id int)`)
+    } finally {
+      await pool.end()
+    }
+  })
+
+  afterAll(async () => {
+    const { pool: admin } = createDbClient(adminUrl)
+    try {
+      await admin.query(`DROP DATABASE IF EXISTS "${resetDbName}" WITH (FORCE)`)
+    } finally {
+      await admin.end()
+    }
+  })
+
+  it('exits 0 and drops the relocated schema while leaving public intact', async () => {
+    await expect(
+      execFileAsync(process.execPath, [resetScript], {
+        env: { ...process.env, DATABASE_URL: resetUrl, DB_SCHEMA: APP_SCHEMA },
+      }),
+    ).resolves.toBeDefined()
+
+    const { pool } = createDbClient(resetUrl)
+    try {
+      const q = async (name: string): Promise<unknown> =>
+        (await pool.query('SELECT to_regnamespace($1) AS r', [name])).rows[0]?.r
+      expect(await q(APP_SCHEMA)).toBeNull() // relocated app schema dropped
+      expect(await q('public')).toBeTruthy() // public survived (was never ours to drop)
+    } finally {
+      await pool.end()
+    }
   })
 })
