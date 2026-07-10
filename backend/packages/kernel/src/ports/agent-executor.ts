@@ -11,6 +11,7 @@ import type {
   PullRequestRef,
   PeerPullRequest,
   ReferenceRepo,
+  AprioriBranch,
   ServiceProvisioning,
   StepSubtasks,
   TestSecretRef,
@@ -298,6 +299,20 @@ export interface AgentRunContext {
    * Absent for non-doc tasks or a task with none attached.
    */
   referenceRepos?: ReferenceRepo[]
+  /**
+   * Pre-existing branches of the PRIMARY target repo attached to this task as run input
+   * (the apriori-branches initiative) — lifted verbatim by the engine from the task
+   * block's `aprioriBranches`. Two modes with disjoint semantics:
+   *  - a single `working` entry names the branch the run BUILDS INSIDE: the executor swaps
+   *    it in for the deterministic `cat-factory/<blockId>` work branch (the PR opens from it,
+   *    the CI gate polls it, the merger merges it), and it must already exist (a missing
+   *    working branch fails the dispatch loudly — it is never created).
+   *  - `reference` entries are read-only context branches the agent may inspect but never
+   *    commit to (consumed in a later slice via the harness `referenceBranches` fetch).
+   * Absent for a task with no apriori branches attached; a pure projection (self-contained),
+   * so no repo reads here.
+   */
+  aprioriBranches?: AprioriBranch[]
   /**
    * For a `conflict-resolver` the conflicts gate dispatched on a PEER-repo conflict
    * (a multi-repo, service-connections task), which of the block's repos the resolver

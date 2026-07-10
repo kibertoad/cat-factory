@@ -2361,6 +2361,81 @@ export function defineAgentConformance(harness: ConformanceHarness): void {
         expect(commits[0]?.files[0]?.path).toBe('compliance/REPORT.md')
         expect(commits[0]?.files[0]?.content).toContain('all clear')
       })
+
+      // Apriori WORKING branch (slice 2): when the task names an existing branch as the run's
+      // starting point, the backend repo-ops must read/commit that branch instead of the
+      // deterministic `cat-factory/<blockId>` one — the RunDispatcher branch-swap, asserted
+      // identically on D1 and Postgres so a facade can't diverge on where a post-op commits.
+      it('commits a custom kind’s post-op onto the task’s apriori working branch, not cat-factory/*', async () => {
+        const commits: { branch: string; files: { path: string; content: string }[] }[] = []
+        const repo: RepoFiles = {
+          getFile: async () => null,
+          listDirectory: async () => [],
+          // The apriori working branch already exists (probe-only ensure finds it): headSha
+          // truthy for every ref, so the swap resolves to it rather than creating one.
+          headSha: async () => 'base-sha',
+          createBranch: async () => {},
+          commitFiles: async (input) => {
+            commits.push({ branch: input.branch, files: input.files })
+            return { sha: 'commit-sha' }
+          },
+          openPullRequest: async () => {
+            throw new Error('not exercised by this test')
+          },
+        }
+
+        const agentKindRegistry = defaultAgentKindRegistry()
+        agentKindRegistry.register({
+          kind: 'conformance-auditor',
+          systemPrompt: 'You audit the service for compliance.',
+          agent: { surface: 'container-explore', output: { kind: 'structured' } },
+          presentation: {
+            label: 'Conformance Auditor',
+            icon: 'i-lucide-shield-check',
+            color: '#10b981',
+            description: 'Audits the service for compliance.',
+            category: 'review',
+            resultView: 'generic-structured',
+          },
+          postOps: [
+            async (ctx) => {
+              await ctx.repo.commitFiles({
+                branch: ctx.branch,
+                message: 'chore: compliance report',
+                files: [{ path: 'compliance/REPORT.md', content: '# ok\n' }],
+              })
+            },
+          ],
+        })
+
+        const app = harness.makeApp(
+          { customResult: { findings: 'all clear' } },
+          { resolveRunRepoContext: async () => ({ repo, baseBranch: 'main' }), agentKindRegistry },
+        )
+        const { workspace } = await app.createWorkspace()
+        const wsId = workspace.id
+
+        // Name an existing branch as the run's working branch (single working entry).
+        const patched = await app.call('PATCH', `/workspaces/${wsId}/blocks/task_login`, {
+          aprioriBranches: [{ name: 'feature/spike', mode: 'working' }],
+        })
+        expect(patched.status).toBe(200)
+
+        const pipeline = await app.call<Pipeline>('POST', `/workspaces/${wsId}/pipelines`, {
+          name: 'Compliance audit',
+          agentKinds: ['conformance-auditor'],
+        })
+        const start = await app.call('POST', `/workspaces/${wsId}/blocks/task_login/executions`, {
+          pipelineId: pipeline.body.id,
+        })
+        expect(start.status).toBe(201)
+        const exec = (await app.drive(wsId)).find((e) => e.blockId === 'task_login')!
+        expect(exec.status).toBe('done')
+
+        // The post-op committed onto the apriori working branch, NOT `cat-factory/task_login`.
+        expect(commits).toHaveLength(1)
+        expect(commits[0]?.branch).toBe('feature/spike')
+      })
     })
 
     describe('registered custom gate + step resolver', () => {

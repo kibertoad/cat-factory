@@ -302,6 +302,91 @@ describe('ContainerAgentExecutor.buildJobBody (per-kind body shapes)', () => {
   })
 })
 
+// Apriori WORKING branch: a task names an existing branch as the run's starting point, so the
+// executor swaps it in for the deterministic `cat-factory/<blockId>` work branch. The branch
+// must pre-exist (probe-only, never created); a missing one — or one equal to base — fails the
+// dispatch loudly.
+describe('ContainerAgentExecutor apriori working branch', () => {
+  const WORKING: NonNullable<AgentRunContext['aprioriBranches']> = [
+    { name: 'feature/spike', mode: 'working' },
+  ]
+
+  it('coder builds inside the apriori working branch (newBranch/pushBranch swapped, PR head = it)', async () => {
+    const { executor, captured } = makeExecutor()
+    await executor.startJob({ ...context('coder'), aprioriBranches: WORKING })
+    const spec = captured[0]!.spec
+    expect(spec.mode).toBe('coding')
+    expect(spec.branch).toBe('main') // still branches off base…
+    expect(spec.newBranch).toBe('feature/spike') // …onto the user's branch, not cat-factory/*
+    expect(spec.pushBranch).toBe('feature/spike')
+    expect(spec.pr).toBeDefined() // opens the PR from the apriori branch
+  })
+
+  it('a read-only agent explores the apriori working branch (probe reports it ready)', async () => {
+    const { executor, captured } = makeExecutor()
+    await executor.startJob({ ...context('architect'), aprioriBranches: WORKING })
+    expect(captured[0]!.spec.branch).toBe('feature/spike')
+  })
+
+  it('probes the apriori branch (create: false), never creating it', async () => {
+    const calls: { branch: string; create: boolean }[] = []
+    const { executor } = makeExecutor({
+      ensureWorkBranch: async (_repo, branch, options) => {
+        calls.push({ branch, create: options.create })
+        return true
+      },
+    })
+    await executor.startJob({ ...context('coder'), aprioriBranches: WORKING })
+    expect(calls).toEqual([{ branch: 'feature/spike', create: false }])
+  })
+
+  it('fails the dispatch loudly when the apriori working branch does not exist', async () => {
+    const { executor } = makeExecutor({ ensureWorkBranch: async () => false })
+    await expect(
+      executor.startJob({ ...context('coder'), aprioriBranches: WORKING }),
+    ).rejects.toThrow(/feature\/spike.*does not exist/s)
+  })
+
+  it('rejects an apriori working branch equal to the repo base branch', async () => {
+    const { executor } = makeExecutor()
+    await expect(
+      executor.startJob({
+        ...context('coder'),
+        aprioriBranches: [{ name: 'main', mode: 'working' }],
+      }),
+    ).rejects.toThrow(/base branch/)
+  })
+
+  it('takes the ready path (no probe) once a PR is open on the apriori branch', async () => {
+    let probed = false
+    const { executor, captured } = makeExecutor({
+      ensureWorkBranch: async () => {
+        probed = true
+        return true
+      },
+    })
+    await executor.startJob({
+      ...context('coder', {
+        pullRequest: { url: 'https://gh/pr/5', number: 5, branch: 'feature/spike' },
+      }),
+      aprioriBranches: WORKING,
+    })
+    expect(probed).toBe(false) // the recorded PR head IS the work branch → skip the round-trip
+    // The work branch stays the apriori branch (a coder branches off base onto it).
+    expect(captured[0]!.spec.newBranch).toBe('feature/spike')
+    expect(captured[0]!.spec.pushBranch).toBe('feature/spike')
+  })
+
+  it('a reference-only apriori entry leaves the work branch as the platform default', async () => {
+    const { executor, captured } = makeExecutor()
+    await executor.startJob({
+      ...context('coder'),
+      aprioriBranches: [{ name: 'spike/prior-art', mode: 'reference' }],
+    })
+    expect(captured[0]!.spec.newBranch).toBe('cat-factory/blk_1')
+  })
+})
+
 describe('ContainerAgentExecutor multi-repo gate/merge targeting', () => {
   // Service-connections phase 4 follow-ups: the conflict-resolver is dispatched AT a conflicted
   // PEER repo, and the merger scores the COMBINED diff across every PR's repo. Both need the plural
