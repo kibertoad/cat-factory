@@ -131,6 +131,7 @@ export {
   formatConfigProblems,
   requireEnv,
   requireEncryptionKey,
+  requireGitHubAppPrivateKey,
   MIN_ENCRYPTION_KEY_BYTES,
   ENV_HELP,
   type ConfigProblem,
@@ -146,7 +147,11 @@ export {
   type WebCryptoSecretCipherOptions,
 } from './crypto/WebCryptoSecretCipher.js'
 export { WebCryptoPersonalSecretCipher } from './crypto/WebCryptoPersonalSecretCipher.js'
-export { GitHubAppAuth, type GitHubAppAuthDependencies } from './github/GitHubAppAuth.js'
+export {
+  GitHubAppAuth,
+  type GitHubAppAuthDependencies,
+  explainInstallationTokenMintFailure,
+} from './github/GitHubAppAuth.js'
 export {
   GitHubAppRegistry,
   type GitHubAppRegistryDependencies,

@@ -3,6 +3,7 @@ import type {
   GitHubInstallationRepository,
   InstallationPermissions,
 } from '@cat-factory/kernel'
+import { GITHUB_SETTINGS_URLS, VCS_DOC_URLS } from '@cat-factory/kernel'
 import { base64url, pkcs8PemToDer } from '../crypto/encoding.js'
 
 // GitHub App authentication, implemented entirely on Web Crypto (`crypto.subtle`)
@@ -20,6 +21,49 @@ import { base64url, pkcs8PemToDer } from '../crypto/encoding.js'
 const TOKEN_SKEW_MS = 5 * 60 * 1000
 const USER_AGENT = 'cat-factory'
 const API_VERSION = '2022-11-28'
+
+/**
+ * Turn a failed installation-token mint into an actionable message (error-message coverage C3).
+ * The App JWT → `/access_tokens` call is not a `VcsClient` request, so it doesn't route through
+ * `describeVcsApiError`; this is the local equivalent for that one endpoint.
+ *
+ * IMPORTANT: the first line is UNCHANGED — `Failed to mint installation token for <id> (HTTP
+ * <status>)` — because the stale-installation reconcile classifies purely by matching this phrase
+ * (`isInstallationTokenGoneError` regex `/Failed to mint installation token .*\(HTTP (404|410)\)/`
+ * and `isInstallationGoneError` `/\(HTTP (401|404|410)\)/` in `reconcileStaleRepos.ts`). We only
+ * APPEND a cause + remedy so elaborating the text never changes classification. Exported for
+ * unit testing, mirroring `explainMigrationFailure`.
+ */
+export function explainInstallationTokenMintFailure(
+  installationId: number,
+  status: number,
+): string {
+  const base = `Failed to mint installation token for ${installationId} (HTTP ${status})`
+  if (status === 401) {
+    return (
+      `${base}\nCause: the App failed to authenticate — GITHUB_APP_PRIVATE_KEY does not match this ` +
+      `App, or the key was rotated in the App settings. Fix: set GITHUB_APP_PRIVATE_KEY to the ` +
+      `App's current private key (PKCS#8 PEM). Manage the App at ${GITHUB_SETTINGS_URLS.installations}. ` +
+      `See ${VCS_DOC_URLS.githubOperations}.`
+    )
+  }
+  if (status === 404 || status === 410) {
+    return (
+      `${base}\nCause: installation ${installationId} no longer exists — the GitHub App was ` +
+      `uninstalled from the org/repo, or this workspace points at a stale installation. Fix: ` +
+      `reinstall the App and reconnect GitHub for the workspace (Settings → GitHub). Manage ` +
+      `installations at ${GITHUB_SETTINGS_URLS.installations}. See ${VCS_DOC_URLS.githubIntegration}.`
+    )
+  }
+  if (status === 403) {
+    return (
+      `${base}\nCause: the App JWT was rejected or rate-limited for this installation. Fix: verify ` +
+      `GITHUB_APP_ID + GITHUB_APP_PRIVATE_KEY are current and the server clock is accurate, then ` +
+      `retry shortly. See ${VCS_DOC_URLS.githubOperations}.`
+    )
+  }
+  return base
+}
 
 /**
  * Installation tokens (live ~1h repo read/write credentials) are cached IN
@@ -127,9 +171,7 @@ export class GitHubAppAuth {
       },
     )
     if (!res.ok) {
-      throw new Error(
-        `Failed to mint installation token for ${installationId} (HTTP ${res.status})`,
-      )
+      throw new Error(explainInstallationTokenMintFailure(installationId, res.status))
     }
     const body = (await res.json()) as AccessTokenResponse
     const expiresAt = Date.parse(body.expires_at)
@@ -145,13 +187,27 @@ export class GitHubAppAuth {
 
   private importKey(): Promise<CryptoKey> {
     if (!this.keyPromise) {
-      this.keyPromise = crypto.subtle.importKey(
-        'pkcs8',
-        pkcs8PemToDer(this.deps.privateKeyPem),
-        { name: 'RSASSA-PKCS1-v1_5', hash: 'SHA-256' },
-        false,
-        ['sign'],
-      )
+      // The config loaders validate the key's SHAPE at boot (PKCS#8 PEM + decodable body — see
+      // `requireGitHubAppPrivateKey`), so the common malformed cases fail on the misconfigured
+      // screen. A body that is valid base64 but not actually a PKCS#8 RSA key still slips through
+      // to here and would reject opaquely, so name the var + the openssl conversion on failure.
+      this.keyPromise = crypto.subtle
+        .importKey(
+          'pkcs8',
+          pkcs8PemToDer(this.deps.privateKeyPem),
+          { name: 'RSASSA-PKCS1-v1_5', hash: 'SHA-256' },
+          false,
+          ['sign'],
+        )
+        .catch((cause) => {
+          throw new Error(
+            'GITHUB_APP_PRIVATE_KEY could not be imported as a PKCS#8 RSA private key. Ensure it is ' +
+              "the GitHub App's private key converted to PKCS#8 (`-----BEGIN PRIVATE KEY-----`) with " +
+              '`openssl pkcs8 -topk8 -nocrypt -in key.pem -out key.pk8.pem`. ' +
+              `See ${VCS_DOC_URLS.githubOperations}.`,
+            { cause },
+          )
+        })
     }
     return this.keyPromise
   }

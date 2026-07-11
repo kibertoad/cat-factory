@@ -22,6 +22,7 @@ import {
   logger,
   parseDetectionConventions,
   requireEncryptionKey,
+  requireGitHubAppPrivateKey,
   resolveMachineTokenTtlMs,
 } from '@cat-factory/server'
 import { GITLAB_PUBLIC_API_BASE } from '@cat-factory/gitlab'
@@ -248,6 +249,17 @@ export function loadNodeConfig(env: NodeJS.ProcessEnv): AppConfig {
   const githubAppId = env.GITHUB_APP_ID?.trim() ?? ''
   const githubAppConfigured =
     githubAppId !== '' && (env.GITHUB_APP_PRIVATE_KEY?.trim() ?? '') !== ''
+  // Validate the App private key's SHAPE at boot (present + PKCS#8 PEM + decodable body) whenever
+  // the App is configured, so a malformed key fails on the misconfigured screen with the openssl
+  // conversion remedy instead of opaquely at the first installation-token mint (error-message
+  // coverage A3). The privileged tier's key is validated the same way when it is present.
+  if (githubAppConfigured) requireGitHubAppPrivateKey(env.GITHUB_APP_PRIVATE_KEY)
+  if ((env.GITHUB_PRIVILEGED_APP_PRIVATE_KEY?.trim() ?? '') !== '') {
+    requireGitHubAppPrivateKey(
+      env.GITHUB_PRIVILEGED_APP_PRIVATE_KEY,
+      'GITHUB_PRIVILEGED_APP_PRIVATE_KEY',
+    )
+  }
   // Self-hosted runner pools encrypt their scheduler credentials at rest; opt-in via
   // the enable flag, sealed with the shared ENCRYPTION_KEY (mirroring the Worker).
   const runnersEncryptionKey = env.ENCRYPTION_KEY?.trim() ?? ''
