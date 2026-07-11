@@ -25,7 +25,11 @@ export {
   DEFAULT_WEB_SEARCH_COUNT,
 } from './modules/webSearch/upstreams.js'
 export { escalateStaleNotifications } from './runtime/escalateNotifications.js'
-export { reconcileStaleRepos, type GitHubReconcileDeps } from './runtime/reconcileStaleRepos.js'
+export {
+  GITHUB_RECONCILE_STALE_MS,
+  reconcileStaleRepos,
+  type GitHubReconcileDeps,
+} from './runtime/reconcileStaleRepos.js'
 export { StateSigner, type InstallState } from './github/state.js'
 export {
   GitHubOAuth,

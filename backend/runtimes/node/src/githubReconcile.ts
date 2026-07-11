@@ -1,5 +1,10 @@
 import type { Clock } from '@cat-factory/kernel'
-import { type GitHubReconcileDeps, type Logger, reconcileStaleRepos } from '@cat-factory/server'
+import {
+  GITHUB_RECONCILE_STALE_MS,
+  type GitHubReconcileDeps,
+  type Logger,
+  reconcileStaleRepos,
+} from '@cat-factory/server'
 import { startSweeper } from './sweeper.js'
 
 // Periodic GitHub reconciliation for the Node facade — the analogue of the Worker's
@@ -12,8 +17,6 @@ import { startSweeper } from './sweeper.js'
 
 /** How often the reconcile pass runs (matches the Worker's frequent cron). */
 const GITHUB_RECONCILE_INTERVAL_MS = 2 * 60 * 1000
-/** A projection not synced for this long is considered stale (matches the Worker). */
-const GITHUB_RECONCILE_STALE_MS = 30 * 60 * 1000
 
 /**
  * Start the periodic reconcile sweep. Runs once immediately then on the two-minute
@@ -26,6 +29,7 @@ export function startGitHubReconcileSweeper(
   log: Logger,
 ): () => void {
   return startSweeper({
+    name: 'github-reconcile',
     intervalMs: GITHUB_RECONCILE_INTERVAL_MS,
     log,
     failureMessage: 'github reconcile sweep failed',

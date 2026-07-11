@@ -2,6 +2,7 @@ import type { Clock, StaleRepoRef } from '@cat-factory/kernel'
 import { describe, expect, it, vi } from 'vitest'
 import type { Logger } from '../src/observability/logger.js'
 import {
+  GITHUB_RECONCILE_STALE_MS,
   type GitHubReconcileDeps,
   reconcileStaleRepos,
 } from '../src/runtime/reconcileStaleRepos.js'
@@ -53,7 +54,8 @@ function makeDeps(
   }
 }
 
-const STALE_MS = 30 * 60 * 1000
+// Pin the shared default staleness window both facades sweep with.
+const STALE_MS = GITHUB_RECONCILE_STALE_MS
 
 describe('reconcileStaleRepos (shared)', () => {
   it('re-syncs every stale repo at now - staleMs and reports the count', async () => {

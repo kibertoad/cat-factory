@@ -18,6 +18,7 @@ describe('startSweeper', () => {
   it('runs the tick once immediately, before the first interval', async () => {
     let calls = 0
     const stop = startSweeper({
+      name: 'test-sweep',
       intervalMs: 10_000, // long enough that only the immediate run can fire
       log: noopLog,
       failureMessage: 'x',
@@ -32,6 +33,7 @@ describe('startSweeper', () => {
   it('re-runs on the interval', async () => {
     let calls = 0
     const stop = startSweeper({
+      name: 'test-sweep',
       intervalMs: 20,
       log: noopLog,
       failureMessage: 'x',
@@ -52,6 +54,7 @@ describe('startSweeper', () => {
       release = resolve
     })
     const stop = startSweeper({
+      name: 'test-sweep',
       intervalMs: 20,
       log: noopLog,
       failureMessage: 'x',
@@ -77,6 +80,7 @@ describe('startSweeper', () => {
     const log = { info: () => {}, warn: () => {}, error } as unknown as Logger
     let runs = 0
     const stop = startSweeper({
+      name: 'test-sweep',
       intervalMs: 20,
       log,
       failureMessage: 'kaizen sweep failed',
@@ -96,6 +100,7 @@ describe('startSweeper', () => {
   it('stops ticking after the returned stop is called', async () => {
     let runs = 0
     const stop = startSweeper({
+      name: 'test-sweep',
       intervalMs: 20,
       log: noopLog,
       failureMessage: 'x',

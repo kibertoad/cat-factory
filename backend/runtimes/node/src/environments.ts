@@ -23,6 +23,7 @@ export function startEnvironmentSweeper(
   const environments = container.environments
   if (!environments) return () => {}
   return startSweeper({
+    name: 'environment-ttl',
     intervalMs: ENVIRONMENT_SWEEP_INTERVAL_MS,
     log,
     failureMessage: 'environment TTL sweep failed',

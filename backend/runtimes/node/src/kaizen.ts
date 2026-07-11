@@ -27,6 +27,7 @@ export function startKaizenSweeper(
   const kaizen = container.kaizen
   if (!kaizen) return () => {}
   return startSweeper({
+    name: 'kaizen',
     intervalMs: KAIZEN_SWEEP_INTERVAL_MS,
     log,
     failureMessage: 'kaizen sweep failed',

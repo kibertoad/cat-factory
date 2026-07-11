@@ -17,6 +17,8 @@ import { AsyncTask, SimpleIntervalJob, ToadScheduler } from 'toad-scheduler'
 
 /** A best-effort periodic sweep started via {@link startSweeper}. */
 export interface SweeperOptions {
+  /** Short sweep name, used as the toad-scheduler task id (so a scheduler-surfaced error names its sweep). */
+  name: string
   /** How often to run the sweep. */
   intervalMs: number
   /** Logger for the best-effort failure line. */
@@ -32,11 +34,16 @@ export interface SweeperOptions {
  * on the interval; skips a tick while the previous pass is still in flight
  * (`preventOverrun`); logs (never throws) a failed pass. Returns a stop function that
  * halts the job.
+ *
+ * NOTE: unlike the hand-rolled `setInterval(...).unref()` timers this replaced, the
+ * scheduler's interval is NOT unref'd (toad-scheduler offers no unref), so a live sweeper
+ * keeps the process alive — every caller MUST invoke the returned stop function on
+ * shutdown (`start()` does, before its `process.exit(0)`).
  */
 export function startSweeper(options: SweeperOptions): () => void {
-  const { intervalMs, log, failureMessage, tick } = options
+  const { name, intervalMs, log, failureMessage, tick } = options
   const scheduler = new ToadScheduler()
-  const task = new AsyncTask('sweeper', tick, (error) => {
+  const task = new AsyncTask(name, tick, (error) => {
     log.error({ err: error instanceof Error ? error.message : String(error) }, failureMessage)
   })
   const job = new SimpleIntervalJob({ milliseconds: intervalMs, runImmediately: true }, task, {

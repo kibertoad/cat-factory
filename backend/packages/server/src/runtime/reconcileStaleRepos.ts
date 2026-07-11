@@ -19,6 +19,12 @@ import type { Logger } from '../observability/logger.js'
 // (the `escalateStaleNotifications` precedent) means a change can't silently diverge
 // between the two facades — the shared unit test guards the behaviour for both.
 
+/**
+ * Default staleness window: a projection not synced for this long is picked up by the
+ * pass. Shared alongside the pass itself so the facades' sweeps can't drift apart.
+ */
+export const GITHUB_RECONCILE_STALE_MS = 30 * 60 * 1000
+
 /** The seams the reconcile pass drives (kept narrow so it is unit-testable with fakes). */
 export interface GitHubReconcileDeps {
   repoProjectionRepository: Pick<RepoProjectionRepository, 'listStale'>

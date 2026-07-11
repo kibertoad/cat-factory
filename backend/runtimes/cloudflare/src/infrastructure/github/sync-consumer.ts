@@ -60,6 +60,10 @@ export async function reconcileStaleRepos(
   staleMs: number,
 ): Promise<number> {
   if (!loadConfig(env).github.enabled) return 0
+  // Resolve the direct-sync fallback once per pass, not per stale repo — building the
+  // whole DI container inside the loop is wasted work. The queue-bound production
+  // configuration never needs it.
+  const github = env.GITHUB_SYNC_QUEUE ? undefined : buildContainer(env).github
   return reconcileStaleReposCore(
     {
       repoProjectionRepository: new D1RepoProjectionRepository({ db: env.DB }),
@@ -69,9 +73,8 @@ export async function reconcileStaleRepos(
         // fall back to an inline direct sync — the Worker's local/dev configuration.
         if (env.GITHUB_SYNC_QUEUE) {
           await env.GITHUB_SYNC_QUEUE.send({ kind: 'resync-repo', workspaceId, repoGithubId })
-        } else {
-          const github = buildContainer(env).github
-          if (github) await github.syncService.syncRepoById(workspaceId, repoGithubId)
+        } else if (github) {
+          await github.syncService.syncRepoById(workspaceId, repoGithubId)
         }
       },
     },

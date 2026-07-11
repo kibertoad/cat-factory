@@ -45,6 +45,7 @@ export function startInitiativeLoopSweeper(
   const initiatives = container.initiatives
   if (!initiatives) return () => {}
   return startSweeper({
+    name: 'initiative-loop',
     intervalMs,
     log,
     failureMessage: 'initiative-loop sweep failed',

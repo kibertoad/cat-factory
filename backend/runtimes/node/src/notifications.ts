@@ -23,6 +23,7 @@ export function startNotificationEscalationSweeper(
 ): () => void {
   if (!container.notifications) return () => {}
   return startSweeper({
+    name: 'notification-escalation',
     intervalMs: NOTIFICATION_ESCALATION_INTERVAL_MS,
     log,
     failureMessage: 'notification escalation failed',

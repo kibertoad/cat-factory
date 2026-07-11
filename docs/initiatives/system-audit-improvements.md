@@ -246,9 +246,13 @@ alongside `GitHubReconcileDeps`). Each facade supplies ONLY its per-repo driver 
 The classifiers were moved **verbatim** (regex→structured code is I7's job, sequenced
 after this). The pure unit test moved to `server/test/reconcileStaleRepos.spec.ts` — one
 test for one implementation, so the facades can't silently diverge (the drift this item
-existed to stop). The one behavioural harmonisation: the per-repo log field is now
-`sweep: 'github-reconcile'` on both facades (was `sweeper:` on Node / `cron:` on the
-Worker), and the Worker's reconcile warn/error no longer carries a stack (Node never did).
+existed to stop). The behavioural harmonisations: all reconcile logs — per-repo lines AND
+the Worker's cron summary — now use `sweep: 'github-reconcile'` (was `sweeper:` on Node /
+`cron:` on the Worker), and the Worker's reconcile warn/error no longer carries a stack
+(Node never did). Review follow-ups on the same slice: the 30-minute staleness window is
+the shared exported `GITHUB_RECONCILE_STALE_MS` (both facades + the test consume it, so it
+can't drift either), and the Worker's queue-less direct-sync fallback resolves its DI
+container once per pass instead of once per stale repo.
 
 #### 5. Node async GitHub ingest is inline; Cloudflare uses a queue — P1
 
@@ -286,9 +290,11 @@ facade's periodic sweeps now go through one seam — `startSweeper` in
 `SimpleIntervalJob` with `preventOverrun: true` is the non-overlap guard (so the DB-heavy
 `initiativeLoop` / `recurring` / notification-escalation sweeps can no longer double-spawn),
 `runImmediately: true` keeps the run-once-first behaviour, and the `AsyncTask` error handler
-keeps the best-effort logging. All seven sweepers were converted (kaizen, githubReconcile,
+keeps the best-effort logging. All eight sweepers were converted (kaizen, githubReconcile,
 initiativeLoop, recurring, notifications, environments, and both retention sweeps), deleting
 the per-file timer/guard boilerplate — a new sweeper physically cannot forget the guard now.
+Each sweep passes a distinct `name` used as the toad-scheduler task id, so a
+scheduler-surfaced error names its sweep.
 Guard: `node/test/sweeper.spec.ts` pins the immediate run, the non-overlap skip, best-effort
 failure logging, and clean stop. NOTE: `toad-scheduler` does not `unref` its interval, unlike
 the old hand-rolled timers, but the Node process is always kept alive by its HTTP listener and

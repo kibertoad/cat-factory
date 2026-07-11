@@ -162,6 +162,7 @@ export function startRetentionSweeper(
   log: Logger,
 ): () => void {
   return startSweeper({
+    name: 'retention',
     intervalMs: RETENTION_SWEEP_INTERVAL_MS,
     log,
     failureMessage: 'retention sweep failed',
@@ -189,6 +190,7 @@ export function startArtifactRetentionSweeper(
   log: Logger,
 ): () => void {
   return startSweeper({
+    name: 'artifact-retention',
     intervalMs: RETENTION_SWEEP_INTERVAL_MS,
     log,
     failureMessage: 'artifact retention sweep failed',

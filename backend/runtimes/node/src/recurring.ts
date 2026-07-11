@@ -24,6 +24,7 @@ export function startScheduleSweeper(
   const recurring = container.recurring
   if (!recurring) return () => {}
   return startSweeper({
+    name: 'recurring-pipelines',
     intervalMs: SCHEDULE_SWEEP_INTERVAL_MS,
     log,
     failureMessage: 'recurring-pipeline sweep failed',
