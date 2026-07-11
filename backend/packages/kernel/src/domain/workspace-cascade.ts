@@ -37,9 +37,9 @@
  * - `binary_artifacts` — its rows are only half the story: the backing blob BYTES
  *   (R2 / S3 / filesystem) must be deleted through the `BinaryBlobBackend` port at
  *   the service layer, not by bare SQL. Deleting the metadata row here would strand
- *   the bytes forever (the row is the only handle on the blob key). Reclaimed by the
- *   workspace-delete blob purge instead. (Until that lands, these rows continue to
- *   orphan exactly as before — no regression from this list.)
+ *   the bytes forever (the row is the only handle on the blob key). Reclaimed instead
+ *   by `WorkspaceService.delete`, which purges rows + bytes together through the
+ *   `BinaryArtifactStore.deleteByWorkspace` port BEFORE this cascade runs.
  * - Runtime-specific tables that only exist on one facade (e.g. the Cloudflare-only
  *   `live_containers` Durable-Object tracking table) are appended by that facade.
  */
