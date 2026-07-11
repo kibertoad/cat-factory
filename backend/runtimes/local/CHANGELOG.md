@@ -1,5 +1,46 @@
 # @cat-factory/local-server
 
+## 0.64.19
+
+### Patch Changes
+
+- 8d65179: Boot-time configuration validation for three previously-opaque failures (error-message
+  coverage initiative, items A2/A4/A6):
+
+  - **A2** — the system `ENCRYPTION_KEY` is now validated at config load on every facade
+    (present, valid base64, decoding to a full AES-256 key) via a shared
+    `requireEncryptionKey` helper in `@cat-factory/server`, wired into the Node and Worker
+    config loaders and reused by local mode. A malformed key fails with an actionable,
+    doc-linked message on the misconfigured screen instead of lazily deep inside the first
+    cipher build (a bare "must decode to at least 32 bytes" or an opaque `atob` error).
+  - **A4** — the Cloudflare Worker's primary `DB` binding is guarded by `requireDb` at
+    container build, mirroring `requireTelemetryDb`, so an unbound/misnamed binding fails
+    fast with a `[[d1_databases]]` remedy rather than NPE-ing deep in the first repository
+    call.
+  - **A6** — an invalid `DB_SCHEMA` / `DB_MIGRATIONS_SCHEMA` on the Node facade now throws a
+    `ConfigValidationError`, so it reaches the "backend misconfigured" fallback screen
+    instead of hard-crashing the process with an opaque message.
+
+- a5dcf7d: Prune resolved notifications on the retention sweep. The `notifications` table was
+  never pruned on either facade (upsert/escalate only, no delete), so resolved
+  (acted/dismissed) cards accumulated without bound on a table read on the snapshot hot
+  path. A new `NotificationRepository.deleteResolvedOlderThan(cutoff)` port method
+  (mirrored D1 ⇄ Drizzle) is wired into both facades' retention sweeps under a new
+  `RetentionConfig.notificationsMs` window (`NOTIFICATION_RETENTION_DAYS`, default 90
+  days). Only terminal rows past the window are deleted — `open` cards (the actionable
+  inbox) are never touched. Covered by a new cross-runtime notification conformance
+  suite. (system-audit-improvements initiative, item 1.)
+- Updated dependencies [8d65179]
+- Updated dependencies [a5dcf7d]
+  - @cat-factory/server@0.110.0
+  - @cat-factory/node-server@0.92.2
+  - @cat-factory/kernel@0.119.0
+  - @cat-factory/executor-harness@1.43.0
+  - @cat-factory/agents@0.53.2
+  - @cat-factory/gitlab@0.7.54
+  - @cat-factory/integrations@0.81.2
+  - @cat-factory/orchestration@0.105.2
+
 ## 0.64.18
 
 ### Patch Changes
