@@ -23,6 +23,7 @@ import type {
   VcsConnectionRef,
   VcsRepoRef,
 } from '@cat-factory/kernel'
+import { describeVcsApiError } from '@cat-factory/kernel'
 import type {
   CommitFilesInput,
   MergePullRequestInput,
@@ -899,7 +900,14 @@ export class FetchGitLabClient implements VcsClient {
       const text = await res.text().catch(() => '')
       throw new GitLabApiError(
         res.status,
-        `GitLab ${opts.method ?? 'GET'} ${url} → ${res.status}: ${text.slice(0, 300)}`,
+        describeVcsApiError({
+          provider: 'gitlab',
+          status: res.status,
+          method: opts.method ?? 'GET',
+          url,
+          body: text.slice(0, 300),
+          rateLimited: res.status === 429,
+        }),
       )
     }
     const json = res.status === 204 ? null : await res.json().catch(() => null)

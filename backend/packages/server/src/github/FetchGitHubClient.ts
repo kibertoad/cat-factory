@@ -28,6 +28,8 @@ import {
   type RepoContentEntry,
   type RepoEntry,
   type RepoFileContent,
+  describeVcsApiError,
+  VCS_DOC_URLS,
 } from '@cat-factory/kernel'
 import { githubProjection as gp } from '@cat-factory/integrations'
 import type { CommitFilesInput } from '@cat-factory/contracts'
@@ -196,7 +198,10 @@ export class FetchGitHubClient implements GitHubClient {
         throw err
       }
     }
-    throw new GitHubApiError(404, `Installation ${installationId} not found on any configured App`)
+    throw new GitHubApiError(
+      404,
+      `Installation ${installationId} not found on any configured App — the GitHub App was likely uninstalled from the account, or this workspace points at a stale installation. Fix: reconnect GitHub for this workspace to re-link it. See ${VCS_DOC_URLS.githubIntegration}.`,
+    )
   }
 
   async listInstallations(): Promise<InstallationSummary[]> {
@@ -351,9 +356,18 @@ export class FetchGitHubClient implements GitHubClient {
     })
     if (!res.ok) {
       const text = await res.text().catch(() => '')
+      const resetSec = numHeader(res, 'x-ratelimit-reset')
       throw new GitHubApiError(
         res.status,
-        `GitHub GET ${url} → ${res.status}: ${text.slice(0, 300)}`,
+        describeVcsApiError({
+          provider: 'github',
+          status: res.status,
+          method: 'GET',
+          url,
+          body: text.slice(0, 300),
+          rateLimited: numHeader(res, 'x-ratelimit-remaining') === 0,
+          resetAt: resetSec === null ? null : resetSec * 1000,
+        }),
       )
     }
     const json = res.status === 204 ? null : await res.json().catch(() => null)
@@ -1255,9 +1269,18 @@ export class FetchGitHubClient implements GitHubClient {
     if (res.status === 304) return { status: 304, res, json: null, next: undefined }
     if (!res.ok) {
       const text = await res.text().catch(() => '')
+      const resetSec = numHeader(res, 'x-ratelimit-reset')
       throw new GitHubApiError(
         res.status,
-        `GitHub ${opts.method ?? 'GET'} ${url} → ${res.status}: ${text.slice(0, 300)}`,
+        describeVcsApiError({
+          provider: 'github',
+          status: res.status,
+          method: opts.method ?? 'GET',
+          url,
+          body: text.slice(0, 300),
+          rateLimited: numHeader(res, 'x-ratelimit-remaining') === 0,
+          resetAt: resetSec === null ? null : resetSec * 1000,
+        }),
       )
     }
     const json = res.status === 204 ? null : await res.json().catch(() => null)
