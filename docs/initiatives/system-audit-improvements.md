@@ -1,6 +1,6 @@
 # Initiative: system audit — data lifecycle, runtime parity, robustness & coverage
 
-**Status:** in progress (items 1–4, 6–8 landed) · **Owner:** core · **Started:** 2026-07-11
+**Status:** in progress (items 1–8 landed) · **Owner:** core · **Started:** 2026-07-11
 
 > This is the durable source of truth for a multi-PR initiative. Read it first before
 > picking up the next slice; update the checklist at the end of each PR.
@@ -83,7 +83,7 @@ benefit, bounded blast radius; **P3** = hygiene/polish. Effort S/M/L.
 | 2   | P1  | retention   | Workspace-delete cascade clears only 7 tables → permanent orphans in ~40 others             | M      | ✅ done | (this PR) |
 | 3   | P1  | retention   | Binary-artifact rows + blob bytes of deleted workspaces never reclaimed                     | M      | ✅ done | (this PR) |
 | 4   | P2  | parity      | GitHub reconcile loop duplicated verbatim across Node/Worker — hoist to shared server pkg   | S      | ✅ done | (this PR) |
-| 5   | P1  | parity      | Node async GitHub ingest runs inline in the request; add pg-boss-backed queue impls         | M–L    | ⬜ todo |           |
+| 5   | P1  | parity      | Node async GitHub ingest runs inline in the request; add pg-boss-backed queue impls         | M–L    | ✅ done | (this PR) |
 | 6   | P2  | parity      | Node sweeper re-entrancy guards inconsistent (initiativeLoop / recurring / escalation)      | S      | ✅ done | (this PR) |
 | 7   | P2  | conformance | Four retention prunes have no cross-runtime conformance assertion                           | S–M    | ✅ done | (this PR) |
 | 8   | P2  | engine      | Notification-escalation sweep: per-workspace settings point-read (N+1 the cache can't fix)  | M      | ✅ done | (this PR) |
@@ -270,6 +270,36 @@ Worker's queue consumer, reusing `GitHubSyncService`), plus an integration asser
 the enqueue path is taken. This closes the "Async GitHub ingest still falls back to the
 inline paths" caveat in CLAUDE.md's Node facade section (update the doc in the same
 slice; pairs with item 16).
+
+**Landed (this PR).** `backend/runtimes/node/src/execution/githubSyncRunner.ts` is the
+Node durable driver — the analogue of the Worker's `sync-consumer.ts` queue consumer +
+`GitHubBackfillWorkflow`. `PgBossGitHubBackfillScheduler` / `PgBossGitHubWebhookIngest`
+implement the `githubBackfill` / `githubWebhook` seams by enqueuing a `GitHubSyncJob`
+(`webhook` / `resync-repo` / `backfill`) onto the new `github.sync` pg-boss queue and
+returning `true`, so the shared controllers ack fast (a webhook → 202, a full resync →
+`backfill_started`) instead of running the deep sync inline in the request. `createNodeGateways`
+now takes the boss (threaded from `buildNodeContainer`'s `options.boss`) and picks the pg-boss
+seams when it's wired, keeping the inline (`false`) fallback for a container built with no boss
+(a pure-logic test — this is what keeps `github-projections.spec.ts`'s inline persistence
+green). `startGitHubSyncWorker` (wired in `server.ts` beside the execution/bootstrap/env-repair
+workers) drains the queue and applies each job via the SAME `WebhookService.handle` /
+`GitHubSyncService.syncRepoById` / `backfillInstallation` the inline path used — so the
+projection result is byte-identical, only WHERE it runs changes; it drops (completes) a job when
+the GitHub module is unwired (mirroring the Worker consumer's `ack()`) and rethrows an apply
+failure so pg-boss retries with backoff. `expireInSeconds` is sized past a full backfill (the
+Worker gives its backfill step 10 min) so a healthy long backfill is never expired mid-run.
+Webhook-response semantics are unchanged (the controller still returns the fast 2xx; the enqueue
+just replaces the inline processing behind it — the item's stated constraint). Guard:
+`node/test/github-sync-runner.spec.ts` asserts the enqueue path is taken (right queue + payload,
+returns `true`) when a boss is wired and falls back to inline (`false`) without one, that
+`applyGitHubSyncJob` routes each kind to the matching service method, and that the worker applies
+a dequeued job / drops an unwired-module job / rethrows an apply failure. CLAUDE.md's Node-facade
+"Async GitHub ingest still falls back to the inline paths" sentence is rewritten to describe the
+pg-boss path (the item-16 half of the doc drift). **Not folded in:** hoisting the apply switch
+into `@cat-factory/server` — like the execution/bootstrap pg-boss runners, the durable driver is
+a per-facade analogue of the Worker's Queue/Workflow (the two message unions even differ: the
+Worker drives backfill through a separate Workflow, not its queue), so the thin apply mirror
+stays local beside its driver, exactly as the Worker's own `applyGitHubSyncMessage` does.
 
 #### 6. Node sweeper re-entrancy guards inconsistent — P2
 

@@ -2702,7 +2702,9 @@ export function buildNodeContainer(options: NodeContainerOptions): ServerContain
     // banner should surface. Local mode injects its own per-run-host-container `resolveTransport`
     // (so the pool is optional there); detect that by the absence of the default pool transport.
     agentExecutorRequiresRunnerPool: options.resolveTransport === undefined,
-    gateways: createNodeGateways(env),
+    // pg-boss-backed async GitHub ingest when the durable engine is wired (the real
+    // server drains the queue via `startGitHubSyncWorker`); inline fallback with no boss.
+    gateways: createNodeGateways(env, options.boss),
     // Source-control PAT login: lets a user sign in with their own GitHub/GitLab PAT via
     // `/auth/pat`, held to the server's login/org/domain allowlist. Local mode overrides this
     // (via its container spread) with a configured-token, allowlist-exempt registry.
