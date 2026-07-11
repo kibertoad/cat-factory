@@ -331,6 +331,9 @@ function settingsRepo(storeAgentContext: boolean) {
         storeAgentContext,
       }
     },
+    async listByWorkspaceIds() {
+      return new Map()
+    },
     async upsert() {},
   }
 }

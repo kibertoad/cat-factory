@@ -255,7 +255,9 @@ const NON_REMOTE: Record<string, Record<string, Reason>> = {
   // `upsert` were already remotely callable — so the whole merge-preset repo is remote.
   riskPolicyRepository: {},
   // `upsert` is now allow-listed (the workspace-settings panel save); `get` was already remote.
-  workspaceSettingsRepository: {},
+  // `listByWorkspaceIds` is the notification-escalation sweep's batched every-workspace read — a
+  // global cron sweeper read, so it stays mothership-internal like the other `'sweeper'` entries.
+  workspaceSettingsRepository: { listByWorkspaceIds: 'sweeper' },
   // The whole observability / incident-enrichment connection + per-block release-health config
   // surface is now allow-listed (the post-release-health settings panels' get/upsert/delete),
   // so these repos are fully remote — get/getByBlock/listByWorkspace/delete via the `workspace`

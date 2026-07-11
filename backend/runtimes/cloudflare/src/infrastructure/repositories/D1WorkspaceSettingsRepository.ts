@@ -1,8 +1,10 @@
 import type { WorkspaceSettingsRepository } from '@cat-factory/kernel'
 import type { TaskLimitMode, TaskLimitPerType, WorkspaceSettings } from '@cat-factory/contracts'
 import type { D1Database } from '@cloudflare/workers-types'
+import { chunkForIn } from './chunk'
 
 interface WorkspaceSettingsRow {
+  workspace_id: string
   waiting_escalation_minutes: number
   task_limit_mode: string
   task_limit_shared: number | null
@@ -57,6 +59,21 @@ export class D1WorkspaceSettingsRepository implements WorkspaceSettingsRepositor
       .bind(workspaceId)
       .first<WorkspaceSettingsRow>()
     return row ? rowToSettings(row) : null
+  }
+
+  async listByWorkspaceIds(workspaceIds: string[]): Promise<Map<string, WorkspaceSettings>> {
+    const out = new Map<string, WorkspaceSettings>()
+    if (workspaceIds.length === 0) return out
+    // Chunk the IN list to stay under D1's bound-parameter limit.
+    for (const chunk of chunkForIn(workspaceIds)) {
+      const placeholders = chunk.map(() => '?').join(', ')
+      const { results } = await this.db
+        .prepare(`SELECT * FROM workspace_settings WHERE workspace_id IN (${placeholders})`)
+        .bind(...chunk)
+        .all<WorkspaceSettingsRow>()
+      for (const row of results ?? []) out.set(row.workspace_id, rowToSettings(row))
+    }
+    return out
   }
 
   async upsert(workspaceId: string, settings: WorkspaceSettings): Promise<void> {
