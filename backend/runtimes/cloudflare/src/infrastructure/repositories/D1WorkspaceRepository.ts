@@ -7,7 +7,10 @@ import { type WorkspaceRow, rowToWorkspace } from './mappers'
 // Cloudflare-only workspace-scoped tables that have no Node/Drizzle analogue (Durable-Object
 // tracking), appended to the shared cascade list for this facade. Kept here — not in the
 // runtime-neutral kernel list — so the Node cascade never references a table it lacks.
-const D1_ONLY_WORKSPACE_SCOPED_TABLES = ['live_containers'] as const
+// Exported so the D1-side cascade-completeness guard (workspace-cascade-completeness.spec.ts)
+// asserts coverage against the SAME source of truth the delete iterates — the Node/Drizzle
+// completeness spec can't see these facade-only tables, so this is what closes that gap.
+export const D1_ONLY_WORKSPACE_SCOPED_TABLES = ['live_containers'] as const
 
 export class D1WorkspaceRepository implements WorkspaceRepository {
   private readonly db: D1Database

@@ -296,7 +296,7 @@ export function defineCoreConformance(harness: ConformanceHarness): void {
 
       it('cascades the delete across workspace-scoped tables (no permanent orphans)', async () => {
         // The delete cascade is driven by the shared kernel list WORKSPACE_SCOPED_TABLES on BOTH
-        // facades. Before it covered the full list, deleting a board left rows in ~15 other
+        // facades. Before it covered the full list, deleting a board left rows in ~40 other
         // workspace-scoped tables (notifications, initiatives, the review/session tables, …)
         // orphaned forever. Seed two of those tables through the real per-runtime stores, delete
         // the board, and assert BOTH stores reclaimed the rows — so a facade that mapped the

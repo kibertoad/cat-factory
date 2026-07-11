@@ -80,7 +80,7 @@ benefit, bounded blast radius; **P3** = hygiene/polish. Effort S/M/L.
 | #   | Pri | Area        | Finding (short)                                                                             | Effort | Status  | PR        |
 | --- | --- | ----------- | ------------------------------------------------------------------------------------------- | ------ | ------- | --------- |
 | 1   | P1  | retention   | `notifications` never pruned in either facade (upsert/escalate only, no delete)             | M      | ✅ done | #1020     |
-| 2   | P1  | retention   | Workspace-delete cascade clears only 7 tables → permanent orphans in ~15 others             | M      | ✅ done | (this PR) |
+| 2   | P1  | retention   | Workspace-delete cascade clears only 7 tables → permanent orphans in ~40 others             | M      | ✅ done | (this PR) |
 | 3   | P1  | retention   | Binary-artifact rows + blob bytes of deleted workspaces never reclaimed                     | M      | ⬜ todo |           |
 | 4   | P2  | parity      | GitHub reconcile loop duplicated verbatim across Node/Worker — hoist to shared server pkg   | S      | ⬜ todo |           |
 | 5   | P1  | parity      | Node async GitHub ingest runs inline in the request; add pg-boss-backed queue impls         | M–L    | ⬜ todo |           |
