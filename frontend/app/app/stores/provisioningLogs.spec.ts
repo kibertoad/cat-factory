@@ -92,4 +92,66 @@ describe('provisioningLogs store — loadForExecution', () => {
     expect(store.byExecution.exec1!.entries).toHaveLength(0)
     expect(store.byExecution.exec1!.error).toBe('503')
   })
+
+  it('a slower stale load never clobbers a newer one (monotonic guard)', async () => {
+    // Two loads race: the FIRST-issued resolves LAST with a stale timeline. Without the guard its
+    // `s.entries = entries` would overwrite the fresher second result — a card/row would vanish.
+    const deferred: Array<(r: { entries: ProvisioningLogEntry[] }) => void> = []
+    vi.stubGlobal('useApi', () => ({
+      listProvisioningLogs: () =>
+        new Promise<{ entries: ProvisioningLogEntry[] }>((res) => deferred.push(res)),
+    }))
+
+    const store = useProvisioningLogsStore()
+    const first = store.loadForExecution('exec1', { silent: true }) // issued #1 (stale)
+    const second = store.loadForExecution('exec1', { silent: true }) // issued #2 (fresh)
+
+    // Resolve NEWEST first, then the older/staler one.
+    deferred[1]!({ entries: [entry({ id: 'fresh', operation: 'release' })] })
+    deferred[0]!({ entries: [entry({ id: 'stale', operation: 'dispatch' })] })
+    await Promise.all([first, second])
+
+    // The fresher result survives — the stale late-resolver was discarded.
+    expect(store.byExecution.exec1!.entries).toHaveLength(1)
+    expect(store.byExecution.exec1!.entries[0]!.id).toBe('fresh')
+  })
+
+  it('a superseding visible load owns the final entries and clears the spinner', async () => {
+    // A visible load in flight, then a newer visible load; the OLDER resolves last and must neither
+    // clobber the entries nor leave a stuck spinner.
+    const deferred: Array<(r: { entries: ProvisioningLogEntry[] }) => void> = []
+    vi.stubGlobal('useApi', () => ({
+      listProvisioningLogs: () =>
+        new Promise<{ entries: ProvisioningLogEntry[] }>((res) => deferred.push(res)),
+    }))
+
+    const store = useProvisioningLogsStore()
+    const first = store.loadForExecution('exec1')
+    const second = store.loadForExecution('exec1')
+
+    deferred[1]!({ entries: [entry({ id: 'fresh' })] })
+    deferred[0]!({ entries: [entry({ id: 'stale' })] })
+    await Promise.all([first, second])
+
+    expect(store.byExecution.exec1!.entries[0]!.id).toBe('fresh')
+    expect(store.byExecution.exec1!.loading).toBe(false)
+  })
+
+  it("evict drops a run's accumulated state (map does not grow unbounded)", async () => {
+    vi.stubGlobal('useApi', () => ({
+      listProvisioningLogs: () => Promise.resolve({ entries: [entry()] }),
+    }))
+
+    const store = useProvisioningLogsStore()
+    await store.loadForExecution('exec1')
+    expect(store.byExecution.exec1).toBeDefined()
+
+    store.evict('exec1')
+    expect(store.byExecution.exec1).toBeUndefined()
+
+    // After eviction a fresh load re-seeds cleanly (the drawer re-fetches on re-mount) — and the
+    // per-execution sequence counter reset too, so the guard still holds for the new lifecycle.
+    await store.loadForExecution('exec1')
+    expect(store.byExecution.exec1!.entries).toHaveLength(1)
+  })
 })
