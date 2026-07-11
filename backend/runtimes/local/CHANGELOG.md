@@ -1,5 +1,72 @@
 # @cat-factory/local-server
 
+## 0.64.21
+
+### Patch Changes
+
+- 22a4d9e: Complete the workspace-delete cascade so a board delete no longer orphans rows forever.
+  Both facades' `WorkspaceRepository.delete` previously cleared only ~7 tables
+  (blocks/pipelines/agent_runs/environments/services/mounts), leaving every other
+  workspace-scoped table (`notifications`, `requirement_reviews`, the review / session /
+  settings / connection / preset tables, the GitHub projection, …) permanently orphaned on
+  a normal board delete — invisible today, unbounded cost tomorrow.
+
+  The cascade is now driven by a single shared kernel list, `WORKSPACE_SCOPED_TABLES`, that
+  both the D1 (Cloudflare) and Drizzle (Node/local) facades iterate, so the two runtimes
+  cannot drift and a newly-added workspace-scoped table can't silently miss the cascade.
+  Per-facade static completeness guards make a new table impossible to forget: the Node guard
+  introspects the Drizzle/Postgres schema and the Worker guard introspects the real migrated
+  D1, each failing if any `workspace_id` table is neither listed nor explicitly acknowledged
+  as a special case (the D1 guard also covers the Cloudflare-only `live_containers` table the
+  Drizzle schema can't see). A cross-runtime conformance assertion proves a deleted board
+  leaves no rows behind on both D1 and Postgres.
+
+  Deliberately out of scope (unchanged): `binary_artifacts` (its blob bytes must be reclaimed
+  through the `BinaryBlobBackend` port at the service layer — a follow-up slice), the
+  bespoke `services` / mount re-home handling, and the isolated `telemetry` / `sandbox` /
+  `provisioning` schemas (separate stores reclaimed by their own retention sweeps; telemetry
+  is a physically separate D1 database on the Worker). (system-audit-improvements initiative,
+  item 2.)
+
+- Updated dependencies [22a4d9e]
+  - @cat-factory/kernel@0.120.0
+  - @cat-factory/node-server@0.92.4
+  - @cat-factory/agents@0.53.3
+  - @cat-factory/gitlab@0.7.55
+  - @cat-factory/integrations@0.81.3
+  - @cat-factory/orchestration@0.105.3
+  - @cat-factory/server@0.110.2
+  - @cat-factory/executor-harness@1.43.0
+
+## 0.64.20
+
+### Patch Changes
+
+- dbfe2e8: Boot-time structured warnings for three previously-silent misconfigurations (error-message
+  coverage initiative, items A5/A9/A10). Each is a single greppable WARN naming the offending
+  var, its consequence, and a doc link — behaviour is unchanged (the conditions were, and stay,
+  non-fatal); they were just invisible until the first dispatch failed.
+
+  - **A5** — the Node facade's container agent executor is disabled when a prerequisite is
+    missing (`PUBLIC_URL`, `AUTH_SESSION_SECRET`, a runner backend, or a GitHub token source),
+    but the service still boots "healthy" and repo-operating steps (coder/mocker/tester/merger/…)
+    failed only at dispatch, deep in a request. It now logs at boot exactly which prerequisite is
+    missing, so the gap is visible up front (the Worker already throws a `configProblem` here).
+  - **A9** — an unrecognised `LOCAL_CONTAINER_RUNTIME` value silently fell back to `docker`; the
+    local preflight now names the rejected value, the accepted set
+    (`docker`/`podman`/`orbstack`/`colima`/`apple`), and the fallback taken.
+  - **A10** — a half-set `CLOUDFLARE_ACCOUNT_ID` / `CLOUDFLARE_API_TOKEN` pair silently disabled
+    Cloudflare Workers AI (over REST) on the Node facade; config load now names which half is set
+    and which is missing.
+
+  Adds a `localMode` section anchor to `@cat-factory/server`'s `ENV_VARS_ANCHORS` so the A9
+  warning deep-links the local-mode env-var docs.
+
+- Updated dependencies [dbfe2e8]
+  - @cat-factory/server@0.110.1
+  - @cat-factory/node-server@0.92.3
+  - @cat-factory/executor-harness@1.43.0
+
 ## 0.64.19
 
 ### Patch Changes

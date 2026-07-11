@@ -1,7 +1,16 @@
 import type { ServiceRehome, WorkspaceRepository, WorkspaceVisibility } from '@cat-factory/kernel'
+import { WORKSPACE_SCOPED_TABLES } from '@cat-factory/kernel'
 import type { Workspace } from '@cat-factory/contracts'
 import type { D1Database } from '@cloudflare/workers-types'
 import { type WorkspaceRow, rowToWorkspace } from './mappers'
+
+// Cloudflare-only workspace-scoped tables that have no Node/Drizzle analogue (Durable-Object
+// tracking), appended to the shared cascade list for this facade. Kept here — not in the
+// runtime-neutral kernel list — so the Node cascade never references a table it lacks.
+// Exported so the D1-side cascade-completeness guard (workspace-cascade-completeness.spec.ts)
+// asserts coverage against the SAME source of truth the delete iterates — the Node/Drizzle
+// completeness spec can't see these facade-only tables, so this is what closes that gap.
+export const D1_ONLY_WORKSPACE_SCOPED_TABLES = ['live_containers'] as const
 
 export class D1WorkspaceRepository implements WorkspaceRepository {
   private readonly db: D1Database
@@ -116,6 +125,14 @@ export class D1WorkspaceRepository implements WorkspaceRepository {
         .prepare('UPDATE blocks SET workspace_id = ? WHERE service_id = ?')
         .bind(toWorkspaceId, serviceId),
     ])
+    // The bulk reclaim of every plain workspace-scoped table is driven by the shared kernel
+    // list (WORKSPACE_SCOPED_TABLES) so this facade and the Node facade cannot drift and a new
+    // table can't silently miss the cascade — see backend/packages/kernel/.../workspace-cascade.ts.
+    // These have no inter-table FK ordering constraints, but MUST run AFTER the `services`/mount
+    // reclaim below (which reads `blocks`) and BEFORE the root `workspaces` row is dropped.
+    const bulkDeletes = [...WORKSPACE_SCOPED_TABLES, ...D1_ONLY_WORKSPACE_SCOPED_TABLES].map(
+      (table) => this.db.prepare(`DELETE FROM ${table} WHERE workspace_id = ?`).bind(id),
+    )
     await this.db.batch([
       ...rehomeStatements,
       // Every board's mount of a service this workspace HOMES (its frame block lives here).
@@ -129,16 +146,15 @@ export class D1WorkspaceRepository implements WorkspaceRepository {
       // This workspace's OWN mounts of services homed elsewhere (shared services it mounted).
       this.db.prepare('DELETE FROM workspace_services WHERE workspace_id = ?').bind(id),
       // The account-owned services this workspace homes — the repo↔frame link that must be freed.
+      // MUST precede the `blocks` delete in the bulk list (this subquery reads `blocks`).
       this.db
         .prepare(
           'DELETE FROM services WHERE frame_block_id IN (SELECT id FROM blocks WHERE workspace_id = ?)',
         )
         .bind(id),
-      this.db.prepare('DELETE FROM environments WHERE workspace_id = ?').bind(id),
-      // agent_runs holds both execution and bootstrap runs (migration 0019).
-      this.db.prepare('DELETE FROM agent_runs WHERE workspace_id = ?').bind(id),
-      this.db.prepare('DELETE FROM blocks WHERE workspace_id = ?').bind(id),
-      this.db.prepare('DELETE FROM pipelines WHERE workspace_id = ?').bind(id),
+      // Bulk reclaim of every plain workspace-scoped table (incl. blocks/agent_runs/pipelines/
+      // environments — agent_runs holds both execution and bootstrap runs, migration 0019).
+      ...bulkDeletes,
       this.db.prepare('DELETE FROM workspaces WHERE id = ?').bind(id),
     ])
   }
