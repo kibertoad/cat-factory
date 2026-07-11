@@ -294,6 +294,44 @@ export function defineCoreConformance(harness: ConformanceHarness): void {
         expect(after.status).toBe(404)
       })
 
+      it('cascades the delete across workspace-scoped tables (no permanent orphans)', async () => {
+        // The delete cascade is driven by the shared kernel list WORKSPACE_SCOPED_TABLES on BOTH
+        // facades. Before it covered the full list, deleting a board left rows in ~15 other
+        // workspace-scoped tables (notifications, initiatives, the review/session tables, …)
+        // orphaned forever. Seed two of those tables through the real per-runtime stores, delete
+        // the board, and assert BOTH stores reclaimed the rows — so a facade that mapped the
+        // cascade differently fails here on D1 or Postgres instead of silently orphaning.
+        const app = harness.makeApp()
+        const { workspace } = await app.createWorkspace()
+        const wsId = workspace.id
+
+        await app.notificationRepository().upsert(wsId, {
+          id: `ntf-${wsId}`,
+          type: 'merge_review',
+          status: 'open',
+          severity: 'normal',
+          blockId: null,
+          executionId: null,
+          title: 'Review',
+          body: 'body',
+          payload: null,
+          createdAt: 1,
+          resolvedAt: null,
+        })
+        await app.initiativeRepository().insert(wsId, spawnedInitiative('init_orphan_anchor'))
+
+        // Sanity: both rows are present before the delete.
+        expect(await app.notificationRepository().listOpen(wsId)).toHaveLength(1)
+        expect(await app.initiativeRepository().list(wsId)).toHaveLength(1)
+
+        const del = await app.call('DELETE', `/workspaces/${wsId}`)
+        expect(del.status).toBe(204)
+
+        // …and neither store keeps a row for the deleted workspace.
+        expect(await app.notificationRepository().listOpen(wsId)).toEqual([])
+        expect(await app.initiativeRepository().list(wsId)).toEqual([])
+      })
+
       it('returns 404 for an unknown board', async () => {
         const { call } = harness.makeApp()
         const res = await call<{ error: { code: string } }>('GET', '/workspaces/missing')

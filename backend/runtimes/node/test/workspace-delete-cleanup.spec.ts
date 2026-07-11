@@ -1,7 +1,14 @@
 import { beforeAll, describe, expect, it } from 'vitest'
+import { eq } from 'drizzle-orm'
 import type { Block, Service } from '@cat-factory/kernel'
 import type { DrizzleDb } from '../src/db/client.js'
 import { createDrizzleRepositories } from '../src/repositories/drizzle.js'
+import {
+  consensusSessions,
+  initiatives,
+  notifications,
+  workspaceSettings,
+} from '../src/db/schema.js'
 import { setupTestDb } from './harness.js'
 
 // Parity with the Cloudflare `add-service-from-repo` workspace-delete regression: deleting a
@@ -134,5 +141,95 @@ describe('DrizzleWorkspaceRepository.delete reclaims the workspace services', ()
     expect(
       (await repos.workspaceMountRepository.listByService(service.id)).map((m) => m.workspaceId),
     ).toEqual([other])
+  })
+})
+
+// The cascade used to clear only 7 tables, orphaning every other workspace-scoped table
+// (notifications, requirement_reviews, the review/session/settings tables, …) forever on a board
+// delete. The cascade is now driven by the shared kernel list WORKSPACE_SCOPED_TABLES; this asserts
+// those previously-orphaning tables are actually reclaimed. The static completeness guard lives in
+// workspace-cascade-completeness.spec.ts — this proves the list-driven deletes really fire.
+describe('DrizzleWorkspaceRepository.delete reclaims previously-orphaning workspace-scoped tables', () => {
+  let db: DrizzleDb
+
+  beforeAll(async () => {
+    db = await setupTestDb()
+  })
+
+  it('deletes rows across representative list-driven tables (no more permanent orphans)', async () => {
+    const repos = createDrizzleRepositories(db, { now: () => 0 })
+    const wsId = `ws_orphan_${Math.floor(performance.now())}`
+    const blockId = `blk_${wsId}`
+
+    await repos.workspaceRepository.create(
+      { id: wsId, name: 'Doomed', description: null, createdAt: 0, accountId: null },
+      null,
+      null,
+    )
+
+    // Seed one row into a spread of tables that the old 7-table cascade left behind: a settings
+    // row (single-column table), an inbox notification, a consensus session, and an initiative.
+    await db.insert(workspaceSettings).values({ workspace_id: wsId })
+    await db.insert(notifications).values({
+      workspace_id: wsId,
+      id: `ntf_${wsId}`,
+      type: 'merge_review',
+      status: 'open',
+      title: 'Review',
+      body: 'body',
+      created_at: 0,
+    })
+    await db.insert(consensusSessions).values({
+      workspace_id: wsId,
+      id: `csn_${wsId}`,
+      block_id: blockId,
+      step_index: 0,
+      agent_kind: 'coder',
+      strategy: 'debate',
+      status: 'running',
+      created_at: 0,
+      updated_at: 0,
+    })
+    await db.insert(initiatives).values({
+      workspace_id: wsId,
+      id: `ini_${wsId}`,
+      block_id: blockId,
+      slug: 'greenfield',
+      status: 'active',
+      rev: 1,
+      doc: '{}',
+      created_at: 0,
+      updated_at: 0,
+    })
+
+    // Sanity: all four rows exist before the delete.
+    expect(
+      await db.select().from(workspaceSettings).where(eq(workspaceSettings.workspace_id, wsId)),
+    ).toHaveLength(1)
+    expect(
+      await db.select().from(notifications).where(eq(notifications.workspace_id, wsId)),
+    ).toHaveLength(1)
+    expect(
+      await db.select().from(consensusSessions).where(eq(consensusSessions.workspace_id, wsId)),
+    ).toHaveLength(1)
+    expect(
+      await db.select().from(initiatives).where(eq(initiatives.workspace_id, wsId)),
+    ).toHaveLength(1)
+
+    await repos.workspaceRepository.delete(wsId)
+
+    // …and none survive the board delete.
+    expect(
+      await db.select().from(workspaceSettings).where(eq(workspaceSettings.workspace_id, wsId)),
+    ).toEqual([])
+    expect(
+      await db.select().from(notifications).where(eq(notifications.workspace_id, wsId)),
+    ).toEqual([])
+    expect(
+      await db.select().from(consensusSessions).where(eq(consensusSessions.workspace_id, wsId)),
+    ).toEqual([])
+    expect(await db.select().from(initiatives).where(eq(initiatives.workspace_id, wsId))).toEqual(
+      [],
+    )
   })
 })

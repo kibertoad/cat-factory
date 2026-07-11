@@ -1,6 +1,6 @@
 # Initiative: system audit — data lifecycle, runtime parity, robustness & coverage
 
-**Status:** in progress (item 1 landed) · **Owner:** core · **Started:** 2026-07-11
+**Status:** in progress (items 1–2 landed) · **Owner:** core · **Started:** 2026-07-11
 
 > This is the durable source of truth for a multi-PR initiative. Read it first before
 > picking up the next slice; update the checklist at the end of each PR.
@@ -77,28 +77,28 @@ remains clusters into four themes:
 Priority: **P1** = correctness/unbounded-growth on a normal operation; **P2** = clear
 benefit, bounded blast radius; **P3** = hygiene/polish. Effort S/M/L.
 
-| #   | Pri | Area        | Finding (short)                                                                             | Effort | Status  | PR    |
-| --- | --- | ----------- | ------------------------------------------------------------------------------------------- | ------ | ------- | ----- |
-| 1   | P1  | retention   | `notifications` never pruned in either facade (upsert/escalate only, no delete)             | M      | ✅ done | #1020 |
-| 2   | P1  | retention   | Workspace-delete cascade clears only 7 tables → permanent orphans in ~15 others             | M      | ⬜ todo |       |
-| 3   | P1  | retention   | Binary-artifact rows + blob bytes of deleted workspaces never reclaimed                     | M      | ⬜ todo |       |
-| 4   | P2  | parity      | GitHub reconcile loop duplicated verbatim across Node/Worker — hoist to shared server pkg   | S      | ⬜ todo |       |
-| 5   | P1  | parity      | Node async GitHub ingest runs inline in the request; add pg-boss-backed queue impls         | M–L    | ⬜ todo |       |
-| 6   | P2  | parity      | Node sweeper re-entrancy guards inconsistent (initiativeLoop / recurring / escalation)      | S      | ⬜ todo |       |
-| 7   | P2  | conformance | Four retention prunes have no cross-runtime conformance assertion                           | S–M    | ⬜ todo |       |
-| 8   | P2  | engine      | Notification-escalation sweep: per-workspace settings point-read (N+1 the cache can't fix)  | M      | ⬜ todo |       |
-| 9   | P2  | ops         | Node `/health` is a static 200 — add a `/ready` readiness probe (pool + pg-boss)            | S      | ⬜ todo |       |
-| 10  | P2  | frontend    | `provisioningLogs` store: unbounded per-execution map + unguarded out-of-order overwrite    | S      | ⬜ todo |       |
-| 11  | P3  | api         | Error code `validation` maps to two HTTP statuses (400 schema vs 422 domain)                | S      | ⬜ todo |       |
-| 12  | P1  | e2e         | Requirements-review flow has zero e2e coverage (largest SPA component, 1.2k lines)          | M      | ⬜ todo |       |
-| 13  | P2  | e2e         | Inline agent windows (brainstorm/clarity/consensus/doc-interview) have no e2e specs         | M      | ⬜ todo |       |
-| 14  | P2  | ci          | `paths-filter` lane-gating globs are unguarded against drift (silent suite skips)           | S      | ⬜ todo |       |
-| 15  | P3  | frontend    | Store-level out-of-order clobber specs cover ~5 of ~40 stateful stores — establish the rule | M      | ⬜ todo |       |
-| 16  | P2  | docs        | CLAUDE.md "Node GitHub connect/sync still needs the integration on Postgres" note is stale  | S      | ⬜ todo |       |
-| 17  | P3  | docs        | `refactoring-candidates.md`/`modularisation.md` stale; the two biggest files untracked      | S      | ⬜ todo |       |
-| 18  | P3  | docs        | Convert finished initiatives to ADRs (`custom-initiative-definitions`, `coder-fork`)        | S      | ⬜ todo |       |
-| 19  | P2  | frontend    | Accessibility whitespace: no a11y tracker/doc; 48/176 components carry any `aria-*`         | M      | ⬜ todo |       |
-| 20  | P3  | frontend    | Close i18n phase X (`utils/catalog.ts` meta tables + 2 pages), retire the progress table    | M      | ⬜ todo |       |
+| #   | Pri | Area        | Finding (short)                                                                             | Effort | Status  | PR        |
+| --- | --- | ----------- | ------------------------------------------------------------------------------------------- | ------ | ------- | --------- |
+| 1   | P1  | retention   | `notifications` never pruned in either facade (upsert/escalate only, no delete)             | M      | ✅ done | #1020     |
+| 2   | P1  | retention   | Workspace-delete cascade clears only 7 tables → permanent orphans in ~15 others             | M      | ✅ done | (this PR) |
+| 3   | P1  | retention   | Binary-artifact rows + blob bytes of deleted workspaces never reclaimed                     | M      | ⬜ todo |           |
+| 4   | P2  | parity      | GitHub reconcile loop duplicated verbatim across Node/Worker — hoist to shared server pkg   | S      | ⬜ todo |           |
+| 5   | P1  | parity      | Node async GitHub ingest runs inline in the request; add pg-boss-backed queue impls         | M–L    | ⬜ todo |           |
+| 6   | P2  | parity      | Node sweeper re-entrancy guards inconsistent (initiativeLoop / recurring / escalation)      | S      | ⬜ todo |           |
+| 7   | P2  | conformance | Four retention prunes have no cross-runtime conformance assertion                           | S–M    | ⬜ todo |           |
+| 8   | P2  | engine      | Notification-escalation sweep: per-workspace settings point-read (N+1 the cache can't fix)  | M      | ⬜ todo |           |
+| 9   | P2  | ops         | Node `/health` is a static 200 — add a `/ready` readiness probe (pool + pg-boss)            | S      | ⬜ todo |           |
+| 10  | P2  | frontend    | `provisioningLogs` store: unbounded per-execution map + unguarded out-of-order overwrite    | S      | ⬜ todo |           |
+| 11  | P3  | api         | Error code `validation` maps to two HTTP statuses (400 schema vs 422 domain)                | S      | ⬜ todo |           |
+| 12  | P1  | e2e         | Requirements-review flow has zero e2e coverage (largest SPA component, 1.2k lines)          | M      | ⬜ todo |           |
+| 13  | P2  | e2e         | Inline agent windows (brainstorm/clarity/consensus/doc-interview) have no e2e specs         | M      | ⬜ todo |           |
+| 14  | P2  | ci          | `paths-filter` lane-gating globs are unguarded against drift (silent suite skips)           | S      | ⬜ todo |           |
+| 15  | P3  | frontend    | Store-level out-of-order clobber specs cover ~5 of ~40 stateful stores — establish the rule | M      | ⬜ todo |           |
+| 16  | P2  | docs        | CLAUDE.md "Node GitHub connect/sync still needs the integration on Postgres" note is stale  | S      | ⬜ todo |           |
+| 17  | P3  | docs        | `refactoring-candidates.md`/`modularisation.md` stale; the two biggest files untracked      | S      | ⬜ todo |           |
+| 18  | P3  | docs        | Convert finished initiatives to ADRs (`custom-initiative-definitions`, `coder-fork`)        | S      | ⬜ todo |           |
+| 19  | P2  | frontend    | Accessibility whitespace: no a11y tracker/doc; 48/176 components carry any `aria-*`         | M      | ⬜ todo |           |
+| 20  | P3  | frontend    | Close i18n phase X (`utils/catalog.ts` meta tables + 2 pages), retire the progress table    | M      | ⬜ todo |           |
 
 ## Detailed findings
 
@@ -144,6 +144,35 @@ to iterate that list. Deleting the orphans of already-deleted workspaces needs n
 migration ceremony (backwards compatibility is a non-goal) — a one-time cleanup in the
 same slice is fine.
 
+**Landed (this PR).** `WORKSPACE_SCOPED_TABLES` in
+`backend/packages/kernel/src/domain/workspace-cascade.ts` is the single source of truth;
+both `D1WorkspaceRepository.delete` and `DrizzleWorkspaceRepository.delete` iterate it
+(the D1 facade appends its runtime-only `live_containers`). The bespoke `services` /
+mount re-home handling still runs first (it reads `blocks`), then the list, then the root
+`workspaces` row. The schema declares essentially no FKs between workspace-scoped tables
+(only `users` FKs; D1 doesn't enforce FKs), so the bulk deletes have no ordering
+constraints. Guards: a static completeness test
+(`node/test/workspace-cascade-completeness.spec.ts`) fails if any primary-schema
+`workspace_id` table is neither listed nor an acknowledged special case; the Node cleanup
+spec proves representative previously-orphaning tables are reclaimed; and a cross-runtime
+conformance assertion (`suite.ts`, "cascades the delete across workspace-scoped tables")
+proves no rows survive on **both** D1 and Postgres.
+
+Deliberately deferred / excluded:
+
+- **`binary_artifacts` → item 3.** Its rows are NOT in the list: deleting the metadata row
+  without the blob bytes would strand the bytes forever (the row is the only handle on the
+  key). It keeps orphaning exactly as before (no regression) until item 3 wires the
+  service-layer blob purge.
+- **Isolated schemas** (`telemetry` / `sandbox` / `provisioning`) are out of scope: on the
+  Worker `telemetry` is a physically separate D1 database, and on Node these are
+  append-heavy / short-retention stores reclaimed by their own retention sweeps (e.g.
+  `llm_call_metrics`) or the extractable sandbox surface — never by the board-delete
+  cascade. The completeness guard filters to `schema === undefined` for this reason.
+- **One-time historical orphan cleanup** (rows of already-deleted workspaces) was NOT done
+  in this slice — the forward fix is the core value, and pre-1.0 the stale rows are
+  acceptable. A follow-up boot/retention sweep could reclaim them if it ever matters.
+
 #### 3. Binary-artifact blobs of deleted workspaces never reclaimed — P1
 
 The artifact retention sweeps (`node/src/retention.ts:180-214` and the Worker analogue in
@@ -155,8 +184,14 @@ the backing blob bytes (R2 / S3 / filesystem) leak forever. These are the heavy 
 so this is unbounded object-storage cost with no surfacing.
 
 **Fix:** delete artifacts (rows + blobs via the `BinaryBlobBackend` port) in the
-workspace-delete path — natural to land as part of item 2's shared cascade list, since the
-blob deletion needs the service layer, not bare SQL.
+workspace-delete path — the service layer, not bare SQL. Now the clean next slice: item 2
+landed the cascade WITHOUT `binary_artifacts` (its rows stay out of `WORKSPACE_SCOPED_TABLES`
+precisely so their bytes aren't stranded). Add a `deleteByWorkspace(workspaceId)` to the
+`BinaryArtifactStore` + `BinaryArtifactMetadataStore` ports (mirrored D1 ⇄ Drizzle, blobs
+first then rows — copy `pruneOlderThan`'s fail-safe ordering), inject
+`resolveBinaryArtifactStore` into `WorkspaceService`, and purge in `WorkspaceService.delete`
+before `workspaceRepository.delete`. Add a conformance assertion (blob + row gone on both
+runtimes).
 
 ### Cluster B — runtime symmetry & shared machinery
 
