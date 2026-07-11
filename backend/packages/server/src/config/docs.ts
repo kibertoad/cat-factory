@@ -57,4 +57,5 @@ export const ENV_VARS_ANCHORS = {
   vcsIntegration: 'vcs-integration-github--gitlab',
   modelProviders: 'model-providers',
   storageRetention: 'storage--retention',
+  localMode: 'local-mode',
 } as const
