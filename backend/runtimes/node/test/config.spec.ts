@@ -82,6 +82,30 @@ describe('loadNodeConfig — remote node mode requires authentication', () => {
   })
 })
 
+// The system encryption key is validated up front (present + valid base64 + full AES-256
+// length), mirroring the Worker's `loadConfig` and local mode — so a malformed key fails at
+// config load with an actionable message rather than deep inside the first cipher build.
+describe('loadNodeConfig — ENCRYPTION_KEY validation', () => {
+  it('throws when ENCRYPTION_KEY is missing', () => {
+    expect(() => loadNodeConfig({ AUTH_DEV_OPEN: 'true' })).toThrow(/ENCRYPTION_KEY/)
+  })
+
+  it('rejects a non-base64 ENCRYPTION_KEY', () => {
+    expect(() =>
+      loadNodeConfig({ ENCRYPTION_KEY: '%%%not-base64%%%', AUTH_DEV_OPEN: 'true' }),
+    ).toThrow(/valid base64/)
+  })
+
+  it('rejects an ENCRYPTION_KEY that decodes to fewer than 32 bytes', () => {
+    expect(() =>
+      loadNodeConfig({
+        ENCRYPTION_KEY: Buffer.alloc(16).toString('base64'),
+        AUTH_DEV_OPEN: 'true',
+      }),
+    ).toThrow(/at least 32 bytes/)
+  })
+})
+
 // `TESTING_NO_AUTH` is a stronger dev-open used by the e2e suite: it implies the open API of
 // dev-open AND flags `auth.testingNoAuth` so the SPA renders the board anonymously. Honoured
 // only outside a production-like ENVIRONMENT (see config.ts).

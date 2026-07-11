@@ -3,9 +3,11 @@ import { createMisconfiguredApp } from '../src/config/misconfiguredApp.js'
 import {
   ConfigValidationError,
   ENV_HELP,
+  MIN_ENCRYPTION_KEY_BYTES,
   configProblem,
   formatConfigProblems,
   isConfigValidationError,
+  requireEncryptionKey,
   requireEnv,
 } from '../src/config/problems.js'
 
@@ -74,6 +76,55 @@ describe('requireEnv', () => {
 
   it('treats a blank value as missing', () => {
     expect(() => requireEnv({ X: '   ' }, 'X')).toThrow(ConfigValidationError)
+  })
+})
+
+describe('requireEncryptionKey', () => {
+  // A valid base64 key that decodes to a full AES-256 key (the minimum accepted).
+  const validKey = Buffer.alloc(MIN_ENCRYPTION_KEY_BYTES).toString('base64')
+
+  it('returns the trimmed key when it is valid base64 of at least 32 bytes', () => {
+    expect(requireEncryptionKey(`  ${validKey}  `)).toBe(validKey)
+  })
+
+  it('throws the ENCRYPTION_KEY problem when missing or blank', () => {
+    for (const value of [undefined, '', '   ']) {
+      try {
+        requireEncryptionKey(value)
+        expect.unreachable('should have thrown')
+      } catch (err) {
+        expect(isConfigValidationError(err)).toBe(true)
+        expect((err as ConfigValidationError).problems[0]).toEqual({
+          key: 'ENCRYPTION_KEY',
+          ...ENV_HELP.ENCRYPTION_KEY,
+        })
+      }
+    }
+  })
+
+  it('throws a base64-naming problem for a non-base64 value', () => {
+    try {
+      requireEncryptionKey('%%%not-base64%%%')
+      expect.unreachable('should have thrown')
+    } catch (err) {
+      expect(isConfigValidationError(err)).toBe(true)
+      const problem = (err as ConfigValidationError).problems[0]!
+      expect(problem.key).toBe('ENCRYPTION_KEY')
+      expect(problem.remedy).toMatch(/valid base64/)
+      expect(problem.docsUrl).toBe(ENV_HELP.ENCRYPTION_KEY.docsUrl)
+    }
+  })
+
+  it('throws a length problem for a key that decodes to fewer than 32 bytes', () => {
+    try {
+      requireEncryptionKey(Buffer.alloc(16).toString('base64'))
+      expect.unreachable('should have thrown')
+    } catch (err) {
+      expect(isConfigValidationError(err)).toBe(true)
+      const problem = (err as ConfigValidationError).problems[0]!
+      expect(problem.key).toBe('ENCRYPTION_KEY')
+      expect(problem.remedy).toMatch(/at least 32 bytes/)
+    }
   })
 })
 

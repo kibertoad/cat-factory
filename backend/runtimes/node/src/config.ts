@@ -18,6 +18,7 @@ import {
   ENV_HELP,
   configProblem,
   parseDetectionConventions,
+  requireEncryptionKey,
   resolveMachineTokenTtlMs,
 } from '@cat-factory/server'
 import { GITLAB_PUBLIC_API_BASE } from '@cat-factory/gitlab'
@@ -150,6 +151,13 @@ function loadSystemEmailSender(env: NodeJS.ProcessEnv): EmailConfig['system'] {
 }
 
 export function loadNodeConfig(env: NodeJS.ProcessEnv): AppConfig {
+  // Validate the system encryption key up front: present, valid base64, and decoding to a full
+  // AES-256 key. It is effectively mandatory (the always-on document/task integrations below seal
+  // credentials at rest under it), so a missing/malformed key fails here with an actionable message
+  // rather than lazily inside the first cipher build (a bare "must decode to at least 32 bytes" or
+  // an opaque `atob` error). Mirrors the Worker's `loadConfig` and local mode's secret validation.
+  requireEncryptionKey(env.ENCRYPTION_KEY)
+
   // Deployment-level capabilities: direct keys are per-workspace (resolved at run time
   // from the DB pool), so none are known here; Cloudflare Workers AI is opt-in over
   // REST (account id + API token). The per-workspace `/models` endpoint recomputes

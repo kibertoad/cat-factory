@@ -27,4 +27,28 @@ describe('shared ENCRYPTION_KEY', () => {
       buildContainer({ ...env, ENCRYPTION_KEY: undefined } as typeof env, agent()),
     ).toThrow(/ENCRYPTION_KEY/i)
   })
+
+  it('fails at config load when ENCRYPTION_KEY is not valid base64', () => {
+    expect(() =>
+      buildContainer({ ...env, ENCRYPTION_KEY: '%%%not-base64%%%' } as typeof env, agent()),
+    ).toThrow(/valid base64/)
+  })
+
+  it('fails at config load when ENCRYPTION_KEY decodes to fewer than 32 bytes', () => {
+    // 16 zero bytes → 24-char base64 → a real but too-short key (would fail AES-256 later).
+    const shortKey = btoa('\0'.repeat(16))
+    expect(() =>
+      buildContainer({ ...env, ENCRYPTION_KEY: shortKey } as typeof env, agent()),
+    ).toThrow(/at least 32 bytes/)
+  })
+})
+
+describe('primary DB binding', () => {
+  it('fails loudly at container build when the DB binding is unbound', () => {
+    // Otherwise `const db = env.DB` is undefined and the first repository call NPEs deep in a
+    // request rather than serving the misconfiguration screen at boot.
+    expect(() =>
+      buildContainer({ ...env, DB: undefined } as unknown as typeof env, agent()),
+    ).toThrow(/\bDB\b/)
+  })
 })

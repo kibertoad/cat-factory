@@ -529,3 +529,16 @@ export function requireTelemetryDb(env: Env): D1Database {
   }
   return env.TELEMETRY_DB
 }
+
+/**
+ * Resolve the required primary database, throwing a clear, actionable error when the `DB` binding
+ * is absent/misnamed. `DB` holds ALL transactional state, so an unbound binding otherwise NPEs
+ * deep inside the first repository call at container build (`const db = env.DB` → `undefined`)
+ * rather than failing at boot with a fixable message — mirroring {@link requireTelemetryDb}.
+ */
+export function requireDb(env: Env): D1Database {
+  if (!env.DB) {
+    throw configProblem({ key: 'DB', ...ENV_HELP.DB })
+  }
+  return env.DB
+}

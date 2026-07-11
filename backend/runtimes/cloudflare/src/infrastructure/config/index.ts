@@ -1,4 +1,4 @@
-import type { AppConfig } from '@cat-factory/server'
+import { type AppConfig, requireEncryptionKey } from '@cat-factory/server'
 import {
   ALL_SUBSCRIPTION_VENDORS,
   type ProviderCapabilities,
@@ -52,6 +52,12 @@ export type {
 }
 
 export function loadConfig(env: Env): AppConfig {
+  // Validate the system encryption key up front: present, valid base64, and decoding to a full
+  // AES-256 key. It is effectively mandatory (the always-on document/task integrations seal
+  // credentials at rest under it), so a missing/malformed binding fails here with an actionable
+  // message rather than lazily inside the first cipher build. Mirrors the Node loader + local mode.
+  requireEncryptionKey(env.ENCRYPTION_KEY)
+
   // Deployment-level capabilities: direct keys are now per-workspace (resolved at run
   // time from the DB pool), so none are known here; Cloudflare Workers AI is opt-in
   // (the `AI` binding). The per-workspace `/models` endpoint recomputes selectability

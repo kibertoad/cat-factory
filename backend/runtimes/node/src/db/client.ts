@@ -1,4 +1,4 @@
-import { logger } from '@cat-factory/server'
+import { DOCS, ENV_VARS_ANCHORS, configProblem, logger } from '@cat-factory/server'
 import { drizzle } from 'drizzle-orm/node-postgres'
 import { Pool } from 'pg'
 
@@ -28,9 +28,15 @@ export function resolveDbSchema(
   const value = schema?.trim()
   if (!value) return fallback
   if (!SCHEMA_IDENTIFIER.test(value)) {
-    throw new Error(
-      `Invalid ${label} "${value}": must be a plain lowercase Postgres identifier ([a-z_][a-z0-9_]*).`,
-    )
+    // A ConfigValidationError (not a bare Error) so this reaches the misconfigured fallback screen
+    // at boot — `resolveDbSchema` runs inside the boot try/catch (createDbClient + migrate) — rather
+    // than hard-crashing the process with an opaque message the operator can't act on.
+    throw configProblem({
+      key: label,
+      summary: `${label} is interpolated into non-parameterizable SQL (the connection search_path and schema DDL), so it must be a plain lowercase Postgres identifier — the value "${value}" is not.`,
+      remedy: `Set ${label} to a plain lowercase identifier matching [a-z_][a-z0-9_]* (lowercase letters, digits, underscores; not starting with a digit), or unset it to use the default "${fallback}".`,
+      docsUrl: DOCS.envVars(ENV_VARS_ANCHORS.coreServiceNetworking),
+    })
   }
   return value
 }
