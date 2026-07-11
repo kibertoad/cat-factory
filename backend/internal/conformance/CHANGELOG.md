@@ -1,5 +1,12 @@
 # @cat-factory/conformance
 
+## 0.10.93
+
+### Patch Changes
+
+- Updated dependencies [dbfe2e8]
+  - @cat-factory/server@0.110.1
+
 ## 0.10.92
 
 ### Patch Changes
