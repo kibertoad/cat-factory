@@ -1,7 +1,11 @@
-import type { RunnerPoolManifest, RunnerPoolProvider } from '@cat-factory/kernel'
+import {
+  DispatchError,
+  type RunnerPoolManifest,
+  type RunnerPoolProvider,
+} from '@cat-factory/kernel'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { fetch as undiciFetch, getGlobalDispatcher, MockAgent, setGlobalDispatcher } from 'undici'
-import { HttpRunnerPoolProvider } from './HttpRunnerPoolProvider.js'
+import { HttpRunnerPoolProvider, RunnerPoolApiError } from './HttpRunnerPoolProvider.js'
 import { RunnerPoolTransport } from './RunnerPoolTransport.js'
 
 // The runtime-neutral self-hosted runner-pool transport both facades resolve for a
@@ -95,6 +99,39 @@ describe('RunnerPoolTransport', () => {
     await transport.dispatch({ runId: 'job-1', jobId: 'job-1' }, {})
     expect(calls.dispatch).toHaveLength(1)
     expect((calls.dispatch[0] as { spec: Record<string, unknown> }).spec.kind).toBe('agent')
+  })
+
+  // A pool rejection's own wording (`Runner pool <method> → <status>`) matches no dispatch
+  // check, so it used to be mislabelled a `preflight` failure downstream. Re-throwing it as a
+  // structured DispatchError (carrying the pool's HTTP status) fixes the classification.
+  it('re-throws a pool RunnerPoolApiError as a DispatchError carrying its HTTP status', async () => {
+    const provider: RunnerPoolProvider = {
+      dispatch: () => Promise.reject(new RunnerPoolApiError(502, 'Runner pool post → 502: down')),
+      poll: () => Promise.resolve({ state: 'running' as const }),
+      release: () => Promise.resolve(),
+    }
+    const transport = new RunnerPoolTransport(provider, manifest, () => 't')
+    const err = await transport
+      .dispatch({ runId: 'r', jobId: 'r-coder' }, {})
+      .catch((e: unknown) => e)
+    expect(err).toBeInstanceOf(DispatchError)
+    expect((err as DispatchError).status).toBe(502)
+    expect((err as DispatchError).message).toContain('Runner pool post → 502')
+  })
+
+  it('wraps a non-status pool dispatch error as a DispatchError with status 0', async () => {
+    const provider: RunnerPoolProvider = {
+      dispatch: () => Promise.reject(new Error('network unreachable')),
+      poll: () => Promise.resolve({ state: 'running' as const }),
+      release: () => Promise.resolve(),
+    }
+    const transport = new RunnerPoolTransport(provider, manifest, () => 't')
+    const err = await transport
+      .dispatch({ runId: 'r', jobId: 'r-coder' }, {})
+      .catch((e: unknown) => e)
+    expect(err).toBeInstanceOf(DispatchError)
+    expect((err as DispatchError).status).toBe(0)
+    expect((err as DispatchError).message).toBe('network unreachable')
   })
 })
 
