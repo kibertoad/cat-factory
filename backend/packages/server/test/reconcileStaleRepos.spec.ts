@@ -1,15 +1,16 @@
 import type { Clock, StaleRepoRef } from '@cat-factory/kernel'
-import type { Logger } from '@cat-factory/server'
 import { describe, expect, it, vi } from 'vitest'
+import type { Logger } from '../src/observability/logger.js'
 import {
-  GITHUB_RECONCILE_STALE_MS,
   type GitHubReconcileDeps,
   reconcileStaleRepos,
-} from '../src/githubReconcile.js'
+} from '../src/runtime/reconcileStaleRepos.js'
 
-// Pure unit coverage for the Node GitHub reconcile pass (no database) — the analogue of
-// the Worker's `github-reconcile` cron. Asserts the staleness cutoff, the best-effort
-// per-repo isolation, and the missed-uninstall tombstone path.
+// Pure unit coverage for the shared GitHub reconcile pass (no database) — the single
+// implementation both facades drive (the Worker's `github-reconcile` cron and the Node
+// `setInterval` sweeper). Asserts the staleness cutoff, the best-effort per-repo
+// isolation, and the missed-uninstall tombstone path. Guards item 4's de-duplication:
+// one test for one implementation, so the two facades can't silently diverge.
 
 const staleRepo = (over: Partial<StaleRepoRef> = {}): StaleRepoRef => ({
   workspaceId: 'ws1',
@@ -52,7 +53,9 @@ function makeDeps(
   }
 }
 
-describe('reconcileStaleRepos (Node)', () => {
+const STALE_MS = 30 * 60 * 1000
+
+describe('reconcileStaleRepos (shared)', () => {
   it('re-syncs every stale repo at now - staleMs and reports the count', async () => {
     const synced: [string, number][] = []
     const deps = makeDeps(
@@ -61,8 +64,8 @@ describe('reconcileStaleRepos (Node)', () => {
         synced.push([ws, id])
       },
     )
-    const count = await reconcileStaleRepos(deps, clock, GITHUB_RECONCILE_STALE_MS, noopLog)
-    expect(deps.listStaleCutoffs).toEqual([clock.now() - GITHUB_RECONCILE_STALE_MS])
+    const count = await reconcileStaleRepos(deps, clock, STALE_MS, noopLog)
+    expect(deps.listStaleCutoffs).toEqual([clock.now() - STALE_MS])
     expect(synced).toEqual([
       ['ws1', 101],
       ['ws2', 202],
@@ -80,7 +83,7 @@ describe('reconcileStaleRepos (Node)', () => {
         synced.push(id)
       },
     )
-    const count = await reconcileStaleRepos(deps, clock, GITHUB_RECONCILE_STALE_MS, noopLog)
+    const count = await reconcileStaleRepos(deps, clock, STALE_MS, noopLog)
     expect(synced).toEqual([1, 3])
     expect(count).toBe(2)
   })
@@ -91,7 +94,7 @@ describe('reconcileStaleRepos (Node)', () => {
     })
     const warn = vi.fn()
     const log = { info: () => {}, warn, error: vi.fn() } as unknown as Logger
-    const count = await reconcileStaleRepos(deps, clock, GITHUB_RECONCILE_STALE_MS, log)
+    const count = await reconcileStaleRepos(deps, clock, STALE_MS, log)
     expect(count).toBe(0)
     expect(deps.softDeleted).toEqual([[42, clock.now()]])
     // Gone-installation is an expected operational state: warn, not error.
@@ -106,7 +109,7 @@ describe('reconcileStaleRepos (Node)', () => {
       const deps = makeDeps([staleRepo()], async () => {
         throw new Error(message)
       })
-      await reconcileStaleRepos(deps, clock, GITHUB_RECONCILE_STALE_MS, noopLog)
+      await reconcileStaleRepos(deps, clock, STALE_MS, noopLog)
       expect(deps.softDeleted).toEqual([])
     }
   })
