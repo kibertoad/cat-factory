@@ -17,7 +17,7 @@ it a debugging session that a good message would have collapsed into a 30-second
 The intended end state: **every failure or missing configuration a user can plausibly hit
 names the condition, its likely cause, the exact fix — the UI location first for
 UI-configurable settings, a command or env var for operator-only settings — and links the
-relevant documentation.** The repo already has five strong reusable shapes for this (see
+relevant documentation.** The repo already has six strong reusable shapes for this (see
 the target patterns below); the work is extending their coverage, not inventing new
 machinery. A second axis of the initiative (section H) closes the biggest _remedy gap_
 itself: several providers cannot currently be configured through the UI at all, so their
@@ -29,8 +29,8 @@ universal gap this initiative closes alongside the per-message work.
 
 ## Target pattern (the reference shapes to copy)
 
-There is no single pilot PR; instead there are five existing good-citizen shapes. Pick by
-failure class — do NOT invent a sixth:
+There is no single pilot PR; instead there are six existing good-citizen shapes. Pick by
+failure class — do NOT invent a seventh:
 
 1. **`ConfigProblem` + `ENV_HELP` registry** — `backend/packages/server/src/config/problems.ts`.
    For boot-time / configuration failures. `{ key, summary, remedy }` written ONCE in the
@@ -54,6 +54,17 @@ failure class — do NOT invent a sixth:
 5. **`PreflightResult.remediation`** — contracts `preflights.ts` +
    `integrations/modules/preflight/PreflightService.ts`. For probe-style prerequisite
    checks: the non-pass verdict carries copy-paste fix instructions.
+6. **Structured cause code + extractor + fallback** — the shape for ERROR IDENTITY
+   (complementing pattern 4, which covers the HTTP/frontend boundary): a named error
+   subclass carrying a machine field consumed via `instanceof` (`GitHubApiError.status`,
+   `DomainError.code`, `HarnessFailure.failureCause`), a small extractor helper that
+   encapsulates the check (`failureCauseOf` in `executor-harness/src/failure.ts:53`,
+   `getErrorReason` in kernel `domain/errors.ts:131`, the duck-typed cross-boundary
+   `httpStatusOf` in `integrations/modules/tasks/tasks.logic.ts:56`), and — where an
+   older producer may still emit only text — a `*FromCause(cause) ?? classify*(message)`
+   mapper pair (`agentFailureKindFromCause ?? classifyAgentFailure`,
+   `RunDispatcher.ts:965`). Classify errors by these fields and typeguards, NEVER by
+   regex/`includes` on the message; see section I for the sites still string-matched.
 
 ### Doc-URL convention (new — establish in the first slice)
 
@@ -126,12 +137,12 @@ issue.
 
 ### D. Container / runner dispatch & observability
 
-| #   | Failure / misconfiguration                        | Current behaviour                                                                                                                                       | Surface | Sev | Proposed fix                                                                                                                                                                          | Doc URL to embed                     | Status  | PR  |
-| --- | ------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------- | ------- | --- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ------------------------------------ | ------- | --- |
-| D1  | `Container dispatch failed (HTTP 404)`            | Raw status (`CloudflareContainerTransport.ts:105`, `KubernetesRunnerTransport.ts:93`); the known cause is a stale harness image whose tag wasn't bumped | env     | P1  | On 404 specifically, append the stale-image explanation: the deployed container image predates this route — republish with a fresh tag + `pnpm deploy` (per the release rules)        | `CONTRIBUTING.md` / releases section | ⬜ todo |     |
-| D2  | Runner-pool HTTP / OAuth / manifest-secret errors | Raw `` `Runner pool ${method} → ${status}` ``, `Missing secret 'X'`, `OAuth token request → <status>` (`HttpRunnerPoolProvider.ts:208,248,312,326`)     | UI      | P2  | UI-first: point at Settings → Self-hosted runner pool (re-test connection there); manifest/secret naming as detail                                                                    | `backend/docs/` runner-pool doc      | ⬜ todo |     |
-| D3  | `No runner backend available for workspace 'X'`   | Plain Error, terse-ish (`cloudflare container.ts:556`)                                                                                                  | UI      | P2  | UI-first: register a pool in Settings → Self-hosted runner pool, or enable Cloudflare Containers (deployment config); make it a `ConflictReason` (reuse `agent_backend_unconfigured`) | `backend/docs/` runner-pool doc      | ⬜ todo |     |
-| D4  | Datadog auth failure                              | Raw `HTTP 403` (`DatadogClient.ts:193`); keys are UI-configured                                                                                         | UI      | P2  | On 401/403: "your Datadog API/Application keys were rejected — re-enter them in Integrations → Observability connection"; env vars not mentioned (they don't exist for this)          | Datadog API-keys vendor URL          | ⬜ todo |     |
+| #   | Failure / misconfiguration                        | Current behaviour                                                                                                                                       | Surface | Sev | Proposed fix                                                                                                                                                                                                                                                       | Doc URL to embed                     | Status  | PR  |
+| --- | ------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------- | ------- | --- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ | ------------------------------------ | ------- | --- |
+| D1  | `Container dispatch failed (HTTP 404)`            | Raw status (`CloudflareContainerTransport.ts:105`, `KubernetesRunnerTransport.ts:93`); the known cause is a stale harness image whose tag wasn't bumped | env     | P1  | On 404 specifically, append the stale-image explanation: the deployed container image predates this route — republish with a fresh tag + `pnpm deploy` (per the release rules); land together with I2's `DispatchError` so the status is a field, not parsed prose | `CONTRIBUTING.md` / releases section | ⬜ todo |     |
+| D2  | Runner-pool HTTP / OAuth / manifest-secret errors | Raw `` `Runner pool ${method} → ${status}` ``, `Missing secret 'X'`, `OAuth token request → <status>` (`HttpRunnerPoolProvider.ts:208,248,312,326`)     | UI      | P2  | UI-first: point at Settings → Self-hosted runner pool (re-test connection there); manifest/secret naming as detail                                                                                                                                                 | `backend/docs/` runner-pool doc      | ⬜ todo |     |
+| D3  | `No runner backend available for workspace 'X'`   | Plain Error, terse-ish (`cloudflare container.ts:556`)                                                                                                  | UI      | P2  | UI-first: register a pool in Settings → Self-hosted runner pool, or enable Cloudflare Containers (deployment config); make it a `ConflictReason` (reuse `agent_backend_unconfigured`)                                                                              | `backend/docs/` runner-pool doc      | ⬜ todo |     |
+| D4  | Datadog auth failure                              | Raw `HTTP 403` (`DatadogClient.ts:193`); keys are UI-configured                                                                                         | UI      | P2  | On 401/403: "your Datadog API/Application keys were rejected — re-enter them in Integrations → Observability connection"; env vars not mentioned (they don't exist for this)                                                                                       | Datadog API-keys vendor URL          | ⬜ todo |     |
 
 ### E. Crypto / credentials
 
@@ -141,6 +152,10 @@ issue.
 | E2  | `Invalid secret envelope` (malformed/truncated ciphertext) | Terse (`WebCryptoSecretCipher.ts:62`)                                                                                                               | n/a     | P3  | Name the likely causes (truncated column, mixed encryption keys across environments) + the re-enter-credential remedy                                                                                              | —                | ⬜ todo |     |
 
 ### F. Executor harness — ⚠ every slice here bumps the image tag + the three pins; batch these rows into ONE slice
+
+Any new failure classification added here (F1–F3) extends the harness `FailureCause`
+union — a structured code per target pattern 6, never a new string-matched phrase — and
+that union change is itself image-affecting, so it batches into the same slice.
 
 | #   | Failure / misconfiguration         | Current behaviour                                                                                                            | Surface | Sev | Proposed fix                                                                                                                                       | Doc URL to embed | Status  | PR  |
 | --- | ---------------------------------- | ---------------------------------------------------------------------------------------------------------------------------- | ------- | --- | -------------------------------------------------------------------------------------------------------------------------------------------------- | ---------------- | ------- | --- |
@@ -186,6 +201,53 @@ assertion, per the standing rules.
 | H4  | Optional base-URL override in the UI for the remaining direct/proxy providers (`${PROVIDER}_BASE_URL` → fallback) | P3  | ⬜ todo |     |
 | H5  | Revisit B1–B4 / A10 remedies once H1–H4 land so the primary instruction is always the UI path                     | P3  | ⬜ todo |     |
 
+### I. Structured error codes & typeguards instead of string/regex matching
+
+Verified 2026-07-11. Error identity is determined two ways today, and the goal is to make
+the structured way the only load-bearing one:
+
+- **Structured (preferred, already end-to-end for harness-owned faults):** the harness
+  `FailureCause` union + `HarnessFailure.failureCause`
+  (`executor-harness/src/failure.ts:28-55`) rides the wire — harness
+  `JobView.failureCause` → kernel `RunnerJobView.failureCause` →
+  `AgentExecutorPollUpdate.failureCause` → `AgentFailure.reason`. Consumers prefer it and
+  fall back to text only for older images/pools:
+  `agentFailureKindFromCause(update.failureCause) ?? classifyAgentFailure(update.error)`
+  (`RunDispatcher.ts:965`; same shape in `ContainerRepoBootstrapper.ts:303`).
+- **String/regex (to eliminate as the primary channel):**
+  - Container **eviction** exists ONLY as text: the transports mint the sentinel
+    `'Job not found (container evicted or crashed)'` (+ `TRANSIENT_EVICTION_MARKER`)
+    (`CloudflareContainerTransport.ts:20-21`, local `harnessHttp.ts:17`,
+    `KubernetesRunnerTransport.ts:45`), and consumers regex it —
+    `isContainerEvictionError` / `isTransientEviction`
+    (`orchestration/execution/job.logic.ts:47-61`), plus the `/evicted or crashed/i`
+    fallbacks in `ContainerRepoBootstrapper.ts:417` / `ContainerEnvConfigRepairer.ts:209`.
+    Two transports even carry "deliberately avoids the phrase" comments
+    (`LocalContainerRunnerTransport.ts:842`, `KubernetesRunnerTransport.ts:206`) — negative
+    coupling that only exists because the signal is a string.
+  - **Dispatch failure** is a bare `Error('… dispatch failed (HTTP n): …')` matched by
+    `/dispatch failed/i` (`BootstrapService.ts:313,425`, `EnvConfigRepairService.ts:170`).
+  - The **watchdog abort phrases** (`failure.ts:63-73`) are regex-matched
+    (`/inactivity|no agent activity|max duration/i`) only as the old-image fallback — the
+    structured `inactivity-timeout`/`max-duration` causes already cover current images.
+
+Compatibility rule for this section: the regex fallbacks guard against OLDER harness
+images / runner pools (see the `failureCausePath` older-pool test in
+`runner-pool-transport.test.ts:229-235`), so a conversion adds the structured field and
+demotes the regex to fallback; deleting the fallback is a separate, image-floor-gated
+step (I5). Eviction and dispatch signals are minted by in-repo transports/facades — those
+conversions need NO executor-harness image bump. Extending the harness `FailureCause`
+union itself DOES bump the image (batch with the F-slice).
+
+| #   | Work item                                                                                                                                                                                                                                                                                                                                                          | Sev | Status  | PR  |
+| --- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ | --- | ------- | --- |
+| I1  | Structured eviction signal: add a field (e.g. `evicted?: 'crash' \| 'transient'`) to kernel `RunnerJobView` (`ports/runner-transport.ts`), emit it from all four transports (Cloudflare, local `harnessHttp`, `LocalContainerRunnerTransport`, k8s), read via an extractor; regexes become fallback-only. No image bump                                            | P1  | ⬜ todo |     |
+| I2  | `DispatchError` class (`httpStatus` + phase) thrown by every transport `dispatch()`; `BootstrapService` / `EnvConfigRepairService` classify via `instanceof`/extractor instead of `/dispatch failed/i`. Pairs with D1's stale-image elaboration. No image bump                                                                                                     | P1  | ⬜ todo |     |
+| I3  | Quick win: `ContainerEnvConfigRepairer.ts:175` ignores the already-plumbed `view.failureCause` — add `repairFailureKindFromCause(cause) ?? classifyRepairFailure(error)`, matching the bootstrap/execution paths                                                                                                                                                   | P2  | ⬜ todo |     |
+| I4  | Type the wire: narrow kernel `failureCause?: string` (`runner-transport.ts:226`, `agent-executor.ts:671`, `preview-transport.ts:52`) to a shared cause union so the `*FromCause` mappers are exhaustively checked (`Record`-style drift guard, like the SPA's `CONFLICT_TITLE_KEYS`)                                                                               | P2  | ⬜ todo |     |
+| I5  | Once a harness-image floor is acceptable, delete the abort-phrase + eviction-phrase regex fallbacks and drop the "wording MUST stay stable" constraint documented in `failure.ts:5-13`                                                                                                                                                                             | P3  | ⬜ todo |     |
+| I6  | Codify the first-wrap-point rule for unavoidable third-party text (git stderr → `HarnessFailure('git')` in `gitFailure`, pg driver errors → `pg.code` switch in `explainMigrationFailure` (the reference), kubectl/k3s stderr in `cli/src/k3s-provision.ts:291`): the code is attached exactly ONCE where the text enters our system; nothing downstream re-parses | P3  | ⬜ todo |     |
+
 ## Conventions & gotchas carried between iterations
 
 - **UI-first remedies** (see the rule above): name the UI location first for anything
@@ -193,11 +255,14 @@ assertion, per the standing rules.
 - **Keep the runtimes symmetric** — any validation added to one facade (Node ⇄ Worker ⇄
   local) lands in the others in the same change, with a conformance assertion where the
   behaviour is shared.
-- **Regex-load-bearing strings must NOT change**: the eviction sentinels
-  (`CloudflareContainerTransport.ts:20-21`), the abort messages
-  (`executor-harness/src/failure.ts:63,71`), and the `classifyBootstrapFailure` patterns
-  are matched downstream. Elaborate AROUND them (structured cause fields, `hint`,
-  appended detail) — never rewrite the matched phrase.
+- **Regex-load-bearing strings must NOT change (interim rule — section I is the real
+  fix)**: the eviction sentinels (`CloudflareContainerTransport.ts:20-21`), the abort
+  messages (`executor-harness/src/failure.ts:63,71`), and the `classifyBootstrapFailure`
+  patterns are matched downstream. Until the corresponding I-item lands and its fallback
+  is retired (I5), elaborate AROUND them (structured cause fields, `hint`, appended
+  detail) — never rewrite the matched phrase. And never ADD a new string-matched
+  sentinel: a new failure condition gets a code field + extractor (target pattern 6)
+  from day one.
 - **The backend never localizes prose.** A new user-facing condition gets a machine
   `details.reason` code in `@cat-factory/contracts`; the SPA maps it to translated copy.
   Adding a `ConflictReason` forces the exhaustive frontend `Record` + every locale catalog
