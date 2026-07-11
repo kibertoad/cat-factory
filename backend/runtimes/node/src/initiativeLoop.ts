@@ -1,5 +1,6 @@
 import type { Clock } from '@cat-factory/kernel'
 import type { Logger, ServerContainer } from '@cat-factory/server'
+import { startSweeper } from './sweeper.js'
 
 // Periodic initiative-execution-loop sweep for the Node facade — the analogue of the Worker's
 // every-2-min cron call to `initiatives.loop.runDue`. The Node service has no cron, so a timer
@@ -30,8 +31,10 @@ export function resolveSweepInterval(env: NodeJS.ProcessEnv = process.env): numb
 
 /**
  * Start the periodic initiative-loop sweep. Runs once immediately then on the resolved interval
- * (default one minute; see {@link resolveSweepInterval}). Best-effort: a failed sweep is logged
- * and retried next tick, never thrown. Returns a stop function that clears the timer.
+ * (default one minute; see {@link resolveSweepInterval}), non-overlapping + best-effort (see
+ * {@link startSweeper}). The non-overlap guard matters most here: `runDue` reconciles spawned
+ * tasks and spawns the next wave, so two concurrent passes could both observe "no active run"
+ * and double-spawn. Returns a stop function that clears the timer.
  */
 export function startInitiativeLoopSweeper(
   container: ServerContainer,
@@ -41,21 +44,16 @@ export function startInitiativeLoopSweeper(
 ): () => void {
   const initiatives = container.initiatives
   if (!initiatives) return () => {}
-  const tick = async () => {
-    try {
+  return startSweeper({
+    name: 'initiative-loop',
+    intervalMs,
+    log,
+    failureMessage: 'initiative-loop sweep failed',
+    tick: async () => {
       const { spawned, completed } = await initiatives.loop.runDue(clock.now())
       if (spawned > 0 || completed > 0) {
         log.info({ spawned, completed }, 'ticked initiative loop')
       }
-    } catch (error) {
-      log.error(
-        { err: error instanceof Error ? error.message : String(error) },
-        'initiative-loop sweep failed',
-      )
-    }
-  }
-  void tick()
-  const timer = setInterval(() => void tick(), intervalMs)
-  timer.unref?.()
-  return () => clearInterval(timer)
+    },
+  })
 }

@@ -1,5 +1,12 @@
 # @cat-factory/conformance
 
+## 0.10.98
+
+### Patch Changes
+
+- Updated dependencies [df7a489]
+  - @cat-factory/server@0.111.0
+
 ## 0.10.97
 
 ### Patch Changes
