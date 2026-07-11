@@ -1,5 +1,34 @@
 # @cat-factory/node-server
 
+## 0.92.1
+
+### Patch Changes
+
+- 5072999: Boot-time configuration problems now carry a documentation link. Each `ENV_HELP`
+  entry embeds a stable in-repo doc URL (built through a new centralized `DOCS`
+  helper in `@cat-factory/server`), the operator log appends a `Docs:` line, and the
+  "backend misconfigured" screen renders a "View documentation" link per problem.
+  This establishes the doc-URL convention for the error-message coverage initiative
+  (item A1).
+- Updated dependencies [5072999]
+  - @cat-factory/contracts@0.126.0
+  - @cat-factory/server@0.109.0
+  - @cat-factory/agents@0.53.1
+  - @cat-factory/consensus@0.10.30
+  - @cat-factory/eks@0.1.53
+  - @cat-factory/gates@0.5.15
+  - @cat-factory/gitlab@0.7.53
+  - @cat-factory/integrations@0.81.1
+  - @cat-factory/kernel@0.118.1
+  - @cat-factory/orchestration@0.105.1
+  - @cat-factory/prompt-fragments@0.13.12
+  - @cat-factory/spend@0.12.11
+  - @cat-factory/provider-bedrock@0.7.200
+  - @cat-factory/provider-cloudflare@0.7.201
+  - @cat-factory/caching@0.6.30
+  - @cat-factory/observability-langfuse@0.7.185
+  - @cat-factory/provider-s3@0.2.135
+
 ## 0.92.0
 
 ### Minor Changes

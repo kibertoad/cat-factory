@@ -1,5 +1,27 @@
 # @cat-factory/server
 
+## 0.109.0
+
+### Minor Changes
+
+- 5072999: Boot-time configuration problems now carry a documentation link. Each `ENV_HELP`
+  entry embeds a stable in-repo doc URL (built through a new centralized `DOCS`
+  helper in `@cat-factory/server`), the operator log appends a `Docs:` line, and the
+  "backend misconfigured" screen renders a "View documentation" link per problem.
+  This establishes the doc-URL convention for the error-message coverage initiative
+  (item A1).
+
+### Patch Changes
+
+- Updated dependencies [5072999]
+  - @cat-factory/contracts@0.126.0
+  - @cat-factory/agents@0.53.1
+  - @cat-factory/integrations@0.81.1
+  - @cat-factory/kernel@0.118.1
+  - @cat-factory/orchestration@0.105.1
+  - @cat-factory/prompt-fragments@0.13.12
+  - @cat-factory/spend@0.12.11
+
 ## 0.108.0
 
 ### Minor Changes
