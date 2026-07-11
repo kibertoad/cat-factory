@@ -153,6 +153,23 @@ function loadSystemEmailSender(env: NodeJS.ProcessEnv): EmailConfig['system'] {
   return undefined
 }
 
+/**
+ * Cloudflare Workers AI over REST needs BOTH `CLOUDFLARE_ACCOUNT_ID` and `CLOUDFLARE_API_TOKEN`.
+ * When exactly one half is set the provider is silently disabled; this returns which var IS set
+ * and which is MISSING so the boot warning can name the gap (error-message coverage A10).
+ * Undefined when both are set or both are unset — no half-set footgun to warn about.
+ */
+export function cloudflareCredsHalfSet(
+  env: NodeJS.ProcessEnv,
+): { set: string; missing: string } | undefined {
+  const accountId = env.CLOUDFLARE_ACCOUNT_ID?.trim()
+  const apiToken = env.CLOUDFLARE_API_TOKEN?.trim()
+  if (!!accountId === !!apiToken) return undefined
+  return accountId
+    ? { set: 'CLOUDFLARE_ACCOUNT_ID', missing: 'CLOUDFLARE_API_TOKEN' }
+    : { set: 'CLOUDFLARE_API_TOKEN', missing: 'CLOUDFLARE_ACCOUNT_ID' }
+}
+
 export function loadNodeConfig(env: NodeJS.ProcessEnv): AppConfig {
   // Validate the system encryption key up front: present, valid base64, and decoding to a full
   // AES-256 key. It is effectively mandatory (the always-on document/task integrations below seal
@@ -171,14 +188,13 @@ export function loadNodeConfig(env: NodeJS.ProcessEnv): AppConfig {
   // missing half at boot (error-message coverage A10).
   const cfAccountId = env.CLOUDFLARE_ACCOUNT_ID?.trim()
   const cfApiToken = env.CLOUDFLARE_API_TOKEN?.trim()
-  if (!!cfAccountId !== !!cfApiToken) {
-    const set = cfAccountId ? 'CLOUDFLARE_ACCOUNT_ID' : 'CLOUDFLARE_API_TOKEN'
-    const missing = cfAccountId ? 'CLOUDFLARE_API_TOKEN' : 'CLOUDFLARE_ACCOUNT_ID'
+  const cfHalfSet = cloudflareCredsHalfSet(env)
+  if (cfHalfSet) {
     logger.warn(
-      { set, missing, docsUrl: DOCS.envVars(ENV_VARS_ANCHORS.modelProviders) },
-      `${set} is set but ${missing} is missing — Cloudflare Workers AI (over REST) needs both, ` +
-        `so it stays DISABLED. Set ${missing} too, or unset ${set}. See ` +
-        `${DOCS.envVars(ENV_VARS_ANCHORS.modelProviders)}.`,
+      { ...cfHalfSet, docsUrl: DOCS.envVars(ENV_VARS_ANCHORS.modelProviders) },
+      `${cfHalfSet.set} is set but ${cfHalfSet.missing} is missing — Cloudflare Workers AI ` +
+        `(over REST) needs both, so it stays DISABLED. Set ${cfHalfSet.missing} too, or unset ` +
+        `${cfHalfSet.set}. See ${DOCS.envVars(ENV_VARS_ANCHORS.modelProviders)}.`,
     )
   }
   const caps: ProviderCapabilities = {

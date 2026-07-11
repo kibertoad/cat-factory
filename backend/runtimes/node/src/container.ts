@@ -862,6 +862,25 @@ export function withProvisioningLog(
 }
 
 /**
+ * Which of the container-executor prerequisites are missing, as the human labels the boot
+ * warning names. Empty ⇒ all three are present. `PUBLIC_URL` is this service's externally
+ * reachable base backing the LLM proxy, `AUTH_SESSION_SECRET` signs the harness↔proxy tokens,
+ * and a runner backend is what a dispatch is handed to. Pure so the "name exactly what's
+ * missing" logic is unit-tested (error-message coverage A5).
+ */
+export function missingContainerExecutorPrereqs(input: {
+  publicUrl: string | undefined
+  sessionSecret: string | undefined
+  hasRunnerBackend: boolean
+}): string[] {
+  const missing: string[] = []
+  if (!input.publicUrl) missing.push('PUBLIC_URL')
+  if (!input.sessionSecret) missing.push('AUTH_SESSION_SECRET (>= 32 chars)')
+  if (!input.hasRunnerBackend) missing.push('a runner backend (self-hosted runner pool)')
+  return missing
+}
+
+/**
  * Build the container agent executor (repo-operating steps: coder, mocker,
  * playwright, blueprints, ci-fixer, conflict-resolver, merger) when its
  * prerequisites are configured: a token source for the push/clone token, the public
@@ -913,10 +932,11 @@ function buildNodeContainerExecutor(
     // (coder/mocker/tester/blueprints/ci-fixer/conflict-resolver/merger) then fail only at
     // dispatch, deep in a request, with no boot signal. Emit a greppable line naming exactly
     // which prerequisite is missing so the gap is visible up front (error-message coverage A5).
-    const missing: string[] = []
-    if (!publicUrl) missing.push('PUBLIC_URL')
-    if (!sessionSecret) missing.push('AUTH_SESSION_SECRET (>= 32 chars)')
-    if (!resolveTransport) missing.push('a runner backend (self-hosted runner pool)')
+    const missing = missingContainerExecutorPrereqs({
+      publicUrl,
+      sessionSecret,
+      hasRunnerBackend: !!resolveTransport,
+    })
     logger.warn(
       { missing, docsUrl: DOCS.envVars(ENV_VARS_ANCHORS.coreServiceNetworking) },
       `container agent steps are DISABLED: missing ${missing.join(', ')}. Repo-operating steps ` +
