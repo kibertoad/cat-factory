@@ -29,6 +29,7 @@ run" and double-spawn. All eight Node sweeps (kaizen, github-reconcile, initiati
 recurring, notification escalation, environment TTL, and both retention sweeps) now go through
 one `startSweeper` helper built on `toad-scheduler`: `preventOverrun` is the non-overlap guard,
 `runImmediately` the run-once-first behaviour, and the `AsyncTask` error handler the best-effort
-logging (each sweep names its task, so scheduler-surfaced errors identify their sweep). A new
-sweeper physically cannot forget the guard. Adds a `toad-scheduler` dependency to
-`@cat-factory/node-server`.
+logging (each sweep names its task, so scheduler-surfaced errors identify their sweep), and
+`unref` keeps the sweep timers from holding the process alive — the same contract as the
+hand-rolled `setInterval(...).unref()` timers this replaced. A new sweeper physically cannot
+forget the guard. Adds a `toad-scheduler` (^4.1.0) dependency to `@cat-factory/node-server`.

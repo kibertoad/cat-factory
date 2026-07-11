@@ -296,10 +296,9 @@ the per-file timer/guard boilerplate — a new sweeper physically cannot forget 
 Each sweep passes a distinct `name` used as the toad-scheduler task id, so a
 scheduler-surfaced error names its sweep.
 Guard: `node/test/sweeper.spec.ts` pins the immediate run, the non-overlap skip, best-effort
-failure logging, and clean stop. NOTE: `toad-scheduler` does not `unref` its interval, unlike
-the old hand-rolled timers, but the Node process is always kept alive by its HTTP listener and
-force-exits via `process.exit(0)` after `shutdown()` calls every sweeper's stop function, so
-the `unref` was not load-bearing.
+failure logging, and clean stop. The jobs pass `unref: true` (toad-scheduler ≥4.1.0), so a
+sweep timer never keeps the process alive on its own — the same contract as the hand-rolled
+`setInterval(...).unref()` timers this replaced.
 
 #### 7. Conformance prune-assertion gaps — P2
 

@@ -32,13 +32,10 @@ export interface SweeperOptions {
 /**
  * Start a periodic, non-overlapping, best-effort sweep. Runs `tick` once immediately then
  * on the interval; skips a tick while the previous pass is still in flight
- * (`preventOverrun`); logs (never throws) a failed pass. Returns a stop function that
- * halts the job.
- *
- * NOTE: unlike the hand-rolled `setInterval(...).unref()` timers this replaced, the
- * scheduler's interval is NOT unref'd (toad-scheduler offers no unref), so a live sweeper
- * keeps the process alive — every caller MUST invoke the returned stop function on
- * shutdown (`start()` does, before its `process.exit(0)`).
+ * (`preventOverrun`); logs (never throws) a failed pass; never keeps the process alive on
+ * the sweep timer alone (`unref`, matching the hand-rolled `setInterval(...).unref()`
+ * timers this replaced). Returns a stop function that halts the job — still call it on
+ * shutdown so a long pass in flight can't outlive the rest of the teardown.
  */
 export function startSweeper(options: SweeperOptions): () => void {
   const { name, intervalMs, log, failureMessage, tick } = options
@@ -48,6 +45,7 @@ export function startSweeper(options: SweeperOptions): () => void {
   })
   const job = new SimpleIntervalJob({ milliseconds: intervalMs, runImmediately: true }, task, {
     preventOverrun: true,
+    unref: true,
   })
   scheduler.addSimpleIntervalJob(job)
   return () => scheduler.stop()
