@@ -245,7 +245,8 @@ const PROFILES: Record<RuntimeId, RuntimeProfile> = {
   },
 }
 
-const RUNTIME_IDS = Object.keys(PROFILES) as RuntimeId[]
+/** The accepted `LOCAL_CONTAINER_RUNTIME` ids, in declaration order (for messages). */
+export const RUNTIME_IDS = Object.keys(PROFILES) as RuntimeId[]
 
 /** Resolve the runtime profile for an id (defaults to docker for an unknown value). */
 export function runtimeProfile(id: RuntimeId): RuntimeProfile {
@@ -255,12 +256,25 @@ export function runtimeProfile(id: RuntimeId): RuntimeProfile {
 /**
  * The runtime selected by `LOCAL_CONTAINER_RUNTIME` (docker | podman | orbstack |
  * colima | apple). Defaults to `docker`; an unrecognised value also falls back to
- * docker (logged by the preflight). Explicit selection is the supported path.
+ * docker (logged by the preflight, see {@link unrecognizedRuntimeId}). Explicit
+ * selection is the supported path.
  */
 export function resolveRuntimeId(env: NodeJS.ProcessEnv): RuntimeId {
   const raw = env.LOCAL_CONTAINER_RUNTIME?.trim().toLowerCase()
   if (raw && (RUNTIME_IDS as string[]).includes(raw)) return raw as RuntimeId
   return 'docker'
+}
+
+/**
+ * The raw `LOCAL_CONTAINER_RUNTIME` value when it is SET but not one of the accepted
+ * runtime ids — i.e. the typo `resolveRuntimeId` silently fell back to `docker` for.
+ * Undefined when the var is unset or valid. The preflight logs this so an unrecognised
+ * value is visible at boot instead of silently running docker (error-message coverage A9).
+ */
+export function unrecognizedRuntimeId(env: NodeJS.ProcessEnv): string | undefined {
+  const raw = env.LOCAL_CONTAINER_RUNTIME?.trim()
+  if (!raw) return undefined
+  return (RUNTIME_IDS as string[]).includes(raw.toLowerCase()) ? undefined : raw
 }
 
 /**

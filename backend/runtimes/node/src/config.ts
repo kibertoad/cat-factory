@@ -15,8 +15,11 @@ import type {
   TasksConfig,
 } from '@cat-factory/server'
 import {
+  DOCS,
   ENV_HELP,
+  ENV_VARS_ANCHORS,
   configProblem,
+  logger,
   parseDetectionConventions,
   requireEncryptionKey,
   resolveMachineTokenTtlMs,
@@ -162,10 +165,26 @@ export function loadNodeConfig(env: NodeJS.ProcessEnv): AppConfig {
   // from the DB pool), so none are known here; Cloudflare Workers AI is opt-in over
   // REST (account id + API token). The per-workspace `/models` endpoint recomputes
   // selectability against each workspace's configured keys + subscriptions.
+  // Cloudflare Workers AI over REST needs BOTH the account id and the API token. A
+  // half-set pair silently disables the provider, so a deployment that set only one reads
+  // as "Cloudflare not configured" with no hint the other half is the gap. Name the
+  // missing half at boot (error-message coverage A10).
+  const cfAccountId = env.CLOUDFLARE_ACCOUNT_ID?.trim()
+  const cfApiToken = env.CLOUDFLARE_API_TOKEN?.trim()
+  if (!!cfAccountId !== !!cfApiToken) {
+    const set = cfAccountId ? 'CLOUDFLARE_ACCOUNT_ID' : 'CLOUDFLARE_API_TOKEN'
+    const missing = cfAccountId ? 'CLOUDFLARE_API_TOKEN' : 'CLOUDFLARE_ACCOUNT_ID'
+    logger.warn(
+      { set, missing, docsUrl: DOCS.envVars(ENV_VARS_ANCHORS.modelProviders) },
+      `${set} is set but ${missing} is missing — Cloudflare Workers AI (over REST) needs both, ` +
+        `so it stays DISABLED. Set ${missing} too, or unset ${set}. See ` +
+        `${DOCS.envVars(ENV_VARS_ANCHORS.modelProviders)}.`,
+    )
+  }
   const caps: ProviderCapabilities = {
     directProviders: new Set(),
     subscriptionVendors: new Set(ALL_SUBSCRIPTION_VENDORS),
-    cloudflareEnabled: !!(env.CLOUDFLARE_ACCOUNT_ID && env.CLOUDFLARE_API_TOKEN),
+    cloudflareEnabled: !!(cfAccountId && cfApiToken),
   }
 
   // Default unpinned agents to Qwen (the Cloudflare flavour when enabled, upgraded to

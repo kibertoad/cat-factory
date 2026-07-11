@@ -1,6 +1,11 @@
 import { describe, expect, it } from 'vitest'
 import type { ContainerExec } from './containerRuntime.js'
-import { createRuntimeAdapter, resolveHostAlias, resolveRuntimeId } from './index.js'
+import {
+  createRuntimeAdapter,
+  resolveHostAlias,
+  resolveRuntimeId,
+  unrecognizedRuntimeId,
+} from './index.js'
 import { AppleContainerRuntimeAdapter } from './appleContainerRuntime.js'
 import { DockerRuntimeAdapter } from './dockerRuntime.js'
 
@@ -23,6 +28,18 @@ describe('runtime selection', () => {
   it('selects the requested runtime (case-insensitive)', () => {
     expect(resolveRuntimeId({ LOCAL_CONTAINER_RUNTIME: 'Podman' })).toBe('podman')
     expect(resolveRuntimeId({ LOCAL_CONTAINER_RUNTIME: 'apple' })).toBe('apple')
+  })
+
+  it('flags an unrecognised LOCAL_CONTAINER_RUNTIME value (A9 boot warning)', () => {
+    // Unset or valid ⇒ nothing to warn about.
+    expect(unrecognizedRuntimeId({})).toBeUndefined()
+    expect(unrecognizedRuntimeId({ LOCAL_CONTAINER_RUNTIME: 'podman' })).toBeUndefined()
+    expect(unrecognizedRuntimeId({ LOCAL_CONTAINER_RUNTIME: '  Apple  ' })).toBeUndefined()
+    // Set but unrecognised ⇒ the raw (untrimmed-case) value the preflight surfaces.
+    expect(unrecognizedRuntimeId({ LOCAL_CONTAINER_RUNTIME: 'nope' })).toBe('nope')
+    expect(unrecognizedRuntimeId({ LOCAL_CONTAINER_RUNTIME: 'pod man' })).toBe('pod man')
+    // Blank (whitespace-only) is treated as unset, not a rejected value.
+    expect(unrecognizedRuntimeId({ LOCAL_CONTAINER_RUNTIME: '   ' })).toBeUndefined()
   })
 
   it('builds the docker-family adapter for docker/podman/orbstack/colima', () => {
