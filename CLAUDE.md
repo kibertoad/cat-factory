@@ -1353,8 +1353,13 @@ differentiators behind the shared kernel ports + the `container.gateways` seam.
   plain async sleeps instead of durable steps; `signalDecision` re-enqueues a parked
   run). `start()` connects to `DATABASE_URL`, runs `migrate()`, boots pg-boss + the
   execution worker, attaches the **real-time WebSocket transport** to the HTTP listener,
-  and serves over `@hono/node-server`. Async GitHub ingest still falls back to the
-  inline/not-enabled paths for now. **Real-time** is implemented: `start()` creates a
+  and serves over `@hono/node-server`. **Async GitHub ingest is pg-boss-backed** (the
+  analogue of the Worker's `GITHUB_SYNC_QUEUE` consumer + `GitHubBackfillWorkflow`): the
+  `githubBackfill` / `githubWebhook` gateway seams enqueue webhook deliveries, single-repo
+  resyncs and full-installation backfills onto the `github.sync` queue so the request acks
+  fast, and `startGitHubSyncWorker` drains it and applies each job to the projections via
+  the same `GitHubSyncService` / `WebhookService` the inline path used (a container built
+  with no boss — a pure-logic test — keeps the inline fallback). **Real-time** is implemented: `start()` creates a
   per-workspace `NodeRealtimeHub` (in-memory subscriber registry), wires a
   `NodeEventPublisher` (decorated with `FanOutEventPublisher`) as the engine's
   `executionEventPublisher` + an `InAppNotificationChannel`, and `attachRealtime`

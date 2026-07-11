@@ -28,6 +28,7 @@ import { migrate } from './db/migrate.js'
 import { executionRuntime } from './execution/config.js'
 import { startExecutionWorker, startStaleRunSweeper } from './execution/pgBossRunner.js'
 import { startBootstrapWorker } from './execution/bootstrapRunner.js'
+import { startGitHubSyncWorker } from './execution/githubSyncRunner.js'
 import { startEnvConfigRepairWorker } from './execution/envConfigRepairRunner.js'
 import { startEnvironmentSweeper } from './environments.js'
 import { startScheduleSweeper } from './recurring.js'
@@ -347,6 +348,12 @@ async function bootServer(
   // Durably drive env-config-repair runs (the Worker uses a per-run EnvConfigRepairWorkflow);
   // a no-op queue when the repair module isn't wired.
   await startEnvConfigRepairWorker(boss, container, runtime.drive, logger, {
+    concurrency: runtime.concurrency,
+  })
+  // Async GitHub ingest (the analogue of the Worker's GITHUB_SYNC_QUEUE consumer +
+  // GitHubBackfillWorkflow): drain the `github.sync` queue the gateway seams enqueue onto,
+  // so webhook deliveries / resyncs / backfills apply out of band and the request acks fast.
+  await startGitHubSyncWorker(boss, container, logger, {
     concurrency: runtime.concurrency,
   })
   const app = createApp(container, env)
