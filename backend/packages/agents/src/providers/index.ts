@@ -1,4 +1,5 @@
 export { CompositeModelProvider, type ModelResolver, type ProviderRegistry } from './registry.js'
+export { MODEL_SUPPORT_DOCS } from './docs.js'
 export {
   CliInlineLanguageModel,
   type InlineCliRequest,
@@ -31,6 +32,7 @@ export {
   OPENROUTER_BASE_URL,
   QWEN_BASE_URL,
   resolveOpenAiCompatibleBaseUrl,
+  UI_CONFIGURABLE_DIRECT_PROVIDERS,
 } from './endpoints.js'
 export {
   type CachePolicy,

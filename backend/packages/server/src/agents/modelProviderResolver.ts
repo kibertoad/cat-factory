@@ -16,6 +16,7 @@ import type {
   ModelProviderResolver,
   ModelScope,
 } from '@cat-factory/kernel'
+import { openAiCompatibleBaseUrlError } from './providerErrors.js'
 
 // Builds a {@link ModelProviderResolver} that resolves INLINE LLM calls against the
 // DB-backed, per-scope API-key pool instead of env-baked keys. For a given run scope
@@ -144,9 +145,11 @@ function buildDirectResolver(
 ): ModelResolver {
   if (provider === 'openai') return openAiResolver({ apiKey, baseURL })
   if (provider === 'anthropic') return anthropicResolver({ apiKey, baseURL })
-  // qwen / deepseek / moonshot expose an OpenAI-compatible API and need a base URL.
+  // qwen / deepseek / moonshot / openrouter / litellm expose an OpenAI-compatible API and need a
+  // base URL. litellm has no public default, so this is the common "key pooled, LITELLM_BASE_URL
+  // unset" case — openAiCompatibleBaseUrlError names it specifically.
   if (!baseURL) {
-    throw new Error(`No base URL configured for OpenAI-compatible provider '${provider}'`)
+    throw new Error(openAiCompatibleBaseUrlError(provider))
   }
   return openAiCompatibleResolver({ name: provider, apiKey, baseURL })
 }

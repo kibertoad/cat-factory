@@ -1,7 +1,8 @@
 # Initiative: error-message coverage (elaborate failures with fix instructions + doc URLs)
 
 **Status:** doc-URL convention established (A1) · boot-config validation (A2/A4/A6) · boot-time
-warnings for missing/rejected config (A5/A9/A10) · **Owner:** core · **Started:** 2026-07-11
+warnings for missing/rejected config (A5/A9/A10) · model-provisioning remedies (B1–B4) ·
+**Owner:** core · **Started:** 2026-07-11
 
 > This is the durable source of truth for a multi-PR initiative. Read it first before
 > picking up the next slice; update the checklist at the end of each PR.
@@ -125,12 +126,12 @@ issue.
 
 ### B. Model provisioning
 
-| #   | Failure / misconfiguration                                  | Current behaviour                                                                                                       | Surface | Sev | Proposed fix                                                                                                                                                                                           | Doc URL to embed                | Status  | PR  |
-| --- | ----------------------------------------------------------- | ----------------------------------------------------------------------------------------------------------------------- | ------- | --- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ | ------------------------------- | ------- | --- |
-| B1  | `Unsupported model provider: X`                             | Terse throw (`backend/packages/agents/src/providers/registry.ts:54`); reaches users raw via the frontend fallback toast | UI      | P1  | UI-first remedy: point at the provider key pool ("Configure AI" / workspace provider keys) as the primary fix, env var(s) as the deployment alternative; consider a `ConflictReason` for a jump action | `backend/docs/model-support.md` | ⬜ todo |     |
-| B2  | `Unsupported Bedrock model: X`                              | Terse throw (`backend/packages/provider-bedrock/src/index.ts:38-40`); doesn't name the allow-list                       | env     | P2  | Name `BEDROCK_MODELS`, list the allowed models, link docs                                                                                                                                              | `backend/docs/model-support.md` | ⬜ todo |     |
-| B3  | LiteLLM selected but `LITELLM_BASE_URL` unset               | Falls through to generic B1 (`endpoints.ts:38-43` returns `undefined`, provider never registers)                        | env→UI  | P1  | Dedicated message naming `LITELLM_BASE_URL` (operator-hosted, no public default); flips to a UI-first remedy once H1 lands                                                                             | `docs/environment-variables.md` | ⬜ todo |     |
-| B4  | `No base URL configured for OpenAI-compatible provider 'X'` | Partial message, no remedy (`backend/packages/server/src/agents/modelProviderResolver.ts:149`)                          | UI/env  | P2  | Name the `${PROVIDER}_BASE_URL` var and (where the key is UI-pooled) the key-pool panel                                                                                                                | `backend/docs/model-support.md` | ⬜ todo |     |
+| #   | Failure / misconfiguration                                  | Current behaviour                                                                                                       | Surface | Sev | Proposed fix                                                                                                                                                                                           | Doc URL to embed                | Status  | PR      |
+| --- | ----------------------------------------------------------- | ----------------------------------------------------------------------------------------------------------------------- | ------- | --- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ | ------------------------------- | ------- | ------- |
+| B1  | `Unsupported model provider: X`                             | Terse throw (`backend/packages/agents/src/providers/registry.ts:54`); reaches users raw via the frontend fallback toast | UI      | P1  | UI-first remedy: point at the provider key pool ("Configure AI" / workspace provider keys) as the primary fix, env var(s) as the deployment alternative; consider a `ConflictReason` for a jump action | `backend/docs/model-support.md` | ✅ done | phase 4 |
+| B2  | `Unsupported Bedrock model: X`                              | Terse throw (`backend/packages/provider-bedrock/src/index.ts:38-40`); doesn't name the allow-list                       | env     | P2  | Name `BEDROCK_MODELS`, list the allowed models, link docs                                                                                                                                              | `backend/docs/model-support.md` | ✅ done | phase 4 |
+| B3  | LiteLLM selected but `LITELLM_BASE_URL` unset               | Falls through to generic B1 (`endpoints.ts:38-43` returns `undefined`, provider never registers)                        | env→UI  | P1  | Dedicated message naming `LITELLM_BASE_URL` (operator-hosted, no public default); flips to a UI-first remedy once H1 lands                                                                             | `docs/environment-variables.md` | ✅ done | phase 4 |
+| B4  | `No base URL configured for OpenAI-compatible provider 'X'` | Partial message, no remedy (`backend/packages/server/src/agents/modelProviderResolver.ts:149`)                          | UI/env  | P2  | Name the `${PROVIDER}_BASE_URL` var and (where the key is UI-pooled) the key-pool panel                                                                                                                | `backend/docs/model-support.md` | ✅ done | phase 4 |
 
 ### C. GitHub / VCS runtime
 
@@ -303,6 +304,19 @@ union itself DOES bump the image (batch with the F-slice).
 - Boot warnings for non-fatal conditions (A5, A8–A10) should be single structured log
   lines with the var name, the rejected/missing value, and the consequence — greppable,
   not multi-line prose.
+- **Provisioning docs helper (B-slice):** `@cat-factory/agents` sits BELOW the server layer,
+  so it cannot use `@cat-factory/server`'s `config/docs.ts`. Per the doc-URL convention it has
+  its own `providers/docs.ts` (`MODEL_SUPPORT_DOCS`), which `@cat-factory/provider-bedrock`
+  imports for B2. The server-layer B3/B4 wording lives in one shared helper
+  (`server/src/agents/providerErrors.ts` `openAiCompatibleBaseUrlError`) so the INLINE resolver
+  (`modelProviderResolver.ts`) and the container LLM proxy (`LlmProxyController.ts`) explain a
+  missing base URL identically. B3 (litellm) is handled at that base-URL site when a litellm key
+  IS pooled but `LITELLM_BASE_URL` is unset; a litellm ref with NO pooled key still lands on B1's
+  (now elaborated) message, which lists litellm among the UI-configurable providers. The B1 remedy
+  derives that provider list from `UI_CONFIGURABLE_DIRECT_PROVIDERS` (`agents/providers/endpoints.ts`,
+  = the built-in OpenAI-compatible endpoints + `anthropic` + `litellm`) rather than re-listing the
+  vendors inline, so adding a vendor to `DEFAULT_OPENAI_COMPATIBLE_BASE_URLS` keeps the error text in
+  step automatically — do NOT re-hardcode the vendor names at the throw site.
 
 ## Out of scope
 
