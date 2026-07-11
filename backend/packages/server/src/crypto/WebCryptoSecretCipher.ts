@@ -59,7 +59,16 @@ export class WebCryptoSecretCipher implements SecretCipher {
   async decrypt(envelope: string): Promise<string> {
     const parts = envelope.split('.')
     if (parts.length !== 4 || parts[0] !== VERSION) {
-      throw new Error('Invalid secret envelope')
+      // Not a well-formed `v1.` envelope: the ciphertext never reaches decryption, so this
+      // is a corruption/format problem, not a key mismatch (that surfaces below as an
+      // authentication failure). Usual causes: a truncated database column, or a value
+      // copied between environments that use a different encryption scheme/version.
+      throw new Error(
+        'A stored secret is not a valid encryption envelope: it is truncated or corrupted, ' +
+          'or was written by a different encryption scheme/version — most likely a truncated ' +
+          'database column, or a value copied between environments. Re-enter the affected ' +
+          'credential to re-seal it under the current ENCRYPTION_KEY.',
+      )
     }
     const salt = base64urlToBytes(parts[1]!) as Uint8Array<ArrayBuffer>
     const iv = base64urlToBytes(parts[2]!) as Uint8Array<ArrayBuffer>

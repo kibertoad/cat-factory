@@ -7,6 +7,9 @@ import { defineConfig } from 'vitest/config'
 // conformance suite (run by each facade against its real datastore).
 export default defineConfig({
   test: {
-    include: ['test/**/*.spec.ts'],
+    // Both layouts: the `test/*.spec.ts` suites and the co-located `src/**/*.test.ts`
+    // unit tests (e.g. the crypto ciphers, provider capabilities) — the latter must be
+    // included explicitly or they silently never run.
+    include: ['test/**/*.spec.ts', 'src/**/*.test.ts'],
   },
 })

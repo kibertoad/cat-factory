@@ -9,12 +9,7 @@ import type {
   SubscriptionActivationRepository,
   SubscriptionVendor,
 } from '@cat-factory/kernel'
-import {
-  CredentialRequiredError,
-  getErrorMessage,
-  isIndividualVendor,
-  ValidationError,
-} from '@cat-factory/kernel'
+import { CredentialRequiredError, isIndividualVendor, ValidationError } from '@cat-factory/kernel'
 import type {
   PersonalSubscriptionStatus,
   StorePersonalSubscriptionInput,
@@ -185,9 +180,13 @@ export class PersonalSubscriptionService {
     const sealed = await this.deps.secretCipher.decrypt(record.tokenCipher)
     try {
       return await this.deps.personalCipher.open(sealed, password)
-    } catch (error) {
+    } catch {
+      // The personal cipher already throws an actionable, self-sufficient message
+      // (wrong password vs corrupted envelope); the `wrong_password` reason drives the
+      // client's re-prompt. Keep the surfaced text clean rather than nesting the two.
       throw new CredentialRequiredError(
-        `Incorrect personal password for your ${vendor} subscription (${getErrorMessage(error)}).`,
+        `The personal password you entered does not unlock your ${vendor} subscription. ` +
+          `Re-enter it, or remove and re-add the subscription.`,
         { vendor, reason: 'wrong_password' },
       )
     }

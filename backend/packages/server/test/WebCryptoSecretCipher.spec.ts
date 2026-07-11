@@ -14,9 +14,13 @@ describe('WebCryptoSecretCipher', () => {
     expect(await cipher.decrypt(sealed)).toBe('sk-secret')
   })
 
-  it('rejects a malformed envelope up front', async () => {
+  it('rejects a malformed envelope up front with an actionable message', async () => {
     const cipher = new WebCryptoSecretCipher({ masterKeyBase64: KEY_A })
-    await expect(cipher.decrypt('not-an-envelope')).rejects.toThrow('Invalid secret envelope')
+    // Names the corruption/format cause + the re-enter-credential remedy, not a terse
+    // "Invalid secret envelope"; distinct from the key-mismatch authentication failure.
+    await expect(cipher.decrypt('not-an-envelope')).rejects.toThrow(
+      /not a valid encryption envelope/i,
+    )
   })
 
   it('surfaces an actionable error when the master key no longer matches (rotated key)', async () => {

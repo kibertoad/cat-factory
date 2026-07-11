@@ -39,17 +39,42 @@ export class WebCryptoPersonalSecretCipher implements PersonalSecretCipher {
   async open(envelope: string, password: string): Promise<string> {
     const parts = envelope.split('.')
     if (parts.length !== 4 || parts[0] !== VERSION) {
-      throw new Error('Invalid personal secret envelope')
+      // The stored value is not a well-formed `pv1.` envelope. This is not a wrong
+      // password (the ciphertext never even reaches the decrypt) — the column is
+      // truncated/corrupted, or it was written by a different scheme/version.
+      throw new Error(
+        'The stored personal subscription credential is not a valid encryption envelope: ' +
+          'it is truncated or corrupted, or was written by a different scheme/version. ' +
+          'Remove and re-add the subscription to re-seal it.',
+      )
     }
     const salt = base64urlToBytes(parts[1]!) as Uint8Array<ArrayBuffer>
     const iv = base64urlToBytes(parts[2]!) as Uint8Array<ArrayBuffer>
     const ciphertext = base64urlToBytes(parts[3]!) as Uint8Array<ArrayBuffer>
     const key = await deriveKey(password, salt)
-    // A wrong password fails the GCM auth tag and throws here.
-    const plain = await crypto.subtle.decrypt({ name: 'AES-GCM', iv }, key, ciphertext)
+    let plain: ArrayBuffer
+    try {
+      plain = await crypto.subtle.decrypt({ name: 'AES-GCM', iv }, key, ciphertext)
+    } catch (e) {
+      // AES-GCM authentication failed. For this password-derived layer that almost
+      // always means the WRONG PASSWORD: the key is derived from the personal password,
+      // so a mismatch can't reproduce the auth tag. The raw failure is the opaque Web
+      // Crypto DOMException ("operation-specific reason"); rethrow an actionable message
+      // (original kept as `cause`). The service maps this to a `wrong_password` 428.
+      throw new Error(
+        'The personal password does not match the one this subscription was sealed under — ' +
+          're-enter it, or remove and re-add the subscription.',
+        { cause: e },
+      )
+    }
     const text = new TextDecoder().decode(plain)
     if (!text.startsWith(MAGIC)) {
-      throw new Error('Personal secret failed integrity check')
+      // GCM verified but the sealed magic prefix is absent — the stored value is corrupted
+      // or was sealed by a different scheme, not a simple wrong password.
+      throw new Error(
+        'This personal subscription credential failed its integrity check — the stored value ' +
+          'is corrupted or was sealed by a different scheme. Remove and re-add the subscription.',
+      )
     }
     return text.slice(MAGIC.length)
   }
