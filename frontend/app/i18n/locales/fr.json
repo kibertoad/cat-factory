@@ -9,6 +9,7 @@
       "title": "Backend non configuré",
       "intro": "Le serveur a démarré mais ne peut pas fonctionner tant que les paramètres ci-dessous ne sont pas fournis. Ajoutez les valeurs manquantes à votre environnement, puis rechargez.",
       "howToFix": "Comment corriger :",
+      "viewDocs": "Voir la documentation",
       "reload": "Recharger",
       "hint": "Seuls les noms des variables et la façon de les définir sont affichés ici, jamais de valeurs secrètes."
     }

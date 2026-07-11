@@ -21,6 +21,12 @@ export const configProblemSchema = v.object({
   summary: v.string(),
   /** One sentence: how to fill it (the concrete remedy — a command, a format, a URL). */
   remedy: v.string(),
+  /**
+   * Optional link to the documentation that deepens the remedy (a stable in-repo doc URL or a
+   * vendor page). The remedy stays self-sufficient without it — the link is supplementary, so
+   * the SPA and the operator log render it only when present.
+   */
+  docsUrl: v.optional(v.string()),
 })
 export type ConfigProblem = v.InferOutput<typeof configProblemSchema>
 

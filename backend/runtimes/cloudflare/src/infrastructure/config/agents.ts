@@ -21,6 +21,7 @@ function parseModelOverrides(
       key: 'AGENT_MODELS',
       summary: ENV_HELP.AGENT_MODELS.summary,
       remedy: `It is not valid JSON. ${ENV_HELP.AGENT_MODELS.remedy}`,
+      docsUrl: ENV_HELP.AGENT_MODELS.docsUrl,
     })
   }
   if (typeof parsed !== 'object' || parsed === null) return {}
@@ -34,6 +35,7 @@ function parseModelOverrides(
         key: 'AGENT_MODELS',
         summary: ENV_HELP.AGENT_MODELS.summary,
         remedy: `Entry "${kind}" is missing a string "provider" and/or "model". ${ENV_HELP.AGENT_MODELS.remedy}`,
+        docsUrl: ENV_HELP.AGENT_MODELS.docsUrl,
       })
     }
     out[kind] = {

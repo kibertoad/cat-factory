@@ -9,6 +9,7 @@
       "title": "Backend nie jest skonfigurowany",
       "intro": "Serwer wystartował, ale nie zadziała, dopóki nie uzupełnisz poniższych ustawień. Dodaj brakujące wartości do swojego środowiska i odśwież.",
       "howToFix": "Jak naprawić:",
+      "viewDocs": "Zobacz dokumentację",
       "reload": "Odśwież",
       "hint": "Tutaj pokazujemy tylko nazwy zmiennych i sposób ich ustawienia, nigdy wartości sekretnych."
     }

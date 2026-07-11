@@ -9,6 +9,7 @@
       "title": "Backend sin configurar",
       "intro": "El servidor se inició pero no puede funcionar hasta que se proporcionen los ajustes siguientes. Añade los valores que faltan a tu entorno y vuelve a cargar.",
       "howToFix": "Cómo solucionarlo:",
+      "viewDocs": "Ver la documentación",
       "reload": "Recargar",
       "hint": "Aquí solo se muestran los nombres de las variables y cómo definirlas, nunca valores secretos."
     }
