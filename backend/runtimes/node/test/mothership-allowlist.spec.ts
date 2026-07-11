@@ -177,11 +177,16 @@ const NON_REMOTE: Record<string, Record<string, Reason>> = {
   },
   // The visual-confirmation gate's artifact METADATA surface is now allow-listed (insert/get/
   // listByExecution/countByExecution/listByBlock/delete — the controllers + gate reads/writes);
-  // only the retention sweep stays mothership-internal (the mothership owns durable-state
-  // retention). The blob BYTES never cross the machine API — they live in the per-account backend.
+  // only the retention/lifecycle reclaim ops stay mothership-internal (the mothership owns
+  // durable-state retention): the age-based retention sweep (listOlderThan/deleteOlderThan) and
+  // the workspace-delete purge (listByWorkspace/deleteByWorkspace, driven server-side by
+  // `WorkspaceService.delete`). The blob BYTES never cross the machine API — they live in the
+  // per-account backend.
   binaryArtifactMetadataStore: {
     listOlderThan: 'sweeper',
     deleteOlderThan: 'sweeper',
+    listByWorkspace: 'sweeper',
+    deleteByWorkspace: 'sweeper',
   },
   // `get`/`remove` are now allow-listed (the preset-library management surface); `list`/`getDefault`/
   // `upsert` were already remotely callable — so the whole model-preset repo is remote.

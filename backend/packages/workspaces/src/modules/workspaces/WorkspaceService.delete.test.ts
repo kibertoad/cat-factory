@@ -31,6 +31,7 @@ function fakeWorkspaceRepository(deleteSpy: WorkspaceRepository['delete']): Work
 
 const baseDeps = (resolveBinaryArtifactStore?: ResolveBinaryArtifactStore) => {
   const deleteSpy = vi.fn(() => Promise.resolve())
+  const logger = { info: vi.fn() }
   const service = new WorkspaceService({
     workspaceRepository: fakeWorkspaceRepository(deleteSpy),
     blockRepository: {} as never,
@@ -39,8 +40,9 @@ const baseDeps = (resolveBinaryArtifactStore?: ResolveBinaryArtifactStore) => {
     idGenerator: { next: () => 'x' },
     clock: { now: () => 1 },
     resolveBinaryArtifactStore,
+    logger,
   })
-  return { service, deleteSpy }
+  return { service, deleteSpy, logger }
 }
 
 describe('WorkspaceService.delete — binary-artifact purge', () => {
@@ -84,9 +86,12 @@ describe('WorkspaceService.delete — binary-artifact purge', () => {
       deleteByWorkspace: () => Promise.reject(new Error('R2 down')),
     } as unknown as BinaryArtifactStore
     const resolve: ResolveBinaryArtifactStore = () => Promise.resolve(store)
-    const { service, deleteSpy } = baseDeps(resolve)
-    // The purge throws, but the board still deletes (rows survive for a later retry).
+    const { service, deleteSpy, logger } = baseDeps(resolve)
+    // The purge throws, but the board still deletes (rows survive for an out-of-band reclaim).
     await expect(service.delete(WS.id)).resolves.toBeUndefined()
     expect(deleteSpy).toHaveBeenCalledWith(WS.id, [])
+    // The swallowed failure is surfaced (not silent) so the residual leak is visible.
+    expect(logger.info).toHaveBeenCalledTimes(1)
+    expect(logger.info.mock.calls[0]?.[0]).toMatchObject({ workspaceId: WS.id })
   })
 })

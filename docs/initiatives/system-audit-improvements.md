@@ -199,17 +199,24 @@ artifact's rows AND bytes, backed by new `listByWorkspace` / `deleteByWorkspace`
 `DrizzleBinaryArtifactMetadataStore`). The composed-store factory now shares one `reclaim`
 helper between `pruneOlderThan` and `deleteByWorkspace` (blobs first, best-effort per object,
 then a single bulk row delete on the all-succeeded fast path — a blob delete that throws
-keeps its metadata row for a later retry rather than orphaning the bytes).
+keeps its metadata row rather than orphaning the bytes). Note the retry asymmetry: for
+`pruneOlderThan` the hourly retention sweep revisits the LIVE workspace and genuinely retries a
+retained row, but a DELETED workspace never reappears in `listVisible`, so a row retained on the
+`deleteByWorkspace` path is NOT auto-retried — it needs an out-of-band reclaim. So the composed
+store takes an optional `logger` and WARNs whenever a blob delete fails (partial reclaim), and
+`WorkspaceService.delete` logs a swallowed total purge failure, so the residual leak is surfaced
+rather than promising a retry that can't happen.
 `WorkspaceService` takes an optional `resolveBinaryArtifactStore` and purges through it in
 `delete()` BEFORE the row cascade (best-effort — a blob-backend outage can't wedge the board
-delete; the rows survive for a later retention/manual retry). `createCore` already passes the
-resolver into `new WorkspaceService(dependencies)`, so both facades wire it for free. Guards:
-the cross-runtime `defineBinaryArtifactsSuite` asserts `deleteByWorkspace` removes every
-artifact's rows + bytes and scopes by workspace on BOTH D1 and Postgres; a
-`WorkspaceService.delete` unit test proves the purge runs before the cascade and that an
-unwired resolver / null store / blob outage all still complete the delete. The
-`binary_artifacts` note in `workspace-cascade.ts` is updated to point at this purge (no longer
-"until that lands").
+delete; the rows survive for an out-of-band reclaim). `createCore` already passes the
+resolver + logger into `new WorkspaceService(dependencies)`, so both facades wire it for free.
+Guards: the cross-runtime `defineBinaryArtifactsSuite` asserts `deleteByWorkspace` removes every
+artifact's rows + bytes and scopes by workspace on BOTH D1 and Postgres; a kernel unit test pins
+the shared `reclaim` partial-failure branch (a failed blob keeps its row + bytes, others are
+reclaimed, the warn fires); a `WorkspaceService.delete` unit test proves the purge runs before
+the cascade, that an unwired resolver / null store / blob outage all still complete the delete,
+and that the outage is logged. The `binary_artifacts` note in `workspace-cascade.ts` is updated
+to point at this purge (no longer "until that lands").
 
 ### Cluster B — runtime symmetry & shared machinery
 
