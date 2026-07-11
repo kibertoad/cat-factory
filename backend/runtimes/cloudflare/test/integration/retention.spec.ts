@@ -6,6 +6,7 @@ import { D1AgentContextSnapshotRepository } from '../../src/infrastructure/repos
 import { D1AgentSearchQueryRepository } from '../../src/infrastructure/repositories/D1AgentSearchQueryRepository'
 import { D1CommitProjectionRepository } from '../../src/infrastructure/repositories/D1CommitProjectionRepository'
 import { D1LlmCallMetricRepository } from '../../src/infrastructure/repositories/D1LlmCallMetricRepository'
+import { D1NotificationRepository } from '../../src/infrastructure/repositories/D1NotificationRepository'
 import { D1RateLimitRepository } from '../../src/infrastructure/repositories/D1RateLimitRepository'
 import { D1SubscriptionQuotaCycleRepository } from '../../src/infrastructure/repositories/D1SubscriptionQuotaCycleRepository'
 import { D1TokenUsageRepository } from '../../src/infrastructure/repositories/D1TokenUsageRepository'
@@ -26,6 +27,7 @@ const POLICY = {
   commitMs: 90 * DAY,
   llmCallMetricsMs: 3 * DAY,
   provisioningLogMs: 14 * DAY,
+  notificationsMs: 90 * DAY,
 }
 
 function deps() {
@@ -42,6 +44,7 @@ function deps() {
     agentSearchQueryRepository: new D1AgentSearchQueryRepository({ db: telemetryDb }),
     // Subscription quota-cycle counters live in the main DB (migration 0047).
     subscriptionQuotaCycleRepository: new D1SubscriptionQuotaCycleRepository({ db }),
+    notificationRepository: new D1NotificationRepository({ db }),
     clock,
     policy: POLICY,
   }
@@ -238,6 +241,7 @@ describe('storage retention sweep', () => {
         commitMs: 0,
         llmCallMetricsMs: 0,
         provisioningLogMs: 0,
+        notificationsMs: 0,
       },
     })
 
@@ -254,6 +258,7 @@ describe('storage retention sweep', () => {
       scheduleRuns: 0,
       provisioningLog: 0,
       passwordResetTokens: 0,
+      notifications: 0,
     })
     expect(await countRows('token_usage', 'id = ?', 'tok_disabled')).toBe(1)
   })
@@ -281,6 +286,51 @@ describe('storage retention sweep', () => {
     expect(result.subscriptionQuotaCycles).toBeGreaterThanOrEqual(1)
     expect(await countRows('subscription_quota_cycles', 'id = ?', 'sqc_old')).toBe(0)
     expect(await countRows('subscription_quota_cycles', 'id = ?', 'sqc_new')).toBe(1)
+  })
+
+  it('prunes resolved notifications past the window, keeping open + fresh-resolved ones', async () => {
+    const ws = 'ws_retention_notif'
+    const repo = new D1NotificationRepository({ db: env.DB })
+    const base = {
+      type: 'ci_failed' as const,
+      severity: 'normal' as const,
+      blockId: null,
+      executionId: null,
+      title: 't',
+      body: 'b',
+      payload: null,
+    }
+    // Resolved 100 days ago — past the 90-day window, should be pruned.
+    await repo.upsert(ws, {
+      ...base,
+      id: 'notif_old',
+      status: 'acted',
+      createdAt: NOW - 120 * DAY,
+      resolvedAt: NOW - 100 * DAY,
+    })
+    // Resolved 2 days ago — inside the window, kept.
+    await repo.upsert(ws, {
+      ...base,
+      id: 'notif_fresh',
+      status: 'dismissed',
+      createdAt: NOW - 5 * DAY,
+      resolvedAt: NOW - 2 * DAY,
+    })
+    // Still open (never resolved) though ancient — the actionable inbox, never pruned.
+    await repo.upsert(ws, {
+      ...base,
+      id: 'notif_open',
+      status: 'open',
+      createdAt: NOW - 200 * DAY,
+      resolvedAt: null,
+    })
+
+    const result = await sweepRetention(deps())
+
+    expect(result.notifications).toBeGreaterThanOrEqual(1)
+    expect(await countRows('notifications', 'id = ?', 'notif_old')).toBe(0)
+    expect(await countRows('notifications', 'id = ?', 'notif_fresh')).toBe(1)
+    expect(await countRows('notifications', 'id = ?', 'notif_open')).toBe(1)
   })
 })
 

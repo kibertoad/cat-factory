@@ -1,6 +1,6 @@
 # Initiative: system audit — data lifecycle, runtime parity, robustness & coverage
 
-**Status:** audit done, no slices landed · **Owner:** core · **Started:** 2026-07-11
+**Status:** in progress (item 1 landed) · **Owner:** core · **Started:** 2026-07-11
 
 > This is the durable source of truth for a multi-PR initiative. Read it first before
 > picking up the next slice; update the checklist at the end of each PR.
@@ -77,28 +77,28 @@ remains clusters into four themes:
 Priority: **P1** = correctness/unbounded-growth on a normal operation; **P2** = clear
 benefit, bounded blast radius; **P3** = hygiene/polish. Effort S/M/L.
 
-| #   | Pri | Area        | Finding (short)                                                                             | Effort | Status  | PR  |
-| --- | --- | ----------- | ------------------------------------------------------------------------------------------- | ------ | ------- | --- |
-| 1   | P1  | retention   | `notifications` never pruned in either facade (upsert/escalate only, no delete)             | M      | ⬜ todo |     |
-| 2   | P1  | retention   | Workspace-delete cascade clears only 7 tables → permanent orphans in ~15 others             | M      | ⬜ todo |     |
-| 3   | P1  | retention   | Binary-artifact rows + blob bytes of deleted workspaces never reclaimed                     | M      | ⬜ todo |     |
-| 4   | P2  | parity      | GitHub reconcile loop duplicated verbatim across Node/Worker — hoist to shared server pkg   | S      | ⬜ todo |     |
-| 5   | P1  | parity      | Node async GitHub ingest runs inline in the request; add pg-boss-backed queue impls         | M–L    | ⬜ todo |     |
-| 6   | P2  | parity      | Node sweeper re-entrancy guards inconsistent (initiativeLoop / recurring / escalation)      | S      | ⬜ todo |     |
-| 7   | P2  | conformance | Four retention prunes have no cross-runtime conformance assertion                           | S–M    | ⬜ todo |     |
-| 8   | P2  | engine      | Notification-escalation sweep: per-workspace settings point-read (N+1 the cache can't fix)  | M      | ⬜ todo |     |
-| 9   | P2  | ops         | Node `/health` is a static 200 — add a `/ready` readiness probe (pool + pg-boss)            | S      | ⬜ todo |     |
-| 10  | P2  | frontend    | `provisioningLogs` store: unbounded per-execution map + unguarded out-of-order overwrite    | S      | ⬜ todo |     |
-| 11  | P3  | api         | Error code `validation` maps to two HTTP statuses (400 schema vs 422 domain)                | S      | ⬜ todo |     |
-| 12  | P1  | e2e         | Requirements-review flow has zero e2e coverage (largest SPA component, 1.2k lines)          | M      | ⬜ todo |     |
-| 13  | P2  | e2e         | Inline agent windows (brainstorm/clarity/consensus/doc-interview) have no e2e specs         | M      | ⬜ todo |     |
-| 14  | P2  | ci          | `paths-filter` lane-gating globs are unguarded against drift (silent suite skips)           | S      | ⬜ todo |     |
-| 15  | P3  | frontend    | Store-level out-of-order clobber specs cover ~5 of ~40 stateful stores — establish the rule | M      | ⬜ todo |     |
-| 16  | P2  | docs        | CLAUDE.md "Node GitHub connect/sync still needs the integration on Postgres" note is stale  | S      | ⬜ todo |     |
-| 17  | P3  | docs        | `refactoring-candidates.md`/`modularisation.md` stale; the two biggest files untracked      | S      | ⬜ todo |     |
-| 18  | P3  | docs        | Convert finished initiatives to ADRs (`custom-initiative-definitions`, `coder-fork`)        | S      | ⬜ todo |     |
-| 19  | P2  | frontend    | Accessibility whitespace: no a11y tracker/doc; 48/176 components carry any `aria-*`         | M      | ⬜ todo |     |
-| 20  | P3  | frontend    | Close i18n phase X (`utils/catalog.ts` meta tables + 2 pages), retire the progress table    | M      | ⬜ todo |     |
+| #   | Pri | Area        | Finding (short)                                                                             | Effort | Status  | PR    |
+| --- | --- | ----------- | ------------------------------------------------------------------------------------------- | ------ | ------- | ----- |
+| 1   | P1  | retention   | `notifications` never pruned in either facade (upsert/escalate only, no delete)             | M      | ✅ done | #1020 |
+| 2   | P1  | retention   | Workspace-delete cascade clears only 7 tables → permanent orphans in ~15 others             | M      | ⬜ todo |       |
+| 3   | P1  | retention   | Binary-artifact rows + blob bytes of deleted workspaces never reclaimed                     | M      | ⬜ todo |       |
+| 4   | P2  | parity      | GitHub reconcile loop duplicated verbatim across Node/Worker — hoist to shared server pkg   | S      | ⬜ todo |       |
+| 5   | P1  | parity      | Node async GitHub ingest runs inline in the request; add pg-boss-backed queue impls         | M–L    | ⬜ todo |       |
+| 6   | P2  | parity      | Node sweeper re-entrancy guards inconsistent (initiativeLoop / recurring / escalation)      | S      | ⬜ todo |       |
+| 7   | P2  | conformance | Four retention prunes have no cross-runtime conformance assertion                           | S–M    | ⬜ todo |       |
+| 8   | P2  | engine      | Notification-escalation sweep: per-workspace settings point-read (N+1 the cache can't fix)  | M      | ⬜ todo |       |
+| 9   | P2  | ops         | Node `/health` is a static 200 — add a `/ready` readiness probe (pool + pg-boss)            | S      | ⬜ todo |       |
+| 10  | P2  | frontend    | `provisioningLogs` store: unbounded per-execution map + unguarded out-of-order overwrite    | S      | ⬜ todo |       |
+| 11  | P3  | api         | Error code `validation` maps to two HTTP statuses (400 schema vs 422 domain)                | S      | ⬜ todo |       |
+| 12  | P1  | e2e         | Requirements-review flow has zero e2e coverage (largest SPA component, 1.2k lines)          | M      | ⬜ todo |       |
+| 13  | P2  | e2e         | Inline agent windows (brainstorm/clarity/consensus/doc-interview) have no e2e specs         | M      | ⬜ todo |       |
+| 14  | P2  | ci          | `paths-filter` lane-gating globs are unguarded against drift (silent suite skips)           | S      | ⬜ todo |       |
+| 15  | P3  | frontend    | Store-level out-of-order clobber specs cover ~5 of ~40 stateful stores — establish the rule | M      | ⬜ todo |       |
+| 16  | P2  | docs        | CLAUDE.md "Node GitHub connect/sync still needs the integration on Postgres" note is stale  | S      | ⬜ todo |       |
+| 17  | P3  | docs        | `refactoring-candidates.md`/`modularisation.md` stale; the two biggest files untracked      | S      | ⬜ todo |       |
+| 18  | P3  | docs        | Convert finished initiatives to ADRs (`custom-initiative-definitions`, `coder-fork`)        | S      | ⬜ todo |       |
+| 19  | P2  | frontend    | Accessibility whitespace: no a11y tracker/doc; 48/176 components carry any `aria-*`         | M      | ⬜ todo |       |
+| 20  | P3  | frontend    | Close i18n phase X (`utils/catalog.ts` meta tables + 2 pages), retire the progress table    | M      | ⬜ todo |       |
 
 ## Detailed findings
 

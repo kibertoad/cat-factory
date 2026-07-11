@@ -5,6 +5,7 @@ import type {
   Clock,
   CommitProjectionRepository,
   LlmCallMetricRepository,
+  NotificationRepository,
   PasswordResetTokenRepository,
   PipelineScheduleRepository,
   ProvisioningLogRepository,
@@ -62,6 +63,9 @@ export interface RetentionRepos {
   // prune is wired unconditionally — on an unwired deployment the table is empty and
   // the pass is a free no-op.
   commitRepository: Pick<CommitProjectionRepository, 'deleteOlderThan'>
+  // Resolved (acted/dismissed) notifications past the retention window. Open cards (the
+  // actionable inbox) are never pruned.
+  notificationRepository: Pick<NotificationRepository, 'deleteResolvedOlderThan'>
 }
 
 /** Rows reclaimed from each table, for logging. */
@@ -76,6 +80,7 @@ export interface RetentionResult {
   provisioningLog: number
   passwordResetTokens: number
   commits: number
+  notifications: number
 }
 
 /**
@@ -136,6 +141,10 @@ export async function sweepRetention(
     // Reset tokens past their own expiry — `now`, not a window (like activations).
     passwordResetTokens: await repos.passwordResetTokenRepository.deleteExpired(now),
     commits: await prune(retention.commitMs, now, (c) => repos.commitRepository.deleteOlderThan(c)),
+    // Resolved (acted/dismissed) notifications past the window; open cards untouched.
+    notifications: await prune(retention.notificationsMs, now, (c) =>
+      repos.notificationRepository.deleteResolvedOlderThan(c),
+    ),
   }
 }
 

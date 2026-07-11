@@ -271,6 +271,14 @@ export interface RetentionConfig {
    * useful for recent debugging, so pruned aggressively (default 14 days). 0 disables.
    */
   provisioningLogMs: number
+  /**
+   * Resolved (acted/dismissed) notifications. A busy workspace raises a card on every
+   * waiting/decision/park event, so terminal rows would accumulate without bound. Only
+   * resolved cards past the window are pruned — open ones (the actionable inbox) are
+   * never touched. Generous by default (90 days), so the inbox's recent history stays
+   * intact. 0 disables.
+   */
+  notificationsMs: number
 }
 
 export interface FragmentLibraryConfig {
