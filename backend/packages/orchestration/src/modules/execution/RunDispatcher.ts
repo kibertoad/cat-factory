@@ -125,6 +125,7 @@ import {
 import {
   agentFailureKindFromCause,
   classifyAgentFailure,
+  classifyDispatchFailure,
   isContainerEvictionError,
   isTransientEviction,
   MAX_EVICTION_RECOVERIES,
@@ -498,22 +499,17 @@ export class RunDispatcher {
         try {
           handle = await executor.startJob(context)
         } catch (error) {
-          // The container/runner never accepted the job (a dispatch HTTP error, a
-          // missing backend, a capacity blip). Surface the EXACT provider/runtime
-          // response and classify it as a `dispatch` failure ("container failed to
-          // start") so the run details say the container never started — not a generic
-          // "run failed". A dispatch-time eviction still routes to the evicted framing.
+          // Classify the throw (see {@link classifyDispatchFailure}). A genuine container
+          // accept failure (HTTP/network/capacity) is framed as `dispatch` ("container failed
+          // to start") with the EXACT provider response as detail; a dispatch-time eviction
+          // routes to `evicted`. But a job is BUILT before any container is contacted, so a
+          // precondition (e.g. `github_not_connected` — no connected repo) is a `preflight`
+          // rejection that surfaces its own actionable message + machine-readable reason
+          // instead of the misleading container framing.
           step.container = { status: 'errored' }
           await this.runStateMachine.casPersist(workspaceId, instance)
           await this.runStateMachine.emitInstance(workspaceId, instance)
-          const message = getErrorMessage(error)
-          const evicted = isContainerEvictionError(message)
-          return {
-            kind: 'job_failed',
-            error: evicted ? message : 'The container failed to start.',
-            failureKind: evicted ? 'evicted' : 'dispatch',
-            detail: message,
-          }
+          return { kind: 'job_failed', ...classifyDispatchFailure(error) }
         }
         step.jobId = handle.jobId
         // Record the model at dispatch — the poll site can't resolve it later.
