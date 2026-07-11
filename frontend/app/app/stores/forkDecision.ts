@@ -20,6 +20,8 @@ export const useForkDecisionStore = defineStore('forkDecision', () => {
 
   /** True while a choose call is in flight (drives the Choose button spinner / disabled state). */
   const choosing = ref(false)
+  /** True while a chat send is in flight (drives the chat send spinner / disabled state). */
+  const chatting = ref(false)
   /** The last error message from an action, surfaced inline; cleared on the next action. */
   const error = ref<string | null>(null)
 
@@ -80,5 +82,25 @@ export const useForkDecisionStore = defineStore('forkDecision', () => {
     }
   }
 
-  return { choosing, error, load, choose }
+  /**
+   * Send a grounded chat message about the surfaced forks. The reply is computed inline in the
+   * durable driver and arrives via the execution stream; the immediate response is the
+   * `answering` state (the human message already appended), which we reflect so the thread shows
+   * the sent turn + a "thinking…" bubble without waiting for the stream.
+   */
+  async function chat(executionId: string, text: string): Promise<void> {
+    error.value = null
+    chatting.value = true
+    try {
+      const state = await api.forkChat(workspace.requireId(), executionId, text)
+      reflect(executionId, state as ForkDecisionStepState)
+    } catch (e) {
+      error.value = e instanceof Error ? e.message : 'Failed to send message'
+      throw e
+    } finally {
+      chatting.value = false
+    }
+  }
+
+  return { choosing, chatting, error, load, choose, chat }
 })

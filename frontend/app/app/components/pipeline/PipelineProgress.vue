@@ -554,6 +554,8 @@ const ITEM_ICON: Record<string, string> = {
           <button
             v-if="forkPhase(s)"
             type="button"
+            data-testid="fork-decision-open"
+            :data-fork-phase="forkPhase(s)"
             class="mt-3 flex w-full items-center gap-2 rounded-lg border border-dashed px-2.5 py-1.5 text-start transition hover:border-violet-400/60"
             :class="
               forkPhase(s) === 'awaiting_choice'

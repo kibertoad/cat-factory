@@ -4610,6 +4610,14 @@
       "title": "Kendi yaklaşımınızı girin",
       "placeholder": "Bunun nasıl uygulanmasını istediğinizi açıklayın…"
     },
+    "chat": {
+      "title": "Bu yaklaşımlar hakkında soru sorun",
+      "hint": "Hangisini seçeceğinizden emin değil misiniz? Karar vermeden önce soru sorun.",
+      "thinking": "Düşünüyor…",
+      "placeholder": "Ödünleşimleri, riskleri veya farklı bir yönü sorun…",
+      "budgetSpent": "Sohbet sınırına ulaşıldı — bir yaklaşım seçin veya kendinizinkini girin.",
+      "send": "Gönder"
+    },
     "empty": {
       "title": "Karar verilecek bir şey yok"
     }

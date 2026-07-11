@@ -1,6 +1,7 @@
 import type {
   AgentConfigValues,
   AgentRunContext,
+  ForkChatMessage,
   ForkDecisionStepState,
   ForkOption,
   ForkProposal,
@@ -96,6 +97,21 @@ export function mintForks(usable: ForkProposal['forks'], nextId: () => string): 
     ...(f.riskNotes ? { riskNotes: f.riskNotes } : {}),
     recommended: i === winner,
   }))
+}
+
+/** How many HUMAN turns a fork chat holds — the budget (`maxChatTurns`) is measured in these. */
+export function humanChatTurns(chat: ForkChatMessage[] | undefined): number {
+  return (chat ?? []).reduce((n, m) => (m.role === 'human' ? n + 1 : n), 0)
+}
+
+/**
+ * Whether a fork chat has spent its human-turn budget: the human has already sent
+ * `maxChatTurns` messages (each answered by one assistant turn). A further chat is refused with a
+ * 409 — the chat is grounded on a fixed proposal, not a live container, so unbounded turns only
+ * add spend and step-row bloat. Pick / custom stay available at the cap.
+ */
+export function forkChatBudgetSpent(state: ForkDecisionStepState): boolean {
+  return humanChatTurns(state.chat) >= (state.maxChatTurns ?? DEFAULT_FORK_MAX_CHAT_TURNS)
 }
 
 /**

@@ -248,6 +248,12 @@ export {
   registerForkProposerAgent,
 } from './agents/kinds/fork-proposer.js'
 export {
+  FORK_CHAT_AGENT_KIND,
+  FORK_CHAT_SYSTEM_PROMPT,
+  type ForkChatGrounding,
+  renderForkChatPrompt,
+} from './agents/prompts/fork-decision.js'
+export {
   ENVIRONMENT_ANALYST_KIND,
   ENVIRONMENT_ANALYST_AGENT_KINDS,
   environmentRecipeDraft,

@@ -19,6 +19,7 @@ import type {
   ForkProposal,
   ForkDecisionStepState,
   ChooseForkInput,
+  ForkChatRequestInput,
   GateContext,
   GateDefinition,
   GateHelperJobResult,
@@ -3556,6 +3557,13 @@ export class RunDispatcher {
    */
   private async handleForkDecisionPhase(ctx: StepHandlerContext): Promise<AdvanceResult> {
     const { workspaceId, instance, step, block } = ctx
+    // Re-entry: the human sent a chat turn about the surfaced forks (`pendingForkChat` set by
+    // {@link ForkDecisionController.chat}). Compute the grounded reply INLINE in the durable driver
+    // (off the HTTP request), append it, and re-park — never re-dispatch the proposer. This is the
+    // resume path the `reentrantForkDecision` guard in `stepInstance` falls through for.
+    if (step.pendingForkChat) {
+      return this.forkDecisionController.answerChat(workspaceId, instance, step, block)
+    }
     if (!step.forkDecision) {
       const tri = resolveForkTriState(block.agentConfig)
       let propose = tri === 'always'
@@ -3597,6 +3605,15 @@ export class RunDispatcher {
     input: ChooseForkInput,
   ): Promise<ForkDecisionStepState> {
     return this.forkDecisionController.choose(workspaceId, executionId, input)
+  }
+
+  /** Send a grounded chat message about the surfaced forks (the reply arrives via the stream). */
+  forkChat(
+    workspaceId: string,
+    executionId: string,
+    input: ForkChatRequestInput,
+  ): Promise<ForkDecisionStepState> {
+    return this.forkDecisionController.chat(workspaceId, executionId, input)
   }
 
   /**

@@ -4598,6 +4598,14 @@
       "title": "Introduce tu propio enfoque",
       "placeholder": "Describe cómo quieres que se implemente…"
     },
+    "chat": {
+      "title": "Pregunta sobre estos enfoques",
+      "hint": "¿No sabes cuál elegir? Haz una pregunta antes de decidir.",
+      "thinking": "Pensando…",
+      "placeholder": "Pregunta por las ventajas y desventajas, los riesgos o una dirección distinta…",
+      "budgetSpent": "Límite del chat alcanzado: elige un enfoque o introduce el tuyo.",
+      "send": "Enviar"
+    },
     "empty": {
       "title": "Nada que decidir"
     }

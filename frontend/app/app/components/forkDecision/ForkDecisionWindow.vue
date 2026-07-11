@@ -3,14 +3,15 @@
 // materially different implementation approaches, opened via the universal result-view host
 // (`ui.openForkDecision`). It reads the live fork state straight off the run's Coder step
 // (`step.forkDecision`, kept fresh by the execution stream) and lets a human pick a proposed
-// fork OR enter their own free-text approach. Once chosen, the Coder re-runs with the chosen
-// approach folded in. Chat is added in a later slice.
+// fork OR enter their own free-text approach, or CHAT about the forks before deciding. Once
+// chosen, the Coder re-runs with the chosen approach folded in. Chat replies are computed by an
+// inline grounded LLM in the durable driver and arrive live on the execution stream.
 import { computed, ref, watch } from 'vue'
 import { useResultView } from '~/composables/useResultView'
 import { useExecutionStore } from '~/stores/execution'
 import { useBoardStore } from '~/stores/board'
 import { useForkDecisionStore } from '~/stores/forkDecision'
-import type { ForkDecisionStepState, ForkOption } from '~/types/execution'
+import type { ForkChatMessage, ForkDecisionStepState, ForkOption } from '~/types/execution'
 import { FORK_DECISION_META } from '~/utils/catalog'
 
 const execution = useExecutionStore()
@@ -36,11 +37,25 @@ const state = computed<ForkDecisionStepState | null>(() => step.value?.forkDecis
 const status = computed(() => state.value?.status ?? null)
 const forks = computed<ForkOption[]>(() => state.value?.forks ?? [])
 const awaiting = computed(() => status.value === 'awaiting_choice')
+// A chat turn is being answered by the inline responder (the reply arrives via the stream).
+const answering = computed(() => status.value === 'answering')
+// The interactive surface (fork cards + chat + choose) is shown while awaiting OR answering.
+const interactive = computed(() => awaiting.value || answering.value)
+const chat = computed<ForkChatMessage[]>(() => state.value?.chat ?? [])
+// The chat has spent its human-turn budget once the human has sent `maxChatTurns` messages.
+const chatBudgetSpent = computed(() => {
+  const max = state.value?.maxChatTurns ?? 15
+  return chat.value.filter((m) => m.role === 'human').length >= max
+})
+const canChat = computed(
+  () => awaiting.value && !answering.value && !chatBudgetSpent.value && !forkDecision.chatting,
+)
 
 // The human's selection: a proposed fork id, or the sentinel 'custom' for the free-text path.
 const selected = ref<string | null>(null)
 const customText = ref('')
 const note = ref('')
+const chatInput = ref('')
 
 // Default the selection to the recommended fork whenever the fork set changes.
 watch(
@@ -71,6 +86,14 @@ async function onChoose() {
       ? { custom: customText.value.trim(), note: noteText }
       : { forkId: selected.value!, note: noteText }
   await forkDecision.choose(id, choice).catch(() => {})
+}
+
+async function onSend() {
+  const id = instanceId.value
+  const text = chatInput.value.trim()
+  if (!id || !text || !canChat.value) return
+  chatInput.value = ''
+  await forkDecision.chat(id, text).catch(() => {})
 }
 </script>
 
@@ -157,8 +180,8 @@ async function onChoose() {
             </p>
           </div>
 
-          <!-- Awaiting the human's choice. -->
-          <div v-else-if="awaiting" class="space-y-3">
+          <!-- Awaiting the human's choice (or answering a chat turn). -->
+          <div v-else-if="interactive" class="space-y-3">
             <p
               v-if="forkDecision.error"
               class="rounded-md bg-rose-500/10 px-3 py-2 text-[12px] text-rose-300"
@@ -263,6 +286,74 @@ async function onChoose() {
                 class="w-full rounded-md border border-slate-700 bg-slate-950/60 px-2.5 py-1.5 text-[12px] text-slate-100 placeholder:text-slate-600 focus:border-violet-500 focus:outline-none"
               />
             </div>
+
+            <!-- Grounded chat: ask about the forks before deciding. -->
+            <section class="rounded-xl border border-slate-800 bg-slate-900/40 px-4 py-3">
+              <p class="text-[11px] font-medium text-slate-400">
+                {{ t('forkDecision.chat.title') }}
+              </p>
+              <div
+                v-if="chat.length || answering"
+                class="mt-2 max-h-64 space-y-2 overflow-y-auto pr-1"
+              >
+                <div
+                  v-for="msg in chat"
+                  :key="msg.id"
+                  data-testid="fork-chat-message"
+                  class="flex"
+                  :class="msg.role === 'human' ? 'justify-end' : 'justify-start'"
+                >
+                  <p
+                    class="max-w-[85%] whitespace-pre-wrap rounded-lg px-3 py-1.5 text-[12px]"
+                    :class="
+                      msg.role === 'human'
+                        ? 'bg-violet-500/15 text-violet-100'
+                        : 'bg-slate-800/70 text-slate-200'
+                    "
+                  >
+                    {{ msg.text }}
+                  </p>
+                </div>
+                <div v-if="answering" class="flex justify-start">
+                  <p
+                    class="flex items-center gap-1.5 rounded-lg bg-slate-800/70 px-3 py-1.5 text-[12px] text-slate-400"
+                  >
+                    <UIcon name="i-lucide-loader-circle" class="h-3.5 w-3.5 animate-spin" />
+                    {{ t('forkDecision.chat.thinking') }}
+                  </p>
+                </div>
+              </div>
+              <p v-else class="mt-1 text-[11px] text-slate-500">
+                {{ t('forkDecision.chat.hint') }}
+              </p>
+              <div class="mt-2 flex items-end gap-2">
+                <textarea
+                  v-model="chatInput"
+                  data-testid="fork-chat-input"
+                  rows="2"
+                  :disabled="!canChat"
+                  :placeholder="
+                    chatBudgetSpent
+                      ? t('forkDecision.chat.budgetSpent')
+                      : t('forkDecision.chat.placeholder')
+                  "
+                  class="min-h-0 flex-1 resize-y rounded-md border border-slate-700 bg-slate-950/60 px-2.5 py-1.5 text-[12px] text-slate-100 placeholder:text-slate-600 focus:border-violet-500 focus:outline-none disabled:opacity-50"
+                  @keydown.enter.exact.prevent="onSend"
+                />
+                <UButton
+                  data-testid="fork-chat-send"
+                  color="neutral"
+                  variant="soft"
+                  size="sm"
+                  icon="i-lucide-send"
+                  :loading="forkDecision.chatting"
+                  :disabled="!canChat || chatInput.trim().length === 0"
+                  @click="onSend"
+                >
+                  {{ t('forkDecision.chat.send') }}
+                </UButton>
+              </div>
+            </section>
           </div>
 
           <!-- Skipped / no state: nothing to decide. -->
@@ -276,7 +367,7 @@ async function onChoose() {
         </div>
 
         <footer
-          v-if="awaiting"
+          v-if="interactive"
           class="flex items-center justify-end gap-2 border-t border-slate-800 px-5 py-3"
         >
           <UButton color="neutral" variant="ghost" size="sm" @click="close">
