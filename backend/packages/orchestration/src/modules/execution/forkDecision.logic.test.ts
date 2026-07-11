@@ -8,7 +8,9 @@ import type {
 } from '@cat-factory/kernel'
 import {
   buildImplementationChoice,
+  forkChatBudgetSpent,
   forkPhasePending,
+  humanChatTurns,
   mintForks,
   resolveForkTriState,
   shouldProposeForkAuto,
@@ -140,6 +142,45 @@ describe('mintForks', () => {
     )
     expect(minted[0]!.recommended).toBe(true)
     expect(minted[1]!.recommended).toBe(false)
+  })
+})
+
+describe('fork chat budget', () => {
+  const msg = (role: 'human' | 'assistant', i: number) => ({
+    id: `m${i}`,
+    role,
+    text: 't',
+    createdAt: i,
+  })
+
+  it('counts only human turns', () => {
+    expect(humanChatTurns(undefined)).toBe(0)
+    expect(humanChatTurns([])).toBe(0)
+    expect(
+      humanChatTurns([msg('human', 0), msg('assistant', 1), msg('human', 2), msg('assistant', 3)]),
+    ).toBe(2)
+  })
+
+  it('is spent once the human has sent maxChatTurns messages', () => {
+    const stateWith = (turns: number, max: number): ForkDecisionStepState => ({
+      status: 'awaiting_choice',
+      forks: [],
+      chat: Array.from({ length: turns }, (_, i) => msg('human', i)),
+      maxChatTurns: max,
+    })
+    expect(forkChatBudgetSpent(stateWith(1, 3))).toBe(false)
+    expect(forkChatBudgetSpent(stateWith(3, 3))).toBe(true)
+    expect(forkChatBudgetSpent(stateWith(4, 3))).toBe(true)
+    // Falls back to the default cap when maxChatTurns is absent (the schema defaults it, so this
+    // out-of-contract literal exercises the runtime `?? DEFAULT` guard for raw in-memory state
+    // that omits the field).
+    expect(
+      forkChatBudgetSpent({
+        status: 'awaiting_choice',
+        forks: [],
+        chat: [],
+      } as unknown as ForkDecisionStepState),
+    ).toBe(false)
   })
 })
 

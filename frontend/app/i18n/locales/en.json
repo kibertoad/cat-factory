@@ -4727,6 +4727,14 @@
       "title": "Enter your own approach",
       "placeholder": "Describe how you want this implemented…"
     },
+    "chat": {
+      "title": "Ask about these approaches",
+      "hint": "Not sure which to pick? Ask a question before you decide.",
+      "thinking": "Thinking…",
+      "placeholder": "Ask about the trade-offs, risks, or a different direction…",
+      "budgetSpent": "Chat limit reached — pick an approach or enter your own.",
+      "send": "Send"
+    },
     "empty": {
       "title": "Nothing to decide"
     }

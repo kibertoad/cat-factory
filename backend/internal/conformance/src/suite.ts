@@ -7912,6 +7912,86 @@ export function defineExecutionConformance(harness: ConformanceHarness): void {
         expect(coder.forkDecision?.status).toBe('single_path')
       })
 
+      it('mounts the fork chat endpoint and degrades it identically when no model can run', async () => {
+        // A human can chat about the surfaced forks before deciding. The chat rides the coder
+        // step (no side table), and the reply is computed by an inline model IN THE DURABLE
+        // DRIVER. In the suite no chat model can actually run (Node's default ref resolves to an
+        // unregistered provider; Cloudflare's resolves its Workers-AI binding but the call can't
+        // run in tests), so the responder must DEGRADE GRACEFULLY and IDENTICALLY: the route is
+        // mounted on every facade, the human turn is recorded + the run re-parks `awaiting_choice`
+        // with a canned assistant reply, and pick / custom still work — the divergence the
+        // cross-runtime suite guards.
+        const app = harness.makeApp({
+          customResult: {
+            seamSummary: 'the login mapper seam',
+            forks: [
+              {
+                title: 'Patch the call site',
+                summary: 's',
+                approach: 'a1',
+                tradeoffs: ['fast'],
+                recommended: true,
+              },
+              { title: 'Refactor the seam', summary: 's', approach: 'a2', tradeoffs: ['clean'] },
+            ],
+            singlePath: false,
+          },
+        })
+        const { workspace } = await app.createWorkspace()
+        const wsId = workspace.id
+        const task = await app.call<Block>(
+          'POST',
+          `/workspaces/${wsId}/blocks/mod_sessions/tasks`,
+          {
+            title: 'Fork chat task',
+            agentConfig: { 'coder.forkDecision': 'always' },
+          },
+        )
+        const pipeline = await app.call<Pipeline>('POST', `/workspaces/${wsId}/pipelines`, {
+          name: 'Fork chat + code',
+          agentKinds: ['coder'],
+        })
+        const start = await app.call<ExecutionInstance>(
+          'POST',
+          `/workspaces/${wsId}/blocks/${task.body.id}/executions`,
+          { pipelineId: pipeline.body.id },
+        )
+        expect(start.status).toBe(201)
+        const parked = (await app.drive(wsId)).find((e) => e.blockId === task.body.id)!
+        expect(parked.status).toBe('blocked')
+
+        // Send a chat message: the human turn is recorded immediately (status `answering`).
+        const sent = await app.call<ForkDecisionStepState>(
+          'POST',
+          `/workspaces/${wsId}/executions/${parked.id}/fork-decision/chat`,
+          { text: 'Which is safer?' },
+        )
+        expect(sent.status).toBe(200)
+        expect(sent.body.status).toBe('answering')
+        expect(sent.body.chat?.filter((m) => m.role === 'human')).toHaveLength(1)
+
+        // The durable driver re-enters, computes the (canned, no-model) reply, and re-parks.
+        const answered = (await app.drive(wsId)).find((e) => e.blockId === task.body.id)!
+        expect(answered.status).toBe('blocked')
+        const answeredCoder = answered.steps.find((s) => s.agentKind === 'coder')!
+        expect(answeredCoder.forkDecision?.status).toBe('awaiting_choice')
+        const answeredChat = answeredCoder.forkDecision?.chat ?? []
+        expect(answeredChat.filter((m) => m.role === 'human')).toHaveLength(1)
+        expect(answeredChat.filter((m) => m.role === 'assistant')).toHaveLength(1)
+
+        // Choosing still works after the chat exchange: the Coder dispatches (Phase B).
+        const chosenId = answeredCoder.forkDecision!.forks![0]!.id
+        const choose = await app.call<ForkDecisionStepState>(
+          'POST',
+          `/workspaces/${wsId}/executions/${parked.id}/fork-decision/choose`,
+          { forkId: chosenId },
+        )
+        expect(choose.status).toBe(200)
+        expect(choose.body.status).toBe('chosen')
+        const done = (await app.drive(wsId)).find((e) => e.blockId === task.body.id)!
+        expect(done.status).toBe('done')
+      })
+
       it('wires the async recommend endpoint and degrades it identically when the Writer cannot run', async () => {
         // Requesting Requirement-Writer recommendations appends `pending` placeholders and, on a
         // parked run, lets the durable driver fill them per finding; off-path (a `ready` review

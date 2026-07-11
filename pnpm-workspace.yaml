@@ -49,3 +49,4 @@ minimumReleaseAgeExclude:
   - '@cat-factory/*'
   - '@toad-contracts/*'
   - layered-loader
+  - toad-scheduler

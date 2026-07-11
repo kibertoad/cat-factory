@@ -4598,6 +4598,14 @@
       "title": "Wpisz własne podejście",
       "placeholder": "Opisz, jak chcesz to zaimplementować…"
     },
+    "chat": {
+      "title": "Zapytaj o te podejścia",
+      "hint": "Nie wiesz, które wybrać? Zadaj pytanie przed podjęciem decyzji.",
+      "thinking": "Myślę…",
+      "placeholder": "Zapytaj o kompromisy, ryzyko lub inny kierunek…",
+      "budgetSpent": "Osiągnięto limit czatu — wybierz podejście lub wprowadź własne.",
+      "send": "Wyślij"
+    },
     "empty": {
       "title": "Nie ma czego decydować"
     }

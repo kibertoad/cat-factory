@@ -1,5 +1,109 @@
 # @cat-factory/server
 
+## 0.112.0
+
+### Minor Changes
+
+- d1a4129: Complete the implementation-fork decision phase with grounded CHAT (PR 2 of the initiative).
+  Before the Coder writes code, a human parked on the surfaced forks can now ask questions about
+  them and get a grounded, comparative answer before deciding. Each human turn is answered by an
+  inline LLM in the durable driver (no container re-dispatch) over the fixed proposal grounding +
+  the thread; a `maxChatTurns` budget bounds spend, and with no chat model wired the chat degrades
+  to a canned "chat unavailable" reply so pick / custom still work. Adds the
+  `POST /executions/:id/fork-decision/chat` endpoint, the `fork-chat` prompt (v1), the
+  `ForkChatService`, the `pendingForkChat` re-entry protocol, the window chat thread, and the
+  cross-runtime + e2e coverage. The fork-decision initiative tracker is converted to ADR 0022.
+
+### Patch Changes
+
+- Updated dependencies [d1a4129]
+  - @cat-factory/contracts@0.127.0
+  - @cat-factory/agents@0.54.0
+  - @cat-factory/orchestration@0.106.0
+  - @cat-factory/integrations@0.81.6
+  - @cat-factory/kernel@0.121.2
+  - @cat-factory/prompt-fragments@0.13.13
+  - @cat-factory/spend@0.12.16
+
+## 0.111.0
+
+### Minor Changes
+
+- df7a489: De-duplicate the GitHub reconcile pass across the two facades, and make every Node
+  periodic sweep non-overlapping through a single seam.
+
+  **Reconcile hoist (audit item 4).** `reconcileStaleRepos` and its two gone-installation
+  classifiers were duplicated verbatim between the Worker's `sync-consumer.ts` and the Node
+  `githubReconcile.ts` (the Node copy's own comment said "Mirrors the Worker's classification"),
+  with no shared test — so a change to one would silently diverge (one runtime stops tombstoning
+  dead installations while the other keeps working). The pass now lives once in
+  `@cat-factory/server` (`reconcileStaleRepos` + `GitHubReconcileDeps`), and each facade supplies
+  only its per-repo driver: the Worker enqueues on `GITHUB_SYNC_QUEUE` (or direct-syncs when
+  unbound), Node direct-syncs inline. The classifiers moved verbatim (their regex→structured-code
+  conversion is tracked separately as error-message-coverage I7). The 30-minute staleness window
+  is now the shared exported `GITHUB_RECONCILE_STALE_MS` (previously defined independently per
+  facade), and all reconcile logs — the per-repo lines AND the Worker's cron summary — now use a
+  single `sweep: 'github-reconcile'` field on both facades. The Worker's queue-less direct-sync
+  fallback also builds its DI container once per pass instead of once per stale repo.
+
+  **Non-overlapping Node sweepers (audit item 6).** The DB-heavy `initiativeLoop`, `recurring`,
+  and notification-escalation sweeps ran unguarded `setInterval` timers, so a pass that outlasted
+  its interval could be stacked — and two concurrent `runDue` passes could both observe "no active
+  run" and double-spawn. All eight Node sweeps (kaizen, github-reconcile, initiative loop,
+  recurring, notification escalation, environment TTL, and both retention sweeps) now go through
+  one `startSweeper` helper built on `toad-scheduler`: `preventOverrun` is the non-overlap guard,
+  `runImmediately` the run-once-first behaviour, and the `AsyncTask` error handler the best-effort
+  logging (each sweep names its task, so scheduler-surfaced errors identify their sweep), and
+  `unref` keeps the sweep timers from holding the process alive — the same contract as the
+  hand-rolled `setInterval(...).unref()` timers this replaced. A new sweeper physically cannot
+  forget the guard. Adds a `toad-scheduler` (^4.1.0) dependency to `@cat-factory/node-server`.
+
+## 0.110.5
+
+### Patch Changes
+
+- 473e849: Classify VCS (GitHub / GitLab) HTTP failures with cause + fix + doc links (error-message coverage
+  initiative, items C1/C4/C5/C6). The `fetch`-based clients used to throw the same bare status dump
+  for any non-2xx (`GitHub GET <url> → 401: <body>`), so a revoked token, an exhausted rate limit,
+  and a missing scope all read identically.
+
+  - Adds a shared kernel helper `describeVcsApiError` (`@cat-factory/kernel` `domain/vcs-errors.ts`)
+    that maps `{ provider, status }` to a remedy. It PRESERVES the raw
+    `<Provider> <method> <url> → <status>: <body>` first line (detectors still surface it and it stays
+    greppable) and APPENDS a cause + remedy sentence: 401 → token revoked/expired (reconnect the App,
+    or refresh `GITHUB_PAT` in local mode); 403 + rate-limit headers / 429 → rate limited, wait for
+    the reset (App has a higher limit than a PAT); 403 → missing permission/scope + where to grant it;
+    404 → repo/installation not visible to the token. GitLab gets the same shapes, GitLab-flavoured
+    (`api` scope, Developer/Maintainer role). Kernel sits below the server layer so it keeps its own
+    `VCS_DOC_URLS` (per the doc-URL convention) linking `backend/docs/github-integration.md` /
+    `github-operations.md` / `vcs-providers.md`.
+  - **C1/C6** — `FetchGitHubClient` (REST `request()` + PAT `requestWithToken()`) and
+    `FetchGitLabClient.request()` / `provisioning.ts` now build their `*ApiError` message through the
+    helper. Error identity still rides the structured `status` field, so classification is unchanged.
+  - **C5** — `Installation X not found on any configured App` now explains the App was likely
+    uninstalled or the workspace points at a stale installation, and to reconnect GitHub.
+  - **C4** — `No connected GitHub repository found for workspace 'X'` (`ContainerAgentExecutor`) is now
+    a `ConflictError` carrying the existing `github_not_connected` reason (was a plain `Error` → 500),
+    with a UI-first remedy pointing at the GitHub connect / repo-linking flow. The SPA already maps
+    that reason to a translated title.
+  - **C4 (async run path)** — the durable dispatch previously caught EVERY `startJob` throw and framed
+    it as a container `dispatch` failure ("The container failed to start."), so a `github_not_connected`
+    precondition reached the board mislabeled and lost its `reason`. `classifyDispatchFailure`
+    (`job.logic.ts`) now distinguishes a pre-dispatch domain precondition (any `DomainError`) as a
+    `preflight` failure that keeps its own actionable message and propagates its `reason`, so
+    `AgentFailureCard` titles it with the same translated "GitHub not connected" string the 409 toast
+    uses (no new locale keys) and shows the remedy in the detail.
+
+  No behaviour changes beyond error identity (C4's 409 + `preflight` classification on the async path)
+  and message text.
+
+- Updated dependencies [473e849]
+  - @cat-factory/kernel@0.121.1
+  - @cat-factory/orchestration@0.105.6
+  - @cat-factory/agents@0.53.6
+  - @cat-factory/integrations@0.81.5
+  - @cat-factory/spend@0.12.15
+
 ## 0.110.4
 
 ### Patch Changes
