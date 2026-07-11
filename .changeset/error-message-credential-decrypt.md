@@ -19,7 +19,10 @@ surface as opaque Web Crypto errors instead of an actionable remedy.
   `WebCryptoPersonalSecretCipher.open`) now name the likely causes (truncated/corrupted column,
   or a value written under a different scheme/key) and the re-enter/re-seal remedy, instead of a
   terse `Invalid secret envelope`. The integrity-check failure (magic prefix absent after a
-  successful GCM decrypt) is distinguished from a wrong password as corruption/tampering.
+  successful GCM decrypt) is distinguished from a wrong password as corruption/tampering. The
+  envelope parse (structure check + base64url decode) is wrapped as a unit, so a corrupt/undecodable
+  segment inside an otherwise well-structured envelope also yields the actionable message rather
+  than leaking a bare `atob` `InvalidCharacterError`.
 
 Also fixes a test-config gap: `@cat-factory/server`'s vitest `include` omitted the co-located
 `src/**/*.test.ts` unit tests (the crypto ciphers, provider capabilities, …), so those suites

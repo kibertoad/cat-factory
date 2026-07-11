@@ -23,6 +23,16 @@ describe('WebCryptoSecretCipher', () => {
     )
   })
 
+  it('rejects a well-structured envelope with an undecodable (corrupt) segment', async () => {
+    const cipher = new WebCryptoSecretCipher({ masterKeyBase64: KEY_A })
+    // 4 segments + the right version prefix, but the base64url body is corrupt so `atob`
+    // rejects it — this must still surface the actionable envelope message (raw decode error
+    // kept as `cause`), not leak a bare `InvalidCharacterError` DOMException.
+    const err = (await cipher.decrypt('v1.@@@.@@@.@@@').catch((e: unknown) => e)) as Error
+    expect(err.message).toMatch(/not a valid encryption envelope/i)
+    expect(err.cause).toBeDefined()
+  })
+
   it('surfaces an actionable error when the master key no longer matches (rotated key)', async () => {
     const sealed = await new WebCryptoSecretCipher({ masterKeyBase64: KEY_A }).encrypt('sk-secret')
     const withRotatedKey = new WebCryptoSecretCipher({ masterKeyBase64: KEY_B })

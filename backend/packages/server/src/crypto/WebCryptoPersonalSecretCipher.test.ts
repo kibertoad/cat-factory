@@ -38,4 +38,13 @@ describe('WebCryptoPersonalSecretCipher', () => {
       /not a valid encryption envelope/i,
     )
   })
+
+  it('rejects a well-structured envelope with an undecodable (corrupt) segment', async () => {
+    // 4 segments + the right version prefix, but the base64url body is corrupt so `atob`
+    // rejects it. This must still surface the actionable envelope message (with the raw
+    // decode error kept as `cause`), not leak a bare `InvalidCharacterError` DOMException.
+    const err = (await cipher.open('pv1.@@@.@@@.@@@', 'pw').catch((e: unknown) => e)) as Error
+    expect(err.message).toMatch(/not a valid encryption envelope/i)
+    expect(err.cause).toBeDefined()
+  })
 })

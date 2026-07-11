@@ -181,9 +181,14 @@ export class PersonalSubscriptionService {
     try {
       return await this.deps.personalCipher.open(sealed, password)
     } catch {
-      // The personal cipher already throws an actionable, self-sufficient message
-      // (wrong password vs corrupted envelope); the `wrong_password` reason drives the
-      // client's re-prompt. Keep the surfaced text clean rather than nesting the two.
+      // Any failure opening the inner (password-derived) envelope is attributed to a wrong
+      // password: for this layer that is the only realistically reachable cause — the GCM
+      // auth tag can't be reproduced without the right password, and the outer system cipher
+      // (line above) already validated the stored envelope's structure before this point, so
+      // a malformed/corrupt inner envelope is near-unreachable. The residual corruption case
+      // is still covered by the shared "remove and re-add" remedy. The `wrong_password`
+      // reason drives the SPA's password re-prompt (428); keep the surfaced text clean and
+      // self-sufficient rather than nesting the raw cipher message.
       throw new CredentialRequiredError(
         `The personal password you entered does not unlock your ${vendor} subscription. ` +
           `Re-enter it, or remove and re-add the subscription.`,

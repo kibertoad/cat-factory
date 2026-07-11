@@ -37,20 +37,30 @@ export class WebCryptoPersonalSecretCipher implements PersonalSecretCipher {
   }
 
   async open(envelope: string, password: string): Promise<string> {
-    const parts = envelope.split('.')
-    if (parts.length !== 4 || parts[0] !== VERSION) {
-      // The stored value is not a well-formed `pv1.` envelope. This is not a wrong
-      // password (the ciphertext never even reaches the decrypt) — the column is
-      // truncated/corrupted, or it was written by a different scheme/version.
+    // Parse the `pv1.` envelope up front. A wrong structure OR an undecodable segment
+    // (base64url that `atob` rejects — a mid-envelope corruption) both mean the stored
+    // value is malformed: the ciphertext never even reaches the decrypt, so this is NOT a
+    // wrong password — the column is truncated/corrupted, or was written by a different
+    // scheme/version. Both funnel through one actionable message (original kept as `cause`).
+    let salt: Uint8Array<ArrayBuffer>
+    let iv: Uint8Array<ArrayBuffer>
+    let ciphertext: Uint8Array<ArrayBuffer>
+    try {
+      const parts = envelope.split('.')
+      if (parts.length !== 4 || parts[0] !== VERSION) {
+        throw new Error(`unexpected envelope structure (${parts.length} segments)`)
+      }
+      salt = base64urlToBytes(parts[1]!) as Uint8Array<ArrayBuffer>
+      iv = base64urlToBytes(parts[2]!) as Uint8Array<ArrayBuffer>
+      ciphertext = base64urlToBytes(parts[3]!) as Uint8Array<ArrayBuffer>
+    } catch (e) {
       throw new Error(
         'The stored personal subscription credential is not a valid encryption envelope: ' +
           'it is truncated or corrupted, or was written by a different scheme/version. ' +
           'Remove and re-add the subscription to re-seal it.',
+        { cause: e },
       )
     }
-    const salt = base64urlToBytes(parts[1]!) as Uint8Array<ArrayBuffer>
-    const iv = base64urlToBytes(parts[2]!) as Uint8Array<ArrayBuffer>
-    const ciphertext = base64urlToBytes(parts[3]!) as Uint8Array<ArrayBuffer>
     const key = await deriveKey(password, salt)
     let plain: ArrayBuffer
     try {
