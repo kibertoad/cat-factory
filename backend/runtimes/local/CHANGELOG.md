@@ -1,5 +1,12 @@
 # @cat-factory/local-server
 
+## 0.64.27
+
+### Patch Changes
+
+- Updated dependencies [6a4feb9]
+  - @cat-factory/node-server@0.92.10
+
 ## 0.64.26
 
 ### Patch Changes
