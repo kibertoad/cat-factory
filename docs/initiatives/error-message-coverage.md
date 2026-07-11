@@ -2,7 +2,8 @@
 
 **Status:** doc-URL convention established (A1) · boot-config validation (A2/A4/A6) · boot-time
 warnings for missing/rejected config (A5/A9/A10) · model-provisioning remedies (B1–B4) ·
-GitHub/GitLab API-error classification (C1/C4/C5/C6) ·
+GitHub/GitLab API-error classification (C1/C4/C5/C6) · crypto/credential decryption remedies
+(E1/E2) ·
 **Owner:** core · **Started:** 2026-07-11
 
 > This is the durable source of truth for a multi-PR initiative. Read it first before
@@ -156,10 +157,10 @@ issue.
 
 ### E. Crypto / credentials
 
-| #   | Failure / misconfiguration                                 | Current behaviour                                                                                                                                   | Surface | Sev | Proposed fix                                                                                                                                                                                                       | Doc URL to embed | Status  | PR  |
-| --- | ---------------------------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------- | ------- | --- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ | ---------------- | ------- | --- |
-| E1  | Personal-subscription wrong password on decrypt            | Raw AES-GCM `DOMException` (`WebCryptoPersonalSecretCipher.ts:49`); contrast the exemplary system-cipher wrapper (`WebCryptoSecretCipher.ts:78-83`) | UI      | P1  | Wrap like the system cipher: "the password does not match the one this subscription was sealed under — re-enter it, or delete and re-add the subscription"; keep the 428 `password_required` flow as the UI driver | —                | ⬜ todo |     |
-| E2  | `Invalid secret envelope` (malformed/truncated ciphertext) | Terse (`WebCryptoSecretCipher.ts:62`)                                                                                                               | n/a     | P3  | Name the likely causes (truncated column, mixed encryption keys across environments) + the re-enter-credential remedy                                                                                              | —                | ⬜ todo |     |
+| #   | Failure / misconfiguration                                 | Current behaviour                                                                                                                                   | Surface | Sev | Proposed fix                                                                                                                                                                                                       | Doc URL to embed | Status  | PR      |
+| --- | ---------------------------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------- | ------- | --- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ | ---------------- | ------- | ------- |
+| E1  | Personal-subscription wrong password on decrypt            | Raw AES-GCM `DOMException` (`WebCryptoPersonalSecretCipher.ts:49`); contrast the exemplary system-cipher wrapper (`WebCryptoSecretCipher.ts:78-83`) | UI      | P1  | Wrap like the system cipher: "the password does not match the one this subscription was sealed under — re-enter it, or delete and re-add the subscription"; keep the 428 `password_required` flow as the UI driver | —                | ✅ done | phase 6 |
+| E2  | `Invalid secret envelope` (malformed/truncated ciphertext) | Terse (`WebCryptoSecretCipher.ts:62`)                                                                                                               | n/a     | P3  | Name the likely causes (truncated column, mixed encryption keys across environments) + the re-enter-credential remedy                                                                                              | —                | ✅ done | phase 6 |
 
 ### F. Executor harness — ⚠ every slice here bumps the image tag + the three pins; batch these rows into ONE slice
 
@@ -320,6 +321,16 @@ union itself DOES bump the image (batch with the F-slice).
   key for the title (no new locale keys). Pattern for future UI-surfaced runtime errors: a
   `ConflictError`/reason alone is not enough — check the failure funnel actually carries the
   reason through to `AgentFailure.reason`.
+- **Credential-decrypt remedies wrap at the CIPHER (phase 6 reference: E1/E2).** The
+  actionable message is attached where the opaque Web Crypto failure enters the system — the
+  `open`/`decrypt` catch in `WebCryptoPersonalSecretCipher` / `WebCryptoSecretCipher`
+  (`@cat-factory/server`), mirroring the system cipher's existing rotated-key wrapper — NOT
+  re-derived at the service call site. Distinguish the two failure modes: a malformed envelope
+  (format/corruption) vs an AES-GCM auth failure (wrong password / rotated key). The consuming
+  service keeps its machine `reason` code (`wrong_password`) as the UI driver and a clean,
+  self-sufficient message rather than nesting the raw cipher text. (Aside surfaced here: the
+  `@cat-factory/server` vitest `include` omitted the co-located `src/**/*.test.ts` unit tests,
+  so the cipher suites silently never ran — the glob now covers both layouts.)
 - **Executor-harness changes bump the image tag** + the three hand-maintained pins
   (`deploy/backend/package.json`, `deploy/backend/wrangler.toml`,
   `RECOMMENDED_HARNESS_IMAGE`) — batch all F-rows into one slice to pay that cost once.
