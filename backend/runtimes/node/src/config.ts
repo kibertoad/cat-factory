@@ -252,9 +252,13 @@ export function loadNodeConfig(env: NodeJS.ProcessEnv): AppConfig {
   // Validate the App private key's SHAPE at boot (present + PKCS#8 PEM + decodable body) whenever
   // the App is configured, so a malformed key fails on the misconfigured screen with the openssl
   // conversion remedy instead of opaquely at the first installation-token mint (error-message
-  // coverage A3). The privileged tier's key is validated the same way when it is present.
+  // coverage A3). The privileged tier is validated on the SAME condition `loadPrivilegedApp`
+  // activates it (both id AND key present) — validating a key with no id would fail boot on a
+  // credential the privileged tier never consumes and diverge from the Worker's `loadPrivilegedApp`.
   if (githubAppConfigured) requireGitHubAppPrivateKey(env.GITHUB_APP_PRIVATE_KEY)
-  if ((env.GITHUB_PRIVILEGED_APP_PRIVATE_KEY?.trim() ?? '') !== '') {
+  const privilegedAppId = env.GITHUB_PRIVILEGED_APP_ID?.trim() ?? ''
+  const privilegedAppKey = env.GITHUB_PRIVILEGED_APP_PRIVATE_KEY?.trim() ?? ''
+  if (privilegedAppId !== '' && privilegedAppKey !== '') {
     requireGitHubAppPrivateKey(
       env.GITHUB_PRIVILEGED_APP_PRIVATE_KEY,
       'GITHUB_PRIVILEGED_APP_PRIVATE_KEY',
