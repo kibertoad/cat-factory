@@ -134,7 +134,7 @@ import type {
   WorkspaceSettings,
   WorkspaceSettingsRepository,
 } from '@cat-factory/kernel'
-import { LLM_WARNING_FINISH_REASONS } from '@cat-factory/kernel'
+import { LLM_WARNING_FINISH_REASONS, WORKSPACE_SCOPED_TABLES } from '@cat-factory/kernel'
 import {
   type SubscriptionVendor,
   agentRunKindSchema,
@@ -192,7 +192,6 @@ import {
   agentSearchQueries,
   agentRuns,
   blocks,
-  environments,
   consensusSessions,
   incidentEnrichmentConnections,
   observabilityConnections,
@@ -349,10 +348,14 @@ class DrizzleWorkspaceRepository implements WorkspaceRepository {
       }
       // This workspace's OWN mounts of services homed elsewhere (shared services it mounted).
       await tx.delete(workspaceServices).where(eq(workspaceServices.workspace_id, id))
-      await tx.delete(environments).where(eq(environments.workspace_id, id))
-      await tx.delete(agentRuns).where(eq(agentRuns.workspace_id, id))
-      await tx.delete(blocks).where(eq(blocks.workspace_id, id))
-      await tx.delete(pipelines).where(eq(pipelines.workspace_id, id))
+      // Bulk reclaim of every plain workspace-scoped table (incl. blocks/agent_runs/pipelines/
+      // environments) from the shared kernel list — keeps this cascade in lockstep with the
+      // Cloudflare facade and stops a new workspace-scoped table silently orphaning. The schema
+      // declares no FKs between these tables, so order is free; they only need to run AFTER the
+      // `services` reclaim above (which reads `blocks`) and BEFORE the root `workspaces` row.
+      for (const table of WORKSPACE_SCOPED_TABLES) {
+        await tx.execute(sql`DELETE FROM ${sql.identifier(table)} WHERE workspace_id = ${id}`)
+      }
       await tx.delete(workspaces).where(eq(workspaces.id, id))
     })
   }

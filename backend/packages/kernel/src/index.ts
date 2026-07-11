@@ -276,4 +276,10 @@ export {
 
 export { requireWorkspace } from './workspace-guard.js'
 
+export {
+  WORKSPACE_SCOPED_TABLES,
+  WORKSPACE_CASCADE_SPECIAL_TABLES,
+  type WorkspaceScopedTable,
+} from './domain/workspace-cascade.js'
+
 export { type TaskContextView, renderTaskContext } from './shared/tasks-prompt.logic.js'
