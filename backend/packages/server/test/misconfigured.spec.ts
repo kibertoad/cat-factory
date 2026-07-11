@@ -9,6 +9,7 @@ import {
   isConfigValidationError,
   requireEncryptionKey,
   requireEnv,
+  requireGitHubAppPrivateKey,
 } from '../src/config/problems.js'
 
 // The misconfiguration fallback backend: when a facade can't boot because a mandatory env var /
@@ -124,6 +125,69 @@ describe('requireEncryptionKey', () => {
       const problem = (err as ConfigValidationError).problems[0]!
       expect(problem.key).toBe('ENCRYPTION_KEY')
       expect(problem.remedy).toMatch(/at least 32 bytes/)
+    }
+  })
+})
+
+describe('requireGitHubAppPrivateKey', () => {
+  // A well-formed PKCS#8 PEM only needs the boundary lines and a base64-decodable body for the
+  // config-load shape check (`crypto.subtle.importKey` does the real key validation later).
+  const validPem = `-----BEGIN PRIVATE KEY-----\n${Buffer.from('pkcs8-body').toString(
+    'base64',
+  )}\n-----END PRIVATE KEY-----`
+
+  it('returns the trimmed PEM for a well-formed PKCS#8 key', () => {
+    expect(requireGitHubAppPrivateKey(`  ${validPem}\n`)).toBe(validPem)
+  })
+
+  it('flags the PKCS#1 key GitHub issues, naming the openssl conversion', () => {
+    const pkcs1 = '-----BEGIN RSA PRIVATE KEY-----\nAAAA\n-----END RSA PRIVATE KEY-----'
+    try {
+      requireGitHubAppPrivateKey(pkcs1)
+      expect.unreachable('should have thrown')
+    } catch (err) {
+      expect(isConfigValidationError(err)).toBe(true)
+      const problem = (err as ConfigValidationError).problems[0]!
+      expect(problem.key).toBe('GITHUB_APP_PRIVATE_KEY')
+      expect(problem.remedy).toMatch(/PKCS#1/)
+      expect(problem.remedy).toMatch(/openssl pkcs8 -topk8/)
+      expect(problem.docsUrl).toBe(ENV_HELP.GITHUB_APP_PRIVATE_KEY.docsUrl)
+    }
+  })
+
+  it('flags a value with no PKCS#8 boundary lines', () => {
+    try {
+      requireGitHubAppPrivateKey('just some text')
+      expect.unreachable('should have thrown')
+    } catch (err) {
+      expect((err as ConfigValidationError).problems[0]!.remedy).toMatch(/BEGIN PRIVATE KEY/)
+    }
+  })
+
+  it('flags a PKCS#8 header whose body is not valid base64', () => {
+    const bad = '-----BEGIN PRIVATE KEY-----\n%%% not base64 %%%\n-----END PRIVATE KEY-----'
+    try {
+      requireGitHubAppPrivateKey(bad)
+      expect.unreachable('should have thrown')
+    } catch (err) {
+      expect((err as ConfigValidationError).problems[0]!.remedy).toMatch(/not valid base64/)
+    }
+  })
+
+  it('treats a missing/blank value as the missing-var problem', () => {
+    for (const value of [undefined, '', '   ']) {
+      expect(() => requireGitHubAppPrivateKey(value)).toThrow(ConfigValidationError)
+    }
+  })
+
+  it('names the specific var for the privileged App key', () => {
+    try {
+      requireGitHubAppPrivateKey('nope', 'GITHUB_PRIVILEGED_APP_PRIVATE_KEY')
+      expect.unreachable('should have thrown')
+    } catch (err) {
+      const problem = (err as ConfigValidationError).problems[0]!
+      expect(problem.key).toBe('GITHUB_PRIVILEGED_APP_PRIVATE_KEY')
+      expect(problem.remedy).toMatch(/GITHUB_PRIVILEGED_APP_PRIVATE_KEY/)
     }
   })
 })
