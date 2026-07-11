@@ -1,5 +1,16 @@
 # @cat-factory/contracts
 
+## 0.126.0
+
+### Minor Changes
+
+- 5072999: Boot-time configuration problems now carry a documentation link. Each `ENV_HELP`
+  entry embeds a stable in-repo doc URL (built through a new centralized `DOCS`
+  helper in `@cat-factory/server`), the operator log appends a `Docs:` line, and the
+  "backend misconfigured" screen renders a "View documentation" link per problem.
+  This establishes the doc-URL convention for the error-message coverage initiative
+  (item A1).
+
 ## 0.125.0
 
 ### Minor Changes
