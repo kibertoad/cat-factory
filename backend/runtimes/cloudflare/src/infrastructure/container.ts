@@ -2223,6 +2223,7 @@ export function buildContainer(
     clock,
     buildBlobBackend: buildCfBlobBackend,
     defaultBackend: contentStorageCapability.defaultBackend,
+    logger,
   })
 
   // The app-owned cache bag, on the ISOLATE-SAFE profile: a Worker isolate has no

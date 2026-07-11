@@ -87,6 +87,7 @@ const EMPTY_BINARY_ARTIFACT_STORE: BinaryArtifactStore = {
   listByBlock: () => Promise.resolve([]),
   delete: () => Promise.resolve(),
   pruneOlderThan: () => Promise.resolve(0),
+  deleteByWorkspace: () => Promise.resolve(0),
 }
 /** Storage configured: every workspace resolves the (empty) store, so the gate is satisfied. */
 const STORAGE_ON: ResolveBinaryArtifactStore = () => Promise.resolve(EMPTY_BINARY_ARTIFACT_STORE)

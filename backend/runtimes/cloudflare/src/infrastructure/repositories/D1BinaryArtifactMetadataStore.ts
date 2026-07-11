@@ -130,4 +130,20 @@ export class D1BinaryArtifactMetadataStore implements BinaryArtifactMetadataStor
       .run()
     return meta.changes ?? 0
   }
+
+  async listByWorkspace(workspaceId: string): Promise<BinaryArtifactRecord[]> {
+    const { results } = await this.db
+      .prepare('SELECT * FROM binary_artifacts WHERE workspace_id = ?')
+      .bind(workspaceId)
+      .all<ArtifactRow>()
+    return (results ?? []).map(rowToRecord)
+  }
+
+  async deleteByWorkspace(workspaceId: string): Promise<number> {
+    const { meta } = await this.db
+      .prepare('DELETE FROM binary_artifacts WHERE workspace_id = ?')
+      .bind(workspaceId)
+      .run()
+    return meta.changes ?? 0
+  }
 }

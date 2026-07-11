@@ -94,6 +94,21 @@ export interface BinaryArtifactStore {
    * Drives the configurable per-workspace retention cleanup (default 14 days).
    */
   pruneOlderThan(workspaceId: string, olderThan: number): Promise<number>
+  /**
+   * Board-delete reclaim: delete EVERY artifact in the workspace — BOTH the metadata rows
+   * AND their bytes — and return how many were removed. Called from the workspace-delete
+   * path (the retention sweeps only ever see LIVE workspaces via `listVisible`, so a deleted
+   * workspace's artifacts would otherwise leak the heavy blob bytes forever). Same fail-safe
+   * blobs-first ordering as {@link pruneOlderThan}: a blob whose delete throws keeps its
+   * metadata row (the only handle on the key) rather than orphaning the bytes.
+   *
+   * NOTE the asymmetry with {@link pruneOlderThan}'s retry story: the retention sweep revisits
+   * a LIVE workspace hourly, so a row it retains is genuinely retried; but a DELETED workspace
+   * never reappears in `listVisible`, so a row retained here is NOT auto-retried — it needs an
+   * out-of-band reclaim. The composed store therefore logs (via its injected logger) whenever a
+   * blob delete fails so the residual leak is surfaced rather than silent.
+   */
+  deleteByWorkspace(workspaceId: string): Promise<number>
 }
 
 /** Per-runtime metadata persistence (D1 ⇄ Drizzle). Bytes live elsewhere. */
@@ -109,6 +124,10 @@ export interface BinaryArtifactMetadataStore {
   listOlderThan(workspaceId: string, olderThan: number): Promise<BinaryArtifactRecord[]>
   /** Delete metadata rows in the workspace created before `olderThan`; returns the count. */
   deleteOlderThan(workspaceId: string, olderThan: number): Promise<number>
+  /** Every record in the workspace — for the workspace-delete purge. */
+  listByWorkspace(workspaceId: string): Promise<BinaryArtifactRecord[]>
+  /** Delete every metadata row in the workspace; returns the count. */
+  deleteByWorkspace(workspaceId: string): Promise<number>
 }
 
 /**
@@ -180,8 +199,59 @@ export function createBinaryArtifactStore(deps: {
   blob: BinaryBlobBackend
   idGenerator: IdGenerator
   clock: Clock
+  /**
+   * Optional structural logger for best-effort diagnostics. Used only to SURFACE a partial
+   * reclaim (one or more blob deletes failed, so their metadata rows are retained) — otherwise
+   * that residual leak would be silent. See {@link BinaryArtifactStore.deleteByWorkspace} for
+   * why the workspace-delete path in particular has no auto-retry to fall back on.
+   */
+  logger?: { warn(obj: Record<string, unknown>, msg?: string): void }
 }): BinaryArtifactStore {
-  const { metadata, blob, idGenerator, clock } = deps
+  const { metadata, blob, idGenerator, clock, logger } = deps
+  // Shared fail-safe reclaim for a batch of records (drives both `pruneOlderThan` and
+  // `deleteByWorkspace`). Delete the BYTES first (best-effort per blob, so one stuck object
+  // doesn't strand the rest), then drop the metadata rows. The invariant in both directions:
+  // NEVER drop a metadata row whose blob is still present-but-failed-to-delete, because that
+  // would orphan the bytes forever (the metadata is the only handle on the key). So a blob
+  // delete that throws keeps its metadata row, leaving the pair intact — and the common
+  // all-succeeded path still collapses to a single bulk delete. We also never keep a metadata
+  // row pointing at already-deleted bytes.
+  //
+  // Whether the retained pair is genuinely retried depends on the caller: `pruneOlderThan` runs
+  // against a LIVE workspace the sweep revisits hourly (real retry), but `deleteByWorkspace`'s
+  // workspace never reappears in `listVisible` (no auto-retry — an out-of-band reclaim is
+  // needed). Either way a non-empty failure set is a leak worth surfacing, so we log it here
+  // rather than swallowing it silently at every call site.
+  async function reclaim(
+    records: BinaryArtifactRecord[],
+    bulkDelete: () => Promise<number>,
+  ): Promise<number> {
+    const failed = new Set<string>()
+    for (const record of records) {
+      try {
+        await blob.delete(record.storageKey)
+      } catch {
+        // Tolerate a backend hiccup on a single object; retain its metadata so a later reclaim
+        // retries the blob delete instead of orphaning the bytes.
+        failed.add(record.id)
+      }
+    }
+    // Fast path: every blob went, so a single range delete reclaims all the metadata.
+    if (failed.size === 0) return bulkDelete()
+    logger?.warn(
+      { workspaceId: records[0]?.workspaceId, failed: failed.size, total: records.length },
+      'binary-artifact reclaim: some blob deletes failed; their metadata rows are retained (bytes not yet reclaimed)',
+    )
+    // Otherwise delete only the rows whose bytes are confirmed gone, one at a time, leaving the
+    // failed pairs (row + blob) intact for a later reclaim.
+    let removed = 0
+    for (const record of records) {
+      if (failed.has(record.id)) continue
+      await metadata.delete(record.workspaceId, record.id)
+      removed += 1
+    }
+    return removed
+  }
   return {
     async store(input) {
       const id = idGenerator.next('art')
@@ -234,35 +304,12 @@ export function createBinaryArtifactStore(deps: {
       await metadata.delete(workspaceId, id)
     },
     async pruneOlderThan(workspaceId, olderThan) {
-      // Delete the BYTES first (best-effort per blob, so one stuck object doesn't strand the
-      // rest), then drop the metadata rows. The invariant in both directions: we NEVER drop a
-      // metadata row whose blob is still present-but-failed-to-delete, because that would orphan
-      // the bytes forever (the metadata is the only handle the next sweep has on the key). So a
-      // blob delete that throws keeps its metadata row, leaving the pair intact for the next
-      // sweep to retry — and the common all-succeeded path still collapses to a single bulk
-      // delete. We also never keep a metadata row pointing at already-deleted bytes.
       const expired = await metadata.listOlderThan(workspaceId, olderThan)
-      const failed = new Set<string>()
-      for (const record of expired) {
-        try {
-          await blob.delete(record.storageKey)
-        } catch {
-          // Tolerate a backend hiccup on a single object; retain its metadata so the next sweep
-          // retries the blob delete instead of orphaning the bytes.
-          failed.add(record.id)
-        }
-      }
-      // Fast path: every blob went, so a single range delete reclaims all the metadata.
-      if (failed.size === 0) return metadata.deleteOlderThan(workspaceId, olderThan)
-      // Otherwise delete only the rows whose bytes are confirmed gone, one at a time, leaving
-      // the failed pairs (row + blob) for the next sweep.
-      let removed = 0
-      for (const record of expired) {
-        if (failed.has(record.id)) continue
-        await metadata.delete(workspaceId, record.id)
-        removed += 1
-      }
-      return removed
+      return reclaim(expired, () => metadata.deleteOlderThan(workspaceId, olderThan))
+    },
+    async deleteByWorkspace(workspaceId) {
+      const all = await metadata.listByWorkspace(workspaceId)
+      return reclaim(all, () => metadata.deleteByWorkspace(workspaceId))
     },
   }
 }

@@ -67,6 +67,8 @@ export interface MakeResolveBinaryArtifactStoreDeps {
   buildBlobBackend: BuildBlobBackend
   /** Backend used when an account has no content-storage config (the runtime default). */
   defaultBackend: ContentStorageBackend
+  /** Optional structural logger, forwarded to the composed store to surface partial reclaims. */
+  logger?: { warn(obj: Record<string, unknown>, msg?: string): void }
 }
 
 /**
@@ -139,6 +141,7 @@ export function makeResolveBinaryArtifactStore(
       blob,
       idGenerator: deps.idGenerator,
       clock: deps.clock,
+      ...(deps.logger ? { logger: deps.logger } : {}),
     })
     cache.set(cacheKey, { signature, store })
     return store
