@@ -2,6 +2,8 @@
 '@cat-factory/kernel': patch
 '@cat-factory/server': patch
 '@cat-factory/gitlab': patch
+'@cat-factory/orchestration': patch
+'@cat-factory/app': patch
 ---
 
 Classify VCS (GitHub / GitLab) HTTP failures with cause + fix + doc links (error-message coverage
@@ -28,5 +30,13 @@ and a missing scope all read identically.
   a `ConflictError` carrying the existing `github_not_connected` reason (was a plain `Error` → 500),
   with a UI-first remedy pointing at the GitHub connect / repo-linking flow. The SPA already maps
   that reason to a translated title.
+- **C4 (async run path)** — the durable dispatch previously caught EVERY `startJob` throw and framed
+  it as a container `dispatch` failure ("The container failed to start."), so a `github_not_connected`
+  precondition reached the board mislabeled and lost its `reason`. `classifyDispatchFailure`
+  (`job.logic.ts`) now distinguishes a pre-dispatch domain precondition (any `DomainError`) as a
+  `preflight` failure that keeps its own actionable message and propagates its `reason`, so
+  `AgentFailureCard` titles it with the same translated "GitHub not connected" string the 409 toast
+  uses (no new locale keys) and shows the remedy in the detail.
 
-No behaviour changes beyond error identity (C4's 409) and message text.
+No behaviour changes beyond error identity (C4's 409 + `preflight` classification on the async path)
+and message text.

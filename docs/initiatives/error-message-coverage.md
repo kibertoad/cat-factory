@@ -310,6 +310,16 @@ union itself DOES bump the image (batch with the F-slice).
   so elaborating the message never changes classification. Kernel sits below the server
   layer so it can't use `config/docs.ts`; per the doc-URL convention it keeps its own
   equivalent (`VCS_DOC_URLS`) — extend that rather than writing a bare blob literal.
+- **A domain-error remedy only reaches the SPA if the failure surface propagates its
+  `reason`.** C4's `github_not_connected` `ConflictError` is a 409 on the synchronous
+  controller start paths, but on the async pipeline it is thrown from `startJob` and caught
+  by `RunDispatcher`, which used to reframe EVERY dispatch throw as a container
+  `dispatch` failure ("container failed to start"), dropping the reason. `classifyDispatchFailure`
+  (`job.logic.ts`) now maps a pre-dispatch `DomainError` to a `preflight` failure that keeps its
+  message + `reason`, and `AgentFailureCard` reuses the existing `errors.conflict.title.*`
+  key for the title (no new locale keys). Pattern for future UI-surfaced runtime errors: a
+  `ConflictError`/reason alone is not enough — check the failure funnel actually carries the
+  reason through to `AgentFailure.reason`.
 - **Executor-harness changes bump the image tag** + the three hand-maintained pins
   (`deploy/backend/package.json`, `deploy/backend/wrangler.toml`,
   `RECOMMENDED_HARNESS_IMAGE`) — batch all F-rows into one slice to pay that cost once.

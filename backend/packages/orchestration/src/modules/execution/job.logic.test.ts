@@ -1,7 +1,9 @@
+import { ConflictError } from '@cat-factory/kernel'
 import { describe, expect, it } from 'vitest'
 import {
   agentFailureKindFromCause,
   classifyAgentFailure,
+  classifyDispatchFailure,
   isContainerEvictionError,
   isTransientEviction,
   MAX_EVICTION_RECOVERIES,
@@ -89,5 +91,41 @@ describe('classifyAgentFailure (error-string fallback)', () => {
   it('maps anything else (and an absent error) to `agent`', () => {
     expect(classifyAgentFailure('the agent produced no usable result')).toBe('agent')
     expect(classifyAgentFailure(undefined)).toBe('agent')
+  })
+})
+
+describe('classifyDispatchFailure', () => {
+  it('frames a domain PRECONDITION (ConflictError) as `preflight`, keeping its message + reason', () => {
+    const err = new ConflictError(
+      "No connected GitHub repository found for workspace 'ws1'. Connect it first.",
+      'github_not_connected',
+    )
+    const c = classifyDispatchFailure(err)
+    expect(c.failureKind).toBe('preflight')
+    expect(c.reason).toBe('github_not_connected')
+    // The actionable message survives (not replaced by the container framing) — on both fields.
+    expect(c.error).toContain('No connected GitHub repository')
+    expect(c.detail).toContain('No connected GitHub repository')
+  })
+
+  it('carries no reason for a domain error that has none', () => {
+    const c = classifyDispatchFailure(new ConflictError('some conflict'))
+    expect(c.failureKind).toBe('preflight')
+    expect(c.reason).toBeUndefined()
+  })
+
+  it('routes a container eviction to `evicted` with the verbatim message', () => {
+    const c = classifyDispatchFailure(new Error(CRASH_EVICTION))
+    expect(c.failureKind).toBe('evicted')
+    expect(c.error).toBe(CRASH_EVICTION)
+    expect(c.reason).toBeUndefined()
+  })
+
+  it('frames a genuine container accept failure as `dispatch`, hiding the raw text behind detail', () => {
+    const c = classifyDispatchFailure(new Error('HTTP 502 from runner'))
+    expect(c.failureKind).toBe('dispatch')
+    expect(c.error).toBe('The container failed to start.')
+    expect(c.detail).toBe('HTTP 502 from runner')
+    expect(c.reason).toBeUndefined()
   })
 })

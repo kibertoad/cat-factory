@@ -109,7 +109,6 @@ export class GitLabProvisioningClient implements VcsProvisioningClient {
           method,
           url: `${apiBase}${path}`,
           body: text.slice(0, 300),
-          rateLimited: res.status === 429,
         }),
       )
     }
