@@ -39,11 +39,17 @@ export type GitHubSyncJob =
 // Worker consumer's `message.retry()`. The apply is idempotent (upserts), so a retry is safe.
 const RETRY_LIMIT = 5
 const RETRY_DELAY_SECONDS = 5
-// Must exceed the longest single job — a full-installation backfill deep-syncs every repo
-// (the Worker gives its backfill step a 10-minute timeout), so a healthy long backfill is
-// never expired mid-run and re-driven. Webhook/resync jobs are quick, so the generous cap
-// only affects how fast a CRASHED worker's job is retried (crash recovery, not the hot path).
+// `expireInSeconds` is an ABSOLUTE cap on a single job (pg-boss times a job out at
+// `started_on + expireInSeconds`; heartbeats do NOT refresh it — see `execution/config.ts`).
+// Size it past the longest single job — a full-installation backfill deep-syncs every repo
+// (the Worker gives its backfill step a 10-minute timeout) — so a healthy long backfill is
+// never expired mid-run and re-driven.
 const EXPIRE_SECONDS = 15 * 60
+// Fast crash recovery, DECOUPLED from that large cap: a live worker auto-heartbeats its active
+// job, so a crashed/evicted worker is detected within `HEARTBEAT_SECONDS` and pg-boss frees the
+// job for a retry — instead of the installation's queued sync sitting stuck for the full
+// `EXPIRE_SECONDS`. Mirrors the execution/bootstrap/env-repair runners' 60s default.
+const HEARTBEAT_SECONDS = 60
 
 function sendOptions(): SendOptions {
   return {
@@ -51,6 +57,7 @@ function sendOptions(): SendOptions {
     retryDelay: RETRY_DELAY_SECONDS,
     retryBackoff: true,
     expireInSeconds: EXPIRE_SECONDS,
+    heartbeatSeconds: HEARTBEAT_SECONDS,
   }
 }
 
