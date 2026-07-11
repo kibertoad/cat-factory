@@ -1,5 +1,48 @@
 # @cat-factory/worker
 
+## 0.82.5
+
+### Patch Changes
+
+- 22a4d9e: Complete the workspace-delete cascade so a board delete no longer orphans rows forever.
+  Both facades' `WorkspaceRepository.delete` previously cleared only ~7 tables
+  (blocks/pipelines/agent_runs/environments/services/mounts), leaving every other
+  workspace-scoped table (`notifications`, `requirement_reviews`, the review / session /
+  settings / connection / preset tables, the GitHub projection, …) permanently orphaned on
+  a normal board delete — invisible today, unbounded cost tomorrow.
+
+  The cascade is now driven by a single shared kernel list, `WORKSPACE_SCOPED_TABLES`, that
+  both the D1 (Cloudflare) and Drizzle (Node/local) facades iterate, so the two runtimes
+  cannot drift and a newly-added workspace-scoped table can't silently miss the cascade.
+  Per-facade static completeness guards make a new table impossible to forget: the Node guard
+  introspects the Drizzle/Postgres schema and the Worker guard introspects the real migrated
+  D1, each failing if any `workspace_id` table is neither listed nor explicitly acknowledged
+  as a special case (the D1 guard also covers the Cloudflare-only `live_containers` table the
+  Drizzle schema can't see). A cross-runtime conformance assertion proves a deleted board
+  leaves no rows behind on both D1 and Postgres.
+
+  Deliberately out of scope (unchanged): `binary_artifacts` (its blob bytes must be reclaimed
+  through the `BinaryBlobBackend` port at the service layer — a follow-up slice), the
+  bespoke `services` / mount re-home handling, and the isolated `telemetry` / `sandbox` /
+  `provisioning` schemas (separate stores reclaimed by their own retention sweeps; telemetry
+  is a physically separate D1 database on the Worker). (system-audit-improvements initiative,
+  item 2.)
+
+- Updated dependencies [22a4d9e]
+  - @cat-factory/kernel@0.120.0
+  - @cat-factory/agents@0.53.3
+  - @cat-factory/caching@0.6.32
+  - @cat-factory/consensus@0.10.32
+  - @cat-factory/eks@0.1.55
+  - @cat-factory/gates@0.5.17
+  - @cat-factory/gitlab@0.7.55
+  - @cat-factory/integrations@0.81.3
+  - @cat-factory/observability-langfuse@0.7.187
+  - @cat-factory/orchestration@0.105.3
+  - @cat-factory/provider-cloudflare@0.7.203
+  - @cat-factory/server@0.110.2
+  - @cat-factory/spend@0.12.13
+
 ## 0.82.4
 
 ### Patch Changes
