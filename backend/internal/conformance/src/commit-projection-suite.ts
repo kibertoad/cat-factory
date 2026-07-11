@@ -70,6 +70,9 @@ export function defineCommitProjectionSuite(
       await repo.upsertMany(ws, [
         commit({ sha: 'old', repoGithubId: repoId, authoredAt: 1_000 }),
         commit({ sha: 'new', repoGithubId: repoId, authoredAt: 5_000 }),
+        // Exactly ON the cutoff: the prune is exclusive (`authored_at < cutoff`), so this
+        // must SURVIVE — a facade drifted to `<=` would delete it and fail here.
+        commit({ sha: 'edge', repoGithubId: repoId, authoredAt: 2_000 }),
         // No authored_at: outside any retention window, must survive the prune.
         commit({ sha: 'undated', repoGithubId: repoId, authoredAt: null }),
       ])
@@ -78,7 +81,7 @@ export function defineCommitProjectionSuite(
       const removed = await repo.deleteOlderThan(2_000)
       expect(removed).toBeGreaterThanOrEqual(1)
       const survivors = new Set((await repo.listByRepo(ws, repoId)).map((c) => c.sha))
-      expect(survivors).toEqual(new Set(['new', 'undated']))
+      expect(survivors).toEqual(new Set(['new', 'edge', 'undated']))
     })
   })
 }

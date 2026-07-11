@@ -88,11 +88,21 @@ export function defineScheduleRunSuite(
         ws,
         run({ id: `${schedule}-new`, scheduleId: schedule, startedAt: 5_000 }),
       )
+      // Exactly ON the cutoff: the prune is exclusive (`started_at < cutoff`), so this must
+      // SURVIVE — a facade drifted to `<=` would delete it and fail here.
+      await repo.insertRun(
+        ws,
+        run({ id: `${schedule}-edge`, scheduleId: schedule, startedAt: 2_000 }),
+      )
       // Table-wide prune, so its count can include other cases' rows in the shared DB —
       // assert the scoped, deterministic survivors instead.
       const removed = await repo.pruneRunsBefore(2_000)
       expect(removed).toBeGreaterThanOrEqual(1)
-      expect((await repo.listRuns(ws, schedule)).map((r) => r.id)).toEqual([`${schedule}-new`])
+      // Newest-first: `new` (5000) then the surviving edge row (2000); `old` (1000) gone.
+      expect((await repo.listRuns(ws, schedule)).map((r) => r.id)).toEqual([
+        `${schedule}-new`,
+        `${schedule}-edge`,
+      ])
     })
   })
 }

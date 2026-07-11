@@ -111,17 +111,27 @@ export function defineSubscriptionActivationSuite(
       const { user, tag } = await ids(users)
       const expired = `exec-old-${tag}`
       const live = `exec-new-${tag}`
+      const edge = `exec-edge-${tag}`
       await activations.upsert(
         activation({ id: `act-old-${tag}`, executionId: expired, userId: user, expiresAt: 1_000 }),
       )
       await activations.upsert(
         activation({ id: `act-new-${tag}`, executionId: live, userId: user, expiresAt: 9_000 }),
       )
+      // Exactly ON the cutoff: unlike the other three prunes, `deleteExpired` is INCLUSIVE
+      // (`expires_at <= now` — a TTL that lands on `now` has passed), so this must be
+      // DELETED — a facade drifted to `<` would keep it and fail here.
+      await activations.upsert(
+        activation({ id: `act-edge-${tag}`, executionId: edge, userId: user, expiresAt: 2_000 }),
+      )
       // Table-wide sweep, so its count can include other cases' rows in the shared DB —
       // assert the scoped, deterministic outcome instead.
       const removed = await activations.deleteExpired(2_000)
       expect(removed).toBeGreaterThanOrEqual(1)
+      // `now: 0` reads the raw row (nothing is TTL-expired at time 0), so a non-null result
+      // here means the row physically survived the sweep — not merely that it's still live.
       expect(await activations.get(expired, user, 'claude', 0)).toBeNull()
+      expect(await activations.get(edge, user, 'claude', 0)).toBeNull()
       expect(await activations.get(live, user, 'claude', 0)).not.toBeNull()
     })
   })

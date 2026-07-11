@@ -131,13 +131,26 @@ export function defineTokenUsageSuite(name: string, makeRepo: () => TokenUsageRe
           createdAt: 5_000,
         }),
       )
+      // A row exactly ON the cutoff pins the boundary: the prune is exclusive
+      // (`created_at < cutoff`), so this one must SURVIVE — a facade that drifted to `<=`
+      // would delete it and fail here. It shares the default group, so it folds into `new`.
+      await repo.record(
+        record({
+          id: `${ws}-edge`,
+          workspaceId: ws,
+          inputTokens: 4,
+          outputTokens: 4,
+          createdAt: 2_000,
+        }),
+      )
       // Table-wide prune, so its count can include other cases' rows in the shared DB —
       // assert the scoped, deterministic outcome instead.
       const removed = await repo.deleteOlderThan(2_000)
       expect(removed).toBeGreaterThanOrEqual(1)
       const breakdown = await repo.usageBreakdownForWorkspace(ws, 0)
       expect(breakdown).toHaveLength(1)
-      expect(breakdown[0]).toMatchObject({ inputTokens: 9, outputTokens: 9, calls: 1 })
+      // `new` (9/9) + the surviving edge row (4/4) fold into one group, calls = 2; `old` gone.
+      expect(breakdown[0]).toMatchObject({ inputTokens: 13, outputTokens: 13, calls: 2 })
     })
   })
 }
