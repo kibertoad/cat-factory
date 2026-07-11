@@ -1,6 +1,6 @@
 import { loadNodeConfig } from '@cat-factory/node-server'
 import type { AppConfig, ConfigProblem } from '@cat-factory/server'
-import { ENV_HELP, base64urlToBytes, configProblem, requireEnv } from '@cat-factory/server'
+import { ENV_HELP, configProblem, requireEncryptionKey, requireEnv } from '@cat-factory/server'
 import { isOffValue } from './envFlags.js'
 import { resolveHostAlias } from './runtimes/index.js'
 
@@ -43,8 +43,6 @@ export function withLocalEnvCliAdvice(problems: ConfigProblem[]): ConfigProblem[
 // mode must enforce it on the raw secret too. 32 chars matches MIN_SESSION_SECRET_LENGTH
 // in the Node loader.
 const MIN_SESSION_SECRET_LENGTH = 32
-/** The system encryption key must decode to at least this many bytes (AES-256). */
-const MIN_ENCRYPTION_KEY_BYTES = 32
 // The harness inbound-auth secret gates every call between this service and its agent
 // containers, and local mode may be reachable on a LAN — so reject a trivially-guessable value.
 const MIN_HARNESS_SECRET_LENGTH = 16
@@ -83,10 +81,16 @@ const DEFAULT_LOCAL_SEARXNG_URL = 'http://localhost:8080'
  * three in the right format.
  */
 function requireStableSecret(env: NodeJS.ProcessEnv, name: string): string {
+  // The encryption key's presence + base64 + AES-256-length validation is the shared, facade-wide
+  // invariant, so delegate it verbatim (identical message on Node, local, and the Worker) rather
+  // than re-implementing it here. The two length-only secrets below are local-mode-specific.
+  if (name === 'ENCRYPTION_KEY') {
+    return requireEncryptionKey(env.ENCRYPTION_KEY)
+  }
   // Presence + trim + the ENV_HELP meaning/remedy come from the shared `requireEnv` (both these
   // vars have an ENV_HELP entry whose remedy already points at `pnpm secrets` in deploy/local), so
   // a missing/blank secret reports identically across the Node, local, and Worker facades. Local
-  // mode then layers its two extra invariants below.
+  // mode then layers its extra length invariant below.
   const value = requireEnv(env, name)
   // Local mode leaves the auth gate open by default, so a short session secret is a real
   // token-forgery risk if the box is reachable on a LAN — reject it up front rather than
@@ -98,30 +102,6 @@ function requireStableSecret(env: NodeJS.ProcessEnv, name: string): string {
       remedy: `Must be at least ${MIN_SESSION_SECRET_LENGTH} characters (got ${value.length}). Generate a strong one with \`pnpm secrets\` in deploy/local.`,
       docsUrl: ENV_HELP.AUTH_SESSION_SECRET.docsUrl,
     })
-  }
-  // Validate the encryption key decodes to a full AES-256 key at config load, so a too-short
-  // key fails with a clear message here rather than deep inside the first cipher build.
-  if (name === 'ENCRYPTION_KEY') {
-    let bytes: Uint8Array
-    try {
-      bytes = base64urlToBytes(value)
-    } catch {
-      throw configProblem({
-        key: 'ENCRYPTION_KEY',
-        summary: ENV_HELP.ENCRYPTION_KEY.summary,
-        remedy:
-          'It must be a valid base64-encoded key. Generate one with `pnpm secrets` in deploy/local.',
-        docsUrl: ENV_HELP.ENCRYPTION_KEY.docsUrl,
-      })
-    }
-    if (bytes.length < MIN_ENCRYPTION_KEY_BYTES) {
-      throw configProblem({
-        key: 'ENCRYPTION_KEY',
-        summary: ENV_HELP.ENCRYPTION_KEY.summary,
-        remedy: `Must decode to at least ${MIN_ENCRYPTION_KEY_BYTES} bytes (got ${bytes.length}). Generate one with \`pnpm secrets\` in deploy/local.`,
-        docsUrl: ENV_HELP.ENCRYPTION_KEY.docsUrl,
-      })
-    }
   }
   // Reject a too-short harness secret: local mode may be reachable on a LAN and this value is
   // the only auth between the service and its agent containers.

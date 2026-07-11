@@ -125,6 +125,8 @@ export {
   configProblem,
   formatConfigProblems,
   requireEnv,
+  requireEncryptionKey,
+  MIN_ENCRYPTION_KEY_BYTES,
   ENV_HELP,
   type ConfigProblem,
 } from './config/problems.js'

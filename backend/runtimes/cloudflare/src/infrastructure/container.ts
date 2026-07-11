@@ -130,7 +130,7 @@ import { type AppConfig, loadConfig } from './config'
 import { loadLangfuseConfig } from './config/langfuse'
 import { loadObservabilityConfig } from './config/observability'
 import type { Env } from './env'
-import { requireTelemetryDb } from './env'
+import { requireDb, requireTelemetryDb } from './env'
 import { baseUrlFor } from './ai/providerEndpoints'
 import { resolveExtraRegistries } from './ai/registries'
 import { DoRealtimeGateway } from './gateways/DoRealtimeGateway'
@@ -2023,7 +2023,9 @@ export function buildContainer(
     // The hosted Worker facade has account admins to govern the account-wide model policy.
     modelPolicy: { supported: true },
   })
-  const db = env.DB
+  // The primary transactional store. Required: fail fast here with a fixable message rather than
+  // NPE deep in the first repository call when the `DB` binding is unbound/misnamed.
+  const db = requireDb(env)
   // Telemetry (llm_call_metrics + agent_context_snapshots) lives in its own D1 database
   // — append-heavy/high-volume/short-retention, unlike the transactional domain. The
   // binding is required: fail fast here rather than NPE deep in a repo on first write.

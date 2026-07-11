@@ -1,7 +1,15 @@
 import type { ConfigProblem } from '@cat-factory/contracts'
+import { base64urlToBytes } from '../crypto/encoding.js'
 import { DOCS, ENV_VARS_ANCHORS } from './docs.js'
 
 export type { ConfigProblem }
+
+/**
+ * The system encryption key must decode to at least this many bytes — a full AES-256 key. Matches
+ * the invariant {@link WebCryptoSecretCipher} enforces at construction, hoisted here so the same
+ * defect fails at config load with an actionable message instead of lazily inside the first cipher.
+ */
+export const MIN_ENCRYPTION_KEY_BYTES = 32
 
 /**
  * Thrown by a facade's config loader (or its container build) when one or more MANDATORY env
@@ -88,6 +96,13 @@ export const ENV_HELP = {
       'Enable one of: GitHub OAuth (GITHUB_OAUTH_CLIENT_ID + GITHUB_OAUTH_CLIENT_SECRET), Google OAuth (GOOGLE_OAUTH_CLIENT_ID + GOOGLE_OAUTH_CLIENT_SECRET), or password login (AUTH_PASSWORD_ENABLED=true) — each alongside a 32+ character AUTH_SESSION_SECRET. For local dev or tests, set AUTH_DEV_OPEN=true in a non-production ENVIRONMENT instead.',
     docsUrl: DOCS.envVars(ENV_VARS_ANCHORS.authentication),
   },
+  DB: {
+    summary:
+      'The primary D1 database — the Worker stores ALL of its transactional state (workspaces, boards, runs, credentials) there. Without it the first repository call NPEs deep in a request instead of failing at boot.',
+    remedy:
+      'Add a `[[d1_databases]]` entry with `binding = "DB"` to your wrangler.toml (create the database with `wrangler d1 create` and point `database_id` at it), then re-deploy.',
+    docsUrl: DOCS.envVars(ENV_VARS_ANCHORS.storageRetention),
+  },
   TELEMETRY_DB: {
     summary:
       'The dedicated telemetry D1 database (per-LLM-call metrics + agent-context snapshots) — kept separate from the transactional data so its append-heavy, short-retention writes never contend with domain reads.',
@@ -140,4 +155,41 @@ export function requireEnv(
     })
   }
   throw configProblem({ key, ...meaning })
+}
+
+/**
+ * Validate the system `ENCRYPTION_KEY` at config load and return the trimmed value: present, valid
+ * base64, and decoding to a full AES-256 key ({@link MIN_ENCRYPTION_KEY_BYTES}). Without this the
+ * same defects fail lazily and opaquely deep inside the FIRST cipher build — a bare
+ * `encryption key must decode to at least 32 bytes`, or (for a non-base64 value) an `atob`
+ * `InvalidCharacterError` — instead of on the misconfigured screen at boot. Shared across the three
+ * facades so a malformed key reads identically whether it's the Node loader, the Worker loader, or
+ * local mode that flags it. Every facade requires the key (the always-on document/task integrations
+ * seal credentials at rest under it), so a missing value is a boot failure too.
+ */
+export function requireEncryptionKey(value: string | undefined): string {
+  const key = value?.trim()
+  if (!key) {
+    throw configProblem({ key: 'ENCRYPTION_KEY', ...ENV_HELP.ENCRYPTION_KEY })
+  }
+  let bytes: Uint8Array
+  try {
+    bytes = base64urlToBytes(key)
+  } catch {
+    throw configProblem({
+      key: 'ENCRYPTION_KEY',
+      summary: ENV_HELP.ENCRYPTION_KEY.summary,
+      remedy: `ENCRYPTION_KEY is not valid base64. ${ENV_HELP.ENCRYPTION_KEY.remedy}`,
+      docsUrl: ENV_HELP.ENCRYPTION_KEY.docsUrl,
+    })
+  }
+  if (bytes.length < MIN_ENCRYPTION_KEY_BYTES) {
+    throw configProblem({
+      key: 'ENCRYPTION_KEY',
+      summary: ENV_HELP.ENCRYPTION_KEY.summary,
+      remedy: `ENCRYPTION_KEY decodes to only ${bytes.length} byte(s); it must decode to at least ${MIN_ENCRYPTION_KEY_BYTES} bytes. ${ENV_HELP.ENCRYPTION_KEY.remedy}`,
+      docsUrl: ENV_HELP.ENCRYPTION_KEY.docsUrl,
+    })
+  }
+  return key
 }
