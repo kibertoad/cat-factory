@@ -1,6 +1,6 @@
 # Initiative: system audit — data lifecycle, runtime parity, robustness & coverage
 
-**Status:** in progress (items 1–4, 6 landed) · **Owner:** core · **Started:** 2026-07-11
+**Status:** in progress (items 1–4, 6–7 landed) · **Owner:** core · **Started:** 2026-07-11
 
 > This is the durable source of truth for a multi-PR initiative. Read it first before
 > picking up the next slice; update the checklist at the end of each PR.
@@ -85,7 +85,7 @@ benefit, bounded blast radius; **P3** = hygiene/polish. Effort S/M/L.
 | 4   | P2  | parity      | GitHub reconcile loop duplicated verbatim across Node/Worker — hoist to shared server pkg   | S      | ✅ done | (this PR) |
 | 5   | P1  | parity      | Node async GitHub ingest runs inline in the request; add pg-boss-backed queue impls         | M–L    | ⬜ todo |           |
 | 6   | P2  | parity      | Node sweeper re-entrancy guards inconsistent (initiativeLoop / recurring / escalation)      | S      | ✅ done | (this PR) |
-| 7   | P2  | conformance | Four retention prunes have no cross-runtime conformance assertion                           | S–M    | ⬜ todo |           |
+| 7   | P2  | conformance | Four retention prunes have no cross-runtime conformance assertion                           | S–M    | ✅ done | (this PR) |
 | 8   | P2  | engine      | Notification-escalation sweep: per-workspace settings point-read (N+1 the cache can't fix)  | M      | ⬜ todo |           |
 | 9   | P2  | ops         | Node `/health` is a static 200 — add a `/ready` readiness probe (pool + pg-boss)            | S      | ⬜ todo |           |
 | 10  | P2  | frontend    | `provisioningLogs` store: unbounded per-execution map + unguarded out-of-order overwrite    | S      | ⬜ todo |           |
@@ -314,6 +314,24 @@ either deletes live data or never reclaims — silently.
 
 **Fix:** add prune assertions mirroring the existing suites (extend the relevant suite
 per table; new prunes from items 1–3 land WITH their assertion, per the standing rule).
+
+**Landed (this PR).** None of the four stores had a parity suite at all, so rather than
+extend an existing one, each got a focused `define*Suite(name, makeRepo)` mirroring the
+`password-reset-suite` / `subscription-quota-suite` shape (seed → read → prune), wired into
+BOTH facades' test suites (Worker D1 in `runtimes/cloudflare/test/integration/*`, Node
+Postgres in `runtimes/node/test/*`): `defineTokenUsageSuite` (`token_usage`:
+`deleteOlderThan`, plus the per-group breakdown + metered-only spend rollup),
+`defineCommitProjectionSuite` (`github_commits`: `deleteOlderThan` — asserts the exclusive
+`authored_at` cutoff AND that null-authored rows survive, the one predicate a facade could
+get wrong), `defineScheduleRunSuite` (`pipeline_schedule_runs`: `pruneRunsBefore`, plus
+insert/patch/list-newest-first), and `defineSubscriptionActivationSuite`
+(`subscription_activations`: `deleteExpired`, plus upsert/get-live-only/deleteByExecution).
+Each prune is table-wide, so — like the existing suites — the assertions scope to a
+per-case unique key and check the deterministic survivors rather than the global count. The
+activation suite's factory also hands back a `UserRepository` to seed the `users` row its
+Postgres `user_id` FK (ON DELETE RESTRICT) requires; D1 doesn't enforce the FK. Test-only —
+no runtime behaviour changed; 26 assertions (13 per facade) run green on real D1 (workerd)
+and real Postgres.
 
 ### Cluster C — robustness & correctness
 
