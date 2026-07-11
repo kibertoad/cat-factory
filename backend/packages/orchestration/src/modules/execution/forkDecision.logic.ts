@@ -9,7 +9,12 @@ import type {
   StepGating,
   TaskEstimate,
 } from '@cat-factory/kernel'
+import { DEFAULT_FORK_MAX_CHAT_TURNS } from '@cat-factory/contracts'
 import { shouldRunGatedStep } from './stepGating.logic.js'
+
+// Re-exported so the many in-package import sites keep sourcing it from this logic module,
+// while contracts stays the single source of truth for the cap.
+export { DEFAULT_FORK_MAX_CHAT_TURNS }
 
 // Pure logic + constants for the optional implementation-fork decision phase on the Coder
 // step. The engine resolves the per-task tri-state + the risk-policy gate to decide whether
@@ -20,9 +25,6 @@ import { shouldRunGatedStep } from './stepGating.logic.js'
 
 /** The producer kind the fork-decision phase attaches to (the Coder). */
 export const FORK_DECISION_PRODUCER_KIND = 'coder'
-
-/** Default hard budget on grounded chat turns (human messages) before a 409. */
-export const DEFAULT_FORK_MAX_CHAT_TURNS = 15
 
 /** The per-task tri-state that gates the phase (the `coder.forkDecision` agent-config value). */
 export type ForkTriState = 'auto' | 'always' | 'off'

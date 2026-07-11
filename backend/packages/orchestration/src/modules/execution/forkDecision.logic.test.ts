@@ -171,8 +171,16 @@ describe('fork chat budget', () => {
     expect(forkChatBudgetSpent(stateWith(1, 3))).toBe(false)
     expect(forkChatBudgetSpent(stateWith(3, 3))).toBe(true)
     expect(forkChatBudgetSpent(stateWith(4, 3))).toBe(true)
-    // Falls back to the default cap when maxChatTurns is absent.
-    expect(forkChatBudgetSpent({ status: 'awaiting_choice', forks: [], chat: [] })).toBe(false)
+    // Falls back to the default cap when maxChatTurns is absent (the schema defaults it, so this
+    // out-of-contract literal exercises the runtime `?? DEFAULT` guard for raw in-memory state
+    // that omits the field).
+    expect(
+      forkChatBudgetSpent({
+        status: 'awaiting_choice',
+        forks: [],
+        chat: [],
+      } as unknown as ForkDecisionStepState),
+    ).toBe(false)
   })
 })
 

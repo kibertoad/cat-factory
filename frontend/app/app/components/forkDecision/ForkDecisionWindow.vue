@@ -7,6 +7,7 @@
 // chosen, the Coder re-runs with the chosen approach folded in. Chat replies are computed by an
 // inline grounded LLM in the durable driver and arrive live on the execution stream.
 import { computed, ref, watch } from 'vue'
+import { DEFAULT_FORK_MAX_CHAT_TURNS } from '@cat-factory/contracts'
 import { useResultView } from '~/composables/useResultView'
 import { useExecutionStore } from '~/stores/execution'
 import { useBoardStore } from '~/stores/board'
@@ -44,12 +45,12 @@ const interactive = computed(() => awaiting.value || answering.value)
 const chat = computed<ForkChatMessage[]>(() => state.value?.chat ?? [])
 // The chat has spent its human-turn budget once the human has sent `maxChatTurns` messages.
 const chatBudgetSpent = computed(() => {
-  const max = state.value?.maxChatTurns ?? 15
+  const max = state.value?.maxChatTurns ?? DEFAULT_FORK_MAX_CHAT_TURNS
   return chat.value.filter((m) => m.role === 'human').length >= max
 })
-const canChat = computed(
-  () => awaiting.value && !answering.value && !chatBudgetSpent.value && !forkDecision.chatting,
-)
+// `awaiting` and `answering` are mutually exclusive statuses, so awaiting already implies the
+// chat isn't mid-answer — no separate `!answering` guard is needed.
+const canChat = computed(() => awaiting.value && !chatBudgetSpent.value && !forkDecision.chatting)
 
 // The human's selection: a proposed fork id, or the sentinel 'custom' for the free-text path.
 const selected = ref<string | null>(null)
