@@ -1,4 +1,5 @@
 export { CompositeModelProvider, type ModelResolver, type ProviderRegistry } from './registry.js'
+export { MODEL_SUPPORT_DOCS } from './docs.js'
 export {
   CliInlineLanguageModel,
   type InlineCliRequest,

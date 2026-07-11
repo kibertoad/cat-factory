@@ -338,6 +338,7 @@ export {
   vendorConcurrencyLimiterFromEnv,
   type ModelResolver,
   type ProviderRegistry,
+  MODEL_SUPPORT_DOCS,
   anthropicResolver,
   baseProviderRegistry,
   cloudflareRestResolver,

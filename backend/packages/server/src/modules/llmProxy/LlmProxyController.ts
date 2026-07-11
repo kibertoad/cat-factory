@@ -3,6 +3,7 @@ import { cachedTokensFromUsage, promptCacheParams } from '@cat-factory/agents'
 import { isLocalRunner } from '@cat-factory/contracts'
 import { fetchLocalRunner } from '@cat-factory/integrations'
 import { type ApiKeyProvider, contextWindowFor } from '@cat-factory/kernel'
+import { openAiCompatibleBaseUrlError } from '../../agents/providerErrors.js'
 import { ContainerSessionService } from '../../containers/ContainerSessionService.js'
 import type { AppEnv } from '../../http/env.js'
 import { makeWaitUntil } from '../../http/waitUntil.js'
@@ -403,19 +404,17 @@ export function llmProxyController(): Hono<AppEnv> {
       const upstream = gateways.llmUpstream.resolveOpenAiCompatible(session.provider)
       if (!upstream) {
         log.error('llm proxy: provider is not available (no base URL resolved)')
+        const message = openAiCompatibleBaseUrlError(session.provider)
         observe({
           usage: null,
           finishReason: null,
           responseText: '',
           ok: false,
           httpStatus: 502,
-          errorMessage: `Provider '${session.provider}' is not available`,
+          errorMessage: message,
           upstreamMs: 0,
         })
-        return c.json(
-          { error: { message: `Provider '${session.provider}' is not available` } },
-          502,
-        )
+        return c.json({ error: { message } }, 502)
       }
       // Lease the API key for this provider from the DB-backed pool (workspace + owning
       // account + the run initiator), scoped from the signed session claims. Keys are no

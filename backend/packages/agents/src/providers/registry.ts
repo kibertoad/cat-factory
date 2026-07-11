@@ -1,5 +1,6 @@
 import type { ModelProvider, ModelRef } from '@cat-factory/kernel'
 import type { LanguageModel } from 'ai'
+import { MODEL_SUPPORT_DOCS } from './docs.js'
 
 // The generic AI provisioning facade. The domain references a model only by a
 // provider-agnostic {@link ModelRef}; a `ModelResolver` turns that into a concrete
@@ -51,7 +52,29 @@ export class CompositeModelProvider implements ModelProvider {
 
   resolve(ref: ModelRef): LanguageModel {
     const resolver = this.resolvers.get(ref.provider)
-    if (!resolver) throw new Error(`Unsupported model provider: ${ref.provider}`)
+    if (!resolver) throw new Error(unsupportedModelProviderMessage(ref.provider, this.providers()))
     return resolver(ref)
   }
+}
+
+/**
+ * The remedy for a model ref whose provider has no resolver registered. A provider is registered
+ * only when its credentials are configured, so an unregistered provider almost always means "this
+ * deployment has no key/config for it" — not a bug. The message follows the initiative's UI-first
+ * rule: for the UI-configurable direct providers it names the workspace API-key pool as the primary
+ * fix, and only mentions the deployment-level env vars as the alternative; it also lists what IS
+ * registered as a diagnostic, and links the model-support doc.
+ */
+export function unsupportedModelProviderMessage(provider: string, registered: string[]): string {
+  const have = registered.length ? registered.slice().sort().join(', ') : 'none'
+  return (
+    `Unsupported model provider '${provider}': no resolver is registered for it, so this ` +
+    `deployment has no credentials configured for it. ` +
+    `Fix: if it is a UI-configurable provider (openai, anthropic, qwen, deepseek, moonshot, ` +
+    `openrouter, litellm), add an API key for it to the workspace AI provider key pool ` +
+    `(Settings → AI providers). Otherwise configure it at the deployment level — e.g. ` +
+    `CLOUDFLARE_ACCOUNT_ID + CLOUDFLARE_API_TOKEN for Cloudflare Workers AI (Node), or ` +
+    `BEDROCK_REGION for AWS Bedrock. Currently registered providers: ${have}. ` +
+    `See ${MODEL_SUPPORT_DOCS.provisioning()}`
+  )
 }
