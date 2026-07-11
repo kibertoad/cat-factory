@@ -2231,6 +2231,7 @@ export function buildNodeContainer(options: NodeContainerOptions): ServerContain
     clock,
     buildBlobBackend: buildNodeBlobBackend,
     defaultBackend: contentStorageCapability.defaultBackend,
+    logger,
   })
 
   // Runner-pool URL/host guard, scoped to its own config (independent of the environment

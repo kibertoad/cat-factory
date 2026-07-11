@@ -18,6 +18,7 @@ import type {
   BlockRepository,
   ExecutionRepository,
   PipelineRepository,
+  ResolveBinaryArtifactStore,
   ServiceRehome,
   ServiceRepository,
   WorkspaceMountRepository,
@@ -42,6 +43,17 @@ export interface WorkspaceServiceDependencies {
    */
   serviceRepository?: ServiceRepository
   workspaceMountRepository?: WorkspaceMountRepository
+  /**
+   * Resolves a workspace's binary-artifact store (screenshots + reference images) so a board
+   * delete can reclaim their heavy blob bytes. Optional — when unwired (no content storage
+   * configured, or in tests) the delete path simply skips the purge. Absent from the
+   * `workspaceRepository.delete` cascade on purpose: deleting the metadata row without the
+   * bytes would strand the blob forever (the row is the only handle on its key), so the purge
+   * runs through this port at the service layer before the cascade.
+   */
+  resolveBinaryArtifactStore?: ResolveBinaryArtifactStore
+  /** Optional structural logger for best-effort diagnostics (e.g. a swallowed artifact purge). */
+  logger?: { info(obj: Record<string, unknown>, msg?: string): void }
 }
 
 /** Creates, reads and deletes boards (workspaces) and assembles snapshots. */
@@ -54,6 +66,8 @@ export class WorkspaceService {
   private readonly clock: Clock
   private readonly serviceRepository?: ServiceRepository
   private readonly workspaceMountRepository?: WorkspaceMountRepository
+  private readonly resolveBinaryArtifactStore?: ResolveBinaryArtifactStore
+  private readonly logger?: { info(obj: Record<string, unknown>, msg?: string): void }
 
   constructor({
     workspaceRepository,
@@ -64,6 +78,8 @@ export class WorkspaceService {
     clock,
     serviceRepository,
     workspaceMountRepository,
+    resolveBinaryArtifactStore,
+    logger,
   }: WorkspaceServiceDependencies) {
     this.workspaceRepository = workspaceRepository
     this.blockRepository = blockRepository
@@ -73,6 +89,8 @@ export class WorkspaceService {
     this.clock = clock
     this.serviceRepository = serviceRepository
     this.workspaceMountRepository = workspaceMountRepository
+    this.resolveBinaryArtifactStore = resolveBinaryArtifactStore
+    this.logger = logger
   }
 
   /**
@@ -333,12 +351,43 @@ export class WorkspaceService {
 
   async delete(id: string): Promise<void> {
     await this.require(id)
+    // Reclaim the board's binary artifacts (screenshots + reference images) — BOTH the metadata
+    // rows AND the heavy blob bytes — BEFORE the row cascade. The retention sweeps only ever see
+    // LIVE workspaces (`listVisible`), so a deleted board's artifacts would otherwise leak their
+    // object-storage bytes forever; and `binary_artifacts` is deliberately excluded from the
+    // `workspaceRepository.delete` cascade (bare SQL can't reach the blob backend, and dropping
+    // the metadata row alone strands the bytes). Best-effort: a storage hiccup must not block the
+    // board delete, so a purge failure is swallowed here (the row cascade skips the table, so the
+    // rows survive rather than orphaning the bytes). But because a deleted board never reappears
+    // in `listVisible`, no retention sweep will revisit those rows — reclaim is then out-of-band,
+    // so the failure is LOGGED (not silent) rather than promising an auto-retry that can't happen.
+    await this.purgeBinaryArtifacts(id)
     // Re-home the SHARED services this board homes: a service another board still mounts must NOT
     // be destroyed just because its home board is deleted (both teams lose the shared subtree).
     // Resolve, per homed service, whether a surviving board mounts it and hand the cascade a
     // re-home plan; services with no other mount fall through to the normal reclaim.
     const rehome = await this.planSharedServiceRehome(id)
     await this.workspaceRepository.delete(id, rehome)
+  }
+
+  /** Purge every binary artifact (rows + blob bytes) of a board being deleted. No-op when the
+   * artifact store isn't wired (no content storage configured / tests). Partial per-blob failures
+   * are surfaced by the composed store itself; this catch handles a TOTAL failure (store resolve /
+   * outage) so it can't wedge the delete. */
+  private async purgeBinaryArtifacts(id: string): Promise<void> {
+    if (!this.resolveBinaryArtifactStore) return
+    try {
+      const store = await this.resolveBinaryArtifactStore(id)
+      await store?.deleteByWorkspace(id)
+    } catch (error) {
+      // A blob-backend outage must not wedge the board delete; the rows stay (cascade skips the
+      // table). But a deleted board never returns to `listVisible`, so no sweep will retry — log
+      // the residual leak (bytes + rows) so it's visible for an out-of-band reclaim, not silent.
+      this.logger?.info(
+        { workspaceId: id, err: error instanceof Error ? error.message : String(error) },
+        'workspace-delete binary-artifact purge failed; artifacts retained for out-of-band reclaim',
+      )
+    }
   }
 
   /**

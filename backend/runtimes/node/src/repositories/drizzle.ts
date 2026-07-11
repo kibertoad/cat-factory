@@ -2009,6 +2009,22 @@ class DrizzleBinaryArtifactMetadataStore implements BinaryArtifactMetadataStore 
       .returning({ id: binaryArtifacts.id })
     return deleted.length
   }
+
+  async listByWorkspace(workspaceId: string): Promise<BinaryArtifactRecord[]> {
+    const rows = await this.db
+      .select()
+      .from(binaryArtifacts)
+      .where(eq(binaryArtifacts.workspace_id, workspaceId))
+    return rows.map(rowToBinaryArtifact)
+  }
+
+  async deleteByWorkspace(workspaceId: string): Promise<number> {
+    const deleted = await this.db
+      .delete(binaryArtifacts)
+      .where(eq(binaryArtifacts.workspace_id, workspaceId))
+      .returning({ id: binaryArtifacts.id })
+    return deleted.length
+  }
 }
 
 function rowToProvisioningLog(row: typeof provisioningLog.$inferSelect): ProvisioningLogRecord {

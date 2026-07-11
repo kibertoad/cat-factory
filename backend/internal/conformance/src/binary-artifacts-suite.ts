@@ -193,5 +193,43 @@ export function defineBinaryArtifactsSuite(
       expect(await store.getMetadata(ws, rec.id)).toBeNull()
       expect(await store.getBlob(ws, rec.id)).toBeNull()
     })
+
+    it('deleteByWorkspace reclaims every artifact (rows + bytes) and scopes by workspace', async () => {
+      // Drives the workspace-delete purge: on a board delete the retention sweep never sees the
+      // (now-gone) workspace again, so every artifact — regardless of age, run or block — must be
+      // reclaimed here, bytes included, without touching another workspace's artifacts.
+      const store = makeStore()
+      const { ws, e1, e2, blk } = ids()
+      const mk = (workspaceId: string, executionId: string | null, n: number) =>
+        store.store({
+          meta: {
+            workspaceId,
+            executionId,
+            blockId: blk,
+            kind: 'screenshot',
+            view: `v${n}`,
+            contentType: 'image/png',
+          },
+          blob: png(n),
+        })
+      const a = await mk(ws, e1, 1)
+      const b = await mk(ws, e2, 2)
+      // A block-scoped reference upload (no executionId) must be reclaimed too.
+      const ref = await mk(ws, null, 3)
+      // A different workspace's artifact — must survive.
+      const otherWs = `${ws}-other`
+      const keep = await mk(otherWs, e1, 4)
+
+      const removed = await store.deleteByWorkspace(ws)
+      expect(removed).toBe(3)
+      for (const rec of [a, b, ref]) {
+        expect(await store.getMetadata(ws, rec.id)).toBeNull()
+        expect(await store.getBlob(ws, rec.id)).toBeNull()
+      }
+      expect(await store.listByBlock(ws, blk)).toEqual([])
+      // The other workspace is untouched (row + bytes).
+      expect(await store.getMetadata(otherWs, keep.id)).not.toBeNull()
+      expect(await store.getBlob(otherWs, keep.id)).toEqual(png(4))
+    })
   })
 }

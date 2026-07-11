@@ -1,5 +1,12 @@
 # @cat-factory/spend
 
+## 0.12.14
+
+### Patch Changes
+
+- Updated dependencies [f4482c7]
+  - @cat-factory/kernel@0.121.0
+
 ## 0.12.13
 
 ### Patch Changes
