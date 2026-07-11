@@ -35,6 +35,23 @@ describe('ConfigValidationError', () => {
     ])
     expect(msg).toContain('2 mandatory configuration values')
   })
+
+  it('formatConfigProblems appends a Docs line when a problem carries a docsUrl', () => {
+    const withDoc = formatConfigProblems([
+      { key: 'A', summary: 's', remedy: 'r', docsUrl: 'https://example.test/docs#a' },
+    ])
+    expect(withDoc).toContain('Docs: https://example.test/docs#a')
+    // ...and omits the Docs line entirely when there is no link.
+    expect(formatConfigProblems([{ key: 'B', summary: 's', remedy: 'r' }])).not.toContain('Docs:')
+  })
+
+  it('every ENV_HELP entry carries a documentation link', () => {
+    for (const [key, help] of Object.entries(ENV_HELP)) {
+      expect(help.docsUrl, `${key} should link docs`).toMatch(
+        /^https:\/\/github\.com\/kibertoad\/cat-factory\/blob\/main\//,
+      )
+    }
+  })
 })
 
 describe('requireEnv', () => {
@@ -92,10 +109,11 @@ describe('createMisconfiguredApp', () => {
     expect(body.error.problems).toEqual(PROBLEMS)
   })
 
-  it('a problem exposes ONLY the key/summary/remedy fields (never a secret value)', () => {
-    // The structural guarantee: a ConfigProblem is a fixed, non-secret shape. Even if a loader tried
-    // to attach a raw value, the type + this shape would keep it out of the wire payload.
+  it('a problem exposes ONLY the non-secret key/summary/remedy/docsUrl fields (never a secret value)', () => {
+    // The structural guarantee: a ConfigProblem is a fixed, non-secret shape (the optional docsUrl is
+    // a public documentation link, not a secret). Even if a loader tried to attach a raw value, the
+    // type + this shape would keep it out of the wire payload.
     const problem = configProblem(PROBLEMS[0]!).problems[0]!
-    expect(Object.keys(problem).sort()).toEqual(['key', 'remedy', 'summary'])
+    expect(Object.keys(problem).sort()).toEqual(['docsUrl', 'key', 'remedy', 'summary'])
   })
 })

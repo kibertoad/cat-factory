@@ -9,6 +9,7 @@
       "title": "Arka uç yapılandırılmadı",
       "intro": "Sunucu başladı ancak aşağıdaki ayarlar sağlanana kadar çalışamaz. Eksik değerleri ortamınıza ekleyip yeniden yükleyin.",
       "howToFix": "Nasıl düzeltilir:",
+      "viewDocs": "Belgeleri görüntüle",
       "reload": "Yeniden yükle",
       "hint": "Burada yalnızca değişken adları ve nasıl ayarlanacakları gösterilir, asla gizli değerler değil."
     }

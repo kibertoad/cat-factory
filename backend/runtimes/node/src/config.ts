@@ -250,6 +250,7 @@ export function loadNodeConfig(env: NodeJS.ProcessEnv): AppConfig {
       remedy:
         `Must be at least ${MIN_SESSION_SECRET_LENGTH} characters when GitHub OAuth is configured ` +
         `(got ${sessionSecret.length}). ${ENV_HELP.AUTH_SESSION_SECRET.remedy} Or enable AUTH_DEV_OPEN in a non-production ENVIRONMENT.`,
+      docsUrl: ENV_HELP.AUTH_SESSION_SECRET.docsUrl,
     })
   }
 

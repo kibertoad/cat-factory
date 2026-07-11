@@ -96,6 +96,7 @@ function requireStableSecret(env: NodeJS.ProcessEnv, name: string): string {
       key: 'AUTH_SESSION_SECRET',
       summary: ENV_HELP.AUTH_SESSION_SECRET.summary,
       remedy: `Must be at least ${MIN_SESSION_SECRET_LENGTH} characters (got ${value.length}). Generate a strong one with \`pnpm secrets\` in deploy/local.`,
+      docsUrl: ENV_HELP.AUTH_SESSION_SECRET.docsUrl,
     })
   }
   // Validate the encryption key decodes to a full AES-256 key at config load, so a too-short
@@ -110,6 +111,7 @@ function requireStableSecret(env: NodeJS.ProcessEnv, name: string): string {
         summary: ENV_HELP.ENCRYPTION_KEY.summary,
         remedy:
           'It must be a valid base64-encoded key. Generate one with `pnpm secrets` in deploy/local.',
+        docsUrl: ENV_HELP.ENCRYPTION_KEY.docsUrl,
       })
     }
     if (bytes.length < MIN_ENCRYPTION_KEY_BYTES) {
@@ -117,6 +119,7 @@ function requireStableSecret(env: NodeJS.ProcessEnv, name: string): string {
         key: 'ENCRYPTION_KEY',
         summary: ENV_HELP.ENCRYPTION_KEY.summary,
         remedy: `Must decode to at least ${MIN_ENCRYPTION_KEY_BYTES} bytes (got ${bytes.length}). Generate one with \`pnpm secrets\` in deploy/local.`,
+        docsUrl: ENV_HELP.ENCRYPTION_KEY.docsUrl,
       })
     }
   }
@@ -127,6 +130,7 @@ function requireStableSecret(env: NodeJS.ProcessEnv, name: string): string {
       key: 'HARNESS_SHARED_SECRET',
       summary: ENV_HELP.HARNESS_SHARED_SECRET.summary,
       remedy: `Must be at least ${MIN_HARNESS_SECRET_LENGTH} characters (got ${value.length}). Generate a strong one with \`pnpm secrets\` in deploy/local.`,
+      docsUrl: ENV_HELP.HARNESS_SHARED_SECRET.docsUrl,
     })
   }
   return value
