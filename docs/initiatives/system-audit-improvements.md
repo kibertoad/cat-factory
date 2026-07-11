@@ -1,6 +1,6 @@
 # Initiative: system audit — data lifecycle, runtime parity, robustness & coverage
 
-**Status:** in progress (items 1–4, 6–7 landed) · **Owner:** core · **Started:** 2026-07-11
+**Status:** in progress (items 1–4, 6–8 landed) · **Owner:** core · **Started:** 2026-07-11
 
 > This is the durable source of truth for a multi-PR initiative. Read it first before
 > picking up the next slice; update the checklist at the end of each PR.
@@ -86,7 +86,7 @@ benefit, bounded blast radius; **P3** = hygiene/polish. Effort S/M/L.
 | 5   | P1  | parity      | Node async GitHub ingest runs inline in the request; add pg-boss-backed queue impls         | M–L    | ⬜ todo |           |
 | 6   | P2  | parity      | Node sweeper re-entrancy guards inconsistent (initiativeLoop / recurring / escalation)      | S      | ✅ done | (this PR) |
 | 7   | P2  | conformance | Four retention prunes have no cross-runtime conformance assertion                           | S–M    | ✅ done | (this PR) |
-| 8   | P2  | engine      | Notification-escalation sweep: per-workspace settings point-read (N+1 the cache can't fix)  | M      | ⬜ todo |           |
+| 8   | P2  | engine      | Notification-escalation sweep: per-workspace settings point-read (N+1 the cache can't fix)  | M      | ✅ done | (this PR) |
 | 9   | P2  | ops         | Node `/health` is a static 200 — add a `/ready` readiness probe (pool + pg-boss)            | S      | ⬜ todo |           |
 | 10  | P2  | frontend    | `provisioningLogs` store: unbounded per-execution map + unguarded out-of-order overwrite    | S      | ⬜ todo |           |
 | 11  | P3  | api         | Error code `validation` maps to two HTTP statuses (400 schema vs 422 domain)                | S      | ⬜ todo |           |
@@ -349,6 +349,22 @@ issues N reads for the escalation threshold.
 **Fix:** a batched `listByWorkspaceIds` (chunked `IN`) on `WorkspaceSettingsRepository`,
 mirrored D1 ⇄ Drizzle + conformance, read once before the loop. Coordinate with perf item
 9 so the two slices don't collide on the same port.
+
+**Landed (this PR).** `WorkspaceSettingsRepository.listByWorkspaceIds(ids)` returns a
+`Map<workspaceId, WorkspaceSettings>` of only the persisted rows (the caller seeds the
+default for absent ones), implemented as a chunked `IN` in BOTH `D1WorkspaceSettingsRepository`
+(via the shared `chunkForIn`) and `DrizzleWorkspaceSettingsRepository` (via `inArray`, sharing
+a new module-level `rowToWorkspaceSettings` mapper with `get`). `WorkspaceSettingsService.getMany`
+wraps it, filling `DEFAULT_WORKSPACE_SETTINGS` for every requested id with no row, and
+`escalateStaleNotifications` (`@cat-factory/server`) now calls it ONCE before the per-workspace
+loop instead of a `get` per workspace — the N+1 the Worker's pass-through settings cache (perf
+item 9) can't fix. The port didn't collide with perf item 9 (that slice caches `get`, this adds
+a distinct batch method). Guards: a cross-runtime `defineWorkspaceSettingsSuite` asserts the
+round-trip + batched read (absent workspace absent, empty input → empty map, no all-rows scan)
+against real D1 (workerd) and real Postgres; a `WorkspaceSettingsService.getMany` unit test pins
+the defaults-fill for absent workspaces. The batch method is a global sweeper read, so it stays
+mothership-internal (`NON_REMOTE` `'sweeper'` in `mothership-allowlist.spec.ts`, not the RPC
+allow-list), matching the ADR-0009 "global sweeper reads are excluded" rule.
 
 #### 9. Node `/health` is a static 200 — P2
 

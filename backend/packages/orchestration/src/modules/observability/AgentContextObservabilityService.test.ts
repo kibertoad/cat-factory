@@ -35,6 +35,9 @@ function fakeSettings(storeAgentContext: boolean): WorkspaceSettingsRepository {
     async get() {
       return settings
     },
+    async listByWorkspaceIds() {
+      return new Map()
+    },
     async upsert() {},
   }
 }
