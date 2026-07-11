@@ -17,6 +17,7 @@ import { D1ProvisioningLogRepository } from './infrastructure/repositories/D1Pro
 import { D1PipelineScheduleRepository } from './infrastructure/repositories/D1PipelineScheduleRepository'
 import { D1SubscriptionQuotaCycleRepository } from './infrastructure/repositories/D1SubscriptionQuotaCycleRepository'
 import { D1PasswordResetTokenRepository } from './infrastructure/repositories/D1PasswordResetTokenRepository'
+import { D1NotificationRepository } from './infrastructure/repositories/D1NotificationRepository'
 import { buildContainer, buildCloudflareArtifactStoreResolver } from './infrastructure/container'
 import { escalateStaleNotifications } from '@cat-factory/server'
 import { CryptoIdGenerator, SystemClock } from './infrastructure/runtime'
@@ -184,6 +185,7 @@ export default {
           subscriptionQuotaCycleRepository: new D1SubscriptionQuotaCycleRepository({ db: env.DB }),
           pipelineScheduleRepository: new D1PipelineScheduleRepository({ db: env.DB }),
           passwordResetTokenRepository: new D1PasswordResetTokenRepository({ db: env.DB }),
+          notificationRepository: new D1NotificationRepository({ db: env.DB }),
           // Prune the separate provisioning-log database when its binding is present.
           ...(env.PROVISIONING_DB
             ? {

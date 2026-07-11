@@ -20,6 +20,7 @@ function fakeRepos(): {
     subscriptionQuotaCycles: number | null
     provisioningLog: number | null
     commits: number | null
+    notifications: number | null
   }
 } {
   const cutoffs = {
@@ -30,6 +31,7 @@ function fakeRepos(): {
     subscriptionQuotaCycles: null as number | null,
     provisioningLog: null as number | null,
     commits: null as number | null,
+    notifications: null as number | null,
   }
   return {
     cutoffs,
@@ -87,6 +89,13 @@ function fakeRepos(): {
           return 4
         },
       },
+      // Resolved notifications, pruned to the `notificationsMs` window (Worker parity).
+      notificationRepository: {
+        deleteResolvedOlderThan: async (c) => {
+          cutoffs.notifications = c
+          return 9
+        },
+      },
     },
   }
 }
@@ -98,6 +107,7 @@ function policy(overrides: Partial<RetentionConfig> = {}): RetentionConfig {
     commitMs: 90 * DAY,
     llmCallMetricsMs: 3 * DAY,
     provisioningLogMs: 14 * DAY,
+    notificationsMs: 90 * DAY,
     ...overrides,
   }
 }
@@ -116,6 +126,7 @@ describe('sweepRetention', () => {
     expect(cutoffs.provisioningLog).toBe(now - 14 * DAY)
     expect(cutoffs.commits).toBe(now - 90 * DAY)
     expect(cutoffs.subscriptionQuotaCycles).toBe(now - 30 * DAY) // fixed 30-day window
+    expect(cutoffs.notifications).toBe(now - 90 * DAY)
     expect(result).toEqual({
       tokenUsage: 3,
       llmCallMetrics: 7,
@@ -127,6 +138,7 @@ describe('sweepRetention', () => {
       provisioningLog: 5,
       passwordResetTokens: 1,
       commits: 4,
+      notifications: 9,
     })
   })
 
@@ -149,6 +161,7 @@ describe('sweepRetention', () => {
       provisioningLog: 5,
       passwordResetTokens: 1,
       commits: 4,
+      notifications: 9,
     })
   })
 

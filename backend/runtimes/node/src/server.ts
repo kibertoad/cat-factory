@@ -44,6 +44,7 @@ import {
   DrizzleRepoProjectionRepository,
 } from './repositories/github.js'
 import { DrizzleSubscriptionActivationRepository } from './repositories/personalSubscription.js'
+import { DrizzleNotificationRepository } from './repositories/notifications.js'
 import { startArtifactRetentionSweeper, startRetentionSweeper } from './retention.js'
 import { SystemClock } from './runtime.js'
 
@@ -385,6 +386,7 @@ async function bootServer(
       provisioningLogRepository: repos.provisioningLogRepository,
       passwordResetTokenRepository: repos.passwordResetTokenRepository,
       commitRepository: new DrizzleCommitProjectionRepository(db),
+      notificationRepository: new DrizzleNotificationRepository(db),
     },
     container.config.retention,
     clock,

@@ -17,5 +17,8 @@ export function loadRetentionConfig(env: Env): RetentionConfig {
     llmCallMetricsMs: retentionMs(env.LLM_CALL_METRICS_RETENTION_DAYS, 3),
     // High-churn provisioning event log (separate D1 db); aggressive default of 14 days.
     provisioningLogMs: retentionMs(env.PROVISIONING_LOG_RETENTION_DAYS, 14),
+    // Resolved (acted/dismissed) notifications; generous default of 90 days so the
+    // inbox's recent history survives. Open cards are never pruned.
+    notificationsMs: retentionMs(env.NOTIFICATION_RETENTION_DAYS, 90),
   }
 }

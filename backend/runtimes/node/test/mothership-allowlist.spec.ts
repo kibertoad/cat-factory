@@ -357,7 +357,9 @@ const NON_REMOTE: Record<string, Record<string, Reason>> = {
   promptFragmentRepository: {
     listBySource: 'pending',
   },
-  notificationRepository: {},
+  // The inbox's read/act/dismiss/escalate surface is fully remote (see REMOTE_PERSISTENCE_METHODS);
+  // only the retention sweep's global prune of resolved cards stays mothership-internal cron.
+  notificationRepository: { deleteResolvedOlderThan: 'sweeper' },
   slackConnectionRepository: {
     getByAccount: 'pending',
     getByTeam: 'pending',

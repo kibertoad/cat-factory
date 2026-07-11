@@ -10,7 +10,7 @@ import {
   notificationTypeSchema,
 } from '@cat-factory/contracts'
 import { decodeEnum, decodeEnumOr } from '@cat-factory/server'
-import { and, desc, eq, isNull, lte, or, sql } from 'drizzle-orm'
+import { and, desc, eq, isNotNull, isNull, lte, ne, or, sql } from 'drizzle-orm'
 import type { DrizzleDb } from '../db/client.js'
 import { notifications } from '../db/schema.js'
 
@@ -165,6 +165,23 @@ export class DrizzleNotificationRepository implements NotificationRepository {
       )
       .returning()
     return rows.map(rowToNotification)
+  }
+
+  async deleteResolvedOlderThan(cutoff: number): Promise<number> {
+    // Retention prune: drop terminal (acted/dismissed) cards resolved at or before the
+    // cutoff. Open cards are the actionable inbox and are never eligible; a null
+    // resolved_at can't be windowed, so it's kept. Mirrors the D1 twin.
+    const deleted = await this.db
+      .delete(notifications)
+      .where(
+        and(
+          ne(notifications.status, 'open'),
+          isNotNull(notifications.resolved_at),
+          lte(notifications.resolved_at, cutoff),
+        ),
+      )
+      .returning({ id: notifications.id })
+    return deleted.length
   }
 
   async upsertOpenForBlock(workspaceId: string, notification: Notification): Promise<Notification> {

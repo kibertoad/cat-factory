@@ -514,6 +514,12 @@ export interface Env {
    * aggressively. Default 14. 0 disables pruning.
    */
   PROVISIONING_LOG_RETENTION_DAYS?: string
+  /**
+   * Days of resolved (acted/dismissed) `notifications` to keep. Open cards (the
+   * actionable inbox) are never pruned. Generous by default so recent history survives.
+   * Default 90. 0 disables pruning.
+   */
+  NOTIFICATION_RETENTION_DAYS?: string
 }
 
 /**

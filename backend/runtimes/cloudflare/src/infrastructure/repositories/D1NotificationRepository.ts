@@ -169,6 +169,20 @@ export class D1NotificationRepository implements NotificationRepository {
     return (results ?? []).map(rowToNotification)
   }
 
+  async deleteResolvedOlderThan(cutoff: number): Promise<number> {
+    // Retention prune: drop terminal (acted/dismissed) cards resolved at or before the
+    // cutoff. Open cards are the actionable inbox and are never eligible; a null
+    // resolved_at can't be windowed, so it's kept. Range delete on resolved_at.
+    const { meta } = await this.db
+      .prepare(
+        `DELETE FROM notifications
+           WHERE status <> 'open' AND resolved_at IS NOT NULL AND resolved_at <= ?`,
+      )
+      .bind(cutoff)
+      .run()
+    return meta.changes ?? 0
+  }
+
   async upsertOpenForBlock(workspaceId: string, notification: Notification): Promise<Notification> {
     // Atomic dedup: the conflict arbiter is the partial unique index on
     // (workspace_id, block_id, type) WHERE status='open' (migration 0023). A second

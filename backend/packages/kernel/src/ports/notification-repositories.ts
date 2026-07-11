@@ -54,4 +54,14 @@ export interface NotificationRepository {
    * re-deliver each for the real-time inbox re-render. Nothing matches → empty array.
    */
   escalateStaleOpen(workspaceId: string, cutoff: number): Promise<Notification[]>
+  /**
+   * Prune resolved notifications (status `acted`/`dismissed`) whose `resolvedAt` is at or
+   * before `cutoff`, across all workspaces, returning the number of rows removed. The
+   * retention sweep's write for the otherwise-unbounded `notifications` table: a busy
+   * workspace raises a card on every waiting/decision/park event, and resolved rows would
+   * accumulate forever otherwise. `open` cards are the actionable inbox and are NEVER
+   * touched — only terminal rows past the window are deleted (a row with a null
+   * `resolvedAt` is likewise kept, since it can't be placed in the window).
+   */
+  deleteResolvedOlderThan(cutoff: number): Promise<number>
 }
