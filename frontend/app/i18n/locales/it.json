@@ -4610,6 +4610,14 @@
       "title": "Inserisci il tuo approccio",
       "placeholder": "Descrivi come vuoi che venga implementato…"
     },
+    "chat": {
+      "title": "Fai una domanda su questi approcci",
+      "hint": "Non sai quale scegliere? Fai una domanda prima di decidere.",
+      "thinking": "Sto pensando…",
+      "placeholder": "Chiedi dei compromessi, dei rischi o di una direzione diversa…",
+      "budgetSpent": "Limite della chat raggiunto: scegli un approccio o inserisci il tuo.",
+      "send": "Invia"
+    },
     "empty": {
       "title": "Nulla da decidere"
     }

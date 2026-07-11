@@ -4610,6 +4610,14 @@
       "title": "Eigenen Ansatz eingeben",
       "placeholder": "Beschreibe, wie dies umgesetzt werden soll…"
     },
+    "chat": {
+      "title": "Zu diesen Ansätzen nachfragen",
+      "hint": "Unsicher, welchen Sie wählen sollen? Stellen Sie vor der Entscheidung eine Frage.",
+      "thinking": "Denkt nach …",
+      "placeholder": "Fragen Sie nach Kompromissen, Risiken oder einer anderen Richtung …",
+      "budgetSpent": "Chat-Limit erreicht – wählen Sie einen Ansatz oder geben Sie einen eigenen ein.",
+      "send": "Senden"
+    },
     "empty": {
       "title": "Nichts zu entscheiden"
     }

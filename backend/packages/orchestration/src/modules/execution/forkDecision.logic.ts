@@ -1,6 +1,7 @@
 import type {
   AgentConfigValues,
   AgentRunContext,
+  ForkChatMessage,
   ForkDecisionStepState,
   ForkOption,
   ForkProposal,
@@ -8,7 +9,12 @@ import type {
   StepGating,
   TaskEstimate,
 } from '@cat-factory/kernel'
+import { DEFAULT_FORK_MAX_CHAT_TURNS } from '@cat-factory/contracts'
 import { shouldRunGatedStep } from './stepGating.logic.js'
+
+// Re-exported so the many in-package import sites keep sourcing it from this logic module,
+// while contracts stays the single source of truth for the cap.
+export { DEFAULT_FORK_MAX_CHAT_TURNS }
 
 // Pure logic + constants for the optional implementation-fork decision phase on the Coder
 // step. The engine resolves the per-task tri-state + the risk-policy gate to decide whether
@@ -19,9 +25,6 @@ import { shouldRunGatedStep } from './stepGating.logic.js'
 
 /** The producer kind the fork-decision phase attaches to (the Coder). */
 export const FORK_DECISION_PRODUCER_KIND = 'coder'
-
-/** Default hard budget on grounded chat turns (human messages) before a 409. */
-export const DEFAULT_FORK_MAX_CHAT_TURNS = 15
 
 /** The per-task tri-state that gates the phase (the `coder.forkDecision` agent-config value). */
 export type ForkTriState = 'auto' | 'always' | 'off'
@@ -96,6 +99,21 @@ export function mintForks(usable: ForkProposal['forks'], nextId: () => string): 
     ...(f.riskNotes ? { riskNotes: f.riskNotes } : {}),
     recommended: i === winner,
   }))
+}
+
+/** How many HUMAN turns a fork chat holds — the budget (`maxChatTurns`) is measured in these. */
+export function humanChatTurns(chat: ForkChatMessage[] | undefined): number {
+  return (chat ?? []).reduce((n, m) => (m.role === 'human' ? n + 1 : n), 0)
+}
+
+/**
+ * Whether a fork chat has spent its human-turn budget: the human has already sent
+ * `maxChatTurns` messages (each answered by one assistant turn). A further chat is refused with a
+ * 409 — the chat is grounded on a fixed proposal, not a live container, so unbounded turns only
+ * add spend and step-row bloat. Pick / custom stay available at the cap.
+ */
+export function forkChatBudgetSpent(state: ForkDecisionStepState): boolean {
+  return humanChatTurns(state.chat) >= (state.maxChatTurns ?? DEFAULT_FORK_MAX_CHAT_TURNS)
 }
 
 /**

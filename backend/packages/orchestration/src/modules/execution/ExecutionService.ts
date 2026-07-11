@@ -7,6 +7,7 @@ import type {
   FollowUpsStepState,
   ForkDecisionStepState,
   ChooseForkInput,
+  ForkChatRequestInput,
   RiskPolicyRepository,
   PipelineStep,
   PullRequestMerger,
@@ -105,6 +106,8 @@ import type { InitiativeInterviewService } from '../initiative/InitiativeIntervi
 import { InitiativeInterviewController } from './InitiativeInterviewController.js'
 import type { DocInterviewService } from '../docInterview/DocInterviewService.js'
 import { DocInterviewController } from './DocInterviewController.js'
+import type { ForkChatService } from './ForkChatService.js'
+import { FORK_DECISION_PRODUCER_KIND } from './forkDecision.logic.js'
 import {
   type InitiativeRunHarvest,
   assertInitiativeShapeAllowed,
@@ -254,6 +257,13 @@ export interface ExecutionServiceDependencies {
    * unchanged off the raw outline.
    */
   docInterviewService?: DocInterviewService
+  /**
+   * Optional: the inline grounded-chat responder for the implementation-fork decision phase.
+   * When wired, a human chat turn about the surfaced forks is answered by an inline LLM in the
+   * durable driver; absent (no model) the chat degrades to a canned "chat unavailable" reply so
+   * pick / custom still work. Passed to the {@link ForkDecisionController}.
+   */
+  forkChatService?: ForkChatService
   /**
    * Optional: the inline reviewer for the test quality-control companion. When wired (and a
    * Tester step has the companion enabled), each Tester report is audited for coverage before
@@ -629,6 +639,7 @@ export class ExecutionService {
     docInterviewRepository,
     requirementReviewService,
     docInterviewService,
+    forkChatService,
     testerQualityReviewer,
     kaizenScheduler,
     clarityReviewRepository,
@@ -829,6 +840,9 @@ export class ExecutionService {
       idGenerator,
       clock,
       notificationService,
+      ...(forkChatService ? { forkChatService } : {}),
+      resolveEffectiveDescription: (ws, block) =>
+        this.contextBuilder.resolveEffectiveDescription(ws, block),
     })
     this.requirementsKind = this.buildRequirementsKind()
     this.clarityKind = this.buildClarityKind()
@@ -2037,11 +2051,19 @@ export class ExecutionService {
       const reentrantInterview =
         hasTrait(step.agentKind, INTERVIEW_GATE_TRAIT, this.agentKindRegistry) &&
         !!step.pendingInterview
+      // The implementation-fork decision phase is re-entrant on a chat turn: the human sent a
+      // grounded question about the surfaced forks, which sets `pendingForkChat` on the parked
+      // coder step and wakes the driver. Fall through so the fork step handler computes the reply
+      // inline (in the driver, off the HTTP request) and re-parks, instead of immediately
+      // re-parking on the stale approval id.
+      const reentrantForkDecision =
+        step.agentKind === FORK_DECISION_PRODUCER_KIND && !!step.pendingForkChat
       if (
         !reentrantRequirements &&
         !reentrantHumanTest &&
         !reentrantVisualConfirm &&
-        !reentrantInterview
+        !reentrantInterview &&
+        !reentrantForkDecision
       ) {
         // Parked on either an agent-raised decision or a human approval gate; both
         // are addressed by the same durable event id.
@@ -2120,6 +2142,15 @@ export class ExecutionService {
     input: ChooseForkInput,
   ): Promise<ForkDecisionStepState> {
     return this.runDispatcher.chooseFork(workspaceId, executionId, input)
+  }
+
+  /** @see RunDispatcher.forkChat */
+  forkChat(
+    workspaceId: string,
+    executionId: string,
+    input: ForkChatRequestInput,
+  ): Promise<ForkDecisionStepState> {
+    return this.runDispatcher.forkChat(workspaceId, executionId, input)
   }
 
   /** @see RunDispatcher.fileFollowUp */

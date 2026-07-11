@@ -20,6 +20,13 @@ import * as v from 'valibot'
 // ---------------------------------------------------------------------------
 
 /**
+ * Default hard budget on grounded chat turns (human messages) before a 409. The single source
+ * of truth for the cap, referenced by the `maxChatTurns` schema default below, the orchestration
+ * gate logic, and the window's UI fallback so the three can't drift.
+ */
+export const DEFAULT_FORK_MAX_CHAT_TURNS = 15
+
+/**
  * One materially different implementation approach the proposer surfaced. Two
  * forks are materially different only if they lead to different code being
  * reviewed, different risk, or different future maintenance — naming/style
@@ -117,7 +124,7 @@ export const forkDecisionStepStateSchema = v.object({
   /** The grounded chat so far (human + assistant turns), in order. */
   chat: v.optional(v.array(forkChatMessageSchema), []),
   /** Hard budget on chat turns (human messages); a 409 is returned past it. */
-  maxChatTurns: v.optional(v.number(), 15),
+  maxChatTurns: v.optional(v.number(), DEFAULT_FORK_MAX_CHAT_TURNS),
   /** The human's resolution once decided; absent while proposing / awaiting. */
   chosen: v.optional(v.nullable(forkChoiceSchema)),
   /** Identifier of the model that produced the proposal, for transparency. */

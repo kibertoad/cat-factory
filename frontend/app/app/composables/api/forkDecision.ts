@@ -1,4 +1,8 @@
-import { chooseForkContract, getForkDecisionContract } from '@cat-factory/contracts'
+import {
+  chooseForkContract,
+  forkChatContract,
+  getForkDecisionContract,
+} from '@cat-factory/contracts'
 import type { ApiContext } from './context'
 
 /**
@@ -13,6 +17,14 @@ export function forkDecisionApi({ send, ws }: ApiContext) {
     // The live fork-decision state for a run (null when no coder step carries one).
     getForkDecision: (workspaceId: string, executionId: string) =>
       send(getForkDecisionContract, { pathPrefix: ws(workspaceId), pathParams: { executionId } }),
+
+    // Send a grounded chat message about the surfaced forks (the reply arrives via the stream).
+    forkChat: (workspaceId: string, executionId: string, text: string) =>
+      send(forkChatContract, {
+        pathPrefix: ws(workspaceId),
+        pathParams: { executionId },
+        body: { text },
+      }),
 
     // Choose an implementation approach — a proposed fork id or a custom approach (+ note).
     chooseFork: (
