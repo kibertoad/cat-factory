@@ -1,6 +1,6 @@
 # Initiative: system audit — data lifecycle, runtime parity, robustness & coverage
 
-**Status:** in progress (items 1–3 landed) · **Owner:** core · **Started:** 2026-07-11
+**Status:** in progress (items 1–4, 6 landed) · **Owner:** core · **Started:** 2026-07-11
 
 > This is the durable source of truth for a multi-PR initiative. Read it first before
 > picking up the next slice; update the checklist at the end of each PR.
@@ -82,9 +82,9 @@ benefit, bounded blast radius; **P3** = hygiene/polish. Effort S/M/L.
 | 1   | P1  | retention   | `notifications` never pruned in either facade (upsert/escalate only, no delete)             | M      | ✅ done | #1020     |
 | 2   | P1  | retention   | Workspace-delete cascade clears only 7 tables → permanent orphans in ~40 others             | M      | ✅ done | (this PR) |
 | 3   | P1  | retention   | Binary-artifact rows + blob bytes of deleted workspaces never reclaimed                     | M      | ✅ done | (this PR) |
-| 4   | P2  | parity      | GitHub reconcile loop duplicated verbatim across Node/Worker — hoist to shared server pkg   | S      | ⬜ todo |           |
+| 4   | P2  | parity      | GitHub reconcile loop duplicated verbatim across Node/Worker — hoist to shared server pkg   | S      | ✅ done | (this PR) |
 | 5   | P1  | parity      | Node async GitHub ingest runs inline in the request; add pg-boss-backed queue impls         | M–L    | ⬜ todo |           |
-| 6   | P2  | parity      | Node sweeper re-entrancy guards inconsistent (initiativeLoop / recurring / escalation)      | S      | ⬜ todo |           |
+| 6   | P2  | parity      | Node sweeper re-entrancy guards inconsistent (initiativeLoop / recurring / escalation)      | S      | ✅ done | (this PR) |
 | 7   | P2  | conformance | Four retention prunes have no cross-runtime conformance assertion                           | S–M    | ⬜ todo |           |
 | 8   | P2  | engine      | Notification-escalation sweep: per-workspace settings point-read (N+1 the cache can't fix)  | M      | ⬜ todo |           |
 | 9   | P2  | ops         | Node `/health` is a static 200 — add a `/ready` readiness probe (pool + pg-boss)            | S      | ⬜ todo |           |
@@ -238,6 +238,22 @@ structured code is **NOT this item** — that is
 [`error-message-coverage.md`](./error-message-coverage.md) row **I7**; land the hoist
 first so I7's conversion is a single-file change.
 
+**Landed (this PR).** `reconcileStaleRepos` + the two gone-installation classifiers now
+live once in `backend/packages/server/src/runtime/reconcileStaleRepos.ts` (exported
+alongside `GitHubReconcileDeps`). Each facade supplies ONLY its per-repo driver via
+`syncRepoById`: the Worker's `sync-consumer.ts` closure enqueues on `GITHUB_SYNC_QUEUE`
+(or direct-syncs when unbound), the Node `githubReconcile.ts` closure direct-syncs inline.
+The classifiers were moved **verbatim** (regex→structured code is I7's job, sequenced
+after this). The pure unit test moved to `server/test/reconcileStaleRepos.spec.ts` — one
+test for one implementation, so the facades can't silently diverge (the drift this item
+existed to stop). The behavioural harmonisations: all reconcile logs — per-repo lines AND
+the Worker's cron summary — now use `sweep: 'github-reconcile'` (was `sweeper:` on Node /
+`cron:` on the Worker), and the Worker's reconcile warn/error no longer carries a stack
+(Node never did). Review follow-ups on the same slice: the 30-minute staleness window is
+the shared exported `GITHUB_RECONCILE_STALE_MS` (both facades + the test consume it, so it
+can't drift either), and the Worker's queue-less direct-sync fallback resolves its DI
+container once per pass instead of once per stale repo.
+
 #### 5. Node async GitHub ingest is inline; Cloudflare uses a queue — P1
 
 `backend/runtimes/node/src/gateways.ts:44-60`: `InlineGitHubBackfillScheduler.scheduleBackfill`
@@ -267,6 +283,22 @@ double-spawn.
 
 **Fix:** apply the same `running` flag to all three (one tiny PR); consider a tiny shared
 `nonOverlapping(fn)` helper in the Node facade so the next sweeper can't forget it.
+
+**Landed (this PR).** Rather than hand-roll a `running` flag per sweeper, ALL of the Node
+facade's periodic sweeps now go through one seam — `startSweeper` in
+`backend/runtimes/node/src/sweeper.ts`, built on **`toad-scheduler`**. A
+`SimpleIntervalJob` with `preventOverrun: true` is the non-overlap guard (so the DB-heavy
+`initiativeLoop` / `recurring` / notification-escalation sweeps can no longer double-spawn),
+`runImmediately: true` keeps the run-once-first behaviour, and the `AsyncTask` error handler
+keeps the best-effort logging. All eight sweepers were converted (kaizen, githubReconcile,
+initiativeLoop, recurring, notifications, environments, and both retention sweeps), deleting
+the per-file timer/guard boilerplate — a new sweeper physically cannot forget the guard now.
+Each sweep passes a distinct `name` used as the toad-scheduler task id, so a
+scheduler-surfaced error names its sweep.
+Guard: `node/test/sweeper.spec.ts` pins the immediate run, the non-overlap skip, best-effort
+failure logging, and clean stop. The jobs pass `unref: true` (toad-scheduler ≥4.1.0), so a
+sweep timer never keeps the process alive on its own — the same contract as the hand-rolled
+`setInterval(...).unref()` timers this replaced.
 
 #### 7. Conformance prune-assertion gaps — P2
 
