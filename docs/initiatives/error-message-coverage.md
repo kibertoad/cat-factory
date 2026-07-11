@@ -1,0 +1,228 @@
+# Initiative: error-message coverage (elaborate failures with fix instructions + doc URLs)
+
+**Status:** research done, no slices landed · **Owner:** core · **Started:** 2026-07-11
+
+> This is the durable source of truth for a multi-PR initiative. Read it first before
+> picking up the next slice; update the checklist at the end of each PR.
+
+## Goal & rationale
+
+Many failures a self-hosting operator or end user can plausibly hit today surface as a
+terse, opaque, or entirely silent condition: a raw `GitHub GET <url> → 401`, a bare
+`Unsupported model provider: litellm`, an `atob` `InvalidCharacterError` from a malformed
+`ENCRYPTION_KEY`, a typo'd `LOCAL_CONTAINER_RUNTIME` silently running docker, a Datadog
+`HTTP 403` with no mention of the keys panel. Each such message costs the person who hits
+it a debugging session that a good message would have collapsed into a 30-second fix.
+
+The intended end state: **every failure or missing configuration a user can plausibly hit
+names the condition, its likely cause, the exact fix — the UI location first for
+UI-configurable settings, a command or env var for operator-only settings — and links the
+relevant documentation.** The repo already has five strong reusable shapes for this (see
+the target patterns below); the work is extending their coverage, not inventing new
+machinery. A second axis of the initiative (section H) closes the biggest _remedy gap_
+itself: several providers cannot currently be configured through the UI at all, so their
+best possible error message today is "ask your deployment operator" — making them
+UI-configurable upgrades the whole remedy story.
+
+Today **no error message anywhere in the repo embeds a documentation URL** — that is a
+universal gap this initiative closes alongside the per-message work.
+
+## Target pattern (the reference shapes to copy)
+
+There is no single pilot PR; instead there are five existing good-citizen shapes. Pick by
+failure class — do NOT invent a sixth:
+
+1. **`ConfigProblem` + `ENV_HELP` registry** — `backend/packages/server/src/config/problems.ts`.
+   For boot-time / configuration failures. `{ key, summary, remedy }` written ONCE in the
+   `ENV_HELP` table, thrown via `configProblem(...)` / `requireEnv(...)`, rendered by
+   `formatConfigProblems`, and served to the SPA by the misconfigured fallback backend
+   (`config/misconfiguredApp.ts`) so the UI can explain what to fix. Only a
+   `ConfigValidationError` reaches that screen — wrapping a boot error in it is often part
+   of the fix.
+2. **Named error class + hint constant + code→cause map** — `backend/runtimes/node/src/db/migrate.ts`
+   (`DbSchemaInconsistentError`, `MigrationFailedError`, `RESET_HINT`,
+   `explainMigrationFailure`). For wrapping opaque driver/SDK errors: map machine codes to
+   a human cause + recovery command, keep the map exported for unit tests.
+3. **Keyed `FAILURE_HINTS` maps** — `BootstrapService.ts` / `RunStateMachine.ts` /
+   `EnvConfigRepairService.ts`. For agent-run failures: a `Partial<Record<FailureKind, string>>`
+   of recovery paragraphs, surfaced as `AgentFailure.hint` and rendered by
+   `AgentFailureCard.vue`.
+4. **`DomainError.details.reason` + `CONFLICT_REASONS`** — kernel `domain/errors.ts` +
+   contracts `errors.ts`, mapped by the SPA's `usePipelineErrorToast.ts`. For any condition
+   the frontend should present with translated copy and/or a jump-to-the-right-panel
+   action: add a machine reason code, never rely on prose matching.
+5. **`PreflightResult.remediation`** — contracts `preflights.ts` +
+   `integrations/modules/preflight/PreflightService.ts`. For probe-style prerequisite
+   checks: the non-pass verdict carries copy-paste fix instructions.
+
+### Doc-URL convention (new — establish in the first slice)
+
+- **In-repo docs** are linked as stable GitHub blob URLs on `main`:
+  `https://github.com/kibertoad/cat-factory/blob/main/docs/environment-variables.md` (the
+  canonical target for every env-var remedy), `…/blob/main/backend/docs/<topic>.md` for
+  topic docs (e.g. `github-operations.md`, `model-support.md`, `auth.md`).
+- **Vendor URLs** where the fix lives off-platform: the GitHub App settings/installation
+  pages, Datadog API-key pages, Cloudflare dashboard/wrangler docs, AWS Bedrock docs.
+- The remedy text must remain self-sufficient without the link — the URL deepens, it never
+  replaces, the instruction.
+- Centralize repo-doc URL construction in one small helper/constant module (per package
+  that needs it) rather than scattering string literals, so a docs move is one edit.
+
+### UI-first remedy rule
+
+Many settings are UI-configurable and mostly used that way: provider API keys (the key
+pool), personal subscriptions, local model runners, the observability/Datadog connection,
+self-hosted runner pools, GitHub connect / repo linking, merge presets, release-health
+configs. For those, the error's PRIMARY fix instruction names the UI location — a click
+path, and where possible a `details.reason` code the SPA turns into a jump action (the
+`usePipelineErrorToast` pattern) — and mentions the env var only as the deployment-level
+ALTERNATIVE. Env-var-first wording is reserved for genuinely operator/env-only settings
+(`DATABASE_URL`, `ENCRYPTION_KEY`, wrangler bindings, and — until H1 lands —
+`LITELLM_BASE_URL`).
+
+## Per-item checklist
+
+Severity legend: **P1** = users/operators hit it routinely and the current message is
+opaque; **P2** = plausible and confusing; **P3** = nice-to-have polish. Config surface:
+**UI** = UI-first remedy applies, **env** = operator/env-only, **n/a** = not a config
+issue.
+
+### A. Boot / configuration
+
+| #   | Failure / misconfiguration                                                 | Current behaviour                                                                                                                                                                                                       | Surface | Sev | Proposed fix                                                                                                                                                                         | Doc URL to embed                                    | Status  | PR  |
+| --- | -------------------------------------------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ------- | --- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ | --------------------------------------------------- | ------- | --- |
+| A1  | Every `ENV_HELP` remedy lacks a doc URL                                    | Good remedies exist for the 8 keys (`backend/packages/server/src/config/problems.ts:58-107`) but none link docs                                                                                                         | env     | P1  | Add a `docsUrl` (or append the link to `remedy`) to each `ENV_HELP` entry; render it in `formatConfigProblems` + the misconfigured screen                                            | `docs/environment-variables.md` (per-key anchors)   | ⬜ todo |     |
+| A2  | `ENCRYPTION_KEY` malformed / too short not validated at Node & Worker boot | Fails lazily: bare `encryption key must decode to at least 32 bytes` (`WebCryptoSecretCipher.ts:42`) or an opaque `atob` `InvalidCharacterError`; local mode already validates (`runtimes/local/src/config.ts:103-122`) | env     | P1  | Validate format + decoded length at config load on Node & Worker (mirror local), throw `configProblem` with the existing `ENV_HELP.ENCRYPTION_KEY` remedy                            | `docs/environment-variables.md`                     | ⬜ todo |     |
+| A3  | `GITHUB_APP_PRIVATE_KEY` malformed PEM (non-PKCS#1 case)                   | Opaque `crypto.subtle.importKey` failure at first token mint (`GitHubAppAuth.ts:148`); only the PKCS#1 case has a good message (`encoding.ts:35`)                                                                       | env     | P2  | Validate PEM shape at config load; wrap import failures naming the var + the `openssl pkcs8 -topk8` conversion                                                                       | `backend/docs/github-operations.md`                 | ⬜ todo |     |
+| A4  | Cloudflare primary `env.DB` binding unbound/misnamed                       | Bare `const db = env.DB` (`runtimes/cloudflare/src/infrastructure/container.ts:2026`) → NPE deep in the first repository call; contrast `requireTelemetryDb` (`env.ts:526`)                                             | env     | P1  | Add a `requireDb`-style guard throwing `configProblem({ key: 'DB', … })` with wrangler `[[d1_databases]]` remedy, mirroring TELEMETRY_DB                                             | `docs/environment-variables.md`                     | ⬜ todo |     |
+| A5  | Node facade: container executor prerequisites missing → no boot signal     | `buildContainerExecutor` returns `null` (`runtimes/node/src/container.ts:909,916`); boots "healthy", fails only at dispatch. Worker throws a configProblem (`cloudflare container.ts:424`)                              | env     | P1  | At minimum a boot-time structured warning listing exactly which of `PUBLIC_URL`/`AUTH_SESSION_SECRET`/App creds/transport is missing; consider an opt-in strict mode that fails fast | `docs/environment-variables.md`                     | ⬜ todo |     |
+| A6  | Invalid `DB_SCHEMA` / `DB_MIGRATIONS_SCHEMA`                               | Good message but a plain `Error` (`runtimes/node/src/db/client.ts:23-36`) → hard crash, never reaches the misconfigured fallback screen                                                                                 | env     | P2  | Rethrow as `ConfigValidationError` (configProblem) so the fallback screen serves it                                                                                                  | `docs/environment-variables.md`                     | ⬜ todo |     |
+| A7  | `REDIS_URL` failure modes                                                  | Missing `ioredis` → good text but a plain Error thrown late in boot (`redisPropagator.ts:37-44`); unreachable host → silent infinite retry, cross-node realtime silently dead (`:55`)                                   | env     | P2  | Wrap the ioredis-missing case as a configProblem; add a connect-timeout probe that logs an elaborate warning (host, likely causes, how to verify) instead of retrying silently       | `backend/docs/concurrency-and-redis.md`             | ⬜ todo |     |
+| A8  | Numeric env knobs silently coerce garbage to defaults                      | `num()` in Node config returns `undefined` on garbage → default, no signal (e.g. `JOB_MAX_POLLS=abc`)                                                                                                                   | env     | P3  | Log a structured warning naming the var, the rejected value, and the default used                                                                                                    | `docs/environment-variables.md`                     | ⬜ todo |     |
+| A9  | `LOCAL_CONTAINER_RUNTIME` unrecognized value silently falls back to docker | `resolveRuntimeId` returns `'docker'` for any unknown value (`runtimes/local/src/containerRuntime.ts:260-264`); preflight logs only the resolved runtime                                                                | env     | P2  | Warn at boot: name the rejected value, the accepted set (docker/podman/orbstack/colima/apple), and the fallback taken                                                                | `docs/environment-variables.md`                     | ⬜ todo |     |
+| A10 | Half-set `CLOUDFLARE_ACCOUNT_ID` / `CLOUDFLARE_API_TOKEN` pair             | Silently disables the Cloudflare provider (`runtimes/node/src/config.ts:160`)                                                                                                                                           | env     | P2  | Boot warning naming the one that is set and the one that is missing                                                                                                                  | `docs/environment-variables.md`                     | ⬜ todo |     |
+| A11 | localhost→IPv6 `::1` Postgres `ECONNRESET` at boot                         | Raw driver error, process dies; the footgun is documented only in `deploy/local/.env.example:7-10`                                                                                                                      | env     | P2  | Detect `ECONNRESET`/`ECONNREFUSED` on a `localhost` `DATABASE_URL` during `migrate()`/connect and explain the IPv6 resolution issue + the `127.0.0.1` fix                            | `docs/environment-variables.md`                     | ⬜ todo |     |
+| A12 | Local mode: invalid (vs missing) `GITHUB_PAT`                              | Missing PAT gets a good boot warning with a pre-scoped token URL (`runtimes/local/src/server.ts:144-150`); an invalid one fails at runtime with raw `GitHub /user/repos failed (HTTP 401)` (`github.ts:167`)            | env     | P2  | Optional boot-time probe (one `GET /user`) that reports invalid/expired/under-scoped with the same pre-scoped creation URL                                                           | GitHub PAT settings URL (already generated in code) | ⬜ todo |     |
+
+### B. Model provisioning
+
+| #   | Failure / misconfiguration                                  | Current behaviour                                                                                                       | Surface | Sev | Proposed fix                                                                                                                                                                                           | Doc URL to embed                | Status  | PR  |
+| --- | ----------------------------------------------------------- | ----------------------------------------------------------------------------------------------------------------------- | ------- | --- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ | ------------------------------- | ------- | --- |
+| B1  | `Unsupported model provider: X`                             | Terse throw (`backend/packages/agents/src/providers/registry.ts:54`); reaches users raw via the frontend fallback toast | UI      | P1  | UI-first remedy: point at the provider key pool ("Configure AI" / workspace provider keys) as the primary fix, env var(s) as the deployment alternative; consider a `ConflictReason` for a jump action | `backend/docs/model-support.md` | ⬜ todo |     |
+| B2  | `Unsupported Bedrock model: X`                              | Terse throw (`backend/packages/provider-bedrock/src/index.ts:38-40`); doesn't name the allow-list                       | env     | P2  | Name `BEDROCK_MODELS`, list the allowed models, link docs                                                                                                                                              | `backend/docs/model-support.md` | ⬜ todo |     |
+| B3  | LiteLLM selected but `LITELLM_BASE_URL` unset               | Falls through to generic B1 (`endpoints.ts:38-43` returns `undefined`, provider never registers)                        | env→UI  | P1  | Dedicated message naming `LITELLM_BASE_URL` (operator-hosted, no public default); flips to a UI-first remedy once H1 lands                                                                             | `docs/environment-variables.md` | ⬜ todo |     |
+| B4  | `No base URL configured for OpenAI-compatible provider 'X'` | Partial message, no remedy (`backend/packages/server/src/agents/modelProviderResolver.ts:149`)                          | UI/env  | P2  | Name the `${PROVIDER}_BASE_URL` var and (where the key is UI-pooled) the key-pool panel                                                                                                                | `backend/docs/model-support.md` | ⬜ todo |     |
+
+### C. GitHub / VCS runtime
+
+| #   | Failure / misconfiguration                               | Current behaviour                                                                                                                                                                                  | Surface | Sev | Proposed fix                                                                                                                                                                                                  | Doc URL to embed                      | Status  | PR  |
+| --- | -------------------------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ------- | --- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ------------------------------------- | ------- | --- |
+| C1  | `FetchGitHubClient` raw status dumps                     | `` `GitHub ${method} ${url} → ${status}: ${text}` `` for every non-2xx (`FetchGitHubClient.ts:1258`, PAT path `:354`, GraphQL `:1182`); no 401-revoked vs 403-rate-limit vs 403-scopes distinction | n/a     | P1  | Classify in one place (a `classifyGitHubApiError` helper on `GitHubApiError`): 401 → token revoked/expired remedy; 403 + rate-limit headers → wait/App-vs-PAT note; 403 scopes → which scope + where to grant | GitHub token/App settings vendor URLs | ⬜ todo |     |
+| C2  | Webhook `Invalid signature` 401                          | One-liner (`GitHubWebhookController.ts:26`, `VcsWebhookController.ts:56`); a mismatched webhook secret is a classic self-host setup error                                                          | env     | P2  | Response stays 401-terse (external caller), but LOG an elaborate operator message: configured-secret mismatch, where to compare (GitHub App webhook settings ⇄ deployment secret)                             | `backend/docs/github-integration.md`  | ⬜ todo |     |
+| C3  | Installation-token mint failures                         | Terse `Failed to mint installation token for <id> (HTTP <status>)` shape (`GitHubAppAuth`)                                                                                                         | env     | P2  | Map 401 → wrong/rotated App private key; 404 → App uninstalled from the org/repo, with reinstall click path                                                                                                   | GitHub App installation settings URL  | ⬜ todo |     |
+| C4  | `No connected GitHub repository found for workspace 'X'` | Partial (`ContainerAgentExecutor.ts:1063`)                                                                                                                                                         | UI      | P1  | UI-first: point at the workspace GitHub connect flow / repo linking; App-installation detail second; consider a `ConflictReason` (`github_not_connected` already exists — reuse it here)                      | `backend/docs/github-integration.md`  | ⬜ todo |     |
+| C5  | `Installation X not found on any configured App`         | Partial (`FetchGitHubClient.ts:199`)                                                                                                                                                               | env     | P3  | Add "the App was likely uninstalled or the workspace points at a stale installation — reconnect GitHub" remedy                                                                                                | `backend/docs/github-integration.md`  | ⬜ todo |     |
+| C6  | `FetchGitLabClient` parity                               | Same raw-status pattern as C1                                                                                                                                                                      | n/a     | P2  | Mirror whatever classification C1 lands (401 PAT, 403, project not found), GitLab-flavoured                                                                                                                   | `backend/docs/vcs-providers.md`       | ⬜ todo |     |
+
+### D. Container / runner dispatch & observability
+
+| #   | Failure / misconfiguration                        | Current behaviour                                                                                                                                       | Surface | Sev | Proposed fix                                                                                                                                                                          | Doc URL to embed                     | Status  | PR  |
+| --- | ------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------- | ------- | --- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ------------------------------------ | ------- | --- |
+| D1  | `Container dispatch failed (HTTP 404)`            | Raw status (`CloudflareContainerTransport.ts:105`, `KubernetesRunnerTransport.ts:93`); the known cause is a stale harness image whose tag wasn't bumped | env     | P1  | On 404 specifically, append the stale-image explanation: the deployed container image predates this route — republish with a fresh tag + `pnpm deploy` (per the release rules)        | `CONTRIBUTING.md` / releases section | ⬜ todo |     |
+| D2  | Runner-pool HTTP / OAuth / manifest-secret errors | Raw `` `Runner pool ${method} → ${status}` ``, `Missing secret 'X'`, `OAuth token request → <status>` (`HttpRunnerPoolProvider.ts:208,248,312,326`)     | UI      | P2  | UI-first: point at Settings → Self-hosted runner pool (re-test connection there); manifest/secret naming as detail                                                                    | `backend/docs/` runner-pool doc      | ⬜ todo |     |
+| D3  | `No runner backend available for workspace 'X'`   | Plain Error, terse-ish (`cloudflare container.ts:556`)                                                                                                  | UI      | P2  | UI-first: register a pool in Settings → Self-hosted runner pool, or enable Cloudflare Containers (deployment config); make it a `ConflictReason` (reuse `agent_backend_unconfigured`) | `backend/docs/` runner-pool doc      | ⬜ todo |     |
+| D4  | Datadog auth failure                              | Raw `HTTP 403` (`DatadogClient.ts:193`); keys are UI-configured                                                                                         | UI      | P2  | On 401/403: "your Datadog API/Application keys were rejected — re-enter them in Integrations → Observability connection"; env vars not mentioned (they don't exist for this)          | Datadog API-keys vendor URL          | ⬜ todo |     |
+
+### E. Crypto / credentials
+
+| #   | Failure / misconfiguration                                 | Current behaviour                                                                                                                                   | Surface | Sev | Proposed fix                                                                                                                                                                                                       | Doc URL to embed | Status  | PR  |
+| --- | ---------------------------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------- | ------- | --- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ | ---------------- | ------- | --- |
+| E1  | Personal-subscription wrong password on decrypt            | Raw AES-GCM `DOMException` (`WebCryptoPersonalSecretCipher.ts:49`); contrast the exemplary system-cipher wrapper (`WebCryptoSecretCipher.ts:78-83`) | UI      | P1  | Wrap like the system cipher: "the password does not match the one this subscription was sealed under — re-enter it, or delete and re-add the subscription"; keep the 428 `password_required` flow as the UI driver | —                | ⬜ todo |     |
+| E2  | `Invalid secret envelope` (malformed/truncated ciphertext) | Terse (`WebCryptoSecretCipher.ts:62`)                                                                                                               | n/a     | P3  | Name the likely causes (truncated column, mixed encryption keys across environments) + the re-enter-credential remedy                                                                                              | —                | ⬜ todo |     |
+
+### F. Executor harness — ⚠ every slice here bumps the image tag + the three pins; batch these rows into ONE slice
+
+| #   | Failure / misconfiguration         | Current behaviour                                                                                                            | Surface | Sev | Proposed fix                                                                                                                                       | Doc URL to embed | Status  | PR  |
+| --- | ---------------------------------- | ---------------------------------------------------------------------------------------------------------------------------- | ------- | --- | -------------------------------------------------------------------------------------------------------------------------------------------------- | ---------------- | ------- | --- |
+| F1  | Clone/push auth failures           | Raw git stderr passed through (`git.ts:139-144`): `Authentication failed`, `repository not found`                            | n/a     | P2  | Classify the common stderr shapes → token-expired / App-lacks-access / repo-deleted causes with remedies, keeping the raw stderr as detail         | —                | ⬜ todo |     |
+| F2  | PR/MR open failures                | Raw `Failed to open PR (HTTP <status>)` + `GitHub did not return a PR url` (`git.ts:1020,1026,1078,1084`)                    | n/a     | P3  | Map the common statuses (403 scopes, 404 repo, 422 validation) to causes                                                                           | —                | ⬜ todo |     |
+| F3  | LLM-proxy 401/402/429 during a run | Unwrapped; surfaces only via `agentOutputTail` stderr slice; the good `NEVER_ACTED_CAUSE` covers only the total-failure case | n/a     | P2  | Classify proxy auth/quota/rate-limit into the harness failure vocabulary so the run failure names the cause (key exhausted / quota / rate-limited) | —                | ⬜ todo |     |
+
+### G. Frontend surfacing
+
+| #   | Failure / misconfiguration                             | Current behaviour                                                                                                                 | Surface | Sev | Proposed fix                                                                                                                                                 | Doc URL to embed | Status  | PR  |
+| --- | ------------------------------------------------------ | --------------------------------------------------------------------------------------------------------------------------------- | ------- | --- | ------------------------------------------------------------------------------------------------------------------------------------------------------------ | ---------------- | ------- | --- |
+| G1  | 14 title-only `ConflictReason`s show raw backend prose | `CONFLICT_TITLE_KEYS` maps only titles; description = untranslated backend `message` (`usePipelineErrorToast.ts:43-58`)           | n/a     | P2  | Add translated description/remedy keys per reason (+ jump actions where a panel exists); locale parity in ALL catalogs in the same PR                        | —                | ⬜ todo |     |
+| G2  | Generic fallback toast surfaces raw backend strings    | Non-conflict errors fall to `error.message` verbatim (`usePipelineErrorToast.ts:248-253`) — the funnel for every raw string above | n/a     | P2  | Keep raw detail behind a "show detail" disclosure; show a generic translated title; shrink this funnel by moving conditions onto reason codes (the real fix) | —                | ⬜ todo |     |
+| G3  | `AgentFailureCard.failure.hint` rarely populated       | The card renders `hint` when present, but the backend `FAILURE_HINTS` maps cover few kinds                                        | n/a     | P2  | Extend the three `FAILURE_HINTS` maps to every `FailureKind`; audit which kinds reach the card hint-less                                                     | —                | ⬜ todo |     |
+
+### H. Provider UI configurability (feature work the UI-first remedies depend on)
+
+Verified 2026-07-11: **none of this exists yet.** The UI key pool (`apiKeyProviderSchema`,
+`backend/packages/contracts/src/api-keys.ts:20-32`; `ApiKeysSection.vue`) covers API keys
+for openai/anthropic/qwen/deepseek/moonshot/openrouter/litellm — but **no base URL or
+credential endpoint is UI-configurable anywhere**. `LITELLM_BASE_URL` is env-only (the
+i18n copy even tells the user "set by your deployment operator (LITELLM_BASE_URL), not
+here", `en.json` `providers.apiKeys.providers.litellm.step2`; the capability gate
+`providerCapabilities.ts:61-79` keeps a UI-connected LiteLLM key unselectable until the
+env var is set). Cloudflare Workers AI (`CLOUDFLARE_ACCOUNT_ID`/`CLOUDFLARE_API_TOKEN`/
+`CLOUDFLARE_AI_GATEWAY`) and Bedrock (`BEDROCK_REGION` + AWS creds + `BEDROCK_MODELS`,
+Node-only) have zero UI surface (Bedrock appears only as a residency-policy checkbox).
+
+**Template & shape:** the per-user "My local runners" panel is the existing UX to copy
+(`LocalModelEndpointsPanel.vue` + `stores/localModels.ts` + `LocalModelEndpointService`:
+base URL + optional key + test-connection + model discovery). The architectural change is
+adding an endpoint/config dimension to the pooled provider-credential model (today the
+`ApiKeyService` pool is secret-only): sealed like keys, consulted by
+`resolveOpenAiCompatibleBaseUrl` / `baseUrlFor` and the capability gate, with the env var
+demoted to deployment-level fallback. Runtimes symmetric (D1 ⇄ Drizzle) + a conformance
+assertion, per the standing rules.
+
+| #   | Work item                                                                                                         | Sev | Status  | PR  |
+| --- | ----------------------------------------------------------------------------------------------------------------- | --- | ------- | --- |
+| H1  | LiteLLM base URL configurable in the UI (alongside its pooled key); `LITELLM_BASE_URL` becomes the fallback       | P1  | ⬜ todo |     |
+| H2  | Cloudflare Workers AI credentials (account id + API token + optional AI-gateway) configurable in the UI           | P2  | ⬜ todo |     |
+| H3  | Bedrock configurable in the UI (region, credentials, model allow-list) — Node-only runtime support                | P2  | ⬜ todo |     |
+| H4  | Optional base-URL override in the UI for the remaining direct/proxy providers (`${PROVIDER}_BASE_URL` → fallback) | P3  | ⬜ todo |     |
+| H5  | Revisit B1–B4 / A10 remedies once H1–H4 land so the primary instruction is always the UI path                     | P3  | ⬜ todo |     |
+
+## Conventions & gotchas carried between iterations
+
+- **UI-first remedies** (see the rule above): name the UI location first for anything
+  UI-configurable; env vars are the deployment-level alternative only.
+- **Keep the runtimes symmetric** — any validation added to one facade (Node ⇄ Worker ⇄
+  local) lands in the others in the same change, with a conformance assertion where the
+  behaviour is shared.
+- **Regex-load-bearing strings must NOT change**: the eviction sentinels
+  (`CloudflareContainerTransport.ts:20-21`), the abort messages
+  (`executor-harness/src/failure.ts:63,71`), and the `classifyBootstrapFailure` patterns
+  are matched downstream. Elaborate AROUND them (structured cause fields, `hint`,
+  appended detail) — never rewrite the matched phrase.
+- **The backend never localizes prose.** A new user-facing condition gets a machine
+  `details.reason` code in `@cat-factory/contracts`; the SPA maps it to translated copy.
+  Adding a `ConflictReason` forces the exhaustive frontend `Record` + every locale catalog
+  to update in the same PR (locale-parity CI gate) — that is the drift guard working, not
+  friction to route around.
+- **Extend the existing shapes** (`ENV_HELP`, `FAILURE_HINTS`, `ConfigProblem`,
+  `ConflictReason`, `PreflightResult.remediation`) — do not invent one-off error string
+  formats or a parallel hint mechanism.
+- **Only `ConfigValidationError` reaches the misconfigured fallback screen.** For boot
+  errors that today crash with a plain `Error` (A6, A7), wrapping them is itself part of
+  the fix.
+- **Executor-harness changes bump the image tag** + the three hand-maintained pins
+  (`deploy/backend/package.json`, `deploy/backend/wrangler.toml`,
+  `RECOMMENDED_HARNESS_IMAGE`) — batch all F-rows into one slice to pay that cost once.
+- **Changesets**: one per touched versioned package; empty changeset for docs-only slices.
+- Boot warnings for non-fatal conditions (A5, A8–A10) should be single structured log
+  lines with the var name, the rejected/missing value, and the consequence — greppable,
+  not multi-line prose.
+
+## Out of scope
+
+- The deliberate 404→`null`/`[]` swallows in `FetchGitHubClient` (`getRepoById`,
+  `branchHeadSha`, `getFileContent`, …) — by-design absence handling, not errors.
+- Internal invariant errors users cannot trigger (e.g. `ContainerAgentExecutor` missing
+  workspaceId/executionId).
+- `RunContendedError` — an internal control-flow signal, deliberately not a `DomainError`.
+- Backwards compatibility of error message text — pre-1.0, messages may change freely
+  except the regex-load-bearing strings named above.
