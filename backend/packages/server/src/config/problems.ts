@@ -114,7 +114,7 @@ export const ENV_HELP = {
       'Shared secret the orchestrator injects into each agent container and sends on every harness call (the `x-harness-secret` header) so a job container only accepts requests from this service.',
     remedy:
       'Set HARNESS_SHARED_SECRET to a random string of at least 16 characters. Generate one with `pnpm secrets` (deploy/local) or `openssl rand -hex 32`. It must stay STABLE across restarts — a fresh value each boot fails auth against containers still running from before the restart, so re-attach breaks and in-flight runs flap.',
-    docsUrl: DOCS.envVars(),
+    docsUrl: DOCS.envVars(ENV_VARS_ANCHORS.authentication),
   },
 } satisfies Record<string, { summary: string; remedy: string; docsUrl?: string }>
 
