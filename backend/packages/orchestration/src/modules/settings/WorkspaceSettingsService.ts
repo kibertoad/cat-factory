@@ -32,6 +32,20 @@ export class WorkspaceSettingsService {
     return (await this.settings.get(workspaceId)) ?? { ...DEFAULT_WORKSPACE_SETTINGS }
   }
 
+  /**
+   * Resolve many workspaces' settings in one batched read, each falling back to the built-in
+   * defaults when none are stored. A caller iterating every workspace (the notification
+   * escalation sweep) uses this instead of a `get` per workspace to avoid an N+1 point-read.
+   */
+  async getMany(workspaceIds: string[]): Promise<Map<string, WorkspaceSettings>> {
+    const stored = await this.settings.listByWorkspaceIds(workspaceIds)
+    const out = new Map<string, WorkspaceSettings>()
+    for (const id of workspaceIds) {
+      out.set(id, stored.get(id) ?? { ...DEFAULT_WORKSPACE_SETTINGS })
+    }
+    return out
+  }
+
   /** Patch a workspace's settings, persisting the merged result. */
   async update(
     workspaceId: string,
