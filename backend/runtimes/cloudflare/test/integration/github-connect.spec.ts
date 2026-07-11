@@ -2,7 +2,7 @@ import type { GitHubConnection } from '@cat-factory/kernel'
 import { describe, expect, it } from 'vitest'
 import { githubDeps, makeApp, uniqueInstallationId } from '../helpers'
 import { FakeAgentExecutor } from '../fakes/FakeAgentExecutor'
-import { FakeGitHubClient } from '../fakes/FakeGitHubClient'
+import { FakeGitHubClient } from '@cat-factory/conformance'
 
 describe('github connect', () => {
   it('binds an installation to a workspace and reads it back', async () => {

@@ -924,6 +924,20 @@
       "involvedServicesEmpty": "Bağlı servis yok. Burada seçebilmek için servis çerçevesinde servisleri bağlayın.",
       "involvedServiceStale": "Artık bu görevin servisine bağlı değil; bir sonraki değişiklikte kaldırılacak."
     },
+    "aprioriBranches": {
+      "title": "Mevcut dallar",
+      "mode": {
+        "reference": "Referans",
+        "working": "Çalışma"
+      },
+      "remove": "{branch} öğesini kaldır",
+      "searchPlaceholder": "Mevcut bir dal ekle…",
+      "connectFirst": "Mevcut dalları eklemek için GitHub'ı bağlayın.",
+      "protectedWarning": "{branch} korumalı bir dal. Çalıştırmadan yapılan göndermeler reddedilebilir.",
+      "multiRepoHint": "Bu görev birden fazla servisi kapsadığı sürece çalışma modu kullanılamaz.",
+      "frozenHint": "Bu görev için zaten bir çekme isteği bulunduğundan çalışma dalı kilitli.",
+      "hint": "Bu göreve deposunun mevcut dallarını verin. Referans dalı, ajanların inceleyebileceği salt okunur bir bağlamdır; tek çalışma dalında çalıştırma, yeni bir dal oluşturmak yerine orada geliştirmeye devam eder."
+    },
     "referenceRepos": {
       "title": "Reference repositories",
       "remove": "Remove {repo}",

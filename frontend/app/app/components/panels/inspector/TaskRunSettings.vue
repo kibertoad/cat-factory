@@ -6,6 +6,7 @@ import type { WritebackOverride } from '~/types/tracker'
 import { riskPolicyOptionLabel, riskPolicySummary } from '~/utils/riskPolicy'
 import { pipelineAllowedForManualStart } from '~/utils/pipeline'
 import InspectorSection from '~/components/panels/inspector/InspectorSection.vue'
+import TaskAprioriBranches from '~/components/panels/inspector/TaskAprioriBranches.vue'
 
 const props = defineProps<{ block: Block }>()
 
@@ -479,6 +480,10 @@ const technicalLabel = computed(() => {
         {{ t('inspector.runSettings.involvedServicesHint') }}
       </div>
     </div>
+
+    <!-- apriori branches: pre-existing branches of the target repo handed to the run as input
+         (a read-only reference, or the working branch the run builds inside) -->
+    <TaskAprioriBranches :block="block" />
 
     <!-- reference repositories: read-only repos the doc-writer reads while drafting (doc tasks) -->
     <DocReferenceRepos v-if="block.taskType === 'document'" :block="block" />

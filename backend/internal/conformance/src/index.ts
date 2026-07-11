@@ -22,6 +22,7 @@ export {
 } from './fakeGateProviders.js'
 export { FakeTesterQualityReviewer } from './FakeTesterQualityReviewer.js'
 export { FakeVcsClient, type FakeVcsCalls, type FakeVcsClientOptions } from './FakeVcsClient.js'
+export { FakeGitHubClient } from './FakeGitHubClient.js'
 export { FakeEnvConfigRepairer } from './FakeEnvConfigRepairer.js'
 export { FakePreviewTransport, fakeBuildPreviewJob } from './FakePreviewTransport.js'
 export { FakeTaskSourceProvider } from './FakeTaskSourceProvider.js'

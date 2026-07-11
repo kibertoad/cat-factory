@@ -115,11 +115,46 @@ FIRST so it can pick the work up without re-deriving context. Capture:
 The first example is [`docs/initiatives/registry-di-migration.md`](./docs/initiatives/registry-di-migration.md)
 (moving the module-global plugin registries to app-owned DI, one registry at a time).
 
+**When the initiative's committed scope is complete, convert the tracker into an ADR and
+delete the tracker.** The tracker is a working document (per-slice checklist, file lists,
+image-tag reminders) that stops being useful once the work lands; the durable record is a
+numbered **Architecture Decision Record** under [`backend/docs/adr/`](./backend/docs/adr/)
+(`NNNN-slug.md`, sequential — take the next free number). Trim the tracker down to the
+high-level decision: **Context** (the problem), **Decision** (what was built and how the
+pieces fit), **Rationale** (the non-obvious choices, condensed from the tracker's decisions
+log + gotchas), and **Consequences** (cross-cutting effects + anything deliberately _not_
+pursued, so a future reader knows the deferrals were intentional). Drop the slice-by-slice
+checklist and per-file tables. Then `git rm` the `docs/initiatives/<name>.md` tracker in the
+same PR — the ADR supersedes it (see ADRs 0010–0021, each a converted initiative). Header
+shape: `# ADR NNNN: <title>` + a `Status` / `Date` / `Context layer` bullet block, mirroring
+the nearest recent ADR.
+
 ## Known environment quirks
 
 - **Do not validate Cloudflare auth before deployments.** Skip `wrangler whoami`
   and similar pre-flight auth checks — always assume the Cloudflare login is
   correct and proceed straight to the deploy commands.
+- **Multi-line git messages: use a bash heredoc in the Bash tool, NOT a PowerShell
+  here-string.** The primary shell is PowerShell, but the Bash tool is POSIX sh — the two
+  do not share string syntax. A PowerShell here-string (`git commit -m @'…'@`) run through
+  the Bash tool is NOT a heredoc there: bash reads the literal `@'` / `'@` delimiters, so
+  the stray `@` characters land in the commit subject/body (a subject like `@ fix: …` with
+  a trailing `@`). Always pass a multi-line commit message (or PR body) to the Bash tool via
+  a real bash heredoc piped to `-F -`:
+
+  ```sh
+  git commit -F - <<'EOF'
+  feat: subject line
+
+  Body paragraph.
+
+  Co-Authored-By: …
+  EOF
+  ```
+
+  Reserve the `@'…'@` here-string for the PowerShell tool only. If a message does slip
+  through mangled, `git commit --amend -F -` with the same heredoc fixes it (before pushing).
+
 - **Worker tests fail on Windows** with `config wrangler validation failed` / 47 errors
   and "no tests" output. This is a pre-existing Windows-only wrangler issue, not caused
   by code changes. Use `pnpm test:run` from `backend/packages/orchestration` (or any other
