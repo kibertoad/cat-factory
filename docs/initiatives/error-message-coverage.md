@@ -126,8 +126,8 @@ issue.
 
 ### B. Model provisioning
 
-| #   | Failure / misconfiguration                                  | Current behaviour                                                                                                       | Surface | Sev | Proposed fix                                                                                                                                                                                           | Doc URL to embed                | Status  | PR  |
-| --- | ----------------------------------------------------------- | ----------------------------------------------------------------------------------------------------------------------- | ------- | --- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ | ------------------------------- | ------- | --- |
+| #   | Failure / misconfiguration                                  | Current behaviour                                                                                                       | Surface | Sev | Proposed fix                                                                                                                                                                                           | Doc URL to embed                | Status  | PR      |
+| --- | ----------------------------------------------------------- | ----------------------------------------------------------------------------------------------------------------------- | ------- | --- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ | ------------------------------- | ------- | ------- |
 | B1  | `Unsupported model provider: X`                             | Terse throw (`backend/packages/agents/src/providers/registry.ts:54`); reaches users raw via the frontend fallback toast | UI      | P1  | UI-first remedy: point at the provider key pool ("Configure AI" / workspace provider keys) as the primary fix, env var(s) as the deployment alternative; consider a `ConflictReason` for a jump action | `backend/docs/model-support.md` | ✅ done | phase 4 |
 | B2  | `Unsupported Bedrock model: X`                              | Terse throw (`backend/packages/provider-bedrock/src/index.ts:38-40`); doesn't name the allow-list                       | env     | P2  | Name `BEDROCK_MODELS`, list the allowed models, link docs                                                                                                                                              | `backend/docs/model-support.md` | ✅ done | phase 4 |
 | B3  | LiteLLM selected but `LITELLM_BASE_URL` unset               | Falls through to generic B1 (`endpoints.ts:38-43` returns `undefined`, provider never registers)                        | env→UI  | P1  | Dedicated message naming `LITELLM_BASE_URL` (operator-hosted, no public default); flips to a UI-first remedy once H1 lands                                                                             | `docs/environment-variables.md` | ✅ done | phase 4 |
@@ -312,7 +312,11 @@ union itself DOES bump the image (batch with the F-slice).
   (`modelProviderResolver.ts`) and the container LLM proxy (`LlmProxyController.ts`) explain a
   missing base URL identically. B3 (litellm) is handled at that base-URL site when a litellm key
   IS pooled but `LITELLM_BASE_URL` is unset; a litellm ref with NO pooled key still lands on B1's
-  (now elaborated) message, which lists litellm among the UI-configurable providers.
+  (now elaborated) message, which lists litellm among the UI-configurable providers. The B1 remedy
+  derives that provider list from `UI_CONFIGURABLE_DIRECT_PROVIDERS` (`agents/providers/endpoints.ts`,
+  = the built-in OpenAI-compatible endpoints + `anthropic` + `litellm`) rather than re-listing the
+  vendors inline, so adding a vendor to `DEFAULT_OPENAI_COMPATIBLE_BASE_URLS` keeps the error text in
+  step automatically — do NOT re-hardcode the vendor names at the throw site.
 
 ## Out of scope
 

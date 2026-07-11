@@ -1,5 +1,6 @@
 import type { ModelRef } from '@cat-factory/kernel'
 import { describe, expect, it } from 'vitest'
+import { UI_CONFIGURABLE_DIRECT_PROVIDERS } from './endpoints.js'
 import { CompositeModelProvider, unsupportedModelProviderMessage } from './registry.js'
 
 const ref = (provider: string): ModelRef => ({ provider, model: 'x' }) as ModelRef
@@ -24,6 +25,17 @@ describe('unsupportedModelProviderMessage', () => {
     expect(unsupportedModelProviderMessage('x', [])).toContain(
       'Currently registered providers: none',
     )
+  })
+
+  it('names the UI-configurable providers from the shared source of truth (no drift)', () => {
+    const msg = unsupportedModelProviderMessage('x', [])
+    // Derived from UI_CONFIGURABLE_DIRECT_PROVIDERS so adding a vendor keeps the remedy in step.
+    expect(msg).toContain(
+      `UI-configurable provider (${UI_CONFIGURABLE_DIRECT_PROVIDERS.join(', ')})`,
+    )
+    for (const p of ['openai', 'anthropic', 'litellm', 'openrouter']) {
+      expect(UI_CONFIGURABLE_DIRECT_PROVIDERS).toContain(p)
+    }
   })
 })
 

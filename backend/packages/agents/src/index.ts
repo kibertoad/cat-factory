@@ -352,6 +352,7 @@ export {
   OPENROUTER_BASE_URL,
   QWEN_BASE_URL,
   resolveOpenAiCompatibleBaseUrl,
+  UI_CONFIGURABLE_DIRECT_PROVIDERS,
   type CachePolicy,
   cachedTokensFromUsage,
   inlineCacheProviderOptions,

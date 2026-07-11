@@ -1,6 +1,7 @@
 import type { ModelProvider, ModelRef } from '@cat-factory/kernel'
 import type { LanguageModel } from 'ai'
 import { MODEL_SUPPORT_DOCS } from './docs.js'
+import { UI_CONFIGURABLE_DIRECT_PROVIDERS } from './endpoints.js'
 
 // The generic AI provisioning facade. The domain references a model only by a
 // provider-agnostic {@link ModelRef}; a `ModelResolver` turns that into a concrete
@@ -67,11 +68,12 @@ export class CompositeModelProvider implements ModelProvider {
  */
 export function unsupportedModelProviderMessage(provider: string, registered: string[]): string {
   const have = registered.length ? registered.slice().sort().join(', ') : 'none'
+  const uiConfigurable = UI_CONFIGURABLE_DIRECT_PROVIDERS.join(', ')
   return (
     `Unsupported model provider '${provider}': no resolver is registered for it, so this ` +
     `deployment has no credentials configured for it. ` +
-    `Fix: if it is a UI-configurable provider (openai, anthropic, qwen, deepseek, moonshot, ` +
-    `openrouter, litellm), add an API key for it to the workspace AI provider key pool ` +
+    `Fix: if it is a UI-configurable provider (${uiConfigurable}), add an API key for it to ` +
+    `the workspace AI provider key pool ` +
     `(Settings → AI providers). Otherwise configure it at the deployment level — e.g. ` +
     `CLOUDFLARE_ACCOUNT_ID + CLOUDFLARE_API_TOKEN for Cloudflare Workers AI (Node), or ` +
     `BEDROCK_REGION for AWS Bedrock. Currently registered providers: ${have}. ` +
