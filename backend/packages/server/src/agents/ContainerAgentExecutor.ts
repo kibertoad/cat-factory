@@ -729,6 +729,14 @@ export class ContainerAgentExecutor implements AsyncAgentExecutor {
     // Capture the complete provided context for observability (best-effort, gated inside
     // the recorder). This is the only place the fully composed prompts + the injected
     // file bodies exist as one unit; proxy telemetry never sees the `.cat-context` files.
+    // Awaited (not fire-and-forget): this runs AFTER the container job is already dispatched,
+    // so it is off the container's critical path — the only thing it delays is the driver's
+    // return of the handle, which then sleeps before its first poll regardless. A bare
+    // `void promise` here would be silently dropped on the Worker: `startJob` runs inside a
+    // Cloudflare Workflow step, and the isolate hibernates on the next durable `step.sleep`
+    // before an un-awaited insert can land (see `http/waitUntil.ts`), so the snapshot would
+    // stop recording on the primary runtime. Awaiting keeps it reliable on both facades; the
+    // swallow guarantees a recorder failure still never breaks a dispatch.
     if (this.deps.agentContextObservability) {
       try {
         await this.deps.agentContextObservability.record(
@@ -1019,6 +1027,55 @@ export class ContainerAgentExecutor implements AsyncAgentExecutor {
     return { workspaceId, executionId, blockId }
   }
 
+  /**
+   * Ensure the shared per-task work branch every agent in this pipeline operates on. By
+   * default its name is deterministic from the block id (so a retry/replay/sweeper re-drive
+   * always targets the SAME branch with no extra persistence), and once a PR is open it IS
+   * this branch. Writers create it from base when absent; read-only agents only probe (a
+   * missing branch ⇒ nothing to read yet ⇒ fall back to base), so a code-less pipeline never
+   * orphans an empty ref. Once this block already has a PR, the branch IS that PR's branch,
+   * so we skip the round-trip entirely.
+   *
+   * An apriori WORKING branch (an existing branch the task names as its starting point)
+   * overrides the deterministic `cat-factory/<blockId>` work branch: the run builds inside
+   * it, the PR opens from it, and the CI gate / merger ride it. Unlike the platform branch,
+   * it must ALREADY exist — it is probed (never created), a missing branch fails the dispatch
+   * loudly, and it may never be the repo's own base branch (the run would have nothing to
+   * diff / no PR to open).
+   */
+  private async resolveWorkBranchReady(
+    repo: RepoTarget,
+    workBranch: string,
+    aprioriWork: string | undefined,
+    context: AgentRunContext,
+  ): Promise<boolean> {
+    if (context.block.pullRequest?.branch === workBranch) {
+      return true
+    }
+    if (aprioriWork) {
+      // Apriori working branch: probe only (create: false). It must pre-exist — a missing
+      // branch is a loud dispatch failure, never a silent create off base (which would look
+      // exactly like the agent ignoring the user's branch). When probing isn't wired
+      // (tests / no GitHub), trust the caller and treat it as ready so the harness resumes it.
+      if (this.deps.ensureWorkBranch) {
+        const exists = await this.deps.ensureWorkBranch(repo, workBranch, { create: false })
+        if (!exists) {
+          throw new Error(
+            `Apriori working branch '${workBranch}' does not exist on ` +
+              `${repo.owner}/${repo.name}; push it before starting the run ` +
+              `(the platform never creates an apriori branch).`,
+          )
+        }
+      }
+      return true
+    }
+    return this.deps.ensureWorkBranch
+      ? await this.deps.ensureWorkBranch(repo, workBranch, {
+          create: !isReadOnlyAgentKind(context.agentKind),
+        })
+      : false
+  }
+
   /** Resolve tokens/prompts/target and assemble the harness job body for `context`. */
   private async buildJobBody(context: AgentRunContext): Promise<{
     body: Record<string, unknown>
@@ -1069,65 +1126,49 @@ export class ContainerAgentExecutor implements AsyncAgentExecutor {
       )
     }
 
-    const ghToken = await this.deps.mintInstallationToken(repo.installationId, {
-      executionId,
-      initiatedBy: context.initiatedByUserId,
-    })
-
-    // The shared per-task work branch every agent in this pipeline operates on. By default
-    // its name is deterministic from the block id (so a retry/replay/sweeper re-drive always
-    // targets the SAME branch with no extra persistence), and once a PR is open it IS this
-    // branch. Ensure it up front (mechanical, idempotent) so even the read-only design agents
-    // clone the branch the earlier writers committed to — e.g. the spec-writer's in-repo
-    // `spec/`. Writers create it from base when absent; read-only agents only probe (a missing
-    // branch ⇒ nothing to read yet ⇒ fall back to base), so a code-less pipeline never
-    // orphans an empty ref. Once this block already has a PR, the branch IS that PR's
-    // branch, so we skip the round-trip entirely.
-    // An apriori WORKING branch (an existing branch the task names as its starting point)
-    // overrides the deterministic `cat-factory/<blockId>` work branch: the run builds inside
-    // it, the PR opens from it, and the CI gate / merger ride it. Unlike the platform branch,
-    // it must ALREADY exist — it is probed (never created), a missing branch fails the
-    // dispatch loudly, and it may never be the repo's own base branch (the run would have
-    // nothing to diff / no PR to open).
+    // The name of the shared per-task work branch (see `resolveWorkBranchReady`). Computed
+    // here because the token mint below is repo-scoped while the branch ensure needs the
+    // resolved name, and both are fanned out in the wave that follows.
     const aprioriWork = resolveAprioriWorkingBranch(context.aprioriBranches, repo.baseBranch)
     const workBranch = aprioriWork ?? `cat-factory/${blockId}`
-    let workBranchReady: boolean
-    if (context.block.pullRequest?.branch === workBranch) {
-      workBranchReady = true
-    } else if (aprioriWork) {
-      // Apriori working branch: probe only (create: false). It must pre-exist — a missing
-      // branch is a loud dispatch failure, never a silent create off base (which would look
-      // exactly like the agent ignoring the user's branch). When probing isn't wired
-      // (tests / no GitHub), trust the caller and treat it as ready so the harness resumes it.
-      if (this.deps.ensureWorkBranch) {
-        const exists = await this.deps.ensureWorkBranch(repo, workBranch, { create: false })
-        if (!exists) {
-          throw new Error(
-            `Apriori working branch '${workBranch}' does not exist on ` +
-              `${repo.owner}/${repo.name}; push it before starting the run ` +
-              `(the platform never creates an apriori branch).`,
-          )
-        }
-      }
-      workBranchReady = true
-    } else {
-      workBranchReady = this.deps.ensureWorkBranch
-        ? await this.deps.ensureWorkBranch(repo, workBranch, {
-            create: !isReadOnlyAgentKind(context.agentKind),
-          })
-        : false
-    }
 
-    // Resolve the per-job auth the harness carries: the proxy session token for Pi,
-    // or a leased subscription token for Claude Code / Codex. `auth` is spread into
-    // every job body so the per-kind bodies can't drift on which auth they forward.
-    const { auth, subscriptionTokenId } = await this.resolveAuth(context, {
-      harness,
-      ref,
-      subscriptionVendor,
-      workspaceId,
-      executionId,
-    })
+    // These dispatch I/O steps are mutually independent once the repo target is resolved: the
+    // installation-token mint + the work-branch ensure are repo-scoped, while auth resolution,
+    // private-registry auth, tester secrets, and web-search availability are workspace/block-
+    // scoped. Serialising them added ~6 round-trips of latency to EVERY step dispatch (and
+    // every tester→fixer re-dispatch epoch), so fan them out in one wave instead. `auth` (the
+    // proxy session token for Pi, or a leased subscription token for Claude Code / Codex) is
+    // spread into every job body so the per-kind bodies can't drift on which auth they forward.
+    const [ghToken, workBranchReady, authResult, packageRegistries, resolvedTestSecrets, search] =
+      await Promise.all([
+        this.deps.mintInstallationToken(repo.installationId, {
+          executionId,
+          initiatedBy: context.initiatedByUserId,
+        }),
+        this.resolveWorkBranchReady(repo, workBranch, aprioriWork, context),
+        this.resolveAuth(context, {
+          harness,
+          ref,
+          subscriptionVendor,
+          workspaceId,
+          executionId,
+        }),
+        // Private-registry auth for the checkout's installs. Resolved per dispatch (like
+        // ghToken) and spread into `common`, so every kind with a checkout gets it.
+        this.deps.resolvePackageRegistries
+          ? this.deps.resolvePackageRegistries(workspaceId)
+          : Promise.resolve<JobPackageRegistrySpec[]>([]),
+        // Sensitive test credentials for the tester kinds ONLY (mapped to env pairs below).
+        isTesterKind(context.agentKind) && this.deps.resolveTestSecrets
+          ? this.deps.resolveTestSecrets(workspaceId, blockId)
+          : Promise.resolve<TestSecretEntry[]>([]),
+        // The proxy-backed web-tools switch: web_search is offered only when the run's account
+        // has a usable upstream, so the agent is never handed a tool that always fails.
+        this.deps.resolveWebSearchAvailability
+          ? this.deps.resolveWebSearchAvailability(workspaceId)
+          : Promise.resolve<WebSearchAvailability>({ available: false, provider: null }),
+      ])
+    const { auth, subscriptionTokenId } = authResult
 
     // The fields EVERY harness job body carries, built once so the per-kind bodies
     // can't drift on which jobId/model/auth/repo/proxy fields they forward.
@@ -1154,21 +1195,11 @@ export class ContainerAgentExecutor implements AsyncAgentExecutor {
     // over its env/built-in defaults, so a kind whose normal pattern differs (e.g. a
     // research-heavy or retry-heavy kind) isn't killed mid-progress. Absent ⇒ defaults.
     const tuning = agentTuningFor(context.agentKind, this.agentKindRegistry)
-    // Private-registry auth for the checkout's installs. Resolved per dispatch (like
-    // ghToken) and spread into `common`, so every kind with a checkout gets it.
-    const packageRegistries = (await this.deps.resolvePackageRegistries?.(workspaceId)) ?? []
-    // Sensitive test credentials for the tester kinds ONLY: decrypt the service frame's sealed
-    // secrets and carry them as `{ key, value }` env pairs on a dedicated top-level body field
-    // (like `packageRegistries`), which the agent-context snapshot allow-list omits. The harness
-    // injects each as an env var; the prompt only advertises the keys+descriptions (from
-    // `context.testSecrets`). Values NEVER reach a prompt or the telemetry snapshot.
-    const testSecretEnv =
-      isTesterKind(context.agentKind) && this.deps.resolveTestSecrets
-        ? (await this.deps.resolveTestSecrets(workspaceId, blockId)).map((e) => ({
-            key: e.key,
-            value: e.value,
-          }))
-        : []
+    // Sensitive test credentials (resolved above) as `{ key, value }` env pairs on a dedicated
+    // top-level body field (like `packageRegistries`), which the agent-context snapshot
+    // allow-list omits. The harness injects each as an env var; the prompt only advertises the
+    // keys+descriptions (from `context.testSecrets`). Values NEVER reach a prompt or telemetry.
+    const testSecretEnv = resolvedTestSecrets.map((e) => ({ key: e.key, value: e.value }))
     // Resolve the repo origin once so both the harness `RepoSpec` and the diagnostics repo
     // summary (returned below) agree on the VCS provider.
     const origin = (this.deps.resolveRepoOrigin ?? githubRepoOrigin)(repo)
@@ -1190,14 +1221,9 @@ export class ContainerAgentExecutor implements AsyncAgentExecutor {
     const promptContext: AgentRunContext = contextFiles.length
       ? { ...context, block: { ...context.block, contextDocs: keptDocs, contextTasks: keptTasks } }
       : context
-    // The proxy-backed web-tools nudge + switch, shared by the kinds that allow web
-    // access (coder/mocker/ci-fixer/fixer/tester/read-only). `web_search` is offered only
-    // when the run's account actually has a usable upstream (keys are per-account now), so
-    // the agent is never handed a tool that always fails. Per-kind hint (coder/mocker/
-    // analysis/… and any custom container kind resolves its own).
-    const search: WebSearchAvailability = (await this.deps.resolveWebSearchAvailability?.(
-      workspaceId,
-    )) ?? { available: false, provider: null }
+    // The proxy-backed web-tools nudge + switch, shared by the kinds that allow web access
+    // (coder/mocker/ci-fixer/fixer/tester/read-only). `search` was resolved in the wave above;
+    // the per-kind hint (coder/mocker/analysis/… and any custom container kind) is applied here.
     const webTools = {
       webToolsGuidance: webResearchGuidanceFor(context.agentKind, this.agentKindRegistry, {
         fetch: true,
