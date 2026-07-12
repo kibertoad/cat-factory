@@ -6,7 +6,14 @@
 //   - Mentions (per-account): toggle + GitHub-user-id → Slack-member-id map.
 import { computed, reactive, ref, watch } from 'vue'
 import type { NotificationType } from '~/types/notifications'
-import type { SlackMemberMappingEntry, SlackMemberRole, SlackRoute } from '~/types/slack'
+import type { SlackMemberRole, SlackRoute } from '~/types/slack'
+import {
+  type MemberRow,
+  emptyMemberRow,
+  hasHalfFilledRow,
+  toMemberEntries,
+  toMemberRow,
+} from '~/utils/slackMemberMapping'
 import IntegrationBackTitle from '~/components/layout/IntegrationBackTitle.vue'
 import SecretInput from '~/components/common/SecretInput.vue'
 
@@ -60,9 +67,15 @@ const routes = reactive<Record<NotificationType, SlackRoute>>({
   initiative: { enabled: false, channel: '' },
 })
 const mentionsEnabled = ref(false)
-const mapping = ref<SlackMemberMappingEntry[]>([])
+// Editable member rows carry a client-only stable `uid` (see `slackMemberMapping`) so
+// a mid-list delete keys the v-model by identity, not the array index (index keys
+// silently rebound a neighbour's inputs — UX-23).
+let uidSeq = 0
+const nextUid = () => `m${++uidSeq}`
+const mapping = ref<MemberRow[]>([])
 const tokenInput = ref('')
 const busy = ref(false)
+const connectingOAuth = ref(false)
 
 function notifyError(title: string, e: unknown) {
   toast.add({
@@ -84,7 +97,7 @@ watch(
         routes[type] = slack.settings?.routes[type] ?? { enabled: false, channel: '' }
       }
       mentionsEnabled.value = slack.settings?.mentionsEnabled ?? false
-      mapping.value = slack.memberMapping.map((e) => ({ role: 'engineering', ...e }))
+      mapping.value = slack.memberMapping.map((e) => toMemberRow(e, nextUid()))
     } catch (e) {
       notifyError(t('slack.error.loadSettings'), e)
     }
@@ -94,9 +107,13 @@ watch(
 )
 
 async function connectViaOAuth() {
+  connectingOAuth.value = true
   try {
+    // On success the browser navigates away, so `connectingOAuth` never resets here —
+    // it only clears on the error path below.
     window.location.href = await slack.installUrl()
   } catch (e) {
+    connectingOAuth.value = false
     notifyError(t('slack.error.startOAuth'), e)
   }
 }
@@ -144,17 +161,29 @@ async function saveRouting() {
 }
 
 function addMapping() {
-  mapping.value.push({ userId: '', slackUserId: '', role: 'engineering' })
+  mapping.value.push(emptyMemberRow(nextUid()))
 }
-function removeMapping(index: number) {
-  mapping.value.splice(index, 1)
+function removeMapping(uid: string) {
+  mapping.value = mapping.value.filter((e) => e.uid !== uid)
 }
 async function saveMapping() {
+  // A partially-filled row (one id present, the other blank) used to be silently
+  // dropped on save (UX-23) — block instead so the user doesn't lose the entry. A
+  // fully-empty row is just an unused slot and is ignored.
+  if (hasHalfFilledRow(mapping.value)) {
+    toast.add({
+      title: t('slack.members.incompleteTitle'),
+      description: t('slack.members.incompleteBody'),
+      icon: 'i-lucide-triangle-alert',
+      color: 'warning',
+    })
+    return
+  }
   busy.value = true
   try {
-    const entries = mapping.value.filter((e) => e.userId.trim() && e.slackUserId.trim())
+    const entries = toMemberEntries(mapping.value)
     await slack.updateMemberMapping(entries)
-    mapping.value = slack.memberMapping.map((e) => ({ ...e }))
+    mapping.value = slack.memberMapping.map((e) => toMemberRow(e, nextUid()))
     toast.add({ title: t('slack.toast.mapSaved'), icon: 'i-lucide-check', color: 'success' })
   } catch (e) {
     notifyError(t('slack.error.saveMap'), e)
@@ -181,6 +210,7 @@ async function saveMapping() {
             v-if="slack.oauthEnabled"
             color="primary"
             icon="i-lucide-slack"
+            :loading="connectingOAuth"
             @click="connectViaOAuth"
           >
             {{ t('slack.connect.addToSlack') }}
@@ -287,7 +317,7 @@ async function saveMapping() {
                 </template>
               </i18n-t>
             </p>
-            <div v-for="(entry, i) in mapping" :key="i" class="flex items-center gap-2">
+            <div v-for="entry in mapping" :key="entry.uid" class="flex items-center gap-2">
               <UInput
                 v-model="entry.userId"
                 size="sm"
@@ -312,7 +342,7 @@ async function saveMapping() {
                 variant="ghost"
                 size="xs"
                 icon="i-lucide-trash-2"
-                @click="removeMapping(i)"
+                @click="removeMapping(entry.uid)"
               />
             </div>
             <div class="flex justify-between">

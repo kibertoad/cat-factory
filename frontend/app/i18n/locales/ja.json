@@ -2911,7 +2911,9 @@
       "userIdPlaceholder": "ユーザーID (usr_...)",
       "slackIdPlaceholder": "SlackメンバーID (U...)",
       "add": "メンバーを追加",
-      "save": "マップを保存"
+      "save": "マップを保存",
+      "incompleteTitle": "メンバー行が未入力です",
+      "incompleteBody": "保存する前に、ユーザー ID と Slack メンバー ID の両方を入力するか、行を削除してください。"
     },
     "routable": {
       "merge_review": "マージレビュー",
@@ -4163,6 +4165,11 @@
     "confirmRemove": {
       "title": "このフラグメントを削除しますか？",
       "body": "「{name}」が削除されます。 この操作は取り消せません。"
+    },
+    "confirmUnlinkSource": {
+      "title": "このソースのリンクを解除しますか？",
+      "body": "「{repo}」と、そこから同期されたガイドライン断片が削除されます。後で再リンクできます。",
+      "confirm": "リンク解除"
     },
     "unavailable": "このデプロイではプロンプトフラグメントライブラリが有効になっていません。"
   },

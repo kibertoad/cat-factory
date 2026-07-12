@@ -2911,7 +2911,9 @@
       "userIdPlaceholder": "Kullanıcı kimliği (usr_...)",
       "slackIdPlaceholder": "Slack üye kimliği (U...)",
       "add": "Üye ekle",
-      "save": "Eşlemeyi kaydet"
+      "save": "Eşlemeyi kaydet",
+      "incompleteTitle": "Eksik üye satırı",
+      "incompleteBody": "Kaydetmeden önce hem kullanıcı kimliğini hem de Slack üye kimliğini girin ya da satırı kaldırın."
     },
     "routable": {
       "merge_review": "Birleştirme incelemesi",
@@ -4163,6 +4165,11 @@
     "confirmRemove": {
       "title": "Bu parça silinsin mi?",
       "body": "\"{name}\" kaldırılacak. Bu işlem geri alınamaz."
+    },
+    "confirmUnlinkSource": {
+      "title": "Bu kaynağın bağlantısı kaldırılsın mı?",
+      "body": "\"{repo}\" ve onun eşitlediği kılavuz parçaları kaldırılacak. Daha sonra yeniden bağlayabilirsiniz.",
+      "confirm": "Bağlantıyı kaldır"
     },
     "unavailable": "Bu dağıtımda istem parçası kütüphanesi etkin değil."
   },
