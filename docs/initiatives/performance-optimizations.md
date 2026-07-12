@@ -72,6 +72,7 @@ symmetric" (CLAUDE.md).
 | 21  | P3  | persistence  | `password_reset_tokens.deleteExpired` full-table scan (no `expires_at` index)                                                       | ⬜ todo |                                                           |
 | 22  | P3  | spend        | `isOverBudget`: up to 3 live SUM aggregates per proxied LLM call (design decision)                                                  | ⬜ todo |                                                           |
 | 23  | P3  | engine       | `resolveRiskPolicy` re-reads merge preset per gate evaluation (optional slice)                                                      | ⬜ todo |                                                           |
+| 24  | P2  | gateways     | Dispatch GH client: no single-flight / throttle — concurrent same-run steps duplicate token mint + branch probe                     | ⬜ todo |                                                           |
 
 ## Detailed findings
 
@@ -435,6 +436,39 @@ controllers + `MergeResolver`. Slow-moving admin config, re-read per gate evalua
 that). Optional `mergePreset` cache slice keyed by `(workspaceId, riskPolicyId|default)`,
 invalidated from `RiskPolicyService.create/update/remove/reseed` (`RiskPolicyService.ts:77-162`).
 
+### 24. Dispatch GH client has no single-flight / throttle — P2
+
+Follow-up surfaced while reviewing item 4 (parallel dispatch waves, PR #1051). Item 4
+overlapped the six per-dispatch resolutions in one `Promise.all` wave, which is the right
+per-dispatch fix — but it exposes a fleet-level shape the wave alone doesn't address: when
+several steps of the SAME run advance near-simultaneously (e.g. a coder finishing while the
+sweeper re-drives, or a tester→fixer epoch), each dispatch independently mints the run's
+installation token and probes the SAME work branch, and firing them concurrently nudges GitHub's
+**secondary** (concurrency/abuse) limits sooner than the old serial chain did. Scope of the real
+GitHub traffic per dispatch is small — `mintInstallationToken` already rides `GitHubAppRegistry`'s
+in-memory token cache (a true mint only on a cold isolate / near expiry), and `ensureWorkBranch`
+is the one guaranteed round-trip (get-ref, maybe create-ref); the other four wave members are
+DB/local. So this is a **defensiveness + de-duplication** slice, not a hot-loop fix.
+
+**Fix (through the blessed seams, both runtimes):**
+
+- **Single-flight / request coalescing** on the shared `FetchGitHubClient`, keyed by
+  `installationId` (token mint) and `(repo, branch)` (`ensureWorkBranch` probe), so N concurrent
+  same-run dispatches collapse to one in-flight call each. This is the biggest real dispatch-path
+  win and the "concurrency-aware" piece.
+- **Reuse item 2's `branchHeadSha` cache** for the dispatch-path branch probe instead of a fresh
+  get-ref per dispatch (the gate-poll client already caches it; thread the same slice through).
+- **Global throttle + `Retry-After` honoring** (token-bucket / `p-limit`) on the client so a
+  fleet-wide advance storm degrades gracefully instead of tripping abuse detection.
+
+Route cached reads through an `AppCaches` slice, NOT a homebrew `Map` (CLAUDE.md caching rule).
+An installation token is self-expiring, so its slice may keep a real TTL even in
+`ISOLATE_SAFE_APP_CACHES_PROFILE` (like `fragmentDocumentBody`); the single-flight wrapper is a
+thin in-flight-promise map on the client, invalidated by nothing (it only lives for the call's
+duration). Keep the runtimes symmetric — the client + its cache slice land for both facades at
+once. Join-batching does NOT apply: the wave members hit heterogeneous endpoints, not a
+loop of point-reads over a list.
+
 ## Conventions & gotchas (carry between slices)
 
 - **Every persistence change lands on BOTH runtimes in the same PR** — D1 migration ⇄
@@ -482,6 +516,8 @@ invalidated from `RiskPolicyService.create/update/remove/reseed` (`RiskPolicySer
 5. Items 7+9 together (spend/workspace-settings slices), then 8 (account settings).
 6. Items 15+16+17+18 as one "reuse the loaded list" batch-fix PR.
 7. Item 12 (GitHub sync parallelism) + 14 (fan-out publisher).
+7b. Item 24 (dispatch GH client single-flight + throttle) — natural pairing with item 2's
+    `branchHeadSha` cache; both runtimes + conformance.
 8. Frontend: 6 first (targeted board upserts, with store unit tests), then 5 (snapshot
    projection, coupled contracts change), then 10/11, then 20.
 9. Items 19, 21 as small both-runtime persistence PRs.
