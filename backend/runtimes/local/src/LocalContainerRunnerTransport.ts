@@ -388,7 +388,7 @@ export class LocalContainerRunnerTransport implements RunnerTransport {
 
     const resolved = await this.resolve(ref.runId)
     // No container for this run at all → it was evicted/reaped (or never started).
-    if (!resolved) return { state: 'failed', error: EVICTION_ERROR }
+    if (!resolved) return { state: 'failed', error: EVICTION_ERROR, evicted: 'crash' }
 
     // Address the per-RUN container, but read the per-step job by its own id. A connection
     // error confirms-or-denies an eviction via the runtime; a confirmed-dead container
@@ -571,7 +571,7 @@ export class LocalContainerRunnerTransport implements RunnerTransport {
 
   private async pollPooled(ref: RunnerJobRef): Promise<RunnerJobView> {
     const member = this.members.find((m) => m.leasedTo === ref.runId)
-    if (!member) return { state: 'failed', error: EVICTION_ERROR }
+    if (!member) return { state: 'failed', error: EVICTION_ERROR, evicted: 'crash' }
     // The member died mid-run: drop it from the pool so it isn't re-leased, and report an
     // eviction so the stale-run sweeper re-drives (a retry leases a healthy member and the
     // harness's persistent checkout resumes the work branch). A 404 with the member still

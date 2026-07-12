@@ -1,4 +1,4 @@
-import type { AgentFailureKind } from '@cat-factory/kernel'
+import type { AgentFailureKind, ContainerEvictionKind } from '@cat-factory/kernel'
 import { DispatchError, DomainError, getErrorMessage } from '@cat-factory/kernel'
 
 /**
@@ -110,6 +110,25 @@ export function classifyDispatchFailure(error: unknown): DispatchFailureClassifi
  */
 export function isTransientEviction(error: string | undefined): boolean {
   return error !== undefined && error.includes(TRANSIENT_EVICTION_MARKER)
+}
+
+/**
+ * The structured container-eviction verdict for a failed job, preferring the transport's
+ * {@link ContainerEvictionKind | evicted} field and falling back to the error-string sentinels
+ * (`(container evicted or crashed)` + {@link TRANSIENT_EVICTION_MARKER}) only when it is absent —
+ * an older producer / a pool that doesn't forward the field. Returns undefined when the failure
+ * is NOT an eviction, so the caller proceeds with its own genuine-failure handling. This is the
+ * single seam consumers read instead of calling {@link isContainerEvictionError} /
+ * {@link isTransientEviction} directly, so the structured field is the load-bearing signal and
+ * the regexes are the compatibility fallback (section I of the error-message initiative).
+ */
+export function evictionKindOf(
+  evicted: ContainerEvictionKind | undefined,
+  error: string | undefined,
+): ContainerEvictionKind | undefined {
+  if (evicted) return evicted
+  if (!isContainerEvictionError(error)) return undefined
+  return isTransientEviction(error) ? 'transient' : 'crash'
 }
 
 /**

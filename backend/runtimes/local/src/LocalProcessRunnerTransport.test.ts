@@ -107,6 +107,7 @@ describe('LocalProcessRunnerTransport', () => {
     child.emit('exit', 1) // the harness process crashed
     const view = await transport.poll({ runId: 'r', jobId: 'j' })
     expect(view.state).toBe('failed')
+    expect(view.evicted).toBe('crash')
     expect(view.error).toMatch(/container evicted or crashed/)
   })
 

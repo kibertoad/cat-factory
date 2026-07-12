@@ -332,6 +332,7 @@ export type {
 } from './env-config-repair.js'
 export { NoopEnvConfigRepairRunner } from './env-config-repair.js'
 export type {
+  ContainerEvictionKind,
   HarnessCallMetric,
   RunnerDispatchKind,
   RunnerDispatchOptions,

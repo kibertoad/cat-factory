@@ -172,7 +172,9 @@ export class ContainerEnvConfigRepairer implements EnvConfigRepairer {
       const error = view.error ?? 'Environment config repair job failed'
       return {
         state: 'failed',
-        failureKind: classifyRepairFailure(error),
+        // Prefer the transport's STRUCTURED eviction verdict; the error-string regex in
+        // classifyRepairFailure is the fallback for an older producer that reports no field.
+        failureKind: view.evicted ? 'evicted' : classifyRepairFailure(error),
         error,
         detail: view.error,
       }

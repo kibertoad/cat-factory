@@ -89,10 +89,10 @@ export async function pollHarnessJob(opts: {
       },
     )
   } catch (err) {
-    if (await opts.isDead()) return { state: 'failed', error: EVICTION_ERROR }
+    if (await opts.isDead()) return { state: 'failed', error: EVICTION_ERROR, evicted: 'crash' }
     throw err
   }
-  if (res.status === 404) return { state: 'failed', error: EVICTION_ERROR }
+  if (res.status === 404) return { state: 'failed', error: EVICTION_ERROR, evicted: 'crash' }
   if (!res.ok) {
     throw new Error(`${opts.label} job poll failed (HTTP ${res.status}): ${await safeText(res)}`)
   }

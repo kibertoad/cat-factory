@@ -7,6 +7,7 @@ GitHub/GitLab API-error classification (C1/C4/C5/C6) · crypto/credential decryp
 structured container/runner dispatch failures (D1 stale-image 404 / I2 `DispatchError`) ·
 UI-first runner-backend / runner-pool / Datadog remedies (D2/D3/D4) · boot-time connection &
 credential probes (A11 Postgres loopback reachability / A12 local-mode PAT validity) ·
+structured container-eviction signal (I1 `RunnerJobView.evicted`) ·
 **Owner:** core · **Started:** 2026-07-11
 
 > This is the durable source of truth for a multi-PR initiative. Read it first before
@@ -229,16 +230,17 @@ the structured way the only load-bearing one:
   `agentFailureKindFromCause(update.failureCause) ?? classifyAgentFailure(update.error)`
   (`RunDispatcher.ts:965`; same shape in `ContainerRepoBootstrapper.ts:303`).
 - **String/regex (to eliminate as the primary channel):**
-  - Container **eviction** exists ONLY as text: the transports mint the sentinel
-    `'Job not found (container evicted or crashed)'` (+ `TRANSIENT_EVICTION_MARKER`)
-    (`CloudflareContainerTransport.ts:20-21`, local `harnessHttp.ts:17`,
-    `KubernetesRunnerTransport.ts:45`), and consumers regex it —
-    `isContainerEvictionError` / `isTransientEviction`
-    (`orchestration/execution/job.logic.ts:47-61`), plus the `/evicted or crashed/i`
-    fallbacks in `ContainerRepoBootstrapper.ts:417` / `ContainerEnvConfigRepairer.ts:209`.
-    Two transports even carry "deliberately avoids the phrase" comments
-    (`LocalContainerRunnerTransport.ts:842`, `KubernetesRunnerTransport.ts:206`) — negative
-    coupling that only exists because the signal is a string.
+  - Container **eviction** — ✅ **structured as of I1 (phase 11).** The verdict now rides the typed
+    `RunnerJobView.evicted` field (`'crash' | 'transient'`, kernel `ContainerEvictionKind`), minted
+    by every transport and read via the `evictionKindOf` extractor (`job.logic.ts`); the consumers
+    (`RunDispatcher.recoverContainerEviction`, `ContainerRepoBootstrapper.pollBootstrap`,
+    `ContainerEnvConfigRepairer.pollRepair`) prefer the field. The sentinel
+    `'Job not found (container evicted or crashed)'` (+ `TRANSIENT_EVICTION_MARKER`) and the
+    `isContainerEvictionError` / `isTransientEviction` regexes are PRESERVED as the older-producer
+    fallback — deleting them is the image-floor-gated I5. Still-string-only: the K8s
+    `waitForPodReady` and inline-job DISPATCH-time eviction THROW an `Error` (no view exists yet),
+    so they ride `classifyDispatchFailure`'s string check; a typed dispatch-eviction error is a
+    follow-up, not part of I1's `RunnerJobView` scope.
   - **Dispatch failure** is a bare `Error('… dispatch failed (HTTP n): …')` matched by
     `/dispatch failed/i` (`BootstrapService.ts:313,425`, `EnvConfigRepairService.ts:170`).
   - The **watchdog abort phrases** (`failure.ts:63-73`) are regex-matched
@@ -262,7 +264,7 @@ union itself DOES bump the image (batch with the F-slice).
 
 | #   | Work item                                                                                                                                                                                                                                                                                                                                                                                                                                                             | Sev | Status  | PR      |
 | --- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | --- | ------- | ------- |
-| I1  | Structured eviction signal: add a field (e.g. `evicted?: 'crash' \| 'transient'`) to kernel `RunnerJobView` (`ports/runner-transport.ts`), emit it from all four transports (Cloudflare, local `harnessHttp`, `LocalContainerRunnerTransport`, k8s), read via an extractor; regexes become fallback-only. No image bump                                                                                                                                               | P1  | ⬜ todo |         |
+| I1  | Structured eviction signal: add a field (e.g. `evicted?: 'crash' \| 'transient'`) to kernel `RunnerJobView` (`ports/runner-transport.ts`), emit it from all four transports (Cloudflare, local `harnessHttp`, `LocalContainerRunnerTransport`, k8s), read via an extractor; regexes become fallback-only. No image bump                                                                                                                                               | P1  | ✅ done | phase 11 |
 | I2  | `DispatchError` class (HTTP `status` field) thrown by every transport `dispatch()`; `BootstrapService` / `EnvConfigRepairService` classify via `instanceof` / `isDispatchFailure` instead of `/dispatch failed/i`. Pairs with D1's stale-image elaboration. No image bump                                                                                                                                                                                             | P1  | ✅ done | phase 8 |
 | I3  | Quick win: `ContainerEnvConfigRepairer.ts:175` ignores the already-plumbed `view.failureCause` — add `repairFailureKindFromCause(cause) ?? classifyRepairFailure(error)`, matching the bootstrap/execution paths                                                                                                                                                                                                                                                      | P2  | ⬜ todo |         |
 | I4  | Type the wire: narrow kernel `failureCause?: string` (`runner-transport.ts:226`, `agent-executor.ts:671`, `preview-transport.ts:52`) to a shared cause union so the `*FromCause` mappers are exhaustively checked (`Record`-style drift guard, like the SPA's `CONFLICT_TITLE_KEYS`)                                                                                                                                                                                  | P2  | ⬜ todo |         |
@@ -377,6 +379,22 @@ DispatchError`, reading `.status`), NOT the `/dispatch failed/i` regex, which is
   reuses the existing `githubPatCreationUrl()` pre-scoped link — the same one-click fix as the
   already-present MISSING-PAT warning. GitLab's equivalent PAT probe (a `GITLAB_PAT`-only local
   deployment) is a deliberate follow-up, not done here — A12 names GitHub only.
+- **Structured container-eviction signal (phase 11 reference: I1).** The eviction verdict is a
+  typed `RunnerJobView.evicted` field (`ContainerEvictionKind` = `'crash' | 'transient'`, kernel
+  `ports/runner-transport.ts`), NOT a string any consumer parses. Every transport that mints an
+  eviction VIEW sets it beside the preserved sentinel — the Cloudflare 404/rollout poll, the shared
+  local `harnessHttp.pollHarnessJob`, the local container/pool/process/native-routing `!resolved` /
+  `!member` / no-leg fallbacks, and the K8s poll 404 (EKS inherits it). It flows through
+  `AgentJobUpdate.evicted` (kernel `agent-executor.ts`, forwarded in `ContainerAgentExecutor.pollJob`)
+  to the three consumers, which read the single `evictionKindOf(evicted, error)` extractor
+  (`job.logic.ts`) — field first, the `isContainerEvictionError` / `isTransientEviction` regexes as
+  the older-producer fallback. TWO channels stay string-only ON PURPOSE and are NOT in I1's scope: a
+  DISPATCH-time eviction is a thrown `Error` (K8s `waitForPodReady`, the inline-job path) with no view
+  to carry a field, classified by `classifyDispatchFailure`; and the `PreviewView` / `InlineJobView`
+  ports are separate types, left on the sentinel. Because the string is preserved, no facade needs a
+  version floor — this bumps no executor-harness image (the signal is minted by in-repo transports).
+  Deleting the regex fallback + the "deliberately avoids the phrase" negative-coupling comments is the
+  still-open, image-floor-gated I5.
 - **Executor-harness changes bump the image tag** + the three hand-maintained pins
   (`deploy/backend/package.json`, `deploy/backend/wrangler.toml`,
   `RECOMMENDED_HARNESS_IMAGE`) — batch all F-rows into one slice to pay that cost once.

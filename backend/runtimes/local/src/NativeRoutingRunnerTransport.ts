@@ -53,14 +53,17 @@ export class NativeRoutingRunnerTransport implements RunnerTransport {
       transport = await this.recoverTransport()
       // No container leg configured (Claude/Codex-only native) ⇒ nothing could have survived;
       // report the eviction so the sweeper re-drives (an idempotent re-dispatch re-routes).
-      if (!transport) return { state: 'failed', error: EVICTION_ERROR }
+      if (!transport) return { state: 'failed', error: EVICTION_ERROR, evicted: 'crash' }
       // Remember the route so the follow-up polls hit the same backend with no rebuild.
       this.routed.set(refKey(ref), transport)
     }
     const view = await transport.poll(ref)
     // An evicted job never comes back on this transport — drop the route so the map can't
     // grow unboundedly on a long-lived dev server (a re-dispatch re-populates it anyway).
-    if (view.state === 'failed' && view.error === EVICTION_ERROR) this.routed.delete(refKey(ref))
+    // Prefer the leg's STRUCTURED eviction verdict; the EVICTION_ERROR string is the fallback.
+    if (view.state === 'failed' && (view.evicted !== undefined || view.error === EVICTION_ERROR)) {
+      this.routed.delete(refKey(ref))
+    }
     // Stamp WHICH leg served the job (native host process vs. per-run container) so the run
     // diagnostics record the true backend — this router picks per job, so it can't declare a
     // single static `backend` the shared job client would stamp.

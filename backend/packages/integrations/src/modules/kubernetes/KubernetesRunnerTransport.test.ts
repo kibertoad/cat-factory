@@ -132,11 +132,13 @@ describe('KubernetesRunnerTransport.poll', () => {
     expect(await transport.poll(ref)).toEqual(view)
   })
 
-  it('maps a 404 from the proxy to the eviction failure', async () => {
+  it('maps a 404 from the proxy to the eviction failure (structured field + string fallback)', async () => {
     stubFetch(() => new Response('not found', { status: 404 }))
     const transport = new KubernetesRunnerTransport(config, resolveSecret)
     const result = await transport.poll(ref)
     expect(result.state).toBe('failed')
+    // The structured verdict is the primary signal; the string suffix stays as the fallback.
+    expect(result.evicted).toBe('crash')
     expect(result.error).toMatch(/evicted or crashed/)
   })
 })

@@ -251,6 +251,7 @@ describe('LocalContainerRunnerTransport', () => {
     })
     const view = await transport.poll({ runId: 'ghost', jobId: 'ghost' })
     expect(view.state).toBe('failed')
+    expect(view.evicted).toBe('crash')
     expect(view.error).toMatch(/container evicted or crashed/)
   })
 
@@ -270,6 +271,7 @@ describe('LocalContainerRunnerTransport', () => {
     await transport.dispatch({ runId: 'job-x', jobId: 'job-x' }, {}, 'agent')
     const view = await transport.poll({ runId: 'job-x', jobId: 'job-x' })
     expect(view.state).toBe('failed')
+    expect(view.evicted).toBe('crash')
     expect(view.error).toMatch(/container evicted or crashed/)
   })
 
@@ -310,6 +312,7 @@ describe('LocalContainerRunnerTransport', () => {
     await transport.dispatch({ runId: 'job-404', jobId: 'job-404' }, {}, 'agent')
     const view = await transport.poll({ runId: 'job-404', jobId: 'job-404' })
     expect(view.state).toBe('failed')
+    expect(view.evicted).toBe('crash')
     expect(view.error).toMatch(/container evicted or crashed/)
   })
 
