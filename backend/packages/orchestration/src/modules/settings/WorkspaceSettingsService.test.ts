@@ -1,5 +1,7 @@
-import { describe, expect, it } from 'vitest'
+import { createAppCaches } from '@cat-factory/caching'
+import { describe, expect, it, vi } from 'vitest'
 import type {
+  Workspace,
   WorkspaceRepository,
   WorkspaceSettings,
   WorkspaceSettingsRepository,
@@ -32,6 +34,13 @@ function settings(waitingEscalationMinutes: number): WorkspaceSettings {
 
 const workspaceRepository = {} as WorkspaceRepository
 
+/** A workspace repo that resolves every id (so `update`'s existence check passes). */
+const presentWorkspaceRepository = {
+  async get(id: string) {
+    return { id } as Workspace
+  },
+} as WorkspaceRepository
+
 describe('WorkspaceSettingsService.getMany', () => {
   it('resolves stored rows and fills the built-in default for absent workspaces', async () => {
     const svc = new WorkspaceSettingsService({
@@ -59,5 +68,75 @@ describe('WorkspaceSettingsService.getMany', () => {
       workspaceRepository,
     })
     expect((await svc.getMany([])).size).toBe(0)
+  })
+})
+
+describe('WorkspaceSettingsService cache (workspaceSettings slice)', () => {
+  it('reads through the cache — a second get does not re-hit the repository', async () => {
+    const repo = fakeRepo(new Map([['ws_a', settings(10)]]))
+    const getSpy = vi.spyOn(repo, 'get')
+    const svc = new WorkspaceSettingsService({
+      workspaceSettingsRepository: repo,
+      workspaceRepository,
+      workspaceSettingsCache: createAppCaches().workspaceSettings,
+    })
+
+    expect((await svc.get('ws_a')).waitingEscalationMinutes).toBe(10)
+    expect((await svc.get('ws_a')).waitingEscalationMinutes).toBe(10)
+    expect(getSpy).toHaveBeenCalledTimes(1)
+  })
+
+  it('caches the built-in default (a workspace with no stored row) without re-reading', async () => {
+    const repo = fakeRepo(new Map())
+    const getSpy = vi.spyOn(repo, 'get')
+    const svc = new WorkspaceSettingsService({
+      workspaceSettingsRepository: repo,
+      workspaceRepository,
+      workspaceSettingsCache: createAppCaches().workspaceSettings,
+    })
+
+    expect(await svc.get('ws_missing')).toEqual(DEFAULT_WORKSPACE_SETTINGS)
+    expect(await svc.get('ws_missing')).toEqual(DEFAULT_WORKSPACE_SETTINGS)
+    // The "absent" case caches as a wrapped null value, so the miss isn't re-loaded.
+    expect(getSpy).toHaveBeenCalledTimes(1)
+  })
+
+  it('update invalidates the cache — the next get reflects the write immediately', async () => {
+    const repo = fakeRepo(new Map([['ws_a', settings(10)]]))
+    const svc = new WorkspaceSettingsService({
+      workspaceSettingsRepository: repo,
+      workspaceRepository: presentWorkspaceRepository,
+      workspaceSettingsCache: createAppCaches().workspaceSettings,
+    })
+
+    // Warm the cache with the pre-write value.
+    expect((await svc.get('ws_a')).waitingEscalationMinutes).toBe(10)
+
+    await svc.update('ws_a', { waitingEscalationMinutes: 42 })
+
+    // Without invalidation this would still serve the warmed 10.
+    expect((await svc.get('ws_a')).waitingEscalationMinutes).toBe(42)
+  })
+
+  it('scopes cache entries per workspace', async () => {
+    const repo = fakeRepo(
+      new Map([
+        ['ws_a', settings(10)],
+        ['ws_b', settings(20)],
+      ]),
+    )
+    const svc = new WorkspaceSettingsService({
+      workspaceSettingsRepository: repo,
+      workspaceRepository: presentWorkspaceRepository,
+      workspaceSettingsCache: createAppCaches().workspaceSettings,
+    })
+
+    await svc.get('ws_a')
+    await svc.get('ws_b')
+    await svc.update('ws_a', { waitingEscalationMinutes: 99 })
+
+    // Only ws_a's entry was dropped; ws_b still serves its (unchanged) cached value.
+    expect((await svc.get('ws_a')).waitingEscalationMinutes).toBe(99)
+    expect((await svc.get('ws_b')).waitingEscalationMinutes).toBe(20)
   })
 })

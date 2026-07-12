@@ -1186,9 +1186,10 @@ export function defineCoreConformance(harness: ConformanceHarness): void {
         expect(before.body.costLimit).toBe(100)
         expect(before.body.currency).toBe('EUR')
 
-        // Setting a per-workspace budget must take effect immediately (the spend service's
-        // pricing cache is invalidated on the settings write) and round-trip through the
-        // new workspace_settings columns identically on both stores.
+        // Setting a per-workspace budget must take effect immediately — the initial GET
+        // warmed the shared `workspaceSettings` cache slice (which SpendService's pricing
+        // overlay reads through), and the settings write invalidates it — and round-trip
+        // through the workspace_settings columns identically on both stores.
         const put = await call('PUT', `/workspaces/${wsId}/settings`, {
           spendMonthlyLimit: 250,
           spendCurrency: 'USD',
