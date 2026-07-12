@@ -60,9 +60,15 @@ const routes = reactive<Record<NotificationType, SlackRoute>>({
   initiative: { enabled: false, channel: '' },
 })
 const mentionsEnabled = ref(false)
-const mapping = ref<SlackMemberMappingEntry[]>([])
+// Editable member rows carry a client-only stable `uid` so a mid-list delete can't
+// rebind the wrong row's v-model (index keys did — UX-23).
+type MemberRow = SlackMemberMappingEntry & { uid: string }
+let uidSeq = 0
+const nextUid = () => `m${++uidSeq}`
+const mapping = ref<MemberRow[]>([])
 const tokenInput = ref('')
 const busy = ref(false)
+const connectingOAuth = ref(false)
 
 function notifyError(title: string, e: unknown) {
   toast.add({
@@ -84,7 +90,11 @@ watch(
         routes[type] = slack.settings?.routes[type] ?? { enabled: false, channel: '' }
       }
       mentionsEnabled.value = slack.settings?.mentionsEnabled ?? false
-      mapping.value = slack.memberMapping.map((e) => ({ role: 'engineering', ...e }))
+      mapping.value = slack.memberMapping.map((e) => ({
+        role: 'engineering',
+        ...e,
+        uid: nextUid(),
+      }))
     } catch (e) {
       notifyError(t('slack.error.loadSettings'), e)
     }
@@ -94,9 +104,13 @@ watch(
 )
 
 async function connectViaOAuth() {
+  connectingOAuth.value = true
   try {
+    // On success the browser navigates away, so `connectingOAuth` never resets here —
+    // it only clears on the error path below.
     window.location.href = await slack.installUrl()
   } catch (e) {
+    connectingOAuth.value = false
     notifyError(t('slack.error.startOAuth'), e)
   }
 }
@@ -144,17 +158,34 @@ async function saveRouting() {
 }
 
 function addMapping() {
-  mapping.value.push({ userId: '', slackUserId: '', role: 'engineering' })
+  mapping.value.push({ uid: nextUid(), userId: '', slackUserId: '', role: 'engineering' })
 }
-function removeMapping(index: number) {
-  mapping.value.splice(index, 1)
+function removeMapping(uid: string) {
+  mapping.value = mapping.value.filter((e) => e.uid !== uid)
 }
 async function saveMapping() {
+  // A partially-filled row (one id present, the other blank) used to be silently
+  // dropped on save (UX-23) — block instead so the user doesn't lose the entry. A
+  // fully-empty row is just an unused slot and is ignored.
+  const halfFilled = mapping.value.some(
+    (e) => Boolean(e.userId.trim()) !== Boolean(e.slackUserId.trim()),
+  )
+  if (halfFilled) {
+    toast.add({
+      title: t('slack.members.incompleteTitle'),
+      description: t('slack.members.incompleteBody'),
+      icon: 'i-lucide-triangle-alert',
+      color: 'warning',
+    })
+    return
+  }
   busy.value = true
   try {
-    const entries = mapping.value.filter((e) => e.userId.trim() && e.slackUserId.trim())
+    const entries = mapping.value
+      .filter((e) => e.userId.trim() && e.slackUserId.trim())
+      .map(({ uid: _uid, ...e }) => e)
     await slack.updateMemberMapping(entries)
-    mapping.value = slack.memberMapping.map((e) => ({ ...e }))
+    mapping.value = slack.memberMapping.map((e) => ({ ...e, uid: nextUid() }))
     toast.add({ title: t('slack.toast.mapSaved'), icon: 'i-lucide-check', color: 'success' })
   } catch (e) {
     notifyError(t('slack.error.saveMap'), e)
@@ -181,6 +212,7 @@ async function saveMapping() {
             v-if="slack.oauthEnabled"
             color="primary"
             icon="i-lucide-slack"
+            :loading="connectingOAuth"
             @click="connectViaOAuth"
           >
             {{ t('slack.connect.addToSlack') }}
@@ -287,7 +319,7 @@ async function saveMapping() {
                 </template>
               </i18n-t>
             </p>
-            <div v-for="(entry, i) in mapping" :key="i" class="flex items-center gap-2">
+            <div v-for="entry in mapping" :key="entry.uid" class="flex items-center gap-2">
               <UInput
                 v-model="entry.userId"
                 size="sm"
@@ -312,7 +344,7 @@ async function saveMapping() {
                 variant="ghost"
                 size="xs"
                 icon="i-lucide-trash-2"
-                @click="removeMapping(i)"
+                @click="removeMapping(entry.uid)"
               />
             </div>
             <div class="flex justify-between">

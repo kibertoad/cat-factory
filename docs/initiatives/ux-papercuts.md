@@ -15,10 +15,12 @@ textarea now masks by default with an eye toggle); the board zoom/canvas navigat
 (UX-07/08/09/14/15/16 — labeled+clamp-disabled zoom controls, a click-to-reset-100% readout,
 double-click-to-focus a frame, and a nudge on blank-canvas pipeline drops); the
 modal-safety cluster (UX-18/25 — the `useUnsavedGuard` confirm-before-discard seam on the
-content-heavy modals + DecisionModal double-submit protection); and the pipeline/inspector
+content-heavy modals + DecisionModal double-submit protection); the pipeline/inspector
 surfaces cluster (UX-35/40/41/42 — live per-step elapsed clocks, a named reason on the locked
-Run trigger, a confirm before stopping a run, and a keyboard-reachable restart button). This
-document catalogs UX papercuts
+Run trigger, a confirm before stopping a run, and a keyboard-reachable restart button); and the
+fragment/Slack form-integrity cluster (UX-21/23/29/30 — confirm before unlinking a fragment
+source, per-row loading spinners, stable+validated Slack member-map rows, a pending Slack OAuth
+button). This document catalogs UX papercuts
 (small annoyances, missing affordances, rough edges) found in the SPA
 (`frontend/app/app`) during a systematic sweep on 2026-07-02. Every finding was
 verified against the code at the referenced `file:line` (line numbers drift as the
@@ -168,16 +170,16 @@ per-file patches:
 | UX-18 | P1  | done   | Content-heavy modals discard all typed input on Escape/backdrop click              |
 | UX-19 | P2  | done   | No show/hide toggle on any password/secret field (systemic)                        |
 | UX-20 | P2  | done   | Provider API key entered in a plaintext, unmasked textarea (several surfaces)      |
-| UX-21 | P2  | todo   | `unlinkSource` (fragment library) destroys a synced source with no confirmation    |
+| UX-21 | P2  | done   | `unlinkSource` (fragment library) destroys a synced source with no confirmation    |
 | UX-22 | P2  | todo   | Reset-password validation is submit-only, no inline feedback                       |
-| UX-23 | P2  | todo   | Slack member-mapping rows keyed by index; incomplete rows silently dropped on save |
+| UX-23 | P2  | done   | Slack member-mapping rows keyed by index; incomplete rows silently dropped on save |
 | UX-24 | P2  | todo   | Datadog connection can't be updated without re-pasting both write-only keys        |
 | UX-25 | P2  | done   | DecisionModal options: fire-and-forget, no pending state, double-click hazard      |
 | UX-26 | P3  | todo   | No autofocus on first field of login/reset/connect modals                          |
 | UX-27 | P3  | todo   | Disabled submit buttons don't state why (min-length rules invisible)               |
 | UX-28 | P3  | todo   | No character counters where the backend enforces length limits                     |
-| UX-29 | P3  | todo   | Fragment library: one global loading flag spins every row's buttons                |
-| UX-30 | P3  | todo   | Slack "Add to Slack" OAuth button has no pending state                             |
+| UX-29 | P3  | done   | Fragment library: one global loading flag spins every row's buttons                |
+| UX-30 | P3  | done   | Slack "Add to Slack" OAuth button has no pending state                             |
 | UX-31 | P3  | todo   | "Edit" on list items doesn't scroll/focus the offscreen edit form                  |
 
 - **UX-18 — Dirty modals discard input. DONE.** A shared `composables/useUnsavedGuard.ts`
@@ -210,15 +212,18 @@ per-file patches:
   `PersonalSubscriptionSection`) are converted to the same masked-by-default `SecretInput`, so
   live vendor keys no longer render in cleartext (shoulder-surf / screen-share leakage). These
   keys are single-line tokens, so the single-line masked input + reveal is the correct shape.
-- **UX-21 — Unguarded unlink.** `fragments/FragmentLibraryManager.vue:233-240`
-  (button :502-508) fires immediately, while sibling `removeFragment` (:124-140)
-  routes through `confirm()`. Fix: same confirm dialog.
+- **UX-21 — Unguarded unlink. DONE.** `unlinkSource` in `FragmentLibraryManager.vue`
+  now routes through `useConfirm()` (destructive variant, naming the `owner/repo` and
+  new `fragments.confirmUnlinkSource.*` keys) before removing the source + its synced
+  guideline fragments, mirroring the sibling `removeFragment` confirm.
 - **UX-22 — Submit-only validation.** `auth/ResetPasswordScreen.vue:21-30` — the
   length≥8 and match checks run only on submit; no live hint or match indicator.
-- **UX-23 — Fragile Slack mapping rows.** `slack/SlackPanel.vue:292` (`:key="i"`)
-  - save filter at `:151`. Deleting a middle row can misbind `v-model`s; rows
-    missing either id are silently dropped on save. Fix: stable keys + block/warn on
-    incomplete rows.
+- **UX-23 — Fragile Slack mapping rows. DONE.** `SlackPanel.vue`'s member-map rows now
+  carry a client-only stable `uid` (`v-model` keyed by `entry.uid`, not the array index)
+  so deleting a middle row can't rebind a neighbour's inputs, and `saveMapping` **blocks**
+  with a warning toast (`slack.members.incomplete{Title,Body}`) when any row is half-filled
+  (exactly one of user-id / Slack-id present) instead of silently dropping it; a fully-empty
+  row is still just an unused slot and is ignored.
 - **UX-24 — Datadog forced re-entry.** `settings/ObservabilityConnectionPanel.vue:216-219`
   disables save unless both write-only keys are present, so changing only `site`
   requires re-pasting both secrets — while the panel's own incident section (:75)
@@ -240,12 +245,17 @@ per-file patches:
 - **UX-28 — No counters on bounded fields.** `bootstrap/BootstrapModal.vue:90-97`
   errors on repo-name >100 chars but the input has no `maxlength`/counter;
   description/instructions have neither.
-- **UX-29 — Global loading flag.** `FragmentLibraryManager.vue` — every row's
-  sync/refresh button binds `:loading="library.loading"` (:399, :499), so one
-  action spins all rows; `checkSource`/`unlinkSource` (:493, :502-508) show no
-  loading at all. Fix: track in-flight row id.
-- **UX-30 — Inert OAuth button.** `SlackPanel.vue:176-183` awaits `installUrl()`
-  with no `:loading` (paste-token button beside it does it right).
+- **UX-29 — Global loading flag. DONE.** `FragmentLibraryManager.vue` no longer binds
+  its row buttons to the shared `library.loading`. A `reactive(new Set())` of keyed
+  in-flight ids (`refresh:`/`remove:`/`sync:`/`check:`/`unlink:` + row id) drives each row
+  button's `:loading` via a `withRow(key, fn)` wrapper, so only the button that triggered an
+  action spins (and `checkSource`/`unlinkSource`, previously unspinnable, now show progress).
+  The three add/link submit buttons got their own local `creating`/`linkingDoc`/`linkingSource`
+  refs so they no longer cross-spin during a row action (and the `linkSource` button, which
+  never set `library.loading`, now shows its own progress).
+- **UX-30 — Inert OAuth button. DONE.** `SlackPanel.vue`'s "Add to Slack" button binds a
+  `connectingOAuth` ref set before awaiting `installUrl()`; it clears only on the error path
+  (the success path navigates the browser away), matching the paste-token button beside it.
 - **UX-31 — Edit without focus move.** `LocalModelEndpointsPanel.vue:228`,
   `UserSecretsSection` — "edit" mutates state but the form is below a long list;
   on small viewports the click appears to do nothing. Fix: scroll-into-view + focus.
@@ -683,6 +693,28 @@ w-72 … lg:flex">`, so below `lg` (laptop split-screen, tablet) the human could
 group-hover:opacity-100` control is invisible to keyboard/touch; add
   `group-focus-within:opacity-100` (tabbing into the containing row) and `focus-visible:opacity-100`
   (the control itself focused) so it isn't a pointer-only gesture (UX-42).
+- **Per-item async feedback comes from per-key in-flight tracking, not a shared store
+  `loading` flag, for any LIST of actionable rows.** A single `store.loading` bound to every
+  row's button spins them all at once and cross-spins sibling forms (UX-29). Track a
+  `reactive(new Set<string>())` of keyed ids (`<action>:<rowId>`) and wrap each row action in a
+  `withRow(key, fn)` helper that adds/removes the key in a `try/finally`; bind `:loading` to
+  `set.has(key)`. Give each distinct form-submit its OWN local `ref` so it can't inherit an
+  unrelated action's spinner. (Same "one control, one signal" idea as the elapsed-clock and
+  disabled-reason conventions.)
+- **A list of editable rows keys `v-model` by a client-only stable `uid`, never the array
+  index.** Deleting/reordering a middle row with `:key="i"` silently rebinds a neighbour's
+  inputs (UX-23). Stamp each row a `uid` on load/add (a module `let seq = 0; nextUid()` counter —
+  do NOT reach for `Math.random`), key by it, delete by it, and re-stamp on save-reload. Pair
+  with a save-time integrity check: a half-filled row (some but not all required fields) BLOCKS
+  the save with a warning toast rather than being silently dropped; a fully-empty row is an
+  unused slot and is ignored.
+- **A destructive list-row action gets the same `useConfirm()` gate its siblings have.** An
+  `unlink`/`remove`/`disconnect` that removes real state (a synced fragment source and its
+  fragments — UX-21) must route through `useConfirm({ variant: 'destructive', … })` naming the
+  target, mirroring the nearest already-confirmed sibling in the same component (`removeFragment`).
+- **A button that triggers a full-page navigation still needs a pending state.** `SlackPanel`'s
+  OAuth button sets a `connectingOAuth` ref before `await`ing the redirect URL and clears it ONLY
+  on the error path — the success path unloads the page, so there is nothing to reset (UX-30).
 - When fixing i18n papercuts (UX-13), remember the locale-parity CI check: adding,
   changing, OR removing an `en.json` key requires the same change in every other locale in
   the same PR (removing the two dead `clarity.*` keys above meant editing all 8 locales).
