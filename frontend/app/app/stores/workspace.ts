@@ -120,6 +120,7 @@ export const useWorkspaceStore = defineStore(
       useExecutionStore().hydrate(snapshot.executions, snapshot.workspace.id)
       useAgentRunsStore().hydrate(snapshot.bootstrapJobs ?? [], snapshot.workspace.id)
       useAgentRunsStore().hydrateEnvConfigRepair(snapshot.envConfigRepairJobs ?? [])
+      useEnvironmentTestStore().hydrate(snapshot.environmentTestRuns ?? [])
       useNotificationsStore().hydrate(snapshot.notifications ?? [])
       useRiskPoliciesStore().hydrate(
         snapshot.riskPolicies ?? [],

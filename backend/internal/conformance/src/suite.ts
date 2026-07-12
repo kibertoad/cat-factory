@@ -2265,6 +2265,7 @@ export function defineAgentConformance(harness: ConformanceHarness): void {
           listDirectory: async () => [],
           headSha: async () => 'base-sha',
           createBranch: async () => {},
+          deleteBranch: async () => {},
           commitFiles: async (input) => {
             commits.push({ branch: input.branch, files: input.files })
             return { sha: 'commit-sha' }
@@ -2376,6 +2377,7 @@ export function defineAgentConformance(harness: ConformanceHarness): void {
           // truthy for every ref, so the swap resolves to it rather than creating one.
           headSha: async () => 'base-sha',
           createBranch: async () => {},
+          deleteBranch: async () => {},
           commitFiles: async (input) => {
             commits.push({ branch: input.branch, files: input.files })
             return { sha: 'commit-sha' }
@@ -3130,6 +3132,7 @@ export function defineAgentConformance(harness: ConformanceHarness): void {
           listDirectory: async () => [],
           headSha: async () => 'base-sha',
           createBranch: async () => {},
+          deleteBranch: async () => {},
           commitFiles: async (input) => {
             commits.push({ branch: input.branch, files: input.files })
             return { sha: 'commit-sha' }
@@ -3189,6 +3192,7 @@ export function defineAgentConformance(harness: ConformanceHarness): void {
           listDirectory: async () => [],
           headSha: async () => 'base-sha',
           createBranch: async () => {},
+          deleteBranch: async () => {},
           commitFiles: async (input) => {
             commits.push({ branch: input.branch, files: input.files })
             return { sha: 'commit-sha' }
@@ -5745,6 +5749,7 @@ export function defineIntegrationConformance(harness: ConformanceHarness): void 
             listDirectory: async () => [],
             headSha: async () => 'base-sha',
             createBranch: async () => {},
+            deleteBranch: async () => {},
             commitFiles: async () => ({ sha: 'c' }),
             openPullRequest: async () => ({ number: 1 }) as never,
           }
@@ -5851,6 +5856,7 @@ export function defineIntegrationConformance(harness: ConformanceHarness): void 
             },
             headSha: async () => 'base-sha',
             createBranch: async () => {},
+            deleteBranch: async () => {},
             commitFiles: async () => ({ sha: 'c' }),
             openPullRequest: async () => ({ number: 1 }) as never,
           }
@@ -5909,6 +5915,7 @@ export function defineIntegrationConformance(harness: ConformanceHarness): void 
           listDirectory: async () => [],
           headSha: async () => 'base-sha',
           createBranch: async () => {},
+          deleteBranch: async () => {},
           commitFiles: async () => ({ sha: 'c' }),
           openPullRequest: async () => ({ number: 1 }) as never,
         }

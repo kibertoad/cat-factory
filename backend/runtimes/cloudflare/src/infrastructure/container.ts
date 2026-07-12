@@ -156,6 +156,7 @@ import { DurableObjectEventPublisher } from './events/DurableObjectEventPublishe
 import { WorkflowsWorkRunner } from './workflows/WorkflowsWorkRunner'
 import { WorkflowsBootstrapRunner } from './workflows/WorkflowsBootstrapRunner'
 import { WorkflowsEnvConfigRepairRunner } from './workflows/WorkflowsEnvConfigRepairRunner'
+import { WorkflowsEnvironmentTestRunner } from './workflows/WorkflowsEnvironmentTestRunner'
 import { D1BlockRepository } from './repositories/D1BlockRepository'
 import { D1ExecutionRepository } from './repositories/D1ExecutionRepository'
 import { D1PipelineRepository } from './repositories/D1PipelineRepository'
@@ -194,6 +195,7 @@ import { D1EnvironmentRegistryRepository } from './repositories/D1EnvironmentReg
 import { D1ReferenceArchitectureRepository } from './repositories/D1ReferenceArchitectureRepository'
 import { D1BootstrapJobRepository } from './repositories/D1BootstrapJobRepository'
 import { D1EnvConfigRepairJobRepository } from './repositories/D1EnvConfigRepairJobRepository'
+import { D1EnvironmentTestRunRepository } from './repositories/D1EnvironmentTestRunRepository'
 import { D1AgentRunRepository } from './repositories/D1AgentRunRepository'
 import { D1BinaryArtifactMetadataStore } from './repositories/D1BinaryArtifactMetadataStore'
 import { R2BinaryBlobBackend } from './storage/R2BinaryBlobBackend'
@@ -2327,6 +2329,13 @@ export function buildContainer(
     envConfigRepairJobRepository: new D1EnvConfigRepairJobRepository({ db }),
     envConfigRepairRunner: env.ENV_CONFIG_REPAIR_WORKFLOW
       ? new WorkflowsEnvConfigRepairRunner(env.ENV_CONFIG_REPAIR_WORKFLOW)
+      : undefined,
+    // The ephemeral-environment self-test: its own run store + the durable driver when the
+    // Workflows binding is present (the Workflow is self-resuming across eviction, so no cron
+    // sweep is needed — the stop button + always-cleanup cover a wedged run).
+    environmentTestRunRepository: new D1EnvironmentTestRunRepository({ db }),
+    environmentTestRunner: env.ENV_TEST_WORKFLOW
+      ? new WorkflowsEnvironmentTestRunner(env.ENV_TEST_WORKFLOW)
       : undefined,
     ...selectGitHubDeps(env, config, db, clock, idGenerator, caches.repoFiles),
     ...selectMergeLifecycleDeps(env, config, db, clock, idGenerator),

@@ -29,6 +29,7 @@ import { executionRuntime } from './execution/config.js'
 import { startExecutionWorker, startStaleRunSweeper } from './execution/pgBossRunner.js'
 import { startBootstrapWorker } from './execution/bootstrapRunner.js'
 import { startEnvConfigRepairWorker } from './execution/envConfigRepairRunner.js'
+import { startEnvTestWorker } from './execution/envTestRunner.js'
 import { startEnvironmentSweeper } from './environments.js'
 import { startScheduleSweeper } from './recurring.js'
 import { resolveSweepInterval, startInitiativeLoopSweeper } from './initiativeLoop.js'
@@ -324,6 +325,11 @@ async function bootServer(
   // Durably drive env-config-repair runs (the Worker uses a per-run EnvConfigRepairWorkflow);
   // a no-op queue when the repair module isn't wired.
   await startEnvConfigRepairWorker(boss, container, runtime.drive, logger, {
+    concurrency: runtime.concurrency,
+  })
+  // Durably drive ephemeral-environment self-test runs (the Worker uses a per-run
+  // EnvironmentTestWorkflow); a no-op queue when the environments module isn't wired.
+  await startEnvTestWorker(boss, container, runtime.drive, logger, {
     concurrency: runtime.concurrency,
   })
   const app = createApp(container, env)

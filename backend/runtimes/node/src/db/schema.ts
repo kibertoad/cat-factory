@@ -1574,6 +1574,30 @@ export const environments = pgTable(
   ],
 )
 
+// Ephemeral-environment self-test runs (mirror of D1 migration 0050). A developer-triggered
+// diagnostic that exercises a service frame's provisioning config end to end against a
+// throwaway branch (create branch → provision → tear down → delete branch). Its own table
+// (not agent_runs) because it carries a `stage` state machine and is not a container agent.
+export const environmentTestRuns = pgTable(
+  'environment_test_runs',
+  {
+    id: text('id').primaryKey(),
+    workspace_id: text('workspace_id').notNull(),
+    block_id: text('block_id').notNull(),
+    status: text('status').notNull(),
+    stage: text('stage').notNull(),
+    initiated_by: text('initiated_by'),
+    branch: text('branch'),
+    environment_id: text('environment_id'),
+    env_url: text('env_url'),
+    error: text('error'),
+    failed_stage: text('failed_stage'),
+    created_at: bigint('created_at', { mode: 'number' }).notNull(),
+    updated_at: bigint('updated_at', { mode: 'number' }).notNull(),
+  },
+  (t) => [index('idx_environment_test_runs_ws_status').on(t.workspace_id, t.status)],
+)
+
 // Repo-bootstrap feature: managed reference architectures a new repo is bootstrapped
 // from (mirror of D1 migration 0010). The bootstrap *runs* themselves are stored as
 // kind='bootstrap' rows of the unified agent_runs table (no separate table), exactly

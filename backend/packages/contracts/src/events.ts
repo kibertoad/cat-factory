@@ -1,6 +1,7 @@
 import type { Block, ExecutionInstance } from './entities.js'
 import type { BootstrapJob } from './bootstrap.js'
 import type { EnvConfigRepairJob } from './env-config-repair.js'
+import type { EnvironmentTestRun } from './environment-test.js'
 import type { Notification } from './notifications.js'
 import type { LlmCallActivity } from './observability.js'
 import type { RequirementReview } from './requirements.js'
@@ -42,6 +43,14 @@ export type WorkspaceEvent =
    * There is no board block — this run is surfaced only on the infra window.
    */
   | { type: 'env-config-repair'; job: EnvConfigRepairJob; at: number }
+  /**
+   * An ephemeral-environment self-test run advanced (branch created, provisioning,
+   * tearing down, deleting branch, or a terminal success/failure). Carries the
+   * updated run so the service inspector's "Test environment creation" control shows
+   * the live stage + final outcome without a refetch. There is no board block — this
+   * run is surfaced only on the inspector that triggered it.
+   */
+  | { type: 'envTest'; run: EnvironmentTestRun; at: number }
   /**
    * A human-actionable notification was raised or resolved (a PR needs review, a
    * pipeline finished and wants confirmation, CI fixing gave up). The client

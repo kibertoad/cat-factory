@@ -86,6 +86,12 @@ binding = "ENV_CONFIG_REPAIR_WORKFLOW"
 name = "cat-factory-env-config-repair"
 class_name = "EnvConfigRepairWorkflow"
 
+# Durable driver for the ephemeral-environment self-test diagnostic.
+[[workflows]]
+binding = "ENV_TEST_WORKFLOW"
+name = "cat-factory-env-test"
+class_name = "EnvironmentTestWorkflow"
+
 # Per-run implementation container. The acceptance suite builds this image from
 # the internal harness package's Dockerfile, so dev/test reference it by local
 # path; the production deployment instead references the published GHCR image

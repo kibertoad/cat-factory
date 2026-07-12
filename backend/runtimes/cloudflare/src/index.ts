@@ -42,6 +42,7 @@ import { D1WorkspaceSettingsRepository } from './infrastructure/repositories/D1W
 export { ExecutionWorkflow } from './infrastructure/workflows/ExecutionWorkflow'
 export { GitHubBackfillWorkflow } from './infrastructure/workflows/GitHubBackfillWorkflow'
 export { BootstrapWorkflow } from './infrastructure/workflows/BootstrapWorkflow'
+export { EnvironmentTestWorkflow } from './infrastructure/workflows/EnvironmentTestWorkflow'
 export { EnvConfigRepairWorkflow } from './infrastructure/workflows/EnvConfigRepairWorkflow'
 // Container-enabled Durable Object backing per-run implementation containers.
 export { ExecutionContainer } from './infrastructure/containers/ExecutionContainer'

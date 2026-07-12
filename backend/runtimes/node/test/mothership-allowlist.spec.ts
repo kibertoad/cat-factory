@@ -28,6 +28,7 @@ import {
 } from '../src/repositories/environments.js'
 import { DrizzleEnvironmentUserHandlerRepository } from '../src/repositories/environmentUserHandler.js'
 import { DrizzleEnvConfigRepairJobRepository } from '../src/repositories/envConfigRepair.js'
+import { DrizzleEnvironmentTestRunRepository } from '../src/repositories/environmentTest.js'
 import { DrizzleCustomManifestTypeRepository } from '../src/repositories/customManifestType.js'
 import {
   DrizzleFragmentSourceRepository,
@@ -323,6 +324,15 @@ const NON_REMOTE: Record<string, Record<string, Reason>> = {
   // `get`/`insert`/`update` are now allow-listed (the repair retry/stop run-control surface);
   // `listByWorkspace` was already remote (the run-path list). The whole repo is now remote.
   envConfigRepairJobRepository: {},
+  // The ephemeral-environment self-test is a member-level, workspace-scoped run-path
+  // diagnostic, but it needs `resolveRunRepoContext` (GitHub) which mothership mode does not
+  // proxy yet — so the whole repo stays off the machine API until a later slice proxies it.
+  environmentTestRunRepository: {
+    insert: 'pending',
+    update: 'pending',
+    get: 'pending',
+    listRunningByWorkspace: 'pending',
+  },
   // The whole environment-connection management surface is now remote (the connection +
   // per-type infra-handler settings panels: list/connect/disconnect/register-handler). Its
   // secrets ride a SEALED `secretsCipher` blob (sealed/decrypted in the service under the LOCAL
@@ -536,6 +546,7 @@ function reflectAllRepositories(): Record<string, string[]> {
     environmentConnectionRepository: DrizzleEnvironmentConnectionRepository,
     environmentUserHandlerRepository: DrizzleEnvironmentUserHandlerRepository,
     envConfigRepairJobRepository: DrizzleEnvConfigRepairJobRepository,
+    environmentTestRunRepository: DrizzleEnvironmentTestRunRepository,
     customManifestTypeRepository: DrizzleCustomManifestTypeRepository,
     fragmentSourceRepository: DrizzleFragmentSourceRepository,
     promptFragmentRepository: DrizzlePromptFragmentRepository,

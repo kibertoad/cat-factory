@@ -332,6 +332,13 @@ export type {
 } from './env-config-repair.js'
 export { NoopEnvConfigRepairRunner } from './env-config-repair.js'
 export type {
+  EnvironmentTestRunRecord,
+  EnvironmentTestRunRecordPatch,
+  EnvironmentTestRunRepository,
+  EnvironmentTestRunner,
+} from './environment-test.js'
+export { NoopEnvironmentTestRunner } from './environment-test.js'
+export type {
   HarnessCallMetric,
   RunnerDispatchKind,
   RunnerDispatchOptions,

@@ -117,6 +117,15 @@ binding = "ENV_CONFIG_REPAIR_WORKFLOW"
 name = "cat-factory-env-config-repair"
 class_name = "EnvConfigRepairWorkflow"
 
+# Durable driver for the ephemeral-environment self-test diagnostic
+# (EnvironmentTestWorkflow). Each run becomes one instance whose id is the run id; it
+# advances the create-branch → provision → tear-down → delete-branch stage machine,
+# streaming live stage events. Only used when the environments module is configured.
+[[workflows]]
+binding = "ENV_TEST_WORKFLOW"
+name = "cat-factory-env-test"
+class_name = "EnvironmentTestWorkflow"
+
 # Per-run code-implementation containers (the @cat-factory/executor-harness
 # Pi coding-agent image). Each run addresses its own instance. Container-based
 # implementation is always on — this binding (or a registered runner pool) is a
