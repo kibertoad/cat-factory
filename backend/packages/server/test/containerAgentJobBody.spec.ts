@@ -718,6 +718,129 @@ describe('ContainerAgentExecutor private package registries', () => {
   })
 })
 
+describe('ContainerAgentExecutor dispatch I/O parallelism', () => {
+  // The independent dispatch resolutions — installation-token mint, work-branch ensure, auth,
+  // package registries, tester secrets, web-search availability — are fanned out in one wave
+  // once the repo target is resolved (audit item 4). This pins that they overlap rather than
+  // running one-after-another, and that the fire-and-forget context-observability record no
+  // longer blocks the returned handle.
+
+  // A deferred promise whose resolution we drive from the test, so we can observe which
+  // resolvers have STARTED before any of them finishes.
+  function deferred<T>(): { promise: Promise<T>; resolve: (v: T) => void } {
+    let resolve!: (v: T) => void
+    const promise = new Promise<T>((r) => {
+      resolve = r
+    })
+    return { promise, resolve }
+  }
+
+  it('starts the independent dispatch resolvers concurrently (not serialised)', async () => {
+    const started = { token: false, branch: false, registries: false, search: false }
+    const gates = {
+      token: deferred<string>(),
+      branch: deferred<boolean>(),
+      registries: deferred<never[]>(),
+      search: deferred<{ available: boolean; provider: null }>(),
+    }
+    const transport: RunnerTransport = {
+      async dispatch() {},
+      async poll() {
+        return { state: 'running' }
+      },
+    }
+    const executor = new ContainerAgentExecutor({
+      resolveTransport: async () => transport,
+      agentRouting: routing,
+      resolveBlockModel: () => undefined,
+      resolveRepoTarget: async () => ({
+        installationId: 7,
+        owner: 'acme',
+        name: 'widgets',
+        baseBranch: 'main',
+      }),
+      mintInstallationToken: () => {
+        started.token = true
+        return gates.token.promise
+      },
+      ensureWorkBranch: () => {
+        started.branch = true
+        return gates.branch.promise
+      },
+      resolvePackageRegistries: () => {
+        started.registries = true
+        return gates.registries.promise
+      },
+      resolveWebSearchAvailability: () => {
+        started.search = true
+        return gates.search.promise
+      },
+      sessionService: {
+        async mint() {
+          return 'SESSION-TOKEN'
+        },
+      } as unknown as ContainerSessionService,
+      proxyBaseUrl: 'https://proxy.test/v1',
+    })
+
+    const job = executor.startJob(context('coder'))
+    // Let the pending microtasks + a macrotask boundary drain so every resolver has been kicked
+    // off (the repo-target/model resolutions precede the wave). None has RESOLVED, so if the
+    // executor were serialising it would be parked on the first resolver only.
+    await new Promise((r) => setTimeout(r, 0))
+    expect(started).toEqual({ token: true, branch: true, registries: true, search: true })
+
+    gates.token.resolve('GH-TOKEN')
+    gates.branch.resolve(true)
+    gates.registries.resolve([])
+    gates.search.resolve({ available: false, provider: null })
+    await job
+  })
+
+  it('does not wait on the context-observability record before returning the handle', async () => {
+    const recordGate = deferred<void>()
+    let recordStarted = false
+    const transport: RunnerTransport = {
+      async dispatch() {},
+      async poll() {
+        return { state: 'running' }
+      },
+    }
+    const executor = new ContainerAgentExecutor({
+      resolveTransport: async () => transport,
+      agentRouting: routing,
+      resolveBlockModel: () => undefined,
+      resolveRepoTarget: async () => ({
+        installationId: 7,
+        owner: 'acme',
+        name: 'widgets',
+        baseBranch: 'main',
+      }),
+      mintInstallationToken: async () => 'GH-TOKEN',
+      ensureWorkBranch: async () => true,
+      sessionService: {
+        async mint() {
+          return 'SESSION-TOKEN'
+        },
+      } as unknown as ContainerSessionService,
+      proxyBaseUrl: 'https://proxy.test/v1',
+      agentContextObservability: {
+        record() {
+          recordStarted = true
+          // Never resolves within the test: a blocking await here would hang startJob.
+          return recordGate.promise
+        },
+      },
+    })
+
+    // Resolves despite the recorder promise being outstanding — the record is fire-and-forget.
+    const handle = await executor.startJob(context('coder'))
+    expect(handle.jobId).toBeDefined()
+    expect(recordStarted).toBe(true)
+    recordGate.resolve()
+  })
+})
+
 // The migrated merger/on-call dispatch the generic `agent` kind and return their JSON as
 // `result.custom`; `toRunResult` maps it KIND-AWARE into `mergeAssessment`/`onCallAssessment`
 // using the handle's `agentKind`. These tests pin that mapping (the poll site must supply

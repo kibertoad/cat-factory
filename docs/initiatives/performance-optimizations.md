@@ -1,6 +1,6 @@
 # Initiative: performance optimizations (prioritized)
 
-**Status:** in progress — items 1, 2, 3 landed (emit metrics rollup · gate-poll GitHub reads · live-run projection) · **Owner:** core · **Started:** 2026-07-09
+**Status:** in progress — items 1, 2, 3, 4 landed (emit metrics rollup · gate-poll GitHub reads · live-run projection · parallel dispatch waves) · **Owner:** core · **Started:** 2026-07-09
 
 > This is the durable source of truth for a multi-PR initiative. Read it first before
 > picking up the next slice; update the checklist at the end of each PR.
@@ -52,7 +52,7 @@ symmetric" (CLAUDE.md).
 | 1   | P1  | engine       | `emitInstance` runs LLM-metrics GROUP BY on every emit (incl. progress ticks)                                                       | ✅ done | branch `claude/performance-tracker-next-phase-cvbcmh`     |
 | 2   | P1  | gateways     | Gate polls: uncached `repoId()` + PAT re-resolved per `request()` + `listCommits` head lookup                                       | ✅ done | [#993](https://github.com/kibertoad/cat-factory/pull/993) |
 | 3   | P1  | persistence  | Execution lists `SELECT *` (incl. `detail` JSON) + JS status filter on dispatch guard; missing `(workspace_id, kind, status)` index | ✅ done | [#996](https://github.com/kibertoad/cat-factory/pull/996) |
-| 4   | P1  | dispatch     | `buildJobBody` serializes ~6 independent I/O steps per dispatch                                                                     | ⬜ todo |                                                           |
+| 4   | P1  | dispatch     | `buildJobBody` serializes ~6 independent I/O steps per dispatch                                                                     | ✅ done | branch `claude/perf-tracker-next-phase-3wg1gq`            |
 | 5   | P1  | frontend     | Board snapshot embeds full step outputs the board never reads                                                                       | ⬜ todo |                                                           |
 | 6   | P1  | frontend     | Coarse `board` event forces full-snapshot refresh; payload already carries `blockId`                                                | ⬜ todo |                                                           |
 | 7   | P2  | caching      | `SpendService` three banned TTL `Map`s (pricing / account / user limits)                                                            | ⬜ todo |                                                           |
@@ -179,6 +179,21 @@ resolvePackageRegistries, resolveTestSecrets, resolveWebSearchAvailability]`. Se
 `startJob` awaits the best-effort `agentContextObservability.record` before returning
 (`:696-704`) — fire-and-forget it (still swallowing errors) so the driver proceeds to the
 first poll immediately.
+
+**Landed (branch `claude/perf-tracker-next-phase-3wg1gq`):** once the repo target is resolved,
+`buildJobBody` fans the six independent dispatch resolutions out in a single `Promise.all`
+wave — the repo-scoped `mintInstallationToken` + work-branch ensure alongside the
+workspace/block-scoped `resolveAuth`, `resolvePackageRegistries`, `resolveTestSecrets`, and
+`resolveWebSearchAvailability` — collapsing ~6 serial round-trips per step dispatch (and per
+tester→fixer re-dispatch epoch) to one. The apriori/work-branch logic moved to a private
+`resolveWorkBranchReady` helper so it fits as one entry in the wave (behaviour unchanged: PR-head
+short-circuit, apriori probe-only-or-fail, writer-create / reader-probe). `startJob` no longer
+awaits `agentContextObservability.record` — it's `void`-dispatched with a swallowing `.catch`, so
+the returned handle no longer blocks on the observability write. Pure `@cat-factory/server`
+change (no persistence / no conformance surface). The per-kind body snapshots are byte-identical
+(the `containerAgentJobBody.spec.ts` characterization guard), plus two new tests pin the
+concurrency (resolvers all started before any resolves) and the fire-and-forget record (the
+handle returns while the recorder promise is still outstanding).
 
 ### 5. Board snapshot carries full step outputs the board never reads — P1
 
