@@ -55,7 +55,11 @@ async function driveEnvTest(
     if (result.state === 'done' || result.state === 'failed') return
     await sleep(cfg.jobPollIntervalMs)
   }
-  log.warn({ workspaceId, id }, 'env-test drive exhausted its poll budget')
+  // Budget exhausted without converging. These runs have no stuck-run sweeper, so finalize here
+  // (best-effort cleanup + mark failed) rather than leaving the run `running` forever with an
+  // orphaned branch/env. Idempotent, so a pg-boss retry that re-drives is safe.
+  log.warn({ workspaceId, id }, 'env-test drive exhausted its poll budget; finalizing')
+  await service.finalizeExhausted(workspaceId, id)
 }
 
 export class PgBossEnvironmentTestRunner implements EnvironmentTestRunner {

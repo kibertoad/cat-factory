@@ -49,9 +49,11 @@ export class EnvironmentTestWorkflow extends WorkflowEntrypoint<
     const pollInterval = execConfig.jobPollInterval as WorkflowSleepDuration
     const log = logger.child({ workspaceId, jobId, workflow: 'env-test' })
 
-    // Consecutive failures to READ/advance the run — treated as transient. See
-    // BootstrapWorkflow (F2): returning on a transient throw would make the instance terminal
-    // and get the still-`running` run finalized as STOPPED by the sweeper instead of resumed.
+    // Consecutive failures to READ/advance the run — treated as transient (retried within the
+    // budget rather than failing the run on a blip). See BootstrapWorkflow (F2): returning on a
+    // transient throw would make the instance terminal prematurely. Only a genuine terminal state
+    // returns early; exhausting the whole budget finalizes the run via `finalizeExhausted` below
+    // (these runs have no separate stuck-run sweeper, unlike the agent_runs-backed flows).
     let pollReadFailures = 0
     for (let p = 0; p < execConfig.jobMaxPolls; p++) {
       await step.sleep(`poll-wait-${p}`, pollInterval)
@@ -83,6 +85,20 @@ export class EnvironmentTestWorkflow extends WorkflowEntrypoint<
       }
       // still running — loop and advance again after the next durable sleep.
     }
-    log.warn('env-test run did not finish within its polling budget; finalizing via sweeper')
+    // Budget exhausted without converging. There is no stuck-run sweeper for this table, so
+    // finalize here (best-effort cleanup + mark failed) rather than leaving the run `running`
+    // forever with an orphaned branch/env.
+    log.warn('env-test run exhausted its polling budget; finalizing (cleanup + fail)')
+    try {
+      await step.do('finalize-exhausted', STEP_CONFIG, async () => {
+        const service = container.environments?.environmentTest
+        await service?.finalizeExhausted(workspaceId, jobId)
+      })
+    } catch (error) {
+      log.warn(
+        { err: error instanceof Error ? error.message : String(error) },
+        'env-test finalize-exhausted failed; run left for a later re-drive',
+      )
+    }
   }
 }

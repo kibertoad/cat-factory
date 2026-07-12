@@ -16,7 +16,13 @@ import type {
   EnvironmentTestRunRepository,
   WorkspaceRepository,
 } from '@cat-factory/kernel'
-import { assertFound, ConflictError, getErrorMessage, requireWorkspace } from '@cat-factory/kernel'
+import {
+  assertFound,
+  ConflictError,
+  getErrorMessage,
+  NotFoundError,
+  requireWorkspace,
+} from '@cat-factory/kernel'
 import type { ProvisionArgs, ProvisionDispatch } from '@cat-factory/integrations'
 
 /** The poll's terminal-ness, returned to the durable driver so it knows when to stop. */
@@ -298,10 +304,35 @@ export class EnvironmentTestService {
     record: EnvironmentTestRunRecord,
   ): Promise<EnvironmentTestPollResult> {
     if (record.environmentId) {
-      await this.deps.teardown.teardown(record.workspaceId, record.environmentId)
+      try {
+        await this.deps.teardown.teardown(record.workspaceId, record.environmentId)
+      } catch (error) {
+        // A durable-driver replay can re-enter this stage after teardown already tombstoned the
+        // env, if the stage-advance write was lost to a crash between the two. Teardown then
+        // 404s on the now-missing env — that means it already succeeded, so treat it as done and
+        // move on. Only a GENUINE provider teardown failure (the env is still standing) should
+        // fail the self-test, so anything other than a not-found is re-thrown.
+        if (!(error instanceof NotFoundError)) throw error
+      }
     }
     await this.patch(record, { stage: 'deleting_branch' })
     return { state: 'running' }
+  }
+
+  /**
+   * Finalize a run that exhausted its durable poll budget without converging: run best-effort
+   * cleanup (tear down any env + delete the branch) and mark it `failed`. The durable drivers
+   * (Cloudflare Workflow / pg-boss) call this once their poll loop ends non-terminally, because
+   * these runs live in their own table with NO stuck-run sweeper (unlike the `agent_runs`-backed
+   * flows) — without it a run whose provisioning never finished in budget would be left `running`
+   * forever, orphaning its throwaway branch (and environment). Idempotent: a run that already
+   * reached a terminal state (or vanished) is returned/skipped unchanged.
+   */
+  async finalizeExhausted(workspaceId: string, id: string): Promise<EnvironmentTestRun | null> {
+    const record = await this.deps.environmentTestRunRepository.get(workspaceId, id)
+    if (!record) return null
+    if (record.status !== 'running') return toRun(record)
+    return this.fail(record, 'The environment self-test did not finish within its time budget.')
   }
 
   private async advanceDeleteBranch(
