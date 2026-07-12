@@ -36,6 +36,7 @@ import { resolveSweepInterval, startInitiativeLoopSweeper } from './initiativeLo
 import { startKaizenSweeper } from './kaizen.js'
 import { startNotificationEscalationSweeper } from './notifications.js'
 import { buildRealtimePropagator } from './propagator.js'
+import { type ReadinessProbe, makeReadinessProbe } from './readiness.js'
 import { NodeRealtimeHub, attachRealtime } from './realtime.js'
 import { DrizzleGitHubInstallationRepository } from './repositories/containerExecution.js'
 import { createDrizzleRepositories } from './repositories/drizzle.js'
@@ -55,10 +56,21 @@ import { SystemClock } from './runtime.js'
 
 export interface CreateServerOptions extends NodeContainerOptions {}
 
+export interface CreateAppOptions {
+  /**
+   * A readiness probe mounted on the public `GET /ready`. Wired by {@link start} from the live
+   * Postgres pool + pg-boss so a broken replica drains out of rotation. Omitted (embedded
+   * `createServer`, local mothership mode) ⇒ `/ready` mirrors `/health` — there is no local
+   * durable-execution substrate to probe. See {@link ./readiness.js}.
+   */
+  readiness?: ReadinessProbe
+}
+
 /** Build the Hono app around a ready container (shared by `createServer` + `start`). */
 export function createApp(
   container: ServerContainer,
   env: NodeJS.ProcessEnv = process.env,
+  opts: CreateAppOptions = {},
 ): Hono<AppEnv> {
   const app = new Hono<AppEnv>()
 
@@ -78,7 +90,20 @@ export function createApp(
     await next()
   })
 
+  // Liveness: the process is up. Always 200 — a restart can't fix a dead downstream, and this is
+  // what the orchestrator restarts on. Readiness (pool + pg-boss) is `/ready` below.
   app.get('/health', (c) => c.json({ status: 'ok' }))
+  // Readiness: drained on when the pool dies, pg-boss stops, or shutdown begins. Public (before the
+  // auth gate) so a load balancer can probe it unauthenticated, like `/health`. With no probe wired
+  // (embedded/mothership) it reports ready — there is no local substrate to drain on.
+  app.get('/ready', async (c) => {
+    if (!opts.readiness) return c.json({ status: 'ready', checks: {} })
+    const report = await opts.readiness()
+    return c.json(
+      { status: report.ready ? 'ready' : 'not_ready', checks: report.checks },
+      report.ready ? 200 : 503,
+    )
+  })
 
   // Default-deny session gate + per-workspace authz, shared verbatim with the Worker
   // (one implementation in @cat-factory/server so the runtimes can't drift).
@@ -282,6 +307,18 @@ async function bootServer(
   // a recovery hint when the DB is wedged.
   await migrate(db, pool, { schema: dbSchema, migrationsSchema })
   await boss.start()
+  // pg-boss lifecycle flags for the `/ready` probe: it's running once `start()` resolves and stops
+  // being ready when it emits `stopped` (graceful shutdown) or `draining` flips at SIGTERM. The
+  // pool's own health is probed live per request (a `SELECT 1`), so it needs no flag.
+  // NOTE: this tracks the GRACEFUL `stopped` transition only — a boss that crashes/wedges without
+  // emitting `stopped` still reads healthy here. That's an accepted residual gap: such an outage is
+  // almost always a shared-database failure the live `SELECT 1` probe catches, and flipping the
+  // flag off every transient `error` event would drain the replica on recoverable blips.
+  let bossRunning = true
+  boss.on('stopped', () => {
+    bossRunning = false
+  })
+  let draining = false
 
   // Build the repositories once and share them with both the container and the
   // retention sweeper (so the sweeper prunes the very stores the app writes to).
@@ -356,7 +393,16 @@ async function bootServer(
   await startGitHubSyncWorker(boss, container, logger, {
     concurrency: runtime.concurrency,
   })
-  const app = createApp(container, env)
+  // Readiness probe for `/ready`: a live Postgres round-trip + the pg-boss flag, draining the
+  // instant shutdown begins so a load balancer stops routing here while in-flight requests finish.
+  const readiness = makeReadinessProbe({
+    ping: async () => {
+      await pool.query('SELECT 1')
+    },
+    pgBossHealthy: () => bossRunning,
+    isDraining: () => draining,
+  })
+  const app = createApp(container, env, { readiness })
   const { server, stopRealtime } = serveAppWithRealtime({
     app,
     realtimeHub,
@@ -455,6 +501,9 @@ async function bootServer(
   const shutdown = async (signal: string) => {
     if (shuttingDown) return
     shuttingDown = true
+    // Flip `/ready` to not-ready FIRST so a load balancer drains this replica out of rotation
+    // before we start tearing down — new requests go elsewhere while in-flight ones finish.
+    draining = true
     logger.info({ signal }, 'shutting down cat-factory node server')
     stopSweeper()
     stopRetention()
