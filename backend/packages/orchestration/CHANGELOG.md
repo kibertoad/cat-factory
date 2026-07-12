@@ -1,5 +1,12 @@
 # @cat-factory/orchestration
 
+## 0.106.4
+
+### Patch Changes
+
+- Updated dependencies [e68c958]
+  - @cat-factory/integrations@0.81.10
+
 ## 0.106.3
 
 ### Patch Changes
