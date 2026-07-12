@@ -16,7 +16,7 @@ import { validateRegistrationsOnce } from '@cat-factory/orchestration'
 import type { BackendRegistries } from '@cat-factory/integrations'
 import { applyLocalDefaults, withLocalEnvCliAdvice } from './config.js'
 import { buildLocalContainer } from './container.js'
-import { githubPatCreationUrl } from './github.js'
+import { describePatProbeVerdict, githubPatCreationUrl, probeGitHubPat } from './github.js'
 import {
   RECOMMENDED_HARNESS_IMAGE,
   type ImageExec,
@@ -152,6 +152,13 @@ async function bootLocal(
         `open PRs/MRs, gate on CI or merge will fail. Create a GitHub token (scopes pre-selected) ` +
         `at ${githubPatCreationUrl()} then set GITHUB_PAT (or set GITLAB_PAT for GitLab) and restart.`,
     )
+  } else if (localized.GITHUB_PAT?.trim()) {
+    // A PAT IS set (GitHub mode): validate it once at boot so an invalid / expired / under-scoped
+    // token surfaces here — with the same one-click fix as the missing case — instead of failing
+    // opaquely on the first clone/push/PR/CI/merge later. Best-effort: a network hiccup or timeout
+    // leaves it unprobed (probeGitHubPat returns undefined), so it never blocks or crashes boot.
+    const warning = describePatProbeVerdict((await probeGitHubPat(localized)) ?? { ok: true })
+    if (warning) logger.warn(warning)
   }
 
   if (localized.AUTH_DEV_OPEN !== 'false' && !env.HOST?.trim()) {
