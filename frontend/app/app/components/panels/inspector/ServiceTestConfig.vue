@@ -247,6 +247,44 @@ async function generateOrFixManifest() {
   }
 }
 
+// Ephemeral-environment self-test: run the whole create-branch → provision → tear-down →
+// delete-branch cycle against this service's provisioning config and report success / the stage
+// it failed at. The returned run is tracked live (by frame id) via the workspace stream store.
+const envTest = useEnvironmentTestStore()
+const envTestStarting = ref(false)
+const envTestError = ref<string | null>(null)
+// The newest self-test run for this frame — re-attaches after a reconnect (the run is carried in
+// the snapshot while running), so the live stage keeps showing without a locally-held id.
+const envTestRun = computed(() => envTest.runForBlock(props.block.id))
+const envTestRunning = computed(() => envTestRun.value?.status === 'running')
+// Nothing to provision for an `infraless` service, so there is nothing to test.
+const canTestEnv = computed(() => provisionType.value !== 'infraless')
+
+async function startEnvTest() {
+  if (!canTestEnv.value || envTestStarting.value || envTestRunning.value) return
+  envTestStarting.value = true
+  envTestError.value = null
+  try {
+    await envTest.start(props.block.id)
+  } catch (e) {
+    envTestError.value =
+      apiErrorEnvelope(e)?.message ?? (e instanceof Error ? e.message : String(e))
+  } finally {
+    envTestStarting.value = false
+  }
+}
+
+async function stopEnvTest() {
+  const run = envTestRun.value
+  if (!run || run.status !== 'running') return
+  try {
+    await envTest.stop(run.id)
+  } catch (e) {
+    envTestError.value =
+      apiErrorEnvelope(e)?.message ?? (e instanceof Error ? e.message : String(e))
+  }
+}
+
 // The provisioning hints (cloud provider + instance size) are advisory inputs to the
 // ephemeral-environment provisioner, not commonly tuned — keep them collapsed by default.
 const showProvisioning = ref(false)
@@ -923,5 +961,77 @@ function setSize(value: InstanceSize) {
         </div>
       </div>
     </InspectorSection>
+
+    <!-- Ephemeral-environment self-test: exercise the whole provisioning lifecycle against a
+         throwaway branch and report success / the failing stage. Disabled for `infraless`. -->
+    <div class="mt-3 space-y-2 border-t border-white/5 pt-3" data-testid="env-test-section">
+      <div class="flex items-center justify-between gap-2">
+        <div class="min-w-0">
+          <p class="text-[11px] font-medium text-slate-300">
+            {{ t('inspector.testConfig.envTest.title') }}
+          </p>
+          <p class="text-[11px] text-slate-400">{{ t('inspector.testConfig.envTest.hint') }}</p>
+        </div>
+        <UButton
+          v-if="!envTestRunning"
+          icon="i-lucide-flask-conical"
+          size="xs"
+          color="primary"
+          variant="soft"
+          data-testid="env-test-start"
+          :loading="envTestStarting"
+          :disabled="!canTestEnv"
+          @click="startEnvTest"
+        >
+          {{ t('inspector.testConfig.envTest.start') }}
+        </UButton>
+        <UButton
+          v-else
+          icon="i-lucide-square"
+          size="xs"
+          color="neutral"
+          variant="ghost"
+          data-testid="env-test-stop"
+          @click="stopEnvTest"
+        >
+          {{ t('inspector.testConfig.envTest.stop') }}
+        </UButton>
+      </div>
+
+      <p v-if="!canTestEnv" class="text-[11px] text-slate-500">
+        {{ t('inspector.testConfig.envTest.infraless') }}
+      </p>
+
+      <!-- Live stage + terminal outcome of the tracked run (pushed via the workspace stream). -->
+      <p
+        v-if="envTestRun"
+        class="text-[11px]"
+        :class="{
+          'text-sky-300/80': envTestRun.status === 'running',
+          'text-emerald-300/80': envTestRun.status === 'succeeded',
+          'text-rose-300/80': envTestRun.status === 'failed',
+        }"
+        data-testid="env-test-status"
+      >
+        <template v-if="envTestRun.status === 'running'">
+          {{ t('inspector.testConfig.envTest.running') }} —
+          {{ t(`inspector.testConfig.envTest.stage.${envTestRun.stage}`) }}
+        </template>
+        <template v-else-if="envTestRun.status === 'succeeded'">
+          {{ t('inspector.testConfig.envTest.succeeded') }}
+        </template>
+        <template v-else>
+          {{ t('inspector.testConfig.envTest.failed') }}
+          <template v-if="envTestRun.failedStage">
+            ({{ t(`inspector.testConfig.envTest.stage.${envTestRun.failedStage}`) }})
+          </template>
+          <span v-if="envTestRun.error" class="block text-rose-300/70">{{ envTestRun.error }}</span>
+        </template>
+      </p>
+
+      <p v-if="envTestError" class="text-[11px] text-rose-400" data-testid="env-test-error">
+        {{ envTestError }}
+      </p>
+    </div>
   </InspectorSection>
 </template>

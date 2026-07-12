@@ -431,7 +431,11 @@
         "visual_pipeline_no_frontend": "Brak frontendu do przetestowania",
         "model_policy_blocked": "Model zablokowany przez politykę konta",
         "model_policy_unsupported": "Polityka modeli jest tu niedostępna",
-        "deployer_required_before_tester": "Dodaj Deployer przed Testerem"
+        "deployer_required_before_tester": "Dodaj Deployer przed Testerem",
+        "env_test_not_a_frame": "To nie usługa",
+        "env_test_infraless": "Nie ma czego testować",
+        "env_test_not_provisionable": "Handler środowiska nie jest skonfigurowany",
+        "env_test_no_vcs": "Dostawca Git nie jest połączony"
       },
       "fallbackMessage": "Ta akcja jest sprzeczna z bieżącym stanem.",
       "providersUnconfigured": {
@@ -778,6 +782,23 @@
         "title": "Konfiguracja środowiska Compose",
         "hint": "Skonfiguruj przepis, kontrole wstępne i handler, aby Deployer udostępnił ten stos.",
         "open": "Otwórz kreatora"
+      },
+      "envTest": {
+        "title": "Testowanie tworzenia środowiska",
+        "hint": "Uruchamia cały cykl życia na jednorazowej gałęzi: utworzenie gałęzi, udostępnienie, usunięcie zasobów, usunięcie gałęzi.",
+        "start": "Testowanie tworzenia środowiska",
+        "stop": "Zatrzymaj",
+        "infraless": "Skonfiguruj powyżej typ udostępniania, aby przetestować tworzenie środowiska.",
+        "running": "Testowanie",
+        "succeeded": "Test zaliczony: środowisko zostało utworzone i usunięte, a gałąź została skasowana.",
+        "failed": "Test nie powiódł się",
+        "stage": {
+          "creating_branch": "tworzenie gałęzi",
+          "provisioning": "udostępnianie środowiska",
+          "tearing_down": "usuwanie środowiska",
+          "deleting_branch": "usuwanie gałęzi",
+          "done": "gotowe"
+        }
       }
     },
     "agentConfig": {

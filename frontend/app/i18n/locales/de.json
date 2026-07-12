@@ -1093,6 +1093,23 @@
         "title": "Einrichtung der Compose-Umgebung",
         "hint": "Konfiguriere das Rezept, die Preflights und den Handler, damit der Deployer diesen Stack bereitstellt.",
         "open": "Assistent öffnen"
+      },
+      "envTest": {
+        "title": "Umgebungserstellung testen",
+        "hint": "Führt den gesamten Lebenszyklus gegen einen Wegwerf-Branch aus: Branch erstellen, bereitstellen, abbauen, Branch löschen.",
+        "start": "Umgebungserstellung testen",
+        "stop": "Stopp",
+        "infraless": "Konfiguriere oben einen Bereitstellungstyp, um die Umgebungserstellung zu testen.",
+        "running": "Wird getestet",
+        "succeeded": "Test bestanden: Die Umgebung wurde erstellt und abgebaut, und der Branch wurde gelöscht.",
+        "failed": "Test fehlgeschlagen",
+        "stage": {
+          "creating_branch": "Branch wird erstellt",
+          "provisioning": "Umgebung wird bereitgestellt",
+          "tearing_down": "Umgebung wird abgebaut",
+          "deleting_branch": "Branch wird gelöscht",
+          "done": "fertig"
+        }
       }
     },
     "agentConfig": {
@@ -3773,7 +3790,11 @@
         "visual_pipeline_no_frontend": "Kein Frontend zum Testen",
         "model_policy_blocked": "Modell durch Kontorichtlinie blockiert",
         "model_policy_unsupported": "Modellrichtlinie hier nicht verfügbar",
-        "deployer_required_before_tester": "Füge einen Deployer vor dem Tester hinzu"
+        "deployer_required_before_tester": "Füge einen Deployer vor dem Tester hinzu",
+        "env_test_not_a_frame": "Kein Dienst",
+        "env_test_infraless": "Nichts zu testen",
+        "env_test_not_provisionable": "Umgebungs-Handler nicht konfiguriert",
+        "env_test_no_vcs": "Git-Anbieter nicht verbunden"
       },
       "fallbackMessage": "Diese Aktion steht im Konflikt mit dem aktuellen Zustand.",
       "providersUnconfigured": {

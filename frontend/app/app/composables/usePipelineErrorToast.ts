@@ -55,6 +55,10 @@ const CONFLICT_TITLE_KEYS: Record<Exclude<ConflictReason, BespokeConflictReason>
   model_policy_blocked: 'errors.conflict.title.model_policy_blocked',
   model_policy_unsupported: 'errors.conflict.title.model_policy_unsupported',
   deployer_required_before_tester: 'errors.conflict.title.deployer_required_before_tester',
+  env_test_not_a_frame: 'errors.conflict.title.env_test_not_a_frame',
+  env_test_infraless: 'errors.conflict.title.env_test_infraless',
+  env_test_not_provisionable: 'errors.conflict.title.env_test_not_provisionable',
+  env_test_no_vcs: 'errors.conflict.title.env_test_no_vcs',
 }
 
 /**

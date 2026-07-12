@@ -431,7 +431,11 @@
         "visual_pipeline_no_frontend": "Test edilecek bir frontend yok",
         "model_policy_blocked": "Model, hesap politikası tarafından engellendi",
         "model_policy_unsupported": "Model politikası burada kullanılamıyor",
-        "deployer_required_before_tester": "Tester’dan önce bir Deployer ekleyin"
+        "deployer_required_before_tester": "Tester’dan önce bir Deployer ekleyin",
+        "env_test_not_a_frame": "Bir hizmet değil",
+        "env_test_infraless": "Test edilecek bir şey yok",
+        "env_test_not_provisionable": "Ortam işleyicisi yapılandırılmamış",
+        "env_test_no_vcs": "Git sağlayıcısı bağlı değil"
       },
       "fallbackMessage": "Bu eylem mevcut durumla çelişiyor.",
       "providersUnconfigured": {
@@ -778,6 +782,23 @@
         "title": "Compose ortam kurulumu",
         "hint": "Tarifi, ön kontrolleri ve işleyiciyi yapılandırın; böylece Deployer bu yığını sağlar.",
         "open": "Sihirbazı aç"
+      },
+      "envTest": {
+        "title": "Ortam oluşturmayı test et",
+        "hint": "Tek kullanımlık bir dal üzerinde tüm yaşam döngüsünü çalıştırır: dal oluştur, sağla, kaldır, dalı sil.",
+        "start": "Ortam oluşturmayı test et",
+        "stop": "Durdur",
+        "infraless": "Ortam oluşturmayı test etmek için yukarıdan bir sağlama türü yapılandırın.",
+        "running": "Test ediliyor",
+        "succeeded": "Test başarılı: ortam oluşturuldu ve kaldırıldı, dal silindi.",
+        "failed": "Test başarısız",
+        "stage": {
+          "creating_branch": "dal oluşturuluyor",
+          "provisioning": "ortam sağlanıyor",
+          "tearing_down": "ortam kaldırılıyor",
+          "deleting_branch": "dal siliniyor",
+          "done": "tamamlandı"
+        }
       }
     },
     "agentConfig": {

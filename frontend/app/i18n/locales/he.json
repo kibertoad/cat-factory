@@ -431,7 +431,11 @@
         "visual_pipeline_no_frontend": "אין frontend לבדיקה",
         "model_policy_blocked": "המודל נחסם על ידי מדיניות החשבון",
         "model_policy_unsupported": "מדיניות המודלים אינה זמינה כאן",
-        "deployer_required_before_tester": "הוסף Deployer לפני ה-Tester"
+        "deployer_required_before_tester": "הוסף Deployer לפני ה-Tester",
+        "env_test_not_a_frame": "לא שירות",
+        "env_test_infraless": "אין מה לבדוק",
+        "env_test_not_provisionable": "מטפל הסביבה אינו מוגדר",
+        "env_test_no_vcs": "ספק Git אינו מחובר"
       },
       "fallbackMessage": "פעולה זו מתנגשת עם המצב הנוכחי.",
       "providersUnconfigured": {
@@ -778,6 +782,23 @@
         "title": "הגדרת סביבת Compose",
         "hint": "הגדירו את המתכון, בדיקות המוכנות והמטפל כדי שה-Deployer יקצה את הסטאק הזה.",
         "open": "פתיחת אשף"
+      },
+      "envTest": {
+        "title": "בדיקת יצירת סביבה",
+        "hint": "מריץ את כל מחזור החיים על ענף חד-פעמי: יצירת ענף, הקצאה, פירוק ומחיקת הענף.",
+        "start": "בדיקת יצירת סביבה",
+        "stop": "עצירה",
+        "infraless": "הגדירו סוג הקצאה למעלה כדי לבדוק את יצירת הסביבה.",
+        "running": "בבדיקה",
+        "succeeded": "הבדיקה עברה: הסביבה נוצרה ופורקה, והענף נמחק.",
+        "failed": "הבדיקה נכשלה",
+        "stage": {
+          "creating_branch": "יוצר ענף",
+          "provisioning": "מקצה סביבה",
+          "tearing_down": "מפרק סביבה",
+          "deleting_branch": "מוחק ענף",
+          "done": "הושלם"
+        }
       }
     },
     "agentConfig": {

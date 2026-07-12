@@ -470,7 +470,11 @@
         "visual_pipeline_no_frontend": "No frontend to test",
         "model_policy_blocked": "Model blocked by account policy",
         "model_policy_unsupported": "Model policy not available here",
-        "deployer_required_before_tester": "Add a Deployer before the Tester"
+        "deployer_required_before_tester": "Add a Deployer before the Tester",
+        "env_test_not_a_frame": "Not a service",
+        "env_test_infraless": "Nothing to test",
+        "env_test_not_provisionable": "Environment handler not configured",
+        "env_test_no_vcs": "Git provider not connected"
       },
       "fallbackMessage": "This action conflicts with the current state.",
       "providersUnconfigured": {
@@ -832,6 +836,23 @@
         "title": "Compose environment setup",
         "hint": "Configure the recipe, preflights, and handler so the Deployer provisions this stack.",
         "open": "Open wizard"
+      },
+      "envTest": {
+        "title": "Test environment creation",
+        "hint": "Runs the whole lifecycle against a throwaway branch: create branch, provision, tear down, delete branch.",
+        "start": "Test environment creation",
+        "stop": "Stop",
+        "infraless": "Configure a provision type above to test environment creation.",
+        "running": "Testing",
+        "succeeded": "Test passed: the environment was created and torn down, and the branch was deleted.",
+        "failed": "Test failed",
+        "stage": {
+          "creating_branch": "creating branch",
+          "provisioning": "provisioning environment",
+          "tearing_down": "tearing down environment",
+          "deleting_branch": "deleting branch",
+          "done": "done"
+        }
       }
     },
     "agentConfig": {

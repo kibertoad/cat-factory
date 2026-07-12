@@ -431,7 +431,11 @@
         "visual_pipeline_no_frontend": "No hay frontend que probar",
         "model_policy_blocked": "Modelo bloqueado por la política de la cuenta",
         "model_policy_unsupported": "La política de modelos no está disponible aquí",
-        "deployer_required_before_tester": "Añade un Deployer antes del Tester"
+        "deployer_required_before_tester": "Añade un Deployer antes del Tester",
+        "env_test_not_a_frame": "No es un servicio",
+        "env_test_infraless": "Nada que probar",
+        "env_test_not_provisionable": "Gestor de entorno no configurado",
+        "env_test_no_vcs": "Proveedor de Git no conectado"
       },
       "fallbackMessage": "Esta acción entra en conflicto con el estado actual.",
       "providersUnconfigured": {
@@ -778,6 +782,23 @@
         "title": "Configuración de entorno Compose",
         "hint": "Configura la receta, las comprobaciones previas y el gestor para que el Deployer aprovisione este stack.",
         "open": "Abrir asistente"
+      },
+      "envTest": {
+        "title": "Probar la creación del entorno",
+        "hint": "Ejecuta todo el ciclo de vida sobre una rama desechable: crear rama, aprovisionar, desmontar, eliminar rama.",
+        "start": "Probar la creación del entorno",
+        "stop": "Detener",
+        "infraless": "Configura arriba un tipo de aprovisionamiento para probar la creación del entorno.",
+        "running": "Probando",
+        "succeeded": "Prueba superada: el entorno se creó y se desmontó, y la rama se eliminó.",
+        "failed": "La prueba falló",
+        "stage": {
+          "creating_branch": "creando rama",
+          "provisioning": "aprovisionando entorno",
+          "tearing_down": "desmontando entorno",
+          "deleting_branch": "eliminando rama",
+          "done": "listo"
+        }
       }
     },
     "agentConfig": {
