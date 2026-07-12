@@ -34,10 +34,10 @@
     "@cat-factory/agents": "workspace:*",
     "@cat-factory/contracts": "workspace:*",
     "@cat-factory/kernel": "workspace:*",
-    "ai": "^6.0.219"
+    "ai": "^6.0.224"
   },
   "devDependencies": {
-    "typescript": "7.0.1-rc",
-    "vitest": "^4.1.9"
+    "typescript": "7.0.2",
+    "vitest": "^4.1.10"
   }
 }

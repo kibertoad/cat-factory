@@ -3368,6 +3368,11 @@
       "title": "Eliminare questo frammento?",
       "body": "\"{name}\" verra rimosso. Questa operazione non puo essere annullata."
     },
+    "confirmUnlinkSource": {
+      "title": "Scollegare questa fonte?",
+      "body": "«{repo}» e i frammenti di linee guida che ha sincronizzato verranno rimossi. Potrai ricollegarla in seguito.",
+      "confirm": "Scollega"
+    },
     "unavailable": "La libreria di frammenti di prompt non e abilitata per questo deployment."
   },
   "brainstorm": {
@@ -3838,7 +3843,9 @@
       "userIdPlaceholder": "Id utente (usr_...)",
       "slackIdPlaceholder": "Id membro Slack (U...)",
       "add": "Aggiungi membro",
-      "save": "Salva mappa"
+      "save": "Salva mappa",
+      "incompleteTitle": "Riga membro incompleta",
+      "incompleteBody": "Prima di salvare, compila sia l’id utente sia l’id membro Slack, oppure rimuovi la riga."
     },
     "routable": {
       "merge_review": "Revisione del merge",

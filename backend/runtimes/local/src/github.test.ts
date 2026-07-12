@@ -1,8 +1,11 @@
 import { describe, expect, it } from 'vitest'
 import {
+  classifyPatProbe,
+  describePatProbeVerdict,
   githubPatCreationUrl,
   gitlabVcsHost,
   harnessAllowedHosts,
+  probeGitHubPat,
   StaticTokenAppRegistry,
 } from './github.js'
 
@@ -26,6 +29,87 @@ describe('githubPatCreationUrl', () => {
     expect(url.origin + url.pathname).toBe('https://github.com/settings/tokens/new')
     expect(url.searchParams.get('scopes')).toBe('repo,workflow')
     expect(url.searchParams.get('description')).toBe('cat-factory local mode')
+  })
+})
+
+// A12: the boot-time PAT probe. The classification is pure; probeGitHubPat is exercised with an
+// injected fetch so no network or real token is needed.
+describe('classifyPatProbe (A12)', () => {
+  it('flags an invalid/expired token on 401', () => {
+    expect(classifyPatProbe({ status: 401, scopesHeader: null })).toEqual({
+      ok: false,
+      reason: 'invalid',
+      detail: expect.stringContaining('401'),
+    })
+  })
+
+  it('flags a rejected token on 403', () => {
+    expect(classifyPatProbe({ status: 403, scopesHeader: null })).toMatchObject({
+      ok: false,
+      reason: 'forbidden',
+    })
+  })
+
+  it('accepts a classic token that carries both required scopes', () => {
+    expect(classifyPatProbe({ status: 200, scopesHeader: 'repo, workflow, read:org' })).toEqual({
+      ok: true,
+    })
+  })
+
+  it('flags an under-scoped classic token, naming the missing scope', () => {
+    expect(classifyPatProbe({ status: 200, scopesHeader: 'repo' })).toEqual({
+      ok: false,
+      reason: 'underscoped',
+      missing: ['workflow'],
+    })
+  })
+
+  it('does NOT false-warn on a fine-grained token (no reported scopes)', () => {
+    expect(classifyPatProbe({ status: 200, scopesHeader: null })).toEqual({ ok: true })
+    expect(classifyPatProbe({ status: 200, scopesHeader: '' })).toEqual({ ok: true })
+  })
+})
+
+describe('probeGitHubPat (A12)', () => {
+  it('returns undefined when no GITHUB_PAT is set (nothing to probe)', async () => {
+    await expect(probeGitHubPat({})).resolves.toBeUndefined()
+  })
+
+  it('probes GET /user with the PAT and classifies the response', async () => {
+    let requested = ''
+    const fetchImpl = (async (input: Parameters<typeof fetch>[0]) => {
+      requested = typeof input === 'string' ? input : input.toString()
+      return new Response('{}', { status: 200, headers: { 'x-oauth-scopes': 'repo, workflow' } })
+    }) as typeof fetch
+    await expect(probeGitHubPat({ GITHUB_PAT: 'ghp_x' }, { fetchImpl })).resolves.toEqual({
+      ok: true,
+    })
+    expect(requested).toBe('https://api.github.com/user')
+  })
+
+  it('stays silent (undefined) on a network error — never blocks boot', async () => {
+    const fetchImpl = (async () => {
+      throw new Error('ENOTFOUND')
+    }) as typeof fetch
+    await expect(probeGitHubPat({ GITHUB_PAT: 'ghp_x' }, { fetchImpl })).resolves.toBeUndefined()
+  })
+})
+
+describe('describePatProbeVerdict (A12)', () => {
+  it('is undefined when the token is fine', () => {
+    expect(describePatProbeVerdict({ ok: true })).toBeUndefined()
+  })
+
+  it('names the missing scopes and links the pre-scoped creation URL', () => {
+    const msg = describePatProbeVerdict({ ok: false, reason: 'underscoped', missing: ['workflow'] })
+    expect(msg).toMatch(/missing required scope\(s\) workflow/)
+    expect(msg).toContain(githubPatCreationUrl())
+  })
+
+  it('reports a rejected token with its detail', () => {
+    const msg = describePatProbeVerdict({ ok: false, reason: 'invalid', detail: 'HTTP 401 — bad' })
+    expect(msg).toMatch(/rejected by GitHub/)
+    expect(msg).toContain('HTTP 401')
   })
 })
 

@@ -2899,7 +2899,9 @@
       "userIdPlaceholder": "Id utilisateur (usr_...)",
       "slackIdPlaceholder": "Id de membre Slack (U...)",
       "add": "Ajouter un membre",
-      "save": "Enregistrer la carte"
+      "save": "Enregistrer la carte",
+      "incompleteTitle": "Ligne de membre incomplète",
+      "incompleteBody": "Avant d’enregistrer, renseignez l’id utilisateur et l’id de membre Slack, ou supprimez la ligne."
     },
     "routable": {
       "merge_review": "Revue de fusion",
@@ -4151,6 +4153,11 @@
     "confirmRemove": {
       "title": "Supprimer ce fragment ?",
       "body": "\"{name}\" sera supprimé. Cette action est irréversible."
+    },
+    "confirmUnlinkSource": {
+      "title": "Dissocier cette source ?",
+      "body": "« {repo} » et les fragments de directives qu’elle a synchronisés seront supprimés. Vous pourrez la relier plus tard.",
+      "confirm": "Dissocier"
     },
     "unavailable": "La bibliothèque de fragments de prompt n'est pas activée pour ce déploiement."
   },

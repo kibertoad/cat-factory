@@ -305,7 +305,7 @@ async function bootServer(
   // and could mask the real migration error). The small overlap we give up is worth the
   // debuggability. `migrate()` throws a MigrationFailedError / DbSchemaInconsistentError with
   // a recovery hint when the DB is wedged.
-  await migrate(db, pool, { schema: dbSchema, migrationsSchema })
+  await migrate(db, pool, { schema: dbSchema, migrationsSchema, databaseUrl })
   await boss.start()
   // pg-boss lifecycle flags for the `/ready` probe: it's running once `start()` resolves and stops
   // being ready when it emits `stopped` (graceful shutdown) or `draining` flips at SIGTERM. The

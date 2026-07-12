@@ -2899,7 +2899,9 @@
       "userIdPlaceholder": "Id uzytkownika (usr_...)",
       "slackIdPlaceholder": "Id czlonka Slacka (U...)",
       "add": "Dodaj czlonka",
-      "save": "Zapisz mape"
+      "save": "Zapisz mape",
+      "incompleteTitle": "Niekompletny wiersz członka",
+      "incompleteBody": "Przed zapisaniem uzupełnij zarówno identyfikator użytkownika, jak i identyfikator członka Slack, albo usuń wiersz."
     },
     "routable": {
       "merge_review": "Przeglad scalenia",
@@ -4151,6 +4153,11 @@
     "confirmRemove": {
       "title": "Usunąć ten fragment?",
       "body": "\"{name}\" zostanie usunięty. Tej operacji nie można cofnąć."
+    },
+    "confirmUnlinkSource": {
+      "title": "Odłączyć to źródło?",
+      "body": "„{repo}” oraz zsynchronizowane z niego fragmenty wytycznych zostaną usunięte. Możesz połączyć je ponownie później.",
+      "confirm": "Odłącz"
     },
     "unavailable": "Biblioteka fragmentów promptów nie jest włączona w tym wdrożeniu."
   },

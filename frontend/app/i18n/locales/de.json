@@ -3368,6 +3368,11 @@
       "title": "Dieses Fragment löschen?",
       "body": "\"{name}\" wird entfernt. Dies kann nicht rückgängig gemacht werden."
     },
+    "confirmUnlinkSource": {
+      "title": "Diese Quelle trennen?",
+      "body": "„{repo}“ und die davon synchronisierten Richtlinien-Fragmente werden entfernt. Du kannst sie später erneut verknüpfen.",
+      "confirm": "Trennen"
+    },
     "unavailable": "Die Prompt-Fragment-Bibliothek ist für dieses Deployment nicht aktiviert."
   },
   "brainstorm": {
@@ -3838,7 +3843,9 @@
       "userIdPlaceholder": "Benutzer-ID (usr_...)",
       "slackIdPlaceholder": "Slack-Mitglieds-ID (U...)",
       "add": "Mitglied hinzufügen",
-      "save": "Zuordnung speichern"
+      "save": "Zuordnung speichern",
+      "incompleteTitle": "Unvollständige Mitgliederzeile",
+      "incompleteBody": "Gib vor dem Speichern sowohl die Benutzer-ID als auch die Slack-Mitglieds-ID ein oder entferne die Zeile."
     },
     "routable": {
       "merge_review": "Merge-Review",
