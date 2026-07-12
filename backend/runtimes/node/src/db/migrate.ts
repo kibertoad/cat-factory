@@ -1,6 +1,12 @@
 import { fileURLToPath } from 'node:url'
+import {
+  type ConfigValidationError,
+  DOCS,
+  ENV_VARS_ANCHORS,
+  configProblem,
+} from '@cat-factory/server'
 import { migrate as drizzleMigrate } from 'drizzle-orm/node-postgres/migrator'
-import type { Pool } from 'pg'
+import type { Pool, PoolClient } from 'pg'
 import {
   DEFAULT_DB_SCHEMA,
   DEFAULT_MIGRATIONS_SCHEMA,
@@ -156,6 +162,90 @@ export function explainMigrationFailure(err: unknown): MigrationFailedError {
   )
 }
 
+// Node system error codes that mean "couldn't establish a TCP connection" — the shapes a
+// Postgres-unreachable-at-boot failure arrives as. ECONNRESET is the one the Windows + Docker
+// Desktop `localhost`→IPv6 footgun surfaces as (see explainDbConnectionFailure).
+const CONNECTION_FAILURE_CODES = new Set([
+  'ECONNREFUSED',
+  'ECONNRESET',
+  'ETIMEDOUT',
+  'EHOSTUNREACH',
+  'ENETUNREACH',
+])
+
+// Loopback hosts. A connection failure against one of these is a local-dev setup problem (Postgres
+// not started, or the `localhost`→`::1` IPv6 footgun) — actionable at boot — rather than a remote
+// database being transiently down (which we must NOT reframe as a misconfiguration; see below).
+const LOOPBACK_HOSTS = new Set(['localhost', '127.0.0.1', '::1', '0.0.0.0'])
+
+/**
+ * Extract a connection-failure code from an error, unwrapping the two nested shapes node-postgres
+ * can surface it as: an `AggregateError` (`.errors`, when `localhost` resolved to several addresses
+ * — e.g. IPv6 `::1` THEN IPv4 — and every attempt failed) and a wrapper's `.cause`. Returns the
+ * matched code or undefined when the error is not a connection failure.
+ */
+function connectionFailureCode(err: unknown): string | undefined {
+  if (!err || typeof err !== 'object') return undefined
+  const e = err as { code?: unknown; errors?: unknown; cause?: unknown }
+  if (typeof e.code === 'string' && CONNECTION_FAILURE_CODES.has(e.code)) return e.code
+  if (Array.isArray(e.errors)) {
+    for (const nested of e.errors) {
+      const code = connectionFailureCode(nested)
+      if (code) return code
+    }
+  }
+  return e.cause ? connectionFailureCode(e.cause) : undefined
+}
+
+/** Parse a loopback `{ host, port }` out of a Postgres URL, or undefined when it isn't loopback. */
+function loopbackTarget(databaseUrl: string): { host: string; port: string } | undefined {
+  let url: URL
+  try {
+    url = new URL(databaseUrl)
+  } catch {
+    return undefined
+  }
+  const host = url.hostname.replace(/^\[|\]$/g, '').toLowerCase()
+  if (!LOOPBACK_HOSTS.has(host)) return undefined
+  return { host, port: url.port || '5432' }
+}
+
+/**
+ * Turn a boot-time Postgres connection failure into an actionable {@link ConfigValidationError} — so
+ * it lands on the misconfigured fallback screen with the fix, instead of the process dying with a
+ * raw `read ECONNRESET` deep in the driver. Scoped DELIBERATELY to LOOPBACK hosts: a refused/reset
+ * loopback connection is a local-dev setup problem (Postgres not up, or the `localhost`→`::1` IPv6
+ * footgun), whereas a remote database being briefly unreachable is a transient outage we must let
+ * crash-and-retry rather than freeze behind a "misconfigured" screen that needs a manual restart.
+ * Returns undefined for a non-loopback host or a non-connection error (the caller then rethrows the
+ * original). Exported for unit testing the mapping without a live socket.
+ */
+export function explainDbConnectionFailure(
+  err: unknown,
+  databaseUrl: string,
+): ConfigValidationError | undefined {
+  const code = connectionFailureCode(err)
+  if (!code) return undefined
+  const target = loopbackTarget(databaseUrl)
+  if (!target) return undefined
+  const { host, port } = target
+  // The `localhost` name is the trigger for the IPv6 footgun; `127.0.0.1`/`::1` are already explicit.
+  const ipv6Note =
+    host === 'localhost'
+      ? 'On Windows + Docker Desktop, `localhost` resolves to IPv6 `::1` first, which hits the WSL ' +
+        'relay and RESETS the connection before Postgres (listening on IPv4) is reached — change ' +
+        "DATABASE_URL's host from `localhost` to `127.0.0.1` to force IPv4. "
+      : ''
+  return configProblem({
+    key: 'DATABASE_URL',
+    summary: `Cannot reach Postgres at ${host}:${port} — the connection was refused or reset at boot (${code}).`,
+    remedy:
+      `${ipv6Note}Confirm a Postgres server is running and listening on ${host}:${port} ` +
+      '(in local mode, `docker compose up` in deploy/local starts one and prints the URL), then restart.',
+    docsUrl: DOCS.envVars(ENV_VARS_ANCHORS.coreServiceNetworking),
+  })
+}
+
 /**
  * Run any pending migrations. Safe to call on every boot, including concurrently from
  * multiple replicas: a session-level advisory lock (held on a dedicated connection for
@@ -176,11 +266,15 @@ export function explainMigrationFailure(err: unknown): MigrationFailedError {
  * `DB_MIGRATIONS_SCHEMA`) is where the migration ledger lives — set it to a service-dedicated
  * name on a SHARED database so cat-factory's ledger can't collide with another drizzle-using
  * service's `drizzle.__drizzle_migrations`. The migrator creates the migrations schema itself.
+ *
+ * `opts.databaseUrl` (the connection string) is used only to explain a LOOPBACK connection failure
+ * at this first-connection point ({@link explainDbConnectionFailure}); pass it so a Postgres that's
+ * down or bound to the wrong address reports the fix instead of a raw driver `ECONNRESET`.
  */
 export async function migrate(
   db: DrizzleDb,
   pool: Pool,
-  opts: { schema?: string; migrationsSchema?: string } = {},
+  opts: { schema?: string; migrationsSchema?: string; databaseUrl?: string } = {},
 ): Promise<void> {
   const resolved = resolveDbSchema(opts.schema)
   const migrationsSchema = resolveDbSchema(
@@ -188,7 +282,15 @@ export async function migrate(
     DEFAULT_MIGRATIONS_SCHEMA,
     'DB_MIGRATIONS_SCHEMA',
   )
-  const lock = await pool.connect()
+  // This is the pool's FIRST connection (it's lazy), so a Postgres-unreachable boot fails here.
+  // Reframe a loopback failure as an actionable ConfigValidationError; anything else rethrows raw.
+  let lock: PoolClient
+  try {
+    lock = await pool.connect()
+  } catch (err) {
+    const explained = opts.databaseUrl && explainDbConnectionFailure(err, opts.databaseUrl)
+    throw explained || err
+  }
   try {
     await lock.query('SELECT pg_advisory_lock($1)', [MIGRATION_LOCK_KEY])
     // Ensure the target schema exists before the migrator's unqualified `CREATE TABLE`s run
