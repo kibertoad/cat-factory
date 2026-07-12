@@ -368,9 +368,11 @@ export class EnvironmentTestService {
       try {
         await this.deps.teardown.teardown(record.workspaceId, record.environmentId)
       } catch (error) {
-        // A replay of this stage after a successful teardown whose stage-patch write was
-        // lost finds the record already tombstoned — that's the teardown having WORKED,
-        // not a failure; anything else propagates (and fails the run with cleanup).
+        // A durable-driver replay can re-enter this stage after teardown already tombstoned the
+        // env, if the stage-advance write was lost to a crash between the two. Teardown then
+        // 404s on the now-missing env — that means it already succeeded, so treat it as done and
+        // move on. Only a GENUINE provider teardown failure (the env is still standing) should
+        // fail the self-test, so anything other than a not-found is re-thrown.
         if (!(error instanceof NotFoundError)) throw error
       }
     }

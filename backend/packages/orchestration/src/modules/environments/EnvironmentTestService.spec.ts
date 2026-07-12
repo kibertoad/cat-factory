@@ -126,8 +126,8 @@ function makeService(opts: {
   released?: RunnerJobRef[]
   repoContext?: RunRepoContext | null
   canProvision?: { ok: boolean; reason?: string }
-  /** teardown() throws this for the given env id (e.g. a NotFound on replay). */
-  teardownThrows?: { id: string; error: Error }
+  /** Full replacement teardown port (e.g. one that throws NotFound on replay). */
+  teardownImpl?: EnvironmentTestTeardown
 }) {
   const runRepo = opts.runRepo ?? new InMemoryRunRepo()
   const registry = opts.registry ?? new FakeRegistry()
@@ -191,9 +191,8 @@ function makeService(opts: {
       released.push(ref)
     },
   }
-  const teardown: EnvironmentTestTeardown = {
+  const teardown: EnvironmentTestTeardown = opts.teardownImpl ?? {
     teardown: async (_ws, id) => {
-      if (opts.teardownThrows && opts.teardownThrows.id === id) throw opts.teardownThrows.error
       teardowns.push(id)
       // A real teardown tombstones the registry record.
       registry.rows = registry.rows.filter((r) => r.id !== id)
@@ -384,6 +383,80 @@ describe('EnvironmentTestService', () => {
     expect(calls.deleted).toHaveLength(1)
   })
 
+  it('tolerates a not-found teardown on a driver replay (idempotent tear-down stage)', async () => {
+    // Simulate the crash-in-window replay: the env was already torn down (tombstoned) on a prior
+    // pass whose stage-advance write was lost, so re-entering `tearing_down` teardown 404s. The
+    // run must still advance to done, NOT flip to failed.
+    const { repo, calls } = fakeRepo()
+    const { service } = makeService({
+      repoContext: { repo, baseBranch: 'main' },
+      dispatch: {
+        kind: 'completed',
+        handle: { id: 'env-gone', url: 'https://live' } as EnvironmentHandle,
+      },
+      teardownImpl: {
+        teardown: async () => {
+          throw new NotFoundError('Environment', 'env-gone')
+        },
+      },
+    })
+    const started = await service.startTest('ws', 'frame-1')
+    // provisioning → tearing_down
+    await service.pollEnvTest('ws', started.id)
+    // tearing_down → deleting_branch (teardown 404s but is tolerated)
+    expect((await service.pollEnvTest('ws', started.id)).state).toBe('running')
+    // deleting_branch → done
+    expect((await service.pollEnvTest('ws', started.id)).state).toBe('done')
+    const final = await service.getRun('ws', started.id)
+    expect(final.status).toBe('succeeded')
+    expect(calls.deleted).toHaveLength(1)
+  })
+
+  it('still fails when the teardown provider genuinely errors (not a not-found)', async () => {
+    const { repo } = fakeRepo()
+    const { service } = makeService({
+      repoContext: { repo, baseBranch: 'main' },
+      dispatch: {
+        kind: 'completed',
+        handle: { id: 'env-stuck', url: 'https://live' } as EnvironmentHandle,
+      },
+      teardownImpl: {
+        teardown: async () => {
+          throw new Error('cluster unreachable')
+        },
+      },
+    })
+    const started = await service.startTest('ws', 'frame-1')
+    await service.pollEnvTest('ws', started.id) // → tearing_down
+    const result = await service.pollEnvTest('ws', started.id)
+    expect(result.state).toBe('failed')
+    const final = await service.getRun('ws', started.id)
+    expect(final.status).toBe('failed')
+    expect(final.failedStage).toBe('tearing_down')
+    expect(final.error).toContain('cluster unreachable')
+  })
+
+  it('expire() cleans up and fails a run stuck past its poll budget', async () => {
+    const { repo, calls } = fakeRepo()
+    const { service, teardowns } = makeService({
+      repoContext: { repo, baseBranch: 'main' },
+      dispatch: { kind: 'completed', handle: { id: 'env-budget', url: null } as EnvironmentHandle },
+    })
+    const started = await service.startTest('ws', 'frame-1')
+    // still `provisioning` (never polled to completion) — the driver's budget ran out.
+    const finalized = await service.expire(
+      'ws',
+      started.id,
+      'The environment test did not finish within its polling budget.',
+    )
+    expect(finalized.status).toBe('failed')
+    expect(finalized.failedStage).toBe('provisioning')
+    expect(finalized.error).toMatch(/polling budget/)
+    // Cleanup ran: the env was torn down and the branch deleted (never orphaned).
+    expect(teardowns).toEqual(['env-budget'])
+    expect(calls.deleted).toHaveLength(1)
+  })
+
   it('stop() cleans up a running test and marks it failed', async () => {
     const { repo, calls } = fakeRepo()
     const { service, teardowns, registry } = makeService({
@@ -434,23 +507,6 @@ describe('EnvironmentTestService', () => {
     const record = runRepo.rows.get(`ws:${started.id}`)!
     expect(record.status).toBe('failed')
     expect(record.error).toBe('Stopped by the user.')
-  })
-
-  it('treats a teardown NotFound on replay as already-done (the run still succeeds)', async () => {
-    const { repo } = fakeRepo()
-    const { service } = makeService({
-      repoContext: { repo, baseBranch: 'main' },
-      dispatch: { kind: 'completed', handle: { id: 'env-5', url: null } as EnvironmentHandle },
-      teardownThrows: { id: 'env-5', error: new NotFoundError('Environment', 'env-5') },
-    })
-    const started = await service.startTest('ws', 'frame-1')
-    // provisioning → tearing_down
-    await service.pollEnvTest('ws', started.id)
-    // tearing_down: teardown throws NotFound (already tombstoned by a prior replay) → advance
-    expect((await service.pollEnvTest('ws', started.id)).state).toBe('running')
-    // deleting_branch → done
-    expect((await service.pollEnvTest('ws', started.id)).state).toBe('done')
-    expect((await service.getRun('ws', started.id)).status).toBe('succeeded')
   })
 
   it('fails a run stranded at creating_branch (the start request died mid-flight)', async () => {

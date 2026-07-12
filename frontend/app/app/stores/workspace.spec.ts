@@ -15,6 +15,7 @@ const INERT_STORES = [
   'useClarityStore',
   'useConsensusStore',
   'useDocInterviewStore',
+  'useEnvironmentTestStore',
   'useExecutionStore',
   'useFragmentsStore',
   'useGitHubStore',
