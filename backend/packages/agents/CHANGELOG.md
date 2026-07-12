@@ -1,5 +1,12 @@
 # @cat-factory/agents
 
+## 0.54.2
+
+### Patch Changes
+
+- Updated dependencies [4810353]
+  - @cat-factory/kernel@0.121.4
+
 ## 0.54.1
 
 ### Patch Changes
