@@ -1,4 +1,4 @@
-import type { RunnerJobView } from '@cat-factory/kernel'
+import { harnessDispatchError, type RunnerJobView } from '@cat-factory/kernel'
 
 // Shared HTTP plumbing for talking to an executor-harness instance over its `/jobs` +
 // `/health` API. Both local runner transports — the per-run/pooled CONTAINER transport
@@ -56,7 +56,9 @@ export async function postHarnessJob(opts: {
     signal: AbortSignal.timeout(opts.timeoutMs),
   })
   if (!res.ok) {
-    throw new Error(`${opts.label} dispatch failed (HTTP ${res.status}): ${await safeText(res)}`)
+    // Structured DispatchError (carrying the HTTP status) so consumers classify by field, not
+    // regex; a 404 on the harness /jobs route elaborates to the stale-image republish remedy.
+    throw harnessDispatchError({ label: opts.label, status: res.status, body: await safeText(res) })
   }
 }
 

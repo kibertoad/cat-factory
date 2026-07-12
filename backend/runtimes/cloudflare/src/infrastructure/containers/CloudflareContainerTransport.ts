@@ -1,8 +1,9 @@
-import type {
-  RunnerDispatchKind,
-  RunnerJobRef,
-  RunnerJobView,
-  RunnerTransport,
+import {
+  harnessDispatchError,
+  type RunnerDispatchKind,
+  type RunnerJobRef,
+  type RunnerJobView,
+  type RunnerTransport,
 } from '@cat-factory/kernel'
 import { TRANSIENT_EVICTION_MARKER } from '@cat-factory/orchestration'
 import type { DurableObjectNamespace } from '@cloudflare/workers-types'
@@ -102,7 +103,14 @@ export class CloudflareContainerTransport implements RunnerTransport {
       signal: AbortSignal.timeout(DISPATCH_TIMEOUT_MS),
     })
     if (!res.ok) {
-      throw new Error(`Container dispatch failed (HTTP ${res.status}): ${await safeText(res)}`)
+      // A structured DispatchError (carrying the HTTP status) so the engine + the bootstrap /
+      // env-config services classify this as a `dispatch` failure by field, not by regex; a 404
+      // (harness image too old to know the /jobs route) elaborates to the stale-image remedy.
+      throw harnessDispatchError({
+        label: 'Container',
+        status: res.status,
+        body: await safeText(res),
+      })
     }
     // Record the now-live container (keyed by the run id, the idFromName argument) so
     // the reaper can find it if its run record ever diverges from reality. Idempotent
