@@ -1,4 +1,5 @@
 import type { ReleaseSignalState } from '@cat-factory/kernel'
+import { VENDOR_DOCS } from '../../docs.js'
 
 // Pure helpers for the Datadog post-release-health integration: site validation
 // (anti-SSRF — only real Datadog hosts), base-URL construction, and mapping Datadog's
@@ -6,6 +7,21 @@ import type { ReleaseSignalState } from '@cat-factory/kernel'
 
 /** The domain tag used to seal observability credentials at rest (HKDF info). */
 export const OBSERVABILITY_CIPHER_INFO = 'cat-factory:observability'
+
+/**
+ * UI-first remedy for a Datadog auth rejection (401/403): the API + Application keys are entered
+ * in the cat-factory UI, so the primary fix names that click path — the env vars don't exist for
+ * this connection. Returns the remedy sentence for an auth status, else `undefined` (a 5xx or a
+ * mapping error is not a credential problem). Appended to the error detail at the throw site so a
+ * rejected key surfaces "re-enter your keys" instead of a bare `HTTP 403`.
+ */
+export function datadogAuthRemedy(status: number): string | undefined {
+  if (status !== 401 && status !== 403) return undefined
+  return (
+    `your Datadog API and Application keys were rejected — re-enter them in Integrations → ` +
+    `Observability connection (mint or rotate them at ${VENDOR_DOCS.datadogApiKeys})`
+  )
+}
 
 /** Datadog site host suffixes we allow a connection to point at (anti-SSRF). */
 const ALLOWED_SITE_SUFFIXES = [

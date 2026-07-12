@@ -86,6 +86,7 @@ import {
   type SubscriptionQuotaTarget,
   type WebSearchAvailability,
   CompositeNotificationChannel,
+  ConflictError,
   DEFAULT_MODEL_PRESET_ID,
   SUBSCRIPTION_VENDORS,
   isAmbientNativeVendor,
@@ -826,11 +827,17 @@ export function buildNodeResolveTransport(
       const resolved = await runnerService.resolve(workspaceId)
       if (resolved) return resolved.transport
     }
-    throw new Error(
+    // A ConflictError (not a plain Error) so the machine `reason` (agent_backend_unconfigured)
+    // rides the wire: on a synchronous start it is a clean 409, and on the async dispatch path
+    // classifyDispatchFailure lifts the reason onto the run's AgentFailure so the SPA renders the
+    // "Agent backend not configured" title + a jump to the setup, instead of the misleading
+    // "container failed to start". UI-first remedy: the pool is registered in the UI.
+    throw new ConflictError(
       `No runner backend available for workspace '${workspaceId ?? '(unknown)'}': the Node ` +
-        `service runs repo-operating agents on a self-hosted runner backend — register a ` +
-        `runner pool or Kubernetes cluster for this workspace (POST ` +
-        `/workspaces/:id/runner-pool/connection).`,
+        `service runs repo-operating agents on a self-hosted runner backend. Register one in ` +
+        `Settings → Self-hosted runner pool (or point the workspace at a Kubernetes cluster). ` +
+        `See ${DOCS.runnerPool()}.`,
+      'agent_backend_unconfigured',
     )
   }
 }

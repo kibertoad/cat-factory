@@ -1,4 +1,5 @@
 import type { RunnerPoolManifest, RunnerPoolProvider } from '@cat-factory/kernel'
+import { ConflictError, getErrorReason } from '@cat-factory/kernel'
 import type { AppConfig } from '@cat-factory/server'
 import { defaultRunnerBackendRegistry } from '@cat-factory/integrations'
 import { describe, expect, it } from 'vitest'
@@ -105,6 +106,13 @@ describe('buildNodeResolveTransport native runner-adapter seam', () => {
       getByWorkspace: () => Promise.resolve(null),
     } as unknown as typeof connectionRepo
     const resolve = buildNodeResolveTransport(config, emptyRepo, workspaceRepo, clock, registry)
-    await expect(resolve!('ws-1')).rejects.toThrow(/No runner backend available/)
+    const err = await resolve!('ws-1').catch((e: unknown) => e)
+    // D3: a ConflictError carrying the machine reason (agent_backend_unconfigured) so the SPA
+    // renders the "Agent backend not configured" title + jump on the async dispatch path — not a
+    // plain Error that reframes as "container failed to start". The remedy names the UI path first.
+    expect(err).toBeInstanceOf(ConflictError)
+    expect(getErrorReason(err)).toBe('agent_backend_unconfigured')
+    expect((err as Error).message).toMatch(/No runner backend available/)
+    expect((err as Error).message).toContain('Settings → Self-hosted runner pool')
   })
 })

@@ -23,6 +23,7 @@ import {
   type VcsIdentityRegistry,
   type WebSearchAvailability,
   type WorkRunner,
+  ConflictError,
 } from '@cat-factory/kernel'
 import {
   AiAgentExecutor,
@@ -120,6 +121,7 @@ import {
   GitHubIdentityResolver,
   resolveUrlSafetyPolicy,
   resolveWorkspaceCapabilities,
+  DOCS,
   type JobPackageRegistrySpec,
   type MintInstallationToken,
   type PersistenceRegistry,
@@ -553,9 +555,16 @@ function buildResolveTransport(
       }
     }
     if (cloudflare) return log(cloudflare, 'container', workspaceId)
-    throw new Error(
-      `No runner backend available for workspace '${workspaceId ?? '(unknown)'}': ` +
-        `register a runner backend (a pool or Kubernetes) or enable Cloudflare Containers`,
+    // A ConflictError (not a plain Error) so the machine `reason` (agent_backend_unconfigured)
+    // rides the wire — a clean 409 synchronously, and classifyDispatchFailure lifts the reason
+    // onto the run's AgentFailure on the async dispatch path (SPA shows "Agent backend not
+    // configured" + a jump, not "container failed to start"). UI-first remedy first.
+    throw new ConflictError(
+      `No runner backend available for workspace '${workspaceId ?? '(unknown)'}': register a ` +
+        `runner pool in Settings → Self-hosted runner pool (or point the workspace at a ` +
+        `Kubernetes cluster), or enable Cloudflare Containers in your deployment config. ` +
+        `See ${DOCS.runnerPool()}.`,
+      'agent_backend_unconfigured',
     )
   }
 }

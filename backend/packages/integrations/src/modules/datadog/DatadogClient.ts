@@ -1,4 +1,4 @@
-import { DatadogApiError, datadogApiBase } from './datadog.logic.js'
+import { DatadogApiError, datadogApiBase, datadogAuthRemedy } from './datadog.logic.js'
 
 // A thin, runtime-neutral wrapper over the Datadog API (plain `fetch`, no SDK), so it
 // runs identically in a Workers isolate and under Node. Only the handful of reads the
@@ -190,7 +190,13 @@ export class DatadogClient {
   private async parse<T>(path: string, res: Response): Promise<T> {
     if (!res.ok) {
       const text = await res.text().catch(() => '')
-      throw new DatadogApiError(path, `HTTP ${res.status}${text ? `: ${text.slice(0, 200)}` : ''}`)
+      // On an auth rejection (401/403) append the UI-first remedy naming the keys panel; the raw
+      // `HTTP <status>: <body>` is preserved ahead of it as the diagnostic detail.
+      const remedy = datadogAuthRemedy(res.status)
+      const detail = `HTTP ${res.status}${text ? `: ${text.slice(0, 200)}` : ''}${
+        remedy ? ` — ${remedy}` : ''
+      }`
+      throw new DatadogApiError(path, detail)
     }
     return (await res.json()) as T
   }

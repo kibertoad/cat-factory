@@ -370,4 +370,18 @@ describe('HttpRunnerPoolProvider', () => {
     // The well-formed entry survives with every field; the malformed one is dropped.
     expect(view.result?.callMetrics).toEqual([good])
   })
+
+  // D2: every runner-pool failure carries the UI-first remedy naming where the pool is
+  // configured/re-tested — while PRESERVING the raw `<method> → <status>` diagnostic ahead of it.
+  it('appends the UI-first remedy to every RunnerPoolApiError while preserving the raw detail', () => {
+    const err = new RunnerPoolApiError(403, 'Runner pool post → 403: forbidden')
+    expect(err.status).toBe(403)
+    expect(err.message).toContain('Runner pool post → 403: forbidden')
+    expect(err.message).toContain('Settings → Self-hosted runner pool')
+    expect(err.message).toContain('runner-pool-integration.md')
+    // A manifest-secret failure gets the same remedy.
+    expect(new RunnerPoolApiError(500, "Missing secret 'API_TOKEN'").message).toContain(
+      'Settings → Self-hosted runner pool',
+    )
+  })
 })
