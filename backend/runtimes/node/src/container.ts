@@ -1712,6 +1712,7 @@ export function buildNodeContainer(options: NodeContainerOptions): ServerContain
           info: ACCOUNT_SETTINGS_CIPHER_INFO,
         }),
         clock,
+        ...(options.caches ? { settingsCache: options.caches.accountSettings } : {}),
       })
     : undefined
   const resolveWebSearchAvailability =
@@ -2215,6 +2216,7 @@ export function buildNodeContainer(options: NodeContainerOptions): ServerContain
         }),
         clock,
         contentStorageCapability,
+        ...(options.caches ? { settingsCache: options.caches.accountSettings } : {}),
       })
     : undefined
 

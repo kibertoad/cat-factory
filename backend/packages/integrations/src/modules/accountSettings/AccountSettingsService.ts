@@ -1,4 +1,10 @@
-import type { AccountSettingsRepository, Clock, SecretCipher } from '@cat-factory/kernel'
+import type {
+  AccountSettingsRepository,
+  Clock,
+  GroupCacheHandle,
+  ResolvedAccountSettings,
+  SecretCipher,
+} from '@cat-factory/kernel'
 import { ConflictError } from '@cat-factory/kernel'
 import type {
   AccountSettingsConfig,
@@ -6,12 +12,7 @@ import type {
   AccountSettingsSummary,
   AccountSettingsView,
   ContentStorageCapability,
-  ContentStorageConfig,
-  LinearOAuthSecret,
-  S3CredentialsSecret,
-  SlackOAuthSecret,
   UpdateAccountSettingsInput,
-  WebSearchSecret,
 } from '@cat-factory/contracts'
 import {
   DEFAULT_ACCOUNT_SETTINGS_CONFIG,
@@ -30,20 +31,10 @@ const DISABLED_CONTENT_STORAGE_CAPABILITY: ContentStorageCapability = {
 /** HKDF domain tag separating the grouped account-settings secret blob from other ciphers. */
 export const ACCOUNT_SETTINGS_CIPHER_INFO = 'cat-factory:account-settings'
 
-/** How long a resolved account-settings entry is cached before reloading (ms). */
-const CACHE_TTL_MS = 30_000
-
-/** A fully-resolved (decrypted) view of an account's settings, for runtime consumers. */
-export interface ResolvedAccountSettings {
-  config: AccountSettingsConfig
-  slackOAuth?: SlackOAuthSecret
-  linearOAuth?: LinearOAuthSecret
-  webSearch?: WebSearchSecret
-  /** Non-secret content-storage config (backend selection + connection settings). */
-  contentStorage?: ContentStorageConfig
-  /** Decrypted S3 access keys for the content-storage `s3` backend, when stored. */
-  s3Credentials?: S3CredentialsSecret
-}
+// The resolved (decrypted) view lives in the kernel account-settings port now that the
+// `AppCaches.accountSettings` slice names it; re-exported here so existing consumers
+// (the Slack/Linear/web-search/S3 resolvers) import it unchanged.
+export type { ResolvedAccountSettings }
 
 export interface AccountSettingsServiceDependencies {
   accountSettingsRepository: AccountSettingsRepository
@@ -55,21 +46,28 @@ export interface AccountSettingsServiceDependencies {
    * admin view so the UI only offers valid options. Omitted ⇒ storage disabled (tests).
    */
   contentStorageCapability?: ContentStorageCapability
+  /**
+   * The shared {@link AppCaches.accountSettings} slice. When wired, {@link resolve} reads
+   * the decrypted view through it and {@link write} invalidates the account's entry after
+   * the write commits — replacing the legacy homebrew TTL `Map` so a credential change is
+   * coherent across replicas. Absent ⇒ every {@link resolve} decrypts fresh (tests).
+   */
+  settingsCache?: GroupCacheHandle<ResolvedAccountSettings>
 }
 
 /**
  * Owns per-account deployment settings: a non-secret `config` blob + ONE sealed secrets
- * blob (Slack OAuth / web-search / Langfuse). {@link resolve} decrypts + caches (short TTL)
- * for runtime consumers; {@link read}/{@link write} back the admin UI (secrets write-only —
- * never returned). A single instance per facade holds the cache across requests; writes
- * {@link invalidate} it so a change takes effect immediately.
+ * blob (Slack OAuth / web-search / Langfuse). {@link resolve} decrypts + caches (through the
+ * shared {@link AppCaches.accountSettings} slice) for runtime consumers; {@link read}/{@link
+ * write} back the admin UI (secrets write-only — never returned). Writes {@link invalidate}
+ * the account's cached entry so a change takes effect immediately across replicas.
  */
 export class AccountSettingsService {
   private readonly repo: AccountSettingsRepository
   private readonly cipher: SecretCipher
   private readonly clock: Clock
   private readonly contentStorageCapability: ContentStorageCapability
-  private readonly cache = new Map<string, { value: ResolvedAccountSettings; expiresAt: number }>()
+  private readonly cache?: GroupCacheHandle<ResolvedAccountSettings>
 
   constructor(deps: AccountSettingsServiceDependencies) {
     this.repo = deps.accountSettingsRepository
@@ -77,17 +75,23 @@ export class AccountSettingsService {
     this.clock = deps.clock
     this.contentStorageCapability =
       deps.contentStorageCapability ?? DISABLED_CONTENT_STORAGE_CAPABILITY
+    this.cache = deps.settingsCache
   }
 
   /** The resolved (decrypted) settings for an account, cache-first. Defaults when no row. */
   async resolve(accountId: string): Promise<ResolvedAccountSettings> {
-    const now = this.clock.now()
-    const cached = this.cache.get(accountId)
-    if (cached && cached.expiresAt > now) return cached.value
+    const load = () => this.load(accountId)
+    // Group == key == account id (one entry per group). The slice keeps the decrypted value
+    // in-process only — the invalidation bus carries keys, never plaintext secrets.
+    return this.cache ? this.cache.get(accountId, accountId, load) : load()
+  }
+
+  /** Load + decrypt an account's resolved settings from the repository (the cache miss path). */
+  private async load(accountId: string): Promise<ResolvedAccountSettings> {
     const record = await this.repo.getByAccount(accountId)
     const config = record ? parseConfig(record.config) : DEFAULT_ACCOUNT_SETTINGS_CONFIG
     const secrets = record?.secretsCipher ? await this.openSecrets(record.secretsCipher) : {}
-    const value: ResolvedAccountSettings = {
+    return {
       config,
       ...(secrets.slackOAuth ? { slackOAuth: secrets.slackOAuth } : {}),
       ...(secrets.linearOAuth ? { linearOAuth: secrets.linearOAuth } : {}),
@@ -95,13 +99,11 @@ export class AccountSettingsService {
       ...(config.contentStorage ? { contentStorage: config.contentStorage } : {}),
       ...(secrets.s3 ? { s3Credentials: secrets.s3 } : {}),
     }
-    this.cache.set(accountId, { value, expiresAt: now + CACHE_TTL_MS })
-    return value
   }
 
   /** Drop an account's cached settings (after a write, so the change is seen at once). */
-  invalidate(accountId: string): void {
-    this.cache.delete(accountId)
+  async invalidate(accountId: string): Promise<void> {
+    await this.cache?.invalidate(accountId, accountId)
   }
 
   /** Admin read: config + non-secret summary + runtime capability; NEVER returns secrets. */
@@ -170,7 +172,7 @@ export class AccountSettingsService {
       createdAt: existing?.createdAt ?? now,
       updatedAt: now,
     })
-    this.invalidate(accountId)
+    await this.invalidate(accountId)
     return { config, summary, contentStorageCapability: this.contentStorageCapability }
   }
 

@@ -17,6 +17,7 @@ import {
   NoopWorkRunner,
   type ProvisioningSubsystem,
   type ResolveBinaryArtifactStore,
+  type ResolvedAccountSettings,
   type RunnerPoolProvider,
   type RunnerTransport,
   type TaskSourceProvider,
@@ -916,6 +917,7 @@ function buildAccountSettings(
   db: D1Database,
   clock: Clock,
   contentStorageCapability?: ContentStorageCapability,
+  settingsCache?: GroupCacheHandle<ResolvedAccountSettings>,
 ): AccountSettingsService | undefined {
   const encryptionKey = env.ENCRYPTION_KEY?.trim()
   if (!encryptionKey) return undefined
@@ -927,6 +929,7 @@ function buildAccountSettings(
     }),
     clock,
     ...(contentStorageCapability ? { contentStorageCapability } : {}),
+    ...(settingsCache ? { settingsCache } : {}),
   })
 }
 
@@ -1312,6 +1315,11 @@ function buildContainerExecutor(
         testSecretsForDispatch.resolveValuesForBlock(workspaceId, blockId)
     : undefined
   const defaultWebSearchUpstream = buildDefaultWebSearchUpstream(env)
+  // No `settingsCache` threaded to this dedicated web-search-availability instance: the
+  // `accountSettings` slice is pass-through on the Worker's isolate-safe profile, so caching it
+  // here is a no-op (the primary `accountSettings` instance in `buildContainer` — the one whose
+  // decrypted view drives the runtime resolvers — gets the shared slice). The Node facade, where
+  // the slice is enabled, wires its web-search instance from `options.caches` directly.
   const webSearchSettings = buildAccountSettings(env, db, clock)
   const resolveWebSearchAvailability =
     defaultWebSearchUpstream || webSearchSettings
@@ -2035,6 +2043,20 @@ export function buildContainer(
   const clock = new SystemClock()
   const idGenerator = new CryptoIdGenerator()
 
+  // The app-owned cache bag, on the ISOLATE-SAFE profile: a Worker isolate has no
+  // cross-isolate invalidation bus (and no Redis), so caches of mutable cross-instance
+  // state (the fragment catalog / repo projection / account policy / account settings) are
+  // configured pass-through rather than TTL'd — a stale-serving cache would be a correctness
+  // bug, not an optimization (see @cat-factory/caching's README). Self-verifying caches (the
+  // document body + the head-sha-probed `repoFiles` reads) stay enabled — safe to keep on
+  // because the probe bounds their staleness even without a bus. Note the bag is rebuilt per
+  // invocation (this runs per request / per Workflow wake), so on the Worker these caches
+  // mainly dedupe reads WITHIN one wake (e.g. a post-op's batch); the cross-run refresh-window
+  // probe is chiefly the Node (process-lived cache) path. Built once here and SHARED: threaded
+  // into the GitHub repo-files resolver (slice 4), the account-settings service, AND the
+  // account-policy read the capability resolver runs, AND handed to `createCore`.
+  const caches = createAppCaches({ profile: ISOLATE_SAFE_APP_CACHES_PROFILE })
+
   // The app-owned backend registries (env + runner kind → provider), built once and injected
   // into the engine + surfaced on the container for the snapshot's backend-kind selectors. A
   // deployment registers a custom backend by reference; the conformance suite injects a
@@ -2205,7 +2227,13 @@ export function buildContainer(
   // Per-account deployment settings (Slack OAuth + web-search keys + content-storage). Built
   // once so the service's short-TTL cache is shared across requests; the Slack OAuth +
   // content-storage resolvers are derived from it in the domain composition root.
-  const accountSettings = buildAccountSettings(env, db, clock, contentStorageCapability)
+  const accountSettings = buildAccountSettings(
+    env,
+    db,
+    clock,
+    contentStorageCapability,
+    caches.accountSettings,
+  )
 
   // The deployment-wide trusted web-search upstream (built from this facade's own `WEB_SEARCH_*`
   // env), read by `WebSearchProxyController` as the fallback when a run's account has no keys.
@@ -2227,20 +2255,6 @@ export function buildContainer(
     defaultBackend: contentStorageCapability.defaultBackend,
     logger,
   })
-
-  // The app-owned cache bag, on the ISOLATE-SAFE profile: a Worker isolate has no
-  // cross-isolate invalidation bus (and no Redis), so caches of mutable cross-instance
-  // state (the fragment catalog / repo projection / account policy) are configured
-  // pass-through rather than TTL'd — a stale-serving cache would be a correctness bug, not an
-  // optimization (see @cat-factory/caching's README). Self-verifying caches (the document body
-  // + the head-sha-probed `repoFiles` reads) stay enabled — safe to keep on because the probe
-  // bounds their staleness even without a bus. Note the bag is rebuilt per invocation (this runs
-  // per request / per Workflow wake), so on the Worker these caches mainly dedupe reads WITHIN one
-  // wake (e.g. a post-op's batch); the cross-run refresh-window probe is chiefly the Node
-  // (process-lived cache) path. Built once here and SHARED: threaded into the GitHub repo-files
-  // resolver (slice 4) AND the account-policy read the capability resolver runs, AND handed to
-  // `createCore` — all need the same instance.
-  const caches = createAppCaches({ profile: ISOLATE_SAFE_APP_CACHES_PROFILE })
 
   const dependencies: CoreDependencies = {
     // App-owned backend registries (kind → provider) the connection services resolve through.

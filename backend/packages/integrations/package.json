@@ -39,6 +39,7 @@
     "yaml": "^2.9.0"
   },
   "devDependencies": {
+    "@cat-factory/caching": "workspace:*",
     "typescript": "7.0.2",
     "undici": "^8.7.0",
     "valibot": "^1.4.2",

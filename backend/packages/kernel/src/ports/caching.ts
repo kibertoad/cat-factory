@@ -1,4 +1,5 @@
 import type { GitHubRepo, ModelFamilyPolicy, WorkspaceSettings } from '../domain/types.js'
+import type { ResolvedAccountSettings } from './account-settings-repositories.js'
 import type { DocumentContent } from './document-source.js'
 import type { ResolvedCatalogEntry } from './fragment-repositories.js'
 import type { RepoContentEntry, RepoFileContent } from './github-client.js'
@@ -143,6 +144,22 @@ export interface AppCaches {
    * mutable D1 state, no cross-isolate bus), so it caches only on the Node/local facades.
    */
   accountModelPolicy: GroupCacheHandle<AccountModelPolicyCacheValue>
+  /**
+   * An account's fully-resolved (decrypted) deployment settings
+   * (`AccountSettingsService.resolve` — the Slack/Linear OAuth secrets, web-search keys,
+   * content-storage config + S3 credentials), grouped AND keyed by account id. Read on the
+   * runtime integration paths (the Slack/Linear OAuth resolvers, the web-search proxy, the
+   * per-account S3 blob backend) — slow-moving, admin-changed. This is the slice that
+   * replaces the service's legacy 30s homebrew TTL `Map` (the anti-pattern CLAUDE.md names):
+   * coherence is invalidation-driven — the sole write path (`AccountSettingsService.write`,
+   * behind the account-settings update controller) drops the account's entry after the write
+   * commits, so a credential change is visible on the very next read on any replica. The
+   * DECRYPTED secrets stay in-process: the notification bus only ever broadcasts invalidation
+   * KEYS (never values), so plaintext secrets never cross the wire — same safety as the old
+   * Map, plus cross-replica coherence. Pass-through on the Worker's isolate-safe profile (our
+   * own mutable D1 state, no cross-isolate bus), so it caches only on the Node/local facades.
+   */
+  accountSettings: GroupCacheHandle<ResolvedAccountSettings>
   /**
    * A workspace's persisted runtime settings row (`workspaceSettingsRepository.get`),
    * grouped AND keyed by workspace id — the slow-moving, admin-changed row read on
