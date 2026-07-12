@@ -452,6 +452,7 @@ export type {
 export type {
   AccountSettingsRecord,
   AccountSettingsRepository,
+  ResolvedAccountSettings,
 } from './account-settings-repositories.js'
 export type { LocalSettingsRecord, LocalSettingsRepository } from './local-settings-repositories.js'
 export type {

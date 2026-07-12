@@ -6,6 +6,7 @@ import type {
   DocumentContent,
   GitHubRepo,
   GroupCacheHandle,
+  ResolvedAccountSettings,
   ResolvedCatalogEntry,
   WorkspaceSettingsCacheValue,
 } from '@cat-factory/kernel'
@@ -61,6 +62,7 @@ export interface AppCachesProfile {
   repoProjection: GroupCacheProfile
   repoFiles: GroupCacheProfile
   accountModelPolicy: GroupCacheProfile
+  accountSettings: GroupCacheProfile
   workspaceSettings: GroupCacheProfile
   accountBudgetLimit: GroupCacheProfile
   userBudgetLimit: GroupCacheProfile
@@ -101,6 +103,16 @@ export const DEFAULT_APP_CACHES_PROFILE: AppCachesProfile = {
   // One resolved model-family policy per account, keyed by account id (one entry per
   // group). Slow-moving (admin-changed); invalidation-driven, no version probe.
   accountModelPolicy: {
+    enabled: true,
+    ttlInMsecs: 5 * 60_000,
+    maxGroups: 2000,
+    maxItemsPerGroup: 1,
+  },
+  // One fully-resolved (decrypted) account-settings view per account, keyed by account id
+  // (one entry per group). Slow-moving (admin-changed integration credentials);
+  // invalidation-driven, no version probe. Replaces the service's legacy 30s homebrew Map —
+  // the decrypted secrets stay in-process (only invalidation keys ride the bus).
+  accountSettings: {
     enabled: true,
     ttlInMsecs: 5 * 60_000,
     maxGroups: 2000,
@@ -162,6 +174,9 @@ export const ISOLATE_SAFE_APP_CACHES_PROFILE: AppCachesProfile = {
   // Pass-through for the same reason: the account policy is our own mutable D1 state
   // with no cross-isolate invalidation bus on the Worker.
   accountModelPolicy: { ...DEFAULT_APP_CACHES_PROFILE.accountModelPolicy, enabled: false },
+  // Pass-through: the resolved account settings are our own mutable D1 state with no
+  // cross-isolate invalidation bus on the Worker, so the isolate resolves them live.
+  accountSettings: { ...DEFAULT_APP_CACHES_PROFILE.accountSettings, enabled: false },
   // Pass-through: the workspace-settings row and the budget-limit reads are all our own
   // mutable D1 state with no cross-isolate invalidation bus on the Worker, so the isolate
   // reads them live (no in-memory tier — every read hits D1; only concurrent in-flight
@@ -328,6 +343,11 @@ export function createAppCaches(options: CreateAppCachesOptions = {}): AppCaches
     profile.accountModelPolicy,
     options,
   )
+  const accountSettings = buildGroupCache<ResolvedAccountSettings>(
+    'account-settings',
+    profile.accountSettings,
+    options,
+  )
   const workspaceSettings = buildGroupCache<WorkspaceSettingsCacheValue>(
     'workspace-settings',
     profile.workspaceSettings,
@@ -349,6 +369,7 @@ export function createAppCaches(options: CreateAppCachesOptions = {}): AppCaches
     repoProjection,
     repoFiles,
     accountModelPolicy,
+    accountSettings,
     workspaceSettings,
     accountBudgetLimit,
     userBudgetLimit,
@@ -359,6 +380,7 @@ export function createAppCaches(options: CreateAppCachesOptions = {}): AppCaches
         repoProjection.close(),
         repoFiles.close(),
         accountModelPolicy.close(),
+        accountSettings.close(),
         workspaceSettings.close(),
         accountBudgetLimit.close(),
         userBudgetLimit.close(),

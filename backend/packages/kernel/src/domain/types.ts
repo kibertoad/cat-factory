@@ -450,4 +450,10 @@ export type {
   PromoteInitiativeFollowUpInput,
   UpdateInitiativeItemInput,
   UpdateInitiativePolicyInput,
+  AccountSettingsConfig,
+  ContentStorageConfig,
+  LinearOAuthSecret,
+  S3CredentialsSecret,
+  SlackOAuthSecret,
+  WebSearchSecret,
 } from '@cat-factory/contracts'

@@ -1,6 +1,6 @@
 # Initiative: performance optimizations (prioritized)
 
-**Status:** in progress — items 1, 2, 3, 4, 7, 9 landed (emit metrics rollup · gate-poll GitHub reads · live-run projection · parallel dispatch waves · spend/workspace-settings cache slices) · **Owner:** core · **Started:** 2026-07-09
+**Status:** in progress — items 1, 2, 3, 4, 7, 8, 9 landed (emit metrics rollup · gate-poll GitHub reads · live-run projection · parallel dispatch waves · spend/workspace-settings/account-settings cache slices) · **Owner:** core · **Started:** 2026-07-09
 
 > This is the durable source of truth for a multi-PR initiative. Read it first before
 > picking up the next slice; update the checklist at the end of each PR.
@@ -56,7 +56,7 @@ symmetric" (CLAUDE.md).
 | 5   | P1  | frontend     | Board snapshot embeds full step outputs the board never reads                                                                       | ⬜ todo |                                                           |
 | 6   | P1  | frontend     | Coarse `board` event forces full-snapshot refresh; payload already carries `blockId`                                                | ⬜ todo |                                                           |
 | 7   | P2  | caching      | `SpendService` three banned TTL `Map`s (pricing / account / user limits)                                                            | ✅ done | branch `claude/performance-tracker-next-phase-hcdba4`     |
-| 8   | P2  | caching      | `AccountSettingsService` legacy 30s `Map` (the named anti-pattern)                                                                  | ⬜ todo |                                                           |
+| 8   | P2  | caching      | `AccountSettingsService` legacy 30s `Map` (the named anti-pattern)                                                                  | ✅ done | branch `claude/performance-initiative-next-phase-i3mtxw`  |
 | 9   | P2  | caching      | `WorkspaceSettingsService.get` uncached; read per recorded LLM call                                                                 | ✅ done | branch `claude/performance-tracker-next-phase-hcdba4`     |
 | 10  | P2  | frontend     | Shared `useBlockQueries` index invalidates ALL BlockNodes on every execution event                                                  | ⬜ todo |                                                           |
 | 11  | P2  | frontend     | Two unconditional 60fps RAF loops doing DOM measurement while idle                                                                  | ⬜ todo |                                                           |
@@ -274,6 +274,24 @@ lower-frequency, but incoherent across replicas after a write.
 **Fix:** an `accountSettings` slice grouped by account id, invalidated in `write()`
 (`:173`). Values stay in-process (the seam broadcasts invalidation keys, never values), so
 decrypted secrets never cross the wire — same safety, plus coherence. Delete the Map.
+
+**Landed (branch `claude/performance-initiative-next-phase-i3mtxw`):** the new `accountSettings`
+`AppCaches` slice (group == key == account id, holding the decrypted `ResolvedAccountSettings`)
+replaces the homebrew `{ value, expiresAt }` `Map` + the `CACHE_TTL_MS` constant. `resolve()`
+now reads through `settingsCache.get(accountId, accountId, () => this.load(...))` (the decrypt +
+default assembly moved into a private `load` helper), and `write()` awaits
+`invalidate(accountId)` after the upsert commits — so a credential edit is visible on the very
+next `resolve` on any replica (the model-policy read stays on its own `accountModelPolicy` slice,
+which the update controller drops separately). The decrypted secrets stay in-process: the
+notification bus carries only invalidation keys, never plaintext (same safety as the Map, plus
+cross-replica coherence). `ResolvedAccountSettings` moved from the service to the kernel
+account-settings port (the caching port now names it) and is re-exported from
+`@cat-factory/integrations` so the Slack/Linear/web-search/S3 consumers import it unchanged.
+Pass-through on the Worker's isolate-safe profile (our own mutable D1 state, no cross-isolate
+bus). Wired from both facades (Worker's `buildAccountSettings` helper + Node's two construction
+sites, from `caches.accountSettings` / `options.caches`); no new persistence, so no conformance
+surface — pinned by a new `@cat-factory/integrations` unit suite (read-through, write-invalidation,
+per-account scoping, and no-cache pass-through parity).
 
 ### 9. `WorkspaceSettingsService.get` uncached on the per-LLM-call path — P2
 

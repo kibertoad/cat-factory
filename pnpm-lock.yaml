@@ -439,6 +439,9 @@ importers:
         specifier: ^2.9.0
         version: 2.9.0
     devDependencies:
+      '@cat-factory/caching':
+        specifier: workspace:*
+        version: link:../caching
       typescript:
         specifier: 7.0.2
         version: 7.0.2
