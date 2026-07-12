@@ -25,7 +25,11 @@ import { WorkflowsWorkRunner } from './infrastructure/workflows/WorkflowsWorkRun
 import { WorkflowsBootstrapRunner } from './infrastructure/workflows/WorkflowsBootstrapRunner'
 import { WorkflowsEnvConfigRepairRunner } from './infrastructure/workflows/WorkflowsEnvConfigRepairRunner'
 import { sweepRetention } from './infrastructure/workflows/retention'
-import { WorkflowsLookup, sweepStuckEnvTests, sweepStuckRuns } from './infrastructure/workflows/sweeper'
+import {
+  WorkflowsLookup,
+  sweepStuckEnvTests,
+  sweepStuckRuns,
+} from './infrastructure/workflows/sweeper'
 import { WorkflowsEnvironmentTestRunner } from './infrastructure/workflows/WorkflowsEnvironmentTestRunner'
 import { D1EnvironmentTestRunRepository } from './infrastructure/repositories/D1EnvironmentTestRunRepository'
 import { handleGitHubSyncBatch, reconcileStaleRepos } from './infrastructure/github/sync-consumer'
@@ -375,7 +379,10 @@ export default {
             }
           })
           .catch((error) =>
-            logger.error({ cron: 'env-test-sweeper', err: errInfo(error) }, 'env-test sweep failed'),
+            logger.error(
+              { cron: 'env-test-sweeper', err: errInfo(error) },
+              'env-test sweep failed',
+            ),
           ),
       )
     }

@@ -155,9 +155,9 @@ export function githubDelegationController(
       return denied()
     }
     try {
-      const installation = (await installations.getByInstallationId(installationId)) as
-        | GitHubInstallation
-        | null
+      const installation = (await installations.getByInstallationId(
+        installationId,
+      )) as GitHubInstallation | null
       const accountId = installation && !installation.deletedAt ? installation.accountId : null
       if (typeof accountId !== 'string' || !payload.scope.accountIds.includes(accountId)) {
         log.warn({ installationId }, 'github delegation: installation out of scope, denied')

@@ -469,7 +469,11 @@ export class EnvironmentTestService {
         // fall through to the tombstone
       }
     }
-    await this.deps.environmentRegistry.softDelete(record.workspaceId, row.id, this.deps.clock.now())
+    await this.deps.environmentRegistry.softDelete(
+      record.workspaceId,
+      row.id,
+      this.deps.clock.now(),
+    )
   }
 
   /**
@@ -529,7 +533,10 @@ export class EnvironmentTestService {
     if (!applied) {
       // A concurrent stop (or driver) finalized the run first; its terminal state is
       // authoritative — the cleanup above was still worth re-running (idempotent).
-      const current = await this.deps.environmentTestRunRepository.get(record.workspaceId, record.id)
+      const current = await this.deps.environmentTestRunRepository.get(
+        record.workspaceId,
+        record.id,
+      )
       return toRun(current ?? { ...record, ...patch })
     }
     const failed = { ...record, ...patch }

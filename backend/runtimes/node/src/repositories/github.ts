@@ -148,9 +148,7 @@ export class DrizzleRepoProjectionRepository implements RepoProjectionRepository
     const rows = await this.db
       .select()
       .from(githubRepos)
-      .where(
-        and(eq(githubRepos.installation_id, installationId), isNull(githubRepos.deleted_at)),
-      )
+      .where(and(eq(githubRepos.installation_id, installationId), isNull(githubRepos.deleted_at)))
       .orderBy(githubRepos.owner, githubRepos.name)
     return rows.map(rowToRepo)
   }

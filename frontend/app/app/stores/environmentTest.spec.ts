@@ -85,7 +85,10 @@ describe('environmentTest store — monotonic run reconcile', () => {
 
   it('hydrate DOES apply a genuinely newer snapshot', () => {
     store.upsert(run('r1', { status: 'running', updatedAt: 2 }))
-    store.hydrate([run('r1', { status: 'running', stage: 'tearing_down', updatedAt: 9 })], 'ws_test')
+    store.hydrate(
+      [run('r1', { status: 'running', stage: 'tearing_down', updatedAt: 9 })],
+      'ws_test',
+    )
     expect(store.runForBlock('blk_r1')!.stage).toBe('tearing_down')
   })
 

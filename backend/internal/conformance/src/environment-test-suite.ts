@@ -86,8 +86,9 @@ export function defineEnvironmentTestSuite(
           envUrl: 'https://x.test',
         }),
       ).toBe(true)
-      expect(await repo.updateIfRunning(ws, id, { stage: 'done', status: 'succeeded', updatedAt: 9 }))
-        .toBe(true)
+      expect(
+        await repo.updateIfRunning(ws, id, { stage: 'done', status: 'succeeded', updatedAt: 9 }),
+      ).toBe(true)
       expect(await repo.get(ws, id)).toMatchObject({
         status: 'succeeded',
         stage: 'done',

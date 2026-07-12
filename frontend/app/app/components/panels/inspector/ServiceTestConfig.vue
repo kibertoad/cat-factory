@@ -1054,7 +1054,9 @@ function setSize(value: InstanceSize) {
       >
         <template v-if="envTestRun.status === 'running'">
           {{
-            t('inspector.testConfig.envTest.running', { stage: envTestStageLabel(envTestRun.stage) })
+            t('inspector.testConfig.envTest.running', {
+              stage: envTestStageLabel(envTestRun.stage),
+            })
           }}
         </template>
         <template v-else-if="envTestRun.status === 'succeeded'">

@@ -55,9 +55,7 @@ class InMemoryRunRepo implements EnvironmentTestRunRepository {
     return [...this.rows.values()].filter((r) => r.workspaceId === ws && r.status === 'running')
   }
   async listStale(cutoffMs: number): Promise<EnvironmentTestRunRecord[]> {
-    return [...this.rows.values()].filter(
-      (r) => r.status === 'running' && r.updatedAt < cutoffMs,
-    )
+    return [...this.rows.values()].filter((r) => r.status === 'running' && r.updatedAt < cutoffMs)
   }
 }
 
@@ -207,7 +205,11 @@ function makeService(opts: {
     workspaceRepository,
     blockRepository: {
       get: async () =>
-        opts.blockRef ? opts.blockRef.current : opts.block === undefined ? frameBlock() : opts.block,
+        opts.blockRef
+          ? opts.blockRef.current
+          : opts.block === undefined
+            ? frameBlock()
+            : opts.block,
     } as never,
     provisioning,
     teardown,
@@ -349,7 +351,11 @@ describe('EnvironmentTestService', () => {
       repoContext: { repo, baseBranch: 'main' },
       dispatch: { kind: 'dispatched', ref: { runId: 'r', jobId: 'r' } },
       pollViews: [{ state: 'failed', error: 'deploy blew up' }],
-      finalize: { id: 'env-failed', status: 'failed', lastError: 'apply failed' } as EnvironmentHandle,
+      finalize: {
+        id: 'env-failed',
+        status: 'failed',
+        lastError: 'apply failed',
+      } as EnvironmentHandle,
     })
     const started = await service.startTest('ws', 'frame-1')
     const result = await service.pollEnvTest('ws', started.id)

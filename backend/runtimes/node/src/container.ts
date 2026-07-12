@@ -2709,6 +2709,18 @@ export function buildNodeContainer(options: NodeContainerOptions): ServerContain
       // proxied (decrypted service-side under the LOCAL key), like the observability/runner-pool
       // connections.
       testSecretsRepository: repos.testSecretsRepository,
+      // GitHub projection + installation reads the mothership serves over the persistence RPC even
+      // when its OWN github service is off. A mothership-mode local node reaches GitHub by token
+      // DELEGATION (no local App), which enables `container.github`, so its board snapshot
+      // (`github.service.listRepos` → `repoProjectionRepository.list`) and run-path repo resolution
+      // (`githubInstallationRepository.getByWorkspace` + `repoProjectionRepository.list`) read the
+      // projection over RPC. Both are plain org tables the mothership owns, constructed
+      // unconditionally above — so reflect them regardless of `config.github.enabled` (they land in
+      // `dependencies` only when the github MODULE is wired), else a mothership without its own App
+      // configured 500s that board load with `... is not wired`. Allow-listed in
+      // `REMOTE_PERSISTENCE_METHODS`; folded in explicitly like the stores above.
+      repoProjectionRepository,
+      githubInstallationRepository,
     } as unknown as PersistenceRegistry,
     // App-owned backend registries, surfaced so the workspace snapshot's backend-kind
     // selectors (`environmentBackendKinds` / `runnerBackendKinds`) read the registered kinds.
