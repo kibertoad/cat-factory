@@ -1,4 +1,5 @@
 import { randomUUID } from 'node:crypto'
+import { missingIoredisProblem } from '@cat-factory/server'
 import type { PropagatorLogger, RealtimeMessage, WebSocketPropagator } from './propagator.js'
 
 // The Redis adapter for cross-node real-time propagation (see `propagator.ts`). Modelled on
@@ -35,11 +36,9 @@ async function loadRedis(): Promise<RedisConstructor> {
     // fall back to the namespace itself for older/edge resolutions.
     return (mod.default ?? mod) as RedisConstructor
   } catch (err) {
-    throw new Error(
-      `REDIS_URL is set but the optional 'ioredis' dependency could not be loaded — install it ` +
-        `(pnpm add ioredis) to enable cross-node WebSocket propagation, or unset REDIS_URL to run ` +
-        `single-node. Original error: ${err instanceof Error ? err.message : String(err)}`,
-    )
+    // A ConfigValidationError (not a bare Error) so this reaches the misconfigured fallback screen
+    // at boot with the install-or-unset remedy, instead of dying opaquely inside start().
+    throw missingIoredisProblem('cross-node WebSocket propagation', err)
   }
 }
 

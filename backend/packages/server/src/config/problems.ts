@@ -44,6 +44,30 @@ export function configProblem(problem: ConfigProblem): ConfigValidationError {
   return new ConfigValidationError([problem])
 }
 
+/**
+ * A {@link ConfigValidationError} for the case where `REDIS_URL` is set but the optional `ioredis`
+ * dependency could not be loaded — the operator asked for cross-node coordination, but the package
+ * that provides it is absent. Turning this into a {@link ConfigValidationError} (rather than dying
+ * with a bare `Error` deep in boot) lands it on the misconfigured screen with the exact fix: install
+ * ioredis, or unset REDIS_URL to run single-node. Shared by BOTH Node Redis consumers (real-time
+ * propagation and distributed cache invalidation) so the message reads identically whichever loads
+ * ioredis first; `purpose` names the feature that couldn't start and `cause` preserves the original
+ * import failure. (Redis is a Node-only concern — the Worker facade coordinates through Durable
+ * Objects — so this lives here only to reuse the shared {@link ENV_HELP}/{@link configProblem} shape.)
+ */
+export function missingIoredisProblem(purpose: string, cause: unknown): ConfigValidationError {
+  const detail = cause instanceof Error ? cause.message : String(cause)
+  return configProblem({
+    key: 'REDIS_URL',
+    summary: ENV_HELP.REDIS_URL.summary,
+    remedy:
+      `REDIS_URL is set but the optional 'ioredis' dependency could not be loaded, so ${purpose} ` +
+      `cannot start. Install it (\`pnpm add ioredis\`) or unset REDIS_URL to run single-node. ` +
+      `Original error: ${detail}`,
+    docsUrl: ENV_HELP.REDIS_URL.docsUrl,
+  })
+}
+
 /** Render the problem list as a multi-line, operator-facing message (used as the Error message). */
 export function formatConfigProblems(problems: ConfigProblem[]): string {
   const header =
@@ -137,6 +161,13 @@ export const ENV_HELP = {
     remedy:
       'Set GITHUB_APP_PRIVATE_KEY to the App private key in PKCS#8 PEM form (`-----BEGIN PRIVATE KEY-----`, including the BEGIN/END lines). GitHub issues a PKCS#1 key (`-----BEGIN RSA PRIVATE KEY-----`); convert it once with `openssl pkcs8 -topk8 -nocrypt -in key.pem -out key.pk8.pem` and use the result.',
     docsUrl: DOCS.githubOperations(),
+  },
+  REDIS_URL: {
+    summary:
+      'Optional Redis pub/sub bus for a horizontally-scaled Node deployment — it fans real-time WebSocket events AND cache invalidations across replicas so a change on one node reaches browsers and caches on the others. Unset (the default for local mode and a single replica) runs single-node with no bus and no extra dependency.',
+    remedy:
+      'To enable cross-node propagation, install the optional `ioredis` dependency (`pnpm add ioredis`) and point REDIS_URL at a reachable Redis instance, e.g. `redis://localhost:6379`. To run single-node instead, unset REDIS_URL — a single replica and local mode never need it.',
+    docsUrl: DOCS.concurrencyAndRedis(),
   },
 } satisfies Record<string, { summary: string; remedy: string; docsUrl?: string }>
 

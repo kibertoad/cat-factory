@@ -36,6 +36,15 @@ export {
   type RedisWebSocketPropagatorOptions,
 } from './redisPropagator.js'
 export {
+  warnIfRedisUnreachable,
+  probeRedisReachable,
+  describeRedisUnreachable,
+  redisTargetLabel,
+  DEFAULT_REDIS_PROBE_TIMEOUT_MS,
+  type RedisProbeResult,
+  type RedisConnectProbe,
+} from './redisProbe.js'
+export {
   buildNodeContainer,
   buildNodeResolveTransport,
   withProvisioningLog,

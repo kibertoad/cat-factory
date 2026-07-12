@@ -1,4 +1,5 @@
 import type { GroupCacheNotifications, GroupNotificationPairFactory } from '@cat-factory/caching'
+import { missingIoredisProblem } from '@cat-factory/server'
 import type { PropagatorLogger } from './propagator.js'
 
 // The Redis-backed cache-invalidation notification wiring (caching initiative,
@@ -56,11 +57,9 @@ async function loadRedis(): Promise<RedisConstructor> {
     } & RedisConstructor
     return (mod.default ?? mod) as RedisConstructor
   } catch (err) {
-    throw new Error(
-      `REDIS_URL is set but the optional 'ioredis' dependency could not be loaded — install it ` +
-        `(pnpm add ioredis) to enable distributed cache invalidation, or unset REDIS_URL to run ` +
-        `single-node. Original error: ${err instanceof Error ? err.message : String(err)}`,
-    )
+    // A ConfigValidationError (not a bare Error) so this reaches the misconfigured fallback screen
+    // at boot with the install-or-unset remedy, instead of dying opaquely during boot.
+    throw missingIoredisProblem('distributed cache invalidation', err)
   }
 }
 
