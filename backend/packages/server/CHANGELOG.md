@@ -1,5 +1,61 @@
 # @cat-factory/server
 
+## 0.112.8
+
+### Patch Changes
+
+- 67dccb6: perf(caching): route workspace-settings and spend budget reads through the app cache seam (perf-tracker items 7 & 9)
+
+  Replaces `SpendService`'s three homebrew `{ value, expiresAt }` TTL `Map`s (pricing /
+  account limit / user limit) and the uncached `WorkspaceSettingsService.get` with three new
+  `AppCaches` slices — `workspaceSettings`, `accountBudgetLimit`, `userBudgetLimit` — so these
+  slow-moving reads are coherent across a horizontally-scaled Node deployment (a budget/settings
+  edit invalidates every replica via the notification bus instead of leaving peers stale for the
+  TTL). The workspace-settings row is now read through a single shared slice by
+  `WorkspaceSettingsService`, `SpendService`'s pricing overlay, and
+  `LlmObservabilityService.bodiesEnabled`, so one invalidation on `WorkspaceSettingsService.update`
+  covers them all. The slices are pass-through on the Worker's isolate-safe profile (our own
+  mutable D1 state, no cross-isolate bus).
+
+- Updated dependencies [67dccb6]
+  - @cat-factory/kernel@0.121.6
+  - @cat-factory/spend@0.12.20
+  - @cat-factory/orchestration@0.106.6
+  - @cat-factory/agents@0.54.4
+  - @cat-factory/integrations@0.81.12
+
+## 0.112.7
+
+### Patch Changes
+
+- f8f1aa8: Update workspace dependencies (direct + transitive) to the newest versions published before the
+  `minimumReleaseAge` supply-chain cutoff. No source changes — dependency ranges + the lockfile only.
+
+  - Refreshed direct deps to their newest cooldown-compliant releases: `wrangler` 4.110.0, `hono`
+    4.12.29, `vitest` / `@vitest/coverage-v8` 4.1.10, `oxlint` 1.73.0, `knip` 6.26.0, `msw` 2.15.0,
+    `pg-boss` 12.26.0, `sherif` 1.13.0, `turbo` 2.10.4, `vue-tsc` 3.3.7, `@types/node` 26.1.1,
+    `@nuxtjs/i18n` 10.4.1, `@aws-sdk/client-s3` 3.1085.0.
+  - `typescript` moved off the `7.0.1-rc` prerelease to the stable `7.0.2` release across every
+    package that used the RC (the TS-6 world — the frontend layer and the two runner harnesses —
+    stays on `^6.0.3`).
+  - Vercel AI SDK family held to the `ai@6`-compatible majors that `workers-ai-provider@3.3.1` peers
+    require (`ai` 6.0.224, `@ai-sdk/anthropic|openai|provider` on 3.x, `@ai-sdk/openai-compatible` on
+    2.x, `@ai-sdk/amazon-bedrock` 4.x) — no v7/v5 major bumps.
+  - Coding (`executor-harness`) and deploy runner harnesses updated too, including the pinned
+    in-container coding-agent CLIs (Pi 0.80.6, Claude Code 2.1.207, Codex 0.144.1; the Pi todo /
+    web-tools extensions stay at their lockstep 1.20.0). Their image tags and the three
+    hand-maintained pins were bumped in lockstep, so the runner images must be re-published +
+    deployed for the new tags to roll out.
+
+- Updated dependencies [f8f1aa8]
+  - @cat-factory/agents@0.54.3
+  - @cat-factory/contracts@0.127.1
+  - @cat-factory/integrations@0.81.11
+  - @cat-factory/kernel@0.121.5
+  - @cat-factory/orchestration@0.106.5
+  - @cat-factory/prompt-fragments@0.13.14
+  - @cat-factory/spend@0.12.19
+
 ## 0.112.6
 
 ### Patch Changes

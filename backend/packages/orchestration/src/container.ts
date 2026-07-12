@@ -2287,12 +2287,14 @@ function createSandboxModule(
 /** Assemble the workspace-settings module when its repository is present. */
 function createWorkspaceSettingsModule(
   deps: CoreDependencies,
+  workspaceSettingsCache: AppCaches['workspaceSettings'],
 ): WorkspaceSettingsModule | undefined {
   const { workspaceSettingsRepository } = deps
   if (!workspaceSettingsRepository) return undefined
   const service = new WorkspaceSettingsService({
     workspaceSettingsRepository,
     workspaceRepository: deps.workspaceRepository,
+    workspaceSettingsCache,
   })
   return { service }
 }
@@ -2533,6 +2535,12 @@ export function createCore(dependencies: CoreDependencies): Core {
     accountRepository: dependencies.accountRepository,
     userSettingsRepository: dependencies.userSettingsRepository,
     dynamicPricesFor: dependencies.dynamicModelPricesFor,
+    // The pricing overlay reads the workspace-settings row through the shared slice
+    // (invalidated by WorkspaceSettingsService.update); the two budget-limit slices are
+    // invalidated by the account/user budget-change callbacks below.
+    workspaceSettingsCache: caches.workspaceSettings,
+    accountBudgetLimitCache: caches.accountBudgetLimit,
+    userBudgetLimitCache: caches.userBudgetLimit,
   })
   spendServiceRef = spendService
   const userSettings: UserSettingsModule | undefined = dependencies.userSettingsRepository
@@ -2553,6 +2561,7 @@ export function createCore(dependencies: CoreDependencies): Core {
         recordPrompts: dependencies.recordLlmPrompts ?? true,
         traceSink: dependencies.llmTraceSink,
         workspaceSettingsRepository: dependencies.workspaceSettingsRepository,
+        workspaceSettingsCache: caches.workspaceSettings,
       })
     : undefined
   // The provisioning event log lives in a separate high-churn store. When its
@@ -2613,7 +2622,7 @@ export function createCore(dependencies: CoreDependencies): Core {
   const sandbox = createSandboxModule(dependencies, agentKindRegistry)
   // Built before the execution engine so the per-service running-task limit can be
   // enforced at start() (and the escalation sweep can read the waiting threshold).
-  const settings = createWorkspaceSettingsModule(dependencies)
+  const settings = createWorkspaceSettingsModule(dependencies, caches.workspaceSettings)
   const releaseHealth = createReleaseHealthModule(dependencies)
   const packageRegistries = createPackageRegistriesModule(dependencies)
   const preview = createPreviewModule(dependencies)
