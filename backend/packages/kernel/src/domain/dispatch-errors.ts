@@ -13,7 +13,8 @@
 //
 // This module is the single place that turns a dispatch rejection into an actionable error:
 //   - `DispatchError` carries the HTTP `status` as a STRUCTURED field, so consumers branch on
-//     `instanceof DispatchError` / `dispatchStatusOf(error)` instead of the message shape.
+//     `instanceof DispatchError` (reading `.status`) / `isDispatchFailure(error)` instead of the
+//     message shape.
 //   - `harnessDispatchFailureMessage` PRESERVES the raw `<label> dispatch failed (HTTP n): body`
 //     first line (callers surface it as detail, it stays greppable, and the legacy regex still
 //     matches it) and, on a 404, APPENDS the stale-image cause + republish remedy.
@@ -35,8 +36,9 @@ export const DISPATCH_DOC_URLS = {
 
 /**
  * A transport `dispatch()` rejection: the container/runner never accepted the job. Carries the
- * HTTP `status` so consumers classify the failure by field (`instanceof` / {@link dispatchStatusOf})
- * rather than regex-matching the message. `status` is `0` when there was no HTTP response (a
+ * HTTP `status` so consumers classify the failure by field (`instanceof DispatchError`, reading
+ * `.status`, or {@link isDispatchFailure}) rather than regex-matching the message. `status` is `0`
+ * when there was no HTTP response (a
  * pre-request or network fault). The `message` is already elaborated by the producer (raw first
  * line + any cause/remedy), so it is safe to surface verbatim.
  */

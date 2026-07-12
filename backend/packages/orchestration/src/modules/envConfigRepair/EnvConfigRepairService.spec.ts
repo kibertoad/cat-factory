@@ -13,7 +13,7 @@ import type {
   Workspace,
   WorkspaceRepository,
 } from '@cat-factory/kernel'
-import { ConflictError } from '@cat-factory/kernel'
+import { ConflictError, DispatchError } from '@cat-factory/kernel'
 import { EnvConfigRepairService } from './EnvConfigRepairService.js'
 
 // EnvConfigRepairService retry/inputs unit. A repair run's bootstrap `inputs` shape the
@@ -50,11 +50,15 @@ class RecordingRepairer implements EnvConfigRepairer {
   readonly calls: EnvConfigRepairRequest[] = []
   /** When true, the FIRST `startRepair` throws (so `start` yields a failed run to retry). */
   failFirst = false
+  /** When set, the FIRST `startRepair` throws THIS instead of the default preflight `Error`. */
+  failWith?: unknown
   private started = 0
   async startRepair(request: EnvConfigRepairRequest): Promise<EnvConfigRepairHandle> {
     this.calls.push(request)
     this.started += 1
-    if (this.failFirst && this.started === 1) throw new Error('preflight: GitHub not connected')
+    if (this.failFirst && this.started === 1) {
+      throw this.failWith ?? new Error('preflight: GitHub not connected')
+    }
     return { workspaceId: request.workspaceId, jobId: request.jobId }
   }
   async pollRepair(): Promise<EnvConfigRepairUpdate> {
@@ -126,6 +130,31 @@ describe('EnvConfigRepairService', () => {
     expect(lastDispatch?.inputs).toEqual(INPUTS)
     expect(lastDispatch?.owner).toBe('o')
     expect(lastDispatch?.gitRef).toBe('feature/x')
+  })
+
+  // The point of the D1/I2 slice: a `start` catch classifies a transport dispatch rejection as
+  // `dispatch` (via the structured DispatchError), while a pre-flight rejection stays `preflight`.
+  it('classifies a transport DispatchError as a `dispatch` failure', async () => {
+    const repo = new InMemoryRepairJobRepo()
+    const repairer = new RecordingRepairer()
+    repairer.failFirst = true
+    repairer.failWith = new DispatchError('Container dispatch failed (HTTP 502): down', 502)
+    const service = makeService(repairer, repo)
+
+    const failed = await service.start('ws1', { owner: 'o', repo: 'r', gitRef: 'main', issues: [] })
+    expect(failed.status).toBe('failed')
+    expect(failed.failure?.kind).toBe('dispatch')
+  })
+
+  it('classifies a pre-flight rejection (plain Error) as a `preflight` failure', async () => {
+    const repo = new InMemoryRepairJobRepo()
+    const repairer = new RecordingRepairer()
+    repairer.failFirst = true // default plain preflight Error — no `dispatch failed` phrase
+    const service = makeService(repairer, repo)
+
+    const failed = await service.start('ws1', { owner: 'o', repo: 'r', gitRef: 'main', issues: [] })
+    expect(failed.status).toBe('failed')
+    expect(failed.failure?.kind).toBe('preflight')
   })
 
   it('retry rejects a run that is not terminally failed', async () => {
