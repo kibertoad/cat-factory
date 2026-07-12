@@ -9,6 +9,7 @@
       "title": "Backend nie jest skonfigurowany",
       "intro": "Serwer wystartował, ale nie zadziała, dopóki nie uzupełnisz poniższych ustawień. Dodaj brakujące wartości do swojego środowiska i odśwież.",
       "howToFix": "Jak naprawić:",
+      "viewDocs": "Zobacz dokumentację",
       "reload": "Odśwież",
       "hint": "Tutaj pokazujemy tylko nazwy zmiennych i sposób ich ustawienia, nigdy wartości sekretnych."
     }
@@ -923,6 +924,20 @@
       "involvedServicesHint": "Połączone usługi bezpośrednio zaangażowane w to zadanie: każda z nich uruchamiana jest jako środowisko tymczasowe obok własnej usługi zadania, a agent kodujący może też zmieniać ich repozytoria.",
       "involvedServicesEmpty": "Brak połączonych usług. Połącz usługi na ramce usługi, aby móc je tutaj wybrać.",
       "involvedServiceStale": "Nie jest już połączona z usługą tego zadania; zostanie usunięta przy następnej zmianie."
+    },
+    "aprioriBranches": {
+      "title": "Istniejące gałęzie",
+      "mode": {
+        "reference": "Referencyjna",
+        "working": "Robocza"
+      },
+      "remove": "Usuń {branch}",
+      "searchPlaceholder": "Dodaj istniejącą gałąź…",
+      "connectFirst": "Połącz GitHub, aby dodać istniejące gałęzie.",
+      "protectedWarning": "{branch} to chroniona gałąź. Wypchnięcia z uruchomienia mogą zostać odrzucone.",
+      "multiRepoHint": "Tryb roboczy jest niedostępny, gdy to zadanie obejmuje więcej niż jedną usługę.",
+      "frozenHint": "Gałąź robocza jest zablokowana, ponieważ dla tego zadania istnieje już pull request.",
+      "hint": "Przekaż temu zadaniu istniejące gałęzie jego repozytorium. Gałąź referencyjna to kontekst tylko do odczytu, który agenci mogą przeglądać; w jedynej gałęzi roboczej uruchomienie kontynuuje pracę zamiast tworzyć nową gałąź."
     },
     "referenceRepos": {
       "title": "Reference repositories",
@@ -4582,6 +4597,14 @@
     "custom": {
       "title": "Wpisz własne podejście",
       "placeholder": "Opisz, jak chcesz to zaimplementować…"
+    },
+    "chat": {
+      "title": "Zapytaj o te podejścia",
+      "hint": "Nie wiesz, które wybrać? Zadaj pytanie przed podjęciem decyzji.",
+      "thinking": "Myślę…",
+      "placeholder": "Zapytaj o kompromisy, ryzyko lub inny kierunek…",
+      "budgetSpent": "Osiągnięto limit czatu — wybierz podejście lub wprowadź własne.",
+      "send": "Wyślij"
     },
     "empty": {
       "title": "Nie ma czego decydować"

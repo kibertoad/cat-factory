@@ -626,6 +626,23 @@ export class AgentContextBuilder {
   }
 
   /**
+   * The EFFECTIVE task description an agent step actually runs against: the incorporated
+   * requirements doc when one exists, else the clarified bug report, else the block's raw
+   * description — the SAME resolution {@link buildContext} folds in (see the `reworked`
+   * substitution). Reviews are only ever run on task blocks, so a frame/module resolves to its
+   * own description. Exposed so the fork-decision chat responder grounds on the same brief every
+   * agent sees, rather than re-deriving it.
+   */
+  async resolveEffectiveDescription(workspaceId: string, block: Block): Promise<string> {
+    const reworked =
+      block.level === 'task'
+        ? ((await this.resolveReworkedRequirements(workspaceId, block.id)) ??
+          (await this.resolveClarifiedBrief(workspaceId, block.id)))
+        : null
+    return reworked ?? block.description ?? ''
+  }
+
+  /**
    * The reworked ("incorporated") requirements for a block — the standard-format
    * document the requirements-rework step produced — or `null` when the feature is
    * unwired or the block has no incorporated review yet. Used both to substitute the

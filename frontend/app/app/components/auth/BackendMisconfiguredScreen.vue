@@ -41,6 +41,16 @@ function reload() {
             <span class="font-medium text-slate-300">{{ t('app.misconfigured.howToFix') }}</span>
             {{ problem.remedy }}
           </p>
+          <a
+            v-if="problem.docsUrl"
+            :href="problem.docsUrl"
+            target="_blank"
+            rel="noopener noreferrer"
+            class="mt-2 inline-flex items-center gap-1 text-sm text-amber-300 hover:text-amber-200"
+          >
+            <UIcon name="i-lucide-book-open" class="h-4 w-4" />
+            {{ t('app.misconfigured.viewDocs') }}
+          </a>
         </li>
       </ul>
 

@@ -16,7 +16,11 @@ transport, and Node model provisioning.
   the CF D1 repos; a 3.9k-line monolith slated for splitting — see
   `docs/refactoring-candidates.md` #1).
 - `db/schema.ts` + `drizzle/` (generated migrations) — the Postgres schema; `migrate()`
-  bootstraps it idempotently on boot.
+  (`db/migrate.ts`) bootstraps it idempotently on boot, failing fast with an actionable error on
+  a ledger↔schema desync and wrapping apply failures with a recovery hint. `scripts/db-reset.mjs`
+  (`pnpm db:reset`) is the destructive clean-slate recovery. Schemas are configurable for a shared
+  database via `DB_SCHEMA` / `DB_MIGRATIONS_SCHEMA` / `DB_PGBOSS_SCHEMA` (see CLAUDE.md →
+  "Migration safety").
 - `container.ts` — the DI composition root (`buildNodeContainer`, with injected
   `resolveTransport`/`mintInstallationToken`/`githubClient` seams the local facade overrides).
 - `execution/` — pg-boss durable execution (`pgBossRunner`, `drive`).

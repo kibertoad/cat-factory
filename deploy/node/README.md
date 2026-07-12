@@ -53,6 +53,50 @@ spend budget, execution tuning) are documented inline in `.env.example`. As with
 Worker, the auth gate **fails closed**: set the OAuth/session secrets for real auth, or
 `AUTH_DEV_OPEN=true` (non-production only) to run open while developing.
 
+## Recovering a wedged database (`db:reset`)
+
+The server validates its migration state on boot: if the migration ledger records applied
+migrations but the tables they created are missing, boot **fails fast** with an actionable
+message rather than dying with an opaque Postgres error deep inside a migration. The usual
+cause is the drizzle-kit 1.0 ledger↔schema split — the migrator's `__drizzle_migrations`
+ledger lives in its own `drizzle` schema, so a hand `DROP SCHEMA public CASCADE` (or a stray
+test run against this database) wipes the tables while the ledger keeps claiming everything
+is applied.
+
+To recover, reset the database to a clean slate and let the next boot re-migrate from
+scratch. This **permanently deletes all data** in `DATABASE_URL`:
+
+```sh
+pnpm --filter @cat-factory/node-server db:reset   # DROPS ALL DATA in DATABASE_URL, then re-migrates on next start
+pnpm start
+```
+
+`db:reset` drops **all** app-owned schemas together — `public`, `telemetry`, `sandbox`,
+`provisioning`, the `drizzle` ledger, and pg-boss's `pgboss` schema — so the ledger can never
+outlive the data it tracks. **Do NOT** hand-drop `public` alone: that is what causes the
+split in the first place.
+
+> **D1 / Cloudflare Worker:** the Worker facade has no boot-time drizzle migrator (D1
+> migrations are applied by wrangler). To reset a **local** D1, drop the local state (delete
+> the `deploy/backend/.wrangler` state dir, or `wrangler d1 execute <db> --local` a fresh
+> schema) and re-apply migrations.
+
+## Sharing a database with other services
+
+By default cat-factory owns the `public` (app tables), `drizzle` (migration ledger), `pgboss`,
+`telemetry`, `sandbox`, and `provisioning` schemas of its database. If you must run it on a
+database shared with other services, three schema names are configurable so cat-factory can't
+collide with a schema another service owns (each must be a plain lowercase identifier):
+
+| Env                    | Default   | What it moves                                                                                                                                                                          |
+| ---------------------- | --------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `DB_SCHEMA`            | `public`  | The default app tables (relocated via the connection `search_path`). Set this when the database has no usable `public` schema.                                                         |
+| `DB_MIGRATIONS_SCHEMA` | `drizzle` | The drizzle migration ledger (`__drizzle_migrations`). Set this so cat-factory's ledger can't collide with **another drizzle-using service's** default `drizzle.__drizzle_migrations`. |
+| `DB_PGBOSS_SCHEMA`     | `pgboss`  | pg-boss's durable-job queue schema.                                                                                                                                                    |
+
+The named app schemas (`telemetry` / `sandbox` / `provisioning`) are fixed and not configurable.
+`db:reset` reads the same variables, so it drops exactly the schemas the deployment owns.
+
 ## Choosing the default model preset
 
 Every workspace's model-preset library is seeded on first use with three built-ins

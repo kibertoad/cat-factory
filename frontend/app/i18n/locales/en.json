@@ -9,6 +9,7 @@
       "title": "Backend not configured",
       "intro": "The server started but can't run until the settings below are provided. Add the missing values to your environment, then reload.",
       "howToFix": "How to fix:",
+      "viewDocs": "View documentation",
       "reload": "Reload",
       "hint": "Only variable names and how to set them are shown here, never any secret values."
     }
@@ -977,6 +978,20 @@
       "involvedServicesHint": "Connected services directly involved in this task: each spins up as an ephemeral environment alongside this task's own service, and the coding agent may change their repositories too.",
       "involvedServicesEmpty": "No connected services. Connect services on the service frame to select them here.",
       "involvedServiceStale": "No longer connected to this task's service; it is dropped on the next change."
+    },
+    "aprioriBranches": {
+      "title": "Existing branches",
+      "mode": {
+        "reference": "Reference",
+        "working": "Working"
+      },
+      "remove": "Remove {branch}",
+      "searchPlaceholder": "Add an existing branch…",
+      "connectFirst": "Connect GitHub to add existing branches.",
+      "protectedWarning": "{branch} is a protected branch. Pushes from the run may be rejected.",
+      "multiRepoHint": "Working mode is unavailable while this task involves more than one service.",
+      "frozenHint": "The working branch is locked because a pull request already exists for this task.",
+      "hint": "Hand this task pre-existing branches of its repository. A reference branch is read-only context the agents may inspect; the single working branch is where the run keeps building instead of a new branch."
     },
     "referenceRepos": {
       "title": "Reference repositories",
@@ -4711,6 +4726,14 @@
     "custom": {
       "title": "Enter your own approach",
       "placeholder": "Describe how you want this implemented…"
+    },
+    "chat": {
+      "title": "Ask about these approaches",
+      "hint": "Not sure which to pick? Ask a question before you decide.",
+      "thinking": "Thinking…",
+      "placeholder": "Ask about the trade-offs, risks, or a different direction…",
+      "budgetSpent": "Chat limit reached — pick an approach or enter your own.",
+      "send": "Send"
     },
     "empty": {
       "title": "Nothing to decide"

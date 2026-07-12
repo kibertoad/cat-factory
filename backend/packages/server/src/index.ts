@@ -25,6 +25,11 @@ export {
   DEFAULT_WEB_SEARCH_COUNT,
 } from './modules/webSearch/upstreams.js'
 export { escalateStaleNotifications } from './runtime/escalateNotifications.js'
+export {
+  GITHUB_RECONCILE_STALE_MS,
+  reconcileStaleRepos,
+  type GitHubReconcileDeps,
+} from './runtime/reconcileStaleRepos.js'
 export { StateSigner, type InstallState } from './github/state.js'
 export {
   GitHubOAuth,
@@ -125,10 +130,14 @@ export {
   configProblem,
   formatConfigProblems,
   requireEnv,
+  requireEncryptionKey,
+  requireGitHubAppPrivateKey,
+  MIN_ENCRYPTION_KEY_BYTES,
   ENV_HELP,
   type ConfigProblem,
 } from './config/problems.js'
 export { createMisconfiguredApp, buildMisconfiguredResponse } from './config/misconfiguredApp.js'
+export { DOCS, ENV_VARS_ANCHORS, repoDocUrl } from './config/docs.js'
 export { base64url, base64urlToBytes, pkcs8PemToDer, timingSafeEqual } from './crypto/encoding.js'
 // Runtime-neutral (Web Crypto) credential encryption + GitHub-App authentication,
 // shared by both facades so the Node service can mint installation tokens and
@@ -138,7 +147,11 @@ export {
   type WebCryptoSecretCipherOptions,
 } from './crypto/WebCryptoSecretCipher.js'
 export { WebCryptoPersonalSecretCipher } from './crypto/WebCryptoPersonalSecretCipher.js'
-export { GitHubAppAuth, type GitHubAppAuthDependencies } from './github/GitHubAppAuth.js'
+export {
+  GitHubAppAuth,
+  type GitHubAppAuthDependencies,
+  explainInstallationTokenMintFailure,
+} from './github/GitHubAppAuth.js'
 export {
   GitHubAppRegistry,
   type GitHubAppRegistryDependencies,

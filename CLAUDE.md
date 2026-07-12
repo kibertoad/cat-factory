@@ -115,11 +115,46 @@ FIRST so it can pick the work up without re-deriving context. Capture:
 The first example is [`docs/initiatives/registry-di-migration.md`](./docs/initiatives/registry-di-migration.md)
 (moving the module-global plugin registries to app-owned DI, one registry at a time).
 
+**When the initiative's committed scope is complete, convert the tracker into an ADR and
+delete the tracker.** The tracker is a working document (per-slice checklist, file lists,
+image-tag reminders) that stops being useful once the work lands; the durable record is a
+numbered **Architecture Decision Record** under [`backend/docs/adr/`](./backend/docs/adr/)
+(`NNNN-slug.md`, sequential — take the next free number). Trim the tracker down to the
+high-level decision: **Context** (the problem), **Decision** (what was built and how the
+pieces fit), **Rationale** (the non-obvious choices, condensed from the tracker's decisions
+log + gotchas), and **Consequences** (cross-cutting effects + anything deliberately _not_
+pursued, so a future reader knows the deferrals were intentional). Drop the slice-by-slice
+checklist and per-file tables. Then `git rm` the `docs/initiatives/<name>.md` tracker in the
+same PR — the ADR supersedes it (see ADRs 0010–0021, each a converted initiative). Header
+shape: `# ADR NNNN: <title>` + a `Status` / `Date` / `Context layer` bullet block, mirroring
+the nearest recent ADR.
+
 ## Known environment quirks
 
 - **Do not validate Cloudflare auth before deployments.** Skip `wrangler whoami`
   and similar pre-flight auth checks — always assume the Cloudflare login is
   correct and proceed straight to the deploy commands.
+- **Multi-line git messages: use a bash heredoc in the Bash tool, NOT a PowerShell
+  here-string.** The primary shell is PowerShell, but the Bash tool is POSIX sh — the two
+  do not share string syntax. A PowerShell here-string (`git commit -m @'…'@`) run through
+  the Bash tool is NOT a heredoc there: bash reads the literal `@'` / `'@` delimiters, so
+  the stray `@` characters land in the commit subject/body (a subject like `@ fix: …` with
+  a trailing `@`). Always pass a multi-line commit message (or PR body) to the Bash tool via
+  a real bash heredoc piped to `-F -`:
+
+  ```sh
+  git commit -F - <<'EOF'
+  feat: subject line
+
+  Body paragraph.
+
+  Co-Authored-By: …
+  EOF
+  ```
+
+  Reserve the `@'…'@` here-string for the PowerShell tool only. If a message does slip
+  through mangled, `git commit --amend -F -` with the same heredoc fixes it (before pushing).
+
 - **Worker tests fail on Windows** with `config wrangler validation failed` / 47 errors
   and "no tests" output. This is a pre-existing Windows-only wrangler issue, not caused
   by code changes. Use `pnpm test:run` from `backend/packages/orchestration` (or any other
@@ -335,6 +370,52 @@ shell/CI** (`Interactive prompts require a TTY terminal`).
 
 Keep the symmetric D1 migration (a fresh numbered `*.sql` under
 `backend/runtimes/cloudflare/migrations/`) in step, per "Keep the runtimes symmetric".
+
+## Migration safety: boot drift-guard, recovery, and self-healing FK migrations
+
+The Node facade boots by running `migrate()` (`backend/runtimes/node/src/db/migrate.ts`)
+BEFORE `boss.start()` (sequential, not a `Promise.all` — a migration failure is then the
+clean top-level rejection, not a race with pg-boss's own schema provisioning). `migrate()`
+is hardened against the two states that used to brick boot with an opaque Postgres error:
+
+- **Ledger↔schema drift (fail fast, then reset).** In drizzle-kit 1.0 the
+  `__drizzle_migrations` ledger lives in its OWN `drizzle` schema, so a hand
+  `DROP SCHEMA public CASCADE` (or a stray test run against a dev DB) wipes `public.*` while
+  the ledger keeps claiming every migration is applied — the next `ALTER TABLE` migration then
+  dies with a bare `42P01`. `migrate()` probes for this up front (`assertSchemaConsistent`:
+  ledger non-empty but anchor tables `public.accounts`/`public.workspaces` missing) and throws
+  a `DbSchemaInconsistentError` naming the condition + the recovery. Any other apply failure is
+  rethrown as a `MigrationFailedError` that maps the pg code (`42P01`/`23503`/`42P07`) to a
+  human cause + hint. Recovery is deliberate + destructive, never automatic:
+  `pnpm --filter @cat-factory/node-server db:reset` (`scripts/db-reset.mjs`) drops ALL
+  app-owned schemas TOGETHER — `public`, `telemetry`, `sandbox`, `provisioning`, the `drizzle`
+  ledger, and pg-boss's `pgboss` — so the ledger can never outlive the data. Never hand-drop
+  `public` alone; that is what creates the split. (Node-Postgres-specific — D1 has no boot-time
+  drizzle migrator.)
+- **Self-healing FK migrations (both runtimes).** A migration that adds an `ON DELETE RESTRICT`
+  foreign key MUST first delete/NULL any pre-existing orphans that would violate it, or it
+  hard-fails with `23503` on any DB old enough to predate the FK. Heal-then-constrain: `DELETE
+FROM <child> WHERE <fk> NOT IN (SELECT id FROM <parent>)` (or `UPDATE … SET <fk> = NULL` for a
+  nullable column) before `ADD CONSTRAINT`. Mirror it across BOTH runtimes (the Postgres
+  `migration.sql` AND the D1 rebuild in `backend/runtimes/cloudflare/migrations/`), per "Keep
+  the runtimes symmetric". Deleting orphaned experimental data is acceptable here (backwards
+  compatibility is a non-goal); do NOT hide the orphaning by swallowing the error instead.
+
+- **Configurable schemas for a SHARED database (Node).** All default to the prior behaviour, so
+  a stock deployment is unchanged; set them when cat-factory shares a Postgres with other
+  services. `DB_SCHEMA` relocates the default (`public`) app tables via the connection
+  `search_path` (`createDbClient` sets `options=-c search_path=…`; `migrate()` `CREATE SCHEMA
+IF NOT EXISTS`es it) — for databases with no usable `public`. `DB_MIGRATIONS_SCHEMA` moves the
+  drizzle ledger off the top-level `drizzle` schema so it can't collide with another
+  drizzle-using service's `drizzle.__drizzle_migrations` (passed as the migrator's
+  `migrationsSchema`). `DB_PGBOSS_SCHEMA` moves pg-boss's queue schema. Each must be a plain
+  lowercase identifier; `db:reset` reads the same env so it drops exactly the schemas the deployment owns.
+  The named app schemas (`telemetry`/`sandbox`/`provisioning`) are fixed `pgSchema(...)` names,
+  not configurable (changing them would mean regenerating migrations). Node-Postgres-specific.
+
+Test harnesses NEVER touch the base `DATABASE_URL` DB: they require a per-vitest-worker
+database (`deriveWorkerDatabase` must resolve) and use the `postgres` maintenance DB for the
+admin `CREATE DATABASE` connection, so running the suite can't pollute or desync a dev DB.
 
 ## Layout
 
@@ -905,6 +986,51 @@ proceed,resolve-exceeded}` (via `container.executionService`). Each facade wires
   task's raw description once `incorporated` (the standardized doc takes focus), and after
   a stop-reset surfaces the last incorporated doc read-only as a base.
 
+## Implementation-fork decision flow (two-phase Coder step: propose → park → choose)
+
+An OPTIONAL phase on the Coder step (`agentKind: 'coder'`, the `build` phase) that surfaces
+the **materially different ways to implement a task** BEFORE any code is written, then parks for
+a human to pick one, enter their own approach, or **chat** about the forks. It rides the run's
+coder step (`step.forkDecision`) — no side table — so it is runtime-symmetric by construction,
+exactly like `followUps`. Gated on the task Estimator's estimate via the workspace risk policy
+(`riskPolicySchema.forkDecision`, reusing `stepGatingSchema`) plus a per-task tri-state
+(`coder.forkDecision` ∈ `auto`/`always`/`off`). Full design + rationale:
+[`backend/docs/adr/0022-coder-fork-decision.md`](./backend/docs/adr/0022-coder-fork-decision.md).
+
+A container job can't pause mid-run, so the human park sits BETWEEN two dispatches on the same
+coder step:
+
+- **Phase A (propose)** — `RunDispatcher.handleForkDecisionPhase` resolves the tri-state + the
+  risk-policy fork gate (`forkDecision.logic.ts`). Not proposing → `step.forkDecision.status =
+'skipped'`, fall through (the Coder runs). Proposing → dispatch the read-only **`fork-proposer`**
+  explore kind (`container-explore`, structured JSON → `result.custom`) as a HELPER off the coder
+  step (`status: 'proposing'`). Its completion is caught by the `fork-proposal` interceptor →
+  `ForkDecisionController.recordProposal`: `singlePath` or <2 usable forks ⇒ `single_path`
+  (re-arm the step, no park, the Coder runs against the one fork); else mint fork ids, raise a
+  `fork_decision_pending` notification, and `parkStepOnDecision`.
+- **Human interaction** (`awaiting_choice`) — pick a fork / type a custom approach / **chat**, via
+  the dedicated `fork-decision` result-view window. Chat rides the transient re-entry protocol
+  (the `pendingIncorporation` template): `ForkDecisionController.chat` CAS-appends the human turn,
+  sets `status: 'answering'` + `step.pendingForkChat = { messageId }`, flips `blocked → running`,
+  and signals the driver (reason `fork-chat`). The `reentrantForkDecision` guard in
+  `ExecutionService.stepInstance` falls through so `handleForkDecisionPhase` re-enters →
+  `ForkDecisionController.answerChat` computes the grounded reply INLINE in the durable driver
+  (`ForkChatService`, DocInterview-style model resolution + metering) off the fixed proposal
+  grounding + the thread, appends the assistant turn, and re-parks (a fresh approval id).
+  `maxChatTurns` (default 15, human messages) is a hard budget (409 past it). **No chat model
+  wired, or a responder failure ⇒ a canned "chat unavailable" assistant turn** and re-park —
+  pick / custom still work (the pass-through the conformance suite asserts).
+- **Phase B (implement)** — `ForkDecisionController.choose` CAS-records `forkDecision.chosen`
+  (`status: 'chosen'`), re-arms the step (`resetStepForRerun` + `startStep`), and signals. On
+  re-entry `forkPhasePending` is false, so `handleAgentStep` dispatches the Coder normally;
+  `AgentContextBuilder` folds `buildImplementationChoice(step.forkDecision)` into
+  `AgentRunContext.implementationChoice` (the chosen approach + the rejected alternatives), which
+  `implementationChoiceSection` renders into the `build` prompt as a binding directive.
+
+Pass-through everywhere it can't run (tri-state `off`, gate not met, proposer/chat unwired), so
+pipelines without the feature — and the engine tests — behave exactly as before. Scoped to the
+run's PRIMARY repo (single-repo tasks); per-repo fork sets are a follow-up.
+
 ## Merge lifecycle flow (CI gate → CI-fixer → merger → notifications)
 
 The tail of a build pipeline turns an open PR into a merged one — gated on **real**
@@ -1227,8 +1353,13 @@ differentiators behind the shared kernel ports + the `container.gateways` seam.
   plain async sleeps instead of durable steps; `signalDecision` re-enqueues a parked
   run). `start()` connects to `DATABASE_URL`, runs `migrate()`, boots pg-boss + the
   execution worker, attaches the **real-time WebSocket transport** to the HTTP listener,
-  and serves over `@hono/node-server`. Async GitHub ingest still falls back to the
-  inline/not-enabled paths for now. **Real-time** is implemented: `start()` creates a
+  and serves over `@hono/node-server`. **Async GitHub ingest is pg-boss-backed** (the
+  analogue of the Worker's `GITHUB_SYNC_QUEUE` consumer + `GitHubBackfillWorkflow`): the
+  `githubBackfill` / `githubWebhook` gateway seams enqueue webhook deliveries, single-repo
+  resyncs and full-installation backfills onto the `github.sync` queue so the request acks
+  fast, and `startGitHubSyncWorker` drains it and applies each job to the projections via
+  the same `GitHubSyncService` / `WebhookService` the inline path used (a container built
+  with no boss — a pure-logic test — keeps the inline fallback). **Real-time** is implemented: `start()` creates a
   per-workspace `NodeRealtimeHub` (in-memory subscriber registry), wires a
   `NodeEventPublisher` (decorated with `FanOutEventPublisher`) as the engine's
   `executionEventPublisher` + an `InAppNotificationChannel`, and `attachRealtime`

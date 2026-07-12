@@ -17,8 +17,9 @@ import { D1ProvisioningLogRepository } from './infrastructure/repositories/D1Pro
 import { D1PipelineScheduleRepository } from './infrastructure/repositories/D1PipelineScheduleRepository'
 import { D1SubscriptionQuotaCycleRepository } from './infrastructure/repositories/D1SubscriptionQuotaCycleRepository'
 import { D1PasswordResetTokenRepository } from './infrastructure/repositories/D1PasswordResetTokenRepository'
+import { D1NotificationRepository } from './infrastructure/repositories/D1NotificationRepository'
 import { buildContainer, buildCloudflareArtifactStoreResolver } from './infrastructure/container'
-import { escalateStaleNotifications } from '@cat-factory/server'
+import { GITHUB_RECONCILE_STALE_MS, escalateStaleNotifications } from '@cat-factory/server'
 import { CryptoIdGenerator, SystemClock } from './infrastructure/runtime'
 import { WorkflowsWorkRunner } from './infrastructure/workflows/WorkflowsWorkRunner'
 import { WorkflowsBootstrapRunner } from './infrastructure/workflows/WorkflowsBootstrapRunner'
@@ -117,8 +118,6 @@ const SWEEP_HARD_STALL_MS = 60 * 60 * 1000
  * per-process `orphanedSince` map.
  */
 const runSweepOrphanedSince = new Map<string, number>()
-/** A GitHub projection is reconciled if it hasn't synced within this window. */
-const GITHUB_RECONCILE_STALE_MS = 30 * 60 * 1000
 /** A `running` Kaizen grading older than this is re-driven (its sweep crashed mid-flight). */
 const KAIZEN_STALE_MS = 10 * 60 * 1000
 /** Max Kaizen gradings to run per scheduled pass (each is an LLM call; keep the batch small). */
@@ -185,6 +184,7 @@ export default {
           subscriptionQuotaCycleRepository: new D1SubscriptionQuotaCycleRepository({ db: env.DB }),
           pipelineScheduleRepository: new D1PipelineScheduleRepository({ db: env.DB }),
           passwordResetTokenRepository: new D1PasswordResetTokenRepository({ db: env.DB }),
+          notificationRepository: new D1NotificationRepository({ db: env.DB }),
           // Prune the separate provisioning-log database when its binding is present.
           ...(env.PROVISIONING_DB
             ? {
@@ -480,11 +480,13 @@ export default {
       reconcileStaleRepos(env, clock, GITHUB_RECONCILE_STALE_MS)
         .then((scheduled) => {
           if (scheduled > 0)
-            logger.info({ cron: 'github-reconcile', scheduled }, 'scheduled repo resyncs')
+            // `sweep:` (not `cron:`) so the summary shares a field with the pass's
+            // per-repo lines, which the shared reconcile core emits on both facades.
+            logger.info({ sweep: 'github-reconcile', scheduled }, 'scheduled repo resyncs')
         })
         .catch((error) =>
           logger.error(
-            { cron: 'github-reconcile', err: errInfo(error) },
+            { sweep: 'github-reconcile', err: errInfo(error) },
             'github reconcile failed',
           ),
         ),

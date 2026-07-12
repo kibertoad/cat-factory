@@ -25,6 +25,21 @@ export const DEFAULT_OPENAI_COMPATIBLE_BASE_URLS: Readonly<Record<string, string
 }
 
 /**
+ * The direct model providers whose API key is UI-configurable through the workspace
+ * "AI providers" key pool. Derived from the built-in OpenAI-compatible endpoints plus
+ * `anthropic` (its own SDK, not OpenAI-shaped) and `litellm` (an operator-hosted gateway
+ * with no public default). This is the single source of truth for that list — a provisioning
+ * remedy names it from here rather than re-listing the vendors inline, so adding a vendor to
+ * {@link DEFAULT_OPENAI_COMPATIBLE_BASE_URLS} keeps the error text in step. Sorted for a
+ * deterministic, stable rendering.
+ */
+export const UI_CONFIGURABLE_DIRECT_PROVIDERS: readonly string[] = [
+  ...Object.keys(DEFAULT_OPENAI_COMPATIBLE_BASE_URLS),
+  'anthropic',
+  'litellm',
+].sort()
+
+/**
  * The single source of truth for "where does OpenAI-compatible provider X live": a
  * per-deployment env override always wins, but a *blank* override falls back to the
  * built-in default (so `QWEN_BASE_URL=` does not silently disable the provider). Returns

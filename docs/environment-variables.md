@@ -45,14 +45,17 @@ UI (Workspace settings -> Budget) and defaults to about 100 EUR/month.
 
 ## Core service & networking
 
-| Variable                                            | Modes       | Default         | Description                                                |
-| --------------------------------------------------- | ----------- | --------------- | ---------------------------------------------------------- |
-| `DATABASE_URL`                                      | Node, Local | required (Node) | Postgres connection string.                                |
-| `PORT`                                              | Node, Local | `8080`          | HTTP listen port.                                          |
-| `HOST`                                              | Node, Local | all interfaces  | Bind address.                                              |
-| `PUBLIC_URL` / `WORKER_PUBLIC_URL` / `APP_BASE_URL` | Node / CF   | derived         | Public base URL used to build callback/redirect URLs.      |
-| `CORS_ALLOWED_ORIGINS`                              | CF, Node    | none            | Comma-separated allowed CORS origins.                      |
-| `ENVIRONMENT`                                       | CF, Node    | `development`   | Deployment environment label (`production`, `local`, ...). |
+| Variable                                            | Modes       | Default         | Description                                                                                                                                                        |
+| --------------------------------------------------- | ----------- | --------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| `DATABASE_URL`                                      | Node, Local | required (Node) | Postgres connection string.                                                                                                                                        |
+| `DB_SCHEMA`                                         | Node        | `public`        | Schema for the app's unqualified tables (relocated via the connection `search_path`); set when sharing a Postgres with other services. Plain lowercase identifier. |
+| `DB_MIGRATIONS_SCHEMA`                              | Node        | `drizzle`       | Schema for the Drizzle migration ledger, so it can't collide with another Drizzle service's `drizzle.__drizzle_migrations`. Plain lowercase identifier.            |
+| `DB_PGBOSS_SCHEMA`                                  | Node        | `pgboss`        | Schema for pg-boss's durable-job queue tables. Plain lowercase identifier.                                                                                         |
+| `PORT`                                              | Node, Local | `8080`          | HTTP listen port.                                                                                                                                                  |
+| `HOST`                                              | Node, Local | all interfaces  | Bind address.                                                                                                                                                      |
+| `PUBLIC_URL` / `WORKER_PUBLIC_URL` / `APP_BASE_URL` | Node / CF   | derived         | Public base URL used to build callback/redirect URLs.                                                                                                              |
+| `CORS_ALLOWED_ORIGINS`                              | CF, Node    | none            | Comma-separated allowed CORS origins.                                                                                                                              |
+| `ENVIRONMENT`                                       | CF, Node    | `development`   | Deployment environment label (`production`, `local`, ...).                                                                                                         |
 
 ## Realtime (Node horizontal scaling)
 
@@ -64,18 +67,19 @@ UI (Workspace settings -> Budget) and defaults to about 100 EUR/month.
 
 ## Authentication
 
-| Variable                                                                              | Modes       | Default                | Description                                                    |
-| ------------------------------------------------------------------------------------- | ----------- | ---------------------- | -------------------------------------------------------------- |
-| `AUTH_SESSION_SECRET`                                                                 | CF, Node    | required (Node/Local)  | HMAC secret for session tokens (>= 32 chars).                  |
-| `AUTH_SESSION_TTL_HOURS`                                                              | Node        | default TTL            | Session lifetime.                                              |
-| `AUTH_DEV_OPEN`                                                                       | Node, Local | `false` (Local `true`) | Dev-open auth (no sign-in).                                    |
-| `AUTH_PASSWORD_ENABLED`                                                               | Node, Local | `false` (Local `true`) | Enable password auth.                                          |
-| `AUTH_OPEN_SIGNUP`                                                                    | Local       | `true` (Local)         | Allow open sign-up.                                            |
-| `AUTH_ALLOWED_LOGINS` / `AUTH_ALLOWED_ORGS` / `AUTH_ALLOWED_EMAIL_DOMAINS`            | CF, Node    | none                   | Allow-lists gating who may sign in.                            |
-| `AUTH_ALLOWED_REDIRECT_ORIGINS` / `AUTH_SUCCESS_REDIRECT_URL` / `AUTH_CALLBACK_URL`   | CF, Node    | none                   | OAuth redirect configuration.                                  |
-| `AUTH_MACHINE_TOKEN_TTL_MS`                                                           | CF, Node    | 30 days                | Lifetime of a machine token minted for a mothership-mode node. |
-| `GITHUB_OAUTH_CLIENT_ID` / `GITHUB_OAUTH_CLIENT_SECRET`                               | CF, Node    | none                   | "Login with GitHub" OAuth app.                                 |
-| `GOOGLE_OAUTH_CLIENT_ID` / `GOOGLE_OAUTH_CLIENT_SECRET` / `GOOGLE_OAUTH_REDIRECT_URL` | Node        | none                   | "Login with Google" OAuth app.                                 |
+| Variable                                                                              | Modes       | Default                | Description                                                                                                                                                                        |
+| ------------------------------------------------------------------------------------- | ----------- | ---------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `AUTH_SESSION_SECRET`                                                                 | CF, Node    | required (Node/Local)  | HMAC secret for session tokens (>= 32 chars).                                                                                                                                      |
+| `HARNESS_SHARED_SECRET`                                                               | CF, Node    | required (executor)    | Shared secret the orchestrator sends on every agent-container harness call (`x-harness-secret`) so a job container only trusts this service (>= 16 chars, stable across restarts). |
+| `AUTH_SESSION_TTL_HOURS`                                                              | Node        | default TTL            | Session lifetime.                                                                                                                                                                  |
+| `AUTH_DEV_OPEN`                                                                       | Node, Local | `false` (Local `true`) | Dev-open auth (no sign-in).                                                                                                                                                        |
+| `AUTH_PASSWORD_ENABLED`                                                               | Node, Local | `false` (Local `true`) | Enable password auth.                                                                                                                                                              |
+| `AUTH_OPEN_SIGNUP`                                                                    | Local       | `true` (Local)         | Allow open sign-up.                                                                                                                                                                |
+| `AUTH_ALLOWED_LOGINS` / `AUTH_ALLOWED_ORGS` / `AUTH_ALLOWED_EMAIL_DOMAINS`            | CF, Node    | none                   | Allow-lists gating who may sign in.                                                                                                                                                |
+| `AUTH_ALLOWED_REDIRECT_ORIGINS` / `AUTH_SUCCESS_REDIRECT_URL` / `AUTH_CALLBACK_URL`   | CF, Node    | none                   | OAuth redirect configuration.                                                                                                                                                      |
+| `AUTH_MACHINE_TOKEN_TTL_MS`                                                           | CF, Node    | 30 days                | Lifetime of a machine token minted for a mothership-mode node.                                                                                                                     |
+| `GITHUB_OAUTH_CLIENT_ID` / `GITHUB_OAUTH_CLIENT_SECRET`                               | CF, Node    | none                   | "Login with GitHub" OAuth app.                                                                                                                                                     |
+| `GOOGLE_OAUTH_CLIENT_ID` / `GOOGLE_OAUTH_CLIENT_SECRET` / `GOOGLE_OAUTH_REDIRECT_URL` | Node        | none                   | "Login with Google" OAuth app.                                                                                                                                                     |
 
 ## VCS integration (GitHub / GitLab)
 

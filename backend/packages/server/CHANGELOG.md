@@ -1,5 +1,352 @@
 # @cat-factory/server
 
+## 0.112.3
+
+### Patch Changes
+
+- 6fc42ed: Elaborate GitHub App authentication failures (error-message coverage initiative, items A3/C3). A
+  malformed `GITHUB_APP_PRIVATE_KEY` and a failed installation-token mint used to surface opaquely —
+  long after boot, deep in a pipeline — instead of naming the cause and the fix.
+
+  - **A3** — new shared validator `requireGitHubAppPrivateKey` (`@cat-factory/server`
+    `config/problems.ts`) checks the App private key's SHAPE at config load whenever the App is
+    configured: present, a PKCS#8 PEM (not the PKCS#1 key GitHub hands out), with a base64-decodable
+    body. A malformed key now fails on the misconfigured screen with the exact `openssl pkcs8 -topk8`
+    conversion remedy and a docs link, rather than as an opaque `crypto.subtle.importKey` rejection or
+    an `atob` `InvalidCharacterError` at the first token mint. Wired into BOTH facade config loaders
+    (Node `loadNodeConfig`, Worker `loadGitHubConfig`) for the default and privileged App keys, with a
+    new `GITHUB_APP_PRIVATE_KEY` `ENV_HELP` entry so the message reads identically across facades.
+    `GitHubAppAuth.importKey` additionally wraps the residual "valid base64 but not a real key" case
+    (which slips past the shape check) with the same actionable message.
+  - **C3** — `GitHubAppAuth.mintInstallationToken` now throws an elaborated message via the exported
+    `explainInstallationTokenMintFailure`: 401 → wrong/rotated App private key; 404/410 → the App was
+    uninstalled or the workspace points at a stale installation (reconnect GitHub); 403 → rejected /
+    rate-limited (check App id + key + clock). The load-bearing first line
+    (`Failed to mint installation token for <id> (HTTP <status>)`) is preserved verbatim so the
+    stale-installation reconcile regexes still classify correctly — the cause + remedy is only
+    appended. Unit-tested for both the elaboration and the regex compatibility.
+
+  No behaviour changes beyond error message text and boot-time validation of an already-required key.
+
+## 0.112.2
+
+### Patch Changes
+
+- edad6e6: feat(engine): batch the notification-escalation settings read (audit item 8)
+
+  The periodic notification-escalation sweep loaded every workspace's settings with a `get`
+  point-read inside the per-workspace loop — an N+1 that runs every couple of minutes on both
+  facades, and one the perf-item-9 settings cache can't fix (that slice is pass-through on the
+  Worker's own-mutable-D1-state profile). Adds a batched `listByWorkspaceIds` (chunked `IN`) to
+  the `WorkspaceSettingsRepository` port, mirrored in both the D1 and Drizzle repos, plus
+  `WorkspaceSettingsService.getMany` (defaults-filled) which `escalateStaleNotifications` now
+  calls ONCE before the loop. A `defineWorkspaceSettingsSuite` cross-runtime parity assertion
+  (seed → get → batched read, absent workspace absent, empty input → empty map) runs against
+  both facades' real stores; the batch read stays mothership-internal (a global sweeper read).
+
+- Updated dependencies [edad6e6]
+  - @cat-factory/kernel@0.121.3
+  - @cat-factory/orchestration@0.106.2
+  - @cat-factory/agents@0.54.1
+  - @cat-factory/integrations@0.81.8
+  - @cat-factory/spend@0.12.17
+
+## 0.112.1
+
+### Patch Changes
+
+- 3b3bdc8: Elaborate credential-decryption failure messages (error-message coverage initiative, items
+  E1/E2). A wrong personal-subscription password and a corrupt/truncated stored secret used to
+  surface as opaque Web Crypto errors instead of an actionable remedy.
+
+  - **E1** — `WebCryptoPersonalSecretCipher.open` (`@cat-factory/server`) now wraps the AES-GCM
+    authentication failure the same way the system cipher already wraps a rotated-key failure: the
+    opaque `DOMException` ("The operation failed for an operation-specific reason") becomes "The
+    personal password does not match the one this subscription was sealed under — re-enter it, or
+    remove and re-add the subscription.", preserving the original as `cause`.
+    `PersonalSubscriptionService.unlock` keeps its `wrong_password` reason (the 428 flow the SPA
+    drives) and now carries a clean, self-sufficient message rather than nesting the raw cipher
+    text in parentheses.
+  - **E2** — the malformed-envelope guards in both ciphers (`WebCryptoSecretCipher.decrypt` and
+    `WebCryptoPersonalSecretCipher.open`) now name the likely causes (truncated/corrupted column,
+    or a value written under a different scheme/key) and the re-enter/re-seal remedy, instead of a
+    terse `Invalid secret envelope`. The integrity-check failure (magic prefix absent after a
+    successful GCM decrypt) is distinguished from a wrong password as corruption/tampering. The
+    envelope parse (structure check + base64url decode) is wrapped as a unit, so a corrupt/undecodable
+    segment inside an otherwise well-structured envelope also yields the actionable message rather
+    than leaking a bare `atob` `InvalidCharacterError`.
+
+  Also fixes a test-config gap: `@cat-factory/server`'s vitest `include` omitted the co-located
+  `src/**/*.test.ts` unit tests (the crypto ciphers, provider capabilities, …), so those suites
+  silently never ran; the glob now covers both `test/*.spec.ts` and `src/**/*.test.ts`.
+
+  No behaviour changes beyond error message text.
+
+- Updated dependencies [3b3bdc8]
+  - @cat-factory/integrations@0.81.7
+  - @cat-factory/orchestration@0.106.1
+
+## 0.112.0
+
+### Minor Changes
+
+- d1a4129: Complete the implementation-fork decision phase with grounded CHAT (PR 2 of the initiative).
+  Before the Coder writes code, a human parked on the surfaced forks can now ask questions about
+  them and get a grounded, comparative answer before deciding. Each human turn is answered by an
+  inline LLM in the durable driver (no container re-dispatch) over the fixed proposal grounding +
+  the thread; a `maxChatTurns` budget bounds spend, and with no chat model wired the chat degrades
+  to a canned "chat unavailable" reply so pick / custom still work. Adds the
+  `POST /executions/:id/fork-decision/chat` endpoint, the `fork-chat` prompt (v1), the
+  `ForkChatService`, the `pendingForkChat` re-entry protocol, the window chat thread, and the
+  cross-runtime + e2e coverage. The fork-decision initiative tracker is converted to ADR 0022.
+
+### Patch Changes
+
+- Updated dependencies [d1a4129]
+  - @cat-factory/contracts@0.127.0
+  - @cat-factory/agents@0.54.0
+  - @cat-factory/orchestration@0.106.0
+  - @cat-factory/integrations@0.81.6
+  - @cat-factory/kernel@0.121.2
+  - @cat-factory/prompt-fragments@0.13.13
+  - @cat-factory/spend@0.12.16
+
+## 0.111.0
+
+### Minor Changes
+
+- df7a489: De-duplicate the GitHub reconcile pass across the two facades, and make every Node
+  periodic sweep non-overlapping through a single seam.
+
+  **Reconcile hoist (audit item 4).** `reconcileStaleRepos` and its two gone-installation
+  classifiers were duplicated verbatim between the Worker's `sync-consumer.ts` and the Node
+  `githubReconcile.ts` (the Node copy's own comment said "Mirrors the Worker's classification"),
+  with no shared test — so a change to one would silently diverge (one runtime stops tombstoning
+  dead installations while the other keeps working). The pass now lives once in
+  `@cat-factory/server` (`reconcileStaleRepos` + `GitHubReconcileDeps`), and each facade supplies
+  only its per-repo driver: the Worker enqueues on `GITHUB_SYNC_QUEUE` (or direct-syncs when
+  unbound), Node direct-syncs inline. The classifiers moved verbatim (their regex→structured-code
+  conversion is tracked separately as error-message-coverage I7). The 30-minute staleness window
+  is now the shared exported `GITHUB_RECONCILE_STALE_MS` (previously defined independently per
+  facade), and all reconcile logs — the per-repo lines AND the Worker's cron summary — now use a
+  single `sweep: 'github-reconcile'` field on both facades. The Worker's queue-less direct-sync
+  fallback also builds its DI container once per pass instead of once per stale repo.
+
+  **Non-overlapping Node sweepers (audit item 6).** The DB-heavy `initiativeLoop`, `recurring`,
+  and notification-escalation sweeps ran unguarded `setInterval` timers, so a pass that outlasted
+  its interval could be stacked — and two concurrent `runDue` passes could both observe "no active
+  run" and double-spawn. All eight Node sweeps (kaizen, github-reconcile, initiative loop,
+  recurring, notification escalation, environment TTL, and both retention sweeps) now go through
+  one `startSweeper` helper built on `toad-scheduler`: `preventOverrun` is the non-overlap guard,
+  `runImmediately` the run-once-first behaviour, and the `AsyncTask` error handler the best-effort
+  logging (each sweep names its task, so scheduler-surfaced errors identify their sweep), and
+  `unref` keeps the sweep timers from holding the process alive — the same contract as the
+  hand-rolled `setInterval(...).unref()` timers this replaced. A new sweeper physically cannot
+  forget the guard. Adds a `toad-scheduler` (^4.1.0) dependency to `@cat-factory/node-server`.
+
+## 0.110.5
+
+### Patch Changes
+
+- 473e849: Classify VCS (GitHub / GitLab) HTTP failures with cause + fix + doc links (error-message coverage
+  initiative, items C1/C4/C5/C6). The `fetch`-based clients used to throw the same bare status dump
+  for any non-2xx (`GitHub GET <url> → 401: <body>`), so a revoked token, an exhausted rate limit,
+  and a missing scope all read identically.
+
+  - Adds a shared kernel helper `describeVcsApiError` (`@cat-factory/kernel` `domain/vcs-errors.ts`)
+    that maps `{ provider, status }` to a remedy. It PRESERVES the raw
+    `<Provider> <method> <url> → <status>: <body>` first line (detectors still surface it and it stays
+    greppable) and APPENDS a cause + remedy sentence: 401 → token revoked/expired (reconnect the App,
+    or refresh `GITHUB_PAT` in local mode); 403 + rate-limit headers / 429 → rate limited, wait for
+    the reset (App has a higher limit than a PAT); 403 → missing permission/scope + where to grant it;
+    404 → repo/installation not visible to the token. GitLab gets the same shapes, GitLab-flavoured
+    (`api` scope, Developer/Maintainer role). Kernel sits below the server layer so it keeps its own
+    `VCS_DOC_URLS` (per the doc-URL convention) linking `backend/docs/github-integration.md` /
+    `github-operations.md` / `vcs-providers.md`.
+  - **C1/C6** — `FetchGitHubClient` (REST `request()` + PAT `requestWithToken()`) and
+    `FetchGitLabClient.request()` / `provisioning.ts` now build their `*ApiError` message through the
+    helper. Error identity still rides the structured `status` field, so classification is unchanged.
+  - **C5** — `Installation X not found on any configured App` now explains the App was likely
+    uninstalled or the workspace points at a stale installation, and to reconnect GitHub.
+  - **C4** — `No connected GitHub repository found for workspace 'X'` (`ContainerAgentExecutor`) is now
+    a `ConflictError` carrying the existing `github_not_connected` reason (was a plain `Error` → 500),
+    with a UI-first remedy pointing at the GitHub connect / repo-linking flow. The SPA already maps
+    that reason to a translated title.
+  - **C4 (async run path)** — the durable dispatch previously caught EVERY `startJob` throw and framed
+    it as a container `dispatch` failure ("The container failed to start."), so a `github_not_connected`
+    precondition reached the board mislabeled and lost its `reason`. `classifyDispatchFailure`
+    (`job.logic.ts`) now distinguishes a pre-dispatch domain precondition (any `DomainError`) as a
+    `preflight` failure that keeps its own actionable message and propagates its `reason`, so
+    `AgentFailureCard` titles it with the same translated "GitHub not connected" string the 409 toast
+    uses (no new locale keys) and shows the remedy in the detail.
+
+  No behaviour changes beyond error identity (C4's 409 + `preflight` classification on the async path)
+  and message text.
+
+- Updated dependencies [473e849]
+  - @cat-factory/kernel@0.121.1
+  - @cat-factory/orchestration@0.105.6
+  - @cat-factory/agents@0.53.6
+  - @cat-factory/integrations@0.81.5
+  - @cat-factory/spend@0.12.15
+
+## 0.110.4
+
+### Patch Changes
+
+- f4482c7: Reclaim a deleted board's binary artifacts (screenshots + reference images) — BOTH the
+  metadata rows AND the heavy blob bytes — so they no longer leak forever.
+
+  The artifact retention sweeps only ever iterate LIVE workspaces (`listVisible`), and
+  `binary_artifacts` is deliberately excluded from the SQL workspace-delete cascade (dropping
+  the metadata row without the bytes would strand the blob in object storage forever — the row
+  is the only handle on its key). So before this change, deleting a board orphaned both the
+  metadata rows and their backing R2 / S3 / filesystem bytes with nothing to reclaim them —
+  unbounded object-storage cost with no surfacing.
+
+  `BinaryArtifactStore` gains `deleteByWorkspace(workspaceId)` (backed by new
+  `listByWorkspace` / `deleteByWorkspace` metadata-store methods, mirrored D1 ⇄ Drizzle),
+  reusing the same fail-safe blobs-first-then-rows ordering as `pruneOlderThan`: a blob whose
+  delete throws keeps its metadata row so a later retry can still reach the bytes rather than
+  orphaning them. `WorkspaceService.delete` now purges through this port (best-effort — a
+  storage outage can't wedge the board delete) before the row cascade runs. The cross-runtime
+  binary-artifact conformance suite asserts the reclaim removes every artifact's rows + bytes,
+  scoped to the workspace, on both D1 and Postgres. (system-audit-improvements initiative,
+  item 3.)
+
+- Updated dependencies [f4482c7]
+  - @cat-factory/kernel@0.121.0
+  - @cat-factory/agents@0.53.5
+  - @cat-factory/integrations@0.81.4
+  - @cat-factory/orchestration@0.105.5
+  - @cat-factory/spend@0.12.14
+
+## 0.110.3
+
+### Patch Changes
+
+- cc6d554: Elaborate the model-provisioning failure messages with cause + fix + doc links (error-message
+  coverage initiative, items B1–B4). Each terse throw now names the condition, the likely cause,
+  the exact remedy (UI-first where the setting is UI-configurable, the env var otherwise), and links
+  `backend/docs/model-support.md` / `docs/environment-variables.md`.
+
+  - **B1** — `Unsupported model provider: X` (`CompositeModelProvider.resolve`) now explains that the
+    provider has no credentials configured, names the workspace AI provider key pool as the primary
+    fix for the UI-configurable direct providers and the deployment env vars (`CLOUDFLARE_*`,
+    `BEDROCK_REGION`) as the alternative, and lists the currently-registered providers as a diagnostic.
+  - **B2** — `Unsupported Bedrock model: X` now names the `BEDROCK_MODELS` allow-list, echoes the
+    models it currently permits, and tells the operator to add the id or pick an allowed one.
+  - **B3** — LiteLLM selected without a base URL gets a dedicated remedy naming `LITELLM_BASE_URL`
+    (an operator-hosted gateway has no public default), instead of the generic "no base URL" message.
+  - **B4** — `No base URL configured for OpenAI-compatible provider 'X'` now names the
+    `${PROVIDER}_BASE_URL` var and the workspace key pool. The inline model resolver and the container
+    LLM proxy share one helper (`openAiCompatibleBaseUrlError`) so both surfaces read identically.
+
+  Adds a small `providers/docs.ts` doc-URL module to `@cat-factory/agents` (it sits below the server
+  layer, so it cannot use `@cat-factory/server`'s `config/docs.ts`); `@cat-factory/provider-bedrock`
+  imports it. No behaviour changes beyond the message text.
+
+- Updated dependencies [cc6d554]
+  - @cat-factory/agents@0.53.4
+  - @cat-factory/orchestration@0.105.4
+
+## 0.110.2
+
+### Patch Changes
+
+- Updated dependencies [22a4d9e]
+  - @cat-factory/kernel@0.120.0
+  - @cat-factory/agents@0.53.3
+  - @cat-factory/integrations@0.81.3
+  - @cat-factory/orchestration@0.105.3
+  - @cat-factory/spend@0.12.13
+
+## 0.110.1
+
+### Patch Changes
+
+- dbfe2e8: Boot-time structured warnings for three previously-silent misconfigurations (error-message
+  coverage initiative, items A5/A9/A10). Each is a single greppable WARN naming the offending
+  var, its consequence, and a doc link — behaviour is unchanged (the conditions were, and stay,
+  non-fatal); they were just invisible until the first dispatch failed.
+
+  - **A5** — the Node facade's container agent executor is disabled when a prerequisite is
+    missing (`PUBLIC_URL`, `AUTH_SESSION_SECRET`, a runner backend, or a GitHub token source),
+    but the service still boots "healthy" and repo-operating steps (coder/mocker/tester/merger/…)
+    failed only at dispatch, deep in a request. It now logs at boot exactly which prerequisite is
+    missing, so the gap is visible up front (the Worker already throws a `configProblem` here).
+  - **A9** — an unrecognised `LOCAL_CONTAINER_RUNTIME` value silently fell back to `docker`; the
+    local preflight now names the rejected value, the accepted set
+    (`docker`/`podman`/`orbstack`/`colima`/`apple`), and the fallback taken.
+  - **A10** — a half-set `CLOUDFLARE_ACCOUNT_ID` / `CLOUDFLARE_API_TOKEN` pair silently disabled
+    Cloudflare Workers AI (over REST) on the Node facade; config load now names which half is set
+    and which is missing.
+
+  Adds a `localMode` section anchor to `@cat-factory/server`'s `ENV_VARS_ANCHORS` so the A9
+  warning deep-links the local-mode env-var docs.
+
+## 0.110.0
+
+### Minor Changes
+
+- 8d65179: Boot-time configuration validation for three previously-opaque failures (error-message
+  coverage initiative, items A2/A4/A6):
+
+  - **A2** — the system `ENCRYPTION_KEY` is now validated at config load on every facade
+    (present, valid base64, decoding to a full AES-256 key) via a shared
+    `requireEncryptionKey` helper in `@cat-factory/server`, wired into the Node and Worker
+    config loaders and reused by local mode. A malformed key fails with an actionable,
+    doc-linked message on the misconfigured screen instead of lazily deep inside the first
+    cipher build (a bare "must decode to at least 32 bytes" or an opaque `atob` error).
+  - **A4** — the Cloudflare Worker's primary `DB` binding is guarded by `requireDb` at
+    container build, mirroring `requireTelemetryDb`, so an unbound/misnamed binding fails
+    fast with a `[[d1_databases]]` remedy rather than NPE-ing deep in the first repository
+    call.
+  - **A6** — an invalid `DB_SCHEMA` / `DB_MIGRATIONS_SCHEMA` on the Node facade now throws a
+    `ConfigValidationError`, so it reaches the "backend misconfigured" fallback screen
+    instead of hard-crashing the process with an opaque message.
+
+- a5dcf7d: Prune resolved notifications on the retention sweep. The `notifications` table was
+  never pruned on either facade (upsert/escalate only, no delete), so resolved
+  (acted/dismissed) cards accumulated without bound on a table read on the snapshot hot
+  path. A new `NotificationRepository.deleteResolvedOlderThan(cutoff)` port method
+  (mirrored D1 ⇄ Drizzle) is wired into both facades' retention sweeps under a new
+  `RetentionConfig.notificationsMs` window (`NOTIFICATION_RETENTION_DAYS`, default 90
+  days). Only terminal rows past the window are deleted — `open` cards (the actionable
+  inbox) are never touched. Covered by a new cross-runtime notification conformance
+  suite. (system-audit-improvements initiative, item 1.)
+
+### Patch Changes
+
+- Updated dependencies [a5dcf7d]
+  - @cat-factory/kernel@0.119.0
+  - @cat-factory/agents@0.53.2
+  - @cat-factory/integrations@0.81.2
+  - @cat-factory/orchestration@0.105.2
+  - @cat-factory/spend@0.12.12
+
+## 0.109.0
+
+### Minor Changes
+
+- 5072999: Boot-time configuration problems now carry a documentation link. Each `ENV_HELP`
+  entry embeds a stable in-repo doc URL (built through a new centralized `DOCS`
+  helper in `@cat-factory/server`), the operator log appends a `Docs:` line, and the
+  "backend misconfigured" screen renders a "View documentation" link per problem.
+  This establishes the doc-URL convention for the error-message coverage initiative
+  (item A1).
+
+### Patch Changes
+
+- Updated dependencies [5072999]
+  - @cat-factory/contracts@0.126.0
+  - @cat-factory/agents@0.53.1
+  - @cat-factory/integrations@0.81.1
+  - @cat-factory/kernel@0.118.1
+  - @cat-factory/orchestration@0.105.1
+  - @cat-factory/prompt-fragments@0.13.12
+  - @cat-factory/spend@0.12.11
+
 ## 0.108.0
 
 ### Minor Changes

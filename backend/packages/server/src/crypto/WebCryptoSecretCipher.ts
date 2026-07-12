@@ -57,13 +57,32 @@ export class WebCryptoSecretCipher implements SecretCipher {
   }
 
   async decrypt(envelope: string): Promise<string> {
-    const parts = envelope.split('.')
-    if (parts.length !== 4 || parts[0] !== VERSION) {
-      throw new Error('Invalid secret envelope')
+    // Parse the `v1.` envelope up front. A wrong structure OR an undecodable segment
+    // (base64url that `atob` rejects — a mid-envelope corruption) both mean the ciphertext
+    // never reaches decryption, so this is a corruption/format problem, not a key mismatch
+    // (that surfaces below as an authentication failure). Usual causes: a truncated database
+    // column, or a value copied between environments on a different encryption scheme/version.
+    // Both funnel through one actionable message (original kept as `cause`).
+    let salt: Uint8Array<ArrayBuffer>
+    let iv: Uint8Array<ArrayBuffer>
+    let ciphertext: Uint8Array<ArrayBuffer>
+    try {
+      const parts = envelope.split('.')
+      if (parts.length !== 4 || parts[0] !== VERSION) {
+        throw new Error(`unexpected envelope structure (${parts.length} segments)`)
+      }
+      salt = base64urlToBytes(parts[1]!) as Uint8Array<ArrayBuffer>
+      iv = base64urlToBytes(parts[2]!) as Uint8Array<ArrayBuffer>
+      ciphertext = base64urlToBytes(parts[3]!) as Uint8Array<ArrayBuffer>
+    } catch (e) {
+      throw new Error(
+        'A stored secret is not a valid encryption envelope: it is truncated or corrupted, ' +
+          'or was written by a different encryption scheme/version — most likely a truncated ' +
+          'database column, or a value copied between environments. Re-enter the affected ' +
+          'credential to re-seal it under the current ENCRYPTION_KEY.',
+        { cause: e },
+      )
     }
-    const salt = base64urlToBytes(parts[1]!) as Uint8Array<ArrayBuffer>
-    const iv = base64urlToBytes(parts[2]!) as Uint8Array<ArrayBuffer>
-    const ciphertext = base64urlToBytes(parts[3]!) as Uint8Array<ArrayBuffer>
     const key = await this.deriveKey(salt)
     let plain: ArrayBuffer
     try {

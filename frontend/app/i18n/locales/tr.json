@@ -9,6 +9,7 @@
       "title": "Arka uç yapılandırılmadı",
       "intro": "Sunucu başladı ancak aşağıdaki ayarlar sağlanana kadar çalışamaz. Eksik değerleri ortamınıza ekleyip yeniden yükleyin.",
       "howToFix": "Nasıl düzeltilir:",
+      "viewDocs": "Belgeleri görüntüle",
       "reload": "Yeniden yükle",
       "hint": "Burada yalnızca değişken adları ve nasıl ayarlanacakları gösterilir, asla gizli değerler değil."
     }
@@ -923,6 +924,20 @@
       "involvedServicesHint": "Bu göreve doğrudan dahil olan bağlı servisler: her biri görevin kendi servisiyle birlikte geçici bir ortam olarak ayağa kaldırılır ve kodlama ajanı onların depolarında da değişiklik yapabilir.",
       "involvedServicesEmpty": "Bağlı servis yok. Burada seçebilmek için servis çerçevesinde servisleri bağlayın.",
       "involvedServiceStale": "Artık bu görevin servisine bağlı değil; bir sonraki değişiklikte kaldırılacak."
+    },
+    "aprioriBranches": {
+      "title": "Mevcut dallar",
+      "mode": {
+        "reference": "Referans",
+        "working": "Çalışma"
+      },
+      "remove": "{branch} öğesini kaldır",
+      "searchPlaceholder": "Mevcut bir dal ekle…",
+      "connectFirst": "Mevcut dalları eklemek için GitHub'ı bağlayın.",
+      "protectedWarning": "{branch} korumalı bir dal. Çalıştırmadan yapılan göndermeler reddedilebilir.",
+      "multiRepoHint": "Bu görev birden fazla servisi kapsadığı sürece çalışma modu kullanılamaz.",
+      "frozenHint": "Bu görev için zaten bir çekme isteği bulunduğundan çalışma dalı kilitli.",
+      "hint": "Bu göreve deposunun mevcut dallarını verin. Referans dalı, ajanların inceleyebileceği salt okunur bir bağlamdır; tek çalışma dalında çalıştırma, yeni bir dal oluşturmak yerine orada geliştirmeye devam eder."
     },
     "referenceRepos": {
       "title": "Reference repositories",
@@ -4594,6 +4609,14 @@
     "custom": {
       "title": "Kendi yaklaşımınızı girin",
       "placeholder": "Bunun nasıl uygulanmasını istediğinizi açıklayın…"
+    },
+    "chat": {
+      "title": "Bu yaklaşımlar hakkında soru sorun",
+      "hint": "Hangisini seçeceğinizden emin değil misiniz? Karar vermeden önce soru sorun.",
+      "thinking": "Düşünüyor…",
+      "placeholder": "Ödünleşimleri, riskleri veya farklı bir yönü sorun…",
+      "budgetSpent": "Sohbet sınırına ulaşıldı — bir yaklaşım seçin veya kendinizinkini girin.",
+      "send": "Gönder"
     },
     "empty": {
       "title": "Karar verilecek bir şey yok"

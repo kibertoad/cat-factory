@@ -1240,6 +1240,20 @@
       "involvedServicesEmpty": "Nessun servizio connesso. Connetti i servizi sul frame del servizio per selezionarli qui.",
       "involvedServiceStale": "Non piu' connesso al servizio di questa attivita'; verra' rimosso alla prossima modifica."
     },
+    "aprioriBranches": {
+      "title": "Branch esistenti",
+      "mode": {
+        "reference": "Riferimento",
+        "working": "Lavoro"
+      },
+      "remove": "Rimuovi {branch}",
+      "searchPlaceholder": "Aggiungi un branch esistente…",
+      "connectFirst": "Connetti GitHub per aggiungere branch esistenti.",
+      "protectedWarning": "{branch} e' un branch protetto. I push dell'esecuzione potrebbero essere rifiutati.",
+      "multiRepoHint": "La modalita' di lavoro non e' disponibile finche' questa attivita' coinvolge piu' di un servizio.",
+      "frozenHint": "Il branch di lavoro e' bloccato perche' esiste gia' una pull request per questa attivita'.",
+      "hint": "Affida a questa attivita' branch gia' esistenti del suo repository. Un branch di riferimento e' contesto in sola lettura che gli agenti possono ispezionare; nell'unico branch di lavoro l'esecuzione continua a costruire invece di creare un nuovo branch."
+    },
     "referenceRepos": {
       "title": "Repository di riferimento",
       "remove": "Rimuovi {repo}",
@@ -3640,6 +3654,7 @@
       "title": "Backend non configurato",
       "intro": "Il server è avviato ma non può funzionare finché non vengono forniti i parametri seguenti. Aggiungi i valori mancanti al tuo ambiente e ricarica.",
       "howToFix": "Come risolvere:",
+      "viewDocs": "Vedi la documentazione",
       "reload": "Ricarica",
       "hint": "Qui vengono mostrati solo i nomi delle variabili e come impostarle, mai valori segreti."
     }
@@ -4594,6 +4609,14 @@
     "custom": {
       "title": "Inserisci il tuo approccio",
       "placeholder": "Descrivi come vuoi che venga implementato…"
+    },
+    "chat": {
+      "title": "Fai una domanda su questi approcci",
+      "hint": "Non sai quale scegliere? Fai una domanda prima di decidere.",
+      "thinking": "Sto pensando…",
+      "placeholder": "Chiedi dei compromessi, dei rischi o di una direzione diversa…",
+      "budgetSpent": "Limite della chat raggiunto: scegli un approccio o inserisci il tuo.",
+      "send": "Invia"
     },
     "empty": {
       "title": "Nulla da decidere"

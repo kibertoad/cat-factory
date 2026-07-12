@@ -11,7 +11,7 @@ import {
   serveMisconfigured,
   start,
 } from '@cat-factory/node-server'
-import { isConfigValidationError, logger } from '@cat-factory/server'
+import { DOCS, ENV_VARS_ANCHORS, isConfigValidationError, logger } from '@cat-factory/server'
 import { validateRegistrationsOnce } from '@cat-factory/orchestration'
 import type { BackendRegistries } from '@cat-factory/integrations'
 import { applyLocalDefaults, withLocalEnvCliAdvice } from './config.js'
@@ -25,7 +25,12 @@ import {
   resolveRefreshMode,
 } from './harnessImage.js'
 import { isMothershipMode } from './mothership.js'
-import { createRuntimeAdapter, resolveRuntimeId } from './runtimes/index.js'
+import {
+  RUNTIME_IDS,
+  createRuntimeAdapter,
+  resolveRuntimeId,
+  unrecognizedRuntimeId,
+} from './runtimes/index.js'
 
 const execFileAsync = promisify(execFile)
 
@@ -289,6 +294,24 @@ async function startLocalMothership(
  * container-backed agent kinds then fail), mirroring how a missing image is handled.
  */
 async function preflightRuntime(localized: NodeJS.ProcessEnv): Promise<void> {
+  // Name a typo'd LOCAL_CONTAINER_RUNTIME at boot: `resolveRuntimeId` silently falls back to
+  // docker for any unrecognised value, so without this a `LOCAL_CONTAINER_RUNTIME=pod man` runs
+  // docker with no signal. Greppable single line: the rejected value, the accepted set, the
+  // fallback taken (error-message coverage A9).
+  const rejectedRuntime = unrecognizedRuntimeId(localized)
+  if (rejectedRuntime !== undefined) {
+    logger.warn(
+      {
+        rejected: rejectedRuntime,
+        accepted: RUNTIME_IDS,
+        fallback: 'docker',
+        docsUrl: DOCS.envVars(ENV_VARS_ANCHORS.localMode),
+      },
+      `local mode: LOCAL_CONTAINER_RUNTIME='${rejectedRuntime}' is not a recognised runtime ` +
+        `(accepted: ${RUNTIME_IDS.join(', ')}) — falling back to 'docker'. See ` +
+        `${DOCS.envVars(ENV_VARS_ANCHORS.localMode)}.`,
+    )
+  }
   const adapter = createRuntimeAdapter(localized)
   logger.info(
     {

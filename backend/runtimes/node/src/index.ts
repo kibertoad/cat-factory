@@ -90,6 +90,17 @@ export {
   DrizzleGitHubInstallationRepository,
   DrizzleRunnerPoolConnectionRepository,
 } from './repositories/containerExecution.js'
+// The Drizzle GitHub projection repositories, re-exported so a test harness (the e2e backend)
+// can wire the GitHub module purely through `buildNodeContainer`'s `overrides` seam — no real
+// GitHub App required (the read endpoints serve from these projections; see the e2e testServer).
+export {
+  DrizzleRepoProjectionRepository,
+  DrizzleBranchProjectionRepository,
+  DrizzlePullRequestProjectionRepository,
+  DrizzleIssueProjectionRepository,
+  DrizzleCommitProjectionRepository,
+  DrizzleCheckRunProjectionRepository,
+} from './repositories/github.js'
 export { DrizzleNotificationRepository } from './repositories/notifications.js'
 export { DrizzleDocumentRepository } from './repositories/documents.js'
 export { DrizzleDocInterviewRepository } from './repositories/drizzle.js'

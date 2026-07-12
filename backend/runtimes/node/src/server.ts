@@ -28,6 +28,7 @@ import { migrate } from './db/migrate.js'
 import { executionRuntime } from './execution/config.js'
 import { startExecutionWorker, startStaleRunSweeper } from './execution/pgBossRunner.js'
 import { startBootstrapWorker } from './execution/bootstrapRunner.js'
+import { startGitHubSyncWorker } from './execution/githubSyncRunner.js'
 import { startEnvConfigRepairWorker } from './execution/envConfigRepairRunner.js'
 import { startEnvTestWorker } from './execution/envTestRunner.js'
 import { startEnvironmentSweeper } from './environments.js'
@@ -45,6 +46,7 @@ import {
   DrizzleRepoProjectionRepository,
 } from './repositories/github.js'
 import { DrizzleSubscriptionActivationRepository } from './repositories/personalSubscription.js'
+import { DrizzleNotificationRepository } from './repositories/notifications.js'
 import { startArtifactRetentionSweeper, startRetentionSweeper } from './retention.js'
 import { SystemClock } from './runtime.js'
 
@@ -253,12 +255,34 @@ async function bootServer(
   // migrations. Without this the same throw would fire deep inside `buildContainer` only after the
   // heavy DB boot, and a bad-config restart would needlessly hammer Postgres first.
   loadNodeConfig(env)
-  const { db, pool } = createDbClient(databaseUrl)
-  const boss = new PgBoss(databaseUrl)
+  // Optional schema overrides for a SHARED database (where `public` is unavailable, or another
+  // service already owns the default `drizzle`/`pgboss` schemas). All default to the prior
+  // behaviour, so a stock deployment is unchanged:
+  //   - DB_SCHEMA — the default (`public`) app tables, relocated via the connection search_path.
+  //   - DB_MIGRATIONS_SCHEMA — the drizzle migration ledger (`drizzle`), so cat-factory's ledger
+  //     can't collide with another drizzle-using service's `drizzle.__drizzle_migrations`.
+  //   - DB_PGBOSS_SCHEMA — pg-boss's queue schema (`pgboss`).
+  // The named app schemas (telemetry/sandbox/provisioning) are always explicitly qualified and
+  // unaffected.
+  const dbSchema = env.DB_SCHEMA
+  const migrationsSchema = env.DB_MIGRATIONS_SCHEMA
+  const { db, pool } = createDbClient(databaseUrl, dbSchema)
+  const boss = new PgBoss({
+    connectionString: databaseUrl,
+    // Default (`pgboss`) when unset — a single object literal (not a string|object union) so it
+    // resolves to pg-boss's options-constructor overload.
+    ...(env.DB_PGBOSS_SCHEMA?.trim() ? { schema: env.DB_PGBOSS_SCHEMA.trim() } : {}),
+  })
   // Migrations (Drizzle, app schema) and pg-boss's own schema provisioning are
-  // independent — neither reads the other's tables — so run them concurrently and
-  // overlap the two heaviest blocking boot steps instead of serializing them.
-  await Promise.all([migrate(db, pool), boss.start()])
+  // independent — neither reads the other's tables. Run the app migration FIRST and on its
+  // own: a migration failure (drift guard / a bad lineage) is then the clean, unambiguous
+  // top-level rejection the entrypoint reports, rather than racing pg-boss's own schema
+  // provisioning inside a `Promise.all` (which would half-provision pg-boss on a doomed boot
+  // and could mask the real migration error). The small overlap we give up is worth the
+  // debuggability. `migrate()` throws a MigrationFailedError / DbSchemaInconsistentError with
+  // a recovery hint when the DB is wedged.
+  await migrate(db, pool, { schema: dbSchema, migrationsSchema })
+  await boss.start()
 
   // Build the repositories once and share them with both the container and the
   // retention sweeper (so the sweeper prunes the very stores the app writes to).
@@ -332,6 +356,12 @@ async function bootServer(
   await startEnvTestWorker(boss, container, runtime.drive, logger, {
     concurrency: runtime.concurrency,
   })
+  // Async GitHub ingest (the analogue of the Worker's GITHUB_SYNC_QUEUE consumer +
+  // GitHubBackfillWorkflow): drain the `github.sync` queue the gateway seams enqueue onto,
+  // so webhook deliveries / resyncs / backfills apply out of band and the request acks fast.
+  await startGitHubSyncWorker(boss, container, logger, {
+    concurrency: runtime.concurrency,
+  })
   const app = createApp(container, env)
   const { server, stopRealtime } = serveAppWithRealtime({
     app,
@@ -369,6 +399,7 @@ async function bootServer(
       provisioningLogRepository: repos.provisioningLogRepository,
       passwordResetTokenRepository: repos.passwordResetTokenRepository,
       commitRepository: new DrizzleCommitProjectionRepository(db),
+      notificationRepository: new DrizzleNotificationRepository(db),
     },
     container.config.retention,
     clock,

@@ -2,7 +2,7 @@ import type { Block, GitHubRepo } from '@cat-factory/kernel'
 import { describe, expect, it } from 'vitest'
 import { githubDeps, makeApp, uniqueInstallationId } from '../helpers'
 import { FakeAgentExecutor } from '../fakes/FakeAgentExecutor'
-import { FakeGitHubClient } from '../fakes/FakeGitHubClient'
+import { FakeGitHubClient } from '@cat-factory/conformance'
 
 /** A client whose installation can access one repo (`acme/web`, id 101). */
 function clientWithRepo(installationId: number): FakeGitHubClient {

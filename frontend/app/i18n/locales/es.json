@@ -9,6 +9,7 @@
       "title": "Backend sin configurar",
       "intro": "El servidor se inició pero no puede funcionar hasta que se proporcionen los ajustes siguientes. Añade los valores que faltan a tu entorno y vuelve a cargar.",
       "howToFix": "Cómo solucionarlo:",
+      "viewDocs": "Ver la documentación",
       "reload": "Recargar",
       "hint": "Aquí solo se muestran los nombres de las variables y cómo definirlas, nunca valores secretos."
     }
@@ -923,6 +924,20 @@
       "involvedServicesHint": "Servicios conectados directamente involucrados en esta tarea: cada uno se levanta como un entorno efímero junto al servicio propio de la tarea, y el agente de código puede modificar también sus repositorios.",
       "involvedServicesEmpty": "No hay servicios conectados. Conecta servicios en el marco del servicio para seleccionarlos aquí.",
       "involvedServiceStale": "Ya no está conectado al servicio de esta tarea; se eliminará con el próximo cambio."
+    },
+    "aprioriBranches": {
+      "title": "Ramas existentes",
+      "mode": {
+        "reference": "Referencia",
+        "working": "Trabajo"
+      },
+      "remove": "Eliminar {branch}",
+      "searchPlaceholder": "Añadir una rama existente…",
+      "connectFirst": "Conecta GitHub para añadir ramas existentes.",
+      "protectedWarning": "{branch} es una rama protegida. Los envíos de la ejecución podrían ser rechazados.",
+      "multiRepoHint": "El modo de trabajo no está disponible mientras esta tarea involucre más de un servicio.",
+      "frozenHint": "La rama de trabajo está bloqueada porque ya existe una solicitud de incorporación para esta tarea.",
+      "hint": "Entrega a esta tarea ramas ya existentes de su repositorio. Una rama de referencia es contexto de solo lectura que los agentes pueden inspeccionar; en la única rama de trabajo la ejecución sigue construyendo en lugar de crear una rama nueva."
     },
     "referenceRepos": {
       "title": "Repositorios de referencia",
@@ -4582,6 +4597,14 @@
     "custom": {
       "title": "Introduce tu propio enfoque",
       "placeholder": "Describe cómo quieres que se implemente…"
+    },
+    "chat": {
+      "title": "Pregunta sobre estos enfoques",
+      "hint": "¿No sabes cuál elegir? Haz una pregunta antes de decidir.",
+      "thinking": "Pensando…",
+      "placeholder": "Pregunta por las ventajas y desventajas, los riesgos o una dirección distinta…",
+      "budgetSpent": "Límite del chat alcanzado: elige un enfoque o introduce el tuyo.",
+      "send": "Enviar"
     },
     "empty": {
       "title": "Nada que decidir"

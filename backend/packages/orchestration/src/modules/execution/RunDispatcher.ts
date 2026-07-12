@@ -19,6 +19,7 @@ import type {
   ForkProposal,
   ForkDecisionStepState,
   ChooseForkInput,
+  ForkChatRequestInput,
   GateContext,
   GateDefinition,
   GateHelperJobResult,
@@ -125,6 +126,7 @@ import {
 import {
   agentFailureKindFromCause,
   classifyAgentFailure,
+  classifyDispatchFailure,
   isContainerEvictionError,
   isTransientEviction,
   MAX_EVICTION_RECOVERIES,
@@ -498,22 +500,17 @@ export class RunDispatcher {
         try {
           handle = await executor.startJob(context)
         } catch (error) {
-          // The container/runner never accepted the job (a dispatch HTTP error, a
-          // missing backend, a capacity blip). Surface the EXACT provider/runtime
-          // response and classify it as a `dispatch` failure ("container failed to
-          // start") so the run details say the container never started — not a generic
-          // "run failed". A dispatch-time eviction still routes to the evicted framing.
+          // Classify the throw (see {@link classifyDispatchFailure}). A genuine container
+          // accept failure (HTTP/network/capacity) is framed as `dispatch` ("container failed
+          // to start") with the EXACT provider response as detail; a dispatch-time eviction
+          // routes to `evicted`. But a job is BUILT before any container is contacted, so a
+          // precondition (e.g. `github_not_connected` — no connected repo) is a `preflight`
+          // rejection that surfaces its own actionable message + machine-readable reason
+          // instead of the misleading container framing.
           step.container = { status: 'errored' }
           await this.runStateMachine.casPersist(workspaceId, instance)
           await this.runStateMachine.emitInstance(workspaceId, instance)
-          const message = getErrorMessage(error)
-          const evicted = isContainerEvictionError(message)
-          return {
-            kind: 'job_failed',
-            error: evicted ? message : 'The container failed to start.',
-            failureKind: evicted ? 'evicted' : 'dispatch',
-            detail: message,
-          }
+          return { kind: 'job_failed', ...classifyDispatchFailure(error) }
         }
         step.jobId = handle.jobId
         // Record the model at dispatch — the poll site can't resolve it later.
@@ -3560,6 +3557,13 @@ export class RunDispatcher {
    */
   private async handleForkDecisionPhase(ctx: StepHandlerContext): Promise<AdvanceResult> {
     const { workspaceId, instance, step, block } = ctx
+    // Re-entry: the human sent a chat turn about the surfaced forks (`pendingForkChat` set by
+    // {@link ForkDecisionController.chat}). Compute the grounded reply INLINE in the durable driver
+    // (off the HTTP request), append it, and re-park — never re-dispatch the proposer. This is the
+    // resume path the `reentrantForkDecision` guard in `stepInstance` falls through for.
+    if (step.pendingForkChat) {
+      return this.forkDecisionController.answerChat(workspaceId, instance, step, block)
+    }
     if (!step.forkDecision) {
       const tri = resolveForkTriState(block.agentConfig)
       let propose = tri === 'always'
@@ -3601,6 +3605,15 @@ export class RunDispatcher {
     input: ChooseForkInput,
   ): Promise<ForkDecisionStepState> {
     return this.forkDecisionController.choose(workspaceId, executionId, input)
+  }
+
+  /** Send a grounded chat message about the surfaced forks (the reply arrives via the stream). */
+  forkChat(
+    workspaceId: string,
+    executionId: string,
+    input: ForkChatRequestInput,
+  ): Promise<ForkDecisionStepState> {
+    return this.forkDecisionController.chat(workspaceId, executionId, input)
   }
 
   /**

@@ -4,7 +4,7 @@
 // the unified retry through the agentRuns store, so every surface (board card,
 // inspector, task panel) gets identical behaviour from one place. Replaces the
 // three hand-rolled bootstrap banners that used to duplicate this logic.
-import type { EnvironmentFailureReason } from '@cat-factory/contracts'
+import type { ConflictReason, EnvironmentFailureReason } from '@cat-factory/contracts'
 import type { AgentRunSummary } from '~/stores/agentRuns'
 import FailureDetail from '~/components/board/FailureDetail.vue'
 
@@ -26,6 +26,10 @@ const failure = computed(() => props.run.failure)
 // infra-setup banners use.
 const isEnvironmentFailure = computed(() => failure.value?.kind === 'environment')
 const DEPLOY_RUNNER_UNWIRED: EnvironmentFailureReason = 'deploy_runner_unwired'
+// A `preflight` rejection with this reason means the run couldn't start because the workspace
+// has no connected/linked repo — the same cause the 409 toast words, so reuse its translated
+// title (and let the backend's actionable message + doc link show in the detail below).
+const GITHUB_NOT_CONNECTED: ConflictReason = 'github_not_connected'
 
 // The provision type of the failed run's SERVICE frame (walk up to the frame, mirroring the
 // backend's `resolveServiceProvisioning`). Drives the K8s-specific gate below.
@@ -69,6 +73,10 @@ const showEnvironmentLocalHint = computed(
     provisionType.value === 'kubernetes',
 )
 const title = computed(() => {
+  // A `github_not_connected` preflight rejection (no repo linked/connected) — name it with
+  // the same translated title the 409 toast uses, with the actionable remedy in the detail.
+  if (failure.value?.reason === GITHUB_NOT_CONNECTED)
+    return t('errors.conflict.title.github_not_connected')
   // A `dispatch` failure means the container/runner never accepted the job — say so
   // explicitly rather than the generic "Run failed", and show the verbatim provider
   // error in the collapsible detail below.

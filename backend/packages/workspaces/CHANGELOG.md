@@ -1,5 +1,76 @@
 # @cat-factory/workspaces
 
+## 0.13.28
+
+### Patch Changes
+
+- Updated dependencies [edad6e6]
+  - @cat-factory/kernel@0.121.3
+
+## 0.13.27
+
+### Patch Changes
+
+- Updated dependencies [d1a4129]
+  - @cat-factory/contracts@0.127.0
+  - @cat-factory/kernel@0.121.2
+
+## 0.13.26
+
+### Patch Changes
+
+- Updated dependencies [473e849]
+  - @cat-factory/kernel@0.121.1
+
+## 0.13.25
+
+### Patch Changes
+
+- f4482c7: Reclaim a deleted board's binary artifacts (screenshots + reference images) — BOTH the
+  metadata rows AND the heavy blob bytes — so they no longer leak forever.
+
+  The artifact retention sweeps only ever iterate LIVE workspaces (`listVisible`), and
+  `binary_artifacts` is deliberately excluded from the SQL workspace-delete cascade (dropping
+  the metadata row without the bytes would strand the blob in object storage forever — the row
+  is the only handle on its key). So before this change, deleting a board orphaned both the
+  metadata rows and their backing R2 / S3 / filesystem bytes with nothing to reclaim them —
+  unbounded object-storage cost with no surfacing.
+
+  `BinaryArtifactStore` gains `deleteByWorkspace(workspaceId)` (backed by new
+  `listByWorkspace` / `deleteByWorkspace` metadata-store methods, mirrored D1 ⇄ Drizzle),
+  reusing the same fail-safe blobs-first-then-rows ordering as `pruneOlderThan`: a blob whose
+  delete throws keeps its metadata row so a later retry can still reach the bytes rather than
+  orphaning them. `WorkspaceService.delete` now purges through this port (best-effort — a
+  storage outage can't wedge the board delete) before the row cascade runs. The cross-runtime
+  binary-artifact conformance suite asserts the reclaim removes every artifact's rows + bytes,
+  scoped to the workspace, on both D1 and Postgres. (system-audit-improvements initiative,
+  item 3.)
+
+- Updated dependencies [f4482c7]
+  - @cat-factory/kernel@0.121.0
+
+## 0.13.24
+
+### Patch Changes
+
+- Updated dependencies [22a4d9e]
+  - @cat-factory/kernel@0.120.0
+
+## 0.13.23
+
+### Patch Changes
+
+- Updated dependencies [a5dcf7d]
+  - @cat-factory/kernel@0.119.0
+
+## 0.13.22
+
+### Patch Changes
+
+- Updated dependencies [5072999]
+  - @cat-factory/contracts@0.126.0
+  - @cat-factory/kernel@0.118.1
+
 ## 0.13.21
 
 ### Patch Changes

@@ -4,6 +4,7 @@ import type {
   Clock,
   CommitProjectionRepository,
   LlmCallMetricRepository,
+  NotificationRepository,
   PasswordResetTokenRepository,
   PipelineScheduleRepository,
   ProvisioningLogRepository,
@@ -43,6 +44,8 @@ interface RetentionPolicy {
    * is non-positive.
    */
   provisioningLogMs: number
+  /** Resolved (acted/dismissed) notifications; open cards are never pruned. */
+  notificationsMs: number
 }
 
 export interface RetentionDeps {
@@ -62,6 +65,8 @@ export interface RetentionDeps {
   provisioningLogRepository?: ProvisioningLogRepository
   /** Optional: password-reset tokens past their own TTL (single-use + 1h expiry). */
   passwordResetTokenRepository?: PasswordResetTokenRepository
+  /** Resolved notifications past the retention window (open cards are never pruned). */
+  notificationRepository: NotificationRepository
   clock: Clock
   policy: RetentionPolicy
 }
@@ -78,6 +83,7 @@ export interface RetentionResult {
   scheduleRuns: number
   provisioningLog: number
   passwordResetTokens: number
+  notifications: number
 }
 
 /** Delete rows older than `now - windowMs`, treating a non-positive window as "disabled". */
@@ -106,6 +112,7 @@ export async function sweepRetention({
   pipelineScheduleRepository,
   provisioningLogRepository,
   passwordResetTokenRepository,
+  notificationRepository,
   clock,
   policy,
 }: RetentionDeps): Promise<RetentionResult> {
@@ -145,5 +152,9 @@ export async function sweepRetention({
     passwordResetTokens: passwordResetTokenRepository
       ? await passwordResetTokenRepository.deleteExpired(now)
       : 0,
+    // Resolved (acted/dismissed) notifications past the window; open cards untouched.
+    notifications: await prune(policy.notificationsMs, now, (c) =>
+      notificationRepository.deleteResolvedOlderThan(c),
+    ),
   }
 }

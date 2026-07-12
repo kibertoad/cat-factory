@@ -148,6 +148,8 @@ import {
   RunnerJobClient,
   type BuildBlobBackend,
   type PersistenceRegistry,
+  DOCS,
+  ENV_VARS_ANCHORS,
   ensureWorkBranchViaRest,
   logger,
   resolveUrlSafetyPolicy,
@@ -862,6 +864,25 @@ export function withProvisioningLog(
 }
 
 /**
+ * Which of the container-executor prerequisites are missing, as the human labels the boot
+ * warning names. Empty ⇒ all three are present. `PUBLIC_URL` is this service's externally
+ * reachable base backing the LLM proxy, `AUTH_SESSION_SECRET` signs the harness↔proxy tokens,
+ * and a runner backend is what a dispatch is handed to. Pure so the "name exactly what's
+ * missing" logic is unit-tested (error-message coverage A5).
+ */
+export function missingContainerExecutorPrereqs(input: {
+  publicUrl: string | undefined
+  sessionSecret: string | undefined
+  hasRunnerBackend: boolean
+}): string[] {
+  const missing: string[] = []
+  if (!input.publicUrl) missing.push('PUBLIC_URL')
+  if (!input.sessionSecret) missing.push('AUTH_SESSION_SECRET (>= 32 chars)')
+  if (!input.hasRunnerBackend) missing.push('a runner backend (self-hosted runner pool)')
+  return missing
+}
+
+/**
  * Build the container agent executor (repo-operating steps: coder, mocker,
  * playwright, blueprints, ci-fixer, conflict-resolver, merger) when its
  * prerequisites are configured: a token source for the push/clone token, the public
@@ -908,14 +929,41 @@ function buildNodeContainerExecutor(
   const publicUrl = env.PUBLIC_URL?.trim()
   const sessionSecret = config.auth.sessionSecret
 
-  if (!publicUrl || !sessionSecret || !resolveTransport) return null
+  if (!publicUrl || !sessionSecret || !resolveTransport) {
+    // The executor is disabled but the service still boots "healthy" — repo-operating steps
+    // (coder/mocker/tester/blueprints/ci-fixer/conflict-resolver/merger) then fail only at
+    // dispatch, deep in a request, with no boot signal. Emit a greppable line naming exactly
+    // which prerequisite is missing so the gap is visible up front (error-message coverage A5).
+    const missing = missingContainerExecutorPrereqs({
+      publicUrl,
+      sessionSecret,
+      hasRunnerBackend: !!resolveTransport,
+    })
+    logger.warn(
+      { missing, docsUrl: DOCS.envVars(ENV_VARS_ANCHORS.coreServiceNetworking) },
+      `container agent steps are DISABLED: missing ${missing.join(', ')}. Repo-operating steps ` +
+        `(coder/mocker/tester/merger/…) will fail at dispatch until configured. See ` +
+        `${DOCS.envVars(ENV_VARS_ANCHORS.coreServiceNetworking)}.`,
+    )
+    return null
+  }
 
   // Token source: an explicit override (e.g. a static PAT in local mode) wins; else
   // the GitHub App registry mints a per-installation token (when the App is configured).
   const baseMint =
     mintInstallationTokenOverride ??
     (appRegistry ? (id: number) => appRegistry.installationToken(id) : undefined)
-  if (!baseMint) return null
+  if (!baseMint) {
+    // Every other prerequisite is set but there is no GitHub token source, so the harness
+    // could never clone/push. Name the fix (App creds) rather than disabling silently (A5).
+    logger.warn(
+      { missing: ['GITHUB_APP_ID + GITHUB_APP_PRIVATE_KEY'], docsUrl: DOCS.githubOperations() },
+      `container agent steps are DISABLED: no GitHub token source — set GITHUB_APP_ID + ` +
+        `GITHUB_APP_PRIVATE_KEY so the harness can mint a push/clone token. Repo-operating steps ` +
+        `will fail at dispatch until configured. See ${DOCS.githubOperations()}.`,
+    )
+    return null
+  }
   // Prefer the run initiator's per-user PAT (when stored) over the App/env token, so
   // pushes/PRs are attributed to them. Falls back to the base mint otherwise.
   const mintInstallationToken: MintInstallationToken = async (installationId, ctx) => {
@@ -2185,6 +2233,7 @@ export function buildNodeContainer(options: NodeContainerOptions): ServerContain
     clock,
     buildBlobBackend: buildNodeBlobBackend,
     defaultBackend: contentStorageCapability.defaultBackend,
+    logger,
   })
 
   // Runner-pool URL/host guard, scoped to its own config (independent of the environment
@@ -2668,7 +2717,9 @@ export function buildNodeContainer(options: NodeContainerOptions): ServerContain
     // banner should surface. Local mode injects its own per-run-host-container `resolveTransport`
     // (so the pool is optional there); detect that by the absence of the default pool transport.
     agentExecutorRequiresRunnerPool: options.resolveTransport === undefined,
-    gateways: createNodeGateways(env),
+    // pg-boss-backed async GitHub ingest when the durable engine is wired (the real
+    // server drains the queue via `startGitHubSyncWorker`); inline fallback with no boss.
+    gateways: createNodeGateways(env, options.boss),
     // Source-control PAT login: lets a user sign in with their own GitHub/GitLab PAT via
     // `/auth/pat`, held to the server's login/org/domain allowlist. Local mode overrides this
     // (via its container spread) with a configured-token, allowlist-exempt registry.

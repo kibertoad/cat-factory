@@ -248,6 +248,12 @@ export {
   registerForkProposerAgent,
 } from './agents/kinds/fork-proposer.js'
 export {
+  FORK_CHAT_AGENT_KIND,
+  FORK_CHAT_SYSTEM_PROMPT,
+  type ForkChatGrounding,
+  renderForkChatPrompt,
+} from './agents/prompts/fork-decision.js'
+export {
   ENVIRONMENT_ANALYST_KIND,
   ENVIRONMENT_ANALYST_AGENT_KINDS,
   environmentRecipeDraft,
@@ -338,6 +344,7 @@ export {
   vendorConcurrencyLimiterFromEnv,
   type ModelResolver,
   type ProviderRegistry,
+  MODEL_SUPPORT_DOCS,
   anthropicResolver,
   baseProviderRegistry,
   cloudflareRestResolver,
@@ -351,6 +358,7 @@ export {
   OPENROUTER_BASE_URL,
   QWEN_BASE_URL,
   resolveOpenAiCompatibleBaseUrl,
+  UI_CONFIGURABLE_DIRECT_PROVIDERS,
   type CachePolicy,
   cachedTokensFromUsage,
   inlineCacheProviderOptions,

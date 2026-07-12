@@ -9,6 +9,14 @@ import { loadNodeConfig } from '../src/config.js'
 
 const ENCRYPTION_KEY = Buffer.alloc(32).toString('base64')
 
+// A well-formed PKCS#8 PEM: the boot-time `requireGitHubAppPrivateKey` shape check (added by the
+// error-message-coverage A3 work) now rejects a non-PKCS#8 key at config load, so the App keys in
+// these fixtures must carry the `-----BEGIN PRIVATE KEY-----` boundaries and a base64-decodable
+// body — the real key validation still happens later in `crypto.subtle.importKey`.
+const VALID_APP_KEY = `-----BEGIN PRIVATE KEY-----\n${Buffer.from('pkcs8-body').toString(
+  'base64',
+)}\n-----END PRIVATE KEY-----`
+
 // A minimal env that satisfies the always-on integrations (ENCRYPTION_KEY) and enables
 // the GitHub App so the privileged tier is reachable. `AUTH_DEV_OPEN` keeps the new
 // "remote node mode requires authentication" guard satisfied — these cases configure no
@@ -17,7 +25,7 @@ const GITHUB_ENABLED: NodeJS.ProcessEnv = {
   ENCRYPTION_KEY,
   AUTH_DEV_OPEN: 'true',
   GITHUB_APP_ID: '123',
-  GITHUB_APP_PRIVATE_KEY: 'default-key',
+  GITHUB_APP_PRIVATE_KEY: VALID_APP_KEY,
   GITHUB_WEBHOOK_SECRET: 'whsec',
 }
 
@@ -26,7 +34,7 @@ describe('loadNodeConfig — privileged App tier (ADR 0005)', () => {
     const config = loadNodeConfig({
       ...GITHUB_ENABLED,
       GITHUB_PRIVILEGED_APP_ID: '456',
-      GITHUB_PRIVILEGED_APP_PRIVATE_KEY: 'privileged-key',
+      GITHUB_PRIVILEGED_APP_PRIVATE_KEY: VALID_APP_KEY,
     })
     expect(config.github.privilegedApp).toEqual({ appId: '456' })
   })
@@ -39,7 +47,7 @@ describe('loadNodeConfig — privileged App tier (ADR 0005)', () => {
   it('leaves privilegedApp undefined when the id is missing', () => {
     const config = loadNodeConfig({
       ...GITHUB_ENABLED,
-      GITHUB_PRIVILEGED_APP_PRIVATE_KEY: 'privileged-key',
+      GITHUB_PRIVILEGED_APP_PRIVATE_KEY: VALID_APP_KEY,
     })
     expect(config.github.privilegedApp).toBeUndefined()
   })
@@ -47,6 +55,32 @@ describe('loadNodeConfig — privileged App tier (ADR 0005)', () => {
   it('leaves privilegedApp undefined when neither is set', () => {
     const config = loadNodeConfig(GITHUB_ENABLED)
     expect(config.github.privilegedApp).toBeUndefined()
+  })
+
+  // The privileged key's boot-time shape validation must fire on the SAME condition
+  // `loadPrivilegedApp` activates the tier (both id AND key present) — a key with no id belongs to
+  // an inactive tier that never consumes it, so validating it would fail boot on an unused
+  // credential and diverge from the Worker's `loadPrivilegedApp`.
+  it('does NOT validate the privileged key when its id is absent (tier inactive)', () => {
+    expect(() =>
+      loadNodeConfig({ ...GITHUB_ENABLED, GITHUB_PRIVILEGED_APP_PRIVATE_KEY: 'not-a-pkcs8-key' }),
+    ).not.toThrow()
+  })
+
+  it('validates the privileged key once its id is present (tier active)', () => {
+    expect(() =>
+      loadNodeConfig({
+        ...GITHUB_ENABLED,
+        GITHUB_PRIVILEGED_APP_ID: '456',
+        GITHUB_PRIVILEGED_APP_PRIVATE_KEY: 'not-a-pkcs8-key',
+      }),
+    ).toThrow(/GITHUB_PRIVILEGED_APP_PRIVATE_KEY/)
+  })
+
+  it('rejects a malformed default App key at config load', () => {
+    expect(() =>
+      loadNodeConfig({ ...GITHUB_ENABLED, GITHUB_APP_PRIVATE_KEY: 'not-a-pkcs8-key' }),
+    ).toThrow(/GITHUB_APP_PRIVATE_KEY/)
   })
 })
 
@@ -79,6 +113,30 @@ describe('loadNodeConfig — remote node mode requires authentication', () => {
       AUTH_SESSION_SECRET: 'x'.repeat(32),
     })
     expect(config.auth.enabled).toBe(true)
+  })
+})
+
+// The system encryption key is validated up front (present + valid base64 + full AES-256
+// length), mirroring the Worker's `loadConfig` and local mode — so a malformed key fails at
+// config load with an actionable message rather than deep inside the first cipher build.
+describe('loadNodeConfig — ENCRYPTION_KEY validation', () => {
+  it('throws when ENCRYPTION_KEY is missing', () => {
+    expect(() => loadNodeConfig({ AUTH_DEV_OPEN: 'true' })).toThrow(/ENCRYPTION_KEY/)
+  })
+
+  it('rejects a non-base64 ENCRYPTION_KEY', () => {
+    expect(() =>
+      loadNodeConfig({ ENCRYPTION_KEY: '%%%not-base64%%%', AUTH_DEV_OPEN: 'true' }),
+    ).toThrow(/valid base64/)
+  })
+
+  it('rejects an ENCRYPTION_KEY that decodes to fewer than 32 bytes', () => {
+    expect(() =>
+      loadNodeConfig({
+        ENCRYPTION_KEY: Buffer.alloc(16).toString('base64'),
+        AUTH_DEV_OPEN: 'true',
+      }),
+    ).toThrow(/at least 32 bytes/)
   })
 })
 

@@ -188,6 +188,7 @@ import { EnvironmentTestService } from './modules/environments/EnvironmentTestSe
 import { BoardScanService } from './modules/boardScan/BoardScanService.js'
 import { RequirementReviewService } from './modules/requirements/RequirementReviewService.js'
 import { DocInterviewService } from './modules/docInterview/DocInterviewService.js'
+import { ForkChatService } from './modules/execution/ForkChatService.js'
 import {
   TesterQualityReviewService,
   type TesterQualityReviewer,
@@ -1790,6 +1791,34 @@ function createDocInterviewService(deps: CoreDependencies): DocInterviewService 
 }
 
 /**
+ * Build the inline grounded-chat responder for the implementation-fork decision phase. Resolves
+ * its model exactly like the requirements reviewer / doc interviewer (block pin → workspace
+ * per-kind default → routing default). Returns `undefined` when no model provider is configured,
+ * so the fork chat degrades to a canned "chat unavailable" reply in unconfigured facades / tests
+ * while pick / custom keep working. Stateless — the chat rides the coder step, no session store.
+ */
+function createForkChatService(deps: CoreDependencies): ForkChatService | undefined {
+  if (!deps.modelProviderResolver && !deps.modelProvider) return undefined
+  return new ForkChatService({
+    modelProviderResolver: deps.modelProviderResolver,
+    modelProvider: deps.modelProvider,
+    modelRef: deps.requirementReviewModel ?? deps.documentPlannerModel,
+    resolveBlockModel: deps.requirementReviewResolveModel,
+    ...(deps.inlineHarnessRef ? { runsInline: deps.inlineHarnessRef } : {}),
+    resolveWorkspaceModelDefault: deps.modelPresetRepository
+      ? (workspaceId, agentKind, modelPresetId) =>
+          resolvePresetModelForKind(
+            deps.modelPresetRepository!,
+            workspaceId,
+            agentKind,
+            modelPresetId,
+          )
+      : undefined,
+    resolveRunContext: resolveBlockRunContext(deps),
+  })
+}
+
+/**
  * Resolve a block's active run (execution id + initiator) for the iterative reviewers, so an
  * inline subscription reviewer served through a leased per-run activation can lease it. Reads
  * the block's `executionId` and the run's `initiatedBy`; `{}` when the block has no active run
@@ -2678,6 +2707,7 @@ export function createCore(dependencies: CoreDependencies): Core {
     fragmentLibrary,
   )
   const docInterview = createDocInterviewService(dependencies)
+  const forkChat = createForkChatService(dependencies)
   const clarity = createClarityModule(dependencies, notifications?.service)
   const brainstorm = createBrainstormModule(dependencies, notifications?.service)
   // Built before the execution engine so the engine's terminal hook can schedule a
@@ -2730,6 +2760,7 @@ export function createCore(dependencies: CoreDependencies): Core {
       : undefined,
     requirementReviewService: requirements?.service,
     docInterviewService: docInterview,
+    forkChatService: forkChat,
     // The test quality-control companion's inline reviewer, resolved like every other inline
     // review (block pin → workspace preset → routing default). Built only when a model
     // provider is available; absent → the Tester gate's QC step is a pass-through.

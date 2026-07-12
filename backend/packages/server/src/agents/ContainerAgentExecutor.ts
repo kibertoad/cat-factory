@@ -22,7 +22,9 @@ import {
 } from '@cat-factory/kernel'
 import {
   CONTEXT_BUDGET,
+  ConflictError,
   CredentialRequiredError,
+  VCS_DOC_URLS,
   renderTaskContext,
   SUBSCRIPTION_VENDORS,
   isIndividualVendor,
@@ -1061,7 +1063,10 @@ export class ContainerAgentExecutor implements AsyncAgentExecutor {
 
     const repo = await this.deps.resolveRepoTarget(workspaceId, blockId)
     if (!repo) {
-      throw new Error(`No connected GitHub repository found for workspace '${workspaceId}'`)
+      throw new ConflictError(
+        `No connected GitHub repository found for workspace '${workspaceId}'. Connect the workspace to GitHub and link a repository to this service before running an agent (Settings → GitHub). See ${VCS_DOC_URLS.githubIntegration}.`,
+        'github_not_connected',
+      )
     }
 
     const ghToken = await this.deps.mintInstallationToken(repo.installationId, {

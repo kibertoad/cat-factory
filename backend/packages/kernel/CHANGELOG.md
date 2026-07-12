@@ -1,5 +1,140 @@
 # @cat-factory/kernel
 
+## 0.121.3
+
+### Patch Changes
+
+- edad6e6: feat(engine): batch the notification-escalation settings read (audit item 8)
+
+  The periodic notification-escalation sweep loaded every workspace's settings with a `get`
+  point-read inside the per-workspace loop — an N+1 that runs every couple of minutes on both
+  facades, and one the perf-item-9 settings cache can't fix (that slice is pass-through on the
+  Worker's own-mutable-D1-state profile). Adds a batched `listByWorkspaceIds` (chunked `IN`) to
+  the `WorkspaceSettingsRepository` port, mirrored in both the D1 and Drizzle repos, plus
+  `WorkspaceSettingsService.getMany` (defaults-filled) which `escalateStaleNotifications` now
+  calls ONCE before the loop. A `defineWorkspaceSettingsSuite` cross-runtime parity assertion
+  (seed → get → batched read, absent workspace absent, empty input → empty map) runs against
+  both facades' real stores; the batch read stays mothership-internal (a global sweeper read).
+
+## 0.121.2
+
+### Patch Changes
+
+- Updated dependencies [d1a4129]
+  - @cat-factory/contracts@0.127.0
+
+## 0.121.1
+
+### Patch Changes
+
+- 473e849: Classify VCS (GitHub / GitLab) HTTP failures with cause + fix + doc links (error-message coverage
+  initiative, items C1/C4/C5/C6). The `fetch`-based clients used to throw the same bare status dump
+  for any non-2xx (`GitHub GET <url> → 401: <body>`), so a revoked token, an exhausted rate limit,
+  and a missing scope all read identically.
+
+  - Adds a shared kernel helper `describeVcsApiError` (`@cat-factory/kernel` `domain/vcs-errors.ts`)
+    that maps `{ provider, status }` to a remedy. It PRESERVES the raw
+    `<Provider> <method> <url> → <status>: <body>` first line (detectors still surface it and it stays
+    greppable) and APPENDS a cause + remedy sentence: 401 → token revoked/expired (reconnect the App,
+    or refresh `GITHUB_PAT` in local mode); 403 + rate-limit headers / 429 → rate limited, wait for
+    the reset (App has a higher limit than a PAT); 403 → missing permission/scope + where to grant it;
+    404 → repo/installation not visible to the token. GitLab gets the same shapes, GitLab-flavoured
+    (`api` scope, Developer/Maintainer role). Kernel sits below the server layer so it keeps its own
+    `VCS_DOC_URLS` (per the doc-URL convention) linking `backend/docs/github-integration.md` /
+    `github-operations.md` / `vcs-providers.md`.
+  - **C1/C6** — `FetchGitHubClient` (REST `request()` + PAT `requestWithToken()`) and
+    `FetchGitLabClient.request()` / `provisioning.ts` now build their `*ApiError` message through the
+    helper. Error identity still rides the structured `status` field, so classification is unchanged.
+  - **C5** — `Installation X not found on any configured App` now explains the App was likely
+    uninstalled or the workspace points at a stale installation, and to reconnect GitHub.
+  - **C4** — `No connected GitHub repository found for workspace 'X'` (`ContainerAgentExecutor`) is now
+    a `ConflictError` carrying the existing `github_not_connected` reason (was a plain `Error` → 500),
+    with a UI-first remedy pointing at the GitHub connect / repo-linking flow. The SPA already maps
+    that reason to a translated title.
+  - **C4 (async run path)** — the durable dispatch previously caught EVERY `startJob` throw and framed
+    it as a container `dispatch` failure ("The container failed to start."), so a `github_not_connected`
+    precondition reached the board mislabeled and lost its `reason`. `classifyDispatchFailure`
+    (`job.logic.ts`) now distinguishes a pre-dispatch domain precondition (any `DomainError`) as a
+    `preflight` failure that keeps its own actionable message and propagates its `reason`, so
+    `AgentFailureCard` titles it with the same translated "GitHub not connected" string the 409 toast
+    uses (no new locale keys) and shows the remedy in the detail.
+
+  No behaviour changes beyond error identity (C4's 409 + `preflight` classification on the async path)
+  and message text.
+
+## 0.121.0
+
+### Minor Changes
+
+- f4482c7: Reclaim a deleted board's binary artifacts (screenshots + reference images) — BOTH the
+  metadata rows AND the heavy blob bytes — so they no longer leak forever.
+
+  The artifact retention sweeps only ever iterate LIVE workspaces (`listVisible`), and
+  `binary_artifacts` is deliberately excluded from the SQL workspace-delete cascade (dropping
+  the metadata row without the bytes would strand the blob in object storage forever — the row
+  is the only handle on its key). So before this change, deleting a board orphaned both the
+  metadata rows and their backing R2 / S3 / filesystem bytes with nothing to reclaim them —
+  unbounded object-storage cost with no surfacing.
+
+  `BinaryArtifactStore` gains `deleteByWorkspace(workspaceId)` (backed by new
+  `listByWorkspace` / `deleteByWorkspace` metadata-store methods, mirrored D1 ⇄ Drizzle),
+  reusing the same fail-safe blobs-first-then-rows ordering as `pruneOlderThan`: a blob whose
+  delete throws keeps its metadata row so a later retry can still reach the bytes rather than
+  orphaning them. `WorkspaceService.delete` now purges through this port (best-effort — a
+  storage outage can't wedge the board delete) before the row cascade runs. The cross-runtime
+  binary-artifact conformance suite asserts the reclaim removes every artifact's rows + bytes,
+  scoped to the workspace, on both D1 and Postgres. (system-audit-improvements initiative,
+  item 3.)
+
+## 0.120.0
+
+### Minor Changes
+
+- 22a4d9e: Complete the workspace-delete cascade so a board delete no longer orphans rows forever.
+  Both facades' `WorkspaceRepository.delete` previously cleared only ~7 tables
+  (blocks/pipelines/agent_runs/environments/services/mounts), leaving every other
+  workspace-scoped table (`notifications`, `requirement_reviews`, the review / session /
+  settings / connection / preset tables, the GitHub projection, …) permanently orphaned on
+  a normal board delete — invisible today, unbounded cost tomorrow.
+
+  The cascade is now driven by a single shared kernel list, `WORKSPACE_SCOPED_TABLES`, that
+  both the D1 (Cloudflare) and Drizzle (Node/local) facades iterate, so the two runtimes
+  cannot drift and a newly-added workspace-scoped table can't silently miss the cascade.
+  Per-facade static completeness guards make a new table impossible to forget: the Node guard
+  introspects the Drizzle/Postgres schema and the Worker guard introspects the real migrated
+  D1, each failing if any `workspace_id` table is neither listed nor explicitly acknowledged
+  as a special case (the D1 guard also covers the Cloudflare-only `live_containers` table the
+  Drizzle schema can't see). A cross-runtime conformance assertion proves a deleted board
+  leaves no rows behind on both D1 and Postgres.
+
+  Deliberately out of scope (unchanged): `binary_artifacts` (its blob bytes must be reclaimed
+  through the `BinaryBlobBackend` port at the service layer — a follow-up slice), the
+  bespoke `services` / mount re-home handling, and the isolated `telemetry` / `sandbox` /
+  `provisioning` schemas (separate stores reclaimed by their own retention sweeps; telemetry
+  is a physically separate D1 database on the Worker). (system-audit-improvements initiative,
+  item 2.)
+
+## 0.119.0
+
+### Minor Changes
+
+- a5dcf7d: Prune resolved notifications on the retention sweep. The `notifications` table was
+  never pruned on either facade (upsert/escalate only, no delete), so resolved
+  (acted/dismissed) cards accumulated without bound on a table read on the snapshot hot
+  path. A new `NotificationRepository.deleteResolvedOlderThan(cutoff)` port method
+  (mirrored D1 ⇄ Drizzle) is wired into both facades' retention sweeps under a new
+  `RetentionConfig.notificationsMs` window (`NOTIFICATION_RETENTION_DAYS`, default 90
+  days). Only terminal rows past the window are deleted — `open` cards (the actionable
+  inbox) are never touched. Covered by a new cross-runtime notification conformance
+  suite. (system-audit-improvements initiative, item 1.)
+
+## 0.118.1
+
+### Patch Changes
+
+- Updated dependencies [5072999]
+  - @cat-factory/contracts@0.126.0
+
 ## 0.118.0
 
 ### Minor Changes

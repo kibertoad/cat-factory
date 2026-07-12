@@ -15,9 +15,14 @@ import type {
   TasksConfig,
 } from '@cat-factory/server'
 import {
+  DOCS,
   ENV_HELP,
+  ENV_VARS_ANCHORS,
   configProblem,
+  logger,
   parseDetectionConventions,
+  requireEncryptionKey,
+  requireGitHubAppPrivateKey,
   resolveMachineTokenTtlMs,
 } from '@cat-factory/server'
 import { GITLAB_PUBLIC_API_BASE } from '@cat-factory/gitlab'
@@ -149,15 +154,54 @@ function loadSystemEmailSender(env: NodeJS.ProcessEnv): EmailConfig['system'] {
   return undefined
 }
 
+/**
+ * Cloudflare Workers AI over REST needs BOTH `CLOUDFLARE_ACCOUNT_ID` and `CLOUDFLARE_API_TOKEN`.
+ * When exactly one half is set the provider is silently disabled; this returns which var IS set
+ * and which is MISSING so the boot warning can name the gap (error-message coverage A10).
+ * Undefined when both are set or both are unset — no half-set footgun to warn about.
+ */
+export function cloudflareCredsHalfSet(
+  env: NodeJS.ProcessEnv,
+): { set: string; missing: string } | undefined {
+  const accountId = env.CLOUDFLARE_ACCOUNT_ID?.trim()
+  const apiToken = env.CLOUDFLARE_API_TOKEN?.trim()
+  if (!!accountId === !!apiToken) return undefined
+  return accountId
+    ? { set: 'CLOUDFLARE_ACCOUNT_ID', missing: 'CLOUDFLARE_API_TOKEN' }
+    : { set: 'CLOUDFLARE_API_TOKEN', missing: 'CLOUDFLARE_ACCOUNT_ID' }
+}
+
 export function loadNodeConfig(env: NodeJS.ProcessEnv): AppConfig {
+  // Validate the system encryption key up front: present, valid base64, and decoding to a full
+  // AES-256 key. It is effectively mandatory (the always-on document/task integrations below seal
+  // credentials at rest under it), so a missing/malformed key fails here with an actionable message
+  // rather than lazily inside the first cipher build (a bare "must decode to at least 32 bytes" or
+  // an opaque `atob` error). Mirrors the Worker's `loadConfig` and local mode's secret validation.
+  requireEncryptionKey(env.ENCRYPTION_KEY)
+
   // Deployment-level capabilities: direct keys are per-workspace (resolved at run time
   // from the DB pool), so none are known here; Cloudflare Workers AI is opt-in over
   // REST (account id + API token). The per-workspace `/models` endpoint recomputes
   // selectability against each workspace's configured keys + subscriptions.
+  // Cloudflare Workers AI over REST needs BOTH the account id and the API token. A
+  // half-set pair silently disables the provider, so a deployment that set only one reads
+  // as "Cloudflare not configured" with no hint the other half is the gap. Name the
+  // missing half at boot (error-message coverage A10).
+  const cfAccountId = env.CLOUDFLARE_ACCOUNT_ID?.trim()
+  const cfApiToken = env.CLOUDFLARE_API_TOKEN?.trim()
+  const cfHalfSet = cloudflareCredsHalfSet(env)
+  if (cfHalfSet) {
+    logger.warn(
+      { ...cfHalfSet, docsUrl: DOCS.envVars(ENV_VARS_ANCHORS.modelProviders) },
+      `${cfHalfSet.set} is set but ${cfHalfSet.missing} is missing — Cloudflare Workers AI ` +
+        `(over REST) needs both, so it stays DISABLED. Set ${cfHalfSet.missing} too, or unset ` +
+        `${cfHalfSet.set}. See ${DOCS.envVars(ENV_VARS_ANCHORS.modelProviders)}.`,
+    )
+  }
   const caps: ProviderCapabilities = {
     directProviders: new Set(),
     subscriptionVendors: new Set(ALL_SUBSCRIPTION_VENDORS),
-    cloudflareEnabled: !!(env.CLOUDFLARE_ACCOUNT_ID && env.CLOUDFLARE_API_TOKEN),
+    cloudflareEnabled: !!(cfAccountId && cfApiToken),
   }
 
   // Default unpinned agents to Qwen (the Cloudflare flavour when enabled, upgraded to
@@ -205,6 +249,21 @@ export function loadNodeConfig(env: NodeJS.ProcessEnv): AppConfig {
   const githubAppId = env.GITHUB_APP_ID?.trim() ?? ''
   const githubAppConfigured =
     githubAppId !== '' && (env.GITHUB_APP_PRIVATE_KEY?.trim() ?? '') !== ''
+  // Validate the App private key's SHAPE at boot (present + PKCS#8 PEM + decodable body) whenever
+  // the App is configured, so a malformed key fails on the misconfigured screen with the openssl
+  // conversion remedy instead of opaquely at the first installation-token mint (error-message
+  // coverage A3). The privileged tier is validated on the SAME condition `loadPrivilegedApp`
+  // activates it (both id AND key present) — validating a key with no id would fail boot on a
+  // credential the privileged tier never consumes and diverge from the Worker's `loadPrivilegedApp`.
+  if (githubAppConfigured) requireGitHubAppPrivateKey(env.GITHUB_APP_PRIVATE_KEY)
+  const privilegedAppId = env.GITHUB_PRIVILEGED_APP_ID?.trim() ?? ''
+  const privilegedAppKey = env.GITHUB_PRIVILEGED_APP_PRIVATE_KEY?.trim() ?? ''
+  if (privilegedAppId !== '' && privilegedAppKey !== '') {
+    requireGitHubAppPrivateKey(
+      env.GITHUB_PRIVILEGED_APP_PRIVATE_KEY,
+      'GITHUB_PRIVILEGED_APP_PRIVATE_KEY',
+    )
+  }
   // Self-hosted runner pools encrypt their scheduler credentials at rest; opt-in via
   // the enable flag, sealed with the shared ENCRYPTION_KEY (mirroring the Worker).
   const runnersEncryptionKey = env.ENCRYPTION_KEY?.trim() ?? ''
@@ -250,6 +309,7 @@ export function loadNodeConfig(env: NodeJS.ProcessEnv): AppConfig {
       remedy:
         `Must be at least ${MIN_SESSION_SECRET_LENGTH} characters when GitHub OAuth is configured ` +
         `(got ${sessionSecret.length}). ${ENV_HELP.AUTH_SESSION_SECRET.remedy} Or enable AUTH_DEV_OPEN in a non-production ENVIRONMENT.`,
+      docsUrl: ENV_HELP.AUTH_SESSION_SECRET.docsUrl,
     })
   }
 
@@ -415,6 +475,9 @@ export function loadNodeConfig(env: NodeJS.ProcessEnv): AppConfig {
       llmCallMetricsMs: (num(env.LLM_CALL_METRICS_RETENTION_DAYS) ?? 3) * 24 * 60 * 60 * 1000,
       // High-churn provisioning event log; pruned aggressively (default 14 days).
       provisioningLogMs: (num(env.PROVISIONING_LOG_RETENTION_DAYS) ?? 14) * 24 * 60 * 60 * 1000,
+      // Resolved (acted/dismissed) notifications; generous default of 90 days. Open
+      // cards (the actionable inbox) are never pruned.
+      notificationsMs: (num(env.NOTIFICATION_RETENTION_DAYS) ?? 90) * 24 * 60 * 60 * 1000,
     },
     // Prompt-fragment library (ADR 0006): on by default, opt OUT with
     // `PROMPT_LIBRARY_ENABLED=false`. Needs no encryption key (fragments are not

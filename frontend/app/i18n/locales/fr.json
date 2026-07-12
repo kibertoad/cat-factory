@@ -9,6 +9,7 @@
       "title": "Backend non configuré",
       "intro": "Le serveur a démarré mais ne peut pas fonctionner tant que les paramètres ci-dessous ne sont pas fournis. Ajoutez les valeurs manquantes à votre environnement, puis rechargez.",
       "howToFix": "Comment corriger :",
+      "viewDocs": "Voir la documentation",
       "reload": "Recharger",
       "hint": "Seuls les noms des variables et la façon de les définir sont affichés ici, jamais de valeurs secrètes."
     }
@@ -923,6 +924,20 @@
       "involvedServicesHint": "Services connectés directement impliqués dans cette tâche : chacun démarre comme environnement éphémère aux côtés du service propre de la tâche, et l'agent de code peut aussi modifier leurs dépôts.",
       "involvedServicesEmpty": "Aucun service connecté. Connectez des services sur le cadre du service pour les sélectionner ici.",
       "involvedServiceStale": "N'est plus connecté au service de cette tâche ; il sera retiré au prochain changement."
+    },
+    "aprioriBranches": {
+      "title": "Branches existantes",
+      "mode": {
+        "reference": "Référence",
+        "working": "Travail"
+      },
+      "remove": "Supprimer {branch}",
+      "searchPlaceholder": "Ajouter une branche existante…",
+      "connectFirst": "Connectez GitHub pour ajouter des branches existantes.",
+      "protectedWarning": "{branch} est une branche protégée. Les poussées de l'exécution peuvent être rejetées.",
+      "multiRepoHint": "Le mode travail est indisponible tant que cette tâche implique plusieurs services.",
+      "frozenHint": "La branche de travail est verrouillée car une pull request existe déjà pour cette tâche.",
+      "hint": "Confiez à cette tâche des branches déjà existantes de son dépôt. Une branche de référence est un contexte en lecture seule que les agents peuvent consulter ; sur l'unique branche de travail, l'exécution continue de construire au lieu de créer une nouvelle branche."
     },
     "referenceRepos": {
       "title": "Dépôts de référence",
@@ -4582,6 +4597,14 @@
     "custom": {
       "title": "Saisir votre propre approche",
       "placeholder": "Décrivez comment vous voulez que ce soit implémenté…"
+    },
+    "chat": {
+      "title": "Poser une question sur ces approches",
+      "hint": "Vous hésitez ? Posez une question avant de décider.",
+      "thinking": "Réflexion en cours…",
+      "placeholder": "Interrogez sur les compromis, les risques ou une autre direction…",
+      "budgetSpent": "Limite de discussion atteinte — choisissez une approche ou saisissez la vôtre.",
+      "send": "Envoyer"
     },
     "empty": {
       "title": "Rien à décider"

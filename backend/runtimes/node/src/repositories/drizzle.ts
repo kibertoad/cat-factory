@@ -134,7 +134,7 @@ import type {
   WorkspaceSettings,
   WorkspaceSettingsRepository,
 } from '@cat-factory/kernel'
-import { LLM_WARNING_FINISH_REASONS } from '@cat-factory/kernel'
+import { LLM_WARNING_FINISH_REASONS, WORKSPACE_SCOPED_TABLES } from '@cat-factory/kernel'
 import {
   type SubscriptionVendor,
   agentRunKindSchema,
@@ -192,7 +192,6 @@ import {
   agentSearchQueries,
   agentRuns,
   blocks,
-  environments,
   consensusSessions,
   incidentEnrichmentConnections,
   observabilityConnections,
@@ -349,10 +348,14 @@ class DrizzleWorkspaceRepository implements WorkspaceRepository {
       }
       // This workspace's OWN mounts of services homed elsewhere (shared services it mounted).
       await tx.delete(workspaceServices).where(eq(workspaceServices.workspace_id, id))
-      await tx.delete(environments).where(eq(environments.workspace_id, id))
-      await tx.delete(agentRuns).where(eq(agentRuns.workspace_id, id))
-      await tx.delete(blocks).where(eq(blocks.workspace_id, id))
-      await tx.delete(pipelines).where(eq(pipelines.workspace_id, id))
+      // Bulk reclaim of every plain workspace-scoped table (incl. blocks/agent_runs/pipelines/
+      // environments) from the shared kernel list — keeps this cascade in lockstep with the
+      // Cloudflare facade and stops a new workspace-scoped table silently orphaning. The schema
+      // declares no FKs between these tables, so order is free; they only need to run AFTER the
+      // `services` reclaim above (which reads `blocks`) and BEFORE the root `workspaces` row.
+      for (const table of WORKSPACE_SCOPED_TABLES) {
+        await tx.execute(sql`DELETE FROM ${sql.identifier(table)} WHERE workspace_id = ${id}`)
+      }
       await tx.delete(workspaces).where(eq(workspaces.id, id))
     })
   }
@@ -2003,6 +2006,22 @@ class DrizzleBinaryArtifactMetadataStore implements BinaryArtifactMetadataStore 
           lt(binaryArtifacts.created_at, olderThan),
         ),
       )
+      .returning({ id: binaryArtifacts.id })
+    return deleted.length
+  }
+
+  async listByWorkspace(workspaceId: string): Promise<BinaryArtifactRecord[]> {
+    const rows = await this.db
+      .select()
+      .from(binaryArtifacts)
+      .where(eq(binaryArtifacts.workspace_id, workspaceId))
+    return rows.map(rowToBinaryArtifact)
+  }
+
+  async deleteByWorkspace(workspaceId: string): Promise<number> {
+    const deleted = await this.db
+      .delete(binaryArtifacts)
+      .where(eq(binaryArtifacts.workspace_id, workspaceId))
       .returning({ id: binaryArtifacts.id })
     return deleted.length
   }
@@ -4336,6 +4355,29 @@ export function createDrizzleSandboxDeps(db: DrizzleDb): {
   }
 }
 
+function rowToWorkspaceSettings(row: typeof workspaceSettings.$inferSelect): WorkspaceSettings {
+  let perType: WorkspaceSettings['taskLimitPerType'] = null
+  if (row.task_limit_per_type) {
+    try {
+      perType = JSON.parse(row.task_limit_per_type) as WorkspaceSettings['taskLimitPerType']
+    } catch {
+      perType = null
+    }
+  }
+  return {
+    waitingEscalationMinutes: row.waiting_escalation_minutes,
+    taskLimitMode: row.task_limit_mode as WorkspaceSettings['taskLimitMode'],
+    taskLimitShared: row.task_limit_shared,
+    taskLimitPerType: perType,
+    storeAgentContext: row.store_agent_context === 1,
+    artifactRetentionDays: row.artifact_retention_days,
+    kaizenEnabled: row.kaizen_enabled === 1,
+    delegateAgentsToRunnerPool: row.delegate_agents_to_runner_pool === 1,
+    spendCurrency: row.spend_currency,
+    spendMonthlyLimit: row.spend_monthly_limit,
+  }
+}
+
 /**
  * Per-workspace runtime settings over Postgres (the Drizzle mirror of the Worker's
  * `D1WorkspaceSettingsRepository`, migration 0004). One row per workspace; the service
@@ -4352,27 +4394,20 @@ export class DrizzleWorkspaceSettingsRepository implements WorkspaceSettingsRepo
       .where(eq(workspaceSettings.workspace_id, workspaceId))
       .limit(1)
     const row = rows[0]
-    if (!row) return null
-    let perType: WorkspaceSettings['taskLimitPerType'] = null
-    if (row.task_limit_per_type) {
-      try {
-        perType = JSON.parse(row.task_limit_per_type) as WorkspaceSettings['taskLimitPerType']
-      } catch {
-        perType = null
-      }
+    return row ? rowToWorkspaceSettings(row) : null
+  }
+
+  async listByWorkspaceIds(workspaceIds: string[]): Promise<Map<string, WorkspaceSettings>> {
+    const out = new Map<string, WorkspaceSettings>()
+    if (workspaceIds.length === 0) return out
+    for (let i = 0; i < workspaceIds.length; i += 500) {
+      const rows = await this.db
+        .select()
+        .from(workspaceSettings)
+        .where(inArray(workspaceSettings.workspace_id, workspaceIds.slice(i, i + 500)))
+      for (const row of rows) out.set(row.workspace_id, rowToWorkspaceSettings(row))
     }
-    return {
-      waitingEscalationMinutes: row.waiting_escalation_minutes,
-      taskLimitMode: row.task_limit_mode as WorkspaceSettings['taskLimitMode'],
-      taskLimitShared: row.task_limit_shared,
-      taskLimitPerType: perType,
-      storeAgentContext: row.store_agent_context === 1,
-      artifactRetentionDays: row.artifact_retention_days,
-      kaizenEnabled: row.kaizen_enabled === 1,
-      delegateAgentsToRunnerPool: row.delegate_agents_to_runner_pool === 1,
-      spendCurrency: row.spend_currency,
-      spendMonthlyLimit: row.spend_monthly_limit,
-    }
+    return out
   }
 
   async upsert(workspaceId: string, settings: WorkspaceSettings): Promise<void> {

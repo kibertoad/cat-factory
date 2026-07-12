@@ -1,5 +1,341 @@
 # @cat-factory/local-server
 
+## 0.64.30
+
+### Patch Changes
+
+- Updated dependencies [6fc42ed]
+- Updated dependencies [b7ca24a]
+  - @cat-factory/server@0.112.3
+  - @cat-factory/node-server@0.92.13
+  - @cat-factory/executor-harness@1.43.0
+
+## 0.64.29
+
+### Patch Changes
+
+- Updated dependencies [edad6e6]
+  - @cat-factory/kernel@0.121.3
+  - @cat-factory/orchestration@0.106.2
+  - @cat-factory/server@0.112.2
+  - @cat-factory/node-server@0.92.12
+  - @cat-factory/agents@0.54.1
+  - @cat-factory/gitlab@0.7.59
+  - @cat-factory/integrations@0.81.8
+  - @cat-factory/executor-harness@1.43.0
+
+## 0.64.28
+
+### Patch Changes
+
+- Updated dependencies [3b3bdc8]
+  - @cat-factory/server@0.112.1
+  - @cat-factory/integrations@0.81.7
+  - @cat-factory/executor-harness@1.43.0
+  - @cat-factory/node-server@0.92.11
+  - @cat-factory/orchestration@0.106.1
+
+## 0.64.27
+
+### Patch Changes
+
+- Updated dependencies [6a4feb9]
+  - @cat-factory/node-server@0.92.10
+
+## 0.64.26
+
+### Patch Changes
+
+- Updated dependencies [d1a4129]
+  - @cat-factory/contracts@0.127.0
+  - @cat-factory/agents@0.54.0
+  - @cat-factory/orchestration@0.106.0
+  - @cat-factory/server@0.112.0
+  - @cat-factory/gitlab@0.7.58
+  - @cat-factory/integrations@0.81.6
+  - @cat-factory/kernel@0.121.2
+  - @cat-factory/node-server@0.92.9
+  - @cat-factory/executor-harness@1.43.0
+
+## 0.64.25
+
+### Patch Changes
+
+- df7a489: De-duplicate the GitHub reconcile pass across the two facades, and make every Node
+  periodic sweep non-overlapping through a single seam.
+
+  **Reconcile hoist (audit item 4).** `reconcileStaleRepos` and its two gone-installation
+  classifiers were duplicated verbatim between the Worker's `sync-consumer.ts` and the Node
+  `githubReconcile.ts` (the Node copy's own comment said "Mirrors the Worker's classification"),
+  with no shared test — so a change to one would silently diverge (one runtime stops tombstoning
+  dead installations while the other keeps working). The pass now lives once in
+  `@cat-factory/server` (`reconcileStaleRepos` + `GitHubReconcileDeps`), and each facade supplies
+  only its per-repo driver: the Worker enqueues on `GITHUB_SYNC_QUEUE` (or direct-syncs when
+  unbound), Node direct-syncs inline. The classifiers moved verbatim (their regex→structured-code
+  conversion is tracked separately as error-message-coverage I7). The 30-minute staleness window
+  is now the shared exported `GITHUB_RECONCILE_STALE_MS` (previously defined independently per
+  facade), and all reconcile logs — the per-repo lines AND the Worker's cron summary — now use a
+  single `sweep: 'github-reconcile'` field on both facades. The Worker's queue-less direct-sync
+  fallback also builds its DI container once per pass instead of once per stale repo.
+
+  **Non-overlapping Node sweepers (audit item 6).** The DB-heavy `initiativeLoop`, `recurring`,
+  and notification-escalation sweeps ran unguarded `setInterval` timers, so a pass that outlasted
+  its interval could be stacked — and two concurrent `runDue` passes could both observe "no active
+  run" and double-spawn. All eight Node sweeps (kaizen, github-reconcile, initiative loop,
+  recurring, notification escalation, environment TTL, and both retention sweeps) now go through
+  one `startSweeper` helper built on `toad-scheduler`: `preventOverrun` is the non-overlap guard,
+  `runImmediately` the run-once-first behaviour, and the `AsyncTask` error handler the best-effort
+  logging (each sweep names its task, so scheduler-surfaced errors identify their sweep), and
+  `unref` keeps the sweep timers from holding the process alive — the same contract as the
+  hand-rolled `setInterval(...).unref()` timers this replaced. A new sweeper physically cannot
+  forget the guard. Adds a `toad-scheduler` (^4.1.0) dependency to `@cat-factory/node-server`.
+
+- Updated dependencies [df7a489]
+  - @cat-factory/server@0.111.0
+  - @cat-factory/node-server@0.92.8
+  - @cat-factory/executor-harness@1.43.0
+
+## 0.64.24
+
+### Patch Changes
+
+- Updated dependencies [473e849]
+  - @cat-factory/kernel@0.121.1
+  - @cat-factory/server@0.110.5
+  - @cat-factory/gitlab@0.7.57
+  - @cat-factory/orchestration@0.105.6
+  - @cat-factory/agents@0.53.6
+  - @cat-factory/integrations@0.81.5
+  - @cat-factory/node-server@0.92.7
+  - @cat-factory/executor-harness@1.43.0
+
+## 0.64.23
+
+### Patch Changes
+
+- f4482c7: Reclaim a deleted board's binary artifacts (screenshots + reference images) — BOTH the
+  metadata rows AND the heavy blob bytes — so they no longer leak forever.
+
+  The artifact retention sweeps only ever iterate LIVE workspaces (`listVisible`), and
+  `binary_artifacts` is deliberately excluded from the SQL workspace-delete cascade (dropping
+  the metadata row without the bytes would strand the blob in object storage forever — the row
+  is the only handle on its key). So before this change, deleting a board orphaned both the
+  metadata rows and their backing R2 / S3 / filesystem bytes with nothing to reclaim them —
+  unbounded object-storage cost with no surfacing.
+
+  `BinaryArtifactStore` gains `deleteByWorkspace(workspaceId)` (backed by new
+  `listByWorkspace` / `deleteByWorkspace` metadata-store methods, mirrored D1 ⇄ Drizzle),
+  reusing the same fail-safe blobs-first-then-rows ordering as `pruneOlderThan`: a blob whose
+  delete throws keeps its metadata row so a later retry can still reach the bytes rather than
+  orphaning them. `WorkspaceService.delete` now purges through this port (best-effort — a
+  storage outage can't wedge the board delete) before the row cascade runs. The cross-runtime
+  binary-artifact conformance suite asserts the reclaim removes every artifact's rows + bytes,
+  scoped to the workspace, on both D1 and Postgres. (system-audit-improvements initiative,
+  item 3.)
+
+- Updated dependencies [f4482c7]
+  - @cat-factory/kernel@0.121.0
+  - @cat-factory/server@0.110.4
+  - @cat-factory/node-server@0.92.6
+  - @cat-factory/agents@0.53.5
+  - @cat-factory/gitlab@0.7.56
+  - @cat-factory/integrations@0.81.4
+  - @cat-factory/orchestration@0.105.5
+  - @cat-factory/executor-harness@1.43.0
+
+## 0.64.22
+
+### Patch Changes
+
+- Updated dependencies [cc6d554]
+  - @cat-factory/agents@0.53.4
+  - @cat-factory/server@0.110.3
+  - @cat-factory/orchestration@0.105.4
+  - @cat-factory/node-server@0.92.5
+  - @cat-factory/executor-harness@1.43.0
+
+## 0.64.21
+
+### Patch Changes
+
+- 22a4d9e: Complete the workspace-delete cascade so a board delete no longer orphans rows forever.
+  Both facades' `WorkspaceRepository.delete` previously cleared only ~7 tables
+  (blocks/pipelines/agent_runs/environments/services/mounts), leaving every other
+  workspace-scoped table (`notifications`, `requirement_reviews`, the review / session /
+  settings / connection / preset tables, the GitHub projection, …) permanently orphaned on
+  a normal board delete — invisible today, unbounded cost tomorrow.
+
+  The cascade is now driven by a single shared kernel list, `WORKSPACE_SCOPED_TABLES`, that
+  both the D1 (Cloudflare) and Drizzle (Node/local) facades iterate, so the two runtimes
+  cannot drift and a newly-added workspace-scoped table can't silently miss the cascade.
+  Per-facade static completeness guards make a new table impossible to forget: the Node guard
+  introspects the Drizzle/Postgres schema and the Worker guard introspects the real migrated
+  D1, each failing if any `workspace_id` table is neither listed nor explicitly acknowledged
+  as a special case (the D1 guard also covers the Cloudflare-only `live_containers` table the
+  Drizzle schema can't see). A cross-runtime conformance assertion proves a deleted board
+  leaves no rows behind on both D1 and Postgres.
+
+  Deliberately out of scope (unchanged): `binary_artifacts` (its blob bytes must be reclaimed
+  through the `BinaryBlobBackend` port at the service layer — a follow-up slice), the
+  bespoke `services` / mount re-home handling, and the isolated `telemetry` / `sandbox` /
+  `provisioning` schemas (separate stores reclaimed by their own retention sweeps; telemetry
+  is a physically separate D1 database on the Worker). (system-audit-improvements initiative,
+  item 2.)
+
+- Updated dependencies [22a4d9e]
+  - @cat-factory/kernel@0.120.0
+  - @cat-factory/node-server@0.92.4
+  - @cat-factory/agents@0.53.3
+  - @cat-factory/gitlab@0.7.55
+  - @cat-factory/integrations@0.81.3
+  - @cat-factory/orchestration@0.105.3
+  - @cat-factory/server@0.110.2
+  - @cat-factory/executor-harness@1.43.0
+
+## 0.64.20
+
+### Patch Changes
+
+- dbfe2e8: Boot-time structured warnings for three previously-silent misconfigurations (error-message
+  coverage initiative, items A5/A9/A10). Each is a single greppable WARN naming the offending
+  var, its consequence, and a doc link — behaviour is unchanged (the conditions were, and stay,
+  non-fatal); they were just invisible until the first dispatch failed.
+
+  - **A5** — the Node facade's container agent executor is disabled when a prerequisite is
+    missing (`PUBLIC_URL`, `AUTH_SESSION_SECRET`, a runner backend, or a GitHub token source),
+    but the service still boots "healthy" and repo-operating steps (coder/mocker/tester/merger/…)
+    failed only at dispatch, deep in a request. It now logs at boot exactly which prerequisite is
+    missing, so the gap is visible up front (the Worker already throws a `configProblem` here).
+  - **A9** — an unrecognised `LOCAL_CONTAINER_RUNTIME` value silently fell back to `docker`; the
+    local preflight now names the rejected value, the accepted set
+    (`docker`/`podman`/`orbstack`/`colima`/`apple`), and the fallback taken.
+  - **A10** — a half-set `CLOUDFLARE_ACCOUNT_ID` / `CLOUDFLARE_API_TOKEN` pair silently disabled
+    Cloudflare Workers AI (over REST) on the Node facade; config load now names which half is set
+    and which is missing.
+
+  Adds a `localMode` section anchor to `@cat-factory/server`'s `ENV_VARS_ANCHORS` so the A9
+  warning deep-links the local-mode env-var docs.
+
+- Updated dependencies [dbfe2e8]
+  - @cat-factory/server@0.110.1
+  - @cat-factory/node-server@0.92.3
+  - @cat-factory/executor-harness@1.43.0
+
+## 0.64.19
+
+### Patch Changes
+
+- 8d65179: Boot-time configuration validation for three previously-opaque failures (error-message
+  coverage initiative, items A2/A4/A6):
+
+  - **A2** — the system `ENCRYPTION_KEY` is now validated at config load on every facade
+    (present, valid base64, decoding to a full AES-256 key) via a shared
+    `requireEncryptionKey` helper in `@cat-factory/server`, wired into the Node and Worker
+    config loaders and reused by local mode. A malformed key fails with an actionable,
+    doc-linked message on the misconfigured screen instead of lazily deep inside the first
+    cipher build (a bare "must decode to at least 32 bytes" or an opaque `atob` error).
+  - **A4** — the Cloudflare Worker's primary `DB` binding is guarded by `requireDb` at
+    container build, mirroring `requireTelemetryDb`, so an unbound/misnamed binding fails
+    fast with a `[[d1_databases]]` remedy rather than NPE-ing deep in the first repository
+    call.
+  - **A6** — an invalid `DB_SCHEMA` / `DB_MIGRATIONS_SCHEMA` on the Node facade now throws a
+    `ConfigValidationError`, so it reaches the "backend misconfigured" fallback screen
+    instead of hard-crashing the process with an opaque message.
+
+- a5dcf7d: Prune resolved notifications on the retention sweep. The `notifications` table was
+  never pruned on either facade (upsert/escalate only, no delete), so resolved
+  (acted/dismissed) cards accumulated without bound on a table read on the snapshot hot
+  path. A new `NotificationRepository.deleteResolvedOlderThan(cutoff)` port method
+  (mirrored D1 ⇄ Drizzle) is wired into both facades' retention sweeps under a new
+  `RetentionConfig.notificationsMs` window (`NOTIFICATION_RETENTION_DAYS`, default 90
+  days). Only terminal rows past the window are deleted — `open` cards (the actionable
+  inbox) are never touched. Covered by a new cross-runtime notification conformance
+  suite. (system-audit-improvements initiative, item 1.)
+- Updated dependencies [8d65179]
+- Updated dependencies [a5dcf7d]
+  - @cat-factory/server@0.110.0
+  - @cat-factory/node-server@0.92.2
+  - @cat-factory/kernel@0.119.0
+  - @cat-factory/executor-harness@1.43.0
+  - @cat-factory/agents@0.53.2
+  - @cat-factory/gitlab@0.7.54
+  - @cat-factory/integrations@0.81.2
+  - @cat-factory/orchestration@0.105.2
+
+## 0.64.18
+
+### Patch Changes
+
+- 5072999: Boot-time configuration problems now carry a documentation link. Each `ENV_HELP`
+  entry embeds a stable in-repo doc URL (built through a new centralized `DOCS`
+  helper in `@cat-factory/server`), the operator log appends a `Docs:` line, and the
+  "backend misconfigured" screen renders a "View documentation" link per problem.
+  This establishes the doc-URL convention for the error-message coverage initiative
+  (item A1).
+- Updated dependencies [5072999]
+  - @cat-factory/contracts@0.126.0
+  - @cat-factory/server@0.109.0
+  - @cat-factory/node-server@0.92.1
+  - @cat-factory/agents@0.53.1
+  - @cat-factory/gitlab@0.7.53
+  - @cat-factory/integrations@0.81.1
+  - @cat-factory/kernel@0.118.1
+  - @cat-factory/orchestration@0.105.1
+  - @cat-factory/executor-harness@1.43.0
+
+## 0.64.17
+
+### Patch Changes
+
+- Updated dependencies [25ac984]
+  - @cat-factory/node-server@0.92.0
+
+## 0.64.16
+
+### Patch Changes
+
+- 2eb0cfd: Make database migrations fail safe and recover cleanly.
+
+  Motivated by a `0.63 → 0.64` upgrade that bricked boot: a database whose drizzle-kit 1.0
+  migration ledger (in its own `drizzle` schema) had outlived its `public` tables — the classic
+  ledger↔schema split left by a hand `DROP SCHEMA public CASCADE` — hit a bare
+  `42P01 relation "accounts" does not exist` deep inside the new FK migration, with no
+  remediation path.
+
+  - **Boot drift-guard + wrapped errors (Node).** `migrate()` now probes for the ledger↔schema
+    split up front (ledger non-empty but anchor tables `public.accounts`/`public.workspaces`
+    missing) and throws a clear `DbSchemaInconsistentError`, and wraps any apply failure in a
+    `MigrationFailedError` mapping the pg code (`42P01`/`23503`/`42P07`) to a human cause + the
+    recovery command. Boot runs `migrate()` before `boss.start()` (no longer racing them in a
+    `Promise.all`) so the migration error is the clean top-level rejection.
+  - **`db:reset` recovery command (Node).** `pnpm --filter @cat-factory/node-server db:reset`
+    drops all app-owned schemas together — the app schema, `telemetry`, `sandbox`,
+    `provisioning`, the migration ledger, and pg-boss's queue schema — so the ledger can never
+    outlive the data. This is the sanctioned recovery; never hand-drop `public` alone (that is
+    what causes the split). **DESTRUCTIVE** — it deletes all data in `DATABASE_URL`.
+  - **Configurable schemas for a shared database (Node).** New optional env vars, all defaulting
+    to the prior behaviour: `DB_SCHEMA` relocates the default (`public`) app tables via the
+    connection `search_path` (for databases with no usable `public`); `DB_MIGRATIONS_SCHEMA` moves
+    the drizzle migration ledger off the top-level `drizzle` schema so it can't collide with
+    another drizzle-using service's `drizzle.__drizzle_migrations`; `DB_PGBOSS_SCHEMA` moves
+    pg-boss's queue schema. `db:reset` honours the same vars. The named app schemas
+    (`telemetry`/`sandbox`/`provisioning`) remain fixed.
+  - **Self-healing FK migrations (both runtimes).** The `ON DELETE RESTRICT` FK migrations now
+    delete/NULL pre-existing orphans before `ADD CONSTRAINT`, so a database old enough to predate
+    the FKs migrates instead of hard-failing on `23503`. Applied symmetrically to the Postgres
+    `20260709061125_old_santa_claus` migration and the D1
+    `0046_user_identity_foreign_keys.sql` rebuild. **Breaking:** editing these already-shipped
+    migrations changes their content; a database that already applied the originals should recover
+    via `db:reset` (only experimental installs exist pre-1.0). Orphaned rows are deleted — losing
+    that stale data is acceptable (backwards compatibility is a non-goal).
+  - **Test-pollution hardening.** The Node/local/mothership test harnesses now require a
+    per-vitest-worker database (they refuse to run against the base `DATABASE_URL`) and use the
+    `postgres` maintenance database for the admin `CREATE DATABASE` connection, so running the
+    suite can never pollute or desync a developer's dev database.
+
+- Updated dependencies [2eb0cfd]
+  - @cat-factory/node-server@0.91.1
+
 ## 0.64.15
 
 ### Patch Changes

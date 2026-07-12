@@ -5,6 +5,7 @@ import type {
   Clock,
   CommitProjectionRepository,
   LlmCallMetricRepository,
+  NotificationRepository,
   PasswordResetTokenRepository,
   PipelineScheduleRepository,
   ProvisioningLogRepository,
@@ -17,6 +18,7 @@ import type {
 import { DEFAULT_WORKSPACE_SETTINGS } from '@cat-factory/kernel'
 import { sweepBinaryArtifactRetention } from '@cat-factory/orchestration'
 import type { Logger, RetentionConfig } from '@cat-factory/server'
+import { startSweeper } from './sweeper.js'
 
 /** Recurring-pipeline run history is kept ~1 week (the inspector's window). */
 const SCHEDULE_RUN_RETENTION_MS = 7 * 24 * 60 * 60 * 1000
@@ -62,6 +64,9 @@ export interface RetentionRepos {
   // prune is wired unconditionally — on an unwired deployment the table is empty and
   // the pass is a free no-op.
   commitRepository: Pick<CommitProjectionRepository, 'deleteOlderThan'>
+  // Resolved (acted/dismissed) notifications past the retention window. Open cards (the
+  // actionable inbox) are never pruned.
+  notificationRepository: Pick<NotificationRepository, 'deleteResolvedOlderThan'>
 }
 
 /** Rows reclaimed from each table, for logging. */
@@ -76,6 +81,7 @@ export interface RetentionResult {
   provisioningLog: number
   passwordResetTokens: number
   commits: number
+  notifications: number
 }
 
 /**
@@ -136,6 +142,10 @@ export async function sweepRetention(
     // Reset tokens past their own expiry — `now`, not a window (like activations).
     passwordResetTokens: await repos.passwordResetTokenRepository.deleteExpired(now),
     commits: await prune(retention.commitMs, now, (c) => repos.commitRepository.deleteOlderThan(c)),
+    // Resolved (acted/dismissed) notifications past the window; open cards untouched.
+    notifications: await prune(retention.notificationsMs, now, (c) =>
+      repos.notificationRepository.deleteResolvedOlderThan(c),
+    ),
   }
 }
 
@@ -151,23 +161,18 @@ export function startRetentionSweeper(
   clock: Clock,
   log: Logger,
 ): () => void {
-  const tick = async () => {
-    try {
+  return startSweeper({
+    name: 'retention',
+    intervalMs: RETENTION_SWEEP_INTERVAL_MS,
+    log,
+    failureMessage: 'retention sweep failed',
+    tick: async () => {
       const reclaimed = await sweepRetention(repos, retention, clock.now())
       if (Object.values(reclaimed).some((n) => n > 0)) {
         log.info(reclaimed, 'retention sweep reclaimed rows')
       }
-    } catch (error) {
-      log.error(
-        { err: error instanceof Error ? error.message : String(error) },
-        'retention sweep failed',
-      )
-    }
-  }
-  void tick()
-  const timer = setInterval(() => void tick(), RETENTION_SWEEP_INTERVAL_MS)
-  timer.unref?.() // never keep the process alive on the sweep timer alone
-  return () => clearInterval(timer)
+    },
+  })
 }
 
 /**
@@ -184,8 +189,12 @@ export function startArtifactRetentionSweeper(
   clock: Clock,
   log: Logger,
 ): () => void {
-  const tick = async () => {
-    try {
+  return startSweeper({
+    name: 'artifact-retention',
+    intervalMs: RETENTION_SWEEP_INTERVAL_MS,
+    log,
+    failureMessage: 'artifact retention sweep failed',
+    tick: async () => {
       const removed = await sweepBinaryArtifactRetention({
         resolveStore,
         listWorkspaceIds: () =>
@@ -200,15 +209,6 @@ export function startArtifactRetentionSweeper(
       })
       if (removed > 0)
         log.info({ binaryArtifacts: removed }, 'artifact retention sweep reclaimed rows')
-    } catch (error) {
-      log.error(
-        { err: error instanceof Error ? error.message : String(error) },
-        'artifact retention sweep failed',
-      )
-    }
-  }
-  void tick()
-  const timer = setInterval(() => void tick(), RETENTION_SWEEP_INTERVAL_MS)
-  timer.unref?.()
-  return () => clearInterval(timer)
+    },
+  })
 }

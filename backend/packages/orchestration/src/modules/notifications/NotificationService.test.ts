@@ -79,6 +79,18 @@ function fakeRepo() {
       rows.set(n.id, { ...n })
       return { ...n }
     },
+    async deleteResolvedOlderThan(cutoff) {
+      // Mirror the real repos' retention prune: drop terminal (acted/dismissed) rows whose
+      // resolvedAt is at or before the cutoff; open rows (and null resolvedAt) are kept.
+      let removed = 0
+      for (const [id, n] of rows) {
+        if (n.status === 'open') continue
+        if (n.resolvedAt == null || n.resolvedAt > cutoff) continue
+        rows.delete(id)
+        removed += 1
+      }
+      return removed
+    },
   }
   return { repo, rows }
 }

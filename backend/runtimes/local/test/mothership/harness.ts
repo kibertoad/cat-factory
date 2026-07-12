@@ -7,6 +7,7 @@ import {
   FakeRepoBootstrapper,
   FakeTaskSourceProvider,
   RecordingEventPublisher,
+  adminDatabaseUrl,
   deriveWorkerDatabase,
   driveWorkspace,
   makeIncorporatedClarityReview,
@@ -117,15 +118,22 @@ const BASE = 'https://cat-factory.test'
 export async function setupMothershipDb(): Promise<DrizzleDb> {
   const url = process.env.DATABASE_URL
   if (!url) throw new Error('DATABASE_URL is required to run the mothership conformance tests')
+  // Require a per-worker database: never fall back to the base DATABASE_URL — this suite DROPS +
+  // recreates its database each run, so running against the base DB would destroy a dev DB.
   const worker = deriveWorkerDatabase(url, 'mship', process.env.VITEST_WORKER_ID)
+  if (!worker) {
+    throw new Error(
+      'The mothership test suite requires a VITEST_WORKER_ID-scoped database; refusing to run ' +
+        '(and drop/recreate) against the base DATABASE_URL. Run via vitest (which sets VITEST_WORKER_ID).',
+    )
+  }
   // The mothership starts FRESH each run (drop + recreate the worker db). Unlike the Node/local
   // suites — which tolerate a reused db because they never enforce scope — the seeded demo boards
   // reuse FIXED block ids (`blk_auth`, …) across workspaces, so a stale row left from a previous
   // run would make an entity-id read (`findById`) resolve to an account outside the current run's
   // token scope and 404. A clean db keeps every such row owned by a this-run (in-scope) account.
-  // (Skipped outside a vitest worker, where the base db is shared and must not be dropped.)
-  if (worker) await recreateDatabase(url, worker.dbName)
-  const { db, pool } = createDbClient(worker?.url ?? url)
+  await recreateDatabase(url, worker.dbName)
+  const { db, pool } = createDbClient(worker.url)
   await migrate(db, pool)
   // The mothership enforces the accounts/memberships → users(id) FKs, so the fixed org owner
   // the machine token is signed for (CONF_USER) must exist as a real users row before any
@@ -144,8 +152,11 @@ export async function setupMothershipDb(): Promise<DrizzleDb> {
   return db
 }
 
-async function recreateDatabase(adminUrl: string, dbName: string): Promise<void> {
-  const { pool } = createDbClient(adminUrl)
+async function recreateDatabase(baseUrl: string, dbName: string): Promise<void> {
+  // Admin over the `postgres` maintenance DB (not the app's base DATABASE_URL): DROP DATABASE
+  // cannot run against the database you are connected to, and this keeps the admin pool off a
+  // developer's dev DB entirely.
+  const { pool } = createDbClient(adminDatabaseUrl(baseUrl))
   try {
     // FORCE terminates any lingering backends so the drop can't be blocked by a stale connection.
     await pool.query(`DROP DATABASE IF EXISTS "${dbName}" WITH (FORCE)`)

@@ -9,12 +9,7 @@ import type {
   SubscriptionActivationRepository,
   SubscriptionVendor,
 } from '@cat-factory/kernel'
-import {
-  CredentialRequiredError,
-  getErrorMessage,
-  isIndividualVendor,
-  ValidationError,
-} from '@cat-factory/kernel'
+import { CredentialRequiredError, isIndividualVendor, ValidationError } from '@cat-factory/kernel'
 import type {
   PersonalSubscriptionStatus,
   StorePersonalSubscriptionInput,
@@ -185,9 +180,18 @@ export class PersonalSubscriptionService {
     const sealed = await this.deps.secretCipher.decrypt(record.tokenCipher)
     try {
       return await this.deps.personalCipher.open(sealed, password)
-    } catch (error) {
+    } catch {
+      // Any failure opening the inner (password-derived) envelope is attributed to a wrong
+      // password: for this layer that is the only realistically reachable cause — the GCM
+      // auth tag can't be reproduced without the right password, and the outer system cipher
+      // (line above) already validated the stored envelope's structure before this point, so
+      // a malformed/corrupt inner envelope is near-unreachable. The residual corruption case
+      // is still covered by the shared "remove and re-add" remedy. The `wrong_password`
+      // reason drives the SPA's password re-prompt (428); keep the surfaced text clean and
+      // self-sufficient rather than nesting the raw cipher message.
       throw new CredentialRequiredError(
-        `Incorrect personal password for your ${vendor} subscription (${getErrorMessage(error)}).`,
+        `The personal password you entered does not unlock your ${vendor} subscription. ` +
+          `Re-enter it, or remove and re-add the subscription.`,
         { vendor, reason: 'wrong_password' },
       )
     }

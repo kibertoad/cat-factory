@@ -520,6 +520,12 @@ export interface Env {
    * aggressively. Default 14. 0 disables pruning.
    */
   PROVISIONING_LOG_RETENTION_DAYS?: string
+  /**
+   * Days of resolved (acted/dismissed) `notifications` to keep. Open cards (the
+   * actionable inbox) are never pruned. Generous by default so recent history survives.
+   * Default 90. 0 disables pruning.
+   */
+  NOTIFICATION_RETENTION_DAYS?: string
 }
 
 /**
@@ -534,4 +540,17 @@ export function requireTelemetryDb(env: Env): D1Database {
     throw configProblem({ key: 'TELEMETRY_DB', ...ENV_HELP.TELEMETRY_DB })
   }
   return env.TELEMETRY_DB
+}
+
+/**
+ * Resolve the required primary database, throwing a clear, actionable error when the `DB` binding
+ * is absent/misnamed. `DB` holds ALL transactional state, so an unbound binding otherwise NPEs
+ * deep inside the first repository call at container build (`const db = env.DB` → `undefined`)
+ * rather than failing at boot with a fixable message — mirroring {@link requireTelemetryDb}.
+ */
+export function requireDb(env: Env): D1Database {
+  if (!env.DB) {
+    throw configProblem({ key: 'DB', ...ENV_HELP.DB })
+  }
+  return env.DB
 }

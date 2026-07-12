@@ -324,6 +324,7 @@ WORKER_PUBLIC_URL = "https://cat-factory-backend.iselwin.workers.dev"
 # TOKEN_USAGE_RETENTION_DAYS = "395"
 # GITHUB_RATE_LIMIT_RETENTION_DAYS = "7"
 # GITHUB_COMMIT_RETENTION_DAYS = "90"
+# NOTIFICATION_RETENTION_DAYS = "90"  # resolved (acted/dismissed) cards; open ones never pruned
 
 # LLM observability. The proxy records one metric per container-agent model call.
 # By default each metric keeps the complete prompt sent to the model; set this to
