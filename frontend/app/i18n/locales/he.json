@@ -320,7 +320,12 @@
       "bootstrapStopped": "האתחול נעצר",
       "runStopped": "הריצה נעצרה",
       "stoppedDescription": "הקונטיינר הופסק והריצה בוטלה.",
-      "stopFailed": "העצירה נכשלה"
+      "stopFailed": "העצירה נכשלה",
+      "confirm": {
+        "title": "לעצור את ההרצה הזו?",
+        "body": "הקונטיינר הפעיל ייעצר. ההרצה תישאר גלויה וניתן יהיה לנסות אותה שוב.",
+        "confirm": "עצור הרצה"
+      }
     },
     "frame": {
       "status": {
@@ -880,7 +885,8 @@
         "title": "אין הרצות עדיין",
         "body": "התחל pipeline כדי לראות כאן את היסטוריית ההרצות."
       },
-      "chooseApproach": "בחר גישה"
+      "chooseApproach": "בחר גישה",
+      "elapsedTooltip": "הזמן שחלף בשלב זה"
     },
     "structure": {
       "title": "מבנה",
@@ -1172,7 +1178,8 @@
       "confirmArchive": {
         "title": "להעביר שירות זה לארכיון?",
         "body": "\"{name}\" והמשימות שלו יוסתרו מהלוח. אפשר לשחזר אותו בכל עת."
-      }
+      },
+      "runBlocked": "חסום על ידי תלות אחת שלא הושלמה: {names} | חסום על ידי {count} תלויות שלא הושלמו: {names}"
     }
   },
   "observability": {
@@ -2924,7 +2931,9 @@
       "userIdPlaceholder": "מזהה משתמש (usr_...)",
       "slackIdPlaceholder": "מזהה חבר Slack (U...)",
       "add": "הוסף חבר",
-      "save": "שמור מפה"
+      "save": "שמור מפה",
+      "incompleteTitle": "שורת חבר חסרה",
+      "incompleteBody": "לפני השמירה מלא גם את מזהה המשתמש וגם את מזהה החבר ב-Slack, או הסר את השורה."
     },
     "routable": {
       "merge_review": "סקירת מיזוג",
@@ -3269,7 +3278,8 @@
       "forkDecision": {
         "proposing": "מציע גישות…",
         "choose": "בחר גישה"
-      }
+      },
+      "elapsedTooltip": "הזמן שחלף בשלב זה"
     },
     "health": {
       "title": "בריאות הצינור",
@@ -4175,6 +4185,11 @@
     "confirmRemove": {
       "title": "למחוק את המקטע הזה?",
       "body": "\"{name}\" יימחק. לא ניתן לבטל פעולה זו."
+    },
+    "confirmUnlinkSource": {
+      "title": "לנתק את המקור הזה?",
+      "body": "המקור \"{repo}\" והקטעים המנחים שסונכרנו ממנו יוסרו. ניתן לקשר אותו מחדש בהמשך.",
+      "confirm": "ניתוק"
     },
     "unavailable": "ספריית מקטעי הפרומפט אינה מופעלת בפריסה זו."
   },

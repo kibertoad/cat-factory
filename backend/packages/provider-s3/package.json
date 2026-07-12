@@ -1,6 +1,6 @@
 {
   "name": "@cat-factory/provider-s3",
-  "version": "0.2.141",
+  "version": "0.2.145",
   "description": "Opt-in AWS S3 blob backend for the Agent Architecture Board's binary-artifact storage abstraction. Implements the kernel BinaryBlobBackend port over an S3 bucket.",
   "repository": {
     "type": "git",
@@ -29,10 +29,10 @@
     "typecheck": "tsc -p tsconfig.json --noEmit"
   },
   "dependencies": {
-    "@aws-sdk/client-s3": "^3.1079.0",
+    "@aws-sdk/client-s3": "^3.1085.0",
     "@cat-factory/kernel": "workspace:*"
   },
   "devDependencies": {
-    "typescript": "7.0.1-rc"
+    "typescript": "7.0.2"
   }
 }

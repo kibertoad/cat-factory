@@ -1,12 +1,13 @@
-import type {
-  ConnectionTestResult,
-  KubernetesRunnerConfig,
-  RunnerDispatchKind,
-  RunnerDispatchOptions,
-  RunnerJobRef,
-  RunnerJobView,
-  RunnerTransport,
-  SecretResolver,
+import {
+  type ConnectionTestResult,
+  harnessDispatchError,
+  type KubernetesRunnerConfig,
+  type RunnerDispatchKind,
+  type RunnerDispatchOptions,
+  type RunnerJobRef,
+  type RunnerJobView,
+  type RunnerTransport,
+  type SecretResolver,
 } from '@cat-factory/kernel'
 import {
   KubernetesApiClient,
@@ -40,8 +41,11 @@ import {
 // the namespace. The pod itself has no Service, so its harness is reachable only
 // via the RBAC-gated proxy — no inbound harness shared secret is required.
 
-// The eviction marker the engine classifies (job.logic `isContainerEvictionError`):
-// a 404 from the proxy means the pod vanished (deleted/crashed/evicted).
+// The eviction marker the engine classifies (job.logic `isContainerEvictionError`): a 404 from
+// the proxy means the pod vanished (deleted/crashed/evicted). A poll returns it alongside the
+// structured `RunnerJobView.evicted: 'crash'` field (the primary signal); this string stays the
+// fallback older consumers match, and it is ALSO the readiness-throw marker in `waitForPodReady`
+// below (a dispatch-time throw carries no view, so it rides the string channel only).
 const EVICTION_ERROR = 'Job not found (container evicted or crashed)'
 
 const DISPATCH_TIMEOUT_MS = 30_000
@@ -90,7 +94,13 @@ export class KubernetesRunnerTransport implements RunnerTransport {
     await this.waitForPodReady(name)
     const res = await this.proxyFetch('POST', name, '/jobs', { ...spec, kind }, DISPATCH_TIMEOUT_MS)
     if (!res.ok) {
-      throw new Error(`Container dispatch failed (HTTP ${res.status}): ${await safeText(res)}`)
+      // Structured DispatchError (carrying the HTTP status) so consumers classify by field, not
+      // regex; a 404 on the harness /jobs route elaborates to the stale-image republish remedy.
+      throw harnessDispatchError({
+        label: 'Container',
+        status: res.status,
+        body: await safeText(res),
+      })
     }
   }
 
@@ -106,8 +116,9 @@ export class KubernetesRunnerTransport implements RunnerTransport {
     if (res.status === 404) {
       // The pod-proxy 404s when the pod is gone (deleted/crashed/evicted) — the
       // harness keeps a finished job's view, so a 404 is the pod vanishing, not a
-      // forgotten job. Report it as the eviction the engine recovers from.
-      return { state: 'failed', error: EVICTION_ERROR }
+      // forgotten job. Report it as the eviction the engine recovers from — the structured
+      // `evicted: 'crash'` field is the primary signal; the string suffix is the fallback.
+      return { state: 'failed', error: EVICTION_ERROR, evicted: 'crash' }
     }
     if (!res.ok) {
       throw new Error(`Container job poll failed (HTTP ${res.status}): ${await safeText(res)}`)

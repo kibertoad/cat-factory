@@ -297,10 +297,15 @@ export class ContainerRepoBootstrapper implements RepoBootstrapper {
       const error = view.error ?? 'Bootstrap job failed'
       return {
         state: 'failed',
-        // Prefer the harness's structured cause; fall back to the error-string regex (which
-        // also catches the facade-emitted eviction, for which the harness sets no cause).
-        failureKind:
-          bootstrapFailureKindFromCause(view.failureCause) ?? classifyBootstrapFailure(error),
+        // Prefer the transport's STRUCTURED eviction verdict, then the harness's structured cause;
+        // fall back to the error-string regex only for an older producer (which also catches the
+        // facade-emitted eviction, for which the harness sets no cause). Both eviction kinds
+        // (`crash` / `transient`) collapse to the single `evicted` failure kind here on purpose —
+        // bootstrap has no transient-vs-crash recovery budget (only the run driver's
+        // `recoverContainerEviction` splits them), so the distinction carries no meaning downstream.
+        failureKind: view.evicted
+          ? 'evicted'
+          : (bootstrapFailureKindFromCause(view.failureCause) ?? classifyBootstrapFailure(error)),
         error,
         detail: view.detail ?? view.error,
       }

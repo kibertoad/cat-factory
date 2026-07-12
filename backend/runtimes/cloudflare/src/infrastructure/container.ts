@@ -120,6 +120,7 @@ import {
   GitHubIdentityResolver,
   resolveUrlSafetyPolicy,
   resolveWorkspaceCapabilities,
+  noRunnerBackendAvailableError,
   type JobPackageRegistrySpec,
   type MintInstallationToken,
   type PersistenceRegistry,
@@ -555,10 +556,11 @@ function buildResolveTransport(
       }
     }
     if (cloudflare) return log(cloudflare, 'container', workspaceId)
-    throw new Error(
-      `No runner backend available for workspace '${workspaceId ?? '(unknown)'}': ` +
-        `register a runner backend (a pool or Kubernetes) or enable Cloudflare Containers`,
-    )
+    // The shared factory throws a ConflictError carrying the machine reason (see its doc): a clean
+    // 409 synchronously, and classifyDispatchFailure lifts the reason onto the run's AgentFailure on
+    // the async dispatch path (SPA shows "Agent backend not configured", not "container failed to
+    // start"). The Cloudflare facade also offers "enable Cloudflare Containers" in the remedy.
+    throw noRunnerBackendAvailableError(workspaceId, { cloudflareContainers: true })
   }
 }
 

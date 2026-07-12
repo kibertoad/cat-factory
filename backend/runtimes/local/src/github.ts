@@ -218,6 +218,97 @@ export async function fetchPatAccount(env: NodeJS.ProcessEnv): Promise<PatAccoun
 }
 
 /**
+ * Verdict of the optional boot-time GITHUB_PAT probe ({@link probeGitHubPat}). `ok` means the token
+ * authenticated and — for a classic token whose scopes GitHub reports — carries the scopes local
+ * mode needs; the failure variants each name what to fix.
+ */
+export type PatProbeVerdict =
+  | { ok: true }
+  | { ok: false; reason: 'invalid' | 'forbidden'; detail: string }
+  | { ok: false; reason: 'underscoped'; missing: string[] }
+
+/**
+ * Classify a `GET /user` probe of the local-mode GITHUB_PAT into an actionable verdict. Pure, so the
+ * mapping is unit-tested without a live token. `scopesHeader` is GitHub's `x-oauth-scopes` response
+ * header: a CLASSIC token lists its granted scopes there (so an under-scoped token is detectable),
+ * while a FINE-GRAINED token returns it empty/absent — scopes can't be verified from it, so we do
+ * NOT false-warn (a successful call is taken as good enough).
+ */
+export function classifyPatProbe(res: {
+  status: number
+  scopesHeader: string | null
+}): PatProbeVerdict {
+  if (res.status === 401) {
+    return { ok: false, reason: 'invalid', detail: 'HTTP 401 — invalid, expired, or revoked' }
+  }
+  if (res.status === 403) {
+    return {
+      ok: false,
+      reason: 'forbidden',
+      detail: 'HTTP 403 — rejected (SSO not authorized, or rate limited)',
+    }
+  }
+  if (res.status < 200 || res.status >= 300) {
+    return { ok: false, reason: 'forbidden', detail: `HTTP ${res.status} — unexpected response` }
+  }
+  // 2xx: the token authenticates. Verify scopes only when GitHub reports them (classic token).
+  const granted = (res.scopesHeader ?? '')
+    .split(',')
+    .map((s) => s.trim())
+    .filter(Boolean)
+  if (granted.length === 0) return { ok: true } // fine-grained token — scopes not reported
+  const missing = LOCAL_PAT_SCOPES.filter((s) => !granted.includes(s))
+  return missing.length === 0
+    ? { ok: true }
+    : { ok: false, reason: 'underscoped', missing: [...missing] }
+}
+
+/**
+ * Best-effort boot-time validation of a SET `GITHUB_PAT`: one `GET /user`. Returns the verdict, or
+ * undefined when there is no PAT to probe or the probe couldn't complete (network error / timeout) —
+ * a probe must NEVER block or crash boot, so an unreachable GitHub is treated as "unknown", not a
+ * failure. `fetchImpl` + `timeoutMs` are injectable for tests.
+ */
+export async function probeGitHubPat(
+  env: NodeJS.ProcessEnv,
+  opts: { fetchImpl?: typeof fetch; timeoutMs?: number } = {},
+): Promise<PatProbeVerdict | undefined> {
+  const pat = env.GITHUB_PAT?.trim()
+  if (!pat) return undefined
+  const apiBase = (env.GITHUB_API_BASE?.trim() || 'https://api.github.com').replace(/\/+$/, '')
+  const doFetch = opts.fetchImpl ?? fetch
+  const controller = new AbortController()
+  const timer = setTimeout(() => controller.abort(), opts.timeoutMs ?? 5000)
+  try {
+    const res = await doFetch(`${apiBase}/user`, {
+      headers: patHeaders(pat),
+      signal: controller.signal,
+    })
+    return classifyPatProbe({ status: res.status, scopesHeader: res.headers.get('x-oauth-scopes') })
+  } catch {
+    return undefined // network error / timeout — best-effort, stay silent
+  } finally {
+    clearTimeout(timer)
+  }
+}
+
+/**
+ * The boot warning for a non-OK {@link probeGitHubPat} verdict (undefined when the PAT is fine).
+ * Mirrors the MISSING-PAT boot warning: it names the exact problem and links the classic-token
+ * creation URL with the local-mode scopes pre-selected, so the fix is one click + restart.
+ */
+export function describePatProbeVerdict(verdict: PatProbeVerdict): string | undefined {
+  if (verdict.ok) return undefined
+  const tail =
+    `agent steps that clone, push, open PRs, gate on CI or merge will fail. Create a token ` +
+    `(scopes pre-selected) at ${githubPatCreationUrl()}, then set GITHUB_PAT and restart.`
+  if (verdict.reason === 'underscoped') {
+    return `local mode: GITHUB_PAT is missing required scope(s) ${verdict.missing.join(', ')} — ${tail}`
+  }
+  return `local mode: GITHUB_PAT was rejected by GitHub (${verdict.detail}) — ${tail}`
+}
+
+/**
  * A GitLab "new personal access token" URL with the scopes a coding agent needs
  * pre-selected, so a developer without a GitLab PAT can click straight through to create
  * one. `api` covers repo read/write + merge; `read_user` lets the login resolve the

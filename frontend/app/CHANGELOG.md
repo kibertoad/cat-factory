@@ -1,5 +1,100 @@
 # @cat-factory/app
 
+## 0.115.3
+
+### Patch Changes
+
+- f8f1aa8: Update workspace dependencies (direct + transitive) to the newest versions published before the
+  `minimumReleaseAge` supply-chain cutoff. No source changes — dependency ranges + the lockfile only.
+
+  - Refreshed direct deps to their newest cooldown-compliant releases: `wrangler` 4.110.0, `hono`
+    4.12.29, `vitest` / `@vitest/coverage-v8` 4.1.10, `oxlint` 1.73.0, `knip` 6.26.0, `msw` 2.15.0,
+    `pg-boss` 12.26.0, `sherif` 1.13.0, `turbo` 2.10.4, `vue-tsc` 3.3.7, `@types/node` 26.1.1,
+    `@nuxtjs/i18n` 10.4.1, `@aws-sdk/client-s3` 3.1085.0.
+  - `typescript` moved off the `7.0.1-rc` prerelease to the stable `7.0.2` release across every
+    package that used the RC (the TS-6 world — the frontend layer and the two runner harnesses —
+    stays on `^6.0.3`).
+  - Vercel AI SDK family held to the `ai@6`-compatible majors that `workers-ai-provider@3.3.1` peers
+    require (`ai` 6.0.224, `@ai-sdk/anthropic|openai|provider` on 3.x, `@ai-sdk/openai-compatible` on
+    2.x, `@ai-sdk/amazon-bedrock` 4.x) — no v7/v5 major bumps.
+  - Coding (`executor-harness`) and deploy runner harnesses updated too, including the pinned
+    in-container coding-agent CLIs (Pi 0.80.6, Claude Code 2.1.207, Codex 0.144.1; the Pi todo /
+    web-tools extensions stay at their lockstep 1.20.0). Their image tags and the three
+    hand-maintained pins were bumped in lockstep, so the runner images must be re-published +
+    deployed for the new tags to roll out.
+
+- 2c89319: UX papercuts (Section B — form & list-action integrity): confirm before
+  unlinking a fragment source (UX-21), per-row loading spinners so one row's
+  action no longer spins every row's (and the add/link forms) (UX-29), stable
+  keys for Slack member-mapping rows plus a block-with-warning when a row is
+  half-filled instead of silently dropping it on save (UX-23), and a pending
+  state on the Slack "Add to Slack" OAuth button (UX-30).
+- Updated dependencies [f8f1aa8]
+  - @cat-factory/contracts@0.127.1
+
+## 0.115.2
+
+### Patch Changes
+
+- bda3d66: fix(stores): guard the kaizen & consensus stores against out-of-order live-push clobber
+
+  Two live-backed Pinia stores blind-replaced state that also arrives over the workspace
+  stream, so a load resolving after a fresher live push (or a newer concurrent load) silently
+  dropped the fresher data — the out-of-order-overwrite hazard the live-push coherence rules
+  warn about, the same class the `provisioningLogs` store was hardened against.
+
+  - **kaizen**: `loadForExecution` and `loadOverview` now take a monotonic load ticket (only
+    the newest-issued load commits) and merge the fetched gradings with the live cache instead
+    of replacing it, so a grading pushed via `upsert` while a load was in flight is preserved
+    rather than dropped (loaded rows stay authoritative per id, keeping the newer `updatedAt`
+    on a shared id). Gradings are append/update-only, so preserving an unmatched live row can't
+    resurrect stale state.
+  - **consensus**: `load` now reconciles through the same newest-wins (`updatedAt`) rule the
+    live `upsert` uses instead of blind-replacing, so a stale load can't regress the transcript,
+    and a raced "no session" response never clobbers an existing (possibly live-pushed) session.
+
+  `docInterview` already routed its `load` through `upsert`'s newest-wins guard; it gains a
+  regression spec so a future refactor can't reintroduce the clobber. Establishes the
+  "every store with both a snapshot/load path and a live-upsert path gets an out-of-order
+  spec" burn-down (system-audit tracker item 15) with these three stores as the first slice.
+
+- b062c38: feat(ux): elapsed clocks, run-blocked reasons, guarded stops & keyboard-reachable restart (UX-35/40/41/42)
+
+  Closes the Section C "pipeline & inspector surfaces" cluster of the UX-papercuts initiative:
+
+  - **UX-35 — live elapsed clocks.** `PipelineProgress` and `TaskExecution` now show each
+    step's elapsed time, driven by a shared 1s tick, so a running step that hasn't yet emitted
+    subtask counts reads as progressing rather than hung. The clock freezes at the step's
+    finish, the run's failure time, or a human park — reusing the same freeze rules as the
+    step-detail overlay (the duration/`isRunning` logic in `useStepTimer` is extracted into pure
+    helpers `stepDurationMs`/`stepDurationLabel`/`stepIsRunning` + a shared `useNowTick`).
+  - **UX-40 — the locked Run trigger says why.** The inspector's disabled Run button read as a
+    dead lock; it now names the unfinished dependencies blocking the task, both as a button
+    title and as a visible hint line (a native title on a disabled button never fires hover, so
+    the hint keeps the reason reachable for pointer, keyboard, and touch alike).
+  - **UX-41 — stopping a run is confirmed.** The shared `AgentStopButton` (board card +
+    inspector bootstrap stop) now routes through the confirm dialog before killing the
+    container, matching the confirm-then-mutate contract the task-reset path already uses.
+  - **UX-42 — restart-from-here is keyboard-reachable.** The hover-only restart button on a
+    pipeline step now also reveals on `group-focus-within`/`focus-visible`, so it is no longer
+    invisible to keyboard and touch users.
+
+## 0.115.1
+
+### Patch Changes
+
+- 327a1ef: fix(app): guard the provisioningLogs store against out-of-order clobber + unbounded growth (audit item 10)
+
+  The `provisioningLogs` store's `loadForExecution` did an unguarded `s.entries = entries`, so the
+  drawer's silent background poll and a manual refresh could resolve out of order and let a
+  slower/staler fetch overwrite the fresher timeline (the same out-of-order-overwrite hazard the
+  live-push rules warn about). And `byExecution` accreted one `LogState` per execution viewed and
+  never evicted — a slow memory creep across a long board session. Adds a per-execution monotonic
+  `loadSeq` guard (only the latest-issued load commits its result, matching `stores/workspace.ts`)
+  and an `evict(executionId)` the `ProvisioningLogsDrawer` calls on unmount, so the map holds only
+  currently-open drawers (a re-opened drawer re-fetches on mount). Behaviour-neutral for the happy
+  path; pins the races with new store specs.
+
 ## 0.115.0
 
 ### Minor Changes

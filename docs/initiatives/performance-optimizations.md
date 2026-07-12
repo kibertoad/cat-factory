@@ -1,6 +1,6 @@
 # Initiative: performance optimizations (prioritized)
 
-**Status:** in progress — items 1, 2, 3 landed (emit metrics rollup · gate-poll GitHub reads · live-run projection) · **Owner:** core · **Started:** 2026-07-09
+**Status:** in progress — items 1, 2, 3, 4, 7, 9 landed (emit metrics rollup · gate-poll GitHub reads · live-run projection · parallel dispatch waves · spend/workspace-settings cache slices) · **Owner:** core · **Started:** 2026-07-09
 
 > This is the durable source of truth for a multi-PR initiative. Read it first before
 > picking up the next slice; update the checklist at the end of each PR.
@@ -52,12 +52,12 @@ symmetric" (CLAUDE.md).
 | 1   | P1  | engine       | `emitInstance` runs LLM-metrics GROUP BY on every emit (incl. progress ticks)                                                       | ✅ done | branch `claude/performance-tracker-next-phase-cvbcmh`     |
 | 2   | P1  | gateways     | Gate polls: uncached `repoId()` + PAT re-resolved per `request()` + `listCommits` head lookup                                       | ✅ done | [#993](https://github.com/kibertoad/cat-factory/pull/993) |
 | 3   | P1  | persistence  | Execution lists `SELECT *` (incl. `detail` JSON) + JS status filter on dispatch guard; missing `(workspace_id, kind, status)` index | ✅ done | [#996](https://github.com/kibertoad/cat-factory/pull/996) |
-| 4   | P1  | dispatch     | `buildJobBody` serializes ~6 independent I/O steps per dispatch                                                                     | ⬜ todo |                                                           |
+| 4   | P1  | dispatch     | `buildJobBody` serializes ~6 independent I/O steps per dispatch                                                                     | ✅ done | branch `claude/perf-tracker-next-phase-3wg1gq`            |
 | 5   | P1  | frontend     | Board snapshot embeds full step outputs the board never reads                                                                       | ⬜ todo |                                                           |
 | 6   | P1  | frontend     | Coarse `board` event forces full-snapshot refresh; payload already carries `blockId`                                                | ⬜ todo |                                                           |
-| 7   | P2  | caching      | `SpendService` three banned TTL `Map`s (pricing / account / user limits)                                                            | ⬜ todo |                                                           |
+| 7   | P2  | caching      | `SpendService` three banned TTL `Map`s (pricing / account / user limits)                                                            | ✅ done | branch `claude/performance-tracker-next-phase-hcdba4`     |
 | 8   | P2  | caching      | `AccountSettingsService` legacy 30s `Map` (the named anti-pattern)                                                                  | ⬜ todo |                                                           |
-| 9   | P2  | caching      | `WorkspaceSettingsService.get` uncached; read per recorded LLM call                                                                 | ⬜ todo |                                                           |
+| 9   | P2  | caching      | `WorkspaceSettingsService.get` uncached; read per recorded LLM call                                                                 | ✅ done | branch `claude/performance-tracker-next-phase-hcdba4`     |
 | 10  | P2  | frontend     | Shared `useBlockQueries` index invalidates ALL BlockNodes on every execution event                                                  | ⬜ todo |                                                           |
 | 11  | P2  | frontend     | Two unconditional 60fps RAF loops doing DOM measurement while idle                                                                  | ⬜ todo |                                                           |
 | 12  | P2  | integrations | `GitHubSyncService`: serial per-workspace fan-out + serial resource syncs                                                           | ⬜ todo |                                                           |
@@ -72,6 +72,7 @@ symmetric" (CLAUDE.md).
 | 21  | P3  | persistence  | `password_reset_tokens.deleteExpired` full-table scan (no `expires_at` index)                                                       | ⬜ todo |                                                           |
 | 22  | P3  | spend        | `isOverBudget`: up to 3 live SUM aggregates per proxied LLM call (design decision)                                                  | ⬜ todo |                                                           |
 | 23  | P3  | engine       | `resolveRiskPolicy` re-reads merge preset per gate evaluation (optional slice)                                                      | ⬜ todo |                                                           |
+| 24  | P2  | gateways     | Dispatch GH client: no single-flight / throttle — concurrent same-run steps duplicate token mint + branch probe                     | ⬜ todo |                                                           |
 
 ## Detailed findings
 
@@ -175,10 +176,29 @@ every re-dispatch epoch (tester→fixer rounds).
 
 **Fix:** after `resolveRepoTarget`, run two parallel waves with `Promise.all`:
 `[mintInstallationToken, ensureWorkBranch]` alongside `[resolveAuth,
-resolvePackageRegistries, resolveTestSecrets, resolveWebSearchAvailability]`. Secondary:
-`startJob` awaits the best-effort `agentContextObservability.record` before returning
-(`:696-704`) — fire-and-forget it (still swallowing errors) so the driver proceeds to the
-first poll immediately.
+resolvePackageRegistries, resolveTestSecrets, resolveWebSearchAvailability]`. (Fire-and-forgetting
+`startJob`'s best-effort `agentContextObservability.record` was considered but rejected — see the
+landed note below: it's already off the critical path, and a `void` would be dropped on the Worker.)
+
+**Landed (branch `claude/perf-tracker-next-phase-3wg1gq`):** once the repo target is resolved,
+`buildJobBody` fans the six independent dispatch resolutions out in a single `Promise.all`
+wave — the repo-scoped `mintInstallationToken` + work-branch ensure alongside the
+workspace/block-scoped `resolveAuth`, `resolvePackageRegistries`, `resolveTestSecrets`, and
+`resolveWebSearchAvailability` — collapsing ~6 serial round-trips per step dispatch (and per
+tester→fixer re-dispatch epoch) to one. The apriori/work-branch logic moved to a private
+`resolveWorkBranchReady` helper so it fits as one entry in the wave (behaviour unchanged: PR-head
+short-circuit, apriori probe-only-or-fail, writer-create / reader-probe). `startJob` keeps
+`agentContextObservability.record` **awaited** (with a swallowing `catch`): it runs after the
+container job is already dispatched, so it is off the container's critical path — the only thing
+it delays is the driver's handle return, which then sleeps before its first poll regardless. A
+bare fire-and-forget `void` was considered but rejected: `startJob` runs inside a Cloudflare
+Workflow step, so an un-awaited insert is silently dropped once the isolate hibernates on the next
+durable `step.sleep` (the `http/waitUntil.ts` anti-pattern), which would stop the snapshot
+recording on the primary runtime for a negligible latency gain. Pure `@cat-factory/server` change
+(no persistence / no conformance surface). The per-kind body snapshots are byte-identical (the
+`containerAgentJobBody.spec.ts` characterization guard), plus two new tests pin the concurrency
+(resolvers all started before any resolves) and that a failing observability record still never
+breaks the dispatch.
 
 ### 5. Board snapshot carries full step outputs the board never reads — P1
 
@@ -229,6 +249,19 @@ workspace/account/user id; invalidate from the existing `invalidatePricing` /
 the isolate-safe profile. Mechanical migration — the invalidation hooks already exist.
 Fold into / coordinate with item 9 (same `workspace_settings` row).
 
+**Landed (with item 9, branch `claude/performance-tracker-next-phase-hcdba4`):** three new
+`AppCaches` slices — `workspaceSettings` (raw settings row), `accountBudgetLimit`,
+`userBudgetLimit` — replace the three Maps. `resolvePricing` now reads the settings row through
+the SHARED `workspaceSettings` slice and overlays `mergeSpendPricing` on the cached value, so
+its coherence rides item 9's single invalidation site (`WorkspaceSettingsService.update`) and
+`SpendService.invalidatePricing` + the controller's manual drop are **deleted**. The two
+budget-limit slices are invalidated by the existing `invalidateAccountLimit` /
+`invalidateUserLimit` methods (now `async`, delegating to the slice), wired unchanged from the
+`AccountService` / `UserSettingsService` budget-change callbacks (made `await`able). All three
+are pass-through on the Worker's isolate-safe profile (our own mutable D1 state). Pinned by a new
+`@cat-factory/spend` vitest suite (read-through + invalidation for all three) and covered
+end-to-end by the conformance `/spend` budget test (warm → settings write → re-read).
+
 ### 8. `AccountSettingsService` legacy 30s Map — P2
 
 `backend/packages/integrations/src/modules/accountSettings/AccountSettingsService.ts:72`
@@ -253,6 +286,18 @@ its own banned Map (item 7).
 **Fix:** a `workspaceSettings` slice keyed by workspace id, invalidated from
 `WorkspaceSettingsService.update` (`:71`); pass-through on the Worker profile. Natural
 home to fold item 7's `pricingCache` into.
+
+**Landed (branch `claude/performance-tracker-next-phase-hcdba4`):** the `workspaceSettings`
+slice (group == key == workspace id, `{ settings: WorkspaceSettings | null }` wrapper) is read
+through by ALL of the row's consumers via the shared `readCachedWorkspaceSettings` kernel helper
+(so they can't drift on the cache key) — `WorkspaceSettingsService.get`, the task-limit start
+guard (through `get`), `LlmObservabilityService.bodiesEnabled`, and `SpendService.resolvePricing`
+(item 7's fold-in). Its sole write path, `WorkspaceSettingsService.update`, invalidates the
+workspace's entry after the upsert commits, so a settings/budget edit is visible on the very next
+read on any replica. Pass-through on the Worker's isolate-safe profile. Pinned by
+`WorkspaceSettingsService.test.ts` (read-through / default caching / update-invalidation /
+per-workspace scoping) and a new conformance cache-coherence assertion (warm GET → PUT → GET
+reflects) on both runtimes.
 
 ### 10. Shared block index fans one event out to every BlockNode — P2
 
@@ -416,6 +461,39 @@ controllers + `MergeResolver`. Slow-moving admin config, re-read per gate evalua
 that). Optional `mergePreset` cache slice keyed by `(workspaceId, riskPolicyId|default)`,
 invalidated from `RiskPolicyService.create/update/remove/reseed` (`RiskPolicyService.ts:77-162`).
 
+### 24. Dispatch GH client has no single-flight / throttle — P2
+
+Follow-up surfaced while reviewing item 4 (parallel dispatch waves, PR #1051). Item 4
+overlapped the six per-dispatch resolutions in one `Promise.all` wave, which is the right
+per-dispatch fix — but it exposes a fleet-level shape the wave alone doesn't address: when
+several steps of the SAME run advance near-simultaneously (e.g. a coder finishing while the
+sweeper re-drives, or a tester→fixer epoch), each dispatch independently mints the run's
+installation token and probes the SAME work branch, and firing them concurrently nudges GitHub's
+**secondary** (concurrency/abuse) limits sooner than the old serial chain did. Scope of the real
+GitHub traffic per dispatch is small — `mintInstallationToken` already rides `GitHubAppRegistry`'s
+in-memory token cache (a true mint only on a cold isolate / near expiry), and `ensureWorkBranch`
+is the one guaranteed round-trip (get-ref, maybe create-ref); the other four wave members are
+DB/local. So this is a **defensiveness + de-duplication** slice, not a hot-loop fix.
+
+**Fix (through the blessed seams, both runtimes):**
+
+- **Single-flight / request coalescing** on the shared `FetchGitHubClient`, keyed by
+  `installationId` (token mint) and `(repo, branch)` (`ensureWorkBranch` probe), so N concurrent
+  same-run dispatches collapse to one in-flight call each. This is the biggest real dispatch-path
+  win and the "concurrency-aware" piece.
+- **Reuse item 2's `branchHeadSha` cache** for the dispatch-path branch probe instead of a fresh
+  get-ref per dispatch (the gate-poll client already caches it; thread the same slice through).
+- **Global throttle + `Retry-After` honoring** (token-bucket / `p-limit`) on the client so a
+  fleet-wide advance storm degrades gracefully instead of tripping abuse detection.
+
+Route cached reads through an `AppCaches` slice, NOT a homebrew `Map` (CLAUDE.md caching rule).
+An installation token is self-expiring, so its slice may keep a real TTL even in
+`ISOLATE_SAFE_APP_CACHES_PROFILE` (like `fragmentDocumentBody`); the single-flight wrapper is a
+thin in-flight-promise map on the client, invalidated by nothing (it only lives for the call's
+duration). Keep the runtimes symmetric — the client + its cache slice land for both facades at
+once. Join-batching does NOT apply: the wave members hit heterogeneous endpoints, not a
+loop of point-reads over a list.
+
 ## Conventions & gotchas (carry between slices)
 
 - **Every persistence change lands on BOTH runtimes in the same PR** — D1 migration ⇄
@@ -458,10 +536,13 @@ invalidated from `RiskPolicyService.create/update/remove/reseed` (`RiskPolicySer
 1. Item 2 (repoId memo + branchHeadSha + PAT probe-scope) — pure server package, big win.
 2. Item 3 (projected `listLiveBlockIds` + index, both runtimes + conformance).
 3. Item 1 (gate `attachStepMetrics` to step-boundary emits).
-4. Item 4 (parallel waves in `buildJobBody` + fire-and-forget context snapshot).
+4. Item 4 (parallel waves in `buildJobBody`; context-snapshot record stays awaited — off the
+   critical path, and a `void` would be dropped on the Worker).
 5. Items 7+9 together (spend/workspace-settings slices), then 8 (account settings).
 6. Items 15+16+17+18 as one "reuse the loaded list" batch-fix PR.
 7. Item 12 (GitHub sync parallelism) + 14 (fan-out publisher).
+   7b. Item 24 (dispatch GH client single-flight + throttle) — natural pairing with item 2's
+   `branchHeadSha` cache; both runtimes + conformance.
 8. Frontend: 6 first (targeted board upserts, with store unit tests), then 5 (snapshot
    projection, coupled contracts change), then 10/11, then 20.
 9. Items 19, 21 as small both-runtime persistence PRs.

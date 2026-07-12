@@ -15,6 +15,7 @@ import type {
   UrlSafetyPolicy,
 } from '@cat-factory/kernel'
 import { STRICT_URL_SAFETY_POLICY } from '@cat-factory/kernel'
+import { DOCS } from '../../docs.js'
 import * as environmentsLogic from '../environments/environments.logic.js'
 import { type MakeHttpError, readCappedText, safeFetch } from '../shared/safe-fetch.js'
 import * as runnersLogic from './runners.logic.js'
@@ -42,13 +43,29 @@ const MAX_RESPONSE_CHARS = 200_000
 const MAX_RESPONSE_BYTES = MAX_RESPONSE_CHARS
 const USER_AGENT = 'cat-factory'
 
-/** Carries the HTTP status so callers can surface a meaningful (redacted) error. */
+/**
+ * UI-first remedy appended to every runner-pool error: a self-hosted pool is registered,
+ * credentialed, and re-tested in the UI, so the primary fix instruction names that click path
+ * (the pool scheduler URL / auth / manifest all live there). Kept self-sufficient without the
+ * doc link. The raw `Runner pool <method> → <status>` / `Missing secret 'X'` first part is
+ * PRESERVED verbatim ahead of it (greppable + surfaced as the connection-test / dispatch detail).
+ */
+const RUNNER_POOL_REMEDY =
+  `Re-test the connection in Settings → Self-hosted runner pool, and update the pool's scheduler ` +
+  `URL, credentials, or manifest there if they changed. See ${DOCS.runnerPool()}.`
+
+/**
+ * Carries the HTTP status so callers can surface a meaningful (redacted) error, and appends the
+ * shared UI-first {@link RUNNER_POOL_REMEDY} so every runner-pool failure (a scheduler non-2xx, a
+ * missing manifest secret, an OAuth-token rejection) names where to fix it — whether it surfaces
+ * as a connection-test message, a dispatch failure, or a log line.
+ */
 export class RunnerPoolApiError extends Error {
   constructor(
     readonly status: number,
     message: string,
   ) {
-    super(message)
+    super(`${message} — ${RUNNER_POOL_REMEDY}`)
     this.name = 'RunnerPoolApiError'
   }
 }

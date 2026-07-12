@@ -1,6 +1,6 @@
 {
   "name": "@cat-factory/caching",
-  "version": "0.6.36",
+  "version": "0.6.40",
   "description": "The app-level caching seam for the Agent Architecture Board (docs/initiatives/caching-layer.md): createAppCaches builds the named, typed in-memory read-through caches (layered-loader) the services consume via the kernel AppCaches port, with optional distributed invalidation over an injected Redis notification pair. Redis is only ever an invalidation bus, never a data tier.",
   "repository": {
     "type": "git",
@@ -35,8 +35,8 @@
     "layered-loader": "^14.5.3"
   },
   "devDependencies": {
-    "@types/node": "^26.1.0",
-    "typescript": "7.0.1-rc",
-    "vitest": "^4.1.9"
+    "@types/node": "^26.1.1",
+    "typescript": "7.0.2",
+    "vitest": "^4.1.10"
   }
 }

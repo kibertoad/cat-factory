@@ -13,10 +13,14 @@ mini-steps, focus-visible rings, reduced-motion guards); the secret-input reveal
 (UX-19/20 — the `SecretInput` primitive: every password field and every plaintext secret
 textarea now masks by default with an eye toggle); the board zoom/canvas navigation cluster
 (UX-07/08/09/14/15/16 — labeled+clamp-disabled zoom controls, a click-to-reset-100% readout,
-double-click-to-focus a frame, and a nudge on blank-canvas pipeline drops); and the
+double-click-to-focus a frame, and a nudge on blank-canvas pipeline drops); the
 modal-safety cluster (UX-18/25 — the `useUnsavedGuard` confirm-before-discard seam on the
-content-heavy modals + DecisionModal double-submit protection). This
-document catalogs UX papercuts
+content-heavy modals + DecisionModal double-submit protection); the pipeline/inspector
+surfaces cluster (UX-35/40/41/42 — live per-step elapsed clocks, a named reason on the locked
+Run trigger, a confirm before stopping a run, and a keyboard-reachable restart button); and the
+fragment/Slack form-integrity cluster (UX-21/23/29/30 — confirm before unlinking a fragment
+source, per-row loading spinners, stable+validated Slack member-map rows, a pending Slack OAuth
+button). This document catalogs UX papercuts
 (small annoyances, missing affordances, rough edges) found in the SPA
 (`frontend/app/app`) during a systematic sweep on 2026-07-02. Every finding was
 verified against the code at the referenced `file:line` (line numbers drift as the
@@ -166,16 +170,16 @@ per-file patches:
 | UX-18 | P1  | done   | Content-heavy modals discard all typed input on Escape/backdrop click              |
 | UX-19 | P2  | done   | No show/hide toggle on any password/secret field (systemic)                        |
 | UX-20 | P2  | done   | Provider API key entered in a plaintext, unmasked textarea (several surfaces)      |
-| UX-21 | P2  | todo   | `unlinkSource` (fragment library) destroys a synced source with no confirmation    |
+| UX-21 | P2  | done   | `unlinkSource` (fragment library) destroys a synced source with no confirmation    |
 | UX-22 | P2  | todo   | Reset-password validation is submit-only, no inline feedback                       |
-| UX-23 | P2  | todo   | Slack member-mapping rows keyed by index; incomplete rows silently dropped on save |
+| UX-23 | P2  | done   | Slack member-mapping rows keyed by index; incomplete rows silently dropped on save |
 | UX-24 | P2  | todo   | Datadog connection can't be updated without re-pasting both write-only keys        |
 | UX-25 | P2  | done   | DecisionModal options: fire-and-forget, no pending state, double-click hazard      |
 | UX-26 | P3  | todo   | No autofocus on first field of login/reset/connect modals                          |
 | UX-27 | P3  | todo   | Disabled submit buttons don't state why (min-length rules invisible)               |
 | UX-28 | P3  | todo   | No character counters where the backend enforces length limits                     |
-| UX-29 | P3  | todo   | Fragment library: one global loading flag spins every row's buttons                |
-| UX-30 | P3  | todo   | Slack "Add to Slack" OAuth button has no pending state                             |
+| UX-29 | P3  | done   | Fragment library: one global loading flag spins every row's buttons                |
+| UX-30 | P3  | done   | Slack "Add to Slack" OAuth button has no pending state                             |
 | UX-31 | P3  | todo   | "Edit" on list items doesn't scroll/focus the offscreen edit form                  |
 
 - **UX-18 — Dirty modals discard input. DONE.** A shared `composables/useUnsavedGuard.ts`
@@ -208,15 +212,18 @@ per-file patches:
   `PersonalSubscriptionSection`) are converted to the same masked-by-default `SecretInput`, so
   live vendor keys no longer render in cleartext (shoulder-surf / screen-share leakage). These
   keys are single-line tokens, so the single-line masked input + reveal is the correct shape.
-- **UX-21 — Unguarded unlink.** `fragments/FragmentLibraryManager.vue:233-240`
-  (button :502-508) fires immediately, while sibling `removeFragment` (:124-140)
-  routes through `confirm()`. Fix: same confirm dialog.
+- **UX-21 — Unguarded unlink. DONE.** `unlinkSource` in `FragmentLibraryManager.vue`
+  now routes through `useConfirm()` (destructive variant, naming the `owner/repo` and
+  new `fragments.confirmUnlinkSource.*` keys) before removing the source + its synced
+  guideline fragments, mirroring the sibling `removeFragment` confirm.
 - **UX-22 — Submit-only validation.** `auth/ResetPasswordScreen.vue:21-30` — the
   length≥8 and match checks run only on submit; no live hint or match indicator.
-- **UX-23 — Fragile Slack mapping rows.** `slack/SlackPanel.vue:292` (`:key="i"`)
-  - save filter at `:151`. Deleting a middle row can misbind `v-model`s; rows
-    missing either id are silently dropped on save. Fix: stable keys + block/warn on
-    incomplete rows.
+- **UX-23 — Fragile Slack mapping rows. DONE.** `SlackPanel.vue`'s member-map rows now
+  carry a client-only stable `uid` (`v-model` keyed by `entry.uid`, not the array index)
+  so deleting a middle row can't rebind a neighbour's inputs, and `saveMapping` **blocks**
+  with a warning toast (`slack.members.incomplete{Title,Body}`) when any row is half-filled
+  (exactly one of user-id / Slack-id present) instead of silently dropping it; a fully-empty
+  row is still just an unused slot and is ignored.
 - **UX-24 — Datadog forced re-entry.** `settings/ObservabilityConnectionPanel.vue:216-219`
   disables save unless both write-only keys are present, so changing only `site`
   requires re-pasting both secrets — while the panel's own incident section (:75)
@@ -238,12 +245,17 @@ per-file patches:
 - **UX-28 — No counters on bounded fields.** `bootstrap/BootstrapModal.vue:90-97`
   errors on repo-name >100 chars but the input has no `maxlength`/counter;
   description/instructions have neither.
-- **UX-29 — Global loading flag.** `FragmentLibraryManager.vue` — every row's
-  sync/refresh button binds `:loading="library.loading"` (:399, :499), so one
-  action spins all rows; `checkSource`/`unlinkSource` (:493, :502-508) show no
-  loading at all. Fix: track in-flight row id.
-- **UX-30 — Inert OAuth button.** `SlackPanel.vue:176-183` awaits `installUrl()`
-  with no `:loading` (paste-token button beside it does it right).
+- **UX-29 — Global loading flag. DONE.** `FragmentLibraryManager.vue` no longer binds
+  its row buttons to the shared `library.loading`. A `reactive(new Set())` of keyed
+  in-flight ids (`refresh:`/`remove:`/`sync:`/`check:`/`unlink:` + row id) drives each row
+  button's `:loading` via a `withRow(key, fn)` wrapper, so only the button that triggered an
+  action spins (and `checkSource`/`unlinkSource`, previously unspinnable, now show progress).
+  The three add/link submit buttons got their own local `creating`/`linkingDoc`/`linkingSource`
+  refs so they no longer cross-spin during a row action (and the `linkSource` button, which
+  never set `library.loading`, now shows its own progress).
+- **UX-30 — Inert OAuth button. DONE.** `SlackPanel.vue`'s "Add to Slack" button binds a
+  `connectingOAuth` ref set before awaiting `installUrl()`; it clears only on the error path
+  (the success path navigates the browser away), matching the paste-token button beside it.
 - **UX-31 — Edit without focus move.** `LocalModelEndpointsPanel.vue:228`,
   `UserSecretsSection` — "edit" mutates state but the form is below a long list;
   on small viewports the click appears to do nothing. Fix: scroll-into-view + focus.
@@ -255,14 +267,14 @@ per-file patches:
 | UX-32 | P1  | done    | Requirements/Clarity review actions completely hidden below `lg` — gate unadvanceable                            |
 | UX-33 | P1  | done    | Typed review answers lost when window closes without blur/save                                                   |
 | UX-34 | P2  | done    | Requirements auto-saves on blur; Clarity needs explicit "Save answer" — opposite models                          |
-| UX-35 | P2  | todo    | No elapsed time on running steps in PipelineProgress / TaskExecution                                             |
+| UX-35 | P2  | done    | No elapsed time on running steps in PipelineProgress / TaskExecution                                             |
 | UX-36 | P2  | done    | Raw model id rendered verbatim in review windows                                                                 |
 | UX-37 | P2  | done    | Internal `agentKind` enum + raw model id leak in consensus window                                                |
 | UX-38 | P2  | done    | Clipboard copies give no feedback and swallow failures                                                           |
 | UX-39 | P2  | done    | Agent/provider errors have no copy button                                                                        |
-| UX-40 | P2  | todo    | Inspector "Run" disabled with no explanation                                                                     |
-| UX-41 | P2  | todo    | Stopping a running bootstrap has no confirmation                                                                 |
-| UX-42 | P3  | todo    | "Restart from here" only visible on hover (invisible on touch)                                                   |
+| UX-40 | P2  | done    | Inspector "Run" disabled with no explanation                                                                     |
+| UX-41 | P2  | done    | Stopping a running bootstrap has no confirmation                                                                 |
+| UX-42 | P3  | done    | "Restart from here" only visible on hover (invisible on touch)                                                   |
 | UX-43 | P3  | done    | Agent prose rendered as plain text in several result views                                                       |
 | UX-44 | P3  | partial | Structured JSON / consensus output lack copy buttons; no jump-to-latest in live stream; findings lack timestamps |
 
@@ -288,11 +300,15 @@ w-72 … lg:flex">`, so below `lg` (laptop split-screen, tablet) the human could
   differs, and the explicit "Save answer" button (+ its `clarity.saveAnswer` /
   `clarity.refineAnswerPlaceholder` i18n keys, removed from all 8 locales) is gone. Both
   windows now behave identically.
-- **UX-35 — No elapsed clock.** `pipeline/PipelineProgress.vue` and
-  `panels/inspector/TaskExecution.vue` show spinner/phase/subtasks but no duration;
-  `composables/useStepTimer.ts` is wired only into the step-detail overlay. A step
-  that hasn't emitted subtasks reads as hung. Fix: surface `durationLabel` inline
-  on the active step.
+- **UX-35 — No elapsed clock. DONE.** `pipeline/PipelineProgress.vue` and
+  `panels/inspector/TaskExecution.vue` now surface each step's elapsed time inline (a small
+  mono clock next to the step's sub-label / state), so a running step that hasn't emitted
+  subtasks reads as progressing rather than hung. `composables/useStepTimer.ts`'s
+  freeze-at-finish/failure/park logic was extracted into pure helpers
+  (`stepDurationMs`/`stepDurationLabel`/`stepIsRunning`) plus a shared `useNowTick()` 1s tick,
+  so the list views drive N steps' live clocks from one interval and reuse the exact freeze
+  rules the step-detail overlay already used. A finished step shows its total duration; a live
+  one counts up.
 - **UX-36 — Raw model ref. DONE.** `RequirementsReviewWindow.vue` and
   `ClarityReviewWindow.vue` now render the reviewer model via
   `models.labelForRef(review.model) ?? review.model` (the friendly `<label> · <provider>`
@@ -314,15 +330,24 @@ w-72 … lg:flex">`, so below `lg` (laptop split-screen, tablet) the human could
   get it), the consensus failure banner (`ConsensusSessionWindow.vue`, when there's an error
   string), and the gate failure summary (`GateResultView.vue`, both the human-review and
   conflicts blocks).
-- **UX-40 — Unexplained lock.** `panels/InspectorPanel.vue:493-504` — when
-  `!runnable` the run trigger becomes a disabled lock icon with no tooltip stating
-  the blocking condition (unmet dependency, wrong status, …).
-- **UX-41 — Unguarded bootstrap stop.** `InspectorPanel.vue:386` +
-  `AgentStopButton.vue:29` kill the container immediately on click, while the
-  comparable task reset is confirm-gated (`TaskExecution.vue:148-159`).
-- **UX-42 — Hover-only restart.** `PipelineProgress.vue:325` styles the restart
-  button `opacity-0 group-hover:opacity-100` — invisible on touch, no focus
-  affordance. Fix: also reveal on `focus-within`, or always show dimmed.
+- **UX-40 — Unexplained lock. DONE.** `panels/InspectorPanel.vue` — a disabled task Run
+  button now names WHY it is locked: `board.unmetDeps(id)` feeds a pluralized
+  `panels.inspector.runBlocked` reason (the unfinished dependency titles), rendered both as
+  the button `:title` AND as a visible amber hint line above the actions
+  (`data-testid="run-blocked-reason"`). The visible line is deliberate — a native `title` on a
+  disabled button never fires hover, so pointer, keyboard, and touch users all get the reason.
+  (`isRunnable` is purely dependency-gated, so the reason is non-null exactly when the button
+  is disabled.)
+- **UX-41 — Unguarded bootstrap stop. DONE.** The shared `board/AgentStopButton.vue` (used by
+  the board card AND the inspector's bootstrap-stop) now routes through `useConfirm()` before
+  killing the container — `board.stop.confirm.{title,body,confirm}` — matching the
+  confirm-then-mutate contract the task reset path uses. Fixing it in the shared primitive
+  covers every stop surface at once (bootstrap + execution runs alike).
+- **UX-42 — Hover-only restart. DONE.** The restart-from-here button in `PipelineProgress.vue`
+  keeps its `opacity-0 group-hover:opacity-100` reveal but now also shows on
+  `group-focus-within:opacity-100` (keyboard-tabbing into the step row reveals it) and
+  `focus-visible:opacity-100` (the button itself receiving focus), so it is no longer invisible
+  to keyboard/touch.
 - **UX-43 — Markdown as plain text. DONE.** A new shared `renderMarkdown()`
   (`utils/agentOutput.ts` — the same secure markdown-it config as the reader, `html:false`,
   links decorated to open safely) plus a reusable `common/MarkdownProse.vue` component replace
@@ -641,6 +666,55 @@ w-72 … lg:flex">`, so below `lg` (laptop split-screen, tablet) the human could
   input is the right shape even for long tokens (the four UX-20 `UTextarea`s were single-line
   vendor keys); reserve a real `UTextarea` for genuinely multi-line secrets (e.g. a PEM key),
   which this primitive does not cover.
+- **A running step's elapsed clock comes from `useStepTimer`'s pure helpers, not a bespoke
+  timer.** `stepDurationMs`/`stepDurationLabel`/`stepIsRunning` + a shared `useNowTick()` (all
+  in `composables/useStepTimer.ts`) encode the one freeze rule — a step's clock stops at its
+  finish, else the run's failure time, else the human-park (`pausedAt`), else it counts up to
+  `now`. A list surface (the pipeline timeline, the inspector run list) drives every row's clock
+  from ONE `useNowTick()` tick + the pure `stepDurationLabel(step, now, runFailed, failureAt)`;
+  a single-step overlay keeps using the `useStepTimer({...})` computed wrapper. Do NOT hand-roll
+  a second interval or re-derive the freeze logic.
+- **Guard a destructive action in the SHARED primitive, not per call-site, when one exists.**
+  Stopping a run (kill the container) is confirm-gated inside `board/AgentStopButton.vue` itself
+  (via `useConfirm()`), so every surface that mounts it — board card + inspector bootstrap stop —
+  inherits the confirm at once, mirroring how the board delete/undo path lives in `stores/board.ts`.
+  Reach for the shared component before sprinkling `confirm()` at each usage. The one stop surface
+  that does NOT mount that primitive — the inspector's live task-execution stop
+  (`TaskExecution.vue` calls `execution.stop()`, not `agentRuns.stop()`) — is confirm-gated at its
+  own call site reusing the SAME `board.stop.confirm.*` keys, so a run's stop is confirmed
+  identically no matter which surface it is triggered from.
+- **A disabled control must say WHY, and a native `title` on a disabled element is not
+  enough.** A disabled `<button>`/`<UButton>` doesn't fire hover, so its `title` tooltip never
+  shows — pair the title with a visible hint line (see UX-40's `runBlocked` reason, rendered
+  both as `:title` and as an amber line with a `data-testid`) so pointer, keyboard, and touch
+  users all get the reason. Derive the reason from the SAME predicate that disables the control
+  (here `board.unmetDeps` ⇄ `isRunnable`) so the two can't drift.
+- **Reveal a hover-only affordance on keyboard focus too.** An `opacity-0
+group-hover:opacity-100` control is invisible to keyboard/touch; add
+  `group-focus-within:opacity-100` (tabbing into the containing row) and `focus-visible:opacity-100`
+  (the control itself focused) so it isn't a pointer-only gesture (UX-42).
+- **Per-item async feedback comes from per-key in-flight tracking, not a shared store
+  `loading` flag, for any LIST of actionable rows.** A single `store.loading` bound to every
+  row's button spins them all at once and cross-spins sibling forms (UX-29). Track a
+  `reactive(new Set<string>())` of keyed ids (`<action>:<rowId>`) and wrap each row action in a
+  `withRow(key, fn)` helper that adds/removes the key in a `try/finally`; bind `:loading` to
+  `set.has(key)`. Give each distinct form-submit its OWN local `ref` so it can't inherit an
+  unrelated action's spinner. (Same "one control, one signal" idea as the elapsed-clock and
+  disabled-reason conventions.)
+- **A list of editable rows keys `v-model` by a client-only stable `uid`, never the array
+  index.** Deleting/reordering a middle row with `:key="i"` silently rebinds a neighbour's
+  inputs (UX-23). Stamp each row a `uid` on load/add (a module `let seq = 0; nextUid()` counter —
+  do NOT reach for `Math.random`), key by it, delete by it, and re-stamp on save-reload. Pair
+  with a save-time integrity check: a half-filled row (some but not all required fields) BLOCKS
+  the save with a warning toast rather than being silently dropped; a fully-empty row is an
+  unused slot and is ignored.
+- **A destructive list-row action gets the same `useConfirm()` gate its siblings have.** An
+  `unlink`/`remove`/`disconnect` that removes real state (a synced fragment source and its
+  fragments — UX-21) must route through `useConfirm({ variant: 'destructive', … })` naming the
+  target, mirroring the nearest already-confirmed sibling in the same component (`removeFragment`).
+- **A button that triggers a full-page navigation still needs a pending state.** `SlackPanel`'s
+  OAuth button sets a `connectingOAuth` ref before `await`ing the redirect URL and clears it ONLY
+  on the error path — the success path unloads the page, so there is nothing to reset (UX-30).
 - When fixing i18n papercuts (UX-13), remember the locale-parity CI check: adding,
   changing, OR removing an `en.json` key requires the same change in every other locale in
   the same PR (removing the two dead `clarity.*` keys above meant editing all 8 locales).

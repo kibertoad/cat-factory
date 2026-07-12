@@ -2,14 +2,17 @@ import {
   type Clock,
   type IdGenerator,
   DEFAULT_WORKSPACE_SETTINGS,
+  readCachedWorkspaceSettings,
   redactSecrets,
 } from '@cat-factory/kernel'
 import type {
+  GroupCacheHandle,
   HarnessCallMetric,
   LlmCallMetric,
   LlmCallMetricRepository,
   LlmCallMetricSummary,
   LlmTraceSink,
+  WorkspaceSettingsCacheValue,
   WorkspaceSettingsRepository,
 } from '@cat-factory/kernel'
 import type { LlmMetricsExport } from '@cat-factory/contracts'
@@ -43,6 +46,13 @@ export interface LlmObservabilityServiceDependencies {
    * Absent ⇒ gate only on {@link recordPrompts} (existing behaviour).
    */
   workspaceSettingsRepository?: WorkspaceSettingsRepository
+  /**
+   * The shared {@link AppCaches.workspaceSettings} slice. When wired alongside the settings
+   * repository, {@link bodiesEnabled} resolves the row through it — this read runs per
+   * recorded LLM call, so caching it (invalidated by `WorkspaceSettingsService.update`)
+   * avoids a DB read per call. Absent ⇒ read live.
+   */
+  workspaceSettingsCache?: GroupCacheHandle<WorkspaceSettingsCacheValue>
 }
 
 /**
@@ -122,6 +132,7 @@ export class LlmObservabilityService {
   private readonly recordPrompts: boolean
   private readonly traceSink?: LlmTraceSink
   private readonly workspaceSettings?: WorkspaceSettingsRepository
+  private readonly workspaceSettingsCache?: GroupCacheHandle<WorkspaceSettingsCacheValue>
 
   constructor({
     llmCallMetricRepository,
@@ -130,6 +141,7 @@ export class LlmObservabilityService {
     recordPrompts = true,
     traceSink,
     workspaceSettingsRepository,
+    workspaceSettingsCache,
   }: LlmObservabilityServiceDependencies) {
     this.repository = llmCallMetricRepository
     this.idGenerator = idGenerator
@@ -137,6 +149,7 @@ export class LlmObservabilityService {
     this.recordPrompts = recordPrompts
     this.traceSink = traceSink
     this.workspaceSettings = workspaceSettingsRepository
+    this.workspaceSettingsCache = workspaceSettingsCache
   }
 
   /**
@@ -240,7 +253,12 @@ export class LlmObservabilityService {
    */
   private async bodiesEnabled(workspaceId: string): Promise<boolean> {
     if (!this.workspaceSettings) return true
-    const settings = (await this.workspaceSettings.get(workspaceId)) ?? DEFAULT_WORKSPACE_SETTINGS
+    const settings =
+      (await readCachedWorkspaceSettings(
+        this.workspaceSettingsCache,
+        this.workspaceSettings,
+        workspaceId,
+      )) ?? DEFAULT_WORKSPACE_SETTINGS
     return settings.storeAgentContext
   }
 

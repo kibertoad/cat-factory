@@ -320,7 +320,12 @@
       "bootstrapStopped": "ブートストラップを停止しました",
       "runStopped": "実行を停止しました",
       "stoppedDescription": "コンテナが終了され、実行はキャンセルされました。",
-      "stopFailed": "停止に失敗しました"
+      "stopFailed": "停止に失敗しました",
+      "confirm": {
+        "title": "この実行を停止しますか？",
+        "body": "実行中のコンテナが終了します。実行は表示されたまま残り、再試行できます。",
+        "confirm": "実行を停止"
+      }
     },
     "frame": {
       "status": {
@@ -880,7 +885,8 @@
         "title": "実行履歴はまだありません",
         "body": "パイプラインを開始すると、ここに実行履歴が表示されます。"
       },
-      "chooseApproach": "アプローチを選択"
+      "chooseApproach": "アプローチを選択",
+      "elapsedTooltip": "このステップの経過時間"
     },
     "structure": {
       "title": "構造",
@@ -1172,7 +1178,8 @@
       "confirmArchive": {
         "title": "このサービスをアーカイブしますか？",
         "body": "「{name}」とそのタスクはボードから非表示になります。いつでも復元できます。"
-      }
+      },
+      "runBlocked": "未完了の依存関係によってブロックされています: {names} | {count} 件の未完了の依存関係によってブロックされています: {names}"
     }
   },
   "observability": {
@@ -2925,7 +2932,9 @@
       "userIdPlaceholder": "ユーザーID (usr_...)",
       "slackIdPlaceholder": "SlackメンバーID (U...)",
       "add": "メンバーを追加",
-      "save": "マップを保存"
+      "save": "マップを保存",
+      "incompleteTitle": "メンバー行が未入力です",
+      "incompleteBody": "保存する前に、ユーザー ID と Slack メンバー ID の両方を入力するか、行を削除してください。"
     },
     "routable": {
       "merge_review": "マージレビュー",
@@ -3270,7 +3279,8 @@
       "forkDecision": {
         "proposing": "アプローチを提案中…",
         "choose": "アプローチを選択"
-      }
+      },
+      "elapsedTooltip": "このステップの経過時間"
     },
     "health": {
       "title": "パイプラインの状態",
@@ -4176,6 +4186,11 @@
     "confirmRemove": {
       "title": "このフラグメントを削除しますか？",
       "body": "「{name}」が削除されます。 この操作は取り消せません。"
+    },
+    "confirmUnlinkSource": {
+      "title": "このソースのリンクを解除しますか？",
+      "body": "「{repo}」と、そこから同期されたガイドライン断片が削除されます。後で再リンクできます。",
+      "confirm": "リンク解除"
     },
     "unavailable": "このデプロイではプロンプトフラグメントライブラリが有効になっていません。"
   },

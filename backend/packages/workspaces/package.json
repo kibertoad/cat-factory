@@ -1,6 +1,6 @@
 {
   "name": "@cat-factory/workspaces",
-  "version": "0.13.28",
+  "version": "0.13.32",
   "description": "Tenancy base services (workspaces and accounts) for the Agent Architecture Board.",
   "repository": {
     "type": "git",
@@ -35,7 +35,7 @@
     "@cat-factory/kernel": "workspace:*"
   },
   "devDependencies": {
-    "typescript": "7.0.1-rc",
-    "vitest": "^4.1.9"
+    "typescript": "7.0.2",
+    "vitest": "^4.1.10"
   }
 }

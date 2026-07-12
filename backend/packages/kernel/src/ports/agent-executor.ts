@@ -20,6 +20,7 @@ import type {
   TaskTypeFields,
   WebSearchAvailability,
 } from '../domain/types.js'
+import type { ContainerEvictionKind } from './runner-transport.js'
 import type { InitiativePresetPhaseTemplate } from '@cat-factory/contracts'
 
 // Port for "an agent doing its work". The execution engine calls this to perform
@@ -666,9 +667,19 @@ export type AgentJobUpdate =
    * classify the failure (→ `AgentFailureKind`) without regex-matching `error`; absent on an
    * older harness image (the driver falls back to the error-string regex). `detail` carries an
    * extended, redacted diagnostic (phase timings, last-tool breadcrumb) distinct from the
-   * one-line `error`, surfaced as the failure detail on the board.
+   * one-line `error`, surfaced as the failure detail on the board. `evicted` carries the
+   * transport's STRUCTURED container-eviction classification (forwarded from
+   * {@link RunnerJobView.evicted}) so the driver recovers it on the right budget without
+   * regex-matching `error`; absent on a non-eviction failure or an older producer.
    */
-  | { state: 'failed'; error: string; failureCause?: string; detail?: string; backend?: string }
+  | {
+      state: 'failed'
+      error: string
+      failureCause?: string
+      detail?: string
+      backend?: string
+      evicted?: ContainerEvictionKind
+    }
 
 /**
  * An executor whose work can outlive a single request. Instead of `run()`

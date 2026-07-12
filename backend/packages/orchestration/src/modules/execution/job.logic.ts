@@ -1,5 +1,5 @@
-import type { AgentFailureKind } from '@cat-factory/kernel'
-import { DomainError, getErrorMessage } from '@cat-factory/kernel'
+import type { AgentFailureKind, ContainerEvictionKind } from '@cat-factory/kernel'
+import { DispatchError, DomainError, getErrorMessage } from '@cat-factory/kernel'
 
 /**
  * Maximum number of times a step's *crash* eviction (OOM / a genuine crash) is
@@ -74,6 +74,9 @@ export interface DispatchFailureClassification {
  *    the SPA renders precise guidance ("GitHub not connected") instead of the misleading
  *    "container failed to start".
  *  - A container eviction/crash routes to `evicted` (a fresh-container retry may help).
+ *  - A structured {@link DispatchError} from a transport `dispatch()` routes to `dispatch` and
+ *    surfaces its already-elaborated message verbatim (the raw status line + any 404 stale-image
+ *    remedy), rather than the generic "failed to start" framing.
  *  - Anything else is a genuine container accept failure (`dispatch`): the container/runner
  *    never accepted the job (an HTTP/network error, a capacity blip).
  */
@@ -91,6 +94,9 @@ export function classifyDispatchFailure(error: unknown): DispatchFailureClassifi
   if (isContainerEvictionError(message)) {
     return { error: message, failureKind: 'evicted', detail: message }
   }
+  if (error instanceof DispatchError) {
+    return { error: message, failureKind: 'dispatch', detail: message }
+  }
   return { error: 'The container failed to start.', failureKind: 'dispatch', detail: message }
 }
 
@@ -104,6 +110,25 @@ export function classifyDispatchFailure(error: unknown): DispatchFailureClassifi
  */
 export function isTransientEviction(error: string | undefined): boolean {
   return error !== undefined && error.includes(TRANSIENT_EVICTION_MARKER)
+}
+
+/**
+ * The structured container-eviction verdict for a failed job, preferring the transport's
+ * {@link ContainerEvictionKind | evicted} field and falling back to the error-string sentinels
+ * (`(container evicted or crashed)` + {@link TRANSIENT_EVICTION_MARKER}) only when it is absent —
+ * an older producer / a pool that doesn't forward the field. Returns undefined when the failure
+ * is NOT an eviction, so the caller proceeds with its own genuine-failure handling. This is the
+ * single seam consumers read instead of calling {@link isContainerEvictionError} /
+ * {@link isTransientEviction} directly, so the structured field is the load-bearing signal and
+ * the regexes are the compatibility fallback (section I of the error-message initiative).
+ */
+export function evictionKindOf(
+  evicted: ContainerEvictionKind | undefined,
+  error: string | undefined,
+): ContainerEvictionKind | undefined {
+  if (evicted) return evicted
+  if (!isContainerEvictionError(error)) return undefined
+  return isTransientEviction(error) ? 'transient' : 'crash'
 }
 
 /**

@@ -4,12 +4,16 @@ import type { ModelRef } from '@cat-factory/kernel'
 import type { Clock, IdGenerator } from '@cat-factory/kernel'
 import type {
   AccountRepository,
+  BudgetLimitCacheValue,
+  GroupCacheHandle,
   TokenUsageRepository,
   UsageBilling,
   UsageBreakdownRow,
   UserSettingsRepository,
+  WorkspaceSettingsCacheValue,
   WorkspaceSettingsRepository,
 } from '@cat-factory/kernel'
+import { readCachedWorkspaceSettings } from '@cat-factory/kernel'
 import {
   type SpendPricing,
   effectiveTierLimit,
@@ -52,6 +56,18 @@ export interface SpendServiceDependencies {
    * the static table is used (the fallback price applies to uncatalogued slugs).
    */
   dynamicPricesFor?: (workspaceId: string) => Promise<OpenRouterModelMeta[]>
+  /**
+   * The shared {@link AppCaches.workspaceSettings} slice, through which the hot
+   * {@link SpendService.resolvePricing} read resolves a workspace's budget overrides —
+   * folding what used to be a per-service homebrew TTL `Map` into the app cache seam, so a
+   * budget edit invalidates coherently across replicas (the `Map` served stale peers for
+   * its TTL). Absent ⇒ the settings row is read live per call (standalone tests).
+   */
+  workspaceSettingsCache?: GroupCacheHandle<WorkspaceSettingsCacheValue>
+  /** The shared {@link AppCaches.accountBudgetLimit} slice (see `workspaceSettingsCache`). */
+  accountBudgetLimitCache?: GroupCacheHandle<BudgetLimitCacheValue>
+  /** The shared {@link AppCaches.userBudgetLimit} slice (see `workspaceSettingsCache`). */
+  userBudgetLimitCache?: GroupCacheHandle<BudgetLimitCacheValue>
 }
 
 /** Details of a single metered LLM call, handed in by the execution engine. */
@@ -82,9 +98,6 @@ export interface BudgetTierScope {
   userId?: string | null
 }
 
-/** How long a workspace's resolved pricing is cached before reloading (ms). */
-const PRICING_CACHE_TTL_MS = 30_000
-
 /**
  * The spend safeguard. It meters token usage into a persistent ledger, prices
  * each call into a single currency, and reports the current billing period's
@@ -96,8 +109,9 @@ const PRICING_CACHE_TTL_MS = 30_000
  * workspace's currency/monthly-limit overrides onto the built-in base table; the account
  * and user tiers compare their own rollup against a configured limit clamped by the
  * operator env cap. A run is over budget when ANY applicable tier is exhausted.
- * Resolutions are cached briefly so the hot {@link isOverBudget} gate doesn't re-read
- * settings per step.
+ * The workspace-pricing and per-tier-limit reads resolve through the app cache seam
+ * ({@link AppCaches}) so the hot {@link isOverBudget} gate doesn't re-read settings per
+ * step; a budget edit invalidates the relevant slice so it takes effect immediately.
  */
 export class SpendService {
   private readonly tokenUsageRepository: TokenUsageRepository
@@ -108,12 +122,9 @@ export class SpendService {
   private readonly accountRepository?: AccountRepository
   private readonly userSettingsRepository?: UserSettingsRepository
   private readonly dynamicPricesFor?: (workspaceId: string) => Promise<OpenRouterModelMeta[]>
-  private readonly pricingCache = new Map<string, { value: SpendPricing; expiresAt: number }>()
-  private readonly accountLimitCache = new Map<
-    string,
-    { value: number | null; expiresAt: number }
-  >()
-  private readonly userLimitCache = new Map<string, { value: number | null; expiresAt: number }>()
+  private readonly workspaceSettingsCache?: GroupCacheHandle<WorkspaceSettingsCacheValue>
+  private readonly accountBudgetLimitCache?: GroupCacheHandle<BudgetLimitCacheValue>
+  private readonly userBudgetLimitCache?: GroupCacheHandle<BudgetLimitCacheValue>
 
   constructor({
     tokenUsageRepository,
@@ -124,6 +135,9 @@ export class SpendService {
     accountRepository,
     userSettingsRepository,
     dynamicPricesFor,
+    workspaceSettingsCache,
+    accountBudgetLimitCache,
+    userBudgetLimitCache,
   }: SpendServiceDependencies) {
     this.tokenUsageRepository = tokenUsageRepository
     this.idGenerator = idGenerator
@@ -133,6 +147,9 @@ export class SpendService {
     this.accountRepository = accountRepository
     this.userSettingsRepository = userSettingsRepository
     this.dynamicPricesFor = dynamicPricesFor
+    this.workspaceSettingsCache = workspaceSettingsCache
+    this.accountBudgetLimitCache = accountBudgetLimitCache
+    this.userBudgetLimitCache = userBudgetLimitCache
   }
 
   /** Parse a `provider:model` identifier into a {@link ModelRef}. */
@@ -143,75 +160,67 @@ export class SpendService {
   }
 
   /**
-   * The workspace's effective pricing (base table overlaid with its budget overrides),
-   * cached for {@link PRICING_CACHE_TTL_MS}. Falls back to the base table when no
-   * settings repository is wired.
+   * The workspace's effective pricing (base table overlaid with its budget overrides).
+   * The underlying settings row is read through the shared `workspaceSettings` cache slice
+   * (invalidated by `WorkspaceSettingsService.update`, so a budget edit takes effect on the
+   * next call). Falls back to the base table when no settings repository is wired.
    */
   private async resolvePricing(workspaceId: string): Promise<SpendPricing> {
     if (!this.workspaceSettingsRepository) return this.pricing
-    const cached = this.pricingCache.get(workspaceId)
-    const now = this.clock.now()
-    if (cached && cached.expiresAt > now) return cached.value
-    const settings = await this.workspaceSettingsRepository.get(workspaceId)
-    const value = mergeSpendPricing(this.pricing, settings)
-    this.pricingCache.set(workspaceId, { value, expiresAt: now + PRICING_CACHE_TTL_MS })
-    return value
+    const settings = await readCachedWorkspaceSettings(
+      this.workspaceSettingsCache,
+      this.workspaceSettingsRepository,
+      workspaceId,
+    )
+    return mergeSpendPricing(this.pricing, settings)
   }
 
-  /** Invalidate a workspace's cached pricing (called after a budget edit). */
-  invalidatePricing(workspaceId: string): void {
-    this.pricingCache.delete(workspaceId)
+  /**
+   * Invalidate a cached account effective limit (called after an account-budget edit, via
+   * `AccountService`'s budget-change callback). A no-op when no cache is wired.
+   */
+  async invalidateAccountLimit(accountId: string): Promise<void> {
+    await this.accountBudgetLimitCache?.invalidate(accountId, accountId)
   }
 
-  /** Invalidate a cached account effective limit (called after an account-budget edit). */
-  invalidateAccountLimit(accountId: string): void {
-    this.accountLimitCache.delete(accountId)
-  }
-
-  /** Invalidate a cached user effective limit (called after a user-budget edit). */
-  invalidateUserLimit(userId: string): void {
-    this.userLimitCache.delete(userId)
+  /**
+   * Invalidate a cached user effective limit (called after a user-budget edit, via
+   * `UserSettingsService`'s budget-change callback). A no-op when no cache is wired.
+   */
+  async invalidateUserLimit(userId: string): Promise<void> {
+    await this.userBudgetLimitCache?.invalidate(userId, userId)
   }
 
   /**
    * The account tier's effective monthly limit: the configured account limit clamped by
-   * the operator env cap. `Infinity` when the tier is inactive (neither set). Cached for
-   * {@link PRICING_CACHE_TTL_MS}.
+   * the operator env cap. `Infinity` when the tier is inactive (neither set). The configured
+   * limit is read through the shared `accountBudgetLimit` cache slice.
    */
   private async resolveAccountLimit(accountId: string): Promise<number> {
     const cap = this.pricing.accountMonthlyLimitCap
-    if (!this.accountRepository) return effectiveTierLimit(null, cap)
-    const now = this.clock.now()
-    const cached = this.accountLimitCache.get(accountId)
-    let configured: number | null
-    if (cached && cached.expiresAt > now) {
-      configured = cached.value
-    } else {
-      const account = await this.accountRepository.get(accountId)
-      configured = account?.spendMonthlyLimit ?? null
-      this.accountLimitCache.set(accountId, {
-        value: configured,
-        expiresAt: now + PRICING_CACHE_TTL_MS,
-      })
-    }
-    return effectiveTierLimit(configured, cap)
+    const repository = this.accountRepository
+    if (!repository) return effectiveTierLimit(null, cap)
+    const load = async (): Promise<BudgetLimitCacheValue> => ({
+      limit: (await repository.get(accountId))?.spendMonthlyLimit ?? null,
+    })
+    const { limit } = this.accountBudgetLimitCache
+      ? await this.accountBudgetLimitCache.get(accountId, accountId, load)
+      : await load()
+    return effectiveTierLimit(limit, cap)
   }
 
   /** The user tier's effective monthly limit (configured user limit clamped by the env cap). */
   private async resolveUserLimit(userId: string): Promise<number> {
     const cap = this.pricing.userMonthlyLimitCap
-    if (!this.userSettingsRepository) return effectiveTierLimit(null, cap)
-    const now = this.clock.now()
-    const cached = this.userLimitCache.get(userId)
-    let configured: number | null
-    if (cached && cached.expiresAt > now) {
-      configured = cached.value
-    } else {
-      const settings = await this.userSettingsRepository.get(userId)
-      configured = settings?.spendMonthlyLimit ?? null
-      this.userLimitCache.set(userId, { value: configured, expiresAt: now + PRICING_CACHE_TTL_MS })
-    }
-    return effectiveTierLimit(configured, cap)
+    const repository = this.userSettingsRepository
+    if (!repository) return effectiveTierLimit(null, cap)
+    const load = async (): Promise<BudgetLimitCacheValue> => ({
+      limit: (await repository.get(userId))?.spendMonthlyLimit ?? null,
+    })
+    const { limit } = this.userBudgetLimitCache
+      ? await this.userBudgetLimitCache.get(userId, userId, load)
+      : await load()
+    return effectiveTierLimit(limit, cap)
   }
 
   /** Meter and persist one LLM call; returns its estimated cost. */

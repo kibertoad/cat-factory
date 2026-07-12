@@ -320,7 +320,12 @@
       "bootstrapStopped": "Arranque detenido",
       "runStopped": "Ejecución detenida",
       "stoppedDescription": "El contenedor se cerró y la ejecución se canceló.",
-      "stopFailed": "No se pudo detener"
+      "stopFailed": "No se pudo detener",
+      "confirm": {
+        "title": "¿Detener esta ejecución?",
+        "body": "Se detendrá el contenedor en ejecución. La ejecución seguirá visible y podrá reintentarse.",
+        "confirm": "Detener ejecución"
+      }
     },
     "frame": {
       "status": {
@@ -880,7 +885,8 @@
         "title": "Aún no hay ejecuciones",
         "body": "Inicia un pipeline para ver el historial de ejecución aquí."
       },
-      "chooseApproach": "Elegir enfoque"
+      "chooseApproach": "Elegir enfoque",
+      "elapsedTooltip": "Tiempo transcurrido en este paso"
     },
     "structure": {
       "title": "Estructura",
@@ -1172,7 +1178,8 @@
       "confirmArchive": {
         "title": "¿Archivar este servicio?",
         "body": "«{name}» y sus tareas se ocultarán del tablero. Puedes restaurarlo en cualquier momento."
-      }
+      },
+      "runBlocked": "Bloqueado por una dependencia sin terminar: {names} | Bloqueado por {count} dependencias sin terminar: {names}"
     }
   },
   "observability": {
@@ -2913,7 +2920,9 @@
       "userIdPlaceholder": "Id de usuario (usr_...)",
       "slackIdPlaceholder": "Id de miembro de Slack (U...)",
       "add": "Anadir miembro",
-      "save": "Guardar mapa"
+      "save": "Guardar mapa",
+      "incompleteTitle": "Fila de miembro incompleta",
+      "incompleteBody": "Antes de guardar, completa tanto el id de usuario como el id de miembro de Slack, o elimina la fila."
     },
     "routable": {
       "merge_review": "Revision de fusion",
@@ -3258,7 +3267,8 @@
       "forkDecision": {
         "proposing": "Proponiendo enfoques…",
         "choose": "Elegir un enfoque"
-      }
+      },
+      "elapsedTooltip": "Tiempo transcurrido en este paso"
     },
     "health": {
       "title": "Estado de los pipelines",
@@ -4164,6 +4174,11 @@
     "confirmRemove": {
       "title": "¿Eliminar este fragmento?",
       "body": "Se eliminará \"{name}\". Esta acción no se puede deshacer."
+    },
+    "confirmUnlinkSource": {
+      "title": "¿Desvincular esta fuente?",
+      "body": "«{repo}» y los fragmentos de directrices que sincronizó se eliminarán. Puedes volver a vincularla más tarde.",
+      "confirm": "Desvincular"
     },
     "unavailable": "La biblioteca de fragmentos de prompt no está habilitada en esta implementación."
   },

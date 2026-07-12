@@ -1,6 +1,6 @@
 {
   "name": "@cat-factory/worker",
-  "version": "0.82.14",
+  "version": "0.82.20",
   "description": "Reusable Cloudflare Worker library (Hono + D1) exposing the Agent Architecture Board core: the `createApp()` Hono factory, the default fetch/scheduled/queue handler, and the Durable Object + Workflow classes. Deployments (see deploy/backend) supply the wrangler.toml + config and re-export these.",
   "repository": {
     "type": "git",
@@ -41,9 +41,9 @@
     "db:migrate:provisioning:local": "wrangler d1 migrations apply cat_factory_provisioning --local"
   },
   "dependencies": {
-    "@ai-sdk/anthropic": "^3.0.92",
-    "@ai-sdk/openai": "^3.0.80",
-    "@ai-sdk/openai-compatible": "^2.0.56",
+    "@ai-sdk/anthropic": "^3.0.96",
+    "@ai-sdk/openai": "^3.0.84",
+    "@ai-sdk/openai-compatible": "^2.0.59",
     "@cat-factory/agents": "workspace:*",
     "@cat-factory/caching": "workspace:*",
     "@cat-factory/consensus": "workspace:*",
@@ -61,8 +61,8 @@
     "@cat-factory/spend": "workspace:*",
     "@cloudflare/containers": "^0.3.7",
     "@hono/valibot-validator": "^0.6.1",
-    "ai": "^6.0.219",
-    "hono": "^4.12.27",
+    "ai": "^6.0.224",
+    "hono": "^4.12.29",
     "pino": "^10.3.1",
     "valibot": "^1.4.2",
     "workers-ai-provider": "^3.3.1"
@@ -71,8 +71,8 @@
     "@cat-factory/conformance": "workspace:*",
     "@cloudflare/vitest-pool-workers": "^0.18.0",
     "@cloudflare/workers-types": "^4.20260702.1",
-    "typescript": "7.0.1-rc",
-    "vitest": "^4.1.9",
-    "wrangler": "^4.107.0"
+    "typescript": "7.0.2",
+    "vitest": "^4.1.10",
+    "wrangler": "^4.110.0"
   }
 }

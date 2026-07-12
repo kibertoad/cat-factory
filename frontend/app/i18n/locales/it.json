@@ -1191,7 +1191,8 @@
       "merged": "Unita",
       "open": "Aperta",
       "mergePr": "Unisci PR",
-      "chooseApproach": "Scegli approccio"
+      "chooseApproach": "Scegli approccio",
+      "elapsedTooltip": "Tempo trascorso su questo passaggio"
     },
     "structure": {
       "title": "Struttura",
@@ -1483,7 +1484,8 @@
       "confirmArchive": {
         "title": "Archiviare questo servizio?",
         "body": "\"{name}\" e le sue attività verranno nascosti dalla board. Puoi ripristinarlo in qualsiasi momento."
-      }
+      },
+      "runBlocked": "Bloccato da una dipendenza non completata: {names} | Bloccato da {count} dipendenze non completate: {names}"
     }
   },
   "layout": {
@@ -2140,7 +2142,12 @@
       "bootstrapStopped": "Bootstrap interrotto",
       "runStopped": "Esecuzione interrotta",
       "stoppedDescription": "Il container è stato terminato e l'esecuzione è stata annullata.",
-      "stopFailed": "Interruzione fallita"
+      "stopFailed": "Interruzione fallita",
+      "confirm": {
+        "title": "Interrompere questa esecuzione?",
+        "body": "Il container in esecuzione verrà terminato. L'esecuzione resta visibile e può essere ripetuta.",
+        "confirm": "Interrompi esecuzione"
+      }
     },
     "frame": {
       "status": {
@@ -3028,7 +3035,8 @@
       "forkDecision": {
         "proposing": "Proposta di approcci…",
         "choose": "Scegli un approccio"
-      }
+      },
+      "elapsedTooltip": "Tempo trascorso su questo passaggio"
     },
     "health": {
       "title": "Stato delle pipeline",
@@ -3376,6 +3384,11 @@
     "confirmRemove": {
       "title": "Eliminare questo frammento?",
       "body": "\"{name}\" verra rimosso. Questa operazione non puo essere annullata."
+    },
+    "confirmUnlinkSource": {
+      "title": "Scollegare questa fonte?",
+      "body": "«{repo}» e i frammenti di linee guida che ha sincronizzato verranno rimossi. Potrai ricollegarla in seguito.",
+      "confirm": "Scollega"
     },
     "unavailable": "La libreria di frammenti di prompt non e abilitata per questo deployment."
   },
@@ -3851,7 +3864,9 @@
       "userIdPlaceholder": "Id utente (usr_...)",
       "slackIdPlaceholder": "Id membro Slack (U...)",
       "add": "Aggiungi membro",
-      "save": "Salva mappa"
+      "save": "Salva mappa",
+      "incompleteTitle": "Riga membro incompleta",
+      "incompleteBody": "Prima di salvare, compila sia l’id utente sia l’id membro Slack, oppure rimuovi la riga."
     },
     "routable": {
       "merge_review": "Revisione del merge",

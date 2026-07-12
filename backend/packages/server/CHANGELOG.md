@@ -1,5 +1,145 @@
 # @cat-factory/server
 
+## 0.112.9
+
+### Patch Changes
+
+- 3ce997d: Structured container-eviction signal (error-message initiative I1). A container eviction is now
+  carried on a typed `RunnerJobView.evicted` field (`'crash'` | `'transient'`, the new
+  `ContainerEvictionKind`) minted by every runner transport (Cloudflare, the shared local
+  `harnessHttp`, the local container/pool/process/native-routing transports, and Kubernetes/EKS),
+  forwarded through `AgentJobUpdate`, and read by the execution / bootstrap / env-config-repair
+  consumers via the new `evictionKindOf` extractor. The `(container evicted or crashed)` sentinel +
+  the transient marker are PRESERVED as the fallback for an older producer, so nothing that still
+  matches the string breaks — the structured field is simply the load-bearing signal now, replacing
+  the regex as the primary classification channel.
+- Updated dependencies [3ce997d]
+  - @cat-factory/kernel@0.121.7
+  - @cat-factory/orchestration@0.106.7
+  - @cat-factory/integrations@0.81.13
+  - @cat-factory/agents@0.54.5
+  - @cat-factory/spend@0.12.21
+
+## 0.112.8
+
+### Patch Changes
+
+- 67dccb6: perf(caching): route workspace-settings and spend budget reads through the app cache seam (perf-tracker items 7 & 9)
+
+  Replaces `SpendService`'s three homebrew `{ value, expiresAt }` TTL `Map`s (pricing /
+  account limit / user limit) and the uncached `WorkspaceSettingsService.get` with three new
+  `AppCaches` slices — `workspaceSettings`, `accountBudgetLimit`, `userBudgetLimit` — so these
+  slow-moving reads are coherent across a horizontally-scaled Node deployment (a budget/settings
+  edit invalidates every replica via the notification bus instead of leaving peers stale for the
+  TTL). The workspace-settings row is now read through a single shared slice by
+  `WorkspaceSettingsService`, `SpendService`'s pricing overlay, and
+  `LlmObservabilityService.bodiesEnabled`, so one invalidation on `WorkspaceSettingsService.update`
+  covers them all. The slices are pass-through on the Worker's isolate-safe profile (our own
+  mutable D1 state, no cross-isolate bus).
+
+- Updated dependencies [67dccb6]
+  - @cat-factory/kernel@0.121.6
+  - @cat-factory/spend@0.12.20
+  - @cat-factory/orchestration@0.106.6
+  - @cat-factory/agents@0.54.4
+  - @cat-factory/integrations@0.81.12
+
+## 0.112.7
+
+### Patch Changes
+
+- f8f1aa8: Update workspace dependencies (direct + transitive) to the newest versions published before the
+  `minimumReleaseAge` supply-chain cutoff. No source changes — dependency ranges + the lockfile only.
+
+  - Refreshed direct deps to their newest cooldown-compliant releases: `wrangler` 4.110.0, `hono`
+    4.12.29, `vitest` / `@vitest/coverage-v8` 4.1.10, `oxlint` 1.73.0, `knip` 6.26.0, `msw` 2.15.0,
+    `pg-boss` 12.26.0, `sherif` 1.13.0, `turbo` 2.10.4, `vue-tsc` 3.3.7, `@types/node` 26.1.1,
+    `@nuxtjs/i18n` 10.4.1, `@aws-sdk/client-s3` 3.1085.0.
+  - `typescript` moved off the `7.0.1-rc` prerelease to the stable `7.0.2` release across every
+    package that used the RC (the TS-6 world — the frontend layer and the two runner harnesses —
+    stays on `^6.0.3`).
+  - Vercel AI SDK family held to the `ai@6`-compatible majors that `workers-ai-provider@3.3.1` peers
+    require (`ai` 6.0.224, `@ai-sdk/anthropic|openai|provider` on 3.x, `@ai-sdk/openai-compatible` on
+    2.x, `@ai-sdk/amazon-bedrock` 4.x) — no v7/v5 major bumps.
+  - Coding (`executor-harness`) and deploy runner harnesses updated too, including the pinned
+    in-container coding-agent CLIs (Pi 0.80.6, Claude Code 2.1.207, Codex 0.144.1; the Pi todo /
+    web-tools extensions stay at their lockstep 1.20.0). Their image tags and the three
+    hand-maintained pins were bumped in lockstep, so the runner images must be re-published +
+    deployed for the new tags to roll out.
+
+- Updated dependencies [f8f1aa8]
+  - @cat-factory/agents@0.54.3
+  - @cat-factory/contracts@0.127.1
+  - @cat-factory/integrations@0.81.11
+  - @cat-factory/kernel@0.121.5
+  - @cat-factory/orchestration@0.106.5
+  - @cat-factory/prompt-fragments@0.13.14
+  - @cat-factory/spend@0.12.19
+
+## 0.112.6
+
+### Patch Changes
+
+- e68c958: feat(errors): UI-first remedies for runner-backend / runner-pool / Datadog failures (D2/D3/D4)
+
+  Continues the error-message-coverage initiative through Section D — runtime provider failures now
+  name their fix (the UI location first) and link the relevant docs, instead of surfacing a terse,
+  opaque condition.
+
+  - **D3 — `No runner backend available for workspace 'X'`** (both the Node and Cloudflare transport
+    resolvers) now throws a `ConflictError` carrying the machine `reason` `agent_backend_unconfigured`
+    instead of a plain `Error`. Synchronously it is a clean 409; on the async dispatch path
+    `classifyDispatchFailure` lifts the reason onto the run's `AgentFailure`, so the SPA renders the
+    existing "Agent backend not configured" title + jump (no new locale keys) rather than the
+    misleading "container failed to start". The remedy names the UI path first (Settings → Self-hosted
+    runner pool) and links `backend/docs/runner-pool-integration.md` via the new `DOCS.runnerPool`
+    entry. The load-bearing `No runner backend available for workspace '<id>'` prefix is preserved.
+  - **D2 — runner-pool provider errors** (`RunnerPoolApiError`: a scheduler non-2xx, a missing
+    manifest secret, an OAuth-token rejection) now append a shared UI-first remedy naming where the
+    pool is registered / re-tested, while preserving the raw `<method> → <status>` / `Missing secret`
+    detail ahead of it (still greppable + still matched by the transport's DispatchError re-wrap).
+  - **D4 — Datadog auth failure**: a `401`/`403` from the Datadog API now appends a UI-first remedy
+    pointing at Integrations → Observability connection (the keys are UI-configured — no env var for
+    this connection), preserving the raw `HTTP <status>` diagnostic. A non-auth status (5xx / mapping
+    error) is unchanged.
+
+  `@cat-factory/integrations` keeps its own `docs.ts` (repo-doc + vendor-URL helpers) since it sits
+  below the server layer and cannot import `@cat-factory/server`'s `config/docs.ts`.
+
+- Updated dependencies [e68c958]
+  - @cat-factory/integrations@0.81.10
+  - @cat-factory/orchestration@0.106.4
+
+## 0.112.5
+
+### Patch Changes
+
+- e61c980: perf(dispatch): fan out independent dispatch I/O in one wave (perf item 4)
+
+  `ContainerAgentExecutor.buildJobBody` resolved the per-dispatch inputs one after another —
+  installation-token mint → work-branch ensure → auth → package registries → tester secrets →
+  web-search availability — so every step dispatch (and every tester→fixer re-dispatch epoch)
+  paid ~6 serial GitHub/DB round-trips of latency. Once the repo target is resolved these are
+  mutually independent, so they now run in a single `Promise.all` wave (the repo-scoped token
+  mint + work-branch ensure alongside the workspace/block-scoped auth / registries / secrets /
+  web-search). The apriori/work-branch resolution moved into a `resolveWorkBranchReady` helper so
+  it fits the wave with unchanged behaviour. The best-effort `agentContextObservability.record`
+  stays awaited (with a swallowing `catch`) — it runs after the container job is already
+  dispatched, so it is off the container's critical path, and a bare fire-and-forget `void` would
+  be silently dropped on the Worker once the isolate hibernates on the next durable sleep. Per-kind
+  job-body shapes are byte-identical.
+
+## 0.112.4
+
+### Patch Changes
+
+- Updated dependencies [4810353]
+  - @cat-factory/kernel@0.121.4
+  - @cat-factory/orchestration@0.106.3
+  - @cat-factory/integrations@0.81.9
+  - @cat-factory/agents@0.54.2
+  - @cat-factory/spend@0.12.18
+
 ## 0.112.3
 
 ### Patch Changes

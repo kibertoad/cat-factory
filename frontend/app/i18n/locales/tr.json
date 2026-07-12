@@ -320,7 +320,12 @@
       "bootstrapStopped": "Bootstrap durduruldu",
       "runStopped": "Çalıştırma durduruldu",
       "stoppedDescription": "Konteyner sonlandırıldı ve çalıştırma iptal edildi.",
-      "stopFailed": "Durdurma başarısız oldu"
+      "stopFailed": "Durdurma başarısız oldu",
+      "confirm": {
+        "title": "Bu çalıştırma durdurulsun mu?",
+        "body": "Çalışan konteyner sonlandırılacak. Çalıştırma görünür kalır ve yeniden denenebilir.",
+        "confirm": "Çalıştırmayı durdur"
+      }
     },
     "frame": {
       "status": {
@@ -880,7 +885,8 @@
         "title": "Henüz çalıştırma yok",
         "body": "Çalıştırma geçmişini burada görmek için bir pipeline başlatın."
       },
-      "chooseApproach": "Yaklaşım seç"
+      "chooseApproach": "Yaklaşım seç",
+      "elapsedTooltip": "Bu adımda geçen süre"
     },
     "structure": {
       "title": "Yapı",
@@ -1172,7 +1178,8 @@
       "confirmArchive": {
         "title": "Bu hizmet arşivlensin mi?",
         "body": "\"{name}\" ve görevleri panodan gizlenecek. İstediğin zaman geri yükleyebilirsin."
-      }
+      },
+      "runBlocked": "Tamamlanmamış bir bağımlılık tarafından engellendi: {names} | Tamamlanmamış {count} bağımlılık tarafından engellendi: {names}"
     }
   },
   "observability": {
@@ -2925,7 +2932,9 @@
       "userIdPlaceholder": "Kullanıcı kimliği (usr_...)",
       "slackIdPlaceholder": "Slack üye kimliği (U...)",
       "add": "Üye ekle",
-      "save": "Eşlemeyi kaydet"
+      "save": "Eşlemeyi kaydet",
+      "incompleteTitle": "Eksik üye satırı",
+      "incompleteBody": "Kaydetmeden önce hem kullanıcı kimliğini hem de Slack üye kimliğini girin ya da satırı kaldırın."
     },
     "routable": {
       "merge_review": "Birleştirme incelemesi",
@@ -3270,7 +3279,8 @@
       "forkDecision": {
         "proposing": "Yaklaşımlar öneriliyor…",
         "choose": "Bir yaklaşım seçin"
-      }
+      },
+      "elapsedTooltip": "Bu adımda geçen süre"
     },
     "health": {
       "title": "Pipeline sağlığı",
@@ -4176,6 +4186,11 @@
     "confirmRemove": {
       "title": "Bu parça silinsin mi?",
       "body": "\"{name}\" kaldırılacak. Bu işlem geri alınamaz."
+    },
+    "confirmUnlinkSource": {
+      "title": "Bu kaynağın bağlantısı kaldırılsın mı?",
+      "body": "\"{repo}\" ve onun eşitlediği kılavuz parçaları kaldırılacak. Daha sonra yeniden bağlayabilirsiniz.",
+      "confirm": "Bağlantıyı kaldır"
     },
     "unavailable": "Bu dağıtımda istem parçası kütüphanesi etkin değil."
   },

@@ -1,6 +1,6 @@
 {
   "name": "@cat-factory/eks",
-  "version": "0.1.60",
+  "version": "0.1.65",
   "description": "Opt-in AWS EKS runner + environment backends for cat-factory. Reuses the native Kubernetes transport/provider behind a SigV4-presigned STS (IAM) apiserver token.",
   "repository": {
     "type": "git",
@@ -37,9 +37,9 @@
     "@cat-factory/kernel": "workspace:*"
   },
   "devDependencies": {
-    "@types/node": "^26.1.0",
-    "typescript": "7.0.1-rc",
+    "@types/node": "^26.1.1",
+    "typescript": "7.0.2",
     "valibot": "^1.4.2",
-    "vitest": "^4.1.9"
+    "vitest": "^4.1.10"
   }
 }

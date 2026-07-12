@@ -1191,7 +1191,8 @@
       "merged": "Gemergt",
       "open": "Öffnen",
       "mergePr": "PR mergen",
-      "chooseApproach": "Ansatz wählen"
+      "chooseApproach": "Ansatz wählen",
+      "elapsedTooltip": "Verstrichene Zeit für diesen Schritt"
     },
     "structure": {
       "title": "Struktur",
@@ -1483,7 +1484,8 @@
       "confirmArchive": {
         "title": "Diesen Dienst archivieren?",
         "body": "„{name}“ und seine Aufgaben werden vom Board ausgeblendet. Du kannst den Dienst jederzeit wiederherstellen."
-      }
+      },
+      "runBlocked": "Blockiert durch eine unerledigte Abhängigkeit: {names} | Blockiert durch {count} unerledigte Abhängigkeiten: {names}"
     }
   },
   "layout": {
@@ -2140,7 +2142,12 @@
       "bootstrapStopped": "Bootstrap gestoppt",
       "runStopped": "Lauf gestoppt",
       "stoppedDescription": "Der Container wurde beendet und der Lauf abgebrochen.",
-      "stopFailed": "Stoppen fehlgeschlagen"
+      "stopFailed": "Stoppen fehlgeschlagen",
+      "confirm": {
+        "title": "Diesen Lauf stoppen?",
+        "body": "Der laufende Container wird beendet. Der Lauf bleibt sichtbar und kann wiederholt werden.",
+        "confirm": "Lauf stoppen"
+      }
     },
     "frame": {
       "status": {
@@ -3028,7 +3035,8 @@
       "forkDecision": {
         "proposing": "Ansätze werden vorgeschlagen…",
         "choose": "Ansatz wählen"
-      }
+      },
+      "elapsedTooltip": "Verstrichene Zeit für diesen Schritt"
     },
     "health": {
       "title": "Pipeline-Zustand",
@@ -3376,6 +3384,11 @@
     "confirmRemove": {
       "title": "Dieses Fragment löschen?",
       "body": "\"{name}\" wird entfernt. Dies kann nicht rückgängig gemacht werden."
+    },
+    "confirmUnlinkSource": {
+      "title": "Diese Quelle trennen?",
+      "body": "„{repo}“ und die davon synchronisierten Richtlinien-Fragmente werden entfernt. Du kannst sie später erneut verknüpfen.",
+      "confirm": "Trennen"
     },
     "unavailable": "Die Prompt-Fragment-Bibliothek ist für dieses Deployment nicht aktiviert."
   },
@@ -3851,7 +3864,9 @@
       "userIdPlaceholder": "Benutzer-ID (usr_...)",
       "slackIdPlaceholder": "Slack-Mitglieds-ID (U...)",
       "add": "Mitglied hinzufügen",
-      "save": "Zuordnung speichern"
+      "save": "Zuordnung speichern",
+      "incompleteTitle": "Unvollständige Mitgliederzeile",
+      "incompleteBody": "Gib vor dem Speichern sowohl die Benutzer-ID als auch die Slack-Mitglieds-ID ein oder entferne die Zeile."
     },
     "routable": {
       "merge_review": "Merge-Review",

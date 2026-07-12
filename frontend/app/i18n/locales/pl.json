@@ -320,7 +320,12 @@
       "bootstrapStopped": "Zatrzymano inicjalizację",
       "runStopped": "Zatrzymano uruchomienie",
       "stoppedDescription": "Kontener został zabity, a uruchomienie anulowane.",
-      "stopFailed": "Nie udało się zatrzymać"
+      "stopFailed": "Nie udało się zatrzymać",
+      "confirm": {
+        "title": "Zatrzymać to uruchomienie?",
+        "body": "Działający kontener zostanie zatrzymany. Uruchomienie pozostanie widoczne i można je ponowić.",
+        "confirm": "Zatrzymaj uruchomienie"
+      }
     },
     "frame": {
       "status": {
@@ -880,7 +885,8 @@
         "title": "Brak uruchomień",
         "body": "Uruchom pipeline, aby zobaczyć tutaj historię uruchomień."
       },
-      "chooseApproach": "Wybierz podejście"
+      "chooseApproach": "Wybierz podejście",
+      "elapsedTooltip": "Czas, który upłynął na tym kroku"
     },
     "structure": {
       "title": "Struktura",
@@ -1172,7 +1178,8 @@
       "confirmArchive": {
         "title": "Zarchiwizować tę usługę?",
         "body": "„{name}” i jej zadania zostaną ukryte z tablicy. Możesz przywrócić usługę w dowolnej chwili."
-      }
+      },
+      "runBlocked": "Zablokowane przez niedokończoną zależność: {names} | Zablokowane przez {count} niedokończone zależności: {names} | Zablokowane przez {count} niedokończonych zależności: {names}"
     }
   },
   "observability": {
@@ -2913,7 +2920,9 @@
       "userIdPlaceholder": "Id uzytkownika (usr_...)",
       "slackIdPlaceholder": "Id czlonka Slacka (U...)",
       "add": "Dodaj czlonka",
-      "save": "Zapisz mape"
+      "save": "Zapisz mape",
+      "incompleteTitle": "Niekompletny wiersz członka",
+      "incompleteBody": "Przed zapisaniem uzupełnij zarówno identyfikator użytkownika, jak i identyfikator członka Slack, albo usuń wiersz."
     },
     "routable": {
       "merge_review": "Przeglad scalenia",
@@ -3258,7 +3267,8 @@
       "forkDecision": {
         "proposing": "Proponowanie podejść…",
         "choose": "Wybierz podejście"
-      }
+      },
+      "elapsedTooltip": "Czas, który upłynął na tym kroku"
     },
     "health": {
       "title": "Stan pipeline'ów",
@@ -4164,6 +4174,11 @@
     "confirmRemove": {
       "title": "Usunąć ten fragment?",
       "body": "\"{name}\" zostanie usunięty. Tej operacji nie można cofnąć."
+    },
+    "confirmUnlinkSource": {
+      "title": "Odłączyć to źródło?",
+      "body": "„{repo}” oraz zsynchronizowane z niego fragmenty wytycznych zostaną usunięte. Możesz połączyć je ponownie później.",
+      "confirm": "Odłącz"
     },
     "unavailable": "Biblioteka fragmentów promptów nie jest włączona w tym wdrożeniu."
   },

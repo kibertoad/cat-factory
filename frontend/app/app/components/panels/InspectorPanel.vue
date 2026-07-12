@@ -100,6 +100,21 @@ const statusLabel = computed(() =>
 
 const runnable = computed(() => (block.value ? board.isRunnable(block.value.id) : false))
 
+// A task runs only once every dependency has merged. When the Run trigger is locked
+// it must say WHY — name the unfinished dependencies rather than showing a bare lock.
+const unmetDepTitles = computed(() =>
+  block.value && isTask.value ? board.unmetDeps(block.value.id).map((b) => b.title) : [],
+)
+const runBlockedReason = computed(() =>
+  unmetDepTitles.value.length
+    ? t(
+        'panels.inspector.runBlocked',
+        { count: unmetDepTitles.value.length, names: unmetDepTitles.value.join(', ') },
+        unmetDepTitles.value.length,
+      )
+    : null,
+)
+
 // The delete control names what it removes, so selecting a task and deleting it
 // reads as "Delete task" rather than ambiguously removing the whole service.
 const deleteLabel = computed(() =>
@@ -532,6 +547,19 @@ const showOriginalDescription = ref(false)
       <!-- initiative: status + goal, run-planning + tracker controls -->
       <InitiativeInspector v-else-if="isInitiative" :block="block" />
 
+      <!-- Locked-run explanation: a disabled task Run button reads as a dead lock unless
+           it says what's holding it. Named here (and on the button title) so the blocking
+           dependencies are visible to pointer, keyboard, and touch alike — a native title
+           on a disabled button doesn't fire hover events. -->
+      <p
+        v-if="isTask && runBlockedReason"
+        class="flex items-start gap-1.5 text-[11px] text-amber-300/90"
+        data-testid="run-blocked-reason"
+      >
+        <UIcon name="i-lucide-lock" class="mt-px h-3 w-3 shrink-0" />
+        <span>{{ runBlockedReason }}</span>
+      </p>
+
       <!-- actions -->
       <div class="flex items-center gap-2">
         <UDropdownMenu v-if="isTask" :items="runMenu">
@@ -542,6 +570,7 @@ const showOriginalDescription = ref(false)
             :icon="runnable ? 'i-lucide-play' : 'i-lucide-lock'"
             trailing-icon="i-lucide-chevron-down"
             :disabled="!runnable"
+            :title="runBlockedReason ?? undefined"
           >
             {{ instance ? t('panels.inspector.reRun') : t('panels.inspector.run') }}
           </UButton>

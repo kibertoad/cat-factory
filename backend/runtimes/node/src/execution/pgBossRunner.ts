@@ -1,6 +1,6 @@
 import type { WorkRunner } from '@cat-factory/kernel'
 import type { Logger, ServerContainer } from '@cat-factory/server'
-import type { Job, PgBoss, SendOptions } from 'pg-boss'
+import type { Job, JobInsert, PgBoss, SendOptions } from 'pg-boss'
 import { BOOTSTRAP_QUEUE, reenqueueStaleBootstrap } from './bootstrapRunner.js'
 import { ENV_CONFIG_REPAIR_QUEUE, reenqueueStaleEnvConfigRepair } from './envConfigRepairRunner.js'
 import { type DriveConfig, driveExecution } from './drive.js'
@@ -53,7 +53,13 @@ export interface AdvanceQueueOptions {
   retryDelaySeconds: number
 }
 
-function sendOptions(executionId: string, opts: AdvanceQueueOptions): SendOptions {
+/**
+ * The single source of truth for an advance job's options, shared by `send` (one job) and
+ * `insert` (a batch) so a batched re-drive carries EXACTLY the same singletonKey/retry/
+ * expiry/heartbeat semantics as an individual `send` — the dedup linchpin can't drift
+ * between the two enqueue paths.
+ */
+function advanceJobOptions(executionId: string, opts: AdvanceQueueOptions) {
   return {
     singletonKey: executionId,
     expireInSeconds: opts.expireInSeconds,
@@ -62,6 +68,23 @@ function sendOptions(executionId: string, opts: AdvanceQueueOptions): SendOption
     retryDelay: opts.retryDelaySeconds,
     retryBackoff: true,
   }
+}
+
+function sendOptions(executionId: string, opts: AdvanceQueueOptions): SendOptions {
+  return advanceJobOptions(executionId, opts)
+}
+
+/**
+ * A batch-insert row for one advance job — the `boss.insert([...])` analogue of
+ * {@link sendOptions}. `insert` compiles to a single
+ * `INSERT … SELECT FROM json_to_recordset(…) ON CONFLICT DO NOTHING`, and the `exclusive`
+ * queue's `(name, singleton_key)` unique index gates that conflict PER ROW — so a batched
+ * re-drive dedupes exactly like N individual `send`s (a row whose run already has a live
+ * advance job is a per-row no-op; the rest insert), preserving the sweeper's
+ * no-double-drive guarantee while collapsing N round-trips into one.
+ */
+function advanceInsert(data: AdvanceJob, opts: AdvanceQueueOptions): JobInsert<AdvanceJob> {
+  return { data, ...advanceJobOptions(data.executionId, opts) }
 }
 
 export class PgBossWorkRunner implements WorkRunner {
@@ -237,6 +260,15 @@ export function startStaleRunSweeper(
       const now = Date.now()
       const stale = await container.agentRunRepository.listStale(now - cfg.leaseMs)
       const stillOrphaned = new Set<string>()
+      // Every `execution.advance` re-drive this tick decides on — stale re-drives below AND
+      // spend-paused resumes further down — is gathered here and flushed as ONE batch
+      // `insert` instead of a `send` per run. singletonKeys are distinct across the batch
+      // (a run is either `running`/stale or `paused`, never both in one tick), so no row
+      // conflicts with another in the same insert; each conflicts only with its own already
+      // -live advance job, which the exclusive index no-ops per row. (Bootstrap /
+      // env-config-repair re-drives target other queues via their own helpers and are left
+      // as individual sends — different queue, typically N=1.)
+      const advanceReenqueues: JobInsert<AdvanceJob>[] = []
       for (const ref of stale) {
         const queue = queueForKind(ref.kind)
         if (!queue) continue
@@ -309,10 +341,8 @@ export function startStaleRunSweeper(
           continue
         }
         log.warn({ workspaceId: ref.workspaceId, executionId: ref.id }, 're-driving stale run')
-        await boss.send(
-          QUEUE,
-          { workspaceId: ref.workspaceId, executionId: ref.id },
-          sendOptions(ref.id, queueOptions),
+        advanceReenqueues.push(
+          advanceInsert({ workspaceId: ref.workspaceId, executionId: ref.id }, queueOptions),
         )
       }
       // Forget runs that recovered (bumped their lease → left the stale set) or went terminal,
@@ -350,12 +380,14 @@ export function startStaleRunSweeper(
           { workspaceId: ref.workspaceId, executionId: ref.id },
           're-driving spend-paused run (workspace/account budget free; step gate re-checks the user tier)',
         )
-        await boss.send(
-          QUEUE,
-          { workspaceId: ref.workspaceId, executionId: ref.id },
-          sendOptions(ref.id, queueOptions),
+        advanceReenqueues.push(
+          advanceInsert({ workspaceId: ref.workspaceId, executionId: ref.id }, queueOptions),
         )
       }
+
+      // One batch insert for every execution.advance re-drive gathered this tick (stale
+      // re-drives + spend-paused resumes), replacing N per-run `send` round-trips.
+      if (advanceReenqueues.length > 0) await boss.insert(QUEUE, advanceReenqueues)
     } catch (error) {
       log.error(
         { err: error instanceof Error ? error.message : String(error) },

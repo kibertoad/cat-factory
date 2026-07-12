@@ -30,6 +30,7 @@ export {
   DEFAULT_WEB_SEARCH_COUNT,
 } from './modules/webSearch/upstreams.js'
 export { escalateStaleNotifications } from './runtime/escalateNotifications.js'
+export { noRunnerBackendAvailableError } from './runtime/runnerBackendError.js'
 export {
   GITHUB_RECONCILE_STALE_MS,
   reconcileStaleRepos,

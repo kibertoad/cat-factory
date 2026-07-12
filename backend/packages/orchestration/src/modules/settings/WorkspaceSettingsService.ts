@@ -1,14 +1,28 @@
 import type {
+  GroupCacheHandle,
   UpdateWorkspaceSettingsInput,
   WorkspaceRepository,
   WorkspaceSettings,
+  WorkspaceSettingsCacheValue,
   WorkspaceSettingsRepository,
 } from '@cat-factory/kernel'
-import { DEFAULT_WORKSPACE_SETTINGS, requireWorkspace } from '@cat-factory/kernel'
+import {
+  DEFAULT_WORKSPACE_SETTINGS,
+  readCachedWorkspaceSettings,
+  requireWorkspace,
+} from '@cat-factory/kernel'
 
 export interface WorkspaceSettingsServiceDependencies {
   workspaceSettingsRepository: WorkspaceSettingsRepository
   workspaceRepository: WorkspaceRepository
+  /**
+   * The shared {@link AppCaches.workspaceSettings} slice. When wired, {@link get} reads
+   * through it and {@link update} invalidates the workspace's entry after the write commits
+   * — the single write path for the row that `SpendService`/`LlmObservabilityService` also
+   * read through the same slice, so a settings/budget edit is coherent everywhere at once.
+   * Absent ⇒ reads go straight to the repository (tests).
+   */
+  workspaceSettingsCache?: GroupCacheHandle<WorkspaceSettingsCacheValue>
 }
 
 /**
@@ -21,15 +35,21 @@ export interface WorkspaceSettingsServiceDependencies {
 export class WorkspaceSettingsService {
   private readonly settings: WorkspaceSettingsRepository
   private readonly workspaceRepository: WorkspaceRepository
+  private readonly cache?: GroupCacheHandle<WorkspaceSettingsCacheValue>
 
   constructor(deps: WorkspaceSettingsServiceDependencies) {
     this.settings = deps.workspaceSettingsRepository
     this.workspaceRepository = deps.workspaceRepository
+    this.cache = deps.workspaceSettingsCache
   }
 
   /** A workspace's settings, falling back to the built-in defaults when none are stored. */
   async get(workspaceId: string): Promise<WorkspaceSettings> {
-    return (await this.settings.get(workspaceId)) ?? { ...DEFAULT_WORKSPACE_SETTINGS }
+    return (
+      (await readCachedWorkspaceSettings(this.cache, this.settings, workspaceId)) ?? {
+        ...DEFAULT_WORKSPACE_SETTINGS,
+      }
+    )
   }
 
   /**
@@ -83,6 +103,10 @@ export class WorkspaceSettingsService {
       if (next.taskLimitPerType == null) next.taskLimitPerType = {}
     }
     await this.settings.upsert(workspaceId, next)
+    // Drop the cached row (and broadcast to peers) after the write commits, so the next
+    // read on this or any replica — including SpendService's pricing overlay — sees the
+    // new settings/budget immediately rather than after the TTL.
+    await this.cache?.invalidate(workspaceId, workspaceId)
     return next
   }
 }

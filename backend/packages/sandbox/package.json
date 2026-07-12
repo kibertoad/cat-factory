@@ -1,6 +1,6 @@
 {
   "name": "@cat-factory/sandbox",
-  "version": "0.9.67",
+  "version": "0.9.71",
   "description": "Parallel prompt/model testing surface: versioned prompt candidates, experiment matrices, judge + objective grading. Isolated from the core product so it can be extracted.",
   "repository": {
     "type": "git",
@@ -37,7 +37,7 @@
     "@cat-factory/sandbox-fixtures": "workspace:*"
   },
   "devDependencies": {
-    "typescript": "7.0.1-rc",
-    "vitest": "^4.1.9"
+    "typescript": "7.0.2",
+    "vitest": "^4.1.10"
   }
 }

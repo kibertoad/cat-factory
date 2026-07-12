@@ -1,9 +1,10 @@
-import { ConflictError } from '@cat-factory/kernel'
+import { ConflictError, harnessDispatchError } from '@cat-factory/kernel'
 import { describe, expect, it } from 'vitest'
 import {
   agentFailureKindFromCause,
   classifyAgentFailure,
   classifyDispatchFailure,
+  evictionKindOf,
   isContainerEvictionError,
   isTransientEviction,
   MAX_EVICTION_RECOVERIES,
@@ -56,6 +57,27 @@ describe('isTransientEviction', () => {
 
   it('gives a transient eviction a larger recovery budget than a crash', () => {
     expect(MAX_TRANSIENT_EVICTION_RECOVERIES).toBeGreaterThan(MAX_EVICTION_RECOVERIES)
+  })
+})
+
+describe('evictionKindOf', () => {
+  it('prefers the transport STRUCTURED field over the error string', () => {
+    // Field wins even when the error string says otherwise (a crash string tagged transient, etc.).
+    expect(evictionKindOf('transient', CRASH_EVICTION)).toBe('transient')
+    expect(evictionKindOf('crash', TRANSIENT_EVICTION)).toBe('crash')
+    // …and even when there is no eviction string at all (the field is authoritative).
+    expect(evictionKindOf('crash', 'Implementation job failed')).toBe('crash')
+    expect(evictionKindOf('transient', undefined)).toBe('transient')
+  })
+
+  it('falls back to the error-string sentinels when no field is present (older producer)', () => {
+    expect(evictionKindOf(undefined, CRASH_EVICTION)).toBe('crash')
+    expect(evictionKindOf(undefined, TRANSIENT_EVICTION)).toBe('transient')
+  })
+
+  it('returns undefined when the failure is not an eviction (no field, no sentinel)', () => {
+    expect(evictionKindOf(undefined, 'Implementation failed: no file changes')).toBeUndefined()
+    expect(evictionKindOf(undefined, undefined)).toBeUndefined()
   })
 })
 
@@ -126,6 +148,17 @@ describe('classifyDispatchFailure', () => {
     expect(c.failureKind).toBe('dispatch')
     expect(c.error).toBe('The container failed to start.')
     expect(c.detail).toBe('HTTP 502 from runner')
+    expect(c.reason).toBeUndefined()
+  })
+
+  it('surfaces a structured DispatchError message verbatim (incl. the 404 stale-image remedy)', () => {
+    const c = classifyDispatchFailure(
+      harnessDispatchError({ label: 'Container', status: 404, body: 'not found' }),
+    )
+    expect(c.failureKind).toBe('dispatch')
+    // Not the generic "failed to start" — the elaborated remedy is the headline + the detail.
+    expect(c.error).toContain('predates this dispatch route')
+    expect(c.detail).toContain('predates this dispatch route')
     expect(c.reason).toBeUndefined()
   })
 })

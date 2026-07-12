@@ -6,7 +6,7 @@
 // the merged catalog (built-in ∪ account ∪ workspace) an agent is selected from per
 // run. The account scope has no resolved/merged catalog and fetches document
 // fragments through `viaWorkspaceId` (document-source credentials are per-workspace).
-import { computed, ref, watch } from 'vue'
+import { computed, reactive, ref, watch } from 'vue'
 import type {
   DocumentSourceKind,
   FragmentOwnerKind,
@@ -111,6 +111,24 @@ function notifyError(title: string, e: unknown) {
   })
 }
 
+// Per-row / per-form in-flight tracking. The store's single `library.loading` flag
+// drove every row's button at once (UX-29) and cross-spun the add/link forms; key
+// each async action so only the control that triggered it shows a spinner.
+const busyRows = reactive(new Set<string>())
+const rowBusy = (key: string) => busyRows.has(key)
+async function withRow(key: string, fn: () => Promise<void>) {
+  if (busyRows.has(key)) return
+  busyRows.add(key)
+  try {
+    await fn()
+  } finally {
+    busyRows.delete(key)
+  }
+}
+const creating = ref(false)
+const linkingDoc = ref(false)
+const linkingSource = ref(false)
+
 // ---- create a hand-authored fragment --------------------------------------
 const draft = ref({ title: '', summary: '', body: '', tags: '' })
 const draftValid = computed(
@@ -119,6 +137,7 @@ const draftValid = computed(
 
 async function createFragment() {
   if (!draftValid.value) return
+  creating.value = true
   try {
     await library.create({
       title: draft.value.title.trim(),
@@ -133,6 +152,8 @@ async function createFragment() {
     toast.add({ title: t('fragments.toast.added'), icon: 'i-lucide-check' })
   } catch (e) {
     notifyError(t('fragments.toast.addFailed'), e)
+  } finally {
+    creating.value = false
   }
 }
 
@@ -146,12 +167,14 @@ async function removeFragment(id: string) {
     icon: 'i-lucide-trash-2',
   })
   if (!ok) return
-  try {
-    await library.remove(id)
-    toast.add({ title: t('fragments.toast.removed'), icon: 'i-lucide-trash-2' })
-  } catch (e) {
-    notifyError(t('fragments.toast.removeFailed'), e)
-  }
+  await withRow(`remove:${id}`, async () => {
+    try {
+      await library.remove(id)
+      toast.add({ title: t('fragments.toast.removed'), icon: 'i-lucide-trash-2' })
+    } catch (e) {
+      notifyError(t('fragments.toast.removeFailed'), e)
+    }
+  })
 }
 
 // ---- document-backed (living) fragments -----------------------------------
@@ -201,6 +224,7 @@ const documentFragments = computed(() => library.fragments.filter((f) => f.docum
 
 async function linkDocumentFragment() {
   if (!docDraftValid.value) return
+  linkingDoc.value = true
   try {
     await library.createDocumentFragment({
       source: docDraft.value.source as DocumentSourceKind,
@@ -214,16 +238,20 @@ async function linkDocumentFragment() {
     toast.add({ title: t('fragments.toast.documentLinked'), icon: 'i-lucide-link' })
   } catch (e) {
     notifyError(t('fragments.toast.linkDocumentFailed'), e)
+  } finally {
+    linkingDoc.value = false
   }
 }
 
 async function refreshFragment(id: string) {
-  try {
-    await library.refreshDocumentFragment(id)
-    toast.add({ title: t('fragments.toast.refreshed'), icon: 'i-lucide-refresh-cw' })
-  } catch (e) {
-    notifyError(t('fragments.toast.refreshFailed'), e)
-  }
+  await withRow(`refresh:${id}`, async () => {
+    try {
+      await library.refreshDocumentFragment(id)
+      toast.add({ title: t('fragments.toast.refreshed'), icon: 'i-lucide-refresh-cw' })
+    } catch (e) {
+      notifyError(t('fragments.toast.refreshFailed'), e)
+    }
+  })
 }
 
 // ---- repo sources ----------------------------------------------------------
@@ -263,6 +291,7 @@ async function linkSource() {
   if (!ownerName) return
   const dirPath =
     (githubReady.value ? sourceDir.value : manualSource.value.dirPath.trim()) || undefined
+  linkingSource.value = true
   try {
     const source = await library.linkSource({
       repoOwner: ownerName.owner,
@@ -271,48 +300,71 @@ async function linkSource() {
       gitRef: sourceRef.value.trim() || undefined,
     })
     resetSourceDraft()
+    // Auto-sync the freshly-linked source via the store method directly (not the
+    // `syncSource` row wrapper): a failure here should surface as a link failure, and
+    // the form-level `linkingSource` spinner already covers the whole operation.
     await library.syncSource(source.id)
     toast.add({ title: t('fragments.toast.sourceLinked'), icon: 'i-lucide-git-branch' })
   } catch (e) {
     notifyError(t('fragments.toast.linkSourceFailed'), e)
+  } finally {
+    linkingSource.value = false
   }
 }
 
 async function syncSource(id: string) {
-  try {
-    const result = await library.syncSource(id)
-    toast.add({
-      title: t('fragments.toast.synced', {
-        updated: result.upserted,
-        removed: result.tombstoned,
-      }),
-      icon: 'i-lucide-refresh-cw',
-      color: 'info',
-    })
-  } catch (e) {
-    notifyError(t('fragments.toast.syncFailed'), e)
-  }
+  await withRow(`sync:${id}`, async () => {
+    try {
+      const result = await library.syncSource(id)
+      toast.add({
+        title: t('fragments.toast.synced', {
+          updated: result.upserted,
+          removed: result.tombstoned,
+        }),
+        icon: 'i-lucide-refresh-cw',
+        color: 'info',
+      })
+    } catch (e) {
+      notifyError(t('fragments.toast.syncFailed'), e)
+    }
+  })
 }
 
 async function checkSource(id: string) {
-  try {
-    const status = await library.checkSource(id)
-    toast.add({
-      title: status.changed ? t('fragments.toast.changesAvailable') : t('fragments.toast.upToDate'),
-      icon: status.changed ? 'i-lucide-bell-dot' : 'i-lucide-check',
-    })
-  } catch (e) {
-    notifyError(t('fragments.toast.checkSourceFailed'), e)
-  }
+  await withRow(`check:${id}`, async () => {
+    try {
+      const status = await library.checkSource(id)
+      toast.add({
+        title: status.changed
+          ? t('fragments.toast.changesAvailable')
+          : t('fragments.toast.upToDate'),
+        icon: status.changed ? 'i-lucide-bell-dot' : 'i-lucide-check',
+      })
+    } catch (e) {
+      notifyError(t('fragments.toast.checkSourceFailed'), e)
+    }
+  })
 }
 
 async function unlinkSource(id: string) {
-  try {
-    await library.unlinkSource(id)
-    toast.add({ title: t('fragments.toast.sourceUnlinked'), icon: 'i-lucide-unplug' })
-  } catch (e) {
-    notifyError(t('fragments.toast.unlinkSourceFailed'), e)
-  }
+  const source = library.sources.find((s) => s.id === id)
+  const repo = source ? `${source.repoOwner}/${source.repoName}` : ''
+  const ok = await confirm({
+    title: t('fragments.confirmUnlinkSource.title'),
+    description: t('fragments.confirmUnlinkSource.body', { repo }),
+    variant: 'destructive',
+    confirmLabel: t('fragments.confirmUnlinkSource.confirm'),
+    icon: 'i-lucide-unplug',
+  })
+  if (!ok) return
+  await withRow(`unlink:${id}`, async () => {
+    try {
+      await library.unlinkSource(id)
+      toast.add({ title: t('fragments.toast.sourceUnlinked'), icon: 'i-lucide-unplug' })
+    } catch (e) {
+      notifyError(t('fragments.toast.unlinkSourceFailed'), e)
+    }
+  })
 }
 </script>
 
@@ -417,6 +469,7 @@ async function unlinkSource(id: string) {
             color="error"
             variant="ghost"
             class="ms-auto"
+            :loading="rowBusy(`remove:${f.id}`)"
             @click="removeFragment(f.id)"
           />
         </div>
@@ -446,7 +499,7 @@ async function unlinkSource(id: string) {
               icon="i-lucide-plus"
               size="sm"
               :disabled="!draftValid"
-              :loading="library.loading"
+              :loading="creating"
               class="self-start"
               @click="createFragment"
             >
@@ -487,7 +540,7 @@ async function unlinkSource(id: string) {
               icon="i-lucide-refresh-cw"
               size="xs"
               variant="ghost"
-              :loading="library.loading"
+              :loading="rowBusy(`refresh:${f.id}`)"
               :title="t('fragments.documents.refreshTitle')"
               @click="refreshFragment(f.id)"
             />
@@ -496,6 +549,7 @@ async function unlinkSource(id: string) {
               size="xs"
               color="error"
               variant="ghost"
+              :loading="rowBusy(`remove:${f.id}`)"
               @click="removeFragment(f.id)"
             />
           </div>
@@ -553,7 +607,7 @@ async function unlinkSource(id: string) {
               icon="i-lucide-link"
               size="sm"
               :disabled="!docDraftValid"
-              :loading="library.loading"
+              :loading="linkingDoc"
               class="self-start"
               @click="linkDocumentFragment"
             >
@@ -598,13 +652,14 @@ async function unlinkSource(id: string) {
               icon="i-lucide-search-check"
               size="xs"
               variant="ghost"
+              :loading="rowBusy(`check:${s.id}`)"
               @click="checkSource(s.id)"
             />
             <UButton
               icon="i-lucide-refresh-cw"
               size="xs"
               variant="ghost"
-              :loading="library.loading"
+              :loading="rowBusy(`sync:${s.id}`)"
               @click="syncSource(s.id)"
             />
             <UButton
@@ -612,6 +667,7 @@ async function unlinkSource(id: string) {
               size="xs"
               color="error"
               variant="ghost"
+              :loading="rowBusy(`unlink:${s.id}`)"
               @click="unlinkSource(s.id)"
             />
           </div>
@@ -669,7 +725,7 @@ async function unlinkSource(id: string) {
               icon="i-lucide-link"
               size="sm"
               :disabled="!sourceValid"
-              :loading="library.loading"
+              :loading="linkingSource"
               class="self-start"
               @click="linkSource"
             >

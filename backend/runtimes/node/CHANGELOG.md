@@ -1,5 +1,199 @@
 # @cat-factory/node-server
 
+## 0.92.20
+
+### Patch Changes
+
+- Updated dependencies [3ce997d]
+  - @cat-factory/kernel@0.121.7
+  - @cat-factory/orchestration@0.106.7
+  - @cat-factory/server@0.112.9
+  - @cat-factory/integrations@0.81.13
+  - @cat-factory/agents@0.54.5
+  - @cat-factory/caching@0.6.40
+  - @cat-factory/consensus@0.10.41
+  - @cat-factory/eks@0.1.65
+  - @cat-factory/gates@0.5.25
+  - @cat-factory/gitlab@0.7.63
+  - @cat-factory/observability-langfuse@0.7.195
+  - @cat-factory/provider-bedrock@0.7.211
+  - @cat-factory/provider-cloudflare@0.7.212
+  - @cat-factory/provider-s3@0.2.145
+  - @cat-factory/spend@0.12.21
+
+## 0.92.19
+
+### Patch Changes
+
+- Updated dependencies [67dccb6]
+  - @cat-factory/kernel@0.121.6
+  - @cat-factory/caching@0.6.39
+  - @cat-factory/spend@0.12.20
+  - @cat-factory/orchestration@0.106.6
+  - @cat-factory/server@0.112.8
+  - @cat-factory/agents@0.54.4
+  - @cat-factory/consensus@0.10.40
+  - @cat-factory/eks@0.1.64
+  - @cat-factory/gates@0.5.24
+  - @cat-factory/gitlab@0.7.62
+  - @cat-factory/integrations@0.81.12
+  - @cat-factory/observability-langfuse@0.7.194
+  - @cat-factory/provider-bedrock@0.7.210
+  - @cat-factory/provider-cloudflare@0.7.211
+  - @cat-factory/provider-s3@0.2.144
+
+## 0.92.18
+
+### Patch Changes
+
+- f8f1aa8: Update workspace dependencies (direct + transitive) to the newest versions published before the
+  `minimumReleaseAge` supply-chain cutoff. No source changes — dependency ranges + the lockfile only.
+
+  - Refreshed direct deps to their newest cooldown-compliant releases: `wrangler` 4.110.0, `hono`
+    4.12.29, `vitest` / `@vitest/coverage-v8` 4.1.10, `oxlint` 1.73.0, `knip` 6.26.0, `msw` 2.15.0,
+    `pg-boss` 12.26.0, `sherif` 1.13.0, `turbo` 2.10.4, `vue-tsc` 3.3.7, `@types/node` 26.1.1,
+    `@nuxtjs/i18n` 10.4.1, `@aws-sdk/client-s3` 3.1085.0.
+  - `typescript` moved off the `7.0.1-rc` prerelease to the stable `7.0.2` release across every
+    package that used the RC (the TS-6 world — the frontend layer and the two runner harnesses —
+    stays on `^6.0.3`).
+  - Vercel AI SDK family held to the `ai@6`-compatible majors that `workers-ai-provider@3.3.1` peers
+    require (`ai` 6.0.224, `@ai-sdk/anthropic|openai|provider` on 3.x, `@ai-sdk/openai-compatible` on
+    2.x, `@ai-sdk/amazon-bedrock` 4.x) — no v7/v5 major bumps.
+  - Coding (`executor-harness`) and deploy runner harnesses updated too, including the pinned
+    in-container coding-agent CLIs (Pi 0.80.6, Claude Code 2.1.207, Codex 0.144.1; the Pi todo /
+    web-tools extensions stay at their lockstep 1.20.0). Their image tags and the three
+    hand-maintained pins were bumped in lockstep, so the runner images must be re-published +
+    deployed for the new tags to roll out.
+
+- Updated dependencies [f8f1aa8]
+  - @cat-factory/agents@0.54.3
+  - @cat-factory/caching@0.6.38
+  - @cat-factory/consensus@0.10.39
+  - @cat-factory/contracts@0.127.1
+  - @cat-factory/eks@0.1.63
+  - @cat-factory/gates@0.5.23
+  - @cat-factory/gitlab@0.7.61
+  - @cat-factory/integrations@0.81.11
+  - @cat-factory/kernel@0.121.5
+  - @cat-factory/observability-langfuse@0.7.193
+  - @cat-factory/orchestration@0.106.5
+  - @cat-factory/prompt-fragments@0.13.14
+  - @cat-factory/provider-bedrock@0.7.209
+  - @cat-factory/provider-cloudflare@0.7.210
+  - @cat-factory/provider-s3@0.2.143
+  - @cat-factory/server@0.112.7
+  - @cat-factory/spend@0.12.19
+
+## 0.92.17
+
+### Patch Changes
+
+- 5dd16d3: Elaborate two boot-time connectivity failures with actionable remedies (error-message coverage
+  A11/A12):
+
+  - **A11 (Node):** a loopback Postgres connection that's refused or reset at boot now reports the
+    fix on the misconfigured screen — including the Windows/Docker-Desktop `localhost`→IPv6 `::1`
+    footgun and the `127.0.0.1` workaround — instead of dying with a raw `ECONNRESET`. A non-loopback
+    (remote) database being briefly unreachable is deliberately left to crash-and-retry.
+  - **A12 (Local):** a set-but-invalid `GITHUB_PAT` is validated once at boot (a best-effort
+    `GET /user`) and, when it's expired/revoked/under-scoped, warned about with the same pre-scoped
+    token-creation link the missing-PAT warning already uses — instead of failing opaquely on the
+    first clone/push/PR later.
+
+## 0.92.16
+
+### Patch Changes
+
+- e68c958: feat(errors): UI-first remedies for runner-backend / runner-pool / Datadog failures (D2/D3/D4)
+
+  Continues the error-message-coverage initiative through Section D — runtime provider failures now
+  name their fix (the UI location first) and link the relevant docs, instead of surfacing a terse,
+  opaque condition.
+
+  - **D3 — `No runner backend available for workspace 'X'`** (both the Node and Cloudflare transport
+    resolvers) now throws a `ConflictError` carrying the machine `reason` `agent_backend_unconfigured`
+    instead of a plain `Error`. Synchronously it is a clean 409; on the async dispatch path
+    `classifyDispatchFailure` lifts the reason onto the run's `AgentFailure`, so the SPA renders the
+    existing "Agent backend not configured" title + jump (no new locale keys) rather than the
+    misleading "container failed to start". The remedy names the UI path first (Settings → Self-hosted
+    runner pool) and links `backend/docs/runner-pool-integration.md` via the new `DOCS.runnerPool`
+    entry. The load-bearing `No runner backend available for workspace '<id>'` prefix is preserved.
+  - **D2 — runner-pool provider errors** (`RunnerPoolApiError`: a scheduler non-2xx, a missing
+    manifest secret, an OAuth-token rejection) now append a shared UI-first remedy naming where the
+    pool is registered / re-tested, while preserving the raw `<method> → <status>` / `Missing secret`
+    detail ahead of it (still greppable + still matched by the transport's DispatchError re-wrap).
+  - **D4 — Datadog auth failure**: a `401`/`403` from the Datadog API now appends a UI-first remedy
+    pointing at Integrations → Observability connection (the keys are UI-configured — no env var for
+    this connection), preserving the raw `HTTP <status>` diagnostic. A non-auth status (5xx / mapping
+    error) is unchanged.
+
+  `@cat-factory/integrations` keeps its own `docs.ts` (repo-doc + vendor-URL helpers) since it sits
+  below the server layer and cannot import `@cat-factory/server`'s `config/docs.ts`.
+
+- 90553c8: perf(node): batch the sweeper's execution.advance re-drives into one pg-boss insert
+
+  The Node stale-run sweeper re-enqueued each run it decides to re-drive with an individual
+  `boss.send()` — one round-trip per stale run and per resumed spend-paused run, every tick.
+  It now gathers every `execution.advance` re-drive of a tick (the stale re-drives and the
+  under-budget spend-paused resumes alike) and flushes them as a single `boss.insert([...])`,
+  replacing N round-trips with one. Each batch row carries the identical
+  `singletonKey`/`retryLimit`/`retryDelay`/`retryBackoff`/`expireInSeconds`/`heartbeatSeconds`
+  options a `send` would, and `insert` dedupes PER ROW against the queue's `exclusive`
+  `(name, singleton_key)` unique index — so a run that already has a live advance job is a
+  no-op and the sweeper's no-double-drive guarantee is preserved exactly (verified by a new
+  real-Postgres test). Bootstrap / env-config-repair re-drives (other queues, typically one at
+  a time) are unchanged. First implementation slice of the pg-boss ingestion-optimization
+  initiative (items V1 + B2 + B1).
+
+- Updated dependencies [e68c958]
+  - @cat-factory/integrations@0.81.10
+  - @cat-factory/server@0.112.6
+  - @cat-factory/eks@0.1.62
+  - @cat-factory/orchestration@0.106.4
+
+## 0.92.15
+
+### Patch Changes
+
+- Updated dependencies [e61c980]
+  - @cat-factory/server@0.112.5
+
+## 0.92.14
+
+### Patch Changes
+
+- 327a1ef: feat(node): add a `/ready` readiness probe distinct from liveness `/health` (audit item 9)
+
+  `/health` was a static 200 regardless of downstream health, so a replica whose Postgres pool
+  had died or whose pg-boss worker had stopped still reported healthy and a load balancer could
+  not drain it. Adds a PUBLIC `GET /ready` that round-trips the app's Postgres pool (a bounded
+  `SELECT 1`) and checks a pg-boss `running` flag, answering `200 {status:'ready'}` /
+  `503 {status:'not_ready'}` with per-dependency `checks`. It also drains the instant graceful
+  shutdown begins — `bootServer` flips a `draining` flag at the top of `shutdown()`, so a
+  SIGTERM'd node reports not-ready immediately and new traffic stops arriving while in-flight
+  requests finish. `/health` stays a static 200 (liveness: a restart can't fix a dead pool). The
+  verdict is a pure `checkReadiness` in `readiness.ts`; `createApp` gained an optional `readiness`
+  probe (wired by `start()` from the live pool + boss). Node-facade-specific by design — the
+  Worker has no long-lived process and local mothership mode has no local Postgres/pg-boss, so
+  both wire no probe and `/ready` falls back to a bare `ready`.
+
+- Updated dependencies [4810353]
+  - @cat-factory/kernel@0.121.4
+  - @cat-factory/orchestration@0.106.3
+  - @cat-factory/integrations@0.81.9
+  - @cat-factory/agents@0.54.2
+  - @cat-factory/caching@0.6.37
+  - @cat-factory/consensus@0.10.38
+  - @cat-factory/eks@0.1.61
+  - @cat-factory/gates@0.5.22
+  - @cat-factory/gitlab@0.7.60
+  - @cat-factory/observability-langfuse@0.7.192
+  - @cat-factory/provider-bedrock@0.7.208
+  - @cat-factory/provider-cloudflare@0.7.209
+  - @cat-factory/provider-s3@0.2.142
+  - @cat-factory/server@0.112.4
+  - @cat-factory/spend@0.12.18
+
 ## 0.92.13
 
 ### Patch Changes

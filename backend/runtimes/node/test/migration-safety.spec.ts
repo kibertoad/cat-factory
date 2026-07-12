@@ -7,6 +7,7 @@ import { type DbClient, createDbClient } from '../src/db/client.js'
 import {
   DbSchemaInconsistentError,
   MigrationFailedError,
+  explainDbConnectionFailure,
   explainMigrationFailure,
   migrate,
 } from '../src/db/migrate.js'
@@ -45,6 +46,62 @@ describe('explainMigrationFailure', () => {
   it('passes an unmapped error message through', () => {
     const e = explainMigrationFailure({ cause: { code: '99999', message: 'boom' } })
     expect(e.message).toContain('boom')
+  })
+})
+
+// The loopback connection-failure mapping (A11) is pure — unit-test the classification with
+// synthetic Node system errors, no live socket. Only a LOOPBACK host is reframed as a
+// ConfigValidationError; a remote host or a non-connection error is left to crash-and-retry.
+describe('explainDbConnectionFailure (A11)', () => {
+  it('explains the localhost→IPv6 footgun on an ECONNRESET against a `localhost` URL', () => {
+    const e = explainDbConnectionFailure(
+      { code: 'ECONNRESET' },
+      'postgres://cat:cat@localhost:5432/catfactory',
+    )
+    expect(e).toBeDefined()
+    expect(e?.problems[0]?.key).toBe('DATABASE_URL')
+    expect(e?.message).toMatch(/ECONNRESET/)
+    expect(e?.message).toMatch(/127\.0\.0\.1/)
+    expect(e?.message).toMatch(/IPv6/)
+    expect(e?.problems[0]?.docsUrl).toMatch(/environment-variables/)
+  })
+
+  it('reframes a refused loopback IP without the IPv6 note (host is already explicit)', () => {
+    const e = explainDbConnectionFailure(
+      { code: 'ECONNREFUSED' },
+      'postgres://cat:cat@127.0.0.1:5432/catfactory',
+    )
+    expect(e).toBeDefined()
+    expect(e?.message).toMatch(/127\.0\.0\.1:5432/)
+    expect(e?.message).not.toMatch(/IPv6/)
+    expect(e?.message).toMatch(/docker compose up/)
+  })
+
+  it('unwraps an AggregateError (both resolved addresses refused)', () => {
+    const agg = { errors: [{ code: 'ECONNREFUSED' }, { code: 'ECONNREFUSED' }] }
+    expect(explainDbConnectionFailure(agg, 'postgres://localhost/db')).toBeDefined()
+  })
+
+  it('unwraps a driver wrapper carrying the code on `.cause`', () => {
+    expect(
+      explainDbConnectionFailure({ cause: { code: 'ETIMEDOUT' } }, 'postgres://localhost/db'),
+    ).toBeDefined()
+  })
+
+  it('leaves a REMOTE host to crash-and-retry (not a misconfiguration)', () => {
+    expect(
+      explainDbConnectionFailure({ code: 'ECONNREFUSED' }, 'postgres://db.internal:5432/app'),
+    ).toBeUndefined()
+  })
+
+  it('ignores a non-connection error (a real migration/query failure)', () => {
+    expect(
+      explainDbConnectionFailure({ code: '42P01' }, 'postgres://localhost:5432/db'),
+    ).toBeUndefined()
+  })
+
+  it('is undefined for an unparseable DATABASE_URL', () => {
+    expect(explainDbConnectionFailure({ code: 'ECONNRESET' }, 'not a url')).toBeUndefined()
   })
 })
 

@@ -1,5 +1,155 @@
 # @cat-factory/local-server
 
+## 0.64.37
+
+### Patch Changes
+
+- 3ce997d: Structured container-eviction signal (error-message initiative I1). A container eviction is now
+  carried on a typed `RunnerJobView.evicted` field (`'crash'` | `'transient'`, the new
+  `ContainerEvictionKind`) minted by every runner transport (Cloudflare, the shared local
+  `harnessHttp`, the local container/pool/process/native-routing transports, and Kubernetes/EKS),
+  forwarded through `AgentJobUpdate`, and read by the execution / bootstrap / env-config-repair
+  consumers via the new `evictionKindOf` extractor. The `(container evicted or crashed)` sentinel +
+  the transient marker are PRESERVED as the fallback for an older producer, so nothing that still
+  matches the string breaks — the structured field is simply the load-bearing signal now, replacing
+  the regex as the primary classification channel.
+- Updated dependencies [3ce997d]
+  - @cat-factory/kernel@0.121.7
+  - @cat-factory/orchestration@0.106.7
+  - @cat-factory/server@0.112.9
+  - @cat-factory/integrations@0.81.13
+  - @cat-factory/agents@0.54.5
+  - @cat-factory/gitlab@0.7.63
+  - @cat-factory/node-server@0.92.20
+  - @cat-factory/executor-harness@1.43.2
+
+## 0.64.36
+
+### Patch Changes
+
+- Updated dependencies [67dccb6]
+  - @cat-factory/kernel@0.121.6
+  - @cat-factory/orchestration@0.106.6
+  - @cat-factory/server@0.112.8
+  - @cat-factory/agents@0.54.4
+  - @cat-factory/gitlab@0.7.62
+  - @cat-factory/integrations@0.81.12
+  - @cat-factory/node-server@0.92.19
+  - @cat-factory/executor-harness@1.43.2
+
+## 0.64.35
+
+### Patch Changes
+
+- f8f1aa8: Update workspace dependencies (direct + transitive) to the newest versions published before the
+  `minimumReleaseAge` supply-chain cutoff. No source changes — dependency ranges + the lockfile only.
+
+  - Refreshed direct deps to their newest cooldown-compliant releases: `wrangler` 4.110.0, `hono`
+    4.12.29, `vitest` / `@vitest/coverage-v8` 4.1.10, `oxlint` 1.73.0, `knip` 6.26.0, `msw` 2.15.0,
+    `pg-boss` 12.26.0, `sherif` 1.13.0, `turbo` 2.10.4, `vue-tsc` 3.3.7, `@types/node` 26.1.1,
+    `@nuxtjs/i18n` 10.4.1, `@aws-sdk/client-s3` 3.1085.0.
+  - `typescript` moved off the `7.0.1-rc` prerelease to the stable `7.0.2` release across every
+    package that used the RC (the TS-6 world — the frontend layer and the two runner harnesses —
+    stays on `^6.0.3`).
+  - Vercel AI SDK family held to the `ai@6`-compatible majors that `workers-ai-provider@3.3.1` peers
+    require (`ai` 6.0.224, `@ai-sdk/anthropic|openai|provider` on 3.x, `@ai-sdk/openai-compatible` on
+    2.x, `@ai-sdk/amazon-bedrock` 4.x) — no v7/v5 major bumps.
+  - Coding (`executor-harness`) and deploy runner harnesses updated too, including the pinned
+    in-container coding-agent CLIs (Pi 0.80.6, Claude Code 2.1.207, Codex 0.144.1; the Pi todo /
+    web-tools extensions stay at their lockstep 1.20.0). Their image tags and the three
+    hand-maintained pins were bumped in lockstep, so the runner images must be re-published +
+    deployed for the new tags to roll out.
+
+- Updated dependencies [f8f1aa8]
+  - @cat-factory/executor-harness@1.43.2
+  - @cat-factory/agents@0.54.3
+  - @cat-factory/contracts@0.127.1
+  - @cat-factory/gitlab@0.7.61
+  - @cat-factory/integrations@0.81.11
+  - @cat-factory/kernel@0.121.5
+  - @cat-factory/node-server@0.92.18
+  - @cat-factory/orchestration@0.106.5
+  - @cat-factory/server@0.112.7
+
+## 0.64.34
+
+### Patch Changes
+
+- 5dd16d3: Elaborate two boot-time connectivity failures with actionable remedies (error-message coverage
+  A11/A12):
+
+  - **A11 (Node):** a loopback Postgres connection that's refused or reset at boot now reports the
+    fix on the misconfigured screen — including the Windows/Docker-Desktop `localhost`→IPv6 `::1`
+    footgun and the `127.0.0.1` workaround — instead of dying with a raw `ECONNRESET`. A non-loopback
+    (remote) database being briefly unreachable is deliberately left to crash-and-retry.
+  - **A12 (Local):** a set-but-invalid `GITHUB_PAT` is validated once at boot (a best-effort
+    `GET /user`) and, when it's expired/revoked/under-scoped, warned about with the same pre-scoped
+    token-creation link the missing-PAT warning already uses — instead of failing opaquely on the
+    first clone/push/PR later.
+
+- Updated dependencies [5dd16d3]
+  - @cat-factory/node-server@0.92.17
+
+## 0.64.33
+
+### Patch Changes
+
+- Updated dependencies [e68c958]
+- Updated dependencies [90553c8]
+  - @cat-factory/integrations@0.81.10
+  - @cat-factory/node-server@0.92.16
+  - @cat-factory/server@0.112.6
+  - @cat-factory/orchestration@0.106.4
+  - @cat-factory/executor-harness@1.43.0
+
+## 0.64.32
+
+### Patch Changes
+
+- Updated dependencies [e61c980]
+  - @cat-factory/server@0.112.5
+  - @cat-factory/executor-harness@1.43.0
+  - @cat-factory/node-server@0.92.15
+
+## 0.64.31
+
+### Patch Changes
+
+- 4810353: Structured, elaborated container/runner dispatch failures (error-message coverage initiative,
+  items D1/I2). A `dispatch()` rejection used to throw a bare `Container dispatch failed (HTTP n)`
+  string that named the symptom but not the cause, and downstream consumers decided "was this a
+  dispatch failure?" by regex-matching `/dispatch failed/i` — so error IDENTITY rode a string, and a
+  self-hosted-pool fault (`Runner pool … → <status>`, a different wording) fell through and was
+  mislabelled a `preflight` error.
+
+  - **I2** — new kernel `DispatchError` (`domain/dispatch-errors.ts`) carries the HTTP `status` as a
+    structured field, thrown by every transport `dispatch()`: `CloudflareContainerTransport`,
+    `KubernetesRunnerTransport`, the local `postHarnessJob` (both local transports), and
+    `RunnerPoolTransport` (which re-wraps the pool provider's `RunnerPoolApiError`, carrying its
+    status). `BootstrapService`, `EnvConfigRepairService`, and the execution engine
+    (`classifyDispatchFailure`) now classify via `instanceof` / the `isDispatchFailure` extractor,
+    with the legacy `/dispatch failed/i` message shape kept only as a fallback. This fixes the pool
+    dispatch fault being mislabelled `preflight`.
+  - **D1** — a 404 from the harness `/jobs` route (the deployed executor-harness image predates the
+    route because its tag was never bumped, so new containers run stale code) now elaborates with the
+    stale-image cause + the republish-under-a-fresh-tag remedy and a link to the release rules. The
+    raw `<label> dispatch failed (HTTP n): <body>` first line is preserved verbatim (still greppable,
+    still matched by the fallback regex); the cause + remedy is only appended.
+
+  No behaviour changes beyond error message text and failure classification. No executor-harness
+  image change (the dispatch signal is minted by in-repo transports).
+
+- Updated dependencies [4810353]
+- Updated dependencies [327a1ef]
+  - @cat-factory/kernel@0.121.4
+  - @cat-factory/orchestration@0.106.3
+  - @cat-factory/integrations@0.81.9
+  - @cat-factory/node-server@0.92.14
+  - @cat-factory/agents@0.54.2
+  - @cat-factory/gitlab@0.7.60
+  - @cat-factory/server@0.112.4
+  - @cat-factory/executor-harness@1.43.0
+
 ## 0.64.30
 
 ### Patch Changes

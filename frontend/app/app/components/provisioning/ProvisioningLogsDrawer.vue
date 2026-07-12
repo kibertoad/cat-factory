@@ -76,7 +76,12 @@ watch(
 )
 
 onMounted(() => reload())
-onBeforeUnmount(stopPolling)
+onBeforeUnmount(() => {
+  stopPolling()
+  // Drop this run's accumulated log state so the per-execution map doesn't grow for the app's
+  // lifetime (a re-opened drawer re-fetches on mount). Subsystem mode keeps its fixed-size state.
+  if (props.executionId) store.evict(props.executionId)
+})
 
 // Exhaustive enum→label maps of literal `t(...)` keys (keeps the typed-key drift guard
 // live for these runtime-indexed lookups).

@@ -1,6 +1,6 @@
 # Initiative: system audit — data lifecycle, runtime parity, robustness & coverage
 
-**Status:** in progress (items 1–8 landed) · **Owner:** core · **Started:** 2026-07-11
+**Status:** in progress (items 1–10 landed; item 15 first slice landed) · **Owner:** core · **Started:** 2026-07-11
 
 > This is the durable source of truth for a multi-PR initiative. Read it first before
 > picking up the next slice; update the checklist at the end of each PR.
@@ -77,28 +77,28 @@ remains clusters into four themes:
 Priority: **P1** = correctness/unbounded-growth on a normal operation; **P2** = clear
 benefit, bounded blast radius; **P3** = hygiene/polish. Effort S/M/L.
 
-| #   | Pri | Area        | Finding (short)                                                                             | Effort | Status  | PR        |
-| --- | --- | ----------- | ------------------------------------------------------------------------------------------- | ------ | ------- | --------- |
-| 1   | P1  | retention   | `notifications` never pruned in either facade (upsert/escalate only, no delete)             | M      | ✅ done | #1020     |
-| 2   | P1  | retention   | Workspace-delete cascade clears only 7 tables → permanent orphans in ~40 others             | M      | ✅ done | (this PR) |
-| 3   | P1  | retention   | Binary-artifact rows + blob bytes of deleted workspaces never reclaimed                     | M      | ✅ done | (this PR) |
-| 4   | P2  | parity      | GitHub reconcile loop duplicated verbatim across Node/Worker — hoist to shared server pkg   | S      | ✅ done | (this PR) |
-| 5   | P1  | parity      | Node async GitHub ingest runs inline in the request; add pg-boss-backed queue impls         | M–L    | ✅ done | (this PR) |
-| 6   | P2  | parity      | Node sweeper re-entrancy guards inconsistent (initiativeLoop / recurring / escalation)      | S      | ✅ done | (this PR) |
-| 7   | P2  | conformance | Four retention prunes have no cross-runtime conformance assertion                           | S–M    | ✅ done | (this PR) |
-| 8   | P2  | engine      | Notification-escalation sweep: per-workspace settings point-read (N+1 the cache can't fix)  | M      | ✅ done | (this PR) |
-| 9   | P2  | ops         | Node `/health` is a static 200 — add a `/ready` readiness probe (pool + pg-boss)            | S      | ⬜ todo |           |
-| 10  | P2  | frontend    | `provisioningLogs` store: unbounded per-execution map + unguarded out-of-order overwrite    | S      | ⬜ todo |           |
-| 11  | P3  | api         | Error code `validation` maps to two HTTP statuses (400 schema vs 422 domain)                | S      | ⬜ todo |           |
-| 12  | P1  | e2e         | Requirements-review flow has zero e2e coverage (largest SPA component, 1.2k lines)          | M      | ⬜ todo |           |
-| 13  | P2  | e2e         | Inline agent windows (brainstorm/clarity/consensus/doc-interview) have no e2e specs         | M      | ⬜ todo |           |
-| 14  | P2  | ci          | `paths-filter` lane-gating globs are unguarded against drift (silent suite skips)           | S      | ⬜ todo |           |
-| 15  | P3  | frontend    | Store-level out-of-order clobber specs cover ~5 of ~40 stateful stores — establish the rule | M      | ⬜ todo |           |
-| 16  | P2  | docs        | CLAUDE.md "Node GitHub connect/sync still needs the integration on Postgres" note is stale  | S      | ⬜ todo |           |
-| 17  | P3  | docs        | `refactoring-candidates.md`/`modularisation.md` stale; the two biggest files untracked      | S      | ⬜ todo |           |
-| 18  | P3  | docs        | Convert finished initiatives to ADRs (`custom-initiative-definitions`, `coder-fork`)        | S      | ⬜ todo |           |
-| 19  | P2  | frontend    | Accessibility whitespace: no a11y tracker/doc; 48/176 components carry any `aria-*`         | M      | ⬜ todo |           |
-| 20  | P3  | frontend    | Close i18n phase X (`utils/catalog.ts` meta tables + 2 pages), retire the progress table    | M      | ⬜ todo |           |
+| #   | Pri | Area        | Finding (short)                                                                             | Effort | Status         | PR        |
+| --- | --- | ----------- | ------------------------------------------------------------------------------------------- | ------ | -------------- | --------- |
+| 1   | P1  | retention   | `notifications` never pruned in either facade (upsert/escalate only, no delete)             | M      | ✅ done        | #1020     |
+| 2   | P1  | retention   | Workspace-delete cascade clears only 7 tables → permanent orphans in ~40 others             | M      | ✅ done        | (this PR) |
+| 3   | P1  | retention   | Binary-artifact rows + blob bytes of deleted workspaces never reclaimed                     | M      | ✅ done        | (this PR) |
+| 4   | P2  | parity      | GitHub reconcile loop duplicated verbatim across Node/Worker — hoist to shared server pkg   | S      | ✅ done        | (this PR) |
+| 5   | P1  | parity      | Node async GitHub ingest runs inline in the request; add pg-boss-backed queue impls         | M–L    | ✅ done        | (this PR) |
+| 6   | P2  | parity      | Node sweeper re-entrancy guards inconsistent (initiativeLoop / recurring / escalation)      | S      | ✅ done        | (this PR) |
+| 7   | P2  | conformance | Four retention prunes have no cross-runtime conformance assertion                           | S–M    | ✅ done        | (this PR) |
+| 8   | P2  | engine      | Notification-escalation sweep: per-workspace settings point-read (N+1 the cache can't fix)  | M      | ✅ done        | (this PR) |
+| 9   | P2  | ops         | Node `/health` is a static 200 — add a `/ready` readiness probe (pool + pg-boss)            | S      | ✅ done        | (this PR) |
+| 10  | P2  | frontend    | `provisioningLogs` store: unbounded per-execution map + unguarded out-of-order overwrite    | S      | ✅ done        | (this PR) |
+| 11  | P3  | api         | Error code `validation` maps to two HTTP statuses (400 schema vs 422 domain)                | S      | ⬜ todo        |           |
+| 12  | P1  | e2e         | Requirements-review flow has zero e2e coverage (largest SPA component, 1.2k lines)          | M      | ⬜ todo        |           |
+| 13  | P2  | e2e         | Inline agent windows (brainstorm/clarity/consensus/doc-interview) have no e2e specs         | M      | ⬜ todo        |           |
+| 14  | P2  | ci          | `paths-filter` lane-gating globs are unguarded against drift (silent suite skips)           | S      | ⬜ todo        |           |
+| 15  | P3  | frontend    | Store-level out-of-order clobber specs cover ~5 of ~40 stateful stores — establish the rule | M      | 🔄 in-progress | (this PR) |
+| 16  | P2  | docs        | CLAUDE.md "Node GitHub connect/sync still needs the integration on Postgres" note is stale  | S      | ⬜ todo        |           |
+| 17  | P3  | docs        | `refactoring-candidates.md`/`modularisation.md` stale; the two biggest files untracked      | S      | ⬜ todo        |           |
+| 18  | P3  | docs        | Convert finished initiatives to ADRs (`custom-initiative-definitions`, `coder-fork`)        | S      | ⬜ todo        |           |
+| 19  | P2  | frontend    | Accessibility whitespace: no a11y tracker/doc; 48/176 components carry any `aria-*`         | M      | ⬜ todo        |           |
+| 20  | P3  | frontend    | Close i18n phase X (`utils/catalog.ts` meta tables + 2 pages), retire the progress table    | M      | ⬜ todo        |           |
 
 ## Detailed findings
 
@@ -408,6 +408,26 @@ this is only the inbound readiness signal.)
 liveness `/health`. Node-facade-specific by nature (the Worker has no long-lived process
 to probe) — a legitimate asymmetry, note it as such.
 
+**Landed (this PR).** `backend/runtimes/node/src/readiness.ts` owns the pure verdict
+(`checkReadiness` → `{ ready, checks }`): it round-trips the app's Postgres pool (a bounded
+`SELECT 1`, timed out so a wedged pool can't hang the probe) and checks a pg-boss `running`
+flag the boot sequence owns (set true after `boss.start()`, flipped on the `stopped` event).
+`createApp` now takes an optional `readiness` probe and mounts a PUBLIC `GET /ready`
+(before the auth gate, like `/health`) that answers `200 {status:'ready'}` /
+`503 {status:'not_ready'}` with the per-dependency `checks`. `bootServer` wires the probe
+from the live `pool` + the boss flag + a `draining` flag it sets at the TOP of `shutdown()`,
+so a SIGTERM'd replica reports not-ready IMMEDIATELY (short-circuiting the downstream probes)
+— a load balancer stops routing new traffic while in-flight requests drain, before anything
+is torn down. `/health` stays a static 200 (liveness: a restart can't fix a dead pool). The
+asymmetry is genuine and documented in `readiness.ts`: the Worker has no long-lived process
+(each request is a fresh isolate), and local **mothership** mode has no local Postgres/pg-boss
+(org state is remote) — both wire no probe, so `/ready` falls back to a bare `ready`. Local's
+Postgres path reuses `start()`, so it gets the real probe for free. Guard:
+`node/test/readiness.spec.ts` pins the pure verdict (ready / pool-down / boss-stopped /
+draining-short-circuit / probe-timeout) AND the `createApp` glue (200/503 status + the route
+being public before the auth gate). No persistence/port change, so no conformance assertion —
+readiness is a per-process signal with no D1 analogue.
+
 #### 10. `provisioningLogs` store: unbounded map + unguarded overwrite — P2
 
 `frontend/app/app/stores/provisioningLogs.ts`: `byExecution` accretes one `LogState` per
@@ -420,6 +440,21 @@ monotonic guard the core stores carry.
 **Fix:** per-execution monotonic sequence guard (copy `stores/workspace.ts`) + eviction
 of terminal executions' log state, + a store-level out-of-order spec (the item-15
 pattern).
+
+**Landed (this PR).** `loadForExecution` now stamps each call with a per-execution
+monotonic `loadSeq` and discards its result if a newer load (the drawer's silent poll or a
+manual refresh) superseded it in flight — the same anti-clobber guard `stores/workspace.ts`
+carries on its full refresh, so a slower/staler fetch can't overwrite the fresher timeline
+(the visible spinner still clears in its own `finally` regardless of supersession, so a
+superseded visible load never leaves a stuck spinner). Eviction is lifecycle-based rather
+than terminal-status-based: the store exposes `evict(executionId)` and
+`ProvisioningLogsDrawer.vue` calls it in `onBeforeUnmount` (executionId mode only), so
+`byExecution` holds only currently-open drawers instead of accreting one `LogState` per run
+viewed for the app's lifetime — a re-opened drawer re-fetches on mount, and keeping the state
+while OPEN is exactly what the manual-refresh-after-terminal affordance needs. Guard:
+`stores/provisioningLogs.spec.ts` adds an out-of-order-resolve test (newest-issued wins over
+a late stale resolver), a superseding-visible-load test (fresh entries + no stuck spinner),
+and an eviction test (state dropped, seq reset, a fresh load re-seeds cleanly).
 
 #### 11. Error code `validation` maps to two HTTP statuses — P3
 
@@ -480,6 +515,41 @@ established pattern.
 **Fix:** establish the rule ("every store with both delivery shapes gets an out-of-order
 spec"), then burn down store-by-store — starting with the stores backing live badges
 (item 10's `provisioningLogs` first).
+
+**First slice landed (this PR).** The rule is: **every store that has BOTH a snapshot/load
+path and a live-`upsert` path must carry an out-of-order spec, and its load must reconcile
+(monotonic-guard + merge/newest-wins) rather than blind-replace.** Auditing the live-stream
+stores (`useWorkspaceStream.ts`) for the `provisioningLogs` clobber shape — an independent
+per-key async `load()` doing an unguarded replace — surfaced two REAL bugs plus one good
+citizen, now the first burn-down batch:
+
+- **`kaizen`** (fixed): `loadForExecution` / `loadOverview` blind-replaced `byExecution` /
+  `history`, both of which are also live-`upsert`ed, so a grading pushed over the stream
+  mid-load was silently dropped, and two loads could resolve out of order. Now each load
+  takes a monotonic ticket (only the newest commits) and merges via `reconcileWithLive`
+  (loaded rows authoritative per id, newer `updatedAt` wins on a shared id, live-only rows
+  preserved — safe because gradings are append/update-only).
+- **`consensus`** (fixed): `load` blind-replaced the session, bypassing the `updatedAt`
+  newest-wins guard the live `upsert` already applied — a stale load regressed the transcript.
+  `load` now reconciles by `updatedAt` and never nulls out an existing live session.
+- **`docInterview`** (already correct): its `load` already routed through `upsert`'s
+  newest-wins guard; pinned with a regression spec so it can't silently regress.
+
+Guards: `stores/{kaizen,consensus,docInterview}.spec.ts` drive the out-of-order resolves
+(stale load issued first / resolves last, live push mid-load) and assert the fresher state
+survives — 13 assertions, stable across repeated runs.
+
+Deliberately deferred: **kaizen `byExecution` eviction.** Like `provisioningLogs` (item 10)
+its per-execution map accretes one entry per run viewed. Unlike `provisioningLogs` — whose
+drawer already owned an unmount lifecycle to hang `evict` on — kaizen's cache has no single
+lifecycle owner (it feeds both the run window and the Kaizen screen), so picking an eviction
+point needs component analysis and is a separate, non-clobber concern; left for a later slice
+rather than dropping state a still-open surface needs.
+
+Remaining item-15 burn-down (other stores with both delivery shapes, no out-of-order spec):
+`initiatives` / `kaizen`-overview-adjacent screens, `notifications` (snapshot-`hydrate`d — its
+ordering is governed by the monotonic `workspace.refresh`, so lower risk), and the
+non-live stores with their own independent fetch-and-replace loads.
 
 ### Cluster E — docs & hygiene
 

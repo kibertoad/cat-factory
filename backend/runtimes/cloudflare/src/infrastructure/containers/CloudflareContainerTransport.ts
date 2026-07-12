@@ -1,8 +1,9 @@
-import type {
-  RunnerDispatchKind,
-  RunnerJobRef,
-  RunnerJobView,
-  RunnerTransport,
+import {
+  harnessDispatchError,
+  type RunnerDispatchKind,
+  type RunnerJobRef,
+  type RunnerJobView,
+  type RunnerTransport,
 } from '@cat-factory/kernel'
 import { TRANSIENT_EVICTION_MARKER } from '@cat-factory/orchestration'
 import type { DurableObjectNamespace } from '@cloudflare/workers-types'
@@ -10,13 +11,12 @@ import type { DeployContainer } from './DeployContainer'
 import { type ExecutionContainer, isRolloutSignal } from './ExecutionContainer'
 import type { ContainerInstanceRegistry } from './ContainerInstanceRegistry'
 
-// The failed-poll error string the engine classifies as a container eviction. The
-// "(container evicted or crashed)" suffix is matched by job.logic
-// `isContainerEvictionError` (and the bootstrap flow). When THIS facade knows the
-// eviction was a transient new-version rollout (not a crash), it appends the
-// engine's neutral TRANSIENT_EVICTION_MARKER so `isTransientEviction` recovers it on
-// the larger budget. The Cloudflare-specific "rollout ⇒ transient" mapping lives
-// here, in the facade; the engine stays runtime-neutral.
+// The failed-poll error string the engine classifies as a container eviction. The eviction
+// verdict now rides the STRUCTURED `RunnerJobView.evicted` field (`crash` / `transient`), which
+// consumers prefer; the "(container evicted or crashed)" suffix + the TRANSIENT_EVICTION_MARKER
+// are PRESERVED alongside it as the fallback older consumers (job.logic `isContainerEvictionError`
+// / `isTransientEviction`, the bootstrap flow) still match. The Cloudflare-specific "rollout ⇒
+// transient" mapping lives here, in the facade; the engine stays runtime-neutral.
 const EVICTION_ERROR = 'Job not found (container evicted or crashed)'
 const ROLLOUT_EVICTION_ERROR = `${EVICTION_ERROR} (${TRANSIENT_EVICTION_MARKER})`
 
@@ -102,7 +102,14 @@ export class CloudflareContainerTransport implements RunnerTransport {
       signal: AbortSignal.timeout(DISPATCH_TIMEOUT_MS),
     })
     if (!res.ok) {
-      throw new Error(`Container dispatch failed (HTTP ${res.status}): ${await safeText(res)}`)
+      // A structured DispatchError (carrying the HTTP status) so the engine + the bootstrap /
+      // env-config services classify this as a `dispatch` failure by field, not by regex; a 404
+      // (harness image too old to know the /jobs route) elaborates to the stale-image remedy.
+      throw harnessDispatchError({
+        label: 'Container',
+        status: res.status,
+        body: await safeText(res),
+      })
     }
     // Record the now-live container (keyed by the run id, the idFromName argument) so
     // the reaper can find it if its run record ever diverges from reality. Idempotent
@@ -130,7 +137,9 @@ export class CloudflareContainerTransport implements RunnerTransport {
       // "new version rollout" signal (exit 143) rather than returning a 404. Report it
       // as a transient rollout eviction so the engine recovers it on the larger
       // rollout budget instead of failing the run.
-      if (isRolloutSignal(err)) return { state: 'failed', error: ROLLOUT_EVICTION_ERROR }
+      if (isRolloutSignal(err)) {
+        return { state: 'failed', error: ROLLOUT_EVICTION_ERROR, evicted: 'transient' }
+      }
       throw err
     }
     if (res.status === 404) {
@@ -141,7 +150,9 @@ export class CloudflareContainerTransport implements RunnerTransport {
       // new-version rollout (a deploy) — if so, tag it so the engine treats it as
       // transient infra churn rather than a crash/OOM.
       const rolledOut = await stub.recentlyRolledOut().catch(() => false)
-      return { state: 'failed', error: rolledOut ? ROLLOUT_EVICTION_ERROR : EVICTION_ERROR }
+      return rolledOut
+        ? { state: 'failed', error: ROLLOUT_EVICTION_ERROR, evicted: 'transient' }
+        : { state: 'failed', error: EVICTION_ERROR, evicted: 'crash' }
     }
     if (!res.ok) {
       throw new Error(`Container job poll failed (HTTP ${res.status}): ${await safeText(res)}`)

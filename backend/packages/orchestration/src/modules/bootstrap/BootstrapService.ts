@@ -27,7 +27,13 @@ import type {
 import type { RepoBootstrapper } from '@cat-factory/kernel'
 import type { BootstrapRunner } from '@cat-factory/kernel'
 import type { ExecutionEventPublisher } from '@cat-factory/kernel'
-import { assertFound, ConflictError, getErrorMessage, sameSubtasks } from '@cat-factory/kernel'
+import {
+  assertFound,
+  ConflictError,
+  getErrorMessage,
+  isDispatchFailure,
+  sameSubtasks,
+} from '@cat-factory/kernel'
 import { registerServiceForFrame, requireWorkspace } from '@cat-factory/kernel'
 
 /** The poll's terminal-ness, returned to the durable driver so it knows when to stop. */
@@ -308,9 +314,11 @@ export class BootstrapService {
       })
     } catch (error) {
       const message = getErrorMessage(error)
-      // A dispatch HTTP/network fault is `dispatch`; everything else here is a
-      // pre-flight rejection (repo missing / not empty / not connected).
-      const kind: BootstrapFailureKind = /dispatch failed/i.test(message) ? 'dispatch' : 'preflight'
+      // A transport dispatch rejection (the container/runner never accepted the job) is
+      // `dispatch`; everything else here is a pre-flight rejection (repo missing / not empty /
+      // not connected). Classified by the structured DispatchError (with a legacy message
+      // fallback), not by regex-matching the prose.
+      const kind: BootstrapFailureKind = isDispatchFailure(error) ? 'dispatch' : 'preflight'
       const failure = this.buildFailure(kind, message, null, null)
       const patch = {
         status: 'failed' as const,
@@ -422,7 +430,7 @@ export class BootstrapService {
       })
     } catch (error) {
       const message = getErrorMessage(error)
-      const kind: BootstrapFailureKind = /dispatch failed/i.test(message) ? 'dispatch' : 'preflight'
+      const kind: BootstrapFailureKind = isDispatchFailure(error) ? 'dispatch' : 'preflight'
       const patch = {
         status: 'failed' as const,
         error: message,
