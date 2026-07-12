@@ -1,5 +1,5 @@
 import type { AgentFailureKind } from '@cat-factory/kernel'
-import { DomainError, getErrorMessage } from '@cat-factory/kernel'
+import { DispatchError, DomainError, getErrorMessage } from '@cat-factory/kernel'
 
 /**
  * Maximum number of times a step's *crash* eviction (OOM / a genuine crash) is
@@ -74,6 +74,9 @@ export interface DispatchFailureClassification {
  *    the SPA renders precise guidance ("GitHub not connected") instead of the misleading
  *    "container failed to start".
  *  - A container eviction/crash routes to `evicted` (a fresh-container retry may help).
+ *  - A structured {@link DispatchError} from a transport `dispatch()` routes to `dispatch` and
+ *    surfaces its already-elaborated message verbatim (the raw status line + any 404 stale-image
+ *    remedy), rather than the generic "failed to start" framing.
  *  - Anything else is a genuine container accept failure (`dispatch`): the container/runner
  *    never accepted the job (an HTTP/network error, a capacity blip).
  */
@@ -90,6 +93,9 @@ export function classifyDispatchFailure(error: unknown): DispatchFailureClassifi
   }
   if (isContainerEvictionError(message)) {
     return { error: message, failureKind: 'evicted', detail: message }
+  }
+  if (error instanceof DispatchError) {
+    return { error: message, failureKind: 'dispatch', detail: message }
   }
   return { error: 'The container failed to start.', failureKind: 'dispatch', detail: message }
 }

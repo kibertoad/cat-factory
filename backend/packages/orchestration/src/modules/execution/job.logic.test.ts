@@ -1,4 +1,4 @@
-import { ConflictError } from '@cat-factory/kernel'
+import { ConflictError, harnessDispatchError } from '@cat-factory/kernel'
 import { describe, expect, it } from 'vitest'
 import {
   agentFailureKindFromCause,
@@ -126,6 +126,17 @@ describe('classifyDispatchFailure', () => {
     expect(c.failureKind).toBe('dispatch')
     expect(c.error).toBe('The container failed to start.')
     expect(c.detail).toBe('HTTP 502 from runner')
+    expect(c.reason).toBeUndefined()
+  })
+
+  it('surfaces a structured DispatchError message verbatim (incl. the 404 stale-image remedy)', () => {
+    const c = classifyDispatchFailure(
+      harnessDispatchError({ label: 'Container', status: 404, body: 'not found' }),
+    )
+    expect(c.failureKind).toBe('dispatch')
+    // Not the generic "failed to start" — the elaborated remedy is the headline + the detail.
+    expect(c.error).toContain('predates this dispatch route')
+    expect(c.detail).toContain('predates this dispatch route')
     expect(c.reason).toBeUndefined()
   })
 })
