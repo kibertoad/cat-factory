@@ -1174,7 +1174,8 @@
       "merged": "Gemergt",
       "open": "Öffnen",
       "mergePr": "PR mergen",
-      "chooseApproach": "Ansatz wählen"
+      "chooseApproach": "Ansatz wählen",
+      "elapsedTooltip": "Verstrichene Zeit für diesen Schritt"
     },
     "structure": {
       "title": "Struktur",
@@ -1466,7 +1467,8 @@
       "confirmArchive": {
         "title": "Diesen Dienst archivieren?",
         "body": "„{name}“ und seine Aufgaben werden vom Board ausgeblendet. Du kannst den Dienst jederzeit wiederherstellen."
-      }
+      },
+      "runBlocked": "Blockiert durch eine unerledigte Abhängigkeit: {names} | Blockiert durch {count} unerledigte Abhängigkeiten: {names}"
     }
   },
   "layout": {
@@ -2123,7 +2125,12 @@
       "bootstrapStopped": "Bootstrap gestoppt",
       "runStopped": "Lauf gestoppt",
       "stoppedDescription": "Der Container wurde beendet und der Lauf abgebrochen.",
-      "stopFailed": "Stoppen fehlgeschlagen"
+      "stopFailed": "Stoppen fehlgeschlagen",
+      "confirm": {
+        "title": "Diesen Lauf stoppen?",
+        "body": "Der laufende Container wird beendet. Der Lauf bleibt sichtbar und kann wiederholt werden.",
+        "confirm": "Lauf stoppen"
+      }
     },
     "frame": {
       "status": {
@@ -3011,7 +3018,8 @@
       "forkDecision": {
         "proposing": "Ansätze werden vorgeschlagen…",
         "choose": "Ansatz wählen"
-      }
+      },
+      "elapsedTooltip": "Verstrichene Zeit für diesen Schritt"
     },
     "health": {
       "title": "Pipeline-Zustand",

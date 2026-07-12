@@ -347,7 +347,12 @@
       "bootstrapStopped": "Bootstrap stopped",
       "runStopped": "Run stopped",
       "stoppedDescription": "The container was killed and the run was cancelled.",
-      "stopFailed": "Stop failed"
+      "stopFailed": "Stop failed",
+      "confirm": {
+        "title": "Stop this run?",
+        "body": "The running container will be killed. The run stays visible and can be retried.",
+        "confirm": "Stop run"
+      }
     },
     "frame": {
       "status": {
@@ -913,7 +918,8 @@
       "merged": "Merged",
       "open": "Open",
       "mergePr": "Merge PR",
-      "chooseApproach": "Choose approach"
+      "chooseApproach": "Choose approach",
+      "elapsedTooltip": "Elapsed time on this step"
     },
     "structure": {
       "title": "Structure",
@@ -1205,7 +1211,8 @@
       "confirmArchive": {
         "title": "Archive this service?",
         "body": "\"{name}\" and its tasks will be hidden from the board. You can restore it at any time."
-      }
+      },
+      "runBlocked": "Blocked by an unfinished dependency: {names} | Blocked by {count} unfinished dependencies: {names}"
     }
   },
   "observability": {
@@ -3324,7 +3331,8 @@
       "forkDecision": {
         "proposing": "Proposing approaches…",
         "choose": "Choose an approach"
-      }
+      },
+      "elapsedTooltip": "Elapsed time on this step"
     },
     "health": {
       "title": "Pipeline health",

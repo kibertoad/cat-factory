@@ -320,7 +320,12 @@
       "bootstrapStopped": "Arranque detenido",
       "runStopped": "Ejecución detenida",
       "stoppedDescription": "El contenedor se cerró y la ejecución se canceló.",
-      "stopFailed": "No se pudo detener"
+      "stopFailed": "No se pudo detener",
+      "confirm": {
+        "title": "¿Detener esta ejecución?",
+        "body": "Se detendrá el contenedor en ejecución. La ejecución seguirá visible y podrá reintentarse.",
+        "confirm": "Detener ejecución"
+      }
     },
     "frame": {
       "status": {
@@ -859,7 +864,8 @@
         "title": "Aún no hay ejecuciones",
         "body": "Inicia un pipeline para ver el historial de ejecución aquí."
       },
-      "chooseApproach": "Elegir enfoque"
+      "chooseApproach": "Elegir enfoque",
+      "elapsedTooltip": "Tiempo transcurrido en este paso"
     },
     "structure": {
       "title": "Estructura",
@@ -1151,7 +1157,8 @@
       "confirmArchive": {
         "title": "¿Archivar este servicio?",
         "body": "«{name}» y sus tareas se ocultarán del tablero. Puedes restaurarlo en cualquier momento."
-      }
+      },
+      "runBlocked": "Bloqueado por una dependencia sin terminar: {names} | Bloqueado por {count} dependencias sin terminar: {names}"
     }
   },
   "observability": {
@@ -3237,7 +3244,8 @@
       "forkDecision": {
         "proposing": "Proponiendo enfoques…",
         "choose": "Elegir un enfoque"
-      }
+      },
+      "elapsedTooltip": "Tiempo transcurrido en este paso"
     },
     "health": {
       "title": "Estado de los pipelines",

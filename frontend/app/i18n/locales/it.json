@@ -1174,7 +1174,8 @@
       "merged": "Unita",
       "open": "Aperta",
       "mergePr": "Unisci PR",
-      "chooseApproach": "Scegli approccio"
+      "chooseApproach": "Scegli approccio",
+      "elapsedTooltip": "Tempo trascorso su questo passaggio"
     },
     "structure": {
       "title": "Struttura",
@@ -1466,7 +1467,8 @@
       "confirmArchive": {
         "title": "Archiviare questo servizio?",
         "body": "\"{name}\" e le sue attività verranno nascosti dalla board. Puoi ripristinarlo in qualsiasi momento."
-      }
+      },
+      "runBlocked": "Bloccato da una dipendenza non completata: {names} | Bloccato da {count} dipendenze non completate: {names}"
     }
   },
   "layout": {
@@ -2123,7 +2125,12 @@
       "bootstrapStopped": "Bootstrap interrotto",
       "runStopped": "Esecuzione interrotta",
       "stoppedDescription": "Il container è stato terminato e l'esecuzione è stata annullata.",
-      "stopFailed": "Interruzione fallita"
+      "stopFailed": "Interruzione fallita",
+      "confirm": {
+        "title": "Interrompere questa esecuzione?",
+        "body": "Il container in esecuzione verrà terminato. L'esecuzione resta visibile e può essere ripetuta.",
+        "confirm": "Interrompi esecuzione"
+      }
     },
     "frame": {
       "status": {
@@ -3011,7 +3018,8 @@
       "forkDecision": {
         "proposing": "Proposta di approcci…",
         "choose": "Scegli un approccio"
-      }
+      },
+      "elapsedTooltip": "Tempo trascorso su questo passaggio"
     },
     "health": {
       "title": "Stato delle pipeline",

@@ -320,7 +320,12 @@
       "bootstrapStopped": "האתחול נעצר",
       "runStopped": "הריצה נעצרה",
       "stoppedDescription": "הקונטיינר הופסק והריצה בוטלה.",
-      "stopFailed": "העצירה נכשלה"
+      "stopFailed": "העצירה נכשלה",
+      "confirm": {
+        "title": "לעצור את ההרצה הזו?",
+        "body": "הקונטיינר הפעיל ייעצר. ההרצה תישאר גלויה וניתן יהיה לנסות אותה שוב.",
+        "confirm": "עצור הרצה"
+      }
     },
     "frame": {
       "status": {
@@ -859,7 +864,8 @@
         "title": "אין הרצות עדיין",
         "body": "התחל pipeline כדי לראות כאן את היסטוריית ההרצות."
       },
-      "chooseApproach": "בחר גישה"
+      "chooseApproach": "בחר גישה",
+      "elapsedTooltip": "הזמן שחלף בשלב זה"
     },
     "structure": {
       "title": "מבנה",
@@ -1151,7 +1157,8 @@
       "confirmArchive": {
         "title": "להעביר שירות זה לארכיון?",
         "body": "\"{name}\" והמשימות שלו יוסתרו מהלוח. אפשר לשחזר אותו בכל עת."
-      }
+      },
+      "runBlocked": "חסום על ידי תלות אחת שלא הושלמה: {names} | חסום על ידי {count} תלויות שלא הושלמו: {names}"
     }
   },
   "observability": {
@@ -3248,7 +3255,8 @@
       "forkDecision": {
         "proposing": "מציע גישות…",
         "choose": "בחר גישה"
-      }
+      },
+      "elapsedTooltip": "הזמן שחלף בשלב זה"
     },
     "health": {
       "title": "בריאות הצינור",

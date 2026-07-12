@@ -11,6 +11,8 @@ import AgentFailureCard from '~/components/board/AgentFailureCard.vue'
 import AgentFailureHistory from '~/components/board/AgentFailureHistory.vue'
 import EmptyState from '~/components/common/EmptyState.vue'
 import InspectorSection from '~/components/panels/inspector/InspectorSection.vue'
+import { useNowTick, stepDurationLabel } from '~/composables/useStepTimer'
+import type { PipelineStep } from '~/types/execution'
 
 const props = defineProps<{ block: Block }>()
 
@@ -83,6 +85,13 @@ const stepLabel: Record<string, string> = {
 /** A step left mid-flight (`working`) on a failed run gave up — not still working. */
 function stepFailed(s: { state: string }) {
   return runFailed.value && s.state === 'working'
+}
+
+// A shared 1s tick drives every step's live elapsed clock, so a running step that
+// hasn't yet emitted subtask counts reads as progressing rather than hung.
+const nowTick = useNowTick()
+function stepElapsed(s: PipelineStep): string | null {
+  return stepDurationLabel(s, nowTick.value, runFailed.value, instance.value?.failure?.occurredAt)
 }
 
 /** A gated step parked for approval reads "Needs approval", not "Needs decision". */
@@ -306,6 +315,14 @@ async function mergePr() {
             >
               <UIcon v-if="stepFailed(s)" name="i-lucide-circle-x" class="h-3 w-3 shrink-0" />
               {{ labelForStep(s) }}
+              <!-- live elapsed clock: a running step counts up, a finished one shows total -->
+              <span
+                v-if="stepElapsed(s)"
+                class="inline-flex items-center gap-0.5 font-mono tabular-nums text-slate-500"
+                :title="t('inspector.execution.elapsedTooltip')"
+              >
+                · {{ stepElapsed(s) }}
+              </span>
             </span>
             <UButton
               v-if="s.decision && !s.decision.chosen"

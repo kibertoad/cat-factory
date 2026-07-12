@@ -13,9 +13,11 @@ mini-steps, focus-visible rings, reduced-motion guards); the secret-input reveal
 (UX-19/20 — the `SecretInput` primitive: every password field and every plaintext secret
 textarea now masks by default with an eye toggle); the board zoom/canvas navigation cluster
 (UX-07/08/09/14/15/16 — labeled+clamp-disabled zoom controls, a click-to-reset-100% readout,
-double-click-to-focus a frame, and a nudge on blank-canvas pipeline drops); and the
+double-click-to-focus a frame, and a nudge on blank-canvas pipeline drops); the
 modal-safety cluster (UX-18/25 — the `useUnsavedGuard` confirm-before-discard seam on the
-content-heavy modals + DecisionModal double-submit protection). This
+content-heavy modals + DecisionModal double-submit protection); and the pipeline/inspector
+surfaces cluster (UX-35/40/41/42 — live per-step elapsed clocks, a named reason on the locked
+Run trigger, a confirm before stopping a run, and a keyboard-reachable restart button). This
 document catalogs UX papercuts
 (small annoyances, missing affordances, rough edges) found in the SPA
 (`frontend/app/app`) during a systematic sweep on 2026-07-02. Every finding was
@@ -255,14 +257,14 @@ per-file patches:
 | UX-32 | P1  | done    | Requirements/Clarity review actions completely hidden below `lg` — gate unadvanceable                            |
 | UX-33 | P1  | done    | Typed review answers lost when window closes without blur/save                                                   |
 | UX-34 | P2  | done    | Requirements auto-saves on blur; Clarity needs explicit "Save answer" — opposite models                          |
-| UX-35 | P2  | todo    | No elapsed time on running steps in PipelineProgress / TaskExecution                                             |
+| UX-35 | P2  | done    | No elapsed time on running steps in PipelineProgress / TaskExecution                                             |
 | UX-36 | P2  | done    | Raw model id rendered verbatim in review windows                                                                 |
 | UX-37 | P2  | done    | Internal `agentKind` enum + raw model id leak in consensus window                                                |
 | UX-38 | P2  | done    | Clipboard copies give no feedback and swallow failures                                                           |
 | UX-39 | P2  | done    | Agent/provider errors have no copy button                                                                        |
-| UX-40 | P2  | todo    | Inspector "Run" disabled with no explanation                                                                     |
-| UX-41 | P2  | todo    | Stopping a running bootstrap has no confirmation                                                                 |
-| UX-42 | P3  | todo    | "Restart from here" only visible on hover (invisible on touch)                                                   |
+| UX-40 | P2  | done    | Inspector "Run" disabled with no explanation                                                                     |
+| UX-41 | P2  | done    | Stopping a running bootstrap has no confirmation                                                                 |
+| UX-42 | P3  | done    | "Restart from here" only visible on hover (invisible on touch)                                                   |
 | UX-43 | P3  | done    | Agent prose rendered as plain text in several result views                                                       |
 | UX-44 | P3  | partial | Structured JSON / consensus output lack copy buttons; no jump-to-latest in live stream; findings lack timestamps |
 
@@ -288,11 +290,15 @@ w-72 … lg:flex">`, so below `lg` (laptop split-screen, tablet) the human could
   differs, and the explicit "Save answer" button (+ its `clarity.saveAnswer` /
   `clarity.refineAnswerPlaceholder` i18n keys, removed from all 8 locales) is gone. Both
   windows now behave identically.
-- **UX-35 — No elapsed clock.** `pipeline/PipelineProgress.vue` and
-  `panels/inspector/TaskExecution.vue` show spinner/phase/subtasks but no duration;
-  `composables/useStepTimer.ts` is wired only into the step-detail overlay. A step
-  that hasn't emitted subtasks reads as hung. Fix: surface `durationLabel` inline
-  on the active step.
+- **UX-35 — No elapsed clock. DONE.** `pipeline/PipelineProgress.vue` and
+  `panels/inspector/TaskExecution.vue` now surface each step's elapsed time inline (a small
+  mono clock next to the step's sub-label / state), so a running step that hasn't emitted
+  subtasks reads as progressing rather than hung. `composables/useStepTimer.ts`'s
+  freeze-at-finish/failure/park logic was extracted into pure helpers
+  (`stepDurationMs`/`stepDurationLabel`/`stepIsRunning`) plus a shared `useNowTick()` 1s tick,
+  so the list views drive N steps' live clocks from one interval and reuse the exact freeze
+  rules the step-detail overlay already used. A finished step shows its total duration; a live
+  one counts up.
 - **UX-36 — Raw model ref. DONE.** `RequirementsReviewWindow.vue` and
   `ClarityReviewWindow.vue` now render the reviewer model via
   `models.labelForRef(review.model) ?? review.model` (the friendly `<label> · <provider>`
@@ -314,15 +320,24 @@ w-72 … lg:flex">`, so below `lg` (laptop split-screen, tablet) the human could
   get it), the consensus failure banner (`ConsensusSessionWindow.vue`, when there's an error
   string), and the gate failure summary (`GateResultView.vue`, both the human-review and
   conflicts blocks).
-- **UX-40 — Unexplained lock.** `panels/InspectorPanel.vue:493-504` — when
-  `!runnable` the run trigger becomes a disabled lock icon with no tooltip stating
-  the blocking condition (unmet dependency, wrong status, …).
-- **UX-41 — Unguarded bootstrap stop.** `InspectorPanel.vue:386` +
-  `AgentStopButton.vue:29` kill the container immediately on click, while the
-  comparable task reset is confirm-gated (`TaskExecution.vue:148-159`).
-- **UX-42 — Hover-only restart.** `PipelineProgress.vue:325` styles the restart
-  button `opacity-0 group-hover:opacity-100` — invisible on touch, no focus
-  affordance. Fix: also reveal on `focus-within`, or always show dimmed.
+- **UX-40 — Unexplained lock. DONE.** `panels/InspectorPanel.vue` — a disabled task Run
+  button now names WHY it is locked: `board.unmetDeps(id)` feeds a pluralized
+  `panels.inspector.runBlocked` reason (the unfinished dependency titles), rendered both as
+  the button `:title` AND as a visible amber hint line above the actions
+  (`data-testid="run-blocked-reason"`). The visible line is deliberate — a native `title` on a
+  disabled button never fires hover, so pointer, keyboard, and touch users all get the reason.
+  (`isRunnable` is purely dependency-gated, so the reason is non-null exactly when the button
+  is disabled.)
+- **UX-41 — Unguarded bootstrap stop. DONE.** The shared `board/AgentStopButton.vue` (used by
+  the board card AND the inspector's bootstrap-stop) now routes through `useConfirm()` before
+  killing the container — `board.stop.confirm.{title,body,confirm}` — matching the
+  confirm-then-mutate contract the task reset path uses. Fixing it in the shared primitive
+  covers every stop surface at once (bootstrap + execution runs alike).
+- **UX-42 — Hover-only restart. DONE.** The restart-from-here button in `PipelineProgress.vue`
+  keeps its `opacity-0 group-hover:opacity-100` reveal but now also shows on
+  `group-focus-within:opacity-100` (keyboard-tabbing into the step row reveals it) and
+  `focus-visible:opacity-100` (the button itself receiving focus), so it is no longer invisible
+  to keyboard/touch.
 - **UX-43 — Markdown as plain text. DONE.** A new shared `renderMarkdown()`
   (`utils/agentOutput.ts` — the same secure markdown-it config as the reader, `html:false`,
   links decorated to open safely) plus a reusable `common/MarkdownProse.vue` component replace
@@ -641,6 +656,29 @@ w-72 … lg:flex">`, so below `lg` (laptop split-screen, tablet) the human could
   input is the right shape even for long tokens (the four UX-20 `UTextarea`s were single-line
   vendor keys); reserve a real `UTextarea` for genuinely multi-line secrets (e.g. a PEM key),
   which this primitive does not cover.
+- **A running step's elapsed clock comes from `useStepTimer`'s pure helpers, not a bespoke
+  timer.** `stepDurationMs`/`stepDurationLabel`/`stepIsRunning` + a shared `useNowTick()` (all
+  in `composables/useStepTimer.ts`) encode the one freeze rule — a step's clock stops at its
+  finish, else the run's failure time, else the human-park (`pausedAt`), else it counts up to
+  `now`. A list surface (the pipeline timeline, the inspector run list) drives every row's clock
+  from ONE `useNowTick()` tick + the pure `stepDurationLabel(step, now, runFailed, failureAt)`;
+  a single-step overlay keeps using the `useStepTimer({...})` computed wrapper. Do NOT hand-roll
+  a second interval or re-derive the freeze logic.
+- **Guard a destructive action in the SHARED primitive, not per call-site, when one exists.**
+  Stopping a run (kill the container) is confirm-gated inside `board/AgentStopButton.vue` itself
+  (via `useConfirm()`), so every surface that mounts it — board card + inspector — inherits the
+  confirm at once, mirroring how the board delete/undo path lives in `stores/board.ts`. Reach
+  for the shared component before sprinkling `confirm()` at each usage.
+- **A disabled control must say WHY, and a native `title` on a disabled element is not
+  enough.** A disabled `<button>`/`<UButton>` doesn't fire hover, so its `title` tooltip never
+  shows — pair the title with a visible hint line (see UX-40's `runBlocked` reason, rendered
+  both as `:title` and as an amber line with a `data-testid`) so pointer, keyboard, and touch
+  users all get the reason. Derive the reason from the SAME predicate that disables the control
+  (here `board.unmetDeps` ⇄ `isRunnable`) so the two can't drift.
+- **Reveal a hover-only affordance on keyboard focus too.** An `opacity-0
+group-hover:opacity-100` control is invisible to keyboard/touch; add
+  `group-focus-within:opacity-100` (tabbing into the containing row) and `focus-visible:opacity-100`
+  (the control itself focused) so it isn't a pointer-only gesture (UX-42).
 - When fixing i18n papercuts (UX-13), remember the locale-parity CI check: adding,
   changing, OR removing an `en.json` key requires the same change in every other locale in
   the same PR (removing the two dead `clarity.*` keys above meant editing all 8 locales).

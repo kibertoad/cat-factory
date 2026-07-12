@@ -22,12 +22,22 @@ const props = withDefaults(
 const { t } = useI18n()
 const agentRuns = useAgentRunsStore()
 const toast = useToast()
+const { confirm } = useConfirm()
 const stopping = ref(false)
 
 const displayLabel = computed(() => props.label ?? t('board.stop.label'))
 
 async function stop() {
   if (stopping.value) return
+  // Killing a running container discards its in-flight work — gate it behind a confirm,
+  // matching the confirm-then-mutate contract the task reset path uses.
+  const ok = await confirm({
+    title: t('board.stop.confirm.title'),
+    description: t('board.stop.confirm.body'),
+    confirmLabel: t('board.stop.confirm.confirm'),
+    icon: 'i-lucide-circle-stop',
+  })
+  if (!ok) return
   stopping.value = true
   try {
     const kind = await agentRuns.stop(props.runId)
