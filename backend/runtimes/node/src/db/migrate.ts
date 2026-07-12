@@ -176,7 +176,15 @@ const CONNECTION_FAILURE_CODES = new Set([
 // Loopback hosts. A connection failure against one of these is a local-dev setup problem (Postgres
 // not started, or the `localhost`→`::1` IPv6 footgun) — actionable at boot — rather than a remote
 // database being transiently down (which we must NOT reframe as a misconfiguration; see below).
+// `0.0.0.0` is the unspecified address, not strictly loopback, but a `DATABASE_URL` pointed at it
+// is still a local-dev misconfiguration (it routes to localhost as a connect target on Linux), so
+// we treat it the same — the IPv6 remedy below is gated on the literal `localhost` name regardless.
 const LOOPBACK_HOSTS = new Set(['localhost', '127.0.0.1', '::1', '0.0.0.0'])
+
+// Guards `connectionFailureCode`'s recursion against a pathological cyclic `.cause`/`.errors` chain
+// (a hand-built error re-referencing itself). Real node-postgres error nests are 1–2 deep, so this
+// ceiling never bites a genuine failure — it only stops an infinite loop / stack overflow.
+const MAX_CAUSE_DEPTH = 8
 
 /**
  * Extract a connection-failure code from an error, unwrapping the two nested shapes node-postgres
@@ -184,17 +192,17 @@ const LOOPBACK_HOSTS = new Set(['localhost', '127.0.0.1', '::1', '0.0.0.0'])
  * — e.g. IPv6 `::1` THEN IPv4 — and every attempt failed) and a wrapper's `.cause`. Returns the
  * matched code or undefined when the error is not a connection failure.
  */
-function connectionFailureCode(err: unknown): string | undefined {
-  if (!err || typeof err !== 'object') return undefined
+function connectionFailureCode(err: unknown, depth = 0): string | undefined {
+  if (depth > MAX_CAUSE_DEPTH || !err || typeof err !== 'object') return undefined
   const e = err as { code?: unknown; errors?: unknown; cause?: unknown }
   if (typeof e.code === 'string' && CONNECTION_FAILURE_CODES.has(e.code)) return e.code
   if (Array.isArray(e.errors)) {
     for (const nested of e.errors) {
-      const code = connectionFailureCode(nested)
+      const code = connectionFailureCode(nested, depth + 1)
       if (code) return code
     }
   }
-  return e.cause ? connectionFailureCode(e.cause) : undefined
+  return e.cause ? connectionFailureCode(e.cause, depth + 1) : undefined
 }
 
 /** Parse a loopback `{ host, port }` out of a Postgres URL, or undefined when it isn't loopback. */
