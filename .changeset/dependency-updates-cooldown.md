@@ -40,6 +40,8 @@ Update workspace dependencies (direct + transitive) to the newest versions publi
 - Vercel AI SDK family held to the `ai@6`-compatible majors that `workers-ai-provider@3.3.1` peers
   require (`ai` 6.0.224, `@ai-sdk/anthropic|openai|provider` on 3.x, `@ai-sdk/openai-compatible` on
   2.x, `@ai-sdk/amazon-bedrock` 4.x) — no v7/v5 major bumps.
-- Coding (`executor-harness`) and deploy runner harnesses updated too; their image tags and the
-  three hand-maintained pins were bumped in lockstep, so the runner images must be re-published +
+- Coding (`executor-harness`) and deploy runner harnesses updated too, including the pinned
+  in-container coding-agent CLIs (Pi 0.80.6, Claude Code 2.1.207, Codex 0.144.1; the Pi todo /
+  web-tools extensions stay at their lockstep 1.20.0). Their image tags and the three
+  hand-maintained pins were bumped in lockstep, so the runner images must be re-published +
   deployed for the new tags to roll out.

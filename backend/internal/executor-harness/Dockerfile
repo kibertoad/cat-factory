@@ -90,9 +90,9 @@ RUN echo 'harness:100000:65536' > /etc/subuid \
 # must be installed WITHOUT `--ignore-scripts` — otherwise the `claude` / `codex`
 # CLI is missing or non-functional at runtime. We then assert both CLIs actually
 # run so a broken install fails the build instead of every subscription job.
-ARG PI_VERSION=0.80.3
-ARG CLAUDE_CODE_VERSION=2.1.201
-ARG CODEX_VERSION=0.142.5
+ARG PI_VERSION=0.80.6
+ARG CLAUDE_CODE_VERSION=2.1.207
+ARG CODEX_VERSION=0.144.1
 RUN --mount=type=secret,id=extra_ca,target=/tmp/extra_ca.crt \
     sh -eu -c 'apt-get update && apt-get install -y --no-install-recommends git ca-certificates curl && rm -rf /var/lib/apt/lists/*; \
     if [ -s /tmp/extra_ca.crt ]; then export NODE_EXTRA_CA_CERTS=/tmp/extra_ca.crt; fi; \
