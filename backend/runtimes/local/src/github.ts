@@ -285,6 +285,30 @@ export function createLocalGitHubClient(env: NodeJS.ProcessEnv): GitHubClient | 
 }
 
 /**
+ * Build a {@link GitHubClient} over a mothership-delegated {@link AppTokenSource}
+ * (mothership mode with no local `GITHUB_PAT`): every installation token is minted by the
+ * mothership's GitHub App via `POST /internal/github/installation-token`, so the CI /
+ * merge / mergeability gates AND the repo-link / "add from repo" flows hit real GitHub on
+ * the org's App installation — without the App private key (or any long-lived credential)
+ * ever reaching this machine. Unlike the PAT client, the BASE `FetchGitHubClient` repo
+ * enumeration (`/installation/repositories`) works as-is: the delegated token IS a real
+ * App installation token.
+ */
+export function createDelegatedGitHubClient(
+  env: NodeJS.ProcessEnv,
+  tokenSource: AppTokenSource,
+): GitHubClient {
+  const apiBase = env.GITHUB_API_BASE?.trim() || 'https://api.github.com'
+  return new FetchGitHubClient({
+    registry: tokenSource,
+    rateLimitRepository: new NoopRateLimitRepository(),
+    idGenerator: localIdGenerator,
+    clock: localClock,
+    apiBase,
+  })
+}
+
+/**
  * Build a {@link GitHubClient} for a GitLab-only local deployment: a PAT-backed
  * {@link FetchGitLabClient} (the provider-neutral `VcsClient`) adapted to the legacy
  * `GitHubClient` port the CI / merge / mergeability gates + repo-link flows still consume.

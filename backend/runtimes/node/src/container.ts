@@ -2686,6 +2686,12 @@ export function buildNodeContainer(options: NodeContainerOptions): ServerContain
     // Core never reads it — it's surfaced separately above for `AgentRunController`), so fold it
     // in explicitly, else the board's retry/stop `getRef` call comes back `... is not wired`.
     // Sourced identically on both facades so they attach the same registry surface.
+    // Mothership-side GitHub token delegation (`POST /internal/github/installation-token`):
+    // when this deployment's GitHub App is configured, a machine-authed mothership-mode node
+    // can mint the short-lived installation tokens its agent containers/gates need — the App
+    // private key never leaves this service. The registry satisfies the seam structurally.
+    // Wired symmetrically on the Cloudflare facade.
+    ...(appRegistry ? { githubTokenDelegation: appRegistry } : {}),
     repositories: {
       ...dependencies,
       agentRunRepository: repos.agentRunRepository,

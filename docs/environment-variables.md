@@ -83,12 +83,12 @@ UI (Workspace settings -> Budget) and defaults to about 100 EUR/month.
 
 ## VCS integration (GitHub / GitLab)
 
-| Variable                                                            | Modes     | Default  | Description                                                                                   |
-| ------------------------------------------------------------------- | --------- | -------- | --------------------------------------------------------------------------------------------- |
-| `GITHUB_APP_ID` / `GITHUB_APP_PRIVATE_KEY`                          | CF, Node  | none     | The GitHub App (installation-based repo access + CI/merge gates).                             |
-| `GITHUB_APP_SLUG` / `GITHUB_API_BASE` / `GITHUB_SETUP_REDIRECT_URL` | CF, Node  | defaults | GitHub App metadata + API base (GitHub Enterprise).                                           |
-| `GITHUB_PAT`                                                        | Local, MS | none     | Personal access token local mode uses instead of a GitHub App (push token + CI/merge client). |
-| `GITLAB_PAT` / `GITLAB_API_BASE`                                    | Local     | none     | GitLab personal access token + API base for a GitLab local deployment.                        |
+| Variable                                                            | Modes     | Default  | Description                                                                                                                                                                                                                                             |
+| ------------------------------------------------------------------- | --------- | -------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `GITHUB_APP_ID` / `GITHUB_APP_PRIVATE_KEY`                          | CF, Node  | none     | The GitHub App (installation-based repo access + CI/merge gates).                                                                                                                                                                                       |
+| `GITHUB_APP_SLUG` / `GITHUB_API_BASE` / `GITHUB_SETUP_REDIRECT_URL` | CF, Node  | defaults | GitHub App metadata + API base (GitHub Enterprise).                                                                                                                                                                                                     |
+| `GITHUB_PAT`                                                        | Local, MS | none     | Personal access token local mode uses instead of a GitHub App (push token + CI/merge client). OPTIONAL in mothership mode: without it, GitHub runs on installation tokens the mothership's GitHub App mints over the machine API. A set PAT still wins. |
+| `GITLAB_PAT` / `GITLAB_API_BASE`                                    | Local     | none     | GitLab personal access token + API base for a GitLab local deployment.                                                                                                                                                                                  |
 
 ## Model providers
 

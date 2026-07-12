@@ -331,15 +331,15 @@ const NON_REMOTE: Record<string, Record<string, Reason>> = {
   // `get`/`insert`/`update` are now allow-listed (the repair retry/stop run-control surface);
   // `listByWorkspace` was already remote (the run-path list). The whole repo is now remote.
   envConfigRepairJobRepository: {},
-  // The ephemeral-environment self-test is a member-level, workspace-scoped run-path
-  // diagnostic, but it needs `resolveRunRepoContext` (GitHub) which mothership mode does not
-  // proxy yet — so the whole repo stays off the machine API until a later slice proxies it.
-  environmentTestRunRepository: {
-    insert: 'pending',
-    update: 'pending',
-    get: 'pending',
-    listRunningByWorkspace: 'pending',
-  },
+  // The whole ephemeral-environment self-test run store is now remote (insert/update/get/
+  // listRunningByWorkspace — the start / durable-poll / stop surface + the snapshot's
+  // in-flight read). Its GitHub dependency (`resolveRunRepoContext` for the throwaway
+  // branch) is served by mothership GitHub token delegation
+  // (`/internal/github/installation-token`), so the old "needs GitHub which mothership does
+  // not proxy" blocker is gone; the remaining gate on a FULL mothership-mode self-test is
+  // the provisioning writes (`environmentRegistryRepository.insert`/`update`, the
+  // secrets-delegation slice below).
+  environmentTestRunRepository: {},
   // The whole environment-connection management surface is now remote (the connection +
   // per-type infra-handler settings panels: list/connect/disconnect/register-handler). Its
   // secrets ride a SEALED `secretsCipher` blob (sealed/decrypted in the service under the LOCAL

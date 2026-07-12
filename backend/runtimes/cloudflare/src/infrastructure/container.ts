@@ -2458,6 +2458,14 @@ export function buildContainer(
     agentRunRepository,
     // Execution-scoped repo, surfaced for the conformance suite's compareAndSwap parity check.
     executionRepository: dependencies.executionRepository,
+    // Mothership-side GitHub token delegation (`POST /internal/github/installation-token`):
+    // when this deployment's GitHub App is configured, a machine-authed mothership-mode node
+    // can mint the short-lived installation tokens its agent containers/gates need — the App
+    // private key never leaves this Worker. The registry satisfies the seam structurally.
+    // Wired symmetrically on the Node facade.
+    ...(config.github.enabled
+      ? { githubTokenDelegation: buildAppRegistry(env, config, db, clock) }
+      : {}),
     // The repository registry the mothership-mode machine API (`/internal/persistence`) reflects
     // over, so a Cloudflare deployment can act as a mothership for mothership-mode local nodes.
     // The controller gates which repo+method is callable (allow-list) and account-scopes each
