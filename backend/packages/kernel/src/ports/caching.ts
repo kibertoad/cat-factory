@@ -201,6 +201,12 @@ export interface BudgetLimitCacheValue {
  * Shared by every reader of the slice (`WorkspaceSettingsService`, `SpendService`,
  * `LlmObservabilityService`) so they build the cache key/group identically and can never
  * drift — the same reasoning as {@link repoFilesCacheGroup}. Group == key == workspace id.
+ *
+ * The returned object is the SHARED cached instance (on a Node/local cache hit every caller
+ * gets the same reference), so callers MUST treat it as immutable — never mutate a field of
+ * the result. Derive a new object instead (as `SpendService.resolvePricing` and
+ * `WorkspaceSettingsService.update` do); mutating it in place would corrupt the entry for
+ * every other reader and, via the notification bus, every replica's logical view of it.
  */
 export async function readCachedWorkspaceSettings(
   cache: GroupCacheHandle<WorkspaceSettingsCacheValue> | undefined,

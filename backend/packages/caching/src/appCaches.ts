@@ -164,8 +164,8 @@ export const ISOLATE_SAFE_APP_CACHES_PROFILE: AppCachesProfile = {
   accountModelPolicy: { ...DEFAULT_APP_CACHES_PROFILE.accountModelPolicy, enabled: false },
   // Pass-through: the workspace-settings row and the budget-limit reads are all our own
   // mutable D1 state with no cross-isolate invalidation bus on the Worker, so the isolate
-  // reads them live (the Worker rebuilds the bag per invocation, so a within-invocation
-  // read still dedupes) — same class as `repoProjection`/`accountModelPolicy`.
+  // reads them live (no in-memory tier — every read hits D1; only concurrent in-flight
+  // loads coalesce) — same class as `repoProjection`/`accountModelPolicy`.
   workspaceSettings: { ...DEFAULT_APP_CACHES_PROFILE.workspaceSettings, enabled: false },
   accountBudgetLimit: { ...DEFAULT_APP_CACHES_PROFILE.accountBudgetLimit, enabled: false },
   userBudgetLimit: { ...DEFAULT_APP_CACHES_PROFILE.userBudgetLimit, enabled: false },
