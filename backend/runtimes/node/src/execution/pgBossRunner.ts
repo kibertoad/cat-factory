@@ -83,12 +83,8 @@ function sendOptions(executionId: string, opts: AdvanceQueueOptions): SendOption
  * advance job is a per-row no-op; the rest insert), preserving the sweeper's
  * no-double-drive guarantee while collapsing N round-trips into one.
  */
-function advanceInsert(
-  executionId: string,
-  data: AdvanceJob,
-  opts: AdvanceQueueOptions,
-): JobInsert<AdvanceJob> {
-  return { data, ...advanceJobOptions(executionId, opts) }
+function advanceInsert(data: AdvanceJob, opts: AdvanceQueueOptions): JobInsert<AdvanceJob> {
+  return { data, ...advanceJobOptions(data.executionId, opts) }
 }
 
 export class PgBossWorkRunner implements WorkRunner {
@@ -346,11 +342,7 @@ export function startStaleRunSweeper(
         }
         log.warn({ workspaceId: ref.workspaceId, executionId: ref.id }, 're-driving stale run')
         advanceReenqueues.push(
-          advanceInsert(
-            ref.id,
-            { workspaceId: ref.workspaceId, executionId: ref.id },
-            queueOptions,
-          ),
+          advanceInsert({ workspaceId: ref.workspaceId, executionId: ref.id }, queueOptions),
         )
       }
       // Forget runs that recovered (bumped their lease → left the stale set) or went terminal,
@@ -389,11 +381,7 @@ export function startStaleRunSweeper(
           're-driving spend-paused run (workspace/account budget free; step gate re-checks the user tier)',
         )
         advanceReenqueues.push(
-          advanceInsert(
-            ref.id,
-            { workspaceId: ref.workspaceId, executionId: ref.id },
-            queueOptions,
-          ),
+          advanceInsert({ workspaceId: ref.workspaceId, executionId: ref.id }, queueOptions),
         )
       }
 
