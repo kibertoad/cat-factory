@@ -1,5 +1,50 @@
 # @cat-factory/node-server
 
+## 0.92.21
+
+### Patch Changes
+
+- 5a3fe5d: Elaborate the two `REDIS_URL` failure modes (error-message initiative A7).
+
+  - **`ioredis` missing** (REDIS_URL set, optional dep not installed): both Node Redis consumers
+    (real-time cross-node propagation and distributed cache invalidation) now throw the shared
+    `missingIoredisProblem` — a `ConfigValidationError` naming `REDIS_URL`, the install-or-unset
+    remedy, and the docs — instead of a bare `Error` deep in boot, so it lands on the misconfigured
+    fallback screen. A `REDIS_URL` entry is added to the server `ENV_HELP` registry.
+  - **Bus unreachable** (REDIS_URL set, Redis down): a best-effort, timeout-bounded boot probe
+    (`warnIfRedisUnreachable`, mirroring local mode's `probeGitHubPat`) now logs ONE elaborate,
+    credential-free warning naming the host, the silent degradation, how to verify
+    (`redis-cli -u <REDIS_URL> ping`), and the docs — instead of ioredis retrying silently while
+    cross-node realtime and cache coherence are quietly degraded. Never blocks or crashes boot.
+
+- 2a13ece: Route `AccountSettingsService.resolve` through the app cache seam (performance initiative item 8).
+  The service's legacy homebrew 30s `{ value, expiresAt }` `Map` — the anti-pattern CLAUDE.md names
+  explicitly — is replaced by a new `accountSettings` `AppCaches` slice (grouped and keyed by account
+  id, holding the decrypted `ResolvedAccountSettings`). `resolve` now reads through it and `write`
+  invalidates the account's entry after the upsert commits, so an integration-credential change is
+  coherent across replicas (the invalidation bus carries only keys, never the decrypted secrets, so
+  plaintext still never leaves the process). `ResolvedAccountSettings` moved to the kernel
+  account-settings port (the caching port now names it) and is re-exported from
+  `@cat-factory/integrations`, so its consumers are unchanged. Pass-through on the Worker's
+  isolate-safe profile (our own mutable D1 state, no cross-isolate bus); both facades wire the slice.
+- Updated dependencies [5a3fe5d]
+- Updated dependencies [2a13ece]
+  - @cat-factory/server@0.112.10
+  - @cat-factory/kernel@0.121.8
+  - @cat-factory/caching@0.6.41
+  - @cat-factory/integrations@0.81.14
+  - @cat-factory/agents@0.54.6
+  - @cat-factory/consensus@0.10.42
+  - @cat-factory/eks@0.1.66
+  - @cat-factory/gates@0.5.26
+  - @cat-factory/gitlab@0.7.64
+  - @cat-factory/observability-langfuse@0.7.196
+  - @cat-factory/orchestration@0.106.8
+  - @cat-factory/provider-bedrock@0.7.212
+  - @cat-factory/provider-cloudflare@0.7.213
+  - @cat-factory/provider-s3@0.2.146
+  - @cat-factory/spend@0.12.22
+
 ## 0.92.20
 
 ### Patch Changes
