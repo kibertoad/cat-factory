@@ -11,7 +11,8 @@ paid ~6 serial GitHub/DB round-trips of latency. Once the repo target is resolve
 mutually independent, so they now run in a single `Promise.all` wave (the repo-scoped token
 mint + work-branch ensure alongside the workspace/block-scoped auth / registries / secrets /
 web-search). The apriori/work-branch resolution moved into a `resolveWorkBranchReady` helper so
-it fits the wave with unchanged behaviour. Separately, `startJob` no longer awaits the
-best-effort `agentContextObservability.record` before returning — it's fire-and-forget with a
-swallowing `catch`, so the driver proceeds to the first poll without waiting on the
-observability write. Per-kind job-body shapes are byte-identical.
+it fits the wave with unchanged behaviour. The best-effort `agentContextObservability.record`
+stays awaited (with a swallowing `catch`) — it runs after the container job is already
+dispatched, so it is off the container's critical path, and a bare fire-and-forget `void` would
+be silently dropped on the Worker once the isolate hibernates on the next durable sleep. Per-kind
+job-body shapes are byte-identical.

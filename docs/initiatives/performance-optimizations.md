@@ -175,10 +175,9 @@ every re-dispatch epoch (tester→fixer rounds).
 
 **Fix:** after `resolveRepoTarget`, run two parallel waves with `Promise.all`:
 `[mintInstallationToken, ensureWorkBranch]` alongside `[resolveAuth,
-resolvePackageRegistries, resolveTestSecrets, resolveWebSearchAvailability]`. Secondary:
-`startJob` awaits the best-effort `agentContextObservability.record` before returning
-(`:696-704`) — fire-and-forget it (still swallowing errors) so the driver proceeds to the
-first poll immediately.
+resolvePackageRegistries, resolveTestSecrets, resolveWebSearchAvailability]`. (Fire-and-forgetting
+`startJob`'s best-effort `agentContextObservability.record` was considered but rejected — see the
+landed note below: it's already off the critical path, and a `void` would be dropped on the Worker.)
 
 **Landed (branch `claude/perf-tracker-next-phase-3wg1gq`):** once the repo target is resolved,
 `buildJobBody` fans the six independent dispatch resolutions out in a single `Promise.all`
@@ -187,13 +186,18 @@ workspace/block-scoped `resolveAuth`, `resolvePackageRegistries`, `resolveTestSe
 `resolveWebSearchAvailability` — collapsing ~6 serial round-trips per step dispatch (and per
 tester→fixer re-dispatch epoch) to one. The apriori/work-branch logic moved to a private
 `resolveWorkBranchReady` helper so it fits as one entry in the wave (behaviour unchanged: PR-head
-short-circuit, apriori probe-only-or-fail, writer-create / reader-probe). `startJob` no longer
-awaits `agentContextObservability.record` — it's `void`-dispatched with a swallowing `.catch`, so
-the returned handle no longer blocks on the observability write. Pure `@cat-factory/server`
-change (no persistence / no conformance surface). The per-kind body snapshots are byte-identical
-(the `containerAgentJobBody.spec.ts` characterization guard), plus two new tests pin the
-concurrency (resolvers all started before any resolves) and the fire-and-forget record (the
-handle returns while the recorder promise is still outstanding).
+short-circuit, apriori probe-only-or-fail, writer-create / reader-probe). `startJob` keeps
+`agentContextObservability.record` **awaited** (with a swallowing `catch`): it runs after the
+container job is already dispatched, so it is off the container's critical path — the only thing
+it delays is the driver's handle return, which then sleeps before its first poll regardless. A
+bare fire-and-forget `void` was considered but rejected: `startJob` runs inside a Cloudflare
+Workflow step, so an un-awaited insert is silently dropped once the isolate hibernates on the next
+durable `step.sleep` (the `http/waitUntil.ts` anti-pattern), which would stop the snapshot
+recording on the primary runtime for a negligible latency gain. Pure `@cat-factory/server` change
+(no persistence / no conformance surface). The per-kind body snapshots are byte-identical (the
+`containerAgentJobBody.spec.ts` characterization guard), plus two new tests pin the concurrency
+(resolvers all started before any resolves) and that a failing observability record still never
+breaks the dispatch.
 
 ### 5. Board snapshot carries full step outputs the board never reads — P1
 
@@ -473,7 +477,8 @@ invalidated from `RiskPolicyService.create/update/remove/reseed` (`RiskPolicySer
 1. Item 2 (repoId memo + branchHeadSha + PAT probe-scope) — pure server package, big win.
 2. Item 3 (projected `listLiveBlockIds` + index, both runtimes + conformance).
 3. Item 1 (gate `attachStepMetrics` to step-boundary emits).
-4. Item 4 (parallel waves in `buildJobBody` + fire-and-forget context snapshot).
+4. Item 4 (parallel waves in `buildJobBody`; context-snapshot record stays awaited — off the
+   critical path, and a `void` would be dropped on the Worker).
 5. Items 7+9 together (spend/workspace-settings slices), then 8 (account settings).
 6. Items 15+16+17+18 as one "reuse the loaded list" batch-fix PR.
 7. Item 12 (GitHub sync parallelism) + 14 (fan-out publisher).

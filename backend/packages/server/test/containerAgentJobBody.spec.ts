@@ -722,8 +722,8 @@ describe('ContainerAgentExecutor dispatch I/O parallelism', () => {
   // The independent dispatch resolutions — installation-token mint, work-branch ensure, auth,
   // package registries, tester secrets, web-search availability — are fanned out in one wave
   // once the repo target is resolved (audit item 4). This pins that they overlap rather than
-  // running one-after-another, and that the fire-and-forget context-observability record no
-  // longer blocks the returned handle.
+  // running one-after-another, and that a failing context-observability record still never
+  // breaks a dispatch.
 
   // A deferred promise whose resolution we drive from the test, so we can observe which
   // resolvers have STARTED before any of them finishes.
@@ -797,8 +797,7 @@ describe('ContainerAgentExecutor dispatch I/O parallelism', () => {
     await job
   })
 
-  it('does not wait on the context-observability record before returning the handle', async () => {
-    const recordGate = deferred<void>()
+  it('awaits the context-observability record but swallows a recorder failure', async () => {
     let recordStarted = false
     const transport: RunnerTransport = {
       async dispatch() {},
@@ -825,19 +824,20 @@ describe('ContainerAgentExecutor dispatch I/O parallelism', () => {
       } as unknown as ContainerSessionService,
       proxyBaseUrl: 'https://proxy.test/v1',
       agentContextObservability: {
-        record() {
+        // Reject: the record is best-effort. It is AWAITED (a bare `void` would be dropped on
+        // the Worker once the isolate hibernates on the next durable sleep), so the swallowing
+        // catch is what guarantees a recorder failure still never breaks the dispatch.
+        async record() {
           recordStarted = true
-          // Never resolves within the test: a blocking await here would hang startJob.
-          return recordGate.promise
+          throw new Error('telemetry DB down')
         },
       },
     })
 
-    // Resolves despite the recorder promise being outstanding — the record is fire-and-forget.
+    // Resolves with a handle despite the recorder throwing — the failure is swallowed.
     const handle = await executor.startJob(context('coder'))
     expect(handle.jobId).toBeDefined()
     expect(recordStarted).toBe(true)
-    recordGate.resolve()
   })
 })
 

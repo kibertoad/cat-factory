@@ -729,14 +729,22 @@ export class ContainerAgentExecutor implements AsyncAgentExecutor {
     // Capture the complete provided context for observability (best-effort, gated inside
     // the recorder). This is the only place the fully composed prompts + the injected
     // file bodies exist as one unit; proxy telemetry never sees the `.cat-context` files.
-    // Fire-and-forget: the driver proceeds to the first poll without waiting on the write,
-    // and a recorder failure never breaks a dispatch.
+    // Awaited (not fire-and-forget): this runs AFTER the container job is already dispatched,
+    // so it is off the container's critical path — the only thing it delays is the driver's
+    // return of the handle, which then sleeps before its first poll regardless. A bare
+    // `void promise` here would be silently dropped on the Worker: `startJob` runs inside a
+    // Cloudflare Workflow step, and the isolate hibernates on the next durable `step.sleep`
+    // before an un-awaited insert can land (see `http/waitUntil.ts`), so the snapshot would
+    // stop recording on the primary runtime. Awaiting keeps it reliable on both facades; the
+    // swallow guarantees a recorder failure still never breaks a dispatch.
     if (this.deps.agentContextObservability) {
-      void this.deps.agentContextObservability
-        .record(buildAgentContextRecord(context, body, model, { workspaceId, executionId }))
-        .catch(() => {
-          // Swallowed: observability never breaks a dispatch.
-        })
+      try {
+        await this.deps.agentContextObservability.record(
+          buildAgentContextRecord(context, body, model, { workspaceId, executionId }),
+        )
+      } catch {
+        // Swallowed: observability never breaks a dispatch.
+      }
     }
     // Carry the run id + workspace on the handle so the poll/stop site can re-address
     // the same per-run container (Cloudflare vs. self-hosted pool) given only the
