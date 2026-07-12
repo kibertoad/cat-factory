@@ -1,6 +1,6 @@
 {
   "name": "@cat-factory/integrations",
-  "version": "0.81.10",
+  "version": "0.81.11",
   "description": "External-system integration domain logic for the Agent Architecture Board (GitHub, documents, tasks, environments, runners).",
   "repository": {
     "type": "git",
