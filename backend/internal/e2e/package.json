@@ -19,8 +19,8 @@
   },
   "devDependencies": {
     "@playwright/test": "^1.61.1",
-    "@types/node": "^26.1.0",
-    "ai": "^6.0.219",
-    "typescript": "7.0.1-rc"
+    "@types/node": "^26.1.1",
+    "ai": "^6.0.224",
+    "typescript": "7.0.2"
   }
 }

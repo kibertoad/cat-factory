@@ -48,9 +48,9 @@
   "devDependencies": {
     "@cat-factory/contracts": "workspace:*",
     "@cat-factory/kernel": "workspace:*",
-    "@types/node": "^26.1.0",
-    "typescript": "7.0.1-rc",
+    "@types/node": "^26.1.1",
+    "typescript": "7.0.2",
     "valibot": "^1.4.2",
-    "vitest": "^4.1.9"
+    "vitest": "^4.1.10"
   }
 }
