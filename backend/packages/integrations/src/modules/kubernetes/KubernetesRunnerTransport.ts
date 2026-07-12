@@ -1,12 +1,13 @@
-import type {
-  ConnectionTestResult,
-  KubernetesRunnerConfig,
-  RunnerDispatchKind,
-  RunnerDispatchOptions,
-  RunnerJobRef,
-  RunnerJobView,
-  RunnerTransport,
-  SecretResolver,
+import {
+  type ConnectionTestResult,
+  harnessDispatchError,
+  type KubernetesRunnerConfig,
+  type RunnerDispatchKind,
+  type RunnerDispatchOptions,
+  type RunnerJobRef,
+  type RunnerJobView,
+  type RunnerTransport,
+  type SecretResolver,
 } from '@cat-factory/kernel'
 import {
   KubernetesApiClient,
@@ -90,7 +91,13 @@ export class KubernetesRunnerTransport implements RunnerTransport {
     await this.waitForPodReady(name)
     const res = await this.proxyFetch('POST', name, '/jobs', { ...spec, kind }, DISPATCH_TIMEOUT_MS)
     if (!res.ok) {
-      throw new Error(`Container dispatch failed (HTTP ${res.status}): ${await safeText(res)}`)
+      // Structured DispatchError (carrying the HTTP status) so consumers classify by field, not
+      // regex; a 404 on the harness /jobs route elaborates to the stale-image republish remedy.
+      throw harnessDispatchError({
+        label: 'Container',
+        status: res.status,
+        body: await safeText(res),
+      })
     }
   }
 

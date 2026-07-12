@@ -1,6 +1,6 @@
 # Initiative: system audit — data lifecycle, runtime parity, robustness & coverage
 
-**Status:** in progress (items 1–8 landed) · **Owner:** core · **Started:** 2026-07-11
+**Status:** in progress (items 1–8, 9, 10 landed) · **Owner:** core · **Started:** 2026-07-11
 
 > This is the durable source of truth for a multi-PR initiative. Read it first before
 > picking up the next slice; update the checklist at the end of each PR.
@@ -87,8 +87,8 @@ benefit, bounded blast radius; **P3** = hygiene/polish. Effort S/M/L.
 | 6   | P2  | parity      | Node sweeper re-entrancy guards inconsistent (initiativeLoop / recurring / escalation)      | S      | ✅ done | (this PR) |
 | 7   | P2  | conformance | Four retention prunes have no cross-runtime conformance assertion                           | S–M    | ✅ done | (this PR) |
 | 8   | P2  | engine      | Notification-escalation sweep: per-workspace settings point-read (N+1 the cache can't fix)  | M      | ✅ done | (this PR) |
-| 9   | P2  | ops         | Node `/health` is a static 200 — add a `/ready` readiness probe (pool + pg-boss)            | S      | ⬜ todo |           |
-| 10  | P2  | frontend    | `provisioningLogs` store: unbounded per-execution map + unguarded out-of-order overwrite    | S      | ⬜ todo |           |
+| 9   | P2  | ops         | Node `/health` is a static 200 — add a `/ready` readiness probe (pool + pg-boss)            | S      | ✅ done | (this PR) |
+| 10  | P2  | frontend    | `provisioningLogs` store: unbounded per-execution map + unguarded out-of-order overwrite    | S      | ✅ done | (this PR) |
 | 11  | P3  | api         | Error code `validation` maps to two HTTP statuses (400 schema vs 422 domain)                | S      | ⬜ todo |           |
 | 12  | P1  | e2e         | Requirements-review flow has zero e2e coverage (largest SPA component, 1.2k lines)          | M      | ⬜ todo |           |
 | 13  | P2  | e2e         | Inline agent windows (brainstorm/clarity/consensus/doc-interview) have no e2e specs         | M      | ⬜ todo |           |
@@ -408,6 +408,26 @@ this is only the inbound readiness signal.)
 liveness `/health`. Node-facade-specific by nature (the Worker has no long-lived process
 to probe) — a legitimate asymmetry, note it as such.
 
+**Landed (this PR).** `backend/runtimes/node/src/readiness.ts` owns the pure verdict
+(`checkReadiness` → `{ ready, checks }`): it round-trips the app's Postgres pool (a bounded
+`SELECT 1`, timed out so a wedged pool can't hang the probe) and checks a pg-boss `running`
+flag the boot sequence owns (set true after `boss.start()`, flipped on the `stopped` event).
+`createApp` now takes an optional `readiness` probe and mounts a PUBLIC `GET /ready`
+(before the auth gate, like `/health`) that answers `200 {status:'ready'}` /
+`503 {status:'not_ready'}` with the per-dependency `checks`. `bootServer` wires the probe
+from the live `pool` + the boss flag + a `draining` flag it sets at the TOP of `shutdown()`,
+so a SIGTERM'd replica reports not-ready IMMEDIATELY (short-circuiting the downstream probes)
+— a load balancer stops routing new traffic while in-flight requests drain, before anything
+is torn down. `/health` stays a static 200 (liveness: a restart can't fix a dead pool). The
+asymmetry is genuine and documented in `readiness.ts`: the Worker has no long-lived process
+(each request is a fresh isolate), and local **mothership** mode has no local Postgres/pg-boss
+(org state is remote) — both wire no probe, so `/ready` falls back to a bare `ready`. Local's
+Postgres path reuses `start()`, so it gets the real probe for free. Guard:
+`node/test/readiness.spec.ts` pins the pure verdict (ready / pool-down / boss-stopped /
+draining-short-circuit / probe-timeout) AND the `createApp` glue (200/503 status + the route
+being public before the auth gate). No persistence/port change, so no conformance assertion —
+readiness is a per-process signal with no D1 analogue.
+
 #### 10. `provisioningLogs` store: unbounded map + unguarded overwrite — P2
 
 `frontend/app/app/stores/provisioningLogs.ts`: `byExecution` accretes one `LogState` per
@@ -420,6 +440,21 @@ monotonic guard the core stores carry.
 **Fix:** per-execution monotonic sequence guard (copy `stores/workspace.ts`) + eviction
 of terminal executions' log state, + a store-level out-of-order spec (the item-15
 pattern).
+
+**Landed (this PR).** `loadForExecution` now stamps each call with a per-execution
+monotonic `loadSeq` and discards its result if a newer load (the drawer's silent poll or a
+manual refresh) superseded it in flight — the same anti-clobber guard `stores/workspace.ts`
+carries on its full refresh, so a slower/staler fetch can't overwrite the fresher timeline
+(the visible spinner still clears in its own `finally` regardless of supersession, so a
+superseded visible load never leaves a stuck spinner). Eviction is lifecycle-based rather
+than terminal-status-based: the store exposes `evict(executionId)` and
+`ProvisioningLogsDrawer.vue` calls it in `onBeforeUnmount` (executionId mode only), so
+`byExecution` holds only currently-open drawers instead of accreting one `LogState` per run
+viewed for the app's lifetime — a re-opened drawer re-fetches on mount, and keeping the state
+while OPEN is exactly what the manual-refresh-after-terminal affordance needs. Guard:
+`stores/provisioningLogs.spec.ts` adds an out-of-order-resolve test (newest-issued wins over
+a late stale resolver), a superseding-visible-load test (fresh entries + no stuck spinner),
+and an eviction test (state dropped, seq reset, a fresh load re-seeds cleanly).
 
 #### 11. Error code `validation` maps to two HTTP statuses — P3
 
