@@ -243,10 +243,12 @@ export type {
 export type {
   AppCaches,
   AccountModelPolicyCacheValue,
+  BudgetLimitCacheValue,
   CachedRepoRead,
   GroupCacheHandle,
+  WorkspaceSettingsCacheValue,
 } from './caching.js'
-export { repoFilesCacheGroup } from './caching.js'
+export { readCachedWorkspaceSettings, repoFilesCacheGroup } from './caching.js'
 export type {
   SelectableFragment,
   FragmentSelectionContext,

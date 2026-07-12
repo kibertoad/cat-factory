@@ -1,6 +1,6 @@
 # Initiative: performance optimizations (prioritized)
 
-**Status:** in progress — items 1, 2, 3, 4 landed (emit metrics rollup · gate-poll GitHub reads · live-run projection · parallel dispatch waves) · **Owner:** core · **Started:** 2026-07-09
+**Status:** in progress — items 1, 2, 3, 4, 7, 9 landed (emit metrics rollup · gate-poll GitHub reads · live-run projection · parallel dispatch waves · spend/workspace-settings cache slices) · **Owner:** core · **Started:** 2026-07-09
 
 > This is the durable source of truth for a multi-PR initiative. Read it first before
 > picking up the next slice; update the checklist at the end of each PR.
@@ -55,9 +55,9 @@ symmetric" (CLAUDE.md).
 | 4   | P1  | dispatch     | `buildJobBody` serializes ~6 independent I/O steps per dispatch                                                                     | ✅ done | branch `claude/perf-tracker-next-phase-3wg1gq`            |
 | 5   | P1  | frontend     | Board snapshot embeds full step outputs the board never reads                                                                       | ⬜ todo |                                                           |
 | 6   | P1  | frontend     | Coarse `board` event forces full-snapshot refresh; payload already carries `blockId`                                                | ⬜ todo |                                                           |
-| 7   | P2  | caching      | `SpendService` three banned TTL `Map`s (pricing / account / user limits)                                                            | ⬜ todo |                                                           |
+| 7   | P2  | caching      | `SpendService` three banned TTL `Map`s (pricing / account / user limits)                                                            | ✅ done | branch `claude/performance-tracker-next-phase-hcdba4`     |
 | 8   | P2  | caching      | `AccountSettingsService` legacy 30s `Map` (the named anti-pattern)                                                                  | ⬜ todo |                                                           |
-| 9   | P2  | caching      | `WorkspaceSettingsService.get` uncached; read per recorded LLM call                                                                 | ⬜ todo |                                                           |
+| 9   | P2  | caching      | `WorkspaceSettingsService.get` uncached; read per recorded LLM call                                                                 | ✅ done | branch `claude/performance-tracker-next-phase-hcdba4`     |
 | 10  | P2  | frontend     | Shared `useBlockQueries` index invalidates ALL BlockNodes on every execution event                                                  | ⬜ todo |                                                           |
 | 11  | P2  | frontend     | Two unconditional 60fps RAF loops doing DOM measurement while idle                                                                  | ⬜ todo |                                                           |
 | 12  | P2  | integrations | `GitHubSyncService`: serial per-workspace fan-out + serial resource syncs                                                           | ⬜ todo |                                                           |
@@ -249,6 +249,19 @@ workspace/account/user id; invalidate from the existing `invalidatePricing` /
 the isolate-safe profile. Mechanical migration — the invalidation hooks already exist.
 Fold into / coordinate with item 9 (same `workspace_settings` row).
 
+**Landed (with item 9, branch `claude/performance-tracker-next-phase-hcdba4`):** three new
+`AppCaches` slices — `workspaceSettings` (raw settings row), `accountBudgetLimit`,
+`userBudgetLimit` — replace the three Maps. `resolvePricing` now reads the settings row through
+the SHARED `workspaceSettings` slice and overlays `mergeSpendPricing` on the cached value, so
+its coherence rides item 9's single invalidation site (`WorkspaceSettingsService.update`) and
+`SpendService.invalidatePricing` + the controller's manual drop are **deleted**. The two
+budget-limit slices are invalidated by the existing `invalidateAccountLimit` /
+`invalidateUserLimit` methods (now `async`, delegating to the slice), wired unchanged from the
+`AccountService` / `UserSettingsService` budget-change callbacks (made `await`able). All three
+are pass-through on the Worker's isolate-safe profile (our own mutable D1 state). Pinned by a new
+`@cat-factory/spend` vitest suite (read-through + invalidation for all three) and covered
+end-to-end by the conformance `/spend` budget test (warm → settings write → re-read).
+
 ### 8. `AccountSettingsService` legacy 30s Map — P2
 
 `backend/packages/integrations/src/modules/accountSettings/AccountSettingsService.ts:72`
@@ -273,6 +286,18 @@ its own banned Map (item 7).
 **Fix:** a `workspaceSettings` slice keyed by workspace id, invalidated from
 `WorkspaceSettingsService.update` (`:71`); pass-through on the Worker profile. Natural
 home to fold item 7's `pricingCache` into.
+
+**Landed (branch `claude/performance-tracker-next-phase-hcdba4`):** the `workspaceSettings`
+slice (group == key == workspace id, `{ settings: WorkspaceSettings | null }` wrapper) is read
+through by ALL of the row's consumers via the shared `readCachedWorkspaceSettings` kernel helper
+(so they can't drift on the cache key) — `WorkspaceSettingsService.get`, the task-limit start
+guard (through `get`), `LlmObservabilityService.bodiesEnabled`, and `SpendService.resolvePricing`
+(item 7's fold-in). Its sole write path, `WorkspaceSettingsService.update`, invalidates the
+workspace's entry after the upsert commits, so a settings/budget edit is visible on the very next
+read on any replica. Pass-through on the Worker's isolate-safe profile. Pinned by
+`WorkspaceSettingsService.test.ts` (read-through / default caching / update-invalidation /
+per-workspace scoping) and a new conformance cache-coherence assertion (warm GET → PUT → GET
+reflects) on both runtimes.
 
 ### 10. Shared block index fans one event out to every BlockNode — P2
 

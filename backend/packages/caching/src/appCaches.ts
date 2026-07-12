@@ -1,11 +1,13 @@
 import type {
   AccountModelPolicyCacheValue,
   AppCaches,
+  BudgetLimitCacheValue,
   CachedRepoRead,
   DocumentContent,
   GitHubRepo,
   GroupCacheHandle,
   ResolvedCatalogEntry,
+  WorkspaceSettingsCacheValue,
 } from '@cat-factory/kernel'
 // Deep imports on purpose: layered-loader's root index eagerly requires its Redis
 // modules (and thereby `ioredis`), which must never load outside the Node facade's
@@ -59,6 +61,9 @@ export interface AppCachesProfile {
   repoProjection: GroupCacheProfile
   repoFiles: GroupCacheProfile
   accountModelPolicy: GroupCacheProfile
+  workspaceSettings: GroupCacheProfile
+  accountBudgetLimit: GroupCacheProfile
+  userBudgetLimit: GroupCacheProfile
 }
 
 /** The default (Node/local/test) profile: caching on, modest bounds. */
@@ -101,6 +106,30 @@ export const DEFAULT_APP_CACHES_PROFILE: AppCachesProfile = {
     maxGroups: 2000,
     maxItemsPerGroup: 1,
   },
+  // One workspace-settings row per workspace, keyed by workspace id (one entry per group).
+  // Slow-moving (admin-changed); invalidation-driven, no version probe. Read on several hot
+  // paths (per-LLM-call body gate, per-step task-limit guard, per-call spend pricing).
+  workspaceSettings: {
+    enabled: true,
+    ttlInMsecs: 5 * 60_000,
+    maxGroups: 1000,
+    maxItemsPerGroup: 1,
+  },
+  // One configured budget limit per account, keyed by account id (one entry per group).
+  // Slow-moving; invalidation-driven, no version probe.
+  accountBudgetLimit: {
+    enabled: true,
+    ttlInMsecs: 5 * 60_000,
+    maxGroups: 2000,
+    maxItemsPerGroup: 1,
+  },
+  // One configured budget limit per user, keyed by user id (one entry per group).
+  userBudgetLimit: {
+    enabled: true,
+    ttlInMsecs: 5 * 60_000,
+    maxGroups: 5000,
+    maxItemsPerGroup: 1,
+  },
 }
 
 /**
@@ -133,6 +162,13 @@ export const ISOLATE_SAFE_APP_CACHES_PROFILE: AppCachesProfile = {
   // Pass-through for the same reason: the account policy is our own mutable D1 state
   // with no cross-isolate invalidation bus on the Worker.
   accountModelPolicy: { ...DEFAULT_APP_CACHES_PROFILE.accountModelPolicy, enabled: false },
+  // Pass-through: the workspace-settings row and the budget-limit reads are all our own
+  // mutable D1 state with no cross-isolate invalidation bus on the Worker, so the isolate
+  // reads them live (the Worker rebuilds the bag per invocation, so a within-invocation
+  // read still dedupes) — same class as `repoProjection`/`accountModelPolicy`.
+  workspaceSettings: { ...DEFAULT_APP_CACHES_PROFILE.workspaceSettings, enabled: false },
+  accountBudgetLimit: { ...DEFAULT_APP_CACHES_PROFILE.accountBudgetLimit, enabled: false },
+  userBudgetLimit: { ...DEFAULT_APP_CACHES_PROFILE.userBudgetLimit, enabled: false },
 }
 
 /**
@@ -292,12 +328,30 @@ export function createAppCaches(options: CreateAppCachesOptions = {}): AppCaches
     profile.accountModelPolicy,
     options,
   )
+  const workspaceSettings = buildGroupCache<WorkspaceSettingsCacheValue>(
+    'workspace-settings',
+    profile.workspaceSettings,
+    options,
+  )
+  const accountBudgetLimit = buildGroupCache<BudgetLimitCacheValue>(
+    'account-budget-limit',
+    profile.accountBudgetLimit,
+    options,
+  )
+  const userBudgetLimit = buildGroupCache<BudgetLimitCacheValue>(
+    'user-budget-limit',
+    profile.userBudgetLimit,
+    options,
+  )
   return {
     fragmentCatalog,
     fragmentDocumentBody,
     repoProjection,
     repoFiles,
     accountModelPolicy,
+    workspaceSettings,
+    accountBudgetLimit,
+    userBudgetLimit,
     close: async () => {
       await Promise.all([
         fragmentCatalog.close(),
@@ -305,6 +359,9 @@ export function createAppCaches(options: CreateAppCachesOptions = {}): AppCaches
         repoProjection.close(),
         repoFiles.close(),
         accountModelPolicy.close(),
+        workspaceSettings.close(),
+        accountBudgetLimit.close(),
+        userBudgetLimit.close(),
       ])
     },
   }

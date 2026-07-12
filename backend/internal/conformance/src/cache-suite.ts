@@ -1,15 +1,15 @@
 import { describe, expect, it } from 'vitest'
 import type { ConformanceHarness } from './harness.js'
 
-// Caching-initiative conformance (docs/initiatives/caching-layer.md): the merged
-// prompt-fragment catalog is served through the app cache bag on every facade —
-// bare in-memory loaders on Node/local (and in these harnesses), the pass-through
-// isolate-safe profile on the Worker — so this suite asserts the property BOTH
-// configurations must uphold: write-then-read coherence. A fragment write is
-// visible on the immediately following resolved-catalog read because the service
-// invalidates at every write site; a facade whose cache wiring misses one (or
-// whose profile wrongly TTLs mutable state without an invalidation path) fails
-// here instead of serving stale catalogs to agent runs.
+// Caching-initiative conformance (docs/initiatives/caching-layer.md): app-cache-backed
+// reads (the merged prompt-fragment catalog; the per-workspace settings row) are served
+// through the app cache bag on every facade — bare in-memory loaders on Node/local (and in
+// these harnesses), the pass-through isolate-safe profile on the Worker — so this suite
+// asserts the property BOTH configurations must uphold: write-then-read coherence. A write
+// is visible on the immediately following read because the owning service invalidates at
+// every write site; a facade whose cache wiring misses one (or whose profile wrongly TTLs
+// mutable state without an invalidation path) fails here instead of serving stale data to
+// agent runs.
 
 export function defineCacheSuite(harness: ConformanceHarness): void {
   describe(`[${harness.name}] cached fragment catalog coherence`, () => {
@@ -75,6 +75,30 @@ export function defineCacheSuite(harness: ConformanceHarness): void {
       )
       expect(inFirst.body.map((f) => f.id)).toContain('ws-scoped')
       expect(inSecond.body.map((f) => f.id)).not.toContain('ws-scoped')
+    })
+
+    // The `workspaceSettings` slice (perf-tracker items 7 & 9): a workspace's settings row
+    // is read through the same app cache on several hot paths (the per-LLM-call body gate,
+    // the task-limit guard, SpendService's pricing overlay). Its sole write path
+    // (`WorkspaceSettingsService.update`) must invalidate the slice so a settings edit is
+    // visible on the very next read — a facade wiring the cache but missing the invalidation
+    // (or a profile TTLing mutable state without an invalidation path) would serve the warmed
+    // pre-write value here.
+    it('a workspace-settings write is visible on the immediately following read', async () => {
+      const { call, createWorkspace } = harness.makeApp()
+      const { workspace } = await createWorkspace()
+      const settings = `/workspaces/${workspace.id}/settings`
+
+      // Warm the cache with the pre-write settings.
+      const initial = await call<{ waitingEscalationMinutes: number }>('GET', settings)
+      expect(initial.status).toBe(200)
+      const before = initial.body.waitingEscalationMinutes
+
+      // Update → the next read reflects the new value (invalidation, not TTL expiry).
+      const updated = await call('PUT', settings, { waitingEscalationMinutes: before + 17 })
+      expect(updated.status).toBe(200)
+      const after = await call<{ waitingEscalationMinutes: number }>('GET', settings)
+      expect(after.body.waitingEscalationMinutes).toBe(before + 17)
     })
   })
 }

@@ -12,7 +12,7 @@ export interface UserSettingsServiceDependencies {
    * Invalidate the spend service's cached user-tier limit when the user's budget
    * changes, so the new ceiling takes effect immediately.
    */
-  onUserBudgetChanged?: (userId: string) => void
+  onUserBudgetChanged?: (userId: string) => void | Promise<void>
   /**
    * The operator hard ceiling on the user-tier budget (`BUDGET_MAX_MONTHLY_PER_USER`), or
    * null/undefined when uncapped. Enforced on write so a submitted value can't exceed the
@@ -49,7 +49,7 @@ export class UserSettingsService {
       )
     }
     await this.deps.userSettingsRepository.upsert(userId, next)
-    this.deps.onUserBudgetChanged?.(userId)
+    await this.deps.onUserBudgetChanged?.(userId)
     return next
   }
 }

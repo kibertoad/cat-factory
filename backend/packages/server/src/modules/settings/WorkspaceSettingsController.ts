@@ -35,10 +35,10 @@ export function workspaceSettingsController(): Hono<AppEnv> {
     const settings = requireSettings(c)
     if (!settings) return unavailable(c)
     const workspaceId = param(c, 'workspaceId')
+    // `update` invalidates the shared `workspaceSettings` cache slice after it commits, so a
+    // budget edit takes effect immediately for SpendService's pricing overlay (which reads
+    // the same slice) — no separate spend-cache drop needed.
     const updated = await settings.service.update(workspaceId, c.req.valid('json'))
-    // A budget edit must take effect immediately, not after the spend service's
-    // short pricing cache TTL — drop the workspace's cached pricing now.
-    c.get('container').spendService.invalidatePricing(workspaceId)
     return c.json(updated, 200)
   })
 

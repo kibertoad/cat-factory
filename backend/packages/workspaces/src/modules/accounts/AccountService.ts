@@ -35,7 +35,7 @@ export interface AccountServiceDependencies {
    * budget changes, so the new ceiling takes effect immediately (wired to
    * `SpendService.invalidateAccountLimit`).
    */
-  onAccountBudgetChanged?: (accountId: string) => void
+  onAccountBudgetChanged?: (accountId: string) => void | Promise<void>
   /**
    * The operator hard ceiling on the account-tier budget (`BUDGET_MAX_MONTHLY_PER_ACCOUNT`),
    * or null/undefined when uncapped. Enforced on write so a submitted value can't exceed the
@@ -236,7 +236,7 @@ export class AccountService {
       }
       await this.deps.accountRepository.updateSettings(accountId, { spendMonthlyLimit: limit })
       // Drop the spend service's cached account limit so the new ceiling takes effect now.
-      this.deps.onAccountBudgetChanged?.(accountId)
+      await this.deps.onAccountBudgetChanged?.(accountId)
     }
     const account = assertFound(
       await this.deps.accountRepository.get(accountId),

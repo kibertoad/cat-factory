@@ -1,7 +1,8 @@
-import type { GitHubRepo, ModelFamilyPolicy } from '../domain/types.js'
+import type { GitHubRepo, ModelFamilyPolicy, WorkspaceSettings } from '../domain/types.js'
 import type { DocumentContent } from './document-source.js'
 import type { ResolvedCatalogEntry } from './fragment-repositories.js'
 import type { RepoContentEntry, RepoFileContent } from './github-client.js'
+import type { WorkspaceSettingsRepository } from './workspace-settings-repositories.js'
 
 // ---------------------------------------------------------------------------
 // The app-level caching seam (docs/initiatives/caching-layer.md). Services read
@@ -142,6 +143,39 @@ export interface AppCaches {
    * mutable D1 state, no cross-isolate bus), so it caches only on the Node/local facades.
    */
   accountModelPolicy: GroupCacheHandle<AccountModelPolicyCacheValue>
+  /**
+   * A workspace's persisted runtime settings row (`workspaceSettingsRepository.get`),
+   * grouped AND keyed by workspace id — the slow-moving, admin-changed row read on
+   * several hot paths: `LlmObservabilityService.bodiesEnabled` (per recorded LLM call),
+   * the per-service task-limit start guard, `WorkspaceSettingsService.get`, and
+   * `SpendService.resolvePricing` (which overlays this row's budget overrides onto the
+   * base pricing table — folding in the old per-service pricing `Map`). Wrapped
+   * ({@link WorkspaceSettingsCacheValue}) so the common "no row persisted yet" case caches
+   * as a value rather than a re-loaded null. Coherence is invalidation-driven: the sole
+   * write path (`WorkspaceSettingsService.update`) drops the workspace's entry after the
+   * write commits, so a budget/settings edit is visible on the very next read. Pass-through
+   * on the Worker's isolate-safe profile (our own mutable D1 state, no cross-isolate bus),
+   * so it caches only on the Node/local facades.
+   */
+  workspaceSettings: GroupCacheHandle<WorkspaceSettingsCacheValue>
+  /**
+   * The ACCOUNT budget tier's configured monthly limit (`accountRepository.get(id)
+   * .spendMonthlyLimit`), grouped AND keyed by account id — read per proxied LLM call and
+   * per advance tick by `SpendService.isOverBudget`/`accountStatus`. Wrapped
+   * ({@link BudgetLimitCacheValue}) so an unset limit caches as a value. Invalidation-driven:
+   * an account-budget edit invalidates the entry via `SpendService.invalidateAccountLimit`
+   * (wired from `AccountService`'s budget-change callback). Pass-through on the Worker's
+   * isolate-safe profile (our own mutable D1 state).
+   */
+  accountBudgetLimit: GroupCacheHandle<BudgetLimitCacheValue>
+  /**
+   * The USER budget tier's configured monthly limit (`userSettingsRepository.get(id)
+   * .spendMonthlyLimit`), grouped AND keyed by user id — the user analogue of
+   * {@link AppCaches.accountBudgetLimit}. Invalidated via `SpendService.invalidateUserLimit`
+   * (wired from `UserSettingsService`'s budget-change callback). Pass-through on the Worker's
+   * isolate-safe profile.
+   */
+  userBudgetLimit: GroupCacheHandle<BudgetLimitCacheValue>
   /** Release notification-bus resources (a no-op for bare in-memory caches). */
   close(): Promise<void>
 }
@@ -149,4 +183,33 @@ export interface AppCaches {
 /** Cache-friendly wrapper for the account policy read (`null` ⇒ no policy / `off`). */
 export interface AccountModelPolicyCacheValue {
   policy: ModelFamilyPolicy | null
+}
+
+/** Cache-friendly wrapper for the workspace settings read (`null` ⇒ no row persisted yet). */
+export interface WorkspaceSettingsCacheValue {
+  settings: WorkspaceSettings | null
+}
+
+/** Cache-friendly wrapper for a budget tier's configured limit (`null` ⇒ no limit set). */
+export interface BudgetLimitCacheValue {
+  limit: number | null
+}
+
+/**
+ * Read a workspace's settings row through the {@link AppCaches.workspaceSettings} slice
+ * (or straight from the repository when no cache is wired — tests/standalone services).
+ * Shared by every reader of the slice (`WorkspaceSettingsService`, `SpendService`,
+ * `LlmObservabilityService`) so they build the cache key/group identically and can never
+ * drift — the same reasoning as {@link repoFilesCacheGroup}. Group == key == workspace id.
+ */
+export async function readCachedWorkspaceSettings(
+  cache: GroupCacheHandle<WorkspaceSettingsCacheValue> | undefined,
+  repository: WorkspaceSettingsRepository,
+  workspaceId: string,
+): Promise<WorkspaceSettings | null> {
+  if (!cache) return repository.get(workspaceId)
+  const { settings } = await cache.get(workspaceId, workspaceId, async () => ({
+    settings: await repository.get(workspaceId),
+  }))
+  return settings
 }
