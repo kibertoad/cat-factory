@@ -30,7 +30,11 @@ import { startExecutionWorker, startStaleRunSweeper } from './execution/pgBossRu
 import { startBootstrapWorker } from './execution/bootstrapRunner.js'
 import { startGitHubSyncWorker } from './execution/githubSyncRunner.js'
 import { startEnvConfigRepairWorker } from './execution/envConfigRepairRunner.js'
-import { startEnvTestWorker } from './execution/envTestRunner.js'
+import {
+  PgBossEnvironmentTestRunner,
+  startEnvTestSweeper,
+  startEnvTestWorker,
+} from './execution/envTestRunner.js'
 import { startEnvironmentSweeper } from './environments.js'
 import { startScheduleSweeper } from './recurring.js'
 import { resolveSweepInterval, startInitiativeLoopSweeper } from './initiativeLoop.js'
@@ -40,6 +44,7 @@ import { buildRealtimePropagator } from './propagator.js'
 import { NodeRealtimeHub, attachRealtime } from './realtime.js'
 import { DrizzleGitHubInstallationRepository } from './repositories/containerExecution.js'
 import { createDrizzleRepositories } from './repositories/drizzle.js'
+import { DrizzleEnvironmentTestRunRepository } from './repositories/environmentTest.js'
 import { startGitHubReconcileSweeper } from './githubReconcile.js'
 import {
   DrizzleCommitProjectionRepository,
@@ -384,6 +389,17 @@ async function bootServer(
     runtime.queue,
     logger,
   )
+  // Env-test self-tests live in their own table (not agent_runs), so the stale-run
+  // sweeper above never sees them — this sibling re-enqueues a drive for any stale run;
+  // the drive's own budget-exhaustion finalize settles one that still can't finish.
+  // Reads the LOCAL store directly (sweeping is deployment-internal, like the other
+  // `listStale` surfaces): on a satellite the local table is empty and this no-ops.
+  const stopEnvTestSweeper = startEnvTestSweeper(
+    new PgBossEnvironmentTestRunner(boss, runtime.queue),
+    new DrizzleEnvironmentTestRunRepository(db),
+    { leaseMs: runtime.sweeper.leaseMs, intervalMs: runtime.sweeper.intervalMs },
+    logger,
+  )
   // Bound the unbounded tables (`token_usage`, the heavy `llm_call_metrics`): the Worker
   // prunes these from cron, Node has none, so a timer mirrors it. Without this the
   // observability sink — full per-call prompt/response — grows forever on Postgres.
@@ -463,6 +479,7 @@ async function bootServer(
     shuttingDown = true
     logger.info({ signal }, 'shutting down cat-factory node server')
     stopSweeper()
+    stopEnvTestSweeper()
     stopRetention()
     stopArtifactRetention()
     stopScheduleSweeper()

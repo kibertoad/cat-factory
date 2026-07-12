@@ -2334,8 +2334,10 @@ export function buildContainer(
       ? new WorkflowsEnvConfigRepairRunner(env.ENV_CONFIG_REPAIR_WORKFLOW)
       : undefined,
     // The ephemeral-environment self-test: its own run store + the durable driver when the
-    // Workflows binding is present (the Workflow is self-resuming across eviction, so no cron
-    // sweep is needed — the stop button + always-cleanup cover a wedged run).
+    // Workflows binding is present. The Workflow self-finalizes on poll-budget exhaustion,
+    // and the cron `sweepStuckEnvTests` (index.ts scheduled) is the backstop for a lost or
+    // terminal instance — the run store is not agent_runs, so the unified run sweep never
+    // covers it.
     environmentTestRunRepository: new D1EnvironmentTestRunRepository({ db }),
     environmentTestRunner: env.ENV_TEST_WORKFLOW
       ? new WorkflowsEnvironmentTestRunner(env.ENV_TEST_WORKFLOW)

@@ -789,7 +789,7 @@
         "start": "Tester la création de l'environnement",
         "stop": "Arrêter",
         "infraless": "Configurez un type de provisionnement ci-dessus pour tester la création de l'environnement.",
-        "running": "Test en cours",
+        "running": "Test en cours : {stage}",
         "succeeded": "Test réussi : l'environnement a été créé puis démonté, et la branche a été supprimée.",
         "failed": "Échec du test",
         "stage": {

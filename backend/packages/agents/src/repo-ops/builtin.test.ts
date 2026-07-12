@@ -40,6 +40,7 @@ class FakeRepo implements RepoFiles {
     return 'head'
   }
   async createBranch() {}
+  async deleteBranch() {}
 
   async commitFiles(input: CommitFilesInput) {
     this.commits.push(input)

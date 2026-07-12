@@ -622,19 +622,20 @@ export const REMOTE_PERSISTENCE_METHODS: PersistenceMethodTable = {
   // The ephemeral-environment SELF-TEST run store (`environment_test_runs`): a member-level,
   // workspace-scoped run-path diagnostic (`EnvironmentTestService` — start / durable poll /
   // stop, plus the snapshot's in-flight-runs read `listRunningByWorkspace`). The whole repo is
-  // remote: `get`/`update`/`listRunningByWorkspace` take the workspaceId as arg0 (the
+  // remote: `get`/`updateIfRunning`/`listRunningByWorkspace` take the workspaceId as arg0 (the
   // `workspace` rule); the record-based `insert(record)` binds on the run's `workspaceId` FIELD
-  // (the `workspaceField` rule). The GitHub half of the self-test (branch create/delete via
-  // `resolveRunRepoContext`) rides mothership GitHub token delegation
-  // (`/internal/github/installation-token`), not this table. What still gates a FULL
-  // mothership-mode self-test: the provisioning WRITES (`environmentRegistryRepository.insert`/
-  // `update`) stay off until the secrets-delegation slice, so the run's provisioning stage
-  // fails cleanly there — the store itself is proxied so the runs surface, clean up, and
-  // complete the moment that slice lands.
+  // (the `workspaceField` rule). The sweeper-only cross-workspace `listStale` stays
+  // mothership-internal (its cron owns it), per the global-sweeper exclusion above. The GitHub
+  // half of the self-test (branch create/delete via `resolveRunRepoContext`) rides mothership
+  // GitHub token delegation (`/internal/github/installation-token`), not this table. What
+  // still gates a FULL mothership-mode self-test: the provisioning WRITES
+  // (`environmentRegistryRepository.insert`/`update`) stay off until the secrets-delegation
+  // slice, so the run's provisioning stage fails cleanly there — the store itself is proxied
+  // so the runs surface, clean up, and complete the moment that slice lands.
   environmentTestRunRepository: {
     get: { scope: { kind: 'workspace', arg: 0 } },
     insert: { scope: { kind: 'workspaceField', arg: 0 } },
-    update: { scope: { kind: 'workspace', arg: 0 } },
+    updateIfRunning: { scope: { kind: 'workspace', arg: 0 } },
     listRunningByWorkspace: { scope: { kind: 'workspace', arg: 0 } },
   },
   // --- Advanced review / structured-dialogue session surfaces ---------------------

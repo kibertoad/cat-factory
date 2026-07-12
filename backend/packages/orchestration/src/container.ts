@@ -1644,6 +1644,7 @@ function createEnvironmentsModule(
           blockRepository: deps.blockRepository,
           provisioning: provisioningService,
           teardown: teardownService,
+          environmentRegistry: environmentRegistryRepository,
           resolveRunRepoContext: deps.resolveRunRepoContext,
           idGenerator: deps.idGenerator,
           clock: deps.clock,

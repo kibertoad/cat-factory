@@ -1,4 +1,8 @@
-import type { EnvironmentTestStage, EnvironmentTestStatus } from '../domain/types.js'
+import type {
+  EnvironmentTestStage,
+  EnvironmentTestStatus,
+  ServiceProvisioning,
+} from '../domain/types.js'
 
 // ---------------------------------------------------------------------------
 // Ports for the ephemeral-environment SELF-TEST run.
@@ -31,6 +35,13 @@ export interface EnvironmentTestRunRecord {
    * dispatch had no user context.
    */
   initiatedBy: string | null
+  /**
+   * The frame's provisioning config, PINNED at dispatch time so the durable poll
+   * finalizes/tears down against exactly what it dispatched — a mid-flight edit of the
+   * frame (or its deletion) can't strand a live environment. Never `infraless`
+   * (`startTest` rejects that before inserting the record).
+   */
+  provisioning: ServiceProvisioning
   /** The temporary branch the run created; null until it is created. */
   branch: string | null
   /** The provisioned environment's registry id, so the teardown stage can reclaim it. */
@@ -61,10 +72,26 @@ export type EnvironmentTestRunRecordPatch = Partial<
 
 export interface EnvironmentTestRunRepository {
   insert(record: EnvironmentTestRunRecord): Promise<void>
-  update(workspaceId: string, id: string, patch: EnvironmentTestRunRecordPatch): Promise<void>
+  /**
+   * Apply `patch` ONLY while the run is still `running`, returning whether a row was
+   * written. Every service write happens on a live run, so the guard makes the
+   * stop-button ⇄ durable-driver race first-writer-wins: a driver poll can never
+   * resurrect (or overwrite the terminal state of) a run the user already stopped.
+   */
+  updateIfRunning(
+    workspaceId: string,
+    id: string,
+    patch: EnvironmentTestRunRecordPatch,
+  ): Promise<boolean>
   get(workspaceId: string, id: string): Promise<EnvironmentTestRunRecord | null>
   /** All currently-running self-tests for a workspace (carried in the snapshot). */
   listRunningByWorkspace(workspaceId: string): Promise<EnvironmentTestRunRecord[]>
+  /**
+   * Running runs (across workspaces) whose `updatedAt` is older than `cutoffMs`, oldest
+   * first — the stale set the cron sweeper classifies (re-drive a lost driver / finalize
+   * an orphan). Mirrors `AgentRunRepository.listStale`.
+   */
+  listStale(cutoffMs: number, limit?: number): Promise<EnvironmentTestRunRecord[]>
 }
 
 export interface EnvironmentTestRunner {

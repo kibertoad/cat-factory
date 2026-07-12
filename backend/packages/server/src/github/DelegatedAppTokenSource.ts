@@ -8,16 +8,19 @@ import type { AppTokenSource } from './GitHubAppRegistry.js'
 // gap by minting each installation token FROM THE MOTHERSHIP over the machine API
 // (`POST /internal/github/installation-token`, served by `githubDelegationController`),
 // so the shared `FetchGitHubClient` — and the executor's push-token mint — run on the
-// laptop unchanged, on the same short-lived installation tokens the mothership's own
-// engine uses.
+// laptop unchanged, on short-lived, REPO-SCOPED variants of the installation tokens the
+// mothership's own engine uses (narrowed to the repos the mothership projects for the
+// installation).
 
 /**
  * How long a delegated installation token is served from the in-process memo before the
- * mothership is asked again. Installation tokens live ~1h and the mothership's own
- * `GitHubAppAuth` cache refuses to serve one within 5 minutes of expiry
- * (`TOKEN_SKEW_MS`), so every response has well over this window left — the memo only
- * collapses the per-GitHub-call mint chatter into one machine-API hop a minute, it can
- * never serve a lapsed token.
+ * mothership is asked again. Delegated tokens are REPO-SCOPED and minted fresh by the
+ * mothership on every call (a scoped mint bypasses its unscoped engine cache — see
+ * `GitHubAppAuth.installationToken`), so each response starts with the full ~1h GitHub
+ * lifetime — the memo can never serve a lapsed token. It exists to collapse the
+ * per-GitHub-call chatter into at most one machine-API hop (= one GitHub mint) a minute
+ * per installation, which also keeps a legitimate node far under the mothership's
+ * per-node mint rate limit.
  */
 const DELEGATED_TOKEN_MEMO_MS = 60_000
 

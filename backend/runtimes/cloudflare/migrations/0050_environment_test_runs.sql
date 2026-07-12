@@ -10,6 +10,8 @@ CREATE TABLE IF NOT EXISTS environment_test_runs (
   status TEXT NOT NULL,
   stage TEXT NOT NULL,
   initiated_by TEXT,
+  -- The frame's provisioning config, pinned at dispatch (JSON) — see the kernel port.
+  provisioning TEXT NOT NULL,
   branch TEXT,
   environment_id TEXT,
   env_url TEXT,
@@ -22,3 +24,7 @@ CREATE TABLE IF NOT EXISTS environment_test_runs (
 -- The snapshot loads a workspace's in-flight runs; the driver/sweeper reads running runs.
 CREATE INDEX IF NOT EXISTS idx_environment_test_runs_ws_status
   ON environment_test_runs (workspace_id, status);
+
+-- The cross-workspace stale-run sweep (`listStale`) scans running runs by lease age.
+CREATE INDEX IF NOT EXISTS idx_environment_test_runs_status_updated
+  ON environment_test_runs (status, updated_at);

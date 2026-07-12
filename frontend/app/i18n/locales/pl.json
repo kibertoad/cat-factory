@@ -789,7 +789,7 @@
         "start": "Testowanie tworzenia środowiska",
         "stop": "Zatrzymaj",
         "infraless": "Skonfiguruj powyżej typ udostępniania, aby przetestować tworzenie środowiska.",
-        "running": "Testowanie",
+        "running": "Testowanie: {stage}",
         "succeeded": "Test zaliczony: środowisko zostało utworzone i usunięte, a gałąź została skasowana.",
         "failed": "Test nie powiódł się",
         "stage": {

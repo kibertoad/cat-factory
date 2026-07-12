@@ -253,9 +253,17 @@ export interface ServerContainer extends Core {
   mothershipConnect?: MothershipConnector
 }
 
-/** Mints a GitHub App installation token for a machine-authed mothership-mode node. */
+/**
+ * Mints a GitHub App installation token for a machine-authed mothership-mode node.
+ * `repositoryIds` narrows the mint to those repos (GitHub's `repository_ids` scoping) —
+ * the delegation controller always passes the in-scope projection's repo ids, so a
+ * delegated token never grants more than the mothership projects for that installation.
+ */
 export interface GitHubTokenDelegation {
-  installationToken(installationId: number, opts?: { forceRefresh?: boolean }): Promise<string>
+  installationToken(
+    installationId: number,
+    opts?: { forceRefresh?: boolean; repositoryIds?: number[] },
+  ): Promise<string>
 }
 
 /** Exchanges a mothership session for a cached machine token (local-mode mothership login). */

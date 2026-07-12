@@ -1587,6 +1587,8 @@ export const environmentTestRuns = pgTable(
     status: text('status').notNull(),
     stage: text('stage').notNull(),
     initiated_by: text('initiated_by'),
+    // The frame's provisioning config, pinned at dispatch (JSON) — see the kernel port.
+    provisioning: text('provisioning').notNull(),
     branch: text('branch'),
     environment_id: text('environment_id'),
     env_url: text('env_url'),
@@ -1595,7 +1597,11 @@ export const environmentTestRuns = pgTable(
     created_at: bigint('created_at', { mode: 'number' }).notNull(),
     updated_at: bigint('updated_at', { mode: 'number' }).notNull(),
   },
-  (t) => [index('idx_environment_test_runs_ws_status').on(t.workspace_id, t.status)],
+  (t) => [
+    index('idx_environment_test_runs_ws_status').on(t.workspace_id, t.status),
+    // The cross-workspace stale-run sweep (`listStale`) scans running runs by lease age.
+    index('idx_environment_test_runs_status_updated').on(t.status, t.updated_at),
+  ],
 )
 
 // Repo-bootstrap feature: managed reference architectures a new repo is bootstrapped

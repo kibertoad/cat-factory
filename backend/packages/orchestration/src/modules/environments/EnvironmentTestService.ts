@@ -16,7 +16,13 @@ import type {
   EnvironmentTestRunRepository,
   WorkspaceRepository,
 } from '@cat-factory/kernel'
-import { assertFound, ConflictError, getErrorMessage, requireWorkspace } from '@cat-factory/kernel'
+import {
+  assertFound,
+  ConflictError,
+  getErrorMessage,
+  NotFoundError,
+  requireWorkspace,
+} from '@cat-factory/kernel'
 import type { ProvisionArgs, ProvisionDispatch } from '@cat-factory/integrations'
 
 /** The poll's terminal-ness, returned to the durable driver so it knows when to stop. */
@@ -44,12 +50,29 @@ export interface EnvironmentTestTeardown {
   teardown(workspaceId: string, id: string): Promise<unknown>
 }
 
+/**
+ * The structural subset of the environment registry the self-test's cleanup reads: the
+ * row keyed under the run's synthetic `(blockId, frameId)` pair — the `provisioning`
+ * placeholder `startProvision` inserts, or a failed finalize's record. Because the
+ * synthetic block id is unique per run and carries no TTL, nothing else ever supersedes
+ * or sweeps such a row, so the run must reclaim it itself.
+ */
+export interface EnvironmentTestRegistry {
+  getByBlockAndFrame(
+    workspaceId: string,
+    blockId: string,
+    frameId: string,
+  ): Promise<{ id: string; externalId: string | null } | null>
+  softDelete(workspaceId: string, id: string, at: number): Promise<void>
+}
+
 export interface EnvironmentTestServiceDependencies {
   environmentTestRunRepository: EnvironmentTestRunRepository
   workspaceRepository: WorkspaceRepository
   blockRepository: BlockRepository
   provisioning: EnvironmentTestProvisioning
   teardown: EnvironmentTestTeardown
+  environmentRegistry: EnvironmentTestRegistry
   /** Resolves the frame's run-repo-bound RepoFiles (branch create/delete + base sha). */
   resolveRunRepoContext: ResolveRunRepoContext
   idGenerator: IdGenerator
@@ -94,6 +117,14 @@ function toRun(record: EnvironmentTestRunRecord): EnvironmentTestRun {
 // SYNTHETIC per-run `blockId` (`env-test:<runId>`), which no real deployer env
 // uses — so the test never clobbers a live environment and its own namespace is
 // unique. Teardown always targets the specific env id the run provisioned.
+//
+// The always-cleans-up contract is enforced by `fail()`: EVERY failure path —
+// a pre-dispatch throw, a failed deploy view, a user stop mid-provision, a
+// driver replay — funnels through it, and it (best-effort) releases the deploy
+// runner, tears down the env, reclaims the synthetic registry row, and deletes
+// the branch BEFORE writing the terminal state. Cleanup state is persisted the
+// moment the side effect it tracks happens (the branch right after creation),
+// never after a later step, so a crash between steps can't orphan it.
 // ---------------------------------------------------------------------------
 
 export class EnvironmentTestService {
@@ -126,10 +157,9 @@ export class EnvironmentTestService {
 
   /**
    * Kick off a self-test against a service frame's provisioning config and return
-   * immediately with the `running` run. Pre-flights (frame provisionable, GitHub
-   * connected), creates the temporary branch, dispatches provisioning, then hands the
-   * poll loop to the durable runner. A pre-flight/dispatch failure runs best-effort
-   * cleanup and returns the run already `failed`.
+   * immediately with the `running` run. Pre-flights (frame provisionable, git provider
+   * connected) throw as 409s BEFORE any record exists; after the record is inserted,
+   * every failure runs best-effort cleanup and returns the run already `failed`.
    */
   async startTest(
     workspaceId: string,
@@ -164,6 +194,15 @@ export class EnvironmentTestService {
         gate.reason ? { reason: gate.reason } : undefined,
       )
     }
+    // Resolve the git provider up front so a missing VCS is a real 409 (the SPA keys its
+    // hint off the reason code) rather than a run born `failed`.
+    const bound = await this.deps.resolveRunRepoContext(workspaceId, blockId)
+    if (!bound) {
+      throw new ConflictError(
+        'This workspace is not connected to a git provider, so no test branch can be created.',
+        'env_test_no_vcs',
+      )
+    }
 
     const now = this.deps.clock.now()
     const record: EnvironmentTestRunRecord = {
@@ -173,6 +212,10 @@ export class EnvironmentTestService {
       status: 'running',
       stage: 'creating_branch',
       initiatedBy: initiatedBy ?? null,
+      // Pin the provisioning config on the record so the durable poll finalizes and
+      // cleans up against exactly what was dispatched (a mid-flight frame edit or
+      // deletion can't strand a live environment).
+      provisioning,
       branch: null,
       environmentId: null,
       envUrl: null,
@@ -186,42 +229,43 @@ export class EnvironmentTestService {
 
     try {
       // Create the throwaway branch off the frame repo's default head.
-      const bound = await this.deps.resolveRunRepoContext(workspaceId, blockId)
-      if (!bound) {
-        throw new ConflictError(
-          'This workspace is not connected to a git provider, so no test branch can be created.',
-          'env_test_no_vcs',
-        )
-      }
       const baseSha = await bound.repo.headSha(bound.baseBranch)
       if (!baseSha) {
         throw new Error(`The repository's default branch '${bound.baseBranch}' has no head commit.`)
       }
       const branch = `cat-factory/env-test/${record.id}`
       await bound.repo.createBranch(branch, baseSha)
+      // Persist the branch BEFORE dispatching, so any later failure — including a
+      // dispatch throw — can reclaim it (`fail()` deletes `record.branch`). A rejected
+      // write means a stop already finalized the run — don't dispatch onto it.
+      record.branch = branch
+      if (!(await this.guardedUpdate(record, { branch }))) {
+        throw new Error('The environment test was stopped while starting.')
+      }
 
       // Dispatch provisioning for the temp branch under the synthetic block id.
       const dispatch = await this.deps.provisioning.startProvision(
-        this.provisionArgs(record, provisioning, branch),
+        this.provisionArgs(record, branch),
         this.ref(record.id),
       )
       const patch =
         dispatch.kind === 'completed'
           ? {
-              branch,
               stage: 'provisioning' as const,
               environmentId: dispatch.handle.id,
               envUrl: dispatch.handle.url,
-              updatedAt: this.deps.clock.now(),
             }
-          : { branch, stage: 'provisioning' as const, updatedAt: this.deps.clock.now() }
-      await this.deps.environmentTestRunRepository.update(workspaceId, record.id, patch)
-      const running = { ...record, ...patch }
-      await this.emit(running)
+          : { stage: 'provisioning' as const }
+      if (!(await this.patch(record, patch))) {
+        // The run was stopped while we were dispatching; the stop already ran cleanup,
+        // but the branch/dispatch may postdate its snapshot — fail() re-runs cleanup
+        // idempotently and leaves the stop's terminal state in place.
+        throw new Error('The environment test was stopped while starting.')
+      }
 
       // Hand off the long poll loop to the durable driver (tests poll directly).
       await this.deps.runner?.startRun(workspaceId, record.id)
-      return toRun(running)
+      return toRun(record)
     } catch (error) {
       return this.fail(record, getErrorMessage(error))
     }
@@ -242,6 +286,14 @@ export class EnvironmentTestService {
 
     try {
       switch (record.stage) {
+        case 'creating_branch':
+          // Only observable when the start request died between the insert and the
+          // dispatch — `startTest` moves the record to `provisioning` before handing
+          // off to the driver, so a (sweeper-driven) poll seeing this stage means the
+          // start never completed. Fail it (with cleanup) instead of spinning forever.
+          throw new Error(
+            'The environment test did not finish starting (the start request was interrupted).',
+          )
         case 'provisioning':
           return await this.advanceProvisioning(record)
         case 'tearing_down':
@@ -249,8 +301,7 @@ export class EnvironmentTestService {
         case 'deleting_branch':
           return await this.advanceDeleteBranch(record)
         default:
-          // `creating_branch`/`done` are never polled: the former is settled in
-          // `startTest` before the driver starts, the latter is terminal.
+          // `done` is terminal and short-circuited above; nothing else is pollable.
           return { state: 'running' }
       }
     } catch (error) {
@@ -274,16 +325,32 @@ export class EnvironmentTestService {
     )
     if (view.state === 'running') return { state: 'running' }
     if (view.state === 'failed') {
+      // Reclaim the deploy runner (mirrors RunDispatcher.pollDeployerJob) and settle the
+      // failed view into the registry — the deploy may have partially applied infra, and
+      // the finalized record (externalId et al.) is what cleanup tears it down through.
+      await this.deps.provisioning.releaseProvisionJob(record.workspaceId, this.ref(record.id))
+      try {
+        const handle = await this.deps.provisioning.finalizeProvision(
+          this.provisionArgs(record, record.branch),
+          view,
+        )
+        record.environmentId = handle.id
+        await this.guardedUpdate(record, { environmentId: handle.id })
+      } catch {
+        // Best-effort — fail() reclaims whatever registry row remains regardless.
+      }
       throw new Error(view.error ?? 'Environment provisioning failed.')
     }
     // Done: reclaim the deploy runner, finalize the env record, move to teardown.
     await this.deps.provisioning.releaseProvisionJob(record.workspaceId, this.ref(record.id))
-    const provisioning = await this.resolveProvisioning(record)
     const handle = await this.deps.provisioning.finalizeProvision(
-      this.provisionArgs(record, provisioning, record.branch),
+      this.provisionArgs(record, record.branch),
       view,
     )
     if (handle.status === 'failed') {
+      // Persist the finalized env id first so fail()'s cleanup tears it down.
+      record.environmentId = handle.id
+      await this.guardedUpdate(record, { environmentId: handle.id })
       throw new Error(handle.lastError ?? 'Environment provisioning failed.')
     }
     await this.patch(record, {
@@ -298,7 +365,14 @@ export class EnvironmentTestService {
     record: EnvironmentTestRunRecord,
   ): Promise<EnvironmentTestPollResult> {
     if (record.environmentId) {
-      await this.deps.teardown.teardown(record.workspaceId, record.environmentId)
+      try {
+        await this.deps.teardown.teardown(record.workspaceId, record.environmentId)
+      } catch (error) {
+        // A replay of this stage after a successful teardown whose stage-patch write was
+        // lost finds the record already tombstoned — that's the teardown having WORKED,
+        // not a failure; anything else propagates (and fails the run with cleanup).
+        if (!(error instanceof NotFoundError)) throw error
+      }
     }
     await this.patch(record, { stage: 'deleting_branch' })
     return { state: 'running' }
@@ -308,14 +382,16 @@ export class EnvironmentTestService {
     record: EnvironmentTestRunRecord,
   ): Promise<EnvironmentTestPollResult> {
     await this.deleteBranch(record)
-    await this.patch(record, { status: 'succeeded', stage: 'done' })
-    return { state: 'done' }
+    const applied = await this.patch(record, { status: 'succeeded', stage: 'done' })
+    // A concurrent stop finalized the run first — its terminal state wins.
+    return applied ? { state: 'done' } : { state: 'failed' }
   }
 
   /**
    * Stop a running self-test: tear down the durable driver, run best-effort cleanup
-   * (teardown the env + delete the branch), then mark it `failed`. Idempotent — a
-   * terminal run is returned unchanged.
+   * (release the in-flight deploy job, tear down the env, reclaim the registry row,
+   * delete the branch), then mark it `failed`. Idempotent — a terminal run is returned
+   * unchanged.
    */
   async stop(workspaceId: string, id: string): Promise<EnvironmentTestRun> {
     await requireWorkspace(this.deps.workspaceRepository, workspaceId)
@@ -329,34 +405,34 @@ export class EnvironmentTestService {
     return this.fail(record, 'Stopped by the user.')
   }
 
+  /**
+   * Finalize a wedged run — its durable driver ended (poll budget exhausted, instance
+   * terminal) without settling it. Runs the same best-effort cleanup as a stop, then
+   * marks the run `failed` with `reason`. Idempotent: a terminal run is returned as-is.
+   * Called by the drivers' budget-exhaustion paths and the cron sweeper.
+   */
+  async expire(workspaceId: string, id: string, reason: string): Promise<EnvironmentTestRun> {
+    const record = assertFound(
+      await this.deps.environmentTestRunRepository.get(workspaceId, id),
+      'Environment test run',
+      id,
+    )
+    if (record.status !== 'running') return toRun(record)
+    return this.fail(record, reason)
+  }
+
   // ---- helpers ------------------------------------------------------------
 
   /** Build the provision args: real frame as `frameId`, synthetic `blockId` (see class docs). */
-  private provisionArgs(
-    record: EnvironmentTestRunRecord,
-    provisioning: NonNullable<Block['provisioning']>,
-    branch: string | null,
-  ): ProvisionArgs {
+  private provisionArgs(record: EnvironmentTestRunRecord, branch: string | null): ProvisionArgs {
     return {
       workspaceId: record.workspaceId,
       blockId: this.provisionBlockId(record.id),
       frameId: record.blockId,
-      serviceProvisioning: provisioning,
+      serviceProvisioning: record.provisioning,
       initiatedBy: record.initiatedBy,
       ...(branch ? { context: { branch } } : {}),
     }
-  }
-
-  /** Re-read the frame's provisioning for a finalize/teardown resolve; throws if it vanished. */
-  private async resolveProvisioning(
-    record: EnvironmentTestRunRecord,
-  ): Promise<NonNullable<Block['provisioning']>> {
-    const frame = await this.deps.blockRepository.get(record.workspaceId, record.blockId)
-    const provisioning = frame?.provisioning
-    if (!provisioning || provisioning.type === 'infraless') {
-      throw new Error('The service’s provisioning configuration is no longer available.')
-    }
-    return provisioning
   }
 
   /** Delete the run's temporary branch (best-effort — a missing branch is not an error). */
@@ -367,21 +443,69 @@ export class EnvironmentTestService {
   }
 
   /**
+   * Reclaim whatever registry row is still keyed under the run's synthetic block id —
+   * the `provisioning` placeholder from `startProvision`, or a failed finalize's record.
+   * The synthetic key is unique per run with no TTL, so nothing else ever supersedes or
+   * sweeps it: without this, every failed self-test would accrete a live row in the
+   * workspace registry forever. A row that reached real infra (`externalId`) goes
+   * through the full provider teardown; a pure placeholder is tombstoned directly, and
+   * a failing provider teardown falls back to the tombstone (the run's error already
+   * carries the diagnosis — a wedged registry helps nobody).
+   */
+  private async reclaimRegistryRow(record: EnvironmentTestRunRecord): Promise<void> {
+    const row = await this.deps.environmentRegistry.getByBlockAndFrame(
+      record.workspaceId,
+      this.provisionBlockId(record.id),
+      record.blockId,
+    )
+    if (!row) return
+    if (row.externalId) {
+      try {
+        await this.deps.teardown.teardown(record.workspaceId, row.id)
+        return
+      } catch {
+        // fall through to the tombstone
+      }
+    }
+    await this.deps.environmentRegistry.softDelete(record.workspaceId, row.id, this.deps.clock.now())
+  }
+
+  /**
    * Record a failure, running best-effort cleanup FIRST so a failed diagnostic never
-   * leaks a branch or environment. `failedStage` captures where it broke.
+   * leaks a branch, environment, registry row, or deploy runner. `failedStage` captures
+   * where it broke. Cleanup runs unconditionally (it is idempotent), but the terminal
+   * write is guarded: if a concurrent stop/driver already finalized the run, its state
+   * is returned unchanged.
    */
   private async fail(
     record: EnvironmentTestRunRecord,
     message: string,
   ): Promise<EnvironmentTestRun> {
     const failedStage = record.stage
-    // Tear the env down if one was provisioned.
+    // Release any in-flight deploy job when provisioning never settled (a stop
+    // mid-provision, a dispatch that threw or crashed before the stage patch landed):
+    // best-effort abort of the deploy runner so a stopped test doesn't keep a container
+    // applying infra. Releasing when nothing was dispatched is a tolerated no-op.
+    if (!record.environmentId) {
+      try {
+        await this.deps.provisioning.releaseProvisionJob(record.workspaceId, this.ref(record.id))
+      } catch {
+        // best-effort — an unreachable runner idles out on its own
+      }
+    }
+    // Tear the env down if one was provisioned (or finalized as failed).
     if (record.environmentId) {
       try {
         await this.deps.teardown.teardown(record.workspaceId, record.environmentId)
       } catch {
-        // best-effort — the TTL reaper is the backstop
+        // best-effort — the registry reclaim below tombstones the row regardless
       }
+    }
+    // Reclaim any registry row still keyed under the synthetic block id.
+    try {
+      await this.reclaimRegistryRow(record)
+    } catch {
+      // best-effort
     }
     // Delete the branch if one was created.
     try {
@@ -395,21 +519,52 @@ export class EnvironmentTestService {
       failedStage,
       updatedAt: this.deps.clock.now(),
     }
-    await this.deps.environmentTestRunRepository.update(record.workspaceId, record.id, patch)
+    const applied = await this.deps.environmentTestRunRepository.updateIfRunning(
+      record.workspaceId,
+      record.id,
+      patch,
+    )
+    if (!applied) {
+      // A concurrent stop (or driver) finalized the run first; its terminal state is
+      // authoritative — the cleanup above was still worth re-running (idempotent).
+      const current = await this.deps.environmentTestRunRepository.get(record.workspaceId, record.id)
+      return toRun(current ?? { ...record, ...patch })
+    }
     const failed = { ...record, ...patch }
     await this.emit(failed)
     return toRun(failed)
   }
 
-  /** Persist a stage/status patch, stamp `updatedAt`, and push the transition. */
+  /**
+   * Persist a stage/status patch on a still-running run, stamp `updatedAt`, and push the
+   * transition. Returns false (writing and emitting nothing) when the run was
+   * concurrently finalized — the terminal state wins.
+   */
   private async patch(
     record: EnvironmentTestRunRecord,
     patch: Partial<Pick<EnvironmentTestRunRecord, 'status' | 'stage' | 'environmentId' | 'envUrl'>>,
-  ): Promise<void> {
+  ): Promise<boolean> {
     const full = { ...patch, updatedAt: this.deps.clock.now() }
-    await this.deps.environmentTestRunRepository.update(record.workspaceId, record.id, full)
+    const applied = await this.deps.environmentTestRunRepository.updateIfRunning(
+      record.workspaceId,
+      record.id,
+      full,
+    )
+    if (!applied) return false
     Object.assign(record, full)
     await this.emit(record)
+    return true
+  }
+
+  /** A guarded field write with an `updatedAt` stamp, without emitting an event. */
+  private async guardedUpdate(
+    record: EnvironmentTestRunRecord,
+    patch: Partial<Pick<EnvironmentTestRunRecord, 'branch' | 'environmentId' | 'envUrl'>>,
+  ): Promise<boolean> {
+    return this.deps.environmentTestRunRepository.updateIfRunning(record.workspaceId, record.id, {
+      ...patch,
+      updatedAt: this.deps.clock.now(),
+    })
   }
 
   private async emit(record: EnvironmentTestRunRecord): Promise<void> {

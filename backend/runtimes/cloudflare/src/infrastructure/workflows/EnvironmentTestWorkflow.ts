@@ -51,7 +51,8 @@ export class EnvironmentTestWorkflow extends WorkflowEntrypoint<
 
     // Consecutive failures to READ/advance the run — treated as transient. See
     // BootstrapWorkflow (F2): returning on a transient throw would make the instance terminal
-    // and get the still-`running` run finalized as STOPPED by the sweeper instead of resumed.
+    // and get the still-`running` run finalized as STOPPED by the env-test sweep
+    // (`sweepStuckEnvTests`, cron) instead of resumed.
     let pollReadFailures = 0
     for (let p = 0; p < execConfig.jobMaxPolls; p++) {
       await step.sleep(`poll-wait-${p}`, pollInterval)
@@ -83,6 +84,19 @@ export class EnvironmentTestWorkflow extends WorkflowEntrypoint<
       }
       // still running — loop and advance again after the next durable sleep.
     }
-    log.warn('env-test run did not finish within its polling budget; finalizing via sweeper')
+    // Poll budget exhausted: finalize the run HERE (best-effort cleanup + failed) rather
+    // than leaving it `running` — this instance is about to end and can never be
+    // re-created under the same id. The cron env-test sweep is only the backstop for an
+    // instance that dies before reaching this step.
+    log.warn('env-test run did not finish within its polling budget; finalizing as failed')
+    await step.do('finalize-budget-exhausted', STEP_CONFIG, async () => {
+      const service = container.environments?.environmentTest
+      if (!service) return
+      await service.expire(
+        workspaceId,
+        jobId,
+        'The environment test did not finish within its polling budget.',
+      )
+    })
   }
 }

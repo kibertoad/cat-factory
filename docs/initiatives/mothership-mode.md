@@ -151,16 +151,26 @@
   machine-authed `POST /internal/github/installation-token` (shared `githubDelegationController`,
   mounted on BOTH facades like the persistence RPC; the facade seam is
   `ServerContainer.githubTokenDelegation`, wired from each facade's GitHub App registry). Auth
-  first (the `machine` audience pin — asserted by a shared conformance test), then the call is
-  account-scoped server-side: the installation must fan out to ≥1 workspace owned by an in-scope
-  account (installation → `listWorkspacesForInstallation` → `accountOf`), else 404 (no existence
-  leak). The laptop consumes it through `DelegatedAppTokenSource` (an `AppTokenSource`; short
+  first (the `machine` audience pin — asserted by a shared conformance test), then a per-node
+  fixed-window rate limit (keyed by the token's signed `nodeId`; per process/isolate — an abuse
+  brake on GitHub's mint API, not a distributed quota), then the call is account-scoped
+  server-side off the installation's own account binding (`getByInstallationId` → live row +
+  `accountId` in the token scope; an installation is bound to exactly ONE account, so this is a
+  single point read), else 404 (no existence leak). The minted token is **repo-scoped, not
+  installation-wide**: the mint passes GitHub `repository_ids` narrowed to the live App-linked
+  rows of the `github_repos` projection for that installation (the batched
+  `repoProjectionRepository.listByInstallation` read, mirrored D1 ⇄ Drizzle; `user_pat`-linked
+  rows excluded — not App-reachable; no linked repos ⇒ the same uniform 404). A scoped mint
+  bypasses the mothership's unscoped in-memory engine token cache in BOTH directions (no
+  over-grant from a cached unscoped token, no poisoning of the engine path), and every mint /
+  denial / failure is audit-logged with the node + user ids (the client-facing 500 stays opaque).
+  The laptop consumes it through `DelegatedAppTokenSource` (an `AppTokenSource`; short
   in-process memo, `forceRefresh` pass-through): `composeMothership` builds it on the SAME machine
   token as the persistence RPC, and `buildLocalContainer` — when NO `GITHUB_PAT` is set — wires it
   as BOTH the executor's push/clone-token mint and a full `FetchGitHubClient` (gates, merge,
   repo-link, `resolveRunRepoContext`/RepoFiles). So a mothership-mode node runs on the org's
-  GitHub App installation with no PAT and no App key on the machine — only the same short-lived
-  (~1h) installation tokens GitHub hands any App worker. An explicit PAT still wins.
+  GitHub App installation with no PAT and no App key on the machine — only short-lived (~1h),
+  repo-scoped installation tokens. An explicit PAT still wins.
   (2) **`environmentTestRunRepository` goes remote** (`get`/`update`/`listRunningByWorkspace` via
   `workspace`, record-based `insert` via `workspaceField`): the ephemeral-environment self-test's
   run store — previously all-`pending` precisely because the self-test needs
@@ -416,11 +426,13 @@ never remotely invocable (mothership-internal cron).
 ## Cross-cutting delegation (not per-call repo proxies)
 
 - **GitHub installation tokens** ✅ landed. `POST /internal/github/installation-token` (machine-authed,
-  installation→workspace→account scoped) mints the mothership App's short-lived installation tokens
-  for the laptop; `DelegatedAppTokenSource` consumes them as the push-token mint + the
-  `FetchGitHubClient` token source when no `GITHUB_PAT` is set. The App private key never leaves the
-  mothership. (Projection WRITES — sync ingest, `setMonorepo`, cursors — remain mothership-owned; the
-  repo-write projection-refresh slice is still open.)
+  rate-limited per node, scoped by the installation's account binding) mints the mothership App's
+  short-lived installation tokens for the laptop, **repo-scoped** via `repository_ids` to the live
+  App-linked `github_repos` projection for the installation; `DelegatedAppTokenSource` consumes them
+  as the push-token mint + the `FetchGitHubClient` token source when no `GITHUB_PAT` is set. The App
+  private key never leaves the mothership, and a delegated token never grants more than the
+  mothership projects. (Projection WRITES — sync ingest, `setMonorepo`, cursors — remain
+  mothership-owned; the repo-write projection-refresh slice is still open.)
 - **Real-time both directions.** `RpcEventPublisher` (`@cat-factory/server`) POSTs each engine event
   to `POST /internal/events/publish` so hosted teammates see the local node's activity; an
   `UpstreamEventSubscriber` opens `GET /internal/events/subscribe?scope=…` and re-publishes into the

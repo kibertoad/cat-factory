@@ -1,4 +1,9 @@
-import type { AgentRunRef, AgentRunRepository, Clock } from '@cat-factory/kernel'
+import type {
+  AgentRunRef,
+  AgentRunRepository,
+  Clock,
+  EnvironmentTestRunRecord,
+} from '@cat-factory/kernel'
 import type { Workflow } from '@cloudflare/workers-types'
 
 /**
@@ -161,4 +166,55 @@ export async function sweepStuckRuns({
     if (!stillOrphaned.has(id)) orphanedSince.delete(id)
   }
   return { redriven, finalized, stalled }
+}
+
+export interface EnvTestSweepDeps {
+  repository: { listStale(cutoffMs: number): Promise<EnvironmentTestRunRecord[]> }
+  /** State of the run's EnvironmentTestWorkflow instance. */
+  instanceState(runId: string): Promise<InstanceState>
+  /** (Re-)create the durable driver for a run whose instance is `missing`. */
+  redrive(workspaceId: string, runId: string): Promise<void>
+  /**
+   * Finalize a run whose instance is `terminal` (it can't be re-created under the same
+   * id): best-effort cleanup + mark it failed, via `EnvironmentTestService.expire`.
+   */
+  finalizeOrphan(workspaceId: string, runId: string): Promise<void>
+  clock: Clock
+  /** A run is considered stuck if its record hasn't been touched in this many ms. */
+  leaseMs: number
+}
+
+/**
+ * The env-test sibling of {@link sweepStuckRuns}: self-test runs live in their own
+ * `environment_test_runs` table (not `agent_runs`), so the unified run sweep never sees
+ * them — without this, a run whose Workflows instance was lost (eviction, a silently
+ * failed `create`) or ended without settling it (poll budget exhausted before the
+ * self-finalize landed, a terminal instance error) would show `running` forever. Note a
+ * long provisioning legitimately leaves `updatedAt` untouched between stage transitions,
+ * so a stale lease alone proves nothing — the instance lookup disambiguates (`alive` →
+ * leave it; a re-drive of an alive instance would be a no-op anyway).
+ */
+export async function sweepStuckEnvTests({
+  repository,
+  instanceState,
+  redrive,
+  finalizeOrphan,
+  clock,
+  leaseMs,
+}: EnvTestSweepDeps): Promise<{ redriven: number; finalized: number }> {
+  const stale = await repository.listStale(clock.now() - leaseMs)
+  let redriven = 0
+  let finalized = 0
+  for (const run of stale) {
+    const state = await instanceState(run.id)
+    if (state === 'alive') continue
+    if (state === 'terminal') {
+      await finalizeOrphan(run.workspaceId, run.id)
+      finalized++
+      continue
+    }
+    await redrive(run.workspaceId, run.id)
+    redriven++
+  }
+  return { redriven, finalized }
 }

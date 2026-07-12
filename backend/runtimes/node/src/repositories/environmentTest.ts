@@ -4,8 +4,9 @@ import type {
   EnvironmentTestRunRepository,
   EnvironmentTestStage,
   EnvironmentTestStatus,
+  ServiceProvisioning,
 } from '@cat-factory/kernel'
-import { and, desc, eq } from 'drizzle-orm'
+import { and, asc, desc, eq, lt } from 'drizzle-orm'
 import type { DrizzleDb } from '../db/client.js'
 import { environmentTestRuns } from '../db/schema.js'
 
@@ -22,6 +23,7 @@ function rowToRecord(row: typeof environmentTestRuns.$inferSelect): EnvironmentT
     status: row.status as EnvironmentTestStatus,
     stage: row.stage as EnvironmentTestStage,
     initiatedBy: row.initiated_by,
+    provisioning: JSON.parse(row.provisioning) as ServiceProvisioning,
     branch: row.branch,
     environmentId: row.environment_id,
     envUrl: row.env_url,
@@ -44,6 +46,7 @@ export class DrizzleEnvironmentTestRunRepository implements EnvironmentTestRunRe
       status: record.status,
       stage: record.stage,
       initiated_by: record.initiatedBy,
+      provisioning: JSON.stringify(record.provisioning),
       branch: record.branch,
       environment_id: record.environmentId,
       env_url: record.envUrl,
@@ -54,11 +57,11 @@ export class DrizzleEnvironmentTestRunRepository implements EnvironmentTestRunRe
     })
   }
 
-  async update(
+  async updateIfRunning(
     workspaceId: string,
     id: string,
     patch: EnvironmentTestRunRecordPatch,
-  ): Promise<void> {
+  ): Promise<boolean> {
     const set: Record<string, unknown> = {}
     if (patch.status !== undefined) set.status = patch.status
     if (patch.stage !== undefined) set.stage = patch.stage
@@ -68,11 +71,18 @@ export class DrizzleEnvironmentTestRunRepository implements EnvironmentTestRunRe
     if (patch.error !== undefined) set.error = patch.error
     if (patch.failedStage !== undefined) set.failed_stage = patch.failedStage
     if (patch.updatedAt !== undefined) set.updated_at = patch.updatedAt
-    if (Object.keys(set).length === 0) return
-    await this.db
+    if (Object.keys(set).length === 0) return false
+    const result = await this.db
       .update(environmentTestRuns)
       .set(set)
-      .where(and(eq(environmentTestRuns.workspace_id, workspaceId), eq(environmentTestRuns.id, id)))
+      .where(
+        and(
+          eq(environmentTestRuns.workspace_id, workspaceId),
+          eq(environmentTestRuns.id, id),
+          eq(environmentTestRuns.status, 'running'),
+        ),
+      )
+    return (result.rowCount ?? 0) > 0
   }
 
   async get(workspaceId: string, id: string): Promise<EnvironmentTestRunRecord | null> {
@@ -95,6 +105,21 @@ export class DrizzleEnvironmentTestRunRepository implements EnvironmentTestRunRe
         ),
       )
       .orderBy(desc(environmentTestRuns.created_at))
+    return rows.map(rowToRecord)
+  }
+
+  async listStale(cutoffMs: number, limit = 50): Promise<EnvironmentTestRunRecord[]> {
+    const rows = await this.db
+      .select()
+      .from(environmentTestRuns)
+      .where(
+        and(
+          eq(environmentTestRuns.status, 'running'),
+          lt(environmentTestRuns.updated_at, cutoffMs),
+        ),
+      )
+      .orderBy(asc(environmentTestRuns.updated_at))
+      .limit(limit)
     return rows.map(rowToRecord)
   }
 }

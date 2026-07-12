@@ -789,7 +789,7 @@
         "start": "Probar la creación del entorno",
         "stop": "Detener",
         "infraless": "Configura arriba un tipo de aprovisionamiento para probar la creación del entorno.",
-        "running": "Probando",
+        "running": "Probando: {stage}",
         "succeeded": "Prueba superada: el entorno se creó y se desmontó, y la rama se eliminó.",
         "failed": "La prueba falló",
         "stage": {

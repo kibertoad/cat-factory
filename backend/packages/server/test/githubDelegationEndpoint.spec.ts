@@ -1,50 +1,124 @@
 import { Hono } from 'hono'
 import { describe, expect, it } from 'vitest'
+import type { GitHubInstallation, GitHubRepo } from '@cat-factory/kernel'
 import { HmacSigner, TOKEN_AUDIENCE } from '../src/auth/signing.js'
 import { mintMachineToken } from '../src/auth/machineToken.js'
 import type { AppEnv, ServerContainer } from '../src/http/env.js'
 import { handleError } from '../src/http/errorHandler.js'
-import { githubDelegationController } from '../src/modules/persistence/GitHubDelegationController.js'
+import {
+  githubDelegationController,
+  type GitHubDelegationControllerOptions,
+} from '../src/modules/persistence/GitHubDelegationController.js'
 import { DelegatedAppTokenSource } from '../src/github/DelegatedAppTokenSource.js'
 
 // The mothership-mode GitHub delegation endpoint (`POST /internal/github/installation-token`):
 // a machine-authed mothership-mode node mints the short-lived GitHub App installation tokens
-// its agent containers / gates / RepoFiles ops run on. Verify the machine-token audience pin,
-// the installation→workspace→account scope binding (404, no existence leak), the 503 on a
-// non-mothership / no-App facade, and the client-side DelegatedAppTokenSource round-trip
-// (memoisation + forceRefresh pass-through).
+// its agent containers / gates / RepoFiles ops run on. Verify the machine-token audience pin
+// (missing / wrong-audience / expired / wrong-secret tokens), the installation→account scope
+// binding (uniform 404, no existence leak), the REPO-SCOPING of the mint (`repository_ids`
+// from the live App-linked projection; nothing linked → 404), the per-node rate limit, the
+// 503 on a non-mothership / no-App facade, and the client-side DelegatedAppTokenSource
+// round-trip (memoisation + forceRefresh pass-through).
 
 const SECRET = 'test-session-secret-0123456789'
 const ACCOUNT = 'acc_1'
 const OTHER_ACCOUNT = 'acc_2'
 
-// Installation 11 fans out to a workspace owned by ACCOUNT (in scope); 22 only to
-// OTHER_ACCOUNT's workspace; 33 is unknown (no workspaces at all).
-const WORKSPACE_ACCOUNTS: Record<string, string> = { ws_in: ACCOUNT, ws_out: OTHER_ACCOUNT }
-const INSTALLATION_WORKSPACES: Record<number, string[]> = { 11: ['ws_in'], 22: ['ws_out'], 33: [] }
+function installation(
+  installationId: number,
+  accountId: string | null,
+  deletedAt: number | null = null,
+): GitHubInstallation {
+  return {
+    installationId,
+    workspaceId: `ws_${installationId}`,
+    accountId,
+    accountLogin: 'org',
+    targetType: 'Organization',
+    appId: null,
+    cachedToken: null,
+    tokenExpiresAt: null,
+    createdAt: 1,
+    deletedAt,
+  }
+}
+
+function repo(
+  githubId: number,
+  installationId: number,
+  linkedVia?: 'app' | 'user_pat',
+): GitHubRepo {
+  return {
+    githubId,
+    installationId,
+    owner: 'org',
+    name: `repo-${githubId}`,
+    defaultBranch: 'main',
+    private: true,
+    ...(linkedVia ? { linkedVia } : {}),
+    syncedAt: 1,
+  }
+}
+
+// 11 is ACCOUNT's live installation with linked repos: 101 twice (two workspaces link it),
+// 102 only via a member's PAT (NOT App-reachable), 103 via the App. 22 belongs to
+// OTHER_ACCOUNT; 33 is unknown; 44 is ACCOUNT's but projects no repos; 55 is ACCOUNT's but
+// tombstoned (uninstalled).
+const INSTALLATIONS: Record<number, GitHubInstallation> = {
+  11: installation(11, ACCOUNT),
+  22: installation(22, OTHER_ACCOUNT),
+  44: installation(44, ACCOUNT),
+  55: installation(55, ACCOUNT, 999),
+}
+const INSTALLATION_REPOS: Record<number, GitHubRepo[]> = {
+  11: [repo(101, 11), repo(101, 11), repo(102, 11, 'user_pat'), repo(103, 11, 'app')],
+  22: [repo(201, 22)],
+  44: [],
+  55: [repo(501, 55)],
+}
+
+interface MintCall {
+  installationId: number
+  forceRefresh?: boolean
+  repositoryIds?: number[]
+}
 
 function makeApp(
-  opts: { mothership?: boolean; delegation?: boolean; mintedTokens?: string[] } = {},
+  opts: {
+    mothership?: boolean
+    delegation?: boolean
+    mintedTokens?: string[]
+    mintCalls?: MintCall[]
+    controller?: GitHubDelegationControllerOptions
+  } = {},
 ) {
   const minted = opts.mintedTokens ?? []
+  const mintCalls = opts.mintCalls ?? []
   const container = {
     repositories:
       opts.mothership === false
         ? undefined
         : {
             githubInstallationRepository: {
-              listWorkspacesForInstallation: async (id: number) =>
-                INSTALLATION_WORKSPACES[id] ?? [],
+              getByInstallationId: async (id: number) => INSTALLATIONS[id] ?? null,
             },
-            workspaceRepository: {
-              accountOf: async (ws: string) => WORKSPACE_ACCOUNTS[ws],
+            repoProjectionRepository: {
+              listByInstallation: async (id: number) => INSTALLATION_REPOS[id] ?? [],
             },
           },
     ...(opts.delegation === false
       ? {}
       : {
           githubTokenDelegation: {
-            installationToken: async (id: number, o?: { forceRefresh?: boolean }) => {
+            installationToken: async (
+              id: number,
+              o?: { forceRefresh?: boolean; repositoryIds?: number[] },
+            ) => {
+              mintCalls.push({
+                installationId: id,
+                forceRefresh: o?.forceRefresh,
+                repositoryIds: o?.repositoryIds,
+              })
               const token = `ghs_${id}_${o?.forceRefresh ? 'fresh' : 'cached'}_${minted.length}`
               minted.push(token)
               return token
@@ -58,13 +132,16 @@ function makeApp(
     c.set('container', container)
     await next()
   })
-  app.route('/', githubDelegationController())
+  app.route('/', githubDelegationController(opts.controller))
   app.onError(handleError)
   return app
 }
 
-async function machineToken(accountIds = [ACCOUNT]) {
-  return (await mintMachineToken(SECRET, { userId: 'usr_1', accountIds })).token
+async function machineToken(
+  accountIds = [ACCOUNT],
+  opts: { nodeId?: string; ttlMs?: number } = {},
+) {
+  return (await mintMachineToken(SECRET, { userId: 'usr_1', accountIds, ...opts })).token
 }
 
 function mint(app: Hono<AppEnv>, token: string | undefined, body: unknown) {
@@ -87,6 +164,28 @@ describe('POST /internal/github/installation-token', () => {
     expect(((await res.json()) as { token: string }).token).toMatch(/^ghs_11_cached/)
   })
 
+  it('repo-scopes the mint to the deduped, App-linked projection (repository_ids)', async () => {
+    const mintCalls: MintCall[] = []
+    const res = await mint(makeApp({ mintCalls }), await machineToken(), { installationId: 11 })
+    expect(res.status).toBe(200)
+    expect(mintCalls).toHaveLength(1)
+    // 101 appears twice in the projection (two workspaces link it) → deduped; 102 is
+    // `user_pat` (not App-reachable) → excluded; 103 is App-linked → included.
+    expect(mintCalls[0]!.repositoryIds).toEqual([101, 103])
+  })
+
+  it('refuses an in-scope installation with NO linked repos (404 — nothing to grant)', async () => {
+    const mintCalls: MintCall[] = []
+    const res = await mint(makeApp({ mintCalls }), await machineToken(), { installationId: 44 })
+    expect(res.status).toBe(404)
+    expect(mintCalls).toHaveLength(0)
+  })
+
+  it('refuses a tombstoned (uninstalled) installation (404)', async () => {
+    const res = await mint(makeApp(), await machineToken(), { installationId: 55 })
+    expect(res.status).toBe(404)
+  })
+
   it('passes forceRefresh through to the mothership mint', async () => {
     const res = await mint(makeApp(), await machineToken(), {
       installationId: 11,
@@ -95,7 +194,7 @@ describe('POST /internal/github/installation-token', () => {
     expect(((await res.json()) as { token: string }).token).toMatch(/^ghs_11_fresh/)
   })
 
-  it('refuses an installation owned only by an out-of-scope account (404, no leak)', async () => {
+  it('refuses an installation owned by an out-of-scope account (404, no leak)', async () => {
     const res = await mint(makeApp(), await machineToken(), { installationId: 22 })
     expect(res.status).toBe(404)
   })
@@ -124,6 +223,42 @@ describe('POST /internal/github/installation-token', () => {
       exp: Date.now() + 60_000,
     })
     expect((await mint(makeApp(), session, { installationId: 11 })).status).toBe(403)
+  })
+
+  it('rejects an EXPIRED machine token (403)', async () => {
+    // Well-formed, correctly signed, in-scope — but past its exp claim.
+    const expired = await machineToken([ACCOUNT], { ttlMs: -60_000 })
+    expect((await mint(makeApp(), expired, { installationId: 11 })).status).toBe(403)
+  })
+
+  it('rejects a machine token signed under a DIFFERENT secret (403 — bad MAC)', async () => {
+    // Valid token shape and machine audience, but the MAC does not verify under the
+    // mothership's session secret.
+    const forged = (
+      await mintMachineToken('another-secret-9876543210', {
+        userId: 'usr_1',
+        accountIds: [ACCOUNT],
+      })
+    ).token
+    expect((await mint(makeApp(), forged, { installationId: 11 })).status).toBe(403)
+  })
+
+  it('rate-limits mints per node (fixed window, keyed by the authenticated nodeId)', async () => {
+    const nowRef = { now: 1_000_000 }
+    const app = makeApp({
+      controller: { rateLimit: { limit: 2, windowMs: 60_000 }, now: () => nowRef.now },
+    })
+    // One token = one nodeId; every mint under it counts against the same window.
+    const token = await machineToken([ACCOUNT], { nodeId: 'node_a' })
+    expect((await mint(app, token, { installationId: 11 })).status).toBe(200)
+    expect((await mint(app, token, { installationId: 11 })).status).toBe(200)
+    expect((await mint(app, token, { installationId: 11 })).status).toBe(429)
+    // A DIFFERENT node is not throttled by node_a's window…
+    const other = await machineToken([ACCOUNT], { nodeId: 'node_b' })
+    expect((await mint(app, other, { installationId: 11 })).status).toBe(200)
+    // …and node_a mints again once its window rolls over.
+    nowRef.now += 60_000
+    expect((await mint(app, token, { installationId: 11 })).status).toBe(200)
   })
 
   it('503s on a facade that is not a mothership or has no GitHub App', async () => {

@@ -25,22 +25,64 @@ export const useEnvironmentTestStore = defineStore('environmentTest', () => {
   }
 
   /**
-   * Replace the RUNNING runs from a full snapshot WITHOUT dropping this session's terminal runs.
-   * A REPLACE of the whole list would clobber a just-finished run the inspector is still showing
-   * (the snapshot omits terminal runs), so merge: keep local terminal runs, swap in the snapshot's
-   * running set (its `id` wins for any run present in both).
+   * Reconcile the cached runs with a server snapshot for `workspaceId`. A snapshot is
+   * authoritative EXCEPT where a live `envTest` event has already advanced (or ADDED) a run
+   * past what this (possibly stale) read observed — a `board`-event refresh or the on-connect
+   * resync can resolve AFTER a newer event already landed. Same two clobber hazards as
+   * `agentRuns.hydrate`, both handled here:
+   *   - REGRESS: a run present in BOTH the snapshot and the cache — keep the newer-by-`updatedAt`
+   *     version, so a lagging refresh can't revert a `failed`/`succeeded` run to `running`
+   *     (terminal runs emit nothing further, so the inspector would be stuck on "testing").
+   *   - DROP: a run a live event just ADDED that the (older) snapshot never saw — replacing from
+   *     the snapshot alone would silently drop it (and terminal runs are omitted from the
+   *     snapshot by design, so a finished run the inspector still shows would vanish).
+   *     Preserve such cached runs, scoped to `workspaceId` so a board SWITCH still starts clean.
+   *
+   * A preserved RUNNING run absent from the snapshot may also have reached terminal while the
+   * socket was down (no event replays, and the snapshot omits terminal runs) — point-read it
+   * best-effort to pick up the outcome; {@link upsert}'s monotonic guard makes the read safe
+   * against racing live events.
    */
-  function hydrate(snapshotRuns: EnvironmentTestRun[]) {
-    const snapshotIds = new Set(snapshotRuns.map((r) => r.id))
-    const keptTerminal = runs.value.filter((r) => r.status !== 'running' && !snapshotIds.has(r.id))
-    runs.value = sortByCreated([...snapshotRuns, ...keptTerminal])
+  function hydrate(snapshotRuns: EnvironmentTestRun[], workspaceId: string) {
+    const incomingIds = new Set(snapshotRuns.map((r) => r.id))
+    const held = new Map(runs.value.map((r) => [r.id, r]))
+    const reconciled = snapshotRuns.map((incoming) => {
+      const current = held.get(incoming.id)
+      return current && current.updatedAt > incoming.updatedAt ? current : incoming
+    })
+    const preserved = [...held.values()].filter(
+      (r) => !incomingIds.has(r.id) && r.workspaceId === workspaceId,
+    )
+    runs.value = sortByCreated([...reconciled, ...preserved])
+    // A still-`running` preserved run wasn't in the snapshot, so either the snapshot is stale
+    // (the run is genuinely newer) or the run FINISHED while we were disconnected — resolve
+    // which by re-reading it (non-blocking; failures leave the cached state as-is).
+    for (const r of preserved) {
+      if (r.status === 'running') void reconcileRun(workspaceId, r.id)
+    }
   }
 
-  /** Fold a live-pushed (or freshly-started) run into the cache. */
+  /** Best-effort point-read of one run, folded in through the monotonic {@link upsert}. */
+  async function reconcileRun(workspaceId: string, id: string) {
+    try {
+      upsert(await api.getEnvironmentTest(workspaceId, id))
+    } catch {
+      // Best-effort: a transient fetch failure just leaves the cached state; the next
+      // snapshot/event reconciles it.
+    }
+  }
+
+  /**
+   * Fold a live-pushed (or freshly-started/stopped) run into the cache. Monotonic by
+   * `updatedAt`: never let a stale/out-of-order write regress a run a newer one already
+   * advanced — e.g. a `start()` response resolving AFTER a fast-failing run's terminal
+   * event already landed (same guard as {@link hydrate}).
+   */
   function upsert(run: EnvironmentTestRun) {
     const i = runs.value.findIndex((r) => r.id === run.id)
-    if (i >= 0) runs.value[i] = run
-    else runs.value.unshift(run)
+    if (i >= 0) {
+      if (run.updatedAt >= runs.value[i]!.updatedAt) runs.value[i] = run
+    } else runs.value.unshift(run)
   }
 
   function runById(id: string): EnvironmentTestRun | undefined {

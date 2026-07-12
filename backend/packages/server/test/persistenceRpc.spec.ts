@@ -249,13 +249,15 @@ function makeRegistry(): {
       update: async () => undefined,
     },
     // The ephemeral-environment self-test run store (start / durable poll / stop + the
-    // snapshot's in-flight read): reads/updates echo the workspaceId (arg0); the record-based
-    // `insert` binds on the run's `workspaceId` FIELD.
+    // snapshot's in-flight read): reads/patches echo the workspaceId (arg0); the record-based
+    // `insert` binds on the run's `workspaceId` FIELD. The write is the guarded
+    // `updateIfRunning` (first-writer-wins vs the stop button); the stub returns undefined
+    // like the other write stubs — this suite pins scope routing, not return payloads.
     environmentTestRunRepository: {
       get: async (ws: string, id: string) => ({ ws, id }),
       listRunningByWorkspace: async (ws: string) => [{ ws }],
       insert: async () => undefined,
-      update: async () => undefined,
+      updateIfRunning: async () => undefined,
     },
     // The board's run-control entry (retry/stop): resolve a run's kind by (workspaceId, id). The
     // stub echoes the workspaceId; `listStale` is wired but sweeper-only (absent from the allow-list).
@@ -998,12 +1000,13 @@ describe('bootstrap / reference-arch / env-config-repair / env-test management s
       method: 'update',
       args: ['repair_1', { status: 'failed' }],
     },
-    // The ephemeral-environment self-test run store: the poll/stop reads + stage patches and
-    // the snapshot's in-flight-runs read, all workspaceId-arg0 scoped like the repair jobs.
+    // The ephemeral-environment self-test run store: the poll/stop reads + the guarded
+    // stage patches and the snapshot's in-flight-runs read, all workspaceId-arg0 scoped
+    // like the repair jobs.
     { repo: 'environmentTestRunRepository', method: 'get', args: ['envtest_1'], echoes: true },
     {
       repo: 'environmentTestRunRepository',
-      method: 'update',
+      method: 'updateIfRunning',
       args: ['envtest_1', { stage: 'tearing_down' }],
     },
     {

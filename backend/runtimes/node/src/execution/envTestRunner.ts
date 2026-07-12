@@ -1,4 +1,4 @@
-import type { EnvironmentTestRunner } from '@cat-factory/kernel'
+import type { EnvironmentTestRunner, EnvironmentTestRunRepository } from '@cat-factory/kernel'
 import type { Logger, ServerContainer } from '@cat-factory/server'
 import type { Job, PgBoss, SendOptions } from 'pg-boss'
 import type { AdvanceQueueOptions } from './pgBossRunner.js'
@@ -55,7 +55,16 @@ async function driveEnvTest(
     if (result.state === 'done' || result.state === 'failed') return
     await sleep(cfg.jobPollIntervalMs)
   }
-  log.warn({ workspaceId, id }, 'env-test drive exhausted its poll budget')
+  // Budget exhausted: finalize the run HERE (best-effort cleanup + failed) — this drive
+  // job is about to COMPLETE (not fail), so pg-boss will never retry it and nothing else
+  // would ever settle the run. The stale-run sweep below is only the backstop for a
+  // drive whose worker died.
+  log.warn({ workspaceId, id }, 'env-test drive exhausted its poll budget; finalizing as failed')
+  await service.expire(
+    workspaceId,
+    id,
+    'The environment test did not finish within its polling budget.',
+  )
 }
 
 export class PgBossEnvironmentTestRunner implements EnvironmentTestRunner {
@@ -72,6 +81,43 @@ export class PgBossEnvironmentTestRunner implements EnvironmentTestRunner {
     // Best-effort: the run is finalized by EnvironmentTestService; any in-flight drive job is
     // a no-op once the run is terminal (pollEnvTest returns done/failed immediately).
   }
+}
+
+/**
+ * Backstop for self-test runs whose drive job died with the worker (or was never
+ * enqueued): re-enqueue a drive for every stale `running` run. Env-test runs live in
+ * their own `environment_test_runs` table, so `startStaleRunSweeper` (agent_runs) never
+ * sees them. Re-driving is always safe: the `exclusive` queue + `singletonKey=runId`
+ * drops the send when a drive job is already alive, and `pollEnvTest` is idempotent. A
+ * re-driven run that still can't finish is settled by the drive's own budget-exhaustion
+ * finalize above, so this can't loop a wedged run forever.
+ */
+export function startEnvTestSweeper(
+  runner: EnvironmentTestRunner,
+  repository: Pick<EnvironmentTestRunRepository, 'listStale'>,
+  cfg: { leaseMs: number; intervalMs: number },
+  log: Logger,
+): () => void {
+  const tick = async () => {
+    try {
+      const stale = await repository.listStale(Date.now() - cfg.leaseMs)
+      for (const run of stale) {
+        log.warn(
+          { workspaceId: run.workspaceId, runId: run.id, stage: run.stage },
+          're-driving stale env-test run',
+        )
+        await runner.startRun(run.workspaceId, run.id)
+      }
+    } catch (error) {
+      log.error(
+        { err: error instanceof Error ? error.message : String(error) },
+        'env-test sweep failed',
+      )
+    }
+  }
+  const timer = setInterval(() => void tick(), cfg.intervalMs)
+  timer.unref?.()
+  return () => clearInterval(timer)
 }
 
 /** Create the env-test drive queue and start the worker that drives self-test runs. */

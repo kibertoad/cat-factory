@@ -4,6 +4,7 @@ import type {
   EnvironmentTestRunRepository,
   EnvironmentTestStage,
   EnvironmentTestStatus,
+  ServiceProvisioning,
 } from '@cat-factory/kernel'
 import type { D1Database } from '@cloudflare/workers-types'
 
@@ -14,6 +15,7 @@ interface EnvironmentTestRunRow {
   status: string
   stage: string
   initiated_by: string | null
+  provisioning: string
   branch: string | null
   environment_id: string | null
   env_url: string | null
@@ -31,6 +33,7 @@ function rowToRecord(row: EnvironmentTestRunRow): EnvironmentTestRunRecord {
     status: row.status as EnvironmentTestStatus,
     stage: row.stage as EnvironmentTestStage,
     initiatedBy: row.initiated_by,
+    provisioning: JSON.parse(row.provisioning) as ServiceProvisioning,
     branch: row.branch,
     environmentId: row.environment_id,
     envUrl: row.env_url,
@@ -65,9 +68,9 @@ export class D1EnvironmentTestRunRepository implements EnvironmentTestRunReposit
     await this.db
       .prepare(
         `INSERT INTO environment_test_runs
-          (id, workspace_id, block_id, status, stage, initiated_by, branch, environment_id,
-           env_url, error, failed_stage, created_at, updated_at)
-         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+          (id, workspace_id, block_id, status, stage, initiated_by, provisioning, branch,
+           environment_id, env_url, error, failed_stage, created_at, updated_at)
+         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
       )
       .bind(
         record.id,
@@ -76,6 +79,7 @@ export class D1EnvironmentTestRunRepository implements EnvironmentTestRunReposit
         record.status,
         record.stage,
         record.initiatedBy,
+        JSON.stringify(record.provisioning),
         record.branch,
         record.environmentId,
         record.envUrl,
@@ -87,21 +91,25 @@ export class D1EnvironmentTestRunRepository implements EnvironmentTestRunReposit
       .run()
   }
 
-  async update(
+  async updateIfRunning(
     workspaceId: string,
     id: string,
     patch: EnvironmentTestRunRecordPatch,
-  ): Promise<void> {
+  ): Promise<boolean> {
     const entries = Object.entries(patch).filter(([, value]) => value !== undefined)
-    if (entries.length === 0) return
+    if (entries.length === 0) return false
     const setClause = entries
       .map(([key]) => `${PATCH_COLUMNS[key as keyof EnvironmentTestRunRecordPatch]} = ?`)
       .join(', ')
     const values = entries.map(([, value]) => value as string | number | null)
-    await this.db
-      .prepare(`UPDATE environment_test_runs SET ${setClause} WHERE workspace_id = ? AND id = ?`)
+    const { meta } = await this.db
+      .prepare(
+        `UPDATE environment_test_runs SET ${setClause}
+         WHERE workspace_id = ? AND id = ? AND status = 'running'`,
+      )
       .bind(...values, workspaceId, id)
       .run()
+    return (meta.changes ?? 0) > 0
   }
 
   async get(workspaceId: string, id: string): Promise<EnvironmentTestRunRecord | null> {
@@ -119,6 +127,17 @@ export class D1EnvironmentTestRunRepository implements EnvironmentTestRunReposit
          WHERE workspace_id = ? AND status = 'running' ORDER BY created_at DESC`,
       )
       .bind(workspaceId)
+      .all<EnvironmentTestRunRow>()
+    return (results ?? []).map(rowToRecord)
+  }
+
+  async listStale(cutoffMs: number, limit = 50): Promise<EnvironmentTestRunRecord[]> {
+    const { results } = await this.db
+      .prepare(
+        `SELECT * FROM environment_test_runs
+         WHERE status = 'running' AND updated_at < ? ORDER BY updated_at ASC LIMIT ?`,
+      )
+      .bind(cutoffMs, limit)
       .all<EnvironmentTestRunRow>()
     return (results ?? []).map(rowToRecord)
   }

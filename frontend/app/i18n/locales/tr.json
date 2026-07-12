@@ -789,7 +789,7 @@
         "start": "Ortam oluşturmayı test et",
         "stop": "Durdur",
         "infraless": "Ortam oluşturmayı test etmek için yukarıdan bir sağlama türü yapılandırın.",
-        "running": "Test ediliyor",
+        "running": "Test ediliyor: {stage}",
         "succeeded": "Test başarılı: ortam oluşturuldu ve kaldırıldı, dal silindi.",
         "failed": "Test başarısız",
         "stage": {

@@ -14,19 +14,21 @@ import type {
   Workspace,
   WorkspaceRepository,
 } from '@cat-factory/kernel'
-import { ConflictError } from '@cat-factory/kernel'
+import { ConflictError, NotFoundError } from '@cat-factory/kernel'
 import type { ProvisionArgs, ProvisionDispatch } from '@cat-factory/integrations'
 import {
   EnvironmentTestService,
   type EnvironmentTestProvisioning,
+  type EnvironmentTestRegistry,
   type EnvironmentTestTeardown,
 } from './EnvironmentTestService.js'
 
 // EnvironmentTestService state-machine unit. Drives the create-branch → provision →
 // tear-down → delete-branch lifecycle over in-memory fakes (no DB / GitHub), covering both
 // provision paths (synchronous `completed` + dispatched deploy job), the always-cleanup
-// failure path, and the up-front gates. The repository round-trip parity is covered
-// separately by the cross-runtime conformance suite.
+// failure paths (pre-dispatch throw, failed deploy view, stop mid-provision), the
+// stop ⇄ driver race guard, the registry reclaim, and the up-front gates. The repository
+// round-trip parity is covered separately by the cross-runtime conformance suite.
 
 class InMemoryRunRepo implements EnvironmentTestRunRepository {
   readonly rows = new Map<string, EnvironmentTestRunRecord>()
@@ -36,15 +38,39 @@ class InMemoryRunRepo implements EnvironmentTestRunRepository {
   async insert(record: EnvironmentTestRunRecord): Promise<void> {
     this.rows.set(this.key(record.workspaceId, record.id), { ...record })
   }
-  async update(ws: string, id: string, patch: EnvironmentTestRunRecordPatch): Promise<void> {
+  async updateIfRunning(
+    ws: string,
+    id: string,
+    patch: EnvironmentTestRunRecordPatch,
+  ): Promise<boolean> {
     const cur = this.rows.get(this.key(ws, id))
-    if (cur) this.rows.set(this.key(ws, id), { ...cur, ...patch })
+    if (!cur || cur.status !== 'running') return false
+    this.rows.set(this.key(ws, id), { ...cur, ...patch })
+    return true
   }
   async get(ws: string, id: string): Promise<EnvironmentTestRunRecord | null> {
     return this.rows.get(this.key(ws, id)) ?? null
   }
   async listRunningByWorkspace(ws: string): Promise<EnvironmentTestRunRecord[]> {
     return [...this.rows.values()].filter((r) => r.workspaceId === ws && r.status === 'running')
+  }
+  async listStale(cutoffMs: number): Promise<EnvironmentTestRunRecord[]> {
+    return [...this.rows.values()].filter(
+      (r) => r.status === 'running' && r.updatedAt < cutoffMs,
+    )
+  }
+}
+
+/** The env registry rows the provisioning fakes write, so reclaim behaviour is observable. */
+class FakeRegistry implements EnvironmentTestRegistry {
+  rows: { id: string; blockId: string; frameId: string; externalId: string | null }[] = []
+  softDeleted: string[] = []
+  async getByBlockAndFrame(_ws: string, blockId: string, frameId: string) {
+    return this.rows.find((r) => r.blockId === blockId && r.frameId === frameId) ?? null
+  }
+  async softDelete(_ws: string, id: string): Promise<void> {
+    this.rows = this.rows.filter((r) => r.id !== id)
+    this.softDeleted.push(id)
   }
 }
 
@@ -85,17 +111,26 @@ function fakeRepo() {
 
 function makeService(opts: {
   runRepo?: InMemoryRunRepo
+  registry?: FakeRegistry
   dispatch?: ProvisionDispatch
+  /** Makes `startProvision` throw AFTER persisting a failed registry row (the real shape). */
+  dispatchThrows?: Error
   pollViews?: RunnerJobView[]
   finalize?: EnvironmentHandle
+  finalizeThrows?: Error
   block?: Block | null
+  /** A mutable block holder, read at every block-repo call (for mid-run edit tests). */
+  blockRef?: { current: Block | null }
   onStartProvision?: (args: ProvisionArgs) => void
   teardowns?: string[]
   released?: RunnerJobRef[]
   repoContext?: RunRepoContext | null
   canProvision?: { ok: boolean; reason?: string }
+  /** teardown() throws this for the given env id (e.g. a NotFound on replay). */
+  teardownThrows?: { id: string; error: Error }
 }) {
   const runRepo = opts.runRepo ?? new InMemoryRunRepo()
+  const registry = opts.registry ?? new FakeRegistry()
   const teardowns = opts.teardowns ?? []
   const released = opts.released ?? []
   let pollIdx = 0
@@ -103,23 +138,65 @@ function makeService(opts: {
     canProvision: async () => opts.canProvision ?? { ok: true },
     startProvision: async (args) => {
       opts.onStartProvision?.(args)
-      return (
-        opts.dispatch ?? {
-          kind: 'completed',
-          handle: { id: 'env-1', url: 'https://x' } as EnvironmentHandle,
-        }
+      if (opts.dispatchThrows) {
+        // Mirror the real service: a dispatch failure persists a failed env row under
+        // the synthetic (blockId, frameId) key before propagating.
+        registry.rows.push({
+          id: 'reg-failed',
+          blockId: args.blockId!,
+          frameId: args.frameId!,
+          externalId: null,
+        })
+        throw opts.dispatchThrows
+      }
+      const dispatch = opts.dispatch ?? {
+        kind: 'completed' as const,
+        handle: { id: 'env-1', url: 'https://x' } as EnvironmentHandle,
+      }
+      // Mirror the real service's registry writes: a dispatched job leaves a
+      // `provisioning` placeholder; a synchronous provision records the real env.
+      registry.rows.push(
+        dispatch.kind === 'dispatched'
+          ? {
+              id: 'reg-placeholder',
+              blockId: args.blockId!,
+              frameId: args.frameId!,
+              externalId: null,
+            }
+          : {
+              id: dispatch.handle.id,
+              blockId: args.blockId!,
+              frameId: args.frameId!,
+              externalId: 'ext-1',
+            },
       )
+      return dispatch
     },
     pollProvisionJob: async () => opts.pollViews?.[pollIdx++] ?? { state: 'done' },
-    finalizeProvision: async () =>
-      opts.finalize ?? ({ id: 'env-1', status: 'ready', url: 'https://x' } as EnvironmentHandle),
+    finalizeProvision: async (args) => {
+      if (opts.finalizeThrows) throw opts.finalizeThrows
+      const handle =
+        opts.finalize ?? ({ id: 'env-1', status: 'ready', url: 'https://x' } as EnvironmentHandle)
+      // Finalize supersedes the placeholder with the settled record.
+      registry.rows = registry.rows.filter((r) => r.blockId !== args.blockId)
+      registry.rows.push({
+        id: handle.id,
+        blockId: args.blockId!,
+        frameId: args.frameId!,
+        externalId: 'ext-1',
+      })
+      return handle
+    },
     releaseProvisionJob: async (_ws, ref) => {
       released.push(ref)
     },
   }
   const teardown: EnvironmentTestTeardown = {
     teardown: async (_ws, id) => {
+      if (opts.teardownThrows && opts.teardownThrows.id === id) throw opts.teardownThrows.error
       teardowns.push(id)
+      // A real teardown tombstones the registry record.
+      registry.rows = registry.rows.filter((r) => r.id !== id)
     },
   }
   const repoCtx =
@@ -130,15 +207,17 @@ function makeService(opts: {
     environmentTestRunRepository: runRepo,
     workspaceRepository,
     blockRepository: {
-      get: async () => (opts.block === undefined ? frameBlock() : opts.block),
+      get: async () =>
+        opts.blockRef ? opts.blockRef.current : opts.block === undefined ? frameBlock() : opts.block,
     } as never,
     provisioning,
     teardown,
+    environmentRegistry: registry,
     resolveRunRepoContext: async () => repoCtx,
     idGenerator,
     clock,
   })
-  return { service, runRepo, teardowns, released }
+  return { service, runRepo, registry, teardowns, released }
 }
 
 describe('EnvironmentTestService', () => {
@@ -152,16 +231,15 @@ describe('EnvironmentTestService', () => {
     await expect(service.startTest('ws', 'frame-1')).rejects.toBeInstanceOf(ConflictError)
   })
 
-  it('fails (no vcs) and cleans up when the repo context is unresolved', async () => {
-    const { service } = makeService({ repoContext: null })
-    const run = await service.startTest('ws', 'frame-1')
-    expect(run.status).toBe('failed')
-    expect(run.failedStage).toBe('creating_branch')
+  it('rejects a workspace with no git provider as a 409 (no run record is created)', async () => {
+    const { service, runRepo } = makeService({ repoContext: null })
+    await expect(service.startTest('ws', 'frame-1')).rejects.toBeInstanceOf(ConflictError)
+    expect(runRepo.rows.size).toBe(0)
   })
 
   it('runs the full happy path on the synchronous (completed) provision path', async () => {
     const { repo, calls } = fakeRepo()
-    const { service, teardowns } = makeService({
+    const { service, teardowns, registry } = makeService({
       repoContext: { repo, baseBranch: 'main' },
       dispatch: {
         kind: 'completed',
@@ -187,6 +265,8 @@ describe('EnvironmentTestService', () => {
     expect(final.stage).toBe('done')
     expect(teardowns).toEqual(['env-9'])
     expect(calls.deleted).toEqual([branch])
+    // Nothing accretes in the registry: teardown tombstoned the synthetic-block record.
+    expect(registry.rows).toEqual([])
   })
 
   it('passes the real frame as frameId and a synthetic blockId to provisioning', async () => {
@@ -200,7 +280,7 @@ describe('EnvironmentTestService', () => {
 
   it('polls a dispatched deploy job to done, then finalizes + tears down + deletes', async () => {
     const { repo, calls } = fakeRepo()
-    const { service, teardowns, released } = makeService({
+    const { service, teardowns, released, registry } = makeService({
       repoContext: { repo, baseBranch: 'main' },
       dispatch: { kind: 'dispatched', ref: { runId: 'r', jobId: 'r' } },
       pollViews: [{ state: 'running' }, { state: 'done' }],
@@ -220,14 +300,57 @@ describe('EnvironmentTestService', () => {
     expect(released).toHaveLength(1)
     expect(teardowns).toEqual(['env-k8s'])
     expect(calls.deleted).toHaveLength(1)
+    expect(registry.rows).toEqual([])
   })
 
-  it('fails at provisioning and still tears down + deletes the branch', async () => {
-    const { repo, calls } = fakeRepo()
+  it('pins the provisioning config at dispatch: a mid-flight frame edit cannot break finalize', async () => {
+    const { repo } = fakeRepo()
+    const blockRef = { current: frameBlock() as Block | null }
     const { service, teardowns } = makeService({
+      repoContext: { repo, baseBranch: 'main' },
+      blockRef,
+      dispatch: { kind: 'dispatched', ref: { runId: 'r', jobId: 'r' } },
+      pollViews: [{ state: 'done' }],
+      finalize: { id: 'env-pin', status: 'ready', url: null } as EnvironmentHandle,
+    })
+    const started = await service.startTest('ws', 'frame-1')
+    // The frame is deleted (or flipped to infraless) mid-run — the record carries the
+    // pinned config, so the finalize + teardown still resolve.
+    blockRef.current = null
+    expect((await service.pollEnvTest('ws', started.id)).state).toBe('running')
+    await service.pollEnvTest('ws', started.id) // tearing_down
+    expect((await service.pollEnvTest('ws', started.id)).state).toBe('done')
+    expect((await service.getRun('ws', started.id)).status).toBe('succeeded')
+    expect(teardowns).toEqual(['env-pin'])
+  })
+
+  it('fails at dispatch and still deletes the just-created branch + reclaims the registry row', async () => {
+    const { repo, calls } = fakeRepo()
+    const { service, registry, released } = makeService({
+      repoContext: { repo, baseBranch: 'main' },
+      dispatchThrows: new Error('no deploy runner wired'),
+    })
+    const run = await service.startTest('ws', 'frame-1')
+    expect(run.status).toBe('failed')
+    expect(run.failedStage).toBe('creating_branch')
+    expect(run.error).toContain('no deploy runner wired')
+    // The branch was created before the dispatch threw — it must be reclaimed.
+    expect(calls.created).toHaveLength(1)
+    expect(calls.deleted).toEqual(calls.created)
+    // The failed registry row under the synthetic key is tombstoned, and the (possibly
+    // accepted) deploy job released.
+    expect(registry.rows).toEqual([])
+    expect(registry.softDeleted).toEqual(['reg-failed'])
+    expect(released).toHaveLength(1)
+  })
+
+  it('fails at provisioning: releases the runner, finalizes the failed view, tears down + deletes', async () => {
+    const { repo, calls } = fakeRepo()
+    const { service, teardowns, released, registry } = makeService({
       repoContext: { repo, baseBranch: 'main' },
       dispatch: { kind: 'dispatched', ref: { runId: 'r', jobId: 'r' } },
       pollViews: [{ state: 'failed', error: 'deploy blew up' }],
+      finalize: { id: 'env-failed', status: 'failed', lastError: 'apply failed' } as EnvironmentHandle,
     })
     const started = await service.startTest('ws', 'frame-1')
     const result = await service.pollEnvTest('ws', started.id)
@@ -237,14 +360,33 @@ describe('EnvironmentTestService', () => {
     expect(final.status).toBe('failed')
     expect(final.failedStage).toBe('provisioning')
     expect(final.error).toContain('deploy blew up')
-    // No env was finalized (the job failed), so nothing to tear down; the branch is still reclaimed.
-    expect(teardowns).toEqual([])
+    // The deploy runner was reclaimed and the finalized (failed) env torn down — partial
+    // infra from the failed apply is removed through the provider.
+    expect(released).toHaveLength(1)
+    expect(teardowns).toEqual(['env-failed'])
+    expect(calls.deleted).toHaveLength(1)
+    expect(registry.rows).toEqual([])
+  })
+
+  it('reclaims the provisioning placeholder row even when the failed view cannot be finalized', async () => {
+    const { repo, calls } = fakeRepo()
+    const { service, registry } = makeService({
+      repoContext: { repo, baseBranch: 'main' },
+      dispatch: { kind: 'dispatched', ref: { runId: 'r', jobId: 'r' } },
+      pollViews: [{ state: 'failed', error: 'deploy blew up' }],
+      finalizeThrows: new Error('provider gone'),
+    })
+    const started = await service.startTest('ws', 'frame-1')
+    await service.pollEnvTest('ws', started.id)
+    // The placeholder had no infra (externalId null) → straight tombstone.
+    expect(registry.rows).toEqual([])
+    expect(registry.softDeleted).toEqual(['reg-placeholder'])
     expect(calls.deleted).toHaveLength(1)
   })
 
   it('stop() cleans up a running test and marks it failed', async () => {
     const { repo, calls } = fakeRepo()
-    const { service, teardowns } = makeService({
+    const { service, teardowns, registry } = makeService({
       repoContext: { repo, baseBranch: 'main' },
       dispatch: { kind: 'completed', handle: { id: 'env-2', url: null } as EnvironmentHandle },
     })
@@ -253,5 +395,104 @@ describe('EnvironmentTestService', () => {
     expect(stopped.status).toBe('failed')
     expect(teardowns).toEqual(['env-2'])
     expect(calls.deleted).toHaveLength(1)
+    expect(registry.rows).toEqual([])
+  })
+
+  it('stop() mid-async-provision releases the deploy job and reclaims the placeholder', async () => {
+    const { repo, calls } = fakeRepo()
+    const { service, released, registry, teardowns } = makeService({
+      repoContext: { repo, baseBranch: 'main' },
+      dispatch: { kind: 'dispatched', ref: { runId: 'r', jobId: 'r' } },
+      pollViews: [{ state: 'running' }],
+    })
+    const started = await service.startTest('ws', 'frame-1')
+    // Deploy job still in flight (no env finalized yet).
+    expect((await service.pollEnvTest('ws', started.id)).state).toBe('running')
+    const stopped = await service.stop('ws', started.id)
+    expect(stopped.status).toBe('failed')
+    // The in-flight deploy job is released (aborting the container), the placeholder row
+    // tombstoned, the branch deleted — nothing owned by the test survives it.
+    expect(released).toHaveLength(1)
+    expect(registry.softDeleted).toEqual(['reg-placeholder'])
+    expect(teardowns).toEqual([])
+    expect(calls.deleted).toHaveLength(1)
+  })
+
+  it('a driver poll after a stop cannot resurrect the run (guarded terminal write)', async () => {
+    const { repo } = fakeRepo()
+    const { service, runRepo } = makeService({
+      repoContext: { repo, baseBranch: 'main' },
+      dispatch: { kind: 'dispatched', ref: { runId: 'r', jobId: 'r' } },
+      pollViews: [{ state: 'done' }],
+    })
+    const started = await service.startTest('ws', 'frame-1')
+    const stopped = await service.stop('ws', started.id)
+    expect(stopped.status).toBe('failed')
+    // A late driver poll short-circuits on the terminal status; the record is unchanged.
+    const result = await service.pollEnvTest('ws', started.id)
+    expect(result.state).toBe('failed')
+    const record = runRepo.rows.get(`ws:${started.id}`)!
+    expect(record.status).toBe('failed')
+    expect(record.error).toBe('Stopped by the user.')
+  })
+
+  it('treats a teardown NotFound on replay as already-done (the run still succeeds)', async () => {
+    const { repo } = fakeRepo()
+    const { service } = makeService({
+      repoContext: { repo, baseBranch: 'main' },
+      dispatch: { kind: 'completed', handle: { id: 'env-5', url: null } as EnvironmentHandle },
+      teardownThrows: { id: 'env-5', error: new NotFoundError('Environment', 'env-5') },
+    })
+    const started = await service.startTest('ws', 'frame-1')
+    // provisioning → tearing_down
+    await service.pollEnvTest('ws', started.id)
+    // tearing_down: teardown throws NotFound (already tombstoned by a prior replay) → advance
+    expect((await service.pollEnvTest('ws', started.id)).state).toBe('running')
+    // deleting_branch → done
+    expect((await service.pollEnvTest('ws', started.id)).state).toBe('done')
+    expect((await service.getRun('ws', started.id)).status).toBe('succeeded')
+  })
+
+  it('fails a run stranded at creating_branch (the start request died mid-flight)', async () => {
+    const { service, runRepo } = makeService({})
+    // Simulate a crash between insert and dispatch: a bare `creating_branch` record.
+    await runRepo.insert({
+      id: 'envtest-stranded',
+      workspaceId: 'ws',
+      blockId: 'frame-1',
+      status: 'running',
+      stage: 'creating_branch',
+      initiatedBy: null,
+      provisioning: { type: 'kubernetes' },
+      branch: null,
+      environmentId: null,
+      envUrl: null,
+      error: null,
+      failedStage: null,
+      createdAt: 1,
+      updatedAt: 1,
+    })
+    const result = await service.pollEnvTest('ws', 'envtest-stranded')
+    expect(result.state).toBe('failed')
+    expect((await service.getRun('ws', 'envtest-stranded')).status).toBe('failed')
+  })
+
+  it('expire() finalizes a wedged run with cleanup and is idempotent on terminal runs', async () => {
+    const { repo, calls } = fakeRepo()
+    const { service, released, registry } = makeService({
+      repoContext: { repo, baseBranch: 'main' },
+      dispatch: { kind: 'dispatched', ref: { runId: 'r', jobId: 'r' } },
+      pollViews: [{ state: 'running' }],
+    })
+    const started = await service.startTest('ws', 'frame-1')
+    const expired = await service.expire('ws', started.id, 'driver lost')
+    expect(expired.status).toBe('failed')
+    expect(expired.error).toBe('driver lost')
+    expect(released).toHaveLength(1)
+    expect(registry.rows).toEqual([])
+    expect(calls.deleted).toHaveLength(1)
+    // Idempotent: a second expire returns the terminal run unchanged.
+    const again = await service.expire('ws', started.id, 'other reason')
+    expect(again.error).toBe('driver lost')
   })
 })

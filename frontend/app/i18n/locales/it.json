@@ -1100,7 +1100,7 @@
         "start": "Prova la creazione dell'ambiente",
         "stop": "Ferma",
         "infraless": "Configura sopra un tipo di provisioning per provare la creazione dell'ambiente.",
-        "running": "Prova in corso",
+        "running": "Prova in corso: {stage}",
         "succeeded": "Prova superata: l'ambiente è stato creato e smontato, e il branch è stato eliminato.",
         "failed": "Prova fallita",
         "stage": {

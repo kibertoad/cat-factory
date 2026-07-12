@@ -1100,7 +1100,7 @@
         "start": "Umgebungserstellung testen",
         "stop": "Stopp",
         "infraless": "Konfiguriere oben einen Bereitstellungstyp, um die Umgebungserstellung zu testen.",
-        "running": "Wird getestet",
+        "running": "Wird getestet: {stage}",
         "succeeded": "Test bestanden: Die Umgebung wurde erstellt und abgebaut, und der Branch wurde gelöscht.",
         "failed": "Test fehlgeschlagen",
         "stage": {

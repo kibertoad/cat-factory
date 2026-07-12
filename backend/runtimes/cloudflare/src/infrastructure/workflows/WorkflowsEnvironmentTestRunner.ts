@@ -1,6 +1,7 @@
 import type { EnvironmentTestRunner } from '@cat-factory/kernel'
 import type { Workflow } from '@cloudflare/workers-types'
 import type { EnvironmentTestWorkflowParams } from './EnvironmentTestWorkflow'
+import { logger } from '../observability/logger'
 
 /**
  * Drives ephemeral-environment self-test runs durably via Cloudflare Workflows,
@@ -17,9 +18,15 @@ export class WorkflowsEnvironmentTestRunner implements EnvironmentTestRunner {
         id,
         params: { workspaceId, jobId: id } satisfies EnvironmentTestWorkflowParams,
       })
-    } catch {
-      // An instance with this id already exists (a duplicate start or a sweeper
-      // re-drive racing a live instance). The existing instance is authoritative.
+    } catch (error) {
+      // Usually an instance with this id already exists (a duplicate start or a sweeper
+      // re-drive racing a live instance) — the existing instance is authoritative. Log it
+      // regardless: a GENUINE create failure (rate limit, outage) strands the run until
+      // the cron env-test sweep re-drives it, and this line is the only trace of why.
+      logger.warn(
+        { workspaceId, runId: id, err: error instanceof Error ? error.message : String(error) },
+        'env-test workflow create was rejected; relying on the existing instance or the sweeper',
+      )
     }
   }
 

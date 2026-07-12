@@ -843,7 +843,7 @@
         "start": "Test environment creation",
         "stop": "Stop",
         "infraless": "Configure a provision type above to test environment creation.",
-        "running": "Testing",
+        "running": "Testing: {stage}",
         "succeeded": "Test passed: the environment was created and torn down, and the branch was deleted.",
         "failed": "Test failed",
         "stage": {
