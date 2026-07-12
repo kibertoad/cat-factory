@@ -59,6 +59,31 @@ describe('checkReadiness', () => {
     expect(report.checks.database!.ok).toBe(false)
     expect(report.checks.database!.error).toMatch(/timed out/)
   })
+
+  it('a pool probe that rejects AFTER the timeout does not leak an unhandled rejection', async () => {
+    // The degraded-pool path: the timeout wins the race, then the wedged `SELECT 1` rejects later
+    // with nothing awaiting it. The verdict must stand on the timeout AND no unhandledRejection fires.
+    const unhandled: unknown[] = []
+    const onUnhandled = (reason: unknown) => unhandled.push(reason)
+    process.on('unhandledRejection', onUnhandled)
+    try {
+      const report = await checkReadiness({
+        ping: () =>
+          new Promise<void>((_resolve, reject) =>
+            setTimeout(() => reject(new Error('late pool error')), 50),
+          ),
+        pgBossHealthy: () => true,
+        timeoutMs: 10,
+      })
+      expect(report.ready).toBe(false)
+      expect(report.checks.database!.error).toMatch(/timed out/)
+      // Let the late rejection fire — the listener would catch it if it were unhandled.
+      await new Promise((resolve) => setTimeout(resolve, 80))
+      expect(unhandled).toEqual([])
+    } finally {
+      process.off('unhandledRejection', onUnhandled)
+    }
+  })
 })
 
 const BASE = 'https://cat-factory.test'

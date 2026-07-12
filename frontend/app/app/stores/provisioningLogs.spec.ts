@@ -150,8 +150,34 @@ describe('provisioningLogs store — loadForExecution', () => {
     expect(store.byExecution.exec1).toBeUndefined()
 
     // After eviction a fresh load re-seeds cleanly (the drawer re-fetches on re-mount) — and the
-    // per-execution sequence counter reset too, so the guard still holds for the new lifecycle.
+    // per-execution ticket record was dropped too, so the guard still holds for the new lifecycle.
     await store.loadForExecution('exec1')
     expect(store.byExecution.exec1!.entries).toHaveLength(1)
+  })
+
+  it('a load in flight when evict runs cannot resurrect stale state after the drawer re-opens', async () => {
+    // Close-then-reopen while the pre-close fetch is still pending: the drawer unmounts (evict), then
+    // re-mounts and issues a fresh load, then the OLD pre-evict fetch finally resolves. With a global
+    // (never-reset) load ticket the re-opened load out-ranks the straggler, so the stale result is
+    // discarded rather than clobbering the fresh timeline (a per-execution counter reset on evict
+    // would let the two collide on the same seq and the straggler would win).
+    const deferred: Array<(r: { entries: ProvisioningLogEntry[] }) => void> = []
+    vi.stubGlobal('useApi', () => ({
+      listProvisioningLogs: () =>
+        new Promise<{ entries: ProvisioningLogEntry[] }>((res) => deferred.push(res)),
+    }))
+
+    const store = useProvisioningLogsStore()
+    const preEvict = store.loadForExecution('exec1', { silent: true }) // issued before close
+    store.evict('exec1') // drawer unmounts mid-flight
+    const reopened = store.loadForExecution('exec1', { silent: true }) // drawer re-opens, fresh load
+
+    // The re-opened load resolves first (fresh), then the stale pre-evict straggler.
+    deferred[1]!({ entries: [entry({ id: 'fresh', operation: 'release' })] })
+    deferred[0]!({ entries: [entry({ id: 'stale', operation: 'dispatch' })] })
+    await Promise.all([preEvict, reopened])
+
+    expect(store.byExecution.exec1!.entries).toHaveLength(1)
+    expect(store.byExecution.exec1!.entries[0]!.id).toBe('fresh')
   })
 })

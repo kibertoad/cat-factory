@@ -17,7 +17,11 @@
 
 export interface ReadinessCheck {
   ok: boolean
-  /** The failure detail when `ok` is false — surfaced in the JSON body for operators, not clients. */
+  /**
+   * The failure detail when `ok` is false. `/ready` is PUBLIC (unauthenticated, like `/health`), so
+   * this string is readable by any client — keep it to a short diagnostic (`pg-boss not running`,
+   * `timed out after 2000ms`) and NEVER put a connection string, host, or credential in it.
+   */
   error?: string
 }
 
@@ -52,6 +56,11 @@ async function withTimeout(promise: Promise<void>, ms: number): Promise<void> {
     // The probe fires every few seconds; its timeout must never keep the process alive on its own.
     timer.unref?.()
   })
+  // When the timeout wins the race, `promise` (a wedged `SELECT 1`) is still pending and may reject
+  // LATER — exactly the degraded-pool path this probe exists to detect. Nothing awaits it by then,
+  // so attach a no-op handler to swallow that late rejection and avoid an unhandledRejection. This
+  // does not hide a pre-timeout failure: the race still observes `promise` rejecting and rejects.
+  promise.catch(() => {})
   try {
     await Promise.race([promise, timeout])
   } finally {

@@ -310,6 +310,10 @@ async function bootServer(
   // pg-boss lifecycle flags for the `/ready` probe: it's running once `start()` resolves and stops
   // being ready when it emits `stopped` (graceful shutdown) or `draining` flips at SIGTERM. The
   // pool's own health is probed live per request (a `SELECT 1`), so it needs no flag.
+  // NOTE: this tracks the GRACEFUL `stopped` transition only — a boss that crashes/wedges without
+  // emitting `stopped` still reads healthy here. That's an accepted residual gap: such an outage is
+  // almost always a shared-database failure the live `SELECT 1` probe catches, and flipping the
+  // flag off every transient `error` event would drain the replica on recoverable blips.
   let bossRunning = true
   boss.on('stopped', () => {
     bossRunning = false

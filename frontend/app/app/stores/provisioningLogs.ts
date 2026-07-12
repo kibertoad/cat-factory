@@ -30,13 +30,17 @@ export const useProvisioningLogsStore = defineStore('provisioningLogs', () => {
     container: emptyState(),
   })
   const byExecution = reactive<Record<string, LogState>>({})
-  // Monotonic per-execution load counter: the drawer's silent background poll and a manual/visible
-  // refresh can be in flight at once, and each ends in a REPLACE-style `s.entries = entries`. Without
-  // ordering a slower/staler fetch resolving AFTER a newer one clobbers the fresher timeline (the
-  // same out-of-order-overwrite hazard the CLAUDE.md live-push rules warn about, and that
-  // stores/workspace.ts guards its full refresh with). Stamp each load; only the latest-issued one
-  // commits its result. NOT reactive — pure bookkeeping the UI never reads.
-  const loadSeq = new Map<string, number>()
+  // Monotonic load-ordering guard: the drawer's silent background poll and a manual/visible refresh
+  // can be in flight at once, and each ends in a REPLACE-style `s.entries = entries`. Without ordering
+  // a slower/staler fetch resolving AFTER a newer one clobbers the fresher timeline (the same
+  // out-of-order-overwrite hazard the CLAUDE.md live-push rules warn about, and that
+  // stores/workspace.ts guards its full refresh with). Each load takes a ticket from a single
+  // ever-increasing counter; `latestLoad` records the newest ticket issued per execution, and only
+  // that load commits. The counter is GLOBAL (never reset on `evict`) so a drawer re-opened for an
+  // evicted execution always out-ranks any still-in-flight prior load — no seq collision can let a
+  // stale fetch win. NOT reactive — pure bookkeeping the UI never reads.
+  let loadTicket = 0
+  const latestLoad = new Map<string, number>()
 
   async function load(subsystem: ProvisioningSubsystem) {
     const ws = useWorkspaceStore()
@@ -67,8 +71,8 @@ export const useProvisioningLogsStore = defineStore('provisioningLogs', () => {
       s.loading = true
       s.error = null
     }
-    const seq = (loadSeq.get(executionId) ?? 0) + 1
-    loadSeq.set(executionId, seq)
+    const seq = ++loadTicket
+    latestLoad.set(executionId, seq)
     try {
       const { entries } = await api.listProvisioningLogs(ws.requireId(), {
         executionId,
@@ -76,11 +80,11 @@ export const useProvisioningLogsStore = defineStore('provisioningLogs', () => {
       })
       // A newer load (silent poll or manual refresh) superseded this one while it was in flight —
       // discard this staler result so it can't clobber the fresher timeline.
-      if (loadSeq.get(executionId) !== seq) return
+      if (latestLoad.get(executionId) !== seq) return
       s.entries = entries
       s.error = null
     } catch (err) {
-      if (loadSeq.get(executionId) !== seq) return
+      if (latestLoad.get(executionId) !== seq) return
       // A background poll keeps the last snapshot on a blip; only a visible load reports.
       if (!opts?.silent) {
         s.error = err instanceof Error ? err.message : 'Failed to load logs'
@@ -101,7 +105,10 @@ export const useProvisioningLogsStore = defineStore('provisioningLogs', () => {
    */
   function evict(executionId: string) {
     delete byExecution[executionId]
-    loadSeq.delete(executionId)
+    // Drop the per-execution ticket record too (its map must not grow unbounded either). The global
+    // `loadTicket` counter is deliberately NOT reset, so a re-opened drawer still out-ranks any load
+    // that was in flight when this ran.
+    latestLoad.delete(executionId)
   }
 
   return { bySubsystem, byExecution, load, loadForExecution, evict }
