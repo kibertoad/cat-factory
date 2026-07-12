@@ -75,10 +75,20 @@ async function loadNotificationFactory(): Promise<CreateGroupNotificationPair> {
   // imports its Redis modules (and thereby ioredis) at module scope, which is why
   // @cat-factory/caching itself only deep-imports the in-memory machinery. The
   // opaque specifier keeps this out of the TS build graph too.
-  const mod = (await import('layered-loader' as string)) as {
-    createGroupNotificationPair: CreateGroupNotificationPair
+  try {
+    const mod = (await import('layered-loader' as string)) as {
+      createGroupNotificationPair: CreateGroupNotificationPair
+    }
+    return mod.createGroupNotificationPair
+  } catch (err) {
+    // layered-loader is a hard dependency (always installed), so the only way its ROOT import
+    // fails is the transitive optional `ioredis` being absent — the same missing-dependency
+    // condition `loadRedis` reports below. Crucially this import runs FIRST (before loadRedis),
+    // so without this wrap the missing-ioredis case would throw a bare Error here and crash boot
+    // opaquely, never reaching loadRedis's ConfigValidationError. Report it as the shared
+    // ConfigValidationError so it lands on the misconfigured fallback screen either way.
+    throw missingIoredisProblem('distributed cache invalidation', err)
   }
-  return mod.createGroupNotificationPair
 }
 
 export interface CacheNotificationsOptions {

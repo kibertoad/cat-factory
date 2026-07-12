@@ -82,10 +82,13 @@ export function formatConfigProblems(problems: ConfigProblem[]): string {
 }
 
 /**
- * The canonical human-readable description of each mandatory env var / binding: what it means and
- * how to fill it. Keeping these here (rather than re-writing the prose at every throw site) unifies
- * the phrasing across the three facades, so `ENCRYPTION_KEY` reads the same whether it's the Node
- * loader, the Worker loader, or local mode that flags it. A throw site spreads the matching entry:
+ * The canonical human-readable description of each env var / binding a config problem can name: what
+ * it means and how to fill it. Most are MANDATORY (missing ⇒ a configProblem), but a few are OPTIONAL
+ * and only surface a problem in a specific failure mode (e.g. `REDIS_URL` — set but its optional
+ * `ioredis` dependency absent). Keeping these here (rather than re-writing the prose at every throw
+ * site) unifies the phrasing across the three facades, so `ENCRYPTION_KEY` reads the same whether
+ * it's the Node loader, the Worker loader, or local mode that flags it. A throw site spreads the
+ * matching entry:
  *
  *   throw configProblem({ key: 'ENCRYPTION_KEY', ...ENV_HELP.ENCRYPTION_KEY })
  *

@@ -409,7 +409,14 @@ DispatchError`, reading `.status`), NOT the `/dispatch failed/i` regex, which is
   silent degradation, `redis-cli … ping`, the docs) and NEVER blocks/crashes boot — the ioredis
   background retry is the real recovery path, the probe only makes the degradation visible. The probe
   distinguishes `false` (unreachable → warn) from `undefined` (ioredis absent → stay silent, the fatal
-  configProblem already covers it). No executor-harness image bump (no harness change).
+  configProblem already covers it). No executor-harness image bump (no harness change). **Gotcha —
+  wrap the layered-loader import too, not just the ioredis one.** In `cacheNotifications.ts` the
+  ioredis-absent failure actually surfaces FIRST at `loadNotificationFactory`'s root `import('layered-loader')`
+  (its root index eagerly requires ioredis, per `appCaches.ts`), which runs before `loadRedis`; and
+  `buildCacheNotifications` itself runs before `redisPropagator.start()` at boot. So the raw
+  `import('layered-loader')` must ALSO be caught and rethrown as `missingIoredisProblem` — otherwise the
+  bare `Cannot find module 'ioredis'` escapes as a non-`ConfigValidationError` and boot crashes opaquely
+  before `loadRedis`'s nice error is ever reached.
 - **Executor-harness changes bump the image tag** + the three hand-maintained pins
   (`deploy/backend/package.json`, `deploy/backend/wrangler.toml`,
   `RECOMMENDED_HARNESS_IMAGE`) — batch all F-rows into one slice to pay that cost once.
