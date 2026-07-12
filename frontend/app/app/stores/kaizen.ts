@@ -23,6 +23,36 @@ export const useKaizenStore = defineStore('kaizen', () => {
   /** 503 ⇒ the Kaizen feature isn't configured on this deployment. */
   const available = ref<boolean | null>(null)
 
+  // Monotonic load-ordering guard. Both loads REPLACE state that also arrives live over the
+  // stream (`upsert`), so a slower/staler fetch resolving AFTER a newer one — or after a live
+  // push — would clobber the fresher gradings (the CLAUDE.md live-push out-of-order hazard,
+  // the same one `stores/provisioningLogs.ts` guards). Each load takes a ticket; only the
+  // newest-issued one commits. NOT reactive — pure bookkeeping the UI never reads.
+  let loadTicket = 0
+  let latestOverviewLoad = 0
+  const latestExecLoad = new Map<string, number>()
+
+  /**
+   * Fold a freshly-loaded grading list into the live cache WITHOUT dropping live-only rows:
+   * a grading pushed via `upsert` while the load was in flight may not be in the server's
+   * response yet, and a blind replace would silently drop it. Loaded rows are authoritative
+   * for the ids they carry (keeping whichever `updatedAt` is greater on a shared id), and any
+   * live-only rows the response hasn't caught up to are preserved. Gradings are append/update-
+   * only (never deleted), so preserving an unmatched live row can't resurrect stale state.
+   * Returns the reconciled loaded rows and the surviving live-only rows separately so each
+   * caller can splice them in its own order (execution cache appends; screen history, which is
+   * newest-first, prepends).
+   */
+  function reconcileWithLive(loaded: KaizenGrading[], existing: KaizenGrading[]) {
+    const loadedIds = new Set(loaded.map((g) => g.id))
+    const reconciled = loaded.map((l) => {
+      const live = existing.find((e) => e.id === l.id)
+      return live && live.updatedAt > l.updatedAt ? live : l
+    })
+    const liveOnly = existing.filter((e) => !loadedIds.has(e.id))
+    return { reconciled, liveOnly }
+  }
+
   function gradingsFor(executionId: string): KaizenGrading[] {
     return byExecution.value[executionId] ?? []
   }
@@ -35,11 +65,18 @@ export const useKaizenStore = defineStore('kaizen', () => {
   async function loadOverview() {
     const ws = useWorkspaceStore()
     loadingOverview.value = true
+    const seq = ++loadTicket
+    latestOverviewLoad = seq
     try {
       const overview = await api.getKaizenOverview(ws.requireId())
-      history.value = overview.gradings
-      verified.value = overview.verified
       available.value = true
+      // A newer overview load superseded this one while it was in flight — discard the staler
+      // result so it can't clobber the fresher history (and any grading live-pushed since).
+      if (latestOverviewLoad !== seq) return
+      verified.value = overview.verified
+      // History is newest-first; live-pushed gradings are the newest, so prepend the survivors.
+      const { reconciled, liveOnly } = reconcileWithLive(overview.gradings, history.value)
+      history.value = [...liveOnly, ...reconciled]
     } catch (e) {
       if ((e as { statusCode?: number; status?: number })?.statusCode === 503)
         available.value = false
@@ -52,10 +89,20 @@ export const useKaizenStore = defineStore('kaizen', () => {
   async function loadForExecution(executionId: string) {
     const ws = useWorkspaceStore()
     loadingExecution.value = new Set(loadingExecution.value).add(executionId)
+    const seq = ++loadTicket
+    latestExecLoad.set(executionId, seq)
     try {
       const { gradings } = await api.getKaizenForExecution(ws.requireId(), executionId)
-      byExecution.value = { ...byExecution.value, [executionId]: gradings }
       available.value = true
+      // A newer load for this execution (or a live `upsert`) may have landed while this fetch
+      // was in flight — discard a superseded load, and merge rather than blind-replace so a
+      // grading pushed live mid-flight isn't dropped.
+      if (latestExecLoad.get(executionId) !== seq) return
+      const { reconciled, liveOnly } = reconcileWithLive(
+        gradings,
+        byExecution.value[executionId] ?? [],
+      )
+      byExecution.value = { ...byExecution.value, [executionId]: [...reconciled, ...liveOnly] }
     } catch (e) {
       if ((e as { statusCode?: number; status?: number })?.statusCode === 503)
         available.value = false
