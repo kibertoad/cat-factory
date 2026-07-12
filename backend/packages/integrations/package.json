@@ -35,13 +35,13 @@
   "dependencies": {
     "@cat-factory/contracts": "workspace:*",
     "@cat-factory/kernel": "workspace:*",
-    "ai": "^6.0.219",
+    "ai": "^6.0.224",
     "yaml": "^2.9.0"
   },
   "devDependencies": {
-    "typescript": "7.0.1-rc",
+    "typescript": "7.0.2",
     "undici": "^8.7.0",
     "valibot": "^1.4.2",
-    "vitest": "^4.1.9"
+    "vitest": "^4.1.10"
   }
 }

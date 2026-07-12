@@ -15,7 +15,7 @@
     "@cat-factory/node-server": "workspace:*"
   },
   "devDependencies": {
-    "@types/node": "^26.1.0",
-    "typescript": "7.0.1-rc"
+    "@types/node": "^26.1.1",
+    "typescript": "7.0.2"
   }
 }
