@@ -1,5 +1,12 @@
 # @cat-factory/node-server
 
+## 0.92.15
+
+### Patch Changes
+
+- Updated dependencies [e61c980]
+  - @cat-factory/server@0.112.5
+
 ## 0.92.14
 
 ### Patch Changes
