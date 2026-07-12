@@ -3,6 +3,7 @@ import type {
   GitHubClient,
   GitHubInstallation,
   GitHubInstallationRepository,
+  RunnerJobView,
   RunnerTransport,
 } from '@cat-factory/kernel'
 import { ContainerRepoBootstrapper } from '../src/agents/ContainerRepoBootstrapper.js'
@@ -95,5 +96,25 @@ describe('ContainerRepoBootstrapper pre-flight', () => {
       repo: 'simpler-service3',
     })
     expect(dispatch).toHaveBeenCalledTimes(1)
+  })
+})
+
+describe('ContainerRepoBootstrapper.pollBootstrap', () => {
+  it('classifies eviction from the STRUCTURED field (no string sentinel needed)', async () => {
+    // A newer transport reports the eviction verdict as a field; the error text carries no
+    // `(container evicted or crashed)` sentinel, so this proves the structured field is
+    // load-bearing and not merely the regex fallback firing on the message.
+    const poll = vi.fn(
+      async (): Promise<RunnerJobView> => ({
+        state: 'failed',
+        error: 'the runner container was reaped',
+        evicted: 'crash',
+      }),
+    )
+    const bootstrapper = makeBootstrapper(fakeClient(), { poll } as unknown as RunnerTransport)
+
+    const update = await bootstrapper.pollBootstrap({ workspaceId: 'ws_1', jobId: 'boot_1' })
+    expect(update.state).toBe('failed')
+    expect(update).toMatchObject({ failureKind: 'evicted' })
   })
 })
