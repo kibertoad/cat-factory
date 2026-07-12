@@ -1,5 +1,33 @@
 # @cat-factory/worker
 
+## 0.82.20
+
+### Patch Changes
+
+- 3ce997d: Structured container-eviction signal (error-message initiative I1). A container eviction is now
+  carried on a typed `RunnerJobView.evicted` field (`'crash'` | `'transient'`, the new
+  `ContainerEvictionKind`) minted by every runner transport (Cloudflare, the shared local
+  `harnessHttp`, the local container/pool/process/native-routing transports, and Kubernetes/EKS),
+  forwarded through `AgentJobUpdate`, and read by the execution / bootstrap / env-config-repair
+  consumers via the new `evictionKindOf` extractor. The `(container evicted or crashed)` sentinel +
+  the transient marker are PRESERVED as the fallback for an older producer, so nothing that still
+  matches the string breaks — the structured field is simply the load-bearing signal now, replacing
+  the regex as the primary classification channel.
+- Updated dependencies [3ce997d]
+  - @cat-factory/kernel@0.121.7
+  - @cat-factory/orchestration@0.106.7
+  - @cat-factory/server@0.112.9
+  - @cat-factory/integrations@0.81.13
+  - @cat-factory/agents@0.54.5
+  - @cat-factory/caching@0.6.40
+  - @cat-factory/consensus@0.10.41
+  - @cat-factory/eks@0.1.65
+  - @cat-factory/gates@0.5.25
+  - @cat-factory/gitlab@0.7.63
+  - @cat-factory/observability-langfuse@0.7.195
+  - @cat-factory/provider-cloudflare@0.7.212
+  - @cat-factory/spend@0.12.21
+
 ## 0.82.19
 
 ### Patch Changes
