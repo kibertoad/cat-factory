@@ -3,7 +3,6 @@ import type {
   Clock,
   EnvironmentHandle,
   EnvironmentTestRun,
-  EnvironmentTestStage,
   ExecutionEventPublisher,
   IdGenerator,
   ResolveRunRepoContext,
@@ -405,9 +404,7 @@ export class EnvironmentTestService {
   /** Persist a stage/status patch, stamp `updatedAt`, and push the transition. */
   private async patch(
     record: EnvironmentTestRunRecord,
-    patch: Partial<
-      Pick<EnvironmentTestRunRecord, 'status' | 'stage' | 'environmentId' | 'envUrl'>
-    >,
+    patch: Partial<Pick<EnvironmentTestRunRecord, 'status' | 'stage' | 'environmentId' | 'envUrl'>>,
   ): Promise<void> {
     const full = { ...patch, updatedAt: this.deps.clock.now() }
     await this.deps.environmentTestRunRepository.update(record.workspaceId, record.id, full)

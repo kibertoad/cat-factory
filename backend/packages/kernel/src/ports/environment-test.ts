@@ -48,7 +48,14 @@ export interface EnvironmentTestRunRecord {
 export type EnvironmentTestRunRecordPatch = Partial<
   Pick<
     EnvironmentTestRunRecord,
-    'status' | 'stage' | 'branch' | 'environmentId' | 'envUrl' | 'error' | 'failedStage' | 'updatedAt'
+    | 'status'
+    | 'stage'
+    | 'branch'
+    | 'environmentId'
+    | 'envUrl'
+    | 'error'
+    | 'failedStage'
+    | 'updatedAt'
   >
 >
 

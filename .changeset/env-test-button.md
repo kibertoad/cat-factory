@@ -1,13 +1,13 @@
 ---
-"@cat-factory/contracts": minor
-"@cat-factory/kernel": minor
-"@cat-factory/orchestration": minor
-"@cat-factory/integrations": patch
-"@cat-factory/server": minor
-"@cat-factory/worker": minor
-"@cat-factory/node-server": minor
-"@cat-factory/local-server": minor
-"@cat-factory/app": minor
+'@cat-factory/contracts': minor
+'@cat-factory/kernel': minor
+'@cat-factory/orchestration': minor
+'@cat-factory/integrations': patch
+'@cat-factory/server': minor
+'@cat-factory/worker': minor
+'@cat-factory/node-server': minor
+'@cat-factory/local-server': minor
+'@cat-factory/app': minor
 ---
 
 Add a "Test environment creation" diagnostic to the service inspector. A developer can now

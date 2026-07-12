@@ -70,10 +70,7 @@ import type {
   EnvConfigRepairer,
   EnvConfigRepairRunner,
 } from '@cat-factory/kernel'
-import type {
-  EnvironmentTestRunRepository,
-  EnvironmentTestRunner,
-} from '@cat-factory/kernel'
+import type { EnvironmentTestRunRepository, EnvironmentTestRunner } from '@cat-factory/kernel'
 import type { RequirementReviewRepository } from '@cat-factory/kernel'
 import type { DocInterviewRepository } from '@cat-factory/kernel'
 import type { KaizenGradingRepository, KaizenVerifiedComboRepository } from '@cat-factory/kernel'

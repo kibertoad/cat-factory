@@ -1,7 +1,4 @@
-import type {
-  EnvironmentTestRunRecord,
-  EnvironmentTestRunRepository,
-} from '@cat-factory/kernel'
+import type { EnvironmentTestRunRecord, EnvironmentTestRunRepository } from '@cat-factory/kernel'
 import { describe, expect, it } from 'vitest'
 
 // Cross-runtime parity for the ephemeral-environment self-test run store
@@ -11,7 +8,8 @@ import { describe, expect, it } from 'vitest'
 // mapped differently or a filter built differently fails a test instead of shipping.
 
 function record(
-  overrides: Partial<EnvironmentTestRunRecord> & Pick<EnvironmentTestRunRecord, 'id' | 'workspaceId' | 'blockId'>,
+  overrides: Partial<EnvironmentTestRunRecord> &
+    Pick<EnvironmentTestRunRecord, 'id' | 'workspaceId' | 'blockId'>,
 ): EnvironmentTestRunRecord {
   return {
     status: 'running',
