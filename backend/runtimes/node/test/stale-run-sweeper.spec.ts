@@ -109,6 +109,52 @@ describe.skipIf(!databaseUrl)('node stale-run sweeper building blocks', () => {
     const reId = await boss.send(QUEUE, { runId }, { singletonKey: runId })
     expect(reId).toBeTruthy()
   })
+
+  it('batch insert preserves the exclusive per-row dedup (the sweeper re-drive invariant)', async () => {
+    // The sweeper batches every execution.advance re-drive into ONE `boss.insert([...])`.
+    // This proves that insert dedups PER ROW against the exclusive `(name, singleton_key)`
+    // index exactly as N individual `send`s would: a row whose run already has a live
+    // advance job is a no-op, the rest insert, and the one conflict never fails the batch.
+    const k1 = `exec_${randomSuffix()}`
+    const k2 = `exec_${randomSuffix()}`
+    const liveCount = async (key: string): Promise<number> => {
+      const { rows } = await pool.query(
+        `SELECT count(*)::int AS n FROM pgboss.job
+           WHERE name = $1 AND singleton_key = $2 AND state IN ('created', 'active', 'retry')`,
+        [QUEUE, key],
+      )
+      return rows[0]!.n as number
+    }
+
+    // Two distinct keys → both insert.
+    const first = await boss.insert(
+      QUEUE,
+      [
+        { data: { executionId: k1 }, singletonKey: k1 },
+        { data: { executionId: k2 }, singletonKey: k2 },
+      ],
+      { returnId: true },
+    )
+    expect(first).toHaveLength(2)
+    expect(await liveCount(k1)).toBe(1)
+    expect(await liveCount(k2)).toBe(1)
+
+    // Re-enqueue k1 (already live) alongside a fresh k3 in one batch: k1 is a per-row no-op,
+    // k3 inserts — the single conflict does NOT reject the whole batch, and k1 gains no
+    // duplicate advance job (still exactly one live), so a healthy run is never double-driven.
+    const k3 = `exec_${randomSuffix()}`
+    const second = await boss.insert(
+      QUEUE,
+      [
+        { data: { executionId: k1 }, singletonKey: k1 },
+        { data: { executionId: k3 }, singletonKey: k3 },
+      ],
+      { returnId: true },
+    )
+    expect(second).toHaveLength(1) // only k3 was inserted
+    expect(await liveCount(k1)).toBe(1) // no duplicate for the already-live run
+    expect(await liveCount(k3)).toBe(1)
+  })
 })
 
 let counter = 0

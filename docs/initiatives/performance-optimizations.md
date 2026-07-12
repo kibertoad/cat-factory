@@ -516,8 +516,8 @@ loop of point-reads over a list.
 5. Items 7+9 together (spend/workspace-settings slices), then 8 (account settings).
 6. Items 15+16+17+18 as one "reuse the loaded list" batch-fix PR.
 7. Item 12 (GitHub sync parallelism) + 14 (fan-out publisher).
-7b. Item 24 (dispatch GH client single-flight + throttle) — natural pairing with item 2's
-    `branchHeadSha` cache; both runtimes + conformance.
+   7b. Item 24 (dispatch GH client single-flight + throttle) — natural pairing with item 2's
+   `branchHeadSha` cache; both runtimes + conformance.
 8. Frontend: 6 first (targeted board upserts, with store unit tests), then 5 (snapshot
    projection, coupled contracts change), then 10/11, then 20.
 9. Items 19, 21 as small both-runtime persistence PRs.
