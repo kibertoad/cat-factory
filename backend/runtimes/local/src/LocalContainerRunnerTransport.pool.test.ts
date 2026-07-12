@@ -263,6 +263,7 @@ describe('LocalContainerRunnerTransport (warm pool)', () => {
     alive = false
     const view = await transport.poll({ runId: 'r1', jobId: 'j1' })
     expect(view.state).toBe('failed')
+    expect(view.evicted).toBe('crash')
     expect(view.error).toMatch(/container evicted or crashed/)
 
     // The dead member was dropped — a subsequent dispatch starts a fresh container.

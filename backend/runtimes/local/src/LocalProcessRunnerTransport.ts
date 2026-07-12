@@ -166,7 +166,7 @@ export class LocalProcessRunnerTransport implements RunnerTransport {
   async poll(ref: RunnerJobRef): Promise<RunnerJobView> {
     const proc = this.proc
     // The process died (or was never started) → report an eviction so the run can recover.
-    if (!proc || proc.exited) return { state: 'failed', error: EVICTION_ERROR }
+    if (!proc || proc.exited) return { state: 'failed', error: EVICTION_ERROR, evicted: 'crash' }
     return pollHarnessJob({
       fetchImpl: this.fetchImpl,
       endpoint: endpointFor(proc.port),

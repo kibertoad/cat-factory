@@ -10,6 +10,7 @@ import type {
   BrainstormSession,
   ClarityReview,
   Clock,
+  ContainerEvictionKind,
   EnvironmentHandle,
   ExecutionEventPublisher,
   ExecutionInstance,
@@ -127,8 +128,7 @@ import {
   agentFailureKindFromCause,
   classifyAgentFailure,
   classifyDispatchFailure,
-  isContainerEvictionError,
-  isTransientEviction,
+  evictionKindOf,
   MAX_EVICTION_RECOVERIES,
   MAX_TRANSIENT_EVICTION_RECOVERIES,
 } from './job.logic.js'
@@ -944,6 +944,7 @@ export class RunDispatcher {
         instance,
         step,
         update.error,
+        update.evicted,
       )
       if (recovered) return recovered
       // Not an eviction: a genuine agent/job failure. Prefer the harness's STRUCTURED cause
@@ -1039,10 +1040,14 @@ export class RunDispatcher {
     instance: ExecutionInstance,
     step: PipelineStep,
     error: string | undefined,
+    evicted: ContainerEvictionKind | undefined,
     onBeforeRedispatch?: () => Promise<void>,
   ): Promise<AdvanceResult | null> {
-    if (!isContainerEvictionError(error)) return null
-    const transient = isTransientEviction(error)
+    // Prefer the transport's STRUCTURED eviction verdict; fall back to the error-string
+    // sentinels for an older producer (job.logic `evictionKindOf`). Null ⇒ not an eviction.
+    const kind = evictionKindOf(evicted, error)
+    if (!kind) return null
+    const transient = kind === 'transient'
     const limit = transient ? MAX_TRANSIENT_EVICTION_RECOVERIES : MAX_EVICTION_RECOVERIES
     const recoveries = transient
       ? (step.transientEvictionRecoveries ?? 0)
@@ -1921,6 +1926,7 @@ export class RunDispatcher {
         instance,
         step,
         view.error,
+        view.evicted,
         () => this.environmentProvisioning!.releaseProvisionJob(workspaceId, ref).catch(() => {}),
       )
       if (recovered) return recovered

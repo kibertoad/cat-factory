@@ -154,6 +154,25 @@ describe('ContainerEnvConfigRepairer', () => {
     expect(update.error).toMatch(/evicted/i)
   })
 
+  it('pollRepair classifies eviction from the STRUCTURED field (no string sentinel needed)', async () => {
+    const repairer = makeRepairer({
+      dispatch: vi.fn(),
+      poll: vi.fn(
+        // A newer transport reports the verdict as a field; the error text carries no sentinel.
+        async (): Promise<RunnerJobView> => ({
+          state: 'failed',
+          error: 'the runner pod was reaped',
+          evicted: 'crash',
+        }),
+      ),
+      release: vi.fn(),
+    } as unknown as RunnerTransport)
+
+    const update = await repairer.pollRepair({ workspaceId: 'ws_1', jobId: 'job_1' })
+    expect(update.state).toBe('failed')
+    expect(update.failureKind).toBe('evicted')
+  })
+
   it('pollRepair treats a completed job with a structured error as a failure', async () => {
     const repairer = makeRepairer({
       dispatch: vi.fn(),

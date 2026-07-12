@@ -172,7 +172,12 @@ export class ContainerEnvConfigRepairer implements EnvConfigRepairer {
       const error = view.error ?? 'Environment config repair job failed'
       return {
         state: 'failed',
-        failureKind: classifyRepairFailure(error),
+        // Prefer the transport's STRUCTURED eviction verdict; the error-string regex in
+        // classifyRepairFailure is the fallback for an older producer that reports no field. Both
+        // eviction kinds (`crash` / `transient`) collapse to the single `evicted` failure kind on
+        // purpose — env-config repair has no transient-vs-crash recovery budget (only the run
+        // driver's `recoverContainerEviction` splits them), so the distinction is meaningless here.
+        failureKind: view.evicted ? 'evicted' : classifyRepairFailure(error),
         error,
         detail: view.error,
       }

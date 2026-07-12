@@ -28,6 +28,20 @@ import type { LlmToolSpan } from './llm-trace-sink.js'
 export type RunnerJobProgress = StepSubtasks
 
 /**
+ * How a transport classifies a container eviction on a failed {@link RunnerJobView}: a
+ * `crash` (OOM / a genuine crash / a vanished per-run container) recovers on the small
+ * crash-eviction budget, while a `transient` one — infrastructure churn a facade flags as
+ * expected (a Cloudflare new-version rollout, a node drain) — recovers on the larger transient
+ * budget (see orchestration's `MAX_EVICTION_RECOVERIES` / `MAX_TRANSIENT_EVICTION_RECOVERIES`).
+ * This is the STRUCTURED
+ * successor to matching the `(container evicted or crashed)` sentinel + the transient marker in
+ * the error string: consumers read {@link RunnerJobView.evicted} and only fall back to the
+ * regexes for an older producer that reports no field. The mapping from a runtime's own signal
+ * to `crash`/`transient` stays the facade's call — the engine knows only these two.
+ */
+export type ContainerEvictionKind = 'crash' | 'transient'
+
+/**
  * One forward-looking item the Coder streamed (a loose end / side-task / question), as the
  * harness reports it on a poll (drain-on-read). Structurally the harness's `FollowUpLine` /
  * the contracts' `StreamedFollowUp`; kept as a local shape so this port stays schema-free.
@@ -224,6 +238,18 @@ export interface RunnerJobView {
    * container (a `(container evicted or crashed)` error), never emitted by the harness.
    */
   failureCause?: string
+  /**
+   * Present on a failed view minted by a TRANSPORT for a container eviction (the per-run
+   * container vanished / was drained): the STRUCTURED eviction classification, so the engine
+   * recovers it on the right budget without regex-matching {@link error}. `crash` for a genuine
+   * crash/OOM/vanished container, `transient` for infrastructure churn the facade flags as
+   * expected (a Cloudflare rollout, a node drain). Absent on a non-eviction failure and on an
+   * older producer — the consumer then falls back to the (still-stable) `(container evicted or
+   * crashed)` + transient-marker regexes. See {@link ContainerEvictionKind}. NOT a harness
+   * signal: the harness never emits it (an eviction is the transport observing a gone container),
+   * which is why it lives beside — not inside — {@link failureCause}.
+   */
+  evicted?: ContainerEvictionKind
   /**
    * Present on a failed view: an extended, redacted diagnostic (phase-timing breakdown,
    * last-tool breadcrumb) distinct from the one-line {@link error}. The engine surfaces it

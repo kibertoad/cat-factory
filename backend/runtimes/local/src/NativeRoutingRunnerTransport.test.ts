@@ -82,6 +82,7 @@ describe('NativeRoutingRunnerTransport', () => {
     )
     const view = await router.poll({ runId: 'never', jobId: 'dispatched' })
     expect(view.state).toBe('failed')
+    expect(view.evicted).toBe('crash')
     expect(view.error).toMatch(/evicted or crashed/)
   })
 
