@@ -300,6 +300,9 @@ async function linkSource() {
       gitRef: sourceRef.value.trim() || undefined,
     })
     resetSourceDraft()
+    // Auto-sync the freshly-linked source via the store method directly (not the
+    // `syncSource` row wrapper): a failure here should surface as a link failure, and
+    // the form-level `linkingSource` spinner already covers the whole operation.
     await library.syncSource(source.id)
     toast.add({ title: t('fragments.toast.sourceLinked'), icon: 'i-lucide-git-branch' })
   } catch (e) {

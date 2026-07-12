@@ -6,7 +6,14 @@
 //   - Mentions (per-account): toggle + GitHub-user-id → Slack-member-id map.
 import { computed, reactive, ref, watch } from 'vue'
 import type { NotificationType } from '~/types/notifications'
-import type { SlackMemberMappingEntry, SlackMemberRole, SlackRoute } from '~/types/slack'
+import type { SlackMemberRole, SlackRoute } from '~/types/slack'
+import {
+  type MemberRow,
+  emptyMemberRow,
+  hasHalfFilledRow,
+  toMemberEntries,
+  toMemberRow,
+} from '~/utils/slackMemberMapping'
 import IntegrationBackTitle from '~/components/layout/IntegrationBackTitle.vue'
 import SecretInput from '~/components/common/SecretInput.vue'
 
@@ -60,9 +67,9 @@ const routes = reactive<Record<NotificationType, SlackRoute>>({
   initiative: { enabled: false, channel: '' },
 })
 const mentionsEnabled = ref(false)
-// Editable member rows carry a client-only stable `uid` so a mid-list delete can't
-// rebind the wrong row's v-model (index keys did — UX-23).
-type MemberRow = SlackMemberMappingEntry & { uid: string }
+// Editable member rows carry a client-only stable `uid` (see `slackMemberMapping`) so
+// a mid-list delete keys the v-model by identity, not the array index (index keys
+// silently rebound a neighbour's inputs — UX-23).
 let uidSeq = 0
 const nextUid = () => `m${++uidSeq}`
 const mapping = ref<MemberRow[]>([])
@@ -90,11 +97,7 @@ watch(
         routes[type] = slack.settings?.routes[type] ?? { enabled: false, channel: '' }
       }
       mentionsEnabled.value = slack.settings?.mentionsEnabled ?? false
-      mapping.value = slack.memberMapping.map((e) => ({
-        role: 'engineering',
-        ...e,
-        uid: nextUid(),
-      }))
+      mapping.value = slack.memberMapping.map((e) => toMemberRow(e, nextUid()))
     } catch (e) {
       notifyError(t('slack.error.loadSettings'), e)
     }
@@ -158,7 +161,7 @@ async function saveRouting() {
 }
 
 function addMapping() {
-  mapping.value.push({ uid: nextUid(), userId: '', slackUserId: '', role: 'engineering' })
+  mapping.value.push(emptyMemberRow(nextUid()))
 }
 function removeMapping(uid: string) {
   mapping.value = mapping.value.filter((e) => e.uid !== uid)
@@ -167,10 +170,7 @@ async function saveMapping() {
   // A partially-filled row (one id present, the other blank) used to be silently
   // dropped on save (UX-23) — block instead so the user doesn't lose the entry. A
   // fully-empty row is just an unused slot and is ignored.
-  const halfFilled = mapping.value.some(
-    (e) => Boolean(e.userId.trim()) !== Boolean(e.slackUserId.trim()),
-  )
-  if (halfFilled) {
+  if (hasHalfFilledRow(mapping.value)) {
     toast.add({
       title: t('slack.members.incompleteTitle'),
       description: t('slack.members.incompleteBody'),
@@ -181,11 +181,9 @@ async function saveMapping() {
   }
   busy.value = true
   try {
-    const entries = mapping.value
-      .filter((e) => e.userId.trim() && e.slackUserId.trim())
-      .map(({ uid: _uid, ...e }) => e)
+    const entries = toMemberEntries(mapping.value)
     await slack.updateMemberMapping(entries)
-    mapping.value = slack.memberMapping.map((e) => ({ ...e, uid: nextUid() }))
+    mapping.value = slack.memberMapping.map((e) => toMemberRow(e, nextUid()))
     toast.add({ title: t('slack.toast.mapSaved'), icon: 'i-lucide-check', color: 'success' })
   } catch (e) {
     notifyError(t('slack.error.saveMap'), e)
