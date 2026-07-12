@@ -36,6 +36,7 @@ import { resolveSweepInterval, startInitiativeLoopSweeper } from './initiativeLo
 import { startKaizenSweeper } from './kaizen.js'
 import { startNotificationEscalationSweeper } from './notifications.js'
 import { buildRealtimePropagator } from './propagator.js'
+import { warnIfRedisUnreachable } from './redisProbe.js'
 import { type ReadinessProbe, makeReadinessProbe } from './readiness.js'
 import { NodeRealtimeHub, attachRealtime } from './realtime.js'
 import { DrizzleGitHubInstallationRepository } from './repositories/containerExecution.js'
@@ -362,6 +363,12 @@ async function bootServer(
   // Connect the cross-node adapters (a no-op when none are configured) so peer events start
   // reaching this node's browsers.
   await realtimePropagator.start(logger)
+  // Best-effort boot probe of the Redis bus (A7): when REDIS_URL is set but the bus is
+  // unreachable, ioredis retries silently in the background and cross-node realtime + cache
+  // coherence are quietly degraded. One bounded, non-fatal probe surfaces that at boot with the
+  // host and how to verify, instead of leaving the operator to discover it from stale peers. A
+  // no-op when REDIS_URL is unset (single-node / local mode).
+  await warnIfRedisUnreachable(env, logger)
 
   // Validate the registered extensions (gates / agent kinds) once, before serving — every
   // `register*` import side effect has run by now. A typo'd gate helperKind or an unknown

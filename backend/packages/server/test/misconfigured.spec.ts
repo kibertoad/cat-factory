@@ -7,6 +7,7 @@ import {
   configProblem,
   formatConfigProblems,
   isConfigValidationError,
+  missingIoredisProblem,
   requireEncryptionKey,
   requireEnv,
   requireGitHubAppPrivateKey,
@@ -54,6 +55,30 @@ describe('ConfigValidationError', () => {
         /^https:\/\/github\.com\/kibertoad\/cat-factory\/blob\/main\//,
       )
     }
+  })
+})
+
+describe('missingIoredisProblem (A7)', () => {
+  it('is a REDIS_URL ConfigValidationError naming the purpose, the fix, and the original cause', () => {
+    const err = missingIoredisProblem(
+      'cross-node WebSocket propagation',
+      new Error('Cannot find module ioredis'),
+    )
+    expect(isConfigValidationError(err)).toBe(true)
+    const problem = err.problems[0]!
+    expect(problem.key).toBe('REDIS_URL')
+    expect(problem.summary).toBe(ENV_HELP.REDIS_URL.summary)
+    expect(problem.remedy).toContain('cross-node WebSocket propagation')
+    expect(problem.remedy).toMatch(/pnpm add ioredis/)
+    expect(problem.remedy).toMatch(/unset REDIS_URL/)
+    expect(problem.remedy).toContain('Cannot find module ioredis')
+    expect(problem.docsUrl).toBe(ENV_HELP.REDIS_URL.docsUrl)
+  })
+
+  it('stringifies a non-Error cause', () => {
+    const problem = missingIoredisProblem('distributed cache invalidation', 'boom').problems[0]!
+    expect(problem.remedy).toContain('distributed cache invalidation')
+    expect(problem.remedy).toContain('boom')
   })
 })
 

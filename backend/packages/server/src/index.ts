@@ -129,6 +129,7 @@ export {
   ConfigValidationError,
   isConfigValidationError,
   configProblem,
+  missingIoredisProblem,
   formatConfigProblems,
   requireEnv,
   requireEncryptionKey,
