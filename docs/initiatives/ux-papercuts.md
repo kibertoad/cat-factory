@@ -666,9 +666,13 @@ w-72 … lg:flex">`, so below `lg` (laptop split-screen, tablet) the human could
   a second interval or re-derive the freeze logic.
 - **Guard a destructive action in the SHARED primitive, not per call-site, when one exists.**
   Stopping a run (kill the container) is confirm-gated inside `board/AgentStopButton.vue` itself
-  (via `useConfirm()`), so every surface that mounts it — board card + inspector — inherits the
-  confirm at once, mirroring how the board delete/undo path lives in `stores/board.ts`. Reach
-  for the shared component before sprinkling `confirm()` at each usage.
+  (via `useConfirm()`), so every surface that mounts it — board card + inspector bootstrap stop —
+  inherits the confirm at once, mirroring how the board delete/undo path lives in `stores/board.ts`.
+  Reach for the shared component before sprinkling `confirm()` at each usage. The one stop surface
+  that does NOT mount that primitive — the inspector's live task-execution stop
+  (`TaskExecution.vue` calls `execution.stop()`, not `agentRuns.stop()`) — is confirm-gated at its
+  own call site reusing the SAME `board.stop.confirm.*` keys, so a run's stop is confirmed
+  identically no matter which surface it is triggered from.
 - **A disabled control must say WHY, and a native `title` on a disabled element is not
   enough.** A disabled `<button>`/`<UButton>` doesn't fire hover, so its `title` tooltip never
   shows — pair the title with a visible hint line (see UX-40's `runBlocked` reason, rendered

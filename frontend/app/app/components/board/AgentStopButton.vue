@@ -35,6 +35,7 @@ async function stop() {
     title: t('board.stop.confirm.title'),
     description: t('board.stop.confirm.body'),
     confirmLabel: t('board.stop.confirm.confirm'),
+    variant: 'destructive',
     icon: 'i-lucide-circle-stop',
   })
   if (!ok) return

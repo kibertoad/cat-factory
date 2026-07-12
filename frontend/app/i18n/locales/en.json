@@ -1212,7 +1212,10 @@
         "title": "Archive this service?",
         "body": "\"{name}\" and its tasks will be hidden from the board. You can restore it at any time."
       },
-      "runBlocked": "Blocked by an unfinished dependency: {names} | Blocked by {count} unfinished dependencies: {names}"
+      "runBlocked": "Blocked by an unfinished dependency: {names} | Blocked by {count} unfinished dependencies: {names}",
+      "@runBlocked": {
+        "description": "Count-driven plural: {count} unfinished dependencies, {names} their comma-joined titles. Languages with more than two plural forms (e.g. Polish, Ukrainian: one/few/many) need the extra pipe-separated forms."
+      }
     }
   },
   "observability": {

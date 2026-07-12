@@ -157,6 +157,17 @@ function openForkFor(i: number) {
 const stopping = ref(false)
 async function stopRun() {
   if (!instance.value || stopping.value) return
+  // Killing the running container discards its in-flight work — gate it behind the same
+  // confirm the board card's stop uses (via `AgentStopButton`), so every stop surface for
+  // a run is confirm-gated identically.
+  const ok = await confirm({
+    title: t('board.stop.confirm.title'),
+    description: t('board.stop.confirm.body'),
+    confirmLabel: t('board.stop.confirm.confirm'),
+    variant: 'destructive',
+    icon: 'i-lucide-circle-stop',
+  })
+  if (!ok) return
   stopping.value = true
   try {
     await execution.stop(instance.value.id)
