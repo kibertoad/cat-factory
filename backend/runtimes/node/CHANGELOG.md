@@ -1,5 +1,48 @@
 # @cat-factory/node-server
 
+## 0.92.15
+
+### Patch Changes
+
+- Updated dependencies [e61c980]
+  - @cat-factory/server@0.112.5
+
+## 0.92.14
+
+### Patch Changes
+
+- 327a1ef: feat(node): add a `/ready` readiness probe distinct from liveness `/health` (audit item 9)
+
+  `/health` was a static 200 regardless of downstream health, so a replica whose Postgres pool
+  had died or whose pg-boss worker had stopped still reported healthy and a load balancer could
+  not drain it. Adds a PUBLIC `GET /ready` that round-trips the app's Postgres pool (a bounded
+  `SELECT 1`) and checks a pg-boss `running` flag, answering `200 {status:'ready'}` /
+  `503 {status:'not_ready'}` with per-dependency `checks`. It also drains the instant graceful
+  shutdown begins — `bootServer` flips a `draining` flag at the top of `shutdown()`, so a
+  SIGTERM'd node reports not-ready immediately and new traffic stops arriving while in-flight
+  requests finish. `/health` stays a static 200 (liveness: a restart can't fix a dead pool). The
+  verdict is a pure `checkReadiness` in `readiness.ts`; `createApp` gained an optional `readiness`
+  probe (wired by `start()` from the live pool + boss). Node-facade-specific by design — the
+  Worker has no long-lived process and local mothership mode has no local Postgres/pg-boss, so
+  both wire no probe and `/ready` falls back to a bare `ready`.
+
+- Updated dependencies [4810353]
+  - @cat-factory/kernel@0.121.4
+  - @cat-factory/orchestration@0.106.3
+  - @cat-factory/integrations@0.81.9
+  - @cat-factory/agents@0.54.2
+  - @cat-factory/caching@0.6.37
+  - @cat-factory/consensus@0.10.38
+  - @cat-factory/eks@0.1.61
+  - @cat-factory/gates@0.5.22
+  - @cat-factory/gitlab@0.7.60
+  - @cat-factory/observability-langfuse@0.7.192
+  - @cat-factory/provider-bedrock@0.7.208
+  - @cat-factory/provider-cloudflare@0.7.209
+  - @cat-factory/provider-s3@0.2.142
+  - @cat-factory/server@0.112.4
+  - @cat-factory/spend@0.12.18
+
 ## 0.92.13
 
 ### Patch Changes

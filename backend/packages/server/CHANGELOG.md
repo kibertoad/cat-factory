@@ -1,5 +1,35 @@
 # @cat-factory/server
 
+## 0.112.5
+
+### Patch Changes
+
+- e61c980: perf(dispatch): fan out independent dispatch I/O in one wave (perf item 4)
+
+  `ContainerAgentExecutor.buildJobBody` resolved the per-dispatch inputs one after another —
+  installation-token mint → work-branch ensure → auth → package registries → tester secrets →
+  web-search availability — so every step dispatch (and every tester→fixer re-dispatch epoch)
+  paid ~6 serial GitHub/DB round-trips of latency. Once the repo target is resolved these are
+  mutually independent, so they now run in a single `Promise.all` wave (the repo-scoped token
+  mint + work-branch ensure alongside the workspace/block-scoped auth / registries / secrets /
+  web-search). The apriori/work-branch resolution moved into a `resolveWorkBranchReady` helper so
+  it fits the wave with unchanged behaviour. The best-effort `agentContextObservability.record`
+  stays awaited (with a swallowing `catch`) — it runs after the container job is already
+  dispatched, so it is off the container's critical path, and a bare fire-and-forget `void` would
+  be silently dropped on the Worker once the isolate hibernates on the next durable sleep. Per-kind
+  job-body shapes are byte-identical.
+
+## 0.112.4
+
+### Patch Changes
+
+- Updated dependencies [4810353]
+  - @cat-factory/kernel@0.121.4
+  - @cat-factory/orchestration@0.106.3
+  - @cat-factory/integrations@0.81.9
+  - @cat-factory/agents@0.54.2
+  - @cat-factory/spend@0.12.18
+
 ## 0.112.3
 
 ### Patch Changes

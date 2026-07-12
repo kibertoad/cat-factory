@@ -1,13 +1,16 @@
-import type {
-  RunnerDispatchKind,
-  RunnerDispatchOptions,
-  RunnerJobRef,
-  RunnerJobView,
-  RunnerPoolManifest,
-  RunnerPoolProvider,
-  RunnerTransport,
-  SecretResolver,
+import {
+  DispatchError,
+  getErrorMessage,
+  type RunnerDispatchKind,
+  type RunnerDispatchOptions,
+  type RunnerJobRef,
+  type RunnerJobView,
+  type RunnerPoolManifest,
+  type RunnerPoolProvider,
+  type RunnerTransport,
+  type SecretResolver,
 } from '@cat-factory/kernel'
+import { RunnerPoolApiError } from './HttpRunnerPoolProvider.js'
 
 // Adapts the stateless, manifest-interpreting HttpRunnerPoolProvider to the
 // RunnerTransport the container executor drives, binding one workspace's resolved
@@ -41,7 +44,7 @@ export class RunnerPoolTransport implements RunnerTransport {
     private readonly resolveSecret: SecretResolver,
   ) {}
 
-  dispatch(
+  async dispatch(
     ref: RunnerJobRef,
     spec: Record<string, unknown>,
     kind: RunnerDispatchKind = 'agent',
@@ -60,18 +63,28 @@ export class RunnerPoolTransport implements RunnerTransport {
     // and pull the right image — `image: 'deploy'` selects the deploy-harness image (real
     // kubectl/kustomize/helm) for a container-backed Kubernetes provision, `ui` the heavier
     // Playwright image, else the default executor image.
-    return this.provider.dispatch({
-      manifest: this.manifest,
-      jobId,
-      spec: {
-        ...spec,
-        kind,
-        ...(options?.instanceTypeId ? { instanceType: options.instanceTypeId } : {}),
-        ...(options?.provider ? { cloudProvider: options.provider } : {}),
-        ...(options?.image ? { image: options.image } : {}),
-      },
-      resolveSecret: this.resolveSecret,
-    })
+    try {
+      await this.provider.dispatch({
+        manifest: this.manifest,
+        jobId,
+        spec: {
+          ...spec,
+          kind,
+          ...(options?.instanceTypeId ? { instanceType: options.instanceTypeId } : {}),
+          ...(options?.provider ? { cloudProvider: options.provider } : {}),
+          ...(options?.image ? { image: options.image } : {}),
+        },
+        resolveSecret: this.resolveSecret,
+      })
+    } catch (error) {
+      // The pool rejected the job: re-throw as a structured DispatchError (carrying the pool's
+      // HTTP status) so the engine + the bootstrap / env-config services classify it as a
+      // `dispatch` failure by `instanceof`. The provider's own `Runner pool <method> → <status>`
+      // wording matches no dispatch check, so it used to fall through to a misleading `preflight`.
+      if (error instanceof DispatchError) throw error
+      const status = error instanceof RunnerPoolApiError ? error.status : 0
+      throw new DispatchError(getErrorMessage(error), status)
+    }
   }
 
   poll(ref: RunnerJobRef): Promise<RunnerJobView> {

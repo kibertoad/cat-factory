@@ -207,6 +207,13 @@ export {
   VCS_DOC_URLS,
   GITHUB_SETTINGS_URLS,
 } from './domain/vcs-errors.js'
+export {
+  DispatchError,
+  DISPATCH_DOC_URLS,
+  harnessDispatchError,
+  harnessDispatchFailureMessage,
+  isDispatchFailure,
+} from './domain/dispatch-errors.js'
 
 // Pure gate logic + gate/helper agent-kind constants, shared by the built-in gate suite
 // (`@cat-factory/gates`) and the engine. See `domain/gate-logic.ts`.
