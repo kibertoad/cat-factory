@@ -150,6 +150,7 @@ import {
   type PersistenceRegistry,
   DOCS,
   ENV_VARS_ANCHORS,
+  noRunnerBackendAvailableError,
   ensureWorkBranchViaRest,
   logger,
   resolveUrlSafetyPolicy,
@@ -826,12 +827,12 @@ export function buildNodeResolveTransport(
       const resolved = await runnerService.resolve(workspaceId)
       if (resolved) return resolved.transport
     }
-    throw new Error(
-      `No runner backend available for workspace '${workspaceId ?? '(unknown)'}': the Node ` +
-        `service runs repo-operating agents on a self-hosted runner backend — register a ` +
-        `runner pool or Kubernetes cluster for this workspace (POST ` +
-        `/workspaces/:id/runner-pool/connection).`,
-    )
+    // The shared factory throws a ConflictError carrying the machine reason (see its doc): a clean
+    // 409 synchronously, and classifyDispatchFailure lifts the reason onto the run's AgentFailure on
+    // the async dispatch path (SPA shows "Agent backend not configured", not "container failed to
+    // start"). The Node facade has no per-run container backend, so the remedy points only at the
+    // self-hosted runner pool / Kubernetes.
+    throw noRunnerBackendAvailableError(workspaceId)
   }
 }
 

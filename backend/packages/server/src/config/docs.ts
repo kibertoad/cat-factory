@@ -45,6 +45,8 @@ export const DOCS = {
   /** `backend/docs/concurrency-and-redis.md` — Redis cross-node realtime propagation. */
   concurrencyAndRedis: (anchor?: string) =>
     repoDocUrl('backend/docs/concurrency-and-redis.md', anchor),
+  /** `backend/docs/runner-pool-integration.md` — self-hosted runner pools + container backends. */
+  runnerPool: (anchor?: string) => repoDocUrl('backend/docs/runner-pool-integration.md', anchor),
 } as const
 
 // GitHub slugifies a heading by lowercasing, dropping punctuation, and turning runs of spaces
