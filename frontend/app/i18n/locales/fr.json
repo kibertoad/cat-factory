@@ -320,7 +320,12 @@
       "bootstrapStopped": "Initialisation arrêtée",
       "runStopped": "Exécution arrêtée",
       "stoppedDescription": "Le conteneur a été tué et l’exécution annulée.",
-      "stopFailed": "Échec de l’arrêt"
+      "stopFailed": "Échec de l’arrêt",
+      "confirm": {
+        "title": "Arrêter cette exécution ?",
+        "body": "Le conteneur en cours sera arrêté. L'exécution reste visible et peut être relancée.",
+        "confirm": "Arrêter l'exécution"
+      }
     },
     "frame": {
       "status": {
@@ -859,7 +864,8 @@
         "title": "Aucune exécution pour l'instant",
         "body": "Lancez un pipeline pour voir l'historique d'exécution ici."
       },
-      "chooseApproach": "Choisir l'approche"
+      "chooseApproach": "Choisir l'approche",
+      "elapsedTooltip": "Temps écoulé sur cette étape"
     },
     "structure": {
       "title": "Structure",
@@ -1151,7 +1157,8 @@
       "confirmArchive": {
         "title": "Archiver ce service ?",
         "body": "« {name} » et ses tâches seront masqués du tableau. Vous pouvez le restaurer à tout moment."
-      }
+      },
+      "runBlocked": "Bloqué par une dépendance non terminée : {names} | Bloqué par {count} dépendances non terminées : {names}"
     }
   },
   "observability": {
@@ -3237,7 +3244,8 @@
       "forkDecision": {
         "proposing": "Proposition d'approches…",
         "choose": "Choisir une approche"
-      }
+      },
+      "elapsedTooltip": "Temps écoulé sur cette étape"
     },
     "health": {
       "title": "État des pipelines",

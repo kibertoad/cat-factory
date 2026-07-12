@@ -12,6 +12,7 @@ import {
   containerPhaseLabel,
 } from '~/utils/pipelineRender'
 import StepMetricsBar from '~/components/observability/StepMetricsBar.vue'
+import { useNowTick, stepDurationLabel } from '~/composables/useStepTimer'
 
 const props = defineProps<{ instance: ExecutionInstance }>()
 const emit = defineEmits<{
@@ -135,6 +136,13 @@ const STATUS_META = computed<Record<ExecutionInstance['status'], { label: string
 
 const steps = computed(() => props.instance.steps)
 const total = computed(() => steps.value.length)
+
+// A shared 1s tick drives every step's live elapsed clock, so a step that hasn't yet
+// emitted subtask counts still shows it is progressing rather than reading as hung.
+const nowTick = useNowTick()
+function stepElapsed(s: PipelineStep): string | null {
+  return stepDurationLabel(s, nowTick.value, runFailed.value, props.instance.failure?.occurredAt)
+}
 
 // The conditionally-run companion (e.g. the Tester's `fixer`) each step drives, with
 // its possible/running/completed/skipped state — rendered as a distinct sub-node so a
@@ -322,8 +330,20 @@ const ITEM_ICON: Record<string, string> = {
                   {{ t('pipeline.progress.companion') }}
                 </span>
               </div>
-              <div class="text-[10px] uppercase tracking-wide text-slate-500">
-                {{ t('pipeline.progress.stepOf', { current: i + 1, total }) }}
+              <div
+                class="flex items-center gap-1.5 text-[10px] uppercase tracking-wide text-slate-500"
+              >
+                <span>{{ t('pipeline.progress.stepOf', { current: i + 1, total }) }}</span>
+                <!-- live elapsed clock: a running step counts up (so no-subtask steps
+                     don't read as hung), a finished step shows its total duration -->
+                <span
+                  v-if="stepElapsed(s)"
+                  class="inline-flex items-center gap-0.5 font-mono normal-case tabular-nums text-slate-400"
+                  :title="t('pipeline.progress.elapsedTooltip')"
+                >
+                  <UIcon name="i-lucide-clock" class="h-2.5 w-2.5 shrink-0" />
+                  {{ stepElapsed(s) }}
+                </span>
               </div>
             </div>
             <span
@@ -343,7 +363,7 @@ const ITEM_ICON: Record<string, string> = {
                 color="neutral"
                 variant="ghost"
                 size="xs"
-                class="shrink-0 opacity-0 transition-opacity group-hover:opacity-100"
+                class="shrink-0 opacity-0 transition-opacity group-hover:opacity-100 group-focus-within:opacity-100 focus-visible:opacity-100"
                 :title="t('pipeline.progress.restartTooltip')"
                 @click.stop="
                   () => {

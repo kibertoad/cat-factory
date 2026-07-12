@@ -11,6 +11,8 @@ import AgentFailureCard from '~/components/board/AgentFailureCard.vue'
 import AgentFailureHistory from '~/components/board/AgentFailureHistory.vue'
 import EmptyState from '~/components/common/EmptyState.vue'
 import InspectorSection from '~/components/panels/inspector/InspectorSection.vue'
+import { useNowTick, stepDurationLabel } from '~/composables/useStepTimer'
+import type { PipelineStep } from '~/types/execution'
 
 const props = defineProps<{ block: Block }>()
 
@@ -85,6 +87,13 @@ function stepFailed(s: { state: string }) {
   return runFailed.value && s.state === 'working'
 }
 
+// A shared 1s tick drives every step's live elapsed clock, so a running step that
+// hasn't yet emitted subtask counts reads as progressing rather than hung.
+const nowTick = useNowTick()
+function stepElapsed(s: PipelineStep): string | null {
+  return stepDurationLabel(s, nowTick.value, runFailed.value, instance.value?.failure?.occurredAt)
+}
+
 /** A gated step parked for approval reads "Needs approval", not "Needs decision". */
 function labelForStep(s: {
   state: string
@@ -148,6 +157,17 @@ function openForkFor(i: number) {
 const stopping = ref(false)
 async function stopRun() {
   if (!instance.value || stopping.value) return
+  // Killing the running container discards its in-flight work — gate it behind the same
+  // confirm the board card's stop uses (via `AgentStopButton`), so every stop surface for
+  // a run is confirm-gated identically.
+  const ok = await confirm({
+    title: t('board.stop.confirm.title'),
+    description: t('board.stop.confirm.body'),
+    confirmLabel: t('board.stop.confirm.confirm'),
+    variant: 'destructive',
+    icon: 'i-lucide-circle-stop',
+  })
+  if (!ok) return
   stopping.value = true
   try {
     await execution.stop(instance.value.id)
@@ -306,6 +326,14 @@ async function mergePr() {
             >
               <UIcon v-if="stepFailed(s)" name="i-lucide-circle-x" class="h-3 w-3 shrink-0" />
               {{ labelForStep(s) }}
+              <!-- live elapsed clock: a running step counts up, a finished one shows total -->
+              <span
+                v-if="stepElapsed(s)"
+                class="inline-flex items-center gap-0.5 font-mono tabular-nums text-slate-500"
+                :title="t('inspector.execution.elapsedTooltip')"
+              >
+                · {{ stepElapsed(s) }}
+              </span>
             </span>
             <UButton
               v-if="s.decision && !s.decision.chosen"
