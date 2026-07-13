@@ -125,8 +125,16 @@ export class GitHubAppAuth {
    */
   async installationToken(
     installationId: number,
-    opts?: { forceRefresh?: boolean },
+    opts?: { forceRefresh?: boolean; repositoryIds?: number[] },
   ): Promise<string> {
+    // A repo-SCOPED mint (mothership GitHub delegation) never touches the unscoped
+    // engine cache: serving a cached unscoped token would over-grant past the caller's
+    // scope, and caching the scoped token would under-grant every subsequent engine
+    // call. Scoped tokens are minted fresh per request — the delegation client's own
+    // short memo collapses the chatter.
+    if (opts?.repositoryIds) {
+      return (await this.mintInstallationToken(installationId, opts.repositoryIds)).token
+    }
     return (await this.cachedToken(installationId, opts?.forceRefresh)).token
   }
 
@@ -156,6 +164,7 @@ export class GitHubAppAuth {
 
   private async mintInstallationToken(
     installationId: number,
+    repositoryIds?: number[],
   ): Promise<{ token: string; permissions: InstallationPermissions }> {
     const jwt = await this.appJwt()
     const res = await fetch(
@@ -167,7 +176,11 @@ export class GitHubAppAuth {
           accept: 'application/vnd.github+json',
           'user-agent': USER_AGENT,
           'x-github-api-version': API_VERSION,
+          // GitHub narrows the token to the named repos (numeric ids) when the mint
+          // carries a `repository_ids` body; bodyless mints stay installation-wide.
+          ...(repositoryIds ? { 'content-type': 'application/json' } : {}),
         },
+        ...(repositoryIds ? { body: JSON.stringify({ repository_ids: repositoryIds }) } : {}),
       },
     )
     if (!res.ok) {
@@ -180,8 +193,10 @@ export class GitHubAppAuth {
       permissions: body.permissions ?? {},
       expiresAt: Number.isNaN(expiresAt) ? this.deps.clock.now() + 30 * 60 * 1000 : expiresAt,
     }
-    // In-memory only (see tokenCache note) — never persisted.
-    tokenCache.set(installationId, entry)
+    // In-memory only (see tokenCache note) — never persisted. A repo-scoped mint is
+    // deliberately NOT cached: the cache is keyed by installation id alone, so a scoped
+    // entry would poison the unscoped engine path (and vice versa).
+    if (!repositoryIds) tokenCache.set(installationId, entry)
     return entry
   }
 

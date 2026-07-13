@@ -4,6 +4,9 @@ import {
   detectFrontendConfigContract,
   detectServiceProvisioningContract,
   getEnvironmentAccessContract,
+  getEnvironmentTestContract,
+  startEnvironmentTestContract,
+  stopEnvironmentTestContract,
   getEnvironmentConnectionContract,
   getEnvironmentContract,
   listEnvironmentHandlersContract,
@@ -28,7 +31,7 @@ import { buildHonoRoute } from '@toad-contracts/hono'
 import * as v from 'valibot'
 import { Hono } from 'hono'
 import type { Context } from 'hono'
-import type { EnvironmentsModule } from '@cat-factory/orchestration'
+import type { EnvironmentsModule, EnvironmentTestService } from '@cat-factory/orchestration'
 import type { AppEnv } from '../../http/env.js'
 import { param } from '../../http/params.js'
 
@@ -40,6 +43,22 @@ function requireEnvironments<E extends AppEnv>(c: Context<E>): EnvironmentsModul
 const unavailable = <E extends AppEnv>(c: Context<E>) =>
   c.json(
     { error: { code: 'unavailable', message: 'Environment integration is not configured' } },
+    503,
+  )
+
+/** The self-test service, present only when its run store + a git provider are wired. */
+function requireEnvironmentTest<E extends AppEnv>(c: Context<E>): EnvironmentTestService | null {
+  return c.get('container').environments?.environmentTest ?? null
+}
+
+const testUnavailable = <E extends AppEnv>(c: Context<E>) =>
+  c.json(
+    {
+      error: {
+        code: 'unavailable',
+        message: 'Ephemeral-environment self-testing is not configured for this deployment',
+      },
+    },
     503,
   )
 
@@ -310,6 +329,36 @@ export function environmentController(): Hono<AppEnv> {
       c.req.valid('param').environmentId,
     )
     return c.json(handle, 200)
+  })
+
+  // ---- ephemeral-environment self-test (diagnostic) -----------------------
+
+  // Start a full create-branch → provision → teardown → delete-branch cycle against a
+  // service frame's provisioning config. Returns immediately with the `running` run; the
+  // durable driver advances it and pushes live `envTest` stage events.
+  buildHonoRoute(app, startEnvironmentTestContract, async (c) => {
+    const service = requireEnvironmentTest(c)
+    if (!service) return testUnavailable(c)
+    const run = await service.startTest(
+      param(c, 'workspaceId'),
+      c.req.valid('param').blockId,
+      c.get('user')?.id ?? null,
+    )
+    return c.json(run, 201)
+  })
+
+  buildHonoRoute(app, getEnvironmentTestContract, async (c) => {
+    const service = requireEnvironmentTest(c)
+    if (!service) return testUnavailable(c)
+    const run = await service.getRun(param(c, 'workspaceId'), c.req.valid('param').id)
+    return c.json(run, 200)
+  })
+
+  buildHonoRoute(app, stopEnvironmentTestContract, async (c) => {
+    const service = requireEnvironmentTest(c)
+    if (!service) return testUnavailable(c)
+    const run = await service.stop(param(c, 'workspaceId'), c.req.valid('param').id)
+    return c.json(run, 200)
   })
 
   return app

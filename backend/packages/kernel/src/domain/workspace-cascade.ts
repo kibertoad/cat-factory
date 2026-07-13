@@ -54,6 +54,7 @@ export const WORKSPACE_SCOPED_TABLES = [
   'document_connections',
   'documents',
   'environment_connections',
+  'environment_test_runs',
   'environment_user_handlers',
   'environments',
   'github_branches',

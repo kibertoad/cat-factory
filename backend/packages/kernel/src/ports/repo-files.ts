@@ -43,6 +43,12 @@ export interface RepoFiles {
   /** Create `branch` pointing at `fromSha` (e.g. the default branch's head). */
   createBranch(branch: string, fromSha: string): Promise<void>
   /**
+   * Delete `branch`. Idempotent from the caller's view: a missing branch (already
+   * deleted) is not an error. Used to reclaim a throwaway branch a run created (e.g.
+   * the ephemeral-environment self-test's temp branch).
+   */
+  deleteBranch(branch: string): Promise<void>
+  /**
    * Commit a set of files onto a branch via the Git Data API (blob → tree → commit →
    * ref), optionally DELETING paths (`input.deletions`) in the same commit — so a
    * deterministic render that drops a module/group also prunes its stale artifact file.

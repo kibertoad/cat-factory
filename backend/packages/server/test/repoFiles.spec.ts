@@ -22,6 +22,7 @@ function fakeClient(overrides: Partial<GitHubClient> = {}): GitHubClient {
       branch === 'main' ? 'sha-main' : branch === 'cat-factory/blk' ? 'sha-work' : null,
     ),
     createBranch: vi.fn(async () => undefined),
+    deleteBranch: vi.fn(async () => undefined),
     commitFiles: vi.fn(async () => ({ sha: 'commit1' })),
     openPullRequest: vi.fn(async () => ({
       number: 7,

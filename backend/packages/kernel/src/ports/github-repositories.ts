@@ -113,6 +113,16 @@ export interface RepoProjectionRepository {
    */
   linkedWorkspaces(repoGithubId: number, candidateWorkspaceIds: string[]): Promise<string[]>
   /**
+   * Every LIVE repo row linked under an installation, across all its workspaces, in one
+   * query. Backs the mothership GitHub-delegation mint, which repo-scopes the delegated
+   * installation token (`repository_ids`) to the repos the mothership actually projects
+   * for that installation — instead of one `list(workspaceId)` per fan-out workspace.
+   * The same repo linked by several workspaces returns one row per workspace (callers
+   * dedupe by `githubId`); `user_pat`-linked rows are included (callers filter on
+   * `linkedVia` — a PAT-only repo is not reachable through the App installation).
+   */
+  listByInstallation(installationId: number): Promise<GitHubRepo[]>
+  /**
    * Incremental-sync cursors are keyed by **installation** + repo (not workspace):
    * a repo is fetched from GitHub once per org and the result fanned out to every
    * workspace that links it, so two teams sharing a repo don't each burn an API

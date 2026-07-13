@@ -25,7 +25,13 @@ import { WorkflowsWorkRunner } from './infrastructure/workflows/WorkflowsWorkRun
 import { WorkflowsBootstrapRunner } from './infrastructure/workflows/WorkflowsBootstrapRunner'
 import { WorkflowsEnvConfigRepairRunner } from './infrastructure/workflows/WorkflowsEnvConfigRepairRunner'
 import { sweepRetention } from './infrastructure/workflows/retention'
-import { WorkflowsLookup, sweepStuckRuns } from './infrastructure/workflows/sweeper'
+import {
+  WorkflowsLookup,
+  sweepStuckEnvTests,
+  sweepStuckRuns,
+} from './infrastructure/workflows/sweeper'
+import { WorkflowsEnvironmentTestRunner } from './infrastructure/workflows/WorkflowsEnvironmentTestRunner'
+import { D1EnvironmentTestRunRepository } from './infrastructure/repositories/D1EnvironmentTestRunRepository'
 import { handleGitHubSyncBatch, reconcileStaleRepos } from './infrastructure/github/sync-consumer'
 import { sweepExpiredEnvironments } from './infrastructure/environments/sweep'
 import { logger } from './infrastructure/observability/logger'
@@ -43,6 +49,7 @@ import { D1WorkspaceSettingsRepository } from './infrastructure/repositories/D1W
 export { ExecutionWorkflow } from './infrastructure/workflows/ExecutionWorkflow'
 export { GitHubBackfillWorkflow } from './infrastructure/workflows/GitHubBackfillWorkflow'
 export { BootstrapWorkflow } from './infrastructure/workflows/BootstrapWorkflow'
+export { EnvironmentTestWorkflow } from './infrastructure/workflows/EnvironmentTestWorkflow'
 export { EnvConfigRepairWorkflow } from './infrastructure/workflows/EnvConfigRepairWorkflow'
 // Container-enabled Durable Object backing per-run implementation containers.
 export { ExecutionContainer } from './infrastructure/containers/ExecutionContainer'
@@ -337,6 +344,45 @@ export default {
           })
           .catch((error) =>
             logger.error({ cron: 'run-sweeper', err: errInfo(error) }, 'run sweep failed'),
+          ),
+      )
+    }
+
+    // Env-test self-tests live in their own table (not agent_runs), so the unified run
+    // sweep above never sees them — this sibling sweep re-drives a run whose Workflows
+    // instance was lost and finalizes (cleanup + failed) one whose instance is terminal.
+    if (env.ENV_TEST_WORKFLOW) {
+      const envTestLookup = new WorkflowsLookup(env.ENV_TEST_WORKFLOW)
+      const envTestRunner = new WorkflowsEnvironmentTestRunner(env.ENV_TEST_WORKFLOW)
+      ctx.waitUntil(
+        sweepStuckEnvTests({
+          repository: new D1EnvironmentTestRunRepository({ db: env.DB }),
+          instanceState: (runId) => envTestLookup.instanceState(runId),
+          redrive: (workspaceId, runId) => envTestRunner.startRun(workspaceId, runId),
+          finalizeOrphan: async (workspaceId, runId) => {
+            const container = buildContainer(env)
+            await container.environments?.environmentTest?.expire(
+              workspaceId,
+              runId,
+              'The environment test was stopped automatically: its durable driver ended without finalizing it.',
+            )
+          },
+          clock,
+          leaseMs: SWEEP_LEASE_MS,
+        })
+          .then(({ redriven, finalized }) => {
+            if (redriven > 0 || finalized > 0) {
+              logger.warn(
+                { cron: 'env-test-sweeper', redriven, finalized },
+                'swept stuck env-test runs',
+              )
+            }
+          })
+          .catch((error) =>
+            logger.error(
+              { cron: 'env-test-sweeper', err: errInfo(error) },
+              'env-test sweep failed',
+            ),
           ),
       )
     }

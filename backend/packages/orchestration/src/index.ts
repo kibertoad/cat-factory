@@ -217,6 +217,12 @@ export {
 } from './modules/envConfigRepair/EnvConfigRepairService.js'
 
 export {
+  EnvironmentTestService,
+  type EnvironmentTestServiceDependencies,
+  type EnvironmentTestPollResult,
+} from './modules/environments/EnvironmentTestService.js'
+
+export {
   BoardScanService,
   type BoardScanServiceDependencies,
 } from './modules/boardScan/BoardScanService.js'

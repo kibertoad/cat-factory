@@ -28,6 +28,7 @@ import {
 } from '../src/repositories/environments.js'
 import { DrizzleEnvironmentUserHandlerRepository } from '../src/repositories/environmentUserHandler.js'
 import { DrizzleEnvConfigRepairJobRepository } from '../src/repositories/envConfigRepair.js'
+import { DrizzleEnvironmentTestRunRepository } from '../src/repositories/environmentTest.js'
 import { DrizzleCustomManifestTypeRepository } from '../src/repositories/customManifestType.js'
 import {
   DrizzleFragmentSourceRepository,
@@ -330,6 +331,16 @@ const NON_REMOTE: Record<string, Record<string, Reason>> = {
   // `get`/`insert`/`update` are now allow-listed (the repair retry/stop run-control surface);
   // `listByWorkspace` was already remote (the run-path list). The whole repo is now remote.
   envConfigRepairJobRepository: {},
+  // The ephemeral-environment self-test run store is remote (insert/updateIfRunning/get/
+  // listRunningByWorkspace — the start / durable-poll / stop surface + the snapshot's
+  // in-flight read). Its GitHub dependency (`resolveRunRepoContext` for the throwaway
+  // branch) is served by mothership GitHub token delegation
+  // (`/internal/github/installation-token`), so the old "needs GitHub which mothership does
+  // not proxy" blocker is gone; the remaining gate on a FULL mothership-mode self-test is
+  // the provisioning writes (`environmentRegistryRepository.insert`/`update`, the
+  // secrets-delegation slice below). `listStale` is the stale-run cron sweeper's
+  // cross-workspace read (mirrors `agentRunRepository.listStale`) — mothership-internal.
+  environmentTestRunRepository: { listStale: 'sweeper' },
   // The whole environment-connection management surface is now remote (the connection +
   // per-type infra-handler settings panels: list/connect/disconnect/register-handler). Its
   // secrets ride a SEALED `secretsCipher` blob (sealed/decrypted in the service under the LOCAL
@@ -412,6 +423,10 @@ const NON_REMOTE: Record<string, Record<string, Reason>> = {
     tombstoneMissing: 'pending',
     setMonorepo: 'pending',
     listStale: 'sweeper',
+    // The GitHub-delegation mint's mothership-side repo-scoping read (`repository_ids`):
+    // unscoped across an installation's workspaces, so it must stay mothership-internal —
+    // exposing it over the RPC would leak repo rows past the per-call workspace scoping.
+    listByInstallation: 'sweeper',
     getCursor: 'pending',
     setCursor: 'pending',
   },
@@ -545,6 +560,7 @@ function reflectAllRepositories(): Record<string, string[]> {
     environmentConnectionRepository: DrizzleEnvironmentConnectionRepository,
     environmentUserHandlerRepository: DrizzleEnvironmentUserHandlerRepository,
     envConfigRepairJobRepository: DrizzleEnvConfigRepairJobRepository,
+    environmentTestRunRepository: DrizzleEnvironmentTestRunRepository,
     customManifestTypeRepository: DrizzleCustomManifestTypeRepository,
     fragmentSourceRepository: DrizzleFragmentSourceRepository,
     promptFragmentRepository: DrizzlePromptFragmentRepository,

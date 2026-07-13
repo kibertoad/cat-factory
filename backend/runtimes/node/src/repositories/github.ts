@@ -144,6 +144,15 @@ export class DrizzleRepoProjectionRepository implements RepoProjectionRepository
     return rows[0] ? rowToRepo(rows[0]) : null
   }
 
+  async listByInstallation(installationId: number): Promise<GitHubRepo[]> {
+    const rows = await this.db
+      .select()
+      .from(githubRepos)
+      .where(and(eq(githubRepos.installation_id, installationId), isNull(githubRepos.deleted_at)))
+      .orderBy(githubRepos.owner, githubRepos.name)
+    return rows.map(rowToRepo)
+  }
+
   async linkedWorkspaces(repoGithubId: number, candidateWorkspaceIds: string[]): Promise<string[]> {
     if (candidateWorkspaceIds.length === 0) return []
     const rows = await this.db

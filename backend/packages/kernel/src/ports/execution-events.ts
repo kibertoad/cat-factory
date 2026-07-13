@@ -6,6 +6,7 @@ import type {
   ClarityReview,
   DocInterviewSession,
   EnvConfigRepairJob,
+  EnvironmentTestRun,
   ExecutionInstance,
   Initiative,
   KaizenGrading,
@@ -63,6 +64,13 @@ export interface ExecutionEventPublisher {
    * block. Optional so publishers/tests that predate it need no change.
    */
   envConfigRepairChanged?(workspaceId: string, job: EnvConfigRepairJob): Promise<void>
+  /**
+   * An ephemeral-environment self-test run advanced: push the updated run so the
+   * service inspector's "Test environment creation" control patches its live stage +
+   * final outcome without a refetch. There is no board block. Optional so
+   * publishers/tests that predate it need no change.
+   */
+  envTestChanged?(workspaceId: string, run: EnvironmentTestRun): Promise<void>
   /**
    * A human-actionable notification was raised or resolved: push it so the board
    * surfaces/clears its badge and inbox entry live. Optional so publishers/tests
@@ -141,6 +149,7 @@ export class NoopEventPublisher implements ExecutionEventPublisher {
   async boardChanged(): Promise<void> {}
   async bootstrapChanged(): Promise<void> {}
   async envConfigRepairChanged(): Promise<void> {}
+  async envTestChanged(): Promise<void> {}
   async notificationChanged(): Promise<void> {}
   async llmCallObserved(): Promise<void> {}
   async requirementReviewChanged(): Promise<void> {}

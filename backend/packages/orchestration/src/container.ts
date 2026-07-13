@@ -70,6 +70,7 @@ import type {
   EnvConfigRepairer,
   EnvConfigRepairRunner,
 } from '@cat-factory/kernel'
+import type { EnvironmentTestRunRepository, EnvironmentTestRunner } from '@cat-factory/kernel'
 import type { RequirementReviewRepository } from '@cat-factory/kernel'
 import type { DocInterviewRepository } from '@cat-factory/kernel'
 import type { KaizenGradingRepository, KaizenVerifiedComboRepository } from '@cat-factory/kernel'
@@ -180,6 +181,7 @@ import {
 } from '@cat-factory/integrations'
 import { BootstrapService } from './modules/bootstrap/BootstrapService.js'
 import { EnvConfigRepairService } from './modules/envConfigRepair/EnvConfigRepairService.js'
+import { EnvironmentTestService } from './modules/environments/EnvironmentTestService.js'
 import { BoardScanService } from './modules/boardScan/BoardScanService.js'
 import { RequirementReviewService } from './modules/requirements/RequirementReviewService.js'
 import { DocInterviewService } from './modules/docInterview/DocInterviewService.js'
@@ -352,6 +354,17 @@ export interface CoreDependencies {
    * `EnvConfigRepairWorkflow` / Node pg-boss). Absent → tests poll `pollJob` directly.
    */
   envConfigRepairRunner?: EnvConfigRepairRunner
+  /**
+   * Optional: the `environment_test_runs` rows backing the ephemeral-environment
+   * self-test. Wired (with `resolveRunRepoContext` + the environments module) → the
+   * environments module builds an {@link EnvironmentTestService}; absent → no self-test.
+   */
+  environmentTestRunRepository?: EnvironmentTestRunRepository
+  /**
+   * Optional: durably drives a self-test run's poll loop (the worker's
+   * `EnvironmentTestWorkflow` / Node pg-boss). Absent → tests poll `pollEnvTest` directly.
+   */
+  environmentTestRunner?: EnvironmentTestRunner
   /**
    * Optional: runs the engine's gate-probe / merge GitHub reads under the run
    * initiator's ambient context so a per-user PAT is preferred (see
@@ -968,6 +981,11 @@ export interface EnvironmentsModule {
   userHandlerService?: EnvironmentUserHandlerService
   /** The durable env-config-repair service, present only when its deps are wired. */
   envConfigRepair?: EnvConfigRepairModule
+  /**
+   * The ephemeral-environment self-test service, present only when its run repository +
+   * `resolveRunRepoContext` are wired (needs a git provider to create/delete the branch).
+   */
+  environmentTest?: EnvironmentTestService
 }
 
 /** The self-hosted runner-pool integration's services, present only when configured. */
@@ -1616,12 +1634,32 @@ function createEnvironmentsModule(
     ...(preflightService ? { runPreflights: (_ws, refs) => preflightService.run(refs) } : {}),
     ...(provisioningLog ? { provisioningLog } : {}),
   })
+  // The ephemeral-environment self-test: needs its own run store + a git provider (to
+  // create/delete the throwaway branch). Absent either ⇒ no self-test (the controller 503s).
+  const environmentTest =
+    deps.environmentTestRunRepository && deps.resolveRunRepoContext
+      ? new EnvironmentTestService({
+          environmentTestRunRepository: deps.environmentTestRunRepository,
+          workspaceRepository: deps.workspaceRepository,
+          blockRepository: deps.blockRepository,
+          provisioning: provisioningService,
+          teardown: teardownService,
+          environmentRegistry: environmentRegistryRepository,
+          resolveRunRepoContext: deps.resolveRunRepoContext,
+          idGenerator: deps.idGenerator,
+          clock: deps.clock,
+          ...(deps.environmentTestRunner ? { runner: deps.environmentTestRunner } : {}),
+          ...(eventPublisher ? { eventPublisher } : {}),
+        })
+      : undefined
+
   return {
     connectionService,
     provisioningService,
     teardownService,
     ...(userHandlerService ? { userHandlerService } : {}),
     ...(repairService ? { envConfigRepair: { service: repairService } } : {}),
+    ...(environmentTest ? { environmentTest } : {}),
   }
 }
 

@@ -12,6 +12,7 @@ import { useBoardStore } from '~/stores/board'
 import { usePipelinesStore } from '~/stores/pipelines'
 import { useExecutionStore } from '~/stores/execution'
 import { useAgentRunsStore } from '~/stores/agentRuns'
+import { useEnvironmentTestStore } from '~/stores/environmentTest'
 import { useNotificationsStore } from '~/stores/notifications'
 import { useRiskPoliciesStore } from '~/stores/riskPolicies'
 import { useSharedStacksStore } from '~/stores/sharedStacks'
@@ -120,6 +121,7 @@ export const useWorkspaceStore = defineStore(
       useExecutionStore().hydrate(snapshot.executions, snapshot.workspace.id)
       useAgentRunsStore().hydrate(snapshot.bootstrapJobs ?? [], snapshot.workspace.id)
       useAgentRunsStore().hydrateEnvConfigRepair(snapshot.envConfigRepairJobs ?? [])
+      useEnvironmentTestStore().hydrate(snapshot.environmentTestRuns ?? [], snapshot.workspace.id)
       useNotificationsStore().hydrate(snapshot.notifications ?? [])
       useRiskPoliciesStore().hydrate(
         snapshot.riskPolicies ?? [],

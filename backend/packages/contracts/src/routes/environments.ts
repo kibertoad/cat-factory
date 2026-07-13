@@ -26,6 +26,7 @@ import {
   repoValidationResultSchema,
 } from '../provider-config.js'
 import { detectFrontendConfigSchema, frontendConfigRecommendationSchema } from '../frontend.js'
+import { environmentTestRunSchema } from '../environment-test.js'
 import { errorResponses, singleStringParam } from './_shared.js'
 
 // ---------------------------------------------------------------------------
@@ -230,4 +231,35 @@ export const teardownEnvironmentContract = defineApiContract({
   pathResolver: ({ environmentId }) => `/environments/${environmentId}/teardown`,
   requestBodySchema: ContractNoBody,
   responsesByStatusCode: { 200: environmentHandleSchema, ...errorResponses },
+})
+
+// ---- ephemeral-environment self-test (diagnostic) -----------------------
+
+const environmentTestIdParams = singleStringParam('id')
+const environmentTestBlockParams = singleStringParam('blockId')
+
+/** Start an environment-test run against a service frame's provisioning config. */
+export const startEnvironmentTestContract = defineApiContract({
+  method: 'post',
+  requestPathParamsSchema: environmentTestBlockParams,
+  pathResolver: ({ blockId }) => `/blocks/${blockId}/environment-test`,
+  requestBodySchema: ContractNoBody,
+  responsesByStatusCode: { 201: environmentTestRunSchema, ...errorResponses },
+})
+
+/** Read one environment-test run's current stage + outcome. */
+export const getEnvironmentTestContract = defineApiContract({
+  method: 'get',
+  requestPathParamsSchema: environmentTestIdParams,
+  pathResolver: ({ id }) => `/environment-tests/${id}`,
+  responsesByStatusCode: { 200: environmentTestRunSchema, ...errorResponses },
+})
+
+/** Stop a running environment-test run (best-effort cleanup then mark failed/cancelled). */
+export const stopEnvironmentTestContract = defineApiContract({
+  method: 'post',
+  requestPathParamsSchema: environmentTestIdParams,
+  pathResolver: ({ id }) => `/environment-tests/${id}/stop`,
+  requestBodySchema: ContractNoBody,
+  responsesByStatusCode: { 200: environmentTestRunSchema, ...errorResponses },
 })

@@ -89,10 +89,15 @@ export class GitHubAppRegistry {
     return this.deps.default.auth
   }
 
-  /** An installation token, minted by the App that owns the installation. */
+  /**
+   * An installation token, minted by the App that owns the installation.
+   * `repositoryIds` narrows the mint to those repos (the mothership GitHub-delegation
+   * path — see `GitHubAppAuth.installationToken`); the engine's own calls pass none
+   * and stay installation-wide.
+   */
   async installationToken(
     installationId: number,
-    opts?: { forceRefresh?: boolean },
+    opts?: { forceRefresh?: boolean; repositoryIds?: number[] },
   ): Promise<string> {
     return (await this.ownerAuth(installationId)).installationToken(installationId, opts)
   }

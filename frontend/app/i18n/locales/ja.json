@@ -436,7 +436,11 @@
         "visual_pipeline_no_frontend": "テスト対象のフロントエンドがありません",
         "model_policy_blocked": "アカウントのポリシーによりモデルがブロックされています",
         "model_policy_unsupported": "モデルポリシーはここでは利用できません",
-        "deployer_required_before_tester": "テスターの前にDeployerを追加してください"
+        "deployer_required_before_tester": "テスターの前にDeployerを追加してください",
+        "env_test_not_a_frame": "サービスではありません",
+        "env_test_infraless": "テストする対象がありません",
+        "env_test_not_provisionable": "環境ハンドラーが設定されていません",
+        "env_test_no_vcs": "Git プロバイダーが未接続です"
       },
       "fallbackMessage": "この操作は現在の状態と競合します。",
       "providersUnconfigured": {
@@ -783,6 +787,23 @@
         "title": "Compose 環境のセットアップ",
         "hint": "レシピ・プリフライト・ハンドラーを設定して、Deployer がこのスタックをプロビジョニングできるようにします。",
         "open": "ウィザードを開く"
+      },
+      "envTest": {
+        "title": "環境作成のテスト",
+        "hint": "使い捨てブランチに対してライフサイクル全体を実行します。ブランチ作成、プロビジョニング、破棄、ブランチ削除の順に行います。",
+        "start": "環境作成のテスト",
+        "stop": "停止",
+        "infraless": "環境作成をテストするには、上でプロビジョニングの種類を設定してください。",
+        "running": "テスト中: {stage}",
+        "succeeded": "テスト成功: 環境が作成されて破棄され、ブランチが削除されました。",
+        "failed": "テスト失敗",
+        "stage": {
+          "creating_branch": "ブランチを作成中",
+          "provisioning": "環境をプロビジョニング中",
+          "tearing_down": "環境を破棄中",
+          "deleting_branch": "ブランチを削除中",
+          "done": "完了"
+        }
       }
     },
     "agentConfig": {

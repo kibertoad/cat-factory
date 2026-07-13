@@ -29,6 +29,7 @@ function fakeRepo(files: Record<string, string>): RepoFiles {
     listDirectory,
     headSha: async () => null,
     createBranch: async () => undefined,
+    deleteBranch: async () => undefined,
     commitFiles: async () => ({ sha: 'c' }),
     openPullRequest: async () => ({ number: 1, url: 'u' }) as never,
   }

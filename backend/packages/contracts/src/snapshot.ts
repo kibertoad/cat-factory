@@ -10,6 +10,7 @@ import {
 import { userSettingsSchema } from './user-settings.js'
 import { bootstrapJobSchema } from './bootstrap.js'
 import { envConfigRepairJobSchema } from './env-config-repair.js'
+import { environmentTestRunSchema } from './environment-test.js'
 import { notificationSchema } from './notifications.js'
 import { riskPolicySchema } from './merge.js'
 import { agentConfigCatalogSchema } from './agent-config.js'
@@ -64,6 +65,13 @@ export const workspaceSnapshotSchema = v.object({
    * facade, so optional on the wire.
    */
   envConfigRepairJobs: v.optional(v.array(envConfigRepairJobSchema)),
+  /**
+   * In-flight ephemeral-environment self-test runs for this workspace. Carried so the
+   * service inspector re-attaches to a running test's live stage after a reconnect —
+   * without this, a full-refresh hydrate would clobber a run that only ever arrived
+   * via the live `envTest` event. Attached by the facade, so optional on the wire.
+   */
+  environmentTestRuns: v.optional(v.array(environmentTestRunSchema)),
   /**
    * The current spend-safeguard status for the WORKSPACE tier. Attached by the
    * facade (it depends on deployment-wide pricing/budget config), so it is optional

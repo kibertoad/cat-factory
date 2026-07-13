@@ -6,6 +6,7 @@ import type {
   ClarityReview,
   DocInterviewSession,
   EnvConfigRepairJob,
+  EnvironmentTestRun,
   ExecutionEventPublisher,
   ExecutionInstance,
   Initiative,
@@ -88,6 +89,11 @@ export class FanOutEventPublisher implements ExecutionEventPublisher {
   // workspace-scoped. Forward straight to the inner publisher for this workspace.
   async envConfigRepairChanged(workspaceId: string, job: EnvConfigRepairJob): Promise<void> {
     await this.inner.envConfigRepairChanged?.(workspaceId, job)
+  }
+
+  // A self-test run has no board block either, so no fan-out to mounting workspaces.
+  async envTestChanged(workspaceId: string, run: EnvironmentTestRun): Promise<void> {
+    await this.inner.envTestChanged?.(workspaceId, run)
   }
 
   async notificationChanged(workspaceId: string, notification: Notification): Promise<void> {

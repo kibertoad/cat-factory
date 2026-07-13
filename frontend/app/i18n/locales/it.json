@@ -1093,6 +1093,23 @@
         "title": "Configurazione ambiente Compose",
         "hint": "Configura la ricetta, i preflight e l'handler affinche' il Deployer provisioni questo stack.",
         "open": "Apri la procedura guidata"
+      },
+      "envTest": {
+        "title": "Prova la creazione dell'ambiente",
+        "hint": "Esegue l'intero ciclo di vita su un branch usa e getta: crea branch, provisiona, smonta, elimina branch.",
+        "start": "Prova la creazione dell'ambiente",
+        "stop": "Ferma",
+        "infraless": "Configura sopra un tipo di provisioning per provare la creazione dell'ambiente.",
+        "running": "Prova in corso: {stage}",
+        "succeeded": "Prova superata: l'ambiente è stato creato e smontato, e il branch è stato eliminato.",
+        "failed": "Prova fallita",
+        "stage": {
+          "creating_branch": "creazione del branch",
+          "provisioning": "provisioning dell'ambiente",
+          "tearing_down": "smontaggio dell'ambiente",
+          "deleting_branch": "eliminazione del branch",
+          "done": "completato"
+        }
       }
     },
     "agentConfig": {
@@ -3786,7 +3803,11 @@
         "visual_pipeline_no_frontend": "Nessun frontend da testare",
         "model_policy_blocked": "Modello bloccato dalla policy dell'account",
         "model_policy_unsupported": "Policy dei modelli non disponibile qui",
-        "deployer_required_before_tester": "Aggiungi un Deployer prima del Tester"
+        "deployer_required_before_tester": "Aggiungi un Deployer prima del Tester",
+        "env_test_not_a_frame": "Non è un servizio",
+        "env_test_infraless": "Niente da testare",
+        "env_test_not_provisionable": "Handler dell'ambiente non configurato",
+        "env_test_no_vcs": "Provider Git non connesso"
       },
       "fallbackMessage": "Questa azione è in conflitto con lo stato attuale.",
       "providersUnconfigured": {

@@ -8,6 +8,7 @@ import type {
   ClarityReview,
   DocInterviewSession,
   EnvConfigRepairJob,
+  EnvironmentTestRun,
   ExecutionInstance,
   Initiative,
   KaizenGrading,
@@ -165,6 +166,10 @@ export class NodeEventPublisher implements ExecutionEventPublisher {
 
   async envConfigRepairChanged(workspaceId: string, job: EnvConfigRepairJob): Promise<void> {
     this.publish(workspaceId, { type: 'env-config-repair', job, at: Date.now() })
+  }
+
+  async envTestChanged(workspaceId: string, run: EnvironmentTestRun): Promise<void> {
+    this.publish(workspaceId, { type: 'envTest', run, at: Date.now() })
   }
 
   async notificationChanged(workspaceId: string, notification: Notification): Promise<void> {
