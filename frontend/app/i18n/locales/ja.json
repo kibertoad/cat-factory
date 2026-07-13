@@ -482,6 +482,11 @@
     "renewsField": "サブスクリプションの更新日 (任意)",
     "connect": "接続",
     "replace": "置き換え",
+    "disabledReason": {
+      "signIn": "個人サブスクリプションを接続するにはサインインしてください",
+      "token": "続行するにはトークンを入力してください",
+      "password": "6文字以上の個人パスワードを入力してください"
+    },
     "expires": "有効期限 {date}",
     "noExpiry": "有効期限は未設定",
     "renewal": {

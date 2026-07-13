@@ -2564,6 +2564,11 @@
     "renewsField": "Abonnement verlängert sich am (optional)",
     "connect": "Verbinden",
     "replace": "Ersetzen",
+    "disabledReason": {
+      "signIn": "Melden Sie sich an, um ein persönliches Abonnement zu verbinden",
+      "token": "Geben Sie Ihr Token ein, um fortzufahren",
+      "password": "Geben Sie ein persönliches Passwort mit mindestens 6 Zeichen ein"
+    },
     "expires": "Läuft ab am {date}",
     "noExpiry": "Kein Ablaufdatum gesetzt",
     "renewal": {

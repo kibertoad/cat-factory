@@ -92,6 +92,18 @@ onMounted(() => void personal.load())
 const selectedMeta = computed(() => vendorMeta(vendor.value) ?? PERSONAL_VENDORS.value[0]!)
 const existing = computed(() => personal.subscriptions.find((s) => s.vendor === vendor.value))
 
+/**
+ * Why the Connect button is disabled, or null when it's actionable. This is the single source
+ * of truth: the button's `:disabled` is bound to `disabledReason !== null`, and the same value
+ * renders in red next to it, so the button state and the shown reason can never disagree.
+ */
+const disabledReason = computed(() => {
+  if (needsSignIn.value) return t('personalSubscriptions.disabledReason.signIn')
+  if (!token.value.trim()) return t('personalSubscriptions.disabledReason.token')
+  if (password.value.length < 6) return t('personalSubscriptions.disabledReason.password')
+  return null
+})
+
 /** Renewal nudges for any connected subscription that's near or past expiry. */
 const renewals = computed(() =>
   personal.subscriptions
@@ -253,10 +265,11 @@ async function disconnect(v: SubscriptionVendor) {
           <UInput v-model="expiresOn" type="date" :disabled="needsSignIn" />
         </UFormField>
       </div>
-      <div class="flex justify-end">
+      <div class="flex items-center justify-end gap-3">
+        <p v-if="disabledReason" class="text-sm text-rose-400">{{ disabledReason }}</p>
         <UButton
           :loading="busy"
-          :disabled="needsSignIn || !token.trim() || password.length < 6"
+          :disabled="disabledReason !== null"
           icon="i-lucide-shield-check"
           @click="connect()"
         >

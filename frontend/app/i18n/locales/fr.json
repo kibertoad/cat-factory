@@ -482,6 +482,11 @@
     "renewsField": "L'abonnement se renouvelle le (facultatif)",
     "connect": "Connecter",
     "replace": "Remplacer",
+    "disabledReason": {
+      "signIn": "Connectez-vous pour associer un abonnement personnel",
+      "token": "Saisissez votre jeton pour continuer",
+      "password": "Saisissez un mot de passe personnel d'au moins 6 caractères"
+    },
     "expires": "Expire le {date}",
     "noExpiry": "Aucune date d'expiration",
     "renewal": {
