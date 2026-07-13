@@ -236,12 +236,34 @@ export interface ServerContainer extends Core {
    */
   repositories?: PersistenceRegistry
   /**
+   * Mothership-side GitHub token delegation: mints a short-lived GitHub App INSTALLATION
+   * token for a machine-authed mothership-mode node (`POST /internal/github/installation-token`),
+   * so the laptop's agent containers, gates, and RepoFiles ops reach GitHub while the App
+   * private key never leaves the mothership. Wired by a facade whose GitHub App is configured
+   * (both Node + Cloudflare — the symmetric change); absent ⇒ the endpoint 503s. See
+   * docs/initiatives/mothership-mode.md.
+   */
+  githubTokenDelegation?: GitHubTokenDelegation
+  /**
    * Local-mode mothership login seam: exchange a mothership SESSION token for a machine token
    * and cache it locally, so the node can talk to the mothership without a pasted static token.
    * Wired ONLY on the local-mode facade in mothership mode; `POST /local/mothership/connect`
    * 503s when absent. See docs/initiatives/mothership-mode.md.
    */
   mothershipConnect?: MothershipConnector
+}
+
+/**
+ * Mints a GitHub App installation token for a machine-authed mothership-mode node.
+ * `repositoryIds` narrows the mint to those repos (GitHub's `repository_ids` scoping) —
+ * the delegation controller always passes the in-scope projection's repo ids, so a
+ * delegated token never grants more than the mothership projects for that installation.
+ */
+export interface GitHubTokenDelegation {
+  installationToken(
+    installationId: number,
+    opts?: { forceRefresh?: boolean; repositoryIds?: number[] },
+  ): Promise<string>
 }
 
 /** Exchanges a mothership session for a cached machine token (local-mode mothership login). */

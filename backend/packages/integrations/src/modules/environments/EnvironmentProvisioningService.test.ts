@@ -194,6 +194,7 @@ describe('EnvironmentProvisioningService — repo-config pre-flight gate', () =>
         listDirectory: async () => [],
         headSha: async () => 'sha',
         createBranch: async () => {},
+        deleteBranch: async () => {},
         commitFiles: async () => ({ sha: 'c' }),
         openPullRequest: async () => ({ number: 1 }) as never,
       },

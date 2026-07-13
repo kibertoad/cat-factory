@@ -187,6 +187,18 @@ export function defineCoreConformance(harness: ConformanceHarness): void {
         })
         expect(res.status).toBe(403)
       })
+
+      it('serves /internal/github/installation-token with the machine-token gate active', async () => {
+        const { call } = harness.makeApp()
+        // The GitHub delegation endpoint is mounted by the shared controller on both facades
+        // and checks the machine token FIRST (before the "is a GitHub App wired" 503), so an
+        // unauthenticated call is a 403 everywhere — the drift guard that the endpoint exists
+        // and is machine-gated regardless of whether this facade configures a GitHub App.
+        const res = await call('POST', '/internal/github/installation-token', {
+          installationId: 1,
+        })
+        expect(res.status).toBe(403)
+      })
     })
 
     describe('workspaces', () => {
@@ -2305,6 +2317,7 @@ export function defineAgentConformance(harness: ConformanceHarness): void {
           listDirectory: async () => [],
           headSha: async () => 'base-sha',
           createBranch: async () => {},
+          deleteBranch: async () => {},
           commitFiles: async (input) => {
             commits.push({ branch: input.branch, files: input.files })
             return { sha: 'commit-sha' }
@@ -2416,6 +2429,7 @@ export function defineAgentConformance(harness: ConformanceHarness): void {
           // truthy for every ref, so the swap resolves to it rather than creating one.
           headSha: async () => 'base-sha',
           createBranch: async () => {},
+          deleteBranch: async () => {},
           commitFiles: async (input) => {
             commits.push({ branch: input.branch, files: input.files })
             return { sha: 'commit-sha' }
@@ -3170,6 +3184,7 @@ export function defineAgentConformance(harness: ConformanceHarness): void {
           listDirectory: async () => [],
           headSha: async () => 'base-sha',
           createBranch: async () => {},
+          deleteBranch: async () => {},
           commitFiles: async (input) => {
             commits.push({ branch: input.branch, files: input.files })
             return { sha: 'commit-sha' }
@@ -3229,6 +3244,7 @@ export function defineAgentConformance(harness: ConformanceHarness): void {
           listDirectory: async () => [],
           headSha: async () => 'base-sha',
           createBranch: async () => {},
+          deleteBranch: async () => {},
           commitFiles: async (input) => {
             commits.push({ branch: input.branch, files: input.files })
             return { sha: 'commit-sha' }
@@ -5785,6 +5801,7 @@ export function defineIntegrationConformance(harness: ConformanceHarness): void 
             listDirectory: async () => [],
             headSha: async () => 'base-sha',
             createBranch: async () => {},
+            deleteBranch: async () => {},
             commitFiles: async () => ({ sha: 'c' }),
             openPullRequest: async () => ({ number: 1 }) as never,
           }
@@ -5891,6 +5908,7 @@ export function defineIntegrationConformance(harness: ConformanceHarness): void 
             },
             headSha: async () => 'base-sha',
             createBranch: async () => {},
+            deleteBranch: async () => {},
             commitFiles: async () => ({ sha: 'c' }),
             openPullRequest: async () => ({ number: 1 }) as never,
           }
@@ -5949,6 +5967,7 @@ export function defineIntegrationConformance(harness: ConformanceHarness): void 
           listDirectory: async () => [],
           headSha: async () => 'base-sha',
           createBranch: async () => {},
+          deleteBranch: async () => {},
           commitFiles: async () => ({ sha: 'c' }),
           openPullRequest: async () => ({ number: 1 }) as never,
         }

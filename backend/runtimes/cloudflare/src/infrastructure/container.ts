@@ -158,6 +158,7 @@ import { DurableObjectEventPublisher } from './events/DurableObjectEventPublishe
 import { WorkflowsWorkRunner } from './workflows/WorkflowsWorkRunner'
 import { WorkflowsBootstrapRunner } from './workflows/WorkflowsBootstrapRunner'
 import { WorkflowsEnvConfigRepairRunner } from './workflows/WorkflowsEnvConfigRepairRunner'
+import { WorkflowsEnvironmentTestRunner } from './workflows/WorkflowsEnvironmentTestRunner'
 import { D1BlockRepository } from './repositories/D1BlockRepository'
 import { D1ExecutionRepository } from './repositories/D1ExecutionRepository'
 import { D1PipelineRepository } from './repositories/D1PipelineRepository'
@@ -196,6 +197,7 @@ import { D1EnvironmentRegistryRepository } from './repositories/D1EnvironmentReg
 import { D1ReferenceArchitectureRepository } from './repositories/D1ReferenceArchitectureRepository'
 import { D1BootstrapJobRepository } from './repositories/D1BootstrapJobRepository'
 import { D1EnvConfigRepairJobRepository } from './repositories/D1EnvConfigRepairJobRepository'
+import { D1EnvironmentTestRunRepository } from './repositories/D1EnvironmentTestRunRepository'
 import { D1AgentRunRepository } from './repositories/D1AgentRunRepository'
 import { D1BinaryArtifactMetadataStore } from './repositories/D1BinaryArtifactMetadataStore'
 import { R2BinaryBlobBackend } from './storage/R2BinaryBlobBackend'
@@ -2347,6 +2349,15 @@ export function buildContainer(
     envConfigRepairRunner: env.ENV_CONFIG_REPAIR_WORKFLOW
       ? new WorkflowsEnvConfigRepairRunner(env.ENV_CONFIG_REPAIR_WORKFLOW)
       : undefined,
+    // The ephemeral-environment self-test: its own run store + the durable driver when the
+    // Workflows binding is present. The Workflow self-finalizes on poll-budget exhaustion,
+    // and the cron `sweepStuckEnvTests` (index.ts scheduled) is the backstop for a lost or
+    // terminal instance — the run store is not agent_runs, so the unified run sweep never
+    // covers it.
+    environmentTestRunRepository: new D1EnvironmentTestRunRepository({ db }),
+    environmentTestRunner: env.ENV_TEST_WORKFLOW
+      ? new WorkflowsEnvironmentTestRunner(env.ENV_TEST_WORKFLOW)
+      : undefined,
     ...selectGitHubDeps(env, config, db, clock, idGenerator, caches.repoFiles),
     ...selectMergeLifecycleDeps(env, config, db, clock, idGenerator),
     // A fresh workspace's model-preset library is seeded with Kimi K2.7 as the default
@@ -2465,6 +2476,14 @@ export function buildContainer(
     agentRunRepository,
     // Execution-scoped repo, surfaced for the conformance suite's compareAndSwap parity check.
     executionRepository: dependencies.executionRepository,
+    // Mothership-side GitHub token delegation (`POST /internal/github/installation-token`):
+    // when this deployment's GitHub App is configured, a machine-authed mothership-mode node
+    // can mint the short-lived installation tokens its agent containers/gates need — the App
+    // private key never leaves this Worker. The registry satisfies the seam structurally.
+    // Wired symmetrically on the Node facade.
+    ...(config.github.enabled
+      ? { githubTokenDelegation: buildAppRegistry(env, config, db, clock) }
+      : {}),
     // The repository registry the mothership-mode machine API (`/internal/persistence`) reflects
     // over, so a Cloudflare deployment can act as a mothership for mothership-mode local nodes.
     // The controller gates which repo+method is callable (allow-list) and account-scopes each
@@ -2489,6 +2508,18 @@ export function buildContainer(
       // proxied (decrypted service-side under the LOCAL key), like the observability/runner-pool
       // connections.
       testSecretsRepository: new D1TestSecretsRepository({ db }),
+      // GitHub projection + installation reads the mothership serves over the persistence RPC even
+      // when its OWN github service is off. A mothership-mode local node reaches GitHub by token
+      // DELEGATION (no local App), which enables `container.github`, so its board snapshot
+      // (`github.service.listRepos` → `repoProjectionRepository.list`) and run-path repo resolution
+      // (`githubInstallationRepository.getByWorkspace` + `repoProjectionRepository.list`) read the
+      // projection over RPC. Both are plain org tables the mothership owns (`selectGitHubDeps`
+      // folds them into `dependencies` only when the App is configured), so reflect them regardless
+      // of `config.github.enabled`, else a mothership without its own App 500s that board load with
+      // `... is not wired`. Allow-listed in `REMOTE_PERSISTENCE_METHODS`; folded in explicitly like
+      // the stores above. Sourced identically on both facades.
+      repoProjectionRepository: new D1RepoProjectionRepository({ db }),
+      githubInstallationRepository: new D1GitHubInstallationRepository({ db }),
     } as unknown as PersistenceRegistry,
     // App-owned backend registries, surfaced so the workspace snapshot's backend-kind
     // selectors (`environmentBackendKinds` / `runnerBackendKinds`) read the registered kinds.

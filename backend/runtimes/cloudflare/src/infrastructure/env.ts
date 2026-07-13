@@ -87,6 +87,12 @@ export interface Env {
    * isn't auto-driven — the cron sweep re-drives any run left running.
    */
   ENV_CONFIG_REPAIR_WORKFLOW?: Workflow
+  /**
+   * Workflows binding that durably drives each ephemeral-environment self-test run's stage
+   * machine (see EnvironmentTestWorkflow). Without it a self-test still starts (creates the
+   * branch + dispatches provisioning) but isn't auto-advanced.
+   */
+  ENV_TEST_WORKFLOW?: Workflow
   /** How long a run may park on a human decision before expiring, e.g. "24h". */
   DECISION_TIMEOUT?: string
   /**

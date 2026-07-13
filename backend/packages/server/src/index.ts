@@ -3,7 +3,12 @@
 // helpers, validation envelope, error mapping, CORS policy); the controllers,
 // middleware and the Hono app factory move here in subsequent steps.
 export { logger, type Logger } from './observability/logger.js'
-export { type AppEnv, type MothershipConnector, type ServerContainer } from './http/env.js'
+export {
+  type AppEnv,
+  type GitHubTokenDelegation,
+  type MothershipConnector,
+  type ServerContainer,
+} from './http/env.js'
 export {
   type GitHubBackfillScheduler,
   type GitHubWebhookIngest,
@@ -288,6 +293,14 @@ export {
   createRemoteRepositoryRegistry,
   HttpPersistenceRpcClient,
 } from './persistence/remoteRepositories.js'
+// Mothership-mode GitHub token delegation: the mothership mints short-lived installation
+// tokens for a machine-authed node (`ServerContainer.githubTokenDelegation` serves it),
+// and a mothership-mode local node consumes them through this AppTokenSource so the shared
+// FetchGitHubClient (and the executor's push-token mint) run without a PAT or App key.
+export {
+  DelegatedAppTokenSource,
+  type GitHubDelegationClientOptions,
+} from './github/DelegatedAppTokenSource.js'
 
 // Per-account binary-artifact store resolution (the blob backend is configured per-account
 // in the UI; each facade supplies its own backend factory + default).

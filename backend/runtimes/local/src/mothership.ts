@@ -3,6 +3,7 @@ import { join } from 'node:path'
 import { mkdirSync } from 'node:fs'
 import { type CoreRepositories, type DriveConfig, driveExecution } from '@cat-factory/node-server'
 import {
+  DelegatedAppTokenSource,
   HttpPersistenceRpcClient,
   type Logger,
   type MothershipConnector,
@@ -76,6 +77,16 @@ export interface MothershipComposition {
    * facade's own differentiator — so it lives on the laptop, not the mothership.
    */
   localSettingsStore: LocalSettingsStore
+  /**
+   * Delegated GitHub token source: installation tokens minted BY THE MOTHERSHIP over
+   * `POST /internal/github/installation-token` (the mothership owns the GitHub App; its
+   * private key never reaches this machine). The facade wires it as the push-token mint +
+   * the `FetchGitHubClient` token source when no local `GITHUB_PAT` is configured, so
+   * agent containers, gates/merge, RepoFiles ops — and the environment self-test's branch
+   * create/delete — reach GitHub through the org's App installation. Reads the SAME
+   * machine token as the persistence RPC (per request, so a post-boot login is picked up).
+   */
+  githubTokenSource: DelegatedAppTokenSource
   /** The durable local-sqlite execution work queue (the no-pg-boss durability substrate). */
   workQueue: SqliteWorkQueue
   /**
@@ -112,11 +123,12 @@ export function composeMothership(env: NodeJS.ProcessEnv): MothershipComposition
     localDbPath(env.LOCAL_MOTHERSHIP_TOKEN_DB, 'machine-token.sqlite'),
   )
   const envToken = env.LOCAL_MOTHERSHIP_TOKEN?.trim()
-  const client = new HttpPersistenceRpcClient({
-    baseUrl,
-    token: () => envToken || validCachedToken(machineTokenStore),
-  })
+  const machineToken = () => envToken || validCachedToken(machineTokenStore)
+  const client = new HttpPersistenceRpcClient({ baseUrl, token: machineToken })
   const repos = createRemoteRepositoryRegistry(client) as unknown as CoreRepositories
+  // Same base URL + per-request token as the persistence RPC, so GitHub delegation follows
+  // the exact connect/expiry lifecycle of the rest of the machine API.
+  const githubTokenSource = new DelegatedAppTokenSource({ baseUrl, token: machineToken })
   const credentialStore = createLocalCredentialStore(
     localDbPath(env.LOCAL_MOTHERSHIP_CREDENTIAL_DB, 'credentials.sqlite'),
   )
@@ -126,6 +138,7 @@ export function composeMothership(env: NodeJS.ProcessEnv): MothershipComposition
   const workQueue = createWorkQueue(localDbPath(env.LOCAL_MOTHERSHIP_WORK_DB, 'work-queue.sqlite'))
   return {
     repos,
+    githubTokenSource,
     credentialStore,
     localSettingsStore,
     workQueue,

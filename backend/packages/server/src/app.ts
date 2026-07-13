@@ -71,6 +71,7 @@ import {
 } from './modules/tasks/TaskSourceController.js'
 import { workspaceController } from './modules/workspaces/WorkspaceController.js'
 import { persistenceController } from './modules/persistence/PersistenceController.js'
+import { githubDelegationController } from './modules/persistence/GitHubDelegationController.js'
 import { publicApiController } from './modules/publicApi/PublicApiController.js'
 import { publicApiKeyController } from './modules/publicApi/PublicApiKeyController.js'
 
@@ -102,6 +103,12 @@ export function registerCoreControllers<E extends AppEnv>(app: Hono<E>): void {
   // facade attached its repository registry. Mounted on both facades so either can be a
   // mothership.
   app.route('/', persistenceController())
+  // Mothership-mode GitHub delegation (`/internal/github/installation-token`): a mothership-mode
+  // local node with no GitHub PAT mints its short-lived installation tokens here, so its agent
+  // containers/gates/RepoFiles ops reach GitHub while the App private key stays on the
+  // mothership. Machine-token gated like the persistence RPC; 503 unless the facade wired
+  // `githubTokenDelegation`. Mounted on both facades so either can be a mothership.
+  app.route('/', githubDelegationController())
   // The PUBLIC external API (`/api/v1/*`): key-authenticated in-controller (its `/api` prefix
   // bypasses the session gate), for external systems to run a public inline pipeline headlessly.
   app.route('/', publicApiController())

@@ -190,6 +190,7 @@ import type { DrizzleDb } from './db/client.js'
 import { executionRuntime } from './execution/config.js'
 import { PgBossBootstrapRunner } from './execution/bootstrapRunner.js'
 import { PgBossEnvConfigRepairRunner } from './execution/envConfigRepairRunner.js'
+import { PgBossEnvironmentTestRunner } from './execution/envTestRunner.js'
 import { PgBossWorkRunner } from './execution/pgBossRunner.js'
 import { createNodeGateways } from './gateways.js'
 import { baseUrlForNode, createNodeModelProviderResolver } from './modelProvider.js'
@@ -219,6 +220,7 @@ import {
   DrizzleReferenceArchitectureRepository,
 } from './repositories/bootstrap.js'
 import { DrizzleEnvConfigRepairJobRepository } from './repositories/envConfigRepair.js'
+import { DrizzleEnvironmentTestRunRepository } from './repositories/environmentTest.js'
 import {
   DrizzleDocumentConnectionRepository,
   DrizzleDocumentRepository,
@@ -2458,6 +2460,12 @@ export function buildNodeContainer(options: NodeContainerOptions): ServerContain
             options.boss,
             executionRuntime(config, env).queue,
           ),
+          // The durable ephemeral-environment self-test driver (analogue of the Worker's
+          // EnvironmentTestWorkflow): startRun enqueues a drive job that advances the run.
+          environmentTestRunner: new PgBossEnvironmentTestRunner(
+            options.boss,
+            executionRuntime(config, env).queue,
+          ),
         }
       : {}),
     ...githubGateDeps,
@@ -2481,6 +2489,13 @@ export function buildNodeContainer(options: NodeContainerOptions): ServerContain
     envConfigRepairJobRepository: sourced(
       'envConfigRepairJobRepository',
       (d) => new DrizzleEnvConfigRepairJobRepository(d),
+    ),
+    // Ephemeral-environment self-test runs (their own table). The store is wired
+    // unconditionally; the environments module builds the service when it + a git provider
+    // are present, and the durable runner is wired in the `options.boss` block above.
+    environmentTestRunRepository: sourced(
+      'environmentTestRunRepository',
+      (d) => new DrizzleEnvironmentTestRunRepository(d),
     ),
     // Document sources (Confluence / Notion / GitHub docs): wired from the shared
     // integration providers exactly like the Worker, so a workspace can connect a
@@ -2674,6 +2689,12 @@ export function buildNodeContainer(options: NodeContainerOptions): ServerContain
     // Core never reads it — it's surfaced separately above for `AgentRunController`), so fold it
     // in explicitly, else the board's retry/stop `getRef` call comes back `... is not wired`.
     // Sourced identically on both facades so they attach the same registry surface.
+    // Mothership-side GitHub token delegation (`POST /internal/github/installation-token`):
+    // when this deployment's GitHub App is configured, a machine-authed mothership-mode node
+    // can mint the short-lived installation tokens its agent containers/gates need — the App
+    // private key never leaves this service. The registry satisfies the seam structurally.
+    // Wired symmetrically on the Cloudflare facade.
+    ...(appRegistry ? { githubTokenDelegation: appRegistry } : {}),
     repositories: {
       ...dependencies,
       agentRunRepository: repos.agentRunRepository,
@@ -2690,6 +2711,18 @@ export function buildNodeContainer(options: NodeContainerOptions): ServerContain
       // proxied (decrypted service-side under the LOCAL key), like the observability/runner-pool
       // connections.
       testSecretsRepository: repos.testSecretsRepository,
+      // GitHub projection + installation reads the mothership serves over the persistence RPC even
+      // when its OWN github service is off. A mothership-mode local node reaches GitHub by token
+      // DELEGATION (no local App), which enables `container.github`, so its board snapshot
+      // (`github.service.listRepos` → `repoProjectionRepository.list`) and run-path repo resolution
+      // (`githubInstallationRepository.getByWorkspace` + `repoProjectionRepository.list`) read the
+      // projection over RPC. Both are plain org tables the mothership owns, constructed
+      // unconditionally above — so reflect them regardless of `config.github.enabled` (they land in
+      // `dependencies` only when the github MODULE is wired), else a mothership without its own App
+      // configured 500s that board load with `... is not wired`. Allow-listed in
+      // `REMOTE_PERSISTENCE_METHODS`; folded in explicitly like the stores above.
+      repoProjectionRepository,
+      githubInstallationRepository,
     } as unknown as PersistenceRegistry,
     // App-owned backend registries, surfaced so the workspace snapshot's backend-kind
     // selectors (`environmentBackendKinds` / `runnerBackendKinds`) read the registered kinds.

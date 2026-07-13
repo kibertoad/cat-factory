@@ -18,6 +18,7 @@ export function useWorkspaceStream() {
   const execution = useExecutionStore()
   const board = useBoardStore()
   const agentRuns = useAgentRunsStore()
+  const environmentTest = useEnvironmentTestStore()
   const notifications = useNotificationsStore()
   const observability = useObservabilityStore()
   const requirements = useRequirementsStore()
@@ -102,6 +103,11 @@ export function useWorkspaceStream() {
       // the infrastructure-providers window's "repairing…" indicator updates in place
       // (then flips to ok / residual issues / a failure) without a refetch. No board block.
       agentRuns.upsertEnvConfigRepair(event.job)
+    } else if (event.type === 'envTest') {
+      // An ephemeral-environment self-test advanced a stage — patch the run so the service
+      // inspector's "Test environment creation" control shows the live stage + final
+      // outcome in place without a refetch. No board block.
+      environmentTest.upsert(event.run)
     } else if (event.type === 'notification') {
       // A PR needs a merge decision, a pipeline finished, or CI gave up — patch the
       // inbox + per-block badge in place (resolved ones drop out of the inbox).

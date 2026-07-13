@@ -77,6 +77,7 @@ function runRepo(files: Record<string, string>): RunRepoContext {
       return null
     },
     async createBranch() {},
+    async deleteBranch() {},
     async commitFiles() {
       return { sha: 'c' }
     },

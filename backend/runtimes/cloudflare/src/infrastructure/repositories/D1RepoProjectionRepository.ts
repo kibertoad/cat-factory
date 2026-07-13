@@ -59,6 +59,16 @@ export class D1RepoProjectionRepository implements RepoProjectionRepository {
     return row ? rowToRepo(row) : null
   }
 
+  async listByInstallation(installationId: number): Promise<GitHubRepo[]> {
+    const { results } = await this.db
+      .prepare(
+        'SELECT * FROM github_repos WHERE installation_id = ? AND deleted_at IS NULL ORDER BY owner, name',
+      )
+      .bind(installationId)
+      .all<GitHubRepoRow>()
+    return results.map(rowToRepo)
+  }
+
   async linkedWorkspaces(repoGithubId: number, candidateWorkspaceIds: string[]): Promise<string[]> {
     if (candidateWorkspaceIds.length === 0) return []
     const found: string[] = []

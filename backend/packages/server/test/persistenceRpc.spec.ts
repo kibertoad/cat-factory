@@ -248,6 +248,17 @@ function makeRegistry(): {
       insert: async () => undefined,
       update: async () => undefined,
     },
+    // The ephemeral-environment self-test run store (start / durable poll / stop + the
+    // snapshot's in-flight read): reads/patches echo the workspaceId (arg0); the record-based
+    // `insert` binds on the run's `workspaceId` FIELD. The write is the guarded
+    // `updateIfRunning` (first-writer-wins vs the stop button); the stub returns undefined
+    // like the other write stubs — this suite pins scope routing, not return payloads.
+    environmentTestRunRepository: {
+      get: async (ws: string, id: string) => ({ ws, id }),
+      listRunningByWorkspace: async (ws: string) => [{ ws }],
+      insert: async () => undefined,
+      updateIfRunning: async () => undefined,
+    },
     // The board's run-control entry (retry/stop): resolve a run's kind by (workspaceId, id). The
     // stub echoes the workspaceId; `listStale` is wired but sweeper-only (absent from the allow-list).
     agentRunRepository: {
@@ -952,7 +963,7 @@ describe('agent-run control surface (retry/stop entry — workspace-scoped)', ()
   })
 })
 
-describe('bootstrap / reference-arch / env-config-repair management surface (workspace-scoped)', () => {
+describe('bootstrap / reference-arch / env-config-repair / env-test management surface (workspace-scoped)', () => {
   function remoteRegistry(accountIds = [ACCOUNT]) {
     const { registry, ...resolvers } = makeRegistry()
     const client = inProcessClient({
@@ -989,6 +1000,21 @@ describe('bootstrap / reference-arch / env-config-repair management surface (wor
       method: 'update',
       args: ['repair_1', { status: 'failed' }],
     },
+    // The ephemeral-environment self-test run store: the poll/stop reads + the guarded
+    // stage patches and the snapshot's in-flight-runs read, all workspaceId-arg0 scoped
+    // like the repair jobs.
+    { repo: 'environmentTestRunRepository', method: 'get', args: ['envtest_1'], echoes: true },
+    {
+      repo: 'environmentTestRunRepository',
+      method: 'updateIfRunning',
+      args: ['envtest_1', { stage: 'tearing_down' }],
+    },
+    {
+      repo: 'environmentTestRunRepository',
+      method: 'listRunningByWorkspace',
+      args: [],
+      echoes: true,
+    },
   ]
 
   for (const { repo, method, args, echoes } of WORKSPACE_METHODS) {
@@ -1018,6 +1044,7 @@ describe('bootstrap / reference-arch / env-config-repair management surface (wor
     'bootstrapJobRepository',
     'referenceArchitectureRepository',
     'envConfigRepairJobRepository',
+    'environmentTestRunRepository',
   ]
 
   for (const repo of INSERTS) {

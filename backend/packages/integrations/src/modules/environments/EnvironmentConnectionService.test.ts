@@ -455,6 +455,9 @@ function fakeRepoFiles(seed: Record<string, string> = {}): RepoFiles & {
     async createBranch(branch) {
       branches.add(branch)
     },
+    async deleteBranch(branch) {
+      branches.delete(branch)
+    },
     async commitFiles(input) {
       commits.push({ branch: input.branch, files: input.files })
       for (const f of input.files) store.set(f.path, f.content)

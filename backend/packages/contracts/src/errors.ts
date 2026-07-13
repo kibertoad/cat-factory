@@ -53,6 +53,18 @@ export const CONFLICT_REASONS = [
   // an unreachable endpoint / apiserver, a revoked token. The SPA steers the user to fix + re-test
   // the infrastructure handler. (A MISSING handler is `provision_type_unhandled`, not this.)
   'deployer_connection_test_failed',
+  // The ephemeral-environment self-test was started against something other than a service
+  // frame — the diagnostic runs per-service, so only a `level:'frame'` block is valid.
+  'env_test_not_a_frame',
+  // The self-test was requested for a service with no ephemeral-environment provisioning
+  // configured (`infraless` / none) — there is nothing to exercise.
+  'env_test_infraless',
+  // The self-test's service has a provision type but no workspace handler resolves for it yet,
+  // so provisioning can't run — the SPA steers the user to configure the environment handler.
+  'env_test_not_provisionable',
+  // The self-test needs a git provider to create/delete its throwaway branch, but the
+  // workspace is not connected to one.
+  'env_test_no_vcs',
 ] as const
 
 export type ConflictReason = (typeof CONFLICT_REASONS)[number]

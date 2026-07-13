@@ -352,6 +352,9 @@ export function workspaceController(): Hono<AppEnv> {
       // Env-config-repair runs (the durable agent fallback for provider config), so the
       // infrastructure-providers window renders a repair's live progress / outcome on load.
       envConfigRepairJobs,
+      // In-flight ephemeral-environment self-test runs, so the service inspector re-attaches
+      // to a running test's live stage after a reconnect (see snapshot coherence note).
+      environmentTestRuns,
       // Open notifications + merge-preset library, so the board renders the inbox,
       // per-block badges and the task preset picker on load.
       notifications,
@@ -392,6 +395,7 @@ export function workspaceController(): Hono<AppEnv> {
       container.spendService.status(workspaceId),
       container.bootstrap?.service.listJobs(workspaceId),
       container.envConfigRepair?.service.listJobs(workspaceId),
+      container.environments?.environmentTest?.listRunning(workspaceId),
       container.notifications?.service.listOpen(workspaceId),
       container.riskPolicies?.service.list(workspaceId),
       container.sharedStacks?.service.list(workspaceId),
@@ -452,6 +456,7 @@ export function workspaceController(): Hono<AppEnv> {
         ...budgetTiers,
         ...(redacted.bootstrapJobs ? { bootstrapJobs: redacted.bootstrapJobs } : {}),
         ...(envConfigRepairJobs ? { envConfigRepairJobs } : {}),
+        ...(environmentTestRuns ? { environmentTestRuns } : {}),
         ...(redacted.notifications ? { notifications: redacted.notifications } : {}),
         ...(riskPolicies ? { riskPolicies } : {}),
         ...(sharedStacks ? { sharedStacks } : {}),

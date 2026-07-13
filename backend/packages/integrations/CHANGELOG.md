@@ -1,5 +1,55 @@
 # @cat-factory/integrations
 
+## 0.81.15
+
+### Patch Changes
+
+- 1e684b7: Add a "Test environment creation" diagnostic to the service inspector. A developer can now
+  run the whole ephemeral-environment lifecycle against a throwaway branch — create branch →
+  provision → tear down → delete branch — and see the live stage plus the final success/failure
+  (and the stage it failed at), with guaranteed cleanup even on error.
+
+  Modelled as a durable, observable run (its own `environment_test_runs` table on both facades)
+  driven by a Cloudflare Workflow on the Worker and pg-boss on Node, with live `envTest` events
+  pushed to the SPA. Adds the `RepoFiles.deleteBranch` port method (implemented once in the shared
+  server layer) so the throwaway branch is reclaimed through the existing checkout-free seam.
+
+  The always-cleans-up contract is enforced on every path: the branch is persisted before
+  dispatch (a dispatch failure can't orphan it), a failed deploy view releases the runner and
+  finalizes so cleanup tears down partial infra, a stop mid-provision aborts the in-flight
+  deploy job, and the run's synthetic environment-registry row is always reclaimed. The
+  provisioning config is pinned on the run record at dispatch, terminal writes are guarded
+  (`updateIfRunning`, first-writer-wins vs the stop button), and both runtimes gain an env-test
+  stale-run sweep plus self-finalization on poll-budget exhaustion so a run whose driver dies
+  can never show `running` forever. The SPA store reconciles snapshots and live events by
+  `updatedAt` so a stale refresh can't regress or drop a run's state.
+
+  Schema change (no backwards-compatible migration, per project policy): a new
+  `environment_test_runs` table is added to both the D1 (`0050_environment_test_runs.sql`) and
+  Postgres/Drizzle schemas.
+
+- Updated dependencies [1e684b7]
+- Updated dependencies [1e684b7]
+  - @cat-factory/contracts@0.128.0
+  - @cat-factory/kernel@0.122.0
+
+## 0.81.14
+
+### Patch Changes
+
+- 2a13ece: Route `AccountSettingsService.resolve` through the app cache seam (performance initiative item 8).
+  The service's legacy homebrew 30s `{ value, expiresAt }` `Map` — the anti-pattern CLAUDE.md names
+  explicitly — is replaced by a new `accountSettings` `AppCaches` slice (grouped and keyed by account
+  id, holding the decrypted `ResolvedAccountSettings`). `resolve` now reads through it and `write`
+  invalidates the account's entry after the upsert commits, so an integration-credential change is
+  coherent across replicas (the invalidation bus carries only keys, never the decrypted secrets, so
+  plaintext still never leaves the process). `ResolvedAccountSettings` moved to the kernel
+  account-settings port (the caching port now names it) and is re-exported from
+  `@cat-factory/integrations`, so its consumers are unchanged. Pass-through on the Worker's
+  isolate-safe profile (our own mutable D1 state, no cross-isolate bus); both facades wire the slice.
+- Updated dependencies [2a13ece]
+  - @cat-factory/kernel@0.121.8
+
 ## 0.81.13
 
 ### Patch Changes

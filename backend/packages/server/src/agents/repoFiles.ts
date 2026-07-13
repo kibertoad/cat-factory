@@ -73,6 +73,7 @@ export function makeRepoFiles(
     // `listBranches` page. Null ⇒ the branch does not exist yet (create-vs-commit).
     headSha,
     createBranch: (branch, fromSha) => client.createBranch(installationId, ref, branch, fromSha),
+    deleteBranch: (branch) => client.deleteBranch(installationId, ref, branch),
     commitFiles: (input) => client.commitFiles(installationId, ref, input),
     openPullRequest: (input) => client.openPullRequest(installationId, ref, input),
   }

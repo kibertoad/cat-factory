@@ -3,11 +3,13 @@ import { computed, onMounted, ref, watch } from 'vue'
 import type {
   Block,
   CloudProvider,
+  EnvironmentTestStage,
   InstanceSize,
   ProvisionType,
   ServiceProvisioning,
 } from '~/types/domain'
 import type {
+  ConflictReason,
   KubernetesManifestSource,
   KubernetesRenderer,
   ProvisioningComposeServiceCandidate,
@@ -19,6 +21,7 @@ import type {
 import RepoTreeBrowser from '~/components/github/RepoTreeBrowser.vue'
 import InspectorSection from '~/components/panels/inspector/InspectorSection.vue'
 import { apiErrorEnvelope } from '~/composables/api/errors'
+import { parseConflict } from '~/composables/usePipelineErrorToast'
 
 // Service-level (frame) configuration: the service-owned PROVISIONING — the provision
 // TYPE this service produces (`infraless` / `docker-compose` / `kubernetes` / `custom`)
@@ -44,7 +47,7 @@ const services = useServicesStore()
 const infra = useInfraConfigStore()
 const agentRuns = useAgentRunsStore()
 const ui = useUiStore()
-const { t } = useI18n()
+const { t, te } = useI18n()
 
 // The custom-manifest-type catalog feeds the `custom` picker. Cheap + shared (coalesced).
 // The repo list backs the detect-from-repo affordance (owner/name lookup).
@@ -244,6 +247,80 @@ async function generateOrFixManifest() {
     manifestRepairError.value = true
   } finally {
     generating.value = false
+  }
+}
+
+// Ephemeral-environment self-test: run the whole create-branch → provision → tear-down →
+// delete-branch cycle against this service's provisioning config and report success / the stage
+// it failed at. The returned run is tracked live (by frame id) via the workspace stream store.
+const envTest = useEnvironmentTestStore()
+const envTestStarting = ref(false)
+const envTestError = ref<string | null>(null)
+// The newest self-test run for this frame — re-attaches after a reconnect (the run is carried in
+// the snapshot while running), so the live stage keeps showing without a locally-held id.
+const envTestRun = computed(() => envTest.runForBlock(props.block.id))
+const envTestRunning = computed(() => envTestRun.value?.status === 'running')
+// Nothing to provision for an `infraless` service, so there is nothing to test.
+const canTestEnv = computed(() => provisionType.value !== 'infraless')
+
+// Per-stage label KEYS, exhaustive over the contracts `EnvironmentTestStage` union: a new
+// backend stage fails THIS typecheck until mapped (the key is resolved at runtime, so the
+// typed-message-keys check can't see the `t()` lookup — the map's exhaustiveness is the
+// drift guard, same pattern as `CONFLICT_TITLE_KEYS`).
+const ENV_TEST_STAGE_KEYS: Record<EnvironmentTestStage, string> = {
+  creating_branch: 'inspector.testConfig.envTest.stage.creating_branch',
+  provisioning: 'inspector.testConfig.envTest.stage.provisioning',
+  tearing_down: 'inspector.testConfig.envTest.stage.tearing_down',
+  deleting_branch: 'inspector.testConfig.envTest.stage.deleting_branch',
+  done: 'inspector.testConfig.envTest.stage.done',
+}
+
+function envTestStageLabel(stage: EnvironmentTestStage): string {
+  const key = ENV_TEST_STAGE_KEYS[stage]
+  // `te`-guarded so a locale missing the key shows the raw stage id, never a raw message key.
+  return te(key) ? t(key) : stage
+}
+
+// The start preflight's machine-readable 409 reasons, mapped to their localized titles —
+// exhaustive over the contracts `env_test_*` conflict reasons (same drift guard as above).
+// The raw backend `message` is only the last-resort fallback for unmapped/non-conflict errors.
+const ENV_TEST_CONFLICT_KEYS: Record<Extract<ConflictReason, `env_test_${string}`>, string> = {
+  env_test_not_a_frame: 'errors.conflict.title.env_test_not_a_frame',
+  env_test_infraless: 'errors.conflict.title.env_test_infraless',
+  env_test_not_provisionable: 'errors.conflict.title.env_test_not_provisionable',
+  env_test_no_vcs: 'errors.conflict.title.env_test_no_vcs',
+}
+
+function envTestErrorText(e: unknown): string {
+  const reason = parseConflict(e)?.reason
+  const key =
+    reason && reason in ENV_TEST_CONFLICT_KEYS
+      ? ENV_TEST_CONFLICT_KEYS[reason as keyof typeof ENV_TEST_CONFLICT_KEYS]
+      : undefined
+  if (key && te(key)) return t(key)
+  return apiErrorEnvelope(e)?.message ?? (e instanceof Error ? e.message : String(e))
+}
+
+async function startEnvTest() {
+  if (!canTestEnv.value || envTestStarting.value || envTestRunning.value) return
+  envTestStarting.value = true
+  envTestError.value = null
+  try {
+    await envTest.start(props.block.id)
+  } catch (e) {
+    envTestError.value = envTestErrorText(e)
+  } finally {
+    envTestStarting.value = false
+  }
+}
+
+async function stopEnvTest() {
+  const run = envTestRun.value
+  if (!run || run.status !== 'running') return
+  try {
+    await envTest.stop(run.id)
+  } catch (e) {
+    envTestError.value = envTestErrorText(e)
   }
 }
 
@@ -923,5 +1000,80 @@ function setSize(value: InstanceSize) {
         </div>
       </div>
     </InspectorSection>
+
+    <!-- Ephemeral-environment self-test: exercise the whole provisioning lifecycle against a
+         throwaway branch and report success / the failing stage. Disabled for `infraless`. -->
+    <div class="mt-3 space-y-2 border-t border-white/5 pt-3" data-testid="env-test-section">
+      <div class="flex items-center justify-between gap-2">
+        <div class="min-w-0">
+          <p class="text-[11px] font-medium text-slate-300">
+            {{ t('inspector.testConfig.envTest.title') }}
+          </p>
+          <p class="text-[11px] text-slate-400">{{ t('inspector.testConfig.envTest.hint') }}</p>
+        </div>
+        <UButton
+          v-if="!envTestRunning"
+          icon="i-lucide-flask-conical"
+          size="xs"
+          color="primary"
+          variant="soft"
+          data-testid="env-test-start"
+          :loading="envTestStarting"
+          :disabled="!canTestEnv"
+          @click="startEnvTest"
+        >
+          {{ t('inspector.testConfig.envTest.start') }}
+        </UButton>
+        <UButton
+          v-else
+          icon="i-lucide-square"
+          size="xs"
+          color="neutral"
+          variant="ghost"
+          data-testid="env-test-stop"
+          @click="stopEnvTest"
+        >
+          {{ t('inspector.testConfig.envTest.stop') }}
+        </UButton>
+      </div>
+
+      <p v-if="!canTestEnv" class="text-[11px] text-slate-500">
+        {{ t('inspector.testConfig.envTest.infraless') }}
+      </p>
+
+      <!-- Live stage + terminal outcome of the tracked run (pushed via the workspace stream). -->
+      <p
+        v-if="envTestRun"
+        class="text-[11px]"
+        :class="{
+          'text-sky-300/80': envTestRun.status === 'running',
+          'text-emerald-300/80': envTestRun.status === 'succeeded',
+          'text-rose-300/80': envTestRun.status === 'failed',
+        }"
+        data-testid="env-test-status"
+      >
+        <template v-if="envTestRun.status === 'running'">
+          {{
+            t('inspector.testConfig.envTest.running', {
+              stage: envTestStageLabel(envTestRun.stage),
+            })
+          }}
+        </template>
+        <template v-else-if="envTestRun.status === 'succeeded'">
+          {{ t('inspector.testConfig.envTest.succeeded') }}
+        </template>
+        <template v-else>
+          {{ t('inspector.testConfig.envTest.failed') }}
+          <template v-if="envTestRun.failedStage">
+            ({{ envTestStageLabel(envTestRun.failedStage) }})
+          </template>
+          <span v-if="envTestRun.error" class="block text-rose-300/70">{{ envTestRun.error }}</span>
+        </template>
+      </p>
+
+      <p v-if="envTestError" class="text-[11px] text-rose-400" data-testid="env-test-error">
+        {{ envTestError }}
+      </p>
+    </div>
   </InspectorSection>
 </template>

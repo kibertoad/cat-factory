@@ -436,7 +436,11 @@
         "visual_pipeline_no_frontend": "Aucun frontend à tester",
         "model_policy_blocked": "Modèle bloqué par la politique du compte",
         "model_policy_unsupported": "La politique de modèles n'est pas disponible ici",
-        "deployer_required_before_tester": "Ajoutez un Deployer avant le Testeur"
+        "deployer_required_before_tester": "Ajoutez un Deployer avant le Testeur",
+        "env_test_not_a_frame": "Pas un service",
+        "env_test_infraless": "Rien à tester",
+        "env_test_not_provisionable": "Gestionnaire d'environnement non configuré",
+        "env_test_no_vcs": "Fournisseur Git non connecté"
       },
       "fallbackMessage": "Cette action est en conflit avec l’état actuel.",
       "providersUnconfigured": {
@@ -783,6 +787,23 @@
         "title": "Configuration d'environnement Compose",
         "hint": "Configurez la recette, les vérifications préalables et le gestionnaire pour que le Deployer provisionne cette stack.",
         "open": "Ouvrir l'assistant"
+      },
+      "envTest": {
+        "title": "Tester la création de l'environnement",
+        "hint": "Exécute tout le cycle de vie sur une branche jetable : créer la branche, provisionner, démonter, supprimer la branche.",
+        "start": "Tester la création de l'environnement",
+        "stop": "Arrêter",
+        "infraless": "Configurez un type de provisionnement ci-dessus pour tester la création de l'environnement.",
+        "running": "Test en cours : {stage}",
+        "succeeded": "Test réussi : l'environnement a été créé puis démonté, et la branche a été supprimée.",
+        "failed": "Échec du test",
+        "stage": {
+          "creating_branch": "création de la branche",
+          "provisioning": "provisionnement de l'environnement",
+          "tearing_down": "démontage de l'environnement",
+          "deleting_branch": "suppression de la branche",
+          "done": "terminé"
+        }
       }
     },
     "agentConfig": {

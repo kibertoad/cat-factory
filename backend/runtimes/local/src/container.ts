@@ -47,6 +47,7 @@ import { applyLocalDefaults } from './config.js'
 import { OFF_VALUES } from './envFlags.js'
 import {
   buildVcsIdentityRegistry,
+  createDelegatedGitHubClient,
   createLocalGitHubClient,
   createLocalGitLabClient,
   fetchPatAccount,
@@ -139,11 +140,19 @@ export function buildLocalContainer(options: NodeContainerOptions): ServerContai
   // the GitLab API via the VcsClient→GitHubClient adapter. `gitToken` is what the harness
   // pushes with; `vcsClient` is what the gates/merger/repo-link read through.
   const gitToken = pat ?? gitlabPat
+  // Mothership-mode GitHub delegation: with NO local PAT, GitHub is reached on installation
+  // tokens the MOTHERSHIP mints over the machine API (`/internal/github/installation-token`) —
+  // the org's GitHub App backs the laptop's agent containers, gates/merge, RepoFiles ops and
+  // the environment self-test, with no App key or long-lived credential on this machine. An
+  // explicitly configured PAT (GitHub or GitLab) wins; delegation is the no-PAT default.
+  const delegatedGitHub = mothership && !gitToken ? mothership.githubTokenSource : undefined
   const vcsClient: GitHubClient | undefined = pat
     ? createLocalGitHubClient(env)
     : gitlabPat
       ? createLocalGitLabClient(env)
-      : undefined
+      : delegatedGitHub
+        ? createDelegatedGitHubClient(env, delegatedGitHub)
+        : undefined
   // When GitLab is the active backend (no GitHub PAT), the agent containers must clone the
   // GitLab host and open merge requests — not github.com. The repo projection carries no host,
   // so build the clone URL + provider from the configured GitLab host here. Same host the
@@ -193,9 +202,10 @@ export function buildLocalContainer(options: NodeContainerOptions): ServerContai
   const { registry: vcsIdentity, configured } = buildVcsIdentityRegistry(env)
   const config: AppConfig = {
     ...base,
-    // Enable the (provider-neutral) source-control integration for EITHER PAT: the read/link
-    // endpoints + gates are served through `vcsClient`, GitHub- or GitLab-backed alike.
-    ...(gitToken ? { github: { ...base.github, enabled: true } } : {}),
+    // Enable the (provider-neutral) source-control integration for EITHER PAT — or for
+    // mothership-delegated GitHub: the read/link endpoints + gates are served through
+    // `vcsClient`, PAT- or delegation-backed alike.
+    ...(gitToken || delegatedGitHub ? { github: { ...base.github, enabled: true } } : {}),
     ...(nativeAgents ? { nativeAmbientAuth: nativeHarnesses } : {}),
     // Inline LLM steps (requirements reviewer, brainstorm, task-estimator, inline document kinds)
     // run on a subscription model through the developer's ambient `claude`/`codex` CLI — so a
@@ -218,7 +228,8 @@ export function buildLocalContainer(options: NodeContainerOptions): ServerContai
       // to the mothership (org/durable state), and (in mothership mode) where to send the user
       // to sign in. Off → the standard siloed-Postgres local mode.
       ...(mothership ? { mothership: true, mothershipUrl: env.LOCAL_MOTHERSHIP_URL?.trim() } : {}),
-      ...(gitToken ? {} : { githubPatSetupUrl: githubPatCreationUrl() }),
+      // No "create a PAT" banner when GitHub rides mothership delegation — a PAT is optional there.
+      ...(gitToken || delegatedGitHub ? {} : { githubPatSetupUrl: githubPatCreationUrl() }),
       // Scopes-preselected "create a PAT" deep links so the "no token configured" notice sends
       // the developer straight to the right token page (scopes differ per provider).
       patLogin: {
@@ -605,9 +616,15 @@ export function buildLocalContainer(options: NodeContainerOptions): ServerContai
     // there requires explicit per-account configuration.)
     contentStorageDefaultBackend: 'fs',
     // Authenticate git with the developer's PAT when present (GitHub or GitLab — the harness
-    // credential is host-neutral). Absent → the executor falls back to the GitHub App path
-    // (and is null without it), so container kinds fail loudly rather than silently mis-running.
-    ...(gitToken ? { mintInstallationToken: async () => gitToken } : {}),
+    // credential is host-neutral); in mothership mode without a PAT, mint the per-installation
+    // push/clone token from the mothership's GitHub App instead. Absent both → the executor
+    // falls back to the GitHub App path (and is null without it), so container kinds fail
+    // loudly rather than silently mis-running.
+    ...(gitToken
+      ? { mintInstallationToken: async () => gitToken }
+      : delegatedGitHub
+        ? { mintInstallationToken: (id: number) => delegatedGitHub.installationToken(id) }
+        : {}),
     // The PAT-backed VCS client wires the CI gate + merge / mergeability providers, so a local
     // pipeline gates on real CI and merges the PR/MR for real, AND serves the read/link
     // endpoints. GitHub uses the PAT client (repos via /user/repos); GitLab uses the
