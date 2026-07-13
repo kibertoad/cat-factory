@@ -1,5 +1,12 @@
 # @cat-factory/node-server
 
+## 0.93.2
+
+### Patch Changes
+
+- Updated dependencies [17c6808]
+  - @cat-factory/server@0.113.2
+
 ## 0.93.1
 
 ### Patch Changes

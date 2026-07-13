@@ -1,5 +1,13 @@
 # @cat-factory/app
 
+## 0.116.1
+
+### Patch Changes
+
+- ad4ef94: Show why the "Connect" button is disabled on the Personal subscriptions screen: a
+  red reason (sign in / enter a token / password too short) now renders next to the
+  button and disappears reactively the moment the blocking condition clears.
+
 ## 0.116.0
 
 ### Minor Changes
