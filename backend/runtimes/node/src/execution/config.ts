@@ -1,4 +1,4 @@
-import type { AppConfig } from '@cat-factory/server'
+import { type AppConfig, parseNumericEnv } from '@cat-factory/server'
 import type { DriveConfig } from './drive.js'
 import type { AdvanceQueueOptions, SweeperConfig } from './pgBossRunner.js'
 
@@ -63,7 +63,10 @@ export function executionRuntime(config: AppConfig, env: NodeJS.ProcessEnv): Exe
   const singleStepBudgetMs =
     jobPollIntervalMs * exec.jobMaxPolls + ciPollIntervalMs * exec.ciMaxPolls
   // ...times the most steps a single drive can chain (agent steps + CI-fixer retries).
-  const maxDriveSteps = Math.max(1, num(env.EXECUTION_MAX_DRIVE_STEPS) ?? 16)
+  const maxDriveSteps = Math.max(
+    1,
+    num('EXECUTION_MAX_DRIVE_STEPS', env.EXECUTION_MAX_DRIVE_STEPS) ?? 16,
+  )
   const maxDriveMs = singleStepBudgetMs * maxDriveSteps
   // Treat an unset OR blank override as "not provided" (a blank env var must not collapse
   // to 0 and force the 60-minute floor over the computed budget); only a real number wins.
@@ -82,7 +85,10 @@ export function executionRuntime(config: AppConfig, env: NodeJS.ProcessEnv): Exe
 
   const queue: AdvanceQueueOptions = {
     expireInSeconds,
-    heartbeatSeconds: Math.max(10, Math.floor(num(env.EXECUTION_HEARTBEAT_SECONDS) ?? 60)),
+    heartbeatSeconds: Math.max(
+      10,
+      Math.floor(num('EXECUTION_HEARTBEAT_SECONDS', env.EXECUTION_HEARTBEAT_SECONDS) ?? 60),
+    ),
     retryLimit: 5,
     retryDelaySeconds: 30,
   }
@@ -95,14 +101,11 @@ export function executionRuntime(config: AppConfig, env: NodeJS.ProcessEnv): Exe
     hardStallMs: Math.max(1, Number(env.STALE_RUN_HARD_FAIL_MINUTES) || 60) * 60_000,
   }
 
-  const concurrency = Math.max(1, num(env.EXECUTION_CONCURRENCY) ?? 10)
+  const concurrency = Math.max(1, num('EXECUTION_CONCURRENCY', env.EXECUTION_CONCURRENCY) ?? 10)
 
   return { drive, queue, sweeper, concurrency }
 }
 
-/** Parse a positive number from an env value; undefined/blank/non-finite → undefined. */
-function num(value: string | undefined): number | undefined {
-  if (value === undefined || value.trim() === '') return undefined
-  const n = Number(value)
-  return Number.isFinite(n) ? n : undefined
-}
+// Parse a numeric env var, warning when a present value is un-parseable rather than
+// silently coercing garbage to the caller's default (error-message coverage A8).
+const num = parseNumericEnv
