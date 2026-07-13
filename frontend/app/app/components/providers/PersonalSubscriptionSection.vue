@@ -93,9 +93,9 @@ const selectedMeta = computed(() => vendorMeta(vendor.value) ?? PERSONAL_VENDORS
 const existing = computed(() => personal.subscriptions.find((s) => s.vendor === vendor.value))
 
 /**
- * Why the Connect button is disabled, or null when it's actionable. Rendered in red next to
- * the button and reactively disappears the moment the blocking condition clears. Mirrors the
- * button's own `:disabled` predicate so the two can never disagree.
+ * Why the Connect button is disabled, or null when it's actionable. This is the single source
+ * of truth: the button's `:disabled` is bound to `disabledReason !== null`, and the same value
+ * renders in red next to it, so the button state and the shown reason can never disagree.
  */
 const disabledReason = computed(() => {
   if (needsSignIn.value) return t('personalSubscriptions.disabledReason.signIn')
@@ -266,10 +266,10 @@ async function disconnect(v: SubscriptionVendor) {
         </UFormField>
       </div>
       <div class="flex items-center justify-end gap-3">
-        <p v-if="disabledReason" class="text-sm text-red-400">{{ disabledReason }}</p>
+        <p v-if="disabledReason" class="text-sm text-rose-400">{{ disabledReason }}</p>
         <UButton
           :loading="busy"
-          :disabled="needsSignIn || !token.trim() || password.length < 6"
+          :disabled="disabledReason !== null"
           icon="i-lucide-shield-check"
           @click="connect()"
         >

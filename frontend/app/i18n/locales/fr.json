@@ -483,9 +483,9 @@
     "connect": "Connecter",
     "replace": "Remplacer",
     "disabledReason": {
-      "signIn": "Connecte-toi pour associer un abonnement personnel",
-      "token": "Saisis ton jeton pour continuer",
-      "password": "Saisis un mot de passe personnel d'au moins 6 caractères"
+      "signIn": "Connectez-vous pour associer un abonnement personnel",
+      "token": "Saisissez votre jeton pour continuer",
+      "password": "Saisissez un mot de passe personnel d'au moins 6 caractères"
     },
     "expires": "Expire le {date}",
     "noExpiry": "Aucune date d'expiration",
