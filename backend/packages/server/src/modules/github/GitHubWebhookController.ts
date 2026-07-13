@@ -1,5 +1,6 @@
 import { Hono } from 'hono'
 import { StateSigner } from '../../github/state.js'
+import { logWebhookSignatureRejection } from '../../webhooks/signatureLog.js'
 import type { AppEnv } from '../../http/env.js'
 
 /**
@@ -15,14 +16,22 @@ export function githubWebhookController(): Hono<AppEnv> {
   const app = new Hono<AppEnv>()
 
   app.post('/webhooks', async (c) => {
-    const github = c.get('container').github
+    const container = c.get('container')
+    const github = container.github
     if (!github)
       return c.json({ error: { code: 'unavailable', message: 'GitHub not configured' } }, 503)
 
     // Verify against the raw bytes before parsing.
     const raw = await c.req.arrayBuffer()
-    const ok = await github.webhookVerifier.verify(raw, c.req.header('x-hub-signature-256') ?? null)
+    const signature = c.req.header('x-hub-signature-256') ?? null
+    const ok = await github.webhookVerifier.verify(raw, signature)
     if (!ok) {
+      // Response stays terse (external caller); log the operator-facing setup remedy.
+      logWebhookSignatureRejection({
+        provider: 'github',
+        secretConfigured: container.config.github.webhookSecret !== '',
+        signaturePresent: !!signature,
+      })
       return c.json({ error: { code: 'unauthorized', message: 'Invalid signature' } }, 401)
     }
 
