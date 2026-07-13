@@ -335,11 +335,25 @@ export class InitiativeLoopService {
       ? ((await this.deps.serviceRepository.getByFrameBlock(frame.id))?.id ?? null)
       : null
 
+    // The pipeline catalog is invariant across the tick — read it ONCE and check each
+    // spawned item's pipeline against this set, rather than a per-item point-read in the
+    // loop (banned N+1). A missing pipeline is a config problem the item is blocked on.
+    const knownPipelineIds = new Set(
+      (await this.deps.pipelineRepository.listByWorkspace(workspaceId)).map((p) => p.id),
+    )
+
     let spawned = 0
     let entity = initiative
     for (const item of eligible) {
       if (slots <= 0) break
-      const result = await this.spawnItem(workspaceId, entity, item, frame, serviceId)
+      const result = await this.spawnItem(
+        workspaceId,
+        entity,
+        item,
+        frame,
+        serviceId,
+        knownPipelineIds,
+      )
       entity = result.entity
       if (result.outcome === 'spawned') {
         spawned++
@@ -359,14 +373,16 @@ export class InitiativeLoopService {
     item: InitiativeItem,
     frame: Block,
     serviceId: string | null,
+    knownPipelineIds: Set<string>,
   ): Promise<SpawnOutcome> {
     const policy = entity.policy
     if (!policy) return { outcome: 'skipped', entity }
 
     // Pick the pipeline first; a missing one is a config problem (a pipeline deleted after
-    // ingest) → block the item + deviation + notify, NEVER throw inside the sweep.
+    // ingest) → block the item + deviation + notify, NEVER throw inside the sweep. Membership
+    // is checked against the tick's pre-loaded catalog, not a per-item repository read.
     const pipelineId = selectInitiativePipeline(item, policy)
-    if (!(await this.deps.pipelineRepository.get(workspaceId, pipelineId))) {
+    if (!knownPipelineIds.has(pipelineId)) {
       const blocked = await this.blockItem(
         workspaceId,
         entity.blockId,

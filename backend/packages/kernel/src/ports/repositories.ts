@@ -153,6 +153,18 @@ export interface LiveRunSummary {
   status: ExecutionStatus
 }
 
+/**
+ * A workspace's block list captured by one caller and handed to the next so the second
+ * doesn't re-list the whole board. Carries the `workspaceId` it was loaded for so the
+ * consumer can only reuse it when its own resolved workspace matches (e.g. a locally-owned
+ * block whose home == the acting workspace) and re-lists otherwise (a mounted shared
+ * service homed elsewhere). Used across the block-delete path (teardown → removeBlock).
+ */
+export interface PreloadedBlocks {
+  workspaceId: string
+  blocks: Block[]
+}
+
 export interface ExecutionRepository {
   listByWorkspace(workspaceId: string): Promise<ExecutionInstance[]>
   /**

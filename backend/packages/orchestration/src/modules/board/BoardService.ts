@@ -7,7 +7,13 @@ import type {
   ReparentInput,
   UpdateBlockInput,
 } from '@cat-factory/contracts'
-import type { Block, BlockType, Position, ServiceConnection } from '@cat-factory/kernel'
+import type {
+  Block,
+  BlockType,
+  Position,
+  PreloadedBlocks,
+  ServiceConnection,
+} from '@cat-factory/kernel'
 import { assertFound, ValidationError } from '@cat-factory/kernel'
 import { BLOCK_TYPE_LABEL, defaultPipelineIdForTaskType } from '@cat-factory/kernel'
 import type {
@@ -650,35 +656,54 @@ export class BoardService {
 
   /** Add a module (sub-frame) inside a service. */
   async addModule(workspaceId: string, serviceId: string, input: AddModuleInput): Promise<Block> {
+    const created = await this.addModules(workspaceId, serviceId, [input])
+    return created[0]!
+  }
+
+  /**
+   * Add several modules to a service in ONE pass — resolving the workspace + service and
+   * listing the board a single time for the whole batch (module positions lay out against
+   * one starting count) instead of paying a workspace list per module as repeated
+   * {@link addModule} calls would (a banned N+1 when a reconcile adds many modules at once).
+   * Returns the created blocks in input order.
+   */
+  async addModules(
+    workspaceId: string,
+    serviceId: string,
+    inputs: AddModuleInput[],
+  ): Promise<Block[]> {
     await this.requireWorkspace(workspaceId)
-    // The service frame may be mounted from another workspace; create the module in its home.
+    if (inputs.length === 0) return []
+    // The service frame may be mounted from another workspace; create the modules in its home.
     const { homeWorkspaceId, block: service } = await this.resolveBlock(workspaceId, serviceId)
     if (service.level !== 'frame') {
       throw new ValidationError('Modules can only be added to a service frame')
     }
     const blocks = await this.blockRepository.listByWorkspace(homeWorkspaceId)
-    const n = blocks.filter((b) => b.parentId === serviceId && b.level === 'module').length
-    const block: Block = {
-      id: this.idGenerator.next('mod'),
-      title: input.name,
-      type: service.type,
-      description: `Module within ${service.title}.`,
-      position: input.position ?? gridSlot(n, 2, 280, 220, 24, 80),
-      status: 'planned',
-      progress: 0,
-      dependsOn: [],
-      executionId: null,
-      level: 'module',
-      parentId: serviceId,
+    const containerServiceId = await this.serviceForContainer(blocks, service)
+    let n = blocks.filter((b) => b.parentId === serviceId && b.level === 'module').length
+    const created: Block[] = []
+    for (const input of inputs) {
+      const block: Block = {
+        id: this.idGenerator.next('mod'),
+        title: input.name,
+        type: service.type,
+        description: `Module within ${service.title}.`,
+        position: input.position ?? gridSlot(n, 2, 280, 220, 24, 80),
+        status: 'planned',
+        progress: 0,
+        dependsOn: [],
+        executionId: null,
+        level: 'module',
+        parentId: serviceId,
+      }
+      await this.blockRepository.insert(homeWorkspaceId, block, containerServiceId)
+      // Origin = the block's HOME so a module added to a mounted service fans out to all mounts.
+      await this.emitBoardChanged(homeWorkspaceId, 'block-added', block.id)
+      created.push(block)
+      n += 1
     }
-    await this.blockRepository.insert(
-      homeWorkspaceId,
-      block,
-      await this.serviceForContainer(blocks, service),
-    )
-    // Origin = the block's HOME so a module added to a mounted service fans out to all mounts.
-    await this.emitBoardChanged(homeWorkspaceId, 'block-added', block.id)
-    return block
+    return created
   }
 
   /**
@@ -1022,8 +1047,19 @@ export class BoardService {
     }
   }
 
-  /** Delete a block and all its descendants, dropping dangling dependencies. */
-  async removeBlock(workspaceId: string, id: string): Promise<void> {
+  /**
+   * Delete a block and all its descendants, dropping dangling dependencies.
+   *
+   * `opts.preloaded` lets the caller hand in a block list it already loaded (the delete
+   * path's teardown lists the board immediately before this) so a locally-owned delete
+   * doesn't re-list the whole board; it is reused ONLY when it was loaded for the same
+   * workspace this block homes to (a mounted shared service homed elsewhere re-lists).
+   */
+  async removeBlock(
+    workspaceId: string,
+    id: string,
+    opts: { preloaded?: PreloadedBlocks } = {},
+  ): Promise<void> {
     await this.requireWorkspace(workspaceId)
     // Resolve the block at its home so a shared service's block can be deleted from any board
     // that mounts it (the delete then applies to the one shared copy everywhere). Deletion is
@@ -1046,7 +1082,12 @@ export class BoardService {
         fanoutTargets.add(ws)
       }
     }
-    const blocks = await this.blockRepository.listByWorkspace(homeWorkspaceId)
+    // Reuse the caller's list only when it was loaded for this block's home (the common
+    // locally-owned delete); a mounted service homed elsewhere re-lists against its home.
+    const blocks =
+      opts.preloaded && opts.preloaded.workspaceId === homeWorkspaceId
+        ? opts.preloaded.blocks
+        : await this.blockRepository.listByWorkspace(homeWorkspaceId)
     const doomed = descendantIds(blocks, id)
 
     // A service frame that still has unfinished work must NOT be deleted (that would discard

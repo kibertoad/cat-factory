@@ -1,6 +1,6 @@
 # Initiative: performance optimizations (prioritized)
 
-**Status:** in progress — items 1, 2, 3, 4, 7, 8, 9 landed (emit metrics rollup · gate-poll GitHub reads · live-run projection · parallel dispatch waves · spend/workspace-settings/account-settings cache slices) · **Owner:** core · **Started:** 2026-07-09
+**Status:** in progress — items 1, 2, 3, 4, 7, 8, 9, 15, 16, 17, 18 landed (emit metrics rollup · gate-poll GitHub reads · live-run projection · parallel dispatch waves · spend/workspace-settings/account-settings cache slices · reuse-the-loaded-list batch across autoStart/initiative-spawn/blueprint-reconcile/block-delete) · **Owner:** core · **Started:** 2026-07-09
 
 > This is the durable source of truth for a multi-PR initiative. Read it first before
 > picking up the next slice; update the checklist at the end of each PR.
@@ -63,10 +63,10 @@ symmetric" (CLAUDE.md).
 | 12  | P2  | integrations | `GitHubSyncService`: serial per-workspace fan-out + serial resource syncs                                                           | ⬜ todo |                                                           |
 | 13  | P2  | engine       | `AgentContextBuilder` re-walks block ancestry per resolver, sequentially                                                            | ⬜ todo |                                                           |
 | 14  | P2  | events       | `FanOutEventPublisher` forwards to N mounted workspaces serially                                                                    | ⬜ todo |                                                           |
-| 15  | P3  | engine       | `autoStartDependents`: per-dependent pipeline point-read in loop                                                                    | ⬜ todo |                                                           |
-| 16  | P3  | engine       | `InitiativeLoopService.spawnItem`: per-item pipeline point-read in loop                                                             | ⬜ todo |                                                           |
-| 17  | P3  | board        | `BoardScanService` reconcile: `addModule` re-lists whole board per module                                                           | ⬜ todo |                                                           |
-| 18  | P3  | board        | Block delete: teardown + remove each re-list the whole board                                                                        | ⬜ todo |                                                           |
+| 15  | P3  | engine       | `autoStartDependents`: per-dependent pipeline point-read in loop                                                                    | ✅ done | branch `claude/performance-tracker-next-phase-caz67j`     |
+| 16  | P3  | engine       | `InitiativeLoopService.spawnItem`: per-item pipeline point-read in loop                                                             | ✅ done | branch `claude/performance-tracker-next-phase-caz67j`     |
+| 17  | P3  | board        | `BoardScanService` reconcile: `addModule` re-lists whole board per module                                                           | ✅ done | branch `claude/performance-tracker-next-phase-caz67j`     |
+| 18  | P3  | board        | Block delete: teardown + remove each re-list the whole board                                                                        | ✅ done | branch `claude/performance-tracker-next-phase-caz67j`     |
 | 19  | P3  | persistence  | `notifications.listOpen` unbounded `SELECT *` (body+payload) on snapshot                                                            | ⬜ todo |                                                           |
 | 20  | P3  | frontend     | `board.hydrate` JSON.stringifies every block per refresh; global decision/approval maps rebuilt per event; no node virtualization   | ⬜ todo |                                                           |
 | 21  | P3  | persistence  | `password_reset_tokens.deleteExpired` full-table scan (no `expires_at` index)                                                       | ⬜ todo |                                                           |
@@ -395,12 +395,23 @@ Fires on the merge/finalize path, linear in dependents.
 **Fix:** load `listByWorkspace` once unconditionally, index into a `Map`, resolve pinned
 pipelines and `firstPipeline` from it.
 
+**Landed (branch `claude/performance-tracker-next-phase-caz67j`):** `autoStartDependents` reads
+the workspace pipeline catalog once (`listByWorkspace`), indexes it into a `Map<id, pipeline>`,
+and resolves each dependent's pinned pipeline from the map (`firstPipeline = pipelines[0]` for a
+dependent with none) — the per-dependent `pipelineRepository.get` in the loop is gone. Behaviour
+is unchanged (same pipeline selection); the read count drops from `1 + N` pinned gets to one list.
+
 ### 16. `InitiativeLoopService.spawnItem` per-item pipeline point-read — P3
 
 `backend/packages/orchestration/src/modules/initiative/InitiativeLoopService.ts:369`
 (loop from `:340`): a `pipelineRepository.get` per eligible item, per initiative tick.
 Slot-capped, so bounded — but same fix as item 15: one `listByWorkspace` per tick, check
 membership in memory.
+
+**Landed (branch `claude/performance-tracker-next-phase-caz67j`):** `spawn` loads the pipeline
+catalog once per tick into a `Set<pipelineId>` and hands it to `spawnItem`, which now checks
+`knownPipelineIds.has(pipelineId)` instead of a `pipelineRepository.get` per eligible item. The
+missing-pipeline path (block the item + deviation) is unchanged.
 
 ### 17. `BoardScanService` reconcile re-lists the board per added module — P3
 
@@ -413,6 +424,17 @@ holds the block list (`:85`). Per `blueprints` step, linear in modules.
 **Fix:** add a batch module-insert seam on `BoardService` (or let `addModule` accept a
 pre-loaded block list) so the reconcile builds all rows against the single read it holds.
 
+**Landed (branch `claude/performance-tracker-next-phase-caz67j`):** new
+`BoardService.addModules(workspaceId, serviceId, inputs[])` resolves the workspace + service and
+lists the board ONCE for the whole batch (positions lay out against one starting count), then
+inserts every module; `addModule` delegates to it (single input). `BoardScanService` uses it in
+both paths — `spawnBlueprint` inserts all modules in one batch, and `reconcileBlueprint` collects
+the name-deduped missing modules and inserts them in one batch (the same-named-module dedup the
+per-module loop gave is preserved) before refreshing descriptions. A new
+`BoardScanService.test.ts` pins that reconcile adds the batch with two board lists total (its own
+
+- the batch), not one per module.
+
 ### 18. Block delete pays two full board reads — P3
 
 `backend/packages/server/src/modules/board/BoardController.ts:158-159` calls
@@ -422,6 +444,16 @@ pre-loaded block list) so the reconcile builds all rows against the single read 
 
 **Fix:** resolve the block list + descendant set once and thread it into both (e.g.
 `teardownForBlockTree` returns the resolved subtree, `removeBlock` accepts it).
+
+**Landed (branch `claude/performance-tracker-next-phase-caz67j`):** `teardownForBlockTree` now
+returns a `PreloadedBlocks` (`{ workspaceId, blocks }`) — the workspace block list it already
+loaded (it deletes only run records, never blocks, so the list is still current) — and the
+`BoardController` DELETE handler threads it into `removeBlock(workspaceId, blockId, { preloaded })`.
+`removeBlock` reuses the list ONLY when it was loaded for the block's resolved home workspace (the
+common locally-owned delete); a mounted shared service homed elsewhere re-lists against its home,
+so the mount semantics are unchanged. `PreloadedBlocks` is a new shared kernel type.
+`BoardService.removeBlockPreloaded.test.ts` pins reuse (no second read) for the local case,
+re-list for the mounted (home-mismatch) case, and the unchanged default (no-opts) path.
 
 ### 19. `notifications.listOpen` unbounded `SELECT *` on the snapshot — P3
 
