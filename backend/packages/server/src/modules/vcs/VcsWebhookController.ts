@@ -3,6 +3,7 @@ import { getVcsProvider, isVcsProvider } from '@cat-factory/kernel'
 import type { VcsConnectionRef } from '@cat-factory/kernel'
 import type { AppConfig } from '../../config/types.js'
 import type { AppEnv } from '../../http/env.js'
+import { logWebhookSignatureRejection } from '../../webhooks/signatureLog.js'
 
 /**
  * Provider-neutral webhook receiver for non-GitHub VCS systems (GitLab first). GitHub keeps
@@ -53,6 +54,12 @@ export function vcsWebhookController(): Hono<AppEnv> {
       )
     }
     if (!(await bundle.webhookVerifier.verify(raw, signatureHeader))) {
+      // Response stays terse (external caller); log the operator-facing setup remedy.
+      logWebhookSignatureRejection({
+        provider: providerParam,
+        secretConfigured: connectionSecret(c.get('container').config, providerParam) !== '',
+        signaturePresent: !!signatureHeader,
+      })
       return c.json({ error: { code: 'unauthorized', message: 'Invalid signature' } }, 401)
     }
 
@@ -91,4 +98,12 @@ function resolveConnection(
   }
   // GitHub uses its dedicated `/github/webhooks` route; the neutral route does not serve it.
   return null
+}
+
+/** The deployment's configured webhook secret for a provider ('' when unset) — the signal for
+ * the C2 "no secret configured" rejection sub-case. */
+function connectionSecret(config: AppConfig, provider: 'github' | 'gitlab'): string {
+  if (provider === 'gitlab') return config.gitlab?.webhookSecret ?? ''
+  // GitHub is not served by the neutral route (see resolveConnection).
+  return ''
 }
