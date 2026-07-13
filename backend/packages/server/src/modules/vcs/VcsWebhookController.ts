@@ -54,7 +54,10 @@ export function vcsWebhookController(): Hono<AppEnv> {
       )
     }
     if (!(await bundle.webhookVerifier.verify(raw, signatureHeader))) {
-      // Response stays terse (external caller); log the operator-facing setup remedy.
+      // Response stays terse (external caller); log the operator-facing setup remedy. NOTE: a
+      // provider bundle only carries a `webhookVerifier` once its secret is configured (an unset
+      // secret 503s at the guard above), so `secretConfigured` is effectively always true here —
+      // the "no secret configured" sub-case is reached via the GitHub route, not this one.
       logWebhookSignatureRejection({
         provider: providerParam,
         secretConfigured: connectionSecret(c.get('container').config, providerParam) !== '',

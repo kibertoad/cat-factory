@@ -82,6 +82,9 @@ export function describeWebhookSignatureRejection(rejection: WebhookSignatureRej
       `no ${header} header was present. Either ${providerSecretField} is not set (add one ` +
       `matching ${envVar}) or the caller is not ${label}.`
   } else {
+    // `signaturePresent` is header PRESENCE, not validity — so this branch also covers a
+    // malformed GitHub `X-Hub-Signature-256` (wrong `sha256=` prefix / non-hex digest). A
+    // mismatched secret is by far the dominant cause, so the remedy leads with it.
     cause =
       `the signature did not match. ${providerSecretField} and this deployment's ${envVar} ` +
       `differ — set them to the same value.`

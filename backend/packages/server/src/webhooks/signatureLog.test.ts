@@ -70,13 +70,25 @@ describe('describeWebhookSignatureRejection', () => {
     })
   })
 
-  it('never leaks the secret material — only env var names and settings locations', () => {
+  it('is assembled only from static provider copy — env var names + settings locations, no secret', () => {
+    // The `WebhookSignatureRejection` input carries no secret bytes (only the provider + two
+    // booleans), so the message is a pure function of static copy. Assert the safe tokens are
+    // present and nothing dynamic leaked in.
     const msg = describeWebhookSignatureRejection({
       provider: 'github',
       secretConfigured: true,
       signaturePresent: true,
     })
-    // The message is built from static copy + env var names; it has no access to secret values.
+    expect(msg).toContain('GITHUB_WEBHOOK_SECRET')
+    expect(msg).toContain("the GitHub App's 'Webhook secret'")
     expect(msg).not.toContain('undefined')
+    // The output depends only on the non-secret inputs — same inputs, byte-identical message.
+    expect(msg).toBe(
+      describeWebhookSignatureRejection({
+        provider: 'github',
+        secretConfigured: true,
+        signaturePresent: true,
+      }),
+    )
   })
 })
