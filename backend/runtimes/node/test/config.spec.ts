@@ -1,4 +1,5 @@
-import { describe, expect, it } from 'vitest'
+import { logger } from '@cat-factory/server'
+import { afterEach, describe, expect, it, vi } from 'vitest'
 import { loadNodeConfig } from '../src/config.js'
 
 // `loadNodeConfig` is the Node analogue of the Worker's `loadConfig`; the two MUST
@@ -161,5 +162,55 @@ describe('loadNodeConfig — TESTING_NO_AUTH', () => {
     const config = loadNodeConfig({ ENCRYPTION_KEY, AUTH_DEV_OPEN: 'true' })
     expect(config.auth.testingNoAuth).toBe(false)
     expect(config.auth.devOpen).toBe(true)
+  })
+})
+
+// A8 (error-message coverage): a numeric knob set to garbage used to coerce silently to its
+// built-in default. `parseNumericEnv` now warns through the shared logger. The unit behaviour
+// of the parser lives in `@cat-factory/server`'s `numeric.test.ts`; these assert the wiring
+// end-to-end through `loadNodeConfig` — the warning fires, the resolved value still defaults,
+// and a var read at several model-config sites warns only ONCE (the hoist dedup).
+const DAY_MS = 24 * 60 * 60 * 1000
+
+describe('loadNodeConfig — numeric env-knob rejection warnings (A8)', () => {
+  afterEach(() => vi.restoreAllMocks())
+
+  it('warns once for a garbage knob and still applies the built-in default', () => {
+    const warn = vi.spyOn(logger, 'warn').mockImplementation(() => {})
+    const config = loadNodeConfig({ ENCRYPTION_KEY, AUTH_DEV_OPEN: 'true', JOB_MAX_POLLS: 'abc' })
+    expect(config.execution.jobMaxPolls).toBe(280)
+    const jobMaxPollsWarnings = warn.mock.calls.filter(([, msg]) =>
+      typeof msg === 'string' ? msg.includes('JOB_MAX_POLLS') : false,
+    )
+    expect(jobMaxPollsWarnings).toHaveLength(1)
+  })
+
+  it('warns only ONCE for a knob read at several model-config sites (hoist dedup)', () => {
+    // AGENT_DEFAULT_TEMPERATURE feeds every model config (default/agentic/companion/conflict).
+    const warn = vi.spyOn(logger, 'warn').mockImplementation(() => {})
+    loadNodeConfig({ ENCRYPTION_KEY, AUTH_DEV_OPEN: 'true', AGENT_DEFAULT_TEMPERATURE: 'hot' })
+    const tempWarnings = warn.mock.calls.filter(([, msg]) =>
+      typeof msg === 'string' ? msg.includes('AGENT_DEFAULT_TEMPERATURE') : false,
+    )
+    expect(tempWarnings).toHaveLength(1)
+  })
+
+  it('does not warn for a valid or an unset knob', () => {
+    const warn = vi.spyOn(logger, 'warn').mockImplementation(() => {})
+    loadNodeConfig({ ENCRYPTION_KEY, AUTH_DEV_OPEN: 'true', JOB_MAX_POLLS: '42' })
+    expect(warn.mock.calls.some(([, msg]) => String(msg).includes('JOB_MAX_POLLS'))).toBe(false)
+  })
+
+  // Retention parsing mirrors the Worker's `retentionMs`, including the `days >= 0` clamp, so a
+  // negative override falls back to the default on both facades instead of a negative window on
+  // Node only ("keep the runtimes symmetric").
+  it('clamps a negative retention override back to the default', () => {
+    vi.spyOn(logger, 'warn').mockImplementation(() => {})
+    const config = loadNodeConfig({
+      ENCRYPTION_KEY,
+      AUTH_DEV_OPEN: 'true',
+      NOTIFICATION_RETENTION_DAYS: '-5',
+    })
+    expect(config.retention.notificationsMs).toBe(90 * DAY_MS)
   })
 })

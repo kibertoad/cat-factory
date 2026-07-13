@@ -23,7 +23,7 @@ export function loadAuthConfig(env: Env): AuthConfig {
   const clientId = env.GITHUB_OAUTH_CLIENT_ID?.trim() ?? ''
   const clientSecret = env.GITHUB_OAUTH_CLIENT_SECRET?.trim() ?? ''
   const sessionSecret = env.AUTH_SESSION_SECRET?.trim() ?? ''
-  const ttlHours = num(env.AUTH_SESSION_TTL_HOURS)
+  const ttlHours = num('AUTH_SESSION_TTL_HOURS', env.AUTH_SESSION_TTL_HOURS)
   // The local-dev escape hatch is honoured ONLY outside a production-like
   // deployment, so leaving AUTH_DEV_OPEN=true set on a deployed worker can no
   // longer silently re-open the API. Operators should set ENVIRONMENT=production.

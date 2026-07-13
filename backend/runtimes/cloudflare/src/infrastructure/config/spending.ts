@@ -16,8 +16,8 @@ export function loadSpendPricing(env: Env): SpendPricing {
   return {
     ...DEFAULT_SPEND_PRICING,
     ...budgetCapsOverlay(
-      num(env.BUDGET_MAX_MONTHLY_PER_ACCOUNT),
-      num(env.BUDGET_MAX_MONTHLY_PER_USER),
+      num('BUDGET_MAX_MONTHLY_PER_ACCOUNT', env.BUDGET_MAX_MONTHLY_PER_ACCOUNT),
+      num('BUDGET_MAX_MONTHLY_PER_USER', env.BUDGET_MAX_MONTHLY_PER_USER),
     ),
   }
 }
