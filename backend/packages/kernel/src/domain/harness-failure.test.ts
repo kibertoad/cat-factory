@@ -12,7 +12,15 @@ describe('failureKindFromHarnessCause', () => {
   })
 
   it('maps every other harness cause to `agent`', () => {
-    for (const cause of ['agent', 'git', 'api', 'no-usable-output', 'no-changes', 'deploy']) {
+    for (const cause of [
+      'agent',
+      'git',
+      'api',
+      'llm-upstream',
+      'no-usable-output',
+      'no-changes',
+      'deploy',
+    ]) {
       expect(failureKindFromHarnessCause(cause)).toBe('agent')
     }
   })

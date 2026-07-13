@@ -101,7 +101,7 @@ export const runnerPoolResponseMappingSchema = v.object({
   /**
    * Dot-path to the harness's STRUCTURED failure cause on a failed job (the harness
    * `failureCause`: `inactivity-timeout` | `max-duration` | `agent` | `git` | `api` |
-   * `no-usable-output` | `no-changes`). A pool that proxies the cat-factory executor-harness
+   * `llm-upstream` | `no-usable-output` | `no-changes`). A pool that proxies the cat-factory executor-harness
    * verbatim should set this to `failureCause` so the engine classifies the failure WITHOUT
    * regex-matching the error string — exactly like a Cloudflare container. Absent ⇒ the engine
    * falls back to the (still-stable) error-string regex.

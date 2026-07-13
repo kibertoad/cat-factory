@@ -2,7 +2,12 @@ import { mkdtemp, rm } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { describe, expect, it } from 'vitest'
-import { NON_INTERACTIVE_CREDENTIAL_ARGS, cloneRepo, isGitTimeoutKill } from '../src/git.js'
+import {
+  NON_INTERACTIVE_CREDENTIAL_ARGS,
+  cloneRepo,
+  describeGitFailure,
+  isGitTimeoutKill,
+} from '../src/git.js'
 import { HarnessFailure } from '../src/failure.js'
 
 // The non-interactive-auth hardening: a per-command timeout kill must be reported as a STALL
@@ -74,5 +79,39 @@ describe('git failure surfacing', () => {
     } finally {
       await rm(dir, { recursive: true, force: true })
     }
+  })
+})
+
+describe('describeGitFailure (F1: auth/access remedies)', () => {
+  it('classifies an authentication failure → credential-rejected remedy', () => {
+    const remedy = describeGitFailure(
+      'remote: Invalid username or password.\nfatal: Authentication failed',
+    )
+    expect(remedy).toMatch(/authentication was rejected/i)
+    expect(remedy).toMatch(/expired, rotated, revoked/i)
+  })
+
+  it('classifies "could not read Username" (non-interactive prompt) as an auth failure', () => {
+    const remedy = describeGitFailure(
+      "fatal: could not read Username for 'https://github.com': terminal prompts disabled",
+    )
+    expect(remedy).toMatch(/authentication was rejected/i)
+  })
+
+  it('classifies a repository-not-found (404) → visibility/access remedy, not an auth one', () => {
+    const remedy = describeGitFailure('remote: Repository not found.\nfatal: repository not found')
+    expect(remedy).toMatch(/could not be found or is not visible/i)
+    expect(remedy).not.toMatch(/authentication was rejected/i)
+  })
+
+  it('classifies a push permission denial (403) → write-access remedy', () => {
+    const remedy = describeGitFailure(
+      'remote: Permission to owner/repo.git denied to cat-factory[bot].\nfatal: unable to access',
+    )
+    expect(remedy).toMatch(/lacks WRITE access/i)
+  })
+
+  it('returns undefined for an unrecognized failure (keeps just the raw stderr)', () => {
+    expect(describeGitFailure('fatal: the remote end hung up unexpectedly')).toBeUndefined()
   })
 })

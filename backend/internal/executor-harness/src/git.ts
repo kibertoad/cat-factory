@@ -113,6 +113,103 @@ function gitSubcommand(args: string[]): string {
 }
 
 /**
+ * Classify the common shapes of git's own stderr into an actionable remedy, else undefined
+ * (an unrecognized failure keeps just its raw stderr). This is the FIRST-WRAP-POINT for
+ * unavoidable third-party text (per the error-message initiative's I6): git's stderr is the
+ * only signal we get for a clone/push auth or access fault, so we match it ONCE here and
+ * APPEND a cause + fix, never rewrite the raw line. Host-neutral — the same remedy serves a
+ * GitHub-App installation token and a GitLab/GitHub PAT (local mode). Pure, so it is
+ * unit-tested over a fixed set of stderr strings.
+ */
+export function describeGitFailure(stderr: string): string | undefined {
+  const s = stderr.toLowerCase()
+  // Order matters: a 404 "repository not found" is sometimes GitHub's stand-in for "your
+  // token can't see this private repo", so it is checked before the generic auth shape.
+  if (
+    /repository not found|remote:\s*not found|returned error:\s*404|fatal:\s*could not read from remote repository/i.test(
+      stderr,
+    ) &&
+    !/authentication failed|invalid username or password/i.test(s)
+  ) {
+    return (
+      'The repository could not be found or is not visible to the credential used for this run. ' +
+      'It may have been deleted, renamed, or made private, or the GitHub App installation / access ' +
+      'token no longer has access to it. Confirm the repository still exists and that the connected ' +
+      'GitHub App (or, in local mode, the GITHUB_PAT) can see it, then retry.'
+    )
+  }
+  if (
+    /authentication failed|invalid username or password|could not read username|could not read password|terminal prompts disabled|support for password authentication was removed|returned error:\s*401|http basic:\s*access denied/i.test(
+      stderr,
+    )
+  ) {
+    return (
+      'Git authentication was rejected — the credential this run used was refused. The GitHub App ' +
+      'installation token (or, in local mode, the GITHUB_PAT) is most likely expired, rotated, ' +
+      'revoked, or no longer installed on this repository. Reconnect the GitHub App for the ' +
+      'workspace (or regenerate the PAT with repo scope in local mode), then retry.'
+    )
+  }
+  if (
+    /permission to .* denied|remote:\s*permission|protected branch|pre-receive hook declined|returned error:\s*403|http 403/i.test(
+      stderr,
+    )
+  ) {
+    return (
+      'Git authenticated but the credential lacks WRITE access to push to this repository. Grant ' +
+      'the connected GitHub App (or the local-mode PAT) write permission on the repo — and, if the ' +
+      'target branch is protected, the permission its branch-protection rule requires — then retry.'
+    )
+  }
+  return undefined
+}
+
+/**
+ * Classify a PR/MR-open REST failure by its HTTP status into an actionable remedy, else
+ * undefined (an unmapped status keeps just the raw `Failed to open … (HTTP n)` line). Like
+ * {@link describeGitFailure} this only APPENDS a cause + fix — the raw status line is
+ * load-bearing detail and stays. `provider` tailors the scope/permission wording (GitHub App
+ * Pull-requests permission / `repo` PAT scope vs GitLab `api` scope) and the noun (pull
+ * request vs merge request). Pure, so it is unit-tested per status.
+ */
+export function describePrOpenFailure(
+  status: number,
+  provider: 'github' | 'gitlab',
+): string | undefined {
+  const noun = provider === 'gitlab' ? 'merge request' : 'pull request'
+  if (status === 401) {
+    return (
+      `The credential was rejected while opening the ${noun}. The GitHub App installation token ` +
+      '(or, in local mode, the GITHUB_PAT) is most likely expired, rotated, or revoked — reconnect ' +
+      'the GitHub App for the workspace (or regenerate the PAT), then retry.'
+    )
+  }
+  if (status === 403) {
+    const scope =
+      provider === 'gitlab'
+        ? 'the GitLab token needs the `api` scope and Developer+ access to the project'
+        : 'the GitHub App needs the "Pull requests: write" permission (or the PAT the `repo` scope) and write access to the repository'
+    return `The credential lacks permission to open a ${noun}: ${scope}. Grant it, then retry.`
+  }
+  if (status === 404) {
+    return (
+      `The repository could not be found while opening the ${noun} — it may have been deleted, ` +
+      'renamed, or made private, or the credential can no longer see it. Confirm the repo and the ' +
+      "credential's access to it, then retry."
+    )
+  }
+  if (status === 422 || status === 400) {
+    return (
+      `GitHub/GitLab rejected the ${noun} as invalid. Usually the head or base branch does not ` +
+      'exist, the two branches are identical (nothing to compare), or the base branch is protected ' +
+      'against direct PRs. Check the branch names and that the head has commits ahead of the base, ' +
+      'then retry.'
+    )
+  }
+  return undefined
+}
+
+/**
  * Wrap a git failure into a credential-scrubbed {@link HarnessFailure}('git') with an ACCURATE
  * message. Three cases the old bare "Command failed: git …" collapsed together:
  *  - a per-command timeout kill → say it STALLED (and name the usual causes) instead of a blank
@@ -139,7 +236,12 @@ function gitFailure(err: unknown, args: string[], aborted: boolean): HarnessFail
   const stderr = typeof e?.stderr === 'string' ? e.stderr : (e?.stderr?.toString() ?? '')
   const base = e instanceof Error ? e.message : String(err)
   const combined = stderr.trim() ? `${base}\n${stderr.trim()}` : base
-  const failure = new HarnessFailure('git', redactSecrets(combined))
+  // Append a cause + fix for the recognized auth/access shapes, keeping the raw (scrubbed)
+  // stderr above it as the detail. The remedy is static text with no secrets, so it is added
+  // after redaction.
+  const remedy = describeGitFailure(combined)
+  const message = remedy ? `${redactSecrets(combined)}\n${remedy}` : redactSecrets(combined)
+  const failure = new HarnessFailure('git', message)
   if (e?.stack) failure.stack = redactSecrets(e.stack)
   return failure
 }
@@ -1017,10 +1119,9 @@ export async function openPullRequest(opts: OpenPullRequestOptions): Promise<str
     // from base). Signal it with null so the caller records a clean no-op instead of failing
     // the run with GitHub's opaque 422.
     if (res.status === 422 && /no commits between/i.test(detail)) return null
-    throw new HarnessFailure(
-      'api',
-      redactSecrets(`Failed to open PR (HTTP ${res.status}): ${detail.slice(0, 300)}`),
-    )
+    const remedy = describePrOpenFailure(res.status, 'github')
+    const base = redactSecrets(`Failed to open PR (HTTP ${res.status}): ${detail.slice(0, 300)}`)
+    throw new HarnessFailure('api', remedy ? `${base}\n${remedy}` : base)
   }
   const body = (await res.json()) as { html_url?: string }
   if (!body.html_url) throw new HarnessFailure('api', 'GitHub did not return a PR url')
@@ -1075,10 +1176,11 @@ async function openGitLabMergeRequest(
       const existing = await findOpenMergeRequestUrl(apiBase, project, opts)
       if (existing) return existing
     }
-    throw new HarnessFailure(
-      'api',
-      redactSecrets(`Failed to open merge request (HTTP ${res.status}): ${detail.slice(0, 300)}`),
+    const remedy = describePrOpenFailure(res.status, 'gitlab')
+    const base = redactSecrets(
+      `Failed to open merge request (HTTP ${res.status}): ${detail.slice(0, 300)}`,
     )
+    throw new HarnessFailure('api', remedy ? `${base}\n${remedy}` : base)
   }
   const body = (await res.json()) as { web_url?: string }
   if (!body.web_url) throw new HarnessFailure('api', 'GitLab did not return a merge request url')

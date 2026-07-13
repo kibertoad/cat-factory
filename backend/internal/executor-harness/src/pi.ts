@@ -5,6 +5,7 @@ import { dirname, join } from 'node:path'
 import { killChildProcess, spawnDetached } from './process.js'
 import { pathExists } from './fs-utils.js'
 import { redactSecrets } from './redact.js'
+import { HarnessFailure } from './failure.js'
 import { log } from './logger.js'
 
 // Drives the Pi coding-agent CLI. Pi is pointed at the Worker's OpenAI-compatible
@@ -1061,7 +1062,14 @@ export function runPi(opts: {
         const runError = terminalRunError(stdout)
         if (runError) {
           const scrubbed = redactSecrets(runError).slice(0, 1000)
-          reject(new Error(tail ? `${scrubbed} Agent stderr: ${tail}` : scrubbed))
+          const detail = tail ? `${scrubbed} Agent stderr: ${tail}` : scrubbed
+          // If the terminal failure is the LLM proxy refusing every call (auth/quota/rate-limit),
+          // stamp the structured `llm-upstream` cause + a fix so the run names it instead of
+          // reading as a generic agent failure. Unrecognized shapes keep the plain Error (→ agent).
+          const remedy = classifyLlmUpstreamError(runError)
+          reject(
+            remedy ? new HarnessFailure('llm-upstream', `${remedy}\n${detail}`) : new Error(detail),
+          )
         } else {
           resolve({ ...summarizePiRun(stdout), ...(tail ? { stderrTail: tail } : {}) })
         }
@@ -1113,6 +1121,52 @@ export function terminalRunError(stdout: string): string | undefined {
         ? e.errorMessage
         : undefined
     }
+  }
+  return undefined
+}
+
+/**
+ * Classify a terminal run error whose text points at the LLM PROXY rejecting every model call
+ * (auth / quota / rate-limit) into an actionable remedy, else undefined. All model traffic goes
+ * through the Worker's OpenAI-compatible proxy, so a 401/402/429 surfaced in Pi's `finalError`
+ * means the leased provider key was refused, is out of credit, or was rate-limited — none of
+ * which is an agent bug. This is the first-wrap-point for Pi's own error text (per the
+ * error-message initiative's I6): we match it ONCE here and let the caller stamp the structured
+ * `llm-upstream` cause + this remedy. Pure, so it is unit-tested over fixed error strings.
+ */
+export function classifyLlmUpstreamError(finalError: string): string | undefined {
+  const s = finalError.toLowerCase()
+  // 402 / quota / credit — check before the generic auth shape (a 402 body can also say
+  // "unauthorized"-ish things, but a payment/quota signal is the more actionable cause).
+  if (
+    /\b402\b|payment required|insufficient (?:funds|quota|credit|balance)|out of (?:quota|credit)|quota exceeded|billing/i.test(
+      finalError,
+    )
+  ) {
+    return (
+      'The model provider rejected the run: the account is out of quota or credit (HTTP 402). ' +
+      'Top up or raise the limit with the provider, or switch to a provider key that has quota in ' +
+      'the workspace AI key pool (Configure AI), then retry.'
+    )
+  }
+  if (
+    /\b429\b|too many requests|rate.?limit/i.test(finalError) &&
+    !/\b401\b|\b402\b/.test(finalError)
+  ) {
+    return (
+      'The model provider rate-limited the run (HTTP 429) and the agent exhausted its automatic ' +
+      'retries. This is usually transient — wait a moment and retry. If it persists, reduce ' +
+      'concurrent runs or use a provider key / plan with a higher rate limit in the AI key pool.'
+    )
+  }
+  if (
+    /\b401\b|\b403\b|unauthorized|forbidden|invalid api key|authentication|invalid.*token/i.test(s)
+  ) {
+    return (
+      'The model provider rejected the run: the API credential was refused (HTTP 401/403). The ' +
+      'provider key in the workspace AI key pool is most likely invalid, revoked, or expired — ' +
+      're-enter it under the AI provider keys (Configure AI), then retry.'
+    )
   }
   return undefined
 }

@@ -22,10 +22,12 @@ export const HARNESS_FAILURE_CAUSES = [
   'inactivity-timeout',
   'max-duration',
   // Executor-harness faults: the agent erred/threw, a git op failed, an upstream API call
-  // failed, the agent finished without a usable product / without a change to push.
+  // failed, the model provider rejected every call (auth/quota/rate-limit), the agent finished
+  // without a usable product / without a change to push.
   'agent',
   'git',
   'api',
+  'llm-upstream',
   'no-usable-output',
   'no-changes',
   // Deploy-harness fault: rendering/applying the Kubernetes manifests failed.
@@ -58,6 +60,7 @@ const FAILURE_KIND_BY_CAUSE: Record<HarnessFailureCause, 'timeout' | 'agent'> = 
   agent: 'agent',
   git: 'agent',
   api: 'agent',
+  'llm-upstream': 'agent',
   'no-usable-output': 'agent',
   'no-changes': 'agent',
   deploy: 'agent',

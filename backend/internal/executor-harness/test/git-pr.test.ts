@@ -1,5 +1,6 @@
 import { afterEach, describe, expect, it, vi } from 'vitest'
 import {
+  describePrOpenFailure,
   gitlabApiBaseFromCloneUrl,
   gitlabProjectPath,
   inferVcsProvider,
@@ -8,6 +9,35 @@ import {
 
 afterEach(() => {
   vi.unstubAllGlobals()
+})
+
+describe('describePrOpenFailure (F2: PR/MR open remedies)', () => {
+  it('401 → credential-rejected remedy', () => {
+    expect(describePrOpenFailure(401, 'github')).toMatch(/credential was rejected/i)
+  })
+
+  it('403 → scope/permission remedy tailored per provider', () => {
+    expect(describePrOpenFailure(403, 'github')).toMatch(/Pull requests: write/i)
+    expect(describePrOpenFailure(403, 'gitlab')).toMatch(/`api` scope/i)
+  })
+
+  it('404 → repository-not-found remedy', () => {
+    expect(describePrOpenFailure(404, 'github')).toMatch(/could not be found/i)
+  })
+
+  it('422 (GitHub) and 400 (GitLab) → validation remedy naming the branch causes', () => {
+    expect(describePrOpenFailure(422, 'github')).toMatch(/head or base branch/i)
+    expect(describePrOpenFailure(400, 'gitlab')).toMatch(/merge request as invalid/i)
+  })
+
+  it('uses the provider-appropriate noun (pull request vs merge request)', () => {
+    expect(describePrOpenFailure(401, 'github')).toMatch(/pull request/i)
+    expect(describePrOpenFailure(401, 'gitlab')).toMatch(/merge request/i)
+  })
+
+  it('returns undefined for an unmapped status (keeps just the raw HTTP line)', () => {
+    expect(describePrOpenFailure(500, 'github')).toBeUndefined()
+  })
 })
 
 describe('inferVcsProvider', () => {

@@ -22,6 +22,8 @@
  *  - `agent`              — the agent ran but produced an unusable/failed result, or threw.
  *  - `git`                — a git operation failed (clone/push/merge/PR).
  *  - `api`                — an upstream API call failed (e.g. the GitHub/GitLab PR/MR REST call).
+ *  - `llm-upstream`       — the model provider rejected every call (auth/quota/rate-limit) and Pi
+ *                           exhausted its retries, so the run never produced a result.
  *  - `no-usable-output`   — the agent finished but returned no usable report / structured output.
  *  - `no-changes`         — a coding agent finished without producing any change to push.
  */
@@ -31,6 +33,7 @@ export type FailureCause =
   | 'agent'
   | 'git'
   | 'api'
+  | 'llm-upstream'
   | 'no-usable-output'
   | 'no-changes'
 
