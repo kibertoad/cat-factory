@@ -121,7 +121,9 @@ function profileToOptions(profile: FakeProfile | undefined): FakeOptions {
     ...(profile.pollFailKinds?.length
       ? { pollFailKinds: profile.pollFailKinds as FakeOptions['pollFailKinds'] }
       : {}),
-    ...(profile.pollFailCause !== undefined ? { pollFailCause: profile.pollFailCause } : {}),
+    ...(profile.pollFailCause !== undefined
+      ? { pollFailCause: profile.pollFailCause as FakeOptions['pollFailCause'] }
+      : {}),
     ...(profile.asyncPolls !== undefined ? { asyncPolls: profile.asyncPolls } : {}),
     ...(profile.customResult !== undefined
       ? { customResult: profile.customResult as FakeOptions['customResult'] }

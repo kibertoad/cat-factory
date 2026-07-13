@@ -48,6 +48,7 @@ import type {
 import {
   ConflictError,
   DEFAULT_RISK_POLICY,
+  failureKindFromHarnessCause,
   getErrorMessage,
   getErrorReason,
   getProvider,
@@ -125,7 +126,6 @@ import {
   shouldLoopCoder,
 } from './followUp.logic.js'
 import {
-  agentFailureKindFromCause,
   classifyAgentFailure,
   classifyDispatchFailure,
   evictionKindOf,
@@ -960,7 +960,7 @@ export class RunDispatcher {
         kind: 'job_failed',
         error: update.error,
         failureKind:
-          agentFailureKindFromCause(update.failureCause) ?? classifyAgentFailure(update.error),
+          failureKindFromHarnessCause(update.failureCause) ?? classifyAgentFailure(update.error),
         detail: update.detail ?? update.error,
         // Preserve the harness's FINE-GRAINED cause (git / api / no-usable-output / no-changes)
         // that `failureKind` collapses to the coarse `agent` — recorded on the failure's

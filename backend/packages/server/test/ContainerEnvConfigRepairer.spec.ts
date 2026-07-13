@@ -173,6 +173,45 @@ describe('ContainerEnvConfigRepairer', () => {
     expect(update.failureKind).toBe('evicted')
   })
 
+  it('pollRepair classifies a failed view from the STRUCTURED harness cause (watchdog → timeout)', async () => {
+    const repairer = makeRepairer({
+      dispatch: vi.fn(),
+      poll: vi.fn(
+        // The harness reports its structured cause; the free-text error carries no watchdog phrase,
+        // so a naive string classifier would mislabel this `agent` instead of `timeout`.
+        async (): Promise<RunnerJobView> => ({
+          state: 'failed',
+          error: 'the run stopped',
+          failureCause: 'inactivity-timeout',
+        }),
+      ),
+      release: vi.fn(),
+    } as unknown as RunnerTransport)
+
+    const update = await repairer.pollRepair({ workspaceId: 'ws_1', jobId: 'job_1' })
+    expect(update.state).toBe('failed')
+    expect(update.failureKind).toBe('timeout')
+  })
+
+  it('pollRepair falls back to the error-string regex when the harness reports no cause', async () => {
+    const repairer = makeRepairer({
+      dispatch: vi.fn(),
+      poll: vi.fn(
+        // An older producer forwards neither `evicted` nor `failureCause`; the regex catches the
+        // watchdog phrase in the raw error text.
+        async (): Promise<RunnerJobView> => ({
+          state: 'failed',
+          error: 'aborted: no agent activity for too long',
+        }),
+      ),
+      release: vi.fn(),
+    } as unknown as RunnerTransport)
+
+    const update = await repairer.pollRepair({ workspaceId: 'ws_1', jobId: 'job_1' })
+    expect(update.state).toBe('failed')
+    expect(update.failureKind).toBe('timeout')
+  })
+
   it('pollRepair treats a completed job with a structured error as a failure', async () => {
     const repairer = makeRepairer({
       dispatch: vi.fn(),
@@ -186,6 +225,28 @@ describe('ContainerEnvConfigRepairer', () => {
     expect(update.state).toBe('failed')
     expect(update.failureKind).toBe('agent')
     expect(update.error).toMatch(/push rejected/i)
+  })
+
+  it('pollRepair prefers the harness cause on a completed-with-error view (git push fault)', async () => {
+    const repairer = makeRepairer({
+      dispatch: vi.fn(),
+      poll: vi.fn(
+        async (): Promise<RunnerJobView> => ({
+          state: 'done',
+          result: { error: 'push rejected' },
+          failureCause: 'git',
+        }),
+      ),
+      release: vi.fn(),
+    } as unknown as RunnerTransport)
+
+    const update = await repairer.pollRepair({ workspaceId: 'ws_1', jobId: 'job_1' })
+    expect(update.state).toBe('failed')
+    // `git` collapses to the coarse `agent` kind — the same value the old hardcoded default
+    // produced, because every cause a done-with-error view realistically carries maps to `agent`
+    // (a watchdog kill always yields a FAILED view). The case pins the path's coverage of the
+    // shared kernel mapper, not a value difference.
+    expect(update.failureKind).toBe('agent')
   })
 
   it('stopRepair releases the per-run container', async () => {

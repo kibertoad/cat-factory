@@ -21,6 +21,7 @@ import type {
   WebSearchAvailability,
 } from '../domain/types.js'
 import type { ContainerEvictionKind } from './runner-transport.js'
+import type { HarnessFailureCause } from '../domain/harness-failure.js'
 import type { InitiativePresetPhaseTemplate } from '@cat-factory/contracts'
 
 // Port for "an agent doing its work". The execution engine calls this to perform
@@ -675,7 +676,7 @@ export type AgentJobUpdate =
   | {
       state: 'failed'
       error: string
-      failureCause?: string
+      failureCause?: HarnessFailureCause
       detail?: string
       backend?: string
       evicted?: ContainerEvictionKind

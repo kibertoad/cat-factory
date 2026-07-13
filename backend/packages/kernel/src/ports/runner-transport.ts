@@ -1,4 +1,5 @@
 import type { CloudProvider, InstanceSize, StepSubtasks } from '../domain/types.js'
+import type { HarnessFailureCause } from '../domain/harness-failure.js'
 import type { LlmToolSpan } from './llm-trace-sink.js'
 
 // Port for "where a repo-operating coding job actually runs". The
@@ -230,14 +231,15 @@ export interface RunnerJobView {
   result?: RunnerJobResult
   error?: string
   /**
-   * Present on a failed view: the harness's STRUCTURED failure cause (e.g.
-   * `inactivity-timeout`, `max-duration`, `no-usable-output`, `agent`), so the engine can
-   * classify the failure without regex-matching {@link error}. Absent on an older harness
-   * image — the consumer falls back to the (still-stable) error-string regex. Container
-   * EVICTION is NOT represented here: that is detected by the runtime facade from a vanished
-   * container (a `(container evicted or crashed)` error), never emitted by the harness.
+   * Present on a failed view: the harness's STRUCTURED failure cause (the shared
+   * {@link HarnessFailureCause} union), so the engine can classify the failure via
+   * `failureKindFromHarnessCause` without regex-matching {@link error}. Absent on an older
+   * harness image — the consumer falls back to the (still-stable) error-string regex.
+   * Container EVICTION is NOT represented here: that is detected by the runtime facade from a
+   * vanished container (a `(container evicted or crashed)` error), never emitted by the
+   * harness.
    */
-  failureCause?: string
+  failureCause?: HarnessFailureCause
   /**
    * Present on a failed view minted by a TRANSPORT for a container eviction (the per-run
    * container vanished / was drained): the STRUCTURED eviction classification, so the engine
