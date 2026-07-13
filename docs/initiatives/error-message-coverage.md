@@ -467,7 +467,12 @@ DispatchError`, reading `.status`), NOT the `/dispatch failed/i` regex, which is
   is split out for unit testing (mirroring `describeWebhookSignatureRejection`). Scope is the
   non-finite case the `num()` helpers own; the sibling `Number(env.X) || default` sites
   (`STALE_RUN_*`, `EXECUTION_DRIVE_EXPIRE_MINUTES`) are a different pattern left as-is. No image
-  bump (config-layer only).
+  bump (config-layer only). Two follow-through details, since `parseNumericEnv` warns per call:
+  the knobs read at every model-config site (`AGENT_DEFAULT_TEMPERATURE`,
+  `AGENT_MAX_OUTPUT_TOKENS`) are parsed ONCE per facade and reused so a garbage value warns once,
+  not N times; and Node's retention days now go through a local `retentionMs` helper mirroring the
+  Worker's (incl. the `days >= 0` clamp), so a negative override falls back to the default on both
+  facades rather than a negative window on Node only.
 - **Executor-harness changes bump the image tag** + the three hand-maintained pins
   (`deploy/backend/package.json`, `deploy/backend/wrangler.toml`,
   `RECOMMENDED_HARNESS_IMAGE`) — batch all F-rows into one slice to pay that cost once.

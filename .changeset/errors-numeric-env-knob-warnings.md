@@ -19,3 +19,9 @@ in effect and no clue their override was ignored.
   `infrastructure/config/utils.ts` — the Worker's `retentionMs` too) now delegate to it, so the
   warning reads identically across runtimes. The message lives in one shared place per the
   "keep the runtimes symmetric" rule.
+- The two knobs read at every model-config site (`AGENT_DEFAULT_TEMPERATURE`,
+  `AGENT_MAX_OUTPUT_TOKENS`) are now parsed ONCE per facade and reused, so a single garbage value
+  emits one warning rather than one per read site.
+- Node's retention days now go through a local `retentionMs` helper mirroring the Worker's,
+  including the `days >= 0` clamp — a negative override falls back to the default on both facades
+  instead of yielding a negative window on Node only.

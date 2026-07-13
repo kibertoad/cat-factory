@@ -43,6 +43,19 @@ const PRODUCTION_ENVIRONMENTS = new Set(['production', 'prod', 'staging'])
 // message lives in the shared server layer so it reads identically on the Worker facade.
 const num = parseNumericEnv
 
+const DAY_MS = 24 * 60 * 60 * 1000
+
+/**
+ * Parse a non-negative retention-day var into ms, falling back to `defaultDays`. Mirrors
+ * the Worker's `retentionMs` (`infrastructure/config/utils.ts`) — including the `days >= 0`
+ * clamp, so a negative override falls back to the default on both facades rather than
+ * yielding a negative window on Node only ("keep the runtimes symmetric").
+ */
+function retentionMs(name: string, raw: string | undefined, defaultDays: number): number {
+  const days = num(name, raw)
+  return (days !== undefined && days >= 0 ? days : defaultDays) * DAY_MS
+}
+
 function csv(value: string | undefined): string[] {
   return (value ?? '')
     .split(',')
@@ -208,18 +221,23 @@ export function loadNodeConfig(env: NodeJS.ProcessEnv): AppConfig {
   // direct DashScope per-workspace by the executor when a Qwen key is configured); the
   // agentic kinds default to GLM-5.2 — mirroring the Worker's routing.
   const qwenDefault = resolveModelRef('qwen', caps)
+  // Parse the two shared numeric knobs ONCE: each is read across every model config
+  // below, and `parseNumericEnv` warns per call, so a single garbage value would emit
+  // one warning per site. Hoisting collapses that to one warning per var (A8).
+  const envTemperature = num('AGENT_DEFAULT_TEMPERATURE', env.AGENT_DEFAULT_TEMPERATURE)
+  const envMaxOutputTokens = num('AGENT_MAX_OUTPUT_TOKENS', env.AGENT_MAX_OUTPUT_TOKENS)
   const defaultConfig: AgentModelConfig = {
     ref: {
       provider: env.AGENT_DEFAULT_PROVIDER ?? qwenDefault?.provider ?? 'workers-ai',
       model: env.AGENT_DEFAULT_MODEL ?? qwenDefault?.model ?? '@cf/qwen/qwen3-30b-a3b-fp8',
     },
-    temperature: num('AGENT_DEFAULT_TEMPERATURE', env.AGENT_DEFAULT_TEMPERATURE) ?? 0.4,
-    maxOutputTokens: num('AGENT_MAX_OUTPUT_TOKENS', env.AGENT_MAX_OUTPUT_TOKENS) ?? 5000,
+    temperature: envTemperature ?? 0.4,
+    maxOutputTokens: envMaxOutputTokens ?? 5000,
   }
   const agenticDefault: AgentModelConfig = {
     ref: { provider: 'workers-ai', model: '@cf/zai-org/glm-5.2' },
-    temperature: num('AGENT_DEFAULT_TEMPERATURE', env.AGENT_DEFAULT_TEMPERATURE) ?? 0.3,
-    maxOutputTokens: num('AGENT_MAX_OUTPUT_TOKENS', env.AGENT_MAX_OUTPUT_TOKENS) ?? 5000,
+    temperature: envTemperature ?? 0.3,
+    maxOutputTokens: envMaxOutputTokens ?? 5000,
   }
   // Companions (reviewer / spec-companion / architect-companion) return their whole
   // verdict — rating + summary + per-item comments — as ONE inline JSON reply. On a
@@ -228,8 +246,8 @@ export function loadNodeConfig(env: NodeJS.ProcessEnv): AppConfig {
   // budget so the verdict fits (mirrors the Worker's routing).
   const companionDefault: AgentModelConfig = {
     ref: { provider: 'workers-ai', model: '@cf/zai-org/glm-5.2' },
-    temperature: num('AGENT_DEFAULT_TEMPERATURE', env.AGENT_DEFAULT_TEMPERATURE) ?? 0.3,
-    maxOutputTokens: num('AGENT_MAX_OUTPUT_TOKENS', env.AGENT_MAX_OUTPUT_TOKENS) ?? 12000,
+    temperature: envTemperature ?? 0.3,
+    maxOutputTokens: envMaxOutputTokens ?? 12000,
   }
   // The conflict-resolver clones a PR head with merge conflicts and rewrites the
   // conflicted hunks against the base — a focused, diff-heavy reasoning task. Kimi K2.5
@@ -237,8 +255,8 @@ export function loadNodeConfig(env: NodeJS.ProcessEnv): AppConfig {
   // the small default MoE (mirrors the Worker's routing).
   const conflictResolverDefault: AgentModelConfig = {
     ref: { provider: 'workers-ai', model: '@cf/moonshotai/kimi-k2.5' },
-    temperature: num('AGENT_DEFAULT_TEMPERATURE', env.AGENT_DEFAULT_TEMPERATURE) ?? 0.3,
-    maxOutputTokens: num('AGENT_MAX_OUTPUT_TOKENS', env.AGENT_MAX_OUTPUT_TOKENS) ?? 5000,
+    temperature: envTemperature ?? 0.3,
+    maxOutputTokens: envMaxOutputTokens ?? 5000,
   }
 
   const sessionSecret = env.AUTH_SESSION_SECRET?.trim() ?? ''
@@ -471,46 +489,32 @@ export function loadNodeConfig(env: NodeJS.ProcessEnv): AppConfig {
         ? { enabled: true, encryptionKey: env.ENCRYPTION_KEY.trim() }
         : { enabled: false },
     retention: {
-      tokenUsageMs:
-        (num('TOKEN_USAGE_RETENTION_DAYS', env.TOKEN_USAGE_RETENTION_DAYS) ?? 395) *
-        24 *
-        60 *
-        60 *
-        1000,
-      rateLimitMs:
-        (num('GITHUB_RATE_LIMIT_RETENTION_DAYS', env.GITHUB_RATE_LIMIT_RETENTION_DAYS) ?? 7) *
-        24 *
-        60 *
-        60 *
-        1000,
-      commitMs:
-        (num('GITHUB_COMMIT_RETENTION_DAYS', env.GITHUB_COMMIT_RETENTION_DAYS) ?? 90) *
-        24 *
-        60 *
-        60 *
-        1000,
+      tokenUsageMs: retentionMs('TOKEN_USAGE_RETENTION_DAYS', env.TOKEN_USAGE_RETENTION_DAYS, 395),
+      rateLimitMs: retentionMs(
+        'GITHUB_RATE_LIMIT_RETENTION_DAYS',
+        env.GITHUB_RATE_LIMIT_RETENTION_DAYS,
+        7,
+      ),
+      commitMs: retentionMs('GITHUB_COMMIT_RETENTION_DAYS', env.GITHUB_COMMIT_RETENTION_DAYS, 90),
       // Heavy full per-call prompt/response; pruned aggressively (default 3 days).
-      llmCallMetricsMs:
-        (num('LLM_CALL_METRICS_RETENTION_DAYS', env.LLM_CALL_METRICS_RETENTION_DAYS) ?? 3) *
-        24 *
-        60 *
-        60 *
-        1000,
+      llmCallMetricsMs: retentionMs(
+        'LLM_CALL_METRICS_RETENTION_DAYS',
+        env.LLM_CALL_METRICS_RETENTION_DAYS,
+        3,
+      ),
       // High-churn provisioning event log; pruned aggressively (default 14 days).
-      provisioningLogMs:
-        (num('PROVISIONING_LOG_RETENTION_DAYS', env.PROVISIONING_LOG_RETENTION_DAYS) ?? 14) *
-        24 *
-        60 *
-        60 *
-        1000,
+      provisioningLogMs: retentionMs(
+        'PROVISIONING_LOG_RETENTION_DAYS',
+        env.PROVISIONING_LOG_RETENTION_DAYS,
+        14,
+      ),
       // Resolved (acted/dismissed) notifications; generous default of 90 days. Open
       // cards (the actionable inbox) are never pruned.
-      notificationsMs:
-        (num('NOTIFICATION_RETENTION_DAYS', env.NOTIFICATION_RETENTION_DAYS) ?? 90) *
-        24 *
-        60 *
-        60 *
-        1000,
+      notificationsMs: retentionMs(
+        'NOTIFICATION_RETENTION_DAYS',
+        env.NOTIFICATION_RETENTION_DAYS,
+        90,
+      ),
     },
     // Prompt-fragment library (ADR 0006): on by default, opt OUT with
     // `PROMPT_LIBRARY_ENABLED=false`. Needs no encryption key (fragments are not

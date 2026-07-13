@@ -55,17 +55,22 @@ export function loadAgentsConfig(env: Env, caps: ProviderCapabilities): AgentsCo
   // direct DashScope per-workspace by the executor when a Qwen key is configured).
   // An operator can still pin a specific provider/model via the env vars.
   const qwenDefault = resolveModelRef('qwen', caps)
+  // Parse the two shared numeric knobs ONCE: each is read across every model config
+  // below, and `parseNumericEnv` warns per call, so a single garbage value would emit
+  // one warning per site. Hoisting collapses that to one warning per var (A8).
+  const envTemperature = num('AGENT_DEFAULT_TEMPERATURE', env.AGENT_DEFAULT_TEMPERATURE)
+  const envMaxOutputTokens = num('AGENT_MAX_OUTPUT_TOKENS', env.AGENT_MAX_OUTPUT_TOKENS)
   const defaultConfig: AgentModelConfig = {
     ref: {
       provider: env.AGENT_DEFAULT_PROVIDER ?? qwenDefault?.provider ?? 'workers-ai',
       model: env.AGENT_DEFAULT_MODEL ?? qwenDefault?.model ?? '@cf/qwen/qwen3-30b-a3b-fp8',
     },
-    temperature: num('AGENT_DEFAULT_TEMPERATURE', env.AGENT_DEFAULT_TEMPERATURE) ?? 0.4,
+    temperature: envTemperature ?? 0.4,
     // 5000, not 512: the default model is a *reasoning* model whose `<think>`
     // tokens count against this cap, so a tight limit truncates the answer mid
     // reasoning (finish_reason: length). Operators can still override via env or
     // pin a leaner cap per kind in AGENT_MODELS.
-    maxOutputTokens: num('AGENT_MAX_OUTPUT_TOKENS', env.AGENT_MAX_OUTPUT_TOKENS) ?? 5000,
+    maxOutputTokens: envMaxOutputTokens ?? 5000,
   }
 
   // The agentic phases — design (bootstrap/architect), build (coder) and review
@@ -77,8 +82,8 @@ export function loadAgentsConfig(env: Env, caps: ProviderCapabilities): AgentsCo
   // of these per kind.
   const agenticDefault: AgentModelConfig = {
     ref: { provider: 'workers-ai', model: '@cf/zai-org/glm-5.2' },
-    temperature: num('AGENT_DEFAULT_TEMPERATURE', env.AGENT_DEFAULT_TEMPERATURE) ?? 0.3,
-    maxOutputTokens: num('AGENT_MAX_OUTPUT_TOKENS', env.AGENT_MAX_OUTPUT_TOKENS) ?? 5000,
+    temperature: envTemperature ?? 0.3,
+    maxOutputTokens: envMaxOutputTokens ?? 5000,
   }
   // The coder (implementer) runs the longest, most tool-heavy loop, where GLM-5.2
   // on Workers AI was observed emitting malformed tool calls (e.g. `write` with no
@@ -88,8 +93,8 @@ export function loadAgentsConfig(env: Env, caps: ProviderCapabilities): AgentsCo
   // it while design/review stay on GLM-5.2.
   const coderDefault: AgentModelConfig = {
     ref: { provider: 'workers-ai', model: '@cf/moonshotai/kimi-k2.7-code' },
-    temperature: num('AGENT_DEFAULT_TEMPERATURE', env.AGENT_DEFAULT_TEMPERATURE) ?? 0.3,
-    maxOutputTokens: num('AGENT_MAX_OUTPUT_TOKENS', env.AGENT_MAX_OUTPUT_TOKENS) ?? 5000,
+    temperature: envTemperature ?? 0.3,
+    maxOutputTokens: envMaxOutputTokens ?? 5000,
   }
   // Companions (reviewer / spec-companion / architect-companion) return their whole
   // verdict — rating + summary + per-item comments — as ONE inline JSON reply. On a
@@ -99,8 +104,8 @@ export function loadAgentsConfig(env: Env, caps: ProviderCapabilities): AgentsCo
   // like the reviewer was already on.
   const companionDefault: AgentModelConfig = {
     ref: { provider: 'workers-ai', model: '@cf/zai-org/glm-5.2' },
-    temperature: num('AGENT_DEFAULT_TEMPERATURE', env.AGENT_DEFAULT_TEMPERATURE) ?? 0.3,
-    maxOutputTokens: num('AGENT_MAX_OUTPUT_TOKENS', env.AGENT_MAX_OUTPUT_TOKENS) ?? 12000,
+    temperature: envTemperature ?? 0.3,
+    maxOutputTokens: envMaxOutputTokens ?? 12000,
   }
   // The conflict-resolver clones a PR head with merge conflicts and rewrites the
   // conflicted hunks against the base — a focused, diff-heavy reasoning task over
@@ -108,8 +113,8 @@ export function loadAgentsConfig(env: Env, caps: ProviderCapabilities): AgentsCo
   // 256K window) handles that better than the small default MoE.
   const conflictResolverDefault: AgentModelConfig = {
     ref: { provider: 'workers-ai', model: '@cf/moonshotai/kimi-k2.5' },
-    temperature: num('AGENT_DEFAULT_TEMPERATURE', env.AGENT_DEFAULT_TEMPERATURE) ?? 0.3,
-    maxOutputTokens: num('AGENT_MAX_OUTPUT_TOKENS', env.AGENT_MAX_OUTPUT_TOKENS) ?? 5000,
+    temperature: envTemperature ?? 0.3,
+    maxOutputTokens: envMaxOutputTokens ?? 5000,
   }
   const byKind: Partial<Record<AgentKind, AgentModelConfig>> = {
     architect: agenticDefault,
