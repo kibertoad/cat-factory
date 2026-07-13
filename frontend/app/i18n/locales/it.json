@@ -2564,6 +2564,11 @@
     "renewsField": "L'abbonamento si rinnova il (opzionale)",
     "connect": "Collega",
     "replace": "Sostituisci",
+    "disabledReason": {
+      "signIn": "Accedi per collegare un abbonamento personale",
+      "token": "Inserisci il tuo token per continuare",
+      "password": "Inserisci una password personale di almeno 6 caratteri"
+    },
     "expires": "Scade il {date}",
     "noExpiry": "Nessuna scadenza impostata",
     "renewal": {

@@ -482,6 +482,11 @@
     "renewsField": "Subskrypcja odnawia się (opcjonalnie)",
     "connect": "Połącz",
     "replace": "Zastąp",
+    "disabledReason": {
+      "signIn": "Zaloguj się, aby połączyć subskrypcję osobistą",
+      "token": "Wprowadź token, aby kontynuować",
+      "password": "Wprowadź hasło osobiste o długości co najmniej 6 znaków"
+    },
     "expires": "Wygasa {date}",
     "noExpiry": "Brak daty wygaśnięcia",
     "renewal": {

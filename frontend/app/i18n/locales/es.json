@@ -482,6 +482,11 @@
     "renewsField": "La suscripción se renueva el (opcional)",
     "connect": "Conectar",
     "replace": "Reemplazar",
+    "disabledReason": {
+      "signIn": "Inicia sesión para conectar una suscripción personal",
+      "token": "Introduce tu token para continuar",
+      "password": "Introduce una contraseña personal de al menos 6 caracteres"
+    },
     "expires": "Caduca el {date}",
     "noExpiry": "Sin fecha de caducidad",
     "renewal": {

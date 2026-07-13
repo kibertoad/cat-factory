@@ -533,6 +533,11 @@
     "renewsField": "Subscription renews on (optional)",
     "connect": "Connect",
     "replace": "Replace",
+    "disabledReason": {
+      "signIn": "Sign in to connect a personal subscription",
+      "token": "Enter your token to continue",
+      "password": "Enter a personal password of at least 6 characters"
+    },
     "expires": "Expires {date}",
     "noExpiry": "No expiry set",
     "renewal": {

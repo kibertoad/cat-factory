@@ -482,6 +482,11 @@
     "renewsField": "Abonelik yenilenme tarihi (isteğe bağlı)",
     "connect": "Bağlan",
     "replace": "Değiştir",
+    "disabledReason": {
+      "signIn": "Kişisel bir abonelik bağlamak için oturum açın",
+      "token": "Devam etmek için token'ınızı girin",
+      "password": "En az 6 karakterlik kişisel bir parola girin"
+    },
     "expires": "Son kullanma {date}",
     "noExpiry": "Son kullanma tarihi ayarlanmadı",
     "renewal": {
