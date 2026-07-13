@@ -1,3 +1,5 @@
+import type { HarnessFailureCause } from '../domain/harness-failure.js'
+
 // Port for "where a browsable frontend PREVIEW actually runs" — the long-lived analogue
 // of {@link RunnerTransport}. A preview builds + serves a `frontend` frame's app (with its
 // other upstreams mocked) inside a container and KEEPS IT RUNNING past the build job, so a
@@ -49,7 +51,7 @@ export interface PreviewView {
   /** A failure message when `state === 'failed'`. */
   error?: string
   /** The harness's structured failure cause when `state === 'failed'`, when available. */
-  failureCause?: string
+  failureCause?: HarnessFailureCause
 }
 
 /**

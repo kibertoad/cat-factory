@@ -242,8 +242,10 @@ describe('ContainerEnvConfigRepairer', () => {
 
     const update = await repairer.pollRepair({ workspaceId: 'ws_1', jobId: 'job_1' })
     expect(update.state).toBe('failed')
-    // `git` collapses to the coarse `agent` kind, but routing through the structured mapper (rather
-    // than the hardcoded `'agent'`) keeps the completed-error path aligned with the failed path.
+    // `git` collapses to the coarse `agent` kind — the same value the old hardcoded default
+    // produced, because every cause a done-with-error view realistically carries maps to `agent`
+    // (a watchdog kill always yields a FAILED view). The case pins the path's coverage of the
+    // shared kernel mapper, not a value difference.
     expect(update.failureKind).toBe('agent')
   })
 

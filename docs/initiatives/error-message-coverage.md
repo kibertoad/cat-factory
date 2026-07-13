@@ -9,7 +9,8 @@ UI-first runner-backend / runner-pool / Datadog remedies (D2/D3/D4) · boot-time
 credential probes (A11 Postgres loopback reachability / A12 local-mode PAT validity) ·
 structured container-eviction signal (I1 `RunnerJobView.evicted`) · Redis-bus failure modes
 (A7 missing-`ioredis` configProblem + unreachable-bus boot probe) · env-config-repair
-structured-cause classification (I3) ·
+structured-cause classification (I3) · typed harness cause union + one shared kernel mapper
+(I4 `HarnessFailureCause` / `failureKindFromHarnessCause`) ·
 **Owner:** core · **Started:** 2026-07-11
 
 > This is the durable source of truth for a multi-PR initiative. Read it first before
@@ -269,7 +270,7 @@ union itself DOES bump the image (batch with the F-slice).
 | I1  | Structured eviction signal: add a field (e.g. `evicted?: 'crash' \| 'transient'`) to kernel `RunnerJobView` (`ports/runner-transport.ts`), emit it from all four transports (Cloudflare, local `harnessHttp`, `LocalContainerRunnerTransport`, k8s), read via an extractor; regexes become fallback-only. No image bump                                                                                                                                               | P1  | ✅ done | phase 11 |
 | I2  | `DispatchError` class (HTTP `status` field) thrown by every transport `dispatch()`; `BootstrapService` / `EnvConfigRepairService` classify via `instanceof` / `isDispatchFailure` instead of `/dispatch failed/i`. Pairs with D1's stale-image elaboration. No image bump                                                                                                                                                                                             | P1  | ✅ done | phase 8  |
 | I3  | Quick win: `ContainerEnvConfigRepairer.ts:175` ignores the already-plumbed `view.failureCause` — add `repairFailureKindFromCause(cause) ?? classifyRepairFailure(error)`, matching the bootstrap/execution paths                                                                                                                                                                                                                                                      | P2  | ✅ done | phase 13 |
-| I4  | Type the wire: narrow kernel `failureCause?: string` (`runner-transport.ts:226`, `agent-executor.ts:671`, `preview-transport.ts:52`) to a shared cause union so the `*FromCause` mappers are exhaustively checked (`Record`-style drift guard, like the SPA's `CONFLICT_TITLE_KEYS`)                                                                                                                                                                                  | P2  | ⬜ todo |          |
+| I4  | Type the wire: narrow kernel `failureCause?: string` (`runner-transport.ts:226`, `agent-executor.ts:671`, `preview-transport.ts:52`) to a shared cause union so the `*FromCause` mappers are exhaustively checked (`Record`-style drift guard, like the SPA's `CONFLICT_TITLE_KEYS`)                                                                                                                                                                                  | P2  | ✅ done | phase 13 |
 | I5  | Once a harness-image floor is acceptable, delete the abort-phrase + eviction-phrase regex fallbacks and drop the "wording MUST stay stable" constraint documented in `failure.ts:5-13`                                                                                                                                                                                                                                                                                | P3  | ⬜ todo |          |
 | I6  | Codify the first-wrap-point rule for unavoidable third-party text (git stderr → `HarnessFailure('git')` in `gitFailure`, pg driver errors → `pg.code` switch in `explainMigrationFailure` (the reference), kubectl/k3s stderr in `cli/src/k3s-provision.ts:291`): the code is attached exactly ONCE where the text enters our system; nothing downstream re-parses                                                                                                    | P3  | ⬜ todo |          |
 | I7  | Installation-token-gone classification: attach a structured code where the mint failure enters the system (the App-registry mint path — dovetails with C3's message elaboration), consume via `instanceof`/extractor (`GitHubApiError.status`-style), demote the message regex to old-producer fallback. No image bump. Sequence AFTER the reconcile-loop hoist tracked in `system-audit-improvements.md` item 4, which deduplicates the classifier to one site first | P2  | ⬜ todo |          |
@@ -418,16 +419,25 @@ DispatchError`, reading `.status`), NOT the `/dispatch failed/i` regex, which is
   `import('layered-loader')` must ALSO be caught and rethrown as `missingIoredisProblem` — otherwise the
   bare `Cannot find module 'ioredis'` escapes as a non-`ConfigValidationError` and boot crashes opaquely
   before `loadRedis`'s nice error is ever reached.
-- **Env-config-repair structured-cause classification (phase 13 reference: I3).** The repair
-  poll now prefers the harness's structured `RunnerJobView.failureCause` over the free-text error
-  regex, mirroring the execution (`agentFailureKindFromCause`) and bootstrap
-  (`bootstrapFailureKindFromCause`) paths. The `cause → FailureKind` mapper is kept as a
-  PER-FLOW LOCAL function (`repairFailureKindFromCause` in `ContainerEnvConfigRepairer.ts`), NOT a
-  shared export — matching the deliberate existing convention, because each flow's target enum
-  differs (`AgentFailureKind` for repair/execution, `BootstrapFailureKind` for bootstrap) even
-  though the cause union is common. The `classifyRepairFailure` string regex stays as the
-  older-harness-image fallback (it also still catches the facade-emitted eviction, which carries no
-  harness cause). No image bump — the signal is minted by in-repo transports.
+- **Structured-cause classification is ONE shared kernel mapper (phase 13 reference: I3 + I4).**
+  Every job-failure classifier (execution `RunDispatcher`, bootstrap `ContainerRepoBootstrapper`,
+  env-config repair `ContainerEnvConfigRepairer`) prefers the harness's structured
+  `RunnerJobView.failureCause` via the kernel's `failureKindFromHarnessCause`
+  (`kernel/src/domain/harness-failure.ts`), with its per-flow error-string regex demoted to the
+  older-producer fallback. The historical per-flow local `*FromCause` copies are GONE — they were
+  three identical switches (the once-claimed "target enums differ" rationale only ever held for
+  bootstrap; repair and execution always shared `AgentFailureKind`, and the real blocker was just
+  that the execution mapper wasn't a public export), and the kernel mapper's coarse
+  `'timeout' | 'agent'` result is assignable to BOTH `AgentFailureKind` and
+  `BootstrapFailureKind`, so one function serves every flow. The `HarnessFailureCause` union is
+  kept in step BY HAND with the two dependency-free container payloads (executor-harness
+  `FailureCause`, deploy-harness `DeployFailureCause` — hence the `deploy` member); the
+  `Record<HarnessFailureCause, …>` inside the mapper is the drift guard (a new union member with
+  no mapping fails typecheck). Untyped producers (the pool's dot-path extraction in
+  `HttpRunnerPoolProvider`) narrow through `isHarnessFailureCause`, dropping free-form values to
+  the regex fallback. Container eviction stays OUTSIDE the union on purpose (transport-minted,
+  `RunnerJobView.evicted`). No image bump — the harness types are untouched; only backend
+  consumers changed.
 - **Executor-harness changes bump the image tag** + the three hand-maintained pins
   (`deploy/backend/package.json`, `deploy/backend/wrangler.toml`,
   `RECOMMENDED_HARNESS_IMAGE`) — batch all F-rows into one slice to pay that cost once.

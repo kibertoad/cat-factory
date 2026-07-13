@@ -5,6 +5,7 @@ import type {
   AgentRunContext,
   AgentRunResult,
   AsyncAgentExecutor,
+  HarnessFailureCause,
   PullRequestRef,
   PeerPullRequest,
   TestReport,
@@ -46,7 +47,7 @@ export interface FakeAgentOptions {
    */
   pollFailKinds?: AgentKind[]
   /** The structured `failureCause` a {@link pollFailKinds} poll reports. Default `inactivity-timeout`. */
-  pollFailCause?: string
+  pollFailCause?: HarnessFailureCause
   /** The extended `detail` a {@link pollFailKinds} poll reports. Default a phase-timing breadcrumb. */
   pollFailDetail?: string
   /** Token usage reported per call, so the spend safeguard can be exercised. */
@@ -513,7 +514,7 @@ export class AsyncFakeAgentExecutor extends FakeAgentExecutor implements AsyncAg
   private readonly dispatchThrowKinds: ReadonlySet<AgentKind>
   private readonly dispatchThrowMessage: string
   private readonly pollFailKinds: ReadonlySet<AgentKind>
-  private readonly pollFailCause: string
+  private readonly pollFailCause: HarnessFailureCause
   private readonly pollFailDetail: string
   protected readonly followUpItems: FakeAgentOptions['followUps']
 

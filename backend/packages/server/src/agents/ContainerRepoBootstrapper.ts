@@ -14,6 +14,7 @@ import type {
   RepoEntry,
   RepoProjectionRepository,
 } from '@cat-factory/kernel'
+import { failureKindFromHarnessCause } from '@cat-factory/kernel'
 import { isProxyableProvider } from '@cat-factory/agents'
 import type { ContainerSessionService } from '../containers/ContainerSessionService.js'
 import type { JobPackageRegistrySpec } from './ContainerAgentExecutor.js'
@@ -305,7 +306,7 @@ export class ContainerRepoBootstrapper implements RepoBootstrapper {
         // `recoverContainerEviction` splits them), so the distinction carries no meaning downstream.
         failureKind: view.evicted
           ? 'evicted'
-          : (bootstrapFailureKindFromCause(view.failureCause) ?? classifyBootstrapFailure(error)),
+          : (failureKindFromHarnessCause(view.failureCause) ?? classifyBootstrapFailure(error)),
         error,
         detail: view.detail ?? view.error,
       }
@@ -315,7 +316,7 @@ export class ContainerRepoBootstrapper implements RepoBootstrapper {
     if (result.error) {
       return {
         state: 'failed',
-        failureKind: bootstrapFailureKindFromCause(view.failureCause) ?? 'agent',
+        failureKind: failureKindFromHarnessCause(view.failureCause) ?? 'agent',
         error: `Bootstrap failed: ${result.error}`,
         detail: view.detail ?? result.error,
       }
@@ -413,38 +414,15 @@ function isBootstrapBoilerplate(entry: RepoEntry): boolean {
 
 /**
  * Classify a failed bootstrap job's error message into a {@link BootstrapFailureKind}
- * the board can act on. The transport maps an evicted/crashed container (a 404 poll)
- * to a failed view whose message ends "(container evicted or crashed)"; the harness
- * redacts + labels its watchdog kills ("…no agent activity…", "…exceeded max
- * duration…"). Everything else is an ordinary agent fault.
+ * the board can act on — the FALLBACK when the harness reported no structured cause
+ * (the kernel's shared `failureKindFromHarnessCause` wins when one is present). The
+ * transport maps an evicted/crashed container (a 404 poll) to a failed view whose
+ * message ends "(container evicted or crashed)"; the harness redacts + labels its
+ * watchdog kills ("…no agent activity…", "…exceeded max duration…"). Everything else
+ * is an ordinary agent fault.
  */
 function classifyBootstrapFailure(error: string): BootstrapFailureKind {
   if (/evicted or crashed/i.test(error)) return 'evicted'
   if (/inactivity|no agent activity|max duration/i.test(error)) return 'timeout'
   return 'agent'
-}
-
-/**
- * Map the harness's STRUCTURED failure cause onto a {@link BootstrapFailureKind}, preferred
- * over {@link classifyBootstrapFailure}'s error-string regex when present. Returns undefined
- * for an absent/unknown cause so the caller falls back to the regex (older harness image) —
- * crucially including container eviction, which has NO harness cause (the transport emits the
- * "evicted or crashed" string), so it correctly falls through to the regex's `evicted`.
- */
-function bootstrapFailureKindFromCause(
-  cause: string | undefined,
-): BootstrapFailureKind | undefined {
-  switch (cause) {
-    case 'inactivity-timeout':
-    case 'max-duration':
-      return 'timeout'
-    case 'agent':
-    case 'git':
-    case 'api':
-    case 'no-usable-output':
-    case 'no-changes':
-      return 'agent'
-    default:
-      return undefined
-  }
 }

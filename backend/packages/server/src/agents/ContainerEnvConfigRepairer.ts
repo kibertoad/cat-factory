@@ -8,6 +8,7 @@ import type {
   GitHubInstallationRepository,
   ModelRef,
 } from '@cat-factory/kernel'
+import { failureKindFromHarnessCause } from '@cat-factory/kernel'
 import { isProxyableProvider } from '@cat-factory/agents'
 import type { ContainerSessionService } from '../containers/ContainerSessionService.js'
 import { RunnerJobClient, type ResolveRunnerTransport } from './RunnerJobClient.js'
@@ -173,15 +174,16 @@ export class ContainerEnvConfigRepairer implements EnvConfigRepairer {
       return {
         state: 'failed',
         // Prefer the transport's STRUCTURED eviction verdict, then the harness's structured
-        // `failureCause`; the error-string regex in classifyRepairFailure is the fallback only for
-        // an older producer that reports neither field (and also catches the facade-emitted
-        // eviction, for which the harness sets no cause). Both eviction kinds (`crash` /
-        // `transient`) collapse to the single `evicted` failure kind on purpose — env-config
-        // repair has no transient-vs-crash recovery budget (only the run driver's
-        // `recoverContainerEviction` splits them), so the distinction is meaningless here.
+        // `failureCause` (via the kernel's shared mapper); the error-string regex in
+        // classifyRepairFailure is the fallback only for an older producer that reports neither
+        // field (and also catches the facade-emitted eviction, for which the harness sets no
+        // cause). Both eviction kinds (`crash` / `transient`) collapse to the single `evicted`
+        // failure kind on purpose — env-config repair has no transient-vs-crash recovery budget
+        // (only the run driver's `recoverContainerEviction` splits them), so the distinction is
+        // meaningless here.
         failureKind: view.evicted
           ? 'evicted'
-          : (repairFailureKindFromCause(view.failureCause) ?? classifyRepairFailure(error)),
+          : (failureKindFromHarnessCause(view.failureCause) ?? classifyRepairFailure(error)),
         error,
         detail: view.error,
       }
@@ -192,7 +194,7 @@ export class ContainerEnvConfigRepairer implements EnvConfigRepairer {
     if (result.error) {
       return {
         state: 'failed',
-        failureKind: repairFailureKindFromCause(view.failureCause) ?? 'agent',
+        failureKind: failureKindFromHarnessCause(view.failureCause) ?? 'agent',
         error: `Environment config repair failed: ${result.error}`,
         detail: result.error,
       }
@@ -211,39 +213,14 @@ export class ContainerEnvConfigRepairer implements EnvConfigRepairer {
 }
 
 /**
- * Classify a failed repair job's error message into an {@link AgentFailureKind}: the
- * transport maps an evicted/crashed container (a 404 poll) to a failed view, and the
- * harness redacts + labels its watchdog kills. Everything else is an agent fault.
+ * Classify a failed repair job's error message into an {@link AgentFailureKind} — the FALLBACK
+ * when the harness reported no structured cause (the kernel's shared
+ * `failureKindFromHarnessCause` wins when one is present). The transport maps an
+ * evicted/crashed container (a 404 poll) to a failed view, and the harness redacts + labels
+ * its watchdog kills. Everything else is an agent fault.
  */
 function classifyRepairFailure(error: string): AgentFailureKind {
   if (/evicted or crashed/i.test(error)) return 'evicted'
   if (/inactivity|no agent activity|max duration/i.test(error)) return 'timeout'
   return 'agent'
-}
-
-/**
- * Map the harness's STRUCTURED failure cause (the `failureCause` it reports on a failed job view)
- * onto an {@link AgentFailureKind}, preferred over {@link classifyRepairFailure}'s error-string
- * regex when present — mirroring the execution path's `agentFailureKindFromCause` and the
- * bootstrapper's `bootstrapFailureKindFromCause`. The watchdog kills map to `timeout`; every other
- * harness cause (a genuine agent error, a git/api failure, a no-usable-output / no-changes result)
- * is an `agent` fault. Returns undefined for an absent/unknown cause so the caller falls back to
- * the regex (older harness image) — crucially including container eviction, which has NO harness
- * cause (the transport emits it as the `RunnerJobView.evicted` field or the "evicted or crashed"
- * string), so it correctly routes to `view.evicted` / the regex's `evicted` instead.
- */
-function repairFailureKindFromCause(cause: string | undefined): AgentFailureKind | undefined {
-  switch (cause) {
-    case 'inactivity-timeout':
-    case 'max-duration':
-      return 'timeout'
-    case 'agent':
-    case 'git':
-    case 'api':
-    case 'no-usable-output':
-    case 'no-changes':
-      return 'agent'
-    default:
-      return undefined
-  }
 }

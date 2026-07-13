@@ -14,7 +14,7 @@ import type {
   SecretResolver,
   UrlSafetyPolicy,
 } from '@cat-factory/kernel'
-import { STRICT_URL_SAFETY_POLICY } from '@cat-factory/kernel'
+import { isHarnessFailureCause, STRICT_URL_SAFETY_POLICY } from '@cat-factory/kernel'
 import { DOCS } from '../../docs.js'
 import * as environmentsLogic from '../environments/environments.logic.js'
 import { type MakeHttpError, readCappedText, safeFetch } from '../shared/safe-fetch.js'
@@ -368,9 +368,12 @@ export class HttpRunnerPoolProvider implements RunnerPoolProvider {
     // The harness's structured failure cause + extended diagnostic, when the manifest maps
     // them — so a pool that proxies the executor-harness verbatim classifies a failure exactly
     // like a Cloudflare container, instead of degrading to the engine's error-string regex.
+    // The mapped value is arbitrary scheduler JSON, so it is narrowed to the kernel
+    // {@link HarnessFailureCause} union here — a free-form/unknown value is dropped, which
+    // degrades to the same regex fallback as a pool that maps no cause at all.
     const failureCause = environmentsLogic.extractString(json, r.failureCausePath)
     const detail = environmentsLogic.extractString(json, r.detailPath)
-    if (failureCause) view.failureCause = failureCause
+    if (isHarnessFailureCause(failureCause)) view.failureCause = failureCause
     if (detail) view.detail = detail
 
     if (state === 'failed') {

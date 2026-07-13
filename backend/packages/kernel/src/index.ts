@@ -215,6 +215,16 @@ export {
   isDispatchFailure,
 } from './domain/dispatch-errors.js'
 
+// The structured harness failure-cause vocabulary + the single shared cause → coarse-kind
+// mapper every job-failure classifier prefers over its error-string regex. See
+// `domain/harness-failure.ts`.
+export {
+  HARNESS_FAILURE_CAUSES,
+  type HarnessFailureCause,
+  isHarnessFailureCause,
+  failureKindFromHarnessCause,
+} from './domain/harness-failure.js'
+
 // Pure gate logic + gate/helper agent-kind constants, shared by the built-in gate suite
 // (`@cat-factory/gates`) and the engine. See `domain/gate-logic.ts`.
 export {
