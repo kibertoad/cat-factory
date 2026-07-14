@@ -2906,20 +2906,23 @@
       },
       "monorepoLabel": "Bu bir monorepo (birden fazla servis barındırır)",
       "monorepoDescription": "Tek depodan, her biri bir alt dizine sabitlenmiş birkaç servis ekleyin.",
-      "monorepoBrowseHint": "Depoyu inceleyin ve eklemek istediğiniz servisin dizinini seçin. Bu servis üzerinde çalışan ajanlar o alt dizin içinde çalışır.",
-      "serviceDirectory": "Servis dizini:",
-      "noDirectorySelected": "Henüz dizin seçilmedi.",
+      "monorepoBrowseHint": "Depoyu inceleyin ve eklemek istediğiniz servislerin dizinlerini herhangi bir klasörden seçin. Bir servis üzerinde çalışan ajanlar onun alt dizininde çalışır.",
+      "selectedServices": "Seçili servisler",
+      "noServicesSelected": "Henüz servis seçilmedi. Yukarıdan dizin seçin.",
+      "addServices": "{count} servis ekle | {count} servis ekle",
+      "removeService": "{directory} öğesini kaldır",
       "addedConfigure": "{title} eklendi, yapılandırın",
       "grantAccess": "App'e bir depoya erişim ver",
       "grantAccessTitle": "App'e bir depoya erişim vermek için kurulum ayarlarını açın",
       "refreshList": "Listeyi yenile",
       "done": "Tamam",
       "add": "Servis ekle",
-      "addAnother": "Başka bir servis ekle",
       "toast": {
         "addedTitle": "Servis eklendi",
         "addedDescription": "{title} panoda, aşağıdan yapılandırın.",
-        "addFailedTitle": "Servis eklenemedi"
+        "addFailedTitle": "Servis eklenemedi",
+        "servicesAddedTitle": "Servisler eklendi",
+        "servicesAddedDescription": "{count} servis panoya eklendi. | {count} servis panoya eklendi."
       },
       "repoType": "Depo türü",
       "repoTypeHint": "Bu deponun türü: bir backend servisi, bir frontend uygulaması, paylaşılan bir kütüphane veya bir doküman deposu (yalnızca doküman/spike)."
@@ -2931,6 +2934,7 @@
       "empty": "Burada bir şey yok.",
       "select": "Seç",
       "selected": "Seçildi",
+      "added": "Eklendi",
       "useThisFolder": "Bu klasörü kullan",
       "errors": {
         "listDirectory": "Dizin listelenemedi"

@@ -2905,20 +2905,23 @@
       },
       "monorepoLabel": "זהו מונורפו (מארח יותר משירות אחד)",
       "monorepoDescription": "הוסף כמה שירותים ממאגר אחד, כל אחד מוצמד לתת-ספרייה.",
-      "monorepoBrowseHint": "עיין במאגר ובחר את הספרייה של השירות שברצונך להוסיף. סוכנים העובדים על שירות זה ירוצו בתוך אותה תת-ספרייה.",
-      "serviceDirectory": "ספריית שירות:",
-      "noDirectorySelected": "לא נבחרה עדיין ספרייה.",
+      "monorepoBrowseHint": "עיין במאגר ובחר את הספריות של השירותים שברצונך להוסיף — מכל תיקייה. סוכנים העובדים על שירות ירוצו בתוך תת-הספרייה שלו.",
+      "selectedServices": "שירותים נבחרים",
+      "noServicesSelected": "עדיין לא נבחרו שירותים. בחר ספריות למעלה.",
+      "addServices": "הוסף שירות {count} | הוסף {count} שירותים",
+      "removeService": "הסר {directory}",
       "addedConfigure": "{title} נוסף, הגדר אותו",
       "grantAccess": "הענק לאפליקציה גישה למאגר",
       "grantAccessTitle": "פתח את הגדרות ההתקנה של האפליקציה כדי להעניק לה גישה למאגר",
       "refreshList": "רענן רשימה",
       "done": "סיום",
       "add": "הוסף שירות",
-      "addAnother": "הוסף שירות נוסף",
       "toast": {
         "addedTitle": "השירות נוסף",
         "addedDescription": "{title} על הלוח, הגדר אותו למטה.",
-        "addFailedTitle": "לא ניתן היה להוסיף שירות"
+        "addFailedTitle": "לא ניתן היה להוסיף שירות",
+        "servicesAddedTitle": "השירותים נוספו",
+        "servicesAddedDescription": "שירות {count} נוסף ללוח. | {count} שירותים נוספו ללוח."
       },
       "repoType": "סוג המאגר",
       "repoTypeHint": "מה המאגר הזה: שירות בק-אנד, אפליקציית פרונט-אנד, ספרייה משותפת או מאגר תיעוד (מסמכים/ספייקים בלבד)."
@@ -2930,6 +2933,7 @@
       "empty": "אין כאן כלום.",
       "select": "בחר",
       "selected": "נבחר",
+      "added": "נוסף",
       "useThisFolder": "השתמש בתיקייה זו",
       "errors": {
         "listDirectory": "לא ניתן היה לרשום את הספרייה"

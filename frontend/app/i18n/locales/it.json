@@ -2523,20 +2523,23 @@
       },
       "monorepoLabel": "Questo è un monorepo (ospita più di un servizio)",
       "monorepoDescription": "Aggiungi più servizi da un unico repo, ciascuno ancorato a una sottodirectory.",
-      "monorepoBrowseHint": "Sfoglia il repository e scegli la directory del servizio che vuoi aggiungere. Gli agenti che lavorano su questo servizio verranno eseguiti all'interno di quella sottodirectory.",
-      "serviceDirectory": "Directory del servizio:",
-      "noDirectorySelected": "Nessuna directory ancora selezionata.",
+      "monorepoBrowseHint": "Sfoglia il repository e seleziona le directory dei servizi che vuoi aggiungere, da qualsiasi cartella. Gli agenti che lavorano su un servizio verranno eseguiti all'interno della sua sottodirectory.",
+      "selectedServices": "Servizi selezionati",
+      "noServicesSelected": "Nessun servizio ancora selezionato. Scegli le directory sopra.",
+      "addServices": "Aggiungi {count} servizio | Aggiungi {count} servizi",
+      "removeService": "Rimuovi {directory}",
       "addedConfigure": "{title} aggiunto, configuralo",
       "grantAccess": "Concedi alla App l'accesso a un repo",
       "grantAccessTitle": "Apri le impostazioni di installazione della App per concederle l'accesso a un repository",
       "refreshList": "Aggiorna l'elenco",
       "done": "Fatto",
       "add": "Aggiungi servizio",
-      "addAnother": "Aggiungi un altro servizio",
       "toast": {
         "addedTitle": "Servizio aggiunto",
         "addedDescription": "{title} è sulla board, configuralo qui sotto.",
-        "addFailedTitle": "Impossibile aggiungere il servizio"
+        "addFailedTitle": "Impossibile aggiungere il servizio",
+        "servicesAddedTitle": "Servizi aggiunti",
+        "servicesAddedDescription": "{count} servizio aggiunto alla board. | {count} servizi aggiunti alla board."
       }
     },
     "repoTree": {
@@ -2546,6 +2549,7 @@
       "empty": "Niente qui.",
       "select": "Seleziona",
       "selected": "Selezionata",
+      "added": "Aggiunto",
       "useThisFolder": "Usa questa cartella",
       "errors": {
         "listDirectory": "Impossibile elencare la directory"

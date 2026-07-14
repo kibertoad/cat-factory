@@ -6,20 +6,37 @@
 // The selected path (relative to the repo root, as GitHub returns it) is exposed
 // via `v-model`. The component owns its own navigation/loading state so callers
 // just bind a repo id + mode; it self-loads on mount and when those change.
+//
+// `dir` mode additionally supports `multiple`: instead of the single `v-model`
+// path, the caller passes the current `selectedPaths` (a cart) + `addedPaths`
+// (directories already on the board, shown disabled) and handles the `toggle`
+// event to add/remove a directory. This lets one browse session accumulate
+// several services from ANY parent folder (the monorepo add flow) — navigating
+// away never drops earlier picks.
 import type { RepoTreeEntry } from '~/types/domain'
 
 const props = withDefaults(
   defineProps<{
     repoGithubId: number
     mode?: 'dir' | 'file'
-    /** Currently picked path (repo-root-relative), via v-model. */
+    /** Currently picked path (repo-root-relative), via v-model. Single-select only. */
     modelValue?: string
     /** Directory to open at (e.g. a monorepo service's subdirectory). */
     startPath?: string
+    /** `dir` mode: accumulate a set of picks (via `selectedPaths`/`toggle`) instead of one. */
+    multiple?: boolean
+    /** `dir` + `multiple`: the current cart of picked directories (repo-root-relative). */
+    selectedPaths?: string[]
+    /** `dir` + `multiple`: directories already on the board — listed but not selectable. */
+    addedPaths?: string[]
   }>(),
-  { mode: 'dir', startPath: '' },
+  { mode: 'dir', startPath: '', multiple: false, selectedPaths: () => [], addedPaths: () => [] },
 )
-const emit = defineEmits<{ 'update:modelValue': [string | undefined] }>()
+const emit = defineEmits<{
+  'update:modelValue': [string | undefined]
+  /** `dir` + `multiple`: the user asked to add/remove this directory from the cart. */
+  toggle: [string]
+}>()
 
 const { t } = useI18n()
 const github = useGitHubStore()
@@ -28,6 +45,15 @@ const toast = useToast()
 const currentPath = ref(props.startPath)
 const treeEntries = ref<RepoTreeEntry[]>([])
 const loading = ref(false)
+
+const selectedSet = computed(() => new Set(props.selectedPaths.map(normalizeRepoPath)))
+const addedSet = computed(() => new Set(props.addedPaths.map(normalizeRepoPath)))
+function isAdded(path: string): boolean {
+  return props.multiple && addedSet.value.has(normalizeRepoPath(path))
+}
+function isPicked(path: string): boolean {
+  return props.multiple ? selectedSet.value.has(normalizeRepoPath(path)) : props.modelValue === path
+}
 
 const dirEntries = computed(() => treeEntries.value.filter((e) => e.type === 'dir'))
 const fileEntries = computed(() => treeEntries.value.filter((e) => e.type === 'file'))
@@ -63,7 +89,13 @@ async function browseTo(path: string) {
 }
 
 function pick(path: string) {
-  emit('update:modelValue', path)
+  if (props.multiple) {
+    // Already-on-board directories are shown for orientation but can't be re-added.
+    if (addedSet.value.has(normalizeRepoPath(path))) return
+    emit('toggle', path)
+  } else {
+    emit('update:modelValue', path)
+  }
 }
 
 // Re-open at the start path whenever the repo (or requested root) changes.
@@ -124,18 +156,21 @@ watch(
             <UIcon name="i-lucide-folder" class="h-4 w-4 shrink-0 text-amber-400" />
             <span class="truncate">{{ entry.name }}</span>
           </button>
+          <span
+            v-if="mode === 'dir' && isAdded(entry.path)"
+            class="flex shrink-0 items-center gap-1 text-xs text-slate-500"
+          >
+            <UIcon name="i-lucide-check" class="h-3.5 w-3.5" />
+            {{ t('github.repoTree.added') }}
+          </span>
           <UButton
-            v-if="mode === 'dir'"
+            v-else-if="mode === 'dir'"
             size="xs"
             variant="soft"
-            :color="modelValue === entry.path ? 'primary' : 'neutral'"
+            :color="isPicked(entry.path) ? 'primary' : 'neutral'"
             @click="pick(entry.path)"
           >
-            {{
-              modelValue === entry.path
-                ? t('github.repoTree.selected')
-                : t('github.repoTree.select')
-            }}
+            {{ isPicked(entry.path) ? t('github.repoTree.selected') : t('github.repoTree.select') }}
           </UButton>
         </li>
         <template v-if="mode === 'file'">
@@ -164,14 +199,21 @@ watch(
     </div>
 
     <!-- dir mode: pin the current folder without descending into a child -->
-    <div v-if="mode === 'dir' && currentPath" class="mt-2 flex justify-end">
+    <div
+      v-if="mode === 'dir' && currentPath && !isAdded(currentPath)"
+      class="mt-2 flex justify-end"
+    >
       <UButton
         size="xs"
         variant="soft"
-        :color="modelValue === currentPath ? 'primary' : 'neutral'"
+        :color="isPicked(currentPath) ? 'primary' : 'neutral'"
         @click="pick(currentPath)"
       >
-        {{ t('github.repoTree.useThisFolder') }}
+        {{
+          multiple && isPicked(currentPath)
+            ? t('github.repoTree.selected')
+            : t('github.repoTree.useThisFolder')
+        }}
       </UButton>
     </div>
   </div>

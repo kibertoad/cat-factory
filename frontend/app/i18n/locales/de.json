@@ -2523,20 +2523,23 @@
       },
       "monorepoLabel": "Dies ist ein Monorepo (beherbergt mehr als einen Service)",
       "monorepoDescription": "Fügen Sie mehrere Services aus einem Repo hinzu, jeder an ein Unterverzeichnis gebunden.",
-      "monorepoBrowseHint": "Durchsuchen Sie das Repository und wählen Sie das Verzeichnis des Service aus, den Sie hinzufügen möchten. Agents, die an diesem Service arbeiten, laufen innerhalb dieses Unterverzeichnisses.",
-      "serviceDirectory": "Service-Verzeichnis:",
-      "noDirectorySelected": "Noch kein Verzeichnis ausgewählt.",
+      "monorepoBrowseHint": "Durchsuchen Sie das Repository und wählen Sie die Verzeichnisse der Services aus, die Sie hinzufügen möchten – aus jedem beliebigen Ordner. Agents, die an einem Service arbeiten, laufen innerhalb seines Unterverzeichnisses.",
+      "selectedServices": "Ausgewählte Services",
+      "noServicesSelected": "Noch keine Services ausgewählt. Wählen Sie oben Verzeichnisse aus.",
+      "addServices": "{count} Service hinzufügen | {count} Services hinzufügen",
+      "removeService": "{directory} entfernen",
       "addedConfigure": "{title} hinzugefügt, konfigurieren Sie es",
       "grantAccess": "Der App Zugriff auf ein Repo gewähren",
       "grantAccessTitle": "Öffnen Sie die Installationseinstellungen der App, um ihr Zugriff auf ein Repository zu gewähren",
       "refreshList": "Liste aktualisieren",
       "done": "Fertig",
       "add": "Service hinzufügen",
-      "addAnother": "Weiteren Service hinzufügen",
       "toast": {
         "addedTitle": "Service hinzugefügt",
         "addedDescription": "{title} ist auf dem Board, konfigurieren Sie es unten.",
-        "addFailedTitle": "Service konnte nicht hinzugefügt werden"
+        "addFailedTitle": "Service konnte nicht hinzugefügt werden",
+        "servicesAddedTitle": "Services hinzugefügt",
+        "servicesAddedDescription": "{count} Service zum Board hinzugefügt. | {count} Services zum Board hinzugefügt."
       }
     },
     "repoTree": {
@@ -2546,6 +2549,7 @@
       "empty": "Nichts hier.",
       "select": "Auswählen",
       "selected": "Ausgewählt",
+      "added": "Hinzugefügt",
       "useThisFolder": "Diesen Ordner verwenden",
       "errors": {
         "listDirectory": "Verzeichnis konnte nicht aufgelistet werden"
