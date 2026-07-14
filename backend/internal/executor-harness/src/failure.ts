@@ -1,16 +1,17 @@
 // Single source of truth for how a job FAILS: the canonical failure-cause vocabulary plus
 // the watchdog abort-message builders.
 //
-// WHY THIS MODULE EXISTS — the backend classifies a failed job by REGEX-matching the
-// harness's free-text `error` string (it has no other signal today):
-//   - server `ContainerRepoBootstrapper.classifyBootstrapFailure`:
-//       /inactivity|no agent activity|max duration/i → 'timeout', else → 'agent'
-//   - orchestration `job.logic.isContainerEvictionError`: /evicted or crashed/i (FACADE-owned,
-//     NOT emitted here — the harness must keep NOT emitting that phrase for a non-eviction)
-// Because those phrases are matched downstream, their wording MUST stay stable. Centralizing
-// the builders here keeps the emitted text from drifting away from the regex that reads it.
-// Alongside the strings we now also emit a STRUCTURED {@link FailureCause} on the job view so
-// the backend can prefer it and treat the regex as a backward-compatible fallback.
+// WHY THIS MODULE EXISTS — a failed job surfaces a STRUCTURED {@link FailureCause} on the job
+// view, and that is the ONLY signal the backend classifies on (`failureKindFromHarnessCause`);
+// the watchdog kills set their cause from `killReason`. Centralizing the cause vocabulary + the
+// abort-message builders here keeps the two in step.
+//
+// The abort-message wording is now HUMAN-READABLE ONLY — the backend no longer regex-matches it
+// (the string-fallback classifiers `classify{Agent,Bootstrap,Repair}Failure` were deleted in
+// error-message coverage I5), so it is free to change. The one phrase that stays load-bearing is
+// the facade-owned eviction sentinel `(container evicted or crashed)`, which
+// `job.logic.isContainerEvictionError` still matches for a DISPATCH-time throw that carries no job
+// view — and which the harness must keep NOT emitting for a non-eviction failure.
 
 /**
  * The structured reason a harness job failed, surfaced on the job view's `failureCause`.
@@ -58,18 +59,20 @@ export function failureCauseOf(err: unknown): FailureCause | undefined {
 }
 
 /**
- * The inactivity-watchdog abort message PREFIX. The `no agent activity` phrase is
- * regex-matched by the backend's `classifyBootstrapFailure` (→ `timeout`); do not reword it.
- * The caller appends a `(likely hung ...)` diagnostic clause (phase + last tool) after this,
- * so the prefix deliberately stops before the parenthetical (see `runner.ts` drive catch).
+ * The inactivity-watchdog abort message PREFIX. Human-readable only now — the backend reads the
+ * structured `inactivity-timeout` {@link FailureCause}, not this phrase (the string fallback was
+ * deleted in error-message coverage I5), so it is free to change. The caller appends a `(likely
+ * hung ...)` diagnostic clause (phase + last tool) after this, so the prefix deliberately stops
+ * before the parenthetical (see `runner.ts` drive catch).
  */
 export function inactivityAbortMessage(inactivityMs: number): string {
   return `Aborted: no agent activity for ${Math.round(inactivityMs / 1000)}s`
 }
 
 /**
- * The max-duration-watchdog abort message. The `max duration` phrase is regex-matched by the
- * backend's `classifyBootstrapFailure` (→ `timeout`); do not reword it.
+ * The max-duration-watchdog abort message. Human-readable only now — the backend reads the
+ * structured `max-duration` {@link FailureCause}, not this phrase (the string fallback was deleted
+ * in error-message coverage I5), so it is free to change.
  */
 export function maxDurationAbortMessage(maxDurationMs: number): string {
   return `Aborted: exceeded max duration of ${Math.round(maxDurationMs / 1000)}s`

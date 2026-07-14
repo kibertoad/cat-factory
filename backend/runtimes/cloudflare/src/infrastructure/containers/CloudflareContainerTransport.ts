@@ -143,9 +143,10 @@ export class CloudflareContainerTransport implements RunnerTransport {
     }
     if (res.status === 404) {
       // The job/container vanished (eviction or crash): report failed so the run
-      // stops (the run-sweeper may then re-drive it from durable state). The trailing
-      // "(container evicted or crashed)" is matched by the bootstrap flow to classify
-      // the fault as `evicted`. Ask the DO whether it was just drained by a
+      // stops (the run-sweeper may then re-drive it from durable state). The eviction
+      // verdict rides the STRUCTURED `evicted` field the caller reads directly (the
+      // "(container evicted or crashed)" string is descriptive context only — no consumer
+      // regex-matches it any more, see I5). Ask the DO whether it was just drained by a
       // new-version rollout (a deploy) — if so, tag it so the engine treats it as
       // transient infra churn rather than a crash/OOM.
       const rolledOut = await stub.recentlyRolledOut().catch(() => false)
