@@ -269,7 +269,9 @@ const showOriginalDescription = ref(false)
          (Run / Focus / Delete) stay reachable. The status bar above stays put.
          On compact viewports the panel is a bottom sheet capped to the visible
          height (dvh excludes mobile browser chrome). -->
-    <div class="max-h-[80dvh] space-y-4 overflow-y-auto p-4 lg:max-h-[calc(100vh-5rem)]">
+    <div
+      class="max-h-[80dvh] space-y-4 overflow-y-auto overscroll-contain px-4 pt-4 pb-[calc(1rem+env(safe-area-inset-bottom))] lg:max-h-[calc(100vh-5rem)]"
+    >
       <!-- header -->
       <div class="flex items-start justify-between gap-2">
         <div class="flex items-center gap-2">

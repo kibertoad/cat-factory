@@ -115,7 +115,21 @@ export default defineNuxtConfig({
   app: {
     head: {
       title: 'Agent Architecture Board',
-      meta: [{ name: 'viewport', content: 'width=device-width, initial-scale=1' }],
+      meta: [
+        // `viewport-fit=cover` is what makes `env(safe-area-inset-*)` resolve to
+        // non-zero on notched/rounded phones — the safe-area padding on the
+        // bottom-anchored surfaces (inspector sheet, drawer, toaster) is inert
+        // without it, so the two ship together.
+        {
+          name: 'viewport',
+          content: 'width=device-width, initial-scale=1, viewport-fit=cover',
+        },
+        // Tint the mobile browser chrome / iOS Safari address bar to the board
+        // surface so the app doesn't sit under a mismatched white bar. Matches
+        // `--board-bg`. (Home-screen installability — manifest, standalone status
+        // bar, touch icons — is deferred to the initiative's E2/A5-icons follow-up.)
+        { name: 'theme-color', content: '#0b1020' },
+      ],
     },
   },
 })
