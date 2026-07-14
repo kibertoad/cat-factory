@@ -1,5 +1,12 @@
 # @cat-factory/app
 
+## 0.116.2
+
+### Patch Changes
+
+- Updated dependencies [2ce396d]
+  - @cat-factory/contracts@0.128.1
+
 ## 0.116.1
 
 ### Patch Changes
