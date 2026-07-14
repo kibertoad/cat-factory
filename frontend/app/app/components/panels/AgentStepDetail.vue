@@ -572,7 +572,7 @@ async function copyOutput() {
             </p>
           </div>
 
-          <div class="flex-1 space-y-3 overflow-auto px-4 py-3">
+          <div class="flex-1 space-y-3 overflow-auto overscroll-contain px-4 py-3">
             <p
               v-if="editing"
               class="rounded-lg border border-amber-500/30 bg-amber-500/5 p-3 text-[12px] leading-relaxed text-amber-200/90"
@@ -659,7 +659,10 @@ async function copyOutput() {
           </div>
 
           <!-- edit-then-approve actions -->
-          <div v-if="editing" class="space-y-2 border-t border-slate-800 px-4 py-3">
+          <div
+            v-if="editing"
+            class="space-y-2 border-t border-slate-800 px-4 pt-3 pb-[calc(0.75rem+env(safe-area-inset-bottom))]"
+          >
             <UButton
               color="primary"
               size="sm"
@@ -682,7 +685,10 @@ async function copyOutput() {
             </UButton>
           </div>
 
-          <div v-else class="space-y-2 border-t border-slate-800 px-4 py-3">
+          <div
+            v-else
+            class="space-y-2 border-t border-slate-800 px-4 pt-3 pb-[calc(0.75rem+env(safe-area-inset-bottom))]"
+          >
             <UButton
               color="primary"
               data-testid="step-approve"

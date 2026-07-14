@@ -9,11 +9,17 @@
   user-select: text;
 }
 
-/* Keep bottom-anchored toasts clear of the home indicator / rounded corner on
- * phones. `env(safe-area-inset-bottom)` is 0 until the viewport meta carries
- * `viewport-fit=cover` (see nuxt.config.ts), so this is inert on desktop. */
+/* Keep the bottom-anchored toaster clear of the home indicator / rounded corner
+ * on phones. The toaster viewport is bottom-anchored (Nuxt UI positions it at
+ * `bottom-4`), so we add the safe-area inset to that OFFSET rather than to the
+ * padding: each toast is `position: absolute; bottom: 0` inside the viewport, so
+ * padding-bottom does not lift it (an abs child anchored to `bottom-0` tracks the
+ * padding-box edge and ignores the padding). `env(safe-area-inset-bottom)` is 0
+ * until the viewport meta carries `viewport-fit=cover` (see nuxt.config.ts), so
+ * this collapses to the stock `1rem` on desktop. Assumes the default bottom
+ * placement (the app does not configure a top-anchored toaster). */
 [data-slot='viewport'] {
-  padding-bottom: env(safe-area-inset-bottom);
+  bottom: calc(1rem + env(safe-area-inset-bottom));
 }
 
 /* Input font floor (P-3): iOS Safari auto-zooms the viewport whenever a focused
