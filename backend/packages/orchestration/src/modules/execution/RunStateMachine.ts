@@ -37,10 +37,16 @@ export interface KaizenScheduler {
 
 /**
  * "What to do next" guidance per failure kind a pipeline run can produce, shown
- * under the failure banner on the board (mirrors bootstrap's FAILURE_HINTS). Only
- * the execution-relevant subset of {@link AgentFailureKind} is keyed.
+ * under the failure banner on the board (mirrors bootstrap's FAILURE_HINTS). This is an
+ * EXHAUSTIVE {@link Record} over {@link AgentFailureKind} — the execution engine is the
+ * primary producer of that union, so every kind must carry a hint and none may reach the
+ * board hint-less. Keeping it exhaustive (rather than a `Partial`) makes a newly-added
+ * failure kind a typecheck failure here, the same drift guard bootstrap's
+ * `Record<BootstrapFailureKind, string>` provides (error-message initiative item G3).
  */
-const EXECUTION_FAILURE_HINTS: Partial<Record<AgentFailureKind, string>> = {
+const EXECUTION_FAILURE_HINTS: Record<AgentFailureKind, string> = {
+  preflight:
+    'A precondition failed before the agent’s container was started, so the run never began — most often the workspace has no connected GitHub repository, the selected model or provider isn’t configured, or a required credential is missing. The specific cause is shown above. Fix it (connect GitHub and link a repository, or pick a configured model in the workspace settings), then retry.',
   agent:
     'An agent step failed after its automatic retries. Review the run, then retry to re-run the pipeline.',
   job_failed:
@@ -533,7 +539,7 @@ export class RunStateMachine {
       kind,
       message,
       detail,
-      hint: EXECUTION_FAILURE_HINTS[kind] ?? null,
+      hint: EXECUTION_FAILURE_HINTS[kind],
       reason,
       occurredAt: this.clock.now(),
       lastSubtasks: instance.steps[instance.currentStep]?.subtasks ?? null,
