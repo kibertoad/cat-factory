@@ -32,6 +32,13 @@ export interface UserSecretServiceDependencies {
   userSecretKindRegistry?: UserSecretKindRegistry
   /** Injected for tests; defaults to the global fetch (used by kind testConnection). */
   fetch?: typeof fetch
+  /**
+   * Invoked after a secret write/removal commits, so a cache keyed on that secret can drop the
+   * user's entry — today the `viewerRepos` cache, whose per-user GitHub enumeration is scoped to
+   * the user's current `github_pat` (swapping it changes which repos the key resolves to). Absent
+   * ⇒ no-op. Best-effort: a callback failure must not fail the write, so callers keep it cheap.
+   */
+  onSecretChanged?: (userId: string, kind: UserSecretKind) => void | Promise<void>
 }
 
 export class UserSecretService {
@@ -74,12 +81,14 @@ export class UserSecretService {
       updatedAt: now,
     }
     await this.deps.userSecretRepository.upsert(record)
+    await this.deps.onSecretChanged?.(userId, kind)
     return toStatus(record)
   }
 
   /** Remove the user's secret of a kind. */
   async remove(userId: string, kind: UserSecretKind): Promise<void> {
     await this.deps.userSecretRepository.remove(userId, kind)
+    await this.deps.onSecretChanged?.(userId, kind)
   }
 
   /**

@@ -193,6 +193,21 @@ export interface AppCaches {
    * isolate-safe profile.
    */
   userBudgetLimit: GroupCacheHandle<BudgetLimitCacheValue>
+  /**
+   * The signed-in viewer's PAT-reachable repo enumeration (`GET /user/repos`), grouped AND
+   * keyed by user id — the add-service picker's typeahead re-runs it on every keystroke, and a
+   * broad PAT (hundreds–thousands of repos) makes each run a multi-page walk. The picker filters
+   * this cached complete set in memory, so a keystroke costs a substring scan rather than a fresh
+   * enumeration. Unlike the invalidation-driven slices above the cached SOURCE is external GitHub
+   * state we never write, so coherence is the short TTL: the only local mutation that changes what
+   * the key resolves to — the user swapping their stored PAT — invalidates the group explicitly
+   * (`UserSecretService` on a `github_pat` write/removal); a repo created straight on GitHub simply
+   * appears once the TTL lapses. Pass-through on the Worker's isolate-safe profile: it is neither
+   * immutable nor self-verifying, and a PAT-swap invalidation can't reach a peer isolate without a
+   * bus, so the Worker enumerates live (caching only on the Node/local facades, where the PAT
+   * picker is the primary flow).
+   */
+  viewerRepos: GroupCacheHandle<GitHubRepo[]>
   /** Release notification-bus resources (a no-op for bare in-memory caches). */
   close(): Promise<void>
 }

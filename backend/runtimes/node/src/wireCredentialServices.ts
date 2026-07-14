@@ -11,6 +11,8 @@ import {
 } from '@cat-factory/integrations'
 import type {
   Clock,
+  GitHubRepo,
+  GroupCacheHandle,
   LocalModelEndpointRepository,
   PersonalSubscriptionRepository,
   ProviderApiKeyRepository,
@@ -165,6 +167,10 @@ export function buildNodeUserSecretService(
   db: DrizzleDb | undefined,
   clock: Clock,
   userSecretKindRegistry: UserSecretKindRegistry,
+  // The per-user viewer-repos cache (`AppCaches.viewerRepos`). When wired, a `github_pat`
+  // write/removal drops the user's cached PAT repo enumeration so the picker re-reads with the
+  // new token. Absent (no cache configured) ⇒ the enumeration self-heals on the TTL.
+  viewerReposCache?: GroupCacheHandle<GitHubRepo[]>,
 ): UserSecretService | undefined {
   const masterKeyBase64 = env.ENCRYPTION_KEY?.trim()
   // No Postgres (mothership mode): the per-user secret store is not yet a local-sqlite
@@ -175,6 +181,12 @@ export function buildNodeUserSecretService(
     secretCipher: new WebCryptoSecretCipher({ masterKeyBase64, info: 'cat-factory:user-secret' }),
     clock,
     userSecretKindRegistry,
+    ...(viewerReposCache
+      ? {
+          onSecretChanged: (userId, kind) =>
+            kind === 'github_pat' ? viewerReposCache.invalidateGroup(userId) : undefined,
+        }
+      : {}),
   })
 }
 

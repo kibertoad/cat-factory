@@ -89,4 +89,21 @@ describe('UserSecretService', () => {
     const result = await service.testConnection('github_pat', { secret: 'ghp_abc' })
     expect(result).toEqual({ ok: true, message: 'Authenticated as octocat' })
   })
+
+  it('fires onSecretChanged after a store and a remove (viewer-repos cache invalidation)', async () => {
+    const repo = new FakeRepo()
+    const changes: { userId: string; kind: string }[] = []
+    const service = new UserSecretService({
+      userSecretRepository: repo,
+      secretCipher: systemCipher,
+      clock: { now: () => 1000 },
+      onSecretChanged: (userId, kind) => void changes.push({ userId, kind }),
+    })
+    await service.store('usr_1', 'github_pat', { secret: 'ghp_abc' })
+    await service.remove('usr_1', 'github_pat')
+    expect(changes).toEqual([
+      { userId: 'usr_1', kind: 'github_pat' },
+      { userId: 'usr_1', kind: 'github_pat' },
+    ])
+  })
 })

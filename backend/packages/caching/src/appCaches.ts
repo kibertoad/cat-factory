@@ -66,6 +66,7 @@ export interface AppCachesProfile {
   workspaceSettings: GroupCacheProfile
   accountBudgetLimit: GroupCacheProfile
   userBudgetLimit: GroupCacheProfile
+  viewerRepos: GroupCacheProfile
 }
 
 /** The default (Node/local/test) profile: caching on, modest bounds. */
@@ -142,6 +143,12 @@ export const DEFAULT_APP_CACHES_PROFILE: AppCachesProfile = {
     maxGroups: 5000,
     maxItemsPerGroup: 1,
   },
+  // One PAT-reachable repo enumeration per user, keyed by user id (one entry per group). Backs
+  // the add-service picker's per-keystroke typeahead, so a SHORT TTL (external GitHub state we
+  // don't write; a PAT swap invalidates the group explicitly, and a brand-new repo appears once
+  // this lapses) — a minute keeps a freshly-created repo from hiding for long while still
+  // collapsing a burst of keystrokes into one enumeration.
+  viewerRepos: { enabled: true, ttlInMsecs: 60_000, maxGroups: 5000, maxItemsPerGroup: 1 },
 }
 
 /**
@@ -184,6 +191,10 @@ export const ISOLATE_SAFE_APP_CACHES_PROFILE: AppCachesProfile = {
   workspaceSettings: { ...DEFAULT_APP_CACHES_PROFILE.workspaceSettings, enabled: false },
   accountBudgetLimit: { ...DEFAULT_APP_CACHES_PROFILE.accountBudgetLimit, enabled: false },
   userBudgetLimit: { ...DEFAULT_APP_CACHES_PROFILE.userBudgetLimit, enabled: false },
+  // Pass-through: neither immutable nor self-verifying (no cheap "did the token's repo set move"
+  // probe), and the PAT-swap invalidation can't reach a peer isolate without a bus — so the Worker
+  // enumerates the picker live, exactly like the mutable-D1-state slices above.
+  viewerRepos: { ...DEFAULT_APP_CACHES_PROFILE.viewerRepos, enabled: false },
 }
 
 /**
@@ -363,6 +374,7 @@ export function createAppCaches(options: CreateAppCachesOptions = {}): AppCaches
     profile.userBudgetLimit,
     options,
   )
+  const viewerRepos = buildGroupCache<GitHubRepo[]>('viewer-repos', profile.viewerRepos, options)
   return {
     fragmentCatalog,
     fragmentDocumentBody,
@@ -373,6 +385,7 @@ export function createAppCaches(options: CreateAppCachesOptions = {}): AppCaches
     workspaceSettings,
     accountBudgetLimit,
     userBudgetLimit,
+    viewerRepos,
     close: async () => {
       await Promise.all([
         fragmentCatalog.close(),
@@ -384,6 +397,7 @@ export function createAppCaches(options: CreateAppCachesOptions = {}): AppCaches
         workspaceSettings.close(),
         accountBudgetLimit.close(),
         userBudgetLimit.close(),
+        viewerRepos.close(),
       ])
     },
   }

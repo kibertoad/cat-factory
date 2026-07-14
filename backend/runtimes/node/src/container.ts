@@ -1450,7 +1450,13 @@ export function buildNodeContainer(options: NodeContainerOptions): ServerContain
   )
   // The per-user generic secret store (a GitHub PAT today), shared by the user-secret
   // controller and the run-initiator PAT resolver below.
-  const userSecrets = buildNodeUserSecretService(env, db, clock, userSecretKindRegistry)
+  const userSecrets = buildNodeUserSecretService(
+    env,
+    db,
+    clock,
+    userSecretKindRegistry,
+    options.caches?.viewerRepos,
+  )
   // Resolve the run initiator's stored GitHub PAT (when set) — preferred over the
   // App/env token by the container push-token mint + the engine GitHub client.
   const resolveUserGitHubToken: ResolveUserGitHubToken | undefined = userSecrets

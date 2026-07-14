@@ -1321,6 +1321,9 @@ function createGitHubModule(deps: CoreDependencies, caches: AppCaches): GitHubMo
     commitBackfillHorizonMs: deps.commitBackfillHorizonMs,
     // Drop a workspace's cached repo projection (slice 3) after any link/sync write.
     repoProjectionCache: caches.repoProjection,
+    // Serve the add-service picker's PAT typeahead from a per-user cache (filter in memory)
+    // instead of re-walking `/user/repos` on every keystroke.
+    viewerReposCache: caches.viewerRepos,
   })
   const webhookService = new WebhookService({
     githubInstallationRepository,
