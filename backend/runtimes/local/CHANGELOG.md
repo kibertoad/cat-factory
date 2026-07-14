@@ -1,5 +1,16 @@
 # @cat-factory/local-server
 
+## 0.65.7
+
+### Patch Changes
+
+- Updated dependencies [90a7fb3]
+  - @cat-factory/integrations@0.81.19
+  - @cat-factory/server@0.113.7
+  - @cat-factory/orchestration@0.107.5
+  - @cat-factory/node-server@0.93.7
+  - @cat-factory/executor-harness@1.43.4
+
 ## 0.65.6
 
 ### Patch Changes
