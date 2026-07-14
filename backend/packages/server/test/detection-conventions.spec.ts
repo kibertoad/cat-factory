@@ -16,13 +16,15 @@ describe('parseDetectionConventions', () => {
     expect(parseDetectionConventions('{"composeFiles":[]}')).toBeUndefined()
   })
 
-  it('reads the four known array fields, trimming blanks', () => {
+  it('reads the known array fields, trimming blanks', () => {
     const parsed = parseDetectionConventions(
       JSON.stringify({
         composeFiles: ['stack.yml', ' compose.custom.yml '],
         composeDirs: ['infra'],
         seedDirs: ['ops/seeds'],
         envTemplateDirs: ['vault'],
+        manifestDirs: ['platform', ' release '],
+        serviceManifestPaths: ['deployment/k8s/overlays/{env}/{service}'],
       }),
     )
     expect(parsed).toEqual({
@@ -30,6 +32,8 @@ describe('parseDetectionConventions', () => {
       composeDirs: ['infra'],
       seedDirs: ['ops/seeds'],
       envTemplateDirs: ['vault'],
+      manifestDirs: ['platform', 'release'],
+      serviceManifestPaths: ['deployment/k8s/overlays/{env}/{service}'],
     })
   })
 

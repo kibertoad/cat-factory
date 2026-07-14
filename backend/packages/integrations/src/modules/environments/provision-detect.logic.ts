@@ -76,6 +76,28 @@ export interface DetectionConventions {
   seedDirs?: string[]
   /** Extra directories an env/config template may sit in, beyond the compose dir + `config`/`env`/…. */
   envTemplateDirs?: string[]
+  /**
+   * Extra top-level directories to treat as shared DEPLOY-MANIFEST roots for the monorepo
+   * per-service slice search, beyond the built-in `deploy`/`deployment`/`k8s`/`manifests`/… set
+   * (appended lowest-priority). For an org whose manifests live under a house-named root the
+   * defaults don't cover (e.g. `platform/`, `release/`).
+   */
+  manifestDirs?: string[]
+  /**
+   * House-layout path TEMPLATES that map a service DIRECTLY to its manifests, tried BEFORE the
+   * heuristic search — the deterministic escape hatch for a layout the heuristics can't infer (or
+   * that you simply want pinned). Each template may contain two placeholders:
+   *
+   * - `{service}` — the service directory's basename (e.g. `backend-export` for a service whose
+   *   `directory` is `services/in-and-out/backend-export`).
+   * - `{env}` — expanded across the known ephemeral-environment names (`prenv`, `preview`, `pr`,
+   *   `dev`, `staging`, …); the first template whose expansion resolves to real manifests wins.
+   *
+   * E.g. `["deployment/k8s/overlays/{env}/{service}", "deployment/k8s/base/services/{service}"]`.
+   * A template that resolves is used verbatim (highest confidence); if none resolve the heuristic
+   * search runs as normal, so a template can only ADD determinism, never suppress detection.
+   */
+  serviceManifestPaths?: string[]
 }
 
 export interface DetectProvisioningOptions {
@@ -172,39 +194,79 @@ const K8S_NESTED_SUBDIRS = [
   'charts',
   'kustomize',
 ]
-// Root shared-deploy dirs a monorepo keys per-service subfolders under (e.g. `deploy/<svc>`,
-// `k8s/<svc>`, `manifests/services/<svc>`). Scanned at the REPO ROOT only when a service
-// subdirectory was given, to locate the slice belonging to this service. Deliberately excludes
-// `apps/` — that is almost always the SOURCE tree, not deploy manifests, so listing every app as a
-// "deploy folder" candidate is noise (a service whose manifests really live under `apps/<svc>` is
-// already covered by the colocated scan of its own directory).
+// Top-level directories a monorepo commonly parks its shared DEPLOY manifests under, used for the
+// per-service slice search (when a service subdir has no colocated manifests). Broader than a single
+// name because orgs differ: `deploy` vs `deployment(s)`, `k8s` vs `kubernetes`, GitOps roots
+// (`gitops`/`argocd`/`flux`). Deliberately excludes `apps/` — almost always the SOURCE tree, so a
+// service whose manifests really live under `apps/<svc>` is covered by the colocated scan instead.
 const SHARED_DEPLOY_ROOTS = [
   'deploy',
+  'deployment',
+  'deployments',
   'k8s',
   'kubernetes',
+  '.k8s',
   'manifests',
-  'manifests/services',
-  'infra/manifests',
+  'infra',
+  'infrastructure',
+  'ops',
+  'gitops',
+  'argocd',
+  'flux',
+  '.deploy',
+  'chart',
+  'charts',
+  'helm',
 ]
-// Fast membership test used to drop a shared-root child that is ITSELF another shared root (e.g.
-// `manifests/services`, surfaced as a child of `manifests`) so it isn't offered as a bogus slice.
-const SHARED_DEPLOY_ROOT_SET = new Set(SHARED_DEPLOY_ROOTS)
+// Structural layer dirs a monorepo nests per-service slices UNDER, inside a shared deploy root
+// (`deployment/k8s/base/services/<svc>`, `manifests/overlays/pre/<svc>`, `k8s/apps/<svc>`). The
+// layered slice search descends THROUGH these — and through env-ranked overlay names (see
+// `OVERLAY_RANK`) — looking for a child whose basename is the service, instead of only checking a
+// shared root's immediate children. This is what generalizes detection across nesting conventions.
+const SHARED_DEPLOY_LAYER_DIRS = new Set([
+  'base',
+  'bases',
+  'services',
+  'apps',
+  'components',
+  'overlays',
+  'overlay',
+  'env',
+  'envs',
+  'environments',
+  'k8s',
+  'kubernetes',
+])
+// Bounds the recursive slice search so a pathological monorepo can't fan out unboundedly.
+const MAX_SHARED_DEPLOY_DEPTH = 5
+const MAX_SHARED_DEPLOY_DIRS = 80
 // The most k8s roots we collect as candidates (bounds the candidate list + the reads it triggers).
 const MAX_MANIFEST_ROOTS = 6
-// Overlay names ranked most→least likely to be the ephemeral/preview environment.
+// Overlay/environment names ranked most→least likely to be the ephemeral/preview environment. Also
+// the vocabulary the `serviceManifestPaths` `{env}` placeholder expands across. Deliberately broad —
+// orgs name their preview env many ways (`prenv`/`preview`/`pre`/`pr`/`review`/`ephemeral`/…); the
+// rank only decides which is pre-selected when SEVERAL overlays coexist.
 const OVERLAY_RANK = [
   'prenv',
   'preview',
+  'pre',
   'pr',
+  'review',
   'ephemeral',
   'eph',
+  'sandbox',
+  'sbx',
   'dev',
   'development',
+  'int',
+  'integration',
   'staging',
   'stage',
+  'uat',
   'test',
   'testing',
   'qa',
+  'demo',
 ]
 const ENV_EXAMPLE_FILES = ['.env.example', '.env.sample', '.env.template', '.env.dist']
 // Bounds the total reads so a pathological repo can't fan out unboundedly. Raised from 80 because
@@ -341,6 +403,133 @@ function parseOne(content: string): Record<string, unknown> | null {
   }
 }
 
+// ---------------------------------------------------------------------------
+// Kubernetes-manifest classification. A plain `kind` + `apiVersion` presence check is NOT enough:
+// many non-cluster tools use the same envelope — the classic decoy is Backstage's `catalog-info.yaml`
+// (`apiVersion: backstage.io/v1alpha1`, often `kind: Component`), which sits in EVERY service dir of a
+// Backstage-catalogued monorepo. Treating those as manifests makes the detector classify a service's
+// SOURCE directory (or the repo root) as a raw-manifest deploy target — a confident false positive.
+// So a doc counts as a Kubernetes manifest only when its API group is Kubernetes-shaped (and not on the
+// non-Kubernetes denylist). This is provider-neutral and repo-shape-agnostic — it keys off the manifest
+// envelope, never a specific repo's layout.
+// ---------------------------------------------------------------------------
+
+/** The API group of an `apiVersion` (`apps/v1` → `apps`; a bare `v1` → `''`, the core group). */
+function apiGroupOf(apiVersion: string): string {
+  const slash = apiVersion.indexOf('/')
+  return slash === -1 ? '' : apiVersion.slice(0, slash)
+}
+
+// API groups that share the `kind`+`apiVersion` envelope but are NOT Kubernetes cluster resources.
+// Backstage is the common one in a service monorepo; the rest are other catalog/registry tools that
+// occasionally sit in a repo. A doc in one of these groups is never a manifest, even when its `kind`
+// collides with a real one (Backstage `Component` vs Kustomize `Component`).
+const NON_KUBERNETES_API_GROUPS = new Set([
+  'backstage.io',
+  'catalog.cattle.io',
+  'argoproj.io/argo-events', // (defensive; real Argo groups are allowed below)
+])
+// Built-in Kubernetes kinds + the kinds of the most common GitOps/operator CRDs. A doc with one of
+// these kinds is a manifest UNLESS its group is denylisted above (so a Backstage `Component` is still
+// rejected). This positively catches manifests whose CRD group we don't enumerate below.
+const KUBERNETES_KINDS = new Set([
+  // Workloads
+  'Deployment',
+  'StatefulSet',
+  'DaemonSet',
+  'ReplicaSet',
+  'ReplicationController',
+  'Pod',
+  'Job',
+  'CronJob',
+  // Networking / config / storage
+  'Service',
+  'Ingress',
+  'IngressClass',
+  'Endpoints',
+  'EndpointSlice',
+  'ConfigMap',
+  'Secret',
+  'Namespace',
+  'PersistentVolume',
+  'PersistentVolumeClaim',
+  'ServiceAccount',
+  'Role',
+  'RoleBinding',
+  'ClusterRole',
+  'ClusterRoleBinding',
+  'HorizontalPodAutoscaler',
+  'PodDisruptionBudget',
+  'NetworkPolicy',
+  'ResourceQuota',
+  'LimitRange',
+  'PriorityClass',
+  // Gateway API
+  'Gateway',
+  'HTTPRoute',
+  'GRPCRoute',
+  'TCPRoute',
+  'ReferenceGrant',
+  // Kustomize
+  'Kustomization',
+  'Component',
+  // GitOps / operators (common CRDs)
+  'Application',
+  'ApplicationSet',
+  'HelmRelease',
+  'HelmRepository',
+  'Certificate',
+  'Issuer',
+  'ClusterIssuer',
+  'ServiceMonitor',
+  'PrometheusRule',
+  'SealedSecret',
+  'ExternalSecret',
+])
+// API-group suffixes that mark a CRD as a Kubernetes cluster resource even when its `kind` isn't in
+// the set above. Kept to well-known operator ecosystems so a random `apiVersion: mytool/v1` config
+// file isn't mistaken for a manifest. `*.k8s.io` / `*.x-k8s.io` are handled separately (any such
+// group is Kubernetes by definition).
+const KUBERNETES_CRD_GROUP_SUFFIXES = [
+  'argoproj.io',
+  'fluxcd.io',
+  'cert-manager.io',
+  'coreos.com',
+  'istio.io',
+  'linkerd.io',
+  'crossplane.io',
+  'bitnami.com',
+  'external-secrets.io',
+  'jetstack.io',
+  'gatekeeper.sh',
+  'kyverno.io',
+]
+
+/**
+ * True when a parsed YAML doc is a Kubernetes cluster manifest (vs a decoy that merely shares the
+ * `kind`+`apiVersion` envelope — a Backstage `catalog-info.yaml`, a CI/tool config, generic app
+ * config). The rule, in order: no kind/apiVersion ⇒ no; denylisted group ⇒ no; known Kubernetes kind
+ * ⇒ yes; core group (`v1`, `apps/v1`) or a `*.k8s.io` / kustomize / known-operator group ⇒ yes;
+ * otherwise (an unknown custom group) ⇒ no. Conservative on the unknown tail on purpose: the cost of
+ * a false positive here is a source dir wrongly offered as a deploy target, whereas a genuinely exotic
+ * CRD-only layout is covered by the `serviceManifestPaths` escape hatch.
+ */
+function isKubernetesManifestDoc(doc: Record<string, unknown>): boolean {
+  const kind = asString(doc.kind)
+  const apiVersion = asString(doc.apiVersion)
+  if (!kind || !apiVersion) return false
+  const group = apiGroupOf(apiVersion)
+  if (NON_KUBERNETES_API_GROUPS.has(group)) return false
+  if (KUBERNETES_KINDS.has(kind)) return true
+  if (group === '' || group.endsWith('.k8s.io') || group.endsWith('.x-k8s.io')) return true
+  return KUBERNETES_CRD_GROUP_SUFFIXES.some((s) => group === s || group.endsWith(`.${s}`))
+}
+
+/** Parse a file's YAML docs and keep only the ones that are real Kubernetes manifests. */
+function parseManifestDocs(content: string): Record<string, unknown>[] {
+  return parseDocs(content).filter(isKubernetesManifestDoc)
+}
+
 /** Accumulated facts read out of the manifest tree. */
 interface ManifestScan {
   kinds: Set<string>
@@ -415,7 +604,7 @@ async function scanRawDir(
   for (const entry of entries) {
     if (entry.type !== 'dir' && isYamlFile(entry.name)) {
       const content = await scanner.getFile(joinRepoPath(dir, entry.name))
-      if (content) for (const doc of parseDocs(content)) scanManifestDoc(doc, scan)
+      if (content) for (const doc of parseManifestDocs(content)) scanManifestDoc(doc, scan)
     }
   }
 }
@@ -474,7 +663,7 @@ async function walkKustomize(
     const refPath = joinRepoPath(dir, ref)
     if (isYamlFile(ref)) {
       const content = await scanner.getFile(refPath)
-      if (content) for (const doc of parseDocs(content)) scanManifestDoc(doc, scan)
+      if (content) for (const doc of parseManifestDocs(content)) scanManifestDoc(doc, scan)
     } else {
       await walkKustomize(scanner, refPath, scan, depth + 1)
     }
@@ -496,38 +685,59 @@ function parseEnvExampleKeys(content: string): string[] {
   return [...new Set(keys)]
 }
 
-/** A k8s manifest root: the directory + whether it carries an `overlays/` tree. */
+/**
+ * A k8s manifest root: the directory, whether it carries an `overlays/` tree, whether it has a
+ * kustomization, and whether that kustomization is a Kustomize `Component`. A Component
+ * (`kind: Component`, `kustomize.config.k8s.io`) is NOT independently deployable — `kustomize build`
+ * rejects it; it exists only to be pulled into an aggregating overlay via `components:`. So a
+ * Component root is ranked below a standalone one, and when it's the best match the detector prefers
+ * the overlay that aggregates it (see `resolveComponentAggregator`).
+ */
 interface KubernetesRoot {
   dir: string
   hasOverlays: boolean
   hasKustomization: boolean
+  isComponent: boolean
+}
+
+/** True when a parsed kustomization declares `kind: Component` (a non-standalone Kustomize component). */
+function isKustomizeComponent(kustomizationContent: string): boolean {
+  const parsed = parseOne(kustomizationContent)
+  return parsed !== null && asString(parsed.kind) === 'Component'
 }
 
 /**
  * Decide whether `dir` (with its already-listed `entries`) is a k8s manifest root: it is when it
  * carries a kustomization / an `overlays/` or `base(s)/` subtree, or — lacking those markers — at
- * least one YAML file that parses as a real manifest (`kind` + `apiVersion`).
+ * least one YAML file that parses as a real Kubernetes manifest (see {@link isKubernetesManifestDoc};
+ * a Backstage `catalog-info.yaml` and other non-cluster `kind`+`apiVersion` decoys do NOT qualify).
  */
 async function evaluateK8sDir(
   scanner: BudgetedRepoScanner,
   dir: string,
   entries: { name: string; type: string; path: string }[],
 ): Promise<KubernetesRoot | null> {
-  const hasKustomization = entries.some(
+  const kustomizationEntry = entries.find(
     (e) => e.type !== 'dir' && KUSTOMIZATION_FILES.includes(e.name),
   )
+  const hasKustomization = kustomizationEntry !== undefined
   const hasOverlays = entries.some((e) => e.type === 'dir' && e.name === 'overlays')
   const hasBase = entries.some((e) => e.type === 'dir' && (e.name === 'base' || e.name === 'bases'))
   if (hasKustomization || hasOverlays || hasBase) {
-    return { dir, hasOverlays, hasKustomization }
+    let isComponent = false
+    if (kustomizationEntry) {
+      const content = await scanner.getFile(joinRepoPath(dir, kustomizationEntry.name))
+      isComponent = content !== null && isKustomizeComponent(content)
+    }
+    return { dir, hasOverlays, hasKustomization, isComponent }
   }
   // No kustomize markers — accept the dir only if it holds an actual k8s manifest.
   for (const entry of entries) {
     if (entry.type === 'dir' || !isYamlFile(entry.name)) continue
     const content = await scanner.getFile(joinRepoPath(dir, entry.name))
-    const looksLikeManifest =
-      content !== null && parseDocs(content).some((d) => asString(d.kind) && asString(d.apiVersion))
-    if (looksLikeManifest) return { dir, hasOverlays: false, hasKustomization: false }
+    if (content !== null && parseManifestDocs(content).length > 0) {
+      return { dir, hasOverlays: false, hasKustomization: false, isComponent: false }
+    }
   }
   return null
 }
@@ -569,41 +779,206 @@ async function collectKubernetesRoots(
       if (nested) add(nested)
     }
   }
-  return found
+  // Standalone roots rank above Kustomize Components (a Component can't be built on its own), keeping
+  // the original discovery order within each group (a stable partition). So `found[0]` — the prefilled
+  // pick — is never a bare Component when a standalone sibling exists.
+  return found.sort((a, b) => Number(a.isComponent) - Number(b.isComponent))
 }
 
 /**
- * When a service SUBDIR was given but its manifests aren't colocated, scan the repo's root
- * shared-deploy dirs for a per-service slice keyed by the service basename. Returns every candidate
- * slice (an immediate child dir of a `SHARED_DEPLOY_ROOTS` entry), with the basename-matching one(s)
- * flagged `recommended`. Case-insensitive fallback when no exact match exists.
+ * How strongly a slice directory name identifies THIS service. 3 = exact, 2 = case-insensitive,
+ * 1 = affix match (a hyphen/underscore-delimited prefix or suffix — catches a namespaced slice like
+ * `acme-backend-export` for service `backend-export`, or `backend-export-deploy`), 0 = no match.
+ * Affix matching is delimiter-bounded so `backend` does NOT match `backend-export` (a different service).
  */
-async function findServiceDeployCandidates(
+function serviceNameMatchTier(sliceName: string, serviceBasename: string): number {
+  if (!serviceBasename) return 0
+  if (sliceName === serviceBasename) return 3
+  const a = sliceName.toLowerCase()
+  const b = serviceBasename.toLowerCase()
+  if (a === b) return 2
+  const affix = (long: string, short: string): boolean =>
+    long.startsWith(`${short}-`) ||
+    long.startsWith(`${short}_`) ||
+    long.endsWith(`-${short}`) ||
+    long.endsWith(`_${short}`)
+  if (a.length > b.length && affix(a, b)) return 1
+  if (b.length > a.length && affix(b, a)) return 1
+  return 0
+}
+
+/**
+ * Deploy-slice structural preference inferred from its path: a `base`/`services` slice is typically a
+ * standalone Kustomization (higher), an `overlays`/`components` slice is usually a non-standalone
+ * Component (lower). Only breaks ties between equally-named slices — the definitive standalone-vs-
+ * component decision is made from the slice's own kustomization by {@link evaluateK8sDir}.
+ */
+function sliceStructuralScore(path: string): number {
+  const segs = path.toLowerCase().split('/')
+  let score = 0
+  if (segs.includes('base') || segs.includes('bases') || segs.includes('services')) score += 2
+  if (segs.includes('overlays') || segs.includes('overlay') || segs.includes('components'))
+    score -= 2
+  return score
+}
+
+// Top-level roots that UNAMBIGUOUSLY hold deploy manifests. A name-matched slice directly under one
+// of these is a real slice; a match under an AMBIGUOUS root (`infra`/`ops`/`gitops`/`argocd`/`flux`/
+// `charts`/`helm`, which just as often hold terraform/scripts/charts) is surfaced only when its path
+// also carries a Kubernetes structural token — so a terraform `infra/<svc>` sibling isn't offered as
+// a bogus manifest slice.
+const STRONG_MANIFEST_ROOTS = new Set([
+  'deploy',
+  'deployment',
+  'deployments',
+  'k8s',
+  'kubernetes',
+  '.k8s',
+  '.deploy',
+  'manifests',
+])
+
+/**
+ * Whether a name-matched slice path is manifest-shaped enough to surface (see {@link STRONG_MANIFEST_ROOTS}).
+ * A match directly under an operator-configured `manifestDirs` root (`strongExtras`) always counts —
+ * the operator has declared that root holds manifests, so it's never treated as an ambiguous sibling.
+ */
+function isManifestSlicePath(path: string, strongExtras: Set<string>): boolean {
+  const segs = path.toLowerCase().split('/')
+  const top = segs[0] ?? ''
+  if (STRONG_MANIFEST_ROOTS.has(top) || strongExtras.has(top)) return true
+  return segs.some(
+    (s) =>
+      SHARED_DEPLOY_LAYER_DIRS.has(s) || s === 'manifests' || s === 'k8s' || s === 'kubernetes',
+  )
+}
+
+interface ServiceSlice {
+  path: string
+  name: string
+  tier: number
+  structural: number
+}
+
+/**
+ * Locate THIS service's per-service manifest slice(s) in the repo's shared deploy roots — a bounded,
+ * layered breadth-first descent that generalizes across nesting conventions: `deploy/<svc>`,
+ * `deployment/k8s/base/services/<svc>`, `manifests/overlays/pre/<svc>`, `k8s/apps/<svc>`, and a
+ * `<prefix>-<svc>` namespaced slice. From each shared deploy root it descends THROUGH the structural
+ * layer dirs (`base`/`services`/`apps`/`overlays/<env>`/…) collecting only directories whose basename
+ * MATCHES the service (name tier ≥ 1) — so the surfaced candidates are the handful that plausibly
+ * belong to this service, not every unrelated sibling. Bounded by depth + a dir-listing cap + the read
+ * budget. Returns them best-match-first (exact > ci > affix, then standalone > component), with the
+ * best flagged `recommended`. `extraRoots` are deployment-configured additions (`conventions.manifestDirs`).
+ */
+async function findServiceManifestSlices(
   scanner: BudgetedRepoScanner,
   serviceBasename: string,
+  extraRoots: string[] = [],
 ): Promise<ProvisioningServiceDirCandidate[]> {
-  const candidates: { path: string; name: string }[] = []
-  const seen = new Set<string>()
-  for (const deployRoot of SHARED_DEPLOY_ROOTS) {
-    for (const entry of await scanner.listDir(deployRoot)) {
+  if (!serviceBasename) return []
+  const matches: ServiceSlice[] = []
+  const seenMatch = new Set<string>()
+  const visited = new Set<string>()
+  let listed = 0
+  // Operator-configured roots are trusted as strong (a name match directly under one is a real slice).
+  const strongExtras = new Set(extraRoots.map((r) => r.trim().toLowerCase()).filter(Boolean))
+  // BFS frontier of (dir, depth). Seed with the shared roots (+ configured extras) at depth 0.
+  const frontier: { dir: string; depth: number }[] = withExtras(
+    SHARED_DEPLOY_ROOTS,
+    extraRoots,
+  ).map((dir) => ({ dir, depth: 0 }))
+  while (frontier.length > 0) {
+    if (listed >= MAX_SHARED_DEPLOY_DIRS) break
+    const { dir, depth } = frontier.shift()!
+    if (visited.has(dir)) continue
+    visited.add(dir)
+    const entries = await scanner.listDir(dir)
+    if (entries.length === 0) continue
+    listed++
+    for (const entry of entries) {
       if (entry.type !== 'dir') continue
-      const path = joinRepoPath(deployRoot, entry.name)
-      if (seen.has(path)) continue
-      // Skip a child that is itself a shared-deploy root (e.g. `manifests/services`): it's a
-      // container for slices, not a per-service slice of its own.
-      if (SHARED_DEPLOY_ROOT_SET.has(path)) continue
-      seen.add(path)
-      candidates.push({ path, name: entry.name })
+      const childPath = joinRepoPath(dir, entry.name)
+      const tier = serviceNameMatchTier(entry.name, serviceBasename)
+      if (tier > 0 && !seenMatch.has(childPath) && isManifestSlicePath(childPath, strongExtras)) {
+        seenMatch.add(childPath)
+        matches.push({
+          path: childPath,
+          name: entry.name,
+          tier,
+          structural: sliceStructuralScore(childPath),
+        })
+      }
+      // Descend through structural-layer dirs and env-ranked overlay names (`overlays/pre`) so a slice
+      // nested several layers deep still resolves. A name-matched dir is a leaf slice, not a layer, so
+      // we don't descend into it (its own manifests are read later by `collectKubernetesRoots`).
+      const isLayer =
+        SHARED_DEPLOY_LAYER_DIRS.has(entry.name.toLowerCase()) ||
+        rankOverlay(entry.name) < OVERLAY_RANK.length
+      if (tier === 0 && isLayer && depth + 1 <= MAX_SHARED_DEPLOY_DEPTH) {
+        frontier.push({ dir: childPath, depth: depth + 1 })
+      }
     }
   }
-  if (candidates.length === 0) return []
-  // Flag exactly ONE slice recommended: the first exact-basename match (SHARED_DEPLOY_ROOTS order),
-  // else the first case-insensitive match, else none (the user picks from the surfaced list).
-  const lower = serviceBasename.toLowerCase()
-  const exactIdx = candidates.findIndex((c) => c.name === serviceBasename)
-  const chosenIdx =
-    exactIdx !== -1 ? exactIdx : candidates.findIndex((c) => c.name.toLowerCase() === lower)
-  return candidates.map((c, i) => ({ ...c, recommended: i === chosenIdx }))
+  if (matches.length === 0) return []
+  matches.sort(
+    (a, b) => b.tier - a.tier || b.structural - a.structural || a.path.localeCompare(b.path),
+  )
+  return matches.map((m, i) => ({ path: m.path, name: m.name, recommended: i === 0 }))
+}
+
+/**
+ * Resolve the aggregating overlay for a Kustomize Component slice — the overlay `kustomization.yaml`
+ * (a real `Kustomization`) that pulls the component in via `components:`. A Component can't be built on
+ * its own, so when a component slice is the chosen manifest source we recommend its aggregator instead.
+ * Looks at the component dir's PARENT (the common `overlays/<env>/<component>` shape). Returns the
+ * aggregator root, or null when none references it (then the caller keeps the component + warns).
+ */
+async function resolveComponentAggregator(
+  scanner: BudgetedRepoScanner,
+  componentDir: string,
+): Promise<KubernetesRoot | null> {
+  const componentBase = componentDir.split('/').pop() ?? componentDir
+  const parent = componentDir.split('/').slice(0, -1).join('/')
+  if (!parent) return null
+  const kustomization = await scanner.getFirstFile(parent, KUSTOMIZATION_FILES)
+  if (!kustomization) return null
+  const parsed = parseOne(kustomization.content)
+  if (!parsed || asString(parsed.kind) === 'Component') return null
+  const references = asArray(parsed.components).some((c) => {
+    const ref = asString(c)
+    return ref !== undefined && (ref.split('/').pop() ?? ref) === componentBase
+  })
+  if (!references) return null
+  return evaluateK8sDir(scanner, parent, await scanner.listDir(parent))
+}
+
+/**
+ * Resolve an explicit house-layout {@link DetectionConventions.serviceManifestPaths} template to real
+ * manifests — the deterministic escape hatch. Expands `{service}` (the service basename) and `{env}`
+ * (tried across {@link OVERLAY_RANK}, most-ephemeral first), and returns the first expansion that IS a
+ * manifest root. A template needing `{service}` is skipped when there's no service basename (a
+ * repo-root scan). The probe is a single {@link evaluateK8sDir} on the EXACT expanded path (a template
+ * points straight at the manifests dir), so it stays cheap even across many `{env}` expansions — never
+ * the full sub-tree search. Returns null when no template resolves (the heuristic search then runs).
+ */
+async function resolveTemplatedManifestRoots(
+  scanner: BudgetedRepoScanner,
+  templates: string[],
+  serviceBasename: string,
+): Promise<{ roots: KubernetesRoot[]; path: string } | null> {
+  for (const template of templates) {
+    if (template.includes('{service}') && !serviceBasename) continue
+    const withService = template.split('{service}').join(serviceBasename)
+    const envValues = withService.includes('{env}') ? OVERLAY_RANK : ['']
+    for (const env of envValues) {
+      const path = joinRepoPath(withService.split('{env}').join(env))
+      if (!path) continue
+      const root = await evaluateK8sDir(scanner, path, await scanner.listDir(path))
+      if (root) return { roots: [root], path }
+    }
+  }
+  return null
 }
 
 interface ComposeHit {
@@ -1301,7 +1676,30 @@ async function buildKubernetesRecommendation(
   opts: KubernetesBuildOptions,
 ): Promise<ProvisioningRecommendation> {
   const notes: ProvisioningDetectionNote[] = []
-  const chosen = roots[0]!
+  let effectiveRoots = roots
+  let chosen = effectiveRoots[0]!
+
+  // A Kustomize Component isn't independently deployable (`kustomize build` rejects it). If the chosen
+  // slice is one, prefer the overlay that aggregates it (its `components:` parent) so the recommended
+  // source actually renders; when no aggregator references it, keep the component but warn clearly.
+  if (chosen.isComponent) {
+    const aggregator = await resolveComponentAggregator(scanner, chosen.dir)
+    if (aggregator) {
+      notes.push({
+        field: 'manifestRoot',
+        confidence: 'high',
+        message: `"${dirLabel(chosen.dir)}" is a Kustomize Component (not deployable on its own); using the overlay that aggregates it at ${aggregator.dir || '.'} instead.`,
+      })
+      effectiveRoots = [aggregator, ...effectiveRoots]
+      chosen = aggregator
+    } else {
+      notes.push({
+        field: 'manifestRoot',
+        confidence: 'low',
+        message: `"${dirLabel(chosen.dir)}" looks like a Kustomize Component, which \`kustomize build\` can't render on its own. Point the manifest source at the overlay that includes it (via \`components:\`).`,
+      })
+    }
+  }
 
   if (opts.chosenSlice) {
     notes.push({
@@ -1344,8 +1742,8 @@ async function buildKubernetesRecommendation(
 
   // Several k8s roots resolved — surface the "which root" picker (complements the overlay picker).
   let manifestRootCandidates: ProvisioningManifestRootCandidate[] | undefined
-  if (roots.length > 1) {
-    manifestRootCandidates = roots.map((r, i) => ({
+  if (effectiveRoots.length > 1) {
+    manifestRootCandidates = effectiveRoots.map((r, i) => ({
       // The recommended root uses the RESOLVED source path (which may be a kustomize overlay subdir,
       // e.g. `k8s/overlays/prenv`) so its chip matches `manifestSource.path` and stays highlighted —
       // and picking it re-applies that same overlay-resolved path rather than the bare root.
@@ -1357,7 +1755,7 @@ async function buildKubernetesRecommendation(
     notes.push({
       field: 'manifestRoot',
       confidence: 'low',
-      message: `Found ${roots.length} manifest locations; pre-selected ${dirLabel(chosen.dir)}. Pick another below if that's wrong.`,
+      message: `Found ${effectiveRoots.length} manifest locations; pre-selected ${dirLabel(chosen.dir)}. Pick another below if that's wrong.`,
     })
   }
 
@@ -1514,6 +1912,22 @@ export async function detectKubernetesProvisioning(
     )
   }
 
+  // Escape hatch (highest confidence): an explicit house-layout `serviceManifestPaths` template maps
+  // the service straight to its manifests, so it's tried BEFORE the heuristic search — a one-line
+  // deployment config that makes a whole monorepo resolve deterministically.
+  const templates = options.conventions?.serviceManifestPaths
+  if (templates && templates.length > 0) {
+    const templated = await resolveTemplatedManifestRoots(scanner, templates, serviceBasename)
+    if (templated) {
+      return buildKubernetesRecommendation(scanner, templated.roots, templated.path, {
+        serviceBasename,
+        compose,
+      })
+    }
+  }
+
+  const extraManifestDirs = options.conventions?.manifestDirs
+
   // Colocated k8s manifests win (highest confidence). In a monorepo, ALSO surface a root-shared
   // per-service slice as a low-confidence "this might be the deploy target instead" hint — but ONLY
   // when a slice actually matches THIS service's name. Surfacing every unrelated `deploy/*` child
@@ -1521,7 +1935,7 @@ export async function detectKubernetesProvisioning(
   if (roots.length > 0) {
     const lowerBasename = serviceBasename.toLowerCase()
     const matchingHint = repoScanEnabled
-      ? (await findServiceDeployCandidates(scanner, serviceBasename)).filter(
+      ? (await findServiceManifestSlices(scanner, serviceBasename, extraManifestDirs)).filter(
           (c) => c.name.toLowerCase() === lowerBasename,
         )
       : []
@@ -1532,10 +1946,11 @@ export async function detectKubernetesProvisioning(
     })
   }
 
-  // No colocated manifests. In a monorepo, look for THIS service's slice in a root shared-deploy dir
-  // (e.g. `deploy/<service>`), preferring the basename-matched slice(s).
+  // No colocated manifests. In a monorepo, look for THIS service's slice in the shared deploy dirs
+  // (`deploy/<svc>`, `deployment/k8s/base/services/<svc>`, `overlays/<env>/<svc>`, …), preferring the
+  // basename-matched slice(s).
   if (repoScanEnabled) {
-    const slices = await findServiceDeployCandidates(scanner, serviceBasename)
+    const slices = await findServiceManifestSlices(scanner, serviceBasename, extraManifestDirs)
     if (slices.length > 0) {
       const ordered = [...slices].sort((a, b) => Number(b.recommended) - Number(a.recommended))
       for (const slice of ordered) {

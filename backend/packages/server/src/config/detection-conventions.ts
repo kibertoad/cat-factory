@@ -2,10 +2,11 @@ import type { EnvironmentsConfig } from './types.js'
 
 // Parse the optional deployment-level provisioning-DETECTION convention extensions from a single
 // env var, so both facades read the same house-convention overrides the same way. The value is a
-// JSON object with any of `composeFiles` / `composeDirs` / `seedDirs` / `envTemplateDirs` string
-// arrays; anything else (unset / blank / malformed / non-object / empty) yields undefined, i.e. the
-// built-in detection behaviour. A convention EXTENSION is never critical, so malformed JSON degrades
-// to "built-in" rather than failing config load. See `EnvironmentsConfig.detectionConventions`.
+// JSON object with any of the string-array fields `composeFiles` / `composeDirs` / `seedDirs` /
+// `envTemplateDirs` / `manifestDirs` / `serviceManifestPaths`; anything else (unset / blank /
+// malformed / non-object / empty) yields undefined, i.e. the built-in detection behaviour. A
+// convention EXTENSION is never critical, so malformed JSON degrades to "built-in" rather than
+// failing config load. See `EnvironmentsConfig.detectionConventions`.
 
 export type DetectionConventionsConfig = NonNullable<EnvironmentsConfig['detectionConventions']>
 
@@ -21,7 +22,7 @@ function stringList(value: unknown): string[] | undefined {
 
 /**
  * Parse `ENVIRONMENTS_DETECTION_CONVENTIONS` (a JSON object) into the config shape, or undefined
- * when unset/blank/malformed/empty. Only the four known array fields are read; unknown keys and
+ * when unset/blank/malformed/empty. Only the known array fields are read; unknown keys and
  * non-string entries are ignored.
  */
 export function parseDetectionConventions(
@@ -46,5 +47,9 @@ export function parseDetectionConventions(
   if (seedDirs) result.seedDirs = seedDirs
   const envTemplateDirs = stringList(src.envTemplateDirs)
   if (envTemplateDirs) result.envTemplateDirs = envTemplateDirs
+  const manifestDirs = stringList(src.manifestDirs)
+  if (manifestDirs) result.manifestDirs = manifestDirs
+  const serviceManifestPaths = stringList(src.serviceManifestPaths)
+  if (serviceManifestPaths) result.serviceManifestPaths = serviceManifestPaths
   return Object.keys(result).length > 0 ? result : undefined
 }
