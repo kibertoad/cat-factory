@@ -32,6 +32,7 @@ import { useConsensusStore } from '~/stores/consensus'
 import { useGitHubStore } from '~/stores/github'
 import { useFragmentsStore } from '~/stores/fragments'
 import { useProviderConnectionsStore } from '~/stores/providerConnections'
+import { markBoot } from '~/utils/bootMarks'
 
 /**
  * Owns the active workspace and bootstraps the app against the backend. On load
@@ -159,6 +160,17 @@ export const useWorkspaceStore = defineStore(
       ready.value = false
       error.value = null
       try {
+        // Cold-open waterfall flattening (app-startup initiative, item 8): the persisted board is
+        // usually known from localStorage BEFORE any request fires, and its snapshot is the app's
+        // heaviest payload (the ~18-read aggregate). Fetch it SPECULATIVELY in parallel with the
+        // workspace list + accounts instead of waiting for the list to resolve first — one fewer
+        // sequential round trip on the critical path. Validated for membership in
+        // resolveActiveBoard; a stale/removed persisted id just discards the speculative result and
+        // falls back to today's path. `.catch` keeps a gone-board 404 from rejecting the whole init.
+        const persistedId = workspaceId.value
+        const speculativeSnapshot = persistedId
+          ? api.getWorkspace(persistedId).catch(() => null)
+          : null
         // Accounts (an auth concept — empty in dev, which leaves boards unscoped) and the
         // workspace list are independent, so fetch them concurrently. resolveActiveBoard
         // needs both, so it still runs after.
@@ -168,25 +180,38 @@ export const useWorkspaceStore = defineStore(
             .catch(() => {}),
           api.listWorkspaces(),
         ])
+        markBoot('workspaces-listed')
         workspaces.value = workspaceList
-        await resolveActiveBoard()
+        await resolveActiveBoard(await speculativeSnapshot)
+        markBoot('snapshot-hydrated')
         ready.value = true
       } catch (e) {
         error.value = e instanceof Error ? e.message : 'Failed to reach the backend.'
       }
     }
 
-    /** Open the persisted board (aligning the active account to it), else pick/create one. */
-    async function resolveActiveBoard() {
+    /**
+     * Open the persisted board (aligning the active account to it), else pick/create one.
+     *
+     * `prefetched` is the speculatively-fetched snapshot for the persisted board (see {@link init}):
+     * when it's for the SAME still-valid board we reuse it instead of re-fetching, so the cold open
+     * pays exactly one snapshot fetch — overlapped with the workspace list rather than after it.
+     */
+    async function resolveActiveBoard(prefetched?: WorkspaceSnapshot | null) {
       const accounts = useAccountsStore()
       if (workspaceId.value) {
         const existing = workspaces.value.find((w) => w.id === workspaceId.value)
         if (existing) {
           if (accounts.enabled && existing.accountId) accounts.activeAccountId = existing.accountId
-          hydrate(await api.getWorkspace(existing.id))
+          hydrate(
+            prefetched && prefetched.workspace.id === existing.id
+              ? prefetched
+              : await api.getWorkspace(existing.id),
+          )
           return
         }
-        // Persisted board is gone (deleted, or now another tenant's) — fall through.
+        // Persisted board is gone (deleted, or now another tenant's) — fall through (and discard the
+        // now-irrelevant speculative snapshot).
         workspaceId.value = null
       }
       const first = accountWorkspaces.value[0]

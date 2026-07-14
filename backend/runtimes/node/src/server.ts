@@ -16,6 +16,7 @@ import {
   resolveCorsOrigin,
 } from '@cat-factory/server'
 import { loadNodeConfig } from './config.js'
+import { startBootClock } from './bootTimings.js'
 import { Hono } from 'hono'
 import { cors } from 'hono/cors'
 import { validateRegistrationsOnce } from '@cat-factory/orchestration'
@@ -280,12 +281,17 @@ async function bootServer(
   options: NonNullable<Parameters<typeof start>[0]>,
   env: NodeJS.ProcessEnv,
 ): Promise<ReturnType<typeof serve>> {
+  // Boot-phase instrumentation (app-startup initiative, item 1): bracket each phase so the "ready"
+  // line below reports where the boot seconds actually go. Cheap `performance.now()` marks; the
+  // summary is logged once, after listen.
+  const bootClock = startBootClock()
   const databaseUrl = requireEnv(env, 'DATABASE_URL')
   // Validate the full config UP FRONT — it is pure (no I/O), so an ENCRYPTION_KEY / auth-provider
   // problem surfaces as a ConfigValidationError here, BEFORE we open a Postgres connection or run
   // migrations. Without this the same throw would fire deep inside `buildContainer` only after the
   // heavy DB boot, and a bad-config restart would needlessly hammer Postgres first.
   loadNodeConfig(env)
+  bootClock.mark('config')
   // Optional schema overrides for a SHARED database (where `public` is unavailable, or another
   // service already owns the default `drizzle`/`pgboss` schemas). All default to the prior
   // behaviour, so a stock deployment is unchanged:
@@ -313,7 +319,9 @@ async function bootServer(
   // debuggability. `migrate()` throws a MigrationFailedError / DbSchemaInconsistentError with
   // a recovery hint when the DB is wedged.
   await migrate(db, pool, { schema: dbSchema, migrationsSchema, databaseUrl })
+  bootClock.mark('migrate')
   await boss.start()
+  bootClock.mark('bossStart')
   // pg-boss lifecycle flags for the `/ready` probe: it's running once `start()` resolves and stops
   // being ready when it emits `stopped` (graceful shutdown) or `draining` flips at SIGTERM. The
   // pool's own health is probed live per request (a `SELECT 1`), so it needs no flag.
@@ -366,6 +374,7 @@ async function bootServer(
     // default). The local facade rides on this same field via its `buildContainer` override.
     defaultModelPresetId: options.defaultModelPresetId,
   })
+  bootClock.mark('container')
   // Connect the cross-node adapters (a no-op when none are configured) so peer events start
   // reaching this node's browsers.
   await realtimePropagator.start(logger)
@@ -375,6 +384,7 @@ async function bootServer(
   // host and how to verify, instead of leaving the operator to discover it from stale peers. A
   // no-op when REDIS_URL is unset (single-node / local mode).
   await warnIfRedisUnreachable(env, logger)
+  bootClock.mark('bus')
 
   // Validate the registered extensions (gates / agent kinds) once, before serving — every
   // `register*` import side effect has run by now. A typo'd gate helperKind or an unknown
@@ -411,6 +421,7 @@ async function bootServer(
   await startGitHubSyncWorker(boss, container, logger, {
     concurrency: runtime.concurrency,
   })
+  bootClock.mark('workers')
   // Readiness probe for `/ready`: a live Postgres round-trip + the pg-boss flag, draining the
   // instant shutdown begins so a load balancer stops routing here while in-flight requests finish.
   const readiness = makeReadinessProbe({
@@ -429,6 +440,11 @@ async function bootServer(
     host: options.host,
     label: 'cat-factory node server',
   })
+  bootClock.mark('listen')
+  // One structured line naming where the boot seconds went (app-startup initiative, item 1). The
+  // per-phase breakdown is what every later optimization slice reports its before/after against.
+  const timings = bootClock.summary()
+  logger.info(timings, `cat-factory node server ready in ${timings.totalMs} ms`)
 
   // The background sweepers below only schedule `setInterval`s (no work runs until a
   // timer fires), so start them AFTER the listener binds — the server accepts requests a

@@ -10,6 +10,7 @@ import {
   serveAppWithRealtime,
   serveMisconfigured,
   start,
+  startBootClock,
 } from '@cat-factory/node-server'
 import { DOCS, ENV_VARS_ANCHORS, isConfigValidationError, logger } from '@cat-factory/server'
 import { validateRegistrationsOnce } from '@cat-factory/orchestration'
@@ -123,10 +124,17 @@ async function bootLocal(
   // or HOST=127.0.0.1 on Docker Desktop (where host.docker.internal still resolves).
   const localized = applyLocalDefaults(env)
 
+  // Time local mode's OWN awaited preflights (app-startup initiative, item 1): the Node `start()`
+  // it delegates to logs its own phase breakdown, but the runtime + PAT probes run BEFORE that and
+  // are otherwise untimed. One summary line makes a slow github.com PAT round-trip (item 6) or a
+  // wedged container CLI visible without guessing.
+  const bootClock = startBootClock()
+
   // Container-runtime preflight: log the selected runtime + its capabilities + the host
   // alias the harness will use to reach this service, and probe that the CLI is present.
   // A misconfigured runtime then fails loud at boot rather than on the first dispatch.
   await preflightRuntime(localized)
+  bootClock.mark('runtimePreflight')
 
   // Harness-image preflight: resolve the effective image (an explicit LOCAL_HARNESS_IMAGE, else
   // the backend-matched RECOMMENDED_HARNESS_IMAGE) and refresh it so a rerun can't launch a
@@ -160,6 +168,9 @@ async function bootLocal(
     const warning = describePatProbeVerdict((await probeGitHubPat(localized)) ?? { ok: true })
     if (warning) logger.warn(warning)
   }
+  bootClock.mark('patProbe')
+  const preflight = bootClock.summary()
+  logger.info(preflight, `local mode: preflights done in ${preflight.totalMs} ms`)
 
   if (localized.AUTH_DEV_OPEN !== 'false' && !env.HOST?.trim()) {
     logger.warn(

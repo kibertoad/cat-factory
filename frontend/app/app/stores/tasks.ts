@@ -34,6 +34,7 @@ export const useTasksStore = defineStore('tasks', () => {
   // (integration disabled vs a server/backend error) instead of "install it first".
   const integration = useSourceIntegration<TaskSourceKind, TaskConnection, TaskSourceState>({
     enabled: () => !!workspace.workspaceId,
+    workspaceId: () => workspace.workspaceId,
     fetch: async () => {
       const [{ sources }, { connections }] = await Promise.all([
         api.listTaskSources(workspace.requireId()),
@@ -44,7 +45,7 @@ export const useTasksStore = defineStore('tasks', () => {
   })
   const { available, probeError, sources, connections, connectedSources, anyConnected } =
     integration
-  const { descriptorFor, connectionFor, isConnected, probe } = integration
+  const { descriptorFor, connectionFor, isConnected, probe, ensureProbed } = integration
 
   const { items: tasks, upsert: upsertTask } = useUpsertList<SourceTask>({
     key: (t) => `${t.source}:${t.externalId}`,
@@ -224,6 +225,7 @@ export const useTasksStore = defineStore('tasks', () => {
     isConnected,
     tasksForBlock,
     probe,
+    ensureProbed,
     checkSetup,
     connect,
     startLinearOAuth,

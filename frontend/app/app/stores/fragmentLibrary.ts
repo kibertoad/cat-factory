@@ -10,6 +10,7 @@ import type {
   ResolvedFragment,
   UpdatePromptFragmentInput,
 } from '~/types/domain'
+import { useSingleFlightProbe } from '~/composables/useSingleFlightProbe'
 import { useWorkspaceStore } from '~/stores/workspace'
 import { useFragmentsStore } from '~/stores/fragments'
 
@@ -62,7 +63,7 @@ function fragmentLibrarySetup(kind: FragmentOwnerKind, resolveOwnerId: () => str
   }
 
   /** Probe the feature + load this owner's tier, sources and (ws) resolved catalog. */
-  async function probe() {
+  async function runProbe() {
     const id = resolveOwnerId()
     if (!id) return
     try {
@@ -82,6 +83,10 @@ function fragmentLibrarySetup(kind: FragmentOwnerKind, resolveOwnerId: () => str
       resolved.value = []
     }
   }
+  // Single-flight the probe keyed on the owner id (app-startup initiative, item 12): the SideBar's
+  // board-open fan-out uses `ensureProbed`, so it loads once per owner; `probe()` stays the
+  // on-demand refresh (a library mutation still re-reads via the explicit calls).
+  const { probe, ensureProbed } = useSingleFlightProbe(runProbe, () => resolveOwnerId())
 
   async function refreshResolved() {
     // Every library mutation lands here: drop the picker catalog's cache so the
@@ -192,6 +197,7 @@ function fragmentLibrarySetup(kind: FragmentOwnerKind, resolveOwnerId: () => str
     viaWorkspaceId,
     builtinCount,
     probe,
+    ensureProbed,
     refreshResolved,
     create,
     createDocumentFragment,

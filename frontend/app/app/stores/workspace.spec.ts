@@ -112,3 +112,70 @@ describe('workspace store refresh ordering', () => {
     expect(board.getBlock('spawned')).toBeDefined()
   })
 })
+
+// Cold-open waterfall flattening (app-startup initiative, item 8): `init()` fetches the persisted
+// board's snapshot SPECULATIVELY, in parallel with the workspace list, instead of waiting for the
+// list to resolve before the (heaviest) snapshot fetch. These pin that (a) a still-valid persisted
+// board is opened with EXACTLY ONE snapshot fetch — the reused speculative one — and (b) a stale
+// persisted id falls back cleanly, discarding the speculative result.
+describe('workspace store cold-open speculative snapshot', () => {
+  beforeEach(() => {
+    // A working accounts store (the inert stub returns non-promises, which init's `.catch` chain +
+    // `accountWorkspaces` can't use). Auth off ⇒ all boards are in scope.
+    vi.stubGlobal('useAccountsStore', () => ({
+      load: async () => {},
+      enabled: false,
+      activeAccountId: null,
+    }))
+  })
+
+  it('reuses the speculative persisted snapshot — one getWorkspace on a cold open', async () => {
+    const getWorkspace = vi.fn().mockResolvedValue(snapshot('ws1', [block('f1')]))
+    const listWorkspaces = vi.fn().mockResolvedValue([{ id: 'ws1', name: 'ws1', accountId: null }])
+    vi.stubGlobal('useApi', () => ({ getWorkspace, listWorkspaces }))
+
+    const ws = useWorkspaceStore()
+    ws.workspaceId = 'ws1' // the persisted board (read from localStorage on a real cold open)
+    await ws.init()
+
+    // The persisted board's snapshot was fetched exactly once (speculatively) and REUSED —
+    // resolveActiveBoard did not fetch it a second time.
+    expect(listWorkspaces).toHaveBeenCalledTimes(1)
+    expect(getWorkspace).toHaveBeenCalledTimes(1)
+    expect(getWorkspace).toHaveBeenCalledWith('ws1')
+    expect(useBoardStore().getBlock('f1')).toBeDefined()
+  })
+
+  it('falls back to the first board when the persisted id is gone', async () => {
+    const getWorkspace = vi.fn(async (id: string) => {
+      if (id === 'gone') throw new Error('404') // the speculative fetch for a removed board rejects
+      return snapshot(id, [block('f2')])
+    })
+    const listWorkspaces = vi.fn().mockResolvedValue([{ id: 'ws2', name: 'ws2', accountId: null }])
+    vi.stubGlobal('useApi', () => ({ getWorkspace, listWorkspaces }))
+
+    const ws = useWorkspaceStore()
+    ws.workspaceId = 'gone'
+    await ws.init()
+
+    // The rejected speculative fetch didn't wedge init; it fell back to the one board in scope.
+    expect(getWorkspace).toHaveBeenNthCalledWith(1, 'gone')
+    expect(getWorkspace).toHaveBeenCalledWith('ws2')
+    expect(ws.workspaceId).toBe('ws2')
+    expect(useBoardStore().getBlock('f2')).toBeDefined()
+  })
+
+  it('no persisted board: no speculative fetch, opens the first board', async () => {
+    const getWorkspace = vi.fn().mockResolvedValue(snapshot('ws3', [block('f3')]))
+    const listWorkspaces = vi.fn().mockResolvedValue([{ id: 'ws3', name: 'ws3', accountId: null }])
+    vi.stubGlobal('useApi', () => ({ getWorkspace, listWorkspaces }))
+
+    const ws = useWorkspaceStore()
+    ws.workspaceId = null
+    await ws.init()
+
+    expect(getWorkspace).toHaveBeenCalledTimes(1)
+    expect(getWorkspace).toHaveBeenCalledWith('ws3')
+    expect(useBoardStore().getBlock('f3')).toBeDefined()
+  })
+})

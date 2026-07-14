@@ -1,5 +1,6 @@
 import { type ComputedRef, type Ref, computed, ref } from 'vue'
 import { apiErrorEnvelope, apiErrorStatus } from '~/composables/api/errors'
+import { useSingleFlightProbe } from '~/composables/useSingleFlightProbe'
 import { useUpsertList } from '~/composables/useUpsertList'
 
 /**
@@ -25,6 +26,12 @@ export function useSourceIntegration<
   fetch: () => Promise<{ sources: Desc[]; connections: Conn[] }>
   /** Gate the probe (e.g. skip until a workspace is selected). */
   enabled?: () => boolean
+  /**
+   * The active workspace id, keying the single-flight probe (app-startup initiative, item 12): a
+   * board-open fan-out via `ensureProbed` hits the source once per board, and a workspace switch
+   * (new id) re-probes. Omitted ⇒ a single bucket (probe-once for the composable's lifetime).
+   */
+  workspaceId?: () => string | null
 }): {
   available: Ref<boolean | null>
   probeError: Ref<{ status: number | null; message: string } | null>
@@ -38,6 +45,7 @@ export function useSourceIntegration<
   upsertConnection: (conn: Conn) => void
   removeConnection: (source: Source) => void
   probe: () => Promise<void>
+  ensureProbed: () => Promise<void>
 } {
   /** null = unknown (not probed yet), true/false = integration on/off. */
   const available = ref<boolean | null>(null)
@@ -67,7 +75,7 @@ export function useSourceIntegration<
   }
 
   /** Probe the integration: resolves `available`, the sources and connections. */
-  async function probe() {
+  async function runProbe() {
     if (opts.enabled && !opts.enabled()) return
     try {
       const { sources: srcs, connections: conns } = await opts.fetch()
@@ -89,6 +97,13 @@ export function useSourceIntegration<
       connections.value = []
     }
   }
+  // Single-flight the probe (app-startup initiative, item 12): `probe()` still re-reads on demand
+  // (a connect/disconnect refresh), but the board-open fan-out uses `ensureProbed` so it fetches
+  // once per board rather than on every SideBar/page (re)mount.
+  const { probe, ensureProbed } = useSingleFlightProbe(
+    runProbe,
+    opts.workspaceId ?? (() => 'source-integration'),
+  )
 
   return {
     available,
@@ -103,5 +118,6 @@ export function useSourceIntegration<
     upsertConnection,
     removeConnection,
     probe,
+    ensureProbed,
   }
 }
