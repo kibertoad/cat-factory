@@ -133,7 +133,7 @@ import type {
   PipelineRepository,
   WorkspaceRepository,
 } from '@cat-factory/kernel'
-import type { Clock, IdGenerator } from '@cat-factory/kernel'
+import type { Clock, IdGenerator, PreloadedBlocks } from '@cat-factory/kernel'
 import type { AgentExecutor, ResolveRunRepoContext, TestSecretRef } from '@cat-factory/kernel'
 import { isAsyncAgentExecutor } from '@cat-factory/kernel'
 import type { WorkRunner } from '@cat-factory/kernel'
@@ -2874,24 +2874,28 @@ export class ExecutionService {
     const dependents = blocks.filter(
       (b) => b.level === 'task' && b.dependsOn.includes(mergedBlockId),
     )
+    // Nothing depends on the merged block (the common case) — skip the cross-workspace
+    // augment and the pipeline list entirely rather than paying reads with no dependent to act on.
+    if (dependents.length === 0) return
     // A dependent's OTHER blockers may live in another workspace (a shared service); resolve
     // them so `dependenciesMet` doesn't treat a cross-workspace blocker as missing-⇒-satisfied.
     await this.augmentWithCrossWorkspaceDeps(
       blocks,
       dependents.flatMap((d) => d.dependsOn),
     )
-    // The workspace's first pipeline (the board's "Run" default for a dependent with no
-    // pinned pipeline) is invariant across the loop — read it once, not per dependent.
-    const firstPipeline = dependents.some((d) => !d.pipelineId)
-      ? ((await this.pipelineRepository.listByWorkspace(workspaceId))[0] ?? null)
-      : null
+    // Resolve every dependent's pipeline from ONE workspace list, not a per-dependent
+    // point-read in the loop (banned N+1): index the catalog by id, and take the board's
+    // "Run" default (the first pipeline) for any dependent with no pinned pipeline.
+    const pipelines = await this.pipelineRepository.listByWorkspace(workspaceId)
+    const pipelinesById = new Map(pipelines.map((p) => [p.id, p]))
+    const firstPipeline = pipelines[0] ?? null
     for (const dependent of dependents) {
       // All of the dependent's blockers must now be satisfied (not just the one that merged).
       if (!dependenciesMet(blocks, dependent.id)) continue
       // Only auto-start a fresh task — never replace a run already in flight or a finished one.
       if (dependent.status !== 'planned' && dependent.status !== 'ready') continue
       const pipeline = dependent.pipelineId
-        ? await this.pipelineRepository.get(workspaceId, dependent.pipelineId)
+        ? (pipelinesById.get(dependent.pipelineId) ?? null)
         : firstPipeline
       if (!pipeline) continue
       // Skip dependents that would lease an individual-usage credential (can't unlock
@@ -3559,8 +3563,12 @@ export class ExecutionService {
    * durable driver, and delete the run record — so deleting a service/module never
    * orphans a container or a Workflows instance. Best-effort and silent: the board
    * delete that follows emits the coarse refresh, so no per-run event is needed.
+   *
+   * Returns the workspace block list it loaded so the immediately-following `removeBlock`
+   * can reuse it instead of re-listing the whole board (this teardown deletes only run
+   * records, never blocks, so the list is still current) — see {@link PreloadedBlocks}.
    */
-  async teardownForBlockTree(workspaceId: string, rootId: string): Promise<void> {
+  async teardownForBlockTree(workspaceId: string, rootId: string): Promise<PreloadedBlocks> {
     const blocks = await this.blockRepository.listByWorkspace(workspaceId)
     // Resolve every run in one query and index by block id, rather than a per-block
     // getByBlock (N+1) over the whole subtree.
@@ -3577,5 +3585,6 @@ export class ExecutionService {
       await this.workRunner.cancelRun(workspaceId, run.id)
       await this.executionRepository.deleteByBlock(workspaceId, blockId)
     }
+    return { workspaceId, blocks }
   }
 }

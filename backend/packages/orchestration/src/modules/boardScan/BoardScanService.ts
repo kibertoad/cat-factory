@@ -50,20 +50,24 @@ export class BoardScanService {
       description: describeNode(service.summary, service.references),
     })
 
-    let modules = 0
-    for (const planModule of service.modules ?? []) {
-      const module = await this.deps.boardService.addModule(workspaceId, frame.id, {
-        name: planModule.name,
-      })
-      modules += 1
+    const planModules = service.modules ?? []
+    // One batched insert for the whole map, not an addModule (→ full board list) per module.
+    const created = await this.deps.boardService.addModules(
+      workspaceId,
+      frame.id,
+      planModules.map((m) => ({ name: m.name })),
+    )
+    for (const [i, planModule] of planModules.entries()) {
+      const moduleBlock = created[i]
+      if (!moduleBlock) continue
       const moduleDescription = describeNode(planModule.summary, planModule.references)
       if (moduleDescription) {
-        await this.deps.boardService.updateBlock(workspaceId, module.id, {
+        await this.deps.boardService.updateBlock(workspaceId, moduleBlock.id, {
           description: moduleDescription,
         })
       }
     }
-    return { frameId: frame.id, modules }
+    return { frameId: frame.id, modules: planModules.length }
   }
 
   /**
@@ -96,15 +100,33 @@ export class BoardScanService {
     }
 
     const moduleBlocks = blocks.filter((b) => b.parentId === frame.id && b.level === 'module')
-    let modules = 0
-    for (const planModule of service.modules ?? []) {
-      let moduleBlock = moduleBlocks.find((b) => sameName(b.title, planModule.name))
-      if (!moduleBlock) {
-        moduleBlock = await this.deps.boardService.addModule(workspaceId, frame.id, {
-          name: planModule.name,
-        })
-        moduleBlocks.push(moduleBlock)
+    const planModules = service.modules ?? []
+    // Collect the modules the board is missing (deduped by name, so two blueprint modules
+    // sharing a name still resolve to one block, as the per-module path did), then insert
+    // them in ONE batch rather than an addModule (→ full board list) per missing module.
+    const seen = new Set(moduleBlocks.map((b) => b.title.trim().toLowerCase()))
+    const missing: string[] = []
+    for (const planModule of planModules) {
+      const key = planModule.name.trim().toLowerCase()
+      if (!seen.has(key)) {
+        seen.add(key)
+        missing.push(planModule.name)
       }
+    }
+    if (missing.length > 0) {
+      moduleBlocks.push(
+        ...(await this.deps.boardService.addModules(
+          workspaceId,
+          frame.id,
+          missing.map((name) => ({ name })),
+        )),
+      )
+    }
+
+    let modules = 0
+    for (const planModule of planModules) {
+      const moduleBlock = moduleBlocks.find((b) => sameName(b.title, planModule.name))
+      if (!moduleBlock) continue
       modules += 1
       const moduleDescription = describeNode(planModule.summary, planModule.references)
       if (moduleDescription && moduleDescription !== moduleBlock.description) {

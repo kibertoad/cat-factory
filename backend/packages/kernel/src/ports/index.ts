@@ -4,6 +4,7 @@ export type {
   ExecutionRepository,
   LiveRunSummary,
   PipelineRepository,
+  PreloadedBlocks,
   RunRef,
   ServiceRehome,
   WorkspaceRepository,

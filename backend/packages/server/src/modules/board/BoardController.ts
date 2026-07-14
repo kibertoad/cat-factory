@@ -155,8 +155,10 @@ export function boardController(): Hono<AppEnv> {
     // Tear down any running runs under this subtree FIRST — killing their containers
     // and durable drivers — so deleting a service/module never orphans a container
     // that would idle until its watchdog. Then remove the blocks + run records.
-    await container.executionService.teardownForBlockTree(workspaceId, blockId)
-    await container.boardService.removeBlock(workspaceId, blockId)
+    const preloaded = await container.executionService.teardownForBlockTree(workspaceId, blockId)
+    // Teardown already listed the board (and deleted only run records, not blocks), so hand
+    // that list to removeBlock rather than paying a second full board read on the same DELETE.
+    await container.boardService.removeBlock(workspaceId, blockId, { preloaded })
     return c.body(null, 204)
   })
 

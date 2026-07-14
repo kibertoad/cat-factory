@@ -86,6 +86,7 @@ function makePipelineStore(ids: string[]): PipelineRepository {
   const set = new Set(ids)
   return {
     get: async (_ws: string, id: string) => (set.has(id) ? pipeline(id) : null),
+    listByWorkspace: async (_ws: string) => ids.map((id) => pipeline(id)),
   } as unknown as PipelineRepository
 }
 
