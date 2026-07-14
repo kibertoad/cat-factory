@@ -259,7 +259,10 @@ export {
   parseDetectionConventions,
   type DetectionConventionsConfig,
 } from './config/detection-conventions.js'
-export { buildInfrastructureCapabilities } from './config/infrastructure.js'
+export {
+  buildInfrastructureCapabilities,
+  testEnvHasZeroConfigDefault,
+} from './config/infrastructure.js'
 
 // Row <-> domain mappers for the SQL persistence layer (shared by the D1 repos and
 // the Drizzle/Postgres repos — both use the same column shapes).

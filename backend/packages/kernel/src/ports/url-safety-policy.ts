@@ -11,7 +11,7 @@ export interface UrlSafetyPolicy {
   schemes: readonly string[]
   /**
    * Hostnames exempt from the private/internal-host block. Each entry matches the URL
-   * hostname case-insensitively: an exact match (`kargo.corp`, `10.1.2.3`), or a dot
+   * hostname case-insensitively: an exact match (`preview.corp`, `10.1.2.3`), or a dot
    * suffix when it starts with `.` (`.internal` matches `a.b.internal`). An exempt host
    * bypasses the loopback / link-local / RFC1918 / `.internal` / `.local` checks. Empty
    * => no exemptions (the strict default).

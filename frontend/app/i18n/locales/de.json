@@ -137,7 +137,7 @@
         "editTitle": "{id} bearbeiten",
         "addTitle": "Einen Typ hinzufügen",
         "manifestId": "Manifest-ID",
-        "manifestIdHelp": "Ein Lower-Kebab-Slug, z. B. my-kargo-template.",
+        "manifestIdHelp": "Ein Lower-Kebab-Slug, z. B. my-preview-template.",
         "label": "Bezeichnung",
         "acceptsInputHint": "Eingabehinweis (optional)",
         "acceptsInputHintHelp": "Beschreibt die Eingabeform, die der Provider erwartet.",
@@ -1737,7 +1737,7 @@
       },
       "ephemeralEnvironments": {
         "title": "Testumgebung nicht konfiguriert",
-        "body": "Es ist kein Anbieter für ephemere Umgebungen registriert, sodass Test-Agenten, die eine Live-Umgebung benötigen, nicht laufen können. Verbinden Sie einen, um sie zu aktivieren.",
+        "body": "Es ist kein Anbieter für ephemere Umgebungen registriert, sodass Test-Agenten, die eine aktive Vorschau-Umgebung benötigen, nicht laufen können. Öffnen Sie unten „Testumgebungen“ und verbinden Sie einen Kubernetes-Cluster oder einen benutzerdefinierten HTTP-Umgebungsanbieter, um sie zu aktivieren.",
         "action": "Environment konfigurieren"
       },
       "binaryStorage": {

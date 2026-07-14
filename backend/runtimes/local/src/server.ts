@@ -71,7 +71,7 @@ export async function startLocal(
      * App-owned backend registries (environment + runner kind → provider), registered BY
      * REFERENCE — the same seam the Node facade exposes on `buildContainer.backendRegistries`.
      * A deployment builds `createBackendRegistries()`, registers its custom backend(s) onto it
-     * (e.g. a Kargo ephemeral-environment provider), and passes it here; it is threaded into
+     * (e.g. a custom ephemeral-environment provider), and passes it here; it is threaded into
      * `buildLocalContainer` on both the Postgres and mothership paths. Absent → the built-in-only
      * default (`manifest` + `kubernetes`).
      *

@@ -19,7 +19,7 @@ import { logger } from '../observability/logger.js'
 // ⚠️ This is NOT the "bootstrap repo" task. That flow (ContainerRepoBootstrapper)
 // reinitialises git history and force-pushes a fresh service into an EMPTY repo. This
 // flow leaves history intact: it clones an EXISTING repo at a given ref, has a coding
-// agent fix the provider's malformed/partial config file (e.g. `.kargo.yml`) in place,
+// agent fix the provider's malformed/partial config file (e.g. `.deploy.yml`) in place,
 // and pushes the fix back onto the SAME branch — no history reset, no force-push, no PR,
 // no separate target repo. It dispatches the GENERIC `coding` job with NO `bootstrap`
 // block, so the harness takes its ordinary clone→edit→push path. The two flows share

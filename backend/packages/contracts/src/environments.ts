@@ -156,8 +156,8 @@ export const environmentManifestSchema = v.object({
   /** Fallback TTL (ms) when the response carries no explicit expiry. */
   defaultTtlMs: v.optional(v.pipe(v.number(), v.minValue(60000))),
   /**
-   * Opaque, provider-specific configuration for a CUSTOM backend (e.g. a Kargo project,
-   * link-selection key, status map). The generic HttpEnvironmentProvider ignores it
+   * Opaque, provider-specific configuration for a CUSTOM backend (e.g. a project
+   * reference, link-selection key, status map). The generic HttpEnvironmentProvider ignores it
    * entirely; a custom backend — registered by reference into the app-owned
    * `EnvironmentBackendRegistry` (see `backend/docs/native-environment-adapter.md`) — reads
    * + validates it off the per-call

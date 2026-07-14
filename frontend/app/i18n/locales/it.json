@@ -137,7 +137,7 @@
         "editTitle": "Modifica {id}",
         "addTitle": "Aggiungi un tipo",
         "manifestId": "Id del manifest",
-        "manifestIdHelp": "Uno slug in lower-kebab, es. my-kargo-template.",
+        "manifestIdHelp": "Uno slug in lower-kebab, es. my-preview-template.",
         "label": "Etichetta",
         "acceptsInputHint": "Suggerimento di input (facoltativo)",
         "acceptsInputHintHelp": "Descrive la forma di input attesa dal provider.",
@@ -1737,7 +1737,7 @@
       },
       "ephemeralEnvironments": {
         "title": "Ambiente di test non configurato",
-        "body": "Nessun provider di ambiente effimero è registrato, quindi gli agenti di test che necessitano di un ambiente live non possono funzionare. Connettine uno per abilitarli.",
+        "body": "Nessun provider di ambiente effimero è registrato, quindi gli agenti di test che necessitano di un ambiente di anteprima live non possono funzionare. Apri Ambienti di test qui sotto e connetti un cluster Kubernetes o un provider di ambienti HTTP personalizzato per abilitarli.",
         "action": "Configura l'ambiente"
       },
       "binaryStorage": {

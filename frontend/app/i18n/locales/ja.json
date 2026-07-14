@@ -1600,7 +1600,7 @@
       },
       "ephemeralEnvironments": {
         "title": "テスト環境が未設定です",
-        "body": "エフェメラル環境プロバイダーが登録されていないため、稼働中の環境を必要とするテストエージェントを実行できません。有効にするには接続してください。",
+        "body": "エフェメラル環境プロバイダーが登録されていないため、稼働中のプレビュー環境を必要とするテストエージェントを実行できません。下の「テスト環境」を開き、Kubernetes クラスターまたはカスタム HTTP 環境プロバイダーを接続して有効にしてください。",
         "action": "環境を設定"
       },
       "binaryStorage": {
@@ -1929,7 +1929,7 @@
         "editTitle": "{id} を編集",
         "addTitle": "タイプを追加",
         "manifestId": "マニフェスト ID",
-        "manifestIdHelp": "小文字とハイフンの slug。例: my-kargo-template。",
+        "manifestIdHelp": "小文字とハイフンの slug。例: my-preview-template。",
         "label": "ラベル",
         "acceptsInputHint": "入力ヒント（任意）",
         "acceptsInputHintHelp": "プロバイダーが期待する入力形式を説明します。",

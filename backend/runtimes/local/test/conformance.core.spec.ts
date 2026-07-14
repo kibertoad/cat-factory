@@ -31,6 +31,21 @@ if (databaseUrl) {
       expect(snap.body.infraSetup?.agentExecutor).toBe('not_applicable')
     })
   })
+
+  // Local-facade regression guard for the ephemeral-environments area: local mode ALWAYS wires the
+  // environment integration (ENCRYPTION_KEY is always set) yet the Docker-family runtime the test
+  // harness targets advertises `local-compose` as a zero-config test-env default, so a missing
+  // ephemeral-environment PROVIDER connection must NOT nag "test environment not configured" — the
+  // `ephemeralEnvironmentsRequireProvider` gate keeps this `not_applicable` rather than the
+  // false-positive `not_defined` a bare `!!container.environments` check produced.
+  describe('[local] infra-setup ephemeral-environments area', () => {
+    it('is not_applicable (docker-compose is the zero-config default, no provider required)', async () => {
+      const { call, createWorkspace } = harness.makeApp()
+      const { workspace } = await createWorkspace({ seed: false })
+      const snap = await call<WorkspaceSnapshot>('GET', `/workspaces/${workspace.id}`)
+      expect(snap.body.infraSetup?.ephemeralEnvironments).toBe('not_applicable')
+    })
+  })
 } else {
   describe.skip('[local] conformance core (set DATABASE_URL to run)', () => {
     it('requires Postgres', () => {})

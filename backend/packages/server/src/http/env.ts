@@ -212,6 +212,17 @@ export interface ServerContainer extends Core {
    */
   agentExecutorRequiresRunnerPool?: boolean
   /**
+   * True when this deployment REQUIRES a registered ephemeral-environment provider connection for
+   * env-dependent Tester runs — i.e. it has no zero-config in-container test-env default. Set by
+   * the Worker and stock/remote Node (whose only test-env backend is the `environment-provider`),
+   * and by local mode on a runtime that can't nest a Docker daemon (Apple `container`). Left falsy
+   * on local mode's Docker-family runtimes, where `local-compose` stands the Tester's deps up with
+   * no connection — so a missing provider is NOT a gap there. The infra-setup snapshot reads it so
+   * the "test environment not configured" banner fires only where a provider is genuinely
+   * mandatory (defaults to required when unset, preserving the hosted-facade behaviour).
+   */
+  ephemeralEnvironmentsRequireProvider?: boolean
+  /**
    * Consumer of normalised inbound VCS webhook events (the neutral ingest route's
    * `POST /vcs/:provider/webhooks` hands verified+mapped events here). Present only when a
    * facade wires a sink; absent ⇒ the route still verifies + maps + acks but drops the event

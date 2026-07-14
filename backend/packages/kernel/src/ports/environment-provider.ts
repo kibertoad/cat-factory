@@ -256,7 +256,7 @@ export interface EnvironmentConnectionTestRequest {
 
 // ---------------------------------------------------------------------------
 // Repo lifecycle: validate / bootstrap / agent-repair the provider's config in
-// the TARGET repo (e.g. a Kargo `.kargo.yml`). Some providers (Kargo) require a
+// the TARGET repo (e.g. a `.deploy.yml`). Some providers require a
 // config file to exist in the deployed repo before they can provision. These
 // OPTIONAL capabilities let a native adapter (a) mechanically verify that file is
 // present + well-formed, (b) mechanically generate it from UI-collected variables,
@@ -285,7 +285,7 @@ export interface RepoValidationIssue {
   severity: RepoValidationSeverity
   /** Human-readable explanation, safe to surface to an operator. */
   message: string
-  /** The repo-relative path the issue concerns, when applicable (e.g. `.kargo.yml`). */
+  /** The repo-relative path the issue concerns, when applicable (e.g. `.deploy.yml`). */
   path?: string
 }
 

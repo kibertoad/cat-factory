@@ -136,6 +136,7 @@ import {
   WebCryptoSecretCipher,
   WebCryptoWebhookVerifier,
   buildInfrastructureCapabilities,
+  testEnvHasZeroConfigDefault,
   buildResolveRepoTarget,
   buildResolveRepoTargets,
   createDefaultWebSearchUpstream,
@@ -2738,6 +2739,13 @@ export function buildNodeContainer(options: NodeContainerOptions): ServerContain
     // banner should surface. Local mode injects its own per-run-host-container `resolveTransport`
     // (so the pool is optional there); detect that by the absence of the default pool transport.
     agentExecutorRequiresRunnerPool: options.resolveTransport === undefined,
+    // A missing ephemeral-environment provider is a real setup gap ONLY when no zero-config
+    // in-container test-env default exists. Stock Node's sole test-env backend is the
+    // `environment-provider`, so it's required here; local mode on a Docker-family runtime
+    // advertises `local-compose` (docker-compose in the run's container, no connection), which
+    // flips this false so the "test environment not configured" banner stays quiet. Derived from
+    // the capability descriptor local already populated, so the two can't drift.
+    ephemeralEnvironmentsRequireProvider: !testEnvHasZeroConfigDefault(config.infrastructure),
     // pg-boss-backed async GitHub ingest when the durable engine is wired (the real
     // server drains the queue via `startGitHubSyncWorker`); inline fallback with no boss.
     gateways: createNodeGateways(env, options.boss),

@@ -316,8 +316,8 @@ export class EnvironmentProvisioningService {
   /** Provision an environment, persisting an encrypted record keyed by block/run. */
   async provision(args: ProvisionArgs): Promise<EnvironmentHandle> {
     const resolved = await this.resolveProvision(args)
-    // Pre-flight gate: if the provider declares repo-config expectations (e.g. Kargo's
-    // `.kargo.yml`), verify them against the block's repo BEFORE provisioning, so a
+    // Pre-flight gate: if the provider declares repo-config expectations (e.g. a
+    // `.deploy.yml`), verify them against the block's repo BEFORE provisioning, so a
     // missing/malformed config fails synchronously here instead of as an async failed
     // environment. Skipped for a block-less manual provision or an unconfigured workspace.
     await this.preflightValidateRepo(

@@ -137,6 +137,11 @@ function snapshotBackendKinds(registries: {
  *    the sole way container agents run (`agentExecutorRequiresRunnerPool`) — remote/stock Node;
  *    Cloudflare (built-in per-run containers) and local mode (per-run host containers) both wire the
  *    runner surface but keep a built-in executor, so the pool is optional there ⇒ `not_applicable`.
+ *    Symmetrically, the ephemeral-environments area counts ONLY when a provider connection is
+ *    mandatory (`ephemeralEnvironmentsRequireProvider`): local mode on a Docker-family runtime
+ *    stands the Tester's deps up with `local-compose` and needs no provider, so a missing one is
+ *    `not_applicable` there — the nag fires only on facades whose sole test-env backend is the
+ *    `environment-provider` (Worker / stock Node / local Apple `container`).
  *    Binary storage is `not_applicable` only when the facade wired no artifact-store resolver at all — in practice
  *    every facade wires one, so this area is `configured`/`not_defined` everywhere: a Cloudflare
  *    deployment without an `ARTIFACT_BUCKET` binding (or any account that selected no backend)
@@ -216,6 +221,16 @@ export interface InfraSetupSources {
    * run" on local mode and on a Cloudflare deployment that set `RUNNERS_ENABLED`.
    */
   agentExecutorRequiresRunnerPool?: boolean
+  /**
+   * True when an ephemeral-environment PROVIDER connection is genuinely mandatory for env-dependent
+   * Tester runs — i.e. this deployment has no zero-config in-container test-env default. Gates the
+   * `ephemeralEnvironments` area exactly like `agentExecutorRequiresRunnerPool` gates the executor:
+   * local mode on a Docker-family runtime stands the Tester's deps up with `local-compose` (no
+   * connection), so a missing provider must NOT nag there. Defaults to required (`?? true`) when
+   * unset, preserving the Worker / stock-Node behaviour (their only test-env backend needs a
+   * provider). See `testEnvHasZeroConfigDefault`.
+   */
+  ephemeralEnvironmentsRequireProvider?: boolean
   resolveBinaryArtifactStore?: (ws: string) => Promise<unknown>
 }
 
@@ -226,7 +241,7 @@ export async function snapshotInfraSetup(
 ): Promise<InfraSetup> {
   const [ephemeralEnvironments, agentExecutor, binaryStorage] = await Promise.all([
     areaStatus(
-      !!container.environments,
+      !!container.environments && (container.ephemeralEnvironmentsRequireProvider ?? true),
       () => container.environments!.connectionService.hasConnection(workspaceId),
       { area: 'ephemeralEnvironments', logger },
     ),

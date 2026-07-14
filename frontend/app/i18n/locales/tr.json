@@ -1600,7 +1600,7 @@
       },
       "ephemeralEnvironments": {
         "title": "Test ortamı yapılandırılmadı",
-        "body": "Kayıtlı bir geçici ortam sağlayıcısı yok; bu nedenle çalışan bir ortama ihtiyaç duyan test aracıları çalışamaz. Etkinleştirmek için bir tane bağlayın.",
+        "body": "Kayıtlı bir geçici ortam sağlayıcısı yok; bu nedenle çalışan bir önizleme ortamına ihtiyaç duyan test aracıları çalışamaz. Aşağıdaki Test ortamları sekmesini açın ve etkinleştirmek için bir Kubernetes kümesi ya da özel bir HTTP ortam sağlayıcısı bağlayın.",
         "action": "Ortamı yapılandır"
       },
       "binaryStorage": {
@@ -1929,7 +1929,7 @@
         "editTitle": "{id} düzenle",
         "addTitle": "Tür ekle",
         "manifestId": "Manifest kimliği",
-        "manifestIdHelp": "Küçük harf ve tireli bir slug, ör. my-kargo-template.",
+        "manifestIdHelp": "Küçük harf ve tireli bir slug, ör. my-preview-template.",
         "label": "Etiket",
         "acceptsInputHint": "Girdi ipucu (isteğe bağlı)",
         "acceptsInputHintHelp": "Sağlayıcının beklediği girdi biçimini açıklar.",
