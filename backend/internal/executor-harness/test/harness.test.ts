@@ -254,6 +254,12 @@ describe('classifyLlmUpstreamError (F3: LLM-proxy auth/quota/rate-limit remedies
     )
   })
 
+  it('prefers the auth remedy over rate-limit when a 403 rides alongside a 429', () => {
+    expect(classifyLlmUpstreamError('429 rate limit; 403 Forbidden: key revoked')).toMatch(
+      /API credential was refused/i,
+    )
+  })
+
   it('returns undefined for an unrelated model error (a bare agent failure stays generic)', () => {
     expect(classifyLlmUpstreamError('502 model unreachable')).toBeUndefined()
     expect(

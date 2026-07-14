@@ -123,6 +123,16 @@ function gitSubcommand(args: string[]): string {
  */
 export function describeGitFailure(stderr: string): string | undefined {
   const s = stderr.toLowerCase()
+  // Rate-limit / abuse-detection first: the host returns these as a 403, which would
+  // otherwise fall into the write-access shape below and be mislabeled as a permission
+  // problem — but the fix is to wait, not to grant access.
+  if (/rate limit|secondary rate|abuse detection/i.test(stderr)) {
+    return (
+      'The git host rate-limited this run (a primary/secondary rate limit or abuse-detection ' +
+      'trip). This is usually transient — wait a few minutes and retry. If it persists, reduce ' +
+      'the number of concurrent runs against this host.'
+    )
+  }
   // Order matters: a 404 "repository not found" is sometimes GitHub's stand-in for "your
   // token can't see this private repo", so it is checked before the generic auth shape.
   if (

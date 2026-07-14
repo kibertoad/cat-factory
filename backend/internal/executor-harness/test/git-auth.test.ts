@@ -111,6 +111,14 @@ describe('describeGitFailure (F1: auth/access remedies)', () => {
     expect(remedy).toMatch(/lacks WRITE access/i)
   })
 
+  it('classifies a secondary-rate-limit (403) → wait-and-retry remedy, not write-access', () => {
+    const remedy = describeGitFailure(
+      'remote: You have triggered an abuse detection mechanism. Please wait and retry.\nfatal: unable to access: The requested URL returned error: 403',
+    )
+    expect(remedy).toMatch(/rate-limited this run/i)
+    expect(remedy).not.toMatch(/lacks WRITE access/i)
+  })
+
   it('returns undefined for an unrecognized failure (keeps just the raw stderr)', () => {
     expect(describeGitFailure('fatal: the remote end hung up unexpectedly')).toBeUndefined()
   })

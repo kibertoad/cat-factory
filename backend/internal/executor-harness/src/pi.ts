@@ -1063,21 +1063,34 @@ export function runPi(opts: {
         if (runError) {
           const scrubbed = redactSecrets(runError).slice(0, 1000)
           const detail = tail ? `${scrubbed} Agent stderr: ${tail}` : scrubbed
-          // If the terminal failure is the LLM proxy refusing every call (auth/quota/rate-limit),
-          // stamp the structured `llm-upstream` cause + a fix so the run names it instead of
-          // reading as a generic agent failure. Unrecognized shapes keep the plain Error (→ agent).
-          const remedy = classifyLlmUpstreamError(runError)
-          reject(
-            remedy ? new HarnessFailure('llm-upstream', `${remedy}\n${detail}`) : new Error(detail),
-          )
+          reject(piRunFailure(detail, runError))
         } else {
           resolve({ ...summarizePiRun(stdout), ...(tail ? { stderrTail: tail } : {}) })
         }
       } else {
-        reject(new Error(`pi exited with code ${code}: ${(stderr || stdout).slice(-500)}`))
+        // A non-zero exit is the OTHER way a proxy refusal can surface (Pi crashing rather
+        // than exiting 0 after exhausting retries), so classify it here too — otherwise a
+        // 401/402/429 that happens to crash Pi would read as a generic agent failure. Redact
+        // the transcript slice before it becomes the detail: unlike the exit-0 path above, the
+        // raw `stderr`/`stdout` here was previously interpolated unscrubbed.
+        const raw = (stderr || stdout).slice(-500)
+        reject(piRunFailure(`pi exited with code ${code}: ${redactSecrets(raw)}`, raw))
       }
     })
   })
+}
+
+/**
+ * Build the rejection for a failed Pi run: if its terminal text points at the LLM proxy
+ * refusing every model call (auth/quota/rate-limit), stamp the structured `llm-upstream`
+ * cause with the remedy APPENDED after the detail (keeping the raw line first, matching the
+ * git/PR-open classifiers); otherwise a plain Error (→ the generic `agent` cause). Shared by
+ * both the exit-0 terminal-error path and the non-zero exit path so a proxy refusal is
+ * classified the same whether Pi survives it or crashes on it.
+ */
+function piRunFailure(detail: string, sourceText: string): Error {
+  const remedy = classifyLlmUpstreamError(sourceText)
+  return remedy ? new HarnessFailure('llm-upstream', `${detail}\n${remedy}`) : new Error(detail)
 }
 
 /** Parse Pi's LF-framed JSONL stdout into its event records, skipping noise. */
@@ -1151,7 +1164,7 @@ export function classifyLlmUpstreamError(finalError: string): string | undefined
   }
   if (
     /\b429\b|too many requests|rate.?limit/i.test(finalError) &&
-    !/\b401\b|\b402\b/.test(finalError)
+    !/\b401\b|\b402\b|\b403\b/.test(finalError)
   ) {
     return (
       'The model provider rate-limited the run (HTTP 429) and the agent exhausted its automatic ' +

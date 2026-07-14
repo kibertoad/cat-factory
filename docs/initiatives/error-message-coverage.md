@@ -178,8 +178,8 @@ Any new failure classification added here (F1–F3) extends the harness `Failure
 union — a structured code per target pattern 6, never a new string-matched phrase — and
 that union change is itself image-affecting, so it batches into the same slice.
 
-| #   | Failure / misconfiguration         | Current behaviour                                                                                                            | Surface | Sev | Proposed fix                                                                                                                                       | Doc URL to embed | Status  | PR  |
-| --- | ---------------------------------- | ---------------------------------------------------------------------------------------------------------------------------- | ------- | --- | -------------------------------------------------------------------------------------------------------------------------------------------------- | ---------------- | ------- | --- |
+| #   | Failure / misconfiguration         | Current behaviour                                                                                                            | Surface | Sev | Proposed fix                                                                                                                                       | Doc URL to embed | Status  | PR       |
+| --- | ---------------------------------- | ---------------------------------------------------------------------------------------------------------------------------- | ------- | --- | -------------------------------------------------------------------------------------------------------------------------------------------------- | ---------------- | ------- | -------- |
 | F1  | Clone/push auth failures           | Raw git stderr passed through (`git.ts:139-144`): `Authentication failed`, `repository not found`                            | n/a     | P2  | Classify the common stderr shapes → token-expired / App-lacks-access / repo-deleted causes with remedies, keeping the raw stderr as detail         | —                | ✅ done | phase 16 |
 | F2  | PR/MR open failures                | Raw `Failed to open PR (HTTP <status>)` + `GitHub did not return a PR url` (`git.ts:1020,1026,1078,1084`)                    | n/a     | P3  | Map the common statuses (403 scopes, 404 repo, 422 validation) to causes                                                                           | —                | ✅ done | phase 16 |
 | F3  | LLM-proxy 401/402/429 during a run | Unwrapped; surfaces only via `agentOutputTail` stderr slice; the good `NEVER_ACTED_CAUSE` covers only the total-failure case | n/a     | P2  | Classify proxy auth/quota/rate-limit into the harness failure vocabulary so the run failure names the cause (key exhausted / quota / rate-limited) | —                | ✅ done | phase 16 |
@@ -484,7 +484,7 @@ DispatchError`, reading `.status`), NOT the `/dispatch failed/i` regex, which is
   the `git` cause. **F2:** `describePrOpenFailure(status, provider)` maps 401/403/404/422(GitHub)/
   400(GitLab) to a provider-tailored remedy (GitHub App "Pull requests: write" vs GitLab `api`
   scope; PR vs merge-request noun), keeps the `api` cause and the load-bearing `Failed to open …
-  (HTTP n)` first line. **F3:** the ONE new structured cause this slice adds — `llm-upstream` (in
+(HTTP n)` first line. **F3:** the ONE new structured cause this slice adds — `llm-upstream` (in
   BOTH the harness `FailureCause` and the kernel `HARNESS_FAILURE_CAUSES` union, kept in step by
   hand, mapped to the coarse `agent` kind by the `FAILURE_KIND_BY_CAUSE` drift-guard Record). All
   model traffic rides the proxy, so a terminal `terminalRunError` that `classifyLlmUpstreamError`
