@@ -149,13 +149,9 @@ const addedDirectories = computed<string[]>(() => {
   if (selectedRepoId.value === undefined) return []
   return services.catalog
     .filter((s) => s.repoGithubId === selectedRepoId.value && s.directory)
-    .map((s) => normalizeDir(s.directory as string))
+    .map((s) => normalizeRepoPath(s.directory as string))
 })
 const addedDirSet = computed(() => new Set(addedDirectories.value))
-
-function normalizeDir(p: string): string {
-  return p.replace(/^\/+|\/+$/g, '')
-}
 
 function toggleMonorepo(value: boolean) {
   isMonorepo.value = value
@@ -165,7 +161,7 @@ function toggleMonorepo(value: boolean) {
 // Add/remove a directory from the cart. Guards against an already-added directory (the
 // browser disables it, but keep the model authoritative).
 function toggleDirectory(path: string) {
-  if (addedDirSet.value.has(normalizeDir(path))) return
+  if (addedDirSet.value.has(normalizeRepoPath(path))) return
   const i = selectedDirectories.value.indexOf(path)
   if (i >= 0) selectedDirectories.value.splice(i, 1)
   else selectedDirectories.value.push(path)
@@ -264,6 +260,10 @@ async function add() {
   adding.value = true
   try {
     const block = await board.addServiceFromRepo(selectedRepoId.value, {
+      // The switch is off, so import the whole repo as ONE service. Send the flag
+      // explicitly: a repo already flagged a monorepo (the toggle seeds on) must be
+      // un-flagged here, or the backend still requires a service subdirectory and rejects.
+      isMonorepo: false,
       type: selectedType.value,
       // Place the imported frame in free space (centred in view) instead of the
       // backend's default stagger, so it never overlaps an existing service.
@@ -299,7 +299,7 @@ async function add() {
 // tree marks them "added" — ready to pick more (from any folder) or close.
 async function addServices() {
   if (!canAddServices.value || selectedRepoId.value === undefined) return
-  const dirs = selectedDirectories.value.filter((d) => !addedDirSet.value.has(normalizeDir(d)))
+  const dirs = selectedDirectories.value.filter((d) => !addedDirSet.value.has(normalizeRepoPath(d)))
   if (dirs.length === 0) return
   adding.value = true
   try {

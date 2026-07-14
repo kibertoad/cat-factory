@@ -46,18 +46,13 @@ const currentPath = ref(props.startPath)
 const treeEntries = ref<RepoTreeEntry[]>([])
 const loading = ref(false)
 
-/** Repo-root-relative paths carry no surrounding slashes; normalise so a stored
- *  service `directory` (which may) compares equal to a tree entry's `path`. */
-function normalizePath(p: string): string {
-  return p.replace(/^\/+|\/+$/g, '')
-}
-const selectedSet = computed(() => new Set(props.selectedPaths.map(normalizePath)))
-const addedSet = computed(() => new Set(props.addedPaths.map(normalizePath)))
+const selectedSet = computed(() => new Set(props.selectedPaths.map(normalizeRepoPath)))
+const addedSet = computed(() => new Set(props.addedPaths.map(normalizeRepoPath)))
 function isAdded(path: string): boolean {
-  return props.multiple && addedSet.value.has(normalizePath(path))
+  return props.multiple && addedSet.value.has(normalizeRepoPath(path))
 }
 function isPicked(path: string): boolean {
-  return props.multiple ? selectedSet.value.has(normalizePath(path)) : props.modelValue === path
+  return props.multiple ? selectedSet.value.has(normalizeRepoPath(path)) : props.modelValue === path
 }
 
 const dirEntries = computed(() => treeEntries.value.filter((e) => e.type === 'dir'))
@@ -96,7 +91,7 @@ async function browseTo(path: string) {
 function pick(path: string) {
   if (props.multiple) {
     // Already-on-board directories are shown for orientation but can't be re-added.
-    if (addedSet.value.has(normalizePath(path))) return
+    if (addedSet.value.has(normalizeRepoPath(path))) return
     emit('toggle', path)
   } else {
     emit('update:modelValue', path)
