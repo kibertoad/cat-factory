@@ -2569,6 +2569,7 @@
       "token": "Inserisci il tuo token per continuare",
       "password": "Inserisci una password personale di almeno 6 caratteri"
     },
+    "saved": "Credenziali {vendor} salvate in modo sicuro",
     "expires": "Scade il {date}",
     "noExpiry": "Nessuna scadenza impostata",
     "renewal": {

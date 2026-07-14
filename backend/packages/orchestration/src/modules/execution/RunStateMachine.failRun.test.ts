@@ -74,7 +74,7 @@ function makeMachine(opts: {
     clock: { now: () => 1 } as never,
     stepGraph: {} as never,
   })
-  return { machine, blockUpdates, published }
+  return { machine, blockUpdates, published, stored }
 }
 
 describe('RunStateMachine.failRun — terminal block-projection guard (race-audit 2.3)', () => {
@@ -92,5 +92,22 @@ describe('RunStateMachine.failRun — terminal block-projection guard (race-audi
     await machine.failRun('ws_1', 'exec_1', 'boom', 'agent')
     expect(blockUpdates).toEqual([{ status: 'blocked', progress: 0 }])
     expect(published.at(-1)?.status).toBe('failed')
+  })
+
+  // Error-message initiative G3: a `preflight` failure (a precondition rejected the job before
+  // dispatch — e.g. `github_not_connected`, no connected repo) used to reach the board hint-less
+  // because `EXECUTION_FAILURE_HINTS` omitted the kind. The map is now exhaustive, so every kind
+  // the engine can record — `preflight` included — carries actionable next-step guidance.
+  it('records an actionable hint for a `preflight` failure (was hint-less)', async () => {
+    const { machine, stored } = makeMachine({ storedStatus: 'running' })
+    await machine.failRun(
+      'ws_1',
+      'exec_1',
+      'GitHub is not connected for this workspace.',
+      'preflight',
+    )
+    expect(stored.failure?.kind).toBe('preflight')
+    expect(stored.failure?.hint).toBeTruthy()
+    expect(stored.failure?.hint).toMatch(/connect GitHub/i)
   })
 })
