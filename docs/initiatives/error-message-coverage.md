@@ -13,7 +13,8 @@ structured-cause classification (I3) · typed harness cause union + one shared k
 (I4 `HarnessFailureCause` / `failureKindFromHarnessCause`) · webhook signature-rejection operator
 logging (C2, GitHub HMAC + GitLab token) · numeric-env-knob rejection warnings (A8, shared
 `parseNumericEnv`) · harness clone/push + PR/MR-open + LLM-proxy failure classification (F1/F2/F3,
-one `llm-upstream` cause, image-bumped) ·
+one `llm-upstream` cause, image-bumped) · exhaustive execution failure-kind hints
+(G3, `preflight` was hint-less) ·
 **Owner:** core · **Started:** 2026-07-11
 
 > This is the durable source of truth for a multi-PR initiative. Read it first before
@@ -186,11 +187,11 @@ that union change is itself image-affecting, so it batches into the same slice.
 
 ### G. Frontend surfacing
 
-| #   | Failure / misconfiguration                             | Current behaviour                                                                                                                 | Surface | Sev | Proposed fix                                                                                                                                                 | Doc URL to embed | Status  | PR  |
-| --- | ------------------------------------------------------ | --------------------------------------------------------------------------------------------------------------------------------- | ------- | --- | ------------------------------------------------------------------------------------------------------------------------------------------------------------ | ---------------- | ------- | --- |
-| G1  | 14 title-only `ConflictReason`s show raw backend prose | `CONFLICT_TITLE_KEYS` maps only titles; description = untranslated backend `message` (`usePipelineErrorToast.ts:43-58`)           | n/a     | P2  | Add translated description/remedy keys per reason (+ jump actions where a panel exists); locale parity in ALL catalogs in the same PR                        | —                | ⬜ todo |     |
-| G2  | Generic fallback toast surfaces raw backend strings    | Non-conflict errors fall to `error.message` verbatim (`usePipelineErrorToast.ts:248-253`) — the funnel for every raw string above | n/a     | P2  | Keep raw detail behind a "show detail" disclosure; show a generic translated title; shrink this funnel by moving conditions onto reason codes (the real fix) | —                | ⬜ todo |     |
-| G3  | `AgentFailureCard.failure.hint` rarely populated       | The card renders `hint` when present, but the backend `FAILURE_HINTS` maps cover few kinds                                        | n/a     | P2  | Extend the three `FAILURE_HINTS` maps to every `FailureKind`; audit which kinds reach the card hint-less                                                     | —                | ⬜ todo |     |
+| #   | Failure / misconfiguration                             | Current behaviour                                                                                                                 | Surface | Sev | Proposed fix                                                                                                                                                 | Doc URL to embed | Status  | PR       |
+| --- | ------------------------------------------------------ | --------------------------------------------------------------------------------------------------------------------------------- | ------- | --- | ------------------------------------------------------------------------------------------------------------------------------------------------------------ | ---------------- | ------- | -------- |
+| G1  | 14 title-only `ConflictReason`s show raw backend prose | `CONFLICT_TITLE_KEYS` maps only titles; description = untranslated backend `message` (`usePipelineErrorToast.ts:43-58`)           | n/a     | P2  | Add translated description/remedy keys per reason (+ jump actions where a panel exists); locale parity in ALL catalogs in the same PR                        | —                | ⬜ todo |          |
+| G2  | Generic fallback toast surfaces raw backend strings    | Non-conflict errors fall to `error.message` verbatim (`usePipelineErrorToast.ts:248-253`) — the funnel for every raw string above | n/a     | P2  | Keep raw detail behind a "show detail" disclosure; show a generic translated title; shrink this funnel by moving conditions onto reason codes (the real fix) | —                | ⬜ todo |          |
+| G3  | `AgentFailureCard.failure.hint` rarely populated       | The card renders `hint` when present, but the backend `FAILURE_HINTS` maps cover few kinds                                        | n/a     | P2  | Extend the three `FAILURE_HINTS` maps to every `FailureKind`; audit which kinds reach the card hint-less                                                     | —                | ✅ done | phase 17 |
 
 ### H. Provider UI configurability (feature work the UI-first remedies depend on)
 
@@ -495,6 +496,24 @@ DispatchError`, reading `.status`), NOT the `/dispatch failed/i` regex, which is
   `src/**` changes, so this BUMPS the image tag (`1.43.3`) + the three pins (synced via
   `pnpm sync:image-tags`) — the reason F1/F2/F3 were batched into one slice. Deferred (bare `Error`
   → `agent`) for any shape the classifiers don't recognise, so nothing regresses.
+- **Board failure hints are exhaustive per PRODUCING union, not per map (phase 17 reference: G3).**
+  The audit of the three `FAILURE_HINTS` maps found only ONE genuinely hint-less path: the execution
+  engine's `EXECUTION_FAILURE_HINTS` (`RunStateMachine.ts`) omitted `preflight`, which the engine
+  DOES produce (a pre-dispatch `DomainError` such as `github_not_connected` → `classifyDispatchFailure`
+  → `preflight`), so those failures reached `AgentFailureCard` with `hint: null`. The fix adds the
+  `preflight` hint AND retypes the map from `Partial<Record<AgentFailureKind, string>>` to an
+  EXHAUSTIVE `Record<AgentFailureKind, string>` (dropping the `?? null` at the render site) — the
+  engine is the primary producer of the full `AgentFailureKind` union, so a total map is correct and
+  the type is now the drift guard (a new kind fails typecheck here), mirroring bootstrap's
+  `Record<BootstrapFailureKind, string>`. The OTHER two maps were already safe and are left as-is:
+  bootstrap is exhaustive over its narrow `BootstrapFailureKind` alias, and env-config-repair keeps
+  `Partial<…> & { unknown }` with a `?? unknown` fallback because it only produces a SUBSET of the
+  union (dispatch/preflight/evicted/timeout/agent/cancelled) — forcing hints for kinds it never emits
+  (environment/job_failed/rejected/…) would add dead, misleading entries. So "extend to every
+  FailureKind" means exhaustive over what each flow can PRODUCE, not the full union everywhere. The
+  hint is backend prose rendered verbatim by the card (NOT i18n), so no locale-parity work; no image
+  bump (orchestration-only). G1/G2 (frontend `ConflictReason` copy + fallback-toast disclosure) remain
+  open and are the i18n-bearing slices.
 - **Executor-harness changes bump the image tag** + the three hand-maintained pins
   (`deploy/backend/package.json`, `deploy/backend/wrangler.toml`,
   `RECOMMENDED_HARNESS_IMAGE`) — batch all F-rows into one slice to pay that cost once.
