@@ -2894,20 +2894,23 @@
       },
       "monorepoLabel": "Es un monorepo (aloja más de un servicio)",
       "monorepoDescription": "Añade varios servicios desde un repositorio, cada uno fijado a un subdirectorio.",
-      "monorepoBrowseHint": "Explora el repositorio y elige el directorio del servicio que quieres añadir. Los agentes que trabajen en este servicio se ejecutarán dentro de ese subdirectorio.",
-      "serviceDirectory": "Directorio del servicio:",
-      "noDirectorySelected": "Aún no se ha seleccionado ningún directorio.",
+      "monorepoBrowseHint": "Explora el repositorio y selecciona los directorios de los servicios que quieres añadir, de cualquier carpeta. Los agentes que trabajen en un servicio se ejecutarán dentro de su subdirectorio.",
+      "selectedServices": "Servicios seleccionados",
+      "noServicesSelected": "Aún no hay servicios seleccionados. Elige directorios arriba.",
+      "addServices": "Añadir {count} servicio | Añadir {count} servicios",
+      "removeService": "Quitar {directory}",
       "addedConfigure": "{title} añadido, configúralo",
       "grantAccess": "Conceder a la App acceso a un repositorio",
       "grantAccessTitle": "Abrir la configuración de instalación de la App para concederle acceso a un repositorio",
       "refreshList": "Actualizar lista",
       "done": "Listo",
       "add": "Añadir servicio",
-      "addAnother": "Añadir otro servicio",
       "toast": {
         "addedTitle": "Servicio añadido",
         "addedDescription": "{title} está en el tablero, configúralo abajo.",
-        "addFailedTitle": "No se pudo añadir el servicio"
+        "addFailedTitle": "No se pudo añadir el servicio",
+        "servicesAddedTitle": "Servicios añadidos",
+        "servicesAddedDescription": "{count} servicio añadido al tablero. | {count} servicios añadidos al tablero."
       },
       "repoType": "Tipo de repositorio",
       "repoTypeHint": "Qué es este repositorio: un servicio backend, una aplicación frontend, una biblioteca compartida o un repositorio de documentación (solo documentos/spikes)."
@@ -2919,6 +2922,7 @@
       "empty": "No hay nada aquí.",
       "select": "Seleccionar",
       "selected": "Seleccionado",
+      "added": "Añadido",
       "useThisFolder": "Usar esta carpeta",
       "errors": {
         "listDirectory": "No se pudo listar el directorio"

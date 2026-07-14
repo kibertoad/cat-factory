@@ -8,8 +8,9 @@
 //
 // MONOREPO support: a repo flagged a monorepo can back SEVERAL services, each
 // pinned to a subdirectory. When the selected repo is a monorepo, the user
-// browses its tree and picks the service's directory before adding (and may add
-// more than one, a subset of the repo's services).
+// browses its tree and multi-selects the service directories to add — from ANY
+// parent folder, in one pass — then adds them all at once. Directories that
+// already back a service on this board are shown but not selectable.
 import type { FrameRepoType, GitHubAvailableRepo } from '~/types/domain'
 import GitHubConnect from '~/components/github/GitHubConnect.vue'
 import RepoSearchEmpty from '~/components/github/RepoSearchEmpty.vue'
@@ -136,11 +137,43 @@ const repoMenuItems = computed(() => {
 // repo + requires a directory when it creates the service). A repo already flagged a
 // monorepo (it backs other services) seeds the toggle on when selected.
 const isMonorepo = ref(false)
-const selectedDirectory = ref<string | undefined>(undefined)
+// The cart of monorepo service directories the user has picked (repo-root-relative),
+// accumulated across the whole browse session so picks from different parent folders
+// coexist. Added all at once (see `addServices`), unlike the one-at-a-time whole-repo add.
+const selectedDirectories = ref<string[]>([])
+
+// Directories in the selected repo that ALREADY back a service on this board — surfaced
+// so the tree browser can disable them (adding one again would be a no-op). Derived from
+// the org catalog filtered to this repo; a whole-repo service (null directory) is ignored.
+const addedDirectories = computed<string[]>(() => {
+  if (selectedRepoId.value === undefined) return []
+  return services.catalog
+    .filter((s) => s.repoGithubId === selectedRepoId.value && s.directory)
+    .map((s) => normalizeDir(s.directory as string))
+})
+const addedDirSet = computed(() => new Set(addedDirectories.value))
+
+function normalizeDir(p: string): string {
+  return p.replace(/^\/+|\/+$/g, '')
+}
 
 function toggleMonorepo(value: boolean) {
   isMonorepo.value = value
-  selectedDirectory.value = undefined
+  selectedDirectories.value = []
+}
+
+// Add/remove a directory from the cart. Guards against an already-added directory (the
+// browser disables it, but keep the model authoritative).
+function toggleDirectory(path: string) {
+  if (addedDirSet.value.has(normalizeDir(path))) return
+  const i = selectedDirectories.value.indexOf(path)
+  if (i >= 0) selectedDirectories.value.splice(i, 1)
+  else selectedDirectories.value.push(path)
+}
+
+function removeSelected(path: string) {
+  const i = selectedDirectories.value.indexOf(path)
+  if (i >= 0) selectedDirectories.value.splice(i, 1)
 }
 
 // On repo change, capture the picked repo (from the volatile loaded list, before a later
@@ -152,13 +185,13 @@ watch(selectedRepoId, (id) => {
     if (found) selectedRepo.value = found
   }
   isMonorepo.value = selectedRepo.value?.isMonorepo === true
-  selectedDirectory.value = undefined
+  selectedDirectories.value = []
   configuredBlockId.value = undefined
 })
 
 function resetSelection() {
   selectedRepoId.value = undefined
-  selectedDirectory.value = undefined
+  selectedDirectories.value = []
   isMonorepo.value = false
   configuredBlockId.value = undefined
   resetRepoSearch()
@@ -186,12 +219,11 @@ function openManageInstall() {
   if (manageInstallUrl.value) window.open(manageInstallUrl.value, '_blank', 'noopener')
 }
 
-// The just-added service, kept on the board store so the user can configure it (test
-// infra + fragments) right here — the same controls as the inspector. A monorepo can
-// host several services, so adding another keeps the modal open; a whole-repo service
-// can only be added once (its repo is then on the board).
+// The just-added whole-repo service, kept on the board store so the user can configure it
+// (test infra + fragments) right here — the same controls as the inspector. Only the
+// whole-repo flow surfaces this inline configure step; a monorepo adds several services at
+// once and they're configured later in the inspector.
 const configuredBlockId = ref<string | undefined>(undefined)
-const configuredDirectory = ref<string | undefined>(undefined)
 const configuredBlock = computed(() =>
   configuredBlockId.value ? board.getBlock(configuredBlockId.value) : undefined,
 )
@@ -210,12 +242,21 @@ watch(
   { immediate: true },
 )
 
-// A monorepo service needs a chosen directory; a whole-repo service can be added once.
+// A whole-repo service is added once (then configured inline). A monorepo instead
+// multi-selects directories and adds them together via `addServices`.
 const canAdd = computed(
   () =>
     !needsGitHub.value &&
     selectedRepoId.value !== undefined &&
-    (isMonorepo.value ? !!selectedDirectory.value : !configuredBlockId.value),
+    !isMonorepo.value &&
+    !configuredBlockId.value,
+)
+const canAddServices = computed(
+  () =>
+    !needsGitHub.value &&
+    selectedRepoId.value !== undefined &&
+    isMonorepo.value &&
+    selectedDirectories.value.length > 0,
 )
 
 async function add() {
@@ -223,8 +264,6 @@ async function add() {
   adding.value = true
   try {
     const block = await board.addServiceFromRepo(selectedRepoId.value, {
-      directory: isMonorepo.value ? selectedDirectory.value : undefined,
-      isMonorepo: isMonorepo.value,
       type: selectedType.value,
       // Place the imported frame in free space (centred in view) instead of the
       // backend's default stagger, so it never overlaps an existing service.
@@ -235,15 +274,57 @@ async function add() {
     // Centre the camera on the newly imported service.
     await focusFrame(block.id)
     configuredBlockId.value = block.id
-    configuredDirectory.value = isMonorepo.value ? selectedDirectory.value : undefined
     toast.add({
       title: t('github.addService.toast.addedTitle'),
       description: t('github.addService.toast.addedDescription', { title: block.title }),
       icon: 'i-lucide-check',
       color: 'success',
     })
-    // Ready to pick another monorepo service (the just-added directory is taken).
-    selectedDirectory.value = undefined
+  } catch (e) {
+    toast.add({
+      title: t('github.addService.toast.addFailedTitle'),
+      description: e instanceof Error ? e.message : String(e),
+      icon: 'i-lucide-triangle-alert',
+      color: 'error',
+    })
+  } finally {
+    adding.value = false
+  }
+}
+
+// Add every directory in the cart as its own service, in one action. Each add lays the
+// frame out in free space (seeing the ones added earlier in the loop, so they don't
+// overlap); the projection is refreshed and the camera centres on the last one. The
+// just-added directories then move to `addedDirectories`, so the cart is cleared and the
+// tree marks them "added" — ready to pick more (from any folder) or close.
+async function addServices() {
+  if (!canAddServices.value || selectedRepoId.value === undefined) return
+  const dirs = selectedDirectories.value.filter((d) => !addedDirSet.value.has(normalizeDir(d)))
+  if (dirs.length === 0) return
+  adding.value = true
+  try {
+    let lastBlock: Awaited<ReturnType<typeof board.addServiceFromRepo>> | undefined
+    for (const directory of dirs) {
+      lastBlock = await board.addServiceFromRepo(selectedRepoId.value, {
+        directory,
+        isMonorepo: true,
+        type: selectedType.value,
+        position: freeFramePosition(),
+      })
+    }
+    await github.load()
+    if (lastBlock) await focusFrame(lastBlock.id)
+    selectedDirectories.value = []
+    toast.add({
+      title: t('github.addService.toast.servicesAddedTitle'),
+      description: t(
+        'github.addService.toast.servicesAddedDescription',
+        { count: dirs.length },
+        dirs.length,
+      ),
+      icon: 'i-lucide-check',
+      color: 'success',
+    })
   } catch (e) {
     toast.add({
       title: t('github.addService.toast.addFailedTitle'),
@@ -329,8 +410,9 @@ function done() {
             <USelect v-model="selectedType" :items="typeItems" value-key="value" class="w-full" />
           </UFormField>
 
-          <!-- monorepo handling: flag + directory picker -->
-          <div v-if="selectedRepoId !== undefined" class="space-y-3">
+          <!-- monorepo handling: flag + multi-directory picker (hidden once a whole-repo
+               service has been added and is being configured inline) -->
+          <div v-if="selectedRepoId !== undefined && !configuredBlock" class="space-y-3">
             <USwitch
               :model-value="isMonorepo"
               :label="t('github.addService.monorepoLabel')"
@@ -340,23 +422,65 @@ function done() {
 
             <div
               v-if="isMonorepo"
-              class="rounded-md border border-slate-700/60 bg-slate-900/40 p-3"
+              class="space-y-3 rounded-md border border-slate-700/60 bg-slate-900/40 p-3"
             >
-              <p class="mb-2 text-xs text-slate-400">
+              <p class="text-xs text-slate-400">
                 {{ t('github.addService.monorepoBrowseHint') }}
               </p>
               <RepoTreeBrowser
-                v-model="selectedDirectory"
                 :repo-github-id="selectedRepoId!"
                 mode="dir"
+                multiple
+                :selected-paths="selectedDirectories"
+                :added-paths="addedDirectories"
+                @toggle="toggleDirectory"
               />
-              <p class="mt-2 truncate text-xs text-slate-400">
-                <template v-if="selectedDirectory">
-                  {{ t('github.addService.serviceDirectory') }}
-                  <code class="text-slate-200">{{ selectedDirectory }}</code>
-                </template>
-                <template v-else>{{ t('github.addService.noDirectorySelected') }}</template>
-              </p>
+
+              <!-- the selection cart + the add action sit right beside the tree, so the
+                   picked services and the button that adds them are never scrolled apart -->
+              <div class="space-y-2 rounded-md border border-slate-800 bg-slate-950/40 p-2.5">
+                <p class="text-[11px] font-semibold uppercase tracking-wide text-slate-400">
+                  {{ t('github.addService.selectedServices') }}
+                </p>
+                <div v-if="selectedDirectories.length" class="flex flex-wrap gap-1.5">
+                  <span
+                    v-for="dir in selectedDirectories"
+                    :key="dir"
+                    class="inline-flex items-center gap-1 rounded bg-slate-800 px-2 py-0.5 text-xs text-slate-200"
+                  >
+                    <code class="text-slate-200">{{ dir }}</code>
+                    <button
+                      type="button"
+                      class="text-slate-400 hover:text-slate-100"
+                      :aria-label="t('github.addService.removeService', { directory: dir })"
+                      @click="removeSelected(dir)"
+                    >
+                      <UIcon name="i-lucide-x" class="h-3 w-3" />
+                    </button>
+                  </span>
+                </div>
+                <p v-else class="text-xs text-slate-500">
+                  {{ t('github.addService.noServicesSelected') }}
+                </p>
+                <div class="flex justify-end">
+                  <UButton
+                    color="primary"
+                    icon="i-lucide-plus"
+                    size="sm"
+                    :loading="adding"
+                    :disabled="!canAddServices"
+                    @click="addServices"
+                  >
+                    {{
+                      t(
+                        'github.addService.addServices',
+                        { count: selectedDirectories.length },
+                        selectedDirectories.length,
+                      )
+                    }}
+                  </UButton>
+                </div>
+              </div>
             </div>
           </div>
 
@@ -373,7 +497,7 @@ function done() {
             </div>
             <ServiceTestConfig
               :block="configuredBlock"
-              :repo="{ githubId: selectedRepoId!, directory: configuredDirectory }"
+              :repo="{ githubId: selectedRepoId! }"
               default-open
             />
             <ServiceFragments :block="configuredBlock" default-open />
@@ -395,22 +519,27 @@ function done() {
           </div>
 
           <div class="flex justify-end gap-2">
-            <UButton v-if="configuredBlock" color="neutral" variant="soft" size="sm" @click="done">
+            <!-- Monorepo adds via the cart's own button; the footer only closes. A
+                 whole-repo add shows its "Add service" button until one is added, then
+                 the inline configure panel + this Done. -->
+            <UButton
+              v-if="configuredBlock || isMonorepo"
+              color="neutral"
+              variant="soft"
+              size="sm"
+              @click="done"
+            >
               {{ t('github.addService.done') }}
             </UButton>
             <UButton
-              v-if="!configuredBlock || isMonorepo"
+              v-if="!isMonorepo && !configuredBlock"
               color="primary"
               icon="i-lucide-plus"
               :loading="adding"
               :disabled="!canAdd"
               @click="add"
             >
-              {{
-                configuredBlock && isMonorepo
-                  ? t('github.addService.addAnother')
-                  : t('github.addService.add')
-              }}
+              {{ t('github.addService.add') }}
             </UButton>
           </div>
         </template>

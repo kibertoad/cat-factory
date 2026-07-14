@@ -2906,20 +2906,23 @@
       },
       "monorepoLabel": "これはモノレポです (複数のサービスをホストしています)",
       "monorepoDescription": "1つのリポジトリから複数のサービスを追加し、それぞれをサブディレクトリに固定します。",
-      "monorepoBrowseHint": "リポジトリを参照し、追加したいサービスのディレクトリを選択してください。このサービスで作業するエージェントは、そのサブディレクトリ内で実行されます。",
-      "serviceDirectory": "サービスディレクトリ:",
-      "noDirectorySelected": "ディレクトリはまだ選択されていません。",
+      "monorepoBrowseHint": "リポジトリを参照し、追加したいサービスのディレクトリを任意のフォルダから選択してください。サービスで作業するエージェントは、そのサブディレクトリ内で実行されます。",
+      "selectedServices": "選択したサービス",
+      "noServicesSelected": "サービスがまだ選択されていません。上でディレクトリを選択してください。",
+      "addServices": "{count}件のサービスを追加 | {count}件のサービスを追加",
+      "removeService": "{directory} を削除",
       "addedConfigure": "{title}を追加しました。設定してください",
       "grantAccess": "Appにリポジトリへのアクセス権を付与",
       "grantAccessTitle": "Appのインストール設定を開いて、リポジトリへのアクセス権を付与します",
       "refreshList": "リストを更新",
       "done": "完了",
       "add": "サービスを追加",
-      "addAnother": "別のサービスを追加",
       "toast": {
         "addedTitle": "サービスを追加しました",
         "addedDescription": "{title}がボードに追加されました。以下で設定してください。",
-        "addFailedTitle": "サービスを追加できませんでした"
+        "addFailedTitle": "サービスを追加できませんでした",
+        "servicesAddedTitle": "サービスを追加しました",
+        "servicesAddedDescription": "{count}件のサービスをボードに追加しました。 | {count}件のサービスをボードに追加しました。"
       },
       "repoType": "リポジトリの種類",
       "repoTypeHint": "このリポジトリの種類: バックエンドサービス、フロントエンドアプリ、共有ライブラリ、またはドキュメントリポジトリ（ドキュメント/スパイクのみ）。"
@@ -2931,6 +2934,7 @@
       "empty": "ここには何もありません。",
       "select": "選択",
       "selected": "選択済み",
+      "added": "追加済み",
       "useThisFolder": "このフォルダを使用",
       "errors": {
         "listDirectory": "ディレクトリを一覧表示できませんでした"

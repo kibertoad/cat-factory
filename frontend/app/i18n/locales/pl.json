@@ -2894,20 +2894,23 @@
       },
       "monorepoLabel": "To jest monorepo (zawiera więcej niż jedną usługę)",
       "monorepoDescription": "Dodaj kilka usług z jednego repozytorium, każdą przypiętą do podkatalogu.",
-      "monorepoBrowseHint": "Przeglądaj repozytorium i wybierz katalog usługi, którą chcesz dodać. Agenci pracujący nad tą usługą będą działać w obrębie tego podkatalogu.",
-      "serviceDirectory": "Katalog usługi:",
-      "noDirectorySelected": "Nie wybrano jeszcze żadnego katalogu.",
+      "monorepoBrowseHint": "Przeglądaj repozytorium i wybierz katalogi usług, które chcesz dodać — z dowolnego folderu. Agenci pracujący nad usługą działają w obrębie jej podkatalogu.",
+      "selectedServices": "Wybrane usługi",
+      "noServicesSelected": "Nie wybrano jeszcze żadnych usług. Wybierz katalogi powyżej.",
+      "addServices": "Dodaj {count} usługę | Dodaj {count} usługi | Dodaj {count} usług",
+      "removeService": "Usuń {directory}",
       "addedConfigure": "Dodano {title}, skonfiguruj",
       "grantAccess": "Przyznaj aplikacji dostęp do repozytorium",
       "grantAccessTitle": "Otwórz ustawienia instalacji aplikacji, aby przyznać jej dostęp do repozytorium",
       "refreshList": "Odśwież listę",
       "done": "Gotowe",
       "add": "Dodaj usługę",
-      "addAnother": "Dodaj kolejną usługę",
       "toast": {
         "addedTitle": "Dodano usługę",
         "addedDescription": "{title} jest na tablicy, skonfiguruj ją poniżej.",
-        "addFailedTitle": "Nie udało się dodać usługi"
+        "addFailedTitle": "Nie udało się dodać usługi",
+        "servicesAddedTitle": "Dodano usługi",
+        "servicesAddedDescription": "Dodano {count} usługę do tablicy. | Dodano {count} usługi do tablicy. | Dodano {count} usług do tablicy."
       },
       "repoType": "Typ repozytorium",
       "repoTypeHint": "Czym jest to repozytorium: usługą backendową, aplikacją frontendową, współdzieloną biblioteką lub repozytorium dokumentacji (tylko dokumenty/spike'i)."
@@ -2919,6 +2922,7 @@
       "empty": "Pusto.",
       "select": "Wybierz",
       "selected": "Wybrano",
+      "added": "Dodano",
       "useThisFolder": "Użyj tego folderu",
       "errors": {
         "listDirectory": "Nie udało się wyświetlić katalogu"

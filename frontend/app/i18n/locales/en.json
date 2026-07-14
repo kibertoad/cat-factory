@@ -2983,20 +2983,29 @@
       },
       "monorepoLabel": "This is a monorepo (hosts more than one service)",
       "monorepoDescription": "Add several services from one repo, each pinned to a subdirectory.",
-      "monorepoBrowseHint": "Browse the repository and pick the directory of the service you want to add. Agents working on this service will run within that subdirectory.",
-      "serviceDirectory": "Service directory:",
-      "noDirectorySelected": "No directory selected yet.",
+      "monorepoBrowseHint": "Browse the repository and select the directories of the services you want to add — from any folder. Agents working on a service run within its subdirectory.",
+      "selectedServices": "Selected services",
+      "noServicesSelected": "No services selected yet. Pick directories above.",
+      "addServices": "Add {count} service | Add {count} services",
+      "@addServices": {
+        "description": "Count-driven button label; resolved via t(key, { count }, count) so {count} also drives the plural choice. Provide ALL plural forms your language needs (English has 2; Polish/Ukrainian need 3 - one/few/many - via the custom pluralRules in i18n.config.ts)."
+      },
+      "removeService": "Remove {directory}",
       "addedConfigure": "{title} added, configure it",
       "grantAccess": "Grant the App access to a repo",
       "grantAccessTitle": "Open the App's installation settings to grant it access to a repository",
       "refreshList": "Refresh list",
       "done": "Done",
       "add": "Add service",
-      "addAnother": "Add another service",
       "toast": {
         "addedTitle": "Service added",
         "addedDescription": "{title} is on the board, configure it below.",
-        "addFailedTitle": "Could not add service"
+        "addFailedTitle": "Could not add service",
+        "servicesAddedTitle": "Services added",
+        "servicesAddedDescription": "{count} service added to the board. | {count} services added to the board.",
+        "@servicesAddedDescription": {
+          "description": "Count-driven toast; resolved via t(key, { count }, count) so {count} also drives the plural choice. Provide ALL plural forms your language needs (Polish/Ukrainian need 3 - one/few/many)."
+        }
       }
     },
     "repoTree": {
@@ -3006,6 +3015,7 @@
       "empty": "Nothing here.",
       "select": "Select",
       "selected": "Selected",
+      "added": "Added",
       "useThisFolder": "Use this folder",
       "errors": {
         "listDirectory": "Could not list directory"

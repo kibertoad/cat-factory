@@ -2894,20 +2894,23 @@
       },
       "monorepoLabel": "Ceci est un monorepo (héberge plusieurs services)",
       "monorepoDescription": "Ajoutez plusieurs services depuis un même dépôt, chacun rattaché à un sous-répertoire.",
-      "monorepoBrowseHint": "Parcourez le dépôt et choisissez le répertoire du service que vous voulez ajouter. Les agents travaillant sur ce service s'exécuteront dans ce sous-répertoire.",
-      "serviceDirectory": "Répertoire du service :",
-      "noDirectorySelected": "Aucun répertoire sélectionné pour le moment.",
+      "monorepoBrowseHint": "Parcourez le dépôt et sélectionnez les répertoires des services que vous voulez ajouter, depuis n'importe quel dossier. Les agents travaillant sur un service s'exécutent dans son sous-répertoire.",
+      "selectedServices": "Services sélectionnés",
+      "noServicesSelected": "Aucun service sélectionné pour le moment. Choisissez des répertoires ci-dessus.",
+      "addServices": "Ajouter {count} service | Ajouter {count} services",
+      "removeService": "Retirer {directory}",
       "addedConfigure": "{title} ajouté, configurez-le",
       "grantAccess": "Accorder à l'App l'accès à un dépôt",
       "grantAccessTitle": "Ouvrir les paramètres d'installation de l'App pour lui accorder l'accès à un dépôt",
       "refreshList": "Actualiser la liste",
       "done": "Terminé",
       "add": "Ajouter le service",
-      "addAnother": "Ajouter un autre service",
       "toast": {
         "addedTitle": "Service ajouté",
         "addedDescription": "{title} est sur le tableau, configurez-le ci-dessous.",
-        "addFailedTitle": "Impossible d'ajouter le service"
+        "addFailedTitle": "Impossible d'ajouter le service",
+        "servicesAddedTitle": "Services ajoutés",
+        "servicesAddedDescription": "{count} service ajouté au tableau. | {count} services ajoutés au tableau."
       },
       "repoType": "Type de dépôt",
       "repoTypeHint": "Ce qu'est ce dépôt : un service backend, une application frontend, une bibliothèque partagée ou un dépôt de documentation (documents/spikes uniquement)."
@@ -2919,6 +2922,7 @@
       "empty": "Rien ici.",
       "select": "Sélectionner",
       "selected": "Sélectionné",
+      "added": "Ajouté",
       "useThisFolder": "Utiliser ce dossier",
       "errors": {
         "listDirectory": "Impossible de lister le répertoire"
