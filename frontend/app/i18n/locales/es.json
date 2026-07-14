@@ -442,6 +442,32 @@
         "env_test_not_provisionable": "Gestor de entorno no configurado",
         "env_test_no_vcs": "Proveedor de Git no conectado"
       },
+      "description": {
+        "dependencies_unmet": "Esta tarea depende de otras que aún no están terminadas. Complétalas o desbloquéalas y vuelve a iniciarla.",
+        "task_limit_reached": "Hay demasiadas ejecuciones activas a la vez. Espera a que termine una y vuelve a iniciar esta.",
+        "tester_infra_unsupported": "El paso Tester no puede ejecutarse aquí: este servicio no tiene infraestructura de pruebas configurada, o el entorno de ejecución de este despliegue no puede ejecutarla. Configura una infraestructura de pruebas o usa un servicio que no la necesite.",
+        "agent_backend_unconfigured": "No hay ningún backend de runner disponible para ejecutar agentes en contenedores. Registra un pool de runners autoalojado o habilita Cloudflare Containers en tu despliegue.",
+        "run_not_retryable": "Solo se puede reintentar una ejecución fallida o finalizada. Esta ejecución sigue activa o está en un estado que no admite reintentos.",
+        "no_pr_to_merge": "Esta ejecución aún no ha abierto una pull request, así que no hay nada que fusionar.",
+        "github_not_connected": "Conecta este espacio de trabajo con GitHub para que los agentes puedan clonar el repositorio, enviar cambios y abrir pull requests.",
+        "bootstrap_not_retryable": "Este trabajo de arranque no puede reintentarse en su estado actual (todavía se está ejecutando o ya finalizó correctamente).",
+        "bootstrap_reference_missing": "El repositorio de referencia que adapta este arranque ya no es accesible. Se eliminó o se revocó su acceso. Elige otra referencia o crea desde cero.",
+        "preset_unsatisfiable": "El modelo de un paso en línea no puede ejecutarse en línea en este despliegue (un modelo solo por suscripción sin soporte en línea). Elige un modelo o preset compatible con la ejecución en línea.",
+        "visual_pipeline_no_frontend": "Esta canalización tiene pasos de prueba visual, pero el objetivo no tiene interfaz de usuario que probar (no hay frontend, y nada enlaza a uno).",
+        "model_policy_blocked": "La familia de este modelo está bloqueada por la política de modelos de tu cuenta. Elige un modelo o una familia permitidos.",
+        "model_policy_unsupported": "Las políticas de familia de modelos son un control solo para entornos alojados, y este despliegue no admite configurarlas.",
+        "deployer_required_before_tester": "Este servicio necesita un entorno aprovisionado antes de que pueda ejecutarse un paso de Tester, prueba manual o Playwright, pero no hay ningún Deployer antes. Añade un paso Deployer a la canalización.",
+        "env_test_not_a_frame": "La autoprueba de entorno se ejecuta por servicio, así que solo puede iniciarse en un servicio, no en un módulo o una tarea.",
+        "env_test_infraless": "Este servicio no tiene configurado el aprovisionamiento de entornos efímeros, así que no hay nada que la autoprueba pueda comprobar.",
+        "env_test_not_provisionable": "Este servicio tiene un tipo de aprovisionamiento, pero aún no hay ningún gestor del espacio de trabajo para él, así que el aprovisionamiento no puede ejecutarse. Configura un gestor de entornos.",
+        "env_test_no_vcs": "La autoprueba necesita un proveedor de Git para crear y eliminar su rama desechable, pero este espacio de trabajo no está conectado a ninguno."
+      },
+      "action": {
+        "connectGitHub": "Conectar GitHub",
+        "configureRunnerPool": "Configurar pool de runners",
+        "chooseModel": "Elegir un modelo",
+        "configureInfrastructure": "Configurar infraestructura"
+      },
       "fallbackMessage": "Esta acción entra en conflicto con el estado actual.",
       "providersUnconfigured": {
         "title": "No hay proveedor de IA para este modelo",

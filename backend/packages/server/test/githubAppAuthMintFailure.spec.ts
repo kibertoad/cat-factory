@@ -1,5 +1,9 @@
 import { describe, expect, it } from 'vitest'
-import { explainInstallationTokenMintFailure } from '../src/github/GitHubAppAuth.js'
+import {
+  explainInstallationTokenMintFailure,
+  InstallationTokenMintError,
+  installationTokenMintStatusOf,
+} from '../src/github/GitHubAppAuth.js'
 
 // C3 (error-message coverage): the terse `Failed to mint installation token for <id> (HTTP <s>)`
 // now carries a cause + remedy. These assertions pin BOTH the elaboration AND that the two
@@ -46,5 +50,33 @@ describe('explainInstallationTokenMintFailure', () => {
     expect(explainInstallationTokenMintFailure(5, 500)).toBe(
       'Failed to mint installation token for 5 (HTTP 500)',
     )
+  })
+})
+
+describe('InstallationTokenMintError (I7 structured code)', () => {
+  it('carries the status + installationId as fields and the elaborated message', () => {
+    const err = new InstallationTokenMintError(42, 404)
+    expect(err.status).toBe(404)
+    expect(err.installationId).toBe(42)
+    expect(err.name).toBe('InstallationTokenMintError')
+    expect(err.message).toContain('Failed to mint installation token for 42 (HTTP 404)')
+    expect(err.message).toMatch(/uninstalled|stale installation/)
+  })
+
+  it('installationTokenMintStatusOf reads the status via instanceof', () => {
+    expect(installationTokenMintStatusOf(new InstallationTokenMintError(1, 410))).toBe(410)
+  })
+
+  it('reads the status of a boundary-crossed (plain-object) mint error via the name tag', () => {
+    // A serialized/structured-cloned error loses its class but keeps `name` + `status`.
+    expect(installationTokenMintStatusOf({ name: 'InstallationTokenMintError', status: 401 })).toBe(
+      401,
+    )
+  })
+
+  it('returns undefined for a non-mint status-bearing error (a repo-level GitHubApiError)', () => {
+    // A repo-level 404 also has a `status`, but is NOT a gone installation — must not be read.
+    expect(installationTokenMintStatusOf({ name: 'GitHubApiError', status: 404 })).toBeUndefined()
+    expect(installationTokenMintStatusOf(new Error('Failed to mint … (HTTP 404)'))).toBeUndefined()
   })
 })

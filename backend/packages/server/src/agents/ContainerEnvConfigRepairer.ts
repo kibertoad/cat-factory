@@ -1,5 +1,4 @@
 import type {
-  AgentFailureKind,
   EnvConfigRepairer,
   EnvConfigRepairHandle,
   EnvConfigRepairRequest,
@@ -174,16 +173,15 @@ export class ContainerEnvConfigRepairer implements EnvConfigRepairer {
       return {
         state: 'failed',
         // Prefer the transport's STRUCTURED eviction verdict, then the harness's structured
-        // `failureCause` (via the kernel's shared mapper); the error-string regex in
-        // classifyRepairFailure is the fallback only for an older producer that reports neither
-        // field (and also catches the facade-emitted eviction, for which the harness sets no
-        // cause). Both eviction kinds (`crash` / `transient`) collapse to the single `evicted`
-        // failure kind on purpose — env-config repair has no transient-vs-crash recovery budget
-        // (only the run driver's `recoverContainerEviction` splits them), so the distinction is
-        // meaningless here.
+        // `failureCause` (via the kernel's shared mapper); default to the coarse `agent` when
+        // neither is present (the watchdog-phrase string fallback is gone — current images always
+        // emit a cause). Both eviction kinds (`crash` / `transient`) collapse to the single
+        // `evicted` failure kind on purpose — env-config repair has no transient-vs-crash recovery
+        // budget (only the run driver's `recoverContainerEviction` splits them), so the
+        // distinction is meaningless here.
         failureKind: view.evicted
           ? 'evicted'
-          : (failureKindFromHarnessCause(view.failureCause) ?? classifyRepairFailure(error)),
+          : (failureKindFromHarnessCause(view.failureCause) ?? 'agent'),
         error,
         detail: view.error,
       }
@@ -210,17 +208,4 @@ export class ContainerEnvConfigRepairer implements EnvConfigRepairer {
   async stopRepair(handle: EnvConfigRepairHandle): Promise<void> {
     await this.jobs.release(handle.workspaceId, { runId: handle.jobId, jobId: handle.jobId })
   }
-}
-
-/**
- * Classify a failed repair job's error message into an {@link AgentFailureKind} — the FALLBACK
- * when the harness reported no structured cause (the kernel's shared
- * `failureKindFromHarnessCause` wins when one is present). The transport maps an
- * evicted/crashed container (a 404 poll) to a failed view, and the harness redacts + labels
- * its watchdog kills. Everything else is an agent fault.
- */
-function classifyRepairFailure(error: string): AgentFailureKind {
-  if (/evicted or crashed/i.test(error)) return 'evicted'
-  if (/inactivity|no agent activity|max duration/i.test(error)) return 'timeout'
-  return 'agent'
 }

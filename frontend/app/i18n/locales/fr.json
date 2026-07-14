@@ -442,6 +442,32 @@
         "env_test_not_provisionable": "Gestionnaire d'environnement non configuré",
         "env_test_no_vcs": "Fournisseur Git non connecté"
       },
+      "description": {
+        "dependencies_unmet": "Cette tâche dépend d'autres qui ne sont pas encore terminées. Terminez-les ou débloquez-les, puis relancez-la.",
+        "task_limit_reached": "Trop d'exécutions sont actives en même temps. Attendez qu'une se termine, puis relancez celle-ci.",
+        "tester_infra_unsupported": "L'étape Tester ne peut pas s'exécuter ici : ce service n'a pas d'infrastructure de test configurée, ou l'environnement d'exécution de ce déploiement ne peut pas l'exécuter. Configurez une infrastructure de test ou utilisez un service qui n'en a pas besoin.",
+        "agent_backend_unconfigured": "Aucun backend de runner n'est disponible pour exécuter des agents en conteneur. Enregistrez un pool de runners auto-hébergé ou activez Cloudflare Containers dans votre déploiement.",
+        "run_not_retryable": "Seule une exécution en échec ou terminée peut être relancée. Cette exécution est encore active ou dans un état qui n'autorise pas de nouvelle tentative.",
+        "no_pr_to_merge": "Cette exécution n'a pas encore ouvert de pull request, il n'y a donc rien à fusionner.",
+        "github_not_connected": "Connectez cet espace de travail à GitHub pour que les agents puissent cloner le dépôt, pousser des modifications et ouvrir des pull requests.",
+        "bootstrap_not_retryable": "Cette tâche d'amorçage ne peut pas être relancée dans son état actuel (elle est encore en cours ou déjà terminée avec succès).",
+        "bootstrap_reference_missing": "Le dépôt de référence que cet amorçage adapte n'est plus accessible. Il a été supprimé ou son accès a été révoqué. Choisissez une autre référence ou partez de zéro.",
+        "preset_unsatisfiable": "Le modèle d'une étape en ligne ne peut pas s'exécuter en ligne dans ce déploiement (un modèle par abonnement uniquement, sans prise en charge en ligne). Choisissez un modèle ou un preset compatible avec l'exécution en ligne.",
+        "visual_pipeline_no_frontend": "Ce pipeline comporte des étapes de test visuel, mais la cible n'a pas d'interface utilisateur à tester (pas de frontend, et rien n'y renvoie).",
+        "model_policy_blocked": "La famille de ce modèle est bloquée par la politique de modèles de votre compte. Choisissez un modèle ou une famille autorisés.",
+        "model_policy_unsupported": "Les politiques de famille de modèles sont un contrôle réservé aux environnements hébergés, et ce déploiement ne permet pas de les définir.",
+        "deployer_required_before_tester": "Ce service a besoin d'un environnement provisionné avant qu'une étape Tester, de test manuel ou Playwright puisse s'exécuter, mais aucun Deployer ne la précède. Ajoutez une étape Deployer au pipeline.",
+        "env_test_not_a_frame": "L'auto-test d'environnement s'exécute par service, il ne peut donc être lancé que sur un service, pas sur un module ou une tâche.",
+        "env_test_infraless": "Ce service n'a aucun provisionnement d'environnement éphémère configuré, il n'y a donc rien que l'auto-test puisse exercer.",
+        "env_test_not_provisionable": "Ce service a un type de provisionnement, mais aucun gestionnaire de l'espace de travail ne s'y applique encore, le provisionnement ne peut donc pas s'exécuter. Configurez un gestionnaire d'environnement.",
+        "env_test_no_vcs": "L'auto-test a besoin d'un fournisseur Git pour créer et supprimer sa branche jetable, mais cet espace de travail n'est connecté à aucun."
+      },
+      "action": {
+        "connectGitHub": "Connecter GitHub",
+        "configureRunnerPool": "Configurer le pool de runners",
+        "chooseModel": "Choisir un modèle",
+        "configureInfrastructure": "Configurer l'infrastructure"
+      },
       "fallbackMessage": "Cette action est en conflit avec l’état actuel.",
       "providersUnconfigured": {
         "title": "Aucun fournisseur d’IA pour ce modèle",

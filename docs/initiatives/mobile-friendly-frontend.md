@@ -10,7 +10,7 @@ tree moves — treat them as anchors, not gospel).
 
 The product is a spatial board + a large family of overlay windows, built desktop-first.
 Users increasingly want to check pipeline progress, answer review/decision gates, and read
-agent output from a phone — the *monitor-and-decide* loop, not heavy board editing. The
+agent output from a phone — the _monitor-and-decide_ loop, not heavy board editing. The
 goal of this initiative is:
 
 1. **Nothing broken at 375px** — no clipped layouts, no unreachable actions, no
@@ -18,7 +18,7 @@ goal of this initiative is:
 2. **The monitor-and-decide loop is comfortable on a phone** — inspector, notifications,
    review/decision windows, and run progress are legible and tappable.
 3. **The board is operable on touch** — pan/zoom/drag/select/act all work with a finger,
-   even if deep board *editing* remains a desktop-first activity.
+   even if deep board _editing_ remains a desktop-first activity.
 
 Explicitly **not** a goal (deferred, see section E): a separate mobile app, offline
 support, or replacing the spatial board with a bespoke phone-first navigation model.
@@ -27,7 +27,7 @@ support, or replacing the spatial board with a bespoke phone-first navigation mo
 
 The audit's biggest finding is that **the structural shell is already mobile-adapted** —
 prior work established the right patterns, and the remaining gaps are mostly in the fill,
-not the frame. Inventory of what already works, because the fixes below must *copy* these
+not the frame. Inventory of what already works, because the fixes below must _copy_ these
 patterns rather than invent new ones:
 
 - **Viewport meta** exists (`frontend/app/nuxt.config.ts:118`,
@@ -39,14 +39,14 @@ patterns rather than invent new ones:
   trap, Escape-to-close (`components/layout/SideBar.vue:123-146`), driven by a
   `lg:hidden` hamburger in the shell (`pages/index.vue:338-347`).
 - **Inspector** is a bottom sheet on mobile (`fixed inset-x-0 bottom-0 … max-h-[80dvh]
-  rounded-t-2xl`), a docked `lg:w-80` panel on desktop
+rounded-t-2xl`), a docked `lg:w-80` panel on desktop
   (`components/panels/InspectorPanel.vue:264,272`). `AgentStepDetail.vue:560` follows the
   same bottom-sheet → `lg:w-96` pattern.
 - **Toolbar** caps to the viewport and scrolls (`components/layout/BoardToolbar.vue:132`
   `max-w-[calc(100vw-1rem)] overflow-x-auto`), labels collapse via `hidden sm:inline`.
 - **The ~13 hand-rolled result-view windows share one responsive idiom**: `Teleport` →
   `fixed inset-0 flex justify-center` → `w-full max-w-{3xl..5xl} flex-col overflow-hidden
-  max-h-[90dvh]`, with two-column bodies stacking below `lg`
+max-h-[90dvh]`, with two-column bodies stacking below `lg`
   (`flex-col lg:flex-row`, e.g. `requirements/RequirementsReviewWindow.vue:565,602`).
 - **Board input is touch-engineered on purpose**: one-finger pan via
   `boardPanMode(hasTouch)` (`utils/boardPanMode.ts`, unit-tested — the button-array form
@@ -60,7 +60,7 @@ patterns rather than invent new ones:
 - **Notifications inbox** caps at `w-[min(24rem,92vw)]`
   (`layout/NotificationsInbox.vue:239`).
 - Global CSS is mobile-safe: no fixed body width, `dvh` used for heights, `body
-  { overflow: hidden }` makes the app a non-scrolling surface where every secondary
+{ overflow: hidden }` makes the app a non-scrolling surface where every secondary
   surface owns its scrolling.
 
 ## Target patterns (the design)
@@ -70,7 +70,7 @@ does in its good citizens. **Do not introduce a second responsive system.**
 
 - **P-1 — Breakpoint discipline.** `lg` is the compact cutoff (it is what
   `useViewport().isCompact` encodes and what drawer/inspector/windows already use).
-  Layout defaults to single-column/stacked and opts *into* multi-column at a breakpoint:
+  Layout defaults to single-column/stacked and opts _into_ multi-column at a breakpoint:
   `grid-cols-1 lg:grid-cols-[…]`, `flex-col lg:flex-row`. Never a bare `grid-cols-2`.
   For JS decisions use `useViewport()`, never raw `window.innerWidth`/`matchMedia`.
 - **P-2 — Touch hit targets.** Interactive board/toolbar controls reach ≥40px on touch via
@@ -111,48 +111,48 @@ slices; each section is roughly one PR.
 
 ### A. Foundations (fix-once primitives) — first slice
 
-| ID | Sev | Item | Where | Status |
-|---|---|---|---|---|
-| A1 | P1 | Add `viewport-fit=cover` to the viewport meta and `env(safe-area-inset-bottom)` padding to bottom-anchored surfaces: inspector bottom-sheet action row, toaster viewport, sidebar drawer. | `nuxt.config.ts:118`; `panels/InspectorPanel.vue:264,564`; `app.vue:20` (UApp toaster); `layout/SideBar.vue:142` | todo |
-| A2 | P1 | Global input font floor: Nuxt UI `input`/`textarea`/`select` `:ui` defaults so mobile inputs render ≥16px (`text-base sm:text-sm`), neutralizing iOS focus-zoom app-wide. | `app/app.config.ts` | todo |
-| A3 | P1 | Replace the raw sub-16px `<textarea>`/`<input>` outliers with `UInput`/`UTextarea` (or bump to the P-3 floor): they bypass A2 and zoom the viewport on focus today. | `forkDecision/ForkDecisionWindow.vue:273,287`; `followUp/FollowUpWindow.vue:203`; `visualConfirm/VisualConfirmationWindow.vue:289,343`; `humanTest/HumanTestWindow.vue:292` | todo |
-| A4 | P2 | Extract the shared `<ResultWindow>` overlay shell (P-5) and migrate the ~13 windows onto it; fold in `overscroll-behavior: contain` on the inner scroll containers and safe-area padding. | `requirements/RequirementsReviewWindow.vue`, `clarity/ClarityReviewWindow.vue`, `brainstorm/BrainstormWindow.vue`, `consensus/ConsensusSessionWindow.vue`, `spec/ServiceSpecWindow.vue`, `forkDecision/ForkDecisionWindow.vue`, `followUp/FollowUpWindow.vue`, `humanTest/HumanTestWindow.vue`, `testing/TestReportWindow.vue`, `visualConfirm/VisualConfirmationWindow.vue`, `docs/DocInterviewWindow.vue`, `initiative/InitiativePlanningWindow.vue`, `initiative/InitiativeTrackerWindow.vue` | todo |
-| A5 | P3 | Mobile head metadata: `theme-color` (match the dark surface) + touch icons. PWA manifest/installability is E2, not this item. | `nuxt.config.ts:115-120` | todo |
+| ID  | Sev | Item                                                                                                                                                                                      | Where                                                                                                                                                                                                                                                                                                                                                                                                                                                                                            | Status |
+| --- | --- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ | ------ |
+| A1  | P1  | Add `viewport-fit=cover` to the viewport meta and `env(safe-area-inset-bottom)` padding to bottom-anchored surfaces: inspector bottom-sheet action row, toaster viewport, sidebar drawer. | `nuxt.config.ts:118`; `panels/InspectorPanel.vue:264,564`; `app.vue:20` (UApp toaster); `layout/SideBar.vue:142`                                                                                                                                                                                                                                                                                                                                                                                 | todo   |
+| A2  | P1  | Global input font floor: Nuxt UI `input`/`textarea`/`select` `:ui` defaults so mobile inputs render ≥16px (`text-base sm:text-sm`), neutralizing iOS focus-zoom app-wide.                 | `app/app.config.ts`                                                                                                                                                                                                                                                                                                                                                                                                                                                                              | todo   |
+| A3  | P1  | Replace the raw sub-16px `<textarea>`/`<input>` outliers with `UInput`/`UTextarea` (or bump to the P-3 floor): they bypass A2 and zoom the viewport on focus today.                       | `forkDecision/ForkDecisionWindow.vue:273,287`; `followUp/FollowUpWindow.vue:203`; `visualConfirm/VisualConfirmationWindow.vue:289,343`; `humanTest/HumanTestWindow.vue:292`                                                                                                                                                                                                                                                                                                                      | todo   |
+| A4  | P2  | Extract the shared `<ResultWindow>` overlay shell (P-5) and migrate the ~13 windows onto it; fold in `overscroll-behavior: contain` on the inner scroll containers and safe-area padding. | `requirements/RequirementsReviewWindow.vue`, `clarity/ClarityReviewWindow.vue`, `brainstorm/BrainstormWindow.vue`, `consensus/ConsensusSessionWindow.vue`, `spec/ServiceSpecWindow.vue`, `forkDecision/ForkDecisionWindow.vue`, `followUp/FollowUpWindow.vue`, `humanTest/HumanTestWindow.vue`, `testing/TestReportWindow.vue`, `visualConfirm/VisualConfirmationWindow.vue`, `docs/DocInterviewWindow.vue`, `initiative/InitiativePlanningWindow.vue`, `initiative/InitiativeTrackerWindow.vue` | todo   |
+| A5  | P3  | Mobile head metadata: `theme-color` (match the dark surface) + touch icons. PWA manifest/installability is E2, not this item.                                                             | `nuxt.config.ts:115-120`                                                                                                                                                                                                                                                                                                                                                                                                                                                                         | todo   |
 
 ### B. Layout breaks at 375px
 
-| ID | Sev | Item | Where | Status |
-|---|---|---|---|---|
-| B1 | P1 | `BlockFocusView` full-screen overlay uses a hard `grid grid-cols-[1fr_300px]` with no breakpoint — at 375px the main column collapses to ~0. Restack per P-1: `grid-cols-1 lg:grid-cols-[1fr_300px]`. | `focus/BlockFocusView.vue:120` | todo |
-| B2 | P1 | Non-collapsing `grid-cols-2` forms → `grid-cols-1 sm:grid-cols-2` (copy the correct pattern in `LocalModelEndpointsPanel.vue:323`). | `settings/BudgetSettings.vue:137`; `settings/WorkspaceSettingsPanel.vue:253`; `settings/RiskPolicyPanel.vue:270,353`; `bootstrap/BootstrapModal.vue:698` | todo |
-| B3 | P2 | KaizenPanel table is wrapped in `overflow-hidden` (clips columns on narrow screens); every other table uses `overflow-x-auto` — make Kaizen match. | `kaizen/KaizenPanel.vue:154` | todo |
-| B4 | P2 | Side rails that `hidden lg:flex` instead of restacking (P-6): verify per rail whether the content matters on mobile; restack the ones that do. | `brainstorm/BrainstormWindow.vue:502`; `testing/TestReportWindow.vue:845`; `panels/AgentStepDetail.vue:243` | todo |
-| B5 | P2 | 375px inner-column audit of the full-bleed `items-stretch` windows (each has bespoke internal columns that were not individually verified; B1 shows the failure mode). Naturally folds into the A4 migration. | `docs/DocInterviewWindow.vue:72`; `followUp/FollowUpWindow.vue:88`; `forkDecision/ForkDecisionWindow.vue:106`; `humanTest/HumanTestWindow.vue:140`; `initiative/InitiativePlanningWindow.vue:109`; `initiative/InitiativeTrackerWindow.vue:179` | todo |
+| ID  | Sev | Item                                                                                                                                                                                                          | Where                                                                                                                                                                                                                                           | Status |
+| --- | --- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ------ |
+| B1  | P1  | `BlockFocusView` full-screen overlay uses a hard `grid grid-cols-[1fr_300px]` with no breakpoint — at 375px the main column collapses to ~0. Restack per P-1: `grid-cols-1 lg:grid-cols-[1fr_300px]`.         | `focus/BlockFocusView.vue:120`                                                                                                                                                                                                                  | todo   |
+| B2  | P1  | Non-collapsing `grid-cols-2` forms → `grid-cols-1 sm:grid-cols-2` (copy the correct pattern in `LocalModelEndpointsPanel.vue:323`).                                                                           | `settings/BudgetSettings.vue:137`; `settings/WorkspaceSettingsPanel.vue:253`; `settings/RiskPolicyPanel.vue:270,353`; `bootstrap/BootstrapModal.vue:698`                                                                                        | todo   |
+| B3  | P2  | KaizenPanel table is wrapped in `overflow-hidden` (clips columns on narrow screens); every other table uses `overflow-x-auto` — make Kaizen match.                                                            | `kaizen/KaizenPanel.vue:154`                                                                                                                                                                                                                    | todo   |
+| B4  | P2  | Side rails that `hidden lg:flex` instead of restacking (P-6): verify per rail whether the content matters on mobile; restack the ones that do.                                                                | `brainstorm/BrainstormWindow.vue:502`; `testing/TestReportWindow.vue:845`; `panels/AgentStepDetail.vue:243`                                                                                                                                     | todo   |
+| B5  | P2  | 375px inner-column audit of the full-bleed `items-stretch` windows (each has bespoke internal columns that were not individually verified; B1 shows the failure mode). Naturally folds into the A4 migration. | `docs/DocInterviewWindow.vue:72`; `followUp/FollowUpWindow.vue:88`; `forkDecision/ForkDecisionWindow.vue:106`; `humanTest/HumanTestWindow.vue:140`; `initiative/InitiativePlanningWindow.vue:109`; `initiative/InitiativeTrackerWindow.vue:179` | todo   |
 
 ### C. Legibility & density
 
-| ID | Sev | Item | Where | Status |
-|---|---|---|---|---|
-| C1 | P2 | Sub-12px typography sweep: `text-[10px]`/`text-[11px]` appear ~748 times across ~130 files (eyebrow labels, badges, hints). Define a small shared scale (e.g. an `text-eyebrow`-style utility or agreed replacement classes) that renders ≥12px on compact viewports, then migrate area-by-area — inspector + review windows first (the monitor-and-decide loop), long tail after. | systemic; hotspots: `panels/InspectorPanel.vue:288-384`, `requirements/RequirementsReviewWindow.vue:728,912`, `initiative/InitiativeTrackerWindow.vue` (~25 uses) | todo |
-| C2 | P3 | Density pass on review-window finding cards (badges + selectors + textareas in `p-3` cards with 11px labels): larger tap spacing on compact viewports. Ride the C1 sweep. | `requirements/RequirementsReviewWindow.vue`, `clarity/ClarityReviewWindow.vue` | todo |
+| ID  | Sev | Item                                                                                                                                                                                                                                                                                                                                                                               | Where                                                                                                                                                             | Status |
+| --- | --- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------- | ------ |
+| C1  | P2  | Sub-12px typography sweep: `text-[10px]`/`text-[11px]` appear ~748 times across ~130 files (eyebrow labels, badges, hints). Define a small shared scale (e.g. an `text-eyebrow`-style utility or agreed replacement classes) that renders ≥12px on compact viewports, then migrate area-by-area — inspector + review windows first (the monitor-and-decide loop), long tail after. | systemic; hotspots: `panels/InspectorPanel.vue:288-384`, `requirements/RequirementsReviewWindow.vue:728,912`, `initiative/InitiativeTrackerWindow.vue` (~25 uses) | todo   |
+| C2  | P3  | Density pass on review-window finding cards (badges + selectors + textareas in `p-3` cards with 11px labels): larger tap spacing on compact viewports. Ride the C1 sweep.                                                                                                                                                                                                          | `requirements/RequirementsReviewWindow.vue`, `clarity/ClarityReviewWindow.vue`                                                                                    | todo   |
 
 ### D. Board touch ergonomics
 
-| ID | Sev | Item | Where | Status |
-|---|---|---|---|---|
-| D1 | P1 | Task-card action buttons (Start / Review / Merge / Resolve / open-PR) are hardcoded `size="xs"` (~20-24px) — the most-used touch targets on the board. Apply the existing `:size="isTouch ? 'sm' : 'xs'"` idiom (as `BlockNode.vue:472-510` already does). | `board/nodes/TaskCard.vue:320,331,361-391` | todo |
-| D2 | P2 | Toolbar camera controls (zoom in/out, fit, reset readout) fixed at `size="sm"` (~32px); these are the only camera controls (minimap was deliberately removed). Bump on touch. | `layout/BoardToolbar.vue:135-190` | todo |
-| D3 | P2 | Frame/module resize edge strips only reach 16px under `pointer-coarse` (`w-4`/`h-4`) while the corner correctly reaches 44px — widen edges to ~`w-8`/`h-8` under `pointer-coarse`. | `board/nodes/BlockNode.vue:560,565`; `board/nodes/ModuleFrame.vue:83,88` | todo |
-| D4 | P2 | Pipeline expansion at deep zoom is hover-driven (`elementFromPoint` of last `pointermove`) — effectively unavailable on touch (no persistent hover; only the centre-most-card fallback fires). Add a tap-to-pin expansion path (P-7). | `composables/useTaskExpansion.ts:56,68-72,120-127` | todo |
-| D5 | P3 | Double-click canvas gestures (focus a task, centre a frame) rely on synthesized `dblclick` — unreliable from double-tap. Inspector Focus button + toolbar fit-view already cover the actions; verify those paths and, if double-tap proves dead on real devices, add an explicit affordance rather than a custom gesture recognizer. | `board/BoardCanvas.vue:105-119`; `panels/InspectorPanel.vue:584` | todo |
-| D6 | P3 | Truncated titles / dependency labels expose full text only via `title=` tooltips — unreachable on touch. Full text is available in the inspector after tap-select; verify each site has that path and drop/augment the ones that don't. | `board/nodes/TaskCard.vue:258,296,301`; `board/nodes/EpicNode.vue:40` | todo |
+| ID  | Sev | Item                                                                                                                                                                                                                                                                                                                                 | Where                                                                    | Status |
+| --- | --- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ | ------------------------------------------------------------------------ | ------ |
+| D1  | P1  | Task-card action buttons (Start / Review / Merge / Resolve / open-PR) are hardcoded `size="xs"` (~20-24px) — the most-used touch targets on the board. Apply the existing `:size="isTouch ? 'sm' : 'xs'"` idiom (as `BlockNode.vue:472-510` already does).                                                                           | `board/nodes/TaskCard.vue:320,331,361-391`                               | todo   |
+| D2  | P2  | Toolbar camera controls (zoom in/out, fit, reset readout) fixed at `size="sm"` (~32px); these are the only camera controls (minimap was deliberately removed). Bump on touch.                                                                                                                                                        | `layout/BoardToolbar.vue:135-190`                                        | todo   |
+| D3  | P2  | Frame/module resize edge strips only reach 16px under `pointer-coarse` (`w-4`/`h-4`) while the corner correctly reaches 44px — widen edges to ~`w-8`/`h-8` under `pointer-coarse`.                                                                                                                                                   | `board/nodes/BlockNode.vue:560,565`; `board/nodes/ModuleFrame.vue:83,88` | todo   |
+| D4  | P2  | Pipeline expansion at deep zoom is hover-driven (`elementFromPoint` of last `pointermove`) — effectively unavailable on touch (no persistent hover; only the centre-most-card fallback fires). Add a tap-to-pin expansion path (P-7).                                                                                                | `composables/useTaskExpansion.ts:56,68-72,120-127`                       | todo   |
+| D5  | P3  | Double-click canvas gestures (focus a task, centre a frame) rely on synthesized `dblclick` — unreliable from double-tap. Inspector Focus button + toolbar fit-view already cover the actions; verify those paths and, if double-tap proves dead on real devices, add an explicit affordance rather than a custom gesture recognizer. | `board/BoardCanvas.vue:105-119`; `panels/InspectorPanel.vue:584`         | todo   |
+| D6  | P3  | Truncated titles / dependency labels expose full text only via `title=` tooltips — unreachable on touch. Full text is available in the inspector after tap-select; verify each site has that path and drop/augment the ones that don't.                                                                                              | `board/nodes/TaskCard.vue:258,296,301`; `board/nodes/EpicNode.vue:40`    | todo   |
 
 ### E. Deferred (explicitly not committed in this initiative)
 
-| ID | Item | Why deferred |
-|---|---|---|
-| E1 | A mobile *reading model* for the board (list/drill-down instead of spatial pinch-zoom). Task cards are fixed 210px (`DraggableTask.vue:31`) and pipeline detail only appears at zoom ≥1.8 (`useSemanticZoom.ts:13-19`), so reading a large board on a phone means constant pinch-panning. | Big surface, separate initiative if phone usage becomes primary. The A–D items make the board *operable* on touch; the inspector + notifications already provide a serviceable non-spatial reading path. Decide after A–D land and real usage is observed. |
-| E2 | PWA installability (`@vite-pwa/nuxt`, manifest, offline shell). | Independent of layout; only worth it if users actually want home-screen install. A5's `theme-color` + icons deliver most of the perceived polish first. |
+| ID  | Item                                                                                                                                                                                                                                                                                      | Why deferred                                                                                                                                                                                                                                               |
+| --- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| E1  | A mobile _reading model_ for the board (list/drill-down instead of spatial pinch-zoom). Task cards are fixed 210px (`DraggableTask.vue:31`) and pipeline detail only appears at zoom ≥1.8 (`useSemanticZoom.ts:13-19`), so reading a large board on a phone means constant pinch-panning. | Big surface, separate initiative if phone usage becomes primary. The A–D items make the board _operable_ on touch; the inspector + notifications already provide a serviceable non-spatial reading path. Decide after A–D land and real usage is observed. |
+| E2  | PWA installability (`@vite-pwa/nuxt`, manifest, offline shell).                                                                                                                                                                                                                           | Independent of layout; only worth it if users actually want home-screen install. A5's `theme-color` + icons deliver most of the perceived polish first.                                                                                                    |
 
 ## Verification strategy
 
@@ -172,15 +172,15 @@ slices; each section is roughly one PR.
 - `lg` is the compact cutoff everywhere; `useViewport().isCompact` is the JS mirror of it.
   Do not introduce `md`-based layouts for new mobile work (one existing outlier:
   `AgentStepDetail.vue:243` uses `md:flex` for its rail — normalize when touched).
-- `hasTouch` (`any-pointer: coarse`) gates *input capability* (pan mode); `isTouch`
-  (`pointer: coarse`) gates *ergonomics* (hit-target sizing). Don't conflate them — the
+- `hasTouch` (`any-pointer: coarse`) gates _input capability_ (pan mode); `isTouch`
+  (`pointer: coarse`) gates _ergonomics_ (hit-target sizing). Don't conflate them — the
   distinction is deliberate and documented in `useViewport.ts`.
 - Any handle that starts a Pointer-Events drag MUST carry `touch-none`
   (`touch-action: none`), or the browser steals the gesture for scrolling — this is why
   the existing drag paths work on touch at all.
 - `env(safe-area-inset-*)` evaluates to 0 until the viewport meta carries
   `viewport-fit=cover`; ship the meta change and the padding in the same slice (A1).
-- iOS focus-zoom triggers on *rendered* input font < 16px — a Nuxt UI `size="sm"` prop can
+- iOS focus-zoom triggers on _rendered_ input font < 16px — a Nuxt UI `size="sm"` prop can
   reintroduce it even after A2's defaults; prefer letting the `:ui` default rule.
 - All user-facing copy added while fixing these goes through i18n per CLAUDE.md (all
   locales in the same PR); every `@cat-factory/app` change needs a changeset.

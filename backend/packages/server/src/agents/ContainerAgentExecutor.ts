@@ -817,8 +817,8 @@ export class ContainerAgentExecutor implements AsyncAgentExecutor {
       ...(view.detail ? { detail: view.detail } : {}),
       ...(view.backend ? { backend: view.backend } : {}),
       // Forward the transport's STRUCTURED container-eviction verdict so the driver recovers it on
-      // the right budget without regex-matching `error` (job.logic `evictionKindOf`). Absent on a
-      // non-eviction failure / an older producer.
+      // the right budget (RunDispatcher reads this field directly — there is no error-string
+      // fallback). Absent on a non-eviction failure.
       ...(view.evicted ? { evicted: view.evicted } : {}),
     }
     // Completed OR failed: a subscription harness attaches its per-call telemetry to

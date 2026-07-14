@@ -1,5 +1,6 @@
 import type { Clock, StaleRepoRef } from '@cat-factory/kernel'
 import { describe, expect, it, vi } from 'vitest'
+import { InstallationTokenMintError } from '../src/github/GitHubAppAuth.js'
 import type { Logger } from '../src/observability/logger.js'
 import {
   GITHUB_RECONCILE_STALE_MS,
@@ -110,6 +111,30 @@ describe('reconcileStaleRepos (shared)', () => {
     ]) {
       const deps = makeDeps([staleRepo()], async () => {
         throw new Error(message)
+      })
+      await reconcileStaleRepos(deps, clock, STALE_MS, noopLog)
+      expect(deps.softDeleted).toEqual([])
+    }
+  })
+
+  // I7: the tombstone decision now prefers the structured InstallationTokenMintError over the
+  // message regex — so the elaborated remedy text can change freely without breaking it, and a
+  // repo-level 404 (a different status-bearing error) can never be mistaken for a gone install.
+  it('tombstones on a structured InstallationTokenMintError(404) regardless of message wording', async () => {
+    const deps = makeDeps([staleRepo({ installationId: 55 })], async () => {
+      throw new InstallationTokenMintError(55, 404)
+    })
+    await reconcileStaleRepos(deps, clock, STALE_MS, noopLog)
+    expect(deps.softDeleted).toEqual([[55, clock.now()]])
+  })
+
+  it('does NOT tombstone on a structured mint 401 or a repo-level status-bearing error', async () => {
+    for (const err of [
+      new InstallationTokenMintError(7, 401),
+      { name: 'GitHubApiError', status: 404, message: 'repo gone' },
+    ]) {
+      const deps = makeDeps([staleRepo()], async () => {
+        throw err
       })
       await reconcileStaleRepos(deps, clock, STALE_MS, noopLog)
       expect(deps.softDeleted).toEqual([])

@@ -3,6 +3,7 @@ import type {
   GitHubInstallationRepository,
   RepoProjectionRepository,
 } from '@cat-factory/kernel'
+import { installationTokenMintStatusOf } from '../github/GitHubAppAuth.js'
 import type { Logger } from '../observability/logger.js'
 
 // The runtime-neutral core of the periodic GitHub reconciliation pass, shared by both
@@ -98,8 +99,15 @@ export async function reconcileStaleRepos(
  * transient fault: minting an installation token for an uninstalled or revoked
  * installation returns 401/404 (and a deleted repo 404/410). These are not worth
  * an error-level log or a retry storm — the connection needs human action.
+ *
+ * Prefers the structured mint status; the message regex is the OLD-PRODUCER fallback for a
+ * mint error that crossed a boundary as plain text (and it also catches a repo-level
+ * `(HTTP 404)` that carries no mint class).
  */
 function isInstallationGoneError(error: unknown): boolean {
+  const mintStatus = installationTokenMintStatusOf(error)
+  if (mintStatus !== undefined)
+    return mintStatus === 401 || mintStatus === 404 || mintStatus === 410
   const message = error instanceof Error ? error.message : String(error)
   return /\(HTTP (401|404|410)\)/.test(message)
 }
@@ -107,11 +115,17 @@ function isInstallationGoneError(error: unknown): boolean {
 /**
  * Whether the error is specifically a *token mint* returning 404/410 — i.e. the
  * installation itself is gone (uninstalled/revoked), not merely a single repo
- * being inaccessible. Matches the App registry's mint-failure message. Excludes 401
- * (a transient app-JWT/clock fault would mint-fail for every installation, and must
- * not tombstone a healthy connection).
+ * being inaccessible. Excludes 401 (a transient app-JWT/clock fault would mint-fail for
+ * every installation, and must not tombstone a healthy connection).
+ *
+ * Prefers the structured {@link installationTokenMintStatusOf} — which is set ONLY on a real
+ * mint failure, so a repo-level 404 (a `GitHubApiError`, no mint class) can never be mistaken
+ * for a gone installation. The message regex is the OLD-PRODUCER fallback for a mint error that
+ * lost its class identity across a boundary.
  */
 function isInstallationTokenGoneError(error: unknown): boolean {
+  const mintStatus = installationTokenMintStatusOf(error)
+  if (mintStatus !== undefined) return mintStatus === 404 || mintStatus === 410
   const message = error instanceof Error ? error.message : String(error)
   return /Failed to mint installation token .*\(HTTP (404|410)\)/i.test(message)
 }

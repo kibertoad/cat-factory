@@ -5,20 +5,19 @@ import {
   type RunnerJobView,
   type RunnerTransport,
 } from '@cat-factory/kernel'
-import { TRANSIENT_EVICTION_MARKER } from '@cat-factory/orchestration'
 import type { DurableObjectNamespace } from '@cloudflare/workers-types'
 import type { DeployContainer } from './DeployContainer'
 import { type ExecutionContainer, isRolloutSignal } from './ExecutionContainer'
 import type { ContainerInstanceRegistry } from './ContainerInstanceRegistry'
 
-// The failed-poll error string the engine classifies as a container eviction. The eviction
-// verdict now rides the STRUCTURED `RunnerJobView.evicted` field (`crash` / `transient`), which
-// consumers prefer; the "(container evicted or crashed)" suffix + the TRANSIENT_EVICTION_MARKER
-// are PRESERVED alongside it as the fallback older consumers (job.logic `isContainerEvictionError`
-// / `isTransientEviction`, the bootstrap flow) still match. The Cloudflare-specific "rollout ⇒
-// transient" mapping lives here, in the facade; the engine stays runtime-neutral.
+// The human-readable message for a failed poll the transport maps to a container eviction. The
+// eviction verdict the engine acts on rides the STRUCTURED `RunnerJobView.evicted` field
+// (`crash` / `transient`) minted alongside it — the "(container evicted or crashed)" /
+// "(transient infrastructure eviction)" wording is now DESCRIPTIVE context only, no longer
+// regex-classified by any consumer (error-message coverage I5). The Cloudflare-specific
+// "rollout ⇒ transient" mapping lives here, in the facade; the engine stays runtime-neutral.
 const EVICTION_ERROR = 'Job not found (container evicted or crashed)'
-const ROLLOUT_EVICTION_ERROR = `${EVICTION_ERROR} (${TRANSIENT_EVICTION_MARKER})`
+const ROLLOUT_EVICTION_ERROR = `${EVICTION_ERROR} (transient infrastructure eviction)`
 
 // The default runner transport: a per-RUN Cloudflare Container. One Durable Object
 // instance per run id (`ref.runId`) hosts that run's whole sequence of step jobs; the
