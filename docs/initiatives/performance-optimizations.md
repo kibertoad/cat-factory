@@ -1,6 +1,6 @@
 # Initiative: performance optimizations (prioritized)
 
-**Status:** in progress — items 1, 2, 3, 4, 7, 8, 9, 15, 16, 17, 18 landed (emit metrics rollup · gate-poll GitHub reads · live-run projection · parallel dispatch waves · spend/workspace-settings/account-settings cache slices · reuse-the-loaded-list batch across autoStart/initiative-spawn/blueprint-reconcile/block-delete) · **Owner:** core · **Started:** 2026-07-09
+**Status:** in progress — items 1, 2, 3, 4, 7, 8, 9, 12, 14, 15, 16, 17, 18 landed (emit metrics rollup · gate-poll GitHub reads · live-run projection · parallel dispatch waves · spend/workspace-settings/account-settings cache slices · GitHub-sync + fan-out-publisher parallelism · reuse-the-loaded-list batch across autoStart/initiative-spawn/blueprint-reconcile/block-delete) · **Owner:** core · **Started:** 2026-07-09
 
 > This is the durable source of truth for a multi-PR initiative. Read it first before
 > picking up the next slice; update the checklist at the end of each PR.
@@ -60,9 +60,9 @@ symmetric" (CLAUDE.md).
 | 9   | P2  | caching      | `WorkspaceSettingsService.get` uncached; read per recorded LLM call                                                                 | ✅ done | branch `claude/performance-tracker-next-phase-hcdba4`     |
 | 10  | P2  | frontend     | Shared `useBlockQueries` index invalidates ALL BlockNodes on every execution event                                                  | ⬜ todo |                                                           |
 | 11  | P2  | frontend     | Two unconditional 60fps RAF loops doing DOM measurement while idle                                                                  | ⬜ todo |                                                           |
-| 12  | P2  | integrations | `GitHubSyncService`: serial per-workspace fan-out + serial resource syncs                                                           | ⬜ todo |                                                           |
+| 12  | P2  | integrations | `GitHubSyncService`: serial per-workspace fan-out + serial resource syncs                                                           | ✅ done | branch `claude/performance-tracker-next-phase-kky9ny`     |
 | 13  | P2  | engine       | `AgentContextBuilder` re-walks block ancestry per resolver, sequentially                                                            | ⬜ todo |                                                           |
-| 14  | P2  | events       | `FanOutEventPublisher` forwards to N mounted workspaces serially                                                                    | ⬜ todo |                                                           |
+| 14  | P2  | events       | `FanOutEventPublisher` forwards to N mounted workspaces serially                                                                    | ✅ done | branch `claude/performance-tracker-next-phase-kky9ny`     |
 | 15  | P3  | engine       | `autoStartDependents`: per-dependent pipeline point-read in loop                                                                    | ✅ done | branch `claude/performance-tracker-next-phase-caz67j`     |
 | 16  | P3  | engine       | `InitiativeLoopService.spawnItem`: per-item pipeline point-read in loop                                                             | ✅ done | branch `claude/performance-tracker-next-phase-caz67j`     |
 | 17  | P3  | board        | `BoardScanService` reconcile: `addModule` re-lists whole board per module                                                           | ✅ done | branch `claude/performance-tracker-next-phase-caz67j`     |
@@ -361,6 +361,23 @@ item 2a). `resyncWorkspace`/`backfillInstallation` (`:531-548`) iterate repos se
 independent resource fetches within a repo (keep per-resource cursor writes ordered where
 required); bounded concurrency for the per-repo backfill loop.
 
+**Landed (branch `claude/performance-tracker-next-phase-kky9ny`):** `syncRepo`'s `fanOut` now
+`Promise.all`s the per-workspace projection writes (each resource's rows reach all N linking
+workspaces concurrently, not N serial writes). The four independent cursor resources —
+branches / PRs / issues / commits, each on its OWN installation-scoped cursor, so no cross-kind
+ordering to preserve (`syncResource` reads+writes a single per-kind cursor) — fetch+upsert in
+one `Promise.all` wave; checks stays after the wave because it needs the branch head. The
+data-scaled loops (`resyncWorkspace` per repo, `backfillInstallation` per workspace) move from
+serial to **bounded** concurrency via a new in-tree `mapLimit` helper
+(`integrations/modules/shared/mapLimit.ts`), capped at `REPO_SYNC_CONCURRENCY = 4` /
+`WORKSPACE_BACKFILL_CONCURRENCY = 3` — parallel but not an unbounded burst, so a large
+installation backfills fast without tripping GitHub's secondary (abuse) rate limits (the
+concern item 24 tracks for the dispatch path). The intra-repo resource wave is a fixed 4-wide
+fan-out (not data-scaled), so it needs no bound. Pure orchestration, no persistence surface;
+pinned by a new `GitHubSyncService.parallelism.test.ts` (concurrent resource wave, concurrent
+workspace fan-out, both bounded loops) + a `mapLimit` unit test. The existing cursor/cache
+tests are unaffected (per-kind cursors + ordered invalidation preserved).
+
 ### 13. `AgentContextBuilder` re-walks ancestry per resolver, serially — P2
 
 `backend/packages/orchestration/src/modules/execution/AgentContextBuilder.ts:236-239`:
@@ -384,6 +401,16 @@ service mounted on N boards, N serial DO round-trips (Cloudflare) per state tran
 same-workspace events (per-call `llmCallObserved`, per-step `executionChanged`) into a
 short publish batch is a further opportunity — note it in the slice but treat as a design
 change, not a defect.
+
+**Landed (branch `claude/performance-tracker-next-phase-kky9ny`):** every fan-out method
+resolves its target set once and `Promise.all`s the per-target inner forwards instead of
+`for (…) await`, so a service mounted on N boards pays one round-trip's latency, not N serial
+ones. The block-less methods (`envConfigRepairChanged` / `envTestChanged` / `llmCallObserved`)
+were already single-forward and are untouched. Semantics are unchanged beyond concurrency: the
+forwards were already independent and best-effort. Coalescing rapid same-workspace events into
+a publish batch remains the noted (deferred) design opportunity. Pinned by a new
+`fanOutEventPublisher.spec.ts` case (forwards enter concurrently — a serial chain would
+deadlock the barrier).
 
 ### 15. `autoStartDependents` per-dependent pipeline point-read — P3
 
