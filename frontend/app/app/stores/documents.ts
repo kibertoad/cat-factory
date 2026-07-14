@@ -35,6 +35,7 @@ export const useDocumentsStore = defineStore('documents', () => {
     DocumentSourceDescriptor
   >({
     enabled: () => !!workspace.workspaceId,
+    workspaceId: () => workspace.workspaceId,
     fetch: async () => {
       const [{ sources }, { connections }] = await Promise.all([
         api.listDocumentSources(workspace.requireId()),
@@ -44,7 +45,7 @@ export const useDocumentsStore = defineStore('documents', () => {
     },
   })
   const { available, sources, connections, connectedSources, anyConnected } = integration
-  const { descriptorFor, connectionFor, isConnected, probe } = integration
+  const { descriptorFor, connectionFor, isConnected, probe, ensureProbed } = integration
 
   const { items: documents, upsert: upsertDoc } = useUpsertList<SourceDocument>({
     key: (d) => `${d.source}:${d.externalId}`,
@@ -187,6 +188,7 @@ export const useDocumentsStore = defineStore('documents', () => {
     isConnected,
     docsForBlock,
     probe,
+    ensureProbed,
     connect,
     disconnect,
     loadDocuments,

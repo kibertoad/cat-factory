@@ -13,6 +13,7 @@ import type {
   OpenPullRequestInput,
   ResyncRequest,
 } from '~/types/domain'
+import { useSingleFlightProbe } from '~/composables/useSingleFlightProbe'
 import { useWorkspaceStore } from '~/stores/workspace'
 import { useServicesStore } from '~/stores/services'
 
@@ -96,7 +97,7 @@ export const useGitHubStore = defineStore('github', () => {
   }
 
   /** Probe the integration: resolves `available` and the current connection. */
-  async function probe() {
+  async function runProbe() {
     if (!workspace.workspaceId) return
     try {
       const { connection: conn } = await api.getGitHubConnection(workspace.requireId())
@@ -108,6 +109,11 @@ export const useGitHubStore = defineStore('github', () => {
       connection.value = null
     }
   }
+  // Single-flight the probe (app-startup initiative, item 12): `probe()` still re-reads on demand,
+  // but the on-board-open callers (the board page's onboarding gate + the SideBar) use
+  // `ensureProbed()` so their duplicate fire collapses to one request per board. A workspace switch
+  // (new id) re-probes.
+  const { probe, ensureProbed } = useSingleFlightProbe(runProbe, () => workspace.workspaceId)
 
   /** Load the cached repos, pull requests and issues for the workspace. */
   async function load() {
@@ -327,6 +333,7 @@ export const useGitHubStore = defineStore('github', () => {
     pullUrl,
     issueUrl,
     probe,
+    ensureProbed,
     load,
     ensureLoaded,
     loadAvailableRepos,

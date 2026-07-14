@@ -1,6 +1,6 @@
 # Initiative: app startup time reduction
 
-**Status:** proposed — analysis complete, no slices landed yet · **Owner:** core · **Started:** 2026-07-14
+**Status:** in progress — instrumentation + first frontend slices landed · **Owner:** core · **Started:** 2026-07-14
 
 > This is the durable source of truth for a multi-PR initiative. Read it first before
 > picking up the next slice; update the checklist at the end of each PR.
@@ -72,24 +72,24 @@ run) and Playwright traces for the SPA cold-open waterfall.
 
 ## Per-item checklist
 
-| #   | Pri | Area          | Finding (short)                                                                                    | Status  | PR  |
-| --- | --- | ------------- | -------------------------------------------------------------------------------------------------- | ------- | --- |
-| 1   | P1  | observability | No boot-phase timing anywhere (backend or SPA) — add phase timers + "ready in N ms"               | ⬜ todo |     |
-| 2   | P1  | node boot     | Five pg-boss worker startups awaited serially (~10 round trips) before listen                      | ⬜ todo |     |
-| 3   | P1  | frontend      | Full workspace snapshot fetched TWICE per cold board open (init + on-connect resync)               | ⬜ todo |     |
-| 4   | P1  | run start     | Execution drivers sleep a full 15s poll interval BEFORE the first poll                             | ⬜ todo |     |
-| 5   | P2  | node boot     | `warnIfRedisUnreachable` awaited serially — up to ~3.5s stall when Redis is set but down           | ⬜ todo |     |
-| 6   | P2  | local boot    | GitHub PAT probe awaited on the boot path (network hop to github.com before listen)               | ⬜ todo |     |
-| 7   | P2  | frontend      | GitHub probe blocks first board paint; availability could ride the snapshot                        | ⬜ todo |     |
-| 8   | P2  | frontend      | 3-deep critical-path waterfall: auth → listWorkspaces → snapshot                                   | ⬜ todo |     |
-| 9   | P2  | worker        | `buildContainer` + `createAppCaches` + registries rebuilt on EVERY request                         | ⬜ todo |     |
-| 10  | P3  | node boot     | `migrate()` spends ~5-6 serialized round trips per boot even when the DB is current               | ⬜ todo |     |
-| 11  | P3  | node boot     | Start pg-boss workers after listen? (design decision — documented invariant says before)           | ⬜ todo |     |
-| 12  | P3  | frontend      | Duplicate `github.probe()` + 6-probe SideBar fan-out on open                                       | ⬜ todo |     |
-| 13  | P3  | frontend      | Non-`en` users pay an awaited locale-catalog fetch in the boot plugin                              | ⬜ todo |     |
-| 14  | P3  | frontend      | Bundle: Vue Flow + 3 stylesheets eager; markdown-it likely in the initial chunk (measure first)    | ⬜ todo |     |
-| 15  | P3  | worker        | Isolate cold-start parse weight (~250-import container graph; opt-in integrations eager)           | ⬜ todo |     |
-| 16  | P3  | run start     | No container pre-warm on Cloudflare; local warm pool defaults off (design decision)                | ⬜ todo |     |
+| #   | Pri | Area          | Finding (short)                                                                                 | Status     | PR      |
+| --- | --- | ------------- | ----------------------------------------------------------------------------------------------- | ---------- | ------- |
+| 1   | P1  | observability | No boot-phase timing anywhere (backend or SPA) — add phase timers + "ready in N ms"             | ✅ done    | this PR |
+| 2   | P1  | node boot     | Five pg-boss worker startups awaited serially (~10 round trips) before listen                   | ⬜ todo    |         |
+| 3   | P1  | frontend      | Full workspace snapshot fetched TWICE per cold board open (init + on-connect resync)            | ⬜ todo    |         |
+| 4   | P1  | run start     | Execution drivers sleep a full 15s poll interval BEFORE the first poll                          | ⬜ todo    |         |
+| 5   | P2  | node boot     | `warnIfRedisUnreachable` awaited serially — up to ~3.5s stall when Redis is set but down        | ⬜ todo    |         |
+| 6   | P2  | local boot    | GitHub PAT probe awaited on the boot path (network hop to github.com before listen)             | ⬜ todo    |         |
+| 7   | P2  | frontend      | GitHub probe blocks first board paint; availability could ride the snapshot                     | ⬜ todo    |         |
+| 8   | P2  | frontend      | 3-deep critical-path waterfall: auth → listWorkspaces → snapshot                                | 🟡 partial | this PR |
+| 9   | P2  | worker        | `buildContainer` + `createAppCaches` + registries rebuilt on EVERY request                      | ⬜ todo    |         |
+| 10  | P3  | node boot     | `migrate()` spends ~5-6 serialized round trips per boot even when the DB is current             | ⬜ todo    |         |
+| 11  | P3  | node boot     | Start pg-boss workers after listen? (design decision — documented invariant says before)        | ⬜ todo    |         |
+| 12  | P3  | frontend      | Duplicate `github.probe()` + 6-probe SideBar fan-out on open                                    | 🟡 partial | this PR |
+| 13  | P3  | frontend      | Non-`en` users pay an awaited locale-catalog fetch in the boot plugin                           | ⬜ todo    |         |
+| 14  | P3  | frontend      | Bundle: Vue Flow + 3 stylesheets eager; markdown-it likely in the initial chunk (measure first) | ⬜ todo    |         |
+| 15  | P3  | worker        | Isolate cold-start parse weight (~250-import container graph; opt-in integrations eager)        | ⬜ todo    |         |
+| 16  | P3  | run start     | No container pre-warm on Cloudflare; local warm pool defaults off (design decision)             | ⬜ todo    |         |
 
 ## Detailed findings
 
@@ -103,6 +103,13 @@ mark the cold-open milestones (auth ready → workspaces listed → snapshot hyd
 stream `connected`) via `performance.mark`/`measure` so the waterfall is visible in
 traces. This is the honesty baseline every later slice reports against; without it we're
 guessing which seconds matter.
+
+**Landed (this PR):** `startBootClock` (`backend/runtimes/node/src/bootTimings.ts`) brackets the
+`bootServer` phases (config / migrate / bossStart / container / bus / workers / listen) and logs one
+`cat-factory node server ready in N ms` line; local mode times its own preflights (runtime probe,
+PAT probe). Frontend `markBoot` (`frontend/app/app/utils/bootMarks.ts`) stamps the cold-open
+milestones (`auth-ready` → `workspaces-listed` → `snapshot-hydrated` → `stream-connected`) as
+`performance.mark`/`measure`s.
 
 ### 2. Serial pg-boss worker startups — P1
 
@@ -229,6 +236,13 @@ when the persisted board is gone); (b) start `workspace.init()` concurrently wit
 token; a 401 falls back to the login screen exactly as today). Combines with item 3 —
 design the two together so the "one snapshot per cold open" invariant holds in both.
 
+**Landed (this PR):** direction (a) — `workspace.init()` fires the persisted board's snapshot
+speculatively in parallel with `listWorkspaces`, validates membership in `resolveActiveBoard`, and
+reuses the prefetched snapshot (or falls back for a stale id). The happy path still pays exactly one
+snapshot fetch. **Remaining:** direction (b) (start `workspace.init()` concurrently with the auth
+`getMe` leg, which requires loosening `AuthGate`'s render gating) — deferred; it composes with item
+3 (single-snapshot cold open, not yet started) and should be designed together with it.
+
 ### 9. Worker: full container rebuild per request — P2
 
 `backend/runtimes/cloudflare/src/app.ts:85-93` runs `buildContainer(c.env, ...)` in
@@ -285,6 +299,15 @@ SideBar fans out 5 more probes (`documents.probe`, `tasks.probe`, `slack.probe`,
 keyed by workspace id (several stores already have the shape), and fold the cheapest
 booleans into the snapshot where item 7 sets the precedent.
 
+**Landed (this PR):** the shared `useSingleFlightProbe`
+(`frontend/app/app/composables/useSingleFlightProbe.ts`) gives every board-open probe (github /
+documents / tasks / slack / fragment library) `ensureProbed()` single-flight-per-board semantics;
+the board page + SideBar fan-out now call `ensureProbed()`, so the duplicate `github.probe()` and
+re-mount refires collapse to one request per board (a workspace switch still re-probes, and
+`probe()` stays the explicit post-connect refresh). **Remaining:** folding the cheapest probe
+booleans into the workspace snapshot — that rides item 7's snapshot-carried-readiness precedent, so
+it lands with item 7, not before.
+
 ### 13. Non-`en` locale catalog awaited at boot — P3
 
 `frontend/app/app/plugins/locale.client.ts:15-19` `await`s `i18n.setLocale(stored)` for
@@ -329,7 +352,7 @@ defaults it off (`poolSize = 0`). Both are cost/complexity trade-offs, not defec
 pre-warmed Cloudflare instances bill while idle; a default-on local pool holds
 containers + disk on a dev machine. Decide deliberately (per-surface), with the dispatch
 → first-progress timing from item 1/item 4 in hand — item 4 may already remove most of
-the *perceived* gap, making this not worth its cost.
+the _perceived_ gap, making this not worth its cost.
 
 ## Conventions & gotchas (carry between slices)
 
@@ -386,6 +409,6 @@ the *perceived* gap, making this not worth its cost.
   (its items 5/6 will incidentally shrink the cold-open payload this tracker's items 3/8
   fetch — coordinate, don't duplicate).
 - **Replacing Vue Flow / board virtualization** — bundle work here stops at measurement
-  + cheap deferrals (item 14).
+  - cheap deferrals (item 14).
 - **CI/build pipeline speed** (turbo caching, test runtime) — developer-loop time, not
   app startup.

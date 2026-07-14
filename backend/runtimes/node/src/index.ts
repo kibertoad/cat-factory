@@ -51,6 +51,9 @@ export {
   type NodeContainerOptions,
 } from './container.js'
 export { loadNodeConfig } from './config.js'
+// Boot-phase timing (app-startup initiative, item 1), re-exported so local mode times its own
+// preflights (runtime probe, PAT probe) with the same helper `bootServer` uses.
+export { startBootClock, type BootClock } from './bootTimings.js'
 // Re-exported so the local facade can pass a `cachesProfile` override to `start()` (it makes
 // the repo projection pass-through — its `link-repo` CLI writes the projection out-of-process
 // with no invalidation bus). It imports only from `@cat-factory/node-server`.

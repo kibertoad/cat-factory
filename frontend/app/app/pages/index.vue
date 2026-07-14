@@ -245,12 +245,13 @@ watch(
 
 // Probe the GitHub integration as soon as a board is active (re-probe per board —
 // connections are per workspace). The result drives the onboarding gate below
-// before the board mounts, so an unconnected user can't slip past it. SideBar
-// re-probes once it mounts; that duplicate is harmless (probe is idempotent).
+// before the board mounts, so an unconnected user can't slip past it. `ensureProbed`
+// single-flights per board (app-startup initiative, item 12), so this and the SideBar's
+// probe collapse to one request on a cold open instead of two.
 watch(
   () => workspace.workspaceId,
   (id) => {
-    if (id) void github.probe()
+    if (id) void github.ensureProbed()
   },
   { immediate: true },
 )
@@ -268,6 +269,9 @@ const stream = useWorkspaceStream()
 // in the template would not unwrap, since `stream` is a plain object). Drives the headless
 // `workspace-stream` readiness marker the e2e suite waits on.
 const streamConnected = computed(() => stream.connected.value)
+// Final cold-open milestone (app-startup initiative, item 1): a live, reconciled board. `markBoot`
+// fires once, so only the first connect of the session times the waterfall's tail.
+watch(streamConnected, (c) => c && markBoot('stream-connected'), { immediate: true })
 const streamEverConnected = computed(() => stream.everConnected.value)
 const streamConnectionFailed = computed(() => stream.connectionFailed.value)
 watch(

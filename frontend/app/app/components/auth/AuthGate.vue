@@ -14,7 +14,9 @@ const { t } = useI18n()
 // out, so it must render even when auth is required and there's no user.
 const isPublicRoute = computed(() => route.path === '/reset-password')
 
-onMounted(() => auth.bootstrap())
+// Stamp the first cold-open milestone once the auth handshake settles (app-startup initiative,
+// item 1) — bootstrap resolves even on failure (it catches internally), so `finally` always fires.
+onMounted(() => void auth.bootstrap().finally(() => markBoot('auth-ready')))
 </script>
 
 <template>

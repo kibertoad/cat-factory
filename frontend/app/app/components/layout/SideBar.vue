@@ -100,11 +100,14 @@ watch(
   () => workspace.workspaceId,
   (id) => {
     if (!id) return
-    void documents.probe()
-    void tasks.probe()
-    void github.probe()
-    void slack.probe()
-    void library.probe()
+    // `ensureProbed` single-flights per board (app-startup initiative, item 12): on a cold open
+    // these coalesce with the board page's own github probe and don't refire on a re-mount, while a
+    // workspace switch (new id) still re-probes. `probe()` stays the explicit post-connect refresh.
+    void documents.ensureProbed()
+    void tasks.ensureProbed()
+    void github.ensureProbed()
+    void slack.ensureProbed()
+    void library.ensureProbed()
     void providerConnections.ensureLoaded().catch(() => {})
   },
   { immediate: true },
