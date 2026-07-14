@@ -18,10 +18,14 @@ import type { GitHubAvailableRepo, GitHubRepo, RepoTreeEntry } from '@cat-factor
 import pMap from 'p-map'
 
 // How many repos one workspace resyncs at once, and how many workspaces one installation
-// backfills at once. Each unit issues several GitHub reads, so these bound the concurrent
-// call fan-out to stay well under GitHub's secondary (abuse) rate limits while still
-// collapsing the old serial chains. Modest on purpose (the products stack: a backfill runs
-// up to WORKSPACE × REPO syncs in flight).
+// backfills at once. These bound the concurrent call fan-out to stay well under GitHub's
+// secondary (abuse) rate limits while still collapsing the old serial chains. Modest on
+// purpose because the products STACK — and the true ceiling is a THREE-factor product, not
+// two: each `syncRepo` itself fires a fixed 4-wide resource wave (branches/PRs/issues/commits
+// in one `Promise.all`), so a full `backfillInstallation` peaks at
+// WORKSPACE_BACKFILL_CONCURRENCY × REPO_SYNC_CONCURRENCY × 4 = 3 × 4 × 4 = 48 concurrent GitHub
+// reads. That is comfortably under GitHub's ~100-concurrent guidance, but if either cap is ever
+// raised, multiply in the ×4 wave when re-checking the headroom.
 const REPO_SYNC_CONCURRENCY = 4
 const WORKSPACE_BACKFILL_CONCURRENCY = 3
 
