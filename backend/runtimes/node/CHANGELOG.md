@@ -1,5 +1,44 @@
 # @cat-factory/node-server
 
+## 0.93.9
+
+### Patch Changes
+
+- 6c4bcef: fix(infra-setup): stop the false "test environment not configured" nag in local mode, and make the remaining nag actionable
+
+  Local mode on a Docker-family runtime stands the Tester's dependencies up with the
+  zero-config in-container `local-compose` backend, so a missing ephemeral-environment
+  _provider_ connection is not actually a setup gap there. The infra-setup projection
+  now gates the `ephemeralEnvironments` area on a new
+  `ephemeralEnvironmentsRequireProvider` container flag (derived from the deployment's
+  test-env capability via `testEnvHasZeroConfigDefault`) — exactly like
+  `agentExecutorRequiresRunnerPool` gates the executor area — so the banner stays quiet
+  where docker-compose already works and only fires where a provider is genuinely
+  mandatory (the Worker, stock Node, and local Apple `container`).
+
+  Where the nag still applies, its copy now tells the user what to do: open Test
+  environments and connect a Kubernetes cluster or a custom HTTP environment provider.
+
+- Updated dependencies [6c4bcef]
+- Updated dependencies [6c4bcef]
+  - @cat-factory/contracts@0.128.2
+  - @cat-factory/kernel@0.123.3
+  - @cat-factory/integrations@0.81.20
+  - @cat-factory/server@0.113.9
+  - @cat-factory/agents@0.54.11
+  - @cat-factory/consensus@0.10.47
+  - @cat-factory/eks@0.1.72
+  - @cat-factory/gates@0.5.31
+  - @cat-factory/gitlab@0.7.69
+  - @cat-factory/orchestration@0.107.7
+  - @cat-factory/prompt-fragments@0.13.17
+  - @cat-factory/spend@0.12.27
+  - @cat-factory/caching@0.6.46
+  - @cat-factory/observability-langfuse@0.7.201
+  - @cat-factory/provider-bedrock@0.7.217
+  - @cat-factory/provider-cloudflare@0.7.218
+  - @cat-factory/provider-s3@0.2.151
+
 ## 0.93.8
 
 ### Patch Changes
