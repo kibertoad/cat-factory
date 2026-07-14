@@ -1,5 +1,13 @@
 # @cat-factory/worker
 
+## 0.83.6
+
+### Patch Changes
+
+- Updated dependencies [c1028cc]
+  - @cat-factory/orchestration@0.107.4
+  - @cat-factory/server@0.113.6
+
 ## 0.83.5
 
 ### Patch Changes
