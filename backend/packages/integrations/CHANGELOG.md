@@ -1,5 +1,21 @@
 # @cat-factory/integrations
 
+## 0.81.20
+
+### Patch Changes
+
+- 6c4bcef: chore(environments): drop the proprietary "Kargo" name from shared custom-deployment-provider code and UI
+
+  "Kargo" is one specific proprietary deployment provider and should not appear as the
+  canonical example in the framework's shared code or UI. Replaced every illustrative
+  reference (comments, the `manifestId` placeholder/help text, config-file examples) with
+  neutral wording (`.deploy.yml`, `my-preview-template`, "a native custom env backend").
+  Behaviour is unchanged.
+
+- Updated dependencies [6c4bcef]
+  - @cat-factory/contracts@0.128.2
+  - @cat-factory/kernel@0.123.3
+
 ## 0.81.19
 
 ### Patch Changes
