@@ -14,8 +14,11 @@ structured-cause classification (I3) · typed harness cause union + one shared k
 logging (C2, GitHub HMAC + GitLab token) · numeric-env-knob rejection warnings (A8, shared
 `parseNumericEnv`) · harness clone/push + PR/MR-open + LLM-proxy failure classification (F1/F2/F3,
 one `llm-upstream` cause, image-bumped) · exhaustive execution failure-kind hints
-(G3, `preflight` was hint-less) ·
-**Owner:** core · **Started:** 2026-07-11
+(G3, `preflight` was hint-less) · structured installation-token-gone code + first-wrap-point rule
+codified + string-fallback classifiers deleted (I7/I6/I5) · per-reason conflict-toast descriptions
+
+- jump actions across all locales (G1) ·
+  **Owner:** core · **Started:** 2026-07-11
 
 > This is the durable source of truth for a multi-PR initiative. Read it first before
 > picking up the next slice; update the checklist at the end of each PR.
@@ -75,11 +78,12 @@ failure class — do NOT invent a seventh:
    `DomainError.code`, `HarnessFailure.failureCause`), a small extractor helper that
    encapsulates the check (`failureCauseOf` in `executor-harness/src/failure.ts:53`,
    `getErrorReason` in kernel `domain/errors.ts:131`, the duck-typed cross-boundary
-   `httpStatusOf` in `integrations/modules/tasks/tasks.logic.ts:56`), and — where an
-   older producer may still emit only text — a `*FromCause(cause) ?? classify*(message)`
-   mapper pair (`agentFailureKindFromCause ?? classifyAgentFailure`,
-   `RunDispatcher.ts:965`). Classify errors by these fields and typeguards, NEVER by
-   regex/`includes` on the message; see section I for the sites still string-matched.
+   `httpStatusOf` in `integrations/modules/tasks/tasks.logic.ts:56`). When a structured
+   producer is guaranteed (a current image / an in-process throw), read the field alone —
+   `failureKindFromHarnessCause(cause) ?? 'agent'`, `installationTokenMintStatusOf` — with NO
+   message fallback (I5/I7 deleted the `classify*(message)` pairs). Classify errors by these
+   fields and typeguards, NEVER by regex/`includes` on the message; see section I for the
+   sites still string-matched.
 
 ### Doc-URL convention (new — establish in the first slice)
 
@@ -189,7 +193,7 @@ that union change is itself image-affecting, so it batches into the same slice.
 
 | #   | Failure / misconfiguration                             | Current behaviour                                                                                                                 | Surface | Sev | Proposed fix                                                                                                                                                 | Doc URL to embed | Status  | PR       |
 | --- | ------------------------------------------------------ | --------------------------------------------------------------------------------------------------------------------------------- | ------- | --- | ------------------------------------------------------------------------------------------------------------------------------------------------------------ | ---------------- | ------- | -------- |
-| G1  | 14 title-only `ConflictReason`s show raw backend prose | `CONFLICT_TITLE_KEYS` maps only titles; description = untranslated backend `message` (`usePipelineErrorToast.ts:43-58`)           | n/a     | P2  | Add translated description/remedy keys per reason (+ jump actions where a panel exists); locale parity in ALL catalogs in the same PR                        | —                | ⬜ todo |          |
+| G1  | 14 title-only `ConflictReason`s show raw backend prose | `CONFLICT_TITLE_KEYS` maps only titles; description = untranslated backend `message` (`usePipelineErrorToast.ts:43-58`)           | n/a     | P2  | Add translated description/remedy keys per reason (+ jump actions where a panel exists); locale parity in ALL catalogs in the same PR                        | —                | ✅ done | phase 18 |
 | G2  | Generic fallback toast surfaces raw backend strings    | Non-conflict errors fall to `error.message` verbatim (`usePipelineErrorToast.ts:248-253`) — the funnel for every raw string above | n/a     | P2  | Keep raw detail behind a "show detail" disclosure; show a generic translated title; shrink this funnel by moving conditions onto reason codes (the real fix) | —                | ⬜ todo |          |
 | G3  | `AgentFailureCard.failure.hint` rarely populated       | The card renders `hint` when present, but the backend `FAILURE_HINTS` maps cover few kinds                                        | n/a     | P2  | Extend the three `FAILURE_HINTS` maps to every `FailureKind`; audit which kinds reach the card hint-less                                                     | —                | ✅ done | phase 17 |
 
@@ -253,13 +257,10 @@ the structured way the only load-bearing one:
   - The **watchdog abort phrases** (`failure.ts:63-73`) are regex-matched
     (`/inactivity|no agent activity|max duration/i`) only as the old-image fallback — the
     structured `inactivity-timeout`/`max-duration` causes already cover current images.
-  - **Installation-token-gone** is classified purely by message shape:
-    `isInstallationGoneError` / `isInstallationTokenGoneError` regex-match
-    `/Failed to mint installation token .*\(HTTP (404|410)\)/` in BOTH facades'
-    reconcile paths (`runtimes/node/src/githubReconcile.ts:128-143`,
-    `runtimes/cloudflare/src/infrastructure/github/sync-consumer.ts:131-145`). If the
-    App-registry mint-failure wording changes, one runtime silently stops tombstoning
-    dead installations. See I7.
+  - **Installation-token-gone** — RESOLVED (I7): the shared `reconcileStaleRepos`
+    (`isInstallationGoneError` / `isInstallationTokenGoneError`) classifies off the structured
+    `InstallationTokenMintError.status` / `GitHubApiError.status` fields, no message parsing. The
+    mint wording is free to change.
 
 Compatibility rule for this section: the regex fallbacks guard against OLDER harness
 images / runner pools (see the `failureCausePath` older-pool test in
@@ -269,15 +270,15 @@ step (I5). Eviction and dispatch signals are minted by in-repo transports/facade
 conversions need NO executor-harness image bump. Extending the harness `FailureCause`
 union itself DOES bump the image (batch with the F-slice).
 
-| #   | Work item                                                                                                                                                                                                                                                                                                                                                                                                                                                             | Sev | Status  | PR       |
-| --- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | --- | ------- | -------- |
-| I1  | Structured eviction signal: add a field (e.g. `evicted?: 'crash' \| 'transient'`) to kernel `RunnerJobView` (`ports/runner-transport.ts`), emit it from all four transports (Cloudflare, local `harnessHttp`, `LocalContainerRunnerTransport`, k8s), read via an extractor; regexes become fallback-only. No image bump                                                                                                                                               | P1  | ✅ done | phase 11 |
-| I2  | `DispatchError` class (HTTP `status` field) thrown by every transport `dispatch()`; `BootstrapService` / `EnvConfigRepairService` classify via `instanceof` / `isDispatchFailure` instead of `/dispatch failed/i`. Pairs with D1's stale-image elaboration. No image bump                                                                                                                                                                                             | P1  | ✅ done | phase 8  |
-| I3  | Quick win: `ContainerEnvConfigRepairer.ts:175` ignores the already-plumbed `view.failureCause` — add `repairFailureKindFromCause(cause) ?? classifyRepairFailure(error)`, matching the bootstrap/execution paths                                                                                                                                                                                                                                                      | P2  | ✅ done | phase 13 |
-| I4  | Type the wire: narrow kernel `failureCause?: string` (`runner-transport.ts:226`, `agent-executor.ts:671`, `preview-transport.ts:52`) to a shared cause union so the `*FromCause` mappers are exhaustively checked (`Record`-style drift guard, like the SPA's `CONFLICT_TITLE_KEYS`)                                                                                                                                                                                  | P2  | ✅ done | phase 13 |
-| I5  | Once a harness-image floor is acceptable, delete the abort-phrase + eviction-phrase regex fallbacks and drop the "wording MUST stay stable" constraint documented in `failure.ts:5-13`                                                                                                                                                                                                                                                                                | P3  | ⬜ todo |          |
-| I6  | Codify the first-wrap-point rule for unavoidable third-party text (git stderr → `HarnessFailure('git')` in `gitFailure`, pg driver errors → `pg.code` switch in `explainMigrationFailure` (the reference), kubectl/k3s stderr in `cli/src/k3s-provision.ts:291`): the code is attached exactly ONCE where the text enters our system; nothing downstream re-parses                                                                                                    | P3  | ⬜ todo |          |
-| I7  | Installation-token-gone classification: attach a structured code where the mint failure enters the system (the App-registry mint path — dovetails with C3's message elaboration), consume via `instanceof`/extractor (`GitHubApiError.status`-style), demote the message regex to old-producer fallback. No image bump. Sequence AFTER the reconcile-loop hoist tracked in `system-audit-improvements.md` item 4, which deduplicates the classifier to one site first | P2  | ⬜ todo |          |
+| #   | Work item                                                                                                                                                                                                                                                                                                                                                                                                                                                                               | Sev | Status                            | PR       |
+| --- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | --- | --------------------------------- | -------- |
+| I1  | Structured eviction signal: add a field (e.g. `evicted?: 'crash' \| 'transient'`) to kernel `RunnerJobView` (`ports/runner-transport.ts`), emit it from all four transports (Cloudflare, local `harnessHttp`, `LocalContainerRunnerTransport`, k8s), read via an extractor; regexes become fallback-only. No image bump                                                                                                                                                                 | P1  | ✅ done                           | phase 11 |
+| I2  | `DispatchError` class (HTTP `status` field) thrown by every transport `dispatch()`; `BootstrapService` / `EnvConfigRepairService` classify via `instanceof` / `isDispatchFailure` instead of `/dispatch failed/i`. Pairs with D1's stale-image elaboration. No image bump                                                                                                                                                                                                               | P1  | ✅ done                           | phase 8  |
+| I3  | Quick win: `ContainerEnvConfigRepairer.ts:175` ignores the already-plumbed `view.failureCause` — add `repairFailureKindFromCause(cause) ?? classifyRepairFailure(error)`, matching the bootstrap/execution paths                                                                                                                                                                                                                                                                        | P2  | ✅ done                           | phase 13 |
+| I4  | Type the wire: narrow kernel `failureCause?: string` (`runner-transport.ts:226`, `agent-executor.ts:671`, `preview-transport.ts:52`) to a shared cause union so the `*FromCause` mappers are exhaustively checked (`Record`-style drift guard, like the SPA's `CONFLICT_TITLE_KEYS`)                                                                                                                                                                                                    | P2  | ✅ done                           | phase 13 |
+| I5  | Once a harness-image floor is acceptable, delete the abort-phrase + eviction-phrase regex fallbacks and drop the "wording MUST stay stable" constraint documented in `failure.ts:5-13`                                                                                                                                                                                                                                                                                                  | P3  | ✅ done (consumer-side; see note) | phase 18 |
+| I6  | Codify the first-wrap-point rule for unavoidable third-party text (git stderr → `HarnessFailure('git')` in `gitFailure`, pg driver errors → `pg.code` switch in `explainMigrationFailure` (the reference), kubectl/k3s stderr in `cli/src/k3s-provision.ts:291`): the code is attached exactly ONCE where the text enters our system; nothing downstream re-parses                                                                                                                      | P3  | ✅ done                           | phase 18 |
+| I7  | Installation-token-gone classification: attach a structured code where the mint failure enters the system (the App-registry mint path — dovetails with C3's message elaboration), consume via `instanceof`/extractor (`GitHubApiError.status`-style), no message-regex fallback (in-process throw, current installs only). No image bump. Sequence AFTER the reconcile-loop hoist tracked in `system-audit-improvements.md` item 4, which deduplicates the classifier to one site first | P2  | ✅ done                           | phase 18 |
 
 ## Conventions & gotchas carried between iterations
 
@@ -349,11 +350,10 @@ union itself DOES bump the image (batch with the F-slice).
   AND privileged keys — mirroring `requireEncryptionKey`, so a malformed PKCS#1 / non-base64 / boundary-
   less key reads identically everywhere and lands on the misconfigured screen. Local mode uses a PAT (no
   App), so it is exempt. The installation-token mint remedy is attached at the mint site
-  (`explainInstallationTokenMintFailure`, exported for unit test) and MUST preserve the load-bearing
-  first line `Failed to mint installation token for <id> (HTTP <status>)` verbatim — the stale-
-  installation reconcile classifies by matching it (section I's `isInstallationTokenGoneError` /
-  `isInstallationGoneError` regexes) — so elaborate by APPENDING a cause + remedy only, never by
-  rewriting the phrase (the regex-load-bearing-strings rule above).
+  (`explainInstallationTokenMintFailure`, exported for unit test); the wording is now purely for
+  humans — the stale-installation reconcile classifies off the structured
+  `InstallationTokenMintError.status` field (I7), not the message, so the cause/remedy prose is free
+  to change without affecting the tombstone decision.
 - **Container/runner dispatch failures ride a structured `DispatchError` (phase 8 reference:
   D1/I2).** The identity of a `dispatch()` rejection lives in kernel `domain/dispatch-errors.ts`:
   `DispatchError` carries the HTTP `status` as a FIELD, thrown by every transport `dispatch()`
@@ -512,8 +512,52 @@ DispatchError`, reading `.status`), NOT the `/dispatch failed/i` regex, which is
   (environment/job_failed/rejected/…) would add dead, misleading entries. So "extend to every
   FailureKind" means exhaustive over what each flow can PRODUCE, not the full union everywhere. The
   hint is backend prose rendered verbatim by the card (NOT i18n), so no locale-parity work; no image
-  bump (orchestration-only). G1/G2 (frontend `ConflictReason` copy + fallback-toast disclosure) remain
-  open and are the i18n-bearing slices.
+  bump (orchestration-only). G2 (fallback-toast disclosure) remains open.
+- **The FIRST-WRAP-POINT rule — attach the structured code exactly once, at the boundary (phase 18
+  reference: I6).** Unavoidable third-party TEXT (git stderr, a pg driver error, kubectl/k3s stderr,
+  a REST status body) is classified ONCE, where it first enters our system, into a named error
+  carrying a machine field; nothing downstream re-parses that text. The three reference wrap points:
+  git stderr → `HarnessFailure('git')` in `gitFailure` (executor-harness `git.ts`), pg errors →
+  the `pg.code` switch in `explainMigrationFailure` (`runtimes/node/src/db/migrate.ts` — the
+  canonical reference), kubectl/k3s stderr → `ProvisionError` in `runOrThrow`
+  (`cli/src/k3s-provision.ts`). All three already conformed, so I6 was a codification, not a fix.
+  The rule generalizes the per-class notes already in this section (E1/E2 "wrap at the cipher",
+  C3 "attach at the mint site", F1/F2/F3 "wrap at the FIRST point the text enters"): downstream
+  consumers classify by the field/typeguard (`failureCause`, `.status`, `pg.code`), NEVER by
+  re-`includes`/regex on the message — a message is for humans, a field is for code. A new
+  boundary that ingests third-party text adds its OWN single wrap point rather than teaching a
+  distant consumer to parse the prose.
+- **Structured installation-token-gone code (phase 18 reference: I7).** The token-mint failure now
+  throws a named `InstallationTokenMintError` (carrying the HTTP `status` as a field), wrapped
+  ONCE at the mint site in `GitHubAppAuth.mintInstallationToken` — the first-wrap-point rule
+  applied (the App JWT → `/access_tokens` call is not a `VcsClient` request, so it never routes
+  through `describeVcsApiError`; this is its dedicated boundary). The reconcile pass
+  (`reconcileStaleRepos.ts`) classifies via `installationTokenMintStatusOf(error)` — an `instanceof`
+  extractor DELIBERATELY specific to the mint error, so a repo-level 404 `GitHubApiError` (also
+  `status`-bearing) can never be mistaken for a gone installation. The log-level classifier
+  (`isInstallationGoneError`) additionally reads the repo-level `GitHubApiError.status` structurally,
+  so a deleted repo (404) still logs at warn without any message parsing. Both errors throw
+  in-process to the reconcile catch, so `instanceof` is authoritative — there are NO message-regex
+  fallbacks (the old-producer / boundary-crossed-as-plain-text path was dropped: we target current
+  installations only). The elaborated remedy text (C3) is free to change without breaking
+  classification. No image bump (no harness change).
+- **String-fallback classifiers deleted (phase 18 reference: I5).** With the structured
+  `RunnerJobView.evicted` field (I1) and the harness `failureCause` (I3/I4/F3) now minted by every
+  in-repo transport / current image, the error-string fallbacks they superseded are removed:
+  `classifyAgentFailure` / `classifyBootstrapFailure` / `classifyRepairFailure` are gone (the three
+  `failureKindFromHarnessCause(cause) ?? classify*(error)` sites default to the coarse `'agent'`),
+  and `evictionKindOf`'s string fallback (plus `isTransientEviction` + `TRANSIENT_EVICTION_MARKER`)
+  is dropped — the poll-time eviction verdict reads the `evicted` field directly. Both are
+  backend/runtime-only (no image bump); a self-hosted pool / old image that reports neither field
+  now coarsens a watchdog timeout to `agent` rather than mislabelling it — the accepted cost of the
+  image floor. **KEPT on purpose:** `isContainerEvictionError`, because a DISPATCH-time eviction
+  (K8s `waitForPodReady`, the inline-job path) throws an `Error` with no job view to carry the
+  field — it is the sole remaining eviction string test and is NOT a fallback. **Deferred:** the
+  matching comment cleanup in executor-harness `src/failure.ts:5-13` (the now-stale "wording MUST
+  stay stable / regex-matched by `classifyBootstrapFailure`" note) — editing harness `src/**` trips
+  the path-based image-tag guard, forcing a byte-identical image republish + 3-pin bump for a
+  comment-only change, so it is left to ride the next real harness image bump. The abort-message
+  wording is nonetheless now free to change: no backend classifier reads it.
 - **Executor-harness changes bump the image tag** + the three hand-maintained pins
   (`deploy/backend/package.json`, `deploy/backend/wrangler.toml`,
   `RECOMMENDED_HARNESS_IMAGE`) — batch all F-rows into one slice to pay that cost once.

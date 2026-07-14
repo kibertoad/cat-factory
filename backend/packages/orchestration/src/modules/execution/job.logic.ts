@@ -1,4 +1,4 @@
-import type { AgentFailureKind, ContainerEvictionKind } from '@cat-factory/kernel'
+import type { AgentFailureKind } from '@cat-factory/kernel'
 import { DispatchError, DomainError, getErrorMessage } from '@cat-factory/kernel'
 
 /**
@@ -13,37 +13,31 @@ export const MAX_EVICTION_RECOVERIES = 1
 
 /**
  * Recovery budget for evictions a runtime flags as *transient infrastructure churn*
- * (see {@link isTransientEviction}) rather than a crash. Larger than
- * {@link MAX_EVICTION_RECOVERIES} because such churn can recur several times in a
+ * (the transport mints `RunnerJobView.evicted = 'transient'`) rather than a crash. Larger
+ * than {@link MAX_EVICTION_RECOVERIES} because such churn can recur several times in a
  * short window (e.g. a deploy that drains the sandbox repeatedly). Each recovery
  * re-dispatches a fresh container, naturally spaced by the job poll interval, so a
  * bounded handful rides out the window instead of deterministically failing a
  * healthy run. The engine stays runtime-neutral: which infra events count as
- * transient is the facade's call — it opts in by tagging the eviction with
- * {@link TRANSIENT_EVICTION_MARKER} (Cloudflare maps a new-version rollout / exit
- * 143 to it; another runtime might map a node drain or a placement move).
+ * transient is the facade's call — it opts in by minting `evicted: 'transient'`
+ * (Cloudflare maps a new-version rollout / exit 143 to it; another runtime might map a
+ * node drain or a placement move).
  */
 export const MAX_TRANSIENT_EVICTION_RECOVERIES = 5
 
 /**
- * Neutral marker a runtime facade appends to an eviction error to declare it
- * transient infrastructure churn (recover leniently), not a crash. Kept generic on
- * purpose: the engine knows only "transient vs crash"; the facade owns the mapping
- * from its own signal (a Cloudflare rollout, a node drain, …) to this marker. The
- * tagged string still contains "evicted or crashed" so {@link isContainerEvictionError}
- * also matches and the shared recovery machinery engages.
- */
-export const TRANSIENT_EVICTION_MARKER = 'transient infrastructure eviction'
-
-/**
- * Whether a failed job poll is a *container eviction/crash* (the per-run container
- * vanished and its in-memory job registry is gone) rather than a genuine agent
- * failure. The Cloudflare transport maps a 404 job poll to a failed view whose
- * message ends `(container evicted or crashed)`; the worker bootstrap flow
- * classifies the identical string. Matching it here lets the execution engine
- * recover a transient eviction by spinning a fresh container instead of failing
- * the whole run on the first blip. Covers transient-tagged evictions too (their
- * message also contains this phrase) — {@link isTransientEviction} sub-classifies them.
+ * Whether a thrown DISPATCH-time error is a *container eviction/crash* (the container
+ * vanished before it accepted the job) rather than a genuine dispatch fault. Some transports
+ * have no job view at dispatch time (the Kubernetes `waitForPodReady` wait, the inline-job
+ * path), so a dispatch-time eviction can only surface as a thrown Error whose message ends
+ * `(container evicted or crashed)`; matching it here routes such a throw to a fresh-container
+ * retry rather than failing the run on the first blip.
+ *
+ * POLL-time eviction is NOT string-matched — it rides the structured
+ * {@link import('@cat-factory/kernel').ContainerEvictionKind | RunnerJobView.evicted} field
+ * (set by every transport), which the recovery paths read directly. This check is the only
+ * remaining eviction string test, kept because the dispatch-time throw carries no view (the
+ * typed dispatch-eviction error is a separate follow-up).
  */
 export function isContainerEvictionError(error: string | undefined): boolean {
   return error !== undefined && /evicted or crashed/i.test(error)
@@ -65,7 +59,7 @@ export interface DispatchFailureClassification {
  * Classify a throw from an async agent dispatch (`startJob`) into a terminal failure. The
  * dispatch catch used to assume EVERY throw was the container failing to accept the job, but a
  * job is also built (auth, repo target, context) BEFORE any container is contacted — so a
- * precondition can reject it up front. Three cases, most-specific first:
+ * precondition can reject it up front. Cases, most-specific first:
  *
  *  - A domain PRECONDITION error (any {@link DomainError}, e.g. the `github_not_connected`
  *    `ConflictError` raised while building the job because the workspace has no connected repo)
@@ -98,50 +92,4 @@ export function classifyDispatchFailure(error: unknown): DispatchFailureClassifi
     return { error: message, failureKind: 'dispatch', detail: message }
   }
   return { error: 'The container failed to start.', failureKind: 'dispatch', detail: message }
-}
-
-/**
- * Whether a container eviction was flagged by the runtime facade as *transient
- * infrastructure churn* (the facade tagged it with {@link TRANSIENT_EVICTION_MARKER})
- * rather than a crash/OOM. Transient evictions recover on the larger
- * {@link MAX_TRANSIENT_EVICTION_RECOVERIES} budget. This is intentionally agnostic to
- * what the underlying event was: the facade decides (Cloudflare, for instance, maps a
- * new-version rollout to it after asking the container Durable Object).
- */
-export function isTransientEviction(error: string | undefined): boolean {
-  return error !== undefined && error.includes(TRANSIENT_EVICTION_MARKER)
-}
-
-/**
- * The structured container-eviction verdict for a failed job, preferring the transport's
- * {@link ContainerEvictionKind | evicted} field and falling back to the error-string sentinels
- * (`(container evicted or crashed)` + {@link TRANSIENT_EVICTION_MARKER}) only when it is absent —
- * an older producer / a pool that doesn't forward the field. Returns undefined when the failure
- * is NOT an eviction, so the caller proceeds with its own genuine-failure handling. This is the
- * single seam consumers read instead of calling {@link isContainerEvictionError} /
- * {@link isTransientEviction} directly, so the structured field is the load-bearing signal and
- * the regexes are the compatibility fallback (section I of the error-message initiative).
- */
-export function evictionKindOf(
-  evicted: ContainerEvictionKind | undefined,
-  error: string | undefined,
-): ContainerEvictionKind | undefined {
-  if (evicted) return evicted
-  if (!isContainerEvictionError(error)) return undefined
-  return isTransientEviction(error) ? 'transient' : 'crash'
-}
-
-/**
- * The error-string fallback for an agent/execution job failure when the harness reported no
- * structured `failureCause` (an older image, or a pool transport that doesn't forward it). Mirrors
- * the bootstrap path's `classifyBootstrapFailure`: the watchdog phrases map to `timeout`, anything
- * else to `agent` — so the SAME watchdog text classifies identically on both the execution and
- * bootstrap paths. Container eviction is handled separately (by {@link isContainerEvictionError}),
- * so it never reaches here. Used as `failureKindFromHarnessCause(cause) ??
- * classifyAgentFailure(error)` — the kernel's shared structured-cause mapper wins when the
- * harness reported a cause.
- */
-export function classifyAgentFailure(error: string | undefined): AgentFailureKind {
-  if (error && /inactivity|no agent activity|max duration/i.test(error)) return 'timeout'
-  return 'agent'
 }

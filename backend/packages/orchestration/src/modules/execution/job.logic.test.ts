@@ -1,30 +1,25 @@
 import { ConflictError, harnessDispatchError } from '@cat-factory/kernel'
 import { describe, expect, it } from 'vitest'
 import {
-  classifyAgentFailure,
   classifyDispatchFailure,
-  evictionKindOf,
   isContainerEvictionError,
-  isTransientEviction,
   MAX_EVICTION_RECOVERIES,
   MAX_TRANSIENT_EVICTION_RECOVERIES,
-  TRANSIENT_EVICTION_MARKER,
 } from './job.logic.js'
 
 const CRASH_EVICTION = 'Job not found (container evicted or crashed)'
-const TRANSIENT_EVICTION = `${CRASH_EVICTION} (${TRANSIENT_EVICTION_MARKER})`
 
-describe('isContainerEvictionError', () => {
-  it('matches the transport 404 eviction message', () => {
+// `isContainerEvictionError` is the ONLY remaining eviction string test (error-message coverage
+// I5): it classifies a DISPATCH-time eviction throw, which carries no job view to hold the
+// structured `evicted` field. Poll-time eviction rides that field directly (see RunDispatcher /
+// ContainerRepoBootstrapper / ContainerEnvConfigRepairer), so there is no string fallback to test.
+describe('isContainerEvictionError (dispatch-time throw only)', () => {
+  it('matches the eviction message', () => {
     expect(isContainerEvictionError(CRASH_EVICTION)).toBe(true)
   })
 
   it('is case-insensitive', () => {
     expect(isContainerEvictionError('JOB NOT FOUND (CONTAINER EVICTED OR CRASHED)')).toBe(true)
-  })
-
-  it('also matches a transient eviction (so the shared recovery machinery engages)', () => {
-    expect(isContainerEvictionError(TRANSIENT_EVICTION)).toBe(true)
   })
 
   it('does not match a genuine agent/job failure', () => {
@@ -36,65 +31,9 @@ describe('isContainerEvictionError', () => {
     expect(isContainerEvictionError(undefined)).toBe(false)
   })
 
-  it('recovers a single crash eviction (budget of 1)', () => {
+  it('recovers a single crash eviction (budget of 1), transient a larger one', () => {
     expect(MAX_EVICTION_RECOVERIES).toBe(1)
-  })
-})
-
-describe('isTransientEviction', () => {
-  it('matches a facade-tagged transient eviction', () => {
-    expect(isTransientEviction(TRANSIENT_EVICTION)).toBe(true)
-  })
-
-  it('does not match a plain crash/OOM eviction', () => {
-    expect(isTransientEviction(CRASH_EVICTION)).toBe(false)
-  })
-
-  it('handles an absent error', () => {
-    expect(isTransientEviction(undefined)).toBe(false)
-  })
-
-  it('gives a transient eviction a larger recovery budget than a crash', () => {
     expect(MAX_TRANSIENT_EVICTION_RECOVERIES).toBeGreaterThan(MAX_EVICTION_RECOVERIES)
-  })
-})
-
-describe('evictionKindOf', () => {
-  it('prefers the transport STRUCTURED field over the error string', () => {
-    // Field wins even when the error string says otherwise (a crash string tagged transient, etc.).
-    expect(evictionKindOf('transient', CRASH_EVICTION)).toBe('transient')
-    expect(evictionKindOf('crash', TRANSIENT_EVICTION)).toBe('crash')
-    // …and even when there is no eviction string at all (the field is authoritative).
-    expect(evictionKindOf('crash', 'Implementation job failed')).toBe('crash')
-    expect(evictionKindOf('transient', undefined)).toBe('transient')
-  })
-
-  it('falls back to the error-string sentinels when no field is present (older producer)', () => {
-    expect(evictionKindOf(undefined, CRASH_EVICTION)).toBe('crash')
-    expect(evictionKindOf(undefined, TRANSIENT_EVICTION)).toBe('transient')
-  })
-
-  it('returns undefined when the failure is not an eviction (no field, no sentinel)', () => {
-    expect(evictionKindOf(undefined, 'Implementation failed: no file changes')).toBeUndefined()
-    expect(evictionKindOf(undefined, undefined)).toBeUndefined()
-  })
-})
-
-// The structured cause → failure-kind mapping is the kernel's shared `failureKindFromHarnessCause`
-// (tested in `kernel/src/domain/harness-failure.test.ts`); only the error-string fallback is
-// engine-local.
-describe('classifyAgentFailure (error-string fallback)', () => {
-  it('maps the watchdog phrases to `timeout`, matching the bootstrap path', () => {
-    expect(classifyAgentFailure('Aborted: no agent activity for 600s (likely hung)')).toBe(
-      'timeout',
-    )
-    expect(classifyAgentFailure('Aborted: exceeded max duration of 3600s')).toBe('timeout')
-    expect(classifyAgentFailure('inactivity watchdog fired')).toBe('timeout')
-  })
-
-  it('maps anything else (and an absent error) to `agent`', () => {
-    expect(classifyAgentFailure('the agent produced no usable result')).toBe('agent')
-    expect(classifyAgentFailure(undefined)).toBe('agent')
   })
 })
 

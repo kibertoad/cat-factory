@@ -442,6 +442,32 @@
         "env_test_not_provisionable": "Handler środowiska nie jest skonfigurowany",
         "env_test_no_vcs": "Dostawca Git nie jest połączony"
       },
+      "description": {
+        "dependencies_unmet": "To zadanie zależy od innych, które nie zostały jeszcze ukończone. Ukończ je lub odblokuj, a następnie uruchom je ponownie.",
+        "task_limit_reached": "Zbyt wiele uruchomień jest aktywnych jednocześnie. Poczekaj, aż jedno się zakończy, a następnie uruchom to ponownie.",
+        "tester_infra_unsupported": "Krok Tester nie może zostać tutaj uruchomiony: ta usługa nie ma skonfigurowanej infrastruktury testowej albo środowisko uruchomieniowe tego wdrożenia nie może jej uruchomić. Skonfiguruj infrastrukturę testową lub użyj usługi, która jej nie wymaga.",
+        "agent_backend_unconfigured": "Brak dostępnego zaplecza runnera do uruchamiania agentów w kontenerach. Zarejestruj samodzielnie hostowaną pulę runnerów lub włącz Cloudflare Containers w swoim wdrożeniu.",
+        "run_not_retryable": "Ponowić można tylko nieudane lub zakończone uruchomienie. To uruchomienie jest wciąż aktywne albo w stanie, który nie pozwala na ponowienie.",
+        "no_pr_to_merge": "To uruchomienie nie otworzyło jeszcze pull requesta, więc nie ma czego scalić.",
+        "github_not_connected": "Połącz tę przestrzeń roboczą z GitHubem, aby agenci mogli klonować repozytorium, wysyłać zmiany i otwierać pull requesty.",
+        "bootstrap_not_retryable": "Tego zadania inicjującego nie można ponowić w obecnym stanie (wciąż trwa lub już zakończyło się pomyślnie).",
+        "bootstrap_reference_missing": "Repozytorium referencyjne, które adaptuje to zadanie inicjujące, nie jest już dostępne. Zostało usunięte lub odebrano do niego dostęp. Wybierz inne repozytorium referencyjne albo utwórz od zera.",
+        "preset_unsatisfiable": "Model kroku wbudowanego nie może działać wbudowany w tym wdrożeniu (model wyłącznie subskrypcyjny bez obsługi trybu wbudowanego). Wybierz model lub preset obsługujący tryb wbudowany.",
+        "visual_pipeline_no_frontend": "Ten potok ma kroki testów wizualnych, ale cel nie ma interfejsu użytkownika do przetestowania (brak frontendu i nic do niego nie prowadzi).",
+        "model_policy_blocked": "Rodzina tego modelu jest zablokowana przez zasady modeli Twojego konta. Wybierz dozwolony model lub rodzinę.",
+        "model_policy_unsupported": "Zasady rodzin modeli to funkcja dostępna tylko w środowiskach hostowanych, a to wdrożenie nie umożliwia ich ustawiania.",
+        "deployer_required_before_tester": "Ta usługa wymaga przygotowanego środowiska, zanim będzie mógł zostać uruchomiony krok Tester, testu manualnego lub Playwright, ale nie poprzedza go żaden Deployer. Dodaj krok Deployer do potoku.",
+        "env_test_not_a_frame": "Autotest środowiska działa dla poszczególnych usług, więc można go uruchomić tylko dla usługi, a nie dla modułu czy zadania.",
+        "env_test_infraless": "Ta usługa nie ma skonfigurowanego udostępniania środowisk tymczasowych, więc autotest nie ma czego sprawdzić.",
+        "env_test_not_provisionable": "Ta usługa ma typ udostępniania, ale nie ma jeszcze dla niego żadnego mechanizmu obsługi w przestrzeni roboczej, więc udostępnianie nie może zostać uruchomione. Skonfiguruj mechanizm obsługi środowiska.",
+        "env_test_no_vcs": "Autotest potrzebuje dostawcy Git, aby utworzyć i usunąć swoją jednorazową gałąź, ale ta przestrzeń robocza nie jest połączona z żadnym."
+      },
+      "action": {
+        "connectGitHub": "Połącz GitHub",
+        "configureRunnerPool": "Skonfiguruj pulę runnerów",
+        "chooseModel": "Wybierz model",
+        "configureInfrastructure": "Skonfiguruj infrastrukturę"
+      },
       "fallbackMessage": "Ta akcja jest sprzeczna z bieżącym stanem.",
       "providersUnconfigured": {
         "title": "Brak dostawcy AI dla tego modelu",

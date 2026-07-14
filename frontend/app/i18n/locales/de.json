@@ -3815,6 +3815,32 @@
         "env_test_not_provisionable": "Umgebungs-Handler nicht konfiguriert",
         "env_test_no_vcs": "Git-Anbieter nicht verbunden"
       },
+      "description": {
+        "dependencies_unmet": "Diese Aufgabe hängt von anderen ab, die noch nicht abgeschlossen sind. Schließe sie ab oder gib sie frei und starte dann erneut.",
+        "task_limit_reached": "Es laufen zu viele Ausführungen gleichzeitig. Warte, bis eine abgeschlossen ist, und starte dann erneut.",
+        "tester_infra_unsupported": "Der Tester-Schritt kann hier nicht laufen: Für diesen Service ist keine Testinfrastruktur konfiguriert, oder die Laufzeitumgebung dieses Deployments kann sie nicht ausführen. Konfiguriere eine Testinfrastruktur oder verwende einen Service, der keine benötigt.",
+        "agent_backend_unconfigured": "Es ist kein Runner-Backend verfügbar, um Container-Agenten auszuführen. Registriere einen selbst gehosteten Runner-Pool oder aktiviere Cloudflare Containers in deinem Deployment.",
+        "run_not_retryable": "Nur eine fehlgeschlagene oder abgeschlossene Ausführung kann wiederholt werden. Diese Ausführung ist noch aktiv oder in einem Zustand, der keine Wiederholung erlaubt.",
+        "no_pr_to_merge": "Diese Ausführung hat noch keinen Pull Request geöffnet, es gibt also nichts zu mergen.",
+        "github_not_connected": "Verbinde diesen Workspace mit GitHub, damit Agenten das Repository klonen, Änderungen pushen und Pull Requests öffnen können.",
+        "bootstrap_not_retryable": "Dieser Bootstrap-Auftrag kann in seinem aktuellen Zustand nicht wiederholt werden (er läuft noch oder wurde bereits erfolgreich abgeschlossen).",
+        "bootstrap_reference_missing": "Das Referenz-Repository, das dieser Bootstrap übernimmt, ist nicht mehr erreichbar. Es wurde gelöscht oder der Zugriff wurde entzogen. Wähle eine andere Referenz oder erstelle von Grund auf neu.",
+        "preset_unsatisfiable": "Das Modell eines Inline-Schritts kann in diesem Deployment nicht inline laufen (ein reines Abo-Modell ohne Inline-Unterstützung). Wähle ein inline-fähiges Modell oder Preset.",
+        "visual_pipeline_no_frontend": "Diese Pipeline enthält visuelle Testschritte, aber das Ziel hat keine Benutzeroberfläche zum Testen (kein Frontend, und nichts verweist auf eines).",
+        "model_policy_blocked": "Die Familie dieses Modells ist durch die Modellrichtlinie deines Kontos blockiert. Wähle ein zulässiges Modell oder eine zulässige Familie.",
+        "model_policy_unsupported": "Modellfamilien-Richtlinien sind eine Funktion nur für gehostete Umgebungen, und dieses Deployment unterstützt ihre Einstellung nicht.",
+        "deployer_required_before_tester": "Dieser Service benötigt eine bereitgestellte Umgebung, bevor ein Tester-, manueller Test- oder Playwright-Schritt laufen kann, aber davor steht kein Deployer. Füge der Pipeline einen Deployer-Schritt hinzu.",
+        "env_test_not_a_frame": "Der Umgebungs-Selbsttest läuft pro Service und kann daher nur für einen Service gestartet werden, nicht für ein Modul oder eine Aufgabe.",
+        "env_test_infraless": "Für diesen Service ist keine Bereitstellung einer kurzlebigen Umgebung konfiguriert, es gibt also nichts, was der Selbsttest prüfen könnte.",
+        "env_test_not_provisionable": "Dieser Service hat einen Bereitstellungstyp, aber es ist noch kein Workspace-Handler dafür verfügbar, sodass die Bereitstellung nicht laufen kann. Konfiguriere einen Umgebungs-Handler.",
+        "env_test_no_vcs": "Der Selbsttest benötigt einen Git-Anbieter, um seinen Wegwerf-Branch zu erstellen und zu löschen, aber dieser Workspace ist mit keinem verbunden."
+      },
+      "action": {
+        "connectGitHub": "GitHub verbinden",
+        "configureRunnerPool": "Runner-Pool konfigurieren",
+        "chooseModel": "Modell auswählen",
+        "configureInfrastructure": "Infrastruktur konfigurieren"
+      },
       "fallbackMessage": "Diese Aktion steht im Konflikt mit dem aktuellen Zustand.",
       "providersUnconfigured": {
         "title": "Kein KI-Anbieter für dieses Modell",

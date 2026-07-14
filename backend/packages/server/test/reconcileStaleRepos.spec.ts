@@ -1,5 +1,7 @@
 import type { Clock, StaleRepoRef } from '@cat-factory/kernel'
 import { describe, expect, it, vi } from 'vitest'
+import { GitHubApiError } from '../src/github/FetchGitHubClient.js'
+import { InstallationTokenMintError } from '../src/github/GitHubAppAuth.js'
 import type { Logger } from '../src/observability/logger.js'
 import {
   GITHUB_RECONCILE_STALE_MS,
@@ -92,7 +94,7 @@ describe('reconcileStaleRepos (shared)', () => {
 
   it('tombstones the installation on a token-mint 404 (missed uninstall webhook)', async () => {
     const deps = makeDeps([staleRepo({ installationId: 42 })], async () => {
-      throw new Error('Failed to mint installation token for 42 (HTTP 404)')
+      throw new InstallationTokenMintError(42, 404)
     })
     const warn = vi.fn()
     const log = { info: () => {}, warn, error: vi.fn() } as unknown as Logger
@@ -104,15 +106,41 @@ describe('reconcileStaleRepos (shared)', () => {
   })
 
   it('does NOT tombstone on a repo-level 404 or a mint 401 (transient/JWT faults)', async () => {
-    for (const message of [
-      'GitHub request failed (HTTP 404)',
-      'Failed to mint installation token for 7 (HTTP 401)',
+    for (const err of [
+      new GitHubApiError(404, 'repo gone'),
+      new InstallationTokenMintError(7, 401),
     ]) {
       const deps = makeDeps([staleRepo()], async () => {
-        throw new Error(message)
+        throw err
       })
       await reconcileStaleRepos(deps, clock, STALE_MS, noopLog)
       expect(deps.softDeleted).toEqual([])
     }
+  })
+
+  // I7: the tombstone/log classifiers read the structured status off the two errors the sync
+  // throws (InstallationTokenMintError.status + GitHubApiError.status) — no message parsing — so
+  // the remedy text is free to change and a repo-level 404 can never be mistaken for a gone install.
+  // The log-level classifier reads the structured status off BOTH errors the sync throws: a
+  // repo-level GitHubApiError(404) is an expected "gone repo" state → warn, not error.
+  it('logs a repo-level GitHubApiError(404) at warn (gone), not error, without tombstoning', async () => {
+    const log = { info: vi.fn(), warn: vi.fn(), error: vi.fn() } as unknown as Logger
+    const deps = makeDeps([staleRepo()], async () => {
+      throw new GitHubApiError(404, 'repo gone')
+    })
+    await reconcileStaleRepos(deps, clock, STALE_MS, log)
+    expect(log.warn).toHaveBeenCalledOnce()
+    expect(log.error).not.toHaveBeenCalled()
+    expect(deps.softDeleted).toEqual([])
+  })
+
+  it('logs a genuine (non-gone) fault at error', async () => {
+    const log = { info: vi.fn(), warn: vi.fn(), error: vi.fn() } as unknown as Logger
+    const deps = makeDeps([staleRepo()], async () => {
+      throw new GitHubApiError(500, 'server error')
+    })
+    await reconcileStaleRepos(deps, clock, STALE_MS, log)
+    expect(log.error).toHaveBeenCalledOnce()
+    expect(log.warn).not.toHaveBeenCalled()
   })
 })

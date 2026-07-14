@@ -23,16 +23,45 @@ const USER_AGENT = 'cat-factory'
 const API_VERSION = '2022-11-28'
 
 /**
+ * A failed installation-token mint, carrying the HTTP `status` as a STRUCTURED FIELD so the
+ * stale-installation reconcile classifies by `instanceof` (via {@link installationTokenMintStatusOf})
+ * instead of parsing the message (error-message coverage I7). This is where the mint failure ENTERS
+ * the system (the App JWT → `/access_tokens` call is not a `VcsClient` request, so it never routes
+ * through `describeVcsApiError`), so the code is attached exactly once here and nothing downstream
+ * re-parses it — the first-wrap-point rule (I6).
+ *
+ * The message is the elaborated {@link explainInstallationTokenMintFailure} text; the reconcile
+ * reads the `status` field, so the wording is free to change without affecting classification.
+ */
+export class InstallationTokenMintError extends Error {
+  constructor(
+    readonly installationId: number,
+    readonly status: number,
+  ) {
+    super(explainInstallationTokenMintFailure(installationId, status))
+    this.name = 'InstallationTokenMintError'
+  }
+}
+
+/**
+ * The HTTP status of an installation-token MINT failure, or undefined for any other error. Reads
+ * the status ONLY off a real {@link InstallationTokenMintError}, so a repo-level 404 `GitHubApiError`
+ * — which also carries a `status` — is NOT mistaken for a gone installation (the reconcile must
+ * tombstone only on a mint 404/410, never a single deleted repo). The mint always throws in-process
+ * to the reconcile catch, so `instanceof` is authoritative.
+ */
+export function installationTokenMintStatusOf(error: unknown): number | undefined {
+  return error instanceof InstallationTokenMintError ? error.status : undefined
+}
+
+/**
  * Turn a failed installation-token mint into an actionable message (error-message coverage C3).
  * The App JWT → `/access_tokens` call is not a `VcsClient` request, so it doesn't route through
  * `describeVcsApiError`; this is the local equivalent for that one endpoint.
  *
- * IMPORTANT: the first line is UNCHANGED — `Failed to mint installation token for <id> (HTTP
- * <status>)` — because the stale-installation reconcile classifies purely by matching this phrase
- * (`isInstallationTokenGoneError` regex `/Failed to mint installation token .*\(HTTP (404|410)\)/`
- * and `isInstallationGoneError` `/\(HTTP (401|404|410)\)/` in `reconcileStaleRepos.ts`). We only
- * APPEND a cause + remedy so elaborating the text never changes classification. Exported for
- * unit testing, mirroring `explainMigrationFailure`.
+ * The wording is purely for humans: the stale-installation reconcile classifies off the structured
+ * {@link InstallationTokenMintError} `status` field, not this text, so the cause/remedy prose is
+ * free to change. Exported for unit testing, mirroring `explainMigrationFailure`.
  */
 export function explainInstallationTokenMintFailure(
   installationId: number,
@@ -184,7 +213,7 @@ export class GitHubAppAuth {
       },
     )
     if (!res.ok) {
-      throw new Error(explainInstallationTokenMintFailure(installationId, res.status))
+      throw new InstallationTokenMintError(installationId, res.status)
     }
     const body = (await res.json()) as AccessTokenResponse
     const expiresAt = Date.parse(body.expires_at)

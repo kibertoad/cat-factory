@@ -368,10 +368,11 @@ export class JobRegistry<TJob = unknown, TResult extends JobResultBase = JobResu
 
   /**
    * Build the redacted one-line `error`, the structured {@link FailureCause}, and the extended
-   * `detail` for a failed job. Watchdog kills keep their regex-stable phrase (so the backend's
-   * `classifyBootstrapFailure` fallback still works) and gain a breadcrumb of where they hung;
-   * a thrown error keeps its own message and its structured cause when tagged (a git op → `git`,
-   * an upstream API call → `api`), else `agent`. All strings are credential-scrubbed.
+   * `detail` for a failed job. Watchdog kills set their structured cause (`inactivity-timeout` /
+   * `max-duration`) — the backend classifies on that, so their message is a human-readable
+   * breadcrumb of where they hung, no longer a regex-stable phrase; a thrown error keeps its own
+   * message and its structured cause when tagged (a git op → `git`, an upstream API call → `api`),
+   * else `agent`. All strings are credential-scrubbed.
    */
   private describeFailure(
     killReason: 'inactivity' | 'max-duration' | undefined,

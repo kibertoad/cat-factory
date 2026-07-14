@@ -481,6 +481,32 @@
         "env_test_not_provisionable": "Environment handler not configured",
         "env_test_no_vcs": "Git provider not connected"
       },
+      "description": {
+        "dependencies_unmet": "This task depends on others that aren't finished yet. Complete or unblock them, then start it again.",
+        "task_limit_reached": "Too many runs are active at once. Wait for one to finish, then start this again.",
+        "tester_infra_unsupported": "The Tester step can't run here: this service has no test infrastructure configured, or this deployment's runtime can't run it. Configure test infrastructure or use a service that doesn't need it.",
+        "agent_backend_unconfigured": "No runner backend is available to run container agents. Register a self-hosted runner pool, or enable Cloudflare Containers in your deployment.",
+        "run_not_retryable": "Only a failed or finished run can be retried. This run is still active or in a state that can't be retried.",
+        "no_pr_to_merge": "This run hasn't opened a pull request yet, so there is nothing to merge.",
+        "github_not_connected": "Connect this workspace to GitHub so agents can clone the repository, push changes, and open pull requests.",
+        "bootstrap_not_retryable": "This bootstrap job can't be retried in its current state (it is still running or already finished successfully).",
+        "bootstrap_reference_missing": "The reference repository this bootstrap adapts is no longer reachable. It was deleted or its access was revoked. Pick another reference, or scaffold from scratch.",
+        "preset_unsatisfiable": "An inline step's model can't run inline on this deployment (a subscription-only model with no inline support). Pick an inline-capable model or preset.",
+        "visual_pipeline_no_frontend": "This pipeline has visual test steps, but the target has no user interface to exercise (no frontend, and nothing links to one).",
+        "model_policy_blocked": "This model's family is blocked by your account's model policy. Pick an allowed model or family.",
+        "model_policy_unsupported": "Model-family policies are a hosted-only control, and this deployment doesn't support setting them.",
+        "deployer_required_before_tester": "This service needs an environment provisioned before a Tester, human-test, or Playwright step can run, but no Deployer comes before it. Add a Deployer step to the pipeline.",
+        "env_test_not_a_frame": "The environment self-test runs per service, so it can only be started on a service, not on a module or task.",
+        "env_test_infraless": "This service has no ephemeral-environment provisioning configured, so there is nothing for the self-test to exercise.",
+        "env_test_not_provisionable": "This service has a provision type, but no workspace handler resolves for it yet, so provisioning can't run. Configure an environment handler.",
+        "env_test_no_vcs": "The self-test needs a git provider to create and delete its throwaway branch, but this workspace isn't connected to one."
+      },
+      "action": {
+        "connectGitHub": "Connect GitHub",
+        "configureRunnerPool": "Configure runner pool",
+        "chooseModel": "Choose a model",
+        "configureInfrastructure": "Configure infrastructure"
+      },
       "fallbackMessage": "This action conflicts with the current state.",
       "providersUnconfigured": {
         "title": "No AI provider for this model",

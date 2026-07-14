@@ -442,6 +442,32 @@
         "env_test_not_provisionable": "Ortam işleyicisi yapılandırılmamış",
         "env_test_no_vcs": "Git sağlayıcısı bağlı değil"
       },
+      "description": {
+        "dependencies_unmet": "Bu görev henüz tamamlanmamış başka görevlere bağlı. Onları tamamla veya engelini kaldır, ardından yeniden başlat.",
+        "task_limit_reached": "Aynı anda çok fazla çalıştırma etkin. Birinin bitmesini bekle, ardından bunu yeniden başlat.",
+        "tester_infra_unsupported": "Tester adımı burada çalışamaz: bu hizmet için yapılandırılmış test altyapısı yok ya da bu dağıtımın çalışma zamanı onu çalıştıramıyor. Bir test altyapısı yapılandır veya buna ihtiyaç duymayan bir hizmet kullan.",
+        "agent_backend_unconfigured": "Konteyner aracılarını çalıştıracak bir runner arka ucu yok. Kendi barındırdığın bir runner havuzu kaydet veya dağıtımında Cloudflare Containers'ı etkinleştir.",
+        "run_not_retryable": "Yalnızca başarısız olan veya tamamlanan bir çalıştırma yeniden denenebilir. Bu çalıştırma hâlâ etkin ya da yeniden denemeye uygun olmayan bir durumda.",
+        "no_pr_to_merge": "Bu çalıştırma henüz bir pull request açmadı, bu yüzden birleştirilecek bir şey yok.",
+        "github_not_connected": "Aracıların depoyu klonlayabilmesi, değişiklikleri gönderebilmesi ve pull request açabilmesi için bu çalışma alanını GitHub'a bağla.",
+        "bootstrap_not_retryable": "Bu bootstrap işi mevcut durumunda yeniden denenemez (hâlâ çalışıyor veya zaten başarıyla tamamlandı).",
+        "bootstrap_reference_missing": "Bu bootstrap'in uyarladığı referans deposuna artık erişilemiyor. Silinmiş veya erişimi iptal edilmiş. Başka bir referans seç ya da sıfırdan oluştur.",
+        "preset_unsatisfiable": "Bir satır içi adımın modeli bu dağıtımda satır içi çalışamaz (satır içi desteği olmayan yalnızca abonelikle kullanılan bir model). Satır içi çalışmayı destekleyen bir model veya hazır ayar seç.",
+        "visual_pipeline_no_frontend": "Bu işlem hattında görsel test adımları var ancak hedefte test edilecek bir kullanıcı arayüzü yok (frontend yok ve hiçbir şey bir frontend'e bağlanmıyor).",
+        "model_policy_blocked": "Bu modelin ailesi, hesabının model politikası tarafından engellendi. İzin verilen bir model veya aile seç.",
+        "model_policy_unsupported": "Model ailesi politikaları yalnızca barındırılan ortamlara özgü bir denetimdir ve bu dağıtım bunların ayarlanmasını desteklemez.",
+        "deployer_required_before_tester": "Bu hizmet, bir Tester, manuel test veya Playwright adımı çalışmadan önce sağlanmış bir ortama ihtiyaç duyar ancak öncesinde bir Deployer yok. İşlem hattına bir Deployer adımı ekle.",
+        "env_test_not_a_frame": "Ortam öz testi hizmet başına çalışır, bu yüzden yalnızca bir hizmette başlatılabilir; bir modülde veya görevde değil.",
+        "env_test_infraless": "Bu hizmet için yapılandırılmış geçici ortam sağlama yok, bu yüzden öz testin sınayacağı bir şey yok.",
+        "env_test_not_provisionable": "Bu hizmetin bir sağlama türü var ancak henüz onun için çözümlenen bir çalışma alanı işleyicisi yok, bu yüzden sağlama çalışamaz. Bir ortam işleyicisi yapılandır.",
+        "env_test_no_vcs": "Öz test, tek kullanımlık dalını oluşturup silmek için bir Git sağlayıcısına ihtiyaç duyar ancak bu çalışma alanı hiçbirine bağlı değil."
+      },
+      "action": {
+        "connectGitHub": "GitHub'ı bağla",
+        "configureRunnerPool": "Runner havuzunu yapılandır",
+        "chooseModel": "Bir model seç",
+        "configureInfrastructure": "Altyapıyı yapılandır"
+      },
       "fallbackMessage": "Bu eylem mevcut durumla çelişiyor.",
       "providersUnconfigured": {
         "title": "Bu model için AI sağlayıcısı yok",

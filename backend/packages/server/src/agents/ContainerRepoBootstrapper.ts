@@ -1,5 +1,4 @@
 import type {
-  BootstrapFailureKind,
   BootstrapJobHandle,
   BootstrapJobRepository,
   BootstrapJobUpdate,
@@ -299,14 +298,14 @@ export class ContainerRepoBootstrapper implements RepoBootstrapper {
       return {
         state: 'failed',
         // Prefer the transport's STRUCTURED eviction verdict, then the harness's structured cause;
-        // fall back to the error-string regex only for an older producer (which also catches the
-        // facade-emitted eviction, for which the harness sets no cause). Both eviction kinds
+        // default to the coarse `agent` when neither is present (the watchdog-phrase string
+        // fallback is gone — current images always emit a cause). Both eviction kinds
         // (`crash` / `transient`) collapse to the single `evicted` failure kind here on purpose —
         // bootstrap has no transient-vs-crash recovery budget (only the run driver's
         // `recoverContainerEviction` splits them), so the distinction carries no meaning downstream.
         failureKind: view.evicted
           ? 'evicted'
-          : (failureKindFromHarnessCause(view.failureCause) ?? classifyBootstrapFailure(error)),
+          : (failureKindFromHarnessCause(view.failureCause) ?? 'agent'),
         error,
         detail: view.detail ?? view.error,
       }
@@ -410,19 +409,4 @@ function isBootstrapBoilerplate(entry: RepoEntry): boolean {
     name.startsWith('licence.') ||
     name === 'agents.md'
   )
-}
-
-/**
- * Classify a failed bootstrap job's error message into a {@link BootstrapFailureKind}
- * the board can act on — the FALLBACK when the harness reported no structured cause
- * (the kernel's shared `failureKindFromHarnessCause` wins when one is present). The
- * transport maps an evicted/crashed container (a 404 poll) to a failed view whose
- * message ends "(container evicted or crashed)"; the harness redacts + labels its
- * watchdog kills ("…no agent activity…", "…exceeded max duration…"). Everything else
- * is an ordinary agent fault.
- */
-function classifyBootstrapFailure(error: string): BootstrapFailureKind {
-  if (/evicted or crashed/i.test(error)) return 'evicted'
-  if (/inactivity|no agent activity|max duration/i.test(error)) return 'timeout'
-  return 'agent'
 }

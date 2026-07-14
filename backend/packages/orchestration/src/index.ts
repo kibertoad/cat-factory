@@ -98,9 +98,6 @@ export {
   type ResolvedFrontendBinding,
   type LiveEnvHandle,
 } from './modules/execution/frontend-infra.logic.js'
-// A runtime facade tags an eviction it knows to be transient infra churn with this
-// marker so the engine's job.logic classifier recovers it on the larger budget.
-export { TRANSIENT_EVICTION_MARKER } from './modules/execution/job.logic.js'
 
 export {
   RecurringPipelineService,

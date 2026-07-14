@@ -136,7 +136,9 @@ describe('ContainerEnvConfigRepairer', () => {
     expect(update.state).toBe('done')
   })
 
-  it('pollRepair maps a failed view to a classified failure update', async () => {
+  it('pollRepair no longer string-classifies eviction: the sentinel text alone defaults to `agent`', async () => {
+    // The poll-time eviction verdict rides the `evicted` field now (see the field test below); the
+    // "(container evicted or crashed)" text alone is NOT classified (error-message coverage I5).
     const repairer = makeRepairer({
       dispatch: vi.fn(),
       poll: vi.fn(
@@ -150,8 +152,7 @@ describe('ContainerEnvConfigRepairer', () => {
 
     const update = await repairer.pollRepair({ workspaceId: 'ws_1', jobId: 'job_1' })
     expect(update.state).toBe('failed')
-    expect(update.failureKind).toBe('evicted')
-    expect(update.error).toMatch(/evicted/i)
+    expect(update.failureKind).toBe('agent')
   })
 
   it('pollRepair classifies eviction from the STRUCTURED field (no string sentinel needed)', async () => {
@@ -193,12 +194,12 @@ describe('ContainerEnvConfigRepairer', () => {
     expect(update.failureKind).toBe('timeout')
   })
 
-  it('pollRepair falls back to the error-string regex when the harness reports no cause', async () => {
+  it('pollRepair defaults to `agent` when the harness reports no structured cause (watchdog text no longer classified)', async () => {
+    // The abort-phrase string fallback is gone (I5): only the structured `failureCause` classifies a
+    // timeout now, so a watchdog-worded error with no cause coarsens to `agent`, not `timeout`.
     const repairer = makeRepairer({
       dispatch: vi.fn(),
       poll: vi.fn(
-        // An older producer forwards neither `evicted` nor `failureCause`; the regex catches the
-        // watchdog phrase in the raw error text.
         async (): Promise<RunnerJobView> => ({
           state: 'failed',
           error: 'aborted: no agent activity for too long',
@@ -209,7 +210,7 @@ describe('ContainerEnvConfigRepairer', () => {
 
     const update = await repairer.pollRepair({ workspaceId: 'ws_1', jobId: 'job_1' })
     expect(update.state).toBe('failed')
-    expect(update.failureKind).toBe('timeout')
+    expect(update.failureKind).toBe('agent')
   })
 
   it('pollRepair treats a completed job with a structured error as a failure', async () => {

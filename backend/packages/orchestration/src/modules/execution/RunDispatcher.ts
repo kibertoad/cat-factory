@@ -126,9 +126,7 @@ import {
   shouldLoopCoder,
 } from './followUp.logic.js'
 import {
-  classifyAgentFailure,
   classifyDispatchFailure,
-  evictionKindOf,
   MAX_EVICTION_RECOVERIES,
   MAX_TRANSIENT_EVICTION_RECOVERIES,
 } from './job.logic.js'
@@ -959,8 +957,9 @@ export class RunDispatcher {
       return {
         kind: 'job_failed',
         error: update.error,
-        failureKind:
-          failureKindFromHarnessCause(update.failureCause) ?? classifyAgentFailure(update.error),
+        // Prefer the harness's structured cause; default to the coarse `agent` when it reported
+        // none (the watchdog-phrase string fallback is gone — current images always emit a cause).
+        failureKind: failureKindFromHarnessCause(update.failureCause) ?? 'agent',
         detail: update.detail ?? update.error,
         // Preserve the harness's FINE-GRAINED cause (git / api / no-usable-output / no-changes)
         // that `failureKind` collapses to the coarse `agent` — recorded on the failure's
@@ -1043,9 +1042,9 @@ export class RunDispatcher {
     evicted: ContainerEvictionKind | undefined,
     onBeforeRedispatch?: () => Promise<void>,
   ): Promise<AdvanceResult | null> {
-    // Prefer the transport's STRUCTURED eviction verdict; fall back to the error-string
-    // sentinels for an older producer (job.logic `evictionKindOf`). Null ⇒ not an eviction.
-    const kind = evictionKindOf(evicted, error)
+    // The eviction verdict rides the transport's STRUCTURED `evicted` field (every transport
+    // mints it). Absent ⇒ not an eviction, so the caller proceeds with genuine-failure handling.
+    const kind = evicted
     if (!kind) return null
     const transient = kind === 'transient'
     const limit = transient ? MAX_TRANSIENT_EVICTION_RECOVERIES : MAX_EVICTION_RECOVERIES

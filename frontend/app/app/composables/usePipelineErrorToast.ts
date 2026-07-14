@@ -5,11 +5,12 @@
  * instead of dumping the raw message — and, for `providers_unconfigured`, surface the
  * SAME guidance + "Configure AI" jump as the no-AI-provider startup banner.
  *
- * i18n boundary (see CLAUDE.md / the i18n plan): user-facing titles are resolved from
- * `errors.conflict.*` message keys by the machine-readable `reason`. The raw backend
- * `message` is shown only as the description fallback and stays untranslated — the
- * contract is "if a server message must be localizable, the backend emits a code and the
- * frontend maps it", not "translate arbitrary server prose on the client".
+ * i18n boundary (see CLAUDE.md / the i18n plan): user-facing title AND description are both
+ * resolved from `errors.conflict.*` message keys by the machine-readable `reason` (G1). The raw
+ * backend `message` is shown only as the last-resort description fallback (an unmapped reason, or a
+ * locale missing the key) and stays untranslated — the contract is "if a server message must be
+ * localizable, the backend emits a code and the frontend maps it", not "translate arbitrary server
+ * prose on the client".
  */
 
 import type { ConflictReason } from '@cat-factory/contracts'
@@ -22,16 +23,38 @@ interface ConflictDetails {
   [key: string]: unknown
 }
 
+/** An optional one-click "jump to the panel that fixes it" affordance on a conflict toast. */
+interface ConflictAction {
+  /** i18n message key for the button label (a static literal so tier-1 typed keys see it). */
+  labelKey: string
+  icon: string
+  /** Where the button navigates — a `ui` store deep-link; run with the store passed in. */
+  run: (ui: ReturnType<typeof useUiStore>) => void
+}
+
+/** Per-reason toast copy: a translated title + description, and optionally a jump action. */
+interface ConflictInfo {
+  titleKey: string
+  descriptionKey: string
+  action?: ConflictAction
+}
+
 /**
- * Per-reason toast title KEYS, keyed off the kernel/contracts `ConflictReason`. Being an
- * EXHAUSTIVE `Record` over the union is the real drift guard: a new backend conflict reason
- * fails THIS typecheck until it is mapped here. (The typed-message-keys feature can't see the
- * `t()` lookup because the key is resolved at runtime via this map, not written as a literal —
- * so the exhaustiveness of the map, not `t()`, is what makes a missing reason a build error.)
- * The reasons with BESPOKE handling below (a "configure X" action + their own key namespace) are
- * excluded, since none reaches this generic lookup: `providers_unconfigured`,
- * `binary_storage_unconfigured`, and the deployment-environment trio `provision_type_unhandled` /
- * `deployer_service_provisioning_incomplete` / `deployer_connection_test_failed`.
+ * Per-reason toast copy, keyed off the kernel/contracts `ConflictReason`. Being an EXHAUSTIVE
+ * `Record` over the union is the real drift guard: a new backend conflict reason fails THIS
+ * typecheck until it is mapped here (title + description). (The typed-message-keys feature can't
+ * see the `t()` lookup because the key is resolved at runtime via this map, not written as a
+ * literal — so the exhaustiveness of the map, not `t()`, is what makes a missing reason a build
+ * error.) The reasons with BESPOKE handling above (a runtime-interpolated body + a "configure X"
+ * action + their own key namespace) are excluded, since none reaches this generic lookup:
+ * `providers_unconfigured`, `binary_storage_unconfigured`, and the deployment-environment trio
+ * `provision_type_unhandled` / `deployer_service_provisioning_incomplete` /
+ * `deployer_connection_test_failed`.
+ *
+ * G1 (error-message coverage): before this, only a title was mapped and the description fell back
+ * to the raw, untranslated backend `message`. Every reason now carries a translated `description`
+ * (remedy prose), and the ones a UI panel can fix carry a `run` deep-link — the same shape as the
+ * bespoke conflicts above, but data-driven instead of one `if` per reason.
  */
 type BespokeConflictReason =
   | 'providers_unconfigured'
@@ -40,25 +63,109 @@ type BespokeConflictReason =
   | 'deployer_service_provisioning_incomplete'
   | 'deployer_connection_test_failed'
 
-const CONFLICT_TITLE_KEYS: Record<Exclude<ConflictReason, BespokeConflictReason>, string> = {
-  dependencies_unmet: 'errors.conflict.title.dependencies_unmet',
-  task_limit_reached: 'errors.conflict.title.task_limit_reached',
-  tester_infra_unsupported: 'errors.conflict.title.tester_infra_unsupported',
-  agent_backend_unconfigured: 'errors.conflict.title.agent_backend_unconfigured',
-  run_not_retryable: 'errors.conflict.title.run_not_retryable',
-  no_pr_to_merge: 'errors.conflict.title.no_pr_to_merge',
-  github_not_connected: 'errors.conflict.title.github_not_connected',
-  bootstrap_not_retryable: 'errors.conflict.title.bootstrap_not_retryable',
-  bootstrap_reference_missing: 'errors.conflict.title.bootstrap_reference_missing',
-  preset_unsatisfiable: 'errors.conflict.title.preset_unsatisfiable',
-  visual_pipeline_no_frontend: 'errors.conflict.title.visual_pipeline_no_frontend',
-  model_policy_blocked: 'errors.conflict.title.model_policy_blocked',
-  model_policy_unsupported: 'errors.conflict.title.model_policy_unsupported',
-  deployer_required_before_tester: 'errors.conflict.title.deployer_required_before_tester',
-  env_test_not_a_frame: 'errors.conflict.title.env_test_not_a_frame',
-  env_test_infraless: 'errors.conflict.title.env_test_infraless',
-  env_test_not_provisionable: 'errors.conflict.title.env_test_not_provisionable',
-  env_test_no_vcs: 'errors.conflict.title.env_test_no_vcs',
+const CONFLICT_INFO: Record<Exclude<ConflictReason, BespokeConflictReason>, ConflictInfo> = {
+  dependencies_unmet: {
+    titleKey: 'errors.conflict.title.dependencies_unmet',
+    descriptionKey: 'errors.conflict.description.dependencies_unmet',
+  },
+  task_limit_reached: {
+    titleKey: 'errors.conflict.title.task_limit_reached',
+    descriptionKey: 'errors.conflict.description.task_limit_reached',
+  },
+  tester_infra_unsupported: {
+    titleKey: 'errors.conflict.title.tester_infra_unsupported',
+    descriptionKey: 'errors.conflict.description.tester_infra_unsupported',
+  },
+  agent_backend_unconfigured: {
+    titleKey: 'errors.conflict.title.agent_backend_unconfigured',
+    descriptionKey: 'errors.conflict.description.agent_backend_unconfigured',
+    action: {
+      labelKey: 'errors.conflict.action.configureRunnerPool',
+      icon: 'i-lucide-server',
+      run: (ui) => ui.openInfrastructure('runner-pool'),
+    },
+  },
+  run_not_retryable: {
+    titleKey: 'errors.conflict.title.run_not_retryable',
+    descriptionKey: 'errors.conflict.description.run_not_retryable',
+  },
+  no_pr_to_merge: {
+    titleKey: 'errors.conflict.title.no_pr_to_merge',
+    descriptionKey: 'errors.conflict.description.no_pr_to_merge',
+  },
+  github_not_connected: {
+    titleKey: 'errors.conflict.title.github_not_connected',
+    descriptionKey: 'errors.conflict.description.github_not_connected',
+    action: {
+      labelKey: 'errors.conflict.action.connectGitHub',
+      icon: 'i-lucide-github',
+      run: (ui) => ui.openGitHub(),
+    },
+  },
+  bootstrap_not_retryable: {
+    titleKey: 'errors.conflict.title.bootstrap_not_retryable',
+    descriptionKey: 'errors.conflict.description.bootstrap_not_retryable',
+  },
+  bootstrap_reference_missing: {
+    titleKey: 'errors.conflict.title.bootstrap_reference_missing',
+    descriptionKey: 'errors.conflict.description.bootstrap_reference_missing',
+  },
+  preset_unsatisfiable: {
+    titleKey: 'errors.conflict.title.preset_unsatisfiable',
+    descriptionKey: 'errors.conflict.description.preset_unsatisfiable',
+    action: {
+      labelKey: 'errors.conflict.action.chooseModel',
+      icon: 'i-lucide-cpu',
+      run: (ui) => ui.openModelConfig(),
+    },
+  },
+  visual_pipeline_no_frontend: {
+    titleKey: 'errors.conflict.title.visual_pipeline_no_frontend',
+    descriptionKey: 'errors.conflict.description.visual_pipeline_no_frontend',
+  },
+  model_policy_blocked: {
+    titleKey: 'errors.conflict.title.model_policy_blocked',
+    descriptionKey: 'errors.conflict.description.model_policy_blocked',
+    action: {
+      labelKey: 'errors.conflict.action.chooseModel',
+      icon: 'i-lucide-cpu',
+      run: (ui) => ui.openModelConfig(),
+    },
+  },
+  model_policy_unsupported: {
+    titleKey: 'errors.conflict.title.model_policy_unsupported',
+    descriptionKey: 'errors.conflict.description.model_policy_unsupported',
+  },
+  deployer_required_before_tester: {
+    titleKey: 'errors.conflict.title.deployer_required_before_tester',
+    descriptionKey: 'errors.conflict.description.deployer_required_before_tester',
+  },
+  env_test_not_a_frame: {
+    titleKey: 'errors.conflict.title.env_test_not_a_frame',
+    descriptionKey: 'errors.conflict.description.env_test_not_a_frame',
+  },
+  env_test_infraless: {
+    titleKey: 'errors.conflict.title.env_test_infraless',
+    descriptionKey: 'errors.conflict.description.env_test_infraless',
+  },
+  env_test_not_provisionable: {
+    titleKey: 'errors.conflict.title.env_test_not_provisionable',
+    descriptionKey: 'errors.conflict.description.env_test_not_provisionable',
+    action: {
+      labelKey: 'errors.conflict.action.configureInfrastructure',
+      icon: 'i-lucide-settings',
+      run: (ui) => ui.openProviderConnection('environment'),
+    },
+  },
+  env_test_no_vcs: {
+    titleKey: 'errors.conflict.title.env_test_no_vcs',
+    descriptionKey: 'errors.conflict.description.env_test_no_vcs',
+    action: {
+      labelKey: 'errors.conflict.action.connectGitHub',
+      icon: 'i-lucide-github',
+      run: (ui) => ui.openGitHub(),
+    },
+  },
 }
 
 /**
@@ -234,13 +341,41 @@ export function usePipelineErrorToast() {
     }
 
     if (conflict) {
-      // Per-reason title key from the exhaustive map; fall back to the caller's title key when
-      // this reason has no mapped/translated copy (`te` = translation-exists, so a key missing
-      // in the active locale never leaks as raw text). An unknown reason isn't in the map.
-      const reasonKey =
-        CONFLICT_TITLE_KEYS[conflict.reason as Exclude<ConflictReason, BespokeConflictReason>]
+      // Per-reason copy from the exhaustive map: a translated title + description, and a jump
+      // action for the reasons a UI panel can fix. `te` (translation-exists) guards every lookup,
+      // so a key missing from the active locale falls back rather than leaking a raw key: the
+      // title falls to the caller's key, the description to the raw backend `message`. An unknown
+      // reason (not in the map) gets the same generic title + raw-message fallback.
+      const info = conflict.reason
+        ? CONFLICT_INFO[conflict.reason as Exclude<ConflictReason, BespokeConflictReason>]
+        : undefined
+      if (info) {
+        toast.add({
+          title: te(info.titleKey) ? t(info.titleKey) : t(fallbackTitleKey),
+          description: te(info.descriptionKey)
+            ? t(info.descriptionKey)
+            : (conflict.message ?? t('errors.conflict.fallbackMessage')),
+          color: 'warning',
+          icon: 'i-lucide-triangle-alert',
+          // A reason with a jump action becomes an actionable, sticky toast (like the bespoke
+          // conflicts above) so the one-click remedy doesn't auto-dismiss before it's reached.
+          ...(info.action
+            ? {
+                duration: 0,
+                actions: [
+                  {
+                    label: t(info.action.labelKey),
+                    icon: info.action.icon,
+                    onClick: () => info.action?.run(ui),
+                  },
+                ],
+              }
+            : {}),
+        })
+        return
+      }
       toast.add({
-        title: reasonKey && te(reasonKey) ? t(reasonKey) : t(fallbackTitleKey),
+        title: t(fallbackTitleKey),
         description: conflict.message ?? t('errors.conflict.fallbackMessage'),
         color: 'warning',
         icon: 'i-lucide-triangle-alert',

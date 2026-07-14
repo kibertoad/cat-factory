@@ -3815,6 +3815,32 @@
         "env_test_not_provisionable": "Handler dell'ambiente non configurato",
         "env_test_no_vcs": "Provider Git non connesso"
       },
+      "description": {
+        "dependencies_unmet": "Questa attività dipende da altre non ancora completate. Completale o sbloccale, poi avviala di nuovo.",
+        "task_limit_reached": "Ci sono troppe esecuzioni attive contemporaneamente. Attendi che una finisca, poi riavvia questa.",
+        "tester_infra_unsupported": "Il passaggio Tester non può essere eseguito qui: questo servizio non ha un'infrastruttura di test configurata, oppure il runtime di questo deployment non può eseguirla. Configura un'infrastruttura di test o usa un servizio che non ne ha bisogno.",
+        "agent_backend_unconfigured": "Nessun backend runner disponibile per eseguire gli agenti in container. Registra un pool di runner self-hosted oppure abilita Cloudflare Containers nel tuo deployment.",
+        "run_not_retryable": "Solo un'esecuzione fallita o conclusa può essere ripetuta. Questa esecuzione è ancora attiva o in uno stato che non consente il nuovo tentativo.",
+        "no_pr_to_merge": "Questa esecuzione non ha ancora aperto una pull request, quindi non c'è nulla da unire.",
+        "github_not_connected": "Collega questo workspace a GitHub così gli agenti possono clonare il repository, inviare modifiche e aprire pull request.",
+        "bootstrap_not_retryable": "Questo job di bootstrap non può essere ripetuto nello stato attuale (è ancora in esecuzione o già concluso con successo).",
+        "bootstrap_reference_missing": "Il repository di riferimento adattato da questo bootstrap non è più raggiungibile. È stato eliminato o l'accesso è stato revocato. Scegli un altro riferimento oppure crea da zero.",
+        "preset_unsatisfiable": "Il modello di un passaggio inline non può essere eseguito inline in questo deployment (un modello solo in abbonamento senza supporto inline). Scegli un modello o un preset compatibile con l'esecuzione inline.",
+        "visual_pipeline_no_frontend": "Questa pipeline ha passaggi di test visivo, ma la destinazione non ha un'interfaccia utente da testare (nessun frontend e nulla che ne colleghi uno).",
+        "model_policy_blocked": "La famiglia di questo modello è bloccata dalla policy dei modelli del tuo account. Scegli un modello o una famiglia consentiti.",
+        "model_policy_unsupported": "Le policy sulle famiglie di modelli sono un controllo solo per ambienti ospitati, e questo deployment non ne consente l'impostazione.",
+        "deployer_required_before_tester": "Questo servizio ha bisogno di un ambiente predisposto prima che un passaggio Tester, test manuale o Playwright possa essere eseguito, ma non c'è alcun Deployer prima. Aggiungi un passaggio Deployer alla pipeline.",
+        "env_test_not_a_frame": "L'autotest dell'ambiente viene eseguito per servizio, quindi può essere avviato solo su un servizio, non su un modulo o un'attività.",
+        "env_test_infraless": "Questo servizio non ha alcun provisioning di ambiente effimero configurato, quindi non c'è nulla che l'autotest possa verificare.",
+        "env_test_not_provisionable": "Questo servizio ha un tipo di provisioning, ma non è ancora disponibile alcun handler del workspace, quindi il provisioning non può essere eseguito. Configura un handler dell'ambiente.",
+        "env_test_no_vcs": "L'autotest ha bisogno di un provider Git per creare ed eliminare il suo branch usa e getta, ma questo workspace non è collegato a nessuno."
+      },
+      "action": {
+        "connectGitHub": "Collega GitHub",
+        "configureRunnerPool": "Configura pool di runner",
+        "chooseModel": "Scegli un modello",
+        "configureInfrastructure": "Configura infrastruttura"
+      },
       "fallbackMessage": "Questa azione è in conflitto con lo stato attuale.",
       "providersUnconfigured": {
         "title": "Nessun provider AI per questo modello",
