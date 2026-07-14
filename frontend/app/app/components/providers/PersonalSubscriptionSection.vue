@@ -4,7 +4,7 @@
 // rather than pooled on the workspace. Each token is double-encrypted server-side under a
 // personal PASSWORD (never stored); that password is what you'll enter when you start/retry
 // such a run (cached locally so it's usually transparent). Recurring schedules can't use them.
-import { computed, onMounted, ref } from 'vue'
+import { computed, onBeforeUnmount, onMounted, ref, watch } from 'vue'
 import type { SubscriptionVendor } from '~/types/domain'
 import SecretInput from '~/components/common/SecretInput.vue'
 
@@ -87,7 +87,33 @@ const password = ref('')
 const expiresOn = ref('') // yyyy-mm-dd (optional)
 const busy = ref(false)
 
+// A transient "credentials stored" confirmation shown inline right after a successful save.
+// Emptying the form on success recomputes `disabledReason` back to "enter a token", so without
+// this the user is greeted by a red validation error immediately after they succeeded — which
+// reads as a failure. While this notice is set we suppress `disabledReason` and show it instead,
+// then clear it after a few seconds (or the moment the user starts entering a new credential).
+const savedNotice = ref<string | null>(null)
+let savedTimer: ReturnType<typeof setTimeout> | undefined
+
+function clearSavedNotice() {
+  savedNotice.value = null
+  if (savedTimer) {
+    clearTimeout(savedTimer)
+    savedTimer = undefined
+  }
+}
+
+// Once the user touches the form again the success notice is stale — drop it so `disabledReason`
+// guides the next entry as usual. Guard on non-empty input so the programmatic clear performed by
+// a successful `connect()` (which resets the fields to empty) doesn't immediately wipe the notice
+// we just set; switching vendor always clears it.
+watch([token, password], ([tok, pwd]) => {
+  if (savedNotice.value && (tok.trim() || pwd)) clearSavedNotice()
+})
+watch(vendor, () => clearSavedNotice())
+
 onMounted(() => void personal.load())
+onBeforeUnmount(() => clearSavedNotice())
 
 const selectedMeta = computed(() => vendorMeta(vendor.value) ?? PERSONAL_VENDORS.value[0]!)
 const existing = computed(() => personal.subscriptions.find((s) => s.vendor === vendor.value))
@@ -118,6 +144,7 @@ const renewals = computed(() =>
 
 async function connect() {
   if (!token.value.trim() || password.value.length < 6) return
+  const vendorName = selectedMeta.value.label
   busy.value = true
   try {
     await personal.store({
@@ -133,13 +160,19 @@ async function connect() {
     password.value = ''
     label.value = ''
     expiresOn.value = ''
+    // Confirm success inline (and transiently) so emptying the form doesn't surface the
+    // `disabledReason` validation text as if the save had failed. It clears after a few
+    // seconds, or as soon as the user starts entering another credential.
+    savedNotice.value = t('personalSubscriptions.saved', { vendor: vendorName })
+    if (savedTimer) clearTimeout(savedTimer)
+    savedTimer = setTimeout(clearSavedNotice, 5000)
     // A connected subscription makes its vendor's models usable, so refresh the catalog:
     // this clears the "No AI model configured" banner and, if the default preset still
     // points at models this subscription doesn't cover, reactively surfaces the
     // preset-mismatch prompt (with its "pick a different preset" link).
     if (workspace.workspaceId) await models.refresh(workspace.workspaceId)
     toast.add({
-      title: t('personalSubscriptions.toast.connected', { vendor: selectedMeta.value.label }),
+      title: t('personalSubscriptions.toast.connected', { vendor: vendorName }),
       icon: 'i-lucide-check',
       color: 'success',
     })
@@ -266,7 +299,11 @@ async function disconnect(v: SubscriptionVendor) {
         </UFormField>
       </div>
       <div class="flex items-center justify-end gap-3">
-        <p v-if="disabledReason" class="text-sm text-rose-400">{{ disabledReason }}</p>
+        <p v-if="savedNotice" class="flex items-center gap-1.5 text-sm text-emerald-400">
+          <UIcon name="i-lucide-check" class="size-4" />
+          {{ savedNotice }}
+        </p>
+        <p v-else-if="disabledReason" class="text-sm text-rose-400">{{ disabledReason }}</p>
         <UButton
           :loading="busy"
           :disabled="disabledReason !== null"
