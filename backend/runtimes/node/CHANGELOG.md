@@ -1,5 +1,49 @@
 # @cat-factory/node-server
 
+## 0.94.1
+
+### Patch Changes
+
+- e5cd022: Speed up the "add service from an existing repo" picker's typeahead, which stalled for
+  ~17s per keystroke when a broad personal access token (PAT) backed the results.
+
+  The personal-repo branch re-walked the viewer's entire `GET /user/repos` set — up to ten
+  sequential GitHub pages — on every keystroke and only applied the query as an in-memory
+  filter afterwards, with nothing cached. Three changes:
+
+  - **Cache the enumeration.** New `AppCaches.viewerRepos` slice (grouped/keyed by user id):
+    the picker's typeahead now filters a cached complete set in memory instead of forcing a
+    fresh full walk per keystroke. Invalidated when the user's stored `github_pat` changes;
+    a short (60s) TTL backstops repos created straight on GitHub. Pass-through on the Worker's
+    isolate-safe profile (external state, not self-verifying), so it caches on Node/local
+    where the PAT picker is the primary flow.
+  - **Parallelize the cold walk.** `FetchGitHubClient.listReposForToken` reads page 1, learns
+    the page count from its `Link: rel="last"` header, and fetches the remaining pages
+    concurrently — turning ~10 serial round-trips into ~2.
+  - The blank browse-all path (and its fail-closed access-projection refresh) is unchanged and
+    stays uncached.
+
+  No repos are dropped: a literal GitHub `/search/repositories` call was deliberately avoided
+  because it can't reproduce the enumeration's `owner,collaborator,organization_member`
+  affiliation scope and would bury a low-star private repo in global results.
+
+- Updated dependencies [e5cd022]
+  - @cat-factory/kernel@0.124.0
+  - @cat-factory/caching@0.7.0
+  - @cat-factory/integrations@0.82.0
+  - @cat-factory/server@0.114.0
+  - @cat-factory/orchestration@0.107.8
+  - @cat-factory/agents@0.54.12
+  - @cat-factory/consensus@0.10.48
+  - @cat-factory/eks@0.1.73
+  - @cat-factory/gates@0.5.32
+  - @cat-factory/gitlab@0.7.70
+  - @cat-factory/observability-langfuse@0.7.202
+  - @cat-factory/provider-bedrock@0.7.218
+  - @cat-factory/provider-cloudflare@0.7.219
+  - @cat-factory/provider-s3@0.2.152
+  - @cat-factory/spend@0.12.28
+
 ## 0.94.0
 
 ### Minor Changes
