@@ -1,5 +1,18 @@
 # @cat-factory/local-server
 
+## 0.65.10
+
+### Patch Changes
+
+- c28f89e: Add boot-phase timers to the backend startup path (app-startup initiative, item 1). `bootServer`
+  now brackets each phase (config, migrate, pg-boss start, container build, bus, worker registration,
+  listen) with `performance.now()` and logs one structured `cat-factory node server ready in N ms`
+  line with the per-phase breakdown; local mode times its own preflights (container-runtime probe,
+  GitHub PAT probe) the same way. New `startBootClock` helper is exported from `@cat-factory/node-server`.
+  Pure instrumentation — no behavioural change.
+- Updated dependencies [c28f89e]
+  - @cat-factory/node-server@0.94.0
+
 ## 0.65.9
 
 ### Patch Changes
