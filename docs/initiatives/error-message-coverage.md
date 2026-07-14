@@ -12,7 +12,8 @@ structured container-eviction signal (I1 `RunnerJobView.evicted`) · Redis-bus f
 structured-cause classification (I3) · typed harness cause union + one shared kernel mapper
 (I4 `HarnessFailureCause` / `failureKindFromHarnessCause`) · webhook signature-rejection operator
 logging (C2, GitHub HMAC + GitLab token) · numeric-env-knob rejection warnings (A8, shared
-`parseNumericEnv`) ·
+`parseNumericEnv`) · harness clone/push + PR/MR-open + LLM-proxy failure classification (F1/F2/F3,
+one `llm-upstream` cause, image-bumped) ·
 **Owner:** core · **Started:** 2026-07-11
 
 > This is the durable source of truth for a multi-PR initiative. Read it first before
@@ -177,11 +178,11 @@ Any new failure classification added here (F1–F3) extends the harness `Failure
 union — a structured code per target pattern 6, never a new string-matched phrase — and
 that union change is itself image-affecting, so it batches into the same slice.
 
-| #   | Failure / misconfiguration         | Current behaviour                                                                                                            | Surface | Sev | Proposed fix                                                                                                                                       | Doc URL to embed | Status  | PR  |
-| --- | ---------------------------------- | ---------------------------------------------------------------------------------------------------------------------------- | ------- | --- | -------------------------------------------------------------------------------------------------------------------------------------------------- | ---------------- | ------- | --- |
-| F1  | Clone/push auth failures           | Raw git stderr passed through (`git.ts:139-144`): `Authentication failed`, `repository not found`                            | n/a     | P2  | Classify the common stderr shapes → token-expired / App-lacks-access / repo-deleted causes with remedies, keeping the raw stderr as detail         | —                | ⬜ todo |     |
-| F2  | PR/MR open failures                | Raw `Failed to open PR (HTTP <status>)` + `GitHub did not return a PR url` (`git.ts:1020,1026,1078,1084`)                    | n/a     | P3  | Map the common statuses (403 scopes, 404 repo, 422 validation) to causes                                                                           | —                | ⬜ todo |     |
-| F3  | LLM-proxy 401/402/429 during a run | Unwrapped; surfaces only via `agentOutputTail` stderr slice; the good `NEVER_ACTED_CAUSE` covers only the total-failure case | n/a     | P2  | Classify proxy auth/quota/rate-limit into the harness failure vocabulary so the run failure names the cause (key exhausted / quota / rate-limited) | —                | ⬜ todo |     |
+| #   | Failure / misconfiguration         | Current behaviour                                                                                                            | Surface | Sev | Proposed fix                                                                                                                                       | Doc URL to embed | Status  | PR       |
+| --- | ---------------------------------- | ---------------------------------------------------------------------------------------------------------------------------- | ------- | --- | -------------------------------------------------------------------------------------------------------------------------------------------------- | ---------------- | ------- | -------- |
+| F1  | Clone/push auth failures           | Raw git stderr passed through (`git.ts:139-144`): `Authentication failed`, `repository not found`                            | n/a     | P2  | Classify the common stderr shapes → token-expired / App-lacks-access / repo-deleted causes with remedies, keeping the raw stderr as detail         | —                | ✅ done | phase 16 |
+| F2  | PR/MR open failures                | Raw `Failed to open PR (HTTP <status>)` + `GitHub did not return a PR url` (`git.ts:1020,1026,1078,1084`)                    | n/a     | P3  | Map the common statuses (403 scopes, 404 repo, 422 validation) to causes                                                                           | —                | ✅ done | phase 16 |
+| F3  | LLM-proxy 401/402/429 during a run | Unwrapped; surfaces only via `agentOutputTail` stderr slice; the good `NEVER_ACTED_CAUSE` covers only the total-failure case | n/a     | P2  | Classify proxy auth/quota/rate-limit into the harness failure vocabulary so the run failure names the cause (key exhausted / quota / rate-limited) | —                | ✅ done | phase 16 |
 
 ### G. Frontend surfacing
 
@@ -473,6 +474,27 @@ DispatchError`, reading `.status`), NOT the `/dispatch failed/i` regex, which is
   not N times; and Node's retention days now go through a local `retentionMs` helper mirroring the
   Worker's (incl. the `days >= 0` clamp), so a negative override falls back to the default on both
   facades rather than a negative window on Node only.
+- **Harness git / PR-open / LLM-proxy failure remedies wrap at the FIRST point the third-party
+  text enters the harness (phase 16 reference: F1/F2/F3).** All three are executor-harness faults
+  whose only signal is opaque third-party text (git stderr, a REST status body, Pi's `finalError`),
+  so each is classified ONCE where it enters (per I6) and the remedy is APPENDED — the raw line is
+  preserved as detail, never rewritten. **F1:** `describeGitFailure(stderr)` (`git.ts`) matches the
+  auth / repository-not-found / write-permission shapes (404-not-found checked BEFORE the generic
+  auth shape, since a private-repo 404 is GitHub's stand-in for "your token can't see it") and keeps
+  the `git` cause. **F2:** `describePrOpenFailure(status, provider)` maps 401/403/404/422(GitHub)/
+  400(GitLab) to a provider-tailored remedy (GitHub App "Pull requests: write" vs GitLab `api`
+  scope; PR vs merge-request noun), keeps the `api` cause and the load-bearing `Failed to open …
+(HTTP n)` first line. **F3:** the ONE new structured cause this slice adds — `llm-upstream` (in
+  BOTH the harness `FailureCause` and the kernel `HARNESS_FAILURE_CAUSES` union, kept in step by
+  hand, mapped to the coarse `agent` kind by the `FAILURE_KIND_BY_CAUSE` drift-guard Record). All
+  model traffic rides the proxy, so a terminal `terminalRunError` that `classifyLlmUpstreamError`
+  recognises as a proxy 401/403 (auth) / 402 (quota) / 429 (rate-limit) rejects a
+  `HarnessFailure('llm-upstream', remedy)` instead of a bare `Error` — the cause flows via
+  `RunnerJobView.failureCause` → `AgentFailure.reason`. The three remedies are UI-first (re-enter
+  the provider key in the AI key pool / reconnect the GitHub App). All three are executor-harness
+  `src/**` changes, so this BUMPS the image tag (`1.43.3`) + the three pins (synced via
+  `pnpm sync:image-tags`) — the reason F1/F2/F3 were batched into one slice. Deferred (bare `Error`
+  → `agent`) for any shape the classifiers don't recognise, so nothing regresses.
 - **Executor-harness changes bump the image tag** + the three hand-maintained pins
   (`deploy/backend/package.json`, `deploy/backend/wrangler.toml`,
   `RECOMMENDED_HARNESS_IMAGE`) — batch all F-rows into one slice to pay that cost once.

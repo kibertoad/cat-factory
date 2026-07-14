@@ -9,6 +9,7 @@ import {
   DEFAULT_PROGRESS_GUARD_LIMITS,
   ProgressGuard,
   type ProgressGuardLimits,
+  classifyLlmUpstreamError,
   mergeGuardLimits,
   parsePiOutput,
   parseTodoProgress,
@@ -222,6 +223,48 @@ describe('terminalRunError', () => {
       '{"type":"auto_retry_end","success":true,"attempt":2}',
     ].join('\n')
     expect(terminalRunError(stdout)).toBeUndefined()
+  })
+})
+
+describe('classifyLlmUpstreamError (F3: LLM-proxy auth/quota/rate-limit remedies)', () => {
+  it('classifies a 401/unauthorized → credential-refused remedy', () => {
+    expect(classifyLlmUpstreamError('proxy returned 401 Unauthorized: invalid api key')).toMatch(
+      /API credential was refused/i,
+    )
+    expect(classifyLlmUpstreamError('Error: authentication failed')).toMatch(
+      /API credential was refused/i,
+    )
+  })
+
+  it('classifies a 402/quota → out-of-credit remedy', () => {
+    expect(classifyLlmUpstreamError('HTTP 402 Payment Required')).toMatch(/out of quota or credit/i)
+    expect(classifyLlmUpstreamError('insufficient quota for this request')).toMatch(
+      /out of quota or credit/i,
+    )
+  })
+
+  it('classifies a 429/rate-limit → transient rate-limit remedy', () => {
+    expect(classifyLlmUpstreamError('429 Too Many Requests')).toMatch(/rate-limited the run/i)
+    expect(classifyLlmUpstreamError('upstream rate limit exceeded')).toMatch(/rate-limited/i)
+  })
+
+  it('prefers the quota remedy when a body carries both 402 and auth-ish words', () => {
+    expect(classifyLlmUpstreamError('402 Payment Required: unauthorized until you top up')).toMatch(
+      /out of quota or credit/i,
+    )
+  })
+
+  it('prefers the auth remedy over rate-limit when a 403 rides alongside a 429', () => {
+    expect(classifyLlmUpstreamError('429 rate limit; 403 Forbidden: key revoked')).toMatch(
+      /API credential was refused/i,
+    )
+  })
+
+  it('returns undefined for an unrelated model error (a bare agent failure stays generic)', () => {
+    expect(classifyLlmUpstreamError('502 model unreachable')).toBeUndefined()
+    expect(
+      classifyLlmUpstreamError('the agent failed after exhausting its retries'),
+    ).toBeUndefined()
   })
 })
 
