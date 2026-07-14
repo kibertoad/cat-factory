@@ -112,6 +112,7 @@ import {
   WebCryptoPasswordHasher,
   logger,
   buildInfrastructureCapabilities,
+  testEnvHasZeroConfigDefault,
   createDefaultWebSearchUpstream,
   createWebSearchUpstream,
   createScopedModelProviderResolver,
@@ -1887,7 +1888,7 @@ function selectRepoBootstrapper(
  * prerequisites are met — the same container prerequisites as the bootstrapper PLUS an
  * injected provider that actually supports agent repair (`describeRepairAgent`). A stock
  * deployment runs the generic manifest provider (no repair support), so this stays
- * undefined there; it wires only when a native adapter (e.g. Kargo) is injected. Built
+ * undefined there; it wires only when a native adapter is injected. Built
  * over the FINAL provider (post-overrides), so the dispatcher repairs through the same
  * provider the engine validates with. NOT to be confused with the repo bootstrapper: this
  * is an ordinary clone→edit→push coding job (no history reset / force-push).
@@ -2531,6 +2532,11 @@ export function buildContainer(
     // Resolves the per-account binary-artifact store (screenshots) for the artifact
     // controllers + the visual-confirmation gate (configured per-account in the UI).
     resolveBinaryArtifactStore,
+    // The Worker's only test-env backend is the `environment-provider` (its UI-test container is
+    // torn down with the run — no long-lived in-container compose default), so a missing provider
+    // IS a real gap the "test environment not configured" banner should surface. Derived from the
+    // capability descriptor for symmetry with the Node facade (`testEnvHasZeroConfigDefault`).
+    ephemeralEnvironmentsRequireProvider: !testEnvHasZeroConfigDefault(config.infrastructure),
     // The sensitive per-service test-credential store the shared test-secrets controller reads;
     // present when the shared ENCRYPTION_KEY is configured.
     ...(testSecretsService ? { testSecrets: testSecretsService } : {}),

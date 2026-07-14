@@ -89,7 +89,7 @@ export const testEnvironmentConnectionContract = defineApiContract({
 })
 
 // Validate that a target repo satisfies the provider's config expectations (e.g. a
-// Kargo `.kargo.yml` is present + well-formed). Nothing persisted.
+// provider's `.deploy.yml` is present + well-formed). Nothing persisted.
 export const validateEnvironmentRepoContract = defineApiContract({
   method: 'post',
   pathResolver: () => '/environments/connection/validate-repo',

@@ -151,7 +151,7 @@ export type RepoValidationSeverity = v.InferOutput<typeof repoValidationSeverity
 export const repoValidationIssueSchema = v.object({
   severity: repoValidationSeveritySchema,
   message: v.string(),
-  /** The repo-relative path the issue concerns, when applicable (e.g. `.kargo.yml`). */
+  /** The repo-relative path the issue concerns, when applicable (e.g. `.deploy.yml`). */
   path: v.optional(v.string()),
 })
 export type RepoValidationIssue = v.InferOutput<typeof repoValidationIssueSchema>

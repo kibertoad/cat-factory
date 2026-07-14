@@ -1600,7 +1600,7 @@
       },
       "ephemeralEnvironments": {
         "title": "Entorno de pruebas no configurado",
-        "body": "No hay ningún proveedor de entornos efímeros registrado, así que los agentes de pruebas que necesitan un entorno activo no pueden ejecutarse. Conecta uno para habilitarlos.",
+        "body": "No hay ningún proveedor de entornos efímeros registrado, así que los agentes de pruebas que necesitan un entorno de vista previa activo no pueden ejecutarse. Abre Entornos de prueba abajo y conecta un clúster de Kubernetes o un proveedor de entornos HTTP personalizado para habilitarlos.",
         "action": "Configurar entorno"
       },
       "binaryStorage": {
@@ -2511,7 +2511,7 @@
         "editTitle": "Editar {id}",
         "addTitle": "Añadir un tipo",
         "manifestId": "Id del manifiesto",
-        "manifestIdHelp": "Un slug en minúsculas y guiones, p. ej. my-kargo-template.",
+        "manifestIdHelp": "Un slug en minúsculas y guiones, p. ej. my-preview-template.",
         "label": "Etiqueta",
         "acceptsInputHint": "Pista de entrada (opcional)",
         "acceptsInputHintHelp": "Describe la forma de entrada que espera el proveedor.",

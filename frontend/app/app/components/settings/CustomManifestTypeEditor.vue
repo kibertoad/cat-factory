@@ -167,7 +167,7 @@ async function remove(type: CustomManifestType) {
         :label="t('settings.infrastructure.customType.manifestId')"
         :help="t('settings.infrastructure.customType.manifestIdHelp')"
       >
-        <UInput v-model="draft.manifestId" class="font-mono" placeholder="my-kargo-template" />
+        <UInput v-model="draft.manifestId" class="font-mono" placeholder="my-preview-template" />
       </UFormField>
       <UFormField :label="t('settings.infrastructure.customType.label')">
         <UInput v-model="draft.label" />

@@ -276,7 +276,7 @@ const customSavedManifest = computed<Record<string, unknown> | undefined>(() => 
 
 // The registry backend that builds the `remote-custom` handler's provider. The generic
 // built-in `manifest` (BYO HTTP API) is the default; a deployment that registered a native
-// custom env backend (e.g. Kargo) can be picked here so the handler is pinned to it instead of
+// custom env backend can be picked here so the handler is pinned to it instead of
 // silently resolving to the generic manifest provider. Only backends that serve the
 // `remote-custom` engine are offered (the snapshot advertises each backend's engines).
 const providerConnections = useProviderConnectionsStore()
@@ -342,7 +342,7 @@ async function saveCustom(payload: {
       provisionType: 'custom',
       manifestId: selectedCustomId.value,
       config,
-      // Pin the chosen registry backend so a native custom backend (e.g. Kargo) builds the
+      // Pin the chosen registry backend so a native custom backend builds the
       // provider — absent, the engine would resolve to the generic manifest provider.
       backendKind: selectedBackendKind.value,
       secrets: payload.secrets,

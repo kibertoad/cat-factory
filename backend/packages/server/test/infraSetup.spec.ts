@@ -9,7 +9,9 @@ import {
 // pins "present + valid enum" (per-area values legitimately differ by runtime); these tests pin the
 // actual detection: wired-but-unconfigured → `not_defined`, configured → `configured`, unwired →
 // `not_applicable`, that the agent-executor area only fires where a runner pool is the SOLE executor
-// (`agentExecutorRequiresRunnerPool`), and the fault-isolation that a throwing/hanging probe degrades
+// (`agentExecutorRequiresRunnerPool`) and the ephemeral-environments area only where a provider is
+// genuinely mandatory (`ephemeralEnvironmentsRequireProvider` — local docker-compose needs none),
+// and the fault-isolation that a throwing/hanging probe degrades
 // to `not_applicable` (logged) rather than 500-ing / stalling the board load.
 
 const WS = 'ws-1'
@@ -93,6 +95,43 @@ describe('snapshotInfraSetup', () => {
       agentExecutor: 'configured',
       binaryStorage: 'not_defined',
     })
+  })
+
+  it('ephemeralEnvironments is not_defined when a provider is required and none is registered (Worker / stock Node)', async () => {
+    const infra = await snapshotInfraSetup(
+      { environments: envSource(false), ephemeralEnvironmentsRequireProvider: true },
+      WS,
+    )
+    expect(infra.ephemeralEnvironments).toBe('not_defined')
+  })
+
+  it('ephemeralEnvironments is not_applicable when a zero-config default exists, even with no provider (local docker-compose)', async () => {
+    // Local mode on a Docker-family runtime stands the Tester's deps up with `local-compose` (no
+    // connection), so a missing provider must NOT nag — the `ephemeralEnvironmentsRequireProvider`
+    // gate keeps this `not_applicable` rather than the false-positive `not_defined`, mirroring the
+    // agent-executor gate above. The env probe is never even called.
+    let called = false
+    const infra = await snapshotInfraSetup(
+      {
+        environments: {
+          connectionService: {
+            hasConnection: async () => {
+              called = true
+              return false
+            },
+          },
+        },
+        ephemeralEnvironmentsRequireProvider: false,
+      },
+      WS,
+    )
+    expect(infra.ephemeralEnvironments).toBe('not_applicable')
+    expect(called).toBe(false)
+  })
+
+  it('ephemeralEnvironments defaults to required when the gate is unset (preserves hosted-facade nag)', async () => {
+    const infra = await snapshotInfraSetup({ environments: envSource(false) }, WS)
+    expect(infra.ephemeralEnvironments).toBe('not_defined')
   })
 
   it('agentExecutor is not_defined when the pool is the sole executor and none is registered (remote Node)', async () => {

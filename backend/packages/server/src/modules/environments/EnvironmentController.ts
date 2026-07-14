@@ -133,7 +133,7 @@ export function environmentController(): Hono<AppEnv> {
   })
 
   // Validate that a target repo satisfies the provider's config expectations (e.g. a
-  // Kargo `.kargo.yml` is present + well-formed). Nothing persisted.
+  // provider's `.deploy.yml` is present + well-formed). Nothing persisted.
   buildHonoRoute(app, validateEnvironmentRepoContract, async (c) => {
     const env = requireEnvironments(c)
     if (!env) return unavailable(c)

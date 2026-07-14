@@ -1600,7 +1600,7 @@
       },
       "ephemeralEnvironments": {
         "title": "Środowisko testowe nie jest skonfigurowane",
-        "body": "Nie zarejestrowano żadnego dostawcy środowisk efemerycznych, więc agenci testowi wymagający działającego środowiska nie mogą działać. Podłącz jednego, aby je włączyć.",
+        "body": "Nie zarejestrowano żadnego dostawcy środowisk efemerycznych, więc agenci testowi wymagający działającego środowiska podglądu nie mogą działać. Otwórz poniżej „Środowiska testowe” i podłącz klaster Kubernetes lub niestandardowego dostawcę środowisk HTTP, aby je włączyć.",
         "action": "Skonfiguruj środowisko"
       },
       "binaryStorage": {
@@ -2511,7 +2511,7 @@
         "editTitle": "Edytuj {id}",
         "addTitle": "Dodaj typ",
         "manifestId": "Id manifestu",
-        "manifestIdHelp": "Slug małymi literami z myślnikami, np. my-kargo-template.",
+        "manifestIdHelp": "Slug małymi literami z myślnikami, np. my-preview-template.",
         "label": "Etykieta",
         "acceptsInputHint": "Wskazówka wejścia (opcjonalnie)",
         "acceptsInputHintHelp": "Opisuje format wejścia oczekiwany przez dostawcę.",

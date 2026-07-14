@@ -1600,7 +1600,7 @@
       },
       "ephemeralEnvironments": {
         "title": "Environnement de test non configuré",
-        "body": "Aucun fournisseur d'environnements éphémères n'est enregistré, donc les agents de test qui nécessitent un environnement actif ne peuvent pas s'exécuter. Connectez-en un pour les activer.",
+        "body": "Aucun fournisseur d'environnements éphémères n'est enregistré, donc les agents de test qui nécessitent un environnement de prévisualisation actif ne peuvent pas s'exécuter. Ouvrez Environnements de test ci-dessous et connectez un cluster Kubernetes ou un fournisseur d'environnements HTTP personnalisé pour les activer.",
         "action": "Configurer l'environnement"
       },
       "binaryStorage": {
@@ -2511,7 +2511,7 @@
         "editTitle": "Modifier {id}",
         "addTitle": "Ajouter un type",
         "manifestId": "Id du manifeste",
-        "manifestIdHelp": "Un slug en minuscules avec des tirets, p. ex. my-kargo-template.",
+        "manifestIdHelp": "Un slug en minuscules avec des tirets, p. ex. my-preview-template.",
         "label": "Libellé",
         "acceptsInputHint": "Indice d'entrée (facultatif)",
         "acceptsInputHintHelp": "Décrit la forme d'entrée attendue par le fournisseur.",

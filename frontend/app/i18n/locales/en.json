@@ -1660,7 +1660,7 @@
       },
       "ephemeralEnvironments": {
         "title": "Test environment not configured",
-        "body": "No ephemeral environment provider is registered, so testing agents that need a live environment can't run. Connect one to enable them.",
+        "body": "No ephemeral environment provider is registered, so testing agents that need a live preview environment can't run. Open Test environments below and connect a Kubernetes cluster or a custom HTTP environment provider to enable them.",
         "action": "Configure environment"
       },
       "binaryStorage": {
@@ -1989,7 +1989,7 @@
         "editTitle": "Edit {id}",
         "addTitle": "Add a type",
         "manifestId": "Manifest id",
-        "manifestIdHelp": "A lower-kebab slug, e.g. my-kargo-template.",
+        "manifestIdHelp": "A lower-kebab slug, e.g. my-preview-template.",
         "label": "Label",
         "acceptsInputHint": "Input hint (optional)",
         "acceptsInputHintHelp": "Describes the input shape the provider expects.",
