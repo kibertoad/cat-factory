@@ -138,4 +138,26 @@ describe('FanOutEventPublisher', () => {
     await fanOut.executionChanged('wsA', execInstance('task1'))
     expect(calls).toBe(1)
   })
+
+  it('forwards to the target workspaces concurrently, not one after another', async () => {
+    // Each inner forward blocks until every target has entered — a serial `for await` chain
+    // would deadlock (the second forward never starts), so completing proves concurrency.
+    let entered = 0
+    let release!: () => void
+    const allEntered = new Promise<void>((r) => {
+      release = r
+    })
+    const inner = {
+      async executionChanged() {
+        entered++
+        if (entered === 3) release()
+        await allEntered
+      },
+    } as unknown as ExecutionEventPublisher
+    const fanOut = new FanOutEventPublisher(inner, {
+      workspaceMountRepository: mountRepo(['wsB', 'wsC']),
+    })
+    await fanOut.executionChanged('wsA', execInstance('task1'))
+    expect(entered).toBe(3)
+  })
 })

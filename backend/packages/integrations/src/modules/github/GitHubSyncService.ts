@@ -15,6 +15,19 @@ import type {
   UserRepoAccessRepository,
 } from '@cat-factory/kernel'
 import type { GitHubAvailableRepo, GitHubRepo, RepoTreeEntry } from '@cat-factory/kernel'
+import pMap from 'p-map'
+
+// How many repos one workspace resyncs at once, and how many workspaces one installation
+// backfills at once. These bound the concurrent call fan-out to stay well under GitHub's
+// secondary (abuse) rate limits while still collapsing the old serial chains. Modest on
+// purpose because the products STACK — and the true ceiling is a THREE-factor product, not
+// two: each `syncRepo` itself fires a fixed 4-wide resource wave (branches/PRs/issues/commits
+// in one `Promise.all`), so a full `backfillInstallation` peaks at
+// WORKSPACE_BACKFILL_CONCURRENCY × REPO_SYNC_CONCURRENCY × 4 = 3 × 4 × 4 = 48 concurrent GitHub
+// reads. That is comfortably under GitHub's ~100-concurrent guidance, but if either cap is ever
+// raised, multiply in the ×4 wave when re-checking the headroom.
+const REPO_SYNC_CONCURRENCY = 4
+const WORKSPACE_BACKFILL_CONCURRENCY = 3
 
 // ---------------------------------------------------------------------------
 // GitHubSyncService: keeps the local projections (repos/branches, PRs/issues,
@@ -415,8 +428,12 @@ export class GitHubSyncService {
     const installationId = repo.installationId
     const client = this.deps.githubClient
     const workspaces = await this.linkedWorkspaces(installationId, id)
+    // Fan a resource's projected rows out to every workspace that links the repo. The
+    // per-workspace applies are independent writes (each to its own workspace's projection),
+    // so run them concurrently rather than one-after-another — a repo shared by N workspaces
+    // then costs one write's latency per resource, not N.
     const fanOut = async (apply: (ws: string) => Promise<void>) => {
-      for (const ws of workspaces) await apply(ws)
+      await Promise.all(workspaces.map(apply))
     }
 
     // ETag-conditional cursor: carry the prior ETag forward when the fetch
@@ -430,72 +447,80 @@ export class GitHubSyncService {
         sinceIso: stampSince ? new Date(now).toISOString() : null,
       })
 
-    // Branches — conditional GET via ETag.
-    const branches = await this.syncResource(
-      installationId,
-      id,
-      'branches',
-      full,
-      (cursor) => client.listBranches(installationId, ref, cursor?.etag ?? undefined),
-      (items) => fanOut((ws) => this.deps.branchProjectionRepository.upsertMany(ws, items)),
-      etagCursor(false),
-    )
-    const defaultBranchSha =
-      branches.items.find((b) => b.name === repo.defaultBranch)?.headSha ?? null
-
-    // Pull requests — delta by `since` (GitHub's updated_at lower bound).
-    await this.syncResource(
-      installationId,
-      id,
-      'pulls',
-      full,
-      (cursor) =>
-        client.listPullRequests(installationId, ref, {
-          since: cursor?.sinceIso ?? undefined,
-          etag: cursor?.etag ?? undefined,
-        }),
-      (items) => fanOut((ws) => this.deps.pullRequestProjectionRepository.upsertMany(ws, items)),
-      etagCursor(true),
-    )
-
-    // Issues — delta by `since`.
-    await this.syncResource(
-      installationId,
-      id,
-      'issues',
-      full,
-      (cursor) =>
-        client.listIssues(installationId, ref, {
-          since: cursor?.sinceIso ?? undefined,
-          etag: cursor?.etag ?? undefined,
-        }),
-      (items) => fanOut((ws) => this.deps.issueProjectionRepository.upsertMany(ws, items)),
-      etagCursor(true),
-    )
-
-    // Commits — delta by `since` on the default branch. On the first sync there
-    // is no cursor, so fall back to the backfill horizon (if configured) instead
-    // of fetching the repo's entire commit history in one step.
+    // Commits fall back to the backfill horizon on the first sync (no cursor) instead of
+    // fetching the repo's entire history in one step — a plain sync computation, so hoist it
+    // out of the wave below.
     const commitBackfillSince =
       this.deps.commitBackfillHorizonMs !== undefined
         ? new Date(this.deps.clock.now() - this.deps.commitBackfillHorizonMs).toISOString()
         : undefined
-    await this.syncResource(
-      installationId,
-      id,
-      'commits',
-      full,
-      (cursor) =>
-        client.listCommits(installationId, ref, {
-          since: cursor?.sinceIso ?? commitBackfillSince,
+
+    // Branches, PRs, issues and commits are independent GitHub resources, each on its OWN
+    // installation-scoped cursor (no cross-kind ordering — `syncResource` reads+writes a single
+    // per-kind cursor), so fetch+upsert them in one concurrent wave rather than serially. This
+    // is a fixed 4-wide fan-out per repo (not data-scaled), so it doesn't risk the secondary
+    // rate limits the data-scaled loops below stay bounded against. Checks alone must wait: it
+    // needs the default-branch head resolved from the branch fetch.
+    const [branches] = await Promise.all([
+      // Branches — conditional GET via ETag.
+      this.syncResource(
+        installationId,
+        id,
+        'branches',
+        full,
+        (cursor) => client.listBranches(installationId, ref, cursor?.etag ?? undefined),
+        (items) => fanOut((ws) => this.deps.branchProjectionRepository.upsertMany(ws, items)),
+        etagCursor(false),
+      ),
+      // Pull requests — delta by `since` (GitHub's updated_at lower bound).
+      this.syncResource(
+        installationId,
+        id,
+        'pulls',
+        full,
+        (cursor) =>
+          client.listPullRequests(installationId, ref, {
+            since: cursor?.sinceIso ?? undefined,
+            etag: cursor?.etag ?? undefined,
+          }),
+        (items) => fanOut((ws) => this.deps.pullRequestProjectionRepository.upsertMany(ws, items)),
+        etagCursor(true),
+      ),
+      // Issues — delta by `since`.
+      this.syncResource(
+        installationId,
+        id,
+        'issues',
+        full,
+        (cursor) =>
+          client.listIssues(installationId, ref, {
+            since: cursor?.sinceIso ?? undefined,
+            etag: cursor?.etag ?? undefined,
+          }),
+        (items) => fanOut((ws) => this.deps.issueProjectionRepository.upsertMany(ws, items)),
+        etagCursor(true),
+      ),
+      // Commits — delta by `since` on the default branch. On the first sync there is no
+      // cursor, so fall back to the backfill horizon (if configured).
+      this.syncResource(
+        installationId,
+        id,
+        'commits',
+        full,
+        (cursor) =>
+          client.listCommits(installationId, ref, {
+            since: cursor?.sinceIso ?? commitBackfillSince,
+          }),
+        (items) => fanOut((ws) => this.deps.commitProjectionRepository.upsertMany(ws, items)),
+        (_prev, _etag, now) => ({
+          etag: null,
+          lastSyncedAt: now,
+          sinceIso: new Date(now).toISOString(),
         }),
-      (items) => fanOut((ws) => this.deps.commitProjectionRepository.upsertMany(ws, items)),
-      (_prev, _etag, now) => ({
-        etag: null,
-        lastSyncedAt: now,
-        sinceIso: new Date(now).toISOString(),
-      }),
-    )
+      ),
+    ])
+    const defaultBranchSha =
+      branches.items.find((b) => b.name === repo.defaultBranch)?.headSha ?? null
 
     // Check runs for the default-branch head (CI gating signal). Not cursor-based.
     if (defaultBranchSha) {
@@ -518,7 +543,7 @@ export class GitHubSyncService {
     await fanOut((ws) =>
       this.deps.repoProjectionRepository.upsertMany(ws, [{ ...repo, syncedAt: now }]),
     )
-    if (full) for (const ws of workspaces) await this.invalidateRepoProjection(ws)
+    if (full) await Promise.all(workspaces.map((ws) => this.invalidateRepoProjection(ws)))
   }
 
   /** Resync a single tracked repo by its GitHub id (used by the queue consumer). */
@@ -530,7 +555,11 @@ export class GitHubSyncService {
   /** Incremental resync of every repo this workspace links. */
   async resyncWorkspace(workspaceId: string): Promise<void> {
     const repos = await this.deps.repoProjectionRepository.list(workspaceId)
-    for (const repo of repos) await this.syncRepo(repo)
+    // Resync repos with bounded concurrency, not a serial chain nor an unbounded `Promise.all`:
+    // each `syncRepo` issues several GitHub reads, so a workspace linking many repos would
+    // otherwise crawl (serial) or burst enough concurrent calls to trip GitHub's secondary
+    // (abuse) rate limits (unbounded).
+    await pMap(repos, (repo) => this.syncRepo(repo), { concurrency: REPO_SYNC_CONCURRENCY })
   }
 
   /**
@@ -545,6 +574,10 @@ export class GitHubSyncService {
     if (!installation || installation.deletedAt) return
     const workspaceIds =
       await this.deps.githubInstallationRepository.listWorkspacesForInstallation(installationId)
-    for (const ws of workspaceIds) await this.resyncWorkspace(ws)
+    // Bounded per-workspace concurrency (each `resyncWorkspace` itself bounds its per-repo
+    // reads), so a large installation backfills in parallel without an unbounded GitHub burst.
+    await pMap(workspaceIds, (ws) => this.resyncWorkspace(ws), {
+      concurrency: WORKSPACE_BACKFILL_CONCURRENCY,
+    })
   }
 }

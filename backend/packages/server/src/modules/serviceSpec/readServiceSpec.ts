@@ -14,6 +14,7 @@ import {
   type SpecModule,
 } from '@cat-factory/contracts'
 import type { RepoContentEntry, RepoFiles } from '@cat-factory/kernel'
+import pMap from 'p-map'
 
 // Reassemble the SHARDED `spec/` artifact into a single {@link ServiceSpecView} for the
 // SPA, reading it checkout-free from the repo's default branch (main) via {@link RepoFiles}.
@@ -95,24 +96,6 @@ async function safeList(repo: RepoFiles, path: string, ref: string): Promise<Rep
   }
 }
 
-/** Map `items` through `fn` with at most `limit` in flight; results preserve input order. */
-async function mapLimit<T, R>(
-  items: T[],
-  limit: number,
-  fn: (item: T, index: number) => Promise<R>,
-): Promise<R[]> {
-  const results = Array.from<R>({ length: items.length })
-  let next = 0
-  const worker = async () => {
-    while (next < items.length) {
-      const i = next++
-      results[i] = await fn(items[i]!, i)
-    }
-  }
-  await Promise.all(Array.from({ length: Math.min(limit, items.length) }, worker))
-  return results
-}
-
 /** Read + reassemble the spec on `ref` (the repo default branch). Never throws. */
 export async function readServiceSpec(repo: RepoFiles, ref: string): Promise<ServiceSpecView> {
   // The presence anchor: no readable object `spec/service.json` ⇒ no spec on this branch.
@@ -132,26 +115,30 @@ export async function readServiceSpec(repo: RepoFiles, ref: string): Promise<Ser
   const groupSlugToName = new Map<string, string>()
 
   // Phase A: per module, read its `_module.json` (for the display name) and list its shards.
-  const moduleInfos = await mapLimit(moduleDirs, READ_CONCURRENCY, async (dir) => {
-    const slug = dir.name
-    const [meta, entries] = await Promise.all([
-      safeGetFile(repo, `${dir.path}/_module.json`, ref),
-      safeList(repo, dir.path, ref),
-    ])
-    const metaObj = (meta ? parseJson(meta.content) : undefined) as
-      | { name?: string; summary?: string }
-      | undefined
-    // Fall back to the slug for a blank name too (not only a missing one): `??` keeps `""`,
-    // which then fails the module schema and would silently drop the whole module + its
-    // valid groups. A corrupt/half-written `_module.json` should degrade to the slug instead.
-    const moduleName = nonEmptyString(metaObj?.name) ?? slug
-    moduleSlugToName.set(slug, moduleName)
-    // Every `*.json` except `_module.json` is one canonical group shard.
-    const shards = entries.filter(
-      (e) => e.type === 'file' && e.name.endsWith('.json') && e.name !== '_module.json',
-    )
-    return { slug, moduleName, summary: metaObj?.summary ?? '', shards }
-  })
+  const moduleInfos = await pMap(
+    moduleDirs,
+    async (dir) => {
+      const slug = dir.name
+      const [meta, entries] = await Promise.all([
+        safeGetFile(repo, `${dir.path}/_module.json`, ref),
+        safeList(repo, dir.path, ref),
+      ])
+      const metaObj = (meta ? parseJson(meta.content) : undefined) as
+        | { name?: string; summary?: string }
+        | undefined
+      // Fall back to the slug for a blank name too (not only a missing one): `??` keeps `""`,
+      // which then fails the module schema and would silently drop the whole module + its
+      // valid groups. A corrupt/half-written `_module.json` should degrade to the slug instead.
+      const moduleName = nonEmptyString(metaObj?.name) ?? slug
+      moduleSlugToName.set(slug, moduleName)
+      // Every `*.json` except `_module.json` is one canonical group shard.
+      const shards = entries.filter(
+        (e) => e.type === 'file' && e.name.endsWith('.json') && e.name !== '_module.json',
+      )
+      return { slug, moduleName, summary: metaObj?.summary ?? '', shards }
+    },
+    { concurrency: READ_CONCURRENCY },
+  )
 
   // Phase B: read every group shard across all modules through one bounded queue (this is the
   // largest fan-out), then validate PER SHARD so a malformed group is dropped, not the tree.
@@ -162,10 +149,11 @@ export async function readServiceSpec(repo: RepoFiles, ref: string): Promise<Ser
       entry,
     })),
   )
-  const shardContents = await mapLimit(shardRefs, READ_CONCURRENCY, async (s) => ({
-    ref: s,
-    file: await safeGetFile(repo, s.entry.path, ref),
-  }))
+  const shardContents = await pMap(
+    shardRefs,
+    async (s) => ({ ref: s, file: await safeGetFile(repo, s.entry.path, ref) }),
+    { concurrency: READ_CONCURRENCY },
+  )
   const groupsByModule = new Map<string, RequirementGroup[]>()
   for (const { ref: s, file } of shardContents) {
     const group = file ? coerceGroupShard(parseJson(file.content)) : undefined
@@ -208,16 +196,19 @@ async function readFeatureFiles(
   groupSlugToName: Map<string, string>,
 ): Promise<SpecFeatureFile[]> {
   const moduleDirs = (await safeList(repo, SPEC_FEATURES_DIR, ref)).filter((e) => e.type === 'dir')
-  const perModule = await mapLimit(moduleDirs, READ_CONCURRENCY, async (dir) => {
-    const entries = await safeList(repo, dir.path, ref)
-    return entries
-      .filter((e) => e.type === 'file' && e.name.endsWith('.feature'))
-      .map((entry) => ({ slug: dir.name, entry }))
-  })
+  const perModule = await pMap(
+    moduleDirs,
+    async (dir) => {
+      const entries = await safeList(repo, dir.path, ref)
+      return entries
+        .filter((e) => e.type === 'file' && e.name.endsWith('.feature'))
+        .map((entry) => ({ slug: dir.name, entry }))
+    },
+    { concurrency: READ_CONCURRENCY },
+  )
   const featureRefs = perModule.flat()
-  const read = await mapLimit(
+  const read = await pMap(
     featureRefs,
-    READ_CONCURRENCY,
     async (fr): Promise<SpecFeatureFile | null> => {
       const file = await safeGetFile(repo, fr.entry.path, ref)
       if (!file) return null
@@ -229,6 +220,7 @@ async function readFeatureFiles(
         content: file.content,
       }
     },
+    { concurrency: READ_CONCURRENCY },
   )
   return read.filter((x): x is SpecFeatureFile => x !== null)
 }
