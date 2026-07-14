@@ -106,4 +106,26 @@ describe('UserSecretService', () => {
       { userId: 'usr_1', kind: 'github_pat' },
     ])
   })
+
+  it('does not fail the write when onSecretChanged throws (best-effort invalidation)', async () => {
+    const repo = new FakeRepo()
+    // A cache invalidation that can't reach a peer (e.g. a notification-bus failure) must not
+    // surface as a failed store/remove — the write has already committed.
+    const service = new UserSecretService({
+      userSecretRepository: repo,
+      secretCipher: systemCipher,
+      clock: { now: () => 1000 },
+      onSecretChanged: async () => {
+        throw new Error('invalidation bus unreachable')
+      },
+    })
+    await expect(
+      service.store('usr_1', 'github_pat', { secret: 'ghp_abc' }),
+    ).resolves.toMatchObject({ kind: 'github_pat', hasSecret: true })
+    // The secret persisted despite the hook throwing...
+    expect(await service.get('usr_1', 'github_pat')).toMatchObject({ hasSecret: true })
+    // ...and remove likewise completes.
+    await expect(service.remove('usr_1', 'github_pat')).resolves.toBeUndefined()
+    expect(await service.get('usr_1', 'github_pat')).toBeNull()
+  })
 })

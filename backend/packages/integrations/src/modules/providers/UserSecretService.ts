@@ -81,14 +81,28 @@ export class UserSecretService {
       updatedAt: now,
     }
     await this.deps.userSecretRepository.upsert(record)
-    await this.deps.onSecretChanged?.(userId, kind)
+    await this.notifySecretChanged(userId, kind)
     return toStatus(record)
   }
 
   /** Remove the user's secret of a kind. */
   async remove(userId: string, kind: UserSecretKind): Promise<void> {
     await this.deps.userSecretRepository.remove(userId, kind)
-    await this.deps.onSecretChanged?.(userId, kind)
+    await this.notifySecretChanged(userId, kind)
+  }
+
+  /**
+   * Fire the best-effort post-write change hook (today the `viewerRepos` cache invalidation). The
+   * write has already committed, so a hook failure — e.g. a cache invalidation that can't reach a
+   * peer replica over its notification bus — must NOT surface as a failed `store`/`remove`; swallow
+   * it (the cache's short TTL self-heals) rather than reporting an error for a secret that WAS saved.
+   */
+  private async notifySecretChanged(userId: string, kind: UserSecretKind): Promise<void> {
+    try {
+      await this.deps.onSecretChanged?.(userId, kind)
+    } catch {
+      // Best-effort by contract; the cached enumeration lapses on its TTL if the drop didn't land.
+    }
   }
 
   /**
