@@ -1,7 +1,9 @@
 // A minimal async counting semaphore: bound how many async operations run at once.
-// Hand-rolled on purpose — the repo prefers a tiny in-tree limiter (the GitHub-read
-// `mapLimit`, the `withDirLock` mutex) over pulling `p-limit`/`Bottleneck`, which would
-// add a dependency behind the `minimumReleaseAge` install gate plus a `knip` ignore.
+// Hand-rolled because it is a genuinely different abstraction from a bounded `map` — a
+// shared FIFO permit/mutex acquired at scattered call sites (with abort-aware queueing),
+// not "run this list with a concurrency cap". Bounded-map fan-out uses `p-map` instead of
+// re-rolling that (see `GitHubSyncService`, `readServiceSpec`); this stays in-tree only
+// because `p-map` doesn't cover the shared-permit shape.
 //
 // Fairness is FIFO: waiters are released in the order they blocked, and a released permit
 // is handed straight to the next waiter (never returned to the pool and re-raced), so a

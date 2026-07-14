@@ -21,10 +21,16 @@ concurrently; no behaviour or wire-shape change.
   needs), and each resource's per-workspace projection writes fan out via `Promise.all` — so a
   repo shared by N workspaces costs one write's latency per resource, not N. The data-scaled
   `resyncWorkspace` (per repo) and `backfillInstallation` (per workspace) loops move from
-  serial to **bounded** concurrency via a small in-tree `mapLimit` helper, deliberately capped
-  (4 repos / 3 workspaces in flight) so a large installation backfills in parallel without an
-  unbounded burst of concurrent GitHub reads tripping the provider's secondary rate limits.
+  serial to **bounded** concurrency via `p-map`, deliberately capped (4 repos / 3 workspaces in
+  flight) so a large installation backfills in parallel without an unbounded burst of concurrent
+  GitHub reads tripping the provider's secondary rate limits.
+
+Also standardizes bounded-concurrency fan-out on `p-map` instead of hand-rolled limiters: the
+existing in-tree `mapLimit` in `readServiceSpec` (`@cat-factory/server`) is replaced with `p-map`
+too, so there's one blessed helper. The `@cat-factory/agents` `Semaphore` stays (it is a shared
+FIFO permit/mutex, not a bounded map — `p-map` doesn't cover that shape); only its comment is
+corrected.
 
 Pure orchestration changes in the shared packages (used identically by both runtime facades);
-no persistence or conformance surface. Pinned by new unit tests for the concurrent forwards,
-the concurrent resource wave / workspace fan-out, the bounded loops, and the `mapLimit` helper.
+no persistence or conformance surface. Pinned by new unit tests for the concurrent forwards and
+the concurrent resource wave / workspace fan-out / bounded loops.

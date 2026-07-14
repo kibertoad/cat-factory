@@ -368,15 +368,19 @@ branches / PRs / issues / commits, each on its OWN installation-scoped cursor, s
 ordering to preserve (`syncResource` reads+writes a single per-kind cursor) — fetch+upsert in
 one `Promise.all` wave; checks stays after the wave because it needs the branch head. The
 data-scaled loops (`resyncWorkspace` per repo, `backfillInstallation` per workspace) move from
-serial to **bounded** concurrency via a new in-tree `mapLimit` helper
-(`integrations/modules/shared/mapLimit.ts`), capped at `REPO_SYNC_CONCURRENCY = 4` /
+serial to **bounded** concurrency via `p-map`, capped at `REPO_SYNC_CONCURRENCY = 4` /
 `WORKSPACE_BACKFILL_CONCURRENCY = 3` — parallel but not an unbounded burst, so a large
 installation backfills fast without tripping GitHub's secondary (abuse) rate limits (the
 concern item 24 tracks for the dispatch path). The intra-repo resource wave is a fixed 4-wide
-fan-out (not data-scaled), so it needs no bound. Pure orchestration, no persistence surface;
-pinned by a new `GitHubSyncService.parallelism.test.ts` (concurrent resource wave, concurrent
-workspace fan-out, both bounded loops) + a `mapLimit` unit test. The existing cursor/cache
-tests are unaffected (per-kind cursors + ordered invalidation preserved).
+fan-out (not data-scaled), so it needs no bound. This slice also standardizes bounded-map
+fan-out on `p-map` project-wide: the pre-existing hand-rolled `mapLimit` in `readServiceSpec`
+(`@cat-factory/server`) is replaced with `p-map` too (the `@cat-factory/agents` `Semaphore`
+stays — it is a shared FIFO permit/mutex, not a bounded map, which `p-map` doesn't cover).
+Pure orchestration, no persistence surface; pinned by a new
+`GitHubSyncService.parallelism.test.ts` (concurrent resource wave, concurrent workspace
+fan-out, both bounded loops). The existing cursor/cache tests are unaffected (per-kind cursors
+
+- ordered invalidation preserved).
 
 ### 13. `AgentContextBuilder` re-walks ancestry per resolver, serially — P2
 

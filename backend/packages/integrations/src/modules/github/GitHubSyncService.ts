@@ -15,7 +15,7 @@ import type {
   UserRepoAccessRepository,
 } from '@cat-factory/kernel'
 import type { GitHubAvailableRepo, GitHubRepo, RepoTreeEntry } from '@cat-factory/kernel'
-import { mapLimit } from '../shared/mapLimit.js'
+import pMap from 'p-map'
 
 // How many repos one workspace resyncs at once, and how many workspaces one installation
 // backfills at once. Each unit issues several GitHub reads, so these bound the concurrent
@@ -555,7 +555,7 @@ export class GitHubSyncService {
     // each `syncRepo` issues several GitHub reads, so a workspace linking many repos would
     // otherwise crawl (serial) or burst enough concurrent calls to trip GitHub's secondary
     // (abuse) rate limits (unbounded).
-    await mapLimit(repos, REPO_SYNC_CONCURRENCY, (repo) => this.syncRepo(repo))
+    await pMap(repos, (repo) => this.syncRepo(repo), { concurrency: REPO_SYNC_CONCURRENCY })
   }
 
   /**
@@ -572,6 +572,8 @@ export class GitHubSyncService {
       await this.deps.githubInstallationRepository.listWorkspacesForInstallation(installationId)
     // Bounded per-workspace concurrency (each `resyncWorkspace` itself bounds its per-repo
     // reads), so a large installation backfills in parallel without an unbounded GitHub burst.
-    await mapLimit(workspaceIds, WORKSPACE_BACKFILL_CONCURRENCY, (ws) => this.resyncWorkspace(ws))
+    await pMap(workspaceIds, (ws) => this.resyncWorkspace(ws), {
+      concurrency: WORKSPACE_BACKFILL_CONCURRENCY,
+    })
   }
 }
