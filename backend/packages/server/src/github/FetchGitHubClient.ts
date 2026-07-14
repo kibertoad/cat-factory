@@ -305,21 +305,43 @@ export class FetchGitHubClient implements GitHubClient {
     // installation id is a placeholder here (the picker dedups by github id); the link flow
     // attributes the row to the workspace's real installation.
     const syncedAt = this.deps.clock.now()
-    const items: GitHubRepo[] = []
-    let url: string | undefined =
-      `/user/repos?per_page=${PER_PAGE}&sort=full_name&affiliation=owner,collaborator,organization_member`
-    let page = 0
-    for (; url && page < MAX_PAGES; page++) {
+    const base = `/user/repos?per_page=${PER_PAGE}&sort=full_name&affiliation=owner,collaborator,organization_member`
+    const map = (json: unknown): GitHubRepo[] =>
+      ((json as gp.GhRepoPayload[] | null) ?? []).map((r) => ({
+        ...gp.toRepoProjection(r, 0, syncedAt),
+        linkedVia: 'user_pat' as const,
+      }))
+
+    // Page 1 first: its `Link: rel="last"` header reveals how many pages the token spans, so the
+    // rest fetch CONCURRENTLY rather than walking `next` one blocking request at a time. A broad
+    // PAT (hundreds–thousands of repos) thus costs ~2 round-trips instead of ~MAX_PAGES serial
+    // ones — the difference between a snappy picker and a ~17s stall.
+    const first = await this.requestWithToken(base, token)
+    const items: GitHubRepo[] = map(first.json)
+
+    if (first.last && first.last > 1) {
+      const lastPage = Math.min(first.last, MAX_PAGES)
+      const rest = await Promise.all(
+        Array.from({ length: lastPage - 1 }, (_, i) =>
+          this.requestWithToken(`${base}&page=${i + 2}`, token),
+        ),
+      )
+      for (const r of rest) items.push(...map(r.json))
+      // A `last` beyond our page cap means the token reaches more repos than we enumerated.
+      return { items, truncated: first.last > MAX_PAGES }
+    }
+
+    // No `last` advertised (rare for offset pagination): fall back to the serial `next` walk so
+    // completeness is never traded for the speed-up. A `next` still present at the page cap means
+    // the token reaches more than we enumerated — flag it so the access-cache refresh records
+    // additively rather than replacing (a truncated REPLACE would drop reachable repos and
+    // fail-closed-redact the user's own frames).
+    let url = first.next
+    for (let page = 1; url && page < MAX_PAGES; page++) {
       const { json, next } = await this.requestWithToken(url, token)
-      const repos = (json as gp.GhRepoPayload[] | null) ?? []
-      for (const r of repos) {
-        items.push({ ...gp.toRepoProjection(r, 0, syncedAt), linkedVia: 'user_pat' })
-      }
+      items.push(...map(json))
       url = next
     }
-    // A `next` link still present at the page cap means the token reaches more repos than we
-    // enumerated — flag it so the access-cache refresh records additively rather than replacing
-    // (a truncated REPLACE would drop reachable repos and fail-closed-redact the user's own frames).
     return { items, truncated: Boolean(url) }
   }
 
@@ -344,7 +366,7 @@ export class FetchGitHubClient implements GitHubClient {
   private async requestWithToken(
     pathOrUrl: string,
     token: string,
-  ): Promise<{ json: unknown; next?: string }> {
+  ): Promise<{ json: unknown; next?: string; last?: number }> {
     const url = pathOrUrl.startsWith('http') ? pathOrUrl : `${this.deps.apiBase}${pathOrUrl}`
     const res = await fetch(url, {
       headers: {
@@ -371,7 +393,8 @@ export class FetchGitHubClient implements GitHubClient {
       )
     }
     const json = res.status === 204 ? null : await res.json().catch(() => null)
-    return { json, next: parseNextLink(res.headers.get('link')) }
+    const link = res.headers.get('link')
+    return { json, next: parseNextLink(link), last: parseLastPage(link) }
   }
 
   async canPush(installationId: number, ref: GitHubRepoRef): Promise<boolean> {
@@ -1356,6 +1379,27 @@ function parseNextLink(link: string | null): string | undefined {
   for (const part of link.split(',')) {
     const match = part.match(/<([^>]+)>\s*;\s*rel="next"/)
     if (match) return match[1]
+  }
+  return undefined
+}
+
+/**
+ * The page number from a `Link` header's `rel="last"` entry (GitHub advertises it alongside
+ * `next` for offset-paginated collections like `/user/repos`), so a caller can fetch the
+ * remaining pages CONCURRENTLY instead of walking `next` one blocking request at a time.
+ * Undefined when the header omits `last` (single page, or a cursor-paginated endpoint).
+ */
+function parseLastPage(link: string | null): number | undefined {
+  if (!link) return undefined
+  for (const part of link.split(',')) {
+    const match = part.match(/<([^>]+)>\s*;\s*rel="last"/)
+    if (!match) continue
+    try {
+      const page = Number(new URL(match[1]!).searchParams.get('page'))
+      return Number.isFinite(page) && page > 0 ? page : undefined
+    } catch {
+      return undefined
+    }
   }
   return undefined
 }

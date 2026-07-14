@@ -1,6 +1,29 @@
-import type { GitHubRepo } from '@cat-factory/kernel'
+import type { GitHubRepo, GroupCacheHandle } from '@cat-factory/kernel'
 import { describe, expect, it } from 'vitest'
 import { GitHubSyncService, type GitHubSyncServiceDependencies } from './GitHubSyncService.js'
+
+// A minimal in-memory GroupCacheHandle mirroring layered-loader's contract: a hit returns the
+// cached value; a miss runs `load` and stores its result; a THROWING load stores nothing and
+// propagates (so a transient failure isn't cached). `${group}:${key}` scopes an entry to its group.
+function makeCache<T>(): GroupCacheHandle<T> {
+  const store = new Map<string, T>()
+  const scope = (key: string, group: string) => `${group} ${key}`
+  return {
+    get: async (key, group, load) => {
+      const k = scope(key, group)
+      if (store.has(k)) return store.get(k) as T
+      const value = await load()
+      store.set(k, value)
+      return value
+    },
+    invalidate: async (key, group) => void store.delete(scope(key, group)),
+    invalidateGroup: async (group) => {
+      // Deleting an already-yielded key mid-iteration is safe per the Map spec.
+      for (const k of store.keys()) if (k.startsWith(`${group} `)) store.delete(k)
+    },
+    invalidateAll: async () => store.clear(),
+  }
+}
 
 // Focused coverage for the add-service repo picker's typeahead: a query is matched
 // server-side in realtime (searchInstallationRepos), while a blank query browses the whole
@@ -111,9 +134,11 @@ interface AccessCalls {
 function makePatService(opts: {
   appRepos: GitHubRepo[]
   personal?: { items: GitHubRepo[]; truncated?: boolean } | (() => never)
-}): { service: GitHubSyncService; access: AccessCalls } {
+  viewerReposCache?: GroupCacheHandle<GitHubRepo[]>
+}): { service: GitHubSyncService; access: AccessCalls; enumerations: () => number } {
   const access: AccessCalls = { replace: [], record: [] }
   const personal = opts.personal
+  let enumerations = 0
   const deps = {
     githubInstallationRepository: {
       getByWorkspace: async () => ({
@@ -132,6 +157,7 @@ function makePatService(opts: {
           : []
       },
       listReposForToken: async () => {
+        enumerations++
         if (typeof personal === 'function') return personal()
         return { items: personal?.items ?? [], truncated: personal?.truncated }
       },
@@ -143,9 +169,10 @@ function makePatService(opts: {
       recordAccessible: async (userId: string, repos: unknown[]) =>
         void access.record.push({ userId, count: repos.length }),
     },
+    ...(opts.viewerReposCache ? { viewerReposCache: opts.viewerReposCache } : {}),
     clock: { now: () => 123 },
   } as unknown as GitHubSyncServiceDependencies
-  return { service: new GitHubSyncService(deps), access }
+  return { service: new GitHubSyncService(deps), access, enumerations: () => enumerations }
 }
 
 describe('GitHubSyncService.listAvailableRepos — personal PAT expansion', () => {
@@ -201,5 +228,78 @@ describe('GitHubSyncService.listAvailableRepos — personal PAT expansion', () =
     expect(result.map((r) => r.githubId)).toEqual([11])
     expect(access.replace).toHaveLength(0)
     expect(access.record).toHaveLength(0)
+  })
+})
+
+describe('GitHubSyncService.listAvailableRepos — viewer-repos cache', () => {
+  const personalRepos = [repo(10, 'me', 'content-type-app-engine'), repo(11, 'me', 'scratch')]
+
+  it('enumerates once and serves later keystrokes from the cache', async () => {
+    const viewerReposCache = makeCache<GitHubRepo[]>()
+    const { service, enumerations } = makePatService({
+      appRepos: [],
+      personal: { items: personalRepos },
+      viewerReposCache,
+    })
+    const user = { userId: 'usr_a', userToken: 'tok' }
+
+    const first = await service.listAvailableRepos('ws', { q: 'con', ...user })
+    const second = await service.listAvailableRepos('ws', { q: 'content-type', ...user })
+
+    // Both keystrokes filter the SAME cached enumeration in memory — one GitHub walk, not two.
+    expect(first.map((r) => r.githubId)).toEqual([10])
+    expect(second.map((r) => r.githubId)).toEqual([10])
+    expect(enumerations()).toBe(1)
+  })
+
+  it('scopes the cache per user (a different viewer re-enumerates)', async () => {
+    const viewerReposCache = makeCache<GitHubRepo[]>()
+    const { service, enumerations } = makePatService({
+      appRepos: [],
+      personal: { items: personalRepos },
+      viewerReposCache,
+    })
+    await service.listAvailableRepos('ws', { q: 'content', userId: 'usr_a', userToken: 'tok' })
+    await service.listAvailableRepos('ws', { q: 'content', userId: 'usr_b', userToken: 'tok' })
+    expect(enumerations()).toBe(2)
+  })
+
+  it('caches nothing on a transient enumeration failure (next keystroke retries)', async () => {
+    const viewerReposCache = makeCache<GitHubRepo[]>()
+    let calls = 0
+    const { service } = makePatService({
+      // An App repo that matches the query, so the degrade-to-App-only is observable.
+      appRepos: [repo(1, 'acme', 'content-hub')],
+      // Fail the first enumeration, succeed the second — a cached failure would starve the retry.
+      personal: (() => {
+        calls++
+        if (calls === 1) throw new Error('503 unavailable')
+        return { items: personalRepos }
+      }) as unknown as () => never,
+      viewerReposCache,
+    })
+    const user = { q: 'content', userId: 'usr_a', userToken: 'tok' }
+
+    const first = await service.listAvailableRepos('ws', user)
+    // Degrades to App-only, and the failure is NOT cached...
+    expect(first.map((r) => r.githubId)).toEqual([1])
+    const second = await service.listAvailableRepos('ws', user)
+    // ...so the next keystroke re-enumerates and now finds the personal repo.
+    expect(second.filter((r) => r.personal).map((r) => r.githubId)).toEqual([10])
+    expect(calls).toBe(2)
+  })
+
+  it('drops the cached enumeration for a user when invalidated (PAT change)', async () => {
+    const viewerReposCache = makeCache<GitHubRepo[]>()
+    const { service, enumerations } = makePatService({
+      appRepos: [],
+      personal: { items: personalRepos },
+      viewerReposCache,
+    })
+    const user = { q: 'content', userId: 'usr_a', userToken: 'tok' }
+    await service.listAvailableRepos('ws', user)
+    await viewerReposCache.invalidateGroup('usr_a')
+    await service.listAvailableRepos('ws', user)
+    expect(enumerations()).toBe(2)
   })
 })

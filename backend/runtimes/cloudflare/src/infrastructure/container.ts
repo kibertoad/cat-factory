@@ -2181,7 +2181,13 @@ export function buildContainer(
 
   // The per-user generic secret store (a GitHub PAT today) — shared by the user-secret
   // controller; also backs the run-initiator PAT resolver used by the executor + gates.
-  const userSecrets = buildUserSecretService(env, db, clock, userSecretKindRegistry)
+  const userSecrets = buildUserSecretService(
+    env,
+    db,
+    clock,
+    userSecretKindRegistry,
+    caches.viewerRepos,
+  )
 
   // The per-workspace OpenRouter dynamic-catalog store — shared by the catalog controller,
   // the per-workspace model catalog's dynamic OpenRouter entries, and the spend overlay.

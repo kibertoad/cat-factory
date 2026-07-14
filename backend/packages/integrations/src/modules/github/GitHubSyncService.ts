@@ -74,6 +74,15 @@ export interface GitHubSyncServiceDependencies {
    * Worker's pass-through profile) ⇒ the invalidations are no-ops.
    */
   repoProjectionCache?: GroupCacheHandle<GitHubRepo[]>
+  /**
+   * Per-user cache of the signed-in viewer's PAT-reachable repo enumeration
+   * (`AppCaches.viewerRepos`), grouped AND keyed by user id. The add-service picker's typeahead
+   * filters this cached set in memory instead of re-walking the whole `/user/repos` set (up to a
+   * bounded page count, one request per page) on every keystroke. Invalidated when the user's
+   * stored PAT changes; the short TTL backstops repos created straight on GitHub. Absent (tests /
+   * the Worker's pass-through profile) ⇒ the enumeration runs live per request.
+   */
+  viewerReposCache?: GroupCacheHandle<GitHubRepo[]>
 }
 
 export class GitHubSyncService {
@@ -163,14 +172,36 @@ export class GitHubSyncService {
     query: string | undefined,
   ): Promise<GitHubRepo[]> {
     const { userToken, userId } = opts
-    if (!userToken || !this.deps.githubClient.listReposForToken) return []
+    const listReposForToken = this.deps.githubClient.listReposForToken
+    if (!userToken || !listReposForToken) return []
+
+    // Hot path — the add-service picker's typeahead (a query is always present). Serve the token's
+    // repo enumeration from the per-user cache and filter it in memory, so a keystroke costs a
+    // substring scan of a cached complete set rather than re-walking the whole `/user/repos` set on
+    // every request. A transient enumeration failure caches NOTHING (the load rejects, so `get`
+    // rejects) and degrades to App-only here — never 500s the picker. The blank browse-all below
+    // stays uncached: it also refreshes the fail-closed access projection and wants fresh data.
+    if (query && userId && this.deps.viewerReposCache) {
+      const q = query.toLowerCase()
+      let items: GitHubRepo[]
+      try {
+        items = await this.deps.viewerReposCache.get(userId, userId, async () => {
+          const fresh = await listReposForToken(userToken)
+          return fresh.items
+        })
+      } catch {
+        return []
+      }
+      return items.filter((r) => `${r.owner}/${r.name}`.toLowerCase().includes(q))
+    }
+
     // A stored PAT can be expired/revoked while still decrypting fine (or GitHub can be
     // unreachable). Enumerating with it must NOT 500 the whole available-repos listing — the App
     // repos still have to render — so degrade to App-only on any failure (mirrors the link path's
     // `getRepoForToken` best-effort contract).
     let page: Paged<GitHubRepo>
     try {
-      page = await this.deps.githubClient.listReposForToken(userToken)
+      page = await listReposForToken(userToken)
     } catch {
       return []
     }

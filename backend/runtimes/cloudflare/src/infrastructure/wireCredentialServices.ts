@@ -1,4 +1,9 @@
-import type { Clock, ResolveUserGitHubToken } from '@cat-factory/kernel'
+import type {
+  Clock,
+  GitHubRepo,
+  GroupCacheHandle,
+  ResolveUserGitHubToken,
+} from '@cat-factory/kernel'
 import {
   ApiKeyService,
   LocalModelEndpointService,
@@ -166,6 +171,10 @@ export function buildUserSecretService(
   // PAT resolver) never consult the kind registry, so they omit it (default); only the
   // container-wired service that serves describe/test needs the injected instance.
   userSecretKindRegistry?: UserSecretKindRegistry,
+  // The per-user viewer-repos cache (`AppCaches.viewerRepos`). A `github_pat` write/removal drops
+  // the user's cached PAT repo enumeration. Pass-through on the Worker's isolate-safe profile, so
+  // this invalidation is a no-op there — wired for parity with Node, where it caches.
+  viewerReposCache?: GroupCacheHandle<GitHubRepo[]>,
 ): UserSecretService | undefined {
   const masterKeyBase64 = env.ENCRYPTION_KEY?.trim()
   if (!masterKeyBase64) return undefined
@@ -174,6 +183,12 @@ export function buildUserSecretService(
     secretCipher: new WebCryptoSecretCipher({ masterKeyBase64, info: 'cat-factory:user-secret' }),
     clock,
     ...(userSecretKindRegistry ? { userSecretKindRegistry } : {}),
+    ...(viewerReposCache
+      ? {
+          onSecretChanged: (userId, kind) =>
+            kind === 'github_pat' ? viewerReposCache.invalidateGroup(userId) : undefined,
+        }
+      : {}),
   })
 }
 
