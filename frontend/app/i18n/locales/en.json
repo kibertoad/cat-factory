@@ -538,6 +538,7 @@
       "token": "Enter your token to continue",
       "password": "Enter a personal password of at least 6 characters"
     },
+    "saved": "{vendor} credentials stored securely",
     "expires": "Expires {date}",
     "noExpiry": "No expiry set",
     "renewal": {

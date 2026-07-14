@@ -2569,6 +2569,7 @@
       "token": "Geben Sie Ihr Token ein, um fortzufahren",
       "password": "Geben Sie ein persönliches Passwort mit mindestens 6 Zeichen ein"
     },
+    "saved": "{vendor}-Zugangsdaten sicher gespeichert",
     "expires": "Läuft ab am {date}",
     "noExpiry": "Kein Ablaufdatum gesetzt",
     "renewal": {

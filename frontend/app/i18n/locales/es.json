@@ -487,6 +487,7 @@
       "token": "Introduce tu token para continuar",
       "password": "Introduce una contraseña personal de al menos 6 caracteres"
     },
+    "saved": "Credenciales de {vendor} guardadas de forma segura",
     "expires": "Caduca el {date}",
     "noExpiry": "Sin fecha de caducidad",
     "renewal": {
