@@ -295,7 +295,7 @@ async function resolveExceeded(choice: 'extra-round' | 'proceed' | 'stop-reset')
 
         <div class="flex min-h-0 flex-1 flex-col lg:flex-row">
           <!-- main column -->
-          <div class="min-w-0 flex-1 overflow-y-auto px-6 py-5">
+          <div class="min-h-0 min-w-0 flex-1 overflow-y-auto px-6 py-5">
             <p class="mb-4 text-sm text-slate-400">
               <i18n-t keypath="brainstorm.intro" tag="span" scope="global">
                 <template #subject>{{ subjectNoun }}</template>

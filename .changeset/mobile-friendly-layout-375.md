@@ -32,6 +32,8 @@ good-citizen pattern (P-1 restack / P-6 reflow); no new responsive system is int
   `lg` (copying the `RequirementsReviewWindow` reference: informational stats collapse, the
   actions stay reachable). The `AgentStepDetail` table-of-contents rail was verified redundant
   on mobile (a jump-nav duplicating headings already in the scrollable prose), so it stays
-  hidden below `lg` — only its stray `md:` breakpoint is normalized to the `lg` cutoff.
+  hidden below `lg` — only its stray `md:` breakpoint is normalized to the `lg` cutoff. The two
+  restacked main columns also get `min-h-0` so their `overflow-y-auto` engages on the mobile
+  column axis (without it a tall main column overflows and pushes the bottom rail out of view).
 
 No user-facing copy added, so no i18n/locale changes.

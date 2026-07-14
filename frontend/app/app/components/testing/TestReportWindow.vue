@@ -374,7 +374,7 @@ const GROUP_STATUS_META: Record<ScenarioGroup['status'], { icon: string; text: s
 
         <div class="flex min-h-0 flex-1 flex-col lg:flex-row">
           <!-- Main: infrastructure observability + scenarios → outcomes → concerns tree -->
-          <div class="min-w-0 flex-1 space-y-4 overflow-y-auto px-5 py-4">
+          <div class="min-h-0 min-w-0 flex-1 space-y-4 overflow-y-auto px-5 py-4">
             <!-- Infrastructure: container lifecycle (where + what it's doing), the
                  ephemeral environment, and the run's infra attempts + logs — parity with
                  the Coder's step detail. Shown even before a report lands, so the infra
