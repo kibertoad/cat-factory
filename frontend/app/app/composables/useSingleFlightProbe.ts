@@ -33,8 +33,13 @@ export function useSingleFlightProbe(
 
   function start(id: string | null): Promise<void> {
     const p = Promise.resolve(run()).finally(() => {
-      probedId = id
+      // Only record "settled for this board" / clear the in-flight slot when a NEWER probe hasn't
+      // superseded us. Otherwise an out-of-order completion — an older probe for board A resolving
+      // after a newer probe for board B — would stamp probedId back to A and force a redundant
+      // re-probe of B on the next ensureProbed. The newer probe owns `inFlight`, so it records the
+      // board that's actually current.
       if (inFlight === p) {
+        probedId = id
         inFlight = null
         inFlightId = null
       }

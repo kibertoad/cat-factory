@@ -23,20 +23,27 @@ export function markBoot(milestone: string): void {
   if (typeof performance === 'undefined' || typeof performance.mark !== 'function') return
   seen.add(milestone)
   const mark = `${PREFIX}:${milestone}`
+  const prev = previousMark
   try {
     performance.mark(mark)
+  } catch {
+    return
+  }
+  // Advance the chain as soon as the mark itself lands, INDEPENDENT of the derived measures below.
+  // Some engines reject the numeric-`start` measure form; if that throws we still want the NEXT
+  // milestone to measure its segment from THIS mark rather than a stale earlier one.
+  previousMark = mark
+  try {
     // Absolute time from navigation start (DOMHighResTimeStamp 0 = timeOrigin) to this milestone.
     performance.measure(`${PREFIX}:open→${milestone}`, { start: 0, end: mark })
     // The segment since the previous milestone — the waterfall bar.
-    if (previousMark) {
-      performance.measure(`${PREFIX}:${previousMark.slice(PREFIX.length + 1)}→${milestone}`, {
-        start: previousMark,
+    if (prev) {
+      performance.measure(`${PREFIX}:${prev.slice(PREFIX.length + 1)}→${milestone}`, {
+        start: prev,
         end: mark,
       })
     }
-    previousMark = mark
   } catch {
-    // Some engines reject the numeric-`start` measure form; the marks still land, so the trace is
-    // usable and we simply skip the derived measures.
+    // Derived measures unsupported on this engine; the marks still land, so the trace is usable.
   }
 }

@@ -82,4 +82,33 @@ describe('useSingleFlightProbe', () => {
     resolve()
     await Promise.all([refresh, ensured])
   })
+
+  it('a superseded out-of-order completion does not stamp a stale probedId', async () => {
+    // ws1 probe starts, then a switch to ws2 starts a second — and ws2 (the newer, current board)
+    // resolves BEFORE the older ws1 probe. The late ws1 completion must NOT record ws1 as the
+    // settled board, else the next ensureProbed() for ws2 would redundantly re-run.
+    let id = 'ws1'
+    let n = 0
+    let resolve1!: () => void
+    let resolve2!: () => void
+    const run = vi.fn(() => {
+      n++
+      return new Promise<void>((r) => (n === 1 ? (resolve1 = r) : (resolve2 = r)))
+    })
+    const { ensureProbed } = useSingleFlightProbe(run, () => id)
+
+    const p1 = ensureProbed() // starts ws1
+    id = 'ws2'
+    const p2 = ensureProbed() // starts ws2 (a switch — different id)
+    expect(run).toHaveBeenCalledTimes(2)
+
+    resolve2() // the current board settles first
+    await p2
+    resolve1() // the superseded older probe settles late
+    await p1
+
+    // ws2 is the current, settled board → ensureProbed() is a no-op, not a third (redundant) run.
+    await ensureProbed()
+    expect(run).toHaveBeenCalledTimes(2)
+  })
 })
