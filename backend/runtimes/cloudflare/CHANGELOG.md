@@ -1,5 +1,53 @@
 # @cat-factory/worker
 
+## 0.83.8
+
+### Patch Changes
+
+- b34ab46: Clean up the now-stale error-string classifier comments (deferred tail of error-message coverage I5).
+
+  The string-fallback classifiers (`classify{Agent,Bootstrap,Repair}Failure`) were deleted in I5, so
+  the harness comments claiming the watchdog abort phrases (`no agent activity`, `max duration`)
+  "MUST stay stable" because they're regex-matched downstream are no longer true — the backend now
+  classifies purely on the structured `FailureCause` the harness already emits. Reworded
+  `failure.ts` / `runner.ts` to say the abort wording is human-readable only and free to change; the
+  one phrase that stays load-bearing is the facade-owned eviction sentinel
+  `(container evicted or crashed)`, matched by `isContainerEvictionError` for a dispatch-time throw
+  that carries no job view.
+
+  Also fixed the stale inline comment in the Cloudflare transport's 404 branch (worker facade) that
+  still claimed the eviction string is regex-classified by the bootstrap flow — it now reads the
+  structured `evicted` field.
+
+  Harness image bump (comment-only `src/**` edit, but any `src/**` change re-tags the image): the
+  emitted bytes are unchanged, so this is a byte-identical republish that carries the version through
+  the runner-image-tag pins.
+
+- b34ab46: Classify errors by structured fields, not strings, on three more paths (error-message initiative I5/I6/I7).
+
+  - **I7 — installation-token-gone:** the App token mint now throws a named
+    `InstallationTokenMintError` carrying the HTTP `status` as a field, wrapped once at the mint site
+    in `GitHubAppAuth`. The stale-installation reconcile (`reconcileStaleRepos`) classifies via the
+    `installationTokenMintStatusOf` extractor — an `instanceof` check deliberately specific to the mint
+    error, so a repo-level 404 can never be mistaken for a gone installation — and the log-level check
+    reads the repo-level `GitHubApiError.status` structurally too. Both errors throw in-process, so
+    there is NO message-regex fallback (we target current installations only). The elaborated C3 remedy
+    text is free to change without breaking the tombstone decision.
+  - **I5 — delete the string-fallback classifiers:** with the structured `RunnerJobView.evicted` field
+    and the harness `failureCause` now minted by every in-repo transport, the superseded error-string
+    fallbacks are removed — `classifyAgentFailure` / `classifyBootstrapFailure` / `classifyRepairFailure`
+    are gone (the sites default to the coarse `agent`), and `evictionKindOf`'s string fallback (plus
+    `isTransientEviction` and the exported `TRANSIENT_EVICTION_MARKER`) is dropped in favour of reading
+    the `evicted` field directly. `isContainerEvictionError` is kept for the dispatch-time eviction
+    throw, which carries no job view. Backend/runtime-only; no executor-harness image change.
+  - **I6 — first-wrap-point rule:** codified (the named boundaries — git stderr, pg driver errors,
+    kubectl/k3s stderr — already conformed): third-party text is classified once, where it enters the
+    system, into a named error with a machine field; nothing downstream re-parses the prose.
+
+- Updated dependencies [b34ab46]
+  - @cat-factory/server@0.113.8
+  - @cat-factory/orchestration@0.107.6
+
 ## 0.83.7
 
 ### Patch Changes
