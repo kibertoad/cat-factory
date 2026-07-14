@@ -31,6 +31,10 @@ export interface FanOutEventPublisherDependencies {
  * client reconciles any miss by re-fetching its snapshot. When a block can't be resolved to
  * a service (e.g. a legacy workspace-local block, or a coarse `boardChanged` with no block)
  * it falls back to delivering to the originating workspace only.
+ *
+ * The per-target forwards are independent (one DO round-trip per mounting workspace on the
+ * Worker), so they run concurrently via `Promise.all` — a shared service mounted on N boards
+ * pays one round-trip's latency, not N serial ones — rather than awaiting each in turn.
  */
 export class FanOutEventPublisher implements ExecutionEventPublisher {
   constructor(
@@ -55,9 +59,8 @@ export class FanOutEventPublisher implements ExecutionEventPublisher {
     instance: ExecutionInstance,
     block?: Block | null,
   ): Promise<void> {
-    for (const ws of await this.targets(workspaceId, block?.id ?? instance.blockId)) {
-      await this.inner.executionChanged(ws, instance, block)
-    }
+    const targets = await this.targets(workspaceId, block?.id ?? instance.blockId)
+    await Promise.all(targets.map((ws) => this.inner.executionChanged(ws, instance, block)))
   }
 
   async boardChanged(
@@ -70,9 +73,10 @@ export class FanOutEventPublisher implements ExecutionEventPublisher {
     // bootstrap finished) must prompt a refresh on EVERY board that mounts it. When the caller
     // names a block of the affected service we resolve it to that set; a genuinely block-less
     // signal falls back to the originating workspace only.
-    for (const ws of await this.targets(workspaceId, blockId)) {
-      await this.inner.boardChanged(ws, reason, blockId, originConnectionId)
-    }
+    const targets = await this.targets(workspaceId, blockId)
+    await Promise.all(
+      targets.map((ws) => this.inner.boardChanged(ws, reason, blockId, originConnectionId)),
+    )
   }
 
   async bootstrapChanged(
@@ -80,9 +84,8 @@ export class FanOutEventPublisher implements ExecutionEventPublisher {
     job: BootstrapJob,
     block?: Block | null,
   ): Promise<void> {
-    for (const ws of await this.targets(workspaceId, block?.id ?? job.blockId)) {
-      await this.inner.bootstrapChanged?.(ws, job, block)
-    }
+    const targets = await this.targets(workspaceId, block?.id ?? job.blockId)
+    await Promise.all(targets.map((ws) => this.inner.bootstrapChanged?.(ws, job, block)))
   }
 
   // A repair run has no board block, so there's no shared-service fan-out — it is purely
@@ -97,9 +100,8 @@ export class FanOutEventPublisher implements ExecutionEventPublisher {
   }
 
   async notificationChanged(workspaceId: string, notification: Notification): Promise<void> {
-    for (const ws of await this.targets(workspaceId, notification.blockId)) {
-      await this.inner.notificationChanged?.(ws, notification)
-    }
+    const targets = await this.targets(workspaceId, notification.blockId)
+    await Promise.all(targets.map((ws) => this.inner.notificationChanged?.(ws, notification)))
   }
 
   async llmCallObserved(workspaceId: string, activity: LlmCallActivity): Promise<void> {
@@ -111,38 +113,32 @@ export class FanOutEventPublisher implements ExecutionEventPublisher {
   }
 
   async requirementReviewChanged(workspaceId: string, review: RequirementReview): Promise<void> {
-    for (const ws of await this.targets(workspaceId, review.blockId)) {
-      await this.inner.requirementReviewChanged?.(ws, review)
-    }
+    const targets = await this.targets(workspaceId, review.blockId)
+    await Promise.all(targets.map((ws) => this.inner.requirementReviewChanged?.(ws, review)))
   }
 
   async consensusSessionChanged(workspaceId: string, session: ConsensusSession): Promise<void> {
-    for (const ws of await this.targets(workspaceId, session.blockId)) {
-      await this.inner.consensusSessionChanged?.(ws, session)
-    }
+    const targets = await this.targets(workspaceId, session.blockId)
+    await Promise.all(targets.map((ws) => this.inner.consensusSessionChanged?.(ws, session)))
   }
 
   async clarityReviewChanged(workspaceId: string, review: ClarityReview): Promise<void> {
-    for (const ws of await this.targets(workspaceId, review.blockId)) {
-      await this.inner.clarityReviewChanged?.(ws, review)
-    }
+    const targets = await this.targets(workspaceId, review.blockId)
+    await Promise.all(targets.map((ws) => this.inner.clarityReviewChanged?.(ws, review)))
   }
 
   async brainstormSessionChanged(workspaceId: string, session: BrainstormSession): Promise<void> {
-    for (const ws of await this.targets(workspaceId, session.blockId)) {
-      await this.inner.brainstormSessionChanged?.(ws, session)
-    }
+    const targets = await this.targets(workspaceId, session.blockId)
+    await Promise.all(targets.map((ws) => this.inner.brainstormSessionChanged?.(ws, session)))
   }
 
   async initiativeChanged(workspaceId: string, initiative: Initiative): Promise<void> {
-    for (const ws of await this.targets(workspaceId, initiative.blockId)) {
-      await this.inner.initiativeChanged?.(ws, initiative)
-    }
+    const targets = await this.targets(workspaceId, initiative.blockId)
+    await Promise.all(targets.map((ws) => this.inner.initiativeChanged?.(ws, initiative)))
   }
 
   async docInterviewChanged(workspaceId: string, session: DocInterviewSession): Promise<void> {
-    for (const ws of await this.targets(workspaceId, session.blockId)) {
-      await this.inner.docInterviewChanged?.(ws, session)
-    }
+    const targets = await this.targets(workspaceId, session.blockId)
+    await Promise.all(targets.map((ws) => this.inner.docInterviewChanged?.(ws, session)))
   }
 }

@@ -36,6 +36,7 @@
     "@cat-factory/contracts": "workspace:*",
     "@cat-factory/kernel": "workspace:*",
     "ai": "^6.0.224",
+    "p-map": "^7.0.5",
     "yaml": "^2.9.0"
   },
   "devDependencies": {

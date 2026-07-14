@@ -513,6 +513,7 @@
       "token": "Saisissez votre jeton pour continuer",
       "password": "Saisissez un mot de passe personnel d'au moins 6 caractères"
     },
+    "saved": "Identifiants {vendor} enregistrés en toute sécurité",
     "expires": "Expire le {date}",
     "noExpiry": "Aucune date d'expiration",
     "renewal": {

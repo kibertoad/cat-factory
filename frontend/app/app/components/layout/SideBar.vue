@@ -139,7 +139,7 @@ watch(
     :aria-modal="drawerOpen ? 'true' : undefined"
     :aria-label="isCompact ? t('nav.menu') : undefined"
     :inert="isCompact && !ui.mobileNavOpen"
-    class="fixed inset-y-0 start-0 z-40 flex h-full w-64 shrink-0 flex-col gap-4 overflow-y-auto border-e border-slate-800 bg-slate-900/95 p-3 backdrop-blur transition-transform duration-200 focus:outline-none lg:static lg:z-auto lg:translate-x-0 lg:bg-slate-900/80"
+    class="fixed inset-y-0 start-0 z-40 flex h-full w-64 shrink-0 flex-col gap-4 overflow-y-auto border-e border-slate-800 bg-slate-900/95 px-3 pt-3 pb-[calc(0.75rem+env(safe-area-inset-bottom))] backdrop-blur transition-transform duration-200 focus:outline-none lg:static lg:z-auto lg:translate-x-0 lg:bg-slate-900/80"
     :class="
       ui.mobileNavOpen ? 'translate-x-0' : '-translate-x-full rtl:translate-x-full lg:translate-x-0'
     "

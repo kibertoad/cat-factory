@@ -513,6 +513,7 @@
       "token": "Devam etmek için token'ınızı girin",
       "password": "En az 6 karakterlik kişisel bir parola girin"
     },
+    "saved": "{vendor} kimlik bilgileri güvenli şekilde kaydedildi",
     "expires": "Son kullanma {date}",
     "noExpiry": "Son kullanma tarihi ayarlanmadı",
     "renewal": {
