@@ -9,6 +9,31 @@
   user-select: text;
 }
 
+/* Keep bottom-anchored toasts clear of the home indicator / rounded corner on
+ * phones. `env(safe-area-inset-bottom)` is 0 until the viewport meta carries
+ * `viewport-fit=cover` (see nuxt.config.ts), so this is inert on desktop. */
+[data-slot='viewport'] {
+  padding-bottom: env(safe-area-inset-bottom);
+}
+
+/* Input font floor (P-3): iOS Safari auto-zooms the viewport whenever a focused
+ * field renders below 16px, which yanks the layout around on every tap into an
+ * input. Floor every editable control at 16px on coarse-pointer (touch) devices.
+ * This is the app-wide, fix-once guard: it reaches Nuxt UI's rendered
+ * `<input>`/`<textarea>` AND every hand-rolled raw field, and — unlike a
+ * component-default override — cannot be defeated by a per-instance `size="sm"`.
+ * `max(16px, 1em)` floors at 16px while leaving any deliberately larger field
+ * (1em resolves against the surrounding font size) untouched. Fine-pointer
+ * (desktop) keeps the denser typography. Checkbox/radio/range/color have no
+ * text baseline and never trigger the zoom, so they're excluded. */
+@media (pointer: coarse) {
+  input:not([type='checkbox']):not([type='radio']):not([type='range']):not([type='color']),
+  textarea,
+  select {
+    font-size: max(16px, 1em);
+  }
+}
+
 /* ---- Agent Architecture Board: shared visual language ---------------------- */
 
 :root {
