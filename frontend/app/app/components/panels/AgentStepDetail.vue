@@ -237,10 +237,13 @@ async function copyOutput() {
         role="dialog"
         aria-modal="true"
       >
-        <!-- ToC sidebar (only meaningful when there are prose headings) -->
+        <!-- ToC sidebar (only meaningful when there are prose headings). Hidden below `lg`
+             (the compact cutoff): it is a jump-nav duplicating headings already present in
+             the scrollable prose, so it stays a wide-screen convenience rather than restacking
+             a vertical nav into a top strip. -->
         <aside
           v-if="outline.hasToc"
-          class="hidden w-72 shrink-0 flex-col border-e border-slate-800 bg-slate-900/60 md:flex"
+          class="hidden w-72 shrink-0 flex-col border-e border-slate-800 bg-slate-900/60 lg:flex"
         >
           <div class="border-b border-slate-800 px-4 py-3">
             <div class="text-[11px] font-semibold uppercase tracking-wide text-slate-500">

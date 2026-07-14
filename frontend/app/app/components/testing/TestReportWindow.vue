@@ -372,9 +372,9 @@ const GROUP_STATUS_META: Record<ScenarioGroup['status'], { icon: string; text: s
           </button>
         </header>
 
-        <div class="flex min-h-0 flex-1">
+        <div class="flex min-h-0 flex-1 flex-col lg:flex-row">
           <!-- Main: infrastructure observability + scenarios → outcomes → concerns tree -->
-          <div class="min-w-0 flex-1 space-y-4 overflow-y-auto px-5 py-4">
+          <div class="min-h-0 min-w-0 flex-1 space-y-4 overflow-y-auto px-5 py-4">
             <!-- Infrastructure: container lifecycle (where + what it's doing), the
                  ephemeral environment, and the run's infra attempts + logs — parity with
                  the Coder's step detail. Shown even before a report lands, so the infra
@@ -840,9 +840,11 @@ const GROUP_STATUS_META: Record<ScenarioGroup['status'], { icon: string; text: s
             </template>
           </div>
 
-          <!-- Sidebar: metadata -->
+          <!-- Sidebar: metadata — a right-hand column on wide screens, a full-width section
+               below the report on mobile (outcome counts / environment / run metadata are not
+               redundant with the header verdict badge, so they reflow rather than hide). -->
           <aside
-            class="hidden w-60 shrink-0 flex-col gap-4 border-s border-slate-800 bg-slate-900/50 px-4 py-4 lg:flex"
+            class="flex w-full shrink-0 flex-col gap-4 border-t border-slate-800 bg-slate-900/50 px-4 py-4 lg:w-60 lg:border-s lg:border-t-0"
           >
             <div v-if="report">
               <h4 class="mb-2 text-[11px] font-semibold uppercase tracking-wide text-slate-500">

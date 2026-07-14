@@ -293,9 +293,9 @@ async function resolveExceeded(choice: 'extra-round' | 'proceed' | 'stop-reset')
           </div>
         </header>
 
-        <div class="flex min-h-0 flex-1">
+        <div class="flex min-h-0 flex-1 flex-col lg:flex-row">
           <!-- main column -->
-          <div class="min-w-0 flex-1 overflow-y-auto px-6 py-5">
+          <div class="min-h-0 min-w-0 flex-1 overflow-y-auto px-6 py-5">
             <p class="mb-4 text-sm text-slate-400">
               <i18n-t keypath="brainstorm.intro" tag="span" scope="global">
                 <template #subject>{{ subjectNoun }}</template>
@@ -498,10 +498,14 @@ async function resolveExceeded(choice: 'extra-round' | 'proceed' | 'stop-reset')
             </template>
           </div>
 
-          <!-- right action rail -->
-          <aside class="hidden w-72 shrink-0 flex-col border-s border-slate-800 lg:flex">
+          <!-- action rail: a right-hand column on wide screens, a bottom action bar below
+               `lg` (never hidden — the informational stats collapse away below `lg`, but the
+               actions themselves must stay reachable on a phone). -->
+          <aside
+            class="flex w-full shrink-0 flex-col border-t border-slate-800 lg:w-72 lg:border-s lg:border-t-0"
+          >
             <div class="flex flex-col gap-4 px-4 py-5">
-              <div v-if="session" class="space-y-2 text-xs text-slate-400">
+              <div v-if="session" class="hidden space-y-2 text-xs text-slate-400 lg:block">
                 <div class="flex items-center justify-between">
                   <span>{{ t('brainstorm.rail.options') }}</span>
                   <span class="text-slate-300">{{ session.items.length }}</span>

@@ -695,7 +695,7 @@ const statusLabel = computed<Record<BootstrapStatus, string>>(() => ({
                 class="w-full"
               />
             </UFormField>
-            <div class="grid grid-cols-2 gap-2">
+            <div class="grid grid-cols-1 gap-2 sm:grid-cols-2">
               <UFormField :label="t('bootstrap.arch.repoOwner')" required>
                 <UInput
                   v-model="archForm.repoOwner"

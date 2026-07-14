@@ -117,7 +117,9 @@ function openApprovalFor(approvalId: string) {
       </div>
     </header>
 
-    <div class="grid flex-1 grid-cols-[1fr_300px] gap-6 overflow-hidden p-6">
+    <div
+      class="grid flex-1 grid-cols-1 gap-6 overflow-y-auto p-6 lg:grid-cols-[1fr_300px] lg:overflow-hidden"
+    >
       <!-- main: pipeline flow -->
       <section
         class="flex flex-col overflow-auto rounded-2xl border border-slate-800 bg-slate-900/60 p-6"

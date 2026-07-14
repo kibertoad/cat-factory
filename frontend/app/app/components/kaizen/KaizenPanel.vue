@@ -151,7 +151,7 @@ function statusLabel(g: KaizenGrading): string {
               <UIcon name="i-lucide-history" class="h-4 w-4 text-teal-400" />
               {{ t('kaizen.history.title') }}
             </h2>
-            <div class="overflow-hidden rounded-lg border border-slate-800">
+            <div class="overflow-x-auto rounded-lg border border-slate-800">
               <table class="w-full text-start text-xs">
                 <thead class="bg-slate-900/60 text-[11px] uppercase tracking-wide text-slate-500">
                   <tr>
