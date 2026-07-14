@@ -67,16 +67,12 @@ describe('InstallationTokenMintError (I7 structured code)', () => {
     expect(installationTokenMintStatusOf(new InstallationTokenMintError(1, 410))).toBe(410)
   })
 
-  it('reads the status of a boundary-crossed (plain-object) mint error via the name tag', () => {
-    // A serialized/structured-cloned error loses its class but keeps `name` + `status`.
-    expect(installationTokenMintStatusOf({ name: 'InstallationTokenMintError', status: 401 })).toBe(
-      401,
-    )
-  })
-
-  it('returns undefined for a non-mint status-bearing error (a repo-level GitHubApiError)', () => {
-    // A repo-level 404 also has a `status`, but is NOT a gone installation — must not be read.
-    expect(installationTokenMintStatusOf({ name: 'GitHubApiError', status: 404 })).toBeUndefined()
+  it('returns undefined for anything that is not a real mint error', () => {
+    // A repo-level error also carries a `status`, but is NOT a gone installation — the mint
+    // status is read ONLY off the class (in-process throw), never a look-alike plain object.
+    expect(
+      installationTokenMintStatusOf({ name: 'InstallationTokenMintError', status: 401 }),
+    ).toBeUndefined()
     expect(installationTokenMintStatusOf(new Error('Failed to mint … (HTTP 404)'))).toBeUndefined()
   })
 })

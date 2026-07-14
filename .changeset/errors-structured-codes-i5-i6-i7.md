@@ -9,10 +9,11 @@ Classify errors by structured fields, not strings, on three more paths (error-me
 - **I7 — installation-token-gone:** the App token mint now throws a named
   `InstallationTokenMintError` carrying the HTTP `status` as a field, wrapped once at the mint site
   in `GitHubAppAuth`. The stale-installation reconcile (`reconcileStaleRepos`) classifies via the
-  `installationTokenMintStatusOf` extractor — deliberately specific to the mint error, so a
-  repo-level 404 can never be mistaken for a gone installation — and the message regexes are demoted
-  to an old-producer fallback. The elaborated C3 remedy text is now free to change without breaking
-  the tombstone decision.
+  `installationTokenMintStatusOf` extractor — an `instanceof` check deliberately specific to the mint
+  error, so a repo-level 404 can never be mistaken for a gone installation — and the log-level check
+  reads the repo-level `GitHubApiError.status` structurally too. Both errors throw in-process, so
+  there is NO message-regex fallback (we target current installations only). The elaborated C3 remedy
+  text is free to change without breaking the tombstone decision.
 - **I5 — delete the string-fallback classifiers:** with the structured `RunnerJobView.evicted` field
   and the harness `failureCause` now minted by every in-repo transport, the superseded error-string
   fallbacks are removed — `classifyAgentFailure` / `classifyBootstrapFailure` / `classifyRepairFailure`

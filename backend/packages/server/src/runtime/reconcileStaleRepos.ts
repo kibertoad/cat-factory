@@ -3,6 +3,7 @@ import type {
   GitHubInstallationRepository,
   RepoProjectionRepository,
 } from '@cat-factory/kernel'
+import { GitHubApiError } from '../github/FetchGitHubClient.js'
 import { installationTokenMintStatusOf } from '../github/GitHubAppAuth.js'
 import type { Logger } from '../observability/logger.js'
 
@@ -94,38 +95,38 @@ export async function reconcileStaleRepos(
   return synced
 }
 
-/**
- * Whether a sync error is a *gone/forbidden GitHub App installation* rather than a
- * transient fault: minting an installation token for an uninstalled or revoked
- * installation returns 401/404 (and a deleted repo 404/410). These are not worth
- * an error-level log or a retry storm — the connection needs human action.
- *
- * Prefers the structured mint status; the message regex is the OLD-PRODUCER fallback for a
- * mint error that crossed a boundary as plain text (and it also catches a repo-level
- * `(HTTP 404)` that carries no mint class).
- */
-function isInstallationGoneError(error: unknown): boolean {
-  const mintStatus = installationTokenMintStatusOf(error)
-  if (mintStatus !== undefined)
-    return mintStatus === 401 || mintStatus === 404 || mintStatus === 410
-  const message = error instanceof Error ? error.message : String(error)
-  return /\(HTTP (401|404|410)\)/.test(message)
+/** The gone/forbidden HTTP statuses: an uninstalled/revoked install or a deleted/inaccessible repo. */
+function isGoneStatus(status: number): boolean {
+  return status === 401 || status === 404 || status === 410
 }
 
 /**
- * Whether the error is specifically a *token mint* returning 404/410 — i.e. the
- * installation itself is gone (uninstalled/revoked), not merely a single repo
- * being inaccessible. Excludes 401 (a transient app-JWT/clock fault would mint-fail for
- * every installation, and must not tombstone a healthy connection).
+ * Whether a sync error is a *gone/forbidden GitHub App installation or repo* rather than a
+ * transient fault: minting an installation token for an uninstalled or revoked installation
+ * returns 401/404, and a deleted/inaccessible repo returns 404/410. These are not worth an
+ * error-level log or a retry storm — the connection needs human action.
  *
- * Prefers the structured {@link installationTokenMintStatusOf} — which is set ONLY on a real
- * mint failure, so a repo-level 404 (a `GitHubApiError`, no mint class) can never be mistaken
- * for a gone installation. The message regex is the OLD-PRODUCER fallback for a mint error that
- * lost its class identity across a boundary.
+ * Reads the structured HTTP status off the two errors the sync driver throws — the
+ * {@link InstallationTokenMintError} (via {@link installationTokenMintStatusOf}) and the repo-level
+ * {@link GitHubApiError} — both in-process, so `instanceof` is authoritative and no message is
+ * parsed.
+ */
+function isInstallationGoneError(error: unknown): boolean {
+  const status =
+    installationTokenMintStatusOf(error) ??
+    (error instanceof GitHubApiError ? error.status : undefined)
+  return status !== undefined && isGoneStatus(status)
+}
+
+/**
+ * Whether the error is specifically a *token mint* returning 404/410 — i.e. the installation
+ * itself is gone (uninstalled/revoked), not merely a single repo being inaccessible. Reads the
+ * structured {@link installationTokenMintStatusOf}, which is set ONLY on a real mint failure, so a
+ * repo-level 404 (a {@link GitHubApiError}) can never be mistaken for a gone installation. Excludes
+ * 401 (a transient app-JWT/clock fault would mint-fail for every installation, and must not
+ * tombstone a healthy connection).
  */
 function isInstallationTokenGoneError(error: unknown): boolean {
   const mintStatus = installationTokenMintStatusOf(error)
-  if (mintStatus !== undefined) return mintStatus === 404 || mintStatus === 410
-  const message = error instanceof Error ? error.message : String(error)
-  return /Failed to mint installation token .*\(HTTP (404|410)\)/i.test(message)
+  return mintStatus === 404 || mintStatus === 410
 }
