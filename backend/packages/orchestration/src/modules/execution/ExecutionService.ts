@@ -2874,6 +2874,9 @@ export class ExecutionService {
     const dependents = blocks.filter(
       (b) => b.level === 'task' && b.dependsOn.includes(mergedBlockId),
     )
+    // Nothing depends on the merged block (the common case) — skip the cross-workspace
+    // augment and the pipeline list entirely rather than paying reads with no dependent to act on.
+    if (dependents.length === 0) return
     // A dependent's OTHER blockers may live in another workspace (a shared service); resolve
     // them so `dependenciesMet` doesn't treat a cross-workspace blocker as missing-⇒-satisfied.
     await this.augmentWithCrossWorkspaceDeps(
