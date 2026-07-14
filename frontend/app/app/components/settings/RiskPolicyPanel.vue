@@ -267,7 +267,7 @@ async function create() {
         />
       </div>
 
-      <div class="grid grid-cols-2 gap-3 sm:grid-cols-4">
+      <div class="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-4">
         <label class="block">
           <span class="mb-1 block text-[10px] uppercase tracking-wide text-slate-500">
             {{ t('settings.riskPolicy.field.maxComplexity') }}
@@ -350,7 +350,10 @@ async function create() {
           :label="t('settings.riskPolicy.forkDecision.label')"
           :description="t('settings.riskPolicy.forkDecision.hint')"
         />
-        <div v-if="drafts[p.id]!.forkEnabled" class="mt-3 grid grid-cols-2 gap-3 sm:grid-cols-4">
+        <div
+          v-if="drafts[p.id]!.forkEnabled"
+          class="mt-3 grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-4"
+        >
           <label class="block">
             <span class="mb-1 block text-[10px] uppercase tracking-wide text-slate-500">
               {{ t('settings.riskPolicy.forkDecision.minComplexity') }}
