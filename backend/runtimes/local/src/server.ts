@@ -17,7 +17,7 @@ import { validateRegistrationsOnce } from '@cat-factory/orchestration'
 import type { BackendRegistries } from '@cat-factory/integrations'
 import { applyLocalDefaults, withLocalEnvCliAdvice } from './config.js'
 import { buildLocalContainer } from './container.js'
-import { describePatProbeVerdict, githubPatCreationUrl, probeGitHubPat } from './github.js'
+import { githubPatCreationUrl, warnOnGitHubPatProblemInBackground } from './github.js'
 import {
   RECOMMENDED_HARNESS_IMAGE,
   type ImageExec,
@@ -124,10 +124,11 @@ async function bootLocal(
   // or HOST=127.0.0.1 on Docker Desktop (where host.docker.internal still resolves).
   const localized = applyLocalDefaults(env)
 
-  // Time local mode's OWN awaited preflights (app-startup initiative, item 1): the Node `start()`
-  // it delegates to logs its own phase breakdown, but the runtime + PAT probes run BEFORE that and
-  // are otherwise untimed. One summary line makes a slow github.com PAT round-trip (item 6) or a
-  // wedged container CLI visible without guessing.
+  // Time local mode's OWN preflights (app-startup initiative, item 1): the Node `start()` it
+  // delegates to logs its own phase breakdown, but the runtime preflight runs BEFORE that and is
+  // otherwise untimed. One summary line makes a wedged container CLI visible without guessing. The
+  // github.com PAT probe used to be awaited here too (item 6) but is now fire-and-forget, so the
+  // `patProbe` bracket only measures the near-instant kick — it no longer stalls the boot path.
   const bootClock = startBootClock()
 
   // Container-runtime preflight: log the selected runtime + its capabilities + the host
@@ -163,10 +164,11 @@ async function bootLocal(
   } else if (localized.GITHUB_PAT?.trim()) {
     // A PAT IS set (GitHub mode): validate it once at boot so an invalid / expired / under-scoped
     // token surfaces here — with the same one-click fix as the missing case — instead of failing
-    // opaquely on the first clone/push/PR/CI/merge later. Best-effort: a network hiccup or timeout
-    // leaves it unprobed (probeGitHubPat returns undefined), so it never blocks or crashes boot.
-    const warning = describePatProbeVerdict((await probeGitHubPat(localized)) ?? { ok: true })
-    if (warning) logger.warn(warning)
+    // opaquely on the first clone/push/PR/CI/merge later. FIRE-AND-FORGET (app-startup initiative,
+    // item 6): the probe is a real github.com round-trip and best-effort diagnostics only (an
+    // invalid PAT still fails loudly on first use), so it must not hold the boot path for a network
+    // hop — it logs its warning if/when the bounded probe later resolves.
+    warnOnGitHubPatProblemInBackground(localized, logger)
   }
   bootClock.mark('patProbe')
   const preflight = bootClock.summary()

@@ -309,6 +309,28 @@ export function describePatProbeVerdict(verdict: PatProbeVerdict): string | unde
 }
 
 /**
+ * Fire the boot-time {@link probeGitHubPat} check WITHOUT blocking boot (app-startup initiative,
+ * item 6), logging {@link describePatProbeVerdict}'s warning (if any) when the bounded github.com
+ * round-trip later resolves. The probe is best-effort diagnostics — an invalid / expired /
+ * under-scoped PAT still fails LOUDLY on the first clone/push/PR/CI/merge — so it must not hold the
+ * listener for a network hop to github.com. Returns immediately; never throws (`probeGitHubPat`
+ * swallows network errors and the resolution handler is defensively guarded). `fetchImpl` +
+ * `timeoutMs` are injectable for tests.
+ */
+export function warnOnGitHubPatProblemInBackground(
+  env: NodeJS.ProcessEnv,
+  log: { warn: (msg: string) => void },
+  opts: { fetchImpl?: typeof fetch; timeoutMs?: number } = {},
+): void {
+  void probeGitHubPat(env, opts)
+    .then((verdict) => {
+      const warning = describePatProbeVerdict(verdict ?? { ok: true })
+      if (warning) log.warn(warning)
+    })
+    .catch(() => {})
+}
+
+/**
  * A GitLab "new personal access token" URL with the scopes a coding agent needs
  * pre-selected, so a developer without a GitLab PAT can click straight through to create
  * one. `api` covers repo read/write + merge; `read_user` lets the login resolve the
