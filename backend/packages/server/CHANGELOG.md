@@ -1,5 +1,62 @@
 # @cat-factory/server
 
+## 0.119.0
+
+### Minor Changes
+
+- d68e3a8: Add opt-in OpenTelemetry (OTLP) observability. A new `@cat-factory/observability-otel`
+  package implements the kernel `LlmTraceSink` port and exports LLM generations (+ container
+  tool spans) and metrics to any OTLP/HTTP backend — a workerd-safe fetch exporter on the
+  Cloudflare Worker facade and the official `@opentelemetry/*` SDK exporter on Node, kept
+  conformant by a shared mapping layer + a conformity test.
+
+  - **kernel:** new `CompositeTraceSink` + `composeTraceSinks` so multiple external trace
+    destinations (Langfuse and/or OTLP) fan out through the single sink slot.
+  - **server:** new `OtelConfig` on `AppConfig`.
+  - **worker / node-server:** wire the OTLP exporter (fetch on the Worker, SDK on Node)
+    everywhere the Langfuse sink is wired, composed alongside Langfuse. Enabled with
+    `OTEL_ENABLED=true` + `OTEL_EXPORTER_OTLP_ENDPOINT` (`OTEL_EXPORTER_OTLP_HEADERS` /
+    `OTEL_SERVICE_NAME` optional).
+  - **cli:** advertise the `OTEL_*` vars in the generated `.env`.
+
+  Refinements: the Node facade shares ONE trace-sink instance across the core, the container
+  executor and the inline model-provider (so the SDK exporter's batch processors/timers aren't
+  duplicated) and flushes + shuts it down on graceful shutdown (via `LlmTraceSink.shutdown` /
+  `CompositeTraceSink` fan-out) so the final batch isn't dropped. Metric data points carry only
+  the low-cardinality `gen_ai.*` dimensions — the unbounded workspace id stays on spans, off
+  metrics — to keep metric-backend cardinality bounded.
+
+- b414f34: PR deep-review: resolve a parked review by fixing or posting the selected findings.
+
+  The `pr-review` window now offers two terminal resolutions alongside `Finish`, both acting on
+  the human's curated finding selection:
+
+  - **Fix** re-dispatches the `pr-reviewer` step as a Fixer (`FIXER_AGENT_KIND`) that clones the
+    reviewed PR's head branch, commits fixes addressing the selected findings, and pushes back onto
+    it (no new PR).
+  - **Post** publishes the selected findings as a single advisory (`COMMENT`) inline PR review — each
+    line-anchored finding as an inline comment, the rest folded into the review body.
+
+  Two new optional VCS reads/writes back these resolutions — `getPullRequestHeadRef` and
+  `createReview` on the neutral `VcsClient` + `GitHubClient` ports (GitHub-implemented, omitted on
+  GitLab), surfaced to the engine through the checkout-free `RepoFiles` seam. All review state stays
+  on `step.prReview` (no side table); a cross-runtime conformance assertion covers both resolutions.
+
+  Scoped to a same-repo, non-fork PR (the reviewer's existing limitation); a cross-repo `prUrl` and
+  fork PRs remain a tracked follow-up. See `backend/docs/adr/0023-pr-deep-review.md`.
+
+### Patch Changes
+
+- Updated dependencies [d68e3a8]
+- Updated dependencies [b414f34]
+  - @cat-factory/kernel@0.128.0
+  - @cat-factory/contracts@0.132.0
+  - @cat-factory/agents@0.58.0
+  - @cat-factory/orchestration@0.111.0
+  - @cat-factory/integrations@0.84.1
+  - @cat-factory/spend@0.12.32
+  - @cat-factory/prompt-fragments@0.13.21
+
 ## 0.118.0
 
 ### Minor Changes
