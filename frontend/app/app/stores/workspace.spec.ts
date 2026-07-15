@@ -111,6 +111,44 @@ describe('workspace store refresh ordering', () => {
     // The fresh snapshot won and the stale one was discarded: the spawned card survives.
     expect(board.getBlock('spawned')).toBeDefined()
   })
+
+  // Regression for the SECOND clobber axis: a refresh vs an interleaved live `upsert`. The
+  // `refreshSeq` guard above only orders refreshes against each OTHER — it does nothing when a
+  // single refresh's (slow) fetch overlaps a targeted live event. A run's status transitions
+  // (…→ in_progress → pr_ready/done) arrive as `execution`-event `board.upsert`s; a refresh whose
+  // snapshot was FETCHED while the block was still `in_progress` must not, on resolving later,
+  // replace that block back to the stale status. This was the reliable-under-CI-latency e2e
+  // timeout where a run never showed a terminal `data-status`. The board store now stamps each
+  // live upsert and `refresh()` captures a baseline before its fetch so the newer live state wins.
+  it('a refresh started before a live upsert does not clobber the newer live status', async () => {
+    const frame = block('f1')
+    const task = block('t1', { level: 'task', parentId: 'f1', status: 'in_progress' })
+    let resolveRefresh!: (s: WorkspaceSnapshot) => void
+    const getWorkspace = vi
+      .fn()
+      // 1) switchTo — the task is mid-run (`in_progress`).
+      .mockResolvedValueOnce(snapshot('ws1', [frame, task]))
+      // 2) a refresh whose fetch is in flight while a live terminal event lands.
+      .mockReturnValueOnce(new Promise<WorkspaceSnapshot>((r) => (resolveRefresh = r)))
+    vi.stubGlobal('useApi', () => ({ getWorkspace }))
+
+    const ws = useWorkspaceStore()
+    const board = useBoardStore()
+    await ws.switchTo('ws1')
+    expect(board.getBlock('t1')?.status).toBe('in_progress')
+
+    // A refresh starts (captures the board baseline; its snapshot still shows `in_progress`).
+    const pass = ws.refresh()
+    // A live execution event lands mid-fetch: the run reached terminal, so the block is `done`.
+    board.upsert(block('t1', { level: 'task', parentId: 'f1', status: 'done' }))
+    expect(board.getBlock('t1')?.status).toBe('done')
+    // The now-stale refresh resolves with its older `in_progress` snapshot.
+    resolveRefresh(snapshot('ws1', [frame, block('t1', { level: 'task', parentId: 'f1' })]))
+    await pass
+
+    // The live terminal status survives — the stale refresh did NOT clobber it back.
+    expect(board.getBlock('t1')?.status).toBe('done')
+  })
 })
 
 // Cold-open waterfall flattening (app-startup initiative, item 8): `init()` fetches the persisted

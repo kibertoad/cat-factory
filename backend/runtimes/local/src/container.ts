@@ -751,6 +751,9 @@ export function buildLocalContainer(options: NodeContainerOptions): ServerContai
       if (localDeployTransport instanceof LocalProcessRunnerTransport) {
         await localDeployTransport.shutdown()
       }
+      // Compose the base Node container's shutdown (flushes/releases the external trace sink)
+      // — this override would otherwise drop it, since the return below replaces `onShutdown`.
+      await container.onShutdown?.()
     },
   }
 }

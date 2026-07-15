@@ -87,11 +87,34 @@ function advanceInsert(data: AdvanceJob, opts: AdvanceQueueOptions): JobInsert<A
   return { data, ...advanceJobOptions(data.executionId, opts) }
 }
 
+/**
+ * A resume signal (a resolved decision/approval, a chosen fork) can race the very advance job
+ * that just parked the run. That job stays `active` until it acks, and the `exclusive` queue
+ * makes a `send` with the same singletonKey an `ON CONFLICT DO NOTHING` no-op while it is —
+ * so a bare re-`send` fired in that window is DROPPED and the resume is LOST, leaving the run
+ * parked until the 5-minute stale-run sweeper notices (which for a `blocked` decision-park it
+ * never does). This is the window a fast park→resume UI (and the back-to-back park→resume of
+ * the approval / fork-decision flows) reliably hits. Advances are idempotent (advanceInstance
+ * reads current state), so the resume enqueue RETRIES until the parking job acks and frees the
+ * singletonKey (~sub-second) rather than dropping it — bounded so a genuinely long-running
+ * active drive doesn't retry forever (past the budget the sweeper stays the backstop).
+ */
+const RESUME_ENQUEUE_RETRY_ATTEMPTS = 25
+const RESUME_ENQUEUE_RETRY_INTERVAL_MS = 200
+
+const realSleep = (ms: number): Promise<void> => new Promise((resolve) => setTimeout(resolve, ms))
+
 export class PgBossWorkRunner implements WorkRunner {
+  private readonly sleep: (ms: number) => Promise<void>
+
   constructor(
     private readonly boss: PgBoss,
     private readonly queueOptions: AdvanceQueueOptions,
-  ) {}
+    // Test seam: override the retry delay (defaults to a real timer).
+    options: { sleep?: (ms: number) => Promise<void> } = {},
+  ) {
+    this.sleep = options.sleep ?? realSleep
+  }
 
   async startRun(workspaceId: string, executionId: string): Promise<void> {
     await this.boss.send(
@@ -107,13 +130,33 @@ export class PgBossWorkRunner implements WorkRunner {
     _decisionId: string,
     _choice: string,
   ): Promise<void> {
-    // The decision is already persisted by resolveDecision; re-enqueue an advance so
-    // the parked run resumes. The DB write is the source of truth either way.
-    await this.boss.send(
-      QUEUE,
-      { workspaceId, executionId },
-      sendOptions(executionId, this.queueOptions),
-    )
+    // The decision is already persisted by resolveDecision; re-enqueue an advance so the
+    // parked run resumes. The DB write is the source of truth, and the enqueue RETRIES past a
+    // dedupe so a resume racing the parking job's ack is never lost (see the note above).
+    await this.enqueueAdvanceReliably(workspaceId, executionId)
+  }
+
+  /**
+   * Enqueue an advance for a resume, retrying while the exclusive queue dedupes it because the
+   * run's parking advance job is still `active`. `boss.send` returns the new job id, or `null`
+   * when the send was a singleton no-op; on `null` we wait for the parking job to ack (freeing
+   * the singletonKey) and retry, so the resume can't be silently dropped into the sweeper's
+   * multi-minute backstop. Idempotent, so at worst one redundant advance runs.
+   */
+  private async enqueueAdvanceReliably(workspaceId: string, executionId: string): Promise<void> {
+    for (let attempt = 0; attempt < RESUME_ENQUEUE_RETRY_ATTEMPTS; attempt++) {
+      const jobId = await this.boss.send(
+        QUEUE,
+        { workspaceId, executionId },
+        sendOptions(executionId, this.queueOptions),
+      )
+      // A job id (accepted) — the advance will run. `null` means an advance job for this run is
+      // still active; wait briefly for it to ack, then retry.
+      if (jobId) return
+      await this.sleep(RESUME_ENQUEUE_RETRY_INTERVAL_MS)
+    }
+    // Still deduped after the budget — a genuinely long active drive. The decision is persisted
+    // and the stale-run sweeper re-drives a `running` run, so the resume is not lost, only slow.
   }
 
   async cancelRun(_workspaceId: string, _executionId: string): Promise<void> {

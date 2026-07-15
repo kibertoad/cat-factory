@@ -104,7 +104,9 @@ export type {
 } from './llm-trace-sink.js'
 export {
   INLINE_OBSERVABILITY_NS,
+  CompositeTraceSink,
   catFactoryObservability,
+  composeTraceSinks,
   readInlineObservabilityContext,
 } from './llm-trace-sink.js'
 export type {

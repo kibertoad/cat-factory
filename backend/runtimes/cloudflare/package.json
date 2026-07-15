@@ -54,6 +54,7 @@
     "@cat-factory/integrations": "workspace:*",
     "@cat-factory/kernel": "workspace:*",
     "@cat-factory/observability-langfuse": "workspace:*",
+    "@cat-factory/observability-otel": "workspace:*",
     "@cat-factory/orchestration": "workspace:*",
     "@cat-factory/prompt-fragments": "workspace:*",
     "@cat-factory/provider-cloudflare": "workspace:*",

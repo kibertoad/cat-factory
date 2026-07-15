@@ -307,6 +307,22 @@ function commonOptionalEntries(provider: VcsProvider): EnvEntry[] {
     { key: '# LANGFUSE_SECRET_KEY', value: '' },
     {
       comment: [
+        'Export every LLM call (traces + metrics) to an OpenTelemetry OTLP/HTTP backend',
+        '(Grafana, Honeycomb, an OTel Collector, …). OFF by default; the value shown ENABLES',
+        'it (also needs the endpoint below). Composes alongside Langfuse.',
+      ],
+      key: '# OTEL_ENABLED',
+      value: 'true',
+    },
+    { key: '# OTEL_EXPORTER_OTLP_ENDPOINT', value: 'http://localhost:4318' },
+    {
+      comment: ['Optional OTLP auth headers: comma-separated key=value pairs.'],
+      key: '# OTEL_EXPORTER_OTLP_HEADERS',
+      value: '',
+    },
+    { key: '# OTEL_SERVICE_NAME', value: 'cat-factory' },
+    {
+      comment: [
         'Post board notifications to Slack (connect the workspace in the UI). OFF by default;',
         'the value shown ENABLES it.',
       ],

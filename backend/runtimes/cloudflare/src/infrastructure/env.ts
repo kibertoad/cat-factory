@@ -490,6 +490,21 @@ export interface Env {
   /** Langfuse host; defaults to Langfuse Cloud when unset. */
   LANGFUSE_BASE_URL?: string
 
+  // ---- OpenTelemetry OTLP exporter (opt-in LLM observability) ---------------
+  /**
+   * Opt-in flag for exporting LLM generations (+ container tool spans) and metrics to an
+   * OTLP/HTTP backend. Enabled only when 'true' AND OTEL_EXPORTER_OTLP_ENDPOINT is set.
+   * The Worker uses a fetch-based OTLP exporter (workerd-safe); it composes alongside
+   * Langfuse when both are enabled.
+   */
+  OTEL_ENABLED?: string
+  /** OTLP/HTTP base URL, e.g. `http://collector:4318` (the `/v1/*` paths are appended). */
+  OTEL_EXPORTER_OTLP_ENDPOINT?: string
+  /** Comma-separated `k=v` OTLP headers (auth tokens, tenant ids); a Worker secret. */
+  OTEL_EXPORTER_OTLP_HEADERS?: string
+  /** OTLP resource `service.name`; defaults to `cat-factory` when unset. */
+  OTEL_SERVICE_NAME?: string
+
   // ---- Storage retention (see config.ts and docs/storage-and-retention.md) -
   /**
    * Days of `token_usage` ledger history to keep. The spend budget only reads the
