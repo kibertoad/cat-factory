@@ -380,14 +380,21 @@ export class EnvironmentProvisioningService {
     if (!this.deps.deployJobClient) {
       // Provider-agnostic on purpose: ANY provider whose config needs a container-backed render
       // (Kubernetes today; a future Nomad/custom provider tomorrow) reaches here, so the message
-      // names the runtime-neutral transport remedies, not one provider's CLIs. The SPA keys its
-      // runtime-/provider-specific hint off the `deploy_runner_unwired` reason instead.
+      // names the runtime-neutral transport remedies, not one provider's CLIs. It spells out each
+      // facade's exact setting (and, for local mode, the two modes' companion variables + how they
+      // differ) so the remedy is actionable without cross-referencing the docs. The SPA still keys
+      // its runtime-/provider-specific hint off the `deploy_runner_unwired` reason on top of this.
       const message =
         "This service's environment provider needs a container-backed deploy to render and " +
-        'apply its manifests, but this deployment has no deploy runner wired to run it. ' +
-        'Configure a deploy backend for this deployment — a self-hosted runner pool (Node), the ' +
-        'LOCAL_DEPLOY_RUNTIME env (local mode), or the DeployContainer binding (Cloudflare) — or ' +
-        'use an environment config that provisions without a deploy container.'
+        'apply its manifests, but this deployment has no deploy runner wired to run it. Wire a ' +
+        'deploy runner for this deployment:\n' +
+        '  • Local mode — set LOCAL_DEPLOY_RUNTIME to `native` (renders with your own host ' +
+        'kubectl/kustomize/helm; also set LOCAL_DEPLOY_HARNESS_ENTRY) or `container` (runs the ' +
+        'deploy-harness image per job; also set LOCAL_DEPLOY_IMAGE). It has no default — pick one.\n' +
+        '  • Node — register a self-hosted runner pool (it runs the deploy-harness image).\n' +
+        '  • Cloudflare — add the DeployContainer binding.\n' +
+        'Or use an environment config that provisions without a deploy container (raw manifests, ' +
+        'or an infraless service).'
       await this.captureProvisionFailure(args, resolved, message)
       const reason: EnvironmentFailureReason = 'deploy_runner_unwired'
       throw new ValidationError(message, { reason })

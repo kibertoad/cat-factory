@@ -5,6 +5,7 @@ import type {
   RunnerJobView,
   RunnerTransport,
 } from '@cat-factory/kernel'
+import { configProblem } from '@cat-factory/server'
 import { requireHarnessSharedSecret } from './config.js'
 import { createRuntimeAdapter } from './runtimes/index.js'
 import { LocalContainerRunnerTransport } from './LocalContainerRunnerTransport.js'
@@ -17,13 +18,16 @@ import { LocalProcessRunnerTransport } from './LocalProcessRunnerTransport.js'
 // `deployJobClient`'s transport so a kustomize/helm/Gateway-API service stands its
 // environment up locally exactly as it does on the other facades.
 //
-// Two modes, both driving the SAME deploy-harness `POST /jobs` + `GET /jobs/{id}` contract:
-//   - `native` (default): the deploy harness runs as a long-lived HOST PROCESS (the
+// There is NO implicit default: the two modes differ in both prerequisites AND blast radius, so
+// the developer must choose one EXPLICITLY (an unset `LOCAL_DEPLOY_RUNTIME` simply means "no
+// Kubernetes test environments here" — deploy stays unwired). Both drive the SAME deploy-harness
+// `POST /jobs` + `GET /jobs/{id}` contract:
+//   - `native`: the deploy harness runs as a long-lived HOST PROCESS (the
 //     `LocalProcessRunnerTransport` machinery), shelling out to the developer's OWN installed
-//     `kubectl`/`kustomize`/`helm` against their ambient kubeconfig — no Docker. This is the
-//     natural local path (a dev deploys to their own kind/k3d/cluster) and needs no published
-//     image. SECURITY: the harness runs as a plain host subprocess with the developer's full
-//     cluster + file access — acceptable only because local mode is their own machine.
+//     `kubectl`/`kustomize`/`helm` against their ambient kubeconfig — no Docker. Needs no
+//     published image, but requires `LOCAL_DEPLOY_HARNESS_ENTRY`. SECURITY: the harness runs as a
+//     plain host subprocess with the developer's full cluster + file access — the more brittle,
+//     higher-privilege mode, which is exactly why it is not the silent default.
 //   - `container`: the deploy-harness IMAGE (`LOCAL_DEPLOY_IMAGE`) runs in a per-job container
 //     via the same `ContainerRuntimeAdapter` the agent containers use. The deploy job is keyed
 //     by its OWN `jobId` (not the run id) so its container can't collide with the run's agent
@@ -67,42 +71,66 @@ class JobScopedRunnerTransport implements RunnerTransport {
 }
 
 /**
- * Build the local deploy transport from the environment, or return null when its mode's
- * prerequisite isn't configured (so the deploy lifecycle stays unwired — a render-needing
- * config then fails loudly, the synchronous raw-manifest REST path is unaffected). Default
- * mode is `native`.
+ * The shared `summary` for every `LOCAL_DEPLOY_RUNTIME` misconfiguration problem: what the deploy
+ * runner is and that it has no default. The per-throw `remedy` names the specific missing variable.
+ */
+const DEPLOY_RUNTIME_SUMMARY =
+  'The local deploy runner that renders + applies a Kubernetes test environment ' +
+  '(kubectl/kustomize/helm). It has NO default — LOCAL_DEPLOY_RUNTIME must be set to `native` or ' +
+  '`container`, and the chosen mode needs its own mandatory companion variable.'
+
+/**
+ * Build the local deploy transport from the environment, or return null when `LOCAL_DEPLOY_RUNTIME`
+ * is UNSET — the deploy lifecycle then stays unwired (deploy is simply not used; a render-needing
+ * environment config fails loudly at provision time, the synchronous raw-manifest REST path is
+ * unaffected). This is the normal state for a local deployment that does not stand Kubernetes test
+ * environments up.
  *
- * - `native`  → requires `LOCAL_DEPLOY_HARNESS_ENTRY` (the deploy-harness server entry path,
- *   spawned as `node <entry>`; a `.ts` entry runs via Node type-stripping). `kubectl`,
- *   `kustomize` and `helm` must be installed on the host.
+ * There is deliberately NO implicit default. `native` is the more brittle, higher-privilege mode
+ * (it shells out to the developer's own kubectl/kustomize/helm with full cluster + file access), so
+ * it must be chosen EXPLICITLY rather than fallen into. When a mode IS set but its mandatory
+ * companion variable is missing — or the value is unrecognised — this THROWS a
+ * {@link ConfigValidationError} to BREAK boot on the misconfigured screen, rather than degrading to
+ * a silently-unwired deploy the developer only discovers mid-run.
+ *
+ * - `native`    → requires `LOCAL_DEPLOY_HARNESS_ENTRY` (the deploy-harness server entry path,
+ *   spawned as `node <entry>`; a `.ts` entry runs via Node type-stripping). `kubectl`, `kustomize`
+ *   and `helm` must be installed on the host.
  * - `container` → requires `LOCAL_DEPLOY_IMAGE` (the deploy-harness image ref). Runs one
  *   cold-started container per deploy job (no warm pool) on the selected `LOCAL_CONTAINER_RUNTIME`.
  */
-export function buildLocalDeployTransport(
-  env: NodeJS.ProcessEnv,
-  onWarn?: (message: string) => void,
-): RunnerTransport | null {
+export function buildLocalDeployTransport(env: NodeJS.ProcessEnv): RunnerTransport | null {
   const rawMode = env.LOCAL_DEPLOY_RUNTIME?.trim().toLowerCase()
-  const mode = rawMode || 'native'
-  // A typo'd mode would otherwise silently become `native` — and then, with no
-  // LOCAL_DEPLOY_HARNESS_ENTRY, a silently-unwired deploy lifecycle. Keep the fail-safe
-  // fallback, but say so.
-  if (rawMode && rawMode !== 'native' && rawMode !== 'container') {
-    onWarn?.(
-      `LOCAL_DEPLOY_RUNTIME: unrecognized value '${rawMode}' (expected native | container) — ` +
-        `using the native default`,
-    )
+  // Unset ⇒ deploy is simply not used (no default, no error). The common state for a local
+  // deployment that never provisions Kubernetes test environments.
+  if (!rawMode) return null
+  if (rawMode !== 'native' && rawMode !== 'container') {
+    // A typo used to silently fall back to `native` (and then a silently-unwired deploy). Break
+    // instead: an unintelligible mode is a misconfiguration, not a request for the brittle default.
+    throw configProblem({
+      key: 'LOCAL_DEPLOY_RUNTIME',
+      summary: DEPLOY_RUNTIME_SUMMARY,
+      remedy:
+        `LOCAL_DEPLOY_RUNTIME='${rawMode}' is not a recognised value. Set it to \`native\` ` +
+        '(renders with your host kubectl/kustomize/helm; also set LOCAL_DEPLOY_HARNESS_ENTRY) or ' +
+        '`container` (runs the deploy-harness image per job; also set LOCAL_DEPLOY_IMAGE), or ' +
+        'unset LOCAL_DEPLOY_RUNTIME if this deployment does not provision Kubernetes test environments.',
+    })
   }
-  if (mode === 'container') {
+  if (rawMode === 'container') {
     const image = env.LOCAL_DEPLOY_IMAGE?.trim()
     if (!image) {
-      // Container mode was EXPLICITLY selected, so an unwired deploy is a misconfiguration,
-      // not the deploy-unused default — surface it instead of failing only at render time.
-      onWarn?.(
-        'LOCAL_DEPLOY_RUNTIME=container needs LOCAL_DEPLOY_IMAGE — the deploy lifecycle ' +
-          'stays unwired (environment configs that need a render will fail).',
-      )
-      return null
+      // Container mode was EXPLICITLY selected but its image is missing — break boot rather than
+      // leave the deploy lifecycle unwired until the first render fails mid-run.
+      throw configProblem({
+        key: 'LOCAL_DEPLOY_IMAGE',
+        summary: DEPLOY_RUNTIME_SUMMARY,
+        remedy:
+          'LOCAL_DEPLOY_RUNTIME=container needs LOCAL_DEPLOY_IMAGE — the deploy-harness image ref ' +
+          'to run per deploy job (e.g. ghcr.io/kibertoad/cat-factory-deploy:<version>). Set it, ' +
+          'switch to LOCAL_DEPLOY_RUNTIME=native (with LOCAL_DEPLOY_HARNESS_ENTRY), or unset ' +
+          'LOCAL_DEPLOY_RUNTIME to disable Kubernetes test environments.',
+      })
     }
     // poolSize 0: a deploy is one-shot per run, so cold-start its own container and tear it
     // down on release — no warm pool (that's an agent-throughput optimisation). Require the
@@ -119,23 +147,25 @@ export function buildLocalDeployTransport(
     })
     return new JobScopedRunnerTransport(container)
   }
-  // Default: native host process.
+  // Explicit native host process.
   const harnessEntry = env.LOCAL_DEPLOY_HARNESS_ENTRY?.trim()
   if (!harnessEntry) {
-    // Only warn when the mode was EXPLICITLY set: an unset LOCAL_DEPLOY_RUNTIME with no
-    // entry is simply "deploy not used", the normal state for most local deployments.
-    if (rawMode) {
-      onWarn?.(
-        'LOCAL_DEPLOY_RUNTIME=native needs LOCAL_DEPLOY_HARNESS_ENTRY (the deploy-harness ' +
-          'server entry path) — the deploy lifecycle stays unwired (environment configs ' +
-          'that need a render will fail).',
-      )
-    }
-    return null
+    // Native mode was EXPLICITLY selected but its entry is missing — break boot (this is the
+    // brittle, must-be-configured mode; a silent unwiring here is the exact trap this rewrite removes).
+    throw configProblem({
+      key: 'LOCAL_DEPLOY_HARNESS_ENTRY',
+      summary: DEPLOY_RUNTIME_SUMMARY,
+      remedy:
+        'LOCAL_DEPLOY_RUNTIME=native needs LOCAL_DEPLOY_HARNESS_ENTRY — the deploy-harness server ' +
+        'entry path, run as `node <entry>` (a .ts entry runs via Node type-stripping). kubectl, ' +
+        'kustomize and helm must also be installed on the host. Set it, switch to ' +
+        'LOCAL_DEPLOY_RUNTIME=container (with LOCAL_DEPLOY_IMAGE), or unset LOCAL_DEPLOY_RUNTIME to ' +
+        'disable Kubernetes test environments.',
+    })
   }
   return new NativeCliDeployTransport({
     harnessEntry,
-    // Required only on the construction path (the deploy-unused early returns above must not).
+    // Required only on the construction path (the deploy-unused early return above must not).
     sharedSecret: requireHarnessSharedSecret(env),
     // The deploy harness shells out to the developer's kubectl/kustomize/helm, which run on
     // ambient cloud/cluster env (KUBECONFIG, AWS_*, …) — so it inherits the full environment
