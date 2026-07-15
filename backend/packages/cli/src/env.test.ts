@@ -127,6 +127,20 @@ describe('buildLocalEnv', () => {
     const out = buildLocalEnv({ ...base, provider: 'gitlab' })
     expect(out).toContain('# GITLAB_API_BASE=')
   })
+
+  it('documents the Kubernetes deploy runner (commented; no active companion var)', () => {
+    const out = buildLocalEnv({ ...base, provider: 'github' })
+    // All three vars are present but commented — deploy is unused by default, and a mode set
+    // without its companion var breaks boot, so none is written active.
+    expect(out).toContain('# LOCAL_DEPLOY_RUNTIME=native')
+    expect(out).toContain('# LOCAL_DEPLOY_HARNESS_ENTRY=')
+    expect(out).toContain('# LOCAL_DEPLOY_IMAGE=ghcr.io/kibertoad/cat-factory-deploy:<version>')
+    expect(out).not.toMatch(/^LOCAL_DEPLOY_RUNTIME=/m)
+    // Both modes' companion variables + the "no default" contract are explained.
+    expect(out).toContain('no deploy runner')
+    expect(out).toMatch(/native/)
+    expect(out).toMatch(/container/)
+  })
 })
 
 describe('buildFrontendEnv', () => {

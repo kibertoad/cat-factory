@@ -128,6 +128,7 @@ export function buildLocalEnv(input: LocalEnvInput): string {
     },
     ...reachabilityEntries(input.containerRuntime),
     ...executionModeEntries(input),
+    ...deployRunnerEntries(),
     ...commonOptionalEntries(input.provider),
     {
       comment: [
@@ -216,6 +217,39 @@ function executionModeEntries(input: LocalEnvInput): EnvEntry[] {
       value: '',
     },
     { key: '# LOCAL_HARNESS_ENTRY', value: '' },
+  ]
+}
+
+/**
+ * The Kubernetes test-environment DEPLOY RUNNER, all commented out (deploy is unused by default).
+ * A Kubernetes-backed test environment (local k3s/k3d/kind, configured in the UI) needs a deploy
+ * runner to render + apply its manifests; the UI connection says WHERE to deploy, these say WHAT
+ * runs it. There is NO default and no companion var is written active — the backend BREAKS boot if
+ * `LOCAL_DEPLOY_RUNTIME` is set without its mandatory companion — so we document both modes and let
+ * the developer uncomment a complete pair deliberately. Mirrors `deploy/local/.env.example`.
+ */
+function deployRunnerEntries(): EnvEntry[] {
+  return [
+    {
+      comment: [
+        'Kubernetes test environments — the DEPLOY RUNNER (optional, unused by default). A test',
+        'environment backed by Kubernetes (local k3s/k3d/kind, configured in the UI under',
+        'Integrations > "Test environments") needs a deploy runner to render + apply its manifests',
+        'with kubectl/kustomize/helm — WITHOUT one, standing it up fails with "no deploy runner',
+        'wired". That UI connection says WHERE to deploy; these say WHAT runs the deploy. NO default:',
+        'pick a mode explicitly, and the backend FAILS TO BOOT if a mode is set without its companion',
+        'variable (so a half-configured runner surfaces at startup, not mid-run). Leave unset (the',
+        'common case) if you do not stand Kubernetes test environments up.',
+        '  native    — a HOST PROCESS using your OWN installed kubectl/kustomize/helm (no Docker);',
+        '              requires LOCAL_DEPLOY_HARNESS_ENTRY. Runs with your full cluster + file access.',
+        '  container — the deploy-harness IMAGE, one container per job on LOCAL_CONTAINER_RUNTIME;',
+        '              requires LOCAL_DEPLOY_IMAGE.',
+      ],
+      key: '# LOCAL_DEPLOY_RUNTIME',
+      value: 'native',
+    },
+    { key: '# LOCAL_DEPLOY_HARNESS_ENTRY', value: '' },
+    { key: '# LOCAL_DEPLOY_IMAGE', value: 'ghcr.io/kibertoad/cat-factory-deploy:<version>' },
   ]
 }
 

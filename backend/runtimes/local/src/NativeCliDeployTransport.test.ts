@@ -10,23 +10,20 @@ const SECRET = { HARNESS_SHARED_SECRET: 'deploy-test-harness-secret' }
 // construction (no process spawn / container run happens until the first dispatch), so the
 // selection logic is unit-testable directly.
 describe('buildLocalDeployTransport', () => {
-  it('defaults to native mode and is unwired without LOCAL_DEPLOY_HARNESS_ENTRY', () => {
-    // No deploy backend configured ⇒ null, so the deploy lifecycle stays unwired (a
-    // render-needing config fails loudly; the raw-manifest REST path is unaffected).
+  it('is unwired (null) when LOCAL_DEPLOY_RUNTIME is unset — deploy simply not used', () => {
+    // No mode set ⇒ null with NO error, so the deploy lifecycle stays unwired (a render-needing
+    // config fails loudly at provision time; the raw-manifest REST path is unaffected). This is
+    // the common state for a local deployment that doesn't stand Kubernetes test environments up.
     expect(buildLocalDeployTransport({})).toBeNull()
-    expect(buildLocalDeployTransport({ LOCAL_DEPLOY_RUNTIME: 'native' })).toBeNull()
   })
 
-  it('builds the native deploy-harness host-process transport when its entry is set', () => {
+  it('builds the native deploy-harness host-process transport when native + entry are set', () => {
     const t = buildLocalDeployTransport({
       ...SECRET,
+      LOCAL_DEPLOY_RUNTIME: 'native',
       LOCAL_DEPLOY_HARNESS_ENTRY: '/srv/deploy/server.ts',
     })
     expect(t).toBeInstanceOf(NativeCliDeployTransport)
-  })
-
-  it('is unwired in container mode without LOCAL_DEPLOY_IMAGE', () => {
-    expect(buildLocalDeployTransport({ LOCAL_DEPLOY_RUNTIME: 'container' })).toBeNull()
   })
 
   it('builds a job-scoped container transport when container mode + image are set', () => {
@@ -43,30 +40,23 @@ describe('buildLocalDeployTransport', () => {
     expect(typeof t!.release).toBe('function')
   })
 
-  it('warns on an unrecognized LOCAL_DEPLOY_RUNTIME value (typo falls back to native, loudly)', () => {
-    const warnings: string[] = []
-    const t = buildLocalDeployTransport({ LOCAL_DEPLOY_RUNTIME: 'containr' }, (m) =>
-      warnings.push(m),
+  it('BREAKS (throws) on native mode without LOCAL_DEPLOY_HARNESS_ENTRY — no silent fallback', () => {
+    // The brittle, must-be-configured mode: a missing companion var is a boot-breaking
+    // misconfiguration, not a request for a silently-unwired deploy.
+    expect(() => buildLocalDeployTransport({ LOCAL_DEPLOY_RUNTIME: 'native' })).toThrow(
+      /LOCAL_DEPLOY_HARNESS_ENTRY/,
     )
-    expect(t).toBeNull() // native default with no entry ⇒ unwired
-    expect(warnings.some((m) => m.includes("unrecognized value 'containr'"))).toBe(true)
   })
 
-  it('warns when an explicitly selected mode is missing its prerequisite', () => {
-    const containerWarnings: string[] = []
-    buildLocalDeployTransport({ LOCAL_DEPLOY_RUNTIME: 'container' }, (m) =>
-      containerWarnings.push(m),
+  it('BREAKS (throws) on container mode without LOCAL_DEPLOY_IMAGE', () => {
+    expect(() => buildLocalDeployTransport({ LOCAL_DEPLOY_RUNTIME: 'container' })).toThrow(
+      /LOCAL_DEPLOY_IMAGE/,
     )
-    expect(containerWarnings.some((m) => m.includes('LOCAL_DEPLOY_IMAGE'))).toBe(true)
-
-    const nativeWarnings: string[] = []
-    buildLocalDeployTransport({ LOCAL_DEPLOY_RUNTIME: 'native' }, (m) => nativeWarnings.push(m))
-    expect(nativeWarnings.some((m) => m.includes('LOCAL_DEPLOY_HARNESS_ENTRY'))).toBe(true)
   })
 
-  it('does not warn when deploy is simply unused (no LOCAL_DEPLOY_RUNTIME set)', () => {
-    const warnings: string[] = []
-    expect(buildLocalDeployTransport({}, (m) => warnings.push(m))).toBeNull()
-    expect(warnings).toEqual([])
+  it('BREAKS (throws) on an unrecognised LOCAL_DEPLOY_RUNTIME value — no fallback to native', () => {
+    expect(() => buildLocalDeployTransport({ LOCAL_DEPLOY_RUNTIME: 'containr' })).toThrow(
+      /not a recognised value/i,
+    )
   })
 })

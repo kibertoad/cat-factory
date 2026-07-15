@@ -229,6 +229,16 @@ ${harnessImageEnvLines(harnessImage).join('\n')}
 # Container runtime that spawns agent jobs: ${CONTAINER_RUNTIMES.join(' | ')}.
 LOCAL_CONTAINER_RUNTIME=${containerRuntime}
 ${executionLines.join('\n')}
+# Kubernetes test environments — the DEPLOY RUNNER (optional, unused by default). A Kubernetes-backed
+# test environment (local k3s/k3d/kind, configured in the UI) needs a deploy runner to render + apply
+# its manifests (kubectl/kustomize/helm) — without one, standing it up fails with "no deploy runner
+# wired". NO default: pick a mode explicitly, and boot FAILS if a mode is set without its companion
+# var. Leave unset if you don't use Kubernetes test environments.
+#   native    — host process using your OWN kubectl/kustomize/helm; needs LOCAL_DEPLOY_HARNESS_ENTRY.
+#   container — the deploy-harness image, one container per job; needs LOCAL_DEPLOY_IMAGE.
+# LOCAL_DEPLOY_RUNTIME=native
+# LOCAL_DEPLOY_HARNESS_ENTRY=
+# LOCAL_DEPLOY_IMAGE=ghcr.io/kibertoad/cat-factory-deploy:<version>
 # At least one model provider (Cloudflare Workers AI over REST shown; or a direct vendor key):
 # CLOUDFLARE_ACCOUNT_ID=
 # CLOUDFLARE_API_TOKEN=
