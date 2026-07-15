@@ -1,5 +1,14 @@
 # @cat-factory/worker
 
+## 0.83.12
+
+### Patch Changes
+
+- 3f3031a: Poll-first durable drivers: the execution drivers (orchestration `driveExecution` and the Cloudflare `ExecutionWorkflow`) now poll a just-dispatched container job immediately instead of sleeping a full poll interval (default 15s) first, so the first running/subtask state reaches the board with no leading dead air. Gate prechecks deliberately keep the sleep-first shape (the precheck just ran inside advance/pollGate). The Cloudflare Bootstrap/EnvironmentTest/EnvConfigRepair workflows are flipped the same way, matching their already-poll-first Node runner twins.
+- Updated dependencies [3f3031a]
+  - @cat-factory/orchestration@0.107.10
+  - @cat-factory/server@0.115.1
+
 ## 0.83.11
 
 ### Patch Changes
