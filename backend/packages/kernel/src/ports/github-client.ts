@@ -511,7 +511,8 @@ export interface GitHubClient {
    * drained). The PR-deep-review slicer partitions these into cohesive slices from the cheap
    * fields, and the per-slice reviewer reads the `patch`. Optional (see
    * {@link listRequestedReviewers}); a provider that can't enumerate a PR's files omits it and
-   * the review step passes through.
+   * the review step passes through. Note GitHub caps this endpoint at 3000 files, so a
+   * pathologically huge PR is truncated at that ceiling.
    */
   listChangedFiles?(
     installationId: number,

@@ -108,10 +108,25 @@ const docKind = ref<DocKind | ''>('')
 const docAudience = ref('')
 const docTargetPath = ref('')
 const docOutlineHints = ref('')
-// Review-task fields: the target PR (URL or bare number) + optional review focus.
-const reviewPrUrl = ref('')
-const reviewPrNumber = ref<number | undefined>(undefined)
+// Review-task fields: the target PR (entered as a full URL or a bare #number) + optional
+// review focus. The single input is parsed into the contract's `prUrl`/`prNumber` fields.
+const reviewPrRef = ref('')
 const reviewFocus = ref('')
+
+// Parse the PR-reference input into the contract fields: a bare positive integer (optionally
+// `#`-prefixed) becomes `prNumber` (a PR on the service's linked repo); anything else is taken
+// as a full URL (`prUrl`). Returns undefined when blank or unparseable — the caller uses that
+// to require a target on a review task.
+function parseReviewPrRef(raw: string): Pick<TaskTypeFields, 'prUrl' | 'prNumber'> | undefined {
+  const trimmed = raw.trim()
+  if (!trimmed) return undefined
+  const bareNumber = /^#?(\d+)$/.exec(trimmed)
+  if (bareNumber) {
+    const n = Number(bareNumber[1])
+    return Number.isSafeInteger(n) && n >= 1 ? { prNumber: n } : undefined
+  }
+  return { prUrl: trimmed }
+}
 // Per-kind specific fields (see DOC_KIND_FIELDS). Held in one keyed record; only the fields
 // for the selected kind are shown and submitted, so a value from a previously-selected kind is
 // never sent. The catalog keys below keep the labels/placeholders i18n and drift-guarded.
@@ -178,15 +193,7 @@ function buildTypeFields(): TaskTypeFields | undefined {
     return Object.keys(f).length ? f : undefined
   }
   if (taskType.value === 'review') {
-    const f: TaskTypeFields = {}
-    if (reviewPrUrl.value.trim()) f.prUrl = reviewPrUrl.value.trim()
-    else if (
-      typeof reviewPrNumber.value === 'number' &&
-      Number.isFinite(reviewPrNumber.value) &&
-      reviewPrNumber.value >= 1
-    ) {
-      f.prNumber = reviewPrNumber.value
-    }
+    const f: TaskTypeFields = { ...parseReviewPrRef(reviewPrRef.value) }
     if (reviewFocus.value.trim()) f.reviewFocus = reviewFocus.value.trim()
     return Object.keys(f).length ? f : undefined
   }
@@ -403,8 +410,7 @@ watch(open, (isOpen) => {
   docAudience.value = ''
   docTargetPath.value = ''
   docOutlineHints.value = ''
-  reviewPrUrl.value = ''
-  reviewPrNumber.value = undefined
+  reviewPrRef.value = ''
   reviewFocus.value = ''
   for (const key of Object.keys(docKindFieldValues) as DocKindFieldKey[])
     delete docKindFieldValues[key]
@@ -459,10 +465,13 @@ const { requestClose } = useUnsavedGuard({
 })
 
 // A recurring task only needs a target frame (its details are filled in the schedule
-// modal); every other type needs a title.
-const canAdd = computed(() =>
-  isRecurring.value ? recurringFrameId.value !== null : title.value.trim().length > 0,
-)
+// modal); every other type needs a title. A review task additionally needs a target PR.
+const canAdd = computed(() => {
+  if (isRecurring.value) return recurringFrameId.value !== null
+  if (title.value.trim().length === 0) return false
+  if (taskType.value === 'review' && !parseReviewPrRef(reviewPrRef.value)) return false
+  return true
+})
 
 async function add() {
   const containerId = ui.addTaskContainerId
@@ -749,9 +758,10 @@ async function add() {
             <UFormField
               :label="t('board.addTask.review.prUrl')"
               :hint="t('board.addTask.review.prUrlHint')"
+              required
             >
               <UInput
-                v-model="reviewPrUrl"
+                v-model="reviewPrRef"
                 placeholder="https://github.com/owner/repo/pull/123"
                 class="w-full"
               />

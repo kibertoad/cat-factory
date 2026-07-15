@@ -481,7 +481,9 @@ export class RunStateMachine {
     // the task is simply `done`. Marking it `pr_ready` + raising the (PR-assuming)
     // `pipeline_complete` card would strand it in a confirm-and-merge flow that has no PR to act
     // on. This is the no-PR terminal path the review/spike pipelines rely on to finish cleanly.
-    if (!block.pullRequest?.branch && allPullRequests(block).length === 0) {
+    // (`allPullRequests` already counts `block.pullRequest`, so a zero result means there is no
+    // primary PR nor any peer PR.)
+    if (allPullRequests(block).length === 0) {
       await this.blockRepository.update(workspaceId, block.id, { status: 'done', progress: 1 })
       return
     }

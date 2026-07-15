@@ -33,8 +33,9 @@ export const PR_REVIEWER_KIND = 'pr-reviewer'
  * The reviewer's structured output. Lenient (`v.fallback`) throughout — exactly like
  * `forkProposal` / `bugInvestigation` — so a partially-malformed reply degrades to sensible
  * defaults rather than failing the run: an unreadable severity/category reads as its safe
- * default, and each list degrades to empty rather than discarding the whole object. Mirrors
- * the contracts `prReviewSliceProposalSchema` + `prReviewFindingsProposalSchema` shapes.
+ * default, and each list degrades to empty rather than discarding the whole object. PR 2 of
+ * the initiative lifts these slice/finding shapes into shared `@cat-factory/contracts` schemas
+ * (for the step-state + selection UI); until then this is the sole definition.
  */
 export const prReview = defineStructuredOutput(
   v.object({

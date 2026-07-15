@@ -71,6 +71,12 @@ selection step and two terminal actions.
   GitHub-implemented; `FetchGitLabClient` throws "unsupported" for now.
 - **i18n locale parity.** Any `en.json` key touched must be mirrored in every other locale in the
   SAME PR (the parity gate), with real translations — never an English placeholder.
+- **Cross-repo `prUrl` is NOT yet resolved (follow-up).** PR 1 folds the PR reference into the
+  task description and the reviewer clones the SERVICE's linked repo, fetching the PR head by
+  number from `origin`. So a `prUrl` pointing at a different repo than the service's is reviewed
+  against the wrong `origin`. Resolving `prUrl` → owner/repo/number server-side and cloning that
+  repo is a follow-up; until then the create form's target is effectively "a PR on this service's
+  repo" (URL or `#number`).
 
 ## Per-slice status checklist
 
@@ -88,29 +94,29 @@ The **semantic LLM Slicer as its own stage, the human multi-select park loop, an
 fix/inline-comment resolutions moved to PR 2 / PR 3** (they need the park protocol + the
 `prReview` step-state contracts + `createReview`, which are best introduced with their UI).
 
-| #   | Item                                                                                                             | Status | PR |
-| --- | ---------------------------------------------------------------------------------------------------------------- | ------ | -- |
-| 1   | Contracts: `review` in `taskTypeSchema`/`createTaskTypeSchema` + review `taskTypeFields` (`prNumber`/`prUrl`/`reviewFocus`) | done   | 1  |
-| 2   | `VcsClient`/`GitHubClient`.`listChangedFiles` + `FetchGitHubClient` impl + `FakeVcsClient` + adapter (GitLab omits it) | done   | 1  |
-| 3   | `@cat-factory/agents`: built-in `pr-reviewer` kind (container-explore, structured findings, `generic-structured`) | done   | 1  |
-| 4   | `pl_review` pipeline + `REVIEW_PIPELINE_ID` + `defaultPipelineIdForTaskType('review')`                           | done   | 1  |
-| 5   | No-PR terminal path in `RunStateMachine.finalizeBlock` (read-only pipelines finish `done`, no PR-assuming card)  | done   | 1  |
-| 6   | `BoardService.addTask`: fold the PR reference + focus into a review task's description                           | done   | 1  |
-| 7   | Frontend: `AddTaskModal` review chip + fields, `WorkspaceSettingsPanel` type key, i18n (all locales)             | done   | 1  |
-| 8   | Unit tests: seed (pipeline + type default), agents registry (pr-reviewer)                                        | done   | 1  |
+| #   | Item                                                                                                                                       | Status | PR  |
+| --- | ------------------------------------------------------------------------------------------------------------------------------------------ | ------ | --- |
+| 1   | Contracts: `review` in `taskTypeSchema`/`createTaskTypeSchema` + review `taskTypeFields` (`prNumber`/`prUrl`/`reviewFocus`)                | done   | 1   |
+| 2   | `VcsClient`/`GitHubClient`.`listChangedFiles` + `FetchGitHubClient` impl + `FakeVcsClient` + adapter (GitLab omits it)                     | done   | 1   |
+| 3   | `@cat-factory/agents`: built-in `pr-reviewer` kind (container-explore, structured findings, `generic-structured`)                          | done   | 1   |
+| 4   | `pl_review` pipeline + `REVIEW_PIPELINE_ID` + `defaultPipelineIdForTaskType('review')`                                                     | done   | 1   |
+| 5   | No-PR terminal path in `RunStateMachine.finalizeBlock` (read-only pipelines finish `done`, no PR-assuming card)                            | done   | 1   |
+| 6   | `BoardService.addTask`: fold the PR reference + focus into a review task's description                                                     | done   | 1   |
+| 7   | Frontend: `AddTaskModal` review chip + fields, `WorkspaceSettingsPanel` type key, i18n (all locales)                                       | done   | 1   |
+| 8   | Unit tests: seed (pipeline + type default), agents registry (pr-reviewer), no-PR `finalizeBlock` terminal path, review description folding | done   | 1   |
 
 `listChangedFiles` is landed ahead of its consumer — it is the data source for PR 2's
 semantic Slicer (which reviews the manifest, not the whole diff).
 
 ### PR 2 — Semantic Slicer + human selection UI
 
-| #   | Item                                                                                                                                                | Status | PR  |
-| --- | --------------------------------------------------------------------------------------------------------------------------------------------------- | ------ | --- |
+| #   | Item                                                                                                                                                                                                           | Status | PR  |
+| --- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ------ | --- |
 | 9   | Contracts: `prReview.ts` (findings/slices/step-state/choose), `pipelineStepSchema.prReview` + `pendingPrReviewPost`, `result-views.ts` `pr-review`, `notifications.ts` `pr_review_ready`, `routes/prReview.ts` | todo   |     |
-| 10  | Inline semantic Slicer (reads the `listChangedFiles` manifest → cohesive slices; mechanical fallback) + per-slice review + aggregate onto `step.prReview`, park + notification | todo   |     |
-| 11  | `stores/prReview.ts` + `PrReviewWindow.vue` (multi-select, severity badges, grouped by slice, two footer actions)                                   | todo   |     |
-| 12  | Register result-view in `StepResultViewHost.vue`; `ui.openPrReview` opener; `NotificationsInbox` reveal branch; `catalog.ts` archetype `resultView` | todo   |     |
-| 13  | i18n `en.json` + all locales (parity) for the window                                                                                                | todo   |     |
+| 10  | Inline semantic Slicer (reads the `listChangedFiles` manifest → cohesive slices; mechanical fallback) + per-slice review + aggregate onto `step.prReview`, park + notification                                 | todo   |     |
+| 11  | `stores/prReview.ts` + `PrReviewWindow.vue` (multi-select, severity badges, grouped by slice, two footer actions)                                                                                              | todo   |     |
+| 12  | Register result-view in `StepResultViewHost.vue`; `ui.openPrReview` opener; `NotificationsInbox` reveal branch; `catalog.ts` archetype `resultView`                                                            | todo   |     |
+| 13  | i18n `en.json` + all locales (parity) for the window                                                                                                                                                           | todo   |     |
 
 ### PR 3 — Resolutions
 

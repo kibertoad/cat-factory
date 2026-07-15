@@ -189,13 +189,15 @@ export const taskTypeFieldsSchema = v.object({
   /**
    * Review: the number of the EXISTING open pull request to deep-review, on the
    * service's linked repository. Either this or {@link prUrl} identifies the target;
-   * `prUrl` wins when both are present (it also carries the owner/repo for a cross-repo PR).
+   * `prUrl` wins when both are present.
    */
   prNumber: v.optional(v.pipe(v.number(), v.integer(), v.minValue(1))),
   /**
    * Review: the full web URL of the pull request to review (e.g.
-   * `https://github.com/owner/repo/pull/123`). Parsed server-side into owner/repo/number;
-   * lets a review target a PR in an explicit repo rather than the service's default one.
+   * `https://github.com/owner/repo/pull/123`). Folded into the task description for the
+   * reviewer to read; today the reviewer clones the service's linked repo and fetches the
+   * PR head by number from `origin`, so a cross-repo `prUrl` is not yet resolved to a
+   * different repo (a tracked follow-up — see docs/initiatives/pr-deep-review.md).
    */
   prUrl: v.optional(v.pipe(v.string(), v.trim(), v.maxLength(500))),
   /** Review: freeform focus/guidance for the reviewer (e.g. "focus on the auth changes"). */
