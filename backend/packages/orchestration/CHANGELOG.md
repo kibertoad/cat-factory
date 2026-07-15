@@ -1,5 +1,42 @@
 # @cat-factory/orchestration
 
+## 0.111.0
+
+### Minor Changes
+
+- b414f34: PR deep-review: resolve a parked review by fixing or posting the selected findings.
+
+  The `pr-review` window now offers two terminal resolutions alongside `Finish`, both acting on
+  the human's curated finding selection:
+
+  - **Fix** re-dispatches the `pr-reviewer` step as a Fixer (`FIXER_AGENT_KIND`) that clones the
+    reviewed PR's head branch, commits fixes addressing the selected findings, and pushes back onto
+    it (no new PR).
+  - **Post** publishes the selected findings as a single advisory (`COMMENT`) inline PR review — each
+    line-anchored finding as an inline comment, the rest folded into the review body.
+
+  Two new optional VCS reads/writes back these resolutions — `getPullRequestHeadRef` and
+  `createReview` on the neutral `VcsClient` + `GitHubClient` ports (GitHub-implemented, omitted on
+  GitLab), surfaced to the engine through the checkout-free `RepoFiles` seam. All review state stays
+  on `step.prReview` (no side table); a cross-runtime conformance assertion covers both resolutions.
+
+  Scoped to a same-repo, non-fork PR (the reviewer's existing limitation); a cross-repo `prUrl` and
+  fork PRs remain a tracked follow-up. See `backend/docs/adr/0023-pr-deep-review.md`.
+
+### Patch Changes
+
+- Updated dependencies [d68e3a8]
+- Updated dependencies [b414f34]
+  - @cat-factory/kernel@0.128.0
+  - @cat-factory/contracts@0.132.0
+  - @cat-factory/agents@0.58.0
+  - @cat-factory/caching@0.8.3
+  - @cat-factory/integrations@0.84.1
+  - @cat-factory/sandbox@0.9.82
+  - @cat-factory/spend@0.12.32
+  - @cat-factory/workspaces@0.13.43
+  - @cat-factory/prompt-fragments@0.13.21
+
 ## 0.110.0
 
 ### Minor Changes
