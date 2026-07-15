@@ -1,5 +1,37 @@
 # @cat-factory/orchestration
 
+## 0.110.0
+
+### Minor Changes
+
+- a552283: PR deep-review: park a review run on its findings for a human to select which to act on.
+
+  The read-only `pr-reviewer` no longer finishes a review task the moment it returns. Its
+  sliced, prioritized findings are now recorded onto the run's `pr-reviewer` step
+  (`step.prReview`) and the run PARKS for a human to visually SELECT which findings matter
+  through a dedicated multi-select window (findings grouped by slice, severity badges), then
+  resolve. A `pr_review_ready` inbox card (routable to Slack) is raised on park. A clean PR
+  (no findings) passes through and finishes as before.
+
+  All review state rides the step (no side table), so D1 ⇄ Drizzle parity is free; a
+  cross-runtime conformance assertion covers the park → select → resolve loop. The two
+  terminal resolutions — feed the selected findings to a Fixer, or post them as inline PR
+  review comments — are the tracked follow-up; this ships the slicing → park → multi-select
+  loop with a neutral `finish` resolution.
+
+### Patch Changes
+
+- Updated dependencies [a552283]
+  - @cat-factory/contracts@0.131.0
+  - @cat-factory/kernel@0.127.0
+  - @cat-factory/agents@0.57.0
+  - @cat-factory/integrations@0.84.0
+  - @cat-factory/prompt-fragments@0.13.20
+  - @cat-factory/sandbox@0.9.81
+  - @cat-factory/spend@0.12.31
+  - @cat-factory/workspaces@0.13.42
+  - @cat-factory/caching@0.8.2
+
 ## 0.109.0
 
 ### Minor Changes
