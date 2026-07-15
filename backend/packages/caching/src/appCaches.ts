@@ -67,6 +67,7 @@ export interface AppCachesProfile {
   accountBudgetLimit: GroupCacheProfile
   userBudgetLimit: GroupCacheProfile
   viewerRepos: GroupCacheProfile
+  patInstallationRepos: GroupCacheProfile
 }
 
 /** The default (Node/local/test) profile: caching on, modest bounds. */
@@ -149,6 +150,12 @@ export const DEFAULT_APP_CACHES_PROFILE: AppCachesProfile = {
   // this lapses) — a minute keeps a freshly-created repo from hiding for long while still
   // collapsing a burst of keystrokes into one enumeration.
   viewerRepos: { enabled: true, ttlInMsecs: 60_000, maxGroups: 5000, maxItemsPerGroup: 1 },
+  // The local facade's workspace-wide PAT repo enumeration, keyed by installation id (one entry
+  // per group). Same freshness reasoning as `viewerRepos` (external GitHub state we don't write;
+  // a short TTL collapses a burst of typeahead keystrokes into one multi-page walk while a
+  // freshly-created repo can't hide for long). A local deployment has very few installations,
+  // so the group bound is small.
+  patInstallationRepos: { enabled: true, ttlInMsecs: 60_000, maxGroups: 100, maxItemsPerGroup: 1 },
 }
 
 /**
@@ -195,6 +202,9 @@ export const ISOLATE_SAFE_APP_CACHES_PROFILE: AppCachesProfile = {
   // probe), and the PAT-swap invalidation can't reach a peer isolate without a bus — so the Worker
   // enumerates the picker live, exactly like the mutable-D1-state slices above.
   viewerRepos: { ...DEFAULT_APP_CACHES_PROFILE.viewerRepos, enabled: false },
+  // Pass-through for the same reasons as `viewerRepos` — and the Worker never constructs the
+  // local facade's PAT-backed client, so this slice is only ever read on Node/local.
+  patInstallationRepos: { ...DEFAULT_APP_CACHES_PROFILE.patInstallationRepos, enabled: false },
 }
 
 /**
@@ -375,6 +385,11 @@ export function createAppCaches(options: CreateAppCachesOptions = {}): AppCaches
     options,
   )
   const viewerRepos = buildGroupCache<GitHubRepo[]>('viewer-repos', profile.viewerRepos, options)
+  const patInstallationRepos = buildGroupCache<GitHubRepo[]>(
+    'pat-installation-repos',
+    profile.patInstallationRepos,
+    options,
+  )
   return {
     fragmentCatalog,
     fragmentDocumentBody,
@@ -386,6 +401,7 @@ export function createAppCaches(options: CreateAppCachesOptions = {}): AppCaches
     accountBudgetLimit,
     userBudgetLimit,
     viewerRepos,
+    patInstallationRepos,
     close: async () => {
       await Promise.all([
         fragmentCatalog.close(),
@@ -398,6 +414,7 @@ export function createAppCaches(options: CreateAppCachesOptions = {}): AppCaches
         accountBudgetLimit.close(),
         userBudgetLimit.close(),
         viewerRepos.close(),
+        patInstallationRepos.close(),
       ])
     },
   }
