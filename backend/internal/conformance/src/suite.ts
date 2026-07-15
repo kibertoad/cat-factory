@@ -5713,6 +5713,75 @@ export function defineIntegrationConformance(harness: ConformanceHarness): void 
         expect(envs.body).toHaveLength(0)
       })
 
+      it('runs a `library` frame`s deploy+test pipeline suite-focused: deployer no-ops, tester runs, no env — even with a compose path declared', async () => {
+        // Library-frame support: the frame CAPABILITY PROFILE (`frameProfile`), not the provisioning
+        // type, decides behaviour. A `library` frame is never deployed and needs no ephemeral env —
+        // its tester runs the suite in-container. So a deploy+test pipeline on a task under a library
+        // frame must (a) record the deployer step as a library no-op (never reaching the provider),
+        // and (b) run the tester to completion with NO provisioned environment — even when the frame
+        // declares a `docker-compose` path (repo-local TEST infra, not a deployable env). A facade
+        // that consulted the provision type instead of the frame type would try to deploy here.
+        const app = harness.makeApp()
+        const { workspace } = await app.createWorkspace()
+        const wsId = workspace.id
+
+        // A real `library` frame (POST /blocks accepts a block type), with a task nested under it.
+        const frame = await app.call<Block>('POST', `/workspaces/${wsId}/blocks`, {
+          type: 'library',
+          position: { x: 1200, y: 1200 },
+        })
+        expect(frame.status).toBe(201)
+        expect(frame.body.type).toBe('library')
+        const libFrameId = frame.body.id
+
+        // Declare a compose path — on a library this is repo-local test infra, NOT an environment.
+        // The deployer must STILL skip it (proving profile-over-provisioning).
+        await app.call('PATCH', `/workspaces/${wsId}/blocks/${libFrameId}`, {
+          provisioning: { type: 'docker-compose', composePath: 'packages/db/docker-compose.yml' },
+        })
+
+        const task = await app.call<Block>(
+          'POST',
+          `/workspaces/${wsId}/blocks/${libFrameId}/tasks`,
+          {
+            title: 'Add a public helper',
+            description: 'A new exported utility with tests.',
+          },
+        )
+        expect(task.status).toBe(201)
+        const taskId = task.body.id
+
+        const pipeline = await app.call<Pipeline>('POST', `/workspaces/${wsId}/pipelines`, {
+          name: 'Deploy + test',
+          agentKinds: ['deployer', 'tester-api'],
+        })
+        const start = await app.call<ExecutionInstance>(
+          'POST',
+          `/workspaces/${wsId}/blocks/${taskId}/executions`,
+          { pipelineId: pipeline.body.id },
+        )
+        // The run STARTS (the library short-circuits in the tester-infra / deployer start gates keep
+        // a compose-declaring library from being refused for a "missing handler").
+        expect(start.status).toBe(201)
+
+        const exec = (await app.drive(wsId)).find((e) => e.blockId === taskId)!
+        expect(exec.status).toBe('done')
+
+        // The deployer is a library no-op (records WHY it skipped; provider never reached, no env).
+        const deployStep = exec.steps.find((s) => s.agentKind === 'deployer')!
+        expect(deployStep.state).toBe('done')
+        expect(deployStep.output).toContain('Library frame')
+        expect(deployStep.environment ?? null).toBeNull()
+
+        // The tester still ran (suite posture) — a library`s missing env is never a dead-end.
+        const testStep = exec.steps.find((s) => s.agentKind === 'tester-api')!
+        expect(testStep.state).toBe('done')
+
+        // Nothing was provisioned.
+        const envs = await app.call<{ id: string }[]>('GET', `/workspaces/${wsId}/environments`)
+        expect(envs.body).toHaveLength(0)
+      })
+
       it('describes the provider config + missingRequired identically on every facade', async () => {
         // `GET /provider` self-describes the connect form (configFields) and reports which
         // required-without-default fields the workspace still owes (`missingRequired`, the

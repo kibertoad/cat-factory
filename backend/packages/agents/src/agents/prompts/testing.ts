@@ -1,4 +1,5 @@
 import type { AgentKind, AgentRunContext } from '@cat-factory/kernel'
+import { frameProfile } from '@cat-factory/contracts'
 import { FINAL_ANSWER_IN_REPLY, STANDARDS_FOOTER } from './shared.js'
 
 // Built-out role prompts for the Tester → Fixer loop. The `tester` clones the PR
@@ -36,6 +37,8 @@ const TEST_REPORT_SHAPE = [
 const TESTER_SYSTEM_PROMPT = [
   'You are a meticulous test engineer doing EXPLORATORY testing of a pull request before release.',
   'You actually run the software and observe its behaviour — you do NOT pass judgement by reading the diff or restating what the implementer says they did. A greenlight that is not backed by something you actually exercised is worthless.',
+  '',
+  'If "Run mode" below says this is a LIBRARY test suite, there is no running system to probe: your job shifts to the suite — install and build the package, bring up any test dependencies, run the unit + integration tests, assess how well they cover the public API surface for THIS change, and author the missing unit/integration tests on the branch. The rules below (base every outcome on something you observed; a failed outcome blocks the greenlight; abort rather than guess if you truly cannot run the suite) apply unchanged.',
   '',
   'Bootstrap your environment from the repository:',
   "- Read the repo's README.md (and any CONTRIBUTING / docs it points to) to learn how to install dependencies, configure the service, run migrations and start it.",
@@ -173,17 +176,33 @@ export function testingSystemPrompt(kind: AgentKind): string | undefined {
 }
 
 /**
- * The "which environment to run in" section for a Tester step, rendered from the service's
- * declared provision type AND whether the run provisioned an environment: a `kubernetes`/
- * `custom` service — or ANY run that provisioned an env URL (e.g. a `deployer` step) — runs
- * against that ephemeral environment; a `docker-compose` service has its dependencies stood
- * up locally; an `infraless` service (or none declared) stands nothing up. Empty for
- * non-tester kinds, so callers can append it unconditionally. Kept in lock-step with
+ * The "which environment to run in" section for a Tester step, rendered from the frame's
+ * capability profile + its declared provision type: a `library` frame (not `deployable`) runs
+ * the suite in-container (any repo-local compose stood up on localhost, else its lifecycle
+ * scripts); a `kubernetes`/`custom` service — or ANY run that provisioned an env URL (e.g. a
+ * `deployer` step) — runs against that ephemeral environment; a `docker-compose` service has its
+ * dependencies stood up locally; an `infraless` service (or none declared) stands nothing up.
+ * Empty for non-tester kinds, so callers can append it unconditionally. Kept in lock-step with
  * {@link testerInfraSpec} (server) so the prompt and the harness `infra` spec never disagree.
  */
 export function testerEnvironmentSection(context: AgentRunContext): string {
   if (context.agentKind !== TESTER_AGENT_KIND && context.agentKind !== UI_TESTER_AGENT_KIND)
     return ''
+  // A `library` frame (not `deployable`) has no deployment and no running system to probe: the
+  // tester runs the suite in-container. When the frame declares a repo/package-local compose file
+  // it has been stood up on localhost (the harness `standUpInfra` path); otherwise the agent
+  // self-manages test deps via the repo's `pretest:ci`/`test:ci`/`posttest:ci` lifecycle scripts.
+  const frameType = context.service?.type
+  if (frameType && !frameProfile(frameType).deployable) {
+    return (
+      '\nRun mode: library test suite — this is a published package with no deployment and no ' +
+      'running system. Install and build the package; if this run stood up repo-local test ' +
+      'dependencies they are on localhost (connect to them), otherwise run the repo’s ' +
+      '`pretest:ci` / `test:ci` / `posttest:ci` lifecycle scripts (where present) to self-manage ' +
+      'them. Then run the unit + integration suite, assess coverage of the public API surface ' +
+      'against this change, and add the missing unit/integration tests on the branch.'
+    )
+  }
   const type = context.service?.provisioning?.type
   if (type === 'kubernetes' || type === 'custom' || context.environment?.url) {
     return '\nRun mode: ephemeral environment — test against the environment described under "Ephemeral environment under test" above (URL/host/port + any credentials); do not start the service locally.'

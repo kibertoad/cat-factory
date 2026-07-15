@@ -20,6 +20,7 @@ import {
   allPullRequests,
   DEFAULT_COMPANION_MAX_ATTEMPTS,
   frameAllowsVisualPipeline,
+  frameProfile,
   isLocalRunner,
   pipelineHasVisualStep,
 } from '@cat-factory/contracts'
@@ -1154,6 +1155,10 @@ export class ExecutionService {
       })
     }
     const service = await this.contextBuilder.resolveServiceConfig(workspaceId, block)
+    // A `library` frame (not `liveTestable`) runs its unit/integration suite IN-CONTAINER — any
+    // repo-local docker-compose is test infra stood up on localhost, never a Deployer-provisioned
+    // env — so the tester never needs a workspace handler. Pass through regardless of provisioning.
+    if (service?.type && !frameProfile(service.type).liveTestable) return
     const provisioning = service?.provisioning
     // `docker-compose`/`kubernetes`/`custom` are all provisioned by the Deployer via a workspace
     // handler, so resolve it lazily — and only when the provisioning seam is wired (else pass
@@ -1196,6 +1201,9 @@ export class ExecutionService {
     )
     if (!hasConsumer) return
     const service = await this.contextBuilder.resolveServiceConfig(workspaceId, block)
+    // A `library` frame stands nothing up via the Deployer (its tester runs the suite in-container),
+    // so a missing Deployer before the tester is never a dead-end — pass through like `infraless`.
+    if (service?.type && !frameProfile(service.type).deployable) return
     if (!needsDeployerBeforeConsumer(agentKinds, enabled, service?.provisioning?.type)) return
     throw new ConflictError(
       `This service provisions a '${service!.provisioning!.type}' environment, but this pipeline ` +
@@ -1235,6 +1243,11 @@ export class ExecutionService {
     if (!this.environmentProvisioning) return
     if (!hasEnabledDeployerStep(agentKinds, enabled)) return
     const service = await this.contextBuilder.resolveServiceConfig(workspaceId, block)
+    // A Deployer on a `library` frame (not `deployable`) is a safe no-op regardless of any declared
+    // provisioning — the runtime deploy loop records a library skip — so there is nothing to
+    // validate. Checked BEFORE the provisioning branch, since a library may declare a compose path
+    // as repo-local TEST infra (not a deployable env).
+    if (service?.type && !frameProfile(service.type).deployable) return
     const provisioning = service?.provisioning
     // A Deployer on an `infraless`/undeclared service is a safe no-op (nothing to provision), so
     // there is nothing to validate — matching the deployer's own skip in advanceDeployerFrames.

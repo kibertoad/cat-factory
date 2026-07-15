@@ -139,6 +139,40 @@ describe('testerInfraSpec', () => {
     expect(spec).toEqual({ environment: 'local', noInfraDependencies: true })
   })
 
+  it('stands a `library` frame`s declared compose path up locally (reviving the in-container path)', () => {
+    // A library is never deployed: a declared compose file is repo-local TEST infra brought up on
+    // localhost (the harness `standUpInfra` DinD path), NOT an ephemeral environment.
+    const spec = testerInfraSpec(
+      context({
+        service: {
+          type: 'library',
+          provisioning: { type: 'docker-compose', composePath: 'packages/db/docker-compose.yml' },
+        },
+      } as Record<string, unknown>),
+    )
+    expect(spec).toEqual({ environment: 'local', composePath: 'packages/db/docker-compose.yml' })
+  })
+
+  it('runs a `library` frame with no declared compose path as a self-managed local suite', () => {
+    // No compose path → nothing is stood up here; the agent self-manages deps via the repo`s
+    // `pretest:ci`/`test:ci` lifecycle scripts (narrated in the tester prompt).
+    const spec = testerInfraSpec(
+      context({ service: { type: 'library' } } as Record<string, unknown>),
+    )
+    expect(spec).toEqual({ environment: 'local', noInfraDependencies: true })
+  })
+
+  it('never provisions an ephemeral env for a `library` frame, even with an env URL present', () => {
+    // The frame capability profile wins over a stray env URL: a library never targets an ephemeral env.
+    const spec = testerInfraSpec(
+      context({
+        service: { type: 'library' },
+        environment: { url: 'https://stray.env' },
+      } as Record<string, unknown>),
+    )
+    expect(spec).toEqual({ environment: 'local', noInfraDependencies: true })
+  })
+
   it('carries the provisioned environment URL for a `kubernetes`/`custom` service', () => {
     const spec = testerInfraSpec(
       context({
