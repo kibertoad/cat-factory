@@ -1,4 +1,4 @@
-import * as v from 'valibot'
+import { prReviewAgentOutputSchema } from '@cat-factory/contracts'
 import { defineStructuredOutput } from './structured-output.js'
 import type { AgentKindDefinition, AgentKindRegistry } from './registry.js'
 
@@ -30,69 +30,12 @@ import type { AgentKindDefinition, AgentKindRegistry } from './registry.js'
 export const PR_REVIEWER_KIND = 'pr-reviewer'
 
 /**
- * The reviewer's structured output. Lenient (`v.fallback`) throughout — exactly like
- * `forkProposal` / `bugInvestigation` — so a partially-malformed reply degrades to sensible
- * defaults rather than failing the run: an unreadable severity/category reads as its safe
- * default, and each list degrades to empty rather than discarding the whole object. PR 2 of
- * the initiative lifts these slice/finding shapes into shared `@cat-factory/contracts` schemas
- * (for the step-state + selection UI); until then this is the sole definition.
+ * The reviewer's structured output. The lenient (`v.fallback`) slice/finding shape is the
+ * SINGLE source of truth in `@cat-factory/contracts` (`prReviewAgentOutputSchema`) — shared
+ * with the engine's coercion onto `step.prReview` and the selection UI — so a partially-
+ * malformed reply degrades to sensible defaults rather than failing the run.
  */
-export const prReview = defineStructuredOutput(
-  v.object({
-    /** One-paragraph overall assessment of the PR. */
-    summary: v.fallback(v.optional(v.string()), undefined),
-    /** The cohesive slices the reviewer grouped the changed files into. */
-    slices: v.fallback(
-      v.array(
-        v.fallback(
-          v.object({
-            title: v.fallback(v.string(), ''),
-            rationale: v.fallback(v.string(), ''),
-            paths: v.fallback(v.array(v.fallback(v.string(), '')), []),
-          }),
-          { title: '', rationale: '', paths: [] },
-        ),
-      ),
-      [],
-    ),
-    /** The findings, ordered by severity (blocker → nit). */
-    findings: v.fallback(
-      v.array(
-        v.fallback(
-          v.object({
-            path: v.fallback(v.string(), ''),
-            line: v.fallback(v.optional(v.number()), undefined),
-            side: v.fallback(v.optional(v.picklist(['LEFT', 'RIGHT'])), undefined),
-            severity: v.fallback(v.picklist(['blocker', 'high', 'medium', 'low', 'nit']), 'medium'),
-            category: v.fallback(
-              v.picklist([
-                'correctness',
-                'security',
-                'performance',
-                'maintainability',
-                'style',
-                'test',
-                'other',
-              ]),
-              'other',
-            ),
-            title: v.fallback(v.string(), ''),
-            detail: v.fallback(v.string(), ''),
-            suggestedFix: v.fallback(v.optional(v.string()), undefined),
-          }),
-          {
-            path: '',
-            severity: 'medium' as const,
-            category: 'other' as const,
-            title: '',
-            detail: '',
-          },
-        ),
-      ),
-      [],
-    ),
-  }),
-)
+export const prReview = defineStructuredOutput(prReviewAgentOutputSchema)
 
 export type PrReviewOutput = ReturnType<typeof prReview.parse>
 
@@ -153,7 +96,9 @@ export const PR_REVIEWER_AGENT_KINDS: AgentKindDefinition[] = [
         'Deep, token-bounded review of an open pull request: slices a large diff into cohesive ' +
         'chunks, reviews each, and returns prioritized findings.',
       category: 'review',
-      resultView: 'generic-structured',
+      // Opens the dedicated PR-review window (findings grouped by slice + multi-select →
+      // resolve) instead of the generic read-only JSON viewer. See PrReviewWindow.vue.
+      resultView: 'pr-review',
     },
   },
 ]

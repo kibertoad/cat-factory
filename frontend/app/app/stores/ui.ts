@@ -834,6 +834,31 @@ export const useUiStore = defineStore('ui', () => {
       stepIndex: idx,
     }
   }
+  // Open the PR deep-review window for a run's `pr-reviewer` step (from the `pr_review_ready`
+  // notification / the step). Resolves the step index from the run when not given, preferring
+  // the step parked awaiting a finding selection.
+  function openPrReview(instanceId: string, stepIndex: number | null = null) {
+    const execution = useExecutionStore()
+    const instance = execution.getInstance(instanceId)
+    if (!instance) return
+    const resolveIdx = () => {
+      const awaiting = instance.steps.findIndex(
+        (s) => s.agentKind === 'pr-reviewer' && s.prReview?.status === 'awaiting_selection',
+      )
+      if (awaiting >= 0) return awaiting
+      const current = instance.steps[instance.currentStep]
+      if (current?.agentKind === 'pr-reviewer' && current.prReview) return instance.currentStep
+      return instance.steps.findIndex((s) => s.agentKind === 'pr-reviewer' && s.prReview)
+    }
+    const idx = stepIndex ?? resolveIdx()
+    if (idx < 0) return
+    resultView.value = {
+      view: 'pr-review',
+      blockId: instance.blockId,
+      instanceId,
+      stepIndex: idx,
+    }
+  }
   function closeResultView() {
     resultView.value = null
   }
@@ -1032,6 +1057,7 @@ export const useUiStore = defineStore('ui', () => {
     openInitiativePlanning,
     openFollowUps,
     openForkDecision,
+    openPrReview,
     closeRequirementReview,
     openStepDetail,
     closeStepDetail,

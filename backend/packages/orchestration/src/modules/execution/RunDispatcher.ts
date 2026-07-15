@@ -21,6 +21,9 @@ import type {
   ForkDecisionStepState,
   ChooseForkInput,
   ForkChatRequestInput,
+  PrReviewAgentOutput,
+  PrReviewStepState,
+  ResolvePrReviewInput,
   GateContext,
   GateDefinition,
   GateHelperJobResult,
@@ -76,6 +79,7 @@ import {
   blueprintPostOp,
   commitInitiativeTracker,
   FORK_PROPOSER_KIND,
+  PR_REVIEWER_KIND,
   hasTrait,
   isCompanionKind,
   isContainerBackedCompanion,
@@ -137,6 +141,7 @@ import { HumanTestController } from './HumanTestController.js'
 import { MergeResolver } from './MergeResolver.js'
 import { ReviewGateController, type ReviewKind } from './ReviewGateController.js'
 import { ForkDecisionController } from './ForkDecisionController.js'
+import { PrReviewController, PR_REVIEW_STEP_KIND } from './PrReviewController.js'
 import {
   DEFAULT_FORK_MAX_CHAT_TURNS,
   forkPhasePending,
@@ -273,6 +278,7 @@ export interface RunDispatcherDeps {
   visualConfirmationController: VisualConfirmationController
   reviewGate: ReviewGateController
   forkDecisionController: ForkDecisionController
+  prReviewController: PrReviewController
   requirementsKind: ReviewKind<RequirementReview>
   clarityKind: ReviewKind<ClarityReview>
   requirementsBrainstormKind: ReviewKind<BrainstormSession>
@@ -340,6 +346,7 @@ export class RunDispatcher {
   private readonly visualConfirmationController: VisualConfirmationController
   private readonly reviewGate: ReviewGateController
   private readonly forkDecisionController: ForkDecisionController
+  private readonly prReviewController: PrReviewController
   private readonly requirementsKind: ReviewKind<RequirementReview>
   private readonly clarityKind: ReviewKind<ClarityReview>
   private readonly requirementsBrainstormKind: ReviewKind<BrainstormSession>
@@ -394,6 +401,7 @@ export class RunDispatcher {
     this.visualConfirmationController = deps.visualConfirmationController
     this.reviewGate = deps.reviewGate
     this.forkDecisionController = deps.forkDecisionController
+    this.prReviewController = deps.prReviewController
     this.requirementsKind = deps.requirementsKind
     this.clarityKind = deps.clarityKind
     this.requirementsBrainstormKind = deps.requirementsBrainstormKind
@@ -2996,6 +3004,30 @@ export class RunDispatcher {
           )
         },
       },
+      // The read-only `pr-reviewer` deep-review job just finished on a review task's step. Its
+      // structured `result.custom` is the sliced, prioritized findings; record them onto the
+      // step's `prReview` and PARK for the human to select which findings matter (≥1 finding),
+      // rather than the normal completion. A clean PR (no findings) returns null and falls
+      // through to the normal finish. Keyed on the `pr-reviewer` step kind.
+      {
+        kind: 'pr-review',
+        order: 106,
+        canIntercept: ({ step }) => step.agentKind === PR_REVIEW_STEP_KIND,
+        intercept: async ({ workspaceId, instance, step, result }) => {
+          const output = this.agentKindRegistry
+            .structuredOutput(PR_REVIEWER_KIND)
+            ?.safeParse(result.custom) as PrReviewAgentOutput | undefined
+          const block = await this.blockRepository.get(workspaceId, instance.blockId)
+          return this.prReviewController.recordFindings(
+            workspaceId,
+            instance,
+            step,
+            output,
+            result.model ?? step.model,
+            block,
+          )
+        },
+      },
       // A `tester` step returned a structured report. On a withheld greenlight we do NOT
       // finish the step: loop the `fixer` (within the attempt budget) and re-test, mirroring
       // the CI gate. A greenlight (or no provider) returns null and falls through to the
@@ -3632,6 +3664,20 @@ export class RunDispatcher {
     input: ForkChatRequestInput,
   ): Promise<ForkDecisionStepState> {
     return this.forkDecisionController.chat(workspaceId, executionId, input)
+  }
+
+  /** Read a run's active PR deep-review state, or null. */
+  getPrReview(workspaceId: string, executionId: string): Promise<PrReviewStepState | null> {
+    return this.prReviewController.getActive(workspaceId, executionId)
+  }
+
+  /** Resolve a parked PR review: record the human's finding selection and advance the run. */
+  resolvePrReview(
+    workspaceId: string,
+    executionId: string,
+    input: ResolvePrReviewInput,
+  ): Promise<PrReviewStepState> {
+    return this.prReviewController.resolve(workspaceId, executionId, input)
   }
 
   /**

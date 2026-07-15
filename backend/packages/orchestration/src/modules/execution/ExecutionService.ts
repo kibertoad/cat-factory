@@ -8,6 +8,8 @@ import type {
   ForkDecisionStepState,
   ChooseForkInput,
   ForkChatRequestInput,
+  PrReviewStepState,
+  ResolvePrReviewInput,
   RiskPolicyRepository,
   PipelineStep,
   PullRequestMerger,
@@ -90,6 +92,7 @@ import { MergeResolver, type FinalizeMergeResult } from './MergeResolver.js'
 import { orderPrsForMerge } from './mergeOrder.logic.js'
 import { ReviewGateController, type ReviewKind } from './ReviewGateController.js'
 import { ForkDecisionController } from './ForkDecisionController.js'
+import { PrReviewController } from './PrReviewController.js'
 import {
   BrainstormActions,
   ClarityReviewActions,
@@ -559,6 +562,7 @@ export class ExecutionService {
   private readonly reviewGate: ReviewGateController
   /** Drives the human-facing half of the implementation-fork decision phase on the Coder step. */
   private readonly forkDecisionController: ForkDecisionController
+  private readonly prReviewController: PrReviewController
   /** The requirements subject for {@link reviewGate}. */
   private readonly requirementsKind: ReviewKind<RequirementReview>
   /** The clarity (bug-report triage) subject for {@link reviewGate}. */
@@ -845,6 +849,15 @@ export class ExecutionService {
       resolveEffectiveDescription: (ws, block) =>
         this.contextBuilder.resolveEffectiveDescription(ws, block),
     })
+    this.prReviewController = new PrReviewController({
+      executionRepository,
+      workRunner,
+      stateMachine: this.runStateMachine,
+      stepGraph: this.stepGraph,
+      idGenerator,
+      clock,
+      notificationService,
+    })
     this.requirementsKind = this.buildRequirementsKind()
     this.clarityKind = this.buildClarityKind()
     this.requirementsBrainstormKind = this.buildBrainstormKind(
@@ -910,6 +923,7 @@ export class ExecutionService {
       visualConfirmationController: this.visualConfirmationController,
       reviewGate: this.reviewGate,
       forkDecisionController: this.forkDecisionController,
+      prReviewController: this.prReviewController,
       requirementsKind: this.requirementsKind,
       clarityKind: this.clarityKind,
       requirementsBrainstormKind: this.requirementsBrainstormKind,
@@ -2164,6 +2178,20 @@ export class ExecutionService {
     input: ForkChatRequestInput,
   ): Promise<ForkDecisionStepState> {
     return this.runDispatcher.forkChat(workspaceId, executionId, input)
+  }
+
+  /** @see RunDispatcher.getPrReview */
+  getPrReview(workspaceId: string, executionId: string): Promise<PrReviewStepState | null> {
+    return this.runDispatcher.getPrReview(workspaceId, executionId)
+  }
+
+  /** @see RunDispatcher.resolvePrReview */
+  resolvePrReview(
+    workspaceId: string,
+    executionId: string,
+    input: ResolvePrReviewInput,
+  ): Promise<PrReviewStepState> {
+    return this.runDispatcher.resolvePrReview(workspaceId, executionId, input)
   }
 
   /** @see RunDispatcher.fileFollowUp */
