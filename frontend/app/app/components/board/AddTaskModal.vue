@@ -101,6 +101,9 @@ const timeboxHours = ref<number | undefined>(undefined)
 const spikeResearchQuestion = ref('')
 const spikeSuccessCriteria = ref('')
 const spikeOptionsToCompare = ref('')
+// Optional in-repo path the findings document is committed to (else `docs/research/<slug>.md`);
+// shares the `taskTypeFields.targetPath` field + its safe-`.md`-path validation with `document`.
+const spikeTargetPath = ref('')
 // `DOC_KINDS` (and the `DocKind` type) are owned by the contracts package — re-exported via
 // `~/types/domain` — so the picker and the create payload can't drift from the backend list.
 const docKind = ref<DocKind | ''>('')
@@ -164,6 +167,7 @@ function buildTypeFields(): TaskTypeFields | undefined {
     if (spikeResearchQuestion.value.trim()) f.researchQuestion = spikeResearchQuestion.value.trim()
     if (spikeSuccessCriteria.value.trim()) f.successCriteria = spikeSuccessCriteria.value.trim()
     if (spikeOptionsToCompare.value.trim()) f.optionsToCompare = spikeOptionsToCompare.value.trim()
+    if (spikeTargetPath.value.trim()) f.targetPath = spikeTargetPath.value.trim()
     return Object.keys(f).length ? f : undefined
   }
   if (taskType.value === 'document') {
@@ -391,6 +395,7 @@ watch(open, (isOpen) => {
   spikeResearchQuestion.value = ''
   spikeSuccessCriteria.value = ''
   spikeOptionsToCompare.value = ''
+  spikeTargetPath.value = ''
   docKind.value = ''
   docAudience.value = ''
   docTargetPath.value = ''
@@ -437,6 +442,7 @@ const { requestClose } = useUnsavedGuard({
     spikeResearchQuestion: spikeResearchQuestion.value.trim(),
     spikeSuccessCriteria: spikeSuccessCriteria.value.trim(),
     spikeOptionsToCompare: spikeOptionsToCompare.value.trim(),
+    spikeTargetPath: spikeTargetPath.value.trim(),
     docKind: docKind.value,
     docAudience: docAudience.value.trim(),
     docTargetPath: docTargetPath.value.trim(),
@@ -695,6 +701,13 @@ async function add() {
                 :rows="2"
                 autoresize
                 :placeholder="t('board.addTask.spikeFields.optionsToCompare.placeholder')"
+                class="w-full"
+              />
+            </UFormField>
+            <UFormField :label="t('board.addTask.targetPath')" :hint="t('board.addTask.optional')">
+              <UInput
+                v-model="spikeTargetPath"
+                :placeholder="t('board.addTask.targetPathPlaceholder')"
                 class="w-full"
               />
             </UFormField>

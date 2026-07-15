@@ -75,6 +75,11 @@ export const spikeFindings = defineStructuredOutput(
     /** Confidence in the recommendation, 0..1; out-of-range/non-numeric ⇒ omitted. */
     confidence: v.fallback(v.optional(v.pipe(v.number(), v.minValue(0), v.maxValue(1))), undefined),
   }),
+  // The findings ARE the deliverable — fail the run loudly when the model returns an EMPTY /
+  // truncated final answer (a common reasoning-model failure) instead of laundering it through
+  // repair into an empty findings object that would render a title-only document. Mirrors
+  // `environment-analyst`, whose deliverable is likewise the structured JSON.
+  { failOnUnusableFinal: true },
 )
 
 export type SpikeFindings = ReturnType<typeof spikeFindings.parse>
@@ -116,6 +121,23 @@ function spikeFindingsPath(context: AgentRunContext): string {
   const pinned = context.block.taskTypeFields?.targetPath?.trim()
   if (pinned) return pinned
   return `${SPIKE_FINDINGS_DIR}/${spikeSlug(context.block.title)}.md`
+}
+
+/**
+ * Whether the findings carry any substantive content worth committing. A reply that parsed
+ * (the lenient `v.fallback` schema succeeds even on `{}`) but is otherwise empty would render
+ * a title-only document; guarding on this keeps the post-op's "commits no empty report"
+ * contract honest — a degenerate empty object writes nothing.
+ */
+function spikeHasRenderableFindings(findings: SpikeFindings): boolean {
+  return Boolean(
+    findings.question?.trim() ||
+    findings.summary?.trim() ||
+    findings.recommendation?.trim() ||
+    findings.findings.length ||
+    findings.optionsCompared.some((o) => o.option) ||
+    findings.openQuestions.some((q) => q),
+  )
 }
 
 /** Render the findings to deterministic Markdown — pure (same input → same bytes). */
@@ -161,23 +183,35 @@ export function renderSpikeFindings(findings: SpikeFindings, title: string): str
  * {@link RepoFiles}, exactly like the `blueprints`/`security-auditor` post-ops.
  *
  * IDEMPOTENT (byte-identical guard) so a durable-driver replay never double-commits, and a
- * no-op when the agent returned nothing parseable (a malformed run commits no empty report).
- * When no repo is resolvable (GitHub unwired, or a docs-only spike under an unlinked service)
- * the engine skips the whole hook before this runs, so the findings still settle on
- * `step.custom` — the commit is a best-effort durable copy, not a precondition for success.
+ * no-op when the agent returned nothing parseable OR a present-but-empty object (a malformed
+ * run commits no empty report — see {@link spikeHasRenderableFindings}).
+ *
+ * The commit is genuinely a BEST-EFFORT durable copy, not a precondition for success: the
+ * findings already live on `step.custom` (the UI's source of truth), so a repo that rejects
+ * the write — a protected base branch, a token without push, a transient API error — must NOT
+ * discard an otherwise-successful investigation. A commit failure is therefore swallowed here
+ * rather than propagated (a throwing post-op fails the whole run). The repo-less case (no repo
+ * resolvable — GitHub unwired, or a docs-only spike under an unlinked service) is handled a
+ * layer up: the engine skips the whole hook before this runs.
  */
 export const spikePostOp: RepoOp = async (ctx) => {
   const findings = spikeFindings.safeParse(ctx.result?.custom)
-  if (!findings) return
+  if (!findings || !spikeHasRenderableFindings(findings)) return
   const path = spikeFindingsPath(ctx.context)
   const content = renderSpikeFindings(findings, ctx.context.block.title)
-  const existing = await ctx.repo.getFile(path, ctx.branch)
-  if (existing?.content === content) return
-  await ctx.repo.commitFiles({
-    branch: ctx.branch,
-    message: 'docs(research): update spike findings',
-    files: [{ path, content }],
-  })
+  try {
+    const existing = await ctx.repo.getFile(path, ctx.branch)
+    if (existing?.content === content) return
+    await ctx.repo.commitFiles({
+      branch: ctx.branch,
+      message: 'docs(research): update spike findings',
+      files: [{ path, content }],
+    })
+  } catch {
+    // Best-effort: the findings survive on `step.custom`, so a rejected repo interaction
+    // (protected branch / missing push permission / transient API failure) leaves the spike
+    // `done` with its findings intact rather than failing the run over the durable copy.
+  }
 }
 
 /**

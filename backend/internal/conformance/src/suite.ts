@@ -2574,6 +2574,41 @@ export function defineAgentConformance(harness: ConformanceHarness): void {
         expect(spikeStep.custom).toMatchObject({ recommendation: 'Adopt X behind a flag.' })
         expect((await app.blockRepository().get(wsId, 'task_login'))?.status).toBe('done')
       })
+
+      it('reaches `done` even when the findings commit is rejected (best-effort durable copy)', async () => {
+        // The findings already settle on `step.custom` (the UI's source of truth), so a repo
+        // that refuses the write — a protected base branch, a token without push, a transient
+        // API error — must NOT discard an otherwise-successful investigation. The post-op
+        // swallows the failure rather than failing the whole run.
+        const repo: RepoFiles = {
+          getFile: async () => null,
+          listDirectory: async () => [],
+          headSha: async () => 'base-sha',
+          createBranch: async () => {},
+          deleteBranch: async () => {},
+          commitFiles: async () => {
+            throw new Error('protected branch: refusing the push')
+          },
+          openPullRequest: async () => {
+            throw new Error('a spike opens no PR')
+          },
+        }
+        const app = harness.makeApp(
+          { customResult: SPIKE_FINDINGS },
+          { resolveRunRepoContext: async () => ({ repo, baseBranch: 'main' }) },
+        )
+        const { workspace } = await app.createWorkspace()
+        const wsId = workspace.id
+        const start = await app.call('POST', `/workspaces/${wsId}/blocks/task_login/executions`, {
+          pipelineId: 'pl_spike',
+        })
+        expect(start.status).toBe(201)
+        const exec = (await app.drive(wsId)).find((e) => e.blockId === 'task_login')!
+        expect(exec.status).toBe('done')
+        const spikeStep = exec.steps.find((s) => s.agentKind === 'spike')!
+        expect(spikeStep.custom).toMatchObject({ recommendation: 'Adopt X behind a flag.' })
+        expect((await app.blockRepository().get(wsId, 'task_login'))?.status).toBe('done')
+      })
     })
 
     describe('registered custom gate + step resolver', () => {
