@@ -241,4 +241,43 @@ describe('public API — basic board workloads (services + tasks)', () => {
     expect(refused.status).toBe(409)
     expect(refused.body.error.code).toBe('individual_model_unsupported')
   })
+
+  it('refuses to start a task under an archived service, but still lets it be read', async () => {
+    const app = makeApp(new FakeAgentExecutor())
+    const workspaceId = (await app.createOrgWorkspace({ seed: true })).workspace.id
+    const auth = await mintKey(app, workspaceId)
+
+    const frame = await app.call<{ id: string }>('POST', `/workspaces/${workspaceId}/blocks`, {
+      type: 'service',
+      position: { x: 900, y: 900 },
+    })
+    const task = await app.call<Task>(
+      'POST',
+      `/api/v1/services/${frame.body.id}/tasks`,
+      { title: 'Task on a soon-to-be-archived service' },
+      auth,
+    )
+    const taskId = task.body.taskId
+
+    // Archive the enclosing service via the session board API.
+    expect(
+      (await app.call('POST', `/workspaces/${workspaceId}/blocks/${frame.body.id}/archive`)).status,
+    ).toBe(200)
+
+    // Start is refused (409 service_archived) — consistent with listServiceTasks hiding an
+    // archived service and addServiceTask refusing to add work to one.
+    const refused = await app.call<{ error: { code: string } }>(
+      'POST',
+      `/api/v1/tasks/${taskId}/start`,
+      { pipelineId: 'pl_quick' },
+      auth,
+    )
+    expect(refused.status).toBe(409)
+    expect(refused.body.error.code).toBe('service_archived')
+
+    // But the task remains READABLE (poll a run that was in flight when the service was archived).
+    const got = await app.call<Task>('GET', `/api/v1/tasks/${taskId}`, undefined, auth)
+    expect(got.status).toBe(200)
+    expect(got.body.taskId).toBe(taskId)
+  })
 })

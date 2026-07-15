@@ -485,7 +485,7 @@ export function publicApiController(): Hono<AppEnv> {
     if (!found) {
       return c.json({ error: { code: 'not_found', message: 'Task not found' } }, 404)
     }
-    return c.json(toPublicTask(found.block, found.serviceId), 200)
+    return c.json(toPublicTask(found.block, found.service.id), 200)
   })
 
   // Start (run) a task.
@@ -503,6 +503,20 @@ export function publicApiController(): Hono<AppEnv> {
     const found = await container.boardService.getServiceTask(auth.workspaceId, taskId)
     if (!found) {
       return c.json({ error: { code: 'not_found', message: 'Task not found' } }, 404)
+    }
+    // A task under an ARCHIVED service is still READABLE (poll a run that was in flight when the
+    // service was archived) but not START-able — consistent with `listServiceTasks`, which hides
+    // an archived service entirely, and with `addServiceTask`, which refuses to add work to one.
+    if (found.service.archived) {
+      return c.json(
+        {
+          error: {
+            code: 'service_archived',
+            message: 'This task belongs to an archived service and cannot be started',
+          },
+        },
+        409,
+      )
     }
     // The pipeline to run: the request's, else the task's pinned pipeline. A task with
     // neither can't be started headlessly (there is no run-time picker for an API caller).
@@ -549,22 +563,16 @@ export function publicApiController(): Hono<AppEnv> {
     }
     // Headless / system-initiated: no `usr_*` initiator. The engine's own start-time gates
     // (per-service running-task cap, dependency gate, runnability) apply as for any board start;
-    // their `DomainError`s map to the right HTTP status via the shared error handler.
-    const execution = await container.executionService.start(
-      auth.workspaceId,
-      taskId,
-      pipelineId,
-      null,
-    )
-    // Re-project the task now that the run exists (status flipped to `in_progress`, execution
-    // id set) so the caller can immediately poll `GET /api/v1/tasks/:taskId`.
-    return c.json(
-      toPublicTask(
-        { ...found.block, status: 'in_progress', executionId: execution.id },
-        found.serviceId,
-      ),
-      202,
-    )
+    // their `DomainError`s map to the right HTTP status via the shared error handler. This is the
+    // abuse backstop for board starts — the analogue of the initiative surface's active-run cap.
+    await container.executionService.start(auth.workspaceId, taskId, pipelineId, null)
+    // Re-read the task so the caller gets its AUTHORITATIVE post-start projection (status,
+    // executionId, progress) rather than an optimistic guess — a run may park/block at its first
+    // step rather than land on `in_progress`. `getServiceTask` never returns null here (start did
+    // not delete the block), but fall back to the pre-start projection if the row is somehow gone.
+    const after = await container.boardService.getServiceTask(auth.workspaceId, taskId)
+    const projected = after ?? found
+    return c.json(toPublicTask(projected.block, projected.service.id), 202)
   })
 
   return app

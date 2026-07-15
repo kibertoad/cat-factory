@@ -691,23 +691,24 @@ export class BoardService {
   }
 
   /**
-   * Public-API: fetch a board task + its enclosing service frame id, scoped to the
-   * workspace. Returns null when no such task exists in the workspace, it is not a
-   * `task`-level block, it is a headless `internal` anchor, or it has no resolvable
-   * enclosing service frame — so the caller (and any external key) sees only real,
-   * board-visible tasks it owns.
+   * Public-API: fetch a board task + its enclosing service frame, scoped to the workspace.
+   * Returns null when no such task exists in the workspace, it is not a `task`-level block,
+   * it is a headless `internal` anchor, or it has no resolvable enclosing service frame — so
+   * the caller (and any external key) sees only real, board-visible tasks it owns. The frame
+   * is returned in full (not just its id) so a caller can gate on service state (e.g. refuse
+   * to START a task under an archived service, while still allowing its status to be READ).
    */
   async getServiceTask(
     workspaceId: string,
     taskId: string,
-  ): Promise<{ block: Block; serviceId: string } | null> {
+  ): Promise<{ block: Block; service: Block } | null> {
     await this.requireWorkspace(workspaceId)
     const blocks = await this.blockRepository.listByWorkspace(workspaceId)
     const block = blocks.find((b) => b.id === taskId)
     if (!block || block.level !== 'task' || block.internal) return null
     const frame = serviceOf(blocks, block)
     if (!frame) return null
-    return { block, serviceId: frame.id }
+    return { block, service: frame }
   }
 
   /**
