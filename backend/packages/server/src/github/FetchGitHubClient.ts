@@ -2,6 +2,7 @@ import {
   type Clock,
   type CommitFilesResult,
   type GitHubBranch,
+  type GitHubChangedFile,
   type GitHubCheckRun,
   type GitHubClient,
   type GitHubCodeSearchHit,
@@ -847,6 +848,35 @@ export class FetchGitHubClient implements GitHubClient {
           author: c.user?.login ?? '',
           body: c.body ?? '',
           createdAt: parseGitHubTime(c.created_at),
+        })),
+    )
+  }
+
+  async listChangedFiles(
+    installationId: number,
+    ref: GitHubRepoRef,
+    number: number,
+  ): Promise<GitHubChangedFile[]> {
+    return this.paginate<GitHubChangedFile>(
+      `/repos/${ref.owner}/${ref.repo}/pulls/${number}/files?per_page=${PER_PAGE}`,
+      { installationId },
+      (json) =>
+        (
+          json as {
+            filename?: string
+            previous_filename?: string | null
+            status?: string
+            additions?: number
+            deletions?: number
+            patch?: string | null
+          }[]
+        ).map((f) => ({
+          path: f.filename ?? '',
+          previousPath: f.previous_filename ?? null,
+          status: f.status ?? 'modified',
+          additions: f.additions ?? 0,
+          deletions: f.deletions ?? 0,
+          patch: f.patch ?? null,
         })),
     )
   }

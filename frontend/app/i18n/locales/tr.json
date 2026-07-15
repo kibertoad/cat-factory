@@ -167,7 +167,8 @@
         "bug": "Hata",
         "document": "Belge",
         "spike": "Spike",
-        "recurring": "Yinelenen"
+        "recurring": "Yinelenen",
+        "review": "İnceleme"
       },
       "recurringWithFrame": "Yinelenen bir görev, bir işlem hattını belirli bir aralıkta çalıştırır. Programı ve istemi ayarlamak için devam edin.",
       "recurringNoFrame": "Yinelenen bir görev bir serviste bulunmalıdır. Bir servis çerçevesinden (veya içindeki bir modülden) ekleyin.",
@@ -263,7 +264,13 @@
       "continue": "Devam",
       "submit": "Görev ekle",
       "addFailedTitle": "Görev eklenemedi",
-      "linkFailed": "Görev eklendi, ancak {count} ek bağlanamadı | Görev eklendi, ancak {count} ek bağlanamadı"
+      "linkFailed": "Görev eklendi, ancak {count} ek bağlanamadı | Görev eklendi, ancak {count} ek bağlanamadı",
+      "review": {
+        "prUrl": "Pull request",
+        "prUrlHint": "İncelenecek pull request'in URL'si veya numarası",
+        "focus": "İnceleme odağı",
+        "focusPlaceholder": "örn. kimlik doğrulama değişikliklerine ve hata yönetimine odaklan"
+      }
     },
     "recurring": {
       "title": "Yinelenen bir işlem hattı ekle",
@@ -2485,7 +2492,8 @@
         "feature": "özellik",
         "bug": "hata",
         "document": "belge",
-        "spike": "inceleme"
+        "spike": "inceleme",
+        "review": "inceleme"
       },
       "observability": {
         "heading": "Agent gözlemlenebilirliği",

@@ -167,7 +167,8 @@
         "bug": "Błąd",
         "document": "Dokument",
         "spike": "Spike",
-        "recurring": "Cykliczne"
+        "recurring": "Cykliczne",
+        "review": "Przegląd"
       },
       "recurringWithFrame": "Zadanie cykliczne uruchamia pipeline w określonym rytmie. Kontynuuj, aby ustawić harmonogram i prompt.",
       "recurringNoFrame": "Zadanie cykliczne musi należeć do usługi. Dodaj je z ramki usługi (lub modułu w jej obrębie).",
@@ -263,7 +264,13 @@
       "continue": "Dalej",
       "submit": "Dodaj zadanie",
       "addFailedTitle": "Nie udało się dodać zadania",
-      "linkFailed": "Zadanie dodane, ale nie udało się powiązać {count} załącznika | Zadanie dodane, ale nie udało się powiązać {count} załączników | Zadanie dodane, ale nie udało się powiązać {count} załączników"
+      "linkFailed": "Zadanie dodane, ale nie udało się powiązać {count} załącznika | Zadanie dodane, ale nie udało się powiązać {count} załączników | Zadanie dodane, ale nie udało się powiązać {count} załączników",
+      "review": {
+        "prUrl": "Pull request",
+        "prUrlHint": "URL lub numer pull requesta do przeglądu",
+        "focus": "Zakres przeglądu",
+        "focusPlaceholder": "np. skup się na zmianach uwierzytelniania i obsłudze błędów"
+      }
     },
     "recurring": {
       "title": "Dodaj cykliczny pipeline",
@@ -2363,7 +2370,8 @@
         "feature": "funkcja",
         "bug": "błąd",
         "document": "dokument",
-        "spike": "spike"
+        "spike": "spike",
+        "review": "przegląd"
       },
       "observability": {
         "heading": "Obserwowalność agenta",
