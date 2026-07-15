@@ -147,7 +147,10 @@ export function buildLocalContainer(options: NodeContainerOptions): ServerContai
   // explicitly configured PAT (GitHub or GitLab) wins; delegation is the no-PAT default.
   const delegatedGitHub = mothership && !gitToken ? mothership.githubTokenSource : undefined
   const vcsClient: GitHubClient | undefined = pat
-    ? createLocalGitHubClient(env)
+    ? // The picker-typeahead enumeration cache (`AppCaches.patInstallationRepos`). `start()`
+      // passes the process cache bag through; a mothership boot / test harness without one
+      // degrades to a live enumeration per search, unchanged.
+      createLocalGitHubClient(env, options.caches?.patInstallationRepos)
     : gitlabPat
       ? createLocalGitLabClient(env)
       : delegatedGitHub
