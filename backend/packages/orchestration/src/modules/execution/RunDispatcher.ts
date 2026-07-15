@@ -3018,14 +3018,13 @@ export class RunDispatcher {
             .structuredOutput(PR_REVIEWER_KIND)
             ?.safeParse(result.custom) as PrReviewAgentOutput | undefined
           const block = await this.blockRepository.get(workspaceId, instance.blockId)
-          const prUrl = block?.taskTypeFields?.prUrl?.trim() || null
           return this.prReviewController.recordFindings(
             workspaceId,
             instance,
             step,
             output,
             result.model ?? step.model,
-            prUrl,
+            block,
           )
         },
       },

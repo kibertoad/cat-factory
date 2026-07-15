@@ -1,5 +1,5 @@
 import type {
-  BlockRepository,
+  Block,
   Clock,
   ExecutionInstance,
   ExecutionRepository,
@@ -23,7 +23,6 @@ export const PR_REVIEW_STEP_KIND = PR_REVIEWER_KIND
 
 /** What the PR-review controller needs beyond the shared run state-machine spine. */
 export interface PrReviewControllerDeps {
-  blockRepository: BlockRepository
   executionRepository: ExecutionRepository
   workRunner: WorkRunner
   /** The async instance/block spine (park/advance/persist/emit/progress). */
@@ -60,7 +59,9 @@ export class PrReviewController {
    * `pr_review_ready` card, and park on a durable decision-wait. With none (clean PR / degenerate
    * output): record an empty `done` review in place and return `null` so the normal
    * finish/advance spine completes the read-only step. Idempotent: a step already carrying a
-   * resolved review is left to the normal spine.
+   * recorded review is left alone — an already-parked review stays parked (no re-coercion,
+   * which would re-mint the finding ids the human may be mid-selection on, nor a duplicate
+   * card), and a resolved/clean review falls through to the normal spine.
    */
   async recordFindings(
     workspaceId: string,
@@ -68,8 +69,18 @@ export class PrReviewController {
     step: PipelineStep,
     output: PrReviewAgentOutput | undefined,
     model: string | null | undefined,
-    prUrl: string | null | undefined,
+    block: Block | null | undefined,
   ): Promise<AdvanceResult | null> {
+    // A double-fire of the completion interceptor (a durable retry/replay) must not re-coerce:
+    // re-minting finding ids would strand the human's in-flight selection and re-raise the card.
+    // Keep an unresolved review parked; leave a resolved/clean one to the normal spine.
+    if (step.prReview && step.prReview.status !== 'reviewing') {
+      return step.prReview.status === 'awaiting_selection'
+        ? this.deps.stateMachine.parkStepOnDecision(workspaceId, instance, step)
+        : null
+    }
+
+    const prUrl = block?.taskTypeFields?.prUrl?.trim() || null
     const { summary, slices, findings } = coercePrReview(
       output,
       () => this.deps.idGenerator.next('prs'),
@@ -102,7 +113,7 @@ export class PrReviewController {
       prUrl: prUrl ?? null,
       model: model ?? null,
     }
-    await this.raisePrReviewReady(workspaceId, instance, findings.length, slices.length)
+    await this.raisePrReviewReady(workspaceId, instance, block, findings.length, slices.length)
     return this.deps.stateMachine.parkStepOnDecision(workspaceId, instance, step)
   }
 
@@ -180,12 +191,11 @@ export class PrReviewController {
   private async raisePrReviewReady(
     workspaceId: string,
     instance: ExecutionInstance,
+    block: Block | null | undefined,
     findingCount: number,
     sliceCount: number,
   ): Promise<void> {
-    if (!this.deps.notificationService) return
-    const block = await this.deps.blockRepository.get(workspaceId, instance.blockId)
-    if (!block) return
+    if (!this.deps.notificationService || !block) return
     await this.deps.notificationService.raise(workspaceId, {
       type: 'pr_review_ready',
       blockId: block.id,

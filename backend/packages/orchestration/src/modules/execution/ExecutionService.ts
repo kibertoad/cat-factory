@@ -850,7 +850,6 @@ export class ExecutionService {
         this.contextBuilder.resolveEffectiveDescription(ws, block),
     })
     this.prReviewController = new PrReviewController({
-      blockRepository,
       executionRepository,
       workRunner,
       stateMachine: this.runStateMachine,

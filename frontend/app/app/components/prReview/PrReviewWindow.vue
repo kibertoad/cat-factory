@@ -69,13 +69,17 @@ const groups = computed(() => {
   return out
 })
 
-// The human's selection — a set of finding ids. Defaults to every finding whenever the finding
-// set changes (the human deselects the noise), so "Finish" without touching anything keeps all.
+// The human's selection — a set of finding ids. Defaults to every finding (the human deselects
+// the noise), so "Finish" without touching anything keeps all. Re-seeded ONLY when the set of
+// finding IDS actually changes — NOT on every execution-stream re-emit (which hands us a fresh
+// `findings` array reference on each reconnect/resync). Keying on the id set keeps the human's
+// in-progress curation from being silently reset by an unrelated live update.
+const findingIdKey = computed(() => findings.value.map((f) => f.id).join('\n'))
 const selected = ref<Set<string>>(new Set())
 watch(
-  findings,
-  (list) => {
-    selected.value = new Set(list.map((f) => f.id))
+  findingIdKey,
+  () => {
+    selected.value = new Set(findings.value.map((f) => f.id))
   },
   { immediate: true },
 )
