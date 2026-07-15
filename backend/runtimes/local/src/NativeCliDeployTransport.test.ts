@@ -26,7 +26,7 @@ describe('buildLocalDeployTransport', () => {
     expect(t).toBeInstanceOf(NativeCliDeployTransport)
   })
 
-  it('builds a job-scoped container transport when container mode + image are set', () => {
+  it('builds a job-scoped container transport when container mode + an explicit image are set', () => {
     const t = buildLocalDeployTransport({
       ...SECRET,
       LOCAL_DEPLOY_RUNTIME: 'container',
@@ -40,17 +40,21 @@ describe('buildLocalDeployTransport', () => {
     expect(typeof t!.release).toBe('function')
   })
 
+  it('builds container mode with NO LOCAL_DEPLOY_IMAGE — the image is resolved automatically', () => {
+    // LOCAL_DEPLOY_IMAGE is an escape hatch, not a mandatory companion: container mode defaults to
+    // the backend-matched RECOMMENDED_DEPLOY_IMAGE, so it works out of the box (mirrors the
+    // executor-harness image). This is the convenient path the guided setup steers to.
+    const t = buildLocalDeployTransport({ ...SECRET, LOCAL_DEPLOY_RUNTIME: 'container' })
+    expect(t).not.toBeNull()
+    expect(t).not.toBeInstanceOf(NativeCliDeployTransport)
+    expect(typeof t!.dispatch).toBe('function')
+  })
+
   it('BREAKS (throws) on native mode without LOCAL_DEPLOY_HARNESS_ENTRY — no silent fallback', () => {
     // The brittle, must-be-configured mode: a missing companion var is a boot-breaking
     // misconfiguration, not a request for a silently-unwired deploy.
     expect(() => buildLocalDeployTransport({ LOCAL_DEPLOY_RUNTIME: 'native' })).toThrow(
       /LOCAL_DEPLOY_HARNESS_ENTRY/,
-    )
-  })
-
-  it('BREAKS (throws) on container mode without LOCAL_DEPLOY_IMAGE', () => {
-    expect(() => buildLocalDeployTransport({ LOCAL_DEPLOY_RUNTIME: 'container' })).toThrow(
-      /LOCAL_DEPLOY_IMAGE/,
     )
   })
 

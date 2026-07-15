@@ -230,14 +230,19 @@ ${harnessImageEnvLines(harnessImage).join('\n')}
 LOCAL_CONTAINER_RUNTIME=${containerRuntime}
 ${executionLines.join('\n')}
 # Kubernetes test environments — the DEPLOY RUNNER (optional, unused by default). A Kubernetes-backed
-# test environment (local k3s/k3d/kind, configured in the UI) needs a deploy runner to render + apply
-# its manifests (kubectl/kustomize/helm) — without one, standing it up fails with "no deploy runner
-# wired". NO default: pick a mode explicitly, and boot FAILS if a mode is set without its companion
-# var. Leave unset if you don't use Kubernetes test environments.
-#   native    — host process using your OWN kubectl/kustomize/helm; needs LOCAL_DEPLOY_HARNESS_ENTRY.
-#   container — the deploy-harness image, one container per job; needs LOCAL_DEPLOY_IMAGE.
-# LOCAL_DEPLOY_RUNTIME=native
-# LOCAL_DEPLOY_HARNESS_ENTRY=
+# test environment (local k3s/k3d/kind, configured in the UI — or via \`cat-factory k3s\`) needs a
+# deploy runner to render + apply its manifests (kubectl/kustomize/helm) — without one, standing it
+# up fails with "no deploy runner wired". NO default MODE: pick one explicitly. Leave unset if you
+# don't use Kubernetes test environments.
+#   container — RECOMMENDED, works out of the box: the deploy-harness image runs one container per
+#               job on LOCAL_CONTAINER_RUNTIME. The image is resolved automatically to the version
+#               this backend supports, so no other variable is needed. Just uncomment the line below.
+#   native    — host process using your OWN kubectl/kustomize/helm (no Docker); requires
+#               LOCAL_DEPLOY_HARNESS_ENTRY (boot FAILS if it's set without the entry).
+# LOCAL_DEPLOY_RUNTIME=container
+# LOCAL_DEPLOY_HARNESS_ENTRY=          # required only when LOCAL_DEPLOY_RUNTIME=native
+# Escape hatch only — pin a custom/older deploy-harness image or a private-registry mirror. Leave
+# unset to use the backend-matched default (recommended).
 # LOCAL_DEPLOY_IMAGE=ghcr.io/kibertoad/cat-factory-deploy:<version>
 # At least one model provider (Cloudflare Workers AI over REST shown; or a direct vendor key):
 # CLOUDFLARE_ACCOUNT_ID=

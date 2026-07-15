@@ -72,8 +72,35 @@ export async function setupK3s(options: CliOptions, deps: K3sDeps = {}): Promise
   }
 
   printConnectionSummary(connection, io)
+  printDeployRunnerGuidance(io)
   await handOff(connection, options, io)
   return { state, chosen, connection }
+}
+
+/**
+ * Guide the SECOND half of a working Kubernetes test environment: the DEPLOY RUNNER. The connection
+ * we just provisioned only says WHERE to deploy (the apiserver + namespace); a test environment
+ * ALSO needs a runner to actually render + apply its manifests, or standing one up fails with "no
+ * deploy runner wired". That runner is a local-backend env var, NOT part of the cluster connection —
+ * so a user who wires only the connection hits the failure mid-run. Surface it here, now that it is
+ * a one-liner: `LOCAL_DEPLOY_RUNTIME=container` works out of the box (the deploy-harness image is
+ * resolved automatically to the version the backend supports — no image ref to hunt down).
+ */
+function printDeployRunnerGuidance(io: Io): void {
+  io.info(
+    [
+      '',
+      'One more step — the DEPLOY RUNNER. The cluster connection above says WHERE to deploy; a test',
+      'environment also needs a runner to render + apply its manifests (kubectl/kustomize/helm), or',
+      'standing it up fails with "no deploy runner wired". Enable it in your local backend .env:',
+      '',
+      '  LOCAL_DEPLOY_RUNTIME=container',
+      '',
+      'That runs the deploy-harness image one container per job; the image is resolved automatically',
+      '(no version to pick). Then restart the backend. Prefer your own host kubectl/kustomize/helm',
+      'with no Docker? Use LOCAL_DEPLOY_RUNTIME=native and set LOCAL_DEPLOY_HARNESS_ENTRY instead.',
+    ].join('\n'),
+  )
 }
 
 /**

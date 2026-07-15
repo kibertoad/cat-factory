@@ -41,7 +41,11 @@ export const IMAGES = [
     label: 'deploy',
     image: 'cat-factory-deploy',
     harnessPkg: 'backend/internal/deploy-harness/package.json',
-    extraPins: [],
+    // RECOMMENDED_DEPLOY_IMAGE — the tag local mode's `container` deploy runner defaults to (the
+    // escape-hatch analogue of RECOMMENDED_HARNESS_IMAGE). Kept in step with the Worker's
+    // wrangler.toml pin + the deploy-harness version so every facade resolves the SAME supported
+    // deploy image. The guard only verifies DEPLOY_PKG/WRANGLER, but the sync keeps this in step too.
+    extraPins: ['backend/runtimes/local/src/deployImage.ts'],
     sourcePrefixes: ['backend/internal/deploy-harness/src/'],
     sourceFiles: [
       'backend/internal/deploy-harness/Dockerfile',

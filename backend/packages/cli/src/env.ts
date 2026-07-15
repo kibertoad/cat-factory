@@ -222,34 +222,49 @@ function executionModeEntries(input: LocalEnvInput): EnvEntry[] {
 
 /**
  * The Kubernetes test-environment DEPLOY RUNNER, all commented out (deploy is unused by default).
- * A Kubernetes-backed test environment (local k3s/k3d/kind, configured in the UI) needs a deploy
- * runner to render + apply its manifests; the UI connection says WHERE to deploy, these say WHAT
- * runs it. There is NO default and no companion var is written active — the backend BREAKS boot if
- * `LOCAL_DEPLOY_RUNTIME` is set without its mandatory companion — so we document both modes and let
- * the developer uncomment a complete pair deliberately. Mirrors `deploy/local/.env.example`.
+ * A Kubernetes-backed test environment (local k3s/k3d/kind, configured in the UI or via
+ * `cat-factory k3s`) needs a deploy runner to render + apply its manifests; the UI connection says
+ * WHERE to deploy, these say WHAT runs it. There is NO default MODE, and none is written active —
+ * but `container` mode now works with no other variable (the deploy-harness image resolves
+ * automatically, like the executor image), so enabling deploy is a one-line uncomment. We document
+ * both modes and steer to `container`. Mirrors `deploy/local/.env.example`.
  */
 function deployRunnerEntries(): EnvEntry[] {
   return [
     {
       comment: [
         'Kubernetes test environments — the DEPLOY RUNNER (optional, unused by default). A test',
-        'environment backed by Kubernetes (local k3s/k3d/kind, configured in the UI under',
-        'Integrations > "Test environments") needs a deploy runner to render + apply its manifests',
-        'with kubectl/kustomize/helm — WITHOUT one, standing it up fails with "no deploy runner',
-        'wired". That UI connection says WHERE to deploy; these say WHAT runs the deploy. NO default:',
-        'pick a mode explicitly, and the backend FAILS TO BOOT if a mode is set without its companion',
-        'variable (so a half-configured runner surfaces at startup, not mid-run). Leave unset (the',
-        'common case) if you do not stand Kubernetes test environments up.',
+        'environment backed by Kubernetes (local k3s/k3d/kind, set up in the UI under Integrations >',
+        '"Test environments" or with `cat-factory k3s`) needs a deploy runner to render + apply its',
+        'manifests with kubectl/kustomize/helm — WITHOUT one, standing it up fails with "no deploy',
+        'runner wired". That connection says WHERE to deploy; these say WHAT runs the deploy. Pick a',
+        'mode explicitly (no default). Leave unset (the common case) if you do not stand Kubernetes',
+        'test environments up.',
+        '  container — RECOMMENDED, works out of the box: the deploy-harness IMAGE runs one container',
+        '              per job on LOCAL_CONTAINER_RUNTIME. The image is resolved automatically to the',
+        '              version this backend supports — no other variable needed. Just uncomment this.',
         '  native    — a HOST PROCESS using your OWN installed kubectl/kustomize/helm (no Docker);',
-        '              requires LOCAL_DEPLOY_HARNESS_ENTRY. Runs with your full cluster + file access.',
-        '  container — the deploy-harness IMAGE, one container per job on LOCAL_CONTAINER_RUNTIME;',
-        '              requires LOCAL_DEPLOY_IMAGE.',
+        '              requires LOCAL_DEPLOY_HARNESS_ENTRY (boot FAILS if set without it). Runs with',
+        '              your full cluster + file access.',
       ],
       key: '# LOCAL_DEPLOY_RUNTIME',
-      value: 'native',
+      value: 'container',
     },
-    { key: '# LOCAL_DEPLOY_HARNESS_ENTRY', value: '' },
-    { key: '# LOCAL_DEPLOY_IMAGE', value: 'ghcr.io/kibertoad/cat-factory-deploy:<version>' },
+    {
+      comment: [
+        'Required only when LOCAL_DEPLOY_RUNTIME=native (the deploy-harness server entry).',
+      ],
+      key: '# LOCAL_DEPLOY_HARNESS_ENTRY',
+      value: '',
+    },
+    {
+      comment: [
+        'Escape hatch only: pin a custom/older deploy-harness image or a private-registry mirror.',
+        'Leave unset to use the backend-matched default (recommended).',
+      ],
+      key: '# LOCAL_DEPLOY_IMAGE',
+      value: 'ghcr.io/kibertoad/cat-factory-deploy:<version>',
+    },
   ]
 }
 
