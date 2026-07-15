@@ -55,7 +55,9 @@ export class EnvironmentTestWorkflow extends WorkflowEntrypoint<
     // (`sweepStuckEnvTests`, cron) instead of resumed.
     let pollReadFailures = 0
     for (let p = 0; p < execConfig.jobMaxPolls; p++) {
-      await step.sleep(`poll-wait-${p}`, pollInterval)
+      // Poll-first (matching the Node envTestRunner): the run was just started, so the
+      // first poll runs immediately instead of after a full poll interval.
+      if (p > 0) await step.sleep(`poll-wait-${p}`, pollInterval)
       let result: EnvironmentTestPollResult
       try {
         result = (await step.do(`poll-${p}`, STEP_CONFIG, async () => {
