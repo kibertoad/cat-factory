@@ -148,11 +148,22 @@ describe('OtelTraceSink (fetch OTLP exporter)', () => {
       ]),
     )
     expect(byType).toEqual({ input: 100, output: 40 })
+    // The workspace id is on the SPAN (high cardinality is fine there)…
+    expect(spanAttrs['cat_factory.workspace_id']).toBe('ws1')
+    // …but MUST NOT be on the metric data points: workspace id is unbounded, so carrying it
+    // on a metric would explode the backend's time-series cardinality. Only the bounded
+    // provider/model/agent-kind dimensions ride the metrics.
+    const tokenPointAttrs = attrMap(sum.dataPoints[0]!.attributes as KeyValue[])
+    expect(tokenPointAttrs['cat_factory.workspace_id']).toBeUndefined()
+    expect(tokenPointAttrs['gen_ai.system']).toBe('openai')
     const durationMetric = ms.find((m) => m.name === 'gen_ai.client.operation.duration')!
     expect(durationMetric.unit).toBe('s')
     const hist = durationMetric.histogram as { dataPoints: Record<string, unknown>[] }
     expect(hist.dataPoints[0]!.sum).toBe(0.5)
     expect(hist.dataPoints[0]!.count).toBe('1')
+    expect(
+      attrMap(hist.dataPoints[0]!.attributes as KeyValue[])['cat_factory.workspace_id'],
+    ).toBeUndefined()
   })
 
   it('omits prompt/completion events when bodies are empty (LLM_RECORD_PROMPTS=false)', async () => {

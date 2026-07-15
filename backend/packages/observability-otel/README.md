@@ -9,8 +9,9 @@ inline calls (requirements review, document planner, fragment selector, inline a
 is exported to any **OTLP/HTTP** backend (Grafana Tempo/Mimir, Honeycomb, Datadog OTLP,
 Jaeger, an OpenTelemetry Collector, …) as:
 
-- **a trace span per generation**, grouped under a per-run trace, with container tool calls
-  as child spans; and
+- **a trace span per generation**, plus a span per container tool call, all grouped under a
+  shared per-run trace id (they are sibling spans sharing the trace, not parent/child —
+  generations and tool calls arrive as independent, stateless emissions); and
 - **metrics** — a `gen_ai.client.token.usage` counter (input/output) and a
   `gen_ai.client.operation.duration` histogram — following the OpenTelemetry GenAI
   semantic conventions.

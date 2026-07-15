@@ -1,6 +1,10 @@
 import { type ProviderRegistry, resolveOpenAiCompatibleBaseUrl } from '@cat-factory/agents'
 import type { ApiKeyService, LocalModelEndpointService } from '@cat-factory/integrations'
-import { type ModelProviderResolver, composeTraceSinks } from '@cat-factory/kernel'
+import {
+  type LlmTraceSink,
+  type ModelProviderResolver,
+  composeTraceSinks,
+} from '@cat-factory/kernel'
 import { bedrockRegistry } from '@cat-factory/provider-bedrock'
 import { cloudflareRestRegistry } from '@cat-factory/provider-cloudflare'
 import { createLangfuseSink } from '@cat-factory/observability-langfuse'
@@ -14,6 +18,44 @@ import { createScopedModelProviderResolver } from '@cat-factory/server'
 // over REST (when CLOUDFLARE_ACCOUNT_ID + CLOUDFLARE_API_TOKEN are set). There is no
 // Workers AI binding on Node, so `workers-ai` is served via the Cloudflare REST flavour.
 // Inline calls are wrapped for Langfuse exactly like the proxied path when configured.
+
+/** The instrumentation the scoped resolver wraps inline calls with (one shared trace sink). */
+export interface InlineInstrument {
+  traceSink: LlmTraceSink
+  recordPrompts: boolean
+}
+
+/**
+ * Build the inline instrumentation from the process env — Langfuse (fetch) and/or the
+ * OpenTelemetry SDK sink, composed via a fan-out. This is the FALLBACK path used only when
+ * the caller does not supply a pre-built instrument (direct callers / tests). In the real
+ * container build the sink is built ONCE (memoised, and its shutdown wired) and passed in,
+ * so the SDK exporter's batch processors/timers aren't duplicated across wiring sites.
+ */
+function buildInstrumentFromEnv(env: NodeJS.ProcessEnv): InlineInstrument | undefined {
+  const langfuseSink =
+    env.LANGFUSE_ENABLED?.trim() === 'true' &&
+    env.LANGFUSE_PUBLIC_KEY?.trim() &&
+    env.LANGFUSE_SECRET_KEY?.trim()
+      ? createLangfuseSink({
+          publicKey: env.LANGFUSE_PUBLIC_KEY.trim(),
+          secretKey: env.LANGFUSE_SECRET_KEY.trim(),
+          baseUrl: env.LANGFUSE_BASE_URL?.trim() || undefined,
+        })
+      : undefined
+  const otelSink =
+    env.OTEL_ENABLED?.trim() === 'true' && env.OTEL_EXPORTER_OTLP_ENDPOINT?.trim()
+      ? createNodeOtelSink({
+          endpoint: env.OTEL_EXPORTER_OTLP_ENDPOINT.trim(),
+          headers: parseOtlpHeaders(env.OTEL_EXPORTER_OTLP_HEADERS),
+          serviceName: env.OTEL_SERVICE_NAME?.trim() || undefined,
+        })
+      : undefined
+  const traceSink = composeTraceSinks([langfuseSink, otelSink])
+  return traceSink
+    ? { traceSink, recordPrompts: env.LLM_RECORD_PROMPTS?.trim() !== 'false' }
+    : undefined
+}
 
 /**
  * The base URL for a direct provider: the `${PROVIDER}_BASE_URL` env override (e.g.
@@ -29,6 +71,10 @@ export function createNodeModelProviderResolver(
   env: NodeJS.ProcessEnv,
   apiKeys: ApiKeyService | undefined,
   localModelEndpoints?: LocalModelEndpointService,
+  // The already-composed inline instrument (one trace sink shared with the proxied path +
+  // the core, so the SDK exporter isn't built twice). Omitted by direct callers/tests, which
+  // fall back to building it from `env`.
+  instrument?: InlineInstrument,
 ): ModelProviderResolver {
   const extraRegistries: ProviderRegistry[] = []
 
@@ -60,30 +106,10 @@ export function createNodeModelProviderResolver(
   }
 
   // Instrument inline (non-proxied) calls with the SAME external trace sink(s) the proxied
-  // path uses — Langfuse (fetch) and/or OpenTelemetry (official SDK), composed via a
-  // fan-out when both are enabled.
-  const langfuseSink =
-    env.LANGFUSE_ENABLED?.trim() === 'true' &&
-    env.LANGFUSE_PUBLIC_KEY?.trim() &&
-    env.LANGFUSE_SECRET_KEY?.trim()
-      ? createLangfuseSink({
-          publicKey: env.LANGFUSE_PUBLIC_KEY.trim(),
-          secretKey: env.LANGFUSE_SECRET_KEY.trim(),
-          baseUrl: env.LANGFUSE_BASE_URL?.trim() || undefined,
-        })
-      : undefined
-  const otelSink =
-    env.OTEL_ENABLED?.trim() === 'true' && env.OTEL_EXPORTER_OTLP_ENDPOINT?.trim()
-      ? createNodeOtelSink({
-          endpoint: env.OTEL_EXPORTER_OTLP_ENDPOINT.trim(),
-          headers: parseOtlpHeaders(env.OTEL_EXPORTER_OTLP_HEADERS),
-          serviceName: env.OTEL_SERVICE_NAME?.trim() || undefined,
-        })
-      : undefined
-  const traceSink = composeTraceSinks([langfuseSink, otelSink])
-  const instrument = traceSink
-    ? { traceSink, recordPrompts: env.LLM_RECORD_PROMPTS?.trim() !== 'false' }
-    : undefined
+  // path uses — Langfuse (fetch) and/or OpenTelemetry (official SDK). The container build
+  // passes a pre-built, shared instrument (so the SDK exporter is created once); a direct
+  // caller / test that omits it falls back to building one from `env`.
+  const resolvedInstrument = instrument ?? buildInstrumentFromEnv(env)
 
   return createScopedModelProviderResolver({
     apiKeys,
@@ -92,6 +118,6 @@ export function createNodeModelProviderResolver(
     localEndpointsFor: localModelEndpoints
       ? (userId) => localModelEndpoints.listResolved(userId)
       : undefined,
-    instrument,
+    instrument: resolvedInstrument,
   })
 }

@@ -77,4 +77,22 @@ describe('Node facade: inline OpenTelemetry instrumentation wiring', () => {
     expect(inner.some((s) => s instanceof LangfuseTraceSink)).toBe(true)
     expect(inner.some((s) => s instanceof NodeOtelTraceSink)).toBe(true)
   })
+
+  it('reuses a provided instrument instead of building its own (one shared sink)', async () => {
+    // The container passes ONE pre-built sink so the SDK exporter isn't duplicated across
+    // wiring sites; the resolver must instrument with THAT instance, not a fresh env-built one.
+    const shared = track(
+      new NodeOtelTraceSink({ endpoint: 'http://collector.test:4318', serviceName: 'shared' }),
+    )
+    const resolver = createNodeModelProviderResolver(
+      // Env has OTel OFF — proving the sink came from the passed instrument, not the env.
+      {} as NodeJS.ProcessEnv,
+      undefined,
+      undefined,
+      { traceSink: shared, recordPrompts: true },
+    )
+    const provider = await resolver.forScope(scope)
+    expect(provider).toBeInstanceOf(InstrumentedModelProvider)
+    expect(sinkOf(provider)).toBe(shared)
+  })
 })

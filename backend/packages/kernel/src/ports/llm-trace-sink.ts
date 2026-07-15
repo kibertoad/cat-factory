@@ -81,10 +81,22 @@ export interface LlmTraceSink {
   /** Emit one completed LLM call as a generation under its run's trace. */
   recordGeneration(event: LlmGenerationEvent): Promise<void> | void
   /**
-   * Emit a drained batch of container tool spans as child spans under the run trace.
+   * Emit a drained batch of container tool spans, grouped under the run's trace.
    * Optional: a sink that only cares about generations can omit it.
    */
   recordToolSpans?(context: LlmToolSpanContext, spans: LlmToolSpan[]): Promise<void> | void
+  /**
+   * Flush any buffered telemetry (best-effort). Implemented by sinks that batch before
+   * export (e.g. the OpenTelemetry SDK exporter); a fetch-per-call sink that already
+   * awaits each request omits it. Never throws into the caller.
+   */
+  forceFlush?(): Promise<void> | void
+  /**
+   * Release resources and flush a final time before the process exits (best-effort). Wire
+   * into the facade's graceful-shutdown path so the last batch isn't dropped. Implemented
+   * only by sinks that own background exporters/timers; never throws into the caller.
+   */
+  shutdown?(): Promise<void> | void
 }
 
 /**
@@ -115,6 +127,30 @@ export class CompositeTraceSink implements LlmTraceSink {
       this.sinks.map(async (sink) => {
         try {
           await sink.recordToolSpans?.(context, spans)
+        } catch {
+          // Best-effort, as above.
+        }
+      }),
+    )
+  }
+
+  async forceFlush(): Promise<void> {
+    await Promise.all(
+      this.sinks.map(async (sink) => {
+        try {
+          await sink.forceFlush?.()
+        } catch {
+          // Best-effort, as above.
+        }
+      }),
+    )
+  }
+
+  async shutdown(): Promise<void> {
+    await Promise.all(
+      this.sinks.map(async (sink) => {
+        try {
+          await sink.shutdown?.()
         } catch {
           // Best-effort, as above.
         }

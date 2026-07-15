@@ -144,13 +144,24 @@ export function toUnixNano(ms: number): string {
   return `${Math.round(ms)}000000`
 }
 
-/** The dimensions shared by a generation's span and its metrics. */
-function generationDimensions(event: LlmGenerationEvent): AttributeMap {
-  const attrs: AttributeMap = {
+/**
+ * The LOW-cardinality dimensions safe to carry on a metric time series: provider, model,
+ * and agent kind are all bounded sets. Deliberately EXCLUDES the workspace id — it is
+ * unbounded (one value per tenant), so putting it on a metric would explode the backend's
+ * time-series cardinality (and cost). The workspace id belongs on spans, where high
+ * cardinality is expected; see {@link generationDimensions}.
+ */
+function metricDimensions(event: LlmGenerationEvent): AttributeMap {
+  return {
     [ATTR.system]: event.provider,
     [ATTR.requestModel]: event.model,
     [ATTR.agentKind]: event.agentKind,
   }
+}
+
+/** The dimensions on a generation's SPAN: the metric dimensions plus the workspace id. */
+function generationDimensions(event: LlmGenerationEvent): AttributeMap {
+  const attrs = metricDimensions(event)
   if (event.workspaceId) attrs[ATTR.workspaceId] = event.workspaceId
   return attrs
 }
@@ -196,7 +207,8 @@ export function mapGeneration(event: LlmGenerationEvent): MappedSpan {
 
 /** Map one completed LLM call to its token-usage + duration metrics. */
 export function mapGenerationMetrics(event: LlmGenerationEvent): MappedMetrics {
-  const dims = generationDimensions(event)
+  // Metrics use the low-cardinality dimensions only (no workspace id) — see metricDimensions.
+  const dims = metricDimensions(event)
   return {
     tokenUsage: [
       { value: event.promptTokens, attributes: { ...dims, [ATTR.tokenType]: 'input' } },

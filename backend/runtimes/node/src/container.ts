@@ -196,7 +196,11 @@ import { PgBossEnvConfigRepairRunner } from './execution/envConfigRepairRunner.j
 import { PgBossEnvironmentTestRunner } from './execution/envTestRunner.js'
 import { PgBossWorkRunner } from './execution/pgBossRunner.js'
 import { createNodeGateways } from './gateways.js'
-import { baseUrlForNode, createNodeModelProviderResolver } from './modelProvider.js'
+import {
+  type InlineInstrument,
+  baseUrlForNode,
+  createNodeModelProviderResolver,
+} from './modelProvider.js'
 import { ConsensusAgentExecutor, registerConsensusTraits } from '@cat-factory/consensus'
 import { type LocalEventSink, NodeEventPublisher } from './realtime.js'
 import {
@@ -307,14 +311,17 @@ function buildModelProviderResolver(
   db: DrizzleDb | undefined,
   apiKeys: ApiKeyService | undefined,
   localModelEndpoints: LocalModelEndpointService | undefined,
+  // The shared inline instrument (one trace sink for the proxied path, the core AND the
+  // inline calls) so the OTel SDK exporter isn't rebuilt per wiring site.
+  instrument: InlineInstrument | undefined,
 ): ModelProviderResolver {
   // The cache keys on the db handle (one resolver per Drizzle client). Mothership mode has no
   // db, so skip the cache entirely (WeakMap keys must be objects) and build a fresh resolver —
   // a mothership node builds one container, so there is nothing to share it with anyway.
-  if (!db) return createNodeModelProviderResolver(env, apiKeys, localModelEndpoints)
+  if (!db) return createNodeModelProviderResolver(env, apiKeys, localModelEndpoints, instrument)
   const cached = modelResolverCache.get(db)
   if (cached) return cached
-  const resolver = createNodeModelProviderResolver(env, apiKeys, localModelEndpoints)
+  const resolver = createNodeModelProviderResolver(env, apiKeys, localModelEndpoints, instrument)
   modelResolverCache.set(db, resolver)
   return resolver
 }
@@ -1084,7 +1091,8 @@ function buildNodeContainerExecutor(
     // the default github.com origin.
     ...(resolveRepoOrigin ? { resolveRepoOrigin } : {}),
     // Forward container tool spans to the external trace sink(s) (Langfuse and/or OTLP)
-    // as child spans under the run trace — the same sink the LLM proxy fans generations to.
+    // grouped under the run trace — the same sink the LLM proxy fans generations to.
+    // (Langfuse nests them as children; the OTLP exporter groups them by shared trace id.)
     llmTraceSink: buildTraceSink(config),
     // Record the complete provided context per dispatch (best-effort, gated in the sink).
     ...(agentContextObservability ? { agentContextObservability } : {}),
@@ -1513,11 +1521,17 @@ export function buildNodeContainer(options: NodeContainerOptions): ServerContain
     options.personalSubscriptionRepository,
     options.subscriptionActivationRepository,
   )
+  // The ONE external trace sink for this container (memoised per config): the core, the
+  // container executor AND the inline model-provider instrumentation all share this single
+  // instance, so the OTel SDK exporter's batch processors/timers exist exactly once (and its
+  // shutdown is wired below). Its `recordPrompts` matches the proxied path's gating.
+  const traceSink = buildTraceSink(config)
   const baseModelProviderResolver = buildModelProviderResolver(
     env,
     db,
     apiKeys,
     localModelEndpoints,
+    traceSink ? { traceSink, recordPrompts: config.observability.recordPrompts } : undefined,
   )
   const wrappedModelProviderResolver = options.wrapModelProviderResolver
     ? options.wrapModelProviderResolver(baseModelProviderResolver, {
@@ -2805,6 +2819,13 @@ export function buildNodeContainer(options: NodeContainerOptions): ServerContain
     userRepoAccess: db ? new DrizzleUserRepoAccessRepository(db) : undefined,
     // The per-workspace OpenRouter dynamic-catalog store; present when the API-key pool is.
     openRouterCatalog,
+    // Flush + release the external trace sink on graceful shutdown so the OpenTelemetry SDK
+    // exporter's final batch of spans/metrics isn't dropped and its background timers are
+    // cleared. Best-effort; a no-op for the fetch-based Langfuse sink and when nothing is
+    // wired. (The local facade composes this into its own `onShutdown` — see its container.)
+    onShutdown: async () => {
+      await traceSink?.shutdown?.()
+    },
   }
 }
 

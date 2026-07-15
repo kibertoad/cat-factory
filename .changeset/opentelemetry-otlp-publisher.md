@@ -4,6 +4,7 @@
 '@cat-factory/server': minor
 '@cat-factory/worker': minor
 '@cat-factory/node-server': minor
+'@cat-factory/local-server': patch
 '@cat-factory/cli': patch
 ---
 
@@ -21,3 +22,10 @@ conformant by a shared mapping layer + a conformity test.
   `OTEL_ENABLED=true` + `OTEL_EXPORTER_OTLP_ENDPOINT` (`OTEL_EXPORTER_OTLP_HEADERS` /
   `OTEL_SERVICE_NAME` optional).
 - **cli:** advertise the `OTEL_*` vars in the generated `.env`.
+
+Refinements: the Node facade shares ONE trace-sink instance across the core, the container
+executor and the inline model-provider (so the SDK exporter's batch processors/timers aren't
+duplicated) and flushes + shuts it down on graceful shutdown (via `LlmTraceSink.shutdown` /
+`CompositeTraceSink` fan-out) so the final batch isn't dropped. Metric data points carry only
+the low-cardinality `gen_ai.*` dimensions — the unbounded workspace id stays on spans, off
+metrics — to keep metric-backend cardinality bounded.

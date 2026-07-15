@@ -86,4 +86,21 @@ describe('CompositeTraceSink', () => {
     const composite = new CompositeTraceSink([genOnly])
     await expect(composite.recordToolSpans(CTX, SPANS)).resolves.toBeUndefined()
   })
+
+  it('fans forceFlush/shutdown out to sinks that implement them, isolating failures', async () => {
+    const flush = vi.fn()
+    const stop = vi.fn().mockRejectedValue(new Error('down'))
+    const withLifecycle: LlmTraceSink = {
+      recordGeneration: vi.fn(),
+      forceFlush: flush,
+      shutdown: stop,
+    }
+    const bare: LlmTraceSink = { recordGeneration: vi.fn() } // no lifecycle methods
+    const composite = new CompositeTraceSink([withLifecycle, bare])
+
+    await expect(composite.forceFlush()).resolves.toBeUndefined()
+    await expect(composite.shutdown()).resolves.toBeUndefined()
+    expect(flush).toHaveBeenCalledTimes(1)
+    expect(stop).toHaveBeenCalledTimes(1)
+  })
 })

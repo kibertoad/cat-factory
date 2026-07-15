@@ -1438,7 +1438,8 @@ function buildContainerExecutor(
     ...(resolveTestSecrets ? { resolveTestSecrets } : {}),
     githubApiBase: config.github.apiBase,
     // Forward container tool spans to the external trace sink(s) (Langfuse and/or OTLP)
-    // as child spans under the run trace — the same sink the LLM proxy fans generations to.
+    // grouped under the run trace — the same sink the LLM proxy fans generations to.
+    // (Langfuse nests them as children; the OTLP exporter groups them by shared trace id.)
     llmTraceSink: buildTraceSink(config),
     // Record the complete provided context per dispatch (best-effort, gated in the sink).
     ...(agentContextObservability ? { agentContextObservability } : {}),
