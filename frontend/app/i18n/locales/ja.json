@@ -1560,7 +1560,8 @@
         "followup_pending": "既読にする",
         "initiative": "既読にする",
         "markRead": "既読にする",
-        "fork_decision_pending": "既読にする"
+        "fork_decision_pending": "既読にする",
+        "pr_review_ready": "既読にする"
       },
       "toast": {
         "acted": "対応済みにしました",
@@ -2991,6 +2992,7 @@
       "release_regression": "リリースリグレッション",
       "human_test_ready": "人手テスト準備完了",
       "visual_confirmation_ready": "ビジュアル確認準備完了",
+      "pr_review_ready": "PRレビューの指摘",
       "initiative": "イニシアチブの更新"
     },
     "role": {
@@ -4701,6 +4703,41 @@
     },
     "empty": {
       "title": "決定する項目はありません"
+    }
+  },
+  "prReview": {
+    "title": "PRレビュー",
+    "titleWithBlock": "PRレビュー: {title}",
+    "subtitle": "対応する指摘を選択してください。",
+    "openPr": "PRを開く",
+    "summaryLabel": "概要:",
+    "noFindings": "指摘はありません。プルリクエストは問題なさそうです。",
+    "unsliced": "その他",
+    "selectAll": "すべて選択",
+    "clear": "クリア",
+    "selectedCount": "{count}件選択中",
+    "finish": "レビューを完了",
+    "suggestedFix": "修正案:",
+    "line": "{line}行目",
+    "reviewing": {
+      "title": "プルリクエストをレビュー中…",
+      "hint": "差分をまとまりのある単位に分割し、各単位をレビューしています。"
+    },
+    "severity": {
+      "blocker": "ブロッカー",
+      "high": "高",
+      "medium": "中",
+      "low": "低",
+      "nit": "軽微"
+    },
+    "category": {
+      "correctness": "正確性",
+      "security": "セキュリティ",
+      "performance": "パフォーマンス",
+      "maintainability": "保守性",
+      "style": "スタイル",
+      "test": "テスト",
+      "other": "その他"
     }
   }
 }

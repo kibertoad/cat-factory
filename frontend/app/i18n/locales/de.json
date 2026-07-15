@@ -1697,7 +1697,8 @@
         "followup_pending": "Als gelesen markieren",
         "initiative": "Als gelesen markieren",
         "markRead": "Als gelesen markieren",
-        "fork_decision_pending": "Als gelesen markieren"
+        "fork_decision_pending": "Als gelesen markieren",
+        "pr_review_ready": "Als gelesen markieren"
       }
     },
     "aiProvidersBanner": {
@@ -3923,6 +3924,7 @@
       "release_regression": "Release-Regression",
       "human_test_ready": "Bereit für manuelle Tests",
       "visual_confirmation_ready": "Bereit für visuelle Bestätigung",
+      "pr_review_ready": "PR-Review-Befunde",
       "initiative": "Initiativen-Updates"
     },
     "role": {
@@ -4701,6 +4703,41 @@
     },
     "empty": {
       "title": "Nichts zu entscheiden"
+    }
+  },
+  "prReview": {
+    "title": "PR-Review",
+    "titleWithBlock": "PR-Review: {title}",
+    "subtitle": "Wähle die Befunde aus, die bearbeitet werden sollen.",
+    "openPr": "PR öffnen",
+    "summaryLabel": "Zusammenfassung:",
+    "noFindings": "Keine Befunde – der Pull Request sieht sauber aus.",
+    "unsliced": "Sonstige",
+    "selectAll": "Alle auswählen",
+    "clear": "Zurücksetzen",
+    "selectedCount": "{count} ausgewählt",
+    "finish": "Review abschließen",
+    "suggestedFix": "Lösungsvorschlag:",
+    "line": "Zeile {line}",
+    "reviewing": {
+      "title": "Pull Request wird geprüft…",
+      "hint": "Der Diff wird in zusammenhängende Teile zerlegt und einzeln geprüft."
+    },
+    "severity": {
+      "blocker": "Blocker",
+      "high": "Hoch",
+      "medium": "Mittel",
+      "low": "Niedrig",
+      "nit": "Kleinigkeit"
+    },
+    "category": {
+      "correctness": "Korrektheit",
+      "security": "Sicherheit",
+      "performance": "Performance",
+      "maintainability": "Wartbarkeit",
+      "style": "Stil",
+      "test": "Tests",
+      "other": "Sonstiges"
     }
   }
 }

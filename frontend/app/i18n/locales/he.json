@@ -1560,7 +1560,8 @@
         "followup_pending": "סמן כנקרא",
         "initiative": "סמן כנקרא",
         "markRead": "סמן כנקרא",
-        "fork_decision_pending": "סמן כנקרא"
+        "fork_decision_pending": "סמן כנקרא",
+        "pr_review_ready": "סמן כנקרא"
       },
       "toast": {
         "acted": "סומן כטופל",
@@ -2990,6 +2991,7 @@
       "release_regression": "רגרסיית שחרור",
       "human_test_ready": "מוכן לבדיקה אנושית",
       "visual_confirmation_ready": "מוכן לאישור חזותי",
+      "pr_review_ready": "ממצאי בדיקת PR",
       "initiative": "עדכוני יוזמה"
     },
     "role": {
@@ -4700,6 +4702,41 @@
     },
     "empty": {
       "title": "אין מה להחליט"
+    }
+  },
+  "prReview": {
+    "title": "בדיקת PR",
+    "titleWithBlock": "בדיקת PR: {title}",
+    "subtitle": "בחר את הממצאים לטיפול.",
+    "openPr": "פתח PR",
+    "summaryLabel": "סיכום:",
+    "noFindings": "אין ממצאים — בקשת המשיכה נראית תקינה.",
+    "unsliced": "אחר",
+    "selectAll": "בחר הכול",
+    "clear": "נקה",
+    "selectedCount": "{count} נבחרו",
+    "finish": "סיים בדיקה",
+    "suggestedFix": "תיקון מוצע:",
+    "line": "שורה {line}",
+    "reviewing": {
+      "title": "בודק את בקשת המשיכה…",
+      "hint": "מחלק את ההבדלים לקטעים לכידים ובודק כל אחד."
+    },
+    "severity": {
+      "blocker": "חוסם",
+      "high": "גבוה",
+      "medium": "בינוני",
+      "low": "נמוך",
+      "nit": "זניח"
+    },
+    "category": {
+      "correctness": "נכונות",
+      "security": "אבטחה",
+      "performance": "ביצועים",
+      "maintainability": "תחזוקתיות",
+      "style": "סגנון",
+      "test": "בדיקות",
+      "other": "אחר"
     }
   }
 }

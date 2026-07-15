@@ -23,6 +23,7 @@ import GenericStructuredResultView from '~/components/panels/GenericStructuredRe
 import ServiceSpecWindow from '~/components/spec/ServiceSpecWindow.vue'
 import FollowUpWindow from '~/components/followUp/FollowUpWindow.vue'
 import ForkDecisionWindow from '~/components/forkDecision/ForkDecisionWindow.vue'
+import PrReviewWindow from '~/components/prReview/PrReviewWindow.vue'
 import MergerResultView from '~/components/panels/MergerResultView.vue'
 import InitiativeTrackerWindow from '~/components/initiative/InitiativeTrackerWindow.vue'
 import InitiativePlanningWindow from '~/components/initiative/InitiativePlanningWindow.vue'
@@ -57,6 +58,9 @@ const STEP_RESULT_VIEWS: Record<string, Component> = {
   // human's pick / custom approach. Opened directly via `ui.openForkDecision` (the pipeline
   // chip, the inspector button, and the `fork_decision_pending` card).
   'fork-decision': ForkDecisionWindow,
+  // The PR deep-review: the reviewer's sliced, prioritized findings + the human's multi-select.
+  // Opened as the `pr-reviewer` step's result view and via the `pr_review_ready` inbox card.
+  'pr-review': PrReviewWindow,
   // The merger's verdict: the PR's complexity/risk/impact scores + the engine's auto-merge
   // or awaiting-review decision (and why), instead of the agent's raw JSON.
   merger: MergerResultView,

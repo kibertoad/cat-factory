@@ -11,6 +11,7 @@ import {
   type SandboxPromptVersion,
   type Pipeline,
   type PipelineSchedule,
+  type PrReviewStepState,
   type RequirementReview,
   type ScheduleRun,
   seedPipelines,
@@ -1180,6 +1181,94 @@ export function defineCoreConformance(harness: ConformanceHarness): void {
           { pipelineId: pipeline.body.id },
         )
         expect(allowed.status).toBe(201)
+      })
+    })
+
+    describe('PR deep-review (pr-reviewer park → select → resolve)', () => {
+      // The read-only pr-reviewer's structured findings, returned by the fake as `result.custom`.
+      const reviewerOutput = {
+        summary: 'Mostly solid; one correctness concern.',
+        slices: [{ title: 'Auth', rationale: 'auth + its test', paths: ['src/auth.ts'] }],
+        findings: [
+          {
+            path: 'src/auth.ts',
+            line: 12,
+            side: 'RIGHT',
+            severity: 'high',
+            category: 'correctness',
+            title: 'Missing null guard',
+            detail: 'The token may be undefined here.',
+            suggestedFix: 'Guard before dereferencing.',
+          },
+          {
+            path: 'README.md',
+            severity: 'nit',
+            category: 'style',
+            title: 'Typo',
+            detail: 'teh → the',
+          },
+        ],
+      }
+
+      it('parks a review run on its findings, then resolves the human selection to done', async () => {
+        const { call, createWorkspace, drive } = harness.makeApp({ customResult: reviewerOutput })
+        const { workspace } = await createWorkspace({ seed: true })
+        const wsId = workspace.id
+
+        // A review task defaults to the pl_review pipeline (a single read-only pr-reviewer step).
+        const task = await call<Block>('POST', `/workspaces/${wsId}/blocks/blk_auth/tasks`, {
+          title: 'Review PR #42',
+          taskType: 'review',
+          taskTypeFields: { prNumber: 42, prUrl: 'https://github.com/o/r/pull/42' },
+        })
+        expect(task.status).toBe(201)
+        const start = await call<ExecutionInstance>(
+          'POST',
+          `/workspaces/${wsId}/blocks/${task.body.id}/executions`,
+          { pipelineId: 'pl_review' },
+        )
+        expect(start.status).toBe(201)
+
+        // Driving runs the reviewer; its findings are recorded onto the step and the run PARKS
+        // for a human to select — it does NOT finish on its own.
+        const parked = (await drive(wsId)).find((e) => e.blockId === task.body.id)!
+        expect(parked.status).toBe('blocked')
+        const step = parked.steps.find((s) => s.agentKind === 'pr-reviewer')!
+        expect(step.prReview?.status).toBe('awaiting_selection')
+        expect(step.prReview?.prUrl).toBe('https://github.com/o/r/pull/42')
+        // Findings are id-stamped, severity-ordered (high before nit), and anchored to a slice.
+        const findings = step.prReview?.findings ?? []
+        expect(findings.map((f) => f.severity)).toEqual(['high', 'nit'])
+        expect(findings[0]!.id).toMatch(/^prf_/)
+        expect(findings[0]!.sliceId).toBe(step.prReview?.slices?.[0]?.id)
+
+        // The park raised a `pr_review_ready` inbox card (identically on both runtimes).
+        const snap = await call<WorkspaceSnapshot>('GET', `/workspaces/${wsId}`)
+        expect(snap.body.notifications?.some((n) => n.type === 'pr_review_ready')).toBe(true)
+
+        // The GET returns the same active state.
+        const active = await call<PrReviewStepState>(
+          'GET',
+          `/workspaces/${wsId}/executions/${parked.id}/pr-review`,
+        )
+        expect(active.body.status).toBe('awaiting_selection')
+
+        // Resolving with a curated selection records it and advances the read-only run to done.
+        const resolved = await call<PrReviewStepState>(
+          'POST',
+          `/workspaces/${wsId}/executions/${parked.id}/pr-review/resolve`,
+          { action: 'finish', findingIds: [findings[0]!.id] },
+        )
+        expect(resolved.status).toBe(200)
+        expect(resolved.body.status).toBe('done')
+        expect(resolved.body.selectedFindingIds).toEqual([findings[0]!.id])
+
+        const done = (await drive(wsId)).find((e) => e.blockId === task.body.id)!
+        expect(done.status).toBe('done')
+        const finalBlock = (
+          await call<WorkspaceSnapshot>('GET', `/workspaces/${wsId}`)
+        ).body.blocks.find((b) => b.id === task.body.id)!
+        expect(finalBlock.status).toBe('done')
       })
     })
 

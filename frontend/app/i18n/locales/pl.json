@@ -1560,7 +1560,8 @@
         "followup_pending": "Oznacz jako przeczytane",
         "initiative": "Oznacz jako przeczytane",
         "markRead": "Oznacz jako przeczytane",
-        "fork_decision_pending": "Oznacz jako przeczytane"
+        "fork_decision_pending": "Oznacz jako przeczytane",
+        "pr_review_ready": "Oznacz jako przeczytane"
       },
       "toast": {
         "acted": "Oznaczono jako obsłużone",
@@ -2979,6 +2980,7 @@
       "release_regression": "Regresja wydania",
       "human_test_ready": "Gotowe do testow przez czlowieka",
       "visual_confirmation_ready": "Gotowe do potwierdzenia wizualnego",
+      "pr_review_ready": "Uwagi z przeglądu PR",
       "initiative": "Aktualizacje inicjatywy"
     },
     "role": {
@@ -4689,6 +4691,41 @@
     },
     "empty": {
       "title": "Nie ma czego decydować"
+    }
+  },
+  "prReview": {
+    "title": "Przegląd PR",
+    "titleWithBlock": "Przegląd PR: {title}",
+    "subtitle": "Wybierz uwagi, którymi chcesz się zająć.",
+    "openPr": "Otwórz PR",
+    "summaryLabel": "Podsumowanie:",
+    "noFindings": "Brak uwag — pull request wygląda dobrze.",
+    "unsliced": "Inne",
+    "selectAll": "Zaznacz wszystko",
+    "clear": "Wyczyść",
+    "selectedCount": "Wybrano: {count}",
+    "finish": "Zakończ przegląd",
+    "suggestedFix": "Sugerowana poprawka:",
+    "line": "wiersz {line}",
+    "reviewing": {
+      "title": "Przeglądanie pull requesta…",
+      "hint": "Dzielenie zmian na spójne części i przeglądanie każdej z nich."
+    },
+    "severity": {
+      "blocker": "Blokujące",
+      "high": "Wysokie",
+      "medium": "Średnie",
+      "low": "Niskie",
+      "nit": "Drobiazg"
+    },
+    "category": {
+      "correctness": "Poprawność",
+      "security": "Bezpieczeństwo",
+      "performance": "Wydajność",
+      "maintainability": "Utrzymywalność",
+      "style": "Styl",
+      "test": "Testy",
+      "other": "Inne"
     }
   }
 }

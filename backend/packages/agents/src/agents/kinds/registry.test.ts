@@ -68,10 +68,10 @@ describe('agent-definition registry fields', () => {
     // Structured output is derived from the schema (a shapeHint is present).
     expect(registry.agentStep(PR_REVIEWER_KIND)?.output?.kind).toBe('structured')
     expect(registry.structuredOutput(PR_REVIEWER_KIND)).toBeDefined()
-    // First-class palette + generic-structured result view.
+    // First-class palette + the dedicated PR-review result view (findings + multi-select).
     const presentation = registry.presentation(PR_REVIEWER_KIND)
     expect(presentation?.category).toBe('review')
-    expect(presentation?.resultView).toBe('generic-structured')
+    expect(presentation?.resultView).toBe('pr-review')
   })
 
   it('returns empty / undefined for kinds that did not opt in', () => {

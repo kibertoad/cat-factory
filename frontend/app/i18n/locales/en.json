@@ -1626,7 +1626,8 @@
         "followup_pending": "Mark read",
         "initiative": "Mark read",
         "markRead": "Mark read",
-        "fork_decision_pending": "Mark read"
+        "fork_decision_pending": "Mark read",
+        "pr_review_ready": "Mark read"
       }
     },
     "aiProvidersBanner": {
@@ -3072,6 +3073,7 @@
       "release_regression": "Release regression",
       "human_test_ready": "Ready for human testing",
       "visual_confirmation_ready": "Ready for visual confirmation",
+      "pr_review_ready": "PR review findings",
       "initiative": "Initiative updates"
     },
     "role": {
@@ -4827,6 +4829,41 @@
     },
     "empty": {
       "title": "Nothing to decide"
+    }
+  },
+  "prReview": {
+    "title": "PR review",
+    "titleWithBlock": "PR review: {title}",
+    "subtitle": "Select the findings to act on.",
+    "openPr": "Open PR",
+    "summaryLabel": "Summary:",
+    "noFindings": "No findings — the pull request looks clean.",
+    "unsliced": "Other",
+    "selectAll": "Select all",
+    "clear": "Clear",
+    "selectedCount": "{count} selected",
+    "finish": "Finish review",
+    "suggestedFix": "Suggested fix:",
+    "line": "line {line}",
+    "reviewing": {
+      "title": "Reviewing the pull request…",
+      "hint": "Slicing the diff into cohesive chunks and reviewing each one."
+    },
+    "severity": {
+      "blocker": "Blocker",
+      "high": "High",
+      "medium": "Medium",
+      "low": "Low",
+      "nit": "Nit"
+    },
+    "category": {
+      "correctness": "Correctness",
+      "security": "Security",
+      "performance": "Performance",
+      "maintainability": "Maintainability",
+      "style": "Style",
+      "test": "Tests",
+      "other": "Other"
     }
   }
 }

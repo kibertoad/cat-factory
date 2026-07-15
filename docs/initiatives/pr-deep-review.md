@@ -27,12 +27,13 @@ selection step and two terminal actions.
 
 ## Target pattern (reference implementations to copy)
 
-- **Inline-driver review (stages 1–3)** — the requirements-review reviewer runs its LLM work
-  inline in the durable driver: `ReviewGateController`
-  (`backend/packages/orchestration/src/modules/execution/ReviewGateController.ts`) +
-  `requirements.logic.ts` (`buildReviewPrompt`, `coerceReviewItems` — severity-sort + cap,
-  `disposeReview`). Item severity/category/status shapes:
-  `backend/packages/contracts/src/requirements.ts`.
+- **Review substrate (stages 1–2) — the container `pr-reviewer` (PR 1), kept.** The full-source
+  read-only agent (`backend/packages/agents/src/agents/kinds/pr-reviewer.ts`) slices + reviews
+  one slice at a time in Pi's agentic loop and returns `prReviewAgentOutputSchema` as
+  `result.custom`. The engine coerces it (`prReview.logic.ts` `coercePrReview` — mint ids,
+  anchor findings to slices, severity-sort) onto `step.prReview`. (The original plan's inline
+  manifest-Slicer + `ReviewGateController`-style inline reviewer was dropped — see the PR 2
+  design note below.)
 - **Propose → park → choose, state-on-step (stage 4)** — the fork-decision flow:
   `backend/packages/contracts/src/forkDecision.ts`, `ForkDecisionController.ts`
   (`recordProposal` / `choose` / async re-entry via `pendingForkChat`), `forkDecision.logic.ts`
@@ -58,11 +59,20 @@ selection step and two terminal actions.
 
 - **State-on-step, no side table.** All review state rides `step.prReview` (like
   `step.forkDecision`) → D1⇄Drizzle parity is free. Do NOT add a `pr_reviews` table.
-- **Token guardrails are the point.** The Slicer must never receive full patches; only per-slice
-  reviewers do, one slice at a time, under a hard per-slice budget. Keep a mechanical fallback so
-  an unwired/failed Slicer degrades to directory-grouped chunks rather than failing the run.
-- **Pass-through when unwired.** No model / no GitHub client ⇒ the review step is a no-op that
-  advances (exactly like requirements-review and the fork proposer). Conformance depends on this.
+- **Token guardrails are the point — met by the container agent's slice-one-at-a-time loop.**
+  PR 2's decision (above) is that the full-source container `pr-reviewer` already keeps per-slice
+  context bounded in Pi's agentic loop (it slices from cheap `--name-status`/`--stat` signals and
+  reads one slice's files at a time), so no separate inline Slicer stage was added. If a future
+  opt-in inline pre-slicer is revived, it must never receive full patches (manifest only), with a
+  mechanical directory-grouping fallback.
+- **Pass-through when the reviewer produced nothing.** A clean PR (no findings) — or a coerced
+  empty output — records an empty `done` review and lets the normal completion finish the step
+  (no park). Conformance depends on this. The park only happens with ≥1 finding.
+- **Park via a completion interceptor, resolve via advance-past-gate.** The `pr-review`
+  interceptor (`RunDispatcher.buildStepCompletionInterceptors`, order 106) records findings +
+  parks; `PrReviewController.resolve` mirrors the review gate's resolved-gate advance
+  (`advanceRunPastGate` + `settleAdvancedGate`) — it does NOT re-dispatch the reviewer. All the
+  state-on-step + park/resolve shape mirrors the fork-decision flow, not the inline reviewer.
 - **Runtimes symmetric.** New provider/registration wiring + `validateRegistrationsOnce` land in
   BOTH `runtimes/cloudflare` and `runtimes/node` (local inherits Node). Add a conformance
   assertion for shared behaviour.
@@ -108,15 +118,39 @@ fix/inline-comment resolutions moved to PR 2 / PR 3** (they need the park protoc
 `listChangedFiles` is landed ahead of its consumer — it is the data source for PR 2's
 semantic Slicer (which reviews the manifest, not the whole diff).
 
-### PR 2 — Semantic Slicer + human selection UI
+### PR 2 — Human finding-selection UI (park loop) — SHIPPED
 
-| #   | Item                                                                                                                                                                                                           | Status | PR  |
-| --- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ------ | --- |
-| 9   | Contracts: `prReview.ts` (findings/slices/step-state/choose), `pipelineStepSchema.prReview` + `pendingPrReviewPost`, `result-views.ts` `pr-review`, `notifications.ts` `pr_review_ready`, `routes/prReview.ts` | todo   |     |
-| 10  | Inline semantic Slicer (reads the `listChangedFiles` manifest → cohesive slices; mechanical fallback) + per-slice review + aggregate onto `step.prReview`, park + notification                                 | todo   |     |
-| 11  | `stores/prReview.ts` + `PrReviewWindow.vue` (multi-select, severity badges, grouped by slice, two footer actions)                                                                                              | todo   |     |
-| 12  | Register result-view in `StepResultViewHost.vue`; `ui.openPrReview` opener; `NotificationsInbox` reveal branch; `catalog.ts` archetype `resultView`                                                            | todo   |     |
-| 13  | i18n `en.json` + all locales (parity) for the window                                                                                                                                                           | todo   |     |
+**Design decision (supersedes the original "inline Slicer" plan):** PR 2 keeps PR 1's
+full-source **container `pr-reviewer`** as the review substrate rather than replacing it with
+an inline manifest-Slicer + per-slice reviewer. The container agent already slices from the
+cheap `--name-status`/`--stat` signals and reviews one slice at a time in Pi's agentic loop,
+so it keeps per-slice context bounded **while retaining full-source access** (follow a call
+site, read an unchanged neighbour, grep the repo) — which an inline patch-only reviewer can't.
+The inline Slicer's only unique win (a provably-linear token ceiling) wasn't worth the review-
+quality loss, so the "semantic LLM Slicer as its own stage" is dropped (may return as an opt-in
+pre-slicer for pathological PRs). What PR 2 adds is the part that is substrate-independent: the
+`step.prReview` state, the human multi-select **park loop**, the dedicated window, and the card.
+
+PR 2 resolves with a neutral **`finish`** (record the curated selection + complete the read-only
+review); the two real resolutions (Fixer / inline PR comments) stay PR 3 — neither is possible
+without PR 3's `createReview` + fixer dispatch, so shipping placeholder buttons would be
+half-wired. The window presents findings + multi-select + `Finish review`; PR 3 adds the two
+action buttons that consume `selectedFindingIds`.
+
+| #   | Item                                                                                                                                                                                                                                                               | Status | PR  |
+| --- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ | ------ | --- |
+| 9   | Contracts: `prReview.ts` (severity/category/slice/finding/step-state + `prReviewAgentOutputSchema` + `resolvePrReview`), `pipelineStepSchema.prReview`, `result-views.ts` `pr-review`, `notifications.ts` `pr_review_ready` (+ `sliceCount`), `routes/prReview.ts` | done   | 2   |
+| 10  | Engine: `pr-review` completion interceptor records the reviewer's coerced findings onto `step.prReview` + parks (`PrReviewController` / `prReview.logic.ts`); `pr_review_ready` notification; `resolve` records the selection + advances past the gate             | done   | 2   |
+| 11  | `stores/prReview.ts` + `PrReviewWindow.vue` (multi-select, severity/category badges, grouped by slice, `Finish review`)                                                                                                                                            | done   | 2   |
+| 12  | Register result-view in `StepResultViewHost.vue`; `ui.openPrReview` opener; `NotificationsInbox` reveal branch; `pr-reviewer` archetype `resultView: 'pr-review'`                                                                                                  | done   | 2   |
+| 13  | i18n `en.json` + all 9 locales (parity, real translations) for the window + the Slack route + inbox action                                                                                                                                                         | done   | 2   |
+| 14  | `@cat-factory/server` `PrReviewController` (`GET`/`resolve`) + cross-runtime conformance (park → select → resolve)                                                                                                                                                 | done   | 2   |
+
+`pendingPrReviewPost` (the post-as-comments driver marker) is deferred to PR 3 with the
+resolution it serves — PR 2 has no consumer for it, so adding it now would be dead state.
+The inline `listChangedFiles` (landed in PR 1 as the Slicer's data source) is currently
+unused by the container path; PR 3 may consume it for the inline-comment anchor resolution, or
+it stays available for a future opt-in pre-slicer.
 
 ### PR 3 — Resolutions
 
