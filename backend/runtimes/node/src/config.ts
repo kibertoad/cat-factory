@@ -27,6 +27,7 @@ import {
   resolveMachineTokenTtlMs,
 } from '@cat-factory/server'
 import { GITLAB_PUBLIC_API_BASE } from '@cat-factory/gitlab'
+import { parseOtlpHeaders } from '@cat-factory/observability-otel'
 import { DEFAULT_SPEND_PRICING, budgetCapsOverlay, modelCostResolver } from '@cat-factory/spend'
 
 // Translate the Node process environment into the shared AppConfig contract. This is
@@ -538,6 +539,14 @@ export function loadNodeConfig(env: NodeJS.ProcessEnv): AppConfig {
       publicKey: env.LANGFUSE_PUBLIC_KEY?.trim(),
       secretKey: env.LANGFUSE_SECRET_KEY?.trim(),
       baseUrl: env.LANGFUSE_BASE_URL?.trim() || undefined,
+    },
+    // Optional OpenTelemetry OTLP exporter: off unless `OTEL_ENABLED=true` AND an endpoint
+    // is set. On Node this uses the official @opentelemetry/* SDK (see container.ts).
+    otel: {
+      enabled: env.OTEL_ENABLED?.trim() === 'true' && !!env.OTEL_EXPORTER_OTLP_ENDPOINT?.trim(),
+      endpoint: env.OTEL_EXPORTER_OTLP_ENDPOINT?.trim() || undefined,
+      headers: parseOtlpHeaders(env.OTEL_EXPORTER_OTLP_HEADERS),
+      serviceName: env.OTEL_SERVICE_NAME?.trim() || undefined,
     },
   }
 }

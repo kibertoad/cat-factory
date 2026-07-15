@@ -88,6 +88,7 @@ import {
   CompositeNotificationChannel,
   DEFAULT_MODEL_PRESET_ID,
   SUBSCRIPTION_VENDORS,
+  composeTraceSinks,
   isAmbientNativeVendor,
 } from '@cat-factory/kernel'
 import {
@@ -103,6 +104,7 @@ import {
   resolvePresetModelForKind,
 } from '@cat-factory/orchestration'
 import { createLangfuseSink } from '@cat-factory/observability-langfuse'
+import { createNodeOtelSink } from '@cat-factory/observability-otel/node'
 import {
   type AppConfig,
   type JobPackageRegistrySpec,
@@ -282,10 +284,12 @@ export function pickRepoSource<T>(
 }
 
 // Memoised per object so a container build shares ONE model provider (hence one inline
-// Langfuse sink) across the agent executor, requirements reviewer, doc planner and
+// trace sink) across the agent executor, requirements reviewer, doc planner and
 // fragment selector, and ONE core trace sink — instead of each call constructing its
-// own. Mirrors the Worker's `buildModelProvider` memoisation.
-const langfuseSinkCache = new WeakMap<AppConfig, CoreDependencies['llmTraceSink']>()
+// own. Mirrors the Worker's `buildModelProvider` memoisation. Memoisation matters more for
+// OTel than Langfuse: the SDK sink owns batch processors/exporters, so it must be built
+// once per config, not per wiring site.
+const traceSinkCache = new WeakMap<AppConfig, CoreDependencies['llmTraceSink']>()
 
 /** Truthy env flag (`true`/`1`/`yes`). */
 function isTruthy(value: string | undefined): boolean {
@@ -316,14 +320,17 @@ function buildModelProviderResolver(
 }
 
 /**
- * Build the opt-in Langfuse trace sink (fetch-based, so identical to the Worker's
- * `selectLangfuseSink`). Returns undefined unless `LANGFUSE_ENABLED=true` and both keys
- * are set; the observability service then fans every recorded LLM call out to it.
- * Memoised per config so both wiring sites share one sink instance.
+ * Build the opt-in external trace sink(s) — Langfuse and/or OpenTelemetry — composed into
+ * the single sink slot; the observability service then fans every recorded LLM call out to
+ * whichever are wired. Memoised per config so both wiring sites share one instance.
+ *
+ * Langfuse uses the fetch-based sink (identical to the Worker). OpenTelemetry uses the
+ * OFFICIAL `@opentelemetry/*` SDK exporter (`createNodeOtelSink`) — the Node counterpart of
+ * the Worker's fetch OTLP exporter, kept conformant by the shared mapping layer + tests.
  */
-function buildLangfuseSink(config: AppConfig): CoreDependencies['llmTraceSink'] {
-  if (langfuseSinkCache.has(config)) return langfuseSinkCache.get(config)
-  const sink =
+function buildTraceSink(config: AppConfig): CoreDependencies['llmTraceSink'] {
+  if (traceSinkCache.has(config)) return traceSinkCache.get(config)
+  const langfuse =
     !config.langfuse.enabled || !config.langfuse.publicKey || !config.langfuse.secretKey
       ? undefined
       : createLangfuseSink({
@@ -332,7 +339,17 @@ function buildLangfuseSink(config: AppConfig): CoreDependencies['llmTraceSink'] 
           baseUrl: config.langfuse.baseUrl,
           logger,
         })
-  langfuseSinkCache.set(config, sink)
+  const otel =
+    !config.otel.enabled || !config.otel.endpoint
+      ? undefined
+      : createNodeOtelSink({
+          endpoint: config.otel.endpoint,
+          headers: config.otel.headers,
+          serviceName: config.otel.serviceName,
+          logger,
+        })
+  const sink = composeTraceSinks([langfuse, otel])
+  traceSinkCache.set(config, sink)
   return sink
 }
 
@@ -1066,9 +1083,9 @@ function buildNodeContainerExecutor(
     // origin so containers clone gitlab.com (or a self-managed host) and open MRs; absent ⇒
     // the default github.com origin.
     ...(resolveRepoOrigin ? { resolveRepoOrigin } : {}),
-    // Forward container tool spans to Langfuse (when configured) as child spans under
-    // the run trace — the same sink the LLM proxy fans generations out to.
-    llmTraceSink: buildLangfuseSink(config),
+    // Forward container tool spans to the external trace sink(s) (Langfuse and/or OTLP)
+    // as child spans under the run trace — the same sink the LLM proxy fans generations to.
+    llmTraceSink: buildTraceSink(config),
     // Record the complete provided context per dispatch (best-effort, gated in the sink).
     ...(agentContextObservability ? { agentContextObservability } : {}),
     agentKindRegistry,
@@ -2322,9 +2339,10 @@ export function buildNodeContainer(options: NodeContainerOptions): ServerContain
     // Re-exposed on the core for the search-query read endpoint AND the search proxy's
     // write path (it reads it off the request container).
     searchQueryObservability,
-    // Opt-in Langfuse trace sink (fans every recorded LLM call out as a generation).
-    // Built only when configured; otherwise undefined and there is no external emission.
-    llmTraceSink: buildLangfuseSink(config),
+    // Opt-in external trace sink(s) — Langfuse and/or OpenTelemetry — fanning every
+    // recorded LLM call out as a generation. Built only when configured; otherwise
+    // undefined and there is no external emission.
+    llmTraceSink: buildTraceSink(config),
     modelPresetRepository: repos.modelPresetRepository,
     // A fresh workspace's model-preset library is seeded with this built-in as the default
     // (Node deploy → Kimi K2.7, the Cloudflare-runnable baseline; the local facade injects

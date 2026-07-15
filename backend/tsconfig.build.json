@@ -25,6 +25,7 @@
     { "path": "packages/provider-cloudflare/tsconfig.build.json" },
     { "path": "packages/provider-s3/tsconfig.build.json" },
     { "path": "packages/observability-langfuse/tsconfig.build.json" },
+    { "path": "packages/observability-otel/tsconfig.build.json" },
     { "path": "packages/orchestration/tsconfig.build.json" },
     { "path": "packages/server/tsconfig.build.json" },
     { "path": "internal/conformance/tsconfig.build.json" },

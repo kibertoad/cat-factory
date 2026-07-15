@@ -1,9 +1,11 @@
 import { type ProviderRegistry, resolveOpenAiCompatibleBaseUrl } from '@cat-factory/agents'
 import type { ApiKeyService, LocalModelEndpointService } from '@cat-factory/integrations'
-import type { ModelProviderResolver } from '@cat-factory/kernel'
+import { type ModelProviderResolver, composeTraceSinks } from '@cat-factory/kernel'
 import { bedrockRegistry } from '@cat-factory/provider-bedrock'
 import { cloudflareRestRegistry } from '@cat-factory/provider-cloudflare'
 import { createLangfuseSink } from '@cat-factory/observability-langfuse'
+import { parseOtlpHeaders } from '@cat-factory/observability-otel'
+import { createNodeOtelSink } from '@cat-factory/observability-otel/node'
 import { createScopedModelProviderResolver } from '@cat-factory/server'
 
 // The Node deployment's ModelProvider RESOLVER: builds a per-scope provider from the
@@ -57,19 +59,31 @@ export function createNodeModelProviderResolver(
     )
   }
 
-  const instrument =
+  // Instrument inline (non-proxied) calls with the SAME external trace sink(s) the proxied
+  // path uses — Langfuse (fetch) and/or OpenTelemetry (official SDK), composed via a
+  // fan-out when both are enabled.
+  const langfuseSink =
     env.LANGFUSE_ENABLED?.trim() === 'true' &&
     env.LANGFUSE_PUBLIC_KEY?.trim() &&
     env.LANGFUSE_SECRET_KEY?.trim()
-      ? {
-          traceSink: createLangfuseSink({
-            publicKey: env.LANGFUSE_PUBLIC_KEY.trim(),
-            secretKey: env.LANGFUSE_SECRET_KEY.trim(),
-            baseUrl: env.LANGFUSE_BASE_URL?.trim() || undefined,
-          }),
-          recordPrompts: env.LLM_RECORD_PROMPTS?.trim() !== 'false',
-        }
+      ? createLangfuseSink({
+          publicKey: env.LANGFUSE_PUBLIC_KEY.trim(),
+          secretKey: env.LANGFUSE_SECRET_KEY.trim(),
+          baseUrl: env.LANGFUSE_BASE_URL?.trim() || undefined,
+        })
       : undefined
+  const otelSink =
+    env.OTEL_ENABLED?.trim() === 'true' && env.OTEL_EXPORTER_OTLP_ENDPOINT?.trim()
+      ? createNodeOtelSink({
+          endpoint: env.OTEL_EXPORTER_OTLP_ENDPOINT.trim(),
+          headers: parseOtlpHeaders(env.OTEL_EXPORTER_OTLP_HEADERS),
+          serviceName: env.OTEL_SERVICE_NAME?.trim() || undefined,
+        })
+      : undefined
+  const traceSink = composeTraceSinks([langfuseSink, otelSink])
+  const instrument = traceSink
+    ? { traceSink, recordPrompts: env.LLM_RECORD_PROMPTS?.trim() !== 'false' }
+    : undefined
 
   return createScopedModelProviderResolver({
     apiKeys,

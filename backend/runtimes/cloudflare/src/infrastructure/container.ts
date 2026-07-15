@@ -12,8 +12,10 @@ import {
   type GitHubClient,
   type GroupCacheHandle,
   type IdGenerator,
+  type LlmTraceSink,
   type ModelProviderResolver,
   type NotificationChannel,
+  composeTraceSinks,
   NoopWorkRunner,
   type ProvisioningSubsystem,
   type ResolveBinaryArtifactStore,
@@ -94,6 +96,7 @@ import {
 } from '@cat-factory/orchestration'
 import { ISOLATE_SAFE_APP_CACHES_PROFILE, createAppCaches } from '@cat-factory/caching'
 import { createLangfuseSink } from '@cat-factory/observability-langfuse'
+import { createOtelSink } from '@cat-factory/observability-otel'
 import {
   buildResolveRepoTarget as buildSharedResolveRepoTarget,
   buildResolveRepoTargets as buildSharedResolveRepoTargets,
@@ -129,9 +132,10 @@ import {
   type ServerContainer,
   type WebSearchUpstream,
 } from '@cat-factory/server'
-import { type AppConfig, loadConfig } from './config'
+import { type AppConfig, type LangfuseConfig, type OtelConfig, loadConfig } from './config'
 import { loadLangfuseConfig } from './config/langfuse'
 import { loadObservabilityConfig } from './config/observability'
+import { loadOtelConfig } from './config/otel'
 import type { Env } from './env'
 import { requireDb, requireTelemetryDb } from './env'
 import { baseUrlFor } from './ai/providerEndpoints'
@@ -319,19 +323,15 @@ function buildModelProviderResolver(env: Env, db: D1Database): ModelProviderReso
     ...(env.AI ? [cloudflareBindingRegistry({ binding: env.AI })] : []),
     ...resolveExtraRegistries(env),
   ]
-  const langfuse = loadLangfuseConfig(env)
-  const instrument =
-    langfuse.enabled && langfuse.publicKey && langfuse.secretKey
-      ? {
-          traceSink: createLangfuseSink({
-            publicKey: langfuse.publicKey,
-            secretKey: langfuse.secretKey,
-            baseUrl: langfuse.baseUrl,
-            logger,
-          }),
-          recordPrompts: loadObservabilityConfig(env).recordPrompts,
-        }
-      : undefined
+  // Instrument inline (non-proxied) calls with the SAME composed trace sink the proxied
+  // path uses — Langfuse and/or the OTLP exporter, whichever are enabled.
+  const traceSink = composeTraceSinks([
+    buildLangfuseSink(loadLangfuseConfig(env)),
+    buildOtelSink(loadOtelConfig(env)),
+  ])
+  const instrument = traceSink
+    ? { traceSink, recordPrompts: loadObservabilityConfig(env).recordPrompts }
+    : undefined
   const localModelEndpoints = buildLocalModelEndpointService(env, db, { now: () => Date.now() })
   const scoped = createScopedModelProviderResolver({
     apiKeys: buildApiKeyService(env, db, { now: () => Date.now() }),
@@ -1091,24 +1091,45 @@ function buildSystemEmailSender(
 }
 
 /**
- * Wire the opt-in Langfuse trace sink. Built only when `LANGFUSE_ENABLED=true` and both
- * keys are set; the observability service then fans every recorded LLM call out to it.
- * A fetch-based sink, so it runs unchanged on the Worker runtime.
+ * The opt-in Langfuse trace sink. Built only when `LANGFUSE_ENABLED=true` and both keys are
+ * set. A fetch-based sink, so it runs unchanged on the Worker runtime.
  */
-function buildLangfuseSink(config: AppConfig): CoreDependencies['llmTraceSink'] {
-  if (!config.langfuse.enabled || !config.langfuse.publicKey || !config.langfuse.secretKey) {
-    return undefined
-  }
+function buildLangfuseSink(langfuse: LangfuseConfig): LlmTraceSink | undefined {
+  if (!langfuse.enabled || !langfuse.publicKey || !langfuse.secretKey) return undefined
   return createLangfuseSink({
-    publicKey: config.langfuse.publicKey,
-    secretKey: config.langfuse.secretKey,
-    baseUrl: config.langfuse.baseUrl,
+    publicKey: langfuse.publicKey,
+    secretKey: langfuse.secretKey,
+    baseUrl: langfuse.baseUrl,
     logger,
   })
 }
 
-function selectLangfuseSink(config: AppConfig): Partial<CoreDependencies> {
-  const sink = buildLangfuseSink(config)
+/**
+ * The opt-in OpenTelemetry OTLP exporter. Built only when `OTEL_ENABLED=true` and an
+ * endpoint is set. The Worker uses the FETCH-based exporter (`createOtelSink`) so it runs
+ * on workerd; the Node facade uses the official-SDK exporter instead (both conformant).
+ */
+function buildOtelSink(otel: OtelConfig): LlmTraceSink | undefined {
+  if (!otel.enabled || !otel.endpoint) return undefined
+  return createOtelSink({
+    endpoint: otel.endpoint,
+    headers: otel.headers,
+    serviceName: otel.serviceName,
+    logger,
+  })
+}
+
+/**
+ * Compose every enabled external trace destination into the single sink slot: none ⇒
+ * undefined, one ⇒ that sink, both ⇒ a fan-out. The observability service then fans every
+ * recorded LLM call (+ tool spans) out to whichever are wired.
+ */
+function buildTraceSink(config: AppConfig): CoreDependencies['llmTraceSink'] {
+  return composeTraceSinks([buildLangfuseSink(config.langfuse), buildOtelSink(config.otel)])
+}
+
+function selectTraceSink(config: AppConfig): Partial<CoreDependencies> {
+  const sink = buildTraceSink(config)
   return sink ? { llmTraceSink: sink } : {}
 }
 
@@ -1416,9 +1437,9 @@ function buildContainerExecutor(
     // band — injected as container env vars by the harness, never in the prompt/telemetry).
     ...(resolveTestSecrets ? { resolveTestSecrets } : {}),
     githubApiBase: config.github.apiBase,
-    // Forward container tool spans to Langfuse (when configured) as child spans under
-    // the run trace — the same sink the LLM proxy fans generations out to.
-    llmTraceSink: buildLangfuseSink(config),
+    // Forward container tool spans to the external trace sink(s) (Langfuse and/or OTLP)
+    // as child spans under the run trace — the same sink the LLM proxy fans generations to.
+    llmTraceSink: buildTraceSink(config),
     // Record the complete provided context per dispatch (best-effort, gated in the sink).
     ...(agentContextObservability ? { agentContextObservability } : {}),
     agentKindRegistry,
@@ -2388,7 +2409,7 @@ export function buildContainer(
     ...(accountSettings ? { accountSettings } : {}),
     ...selectSlackDeps(config, db),
     ...selectEmailInvitationDeps(config, db),
-    ...selectLangfuseSink(config),
+    ...selectTraceSink(config),
     ...selectRecurringDeps(env, config, db, clock, idGenerator),
     ...selectDocumentsDeps(env, config, db, clock, idGenerator),
     ...selectTasksDeps(env, config, db, clock, idGenerator),

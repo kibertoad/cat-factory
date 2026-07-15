@@ -87,6 +87,57 @@ export interface LlmTraceSink {
   recordToolSpans?(context: LlmToolSpanContext, spans: LlmToolSpan[]): Promise<void> | void
 }
 
+/**
+ * Fan one trace out to every configured sink, isolating per-sink failures. A deployment
+ * that enables more than one external destination (e.g. Langfuse AND an OpenTelemetry
+ * collector) wires them behind this so the single {@link LlmTraceSink} slot the facades
+ * expose reaches all of them. Mirrors `CompositeNotificationChannel`: observability must
+ * never break the caller, so every per-sink call is isolated — one sink throwing (or its
+ * network round trip failing) can never affect the others or the LLM path.
+ */
+export class CompositeTraceSink implements LlmTraceSink {
+  constructor(private readonly sinks: LlmTraceSink[]) {}
+
+  async recordGeneration(event: LlmGenerationEvent): Promise<void> {
+    await Promise.all(
+      this.sinks.map(async (sink) => {
+        try {
+          await sink.recordGeneration(event)
+        } catch {
+          // Best-effort: one sink failing must not block the others or the caller.
+        }
+      }),
+    )
+  }
+
+  async recordToolSpans(context: LlmToolSpanContext, spans: LlmToolSpan[]): Promise<void> {
+    await Promise.all(
+      this.sinks.map(async (sink) => {
+        try {
+          await sink.recordToolSpans?.(context, spans)
+        } catch {
+          // Best-effort, as above.
+        }
+      }),
+    )
+  }
+}
+
+/**
+ * Compose zero or more optional sinks into a single one: none ⇒ `undefined` (nothing
+ * wired, no external emission), exactly one ⇒ that sink verbatim (no wrapper overhead),
+ * more than one ⇒ a {@link CompositeTraceSink} fanning out to all. The one helper every
+ * facade uses so the "0/1/many" collapse is identical across runtimes.
+ */
+export function composeTraceSinks(
+  sinks: readonly (LlmTraceSink | undefined)[],
+): LlmTraceSink | undefined {
+  const active = sinks.filter((sink): sink is LlmTraceSink => sink != null)
+  if (active.length === 0) return undefined
+  if (active.length === 1) return active[0]
+  return new CompositeTraceSink(active)
+}
+
 // ----------------------------------------------------------------------------
 // Inline-call observability context
 //
