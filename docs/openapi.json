@@ -34,7 +34,8 @@
               "feature",
               "bug",
               "document",
-              "spike"
+              "spike",
+              "review"
             ],
             "type": "string"
           },
@@ -317,6 +318,7 @@
               "bug",
               "document",
               "spike",
+              "review",
               "recurring"
             ],
             "type": "string"
@@ -379,7 +381,7 @@
       "name": "MIT"
     },
     "title": "cat-factory Public API",
-    "version": "0.116.1"
+    "version": "1.0.0"
   },
   "openapi": "3.1.0",
   "paths": {

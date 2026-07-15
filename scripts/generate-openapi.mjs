@@ -11,17 +11,24 @@
 // Prereqs: the contracts package must be BUILT first (it imports the compiled `dist`), so
 // run `pnpm build` before `pnpm gen:openapi`.
 
-import { readFile, writeFile } from 'node:fs/promises'
+import { writeFile } from 'node:fs/promises'
 import { dirname, resolve } from 'node:path'
 import { fileURLToPath, pathToFileURL } from 'node:url'
 import { toJsonSchema, toJsonSchemaDefs } from '@valibot/to-json-schema'
 
 const repoRoot = resolve(dirname(fileURLToPath(import.meta.url)), '..')
 const CONTRACTS_DIST = resolve(repoRoot, 'backend/packages/contracts/dist/index.js')
-const SERVER_PKG = resolve(repoRoot, 'backend/packages/server/package.json')
 export const OPENAPI_PATH = resolve(repoRoot, 'docs/openapi.json')
 
 const API_PREFIX = '/api/v1'
+
+// The document's `info.version` describes the PUBLIC API surface (`/api/v1`), NOT the npm
+// package release. It is deliberately DECOUPLED from any `package.json` version: those bump on
+// every changesets release with no bearing on the API contract, and baking one in would make the
+// committed `docs/openapi.json` go stale on every release — the drift guard (`check:openapi`)
+// would then fail spuriously on the next PR that merges a release, even when no contract changed.
+// Bump this only when the `/api/v1` contract itself changes in a versioned way.
+const API_VERSION = '1.0.0'
 
 /**
  * Named DTOs hoisted into `components.schemas` (so client codegen gets named types and
@@ -164,7 +171,6 @@ function sortDeep(value) {
 
 export async function buildOpenApiDoc() {
   const contracts = await import(pathToFileURL(CONTRACTS_DIST).href)
-  const version = JSON.parse(await readFile(SERVER_PKG, 'utf8')).version
 
   // Component schemas (named DTOs) + a reverse identity map (schema object → component name)
   // so an operation referencing a named DTO emits a `$ref` rather than re-inlining it.
@@ -263,7 +269,7 @@ export async function buildOpenApiDoc() {
     openapi: '3.1.0',
     info: {
       title: 'cat-factory Public API',
-      version,
+      version: API_VERSION,
       description:
         'The external, key-authenticated API (`/api/v1`). Authenticate every request with a public-API key: `Authorization: Bearer cf_live_<keyId>.<secret>`. Every call is scoped to the key’s workspace.',
       license: { name: 'MIT', identifier: 'MIT' },
