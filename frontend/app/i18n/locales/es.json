@@ -4705,11 +4705,21 @@
     "clear": "Limpiar",
     "selectedCount": "{count} seleccionados",
     "finish": "Finalizar revisión",
+    "fix": "Corregir seleccionados",
+    "post": "Publicar como comentarios",
     "suggestedFix": "Corrección sugerida:",
     "line": "línea {line}",
     "reviewing": {
       "title": "Revisando el pull request…",
       "hint": "Dividiendo el diff en bloques coherentes y revisando cada uno."
+    },
+    "fixing": {
+      "title": "Corrigiendo los hallazgos seleccionados…",
+      "hint": "Un corrector está confirmando cambios para los hallazgos seleccionados en la rama del pull request."
+    },
+    "posting": {
+      "title": "Publicando comentarios de revisión…",
+      "hint": "Publicando los hallazgos seleccionados como comentarios en línea en el pull request."
     },
     "severity": {
       "blocker": "Bloqueante",

@@ -4843,11 +4843,21 @@
     "clear": "Clear",
     "selectedCount": "{count} selected",
     "finish": "Finish review",
+    "fix": "Fix selected",
+    "post": "Post as comments",
     "suggestedFix": "Suggested fix:",
     "line": "line {line}",
     "reviewing": {
       "title": "Reviewing the pull request…",
       "hint": "Slicing the diff into cohesive chunks and reviewing each one."
+    },
+    "fixing": {
+      "title": "Fixing the selected findings…",
+      "hint": "A fixer is committing changes for the selected findings onto the pull request branch."
+    },
+    "posting": {
+      "title": "Posting review comments…",
+      "hint": "Publishing the selected findings as inline comments on the pull request."
     },
     "severity": {
       "blocker": "Blocker",

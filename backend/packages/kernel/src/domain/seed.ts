@@ -532,7 +532,7 @@ export function seedPipelines(): Pipeline[] {
     // `pr-reviewer` step that slices an open PR's diff into cohesive chunks, reviews each,
     // and returns prioritized findings. No code is written and no PR is opened, so there is
     // no merge tail — the run terminates cleanly via the no-PR terminal path in
-    // `RunStateMachine.finalizeBlock`. See docs/initiatives/pr-deep-review.md.
+    // `RunStateMachine.finalizeBlock`. See backend/docs/adr/0023-pr-deep-review.md.
     { id: 'pl_review', name: 'Review a pull request', agentKinds: ['pr-reviewer'] },
     definePipeline({
       // The Initiative Planning pipeline — the ONLY pipeline runnable on an
