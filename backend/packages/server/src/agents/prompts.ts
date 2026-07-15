@@ -564,14 +564,15 @@ export function testerInfraSpec(context: AgentRunContext): Record<string, unknow
 
   const provisioning = context.service?.provisioning
   const frameType = context.service?.type
-  // A `library` frame (not `deployable`) is never deployed and has no ephemeral env: it runs its
-  // suite in-container. Stand up its repo/package-local test dependencies on localhost when the
-  // frame declares a compose path — this REVIVES the harness `standUpInfra` DinD path (dormant
+  // A `library` frame runs the tester in `suite` posture: never deployed, no ephemeral env — it
+  // runs its suite in-container. Stand up its repo/package-local test dependencies on localhost when
+  // the frame declares a compose path — this REVIVES the harness `standUpInfra` DinD path (dormant
   // since compose started routing to `ephemeral`) — so `{ environment: 'local', composePath }`.
   // With no declared compose path the agent self-manages test deps via the repo's lifecycle
-  // scripts (`pretest:ci`/…), so nothing is stood up (`noInfraDependencies`). See the lock-step
-  // `testerEnvironmentSection` (agents) for the prompt narration.
-  if (frameType && !frameProfile(frameType).deployable) {
+  // scripts (`pretest:ci`/…), so nothing is stood up (`noInfraDependencies`). Keyed off the
+  // profile's `testPosture` so it stays in lock-step with the `testerEnvironmentSection` (agents)
+  // prompt narration, which keys its run-mode off the same flag.
+  if (frameType && frameProfile(frameType).testPosture === 'suite') {
     const composePath = provisioning?.composePath?.trim()
     return {
       environment: 'local',

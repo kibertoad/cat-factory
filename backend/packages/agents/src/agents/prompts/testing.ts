@@ -188,12 +188,14 @@ export function testingSystemPrompt(kind: AgentKind): string | undefined {
 export function testerEnvironmentSection(context: AgentRunContext): string {
   if (context.agentKind !== TESTER_AGENT_KIND && context.agentKind !== UI_TESTER_AGENT_KIND)
     return ''
-  // A `library` frame (not `deployable`) has no deployment and no running system to probe: the
-  // tester runs the suite in-container. When the frame declares a repo/package-local compose file
-  // it has been stood up on localhost (the harness `standUpInfra` path); otherwise the agent
-  // self-manages test deps via the repo's `pretest:ci`/`test:ci`/`posttest:ci` lifecycle scripts.
+  // A `library` frame runs the tester in `suite` posture: no deployment and no running system to
+  // probe, so the tester runs the suite in-container. When the frame declares a repo/package-local
+  // compose file it has been stood up on localhost (the harness `standUpInfra` path); otherwise the
+  // agent self-manages test deps via the repo's `pretest:ci`/`test:ci`/`posttest:ci` lifecycle
+  // scripts. Keyed off the profile's `testPosture` (the field named for exactly this choice) so it
+  // stays in lock-step with `testerInfraSpec` (server), which keys the wire spec off the same flag.
   const frameType = context.service?.type
-  if (frameType && !frameProfile(frameType).deployable) {
+  if (frameType && frameProfile(frameType).testPosture === 'suite') {
     return (
       '\nRun mode: library test suite — this is a published package with no deployment and no ' +
       'running system. Install and build the package; if this run stood up repo-local test ' +

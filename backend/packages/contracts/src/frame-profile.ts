@@ -37,9 +37,17 @@ export interface FrameProfile {
    * handler (the suite runs in-container).
    */
   readonly liveTestable: boolean
-  /** The frame owns a rendered UI (a `frontend` app). */
+  /**
+   * The frame owns a rendered UI (a `frontend` app). Consumed by the SPA panel/step gating
+   * (P2 of the library-frame-support initiative) to hide UI-only affordances on UI-less frames;
+   * carried on the profile now so that gating is a field read rather than another type switch.
+   */
   readonly hasUi: boolean
-  /** The posture the Tester runs in on this frame (see {@link TestPosture}). */
+  /**
+   * The posture the Tester runs in on this frame (see {@link TestPosture}). Drives BOTH the
+   * tester prompt run-mode (`testerEnvironmentSection`, agents) and the harness infra wire spec
+   * (`testerInfraSpec`, server) — the two are kept in lock-step off this single flag.
+   */
   readonly testPosture: TestPosture
 }
 
