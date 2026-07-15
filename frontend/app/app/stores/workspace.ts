@@ -85,8 +85,13 @@ export const useWorkspaceStore = defineStore(
       () => workspaces.value.find((w) => w.id === workspaceId.value) ?? null,
     )
 
-    /** Push a snapshot into the data stores. */
-    function hydrate(snapshot: WorkspaceSnapshot) {
+    /**
+     * Push a snapshot into the data stores. `boardSince` (captured BEFORE this snapshot's fetch)
+     * lets the board store preserve any block live-`upsert`ed while the fetch was in flight, so a
+     * slower refresh can't clobber a newer live status (see `useBoardStore().hydrate`). Omitted by
+     * fresh loads (init/switch/create), where there is no in-flight-upsert race to guard.
+     */
+    function hydrate(snapshot: WorkspaceSnapshot, boardSince?: number) {
       // A change of active board (or the first load) — drop the per-block caches that are
       // NOT part of the snapshot (reviews, brainstorm/consensus sessions, the GitHub
       // projection) so a switched-to board never shows the previous one's stale state.
@@ -116,7 +121,7 @@ export const useWorkspaceStore = defineStore(
       const i = workspaces.value.findIndex((w) => w.id === snapshot.workspace.id)
       if (i >= 0) workspaces.value[i] = snapshot.workspace
       else workspaces.value.unshift(snapshot.workspace)
-      useBoardStore().hydrate(snapshot.blocks)
+      useBoardStore().hydrate(snapshot.blocks, boardSince)
       useBoardStore().hydrateArchived(snapshot.archivedServices ?? [])
       usePipelinesStore().hydrate(snapshot.pipelines, snapshot.pipelineCatalogVersions)
       useExecutionStore().hydrate(snapshot.executions, snapshot.workspace.id)
@@ -291,11 +296,17 @@ export const useWorkspaceStore = defineStore(
       const targetId = workspaceId.value
       if (!targetId) return
       const seq = ++refreshSeq
+      // Capture the board's live-upsert baseline BEFORE the fetch: any block upserted by a live
+      // event while this (potentially slow) snapshot is in flight is newer than the snapshot, so
+      // `hydrate` must NOT clobber it back. The `refreshSeq` guard below only orders refreshes
+      // against each OTHER — this guards a refresh against an interleaved live upsert (e.g. a
+      // run's terminal status landing mid-fetch), the coherence hazard under CI latency.
+      const boardSince = useBoardStore().hydrateBaseline()
       const snapshot = await api.getWorkspace(targetId)
       // A newer refresh was issued (or the active board switched) while this fetch was in flight —
       // discard this older/staler result so it can't clobber the newer hydrate.
       if (seq !== refreshSeq || workspaceId.value !== targetId) return
-      hydrate(snapshot)
+      hydrate(snapshot, boardSince)
     }
 
     /** The active workspace id, or throw if the app isn't bootstrapped yet. */
