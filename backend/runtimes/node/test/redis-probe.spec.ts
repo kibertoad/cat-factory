@@ -5,7 +5,11 @@ import {
   probeRedisReachable,
   redisTargetLabel,
   warnIfRedisUnreachable,
+  warnIfRedisUnreachableInBackground,
 } from '../src/redisProbe.js'
+
+/** Flush pending microtasks so a fire-and-forget background chain settles before we assert. */
+const flush = () => new Promise<void>((resolve) => setTimeout(resolve, 0))
 
 // The boot-time Redis reachability probe (error-message coverage A7). Pure helpers + the probe
 // orchestrator are exercised with an injected connect probe, so no Redis server is needed. This
@@ -124,5 +128,37 @@ describe('warnIfRedisUnreachable', () => {
 
   it('exposes a sane default timeout', () => {
     expect(DEFAULT_REDIS_PROBE_TIMEOUT_MS).toBeGreaterThan(0)
+  })
+})
+
+describe('warnIfRedisUnreachableInBackground (app-startup item 5)', () => {
+  it('returns immediately without blocking the caller (the probe runs in the background)', () => {
+    const { log, warnings } = collectWarnings()
+    // A probe that never settles during this synchronous check: the call must STILL return, with no
+    // warning yet — boot never stalls waiting the full ~3.5s bound for a set-but-down bus to answer.
+    warnIfRedisUnreachableInBackground({ REDIS_URL: 'redis://cache.internal:6379' }, log, {
+      connectProbe: () => new Promise<boolean>(() => {}),
+    })
+    expect(warnings).toEqual([])
+  })
+
+  it('still emits the single warning once the deferred probe reports the bus down', async () => {
+    const { log, warnings } = collectWarnings()
+    warnIfRedisUnreachableInBackground({ REDIS_URL: 'redis://cache.internal:6379' }, log, {
+      connectProbe: async () => false,
+    })
+    await flush()
+    expect(warnings).toHaveLength(1)
+    expect(warnings[0]!.obj).toEqual({ target: 'cache.internal:6379' })
+    expect(warnings[0]!.msg).toMatch(/DEGRADED/)
+  })
+
+  it('stays silent (and never throws) when the bus is reachable', async () => {
+    const { log, warnings } = collectWarnings()
+    warnIfRedisUnreachableInBackground({ REDIS_URL: 'redis://cache.internal:6379' }, log, {
+      connectProbe: async () => true,
+    })
+    await flush()
+    expect(warnings).toEqual([])
   })
 })
