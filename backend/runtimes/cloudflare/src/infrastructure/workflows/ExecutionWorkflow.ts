@@ -100,7 +100,14 @@ export class ExecutionWorkflow extends WorkflowEntrypoint<Env, ExecutionWorkflow
         // poll) rather than failing a healthy long-running job on the first blip.
         let pollReadFailures = 0
         for (let p = 0; p < execConfig.jobMaxPolls; p++) {
-          await step.sleep(`poll-wait-${i}-${p}`, jobPollInterval)
+          // Poll-first: the job was dispatched instants ago by `advance-${i}`, so the
+          // first status read runs immediately — a leading sleep would be a full poll
+          // interval (default 15s) of dead air between "job accepted" and the first
+          // running/subtask state reaching the board. Later iterations sleep between
+          // polls as before. (The gate loop below stays sleep-first on purpose: its
+          // precheck just ran inside advance/pollGate, so an immediate re-probe would
+          // only duplicate an external status read.)
+          if (p > 0) await step.sleep(`poll-wait-${i}-${p}`, jobPollInterval)
           try {
             result = (await step.do(`poll-${i}-${p}`, STEP_CONFIG, () =>
               container.executionService.pollAgentJob(workspaceId, executionId),

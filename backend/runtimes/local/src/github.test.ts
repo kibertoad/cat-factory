@@ -7,7 +7,11 @@ import {
   harnessAllowedHosts,
   probeGitHubPat,
   StaticTokenAppRegistry,
+  warnOnGitHubPatProblemInBackground,
 } from './github.js'
+
+/** Flush pending microtasks so a fire-and-forget background chain settles before we assert. */
+const flush = () => new Promise<void>((resolve) => setTimeout(resolve, 0))
 
 // NOTE: the PAT-authenticated client behaviour (Bearer auth, merge, mergeability, CI reads)
 // is asserted for BOTH GitHub and GitLab in the cross-provider `vcs-conformance.test.ts`.
@@ -110,6 +114,64 @@ describe('describePatProbeVerdict (A12)', () => {
     const msg = describePatProbeVerdict({ ok: false, reason: 'invalid', detail: 'HTTP 401 — bad' })
     expect(msg).toMatch(/rejected by GitHub/)
     expect(msg).toContain('HTTP 401')
+  })
+})
+
+describe('warnOnGitHubPatProblemInBackground (app-startup item 6)', () => {
+  it('returns immediately without blocking (the github.com probe runs in the background)', () => {
+    const warnings: string[] = []
+    // A fetch that never settles during this synchronous check: the call must STILL return with no
+    // warning yet, so boot never stalls on the github.com round-trip.
+    const fetchImpl = (() => new Promise<Response>(() => {})) as typeof fetch
+    warnOnGitHubPatProblemInBackground(
+      { GITHUB_PAT: 'ghp_x' },
+      { warn: (m) => warnings.push(m) },
+      { fetchImpl },
+    )
+    expect(warnings).toEqual([])
+  })
+
+  it('warns once the deferred probe reports an under-scoped token', async () => {
+    const warnings: string[] = []
+    const fetchImpl = (async () =>
+      new Response('{}', { status: 200, headers: { 'x-oauth-scopes': 'repo' } })) as typeof fetch
+    warnOnGitHubPatProblemInBackground(
+      { GITHUB_PAT: 'ghp_x' },
+      { warn: (m) => warnings.push(m) },
+      { fetchImpl },
+    )
+    await flush()
+    expect(warnings).toHaveLength(1)
+    expect(warnings[0]).toMatch(/missing required scope\(s\) workflow/)
+  })
+
+  it('stays silent for a healthy token and swallows a network error (never throws)', async () => {
+    const warnings: string[] = []
+    const healthy = (async () =>
+      new Response('{}', {
+        status: 200,
+        headers: { 'x-oauth-scopes': 'repo, workflow' },
+      })) as typeof fetch
+    warnOnGitHubPatProblemInBackground(
+      { GITHUB_PAT: 'ghp_x' },
+      { warn: (m) => warnings.push(m) },
+      {
+        fetchImpl: healthy,
+      },
+    )
+    // A network error → probeGitHubPat returns undefined → treated as ok → no warning, no throw.
+    const boom = (async () => {
+      throw new Error('ENOTFOUND')
+    }) as typeof fetch
+    warnOnGitHubPatProblemInBackground(
+      { GITHUB_PAT: 'ghp_x' },
+      { warn: (m) => warnings.push(m) },
+      {
+        fetchImpl: boom,
+      },
+    )
+    await flush()
+    expect(warnings).toEqual([])
   })
 })
 

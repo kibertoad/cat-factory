@@ -1,6 +1,6 @@
 # Initiative: app startup time reduction
 
-**Status:** in progress — instrumentation + first frontend slices landed · **Owner:** core · **Started:** 2026-07-14
+**Status:** in progress — instrumentation, poll-first drivers + Node/local boot de-serialization landed · **Owner:** core · **Started:** 2026-07-14
 
 > This is the durable source of truth for a multi-PR initiative. Read it first before
 > picking up the next slice; update the checklist at the end of each PR.
@@ -74,18 +74,18 @@ run) and Playwright traces for the SPA cold-open waterfall.
 
 | #   | Pri | Area          | Finding (short)                                                                                 | Status     | PR      |
 | --- | --- | ------------- | ----------------------------------------------------------------------------------------------- | ---------- | ------- |
-| 1   | P1  | observability | No boot-phase timing anywhere (backend or SPA) — add phase timers + "ready in N ms"             | ✅ done    | this PR |
-| 2   | P1  | node boot     | Five pg-boss worker startups awaited serially (~10 round trips) before listen                   | ⬜ todo    |         |
+| 1   | P1  | observability | No boot-phase timing anywhere (backend or SPA) — add phase timers + "ready in N ms"             | ✅ done    | #1097   |
+| 2   | P1  | node boot     | Five pg-boss worker startups awaited serially (~10 round trips) before listen                   | ✅ done    | this PR |
 | 3   | P1  | frontend      | Full workspace snapshot fetched TWICE per cold board open (init + on-connect resync)            | ⬜ todo    |         |
-| 4   | P1  | run start     | Execution drivers sleep a full 15s poll interval BEFORE the first poll                          | ⬜ todo    |         |
-| 5   | P2  | node boot     | `warnIfRedisUnreachable` awaited serially — up to ~3.5s stall when Redis is set but down        | ⬜ todo    |         |
-| 6   | P2  | local boot    | GitHub PAT probe awaited on the boot path (network hop to github.com before listen)             | ⬜ todo    |         |
+| 4   | P1  | run start     | Execution drivers sleep a full 15s poll interval BEFORE the first poll                          | ✅ done    | #1108   |
+| 5   | P2  | node boot     | `warnIfRedisUnreachable` awaited serially — up to ~3.5s stall when Redis is set but down        | ✅ done    | this PR |
+| 6   | P2  | local boot    | GitHub PAT probe awaited on the boot path (network hop to github.com before listen)             | ✅ done    | this PR |
 | 7   | P2  | frontend      | GitHub probe blocks first board paint; availability could ride the snapshot                     | ⬜ todo    |         |
-| 8   | P2  | frontend      | 3-deep critical-path waterfall: auth → listWorkspaces → snapshot                                | 🟡 partial | this PR |
+| 8   | P2  | frontend      | 3-deep critical-path waterfall: auth → listWorkspaces → snapshot                                | 🟡 partial | #1097   |
 | 9   | P2  | worker        | `buildContainer` + `createAppCaches` + registries rebuilt on EVERY request                      | ⬜ todo    |         |
 | 10  | P3  | node boot     | `migrate()` spends ~5-6 serialized round trips per boot even when the DB is current             | ⬜ todo    |         |
 | 11  | P3  | node boot     | Start pg-boss workers after listen? (design decision — documented invariant says before)        | ⬜ todo    |         |
-| 12  | P3  | frontend      | Duplicate `github.probe()` + 6-probe SideBar fan-out on open                                    | 🟡 partial | this PR |
+| 12  | P3  | frontend      | Duplicate `github.probe()` + 6-probe SideBar fan-out on open                                    | 🟡 partial | #1097   |
 | 13  | P3  | frontend      | Non-`en` users pay an awaited locale-catalog fetch in the boot plugin                           | ⬜ todo    |         |
 | 14  | P3  | frontend      | Bundle: Vue Flow + 3 stylesheets eager; markdown-it likely in the initial chunk (measure first) | ⬜ todo    |         |
 | 15  | P3  | worker        | Isolate cold-start parse weight (~250-import container graph; opt-in integrations eager)        | ⬜ todo    |         |
@@ -125,6 +125,15 @@ The queues are per-name and mutually independent; there is no ordering dependenc
 wave AFTER `boss.start()` and BEFORE listen (the documented "an enqueued job always has a
 consumer" invariant, `server.ts:433-436` — revisiting that ordering is item 11, not this
 slice). ~10 round trips → ~2.
+
+**Landed (this PR):** the five `start*Worker` calls in `bootServer` (`server.ts`) run as one
+`Promise.all` wave — each is an independent `createQueue(name)` + `work(name)` on its own queue,
+so there was never an ordering dependency between them. Kept after `boss.start()` and before listen
+(the invariant is untouched; item 11 still owns any listen-before-workers reorder). The five queues
+being distinct means the wave is a pure timing win with identical semantics; the `durable-execution`
+
+- conformance suites still drive real pg-boss runs to completion, and the `bootClock`'s `workers`
+  phase now measures the parallel wave.
 
 ### 3. Double snapshot fetch per cold board open — P1
 
@@ -177,6 +186,19 @@ runtimes-symmetric rule applies to the driver pair even though they're different
 substrates). The e2e backend already runs at `JOB_POLL_INTERVAL=1 second`, so e2e won't
 see the difference — assert the poll-first ordering in the driver unit tests.
 
+**Landed (this PR):** both drivers' `awaiting_job` loops are poll-first — orchestration's
+`driveExecution` (`pollUntil` grew a `pollFirst` option; the job loop passes it) and the
+Cloudflare `ExecutionWorkflow` (`if (p > 0)` guards the `poll-wait` durable sleep) — so
+the first status read runs the moment the job is dispatched and a job that settles inside
+one interval never sleeps at all. **Gate polls deliberately stay sleep-first**: the gate's
+precheck ran moments ago inside `advanceInstance`/`pollGate`, so an immediate re-probe
+would only duplicate an external status read (CI checks take minutes; nothing is gained).
+The same one-line flip also closed a facade drift the audit missed: the Cloudflare
+`BootstrapWorkflow` / `EnvironmentTestWorkflow` / `EnvConfigRepairWorkflow` all slept
+before their first poll while their Node runner twins were already poll-first — all three
+now match. `drive.test.ts` pins the interleaving (job poll before any sleep, sleeps
+between subsequent polls, gates sleep-first, budget = maxPolls polls / maxPolls-1 sleeps).
+
 ### 5. Redis reachability probe stalls boot — P2
 
 `backend/runtimes/node/src/server.ts:377` awaits `warnIfRedisUnreachable(env, logger)`
@@ -192,6 +214,15 @@ after listen. The warning must still fire exactly once and must not be lost on e
 process exit in tests — keep its existing unit tests green and add one pinning that boot
 does not block on the probe.
 
+**Landed (this PR):** a new `warnIfRedisUnreachableInBackground` (`redisProbe.ts`) wraps the
+existing (unchanged, still-tested) `warnIfRedisUnreachable` in the blessed
+`void probe().catch(() => {})` shape, and `bootServer` calls it instead of awaiting — so a
+set-but-down bus no longer holds the listener for the probe's ~3.5s bound. The `bootClock`'s `bus`
+phase now brackets only `realtimePropagator.start()` (the real wiring step); the probe logs its one
+warning if/when it later resolves. A unit test pins that the helper returns synchronously (no
+warning while the probe is still in flight) yet still emits the warning once a deferred probe
+reports the bus down.
+
 ### 6. Local mode: awaited GitHub PAT probe on the boot path — P2
 
 `backend/runtimes/local/src/server.ts:149-162` awaits `probeGitHubPat(localized)` — a
@@ -203,6 +234,14 @@ the whole Node boot instead of preceding it. The runtime `--version` preflight
 (adapter capabilities / limited mode), and on a healthy host it is tens of ms.
 
 **Fix:** fire-and-forget the PAT probe (log on resolution), same guardrails as item 5.
+
+**Landed (this PR):** a new `warnOnGitHubPatProblemInBackground` (`local/src/github.ts`) fires
+`probeGitHubPat` + `describePatProbeVerdict` in the background and logs the warning on resolution;
+`bootLocal` calls it instead of awaiting the probe, so the github.com round-trip no longer precedes
+`start()`. The runtime `--version` preflight stays awaited (it gates limited mode). The `bootClock`
+`patProbe` bracket now measures only the near-instant kick. Same test shape as item 5: the helper
+returns synchronously (no warning mid-probe) and still warns once a deferred probe reports an
+under-scoped / rejected token, swallowing a network error without throwing.
 
 ### 7. GitHub probe blocks first board paint — P2
 

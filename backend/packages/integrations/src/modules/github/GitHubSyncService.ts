@@ -111,27 +111,34 @@ export class GitHubSyncService {
   ): Promise<GitHubAvailableRepo[]> {
     const installation = await this.deps.githubInstallationRepository.getByWorkspace(workspaceId)
     if (!installation || installation.deletedAt) return []
-    const tracked = new Map(
-      (await this.deps.repoProjectionRepository.list(workspaceId)).map((r) => [r.githubId, r]),
-    )
     const query = opts.q?.trim()
-    // With a query, search server-side in REALTIME (one bounded request) instead of
-    // enumerating the whole installation and filtering in memory: a wide install can
-    // expose far more repos than the enumeration cap, so a match beyond it would be
+    // The tracked-projection read, the App-side lookup and the viewer-PAT expansion are three
+    // independent reads, so run them as one concurrent wave: serially, a cold PAT enumeration
+    // would stack its full multi-page walk on top of the App lookup's latency.
+    //
+    // With a query, the App side searches server-side in REALTIME (one bounded request)
+    // instead of enumerating the whole installation and filtering in memory: a wide install
+    // can expose far more repos than the enumeration cap, so a match beyond it would be
     // silently dropped — the exact "no results for a repo I have access to" bug. Without
     // a query, browse the whole accessible set (the repo-link panel's browse-all).
-    const appRepos = query
-      ? await this.deps.githubClient.searchInstallationRepos(installation.installationId, query, {
-          owner: installation.accountLogin || undefined,
-          ownerType: installation.targetType,
-        })
-      : (await this.deps.githubClient.listInstallationRepos(installation.installationId)).items
-
-    // Expand with repos the signed-in user's own PAT can reach beyond the App's grant — even
-    // on the hosted facades. The App repos win on a github-id collision (they're shared, so a
-    // repo reachable both ways is NOT personal). Personal-only repos are badged so the user
-    // knows linking one makes a frame others may not see.
-    const personalRepos = await this.viewerPatRepos(workspaceId, opts, query)
+    //
+    // The viewer-PAT expansion covers repos the signed-in user's own PAT can reach beyond the
+    // App's grant — even on the hosted facades. The App repos win on a github-id collision
+    // (they're shared, so a repo reachable both ways is NOT personal). Personal-only repos are
+    // badged so the user knows linking one makes a frame others may not see.
+    const [trackedRows, appRepos, personalRepos] = await Promise.all([
+      this.deps.repoProjectionRepository.list(workspaceId),
+      query
+        ? this.deps.githubClient.searchInstallationRepos(installation.installationId, query, {
+            owner: installation.accountLogin || undefined,
+            ownerType: installation.targetType,
+          })
+        : this.deps.githubClient
+            .listInstallationRepos(installation.installationId)
+            .then((page) => page.items),
+      this.viewerPatRepos(workspaceId, opts, query),
+    ])
+    const tracked = new Map(trackedRows.map((r) => [r.githubId, r]))
     const appIds = new Set(appRepos.map((r) => r.githubId))
     const merged: GitHubAvailableRepo[] = appRepos.map((r) => ({
       githubId: r.githubId,

@@ -1,5 +1,63 @@
 # @cat-factory/node-server
 
+## 0.94.6
+
+### Patch Changes
+
+- Updated dependencies [d38d6c2]
+  - @cat-factory/integrations@0.83.2
+  - @cat-factory/eks@0.1.76
+  - @cat-factory/orchestration@0.108.1
+  - @cat-factory/server@0.116.1
+
+## 0.94.5
+
+### Patch Changes
+
+- Updated dependencies [f7e7139]
+- Updated dependencies [5fa0a8e]
+  - @cat-factory/contracts@0.129.0
+  - @cat-factory/kernel@0.125.0
+  - @cat-factory/agents@0.55.0
+  - @cat-factory/orchestration@0.108.0
+  - @cat-factory/server@0.116.0
+  - @cat-factory/caching@0.8.0
+  - @cat-factory/integrations@0.83.1
+  - @cat-factory/consensus@0.10.49
+  - @cat-factory/eks@0.1.75
+  - @cat-factory/gates@0.5.33
+  - @cat-factory/gitlab@0.7.71
+  - @cat-factory/prompt-fragments@0.13.18
+  - @cat-factory/spend@0.12.29
+  - @cat-factory/observability-langfuse@0.7.203
+  - @cat-factory/provider-bedrock@0.7.219
+  - @cat-factory/provider-cloudflare@0.7.220
+  - @cat-factory/provider-s3@0.2.153
+
+## 0.94.4
+
+### Patch Changes
+
+- 806811c: Node/local boot de-serialization (app-startup initiative, items 2/5/6). The Node facade brings up its five pg-boss consumers (execution / bootstrap / env-config-repair / env-test / github-sync) as one `Promise.all` wave instead of awaiting them serially — each is an independent queue with no ordering dependency, so this collapses ~10 back-to-back DB round trips on the boot path to ~2 (kept after `boss.start()` and before listen, invariant unchanged). The best-effort Redis reachability probe (`warnIfRedisUnreachable`) and local mode's GitHub PAT probe are now fire-and-forget (`warnIfRedisUnreachableInBackground` / `warnOnGitHubPatProblemInBackground`) rather than awaited, so a set-but-down Redis bus no longer stalls boot for ~3.5s and a slow github.com round-trip no longer precedes `start()`. Both probes still log their single warning if/when they resolve; the local runtime `--version` preflight stays awaited (it gates limited mode).
+
+## 0.94.3
+
+### Patch Changes
+
+- Updated dependencies [3f3031a]
+  - @cat-factory/orchestration@0.107.10
+  - @cat-factory/server@0.115.1
+
+## 0.94.2
+
+### Patch Changes
+
+- Updated dependencies [ca9ea20]
+  - @cat-factory/integrations@0.83.0
+  - @cat-factory/server@0.115.0
+  - @cat-factory/eks@0.1.74
+  - @cat-factory/orchestration@0.107.9
+
 ## 0.94.1
 
 ### Patch Changes

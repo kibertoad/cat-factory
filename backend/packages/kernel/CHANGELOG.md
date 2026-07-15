@@ -1,5 +1,72 @@
 # @cat-factory/kernel
 
+## 0.125.0
+
+### Minor Changes
+
+- f7e7139: Make `type: 'library'` frames behave correctly end-to-end (P0 of the library-frame-support
+  initiative). Previously picking `library` at import/bootstrap changed almost nothing: build
+  pipelines dispatched a deployer (a no-op at best) and an EXPLORATORY tester against a running
+  system that a published package doesn't have, and an infra-needing library's suite failed on a
+  missing DB because the harness's in-container compose stand-up was dormant.
+
+  Behaviour now ADAPTS to the frame, not to a copy of the pipeline catalog — via a single pure
+  capability profile shared by the engine + prompts:
+
+  - **`frameProfile(type)` (contracts)** — a table beside `visual-pipeline.ts` mapping a frame's
+    block `type` to `{ deployable, liveTestable, hasUi, testPosture }`. `library` ⇒ not deployable,
+    not live-testable, no UI, `suite` posture; `frontend`/`service` keep their deployable/exploratory
+    defaults; any other type defaults to the service profile. The resolved frame `type` is carried on
+    `AgentRunContext.service.type` so the deployer/tester paths and prompts can consult it.
+  - **Deployer no-ops on a library frame** regardless of its `provisioning` (a declared compose path
+    on a library is repo-local TEST infra, not an environment): the runtime deploy loop records a
+    library skip with an explanatory step output, and the run-start deployer-config /
+    deployer-before-consumer / tester-infra gates pass through — so a library never demands a
+    workspace environment handler.
+  - **Tester runs in suite posture on a library frame** (`TESTER_SYSTEM_PROMPT` +
+    `testerEnvironmentSection`): run the unit + integration suite, assess public-API coverage against
+    the change, and author the missing tests — instead of exploratory testing of a running system.
+  - **Local test infra revived for libraries** (`testerInfraSpec`): a library frame emits
+    `{ environment: 'local', composePath }` when it declares a repo/package-local compose file — which
+    brings the harness's dormant `standUpInfra` DinD path back to life on localhost — else
+    `{ environment: 'local', noInfraDependencies }` and the tester self-manages test deps via the
+    repo's `pretest:ci`/`test:ci`/`posttest:ci` lifecycle scripts. No harness image change (the
+    `composePath` wire shape already exists).
+
+  Cross-runtime conformance asserts the whole thing: a deploy+test pipeline on a task under a real
+  `library` frame runs the deployer as a library no-op (provider never reached, no environment) and
+  the tester to completion — even when the frame declares a `docker-compose` path.
+
+- 5fa0a8e: perf(github): fix the slow add-service repo picker search on the local (workspace-PAT) path
+
+  The "add service from repo" typeahead stalled for seconds per keystroke when local mode's
+  `GITHUB_PAT` backed the picker: `PatGitHubClient.searchInstallationRepos` re-walked the
+  PAT's entire `GET /user/repos` set — up to 20 SEQUENTIAL pages — on every search request,
+  with nothing cached (the counterpart viewer-PAT branch was already fixed, but the
+  workspace-credential branch kept its own older serial walk).
+
+  - `PatGitHubClient.listInstallationRepos` now delegates to the shared
+    `FetchGitHubClient.listReposForToken` walk (page 1 reveals the page count via
+    `Link: rel="last"`, the remaining pages fetch concurrently — ~2 round-trips instead of
+    up to 20 serial ones) and re-stamps the rows as workspace-wide (`linkedVia: 'app'`).
+    Note the enumeration cap is now the shared walk's 10 pages (1000 repos, flagged
+    `truncated`) instead of the old silent 20.
+  - New `AppCaches.patInstallationRepos` slice (grouped/keyed by installation id, 60s TTL;
+    pass-through on the Worker's isolate-safe profile): the picker typeahead filters a
+    cached complete enumeration in memory instead of re-walking `/user/repos` per
+    keystroke. The blank browse-all stays live/uncached. The local PAT is env-fixed per
+    boot, so there is no swap-write to invalidate on — the short TTL is the coherence
+    story, mirroring `viewerRepos`.
+  - `GitHubSyncService.listAvailableRepos` now runs its three independent reads (the
+    tracked-projection list, the App-side lookup, the viewer-PAT expansion) as one
+    concurrent wave instead of serially, so a cold PAT enumeration no longer stacks on top
+    of the App lookup's latency.
+
+### Patch Changes
+
+- Updated dependencies [f7e7139]
+  - @cat-factory/contracts@0.129.0
+
 ## 0.124.0
 
 ### Minor Changes

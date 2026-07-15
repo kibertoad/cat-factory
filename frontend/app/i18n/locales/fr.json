@@ -2918,6 +2918,7 @@
       "grantAccessTitle": "Ouvrir les paramètres d'installation de l'App pour lui accorder l'accès à un dépôt",
       "refreshList": "Actualiser la liste",
       "done": "Terminé",
+      "donePendingHint": "Ajoutez d'abord les services sélectionnés ou effacez la sélection, sinon ces choix seront perdus.",
       "add": "Ajouter le service",
       "toast": {
         "addedTitle": "Service ajouté",

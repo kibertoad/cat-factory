@@ -60,7 +60,9 @@ export class BootstrapWorkflow extends WorkflowEntrypoint<Env, BootstrapWorkflow
     // (reset the counter on any good poll) rather than abandoning a healthy run.
     let pollReadFailures = 0
     for (let p = 0; p < execConfig.jobMaxPolls; p++) {
-      await step.sleep(`poll-wait-${p}`, pollInterval)
+      // Poll-first (matching the Node bootstrapRunner): the job was just dispatched, so
+      // the first status read runs immediately instead of after a full poll interval.
+      if (p > 0) await step.sleep(`poll-wait-${p}`, pollInterval)
       let result: BootstrapPollResult
       try {
         result = (await step.do(`poll-${p}`, STEP_CONFIG, async () => {

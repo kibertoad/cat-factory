@@ -147,7 +147,10 @@ export function buildLocalContainer(options: NodeContainerOptions): ServerContai
   // explicitly configured PAT (GitHub or GitLab) wins; delegation is the no-PAT default.
   const delegatedGitHub = mothership && !gitToken ? mothership.githubTokenSource : undefined
   const vcsClient: GitHubClient | undefined = pat
-    ? createLocalGitHubClient(env)
+    ? // The picker-typeahead enumeration cache (`AppCaches.patInstallationRepos`). `start()`
+      // passes the process cache bag through; a mothership boot / test harness without one
+      // degrades to a live enumeration per search, unchanged.
+      createLocalGitHubClient(env, options.caches?.patInstallationRepos)
     : gitlabPat
       ? createLocalGitLabClient(env)
       : delegatedGitHub
@@ -381,13 +384,15 @@ export function buildLocalContainer(options: NodeContainerOptions): ServerContai
   // The DEPLOY job client (the async container-backed Kubernetes render lifecycle). Local runs
   // it on a DEDICATED deploy backend — the developer's host `kubectl`/`kustomize`/`helm` (native
   // mode) or a per-job deploy-harness container — NOT the agent transport (which runs the
-  // executor-harness image, lacking the k8s CLIs). When `LOCAL_DEPLOY_RUNTIME`'s prerequisite
-  // isn't configured this is null, so deploy stays UNWIRED (a render-needing config fails loudly;
-  // the raw-manifest REST path is unaffected) — never silently routed to the agent backend (the
-  // `disableDefaultDeployJobClient` flag below stops `buildNodeContainer` falling back). The
-  // clone target is inherited from `buildNodeContainer`'s default, which already uses local's PAT
-  // mint + GitLab-aware `resolveRepoOrigin`.
-  const localDeployTransport = buildLocalDeployTransport(env, (message) => logger.warn(message))
+  // executor-harness image, lacking the k8s CLIs). `LOCAL_DEPLOY_RUNTIME` has NO default: unset ⇒
+  // this is null so deploy stays UNWIRED (a render-needing config fails loudly at provision time
+  // with an actionable message; the raw-manifest REST path is unaffected) — never silently routed
+  // to the agent backend (the `disableDefaultDeployJobClient` flag below stops `buildNodeContainer`
+  // falling back). A mode SET without its mandatory companion variable BREAKS boot here (the
+  // thrown ConfigValidationError lands on the misconfigured screen) rather than degrading silently.
+  // The clone target is inherited from `buildNodeContainer`'s default, which already uses local's
+  // PAT mint + GitLab-aware `resolveRepoOrigin`.
+  const localDeployTransport = buildLocalDeployTransport(env)
   const deployJobClient = localDeployTransport
     ? new RunnerJobClient(() => Promise.resolve(localDeployTransport))
     : undefined

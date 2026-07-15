@@ -1,5 +1,56 @@
 # @cat-factory/worker
 
+## 0.83.14
+
+### Patch Changes
+
+- Updated dependencies [d38d6c2]
+  - @cat-factory/integrations@0.83.2
+  - @cat-factory/eks@0.1.76
+  - @cat-factory/orchestration@0.108.1
+  - @cat-factory/server@0.116.1
+
+## 0.83.13
+
+### Patch Changes
+
+- Updated dependencies [f7e7139]
+- Updated dependencies [5fa0a8e]
+  - @cat-factory/contracts@0.129.0
+  - @cat-factory/kernel@0.125.0
+  - @cat-factory/agents@0.55.0
+  - @cat-factory/orchestration@0.108.0
+  - @cat-factory/server@0.116.0
+  - @cat-factory/caching@0.8.0
+  - @cat-factory/integrations@0.83.1
+  - @cat-factory/consensus@0.10.49
+  - @cat-factory/eks@0.1.75
+  - @cat-factory/gates@0.5.33
+  - @cat-factory/gitlab@0.7.71
+  - @cat-factory/prompt-fragments@0.13.18
+  - @cat-factory/spend@0.12.29
+  - @cat-factory/observability-langfuse@0.7.203
+  - @cat-factory/provider-cloudflare@0.7.220
+
+## 0.83.12
+
+### Patch Changes
+
+- 3f3031a: Poll-first durable drivers: the execution drivers (orchestration `driveExecution` and the Cloudflare `ExecutionWorkflow`) now poll a just-dispatched container job immediately instead of sleeping a full poll interval (default 15s) first, so the first running/subtask state reaches the board with no leading dead air. Gate prechecks deliberately keep the sleep-first shape (the precheck just ran inside advance/pollGate). The Cloudflare Bootstrap/EnvironmentTest/EnvConfigRepair workflows are flipped the same way, matching their already-poll-first Node runner twins.
+- Updated dependencies [3f3031a]
+  - @cat-factory/orchestration@0.107.10
+  - @cat-factory/server@0.115.1
+
+## 0.83.11
+
+### Patch Changes
+
+- Updated dependencies [ca9ea20]
+  - @cat-factory/integrations@0.83.0
+  - @cat-factory/server@0.115.0
+  - @cat-factory/eks@0.1.74
+  - @cat-factory/orchestration@0.107.9
+
 ## 0.83.10
 
 ### Patch Changes

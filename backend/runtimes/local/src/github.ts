@@ -3,6 +3,7 @@ import type {
   Clock,
   GitHubClient,
   GitHubRepo,
+  GroupCacheHandle,
   IdGenerator,
   InstallationPermissions,
   Paged,
@@ -91,43 +92,6 @@ const localIdGenerator: IdGenerator = {
 
 const localClock: Clock = { now: () => Date.now() }
 
-const PER_PAGE = 100
-const MAX_PAGES = 20
-
-/** Parse the `rel="next"` URL out of a GitHub `Link` response header, if present. */
-function nextLink(header: string | null): string | null {
-  if (!header) return null
-  for (const part of header.split(',')) {
-    const m = part.match(/<([^>]+)>\s*;\s*rel="next"/)
-    if (m) return m[1] ?? null
-  }
-  return null
-}
-
-/** The slice of a `/user/repos` item we map to a repo projection. */
-interface GhUserRepo {
-  id: number
-  name: string
-  private?: boolean
-  default_branch?: string | null
-  owner?: { login?: string } | null
-}
-
-function toRepoProjection(p: GhUserRepo, installationId: number, syncedAt: number): GitHubRepo {
-  return {
-    githubId: p.id,
-    installationId,
-    owner: p.owner?.login ?? '',
-    name: p.name,
-    defaultBranch: p.default_branch ?? null,
-    private: p.private ?? false,
-    // Local mode's shared `GITHUB_PAT` is the workspace-wide credential, so repos it
-    // enumerates are treated as App-reachable (visible to every member).
-    linkedVia: 'app',
-    syncedAt,
-  }
-}
-
 function patHeaders(pat: string): Record<string, string> {
   return {
     authorization: `Bearer ${pat}`,
@@ -150,28 +114,29 @@ class PatGitHubClient extends FetchGitHubClient {
   constructor(
     deps: ConstructorParameters<typeof FetchGitHubClient>[0],
     private readonly pat: string,
-    private readonly apiBase: string,
-    private readonly clock: Clock,
+    /**
+     * The `AppCaches.patInstallationRepos` handle (keyed/grouped by installation id). When
+     * wired, the realtime picker search filters a cached complete enumeration in memory
+     * instead of re-walking `/user/repos` on every keystroke. Absent (mothership boot /
+     * tests) ⇒ the search enumerates live per request, as before.
+     */
+    private readonly repoEnumCache?: GroupCacheHandle<GitHubRepo[]>,
   ) {
     super(deps)
   }
 
   override async listInstallationRepos(installationId: number): Promise<Paged<GitHubRepo>> {
-    const syncedAt = this.clock.now()
-    const items: GitHubRepo[] = []
-    let url: string | null =
-      `${this.apiBase}/user/repos?per_page=${PER_PAGE}&sort=full_name&affiliation=owner,collaborator,organization_member`
-    for (let page = 0; url && page < MAX_PAGES; page++) {
-      const res: Response = await fetch(url, { headers: patHeaders(this.pat) })
-      if (!res.ok) {
-        const text = await res.text().catch(() => '')
-        throw new Error(`GitHub /user/repos failed (HTTP ${res.status}): ${text.slice(0, 200)}`)
-      }
-      const payload = (await res.json()) as GhUserRepo[]
-      for (const repo of payload) items.push(toRepoProjection(repo, installationId, syncedAt))
-      url = nextLink(res.headers.get('link'))
+    // Delegate to the base client's `/user/repos` walk rather than keeping a duplicate one:
+    // it reads page 1, learns the page count from the `Link: rel="last"` header, and fetches
+    // the remaining pages CONCURRENTLY — a broad PAT costs ~2 round-trips instead of a serial
+    // page-by-page crawl. The rows come back stamped as personal (`user_pat`, placeholder
+    // installation), so re-stamp them: local mode's shared `GITHUB_PAT` is the workspace-wide
+    // credential, so repos it enumerates are App-reachable (visible to every member).
+    const { items, truncated } = await this.listReposForToken(this.pat)
+    return {
+      items: items.map((r) => ({ ...r, installationId, linkedVia: 'app' as const })),
+      ...(truncated !== undefined ? { truncated } : {}),
     }
-    return { items }
   }
 
   // A PAT can't scope `/search/repositories` to "my accessible repos" (it searches all
@@ -179,7 +144,10 @@ class PatGitHubClient extends FetchGitHubClient {
   // enumeration and filters `owner/name` in memory — bounded to a developer's repo set,
   // which is exactly why the App-installation truncation this override fixes elsewhere
   // doesn't bite here. The account-scope opts are irrelevant (the enumeration is already
-  // scoped to the PAT's affiliations).
+  // scoped to the PAT's affiliations). This is the picker typeahead's hot path, so the
+  // enumeration is served through the short-TTL cache when one is wired — a keystroke then
+  // costs a substring scan of the cached set, not a fresh multi-page walk. A transient
+  // enumeration failure caches nothing (the load rejects) and propagates, as before.
   override async searchInstallationRepos(
     installationId: number,
     query: string,
@@ -187,7 +155,14 @@ class PatGitHubClient extends FetchGitHubClient {
   ): Promise<GitHubRepo[]> {
     const q = query.trim().toLowerCase()
     if (!q) return []
-    const { items } = await this.listInstallationRepos(installationId)
+    const cacheKey = String(installationId)
+    const items = this.repoEnumCache
+      ? await this.repoEnumCache.get(
+          cacheKey,
+          cacheKey,
+          async () => (await this.listInstallationRepos(installationId)).items,
+        )
+      : (await this.listInstallationRepos(installationId)).items
     const matched = items.filter((r) => `${r.owner}/${r.name}`.toLowerCase().includes(q))
     return matched.slice(0, Math.min(Math.max(opts.limit ?? 50, 1), 100))
   }
@@ -309,6 +284,28 @@ export function describePatProbeVerdict(verdict: PatProbeVerdict): string | unde
 }
 
 /**
+ * Fire the boot-time {@link probeGitHubPat} check WITHOUT blocking boot (app-startup initiative,
+ * item 6), logging {@link describePatProbeVerdict}'s warning (if any) when the bounded github.com
+ * round-trip later resolves. The probe is best-effort diagnostics — an invalid / expired /
+ * under-scoped PAT still fails LOUDLY on the first clone/push/PR/CI/merge — so it must not hold the
+ * listener for a network hop to github.com. Returns immediately; never throws (`probeGitHubPat`
+ * swallows network errors and the resolution handler is defensively guarded). `fetchImpl` +
+ * `timeoutMs` are injectable for tests.
+ */
+export function warnOnGitHubPatProblemInBackground(
+  env: NodeJS.ProcessEnv,
+  log: { warn: (msg: string) => void },
+  opts: { fetchImpl?: typeof fetch; timeoutMs?: number } = {},
+): void {
+  void probeGitHubPat(env, opts)
+    .then((verdict) => {
+      const warning = describePatProbeVerdict(verdict ?? { ok: true })
+      if (warning) log.warn(warning)
+    })
+    .catch(() => {})
+}
+
+/**
  * A GitLab "new personal access token" URL with the scopes a coding agent needs
  * pre-selected, so a developer without a GitLab PAT can click straight through to create
  * one. `api` covers repo read/write + merge; `read_user` lets the login resolve the
@@ -356,8 +353,13 @@ export function buildVcsIdentityRegistry(env: NodeJS.ProcessEnv): {
  * Build a {@link GitHubClient} that authenticates with the PAT, for the CI / merge /
  * mergeability gates AND the repo-link / board "add from repo" flows. Returns undefined
  * when no PAT is configured (the gates then pass through, like the Node default).
+ * `repoEnumCache` is the `AppCaches.patInstallationRepos` handle backing the picker
+ * typeahead (optional — absent, the search enumerates live per request).
  */
-export function createLocalGitHubClient(env: NodeJS.ProcessEnv): GitHubClient | undefined {
+export function createLocalGitHubClient(
+  env: NodeJS.ProcessEnv,
+  repoEnumCache?: GroupCacheHandle<GitHubRepo[]>,
+): GitHubClient | undefined {
   const pat = env.GITHUB_PAT?.trim()
   if (!pat) return undefined
   const apiBase = env.GITHUB_API_BASE?.trim() || 'https://api.github.com'
@@ -370,8 +372,7 @@ export function createLocalGitHubClient(env: NodeJS.ProcessEnv): GitHubClient | 
       apiBase,
     },
     pat,
-    apiBase,
-    localClock,
+    repoEnumCache,
   )
 }
 

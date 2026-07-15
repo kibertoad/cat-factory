@@ -156,3 +156,19 @@ export async function warnIfRedisUnreachable(
     )
   }
 }
+
+/**
+ * Fire {@link warnIfRedisUnreachable} WITHOUT blocking the caller (app-startup initiative, item 5).
+ * Returns immediately; the warning (if any) fires when the bounded probe later resolves. The probe
+ * is diagnostics-only — ioredis retries the bus in the background regardless — so a set-but-down
+ * bus must NOT hold the boot path for the probe's full timeout. Mirrors the blessed
+ * `preflightHarnessImage` fire-and-forget shape (`void probe().catch(() => {})`); never throws
+ * (`warnIfRedisUnreachable` already swallows probe failures, the `.catch` is belt-and-suspenders).
+ */
+export function warnIfRedisUnreachableInBackground(
+  env: NodeJS.ProcessEnv,
+  log: PropagatorLogger,
+  opts: { connectProbe?: RedisConnectProbe; timeoutMs?: number } = {},
+): void {
+  void warnIfRedisUnreachable(env, log, opts).catch(() => {})
+}

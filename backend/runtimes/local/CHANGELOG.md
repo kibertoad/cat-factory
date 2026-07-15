@@ -1,5 +1,104 @@
 # @cat-factory/local-server
 
+## 0.66.0
+
+### Minor Changes
+
+- d38d6c2: Make the local Kubernetes deploy runner explicit and its misconfiguration loud.
+
+  - **local-server (BREAKING for `LOCAL_DEPLOY_RUNTIME`):** `LOCAL_DEPLOY_RUNTIME` no longer
+    defaults to `native`. It is unset ⇒ deploy stays unwired (the normal "no Kubernetes test
+    environments" state); set explicitly to `native` or `container` to wire it. A mode set WITHOUT
+    its mandatory companion variable (`LOCAL_DEPLOY_HARNESS_ENTRY` for `native`,
+    `LOCAL_DEPLOY_IMAGE` for `container`) — or an unrecognised value — now BREAKS boot with an
+    actionable config error instead of warning and silently degrading to an unwired deploy that
+    only failed mid-run. `native` was the more brittle, higher-privilege mode, so it must be chosen
+    deliberately rather than fallen into.
+  - **integrations:** the `deploy_runner_unwired` provisioning failure message now spells out each
+    facade's exact setting and, for local mode, both modes' companion variables and how they differ.
+  - **cli:** `cat-factory init` and `cat-factory env` now document the three `LOCAL_DEPLOY_*`
+    variables in the generated `.env` (and the scaffolded `.env.example`), commented out — deploy is
+    unused by default, and no companion var is written active since a lone mode breaks boot.
+
+### Patch Changes
+
+- Updated dependencies [d38d6c2]
+  - @cat-factory/integrations@0.83.2
+  - @cat-factory/orchestration@0.108.1
+  - @cat-factory/server@0.116.1
+  - @cat-factory/node-server@0.94.6
+  - @cat-factory/executor-harness@1.43.6
+
+## 0.65.15
+
+### Patch Changes
+
+- 5fa0a8e: perf(github): fix the slow add-service repo picker search on the local (workspace-PAT) path
+
+  The "add service from repo" typeahead stalled for seconds per keystroke when local mode's
+  `GITHUB_PAT` backed the picker: `PatGitHubClient.searchInstallationRepos` re-walked the
+  PAT's entire `GET /user/repos` set — up to 20 SEQUENTIAL pages — on every search request,
+  with nothing cached (the counterpart viewer-PAT branch was already fixed, but the
+  workspace-credential branch kept its own older serial walk).
+
+  - `PatGitHubClient.listInstallationRepos` now delegates to the shared
+    `FetchGitHubClient.listReposForToken` walk (page 1 reveals the page count via
+    `Link: rel="last"`, the remaining pages fetch concurrently — ~2 round-trips instead of
+    up to 20 serial ones) and re-stamps the rows as workspace-wide (`linkedVia: 'app'`).
+    Note the enumeration cap is now the shared walk's 10 pages (1000 repos, flagged
+    `truncated`) instead of the old silent 20.
+  - New `AppCaches.patInstallationRepos` slice (grouped/keyed by installation id, 60s TTL;
+    pass-through on the Worker's isolate-safe profile): the picker typeahead filters a
+    cached complete enumeration in memory instead of re-walking `/user/repos` per
+    keystroke. The blank browse-all stays live/uncached. The local PAT is env-fixed per
+    boot, so there is no swap-write to invalidate on — the short TTL is the coherence
+    story, mirroring `viewerRepos`.
+  - `GitHubSyncService.listAvailableRepos` now runs its three independent reads (the
+    tracked-projection list, the App-side lookup, the viewer-PAT expansion) as one
+    concurrent wave instead of serially, so a cold PAT enumeration no longer stacks on top
+    of the App lookup's latency.
+
+- Updated dependencies [f7e7139]
+- Updated dependencies [5fa0a8e]
+  - @cat-factory/contracts@0.129.0
+  - @cat-factory/kernel@0.125.0
+  - @cat-factory/agents@0.55.0
+  - @cat-factory/orchestration@0.108.0
+  - @cat-factory/server@0.116.0
+  - @cat-factory/integrations@0.83.1
+  - @cat-factory/gitlab@0.7.71
+  - @cat-factory/node-server@0.94.5
+  - @cat-factory/executor-harness@1.43.6
+
+## 0.65.14
+
+### Patch Changes
+
+- 806811c: Node/local boot de-serialization (app-startup initiative, items 2/5/6). The Node facade brings up its five pg-boss consumers (execution / bootstrap / env-config-repair / env-test / github-sync) as one `Promise.all` wave instead of awaiting them serially — each is an independent queue with no ordering dependency, so this collapses ~10 back-to-back DB round trips on the boot path to ~2 (kept after `boss.start()` and before listen, invariant unchanged). The best-effort Redis reachability probe (`warnIfRedisUnreachable`) and local mode's GitHub PAT probe are now fire-and-forget (`warnIfRedisUnreachableInBackground` / `warnOnGitHubPatProblemInBackground`) rather than awaited, so a set-but-down Redis bus no longer stalls boot for ~3.5s and a slow github.com round-trip no longer precedes `start()`. Both probes still log their single warning if/when they resolve; the local runtime `--version` preflight stays awaited (it gates limited mode).
+- Updated dependencies [806811c]
+  - @cat-factory/node-server@0.94.4
+
+## 0.65.13
+
+### Patch Changes
+
+- Updated dependencies [3f3031a]
+  - @cat-factory/orchestration@0.107.10
+  - @cat-factory/server@0.115.1
+  - @cat-factory/node-server@0.94.3
+  - @cat-factory/executor-harness@1.43.6
+
+## 0.65.12
+
+### Patch Changes
+
+- Updated dependencies [ca9ea20]
+  - @cat-factory/integrations@0.83.0
+  - @cat-factory/server@0.115.0
+  - @cat-factory/orchestration@0.107.9
+  - @cat-factory/node-server@0.94.2
+  - @cat-factory/executor-harness@1.43.6
+
 ## 0.65.11
 
 ### Patch Changes

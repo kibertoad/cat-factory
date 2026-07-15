@@ -42,7 +42,7 @@ import { resolveSweepInterval, startInitiativeLoopSweeper } from './initiativeLo
 import { startKaizenSweeper } from './kaizen.js'
 import { startNotificationEscalationSweeper } from './notifications.js'
 import { buildRealtimePropagator } from './propagator.js'
-import { warnIfRedisUnreachable } from './redisProbe.js'
+import { warnIfRedisUnreachableInBackground } from './redisProbe.js'
 import { type ReadinessProbe, makeReadinessProbe } from './readiness.js'
 import { NodeRealtimeHub, attachRealtime } from './realtime.js'
 import { DrizzleGitHubInstallationRepository } from './repositories/containerExecution.js'
@@ -378,13 +378,17 @@ async function bootServer(
   // Connect the cross-node adapters (a no-op when none are configured) so peer events start
   // reaching this node's browsers.
   await realtimePropagator.start(logger)
+  bootClock.mark('bus')
   // Best-effort boot probe of the Redis bus (A7): when REDIS_URL is set but the bus is
   // unreachable, ioredis retries silently in the background and cross-node realtime + cache
   // coherence are quietly degraded. One bounded, non-fatal probe surfaces that at boot with the
-  // host and how to verify, instead of leaving the operator to discover it from stale peers. A
-  // no-op when REDIS_URL is unset (single-node / local mode).
-  await warnIfRedisUnreachable(env, logger)
-  bootClock.mark('bus')
+  // host and how to verify, instead of leaving the operator to discover it from stale peers.
+  // FIRE-AND-FORGET (app-startup initiative, item 5): the probe is diagnostics-only — ioredis
+  // retries regardless — so a set-but-down bus must NOT hold the listener for the probe's full
+  // ~3.5s bound, precisely the degraded case where the replica should start serving SOONER. It
+  // logs its one warning if/when the bounded probe later resolves; a no-op when REDIS_URL is unset
+  // (single-node / local mode).
+  warnIfRedisUnreachableInBackground(env, logger)
 
   // Validate the registered extensions (gates / agent kinds) once, before serving — every
   // `register*` import side effect has run by now. A typo'd gate helperKind or an unknown
@@ -395,32 +399,39 @@ async function bootServer(
   })
 
   const runtime = executionRuntime(container.config, env)
-  // A parked run waits for a human indefinitely (no decision timeout); the escalating
-  // notification — not a killed run — signals that a human is overdue.
-  await startExecutionWorker(boss, container, runtime.drive, logger, {
-    concurrency: runtime.concurrency,
-  })
-  // Durably drive bootstrap runs too (the Worker uses a per-run BootstrapWorkflow);
-  // a no-op queue when the bootstrap module isn't wired.
-  await startBootstrapWorker(boss, container, runtime.drive, logger, {
-    concurrency: runtime.concurrency,
-  })
-  // Durably drive env-config-repair runs (the Worker uses a per-run EnvConfigRepairWorkflow);
-  // a no-op queue when the repair module isn't wired.
-  await startEnvConfigRepairWorker(boss, container, runtime.drive, logger, {
-    concurrency: runtime.concurrency,
-  })
-  // Durably drive ephemeral-environment self-test runs (the Worker uses a per-run
-  // EnvironmentTestWorkflow); a no-op queue when the environments module isn't wired.
-  await startEnvTestWorker(boss, container, runtime.drive, logger, {
-    concurrency: runtime.concurrency,
-  })
-  // Async GitHub ingest (the analogue of the Worker's GITHUB_SYNC_QUEUE consumer +
-  // GitHubBackfillWorkflow): drain the `github.sync` queue the gateway seams enqueue onto,
-  // so webhook deliveries / resyncs / backfills apply out of band and the request acks fast.
-  await startGitHubSyncWorker(boss, container, logger, {
-    concurrency: runtime.concurrency,
-  })
+  // Bring up the five pg-boss consumers as ONE parallel wave (app-startup initiative, item 2).
+  // Each is an independent `createQueue(name)` + `work(name)` on its OWN queue with no ordering
+  // dependency between them, so awaiting them serially cost ~10 back-to-back DB round trips on the
+  // boot path for no reason; the wave collapses that to ~2. Kept AFTER `boss.start()` and BEFORE
+  // listen: the documented invariant is that an enqueued job always has a consumer (revisiting
+  // that ordering is item 11, not this slice). A parked run waits for a human indefinitely (no
+  // decision timeout); the escalating notification — not a killed run — signals a human is overdue.
+  await Promise.all([
+    startExecutionWorker(boss, container, runtime.drive, logger, {
+      concurrency: runtime.concurrency,
+    }),
+    // Durably drive bootstrap runs too (the Worker uses a per-run BootstrapWorkflow);
+    // a no-op queue when the bootstrap module isn't wired.
+    startBootstrapWorker(boss, container, runtime.drive, logger, {
+      concurrency: runtime.concurrency,
+    }),
+    // Durably drive env-config-repair runs (the Worker uses a per-run EnvConfigRepairWorkflow);
+    // a no-op queue when the repair module isn't wired.
+    startEnvConfigRepairWorker(boss, container, runtime.drive, logger, {
+      concurrency: runtime.concurrency,
+    }),
+    // Durably drive ephemeral-environment self-test runs (the Worker uses a per-run
+    // EnvironmentTestWorkflow); a no-op queue when the environments module isn't wired.
+    startEnvTestWorker(boss, container, runtime.drive, logger, {
+      concurrency: runtime.concurrency,
+    }),
+    // Async GitHub ingest (the analogue of the Worker's GITHUB_SYNC_QUEUE consumer +
+    // GitHubBackfillWorkflow): drain the `github.sync` queue the gateway seams enqueue onto,
+    // so webhook deliveries / resyncs / backfills apply out of band and the request acks fast.
+    startGitHubSyncWorker(boss, container, logger, {
+      concurrency: runtime.concurrency,
+    }),
+  ])
   bootClock.mark('workers')
   // Readiness probe for `/ready`: a live Postgres round-trip + the pg-boss flag, draining the
   // instant shutdown begins so a load balancer stops routing here while in-flight requests finish.

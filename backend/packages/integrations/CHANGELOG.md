@@ -1,5 +1,100 @@
 # @cat-factory/integrations
 
+## 0.83.2
+
+### Patch Changes
+
+- d38d6c2: Make the local Kubernetes deploy runner explicit and its misconfiguration loud.
+
+  - **local-server (BREAKING for `LOCAL_DEPLOY_RUNTIME`):** `LOCAL_DEPLOY_RUNTIME` no longer
+    defaults to `native`. It is unset ⇒ deploy stays unwired (the normal "no Kubernetes test
+    environments" state); set explicitly to `native` or `container` to wire it. A mode set WITHOUT
+    its mandatory companion variable (`LOCAL_DEPLOY_HARNESS_ENTRY` for `native`,
+    `LOCAL_DEPLOY_IMAGE` for `container`) — or an unrecognised value — now BREAKS boot with an
+    actionable config error instead of warning and silently degrading to an unwired deploy that
+    only failed mid-run. `native` was the more brittle, higher-privilege mode, so it must be chosen
+    deliberately rather than fallen into.
+  - **integrations:** the `deploy_runner_unwired` provisioning failure message now spells out each
+    facade's exact setting and, for local mode, both modes' companion variables and how they differ.
+  - **cli:** `cat-factory init` and `cat-factory env` now document the three `LOCAL_DEPLOY_*`
+    variables in the generated `.env` (and the scaffolded `.env.example`), commented out — deploy is
+    unused by default, and no companion var is written active since a lone mode breaks boot.
+
+## 0.83.1
+
+### Patch Changes
+
+- 5fa0a8e: perf(github): fix the slow add-service repo picker search on the local (workspace-PAT) path
+
+  The "add service from repo" typeahead stalled for seconds per keystroke when local mode's
+  `GITHUB_PAT` backed the picker: `PatGitHubClient.searchInstallationRepos` re-walked the
+  PAT's entire `GET /user/repos` set — up to 20 SEQUENTIAL pages — on every search request,
+  with nothing cached (the counterpart viewer-PAT branch was already fixed, but the
+  workspace-credential branch kept its own older serial walk).
+
+  - `PatGitHubClient.listInstallationRepos` now delegates to the shared
+    `FetchGitHubClient.listReposForToken` walk (page 1 reveals the page count via
+    `Link: rel="last"`, the remaining pages fetch concurrently — ~2 round-trips instead of
+    up to 20 serial ones) and re-stamps the rows as workspace-wide (`linkedVia: 'app'`).
+    Note the enumeration cap is now the shared walk's 10 pages (1000 repos, flagged
+    `truncated`) instead of the old silent 20.
+  - New `AppCaches.patInstallationRepos` slice (grouped/keyed by installation id, 60s TTL;
+    pass-through on the Worker's isolate-safe profile): the picker typeahead filters a
+    cached complete enumeration in memory instead of re-walking `/user/repos` per
+    keystroke. The blank browse-all stays live/uncached. The local PAT is env-fixed per
+    boot, so there is no swap-write to invalidate on — the short TTL is the coherence
+    story, mirroring `viewerRepos`.
+  - `GitHubSyncService.listAvailableRepos` now runs its three independent reads (the
+    tracked-projection list, the App-side lookup, the viewer-PAT expansion) as one
+    concurrent wave instead of serially, so a cold PAT enumeration no longer stacks on top
+    of the App lookup's latency.
+
+- Updated dependencies [f7e7139]
+- Updated dependencies [5fa0a8e]
+  - @cat-factory/contracts@0.129.0
+  - @cat-factory/kernel@0.125.0
+
+## 0.83.0
+
+### Minor Changes
+
+- ca9ea20: Make Kubernetes provisioning auto-detection work across monorepo layouts, and stop it
+  false-positive-detecting a service's source directory as a deploy target.
+
+  The detector (`detectKubernetesProvisioning`) previously treated ANY YAML with a
+  `kind` + `apiVersion` as a Kubernetes manifest, and only looked for shared per-service
+  manifest slices as immediate children of a short, flat root list (`deploy`/`k8s`/
+  `kubernetes`/`manifests`/…). On a real Kustomize monorepo (source nested two levels deep,
+  a Backstage `catalog-info.yaml` in every service dir, manifests under
+  `deployment/k8s/base/services/<svc>` + `overlays/<env>/<svc>`) that produced two failures:
+  it confidently recommended deploying the service's SOURCE folder as "raw manifests" (the
+  `catalog-info.yaml` decoy), and it never found the real shared manifests. This reworks the
+  heuristics to be layout-agnostic while staying deterministic and checkout-free:
+
+  - **Manifest classifier.** A YAML doc counts as a manifest only when its API group is
+    Kubernetes-shaped — core / `*.k8s.io` / kustomize / a known operator-CRD group — and NOT
+    on a non-Kubernetes denylist (Backstage `backstage.io`, …). This kills the source-dir
+    false positive across every Backstage-catalogued repo, and correctly disambiguates a
+    Kustomize `Component` from a Backstage `Component`.
+  - **Kustomize Component awareness.** A `kind: Component` slice isn't independently
+    deployable; when it's the chosen source the detector resolves and recommends the overlay
+    that aggregates it (via `components:`), or keeps it with a clear warning when none does.
+  - **Generalized monorepo slice discovery.** A bounded, layered breadth-first search descends
+    from a broadened set of deploy roots (adds `deployment`/`ops`/`gitops`/`argocd`/`flux`/…)
+    THROUGH the structural layers (`base`/`services`/`apps`/`overlays/<env>`/`components`) to
+    find THIS service's slice however deep it's nested, matching by exact / case-insensitive /
+    affix (`<prefix>-<svc>`) name. Only the service's own matched slice(s) are surfaced —
+    no more flooding the picker with every sibling — and a same-named terraform `infra/<svc>`
+    sibling is not mistaken for a manifest slice.
+  - **Escape hatches** (deployment `ENVIRONMENTS_DETECTION_CONVENTIONS`): `manifestDirs` adds
+    house-named deploy roots, and `serviceManifestPaths` pins explicit `{service}`/`{env}`
+    path templates that resolve the service→manifests mapping deterministically before the
+    heuristic search — a one-line config that makes an exotic layout resolve exactly.
+
+  Existing behaviour for colocated / simple layouts is unchanged. The stack-recipes pilot
+  golden was regenerated: the consumer's Backstage `catalog-info.yaml` no longer produces a
+  spurious "Kubernetes manifests also exist" note (the intended, documented drift).
+
 ## 0.82.0
 
 ### Minor Changes

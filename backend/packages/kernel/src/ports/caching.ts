@@ -208,6 +208,21 @@ export interface AppCaches {
    * picker is the primary flow).
    */
   viewerRepos: GroupCacheHandle<GitHubRepo[]>
+  /**
+   * The local facade's workspace-wide PAT repo enumeration (`GET /user/repos` with the
+   * deployment's `GITHUB_PAT`), grouped AND keyed by installation id — the workspace-credential
+   * analogue of {@link AppCaches.viewerRepos}. Local mode's PAT-backed client serves the
+   * add-service picker's realtime search by enumerating the PAT's whole reachable set and
+   * filtering in memory (a PAT can't scope GitHub's global repo search), so without this slice
+   * every keystroke re-pays the full multi-page walk. The typeahead filters this cached complete
+   * set instead; the blank browse-all stays live/uncached (it wants fresh data). Like
+   * `viewerRepos` the cached SOURCE is external GitHub state we never write, so coherence is the
+   * short TTL — and the local PAT is fixed per boot (env-supplied), so there is no swap-write to
+   * invalidate on; a repo created straight on GitHub appears once the TTL lapses. Pass-through on
+   * the Worker's isolate-safe profile for the same reasons as `viewerRepos` (the Worker never
+   * builds a PAT-backed client anyway).
+   */
+  patInstallationRepos: GroupCacheHandle<GitHubRepo[]>
   /** Release notification-bus resources (a no-op for bare in-memory caches). */
   close(): Promise<void>
 }

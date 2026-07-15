@@ -2547,6 +2547,7 @@
       "grantAccessTitle": "Öffnen Sie die Installationseinstellungen der App, um ihr Zugriff auf ein Repository zu gewähren",
       "refreshList": "Liste aktualisieren",
       "done": "Fertig",
+      "donePendingHint": "Füge zuerst die ausgewählten Services hinzu oder hebe die Auswahl auf – sonst werden diese Auswahlen verworfen.",
       "add": "Service hinzufügen",
       "toast": {
         "addedTitle": "Service hinzugefügt",

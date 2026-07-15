@@ -2547,6 +2547,7 @@
       "grantAccessTitle": "Apri le impostazioni di installazione della App per concederle l'accesso a un repository",
       "refreshList": "Aggiorna l'elenco",
       "done": "Fatto",
+      "donePendingHint": "Aggiungi prima i servizi selezionati oppure annulla la selezione, altrimenti quelle scelte andranno perse.",
       "add": "Aggiungi servizio",
       "toast": {
         "addedTitle": "Servizio aggiunto",

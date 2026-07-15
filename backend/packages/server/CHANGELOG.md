@@ -1,5 +1,116 @@
 # @cat-factory/server
 
+## 0.116.1
+
+### Patch Changes
+
+- Updated dependencies [d38d6c2]
+  - @cat-factory/integrations@0.83.2
+  - @cat-factory/orchestration@0.108.1
+
+## 0.116.0
+
+### Minor Changes
+
+- f7e7139: Make `type: 'library'` frames behave correctly end-to-end (P0 of the library-frame-support
+  initiative). Previously picking `library` at import/bootstrap changed almost nothing: build
+  pipelines dispatched a deployer (a no-op at best) and an EXPLORATORY tester against a running
+  system that a published package doesn't have, and an infra-needing library's suite failed on a
+  missing DB because the harness's in-container compose stand-up was dormant.
+
+  Behaviour now ADAPTS to the frame, not to a copy of the pipeline catalog — via a single pure
+  capability profile shared by the engine + prompts:
+
+  - **`frameProfile(type)` (contracts)** — a table beside `visual-pipeline.ts` mapping a frame's
+    block `type` to `{ deployable, liveTestable, hasUi, testPosture }`. `library` ⇒ not deployable,
+    not live-testable, no UI, `suite` posture; `frontend`/`service` keep their deployable/exploratory
+    defaults; any other type defaults to the service profile. The resolved frame `type` is carried on
+    `AgentRunContext.service.type` so the deployer/tester paths and prompts can consult it.
+  - **Deployer no-ops on a library frame** regardless of its `provisioning` (a declared compose path
+    on a library is repo-local TEST infra, not an environment): the runtime deploy loop records a
+    library skip with an explanatory step output, and the run-start deployer-config /
+    deployer-before-consumer / tester-infra gates pass through — so a library never demands a
+    workspace environment handler.
+  - **Tester runs in suite posture on a library frame** (`TESTER_SYSTEM_PROMPT` +
+    `testerEnvironmentSection`): run the unit + integration suite, assess public-API coverage against
+    the change, and author the missing tests — instead of exploratory testing of a running system.
+  - **Local test infra revived for libraries** (`testerInfraSpec`): a library frame emits
+    `{ environment: 'local', composePath }` when it declares a repo/package-local compose file — which
+    brings the harness's dormant `standUpInfra` DinD path back to life on localhost — else
+    `{ environment: 'local', noInfraDependencies }` and the tester self-manages test deps via the
+    repo's `pretest:ci`/`test:ci`/`posttest:ci` lifecycle scripts. No harness image change (the
+    `composePath` wire shape already exists).
+
+  Cross-runtime conformance asserts the whole thing: a deploy+test pipeline on a task under a real
+  `library` frame runs the deployer as a library no-op (provider never reached, no environment) and
+  the tester to completion — even when the frame declares a `docker-compose` path.
+
+### Patch Changes
+
+- Updated dependencies [f7e7139]
+- Updated dependencies [5fa0a8e]
+  - @cat-factory/contracts@0.129.0
+  - @cat-factory/kernel@0.125.0
+  - @cat-factory/agents@0.55.0
+  - @cat-factory/orchestration@0.108.0
+  - @cat-factory/integrations@0.83.1
+  - @cat-factory/prompt-fragments@0.13.18
+  - @cat-factory/spend@0.12.29
+
+## 0.115.1
+
+### Patch Changes
+
+- Updated dependencies [3f3031a]
+  - @cat-factory/orchestration@0.107.10
+
+## 0.115.0
+
+### Minor Changes
+
+- ca9ea20: Make Kubernetes provisioning auto-detection work across monorepo layouts, and stop it
+  false-positive-detecting a service's source directory as a deploy target.
+
+  The detector (`detectKubernetesProvisioning`) previously treated ANY YAML with a
+  `kind` + `apiVersion` as a Kubernetes manifest, and only looked for shared per-service
+  manifest slices as immediate children of a short, flat root list (`deploy`/`k8s`/
+  `kubernetes`/`manifests`/…). On a real Kustomize monorepo (source nested two levels deep,
+  a Backstage `catalog-info.yaml` in every service dir, manifests under
+  `deployment/k8s/base/services/<svc>` + `overlays/<env>/<svc>`) that produced two failures:
+  it confidently recommended deploying the service's SOURCE folder as "raw manifests" (the
+  `catalog-info.yaml` decoy), and it never found the real shared manifests. This reworks the
+  heuristics to be layout-agnostic while staying deterministic and checkout-free:
+
+  - **Manifest classifier.** A YAML doc counts as a manifest only when its API group is
+    Kubernetes-shaped — core / `*.k8s.io` / kustomize / a known operator-CRD group — and NOT
+    on a non-Kubernetes denylist (Backstage `backstage.io`, …). This kills the source-dir
+    false positive across every Backstage-catalogued repo, and correctly disambiguates a
+    Kustomize `Component` from a Backstage `Component`.
+  - **Kustomize Component awareness.** A `kind: Component` slice isn't independently
+    deployable; when it's the chosen source the detector resolves and recommends the overlay
+    that aggregates it (via `components:`), or keeps it with a clear warning when none does.
+  - **Generalized monorepo slice discovery.** A bounded, layered breadth-first search descends
+    from a broadened set of deploy roots (adds `deployment`/`ops`/`gitops`/`argocd`/`flux`/…)
+    THROUGH the structural layers (`base`/`services`/`apps`/`overlays/<env>`/`components`) to
+    find THIS service's slice however deep it's nested, matching by exact / case-insensitive /
+    affix (`<prefix>-<svc>`) name. Only the service's own matched slice(s) are surfaced —
+    no more flooding the picker with every sibling — and a same-named terraform `infra/<svc>`
+    sibling is not mistaken for a manifest slice.
+  - **Escape hatches** (deployment `ENVIRONMENTS_DETECTION_CONVENTIONS`): `manifestDirs` adds
+    house-named deploy roots, and `serviceManifestPaths` pins explicit `{service}`/`{env}`
+    path templates that resolve the service→manifests mapping deterministically before the
+    heuristic search — a one-line config that makes an exotic layout resolve exactly.
+
+  Existing behaviour for colocated / simple layouts is unchanged. The stack-recipes pilot
+  golden was regenerated: the consumer's Backstage `catalog-info.yaml` no longer produces a
+  spurious "Kubernetes manifests also exist" note (the intended, documented drift).
+
+### Patch Changes
+
+- Updated dependencies [ca9ea20]
+  - @cat-factory/integrations@0.83.0
+  - @cat-factory/orchestration@0.107.9
+
 ## 0.114.0
 
 ### Minor Changes
