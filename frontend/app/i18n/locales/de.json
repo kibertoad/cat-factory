@@ -693,7 +693,8 @@
         "feature": "Feature",
         "bug": "Bug",
         "document": "Dokument",
-        "spike": "Spike"
+        "spike": "Spike",
+        "review": "Review"
       },
       "observability": {
         "heading": "Agenten-Observability",
@@ -1989,7 +1990,8 @@
         "bug": "Bug",
         "document": "Dokument",
         "spike": "Spike",
-        "recurring": "Wiederkehrend"
+        "recurring": "Wiederkehrend",
+        "review": "Review"
       },
       "recurringWithFrame": "Eine wiederkehrende Aufgabe führt eine Pipeline in einem Takt aus. Fahren Sie fort, um Zeitplan + Prompt festzulegen.",
       "recurringNoFrame": "Eine wiederkehrende Aufgabe muss auf einem Service liegen. Fügen Sie sie aus einem Service-Frame (oder einem darin enthaltenen Modul) hinzu.",
@@ -2085,7 +2087,13 @@
       "continue": "Weiter",
       "submit": "Aufgabe hinzufügen",
       "addFailedTitle": "Aufgabe konnte nicht hinzugefügt werden",
-      "linkFailed": "Aufgabe hinzugefügt, aber {count} Anhang konnte nicht verknüpft werden | Aufgabe hinzugefügt, aber {count} Anhänge konnten nicht verknüpft werden"
+      "linkFailed": "Aufgabe hinzugefügt, aber {count} Anhang konnte nicht verknüpft werden | Aufgabe hinzugefügt, aber {count} Anhänge konnten nicht verknüpft werden",
+      "review": {
+        "prUrl": "Pull Request",
+        "prUrlHint": "URL oder Nummer des zu prüfenden Pull Requests",
+        "focus": "Prüfungsschwerpunkt",
+        "focusPlaceholder": "z. B. Fokus auf die Auth-Änderungen und Fehlerbehandlung"
+      }
     },
     "recurring": {
       "title": "Eine wiederkehrende Pipeline hinzufügen",

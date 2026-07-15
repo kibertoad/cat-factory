@@ -147,6 +147,9 @@ export function asGitHubClient(options: VcsBackedGitHubClientOptions): GitHubCli
     client.getPullRequestBaseRef = (i, ref, n) =>
       vcs.getPullRequestBaseRef!(conn(i), toRepoRef(ref), n)
   }
+  if (vcs.listChangedFiles) {
+    client.listChangedFiles = (i, ref, n) => vcs.listChangedFiles!(conn(i), toRepoRef(ref), n)
+  }
   if (vcs.listReviewThreads) {
     client.listReviewThreads = (i, ref, n) => vcs.listReviewThreads!(conn(i), toRepoRef(ref), n)
   }

@@ -140,6 +140,30 @@ export interface GitHubReviewThreadComment {
   createdAt: number
 }
 
+/**
+ * One file changed by a pull request, from `GET /repos/{o}/{r}/pulls/{n}/files`. The
+ * PR-review slicer/reviewer consume these: the slicer reads only the CHEAP fields
+ * (`path`, `additions`, `deletions`, `status`) to group files into cohesive slices,
+ * while a per-slice reviewer reads the `patch` for the files in its slice.
+ */
+export interface GitHubChangedFile {
+  /** Repo-relative path of the file on the PR head. */
+  path: string
+  /** For a rename, the file's path on the base (else null). */
+  previousPath: string | null
+  /** GitHub's change status: added / modified / removed / renamed / copied / changed / unchanged. */
+  status: string
+  /** Lines added. */
+  additions: number
+  /** Lines removed. */
+  deletions: number
+  /**
+   * The unified-diff hunk for this file, or null when GitHub omits it (binary files, or a
+   * diff too large to inline). The reviewer treats a null patch as "read the file bodies instead".
+   */
+  patch: string | null
+}
+
 /** A general (conversation) comment on a pull request, from the issue-comments API. */
 export interface GitHubPullRequestComment {
   /** GitHub comment id (as a string). */
@@ -482,6 +506,19 @@ export interface GitHubClient {
     ref: GitHubRepoRef,
     number: number,
   ): Promise<string | null>
+  /**
+   * List the files a PR changed (`GET /repos/{o}/{r}/pulls/{n}/files`, paginated & fully
+   * drained). The PR-deep-review slicer partitions these into cohesive slices from the cheap
+   * fields, and the per-slice reviewer reads the `patch`. Optional (see
+   * {@link listRequestedReviewers}); a provider that can't enumerate a PR's files omits it and
+   * the review step passes through. Note GitHub caps this endpoint at 3000 files, so a
+   * pathologically huge PR is truncated at that ceiling.
+   */
+  listChangedFiles?(
+    installationId: number,
+    ref: GitHubRepoRef,
+    number: number,
+  ): Promise<GitHubChangedFile[]>
   /**
    * List a PR's review threads via GraphQL (`pullRequest.reviewThreads`), with each thread's
    * resolved state, anchor and comments — the precise "addressed?" signal the REST review-

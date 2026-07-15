@@ -248,6 +248,14 @@ export {
   registerForkProposerAgent,
 } from './agents/kinds/fork-proposer.js'
 export {
+  PR_REVIEWER_KIND,
+  PR_REVIEWER_AGENT_KINDS,
+  PR_REVIEWER_SYSTEM_PROMPT,
+  prReview,
+  type PrReviewOutput,
+  registerPrReviewerAgent,
+} from './agents/kinds/pr-reviewer.js'
+export {
   FORK_CHAT_AGENT_KIND,
   FORK_CHAT_SYSTEM_PROMPT,
   type ForkChatGrounding,

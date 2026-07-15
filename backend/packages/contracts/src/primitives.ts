@@ -66,15 +66,24 @@ export type BlockLevel = v.InferOutput<typeof blockLevelSchema>
 /**
  * The kind of work a task represents, chosen by the human at creation. Drives the
  * task card's icon/badge, per-type creation fields, and (optionally) the per-service
- * running-task limit's bucketing. `recurring` is special: such tasks are NOT created
- * through `addTask` — they are the reused on-board block of a recurring-pipeline
- * schedule, stamped with this type so the board renders them consistently.
+ * running-task limit's bucketing. `review` is a deep-review of an EXISTING open pull
+ * request (see {@link taskTypeFieldsSchema}'s `prNumber`/`prUrl`); `recurring` is
+ * special: such tasks are NOT created through `addTask` — they are the reused on-board
+ * block of a recurring-pipeline schedule, stamped with this type so the board renders
+ * them consistently.
  */
-export const taskTypeSchema = v.picklist(['feature', 'bug', 'document', 'spike', 'recurring'])
+export const taskTypeSchema = v.picklist([
+  'feature',
+  'bug',
+  'document',
+  'spike',
+  'review',
+  'recurring',
+])
 export type TaskType = v.InferOutput<typeof taskTypeSchema>
 
 /** The task types a human can pick in the create-task form (recurring is created via a schedule). */
-export const createTaskTypeSchema = v.picklist(['feature', 'bug', 'document', 'spike'])
+export const createTaskTypeSchema = v.picklist(['feature', 'bug', 'document', 'spike', 'review'])
 export type CreateTaskType = v.InferOutput<typeof createTaskTypeSchema>
 
 /**
@@ -175,6 +184,24 @@ export const taskTypeFieldsSchema = v.object({
   optionsToCompare: v.optional(v.pipe(v.string(), v.maxLength(2000))),
   /** API: the endpoints / surface in scope for the reference. */
   apiSurface: v.optional(v.pipe(v.string(), v.maxLength(2000))),
+
+  // --- Review-task fields ---------------------------------------------------
+  /**
+   * Review: the number of the EXISTING open pull request to deep-review, on the
+   * service's linked repository. Either this or {@link prUrl} identifies the target;
+   * `prUrl` wins when both are present.
+   */
+  prNumber: v.optional(v.pipe(v.number(), v.integer(), v.minValue(1))),
+  /**
+   * Review: the full web URL of the pull request to review (e.g.
+   * `https://github.com/owner/repo/pull/123`). Folded into the task description for the
+   * reviewer to read; today the reviewer clones the service's linked repo and fetches the
+   * PR head by number from `origin`, so a cross-repo `prUrl` is not yet resolved to a
+   * different repo (a tracked follow-up — see docs/initiatives/pr-deep-review.md).
+   */
+  prUrl: v.optional(v.pipe(v.string(), v.trim(), v.maxLength(500))),
+  /** Review: freeform focus/guidance for the reviewer (e.g. "focus on the auth changes"). */
+  reviewFocus: v.optional(v.pipe(v.string(), v.maxLength(4000))),
 })
 export type TaskTypeFields = v.InferOutput<typeof taskTypeFieldsSchema>
 

@@ -167,7 +167,8 @@
         "bug": "Error",
         "document": "Documento",
         "spike": "Spike",
-        "recurring": "Recurrente"
+        "recurring": "Recurrente",
+        "review": "Revisión"
       },
       "recurringWithFrame": "Una tarea recurrente ejecuta una pipeline con cierta cadencia. Continúa para definir el horario y el prompt.",
       "recurringNoFrame": "Una tarea recurrente debe vivir en un servicio. Añádela desde un marco de servicio (o un módulo dentro de él).",
@@ -263,7 +264,13 @@
       "continue": "Continuar",
       "submit": "Añadir tarea",
       "addFailedTitle": "No se pudo añadir la tarea",
-      "linkFailed": "Tarea añadida, pero no se pudo vincular {count} adjunto | Tarea añadida, pero no se pudieron vincular {count} adjuntos"
+      "linkFailed": "Tarea añadida, pero no se pudo vincular {count} adjunto | Tarea añadida, pero no se pudieron vincular {count} adjuntos",
+      "review": {
+        "prUrl": "Pull request",
+        "prUrlHint": "URL o número de la pull request a revisar",
+        "focus": "Enfoque de la revisión",
+        "focusPlaceholder": "p. ej., céntrate en los cambios de autenticación y el manejo de errores"
+      }
     },
     "recurring": {
       "title": "Añadir una pipeline recurrente",
@@ -2363,7 +2370,8 @@
         "feature": "función",
         "bug": "error",
         "document": "documento",
-        "spike": "spike"
+        "spike": "spike",
+        "review": "revisión"
       },
       "observability": {
         "heading": "Observabilidad del agente",
