@@ -66,14 +66,15 @@ export const AGENT_ARCHETYPES: AgentArchetype[] = [
   },
   {
     // A timeboxed read-only research/investigation agent. Its structured findings open in the
-    // shared generic viewer; the findings document is committed by a backend post-op (no PR).
+    // shared generic viewer; the findings document is committed by a backend post-op (delivered
+    // as a pull request by default, or straight to base via the direct pipeline).
     kind: 'spike',
     label: 'Spike',
     icon: 'i-lucide-flask-conical',
     color: '#22d3ee',
     category: 'design',
     description:
-      'Timeboxed read-only investigation that answers a research question against the context and codebase, and commits a findings document (no code, no PR).',
+      'Timeboxed read-only investigation that answers a research question against the context and codebase, and delivers a findings document (as a pull request by default; no code).',
     resultView: 'generic-structured',
   },
   {

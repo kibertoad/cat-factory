@@ -309,7 +309,8 @@ export const SPIKE_AGENT_KINDS: AgentKindDefinition[] = [
     kind: SPIKE_AGENT_KIND,
     systemPrompt: SPIKE_SYSTEM_PROMPT,
     // Read-only checkout of the primary repo's base branch; `agent.output` is derived from the
-    // schema. The findings render + commit is the backend post-op above (base branch, no PR).
+    // schema. The findings render + delivery is the backend post-op above (a PR by default, or a
+    // direct base commit for `pl_spike_direct`).
     agent: { surface: 'container-explore', clone: { branch: 'base' } },
     structuredOutput: spikeFindings,
     postOps: [spikePostOp],
@@ -319,7 +320,7 @@ export const SPIKE_AGENT_KINDS: AgentKindDefinition[] = [
       color: '#22d3ee',
       description:
         'Timeboxed read-only investigation that answers a research question against the context ' +
-        'and codebase, and commits a findings document (no code, no PR).',
+        'and codebase, and delivers a findings document (as a pull request by default; no code).',
       category: 'design',
       // The structured findings open in the shared generic viewer (no bespoke window).
       resultView: 'generic-structured',

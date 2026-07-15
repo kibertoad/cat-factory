@@ -668,16 +668,32 @@ export class FetchGitLabClient implements VcsClient {
     ref: VcsRepoRef,
     input: OpenPullRequestInput,
   ): Promise<OpenedPullRequest> {
-    const { json } = await this.request(`/projects/${projectPath(ref)}/merge_requests`, {
-      connection,
-      method: 'POST',
-      body: {
-        source_branch: input.head,
-        target_branch: input.base,
-        title: input.title,
-        description: input.body ?? '',
-      },
-    })
+    try {
+      const { json } = await this.request(`/projects/${projectPath(ref)}/merge_requests`, {
+        connection,
+        method: 'POST',
+        body: {
+          source_branch: input.head,
+          target_branch: input.base,
+          title: input.title,
+          description: input.body ?? '',
+        },
+      })
+      return this.toOpenedMergeRequest(ref, json)
+    } catch (err) {
+      // Idempotency (see the RepoFiles/VcsClient port doc): GitLab rejects a second MR for the
+      // same source/target branch with a 409 ("Another open merge request already exists"). A
+      // durable-driver replay of a committing post-op (e.g. the `spike` findings PR) hits this,
+      // so treat it as a success: look up and return the existing open MR instead of failing.
+      if (!(err instanceof GitLabApiError) || err.status !== 409) throw err
+      const existing = await this.findOpenMergeRequest(connection, ref, input.head, input.base)
+      if (!existing) throw err
+      return existing
+    }
+  }
+
+  /** Map an MR create/list payload to the {@link OpenedPullRequest} (projection + web url). */
+  private toOpenedMergeRequest(ref: VcsRepoRef, json: unknown): OpenedPullRequest {
     const payload = json as GlMergeRequestPayload & { web_url?: string }
     // GitLab returns the MR `web_url`; surface it as `OpenedPullRequest.url` (the GitHub
     // analogue of `html_url`) so a backend post-op records a real link, provider-agnostically.
@@ -685,6 +701,23 @@ export class FetchGitLabClient implements VcsClient {
       ...toMergeRequestProjection(payload, numericRepoId(ref), this.deps.clock.now()),
       url: payload.web_url ?? '',
     }
+  }
+
+  /** The open MR matching `head`/`base` (for {@link openPullRequest}'s idempotent replay), or null. */
+  private async findOpenMergeRequest(
+    connection: VcsConnectionRef,
+    ref: VcsRepoRef,
+    head: string,
+    base: string,
+  ): Promise<OpenedPullRequest | null> {
+    const { json } = await this.request(
+      `/projects/${projectPath(ref)}/merge_requests?state=opened` +
+        `&source_branch=${encodeURIComponent(head)}&target_branch=${encodeURIComponent(base)}` +
+        '&per_page=1',
+      { connection },
+    )
+    const first = (json as (GlMergeRequestPayload & { web_url?: string })[] | null)?.[0]
+    return first ? this.toOpenedMergeRequest(ref, first) : null
   }
 
   async updatePullRequest(
