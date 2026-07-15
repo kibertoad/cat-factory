@@ -2916,6 +2916,7 @@
       "grantAccessTitle": "App'e bir depoya erişim vermek için kurulum ayarlarını açın",
       "refreshList": "Listeyi yenile",
       "done": "Tamam",
+      "donePendingHint": "Önce seçtiğiniz servisleri ekleyin ya da seçimi temizleyin; aksi halde bu seçimler atılır.",
       "add": "Servis ekle",
       "toast": {
         "addedTitle": "Servis eklendi",
