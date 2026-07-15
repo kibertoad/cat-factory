@@ -77,7 +77,7 @@ run) and Playwright traces for the SPA cold-open waterfall.
 | 1   | P1  | observability | No boot-phase timing anywhere (backend or SPA) — add phase timers + "ready in N ms"             | ✅ done    | this PR |
 | 2   | P1  | node boot     | Five pg-boss worker startups awaited serially (~10 round trips) before listen                   | ⬜ todo    |         |
 | 3   | P1  | frontend      | Full workspace snapshot fetched TWICE per cold board open (init + on-connect resync)            | ⬜ todo    |         |
-| 4   | P1  | run start     | Execution drivers sleep a full 15s poll interval BEFORE the first poll                          | ⬜ todo    |         |
+| 4   | P1  | run start     | Execution drivers sleep a full 15s poll interval BEFORE the first poll                          | ✅ done    | this PR |
 | 5   | P2  | node boot     | `warnIfRedisUnreachable` awaited serially — up to ~3.5s stall when Redis is set but down        | ⬜ todo    |         |
 | 6   | P2  | local boot    | GitHub PAT probe awaited on the boot path (network hop to github.com before listen)             | ⬜ todo    |         |
 | 7   | P2  | frontend      | GitHub probe blocks first board paint; availability could ride the snapshot                     | ⬜ todo    |         |
@@ -176,6 +176,19 @@ bootstrap / env-test / env-config-repair poll FIRST, then sleep
 runtimes-symmetric rule applies to the driver pair even though they're different
 substrates). The e2e backend already runs at `JOB_POLL_INTERVAL=1 second`, so e2e won't
 see the difference — assert the poll-first ordering in the driver unit tests.
+
+**Landed (this PR):** both drivers' `awaiting_job` loops are poll-first — orchestration's
+`driveExecution` (`pollUntil` grew a `pollFirst` option; the job loop passes it) and the
+Cloudflare `ExecutionWorkflow` (`if (p > 0)` guards the `poll-wait` durable sleep) — so
+the first status read runs the moment the job is dispatched and a job that settles inside
+one interval never sleeps at all. **Gate polls deliberately stay sleep-first**: the gate's
+precheck ran moments ago inside `advanceInstance`/`pollGate`, so an immediate re-probe
+would only duplicate an external status read (CI checks take minutes; nothing is gained).
+The same one-line flip also closed a facade drift the audit missed: the Cloudflare
+`BootstrapWorkflow` / `EnvironmentTestWorkflow` / `EnvConfigRepairWorkflow` all slept
+before their first poll while their Node runner twins were already poll-first — all three
+now match. `drive.test.ts` pins the interleaving (job poll before any sleep, sleeps
+between subsequent polls, gates sleep-first, budget = maxPolls polls / maxPolls-1 sleeps).
 
 ### 5. Redis reachability probe stalls boot — P2
 

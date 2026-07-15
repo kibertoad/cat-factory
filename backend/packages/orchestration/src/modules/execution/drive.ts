@@ -79,17 +79,22 @@ export async function driveExecution(
 
   // Poll a parked gate (job / CI / conflicts) until it yields a non-awaiting result
   // or the budget is spent. Tolerates a bounded run of status-read failures.
+  // `pollFirst` runs the first poll BEFORE any sleep — the shape for a just-dispatched
+  // container job, where a leading full interval (default 15s) is pure dead air between
+  // "job accepted" and the first running/subtask state reaching the board. Gates keep
+  // the sleep-first shape: their precheck ran moments ago inside advanceInstance /
+  // pollGate, so an immediate re-probe would only duplicate an external status read.
   const pollUntil = async (
     awaiting: AdvanceResult['kind'],
     poll: () => Promise<AdvanceResult>,
     intervalMs: number,
     maxPolls: number,
     label: string,
-    onExhausted?: () => Promise<AdvanceResult>,
+    opts: { pollFirst?: boolean; onExhausted?: () => Promise<AdvanceResult> } = {},
   ): Promise<AdvanceResult | null> => {
     let readFailures = 0
     for (let p = 0; p < maxPolls; p++) {
-      await sleep(intervalMs)
+      if (p > 0 || !opts.pollFirst) await sleep(intervalMs)
       let result: AdvanceResult
       try {
         result = await poll()
@@ -106,7 +111,7 @@ export async function driveExecution(
     }
     // Budget spent. A gate may resolve exhaustion itself (a watch gate PASSES rather than
     // timing out) — let it; otherwise fail the run as a generic timeout.
-    if (onExhausted) return onExhausted()
+    if (opts.onExhausted) return opts.onExhausted()
     await fail(`${label} did not settle within its polling budget`, 'timeout')
     return null
   }
@@ -136,6 +141,7 @@ export async function driveExecution(
           cfg.jobPollIntervalMs,
           cfg.jobMaxPolls,
           'Implementation job',
+          { pollFirst: true },
         )
         if (!next) return {}
         result = next
@@ -151,7 +157,7 @@ export async function driveExecution(
           cfg.ciPollIntervalMs,
           cfg.ciMaxPolls,
           'Gate precheck',
-          () => exec.resolveGatePollExhaustion(workspaceId, executionId),
+          { onExhausted: () => exec.resolveGatePollExhaustion(workspaceId, executionId) },
         )
         if (!next) return {}
         // An unbounded-wait gate (human-review) re-arms by returning `awaiting_gate` from
