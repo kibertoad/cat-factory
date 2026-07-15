@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest'
-import { AgentKindRegistry } from './registry.js'
+import { AgentKindRegistry, defaultAgentKindRegistry } from './registry.js'
+import { PR_REVIEWER_KIND } from './pr-reviewer.js'
 
 // The agent-definition extension fields added on top of the kind registry:
 // presentation (frontend metadata), the agent-step surface, and the pre/post-op hooks.
@@ -57,6 +58,20 @@ describe('agent-definition registry fields', () => {
     expect(registry.postOps('security-auditor')).toEqual([postOp])
     expect(registry.presentation('security-auditor')?.label).toBe('Security Auditor')
     expect(registry.presentation('security-auditor')?.resultView).toBe('generic-structured')
+  })
+
+  it('registers the built-in pr-reviewer as a read-only structured review kind', () => {
+    const registry = defaultAgentKindRegistry()
+    // A container-explore kind ⇒ requires a container, read-only (no PR opened).
+    expect(registry.requiresContainer(PR_REVIEWER_KIND)).toBe(true)
+    expect(registry.agentStep(PR_REVIEWER_KIND)?.surface).toBe('container-explore')
+    // Structured output is derived from the schema (a shapeHint is present).
+    expect(registry.agentStep(PR_REVIEWER_KIND)?.output?.kind).toBe('structured')
+    expect(registry.structuredOutput(PR_REVIEWER_KIND)).toBeDefined()
+    // First-class palette + generic-structured result view.
+    const presentation = registry.presentation(PR_REVIEWER_KIND)
+    expect(presentation?.category).toBe('review')
+    expect(presentation?.resultView).toBe('generic-structured')
   })
 
   it('returns empty / undefined for kinds that did not opt in', () => {

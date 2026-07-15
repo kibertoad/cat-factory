@@ -185,7 +185,8 @@
         "bug": "Bug",
         "document": "Document",
         "spike": "Spike",
-        "recurring": "Recurring"
+        "recurring": "Recurring",
+        "review": "Review"
       },
       "recurringWithFrame": "A recurring task runs a pipeline on a cadence. Continue to set the schedule + prompt.",
       "recurringNoFrame": "A recurring task must live on a service. Add it from a service frame (or a module inside one).",
@@ -284,6 +285,12 @@
       "linkFailed": "Task added, but {count} attachment could not be linked | Task added, but {count} attachments could not be linked",
       "@linkFailed": {
         "description": "Count-based: how many context attachments (docs/issues) failed to link after the task was created (count is always >= 1). Provide ALL plural forms your language needs (English has 2; Polish/Ukrainian need 3 - one/few/many - via the custom pluralRules in i18n.config.ts)."
+      },
+      "review": {
+        "prUrl": "Pull request",
+        "prUrlHint": "URL or number of the pull request to review",
+        "focus": "Review focus",
+        "focusPlaceholder": "e.g. focus on the auth changes and error handling"
       }
     },
     "recurring": {
@@ -2548,7 +2555,8 @@
         "feature": "feature",
         "bug": "bug",
         "document": "document",
-        "spike": "spike"
+        "spike": "spike",
+        "review": "review"
       },
       "observability": {
         "heading": "Agent observability",
