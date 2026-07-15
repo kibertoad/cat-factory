@@ -388,8 +388,10 @@ export function buildLocalContainer(options: NodeContainerOptions): ServerContai
   // this is null so deploy stays UNWIRED (a render-needing config fails loudly at provision time
   // with an actionable message; the raw-manifest REST path is unaffected) — never silently routed
   // to the agent backend (the `disableDefaultDeployJobClient` flag below stops `buildNodeContainer`
-  // falling back). A mode SET without its mandatory companion variable BREAKS boot here (the
-  // thrown ConfigValidationError lands on the misconfigured screen) rather than degrading silently.
+  // falling back). `container` mode works with no other variable (the deploy-harness image defaults
+  // to the backend-matched RECOMMENDED_DEPLOY_IMAGE); `native` mode SET without its mandatory
+  // LOCAL_DEPLOY_HARNESS_ENTRY companion BREAKS boot here (the thrown ConfigValidationError lands on
+  // the misconfigured screen) rather than degrading silently.
   // The clone target is inherited from `buildNodeContainer`'s default, which already uses local's
   // PAT mint + GitLab-aware `resolveRepoOrigin`.
   const localDeployTransport = buildLocalDeployTransport(env)

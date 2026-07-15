@@ -128,18 +128,20 @@ describe('buildLocalEnv', () => {
     expect(out).toContain('# GITLAB_API_BASE=')
   })
 
-  it('documents the Kubernetes deploy runner (commented; no active companion var)', () => {
+  it('documents the Kubernetes deploy runner (commented; container is the steered mode)', () => {
     const out = buildLocalEnv({ ...base, provider: 'github' })
-    // All three vars are present but commented — deploy is unused by default, and a mode set
-    // without its companion var breaks boot, so none is written active.
-    expect(out).toContain('# LOCAL_DEPLOY_RUNTIME=native')
+    // All three vars are present but commented — deploy is unused by default. The steered mode is
+    // `container` (works out of the box; the image resolves automatically), not the brittle native.
+    expect(out).toContain('# LOCAL_DEPLOY_RUNTIME=container')
     expect(out).toContain('# LOCAL_DEPLOY_HARNESS_ENTRY=')
     expect(out).toContain('# LOCAL_DEPLOY_IMAGE=ghcr.io/kibertoad/cat-factory-deploy:<version>')
     expect(out).not.toMatch(/^LOCAL_DEPLOY_RUNTIME=/m)
-    // Both modes' companion variables + the "no default" contract are explained.
-    expect(out).toContain('no deploy runner')
+    // The "no deploy runner wired" failure, both modes, and the escape-hatch framing are explained.
+    expect(out).toContain('no deploy')
     expect(out).toMatch(/native/)
     expect(out).toMatch(/container/)
+    expect(out).toContain('resolved automatically')
+    expect(out).toContain('Escape hatch')
   })
 })
 

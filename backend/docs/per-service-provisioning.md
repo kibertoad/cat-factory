@@ -169,11 +169,16 @@ The `deploy` dispatch kind is wired on every facade (the raw-manifest REST path 
   analogue of the Worker's DeployContainer). The pool forwards the `image` dispatch option, and
   the native Kubernetes runner config gains an `imageDeploy` variant. `disableDefaultDeployJobClient`
   stops the agent transport (which lacks the k8s CLIs) backing deploy.
-- **Local** (`runtimes/local`): a `NativeCliDeployTransport` selected by **`LOCAL_DEPLOY_RUNTIME`**:
-  - `native` (default) runs the deploy harness as a **host process** (`LOCAL_DEPLOY_HARNESS_ENTRY`)
-    driving the developer's own `kubectl`/`kustomize`/`helm` against the ambient kubeconfig.
-  - `container` runs the deploy-harness **image** (`LOCAL_DEPLOY_IMAGE`) per job, re-keyed by its
-    own `jobId` so it never collides with the run's agent container.
+- **Local** (`runtimes/local`): a `NativeCliDeployTransport` selected by **`LOCAL_DEPLOY_RUNTIME`**
+  (no default mode — unset ⇒ deploy stays off):
+  - `container` (recommended, works out of the box) runs the deploy-harness **image** per job,
+    re-keyed by its own `jobId` so it never collides with the run's agent container. The image is
+    resolved automatically to the backend-matched `RECOMMENDED_DEPLOY_IMAGE` (kept in lockstep with
+    the Worker's wrangler pin + the deploy-harness version by the runner-image-tag sync);
+    `LOCAL_DEPLOY_IMAGE` is only an escape hatch to override it.
+  - `native` runs the deploy harness as a **host process** (requires `LOCAL_DEPLOY_HARNESS_ENTRY`)
+    driving the developer's own `kubectl`/`kustomize`/`helm` against the ambient kubeconfig — set
+    without its companion, boot breaks fast.
   - Unwired ⇒ deploy stays off (render configs fail loudly rather than silently no-op).
 
 ## Custom manifest types (the open `custom` catalog)
