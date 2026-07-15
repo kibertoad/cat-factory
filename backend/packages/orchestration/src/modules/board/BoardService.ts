@@ -14,7 +14,7 @@ import type {
   PreloadedBlocks,
   ServiceConnection,
 } from '@cat-factory/kernel'
-import { assertFound, ValidationError } from '@cat-factory/kernel'
+import { assertFound, NotFoundError, ValidationError } from '@cat-factory/kernel'
 import { BLOCK_TYPE_LABEL, defaultPipelineIdForTaskType } from '@cat-factory/kernel'
 import type {
   BlockRepository,
@@ -652,6 +652,77 @@ export class BoardService {
    */
   countActiveInternalTasks(workspaceId: string): Promise<number> {
     return this.blockRepository.countActiveInternal(workspaceId)
+  }
+
+  // --- Public-API board reads/writes -----------------------------------------
+  // The external `/api/v1` surface (see PublicApiController) works with a key's OWN
+  // workspace only. These methods are STRICTLY scoped to `workspaceId` — they read via
+  // `listByWorkspace` / `get`, which never surface a service merely MOUNTED from another
+  // workspace (those are homed elsewhere), so a key can only touch its own board. They
+  // key on the FRAME BLOCK id (`serviceId` in the wire contract), and always exclude the
+  // headless `internal` anchors. Internals stay excluded here exactly as the board
+  // snapshot excludes them.
+
+  /** Public-API: the workspace's board services (visible service frames). */
+  async listServices(workspaceId: string): Promise<Block[]> {
+    await this.requireWorkspace(workspaceId)
+    const blocks = await this.blockRepository.listByWorkspace(workspaceId)
+    return blocks.filter((b) => b.level === 'frame' && !b.internal && !b.archived)
+  }
+
+  /**
+   * Public-API: create a task under a visible SERVICE FRAME the workspace owns. Rejects a
+   * missing / non-frame / internal / archived container, then delegates to {@link addTask}
+   * (which reuses all the normal placement + task-type validation). Headless / no initiator.
+   */
+  async addServiceTask(
+    workspaceId: string,
+    serviceId: string,
+    input: AddTaskInput,
+  ): Promise<Block> {
+    await this.requireWorkspace(workspaceId)
+    const frame = await this.blockRepository.get(workspaceId, serviceId)
+    if (!frame || frame.internal) throw new NotFoundError('service', serviceId)
+    if (frame.level !== 'frame') {
+      throw new ValidationError('Tasks can only be created under a service')
+    }
+    if (frame.archived) throw new ValidationError('Cannot add a task to an archived service')
+    return this.addTask(workspaceId, serviceId, input, null)
+  }
+
+  /**
+   * Public-API: fetch a board task + its enclosing service frame id, scoped to the
+   * workspace. Returns null when no such task exists in the workspace, it is not a
+   * `task`-level block, it is a headless `internal` anchor, or it has no resolvable
+   * enclosing service frame — so the caller (and any external key) sees only real,
+   * board-visible tasks it owns.
+   */
+  async getServiceTask(
+    workspaceId: string,
+    taskId: string,
+  ): Promise<{ block: Block; serviceId: string } | null> {
+    await this.requireWorkspace(workspaceId)
+    const blocks = await this.blockRepository.listByWorkspace(workspaceId)
+    const block = blocks.find((b) => b.id === taskId)
+    if (!block || block.level !== 'task' || block.internal) return null
+    const frame = serviceOf(blocks, block)
+    if (!frame) return null
+    return { block, serviceId: frame.id }
+  }
+
+  /**
+   * Public-API: list a visible service's tasks — the whole subtree (tasks directly under
+   * the frame AND under its modules), excluding headless `internal` anchors. Returns null
+   * when the frame does not exist in the workspace, is not a visible service frame (a
+   * non-frame / internal / archived block), so the caller 404s.
+   */
+  async listServiceTasks(workspaceId: string, serviceId: string): Promise<Block[] | null> {
+    await this.requireWorkspace(workspaceId)
+    const blocks = await this.blockRepository.listByWorkspace(workspaceId)
+    const frame = blocks.find((b) => b.id === serviceId)
+    if (!frame || frame.level !== 'frame' || frame.internal || frame.archived) return null
+    const subtree = descendantIds(blocks, serviceId)
+    return blocks.filter((b) => subtree.has(b.id) && b.level === 'task' && !b.internal)
   }
 
   /** Add a module (sub-frame) inside a service. */

@@ -1,0 +1,826 @@
+{
+  "components": {
+    "schemas": {
+      "CreateInitiativeJob": {
+        "properties": {
+          "input": {
+            "maxLength": 50000,
+            "minLength": 1,
+            "type": "string"
+          },
+          "pipelineId": {
+            "minLength": 1,
+            "type": "string"
+          },
+          "title": {
+            "maxLength": 200,
+            "type": "string"
+          }
+        },
+        "required": [
+          "pipelineId",
+          "input"
+        ],
+        "type": "object"
+      },
+      "CreatePublicTask": {
+        "properties": {
+          "description": {
+            "maxLength": 2000,
+            "type": "string"
+          },
+          "taskType": {
+            "enum": [
+              "feature",
+              "bug",
+              "document",
+              "spike"
+            ],
+            "type": "string"
+          },
+          "title": {
+            "maxLength": 200,
+            "minLength": 1,
+            "type": "string"
+          }
+        },
+        "required": [
+          "title"
+        ],
+        "type": "object"
+      },
+      "ErrorResponse": {
+        "properties": {
+          "error": {
+            "properties": {
+              "code": {
+                "type": "string"
+              },
+              "details": {},
+              "issues": {
+                "items": {
+                  "properties": {
+                    "message": {
+                      "type": "string"
+                    },
+                    "path": {
+                      "type": "string"
+                    }
+                  },
+                  "required": [
+                    "message"
+                  ],
+                  "type": "object"
+                },
+                "type": "array"
+              },
+              "message": {
+                "type": "string"
+              }
+            },
+            "required": [
+              "code",
+              "message"
+            ],
+            "type": "object"
+          }
+        },
+        "required": [
+          "error"
+        ],
+        "type": "object"
+      },
+      "InitiativeAccepted": {
+        "properties": {
+          "jobId": {
+            "type": "string"
+          },
+          "links": {
+            "properties": {
+              "events": {
+                "type": "string"
+              },
+              "self": {
+                "type": "string"
+              }
+            },
+            "required": [
+              "self",
+              "events"
+            ],
+            "type": "object"
+          },
+          "status": {
+            "enum": [
+              "running",
+              "succeeded",
+              "failed"
+            ],
+            "type": "string"
+          }
+        },
+        "required": [
+          "jobId",
+          "status",
+          "links"
+        ],
+        "type": "object"
+      },
+      "PublicJob": {
+        "properties": {
+          "createdAt": {
+            "type": "number"
+          },
+          "error": {
+            "anyOf": [
+              {
+                "properties": {
+                  "code": {
+                    "type": "string"
+                  },
+                  "message": {
+                    "type": "string"
+                  }
+                },
+                "required": [
+                  "code",
+                  "message"
+                ],
+                "type": "object"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "jobId": {
+            "type": "string"
+          },
+          "pipelineId": {
+            "type": "string"
+          },
+          "result": {
+            "anyOf": [
+              {
+                "properties": {
+                  "data": {
+                    "anyOf": [
+                      {},
+                      {
+                        "type": "null"
+                      }
+                    ]
+                  },
+                  "output": {
+                    "type": "string"
+                  }
+                },
+                "required": [
+                  "output",
+                  "data"
+                ],
+                "type": "object"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "status": {
+            "enum": [
+              "running",
+              "succeeded",
+              "failed"
+            ],
+            "type": "string"
+          }
+        },
+        "required": [
+          "jobId",
+          "status",
+          "pipelineId",
+          "createdAt",
+          "result",
+          "error"
+        ],
+        "type": "object"
+      },
+      "PublicService": {
+        "properties": {
+          "description": {
+            "type": "string"
+          },
+          "serviceId": {
+            "type": "string"
+          },
+          "status": {
+            "enum": [
+              "planned",
+              "ready",
+              "in_progress",
+              "blocked",
+              "pr_ready",
+              "done"
+            ],
+            "type": "string"
+          },
+          "title": {
+            "type": "string"
+          },
+          "type": {
+            "enum": [
+              "frontend",
+              "service",
+              "library",
+              "document",
+              "api",
+              "database",
+              "queue",
+              "integration",
+              "external",
+              "environment"
+            ],
+            "type": "string"
+          }
+        },
+        "required": [
+          "serviceId",
+          "title",
+          "description",
+          "type",
+          "status"
+        ],
+        "type": "object"
+      },
+      "PublicServiceList": {
+        "properties": {
+          "services": {
+            "items": {
+              "$ref": "#/components/schemas/PublicService"
+            },
+            "type": "array"
+          }
+        },
+        "required": [
+          "services"
+        ],
+        "type": "object"
+      },
+      "PublicTask": {
+        "properties": {
+          "description": {
+            "type": "string"
+          },
+          "executionId": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "progress": {
+            "type": "number"
+          },
+          "pullRequestUrl": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "serviceId": {
+            "type": "string"
+          },
+          "status": {
+            "enum": [
+              "planned",
+              "ready",
+              "in_progress",
+              "blocked",
+              "pr_ready",
+              "done"
+            ],
+            "type": "string"
+          },
+          "taskId": {
+            "type": "string"
+          },
+          "taskType": {
+            "enum": [
+              "feature",
+              "bug",
+              "document",
+              "spike",
+              "recurring"
+            ],
+            "type": "string"
+          },
+          "title": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "taskId",
+          "serviceId",
+          "title",
+          "description",
+          "taskType",
+          "status",
+          "progress",
+          "executionId",
+          "pullRequestUrl"
+        ],
+        "type": "object"
+      },
+      "PublicTaskList": {
+        "properties": {
+          "tasks": {
+            "items": {
+              "$ref": "#/components/schemas/PublicTask"
+            },
+            "type": "array"
+          }
+        },
+        "required": [
+          "tasks"
+        ],
+        "type": "object"
+      },
+      "StartPublicTask": {
+        "properties": {
+          "pipelineId": {
+            "maxLength": 120,
+            "minLength": 1,
+            "type": "string"
+          }
+        },
+        "required": [],
+        "type": "object"
+      }
+    },
+    "securitySchemes": {
+      "bearerAuth": {
+        "description": "A public-API key of the form `cf_live_<keyId>.<secret>`.",
+        "scheme": "bearer",
+        "type": "http"
+      }
+    }
+  },
+  "info": {
+    "description": "The external, key-authenticated API (`/api/v1`). Authenticate every request with a public-API key: `Authorization: Bearer cf_live_<keyId>.<secret>`. Every call is scoped to the key’s workspace.",
+    "license": {
+      "identifier": "MIT",
+      "name": "MIT"
+    },
+    "title": "cat-factory Public API",
+    "version": "0.116.1"
+  },
+  "openapi": "3.1.0",
+  "paths": {
+    "/api/v1/initiatives": {
+      "post": {
+        "description": "Start a public, inline pipeline headlessly against a supplied brief. Returns a job id to poll or stream. Nothing is pushed to GitHub.",
+        "operationId": "createInitiativeJob",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/CreateInitiativeJob"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "202": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/InitiativeAccepted"
+                }
+              }
+            },
+            "description": "Accepted — the run has started"
+          },
+          "4XX": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Client error (validation, unauthorized, not found, conflict, rate limit)"
+          },
+          "5XX": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Server error"
+          }
+        },
+        "summary": "Start an initiative-breakdown run",
+        "tags": [
+          "Initiatives"
+        ]
+      }
+    },
+    "/api/v1/jobs/{id}": {
+      "get": {
+        "description": "Poll a headless initiative run started by this key: its status and, once finished, its result.",
+        "operationId": "getPublicJob",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "id",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PublicJob"
+                }
+              }
+            },
+            "description": "Success"
+          },
+          "4XX": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Client error (validation, unauthorized, not found, conflict, rate limit)"
+          },
+          "5XX": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Server error"
+          }
+        },
+        "summary": "Get an initiative job",
+        "tags": [
+          "Initiatives"
+        ]
+      }
+    },
+    "/api/v1/jobs/{id}/events": {
+      "get": {
+        "description": "Server-sent events for a headless initiative run: `progress` frames until a terminal `done`/`error`/`stopped`/`timeout` event. Authenticated by the API key header.",
+        "operationId": "streamPublicJobEvents",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "id",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "text/event-stream": {
+                "schema": {
+                  "type": "string"
+                }
+              }
+            },
+            "description": "An event stream of job updates"
+          },
+          "4XX": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Client error (validation, unauthorized, not found, conflict, rate limit)"
+          }
+        },
+        "summary": "Stream an initiative job (SSE)",
+        "tags": [
+          "Initiatives"
+        ]
+      }
+    },
+    "/api/v1/services": {
+      "get": {
+        "description": "List the board service frames in the key’s workspace, so a caller can discover the serviceId to create/list tasks under.",
+        "operationId": "listPublicServices",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PublicServiceList"
+                }
+              }
+            },
+            "description": "Success"
+          },
+          "4XX": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Client error (validation, unauthorized, not found, conflict, rate limit)"
+          },
+          "5XX": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Server error"
+          }
+        },
+        "summary": "List the workspace's services",
+        "tags": [
+          "Services"
+        ]
+      }
+    },
+    "/api/v1/services/{serviceId}/tasks": {
+      "get": {
+        "description": "List every task under a service (the whole subtree — tasks directly under the frame and under its modules).",
+        "operationId": "listPublicServiceTasks",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "serviceId",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PublicTaskList"
+                }
+              }
+            },
+            "description": "Success"
+          },
+          "4XX": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Client error (validation, unauthorized, not found, conflict, rate limit)"
+          },
+          "5XX": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Server error"
+          }
+        },
+        "summary": "List a service's tasks",
+        "tags": [
+          "Tasks"
+        ]
+      },
+      "post": {
+        "description": "Create a task inside a service frame the key’s workspace owns. The task starts in the `planned` state; start it with the start endpoint.",
+        "operationId": "createPublicTask",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "serviceId",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/CreatePublicTask"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "201": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PublicTask"
+                }
+              }
+            },
+            "description": "Created"
+          },
+          "4XX": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Client error (validation, unauthorized, not found, conflict, rate limit)"
+          },
+          "5XX": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Server error"
+          }
+        },
+        "summary": "Create a task under a service",
+        "tags": [
+          "Tasks"
+        ]
+      }
+    },
+    "/api/v1/tasks/{taskId}": {
+      "get": {
+        "description": "Read a task’s current lifecycle status, run progress, execution id, and PR URL (once one exists).",
+        "operationId": "getPublicTask",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "taskId",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PublicTask"
+                }
+              }
+            },
+            "description": "Success"
+          },
+          "4XX": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Client error (validation, unauthorized, not found, conflict, rate limit)"
+          },
+          "5XX": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Server error"
+          }
+        },
+        "summary": "Get a task's status",
+        "tags": [
+          "Tasks"
+        ]
+      }
+    },
+    "/api/v1/tasks/{taskId}/start": {
+      "post": {
+        "description": "Start a task’s pipeline. Uses the request’s pipelineId, else the task’s pinned pipeline. A task on an individual-usage model cannot be started through the API (no headless personal-credential unlock).",
+        "operationId": "startPublicTask",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "taskId",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/StartPublicTask"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "202": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PublicTask"
+                }
+              }
+            },
+            "description": "Accepted — the run has started"
+          },
+          "4XX": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Client error (validation, unauthorized, not found, conflict, rate limit)"
+          },
+          "5XX": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Server error"
+          }
+        },
+        "summary": "Start (run) a task",
+        "tags": [
+          "Tasks"
+        ]
+      }
+    }
+  },
+  "security": [
+    {
+      "bearerAuth": []
+    }
+  ],
+  "servers": [
+    {
+      "description": "The deployment base URL",
+      "url": "/"
+    }
+  ],
+  "tags": [
+    {
+      "description": "Headless initiative-breakdown runs (start, poll, stream).",
+      "name": "Initiatives"
+    },
+    {
+      "description": "The workspace’s board services.",
+      "name": "Services"
+    },
+    {
+      "description": "Board tasks under a service (create, list, read status, start).",
+      "name": "Tasks"
+    }
+  ]
+}

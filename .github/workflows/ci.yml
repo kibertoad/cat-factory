@@ -401,6 +401,12 @@ jobs:
       - name: Check publish integrity (publint + attw)
         run: pnpm check:publish
 
+      # OpenAPI drift guard: regenerate the public `/api/v1` spec from the Valibot contracts
+      # and diff it against the committed docs/openapi.json. Fails if a public contract changed
+      # without running `pnpm gen:openapi`. Needs the contracts dist built above.
+      - name: Check OpenAPI spec is up to date
+        run: pnpm check:openapi
+
       # Unused files / exports / dependencies across the workspace. The knip.json config is
       # scoped to pass today (see its comments for deliberate ignores); tightening the
       # baseline is tracked separately. Runs after the build because workspace packages

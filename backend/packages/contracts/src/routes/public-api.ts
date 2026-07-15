@@ -6,8 +6,13 @@ import {
 } from '../public-api-keys.js'
 import {
   createInitiativeJobSchema,
+  createPublicTaskSchema,
   initiativeAcceptedSchema,
   publicJobSchema,
+  publicServiceListSchema,
+  publicTaskListSchema,
+  publicTaskSchema,
+  startPublicTaskSchema,
 } from '../public-api.js'
 import { errorResponses, singleStringParam } from './_shared.js'
 
@@ -24,6 +29,8 @@ import { errorResponses, singleStringParam } from './_shared.js'
 // ---------------------------------------------------------------------------
 
 const idParams = singleStringParam('id')
+const serviceIdParams = singleStringParam('serviceId')
+const taskIdParams = singleStringParam('taskId')
 
 // ---- key management (relative to `/workspaces/:workspaceId`) ---------------
 
@@ -61,4 +68,47 @@ export const getPublicJobContract = defineApiContract({
   requestPathParamsSchema: idParams,
   pathResolver: ({ id }) => `/api/v1/jobs/${id}`,
   responsesByStatusCode: { 200: publicJobSchema, ...errorResponses },
+})
+
+// ---- basic board workloads: services + tasks (key-authenticated) -----------
+
+/** List the workspace's services (board service frames). */
+export const listPublicServicesContract = defineApiContract({
+  method: 'get',
+  pathResolver: () => '/api/v1/services',
+  responsesByStatusCode: { 200: publicServiceListSchema, ...errorResponses },
+})
+
+/** Create a task under a service. */
+export const createPublicTaskContract = defineApiContract({
+  method: 'post',
+  requestPathParamsSchema: serviceIdParams,
+  pathResolver: ({ serviceId }) => `/api/v1/services/${serviceId}/tasks`,
+  requestBodySchema: createPublicTaskSchema,
+  responsesByStatusCode: { 201: publicTaskSchema, ...errorResponses },
+})
+
+/** List a service's tasks (the whole subtree — tasks under the frame and its modules). */
+export const listPublicServiceTasksContract = defineApiContract({
+  method: 'get',
+  requestPathParamsSchema: serviceIdParams,
+  pathResolver: ({ serviceId }) => `/api/v1/services/${serviceId}/tasks`,
+  responsesByStatusCode: { 200: publicTaskListSchema, ...errorResponses },
+})
+
+/** Get a task's status. */
+export const getPublicTaskContract = defineApiContract({
+  method: 'get',
+  requestPathParamsSchema: taskIdParams,
+  pathResolver: ({ taskId }) => `/api/v1/tasks/${taskId}`,
+  responsesByStatusCode: { 200: publicTaskSchema, ...errorResponses },
+})
+
+/** Start (run) a task. */
+export const startPublicTaskContract = defineApiContract({
+  method: 'post',
+  requestPathParamsSchema: taskIdParams,
+  pathResolver: ({ taskId }) => `/api/v1/tasks/${taskId}/start`,
+  requestBodySchema: startPublicTaskSchema,
+  responsesByStatusCode: { 202: publicTaskSchema, ...errorResponses },
 })
