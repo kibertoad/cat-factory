@@ -20,6 +20,7 @@ import {
   isInitiativeAgentKind,
   RunContendedError,
 } from '@cat-factory/kernel'
+import { allPullRequests } from '@cat-factory/contracts'
 import { MERGER_AGENT_KIND } from './ci.logic.js'
 import { type InitiativeRunHarvest, extractRunHarvest } from '../initiative/initiative.logic.js'
 import type { NotificationService } from '../notifications/NotificationService.js'
@@ -423,9 +424,13 @@ export class RunStateMachine {
    * looked merged when the PR was still open with red CI. Instead:
    *   - if the pipeline has a `merger` step, it already owned the merge/notify
    *     decision (see `resolveMergerStep`); we only backstop a missing one;
-   *   - otherwise the work is complete but unmerged: leave the PR open (`pr_ready`)
-   *     and raise a `pipeline_complete` notification for a human to confirm + merge.
-   * `done` now strictly means the PR was merged (see the engine's `finalizeMerge`).
+   *   - if there is no merger AND the run opened NO PR (a research/findings pipeline
+   *     such as a `spike`), it finishes cleanly as `done` — nothing to merge or confirm;
+   *   - if there is no merger but a PR IS open, the work is complete but unmerged: leave
+   *     the PR open (`pr_ready`) and raise a `pipeline_complete` notification for a human
+   *     to confirm + merge.
+   * `done` means either the PR was merged (see the engine's `finalizeMerge`) or the run
+   * produced no PR to merge.
    */
   async finalizeBlock(
     workspaceId: string,
@@ -475,7 +480,17 @@ export class RunStateMachine {
       return
     }
 
-    // No merger in this pipeline: complete but unmerged — ask a human to confirm.
+    // No merger in this pipeline. Two shapes:
+    //  - The run produced NO pull requests (a research/findings pipeline, e.g. a `spike`):
+    //    there is nothing to merge and nothing to confirm, so finish it cleanly like a
+    //    frame-level run rather than parking at `pr_ready` behind a PR-asserting notification
+    //    whose confirm would throw `no_pr_to_merge`. This benefits every PR-less pipeline.
+    //  - The run DID open a PR but has no merger (a hand-composed code pipeline): complete but
+    //    unmerged — leave the PR open (`pr_ready`) and ask a human to confirm + merge.
+    if (allPullRequests(block).length === 0) {
+      await this.blockRepository.update(workspaceId, block.id, { status: 'done', progress: 1 })
+      return
+    }
     await this.blockRepository.update(workspaceId, block.id, { status: 'pr_ready', progress: 1 })
     await this.raisePipelineComplete(workspaceId, instance, block)
   }

@@ -567,6 +567,21 @@ export function seedPipelines(): Pipeline[] {
     // A spec-only pipeline, to (re)generate a service's unified in-repo specification
     // (and its Gherkin acceptance scenarios) independently.
     { id: 'pl_spec', name: 'Write spec', agentKinds: ['spec-writer'] },
+    definePipeline({
+      // The SPIKE pipeline — a timeboxed research/investigation task that produces a findings
+      // document, no code and NO PR. It is the type-default a `taskType: 'spike'` task is pinned
+      // to at creation ({@link defaultPipelineIdForTaskType}); the full-build `pl_full` (the
+      // positional default) is wrong for a research task. A `requirements-review` gate leads
+      // (off by default — a spike's criteria are usually clear, and the gate is a pass-through
+      // when unwired), then the read-only `spike` explore agent investigates + returns structured
+      // findings, whose backend post-op commits `docs/research/<slug>.md` straight onto the base
+      // branch. There is deliberately NO `conflicts → ci → merger` tail — nothing to merge — so
+      // the run reaches `done` via the engine's no-PR completion path (see
+      // `RunStateMachine.finalizeBlock`).
+      id: 'pl_spike',
+      name: 'Run a spike',
+      steps: [{ kind: 'requirements-review', gate: true, enabled: false }, 'spike'],
+    }),
     // An analyst-only pipeline: the opt-in `environment-analyst` clones a service's repo
     // read-only and drafts a declarative Docker Compose stack recipe (setup steps,
     // prerequisites, health gate) as a NON-BINDING recommendation. The setup wizard runs it
@@ -711,6 +726,14 @@ export const BUSINESS_DOCS_PIPELINE_ID = 'pl_business_docs'
 export const DOCUMENT_PIPELINE_ID = 'pl_document'
 
 /**
+ * Pipeline id of the spike pipeline (`requirements-review`(off) → `spike`). This is the DEFAULT
+ * pipeline a `taskType: 'spike'` task is pinned to at creation ({@link defaultPipelineIdForTaskType})
+ * — the full-build pipeline makes no sense for a timeboxed research task (no code / spec / tests /
+ * PR). It has no `merger`, so the run settles via the engine's no-PR completion path.
+ */
+export const SPIKE_PIPELINE_ID = 'pl_spike'
+
+/**
  * Pipeline id of the lean document pipeline (`doc-writer` → auto-review → `doc-quality` → the
  * mergeability / CI / merge tail). The docs-refresh preset (slice 8) spawns README + diagram tasks
  * onto it.
@@ -718,13 +741,16 @@ export const DOCUMENT_PIPELINE_ID = 'pl_document'
 export const DOCUMENT_QUICK_PIPELINE_ID = 'pl_document_quick'
 
 /**
- * The pipeline a task of the given task type should default to when the creator pins none. Only
- * `document` tasks get a non-default today (the full-build `pl_full` is wrong for a document);
- * every other task type falls through to the workspace's positional default. Returns `undefined`
- * when there is no type-specific default, so the caller leaves `pipelineId` unset.
+ * The pipeline a task of the given task type should default to when the creator pins none.
+ * `document` → `pl_document` and `spike` → `pl_spike` (the full-build `pl_full` is wrong for
+ * both — a document has no code, a spike has no code AND no PR); every other task type falls
+ * through to the workspace's positional default. Returns `undefined` when there is no
+ * type-specific default, so the caller leaves `pipelineId` unset.
  */
 export function defaultPipelineIdForTaskType(taskType: Block['taskType']): string | undefined {
-  return taskType === 'document' ? DOCUMENT_PIPELINE_ID : undefined
+  if (taskType === 'document') return DOCUMENT_PIPELINE_ID
+  if (taskType === 'spike') return SPIKE_PIPELINE_ID
+  return undefined
 }
 
 /** Pipeline ids of the built-in recurring-pipeline presets. */

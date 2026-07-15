@@ -2493,6 +2493,89 @@ export function defineAgentConformance(harness: ConformanceHarness): void {
       })
     })
 
+    describe('spike research pipeline (pl_spike)', () => {
+      // A spike is a timeboxed research task: the read-only built-in `spike` explore agent
+      // returns structured findings and a BACKEND post-op commits them to
+      // `docs/research/<slug>.md` on the base branch (no PR). `pl_spike` has no `merger`, so the
+      // task must reach `done` via the engine's no-PR completion path — not stall at `pr_ready`
+      // behind a PR-asserting notification whose confirm would throw `no_pr_to_merge`. Both the
+      // post-op commit AND the terminal state are asserted identically on every runtime so a
+      // facade can't diverge.
+      const SPIKE_FINDINGS = {
+        question: 'Should we adopt library X?',
+        summary: 'X fits our needs with one caveat around bundle size.',
+        findings: [{ title: 'Good DX', detail: 'Typed API, small surface.' }],
+        optionsCompared: [{ option: 'X', assessment: 'Best fit' }],
+        recommendation: 'Adopt X behind a flag.',
+        openQuestions: ['Bundle-size budget?'],
+        confidence: 0.7,
+      }
+
+      it('runs pl_spike to a `done` task with findings on the step and a committed research doc', async () => {
+        const commits: { branch: string; files: { path: string; content: string }[] }[] = []
+        const repo: RepoFiles = {
+          getFile: async () => null,
+          listDirectory: async () => [],
+          headSha: async () => 'base-sha',
+          createBranch: async () => {},
+          deleteBranch: async () => {},
+          commitFiles: async (input) => {
+            commits.push({ branch: input.branch, files: input.files })
+            return { sha: 'commit-sha' }
+          },
+          openPullRequest: async () => {
+            throw new Error('a spike opens no PR')
+          },
+        }
+        const app = harness.makeApp(
+          { customResult: SPIKE_FINDINGS },
+          { resolveRunRepoContext: async () => ({ repo, baseBranch: 'main' }) },
+        )
+        const { workspace } = await app.createWorkspace()
+        const wsId = workspace.id
+
+        const start = await app.call('POST', `/workspaces/${wsId}/blocks/task_login/executions`, {
+          pipelineId: 'pl_spike',
+        })
+        expect(start.status).toBe(201)
+
+        const exec = (await app.drive(wsId)).find((e) => e.blockId === 'task_login')!
+        expect(exec.status).toBe('done')
+        // The read-only spike step carries its structured findings on `step.custom` (the
+        // `generic-structured` result view's source).
+        const spikeStep = exec.steps.find((s) => s.agentKind === 'spike')!
+        expect(spikeStep.custom).toMatchObject({ recommendation: 'Adopt X behind a flag.' })
+        // No merger + no PR ⇒ the TASK block finishes `done` via the no-PR completion path,
+        // rather than stalling at `pr_ready`.
+        expect((await app.blockRepository().get(wsId, 'task_login'))?.status).toBe('done')
+        // The post-op committed the rendered findings to `docs/research/*.md` on the BASE
+        // branch (the kind clones `base` and opens no PR), via the checkout-free RepoFiles.
+        expect(commits).toHaveLength(1)
+        expect(commits[0]?.branch).toBe('main')
+        expect(commits[0]?.files[0]?.path).toMatch(/^docs\/research\/.+\.md$/)
+        expect(commits[0]?.files[0]?.content).toContain('Adopt X behind a flag.')
+      })
+
+      it('settles a repo-less spike on step.custom without a commit (docs-only)', async () => {
+        // With no repo resolvable (GitHub unwired, or a docs-only spike under an unlinked
+        // service) the engine skips the post-op — the findings still settle on `step.custom`
+        // and the task reaches `done`, so a research spike never fails just because it has no
+        // repo to write its findings to.
+        const app = harness.makeApp({ customResult: SPIKE_FINDINGS })
+        const { workspace } = await app.createWorkspace()
+        const wsId = workspace.id
+        const start = await app.call('POST', `/workspaces/${wsId}/blocks/task_login/executions`, {
+          pipelineId: 'pl_spike',
+        })
+        expect(start.status).toBe(201)
+        const exec = (await app.drive(wsId)).find((e) => e.blockId === 'task_login')!
+        expect(exec.status).toBe('done')
+        const spikeStep = exec.steps.find((s) => s.agentKind === 'spike')!
+        expect(spikeStep.custom).toMatchObject({ recommendation: 'Adopt X behind a flag.' })
+        expect((await app.blockRepository().get(wsId, 'task_login'))?.status).toBe('done')
+      })
+    })
+
     describe('registered custom gate + step resolver', () => {
       afterEach(() => {
         clearRegisteredGates()

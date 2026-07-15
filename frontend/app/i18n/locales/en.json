@@ -257,6 +257,20 @@
           "placeholder": "The endpoints or surface in scope"
         }
       },
+      "spikeFields": {
+        "researchQuestion": {
+          "label": "Research question",
+          "placeholder": "The question or hypothesis the spike must answer"
+        },
+        "successCriteria": {
+          "label": "Success criteria",
+          "placeholder": "The acceptance criteria or the decision the findings must inform"
+        },
+        "optionsToCompare": {
+          "label": "Options to compare",
+          "placeholder": "The options to weigh against each other"
+        }
+      },
       "optional": "optional",
       "pipeline": "Pipeline",
       "chooseAtRunTime": "Choose at run time",
