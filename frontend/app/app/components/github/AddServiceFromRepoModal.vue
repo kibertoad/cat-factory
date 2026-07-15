@@ -255,6 +255,16 @@ const canAddServices = computed(
     selectedDirectories.value.length > 0,
 )
 
+// Directories the user has picked but NOT yet committed via "Add N services". Closing the
+// modal ("Done") would silently discard them — almost never what the user wants — so the
+// footer's Done is disabled while any remain (see the template). Filtered against the
+// already-added set for parity with `addServices`, so a stale cart entry can't block Done.
+const hasPendingSelection = computed(
+  () =>
+    isMonorepo.value &&
+    selectedDirectories.value.some((d) => !addedDirSet.value.has(normalizeRepoPath(d))),
+)
+
 async function add() {
   if (!canAdd.value || selectedRepoId.value === undefined) return
   adding.value = true
@@ -527,6 +537,8 @@ function done() {
               color="neutral"
               variant="soft"
               size="sm"
+              :disabled="hasPendingSelection"
+              :title="hasPendingSelection ? t('github.addService.donePendingHint') : undefined"
               @click="done"
             >
               {{ t('github.addService.done') }}
