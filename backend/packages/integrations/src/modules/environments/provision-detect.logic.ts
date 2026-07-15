@@ -88,8 +88,8 @@ export interface DetectionConventions {
    * heuristic search — the deterministic escape hatch for a layout the heuristics can't infer (or
    * that you simply want pinned). Each template may contain two placeholders:
    *
-   * - `{service}` — the service directory's basename (e.g. `backend-export` for a service whose
-   *   `directory` is `services/in-and-out/backend-export`).
+   * - `{service}` — the service directory's basename (e.g. `backend-acme` for a service whose
+   *   `directory` is `services/team-alpha/backend-acme`).
    * - `{env}` — expanded across the known ephemeral-environment names (`prenv`, `preview`, `pr`,
    *   `dev`, `staging`, …); the first template whose expansion resolves to real manifests wins.
    *
@@ -424,11 +424,7 @@ function apiGroupOf(apiVersion: string): string {
 // Backstage is the common one in a service monorepo; the rest are other catalog/registry tools that
 // occasionally sit in a repo. A doc in one of these groups is never a manifest, even when its `kind`
 // collides with a real one (Backstage `Component` vs Kustomize `Component`).
-const NON_KUBERNETES_API_GROUPS = new Set([
-  'backstage.io',
-  'catalog.cattle.io',
-  'argoproj.io/argo-events', // (defensive; real Argo groups are allowed below)
-])
+const NON_KUBERNETES_API_GROUPS = new Set(['backstage.io', 'catalog.cattle.io'])
 // Built-in Kubernetes kinds + the kinds of the most common GitOps/operator CRDs. A doc with one of
 // these kinds is a manifest UNLESS its group is denylisted above (so a Backstage `Component` is still
 // rejected). This positively catches manifests whose CRD group we don't enumerate below.
@@ -785,11 +781,44 @@ async function collectKubernetesRoots(
   return found.sort((a, b) => Number(a.isComponent) - Number(b.isComponent))
 }
 
+// Deploy/env decoration tokens that legitimately SUFFIX a service's own slice dir (`<svc>-deploy`,
+// `<svc>-k8s`, `<svc>-staging`). A service-as-PREFIX affix match is accepted ONLY when the trailing
+// token is one of these — the affix tier must NOT let `backend` match a DIFFERENT sibling service
+// `backend-acme` (whose trailing `acme` is not a deploy word). A service-as-SUFFIX match
+// (`<namespace>-<svc>`, e.g. `acme-api`) is org/namespace decoration where the prefix is arbitrary,
+// so it stays accepted as-is.
+const DEPLOY_DECORATION_TOKENS = new Set([
+  'deploy',
+  'deployment',
+  'deployments',
+  'k8s',
+  'kubernetes',
+  'kustomize',
+  'manifests',
+  'manifest',
+  'chart',
+  'charts',
+  'helm',
+  ...OVERLAY_RANK,
+])
+
 /**
  * How strongly a slice directory name identifies THIS service. 3 = exact, 2 = case-insensitive,
- * 1 = affix match (a hyphen/underscore-delimited prefix or suffix — catches a namespaced slice like
- * `acme-backend-export` for service `backend-export`, or `backend-export-deploy`), 0 = no match.
- * Affix matching is delimiter-bounded so `backend` does NOT match `backend-export` (a different service).
+ * 1 = affix match (the service name plus ONE delimiter-bounded decoration segment), 0 = no match.
+ *
+ * The affix tier (1) is deliberately asymmetric so it catches real decoration without matching an
+ * unrelated sibling whose name merely shares a prefix or suffix:
+ *
+ * - `<namespace>-<svc>` — the service is the TRAILING segment (`acme-api` for `api`). The leading
+ *   segment is an arbitrary org/namespace prefix, so any prefix is accepted.
+ * - `<svc>-<token>` — the service is the LEADING segment (`api-deploy` for `api`). Here the trailing
+ *   segment is only accepted when it is a known deploy/env decoration word ({@link DEPLOY_DECORATION_TOKENS});
+ *   this is what stops `backend` matching the DIFFERENT sibling service `backend-acme`.
+ *
+ * (Residual, accepted: a service that is itself the trailing segment of a longer sibling — `acme`
+ * vs `backend-acme` — still tier-1 matches via the namespace-prefix rule, since we can't tell an
+ * org prefix from another service's name without cross-referencing sibling dirs. That is far rarer
+ * than the shared-prefix case above and only ever ADDS a candidate to the picker.)
  */
 function serviceNameMatchTier(sliceName: string, serviceBasename: string): number {
   if (!serviceBasename) return 0
@@ -797,13 +826,16 @@ function serviceNameMatchTier(sliceName: string, serviceBasename: string): numbe
   const a = sliceName.toLowerCase()
   const b = serviceBasename.toLowerCase()
   if (a === b) return 2
-  const affix = (long: string, short: string): boolean =>
-    long.startsWith(`${short}-`) ||
-    long.startsWith(`${short}_`) ||
-    long.endsWith(`-${short}`) ||
-    long.endsWith(`_${short}`)
-  if (a.length > b.length && affix(a, b)) return 1
-  if (b.length > a.length && affix(b, a)) return 1
+  for (const delim of ['-', '_']) {
+    // `<namespace><delim><svc>` — service is the trailing segment; the prefix is arbitrary.
+    if (a.length > b.length + delim.length && a.endsWith(`${delim}${b}`)) return 1
+    // `<svc><delim><token>` — service is the leading segment; the token must be a deploy/env word.
+    if (
+      a.startsWith(`${b}${delim}`) &&
+      DEPLOY_DECORATION_TOKENS.has(a.slice(b.length + delim.length))
+    )
+      return 1
+  }
   return 0
 }
 

@@ -645,6 +645,29 @@ configMapGenerator:
     expect(rec.provisioning.manifestSource?.path).toBe('k8s/acme-api')
   })
 
+  it('matches a <svc>-<deploy-token> suffix slice (api-deploy)', async () => {
+    const reader = makeReader({
+      'services/api/src/index.ts': 'export {}',
+      'k8s/api-deploy/kustomization.yaml': 'resources:\n  - deployment.yaml\n',
+      'k8s/api-deploy/deployment.yaml': deployment('registry/api:1.0.0'),
+    })
+    const rec = await detectKubernetesProvisioning(reader, { directory: 'services/api' })
+    expect(rec.provisioning.manifestSource?.path).toBe('k8s/api-deploy')
+  })
+
+  it('does NOT match a DIFFERENT sibling service that merely shares a name prefix (backend vs backend-acme)', async () => {
+    const reader = makeReader({
+      // Detecting for `backend`, which has NO slice of its own. `backend-acme` is a SEPARATE service;
+      // its slice must not be recommended as backend's deploy target (that would deploy the wrong app).
+      'services/backend/src/index.ts': 'export {}',
+      'deploy/backend-acme/kustomization.yaml': 'resources:\n  - deployment.yaml\n',
+      'deploy/backend-acme/deployment.yaml': deployment('registry/backend-acme:1.0.0'),
+    })
+    const rec = await detectKubernetesProvisioning(reader, { directory: 'services/backend' })
+    expect(rec.detected).toBe(false)
+    expect(rec.provisioning.type).toBe('infraless')
+  })
+
   it('does NOT surface a same-named terraform sibling under infra/ as a manifest slice', async () => {
     const reader = makeReader({
       'services/api/src/index.ts': 'export {}',
@@ -1361,14 +1384,14 @@ services:
 })
 
 // ---------------------------------------------------------------------------
-// End-to-end monorepo shape, modeled on a real Kustomize monorepo (autopilot): source nested two
-// levels deep with a Backstage `catalog-info.yaml` in every service dir + the repo root, per-service
-// base slices under `deployment/k8s/base/services/<svc>`, per-service overlay COMPONENTS under
+// End-to-end monorepo shape, modeled on a real-world Kustomize monorepo: source nested two levels
+// deep with a Backstage `catalog-info.yaml` in every service dir + the repo root, per-service base
+// slices under `deployment/k8s/base/services/<svc>`, per-service overlay COMPONENTS under
 // `deployment/k8s/overlays/pre/<svc>`, one aggregating `overlays/pre` (namespace + Ingress) that pulls
 // them in via `components:`, and a root docker-compose for local dev. This is the durable regression
 // anchor for the whole monorepo-detection behaviour.
 // ---------------------------------------------------------------------------
-describe('detectKubernetesProvisioning — Kustomize monorepo (autopilot-shaped)', () => {
+describe('detectKubernetesProvisioning — Kustomize monorepo (deep-nested, Backstage-catalogued)', () => {
   const backstage = (name: string) => `
 apiVersion: backstage.io/v1alpha1
 kind: Component
@@ -1407,10 +1430,10 @@ metadata:
 `,
     'docker-compose.yml': 'services:\n  api: {}\n  web: {}\n',
     // Source, nested two levels deep, each with a Backstage catalog file (the decoy).
-    'services/in-and-out/api/catalog-info.yaml': backstage('api'),
-    'services/in-and-out/api/src/index.ts': 'export {}',
-    'services/projects/web/catalog-info.yaml': backstage('web'),
-    'services/projects/web/src/index.ts': 'export {}',
+    'services/team-alpha/api/catalog-info.yaml': backstage('api'),
+    'services/team-alpha/api/src/index.ts': 'export {}',
+    'services/team-beta/web/catalog-info.yaml': backstage('web'),
+    'services/team-beta/web/src/index.ts': 'export {}',
     // Deploy tree.
     ...baseSlice('api', 'registry/api:1.0.0'),
     ...baseSlice('web', 'registry/web:1.0.0'),
@@ -1440,7 +1463,7 @@ metadata:
 
   it('a service (by nested source dir) resolves to ITS base slice, ignoring the catalog-info decoy', async () => {
     const rec = await detectKubernetesProvisioning(makeReader(repo()), {
-      directory: 'services/in-and-out/api',
+      directory: 'services/team-alpha/api',
     })
     expect(rec.provisioning.manifestSource).toEqual({
       type: 'colocated',
@@ -1459,7 +1482,7 @@ metadata:
 
   it('a serviceManifestPaths overlay template resolves the whole ephemeral env via component aggregation', async () => {
     const rec = await detectKubernetesProvisioning(makeReader(repo()), {
-      directory: 'services/in-and-out/api',
+      directory: 'services/team-alpha/api',
       conventions: { serviceManifestPaths: ['deployment/k8s/overlays/{env}/{service}'] },
     })
     // {env}=pre resolves to the api COMPONENT, which aggregates up to the deployable overlay.
