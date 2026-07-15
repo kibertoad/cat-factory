@@ -73,7 +73,15 @@ need (`getPullRequestHeadRef`, `createReview`) are new **optional** methods on t
   the reviewed PR's branch.
 - **At-most-once posting.** `post` runs in the durable driver (the `pendingPrReviewPost` marker is
   consumed — cleared + persisted — before the side-effecting `createReview`), so a Workflows
-  retry/replay can't submit the review twice.
+  retry/replay can't submit the review twice. Because the marker is consumed first, a retry will
+  NOT re-post, so a `createReview` that actually throws (GitHub 422s the batched review — most
+  commonly a finding anchored to a line outside the PR diff, which rejects the WHOLE review — or a
+  transient network/5xx error) must NOT silently complete the step as `done` with nothing posted.
+  `postPrReview` therefore fails the step LOUDLY on a post error (a `job_failed` surfaced on the
+  board, mirroring the `fix` preflight failure) rather than reporting a misleading success; the
+  human can re-run `post` or switch to `fix`/`finish`. To keep GitHub from rejecting the review for
+  a blank body, `buildPrReviewPost` always emits a non-empty `body` (falling back to a count of the
+  inline comments when neither a summary nor an unanchored finding supplies one).
 - **Pass-through when unwired.** A clean PR (no findings) records an empty `done` review and lets
   the normal spine finish (no park); an unwired reviewer / no VCS write degrades gracefully. The
   cross-runtime conformance suite asserts the park → select → resolve loop for all three actions.

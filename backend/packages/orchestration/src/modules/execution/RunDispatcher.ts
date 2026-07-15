@@ -3757,6 +3757,14 @@ export class RunDispatcher {
    * persisted) BEFORE the (side-effecting) post so a Workflows retry can't submit it twice. When
    * no VCS review write is wired (tests / no GitHub) the findings are still recorded and the step
    * finishes — the review pipeline never reaches this without GitHub in practice.
+   *
+   * If `createReview` itself throws (GitHub rejects the batched review — e.g. a finding anchored
+   * to a line outside the PR diff 422s the WHOLE review — or a transient network/5xx error), the
+   * marker is already consumed, so a driver retry would NOT re-post. Rather than silently
+   * completing the step as `done` with nothing actually posted (the human would believe the
+   * comments landed), fail the step LOUDLY so the failure surfaces on the board — mirroring the
+   * `fix` resolution's loud preflight failure. `post` is a fallback resolution, so a hard failure
+   * is visible and the human can re-run or choose `fix`/`finish` instead.
    */
   private async postPrReview(ctx: StepHandlerContext): Promise<AdvanceResult> {
     const { workspaceId, instance, step, block, isFinalStep } = ctx
@@ -3773,9 +3781,21 @@ export class RunDispatcher {
         prNumber != null ? await this.resolveRunRepoContext?.(workspaceId, block.id) : null
       const repo = runRepo?.repo
       if (prNumber != null && repo?.createReview) {
-        await this.runInitiatorScope(instance.initiatedBy, () =>
-          repo.createReview!(prNumber, buildPrReviewPost(selected, review.summary)),
-        )
+        try {
+          await this.runInitiatorScope(instance.initiatedBy, () =>
+            repo.createReview!(prNumber, buildPrReviewPost(selected, review.summary)),
+          )
+        } catch (error) {
+          return {
+            kind: 'job_failed',
+            failureKind: 'agent',
+            error:
+              `Failed to post the ${selected.length} selected finding` +
+              `${selected.length === 1 ? '' : 's'} as a pull-request review: ${getErrorMessage(error)}. ` +
+              'GitHub rejects a review whose inline comment anchors a line outside the PR diff — ' +
+              "try the 'fix' resolution, or re-run to post again.",
+          }
+        }
         posted = true
       }
     }

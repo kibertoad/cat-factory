@@ -157,4 +157,19 @@ describe('buildPrReviewPost', () => {
     expect(post.body).toContain('No anchor')
     expect(post.body).toContain('general note')
   })
+
+  it('always emits a non-empty body — falls back to a count when nothing else supplies one', () => {
+    // All findings line-anchored + no summary: GitHub can reject a bodyless COMMENT review, so a
+    // fallback body must be present (a count of the inline comments) rather than omitted.
+    const post = buildPrReviewPost(
+      [
+        finding({ path: 'src/a.ts', line: 5, title: 'One', detail: 'x' }),
+        finding({ path: 'src/b.ts', line: 9, title: 'Two', detail: 'y' }),
+      ],
+      null,
+    )
+    expect(post.comments).toHaveLength(2)
+    expect(post.body).toBeTruthy()
+    expect(post.body).toContain('2 inline findings')
+  })
 })

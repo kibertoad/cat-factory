@@ -113,7 +113,7 @@ function renderFindingBody(finding: PrReviewFinding): string {
     finding.detail,
   ]
   if (finding.suggestedFix) parts.push('', `**Suggested fix:** ${finding.suggestedFix}`)
-  return parts.filter((p) => p !== undefined).join('\n')
+  return parts.join('\n')
 }
 
 /**
@@ -147,6 +147,10 @@ export function renderPrReviewFixerFeedback(findings: PrReviewFinding[]): string
  * anchored to its `path`/`line`/`side` (default `RIGHT`); a finding with no line is summarised
  * in the review `body` alongside the reviewer's overall `summary`. The event is always
  * `COMMENT` (the deep review neither approves nor blocks the PR). Deterministic + total.
+ *
+ * The review always carries a non-empty `body`: GitHub can reject a `COMMENT`/`REQUEST_CHANGES`
+ * review with a blank body, so when neither a summary nor any unanchored findings supply one we
+ * fall back to a one-line count of the inline comments rather than submitting a bodyless review.
  */
 export function buildPrReviewPost(
   findings: PrReviewFinding[],
@@ -174,9 +178,16 @@ export function buildPrReviewPost(
       unanchored.map((f) => `- ${renderFindingBody(f)}`).join('\n\n'),
     )
   }
+  // Never submit a bodyless review — fall back to a count of the inline comments when nothing
+  // else supplied a body (a summary-less review whose findings are all line-anchored).
+  if (bodyParts.length === 0) {
+    bodyParts.push(
+      `Deep review: ${comments.length} inline finding${comments.length === 1 ? '' : 's'}.`,
+    )
+  }
   return {
     event: 'COMMENT',
-    ...(bodyParts.length > 0 ? { body: bodyParts.join('\n\n') } : {}),
+    body: bodyParts.join('\n\n'),
     comments,
   }
 }
