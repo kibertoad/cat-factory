@@ -4717,11 +4717,21 @@
     "clear": "Cancella",
     "selectedCount": "{count} selezionati",
     "finish": "Concludi revisione",
+    "fix": "Correggi selezionati",
+    "post": "Pubblica come commenti",
     "suggestedFix": "Correzione suggerita:",
     "line": "riga {line}",
     "reviewing": {
       "title": "Revisione della pull request…",
       "hint": "Suddivisione del diff in blocchi coerenti e revisione di ciascuno."
+    },
+    "fixing": {
+      "title": "Correzione dei rilievi selezionati…",
+      "hint": "Un fixer sta effettuando il commit delle modifiche per i rilievi selezionati sul branch della pull request."
+    },
+    "posting": {
+      "title": "Pubblicazione dei commenti di revisione…",
+      "hint": "Pubblicazione dei rilievi selezionati come commenti inline sulla pull request."
     },
     "severity": {
       "blocker": "Bloccante",

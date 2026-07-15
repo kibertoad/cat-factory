@@ -1,6 +1,6 @@
 import { defineStore } from 'pinia'
 import { ref } from 'vue'
-import type { PrReviewStepState } from '~/types/execution'
+import type { PrReviewResolution, PrReviewStepState } from '~/types/execution'
 import { useApi } from '~/composables/useApi'
 import { useWorkspaceStore } from '~/stores/workspace'
 import { useExecutionStore } from '~/stores/execution'
@@ -56,15 +56,21 @@ export const usePrReviewStore = defineStore('prReview', () => {
   }
 
   /**
-   * Resolve the review: record the curated finding selection and complete the read-only review
-   * (the run then advances to done). PR 2 supports only the `finish` action.
+   * Resolve the review: record the curated finding selection and act on it. `finish` completes
+   * the read-only review; `fix` feeds the selected findings to a Fixer (which commits fixes onto
+   * the reviewed PR's branch); `post` publishes them as inline PR review comments. The run then
+   * advances (or re-dispatches for `fix`). `fix`/`post` require ≥1 selected finding.
    */
-  async function resolve(executionId: string, findingIds: string[]): Promise<void> {
+  async function resolve(
+    executionId: string,
+    findingIds: string[],
+    action: PrReviewResolution = 'finish',
+  ): Promise<void> {
     error.value = null
     resolving.value = true
     try {
       const state = await api.resolvePrReview(workspace.requireId(), executionId, {
-        action: 'finish',
+        action,
         findingIds,
       })
       reflect(executionId, state as PrReviewStepState)

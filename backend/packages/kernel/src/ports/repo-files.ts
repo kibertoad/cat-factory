@@ -1,6 +1,7 @@
 import type { CommitFilesInput, GitHubPullRequest, OpenPullRequestInput } from '../domain/types.js'
 import type {
   CommitFilesResult,
+  CreateReviewInput,
   GitHubRepoRef,
   RepoContentEntry,
   RepoFileContent,
@@ -59,6 +60,21 @@ export interface RepoFiles {
   commitFiles(input: CommitFilesInput): Promise<CommitFilesResult>
   /** Open a pull request (idempotent: returns the existing open PR if one matches head/base). */
   openPullRequest(input: OpenPullRequestInput): Promise<GitHubPullRequest>
+  /**
+   * The source (head) branch of a pull request by number, or null when the PR can't be read.
+   * The PR-deep-review "fix" resolution reads this to point the Fixer's clone/push at the
+   * reviewed PR's head branch (a `review` task carries only the PR number). Optional: a bound
+   * client that can't read a PR head omits it, so the fix resolution reports the branch
+   * unresolvable rather than pushing blind.
+   */
+  pullRequestHeadRef?(number: number): Promise<string | null>
+  /**
+   * Submit a pull-request review with inline comments (the deep-review "post" resolution
+   * publishes the human-selected findings as one advisory review). Optional: a bound client
+   * that can't post a batched inline review omits it, so the "post" resolution reports it
+   * unsupported rather than silently dropping the findings.
+   */
+  createReview?(number: number, input: CreateReviewInput): Promise<void>
 }
 
 /**

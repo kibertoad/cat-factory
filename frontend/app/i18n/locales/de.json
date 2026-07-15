@@ -4717,11 +4717,21 @@
     "clear": "Zurücksetzen",
     "selectedCount": "{count} ausgewählt",
     "finish": "Review abschließen",
+    "fix": "Ausgewählte beheben",
+    "post": "Als Kommentare posten",
     "suggestedFix": "Lösungsvorschlag:",
     "line": "Zeile {line}",
     "reviewing": {
       "title": "Pull Request wird geprüft…",
       "hint": "Der Diff wird in zusammenhängende Teile zerlegt und einzeln geprüft."
+    },
+    "fixing": {
+      "title": "Ausgewählte Befunde werden behoben…",
+      "hint": "Ein Fixer committet Änderungen für die ausgewählten Befunde auf den Pull-Request-Branch."
+    },
+    "posting": {
+      "title": "Review-Kommentare werden gepostet…",
+      "hint": "Die ausgewählten Befunde werden als Inline-Kommentare im Pull Request veröffentlicht."
     },
     "severity": {
       "blocker": "Blocker",

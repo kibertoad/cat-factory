@@ -14,11 +14,12 @@ export function prReviewApi({ send, ws }: ApiContext) {
     getPrReview: (workspaceId: string, executionId: string) =>
       send(getPrReviewContract, { pathPrefix: ws(workspaceId), pathParams: { executionId } }),
 
-    // Resolve a parked PR review: the curated finding selection + how it was resolved.
+    // Resolve a parked PR review: the curated finding selection + how it was resolved
+    // (`finish` completes it, `fix` feeds a Fixer, `post` publishes inline PR comments).
     resolvePrReview: (
       workspaceId: string,
       executionId: string,
-      body: { action?: 'finish'; findingIds?: string[] },
+      body: { action?: 'finish' | 'fix' | 'post'; findingIds?: string[] },
     ) =>
       send(resolvePrReviewContract, {
         pathPrefix: ws(workspaceId),

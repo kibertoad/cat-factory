@@ -1,4 +1,6 @@
 import type {
+  CreateReviewComment,
+  CreateReviewInput,
   PrReviewAgentOutput,
   PrReviewFinding,
   PrReviewSeverity,
@@ -95,4 +97,97 @@ export function coercePrReview(
     .sort((a, b) => severityRank(a.severity) - severityRank(b.severity))
 
   return { summary: output?.summary?.trim() || null, slices, findings }
+}
+
+// ---------------------------------------------------------------------------
+// PR-review RESOLUTION rendering (PR 3): the two terminal actions the human picks in the
+// window turn the selected findings into either a Fixer prompt (`fix`) or a batch of inline
+// PR review comments (`post`). Both are pure/deterministic and unit-tested directly.
+// ---------------------------------------------------------------------------
+
+/** One selected finding rendered as a Markdown review-comment body (shared by both resolutions). */
+function renderFindingBody(finding: PrReviewFinding): string {
+  const parts = [
+    `**[${finding.severity} · ${finding.category}] ${finding.title}**`,
+    '',
+    finding.detail,
+  ]
+  if (finding.suggestedFix) parts.push('', `**Suggested fix:** ${finding.suggestedFix}`)
+  return parts.join('\n')
+}
+
+/**
+ * Render the human-selected findings into the instruction block handed to the Fixer (fed as a
+ * prior output on the fixer dispatch — the same injection point the gate helpers use). The
+ * Fixer clones the reviewed PR's head branch, addresses each finding, and pushes back onto it.
+ * Bulleted most-severe-first (the findings are already severity-sorted); each line carries the
+ * location, severity/category, headline, detail and any suggested fix.
+ */
+export function renderPrReviewFixerFeedback(findings: PrReviewFinding[]): string {
+  const lines: string[] = [
+    'A code reviewer deep-reviewed this pull request and a human selected the findings below to ' +
+      'ACT ON. Address every one: make the change on the checked-out PR branch, then commit and ' +
+      'push it back onto the SAME branch (do NOT open a new pull request). Group related fixes ' +
+      'into coherent commits.',
+    '',
+    'Findings to address (most severe first):',
+  ]
+  for (const finding of findings) {
+    const location = finding.line != null ? `${finding.path}:${finding.line}` : finding.path
+    lines.push('', `- [${finding.severity} · ${finding.category}] ${location} — ${finding.title}`)
+    if (finding.detail) lines.push(`  ${finding.detail}`)
+    if (finding.suggestedFix) lines.push(`  Suggested fix: ${finding.suggestedFix}`)
+  }
+  return lines.join('\n')
+}
+
+/**
+ * Turn the human-selected findings into a single advisory PR review to submit via
+ * `RepoFiles.createReview`. A finding with a resolvable `line` becomes an inline comment
+ * anchored to its `path`/`line`/`side` (default `RIGHT`); a finding with no line is summarised
+ * in the review `body` alongside the reviewer's overall `summary`. The event is always
+ * `COMMENT` (the deep review neither approves nor blocks the PR). Deterministic + total.
+ *
+ * The review always carries a non-empty `body`: GitHub can reject a `COMMENT`/`REQUEST_CHANGES`
+ * review with a blank body, so when neither a summary nor any unanchored findings supply one we
+ * fall back to a one-line count of the inline comments rather than submitting a bodyless review.
+ */
+export function buildPrReviewPost(
+  findings: PrReviewFinding[],
+  summary: string | null | undefined,
+): CreateReviewInput {
+  const comments: CreateReviewComment[] = []
+  const unanchored: PrReviewFinding[] = []
+  for (const finding of findings) {
+    if (finding.line != null && finding.path) {
+      comments.push({
+        path: finding.path,
+        line: finding.line,
+        side: finding.side ?? 'RIGHT',
+        body: renderFindingBody(finding),
+      })
+    } else {
+      unanchored.push(finding)
+    }
+  }
+  const bodyParts: string[] = []
+  if (summary?.trim()) bodyParts.push(summary.trim())
+  if (unanchored.length > 0) {
+    bodyParts.push(
+      'Additional findings (no specific line):',
+      unanchored.map((f) => `- ${renderFindingBody(f)}`).join('\n\n'),
+    )
+  }
+  // Never submit a bodyless review — fall back to a count of the inline comments when nothing
+  // else supplied a body (a summary-less review whose findings are all line-anchored).
+  if (bodyParts.length === 0) {
+    bodyParts.push(
+      `Deep review: ${comments.length} inline finding${comments.length === 1 ? '' : 's'}.`,
+    )
+  }
+  return {
+    event: 'COMMENT',
+    body: bodyParts.join('\n\n'),
+    comments,
+  }
 }

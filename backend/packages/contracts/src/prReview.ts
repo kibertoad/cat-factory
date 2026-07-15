@@ -11,10 +11,10 @@ import * as v from 'valibot'
 //
 // All review state rides the run's `pr-reviewer` step (`PipelineStep.prReview`) —
 // no side table — so it is runtime-symmetric by construction, exactly like
-// `forkDecision` / `followUps`. The two terminal resolutions (feed the selected
-// findings to a Fixer, or post them as inline PR review comments) are the tracked
-// follow-up (PR 3); PR 2 ships the slicing → park → multi-select loop with a
-// neutral `finish` resolution.
+// `forkDecision` / `followUps`. The human resolves the parked review one of three ways:
+// `finish` (record the curated selection), `fix` (feed the selected findings to a Fixer
+// that commits fixes onto the reviewed PR's branch) or `post` (publish them as inline PR
+// review comments). See backend/docs/adr/0023-pr-deep-review.md.
 // ---------------------------------------------------------------------------
 
 /**
@@ -84,8 +84,8 @@ export type PrReviewFinding = v.InferOutput<typeof prReviewFindingSchema>
  * The PR-review lifecycle on a `pr-reviewer` step:
  * - `reviewing`: the read-only reviewer container job is in flight (the agent dispatch).
  * - `awaiting_selection`: parked; the human curates which findings matter through the window.
- * - `fixing` / `posting`: a resolution is executing (PR 3 — the Fixer commits, or inline
- *   comments are posted). Unused in PR 2.
+ * - `fixing` / `posting`: a resolution is executing — the Fixer is committing fixes onto the
+ *   PR branch (`fixing`), or the selected findings are being posted as inline comments (`posting`).
  * - `done`: the review is resolved (the human finished; PR 3: fixed / posted).
  * - `skipped`: the reviewer isn't wired / produced nothing to review — the step passed through.
  */
@@ -100,12 +100,16 @@ export const prReviewStatusSchema = v.picklist([
 export type PrReviewStatus = v.InferOutput<typeof prReviewStatusSchema>
 
 /**
- * How the human resolved the review. PR 2 ships only `finish` (curate the selection + complete
- * the read-only review); PR 3 adds `fix` (feed the selected findings to a Fixer) and `post`
- * (post them as inline PR review comments). Adding members later is a non-breaking extension
- * (backwards compatibility is a non-goal — see CLAUDE.md).
+ * How the human resolved the review:
+ * - `finish` — curate the selection + complete the read-only review (no side effect).
+ * - `fix` — feed the selected findings to a Fixer, which clones the reviewed PR's head branch,
+ *   commits fixes addressing them, and pushes back onto it (reusing `FIXER_AGENT_KIND`).
+ * - `post` — publish the selected findings as inline PR review comments (a single advisory
+ *   `COMMENT` review) without changing any code.
+ *
+ * `fix`/`post` require at least one selected finding (there is nothing to act on otherwise).
  */
-export const prReviewResolutionSchema = v.picklist(['finish'])
+export const prReviewResolutionSchema = v.picklist(['finish', 'fix', 'post'])
 export type PrReviewResolution = v.InferOutput<typeof prReviewResolutionSchema>
 
 /**
@@ -193,8 +197,9 @@ export type PrReviewAgentOutput = v.InferOutput<typeof prReviewAgentOutputSchema
 
 /**
  * Resolve a parked PR review: the human's curated selection (`findingIds`) plus how to resolve
- * it (`action`). PR 2 supports only `finish` — record the selection and complete the read-only
- * review. The Fixer / inline-comment resolutions are PR 3.
+ * it (`action`). `finish` records the selection and completes the read-only review; `fix` feeds
+ * the selected findings to a Fixer (which commits fixes onto the reviewed PR's branch); `post`
+ * publishes them as inline PR review comments. `fix`/`post` require ≥1 selected finding.
  */
 export const resolvePrReviewSchema = v.object({
   action: v.optional(prReviewResolutionSchema, 'finish'),

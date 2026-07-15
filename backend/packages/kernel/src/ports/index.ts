@@ -124,6 +124,8 @@ export { type WorkRunner, NoopWorkRunner } from './work-runner.js'
 export { type ExecutionEventPublisher, NoopEventPublisher } from './execution-events.js'
 export type {
   CommitFilesResult,
+  CreateReviewComment,
+  CreateReviewInput,
   GitHubChangedFile,
   GitHubClient,
   GitHubCodeSearchHit,

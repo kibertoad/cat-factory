@@ -4705,11 +4705,21 @@
     "clear": "Wyczyść",
     "selectedCount": "Wybrano: {count}",
     "finish": "Zakończ przegląd",
+    "fix": "Napraw wybrane",
+    "post": "Opublikuj jako komentarze",
     "suggestedFix": "Sugerowana poprawka:",
     "line": "wiersz {line}",
     "reviewing": {
       "title": "Przeglądanie pull requesta…",
       "hint": "Dzielenie zmian na spójne części i przeglądanie każdej z nich."
+    },
+    "fixing": {
+      "title": "Naprawianie wybranych uwag…",
+      "hint": "Fixer zatwierdza zmiany dla wybranych uwag w gałęzi pull requesta."
+    },
+    "posting": {
+      "title": "Publikowanie komentarzy przeglądu…",
+      "hint": "Publikowanie wybranych uwag jako komentarzy w treści pull requesta."
     },
     "severity": {
       "blocker": "Blokujące",

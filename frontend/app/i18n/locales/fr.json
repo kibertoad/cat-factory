@@ -4705,11 +4705,21 @@
     "clear": "Effacer",
     "selectedCount": "{count} sélectionné(s)",
     "finish": "Terminer la revue",
+    "fix": "Corriger la sélection",
+    "post": "Publier en commentaires",
     "suggestedFix": "Correction suggérée :",
     "line": "ligne {line}",
     "reviewing": {
       "title": "Revue de la pull request…",
       "hint": "Découpage du diff en blocs cohérents et revue de chacun."
+    },
+    "fixing": {
+      "title": "Correction des points sélectionnés…",
+      "hint": "Un correcteur valide des modifications pour les points sélectionnés sur la branche de la pull request."
+    },
+    "posting": {
+      "title": "Publication des commentaires de revue…",
+      "hint": "Publication des points sélectionnés en commentaires en ligne sur la pull request."
     },
     "severity": {
       "blocker": "Bloquant",

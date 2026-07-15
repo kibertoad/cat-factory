@@ -4717,11 +4717,21 @@
     "clear": "Temizle",
     "selectedCount": "{count} seçildi",
     "finish": "İncelemeyi bitir",
+    "fix": "Seçilenleri düzelt",
+    "post": "Yorum olarak gönder",
     "suggestedFix": "Önerilen düzeltme:",
     "line": "satır {line}",
     "reviewing": {
       "title": "Pull request inceleniyor…",
       "hint": "Fark tutarlı parçalara bölünüp her biri inceleniyor."
+    },
+    "fixing": {
+      "title": "Seçili bulgular düzeltiliyor…",
+      "hint": "Bir düzeltici, seçili bulgular için değişiklikleri pull request dalına işliyor."
+    },
+    "posting": {
+      "title": "İnceleme yorumları gönderiliyor…",
+      "hint": "Seçili bulgular pull request üzerinde satır içi yorum olarak yayımlanıyor."
     },
     "severity": {
       "blocker": "Engelleyici",

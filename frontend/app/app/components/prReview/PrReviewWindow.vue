@@ -3,14 +3,21 @@
 // prioritized findings, opened via the universal result-view host. It reads the live review
 // state straight off the run's `pr-reviewer` step (`step.prReview`, kept fresh by the
 // execution stream) and lets a human multi-SELECT which findings matter, grouped by slice and
-// sorted by severity, then finish the review. The Fixer / inline-comment resolutions are the
-// tracked PR 3 follow-up; this window's `Finish review` records the curated selection.
+// sorted by severity, then resolve the review one of three ways: `Fix` (feed the selected
+// findings to a Fixer that commits fixes onto the PR branch), `Post` (publish them as inline PR
+// review comments), or `Finish` (just record the curated selection). Fix/Post act on the
+// selection, so they require at least one selected finding.
 import { computed, ref, watch } from 'vue'
 import { useResultView } from '~/composables/useResultView'
 import { useExecutionStore } from '~/stores/execution'
 import { useBoardStore } from '~/stores/board'
 import { usePrReviewStore } from '~/stores/prReview'
-import type { PrReviewFinding, PrReviewSeverity, PrReviewStepState } from '~/types/execution'
+import type {
+  PrReviewFinding,
+  PrReviewResolution,
+  PrReviewSeverity,
+  PrReviewStepState,
+} from '~/types/execution'
 
 const execution = useExecutionStore()
 const board = useBoardStore()
@@ -35,6 +42,9 @@ const step = computed(() => {
 const state = computed<PrReviewStepState | null>(() => step.value?.prReview ?? null)
 const status = computed(() => state.value?.status ?? null)
 const awaiting = computed(() => status.value === 'awaiting_selection')
+// A resolution is executing (the Fixer is committing, or comments are being posted) — show a
+// working state between the human's choice and the run advancing/the stream echoing `done`.
+const working = computed(() => status.value === 'fixing' || status.value === 'posting')
 const findings = computed<PrReviewFinding[]>(() => state.value?.findings ?? [])
 
 /** Severity → chip classes (styling, not copy). */
@@ -97,12 +107,16 @@ function clearAll(): void {
   selected.value = new Set()
 }
 
-const canFinish = computed(() => awaiting.value && !prReview.resolving)
+const canResolve = computed(() => awaiting.value && !prReview.resolving)
+// Fix / Post act on the selection, so they need at least one selected finding; Finish always
+// works (it just records the — possibly empty — curated selection and completes the review).
+const hasSelection = computed(() => selected.value.size > 0)
 
-async function onFinish(): Promise<void> {
+async function onResolve(action: PrReviewResolution): Promise<void> {
   const id = instanceId.value
-  if (!id || !canFinish.value) return
-  await prReview.resolve(id, [...selected.value]).catch(() => {})
+  if (!id || !canResolve.value) return
+  if ((action === 'fix' || action === 'post') && !hasSelection.value) return
+  await prReview.resolve(id, [...selected.value], action).catch(() => {})
 }
 </script>
 
@@ -160,6 +174,21 @@ async function onFinish(): Promise<void> {
             <UIcon name="i-lucide-loader-circle" class="h-8 w-8 animate-spin opacity-60" />
             <p class="text-sm">{{ t('prReview.reviewing.title') }}</p>
             <p class="max-w-sm text-[11px] text-slate-500">{{ t('prReview.reviewing.hint') }}</p>
+          </div>
+
+          <!-- A resolution is executing: the Fixer is committing / comments are being posted. -->
+          <div
+            v-else-if="working"
+            data-testid="pr-review-working"
+            class="flex h-full flex-col items-center justify-center gap-2 py-10 text-center text-slate-400"
+          >
+            <UIcon name="i-lucide-loader-circle" class="h-8 w-8 animate-spin opacity-60" />
+            <p class="text-sm">
+              {{ status === 'fixing' ? t('prReview.fixing.title') : t('prReview.posting.title') }}
+            </p>
+            <p class="max-w-sm text-[11px] text-slate-500">
+              {{ status === 'fixing' ? t('prReview.fixing.hint') : t('prReview.posting.hint') }}
+            </p>
           </div>
 
           <template v-else>
@@ -274,13 +303,31 @@ async function onFinish(): Promise<void> {
           class="flex items-center justify-end gap-2 border-t border-slate-800 px-5 py-3"
         >
           <UButton
-            color="primary"
-            :loading="prReview.resolving"
-            :disabled="!canFinish"
+            color="neutral"
+            variant="ghost"
+            :disabled="!canResolve"
             data-testid="pr-review-finish"
-            @click="onFinish"
+            @click="onResolve('finish')"
           >
             {{ t('prReview.finish') }}
+          </UButton>
+          <UButton
+            color="neutral"
+            variant="soft"
+            :disabled="!canResolve || !hasSelection"
+            data-testid="pr-review-post"
+            @click="onResolve('post')"
+          >
+            {{ t('prReview.post') }}
+          </UButton>
+          <UButton
+            color="primary"
+            :loading="prReview.resolving"
+            :disabled="!canResolve || !hasSelection"
+            data-testid="pr-review-fix"
+            @click="onResolve('fix')"
+          >
+            {{ t('prReview.fix') }}
           </UButton>
         </footer>
       </div>

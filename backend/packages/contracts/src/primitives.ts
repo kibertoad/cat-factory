@@ -197,7 +197,7 @@ export const taskTypeFieldsSchema = v.object({
    * `https://github.com/owner/repo/pull/123`). Folded into the task description for the
    * reviewer to read; today the reviewer clones the service's linked repo and fetches the
    * PR head by number from `origin`, so a cross-repo `prUrl` is not yet resolved to a
-   * different repo (a tracked follow-up — see docs/initiatives/pr-deep-review.md).
+   * different repo (a tracked follow-up — see backend/docs/adr/0023-pr-deep-review.md).
    */
   prUrl: v.optional(v.pipe(v.string(), v.trim(), v.maxLength(500))),
   /** Review: freeform focus/guidance for the reviewer (e.g. "focus on the auth changes"). */

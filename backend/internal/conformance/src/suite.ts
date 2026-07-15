@@ -45,6 +45,7 @@ import type {
   BinaryArtifactStore,
   CiStatusProvider,
   DeployCloneTarget,
+  CreateReviewInput,
   DocumentRecord,
   EnvironmentProvider,
   GateProbe,
@@ -68,7 +69,7 @@ import {
   registerStepResolver,
 } from '@cat-factory/kernel'
 import { afterEach, describe, expect, it } from 'vitest'
-import type { ConformanceHarness } from './harness.js'
+import type { ConformanceApp, ConformanceHarness } from './harness.js'
 import { FakeTesterQualityReviewer } from './FakeTesterQualityReviewer.js'
 import { FakeTaskSourceProvider } from './FakeTaskSourceProvider.js'
 import { makeFakeCi, makeFakeDocQuality, makeFakeReleaseHealth } from './fakeGateProviders.js'
@@ -1269,6 +1270,132 @@ export function defineCoreConformance(harness: ConformanceHarness): void {
           await call<WorkspaceSnapshot>('GET', `/workspaces/${wsId}`)
         ).body.blocks.find((b) => b.id === task.body.id)!
         expect(finalBlock.status).toBe('done')
+      })
+
+      // A checkout-free RepoFiles capturing the deep-review resolutions' VCS writes/reads (the
+      // suite's stand-in for a facade's GitHubClient-backed RepoFiles) — no real GitHub needed.
+      const makeReviewRepo = (
+        recorder: {
+          headRefFor?: number
+          posted?: { number: number; input: CreateReviewInput }[]
+        },
+        headRef: string | null = 'feature/pr-42',
+      ): RepoFiles => ({
+        getFile: async () => null,
+        listDirectory: async () => [],
+        headSha: async () => 'base-sha',
+        createBranch: async () => {},
+        deleteBranch: async () => {},
+        commitFiles: async () => ({ sha: 'commit-sha' }),
+        openPullRequest: async () => {
+          throw new Error('not exercised by this test')
+        },
+        pullRequestHeadRef: async (number) => {
+          recorder.headRefFor = number
+          return headRef
+        },
+        createReview: async (number, input) => {
+          ;(recorder.posted ??= []).push({ number, input })
+        },
+      })
+
+      const seedReviewTask = async (
+        call: ConformanceApp['call'],
+        drive: ConformanceApp['drive'],
+        wsId: string,
+      ) => {
+        const task = await call<Block>('POST', `/workspaces/${wsId}/blocks/blk_auth/tasks`, {
+          title: 'Review PR #42',
+          taskType: 'review',
+          taskTypeFields: { prNumber: 42, prUrl: 'https://github.com/o/r/pull/42' },
+        })
+        await call('POST', `/workspaces/${wsId}/blocks/${task.body.id}/executions`, {
+          pipelineId: 'pl_review',
+        })
+        const parked = (await drive(wsId)).find((e) => e.blockId === task.body.id)!
+        const step = parked.steps.find((s) => s.agentKind === 'pr-reviewer')!
+        return {
+          taskId: task.body.id,
+          executionId: parked.id,
+          findings: step.prReview?.findings ?? [],
+        }
+      }
+
+      it('resolves with `fix` — re-dispatches the step as a Fixer on the reviewed PR head branch', async () => {
+        const recorder: { headRefFor?: number } = {}
+        const { call, createWorkspace, drive } = harness.makeApp(
+          { customResult: reviewerOutput },
+          {
+            resolveRunRepoContext: async () => ({
+              repo: makeReviewRepo(recorder),
+              baseBranch: 'main',
+            }),
+          },
+        )
+        const { workspace } = await createWorkspace({ seed: true })
+        const wsId = workspace.id
+        const { taskId, executionId, findings } = await seedReviewTask(call, drive, wsId)
+
+        // Resolve with `fix`, selecting the blocker finding — re-arms the step to `fixing`.
+        const resolved = await call<PrReviewStepState>(
+          'POST',
+          `/workspaces/${wsId}/executions/${executionId}/pr-review/resolve`,
+          { action: 'fix', findingIds: [findings[0]!.id] },
+        )
+        expect(resolved.status).toBe(200)
+        expect(resolved.body.status).toBe('fixing')
+        expect(resolved.body.resolution).toBe('fix')
+
+        // Driving dispatches + completes the Fixer against the PR head branch, then finishes.
+        const done = (await drive(wsId)).find((e) => e.blockId === taskId)!
+        expect(done.status).toBe('done')
+        const finalStep = done.steps.find((s) => s.agentKind === 'pr-reviewer')!
+        expect(finalStep.prReview?.status).toBe('done')
+        expect(finalStep.prReview?.resolution).toBe('fix')
+        // The Fixer resolved PR #42's head branch to clone + push to (a review task has no own PR).
+        expect(recorder.headRefFor).toBe(42)
+      })
+
+      it('resolves with `post` — publishes the selected findings as inline PR review comments', async () => {
+        const recorder: { posted?: { number: number; input: CreateReviewInput }[] } = {}
+        const { call, createWorkspace, drive } = harness.makeApp(
+          { customResult: reviewerOutput },
+          {
+            resolveRunRepoContext: async () => ({
+              repo: makeReviewRepo(recorder),
+              baseBranch: 'main',
+            }),
+          },
+        )
+        const { workspace } = await createWorkspace({ seed: true })
+        const wsId = workspace.id
+        const { taskId, executionId, findings } = await seedReviewTask(call, drive, wsId)
+
+        // Resolve with `post`, selecting BOTH findings (one anchored, one line-less).
+        const resolved = await call<PrReviewStepState>(
+          'POST',
+          `/workspaces/${wsId}/executions/${executionId}/pr-review/resolve`,
+          { action: 'post', findingIds: findings.map((f) => f.id) },
+        )
+        expect(resolved.status).toBe(200)
+        expect(resolved.body.status).toBe('posting')
+
+        // Driving posts a single advisory review + finishes the read-only run.
+        const done = (await drive(wsId)).find((e) => e.blockId === taskId)!
+        expect(done.status).toBe('done')
+        const finalStep = done.steps.find((s) => s.agentKind === 'pr-reviewer')!
+        expect(finalStep.prReview?.status).toBe('done')
+        expect(finalStep.prReview?.resolution).toBe('post')
+
+        // Exactly one COMMENT review, to PR #42, with the anchored finding as an inline comment.
+        expect(recorder.posted).toHaveLength(1)
+        expect(recorder.posted![0]!.number).toBe(42)
+        expect(recorder.posted![0]!.input.event).toBe('COMMENT')
+        expect(
+          recorder.posted![0]!.input.comments.some(
+            (c) => c.path === 'src/auth.ts' && c.line === 12,
+          ),
+        ).toBe(true)
       })
     })
 

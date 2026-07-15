@@ -17,10 +17,11 @@ import type { AgentKindDefinition, AgentKindRegistry } from './registry.js'
 // token usage scales with the slice budget, not the whole PR.
 //
 // The structured JSON (slices + severity-ordered findings) is recorded on the step as
-// `result.custom` and rendered read-only by the shared `generic-structured` result
-// view — no bespoke UI. The human multi-select park loop (choose which findings to
-// address) and the two resolutions (feed a Fixer / post inline PR comments) are the
-// tracked follow-ups (see docs/initiatives/pr-deep-review.md).
+// `result.custom` and rendered by the dedicated `pr-review` window: the run parks for a
+// human to multi-select which findings matter, then resolve one of three ways — `finish`
+// (record the selection), `fix` (feed the selected findings to a Fixer that commits fixes
+// onto the PR branch) or `post` (publish them as inline PR review comments). See
+// backend/docs/adr/0023-pr-deep-review.md.
 //
 // The read-only guardrail + final-answer-in-reply directives are appended automatically
 // for a registered `container-explore` kind (see `applySurfaceDirectives`), so the
