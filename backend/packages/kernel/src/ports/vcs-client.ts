@@ -7,6 +7,7 @@ import type {
   GitHubPullRequest,
   GitHubRepo,
   MergePullRequestInput,
+  OpenedPullRequest,
   OpenPullRequestInput,
 } from '../domain/types.js'
 import type { VcsConnectionRef, VcsRepoRef } from '../domain/vcs-types.js'
@@ -236,7 +237,7 @@ export interface VcsClient {
     connection: VcsConnectionRef,
     ref: VcsRepoRef,
     input: OpenPullRequestInput,
-  ): Promise<GitHubPullRequest>
+  ): Promise<OpenedPullRequest>
   updatePullRequest(
     connection: VcsConnectionRef,
     ref: VcsRepoRef,

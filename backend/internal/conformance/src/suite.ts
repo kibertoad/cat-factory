@@ -2493,14 +2493,16 @@ export function defineAgentConformance(harness: ConformanceHarness): void {
       })
     })
 
-    describe('spike research pipeline (pl_spike)', () => {
+    describe('spike research pipeline (pl_spike / pl_spike_direct)', () => {
       // A spike is a timeboxed research task: the read-only built-in `spike` explore agent
-      // returns structured findings and a BACKEND post-op commits them to
-      // `docs/research/<slug>.md` on the base branch (no PR). `pl_spike` has no `merger`, so the
-      // task must reach `done` via the engine's no-PR completion path — not stall at `pr_ready`
-      // behind a PR-asserting notification whose confirm would throw `no_pr_to_merge`. Both the
-      // post-op commit AND the terminal state are asserted identically on every runtime so a
-      // facade can't diverge.
+      // returns structured findings and a BACKEND post-op DELIVERS them, following the pipeline:
+      //   - `pl_spike` (default): commit to a WORK branch + open a PR (recorded on the block via
+      //     the RepoOp seam) so the `conflicts → ci → human-review → merger` tail reviews + merges
+      //     it — protected base branches are respected.
+      //   - `pl_spike_direct`: commit `docs/research/<slug>.md` STRAIGHT onto the base branch (no
+      //     PR); with no `merger` the task reaches `done` via the engine's no-PR completion path.
+      // Both are asserted identically on every runtime so a facade (or the shared RepoOp/PR-record
+      // seam) can't diverge.
       const SPIKE_FINDINGS = {
         question: 'Should we adopt library X?',
         summary: 'X fits our needs with one caveat around bundle size.',
@@ -2511,7 +2513,78 @@ export function defineAgentConformance(harness: ConformanceHarness): void {
         confidence: 0.7,
       }
 
-      it('runs pl_spike to a `done` task with findings on the step and a committed research doc', async () => {
+      it('runs pl_spike by opening + recording a findings PR, then merging it to `done`', async () => {
+        // The PR-delivery seam end-to-end: the spike post-op sees a merge tail (opensPr), so it
+        // commits the findings to a WORK branch, opens a PR onto base, and returns its ref — which
+        // the engine records as `block.pullRequest`, exactly like a container-coding step. The
+        // `conflicts → ci → human-review` tail passes through (no providers wired) and the merger
+        // merges the recorded PR. Runtime-symmetric: the RepoOp PR-record path is shared engine code.
+        const commits: { branch: string }[] = []
+        const opened: { head: string; base: string }[] = []
+        const branches = new Set<string>(['main'])
+        const repo: RepoFiles = {
+          getFile: async () => null,
+          listDirectory: async () => [],
+          headSha: async (b) => (branches.has(b) ? `${b}-sha` : null),
+          createBranch: async (b) => {
+            branches.add(b)
+          },
+          deleteBranch: async () => {},
+          commitFiles: async (input) => {
+            commits.push({ branch: input.branch })
+            branches.add(input.branch)
+            return { sha: 'commit-sha' }
+          },
+          openPullRequest: async (input) => {
+            opened.push({ head: input.head, base: input.base })
+            return {
+              repoGithubId: 1,
+              number: 7,
+              githubId: 700,
+              title: input.title,
+              state: 'open',
+              headRef: input.head,
+              baseRef: input.base,
+              headSha: null,
+              merged: false,
+              author: 'bot',
+              updatedAt: 0,
+              syncedAt: 0,
+              url: 'https://github.test/acme/repo/pull/7',
+            }
+          },
+        }
+        const app = harness.makeApp(
+          {
+            customResult: SPIKE_FINDINGS,
+            confidence: 1,
+            mergeAssessment: { complexity: 0, risk: 0, impact: 0, rationale: 'Docs-only change.' },
+          },
+          { resolveRunRepoContext: async () => ({ repo, baseBranch: 'main' }) },
+        )
+        const { workspace } = await app.createWorkspace()
+        const wsId = workspace.id
+        const start = await app.call('POST', `/workspaces/${wsId}/blocks/task_login/executions`, {
+          pipelineId: 'pl_spike',
+        })
+        expect(start.status).toBe(201)
+        const exec = (await app.drive(wsId)).find((e) => e.blockId === 'task_login')!
+        const spikeStep = exec.steps.find((s) => s.agentKind === 'spike')!
+        expect(spikeStep.custom).toMatchObject({ recommendation: 'Adopt X behind a flag.' })
+        // Findings committed to the per-block WORK branch (not base), and a PR opened onto base.
+        expect(commits).toHaveLength(1)
+        expect(commits[0]?.branch).toBe('cat-factory/task_login')
+        expect(opened).toEqual([{ head: 'cat-factory/task_login', base: 'main' }])
+        // The engine recorded the opened PR on the block (the RepoOp PR-record seam) so the tail
+        // acts on it — a real link, not the projection that drops the URL.
+        const block = await app.blockRepository().get(wsId, 'task_login')
+        expect(block?.pullRequest?.url).toBe('https://github.test/acme/repo/pull/7')
+        expect(block?.pullRequest?.branch).toBe('cat-factory/task_login')
+        // The merger merged the recorded PR → the task is `done` (not stalled at pr_ready).
+        expect(block?.status).toBe('done')
+      })
+
+      it('runs pl_spike_direct to a `done` task with findings committed on the base branch (no PR)', async () => {
         const commits: { branch: string; files: { path: string; content: string }[] }[] = []
         const repo: RepoFiles = {
           getFile: async () => null,
@@ -2524,7 +2597,7 @@ export function defineAgentConformance(harness: ConformanceHarness): void {
             return { sha: 'commit-sha' }
           },
           openPullRequest: async () => {
-            throw new Error('a spike opens no PR')
+            throw new Error('pl_spike_direct opens no PR')
           },
         }
         const app = harness.makeApp(
@@ -2535,28 +2608,24 @@ export function defineAgentConformance(harness: ConformanceHarness): void {
         const wsId = workspace.id
 
         const start = await app.call('POST', `/workspaces/${wsId}/blocks/task_login/executions`, {
-          pipelineId: 'pl_spike',
+          pipelineId: 'pl_spike_direct',
         })
         expect(start.status).toBe(201)
 
         const exec = (await app.drive(wsId)).find((e) => e.blockId === 'task_login')!
         expect(exec.status).toBe('done')
-        // The read-only spike step carries its structured findings on `step.custom` (the
-        // `generic-structured` result view's source).
         const spikeStep = exec.steps.find((s) => s.agentKind === 'spike')!
         expect(spikeStep.custom).toMatchObject({ recommendation: 'Adopt X behind a flag.' })
-        // No merger + no PR ⇒ the TASK block finishes `done` via the no-PR completion path,
-        // rather than stalling at `pr_ready`.
+        // No merger + no PR ⇒ the TASK block finishes `done` via the no-PR completion path.
         expect((await app.blockRepository().get(wsId, 'task_login'))?.status).toBe('done')
-        // The post-op committed the rendered findings to `docs/research/*.md` on the BASE
-        // branch (the kind clones `base` and opens no PR), via the checkout-free RepoFiles.
+        // The post-op committed the rendered findings to `docs/research/*.md` on the BASE branch.
         expect(commits).toHaveLength(1)
         expect(commits[0]?.branch).toBe('main')
         expect(commits[0]?.files[0]?.path).toMatch(/^docs\/research\/.+\.md$/)
         expect(commits[0]?.files[0]?.content).toContain('Adopt X behind a flag.')
       })
 
-      it('settles a repo-less spike on step.custom without a commit (docs-only)', async () => {
+      it('settles a repo-less pl_spike_direct on step.custom without a commit (docs-only)', async () => {
         // With no repo resolvable (GitHub unwired, or a docs-only spike under an unlinked
         // service) the engine skips the post-op — the findings still settle on `step.custom`
         // and the task reaches `done`, so a research spike never fails just because it has no
@@ -2565,7 +2634,7 @@ export function defineAgentConformance(harness: ConformanceHarness): void {
         const { workspace } = await app.createWorkspace()
         const wsId = workspace.id
         const start = await app.call('POST', `/workspaces/${wsId}/blocks/task_login/executions`, {
-          pipelineId: 'pl_spike',
+          pipelineId: 'pl_spike_direct',
         })
         expect(start.status).toBe(201)
         const exec = (await app.drive(wsId)).find((e) => e.blockId === 'task_login')!
@@ -2575,11 +2644,11 @@ export function defineAgentConformance(harness: ConformanceHarness): void {
         expect((await app.blockRepository().get(wsId, 'task_login'))?.status).toBe('done')
       })
 
-      it('reaches `done` even when the findings commit is rejected (best-effort durable copy)', async () => {
+      it('reaches `done` even when the direct findings commit is rejected (best-effort durable copy)', async () => {
         // The findings already settle on `step.custom` (the UI's source of truth), so a repo
-        // that refuses the write — a protected base branch, a token without push, a transient
-        // API error — must NOT discard an otherwise-successful investigation. The post-op
-        // swallows the failure rather than failing the whole run.
+        // that refuses the DIRECT write — a protected base branch, a token without push, a
+        // transient API error — must NOT discard an otherwise-successful investigation. The
+        // post-op swallows the failure (direct mode is best-effort; PR mode is not).
         const repo: RepoFiles = {
           getFile: async () => null,
           listDirectory: async () => [],
@@ -2590,7 +2659,7 @@ export function defineAgentConformance(harness: ConformanceHarness): void {
             throw new Error('protected branch: refusing the push')
           },
           openPullRequest: async () => {
-            throw new Error('a spike opens no PR')
+            throw new Error('pl_spike_direct opens no PR')
           },
         }
         const app = harness.makeApp(
@@ -2600,7 +2669,7 @@ export function defineAgentConformance(harness: ConformanceHarness): void {
         const { workspace } = await app.createWorkspace()
         const wsId = workspace.id
         const start = await app.call('POST', `/workspaces/${wsId}/blocks/task_login/executions`, {
-          pipelineId: 'pl_spike',
+          pipelineId: 'pl_spike_direct',
         })
         expect(start.status).toBe(201)
         const exec = (await app.drive(wsId)).find((e) => e.blockId === 'task_login')!

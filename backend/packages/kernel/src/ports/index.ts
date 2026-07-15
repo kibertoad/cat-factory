@@ -186,6 +186,7 @@ export type {
   AgentSurface,
   RepoOp,
   RepoOpContext,
+  RepoOpResult,
 } from './agent-definition.js'
 export type {
   BranchProjectionRepository,

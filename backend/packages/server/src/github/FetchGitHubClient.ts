@@ -11,6 +11,7 @@ import {
   type GitHubIssueSearchHit,
   type GitHubSubIssue,
   type GitHubPullRequest,
+  type OpenedPullRequest,
   type GitHubPullRequestReview,
   type GitHubPullRequestComment,
   type GitHubReviewThread,
@@ -1043,14 +1044,20 @@ export class FetchGitHubClient implements GitHubClient {
     installationId: number,
     ref: GitHubRepoRef,
     input: OpenPullRequestInput,
-  ): Promise<GitHubPullRequest> {
+  ): Promise<OpenedPullRequest> {
     const { json } = await this.request(`/repos/${ref.owner}/${ref.repo}/pulls`, {
       installationId,
       method: 'POST',
       body: input,
     })
     const p = json as gp.GhPullPayload
-    return gp.toPullRequestProjection(p, gp.pullRepoGithubId(p) ?? 0, this.deps.clock.now())
+    // The projection drops `html_url` (not a sync field); the create response carries it, so
+    // surface it as the `OpenedPullRequest.url` a post-op records on the block.
+    const url = (json as { html_url?: string }).html_url ?? ''
+    return {
+      ...gp.toPullRequestProjection(p, gp.pullRepoGithubId(p) ?? 0, this.deps.clock.now()),
+      url,
+    }
   }
 
   async createIssue(

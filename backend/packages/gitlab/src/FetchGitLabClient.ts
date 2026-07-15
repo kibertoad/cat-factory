@@ -27,6 +27,7 @@ import { describeVcsApiError } from '@cat-factory/kernel'
 import type {
   CommitFilesInput,
   MergePullRequestInput,
+  OpenedPullRequest,
   OpenPullRequestInput,
 } from '@cat-factory/contracts'
 import type { GitLabTokenSource } from './tokenSource.js'
@@ -666,7 +667,7 @@ export class FetchGitLabClient implements VcsClient {
     connection: VcsConnectionRef,
     ref: VcsRepoRef,
     input: OpenPullRequestInput,
-  ): Promise<GitHubPullRequest> {
+  ): Promise<OpenedPullRequest> {
     const { json } = await this.request(`/projects/${projectPath(ref)}/merge_requests`, {
       connection,
       method: 'POST',
@@ -677,11 +678,13 @@ export class FetchGitLabClient implements VcsClient {
         description: input.body ?? '',
       },
     })
-    return toMergeRequestProjection(
-      json as GlMergeRequestPayload,
-      numericRepoId(ref),
-      this.deps.clock.now(),
-    )
+    const payload = json as GlMergeRequestPayload & { web_url?: string }
+    // GitLab returns the MR `web_url`; surface it as `OpenedPullRequest.url` (the GitHub
+    // analogue of `html_url`) so a backend post-op records a real link, provider-agnostically.
+    return {
+      ...toMergeRequestProjection(payload, numericRepoId(ref), this.deps.clock.now()),
+      url: payload.web_url ?? '',
+    }
   }
 
   async updatePullRequest(

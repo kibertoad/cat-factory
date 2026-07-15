@@ -1,5 +1,5 @@
 import * as v from 'valibot'
-import type { AgentRunContext, RepoOp } from '@cat-factory/kernel'
+import type { AgentRunContext, RepoOp, RepoOpContext, RepoOpResult } from '@cat-factory/kernel'
 import { defineStructuredOutput } from './structured-output.js'
 import type { AgentKindDefinition, AgentKindRegistry } from './registry.js'
 
@@ -11,10 +11,13 @@ import type { AgentKindDefinition, AgentKindRegistry } from './registry.js'
 // docs/tasks, the codebase) and a set of criteria, then returns a structured assessment
 // (question, findings, options compared, recommendation, open questions, confidence) with a
 // mandatory prose `summary` body. It is a read-only `container-explore` kind (like
-// `bug-investigator` / the `security-auditor` worked example): the container makes no edits,
-// opens no PR, and the mechanical render of the findings to `docs/research/<slug>.md` is the
-// deterministic backend {@link spikePostOp} over the checkout-free {@link RepoFiles} port —
-// committed straight onto the base branch (no PR), the way the `blueprints` post-op commits.
+// `bug-investigator` / the `security-auditor` worked example): the CONTAINER makes no edits and
+// opens no PR. The mechanical render of the findings to `docs/research/<slug>.md` is the
+// deterministic backend {@link spikePostOp} over the checkout-free {@link RepoFiles} port, which
+// DELIVERS them per the pipeline (see `RepoOpContext.opensPr`): the default `pl_spike` commits to
+// a work branch and opens a PR (reviewed + merged by the `conflicts → ci → human-review → merger`
+// tail, so protected base branches are respected), while `pl_spike_direct` commits straight onto
+// the base branch (best-effort, no PR), the way the `blueprints` post-op commits.
 //
 // The read-only guardrail + final-answer-in-reply directives are appended automatically for a
 // registered `container-explore` kind (see `applySurfaceDirectives` in `catalog.ts`); the
@@ -175,23 +178,35 @@ export function renderSpikeFindings(findings: SpikeFindings, title: string): str
   return `${lines.join('\n').trimEnd()}\n`
 }
 
+/** The per-block work branch a PR-delivered spike commits its findings to (then PRs to base). */
+function spikeWorkBranch(context: AgentRunContext): string {
+  return `cat-factory/${context.block.id}`
+}
+
+const SPIKE_COMMIT_MESSAGE = 'docs(research): update spike findings'
+
 /**
  * POST-OP for the `spike` kind: render the structured findings to `docs/research/<slug>.md`
- * (or the task's pinned `targetPath`) and commit them onto the run's branch — the base branch,
- * since the kind clones `base` and opens no PR (see `resolveRepoOpBranch`'s `base` arm). The
- * deterministic render lives here in plain backend TypeScript over the checkout-free
- * {@link RepoFiles}, exactly like the `blueprints`/`security-auditor` post-ops.
+ * (or the task's pinned `targetPath`) and DELIVER them to the repo. The deterministic render
+ * lives here in plain backend TypeScript over the checkout-free {@link RepoFiles}, exactly like
+ * the `blueprints`/`security-auditor` post-ops. Delivery follows the pipeline (via
+ * `ctx.opensPr`, derived by the engine from the run's steps — no per-task flag to drift):
+ *
+ *  - **PR mode** (`ctx.opensPr`, the default `pl_spike` pipeline with a merge tail): commit the
+ *    findings to a per-block WORK branch and open a pull request onto the base branch, returning
+ *    its {@link RepoOpResult.pullRequest} so the engine records `block.pullRequest` and the
+ *    downstream `conflicts → ci → human-review → merger` tail reviews + merges it. A failure here
+ *    IS fatal — the whole point of this mode is the PR, and the work branch isn't protected, so a
+ *    failed open is a real error worth surfacing (see {@link deliverSpikeViaPullRequest}).
+ *  - **Direct mode** (`pl_spike_direct`, no merge tail): commit straight onto the base branch,
+ *    BEST-EFFORT — the findings already live on `step.custom` (the UI's source of truth), so a
+ *    rejected write (a protected base branch, a token without push) must NOT discard an
+ *    otherwise-successful investigation; the failure is swallowed.
  *
  * IDEMPOTENT (byte-identical guard) so a durable-driver replay never double-commits, and a
  * no-op when the agent returned nothing parseable OR a present-but-empty object (a malformed
- * run commits no empty report — see {@link spikeHasRenderableFindings}).
- *
- * The commit is genuinely a BEST-EFFORT durable copy, not a precondition for success: the
- * findings already live on `step.custom` (the UI's source of truth), so a repo that rejects
- * the write — a protected base branch, a token without push, a transient API error — must NOT
- * discard an otherwise-successful investigation. A commit failure is therefore swallowed here
- * rather than propagated (a throwing post-op fails the whole run). The repo-less case (no repo
- * resolvable — GitHub unwired, or a docs-only spike under an unlinked service) is handled a
+ * run commits no empty report — see {@link spikeHasRenderableFindings}). The repo-less case (no
+ * repo resolvable — GitHub unwired, or a docs-only spike under an unlinked service) is handled a
  * layer up: the engine skips the whole hook before this runs.
  */
 export const spikePostOp: RepoOp = async (ctx) => {
@@ -199,12 +214,14 @@ export const spikePostOp: RepoOp = async (ctx) => {
   if (!findings || !spikeHasRenderableFindings(findings)) return
   const path = spikeFindingsPath(ctx.context)
   const content = renderSpikeFindings(findings, ctx.context.block.title)
+  if (ctx.opensPr) return deliverSpikeViaPullRequest(ctx, path, content)
+  // Direct mode: commit straight onto the base branch (`ctx.branch`), best-effort.
   try {
     const existing = await ctx.repo.getFile(path, ctx.branch)
     if (existing?.content === content) return
     await ctx.repo.commitFiles({
       branch: ctx.branch,
-      message: 'docs(research): update spike findings',
+      message: SPIKE_COMMIT_MESSAGE,
       files: [{ path, content }],
     })
   } catch {
@@ -212,6 +229,53 @@ export const spikePostOp: RepoOp = async (ctx) => {
     // (protected branch / missing push permission / transient API failure) leaves the spike
     // `done` with its findings intact rather than failing the run over the durable copy.
   }
+}
+
+/**
+ * PR-mode delivery: ensure the per-block work branch off base, commit the findings idempotently,
+ * and open (or reuse) a PR onto the base branch. `ctx.branch` is the base branch (the kind clones
+ * `base`), so it is the PR's target. Returns the opened PR for the engine to record. Not
+ * best-effort: a commit/PR failure fails the step — the pipeline's whole reason to be here is the
+ * PR, and a work branch is unprotected, so a failure is a genuine error. An empty repo (no base
+ * head) can have no PR, so it falls back to a direct base commit.
+ */
+async function deliverSpikeViaPullRequest(
+  ctx: RepoOpContext,
+  path: string,
+  content: string,
+): Promise<RepoOpResult | undefined> {
+  const base = ctx.branch
+  const workBranch = spikeWorkBranch(ctx.context)
+  if (!(await ctx.repo.headSha(workBranch))) {
+    const baseSha = await ctx.repo.headSha(base)
+    if (!baseSha) {
+      // Empty repo: nothing to branch from / PR against — commit onto base and skip the PR.
+      await ctx.repo.commitFiles({
+        branch: base,
+        message: SPIKE_COMMIT_MESSAGE,
+        files: [{ path, content }],
+      })
+      return
+    }
+    await ctx.repo.createBranch(workBranch, baseSha)
+  }
+  const existing = await ctx.repo.getFile(path, workBranch)
+  if (existing?.content !== content) {
+    await ctx.repo.commitFiles({
+      branch: workBranch,
+      message: SPIKE_COMMIT_MESSAGE,
+      files: [{ path, content }],
+    })
+  }
+  const pr = await ctx.repo.openPullRequest({
+    title: `Spike findings: ${ctx.context.block.title}`,
+    head: workBranch,
+    base,
+    body:
+      'Automated spike findings document. Review the rendered research below; ' +
+      'request changes with review comments (the fixer will amend this branch).',
+  })
+  return { pullRequest: { url: pr.url, number: pr.number, branch: workBranch } }
 }
 
 /**

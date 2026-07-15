@@ -278,6 +278,7 @@ describe('runRepoOps', () => {
       block: { title: 't', type: 'service', description: '' },
     } as AgentRunContext,
     branch: 'main',
+    opensPr: false,
   })
 
   it('runs ops in order', async () => {

@@ -122,8 +122,31 @@ Statuses: `todo` / `in-progress` / `done`. Update (+ PR link) at the end of each
   unlinked service still surfaces the pre-existing clean `ValidationError` at dispatch. No new
   engine coupling was added. A dedicated inline (no-container) spike surface is left to a later
   slice if repo-less spikes become the primary use case.
-- **Remaining:** P2 (gaps 8–10 — terminal/reading UX, merge-tail guard-rails, the
-  spike/`document` boundary docs) and the **e2e half of gap 11** (a spike spec).
+- **Follow-up PR — PR-delivery + human review (revises gap 4/D1, addresses part of gap 9).**
+  A direct commit to the base branch breaks on any repo with branch protection on `main`, and
+  gives findings no review path. So findings are now delivered as a **pull request by default**:
+  - `pl_spike` became `requirements-review`(off) → `spike` → `conflicts` → `ci` → `human-review`
+    → `merger`. The spike post-op, when it sees a merge tail (`RepoOpContext.opensPr`, derived by
+    the engine from the run's steps), commits the findings to the per-block WORK branch and opens
+    a PR onto base; the review/merge tail lands it. The existing `human-review` gate + `fixer`
+    handle **PR review comments** (the "same as code" flow) — a pass-through until a PR-review
+    provider is wired. `pl_spike_direct` keeps the fast no-PR path (commit straight to base,
+    best-effort) for unprotected repos.
+  - **New reusable engine seam:** a `RepoOp` may return a `RepoOpResult.pullRequest`; the engine
+    records it as `block.pullRequest` (mirroring `recordStepResult`'s container-PR path), so any
+    deterministic backend-rendered artifact can flow through the normal tail. `RepoFiles`/​`GitHubClient`/​`VcsClient`
+    `openPullRequest` now return the PR web `url` (`OpenedPullRequest`) provider-agnostically
+    (the projection dropped it). `blueprints`/​initiative-tracker committers can adopt this later
+    for protected-branch repos.
+  - Conformance: `pl_spike` opens + records the findings PR and merges to `done`;
+    `pl_spike_direct` covers the base-commit / repo-less / best-effort paths. Unit tests in
+    `spike.test.ts` pin PR-mode (work-branch commit + PR ref) vs direct-mode (best-effort).
+  - **Decision revised:** **D1/D3** — findings are delivered through a reviewed PR by default
+    (protected branches respected; human review available), not an unreviewed base commit. The
+    direct commit survives as the opt-in `pl_spike_direct`.
+- **Remaining:** P2 (gap 8 — terminal/reading UX; gap 10 — the spike/`document` boundary docs;
+  the rest of gap 9 — `merger`/`human-review` guard-rails for _hand-composed_ PR-less pipelines)
+  and the **e2e half of gap 11** (a spike spec).
 
 ## Open decisions
 

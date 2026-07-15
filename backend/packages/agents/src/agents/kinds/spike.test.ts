@@ -1,4 +1,4 @@
-import type { CommitFilesInput } from '@cat-factory/contracts'
+import type { CommitFilesInput, OpenPullRequestInput } from '@cat-factory/contracts'
 import type { AgentRunContext, RepoContentEntry, RepoFiles } from '@cat-factory/kernel'
 import { describe, expect, it } from 'vitest'
 import { systemPromptFor } from '../catalog.js'
@@ -17,30 +17,54 @@ import {
 // it (no module-global side effect).
 const registry = defaultAgentKindRegistry()
 
-/** A tiny in-memory RepoFiles that APPLIES commits, so idempotency can be tested end-to-end. */
+/**
+ * A tiny in-memory, BRANCH-AWARE RepoFiles that APPLIES commits + tracks branches and opened
+ * PRs, so both the direct-commit idempotency and the PR-delivery flow can be tested end-to-end.
+ * `main` exists from the start (a non-empty repo); other branches appear via `createBranch`.
+ */
 class FakeRepo implements RepoFiles {
   readonly commits: CommitFilesInput[] = []
-  constructor(private readonly fileMap: Map<string, string> = new Map()) {}
+  readonly opened: OpenPullRequestInput[] = []
+  private readonly branches = new Set<string>(['main'])
+  constructor(private readonly files: Map<string, string> = new Map()) {}
 
   async getFile(path: string) {
-    const content = this.fileMap.get(path)
+    const content = this.files.get(`${path}`)
     return content === undefined ? null : { content, sha: 'sha' }
   }
   async listDirectory(): Promise<RepoContentEntry[]> {
     return []
   }
-  async headSha() {
-    return 'head'
+  async headSha(branch: string) {
+    return this.branches.has(branch) ? `${branch}-sha` : null
   }
-  async createBranch() {}
+  async createBranch(branch: string) {
+    this.branches.add(branch)
+  }
   async deleteBranch() {}
   async commitFiles(input: CommitFilesInput) {
     this.commits.push(input)
-    for (const f of input.files) this.fileMap.set(f.path, f.content)
+    this.branches.add(input.branch)
+    for (const f of input.files) this.files.set(f.path, f.content)
     return { sha: 'commit' }
   }
-  async openPullRequest(): Promise<never> {
-    throw new Error('a spike opens no PR')
+  async openPullRequest(input: OpenPullRequestInput) {
+    this.opened.push(input)
+    return {
+      repoGithubId: 1,
+      number: 7,
+      githubId: 700,
+      title: input.title,
+      state: 'open' as const,
+      headRef: input.head,
+      baseRef: input.base,
+      headSha: null,
+      merged: false,
+      author: 'bot',
+      updatedAt: 0,
+      syncedAt: 0,
+      url: 'https://github.test/acme/repo/pull/7',
+    }
   }
 }
 
@@ -64,13 +88,18 @@ const WELL_FORMED = {
 const ctx = (
   repo: RepoFiles,
   custom: unknown,
-  block: { title?: string; taskTypeFields?: Record<string, unknown> } = {},
+  opts: { opensPr?: boolean; title?: string; taskTypeFields?: Record<string, unknown> } = {},
 ) => ({
   repo,
   branch: 'main',
+  opensPr: opts.opensPr ?? false,
   context: {
     agentKind: SPIKE_AGENT_KIND,
-    block: { title: block.title ?? 'Adopt X', taskTypeFields: block.taskTypeFields },
+    block: {
+      id: 'task_login',
+      title: opts.title ?? 'Adopt X',
+      taskTypeFields: opts.taskTypeFields,
+    },
   } as unknown as AgentRunContext,
   result: { output: '', custom },
 })
@@ -145,6 +174,29 @@ describe('spike agent kind', () => {
       // Must NOT throw — a protected branch / missing push permission cannot discard an
       // otherwise-successful investigation whose findings already settled on the step.
       await expect(spikePostOp(ctx(repo, WELL_FORMED))).resolves.toBeUndefined()
+    })
+
+    it('PR mode: commits to a work branch and opens a PR, returning its ref', async () => {
+      const repo = new FakeRepo()
+      const out = await spikePostOp(ctx(repo, WELL_FORMED, { opensPr: true }))
+      // Committed to the per-block work branch (not base), then PR'd onto base.
+      expect(repo.commits).toHaveLength(1)
+      expect(repo.commits[0]?.branch).toBe('cat-factory/task_login')
+      expect(repo.opened).toHaveLength(1)
+      expect(repo.opened[0]).toMatchObject({ head: 'cat-factory/task_login', base: 'main' })
+      // The opened PR is returned so the engine records it as `block.pullRequest`.
+      expect(out).toEqual({
+        pullRequest: {
+          url: 'https://github.test/acme/repo/pull/7',
+          number: 7,
+          branch: 'cat-factory/task_login',
+        },
+      })
+    })
+
+    it('PR mode: a failed open PROPAGATES (the PR is the whole point — not best-effort)', async () => {
+      const repo = new RejectingRepo()
+      await expect(spikePostOp(ctx(repo, WELL_FORMED, { opensPr: true }))).rejects.toThrow()
     })
   })
 
