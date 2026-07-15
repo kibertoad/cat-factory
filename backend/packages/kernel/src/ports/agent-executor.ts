@@ -257,11 +257,21 @@ export interface AgentRunContext {
    */
   service?: {
     /**
+     * The resolved service-frame's block `type` (`service` / `frontend` / `library` / …). The
+     * source of the frame CAPABILITY PROFILE (`frameProfile`): the deployer no-ops and the
+     * tester runs in suite posture on a `library` frame regardless of its `provisioning`. Always
+     * set when a frame resolves for the run, so a `library` frame with no provisioning still
+     * carries its type to the deployer/tester prompt + infra spec.
+     */
+    type?: BlockType
+    /**
      * The service-owned provisioning config — the provision type it produces
      * (`kubernetes` / `docker-compose` / `custom` / `infraless`) plus the in-repo
      * specifics. The Tester reads the type to pick its run mode (compose stand-up for
      * `docker-compose`, the provisioned env URL for `kubernetes`/`custom`, nothing for
      * `infraless`); the deployer merges it with the workspace handler at provision time.
+     * On a `library` frame a declared `composePath` is repo-local TEST infra stood up on
+     * localhost (see `testerInfraSpec`), NOT a deployable environment.
      */
     provisioning?: ServiceProvisioning
     cloudProvider?: CloudProvider

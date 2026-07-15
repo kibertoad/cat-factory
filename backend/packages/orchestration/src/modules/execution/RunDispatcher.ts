@@ -66,6 +66,7 @@ import {
   sameSubtasks,
 } from '@cat-factory/kernel'
 import {
+  frameProfile,
   frontendOriginsForService,
   parseBlueprintService,
   parseSpecDoc,
@@ -1626,9 +1627,14 @@ export class RunDispatcher {
     // connection, or a frontend frame — so the deployer records `{status:'skipped'}` and re-enters
     // for the next frame. This makes the deployer a safe NO-OP prefix that can be injected before
     // every tester/human-test step without failing services that never configured provisioning.
+    // A `library` frame (not `deployable`) is never deployed — a declared compose path is repo-local
+    // TEST infra, not an environment — so it stands nothing up here regardless of its provisioning.
+    // Gating every env branch on `deployable` forces the skip record below (mirroring `infraless`).
+    const deployable = frameProfile(next.frame.type).deployable
     const provisionType = next.provisioning?.type
-    const declaresEnv = provisionType === 'kubernetes' || provisionType === 'custom'
+    const declaresEnv = deployable && (provisionType === 'kubernetes' || provisionType === 'custom')
     const composeEnv =
+      deployable &&
       provisionType === 'docker-compose' &&
       next.provisioning !== undefined &&
       // Thread the run initiator so a local per-user handler OVERRIDE resolves exactly as it does at
@@ -1643,6 +1649,7 @@ export class RunDispatcher {
       )?.ok ??
         false)
     const legacyEnv =
+      deployable &&
       provisionType === undefined &&
       (await this.environmentProvisioning?.hasLegacyConnection(workspaceId))
     if (!declaresEnv && !composeEnv && !legacyEnv) {
@@ -2110,10 +2117,16 @@ export class RunDispatcher {
       byFrame.get(frameId)?.isPrimary ?? frameId === primaryFrameId
     const readyEntries = Object.entries(done).filter(([, env]) => env.status === 'ready')
     if (readyEntries.length === 0) {
-      // Every target was `infraless`/skipped — nothing stood up (the single-service infraless case
-      // plus the all-infraless fan-out).
+      // Every target was `infraless`/library/skipped — nothing stood up (the single-service
+      // infraless case plus the all-infraless fan-out). A `library` frame reports its own reason
+      // (it is never deployed) so the run timeline stays explainable, per the frame profile.
+      const primaryFrame = primaryFrameId ? byFrame.get(primaryFrameId)?.frame : undefined
+      const output =
+        primaryFrame && !frameProfile(primaryFrame.type).deployable
+          ? 'Library frame; no deployment or environment provisioned.'
+          : 'Service is infraless; no environment provisioned.'
       return this.recordStepResult(workspaceId, instance, step, isFinalStep, {
-        output: 'Service is infraless; no environment provisioned.',
+        output,
         model: 'environment:none',
       })
     }

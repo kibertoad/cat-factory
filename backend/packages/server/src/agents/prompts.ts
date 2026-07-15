@@ -6,6 +6,7 @@ import {
   userPromptFor,
 } from '@cat-factory/agents'
 import {
+  frameProfile,
   FRONTEND_WIREMOCK_PORT,
   resolveFrontendServePort,
   type InitiativePresetPhaseTemplate,
@@ -501,14 +502,16 @@ export function onCallUserPrompt(
 }
 
 /**
- * The tester's infra stand-up spec for the generic agent job, derived from the service's
- * declared provision type AND whether the run actually provisioned an environment: a
- * `docker-compose`/`kubernetes`/`custom` service — or ANY run that provisioned an env URL (e.g. a
- * `deployer` step) — runs against that ephemeral environment (`environment:'ephemeral'` + the URL
- * when present), since all three are stood up by the single Deployer step; an `infraless` service
- * (or none declared) stands nothing up (`local` + `noInfraDependencies`). The harness `infra` wire
- * shape is unchanged — only its source moved from the old `tester.environment` config to the
- * service's `provisioning` + the run env.
+ * The tester's infra stand-up spec for the generic agent job, derived from the frame's capability
+ * profile + its declared provision type AND whether the run actually provisioned an environment: a
+ * `library` frame (not `deployable`) runs its suite in-container, so it emits `local` + its
+ * repo/package-local `composePath` (reviving the harness `standUpInfra` DinD path) when one is
+ * declared, else `local` + `noInfraDependencies`; a `docker-compose`/`kubernetes`/`custom` service
+ * — or ANY run that provisioned an env URL (e.g. a `deployer` step) — runs against that ephemeral
+ * environment (`environment:'ephemeral'` + the URL when present), since all three are stood up by
+ * the single Deployer step; an `infraless` service (or none declared) stands nothing up (`local` +
+ * `noInfraDependencies`). The harness `infra` wire shape is unchanged. Kept in lock-step with
+ * {@link testerEnvironmentSection} (agents) so the prompt and the harness `infra` spec never disagree.
  */
 
 /**
@@ -560,6 +563,22 @@ export function testerInfraSpec(context: AgentRunContext): Record<string, unknow
   if (context.frontend) return buildFrontendInfraSpec(context.frontend)
 
   const provisioning = context.service?.provisioning
+  const frameType = context.service?.type
+  // A `library` frame runs the tester in `suite` posture: never deployed, no ephemeral env — it
+  // runs its suite in-container. Stand up its repo/package-local test dependencies on localhost when
+  // the frame declares a compose path — this REVIVES the harness `standUpInfra` DinD path (dormant
+  // since compose started routing to `ephemeral`) — so `{ environment: 'local', composePath }`.
+  // With no declared compose path the agent self-manages test deps via the repo's lifecycle
+  // scripts (`pretest:ci`/…), so nothing is stood up (`noInfraDependencies`). Keyed off the
+  // profile's `testPosture` so it stays in lock-step with the `testerEnvironmentSection` (agents)
+  // prompt narration, which keys its run-mode off the same flag.
+  if (frameType && frameProfile(frameType).testPosture === 'suite') {
+    const composePath = provisioning?.composePath?.trim()
+    return {
+      environment: 'local',
+      ...(composePath ? { composePath } : { noInfraDependencies: true }),
+    }
+  }
   const type = provisioning?.type
   const envUrl = context.environment?.url
   // The involved connected services with a LIVE ephemeral env this run (title → URL), so a

@@ -524,6 +524,11 @@ export class AgentContextBuilder {
           )
     if (!frame) return undefined
     const service: NonNullable<AgentRunContext['service']> = {}
+    // Always carry the frame's block `type` — it is the source of the frame capability profile
+    // (`frameProfile`), so a `library` frame with no provisioning/provider still reaches the
+    // deployer skip + the tester's suite posture. Setting it unconditionally also means `service`
+    // is defined whenever a frame resolves (its only consumers read specific fields off it).
+    service.type = frame.type
     if (frame.provisioning) service.provisioning = frame.provisioning
     if (frame.cloudProvider) service.cloudProvider = frame.cloudProvider
     else {
