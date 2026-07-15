@@ -2904,6 +2904,7 @@
       "grantAccessTitle": "Otwórz ustawienia instalacji aplikacji, aby przyznać jej dostęp do repozytorium",
       "refreshList": "Odśwież listę",
       "done": "Gotowe",
+      "donePendingHint": "Najpierw dodaj wybrane usługi albo wyczyść zaznaczenie — w przeciwnym razie te wybory zostaną odrzucone.",
       "add": "Dodaj usługę",
       "toast": {
         "addedTitle": "Dodano usługę",

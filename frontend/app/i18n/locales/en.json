@@ -2996,6 +2996,7 @@
       "grantAccessTitle": "Open the App's installation settings to grant it access to a repository",
       "refreshList": "Refresh list",
       "done": "Done",
+      "donePendingHint": "Add your selected services first, or clear the selection — otherwise those picks are discarded.",
       "add": "Add service",
       "toast": {
         "addedTitle": "Service added",
