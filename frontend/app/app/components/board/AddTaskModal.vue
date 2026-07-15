@@ -76,6 +76,11 @@ const TASK_TYPES = computed<{ value: TaskTypeChoice; label: string; icon: string
     { value: 'bug', label: t('board.addTask.types.bug'), icon: 'i-lucide-bug' },
     { value: 'document', label: t('board.addTask.types.document'), icon: 'i-lucide-file-text' },
     { value: 'spike', label: t('board.addTask.types.spike'), icon: 'i-lucide-flask-conical' },
+    {
+      value: 'review',
+      label: t('board.addTask.types.review'),
+      icon: 'i-lucide-clipboard-check',
+    },
     { value: 'recurring', label: t('board.addTask.types.recurring'), icon: 'i-lucide-repeat' },
   ]
   // A document repository only accepts document/spike tasks (see BoardService.addTask).
@@ -103,6 +108,10 @@ const docKind = ref<DocKind | ''>('')
 const docAudience = ref('')
 const docTargetPath = ref('')
 const docOutlineHints = ref('')
+// Review-task fields: the target PR (URL or bare number) + optional review focus.
+const reviewPrUrl = ref('')
+const reviewPrNumber = ref<number | undefined>(undefined)
+const reviewFocus = ref('')
 // Per-kind specific fields (see DOC_KIND_FIELDS). Held in one keyed record; only the fields
 // for the selected kind are shown and submitted, so a value from a previously-selected kind is
 // never sent. The catalog keys below keep the labels/placeholders i18n and drift-guarded.
@@ -166,6 +175,19 @@ function buildTypeFields(): TaskTypeFields | undefined {
       const value = docKindFieldValues[spec.key]?.trim()
       if (value) f[spec.key] = value
     }
+    return Object.keys(f).length ? f : undefined
+  }
+  if (taskType.value === 'review') {
+    const f: TaskTypeFields = {}
+    if (reviewPrUrl.value.trim()) f.prUrl = reviewPrUrl.value.trim()
+    else if (
+      typeof reviewPrNumber.value === 'number' &&
+      Number.isFinite(reviewPrNumber.value) &&
+      reviewPrNumber.value >= 1
+    ) {
+      f.prNumber = reviewPrNumber.value
+    }
+    if (reviewFocus.value.trim()) f.reviewFocus = reviewFocus.value.trim()
     return Object.keys(f).length ? f : undefined
   }
   return undefined
@@ -381,6 +403,9 @@ watch(open, (isOpen) => {
   docAudience.value = ''
   docTargetPath.value = ''
   docOutlineHints.value = ''
+  reviewPrUrl.value = ''
+  reviewPrNumber.value = undefined
+  reviewFocus.value = ''
   for (const key of Object.keys(docKindFieldValues) as DocKindFieldKey[])
     delete docKindFieldValues[key]
   riskPolicyId.value = ''
@@ -715,6 +740,30 @@ async function add() {
                 v-else
                 v-model="docKindFieldValues[spec.key]"
                 :placeholder="t(DOC_FIELD_PLACEHOLDER_KEYS[spec.key])"
+                class="w-full"
+              />
+            </UFormField>
+          </div>
+
+          <div v-else-if="taskType === 'review'" class="space-y-3">
+            <UFormField
+              :label="t('board.addTask.review.prUrl')"
+              :hint="t('board.addTask.review.prUrlHint')"
+            >
+              <UInput
+                v-model="reviewPrUrl"
+                placeholder="https://github.com/owner/repo/pull/123"
+                class="w-full"
+              />
+            </UFormField>
+            <UFormField
+              :label="t('board.addTask.review.focus')"
+              :hint="t('board.addTask.optional')"
+            >
+              <UTextarea
+                v-model="reviewFocus"
+                :rows="2"
+                :placeholder="t('board.addTask.review.focusPlaceholder')"
                 class="w-full"
               />
             </UFormField>

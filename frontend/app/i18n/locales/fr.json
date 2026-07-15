@@ -167,7 +167,8 @@
         "bug": "Bug",
         "document": "Document",
         "spike": "Spike",
-        "recurring": "Récurrent"
+        "recurring": "Récurrent",
+        "review": "Revue"
       },
       "recurringWithFrame": "Une tâche récurrente exécute une pipeline selon une cadence. Continuez pour définir le calendrier et le prompt.",
       "recurringNoFrame": "Une tâche récurrente doit appartenir à un service. Ajoutez-la depuis un cadre de service (ou un module à l’intérieur).",
@@ -263,7 +264,13 @@
       "continue": "Continuer",
       "submit": "Ajouter la tâche",
       "addFailedTitle": "Impossible d’ajouter la tâche",
-      "linkFailed": "Tâche ajoutée, mais {count} pièce jointe n’a pas pu être liée | Tâche ajoutée, mais {count} pièces jointes n’ont pas pu être liées"
+      "linkFailed": "Tâche ajoutée, mais {count} pièce jointe n’a pas pu être liée | Tâche ajoutée, mais {count} pièces jointes n’ont pas pu être liées",
+      "review": {
+        "prUrl": "Pull request",
+        "prUrlHint": "URL ou numéro de la pull request à examiner",
+        "focus": "Objet de la revue",
+        "focusPlaceholder": "p. ex. concentrez-vous sur les changements d'authentification et la gestion des erreurs"
+      }
     },
     "recurring": {
       "title": "Ajouter une pipeline récurrente",
@@ -2363,7 +2370,8 @@
         "feature": "fonctionnalité",
         "bug": "bug",
         "document": "document",
-        "spike": "spike"
+        "spike": "spike",
+        "review": "revue"
       },
       "observability": {
         "heading": "Observabilité de l'agent",

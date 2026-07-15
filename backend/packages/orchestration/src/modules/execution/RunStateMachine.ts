@@ -20,6 +20,7 @@ import {
   isInitiativeAgentKind,
   RunContendedError,
 } from '@cat-factory/kernel'
+import { allPullRequests } from '@cat-factory/contracts'
 import { MERGER_AGENT_KIND } from './ci.logic.js'
 import { type InitiativeRunHarvest, extractRunHarvest } from '../initiative/initiative.logic.js'
 import type { NotificationService } from '../notifications/NotificationService.js'
@@ -472,6 +473,16 @@ export class RunStateMachine {
           progress: 1,
         })
       }
+      return
+    }
+
+    // No merger AND no PR was produced: a read-only / findings pipeline (a PR deep-review, a
+    // spike, a bare analysis) opened nothing to merge — the run's OUTPUT is the deliverable, so
+    // the task is simply `done`. Marking it `pr_ready` + raising the (PR-assuming)
+    // `pipeline_complete` card would strand it in a confirm-and-merge flow that has no PR to act
+    // on. This is the no-PR terminal path the review/spike pipelines rely on to finish cleanly.
+    if (!block.pullRequest?.branch && allPullRequests(block).length === 0) {
+      await this.blockRepository.update(workspaceId, block.id, { status: 'done', progress: 1 })
       return
     }
 

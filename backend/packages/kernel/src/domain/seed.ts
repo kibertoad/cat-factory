@@ -528,6 +528,12 @@ export function seedPipelines(): Pipeline[] {
     // A blueprint-only pipeline, run after a bootstrap to create the initial
     // service map (and populate the board) from the freshly bootstrapped repo.
     { id: 'pl_blueprint', name: 'Map service', agentKinds: ['blueprints'] },
+    // The PR deep-review pipeline (the DEFAULT for a `review` task): a single read-only
+    // `pr-reviewer` step that slices an open PR's diff into cohesive chunks, reviews each,
+    // and returns prioritized findings. No code is written and no PR is opened, so there is
+    // no merge tail — the run terminates cleanly via the no-PR terminal path in
+    // `RunStateMachine.finalizeBlock`. See docs/initiatives/pr-deep-review.md.
+    { id: 'pl_review', name: 'Review a pull request', agentKinds: ['pr-reviewer'] },
     definePipeline({
       // The Initiative Planning pipeline — the ONLY pipeline runnable on an
       // `initiative`-level block (and initiative blocks accept no other; see the
@@ -718,13 +724,23 @@ export const DOCUMENT_PIPELINE_ID = 'pl_document'
 export const DOCUMENT_QUICK_PIPELINE_ID = 'pl_document_quick'
 
 /**
- * The pipeline a task of the given task type should default to when the creator pins none. Only
- * `document` tasks get a non-default today (the full-build `pl_full` is wrong for a document);
- * every other task type falls through to the workspace's positional default. Returns `undefined`
- * when there is no type-specific default, so the caller leaves `pipelineId` unset.
+ * Pipeline id of the PR deep-review pipeline (`pr-reviewer`). The DEFAULT pipeline a
+ * `taskType: 'review'` task is pinned to at creation ({@link defaultPipelineIdForTaskType}) — the
+ * full-build pipeline makes no sense for a review (no code / spec / tests, no PR opened).
+ */
+export const REVIEW_PIPELINE_ID = 'pl_review'
+
+/**
+ * The pipeline a task of the given task type should default to when the creator pins none.
+ * `document` tasks get the document-authoring pipeline and `review` tasks the PR-review pipeline
+ * (the full-build `pl_full` is wrong for both); every other task type falls through to the
+ * workspace's positional default. Returns `undefined` when there is no type-specific default, so
+ * the caller leaves `pipelineId` unset.
  */
 export function defaultPipelineIdForTaskType(taskType: Block['taskType']): string | undefined {
-  return taskType === 'document' ? DOCUMENT_PIPELINE_ID : undefined
+  if (taskType === 'document') return DOCUMENT_PIPELINE_ID
+  if (taskType === 'review') return REVIEW_PIPELINE_ID
+  return undefined
 }
 
 /** Pipeline ids of the built-in recurring-pipeline presets. */
