@@ -1,5 +1,41 @@
 # @cat-factory/worker
 
+## 0.87.0
+
+### Minor Changes
+
+- 6564507: Add platform-operator observability: a deployment-level operator dashboard.
+
+  A new `PlatformMetricsRepository` kernel port exposes SQL rollups over `agent_runs`
+  (run outcomes, failure-kind taxonomy, live/parked depth, duration stats, and a
+  time-bucketed outcome trend), scoped to an account and implemented on both the D1
+  (Cloudflare) and Drizzle (Postgres/Node) stores with cross-runtime conformance. The
+  admin-gated `GET /accounts/:accountId/observability/platform` endpoint returns a
+  windowed (1h / 24h / 7d) projection, surfaced in the SPA as an operator dashboard
+  panel (outcome tiles + success rate, an outcome-trend sparkline, the failure
+  breakdown, live depth, and duration stats), reachable from the sidebar by account
+  admins. Fully internationalized.
+
+### Patch Changes
+
+- Updated dependencies [6564507]
+  - @cat-factory/kernel@0.133.0
+  - @cat-factory/contracts@0.139.0
+  - @cat-factory/orchestration@0.116.0
+  - @cat-factory/server@0.128.0
+  - @cat-factory/agents@0.61.2
+  - @cat-factory/caching@0.9.2
+  - @cat-factory/consensus@0.10.60
+  - @cat-factory/eks@0.1.87
+  - @cat-factory/gates@0.5.44
+  - @cat-factory/gitlab@0.10.6
+  - @cat-factory/integrations@0.84.9
+  - @cat-factory/observability-langfuse@0.7.214
+  - @cat-factory/observability-otel@0.1.8
+  - @cat-factory/provider-cloudflare@0.7.231
+  - @cat-factory/spend@0.12.40
+  - @cat-factory/prompt-fragments@0.13.28
+
 ## 0.86.1
 
 ### Patch Changes
