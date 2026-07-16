@@ -1,9 +1,11 @@
 import type {
   Clock,
   CreateRiskPolicyInput,
+  GroupCacheHandle,
   IdGenerator,
   RiskPolicyRepository,
   RiskPolicy,
+  RiskPolicyCacheValue,
   UpdateRiskPolicyInput,
   WorkspaceRepository,
 } from '@cat-factory/kernel'
@@ -21,6 +23,12 @@ export interface RiskPolicyServiceDependencies {
   workspaceRepository: WorkspaceRepository
   idGenerator: IdGenerator
   clock: Clock
+  /**
+   * Optional: the {@link AppCaches.riskPolicy} slice the engine reads a task's resolved preset
+   * through. Every write below invalidates the workspace group so a preset edit is visible on the
+   * very next gate evaluation. Absent → the engine reads live (tests / no cache wired).
+   */
+  riskPolicyCache?: GroupCacheHandle<RiskPolicyCacheValue>
 }
 
 /**
@@ -37,12 +45,23 @@ export class RiskPolicyService {
   private readonly workspaceRepository: WorkspaceRepository
   private readonly idGenerator: IdGenerator
   private readonly clock: Clock
+  private readonly cache?: GroupCacheHandle<RiskPolicyCacheValue>
 
   constructor(deps: RiskPolicyServiceDependencies) {
     this.presets = deps.riskPolicyRepository
     this.workspaceRepository = deps.workspaceRepository
     this.idGenerator = deps.idGenerator
     this.clock = deps.clock
+    this.cache = deps.riskPolicyCache
+  }
+
+  /**
+   * Drop the workspace's cached preset library after a write commits. Coarse (one group == one
+   * workspace) because a write can flip which preset is the default, so a single edit's blast
+   * radius is the whole library — over-invalidation is always safe (CLAUDE.md caching rule).
+   */
+  private async invalidate(workspaceId: string): Promise<void> {
+    await this.cache?.invalidateGroup(workspaceId)
   }
 
   /** List a workspace's presets, seeding the built-in catalog if none exist yet. */
@@ -76,6 +95,7 @@ export class RiskPolicyService {
       createdAt: this.clock.now(),
     }
     await this.presets.upsert(workspaceId, preset)
+    await this.invalidate(workspaceId)
     return preset
   }
 
@@ -116,6 +136,7 @@ export class RiskPolicyService {
       ...(patch.isDefault !== undefined ? { isDefault: patch.isDefault } : {}),
     }
     await this.presets.upsert(workspaceId, updated)
+    await this.invalidate(workspaceId)
     return updated
   }
 
@@ -127,6 +148,7 @@ export class RiskPolicyService {
       throw new ConflictError('Cannot delete the default preset; promote another preset first.')
     }
     await this.presets.remove(workspaceId, id)
+    await this.invalidate(workspaceId)
   }
 
   /**
@@ -162,6 +184,7 @@ export class RiskPolicyService {
       createdAt: existing?.createdAt ?? this.clock.now(),
     }
     await this.presets.upsert(workspaceId, preset)
+    await this.invalidate(workspaceId)
     return preset
   }
 
@@ -178,6 +201,9 @@ export class RiskPolicyService {
         createdAt: now + offset++,
       })
     }
+    // A gate that resolved before first-use seeding cached the null default; drop it so the
+    // freshly-seeded default (not the built-in fallback) is read on the very next evaluation.
+    await this.invalidate(workspaceId)
   }
 
   /** A catalog seed as a persisted preset (its stable id + version, without `createdAt`). */

@@ -1,5 +1,59 @@
 # @cat-factory/server
 
+## 0.123.1
+
+### Patch Changes
+
+- bd0a42a: refactor(server): finish the generic row-mapper adoption (refactoring candidate #2)
+
+  The last two hand-enumerated read mappers in `persistence/mappers.ts` — `rowToWorkspace` and
+  `rowToPipeline` — now derive from a declared field table instead of a hand-written object
+  literal, via a small read-only path (`makeRowReader` + the `readScalar` / `readNullable` /
+  `readJson` / `readOptJson` / `readFlag` / `readOptScalar` builders). Both are read-only in this
+  module (their repos bind columns positionally on write), so they declare only the READ
+  direction rather than a full three-way `FieldMapper`. `rowToExecution` stays deliberately
+  bespoke (its tolerant `detail` JSON envelope isn't a column-per-field shape). Pure refactor,
+  no behaviour change; the flag / version / availability / optional-JSON read semantics are
+  pinned by new `test/mappers.spec.ts` cases.
+
+## 0.123.0
+
+### Minor Changes
+
+- 745de02: feat(mothership): real-time upstream publish (the outbound half of PR 2's real-time both directions)
+
+  A mothership-mode local node runs the engine on the laptop but delegates org/durable state to the
+  mothership. Until now its engine events (a run advancing, a board change, a notification) never
+  reached the mothership's real-time fan-out, so a hosted teammate watching the same shared board
+  couldn't see the local node's activity live. This adds the upstream channel.
+
+  - `@cat-factory/server`: a new machine-authed `POST /internal/events/publish` endpoint
+    (`eventsRelayController`) + the `MachineEventRelay` seam on `ServerContainer` + the
+    `HttpMachineEventClient`. Mounted on both facades; account-scoped and default-deny exactly like
+    the persistence RPC (a workspace outside the token's scope is a uniform 404). The verbatim-forwarded
+    payload is size-capped (413 above the ceiling) so a compromised node can't inject an unbounded frame.
+  - `@cat-factory/node-server`: `LocalMachineEventRelay` delivers a relayed event into the facade's
+    own real-time sink (the hub / layered propagator); attached whenever a realtime sink is wired.
+  - `@cat-factory/worker`: `DurableObjectMachineEventRelay` delivers a relayed event into the
+    per-workspace `WorkspaceEventsHub` Durable Object — the symmetric Cloudflare side.
+  - `@cat-factory/local-server`: `MothershipWebSocketPropagator` (a `WebSocketPropagator` adapter,
+    reusing the existing cross-node seam) forwards the local node's engine events upstream; it is
+    layered over the hub in mothership mode so every event fans to the laptop's own SPA AND the
+    mothership.
+
+  Scope: this is the OUTBOUND direction only. The INBOUND subscribe leg (the local node receiving org
+  events raised on the mothership / by peer laptops) is a distinct, runtime-shaped follow-up — see
+  `docs/initiatives/mothership-mode.md`.
+
+### Patch Changes
+
+- Updated dependencies [6108525]
+  - @cat-factory/orchestration@0.113.1
+  - @cat-factory/kernel@0.129.1
+  - @cat-factory/agents@0.59.1
+  - @cat-factory/integrations@0.84.4
+  - @cat-factory/spend@0.12.35
+
 ## 0.122.0
 
 ### Minor Changes

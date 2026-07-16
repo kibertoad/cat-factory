@@ -138,6 +138,7 @@ import type {
   WorkspaceRepository,
 } from '@cat-factory/kernel'
 import type { Clock, IdGenerator, PreloadedBlocks } from '@cat-factory/kernel'
+import type { GroupCacheHandle, RiskPolicy, RiskPolicyCacheValue } from '@cat-factory/kernel'
 import type { AgentExecutor, ResolveRunRepoContext, TestSecretRef } from '@cat-factory/kernel'
 import { isAsyncAgentExecutor } from '@cat-factory/kernel'
 import type { WorkRunner } from '@cat-factory/kernel'
@@ -455,6 +456,13 @@ export interface ExecutionServiceDependencies {
    */
   riskPolicyRepository?: RiskPolicyRepository
   /**
+   * Optional: the {@link AppCaches.riskPolicy} slice — read-through for `resolveRiskPolicy`
+   * so the slow-moving merge-preset row isn't re-fetched on every gate evaluation. Absent →
+   * every resolve hits the repository (tests / no cache wired). Invalidated by
+   * `RiskPolicyService` on every preset write.
+   */
+  riskPolicyCache?: GroupCacheHandle<RiskPolicyCacheValue>
+  /**
    * Optional: runs the gate-probe / merge GitHub reads under the run initiator's
    * ambient context, so a per-user PAT (when set) is preferred over the deployment's
    * App/env token (see `PatPreferringAppRegistry`). Absent → a pass-through
@@ -589,6 +597,7 @@ export class ExecutionService {
   private readonly prMerger?: PullRequestMerger
   private readonly notifications?: NotificationService
   private readonly riskPolicyRepository?: RiskPolicyRepository
+  private readonly riskPolicyCache?: GroupCacheHandle<RiskPolicyCacheValue>
   private readonly issueWriteback?: IssueWritebackProvider
   private readonly subscriptionActivations?: SubscriptionActivationRepository
   private readonly pokeInitiativeLoop?: (
@@ -666,6 +675,7 @@ export class ExecutionService {
     llmObservability,
     pullRequestMerger,
     riskPolicyRepository,
+    riskPolicyCache,
     ticketTrackerProvider,
     issueWriteback,
     bugIntakeService,
@@ -962,6 +972,7 @@ export class ExecutionService {
     this.prMerger = pullRequestMerger
     this.notifications = notificationService
     this.riskPolicyRepository = riskPolicyRepository
+    this.riskPolicyCache = riskPolicyCache
     this.issueWriteback = issueWriteback
     this.subscriptionActivations = subscriptionActivationRepository
     this.pokeInitiativeLoop = pokeInitiativeLoop
@@ -2981,12 +2992,27 @@ export class ExecutionService {
     autoMergeEnabled: boolean
     forkDecision?: StepGating | null
   }> {
-    if (this.riskPolicyRepository) {
+    const repo = this.riskPolicyRepository
+    if (repo) {
+      // Read each preset through the cache slice when wired: the row is slow-moving admin config
+      // re-read on every gate evaluation. Group by workspace (one write drops the whole library),
+      // keyed per resolved id so a picked preset and the default cache separately. A null (deleted
+      // id / unseeded default) caches as a value and still falls through, exactly as an uncached
+      // read would (the `RiskPolicyCacheValue` wrapper).
+      const read = async (
+        key: string,
+        load: () => Promise<RiskPolicy | null>,
+      ): Promise<RiskPolicy | null> => {
+        const cache = this.riskPolicyCache
+        if (!cache) return load()
+        return (await cache.get(key, workspaceId, async () => ({ policy: await load() }))).policy
+      }
       if (block.riskPolicyId) {
-        const picked = await this.riskPolicyRepository.get(workspaceId, block.riskPolicyId)
+        const id = block.riskPolicyId
+        const picked = await read(`picked:${id}`, () => repo.get(workspaceId, id))
         if (picked) return picked
       }
-      const fallback = await this.riskPolicyRepository.getDefault(workspaceId)
+      const fallback = await read('default', () => repo.getDefault(workspaceId))
       if (fallback) return fallback
     }
     return DEFAULT_RISK_POLICY
