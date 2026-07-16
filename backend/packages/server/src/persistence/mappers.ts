@@ -308,6 +308,12 @@ function optBoolIntField<D, P>(prop: string, column = toSnake(prop)): FieldMappe
 // {@link makeRowReader} folds a list of them into a `rowTo*` function, exactly like
 // {@link makeEntityMapper} does for the read direction. This keeps the LAST hand-enumerated
 // read mappers on the same "declare each column once" pattern as `blocks`.
+//
+// NOTE: the `<Row, Domain>` generics on {@link makeRowReader} are a boundary cast only — the
+// readers operate over `AnyRow`, so a mistyped property or column name (or a required `Domain`
+// field left undeclared) compiles cleanly and is caught by `test/mappers.spec.ts`, not `tsc`.
+// Column/field correctness here is TEST-enforced, not type-enforced (same trade as
+// {@link makeEntityMapper}).
 // ---------------------------------------------------------------------------
 
 /** One column → domain property mapping (mutates `out`), skipping absent optionals. */
