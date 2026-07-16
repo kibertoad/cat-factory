@@ -1,10 +1,10 @@
 {
-  "version": "8",
   "dialect": "postgres",
-  "id": "b5c5badb-7451-4c41-bf18-31d518b18c6c",
+  "id": "7a47f1f4-af46-4135-b18a-f5d6a10fac92",
   "prevIds": [
-    "6e57306b-0fdf-4a12-a890-8d7514733370"
+    "618cc253-1d24-4827-841d-95929c6a0da9"
   ],
+  "version": "8",
   "ddl": [
     {
       "name": "provisioning",
@@ -13506,6 +13506,27 @@
       "method": "btree",
       "concurrently": false,
       "name": "idx_password_reset_tokens_user",
+      "entityType": "indexes",
+      "schema": "public",
+      "table": "password_reset_tokens"
+    },
+    {
+      "nameExplicit": true,
+      "columns": [
+        {
+          "value": "expires_at",
+          "isExpression": false,
+          "asc": true,
+          "nullsFirst": false,
+          "opclass": null
+        }
+      ],
+      "isUnique": false,
+      "where": null,
+      "with": "",
+      "method": "btree",
+      "concurrently": false,
+      "name": "idx_password_reset_tokens_expiry",
       "entityType": "indexes",
       "schema": "public",
       "table": "password_reset_tokens"

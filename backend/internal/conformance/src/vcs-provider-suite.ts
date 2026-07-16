@@ -98,7 +98,9 @@ export function defineVcsProviderSuite(
       const { installations, repoProjection } = makeRepos()
       const { ws, install, repo: repoId } = scope()
       await installations.upsert(installation({ installationId: install, workspaceId: ws }))
-      // Explicitly omit `provider` to exercise the column DEFAULT / mapper fallback.
+      // Omit `provider` to exercise the mapper's `?? 'github'` fallback (a domain object with
+      // no provider). The column's own DEFAULT backstops rows written physically before the
+      // column existed — the mapper always supplies a value, so it can't be hit from here.
       const { provider: _drop, ...noProvider } = repo({ githubId: repoId, installationId: install })
       await repoProjection.upsertMany(ws, [noProvider])
       expect((await repoProjection.get(ws, repoId))?.provider).toBe('github')
