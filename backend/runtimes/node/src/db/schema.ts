@@ -627,6 +627,72 @@ export const fragmentSources = pgTable(
   ],
 )
 
+// Repo-sourced Claude Skills library (docs/initiatives/repo-skills.md, slice 1;
+// mirror of D1 migration 0052). An account links a repo directory of skill folders;
+// the link is synced into the account's skill catalog. ONE tier (the account), a
+// directory-per-skill sync unit, resources JSON-encoded in a `text` column.
+export const skillSources = pgTable(
+  'skill_sources',
+  {
+    id: text('id').primaryKey(),
+    account_id: text('account_id').notNull(),
+    repo_owner: text('repo_owner').notNull(),
+    repo_name: text('repo_name').notNull(),
+    git_ref: text('git_ref').notNull().default('HEAD'),
+    dir_path: text('dir_path').notNull().default(''),
+    // Head commit sha of the source dir at the last sync; powers the staleness probe.
+    last_synced_commit: text('last_synced_commit'),
+    last_synced_at: bigint('last_synced_at', { mode: 'number' }),
+    created_at: bigint('created_at', { mode: 'number' }).notNull(),
+    deleted_at: bigint('deleted_at', { mode: 'number' }),
+  },
+  (t) => [
+    uniqueIndex('idx_skill_sources_unique').on(
+      t.account_id,
+      t.repo_owner,
+      t.repo_name,
+      t.git_ref,
+      t.dir_path,
+    ),
+    index('idx_skill_sources_account')
+      .on(t.account_id)
+      .where(sql`${t.deleted_at} IS NULL`),
+    // Push-webhook fan-out (slice 4) looks sources up by repo.
+    index('idx_skill_sources_repo')
+      .on(t.repo_owner, t.repo_name)
+      .where(sql`${t.deleted_at} IS NULL`),
+  ],
+)
+
+export const accountSkills = pgTable(
+  'account_skills',
+  {
+    skill_id: text('skill_id').notNull(),
+    account_id: text('account_id').notNull(),
+    name: text('name').notNull(),
+    description: text('description').notNull(),
+    instructions: text('instructions').notNull(),
+    // JSON [{ path, sha, size }] manifest of sibling resource files (bodies not stored).
+    resources: text('resources').notNull().default('[]'),
+    source_id: text('source_id').notNull(),
+    source_path: text('source_path').notNull(),
+    source_sha: text('source_sha').notNull(),
+    pinned_commit: text('pinned_commit'),
+    created_at: bigint('created_at', { mode: 'number' }).notNull(),
+    updated_at: bigint('updated_at', { mode: 'number' }).notNull(),
+    deleted_at: bigint('deleted_at', { mode: 'number' }),
+  },
+  (t) => [
+    primaryKey({ columns: [t.account_id, t.skill_id] }),
+    index('idx_account_skills_account')
+      .on(t.account_id)
+      .where(sql`${t.deleted_at} IS NULL`),
+    index('idx_account_skills_source')
+      .on(t.source_id)
+      .where(sql`${t.deleted_at} IS NULL`),
+  ],
+)
+
 // LLM observability sink (mirror of D1 migration 0026). One row per proxied
 // container-agent model call: full prompt/response, output-limit headroom and the
 // transport-vs-execution latency split. Pruned aggressively by retention (the full

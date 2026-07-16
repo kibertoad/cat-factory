@@ -248,6 +248,13 @@ export type {
   ResolvedCatalogEntry,
 } from './fragment-repositories.js'
 export type {
+  SkillResource,
+  AccountSkillRecord,
+  AccountSkillRepository,
+  SkillSourceRecord,
+  SkillSourceRepository,
+} from './skill-repositories.js'
+export type {
   AppCaches,
   AccountModelPolicyCacheValue,
   BudgetLimitCacheValue,

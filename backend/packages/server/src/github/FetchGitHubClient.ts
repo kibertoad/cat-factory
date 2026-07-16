@@ -526,14 +526,15 @@ export class FetchGitHubClient implements GitHubClient {
     }
     // A directory returns an array; a single file returns an object — coerce both.
     const arr = Array.isArray(json) ? json : [json]
-    return (arr as Array<{ path?: string; name?: string; type?: string; sha?: string }>).map(
-      (e) => ({
-        path: e.path ?? e.name ?? '',
-        name: e.name ?? (e.path ?? '').split('/').pop() ?? '',
-        type: e.type ?? 'file',
-        sha: e.sha ?? '',
-      }),
-    )
+    return (
+      arr as Array<{ path?: string; name?: string; type?: string; sha?: string; size?: number }>
+    ).map((e) => ({
+      path: e.path ?? e.name ?? '',
+      name: e.name ?? (e.path ?? '').split('/').pop() ?? '',
+      type: e.type ?? 'file',
+      sha: e.sha ?? '',
+      ...(typeof e.size === 'number' ? { size: e.size } : {}),
+    }))
   }
 
   async getFileContent(
