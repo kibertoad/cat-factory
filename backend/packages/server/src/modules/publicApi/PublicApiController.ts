@@ -3,14 +3,21 @@ import {
   createInitiativeJobContract,
   createPublicTaskContract,
   getPublicJobContract,
+  getPublicRunContract,
   getPublicTaskContract,
+  listPublicPipelinesContract,
   listPublicServiceTasksContract,
   listPublicServicesContract,
+  retryPublicTaskContract,
   startPublicTaskContract,
+  stopPublicTaskContract,
+  updatePublicTaskContract,
   type ExecutionInstance,
   type ExecutionStatus,
   type PublicJob,
   type PublicJobStatus,
+  type PublicPipeline,
+  type PublicRun,
   type PublicService,
   type PublicTask,
 } from '@cat-factory/contracts'
@@ -153,6 +160,71 @@ function toPublicService(frame: Block): PublicService {
     description: frame.description,
     type: frame.type,
     status: frame.status,
+  }
+}
+
+/**
+ * Project a task's persisted run + its block onto the RICH external run resource: per-step
+ * state/progress/subtasks, the failure kind+message, and the PR (url + branch). The run's
+ * `status` is the raw execution status (`running`/`blocked`/`paused`/`done`/`failed`) — the
+ * public run view deliberately surfaces the parked states (unlike the coarse `publicJob`), so
+ * a caller can tell an awaiting-a-human `blocked` from a still-`running` step. The PR branch
+ * lives on the BLOCK (`block.pullRequest`), not the run, so both are joined here.
+ */
+function toPublicRun(execution: ExecutionInstance, block: Block): PublicRun {
+  const pr = block.pullRequest
+  return {
+    runId: execution.id,
+    taskId: block.id,
+    status: execution.status,
+    createdAt:
+      execution.createdAt ?? execution.steps.find((s) => s.startedAt != null)?.startedAt ?? 0,
+    currentStep: execution.currentStep,
+    steps: execution.steps.map((s) => ({
+      agentKind: s.agentKind,
+      state: s.state,
+      progress: s.progress,
+      subtasks: s.subtasks
+        ? {
+            completed: s.subtasks.completed,
+            inProgress: s.subtasks.inProgress,
+            total: s.subtasks.total,
+          }
+        : null,
+    })),
+    pullRequest: pr ? { url: pr.url, branch: pr.branch ?? null } : null,
+    error:
+      execution.status === 'failed'
+        ? execution.failure
+          ? { code: execution.failure.kind, message: execution.failure.message }
+          : { code: 'run_failed', message: 'The run failed' }
+        : null,
+  }
+}
+
+/**
+ * Project an internal pipeline onto the external pipeline resource: its id/name, the enabled
+ * step chain (in order), and the two headless-relevant flags a caller needs to choose a
+ * `pipelineId` for `start` — `public` (initiative-startable) and `headlessStartable` (safe to
+ * run with no interactive user). Archived pipelines are filtered out by the caller.
+ */
+function toPublicPipeline(
+  pipeline: {
+    id: string
+    name: string
+    agentKinds: string[]
+    enabled?: boolean[]
+    gates?: boolean[]
+    public?: boolean
+  },
+  registry: AgentKindRegistry,
+): PublicPipeline {
+  return {
+    pipelineId: pipeline.id,
+    name: pipeline.name,
+    steps: pipeline.agentKinds.filter((_, i) => pipeline.enabled?.[i] !== false),
+    public: pipeline.public === true,
+    headlessStartable: isHeadlessInlinePipeline(pipeline, registry),
   }
 }
 
@@ -573,6 +645,235 @@ export function publicApiController(): Hono<AppEnv> {
     const after = await container.boardService.getServiceTask(auth.workspaceId, taskId)
     const projected = after ?? found
     return c.json(toPublicTask(projected.block, projected.service.id), 202)
+  })
+
+  // --- Task lifecycle: edit / stop / retry / run projection / live stream -----
+  // The external counterparts of the SPA's task-lifecycle operations, each double-scoped
+  // to the key's workspace AND to a real board task (`getServiceTask`, which excludes
+  // headless anchors) — so an external key can never edit/stop/retry/read an arbitrary
+  // in-workspace run. Each delegates to the SAME service method the SPA uses; no new logic.
+
+  // Edit a task's title/description (pre-start edits).
+  buildHonoRoute(app, updatePublicTaskContract, async (c) => {
+    const gate = await resolveKey(c)
+    if ('fail' in gate) {
+      return c.json(
+        { error: { code: gate.fail.code, message: gate.fail.message } },
+        gate.fail.status,
+      )
+    }
+    const { auth } = gate
+    const container = c.get('container')
+    const { taskId } = c.req.valid('param')
+    const found = await container.boardService.getServiceTask(auth.workspaceId, taskId)
+    if (!found) {
+      return c.json({ error: { code: 'not_found', message: 'Task not found' } }, 404)
+    }
+    const block = await container.boardService.updateBlock(
+      auth.workspaceId,
+      taskId,
+      c.req.valid('json'),
+    )
+    return c.json(toPublicTask(block, found.service.id), 200)
+  })
+
+  // Stop a task's in-flight run. `stopRun` is keyed by run id and idempotent (a terminal
+  // run is returned as-is): it records a `cancelled` terminal state on the run rather than
+  // deleting it, so the run stays retryable (composing with the retry endpoint below).
+  buildHonoRoute(app, stopPublicTaskContract, async (c) => {
+    const gate = await resolveKey(c)
+    if ('fail' in gate) {
+      return c.json(
+        { error: { code: gate.fail.code, message: gate.fail.message } },
+        gate.fail.status,
+      )
+    }
+    const { auth } = gate
+    const container = c.get('container')
+    const { taskId } = c.req.valid('param')
+    const found = await container.boardService.getServiceTask(auth.workspaceId, taskId)
+    if (!found) {
+      return c.json({ error: { code: 'not_found', message: 'Task not found' } }, 404)
+    }
+    const run = await container.executionRepository.getByBlock(auth.workspaceId, taskId)
+    if (!run) {
+      return c.json({ error: { code: 'not_running', message: 'Task has no run to stop' } }, 409)
+    }
+    await container.executionService.stopRun(auth.workspaceId, run.id)
+    // Re-read for the authoritative post-stop projection (a stopped run leaves the block
+    // `blocked` with the run retryable).
+    const after = await container.boardService.getServiceTask(auth.workspaceId, taskId)
+    const projected = after ?? found
+    return c.json(toPublicTask(projected.block, projected.service.id), 200)
+  })
+
+  // Retry a task's failed run. Mirrors the initiative/start refusals: a headless key has no
+  // user/password to unlock an individual-usage (personal) subscription, so refuse a task
+  // whose model resolves to such a vendor up front (`personalGateForBlock` → 409). The
+  // engine's `retry` then throws `run_not_retryable` (→ 409) unless the run actually failed.
+  buildHonoRoute(app, retryPublicTaskContract, async (c) => {
+    const gate = await resolveKey(c)
+    if ('fail' in gate) {
+      return c.json(
+        { error: { code: gate.fail.code, message: gate.fail.message } },
+        gate.fail.status,
+      )
+    }
+    const { auth } = gate
+    const container = c.get('container')
+    const { taskId } = c.req.valid('param')
+    const found = await container.boardService.getServiceTask(auth.workspaceId, taskId)
+    if (!found) {
+      return c.json({ error: { code: 'not_found', message: 'Task not found' } }, 404)
+    }
+    const run = await container.executionRepository.getByBlock(auth.workspaceId, taskId)
+    if (!run) {
+      return c.json({ error: { code: 'no_run', message: 'Task has no run to retry' } }, 409)
+    }
+    try {
+      await personalGateForBlock(
+        container,
+        auth.workspaceId,
+        taskId,
+        run.pipelineId,
+        undefined,
+        undefined,
+      )
+    } catch (err) {
+      if (err instanceof CredentialRequiredError) {
+        return c.json(
+          {
+            error: {
+              code: 'individual_model_unsupported',
+              message:
+                'This task runs on an individual-usage model that needs an interactive personal-credential unlock; it cannot be retried through the API',
+            },
+          },
+          409,
+        )
+      }
+      throw err
+    }
+    // Headless / system-initiated: no `usr_*` initiator and no personal-credential activation
+    // (the gate above already refused the only case that would need one). A non-failed run is
+    // rejected inside `retry` with `run_not_retryable` → 409 via the shared error handler.
+    await container.executionService.retry(auth.workspaceId, run.id, null, undefined)
+    const after = await container.boardService.getServiceTask(auth.workspaceId, taskId)
+    const projected = after ?? found
+    return c.json(toPublicTask(projected.block, projected.service.id), 202)
+  })
+
+  // Read a task's rich run projection: per-step status/progress/subtasks, failure kind+message,
+  // and the PR (url + branch). A larger projection than the coarse task status — for a caller
+  // that wants to render live run progress or diagnose a failure.
+  buildHonoRoute(app, getPublicRunContract, async (c) => {
+    const gate = await resolveKey(c)
+    if ('fail' in gate) {
+      return c.json(
+        { error: { code: gate.fail.code, message: gate.fail.message } },
+        gate.fail.status,
+      )
+    }
+    const { auth } = gate
+    const container = c.get('container')
+    const { taskId } = c.req.valid('param')
+    const found = await container.boardService.getServiceTask(auth.workspaceId, taskId)
+    if (!found) {
+      return c.json({ error: { code: 'not_found', message: 'Task not found' } }, 404)
+    }
+    const run = await container.executionRepository.getByBlock(auth.workspaceId, taskId)
+    if (!run) {
+      return c.json({ error: { code: 'no_run', message: 'Task has not been started' } }, 404)
+    }
+    return c.json(toPublicRun(run, found.block), 200)
+  })
+
+  // Stream a task's run over SSE: the same bounded-poll pattern as the jobs stream (runtime-
+  // symmetric by construction — no per-facade event-hub wiring), re-reading the persisted run
+  // + its block each tick so a mid-run PR-open surfaces. Terminal on `done`/`failed`; a parked
+  // `blocked`/`paused` keeps polling until the run resumes or the connection hits SSE_MAX_MS.
+  app.get('/api/v1/tasks/:taskId/events', async (c) => {
+    const gate = await resolveKey(c)
+    if ('fail' in gate) {
+      return c.json(
+        { error: { code: gate.fail.code, message: gate.fail.message } },
+        gate.fail.status,
+      )
+    }
+    const { auth } = gate
+    const taskId = c.req.param('taskId')
+    const container = c.get('container')
+    const found = await container.boardService.getServiceTask(auth.workspaceId, taskId)
+    if (!found) {
+      return c.json({ error: { code: 'not_found', message: 'Task not found' } }, 404)
+    }
+    const run = await container.executionRepository.getByBlock(auth.workspaceId, taskId)
+    if (!run) {
+      return c.json({ error: { code: 'no_run', message: 'Task has not been started' } }, 404)
+    }
+    const runId = run.id
+    const keys = container.publicApiKeys
+    return streamSSE(c, async (stream) => {
+      const startedAt = Date.now()
+      let lastAuthCheck = Date.now()
+      let last = ''
+      for (;;) {
+        if (stream.aborted) break
+        if (keys && Date.now() - lastAuthCheck > SSE_REAUTH_MS) {
+          if (!(await keys.isActive(auth.keyId))) break
+          lastAuthCheck = Date.now()
+        }
+        const execution = await container.executionRepository.get(auth.workspaceId, runId)
+        // Re-read the block for the current PR/branch — the run opens the PR mid-flight, so
+        // the block (not the execution) carries it.
+        const block = await container.boardService.getServiceTask(auth.workspaceId, taskId)
+        if (!execution || !block) break
+        const runView = toPublicRun(execution, block.block)
+        const data = JSON.stringify(runView)
+        if (data !== last) {
+          await stream.writeSSE({
+            event:
+              runView.status === 'done'
+                ? 'done'
+                : runView.status === 'failed'
+                  ? 'error'
+                  : 'progress',
+            data,
+          })
+          last = data
+        }
+        if (execution.status === 'done' || execution.status === 'failed') break
+        if (Date.now() - startedAt > SSE_MAX_MS) {
+          await stream.writeSSE({ event: 'timeout', data: '{}' })
+          break
+        }
+        await stream.sleep(SSE_POLL_MS)
+      }
+    })
+  })
+
+  // --- Pipeline discovery ----------------------------------------------------
+  // List the workspace's pipelines so a caller can discover a valid `pipelineId` for `start`
+  // (closing the `pipeline_required`-with-no-way-to-discover gap) and whether each is safe to
+  // run headlessly. Archived pipelines are hidden.
+  buildHonoRoute(app, listPublicPipelinesContract, async (c) => {
+    const gate = await resolveKey(c)
+    if ('fail' in gate) {
+      return c.json(
+        { error: { code: gate.fail.code, message: gate.fail.message } },
+        gate.fail.status,
+      )
+    }
+    const container = c.get('container')
+    const pipelines = await container.pipelineService.list(gate.auth.workspaceId)
+    return c.json(
+      {
+        pipelines: pipelines
+          .filter((p) => !p.archived)
+          .map((p) => toPublicPipeline(p, container.agentKindRegistry)),
+      },
+      200,
+    )
   })
 
   return app
