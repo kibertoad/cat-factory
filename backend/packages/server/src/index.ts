@@ -248,6 +248,7 @@ export type {
   GoogleOAuthConfig,
   LangfuseConfig,
   ObservabilityConfig,
+  OtelConfig,
   PrivilegedAppConfig,
   RetentionConfig,
   RunnerPoolConfig,

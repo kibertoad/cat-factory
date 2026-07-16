@@ -39,6 +39,7 @@ const ROUTABLE = computed<{ type: NotificationType; label: string }[]>(() => [
   { type: 'release_regression', label: t('slack.routable.release_regression') },
   { type: 'human_test_ready', label: t('slack.routable.human_test_ready') },
   { type: 'visual_confirmation_ready', label: t('slack.routable.visual_confirmation_ready') },
+  { type: 'pr_review_ready', label: t('slack.routable.pr_review_ready') },
   { type: 'initiative', label: t('slack.routable.initiative') },
 ])
 
@@ -64,6 +65,7 @@ const routes = reactive<Record<NotificationType, SlackRoute>>({
   human_review: { enabled: false, channel: '' },
   followup_pending: { enabled: false, channel: '' },
   fork_decision_pending: { enabled: false, channel: '' },
+  pr_review_ready: { enabled: false, channel: '' },
   initiative: { enabled: false, channel: '' },
 })
 const mentionsEnabled = ref(false)

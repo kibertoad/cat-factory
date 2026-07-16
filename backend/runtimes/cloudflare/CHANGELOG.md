@@ -1,5 +1,73 @@
 # @cat-factory/worker
 
+## 0.84.0
+
+### Minor Changes
+
+- d68e3a8: Add opt-in OpenTelemetry (OTLP) observability. A new `@cat-factory/observability-otel`
+  package implements the kernel `LlmTraceSink` port and exports LLM generations (+ container
+  tool spans) and metrics to any OTLP/HTTP backend — a workerd-safe fetch exporter on the
+  Cloudflare Worker facade and the official `@opentelemetry/*` SDK exporter on Node, kept
+  conformant by a shared mapping layer + a conformity test.
+
+  - **kernel:** new `CompositeTraceSink` + `composeTraceSinks` so multiple external trace
+    destinations (Langfuse and/or OTLP) fan out through the single sink slot.
+  - **server:** new `OtelConfig` on `AppConfig`.
+  - **worker / node-server:** wire the OTLP exporter (fetch on the Worker, SDK on Node)
+    everywhere the Langfuse sink is wired, composed alongside Langfuse. Enabled with
+    `OTEL_ENABLED=true` + `OTEL_EXPORTER_OTLP_ENDPOINT` (`OTEL_EXPORTER_OTLP_HEADERS` /
+    `OTEL_SERVICE_NAME` optional).
+  - **cli:** advertise the `OTEL_*` vars in the generated `.env`.
+
+  Refinements: the Node facade shares ONE trace-sink instance across the core, the container
+  executor and the inline model-provider (so the SDK exporter's batch processors/timers aren't
+  duplicated) and flushes + shuts it down on graceful shutdown (via `LlmTraceSink.shutdown` /
+  `CompositeTraceSink` fan-out) so the final batch isn't dropped. Metric data points carry only
+  the low-cardinality `gen_ai.*` dimensions — the unbounded workspace id stays on spans, off
+  metrics — to keep metric-backend cardinality bounded.
+
+### Patch Changes
+
+- Updated dependencies [d68e3a8]
+- Updated dependencies [b414f34]
+  - @cat-factory/observability-otel@0.1.0
+  - @cat-factory/kernel@0.128.0
+  - @cat-factory/server@0.119.0
+  - @cat-factory/contracts@0.132.0
+  - @cat-factory/agents@0.58.0
+  - @cat-factory/orchestration@0.111.0
+  - @cat-factory/gitlab@0.9.0
+  - @cat-factory/caching@0.8.3
+  - @cat-factory/consensus@0.10.52
+  - @cat-factory/eks@0.1.79
+  - @cat-factory/gates@0.5.36
+  - @cat-factory/integrations@0.84.1
+  - @cat-factory/observability-langfuse@0.7.206
+  - @cat-factory/provider-cloudflare@0.7.223
+  - @cat-factory/spend@0.12.32
+  - @cat-factory/prompt-fragments@0.13.21
+
+## 0.83.16
+
+### Patch Changes
+
+- Updated dependencies [a552283]
+  - @cat-factory/contracts@0.131.0
+  - @cat-factory/kernel@0.127.0
+  - @cat-factory/agents@0.57.0
+  - @cat-factory/orchestration@0.110.0
+  - @cat-factory/integrations@0.84.0
+  - @cat-factory/server@0.118.0
+  - @cat-factory/consensus@0.10.51
+  - @cat-factory/eks@0.1.78
+  - @cat-factory/gates@0.5.35
+  - @cat-factory/gitlab@0.8.1
+  - @cat-factory/prompt-fragments@0.13.20
+  - @cat-factory/spend@0.12.31
+  - @cat-factory/caching@0.8.2
+  - @cat-factory/observability-langfuse@0.7.205
+  - @cat-factory/provider-cloudflare@0.7.222
+
 ## 0.83.15
 
 ### Patch Changes

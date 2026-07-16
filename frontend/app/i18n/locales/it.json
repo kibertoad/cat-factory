@@ -1697,7 +1697,8 @@
         "followup_pending": "Segna come letto",
         "initiative": "Segna come letto",
         "markRead": "Segna come letto",
-        "fork_decision_pending": "Segna come letto"
+        "fork_decision_pending": "Segna come letto",
+        "pr_review_ready": "Segna come letto"
       }
     },
     "aiProvidersBanner": {
@@ -3923,6 +3924,7 @@
       "release_regression": "Regressione della release",
       "human_test_ready": "Pronto per il test umano",
       "visual_confirmation_ready": "Pronto per la conferma visiva",
+      "pr_review_ready": "Rilievi revisione PR",
       "initiative": "Aggiornamenti dell'iniziativa"
     },
     "role": {
@@ -4701,6 +4703,51 @@
     },
     "empty": {
       "title": "Nulla da decidere"
+    }
+  },
+  "prReview": {
+    "title": "Revisione PR",
+    "titleWithBlock": "Revisione PR: {title}",
+    "subtitle": "Seleziona i rilievi su cui intervenire.",
+    "openPr": "Apri PR",
+    "summaryLabel": "Riepilogo:",
+    "noFindings": "Nessun rilievo — la pull request sembra pulita.",
+    "unsliced": "Altro",
+    "selectAll": "Seleziona tutto",
+    "clear": "Cancella",
+    "selectedCount": "{count} selezionati",
+    "finish": "Concludi revisione",
+    "fix": "Correggi selezionati",
+    "post": "Pubblica come commenti",
+    "suggestedFix": "Correzione suggerita:",
+    "line": "riga {line}",
+    "reviewing": {
+      "title": "Revisione della pull request…",
+      "hint": "Suddivisione del diff in blocchi coerenti e revisione di ciascuno."
+    },
+    "fixing": {
+      "title": "Correzione dei rilievi selezionati…",
+      "hint": "Un fixer sta effettuando il commit delle modifiche per i rilievi selezionati sul branch della pull request."
+    },
+    "posting": {
+      "title": "Pubblicazione dei commenti di revisione…",
+      "hint": "Pubblicazione dei rilievi selezionati come commenti inline sulla pull request."
+    },
+    "severity": {
+      "blocker": "Bloccante",
+      "high": "Alta",
+      "medium": "Media",
+      "low": "Bassa",
+      "nit": "Minore"
+    },
+    "category": {
+      "correctness": "Correttezza",
+      "security": "Sicurezza",
+      "performance": "Prestazioni",
+      "maintainability": "Manutenibilità",
+      "style": "Stile",
+      "test": "Test",
+      "other": "Altro"
     }
   }
 }

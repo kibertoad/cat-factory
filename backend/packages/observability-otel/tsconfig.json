@@ -1,0 +1,12 @@
+{
+  "extends": "../../tsconfig.base.json",
+  "compilerOptions": {
+    "rootDir": "src",
+    "outDir": "dist",
+    // The fetch exporter (`src/index.ts`) uses the runtime globals `fetch`/`crypto`,
+    // present on BOTH the Worker (workerd) and Node — the DOM lib is type-only here.
+    // `src/node.ts` additionally pulls the Node-only `@opentelemetry/*` SDK.
+    "lib": ["ES2022", "DOM"]
+  },
+  "include": ["src/**/*.ts"]
+}

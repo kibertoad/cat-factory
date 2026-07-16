@@ -1560,7 +1560,8 @@
         "followup_pending": "Marquer comme lu",
         "initiative": "Marquer comme lu",
         "markRead": "Marquer comme lu",
-        "fork_decision_pending": "Marquer comme lu"
+        "fork_decision_pending": "Marquer comme lu",
+        "pr_review_ready": "Marquer comme lu"
       },
       "toast": {
         "acted": "Marqué comme traité",
@@ -2979,6 +2980,7 @@
       "release_regression": "Regression de version",
       "human_test_ready": "Pret pour les tests humains",
       "visual_confirmation_ready": "Pret pour la confirmation visuelle",
+      "pr_review_ready": "Points de revue de PR",
       "initiative": "Mises a jour de l'initiative"
     },
     "role": {
@@ -4689,6 +4691,51 @@
     },
     "empty": {
       "title": "Rien à décider"
+    }
+  },
+  "prReview": {
+    "title": "Revue de PR",
+    "titleWithBlock": "Revue de PR : {title}",
+    "subtitle": "Sélectionnez les points à traiter.",
+    "openPr": "Ouvrir la PR",
+    "summaryLabel": "Résumé :",
+    "noFindings": "Aucun point relevé — la pull request semble propre.",
+    "unsliced": "Autres",
+    "selectAll": "Tout sélectionner",
+    "clear": "Effacer",
+    "selectedCount": "{count} sélectionné(s)",
+    "finish": "Terminer la revue",
+    "fix": "Corriger la sélection",
+    "post": "Publier en commentaires",
+    "suggestedFix": "Correction suggérée :",
+    "line": "ligne {line}",
+    "reviewing": {
+      "title": "Revue de la pull request…",
+      "hint": "Découpage du diff en blocs cohérents et revue de chacun."
+    },
+    "fixing": {
+      "title": "Correction des points sélectionnés…",
+      "hint": "Un correcteur valide des modifications pour les points sélectionnés sur la branche de la pull request."
+    },
+    "posting": {
+      "title": "Publication des commentaires de revue…",
+      "hint": "Publication des points sélectionnés en commentaires en ligne sur la pull request."
+    },
+    "severity": {
+      "blocker": "Bloquant",
+      "high": "Élevée",
+      "medium": "Moyenne",
+      "low": "Faible",
+      "nit": "Mineur"
+    },
+    "category": {
+      "correctness": "Exactitude",
+      "security": "Sécurité",
+      "performance": "Performance",
+      "maintainability": "Maintenabilité",
+      "style": "Style",
+      "test": "Tests",
+      "other": "Autre"
     }
   }
 }

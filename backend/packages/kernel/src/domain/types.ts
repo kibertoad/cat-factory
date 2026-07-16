@@ -271,6 +271,17 @@ export type {
   ForkChatRequestInput,
   ChooseForkInput,
   ForkProposal,
+  // PR deep-review shapes: the sliced, severity-ordered findings the read-only reviewer
+  // produces + the live step state the engine parks on + the human's selection/resolution.
+  PrReviewSeverity,
+  PrReviewCategory,
+  PrReviewSlice,
+  PrReviewFinding,
+  PrReviewStatus,
+  PrReviewResolution,
+  PrReviewStepState,
+  PrReviewAgentOutput,
+  ResolvePrReviewInput,
   // Clarity-review (bug-report triage reviewer agent) shapes — reuse the requirements
   // review item/status shapes, differ only in subject + the persisted document field.
   ClarityReviewItem,

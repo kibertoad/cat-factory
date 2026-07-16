@@ -1,5 +1,68 @@
 # @cat-factory/app
 
+## 0.119.0
+
+### Minor Changes
+
+- b414f34: PR deep-review: resolve a parked review by fixing or posting the selected findings.
+
+  The `pr-review` window now offers two terminal resolutions alongside `Finish`, both acting on
+  the human's curated finding selection:
+
+  - **Fix** re-dispatches the `pr-reviewer` step as a Fixer (`FIXER_AGENT_KIND`) that clones the
+    reviewed PR's head branch, commits fixes addressing the selected findings, and pushes back onto
+    it (no new PR).
+  - **Post** publishes the selected findings as a single advisory (`COMMENT`) inline PR review — each
+    line-anchored finding as an inline comment, the rest folded into the review body.
+
+  Two new optional VCS reads/writes back these resolutions — `getPullRequestHeadRef` and
+  `createReview` on the neutral `VcsClient` + `GitHubClient` ports (GitHub-implemented, omitted on
+  GitLab), surfaced to the engine through the checkout-free `RepoFiles` seam. All review state stays
+  on `step.prReview` (no side table); a cross-runtime conformance assertion covers both resolutions.
+
+  Scoped to a same-repo, non-fork PR (the reviewer's existing limitation); a cross-repo `prUrl` and
+  fork PRs remain a tracked follow-up. See `backend/docs/adr/0023-pr-deep-review.md`.
+
+### Patch Changes
+
+- d68e3a8: Fix a real-time board coherence hazard where a run's terminal status (`pr_ready`/`done`)
+  could stay stuck showing `in_progress`. The status arrives as a targeted `execution`-event
+  `board.upsert`, but a full-snapshot `refresh()` whose fetch STARTED earlier (its block still
+  `in_progress`) could resolve afterward and, via the REPLACE-style `hydrate`, clobber the
+  newer live status back to the stale value — with no further event to restore it. Blocks
+  carry no server revision, so the board store now stamps each live `upsert` with a monotonic
+  sequence and `refresh()` captures a baseline before its fetch; `hydrate` preserves any block
+  upserted while the fetch was in flight. Pinned by a store-level regression test. (The
+  existing `refreshSeq` guard only ordered refreshes against each other, not against an
+  interleaved live upsert — reliably hit under CI latency, surfacing as e2e terminal-status
+  timeouts.)
+- Updated dependencies [b414f34]
+  - @cat-factory/contracts@0.132.0
+
+## 0.118.0
+
+### Minor Changes
+
+- a552283: PR deep-review: park a review run on its findings for a human to select which to act on.
+
+  The read-only `pr-reviewer` no longer finishes a review task the moment it returns. Its
+  sliced, prioritized findings are now recorded onto the run's `pr-reviewer` step
+  (`step.prReview`) and the run PARKS for a human to visually SELECT which findings matter
+  through a dedicated multi-select window (findings grouped by slice, severity badges), then
+  resolve. A `pr_review_ready` inbox card (routable to Slack) is raised on park. A clean PR
+  (no findings) passes through and finishes as before.
+
+  All review state rides the step (no side table), so D1 ⇄ Drizzle parity is free; a
+  cross-runtime conformance assertion covers the park → select → resolve loop. The two
+  terminal resolutions — feed the selected findings to a Fixer, or post them as inline PR
+  review comments — are the tracked follow-up; this ships the slicing → park → multi-select
+  loop with a neutral `finish` resolution.
+
+### Patch Changes
+
+- Updated dependencies [a552283]
+  - @cat-factory/contracts@0.131.0
+
 ## 0.117.0
 
 ### Minor Changes

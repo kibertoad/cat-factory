@@ -42,6 +42,16 @@ export const useBoardStore = defineStore('board', () => {
       params ?? {},
     )
   const blocks = ref<Block[]>([])
+  // Client-side monotonic guard against a stale full-snapshot `hydrate` CLOBBERING newer live
+  // state. A run's status transitions (…→ in_progress → pr_ready/done) reach the board as
+  // targeted `execution`-event `upsert`s; a `refresh()` whose snapshot was FETCHED earlier (its
+  // block still `in_progress`) can resolve AFTER such an upsert and, since `hydrate` REPLACES the
+  // list, overwrite the just-applied terminal status back to the stale value — with no further
+  // event to restore it (the documented real-time coherence hazard; reliably hit under CI
+  // latency). Blocks carry no server revision, so we stamp each live `upsert` with a monotonic
+  // sequence and let `hydrate` preserve any block upserted AFTER the refresh's captured baseline.
+  let liveUpsertSeq = 0
+  const liveUpsertAt = new Map<string, number>()
   // Archived service frames (`archived === true`): hidden from the board but preserved and
   // restorable with no expiry. Hydrated from the snapshot's `archivedServices`; the frames
   // themselves are NOT in `blocks` (the snapshot filters an archived frame + its subtree out).
@@ -111,10 +121,22 @@ export const useBoardStore = defineStore('board', () => {
     }
     return s
   }
-  function hydrate(next: Block[]) {
+  /**
+   * Baseline for {@link hydrate}: capture this BEFORE a refresh's snapshot fetch and pass it
+   * back in, so a block that received a live `upsert` while the fetch was in flight is preserved
+   * (its live state is newer than the snapshot). Callers that don't pass a baseline get a plain
+   * full replace (initial load / board switch — no live-upsert race to guard).
+   */
+  function hydrateBaseline(): number {
+    return liveUpsertSeq
+  }
+  function hydrate(next: Block[], since = liveUpsertSeq) {
     const prev = new Map(blocks.value.map((b) => [b.id, b]))
     const reconciled = next.map((n) => {
       const existing = prev.get(n.id)
+      // A block live-`upsert`ed AFTER this refresh's fetch started is newer than the snapshot —
+      // keep the live version instead of clobbering it back to the stale snapshot value.
+      if (existing && (liveUpsertAt.get(n.id) ?? 0) > since) return existing
       return existing && jsonFor(existing) === jsonFor(n) ? existing : n
     })
     // Keep blocks the user just deleted hidden while their delete is still pending.
@@ -147,6 +169,8 @@ export const useBoardStore = defineStore('board', () => {
   function upsert(block: Block) {
     // A live event for a block awaiting its deferred delete must not resurrect it.
     if (pendingDoomed.has(block.id)) return
+    // Stamp the live-upsert order so a later, staler refresh `hydrate` can't clobber this.
+    liveUpsertAt.set(block.id, ++liveUpsertSeq)
     const i = blocks.value.findIndex((b) => b.id === block.id)
     if (i >= 0) blocks.value[i] = block
     else blocks.value.push(block)
@@ -612,6 +636,7 @@ export const useBoardStore = defineStore('board', () => {
     blocks,
     archived,
     hydrate,
+    hydrateBaseline,
     hydrateArchived,
     upsert,
     ...queries,

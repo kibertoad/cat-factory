@@ -69,6 +69,9 @@ const MENTION_AUDIENCE: Record<NotificationType, MentionAudience> = {
   // The fork-decision phase surfaced materially different implementation approaches: tell the
   // task's creator (who picks the approach before the Coder starts).
   fork_decision_pending: { roles: [], includeCreator: true },
+  // The PR reviewer surfaced findings to triage: tell the task's creator (who selects which
+  // findings to act on) and the engineers.
+  pr_review_ready: { roles: ['engineering'], includeCreator: true },
   // An initiative needs attention (a blocked task, or completion): tell the creator (who owns
   // the initiative) and the engineers driving its work.
   initiative: { roles: ['engineering'], includeCreator: true },
@@ -157,6 +160,7 @@ const TYPE_LABEL: Record<NotificationType, string> = {
   human_review: ':bust_in_silhouette: Awaiting code review',
   followup_pending: ':compass: Follow-ups to decide',
   fork_decision_pending: ':fork_and_knife: Choose an implementation approach',
+  pr_review_ready: ':clipboard: PR review findings',
   initiative: ':world_map: Initiative update',
 }
 

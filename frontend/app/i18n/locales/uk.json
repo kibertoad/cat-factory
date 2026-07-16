@@ -1560,7 +1560,8 @@
         "followup_pending": "Позначити прочитаним",
         "initiative": "Позначити прочитаним",
         "markRead": "Позначити прочитаним",
-        "fork_decision_pending": "Позначити прочитаним"
+        "fork_decision_pending": "Позначити прочитаним",
+        "pr_review_ready": "Позначити прочитаним"
       },
       "toast": {
         "acted": "Позначено як опрацьоване",
@@ -2979,6 +2980,7 @@
       "release_regression": "Регресія випуску",
       "human_test_ready": "Готово до тестування людиною",
       "visual_confirmation_ready": "Готово до візуального підтвердження",
+      "pr_review_ready": "Зауваження огляду PR",
       "initiative": "Оновлення ініціативи"
     },
     "role": {
@@ -4689,6 +4691,51 @@
     },
     "empty": {
       "title": "Нема чого вирішувати"
+    }
+  },
+  "prReview": {
+    "title": "Огляд PR",
+    "titleWithBlock": "Огляд PR: {title}",
+    "subtitle": "Виберіть зауваження для опрацювання.",
+    "openPr": "Відкрити PR",
+    "summaryLabel": "Підсумок:",
+    "noFindings": "Зауважень немає — pull request виглядає чистим.",
+    "unsliced": "Інше",
+    "selectAll": "Вибрати все",
+    "clear": "Очистити",
+    "selectedCount": "Вибрано: {count}",
+    "finish": "Завершити огляд",
+    "fix": "Виправити вибрані",
+    "post": "Опублікувати як коментарі",
+    "suggestedFix": "Пропоноване виправлення:",
+    "line": "рядок {line}",
+    "reviewing": {
+      "title": "Перевірка pull request…",
+      "hint": "Поділ змін на цілісні частини та огляд кожної з них."
+    },
+    "fixing": {
+      "title": "Виправлення вибраних зауважень…",
+      "hint": "Фіксер комітить зміни для вибраних зауважень у гілку pull request."
+    },
+    "posting": {
+      "title": "Публікація коментарів огляду…",
+      "hint": "Публікація вибраних зауважень як вбудованих коментарів у pull request."
+    },
+    "severity": {
+      "blocker": "Блокер",
+      "high": "Високий",
+      "medium": "Середній",
+      "low": "Низький",
+      "nit": "Дрібниця"
+    },
+    "category": {
+      "correctness": "Коректність",
+      "security": "Безпека",
+      "performance": "Продуктивність",
+      "maintainability": "Підтримуваність",
+      "style": "Стиль",
+      "test": "Тести",
+      "other": "Інше"
     }
   }
 }
