@@ -269,6 +269,13 @@ export {
   registerEnvironmentAnalystAgent,
 } from './agents/kinds/environment-analyst.js'
 export {
+  SPIKE_KIND,
+  SPIKE_AGENT_KINDS,
+  spikeFindings,
+  type SpikeFindings,
+  registerSpikeAgent,
+} from './agents/kinds/spike.js'
+export {
   REPRO_TEST_KIND,
   REPRO_TEST_AGENT_KINDS,
   reproTestOutcome,

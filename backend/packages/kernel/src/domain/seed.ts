@@ -534,6 +534,16 @@ export function seedPipelines(): Pipeline[] {
     // no merge tail — the run terminates cleanly via the no-PR terminal path in
     // `RunStateMachine.finalizeBlock`. See backend/docs/adr/0023-pr-deep-review.md.
     { id: 'pl_review', name: 'Review a pull request', agentKinds: ['pr-reviewer'] },
+    // The spike pipeline (the DEFAULT for a `spike` task): an OPT-IN `requirements-review` gate
+    // to sanity-check the investigation's criteria (off by default — a spike is meant to be
+    // fast), then the read-only `spike` agent that investigates and returns a findings document.
+    // No code is written and no PR is opened, so there is no merge tail — the run terminates
+    // cleanly via the no-PR terminal path in `RunStateMachine.finalizeBlock`.
+    definePipeline({
+      id: 'pl_spike',
+      name: 'Run a spike',
+      steps: [{ kind: 'requirements-review', gate: true, enabled: false }, 'spike'],
+    }),
     definePipeline({
       // The Initiative Planning pipeline — the ONLY pipeline runnable on an
       // `initiative`-level block (and initiative blocks accept no other; see the
@@ -731,15 +741,26 @@ export const DOCUMENT_QUICK_PIPELINE_ID = 'pl_document_quick'
 export const REVIEW_PIPELINE_ID = 'pl_review'
 
 /**
+ * Pipeline id of the spike pipeline (`requirements-review` off-by-default → `spike`). The DEFAULT
+ * pipeline a `taskType: 'spike'` task is pinned to at creation ({@link defaultPipelineIdForTaskType})
+ * — a spike is a timeboxed investigation whose deliverable is a findings document, so the
+ * full-build pipeline (which dispatches a coder and ends in a merge tail) is wrong for it. The
+ * read-only `spike` step opens no PR, so the run terminates cleanly via the no-PR terminal path in
+ * `RunStateMachine.finalizeBlock` — no `conflicts → ci → merger` tail (nothing to merge).
+ */
+export const SPIKE_PIPELINE_ID = 'pl_spike'
+
+/**
  * The pipeline a task of the given task type should default to when the creator pins none.
- * `document` tasks get the document-authoring pipeline and `review` tasks the PR-review pipeline
- * (the full-build `pl_full` is wrong for both); every other task type falls through to the
- * workspace's positional default. Returns `undefined` when there is no type-specific default, so
- * the caller leaves `pipelineId` unset.
+ * `document` tasks get the document-authoring pipeline, `review` tasks the PR-review pipeline, and
+ * `spike` tasks the spike pipeline (the full-build `pl_full` is wrong for all three); every other
+ * task type falls through to the workspace's positional default. Returns `undefined` when there is
+ * no type-specific default, so the caller leaves `pipelineId` unset.
  */
 export function defaultPipelineIdForTaskType(taskType: Block['taskType']): string | undefined {
   if (taskType === 'document') return DOCUMENT_PIPELINE_ID
   if (taskType === 'review') return REVIEW_PIPELINE_ID
+  if (taskType === 'spike') return SPIKE_PIPELINE_ID
   return undefined
 }
 

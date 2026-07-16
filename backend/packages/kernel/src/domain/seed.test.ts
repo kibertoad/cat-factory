@@ -1,5 +1,10 @@
 import { describe, expect, it } from 'vitest'
-import { defaultPipelineIdForTaskType, REVIEW_PIPELINE_ID, seedPipelines } from './seed.js'
+import {
+  defaultPipelineIdForTaskType,
+  REVIEW_PIPELINE_ID,
+  seedPipelines,
+  SPIKE_PIPELINE_ID,
+} from './seed.js'
 
 // The built-in catalog is authored with the named-step form (`definePipeline`), which lowers to the
 // wire `Pipeline`'s index-aligned `agentKinds`/`gates`/`enabled` arrays. These assertions pin that
@@ -44,6 +49,20 @@ describe('seedPipelines — named-gate lowering', () => {
     // A `review` task type pins the PR-review pipeline; other non-document types get no default.
     expect(defaultPipelineIdForTaskType('review')).toBe(REVIEW_PIPELINE_ID)
     expect(defaultPipelineIdForTaskType('feature')).toBeUndefined()
+  })
+
+  it('seeds the spike pipeline and defaults a spike task to it', () => {
+    const spike = byId().get(SPIKE_PIPELINE_ID)
+    expect(spike, 'pl_spike must be seeded').toBeDefined()
+    // An opt-in requirements-review gate, then the read-only spike agent — no merge tail.
+    expect(spike!.agentKinds).toEqual(['requirements-review', 'spike'])
+    // The requirements-review carries a human gate but is disabled by default (a spike is fast).
+    expect(spike!.agentKinds.filter((_k, i) => spike!.gates![i])).toEqual(['requirements-review'])
+    expect(spike!.agentKinds.filter((_k, i) => spike!.enabled![i] === false)).toEqual([
+      'requirements-review',
+    ])
+    // A `spike` task type pins the spike pipeline (the full build makes no sense for research).
+    expect(defaultPipelineIdForTaskType('spike')).toBe(SPIKE_PIPELINE_ID)
   })
 
   it('lowers pl_full: human gates + opt-in brainstorms land on the named steps', () => {
