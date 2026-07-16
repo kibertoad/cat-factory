@@ -57,6 +57,7 @@ class FakeRepo implements RepoFiles {
 const ctx = (repo: RepoFiles, blueprintService: unknown) => ({
   repo,
   branch: 'main',
+  opensPr: false,
   context: {} as AgentRunContext,
   result: { output: '', blueprintService },
 })
@@ -130,6 +131,7 @@ describe('blueprintPostOp', () => {
 const specCtx = (repo: RepoFiles, spec: unknown) => ({
   repo,
   branch: 'cat-factory/task_login',
+  opensPr: false,
   context: {} as AgentRunContext,
   result: { output: '', spec },
 })

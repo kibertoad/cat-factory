@@ -240,6 +240,20 @@
           "placeholder": "נקודות הקצה או המשטח שבתחום"
         }
       },
+      "spikeFields": {
+        "researchQuestion": {
+          "label": "שאלת מחקר",
+          "placeholder": "השאלה או ההשערה שעל הספייק לענות עליה"
+        },
+        "successCriteria": {
+          "label": "קריטריוני הצלחה",
+          "placeholder": "קריטריוני הקבלה או ההחלטה שהממצאים צריכים לבסס"
+        },
+        "optionsToCompare": {
+          "label": "אפשרויות להשוואה",
+          "placeholder": "האפשרויות שיש לשקול זו מול זו"
+        }
+      },
       "optional": "אופציונלי",
       "pipeline": "צינור",
       "chooseAtRunTime": "בחר בזמן הריצה",

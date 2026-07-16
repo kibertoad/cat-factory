@@ -240,6 +240,20 @@
           "placeholder": "Endpointy lub zakres objęty dokumentem"
         }
       },
+      "spikeFields": {
+        "researchQuestion": {
+          "label": "Pytanie badawcze",
+          "placeholder": "Pytanie lub hipoteza, na które ma odpowiedzieć spike"
+        },
+        "successCriteria": {
+          "label": "Kryteria sukcesu",
+          "placeholder": "Kryteria akceptacji lub decyzja, którą mają uzasadnić wyniki"
+        },
+        "optionsToCompare": {
+          "label": "Opcje do porównania",
+          "placeholder": "Opcje do rozważenia względem siebie"
+        }
+      },
       "optional": "opcjonalne",
       "pipeline": "Pipeline",
       "chooseAtRunTime": "Wybierz przy uruchomieniu",

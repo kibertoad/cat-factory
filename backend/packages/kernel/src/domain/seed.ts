@@ -573,6 +573,42 @@ export function seedPipelines(): Pipeline[] {
     // A spec-only pipeline, to (re)generate a service's unified in-repo specification
     // (and its Gherkin acceptance scenarios) independently.
     { id: 'pl_spec', name: 'Write spec', agentKinds: ['spec-writer'] },
+    definePipeline({
+      // The SPIKE pipeline — a timeboxed research/investigation task that produces a findings
+      // document, delivered as a PULL REQUEST (the default). It is the type-default a
+      // `taskType: 'spike'` task is pinned to at creation ({@link defaultPipelineIdForTaskType});
+      // the full-build `pl_full` (the positional default) is wrong for a research task. A
+      // `requirements-review` gate leads (off by default — a spike's criteria are usually clear,
+      // and the gate is a pass-through when unwired), then the read-only `spike` explore agent
+      // investigates + returns structured findings, whose backend post-op commits
+      // `docs/research/<slug>.md` to a work branch and opens a PR (it sees a merge tail via
+      // `RepoOpContext.opensPr`). The `conflicts → ci → human-review → merger` tail then reviews
+      // (the human-review gate + fixer react to PR review comments, a pass-through until a
+      // PR-review provider is wired) and merges it — so protected base branches are respected and
+      // the findings land through review, not a force-push. Use `pl_spike_direct` for the fast,
+      // no-PR path on an unprotected repo.
+      id: 'pl_spike',
+      name: 'Run a spike',
+      steps: [
+        { kind: 'requirements-review', gate: true, enabled: false },
+        'spike',
+        'conflicts',
+        'ci',
+        'human-review',
+        'merger',
+      ],
+    }),
+    definePipeline({
+      // The DIRECT spike pipeline — the fast, no-PR path: the read-only `spike` explore agent,
+      // whose post-op commits the findings `docs/research/<slug>.md` STRAIGHT onto the base
+      // branch (best-effort — see `spikePostOp`) with no review/merge tail. Since it has no
+      // `merger`, `RepoOpContext.opensPr` is false and the run reaches `done` via the engine's
+      // no-PR completion path (see `RunStateMachine.finalizeBlock`). Opt-in for unprotected repos
+      // / throwaway research where the PR round-trip of `pl_spike` isn't wanted.
+      id: 'pl_spike_direct',
+      name: 'Run a spike (direct commit)',
+      steps: [{ kind: 'requirements-review', gate: true, enabled: false }, 'spike'],
+    }),
     // An analyst-only pipeline: the opt-in `environment-analyst` clones a service's repo
     // read-only and drafts a declarative Docker Compose stack recipe (setup steps,
     // prerequisites, health gate) as a NON-BINDING recommendation. The setup wizard runs it
@@ -717,6 +753,20 @@ export const BUSINESS_DOCS_PIPELINE_ID = 'pl_business_docs'
 export const DOCUMENT_PIPELINE_ID = 'pl_document'
 
 /**
+ * Pipeline id of the spike pipeline (`requirements-review`(off) → `spike` → `conflicts` → `ci` →
+ * `human-review` → `merger`). This is the DEFAULT pipeline a `taskType: 'spike'` task is pinned to
+ * at creation ({@link defaultPipelineIdForTaskType}) — the full-build pipeline makes no sense for a
+ * timeboxed research task. The findings are delivered as a PULL REQUEST that the review/merge tail
+ * lands, so protected base branches are respected.
+ */
+export const SPIKE_PIPELINE_ID = 'pl_spike'
+
+// The direct-commit spike pipeline (`requirements-review`(off) → `spike`) is `pl_spike_direct`
+// (defined above) — the fast no-PR path for unprotected repos, opt-in (not the type default). It
+// has no exported id constant because nothing resolves it programmatically; the type default
+// resolves `SPIKE_PIPELINE_ID` and a user selects the direct variant by pipeline id in the UI.
+
+/**
  * Pipeline id of the lean document pipeline (`doc-writer` → auto-review → `doc-quality` → the
  * mergeability / CI / merge tail). The docs-refresh preset (slice 8) spawns README + diagram tasks
  * onto it.
@@ -732,13 +782,14 @@ export const REVIEW_PIPELINE_ID = 'pl_review'
 
 /**
  * The pipeline a task of the given task type should default to when the creator pins none.
- * `document` tasks get the document-authoring pipeline and `review` tasks the PR-review pipeline
- * (the full-build `pl_full` is wrong for both); every other task type falls through to the
- * workspace's positional default. Returns `undefined` when there is no type-specific default, so
- * the caller leaves `pipelineId` unset.
+ * `document` → `pl_document`, `spike` → `pl_spike`, and `review` → `pl_review` (the full-build
+ * `pl_full` is wrong for all three — a document has no code, a spike has no code, a review opens
+ * no PR); every other task type falls through to the workspace's positional default. Returns
+ * `undefined` when there is no type-specific default, so the caller leaves `pipelineId` unset.
  */
 export function defaultPipelineIdForTaskType(taskType: Block['taskType']): string | undefined {
   if (taskType === 'document') return DOCUMENT_PIPELINE_ID
+  if (taskType === 'spike') return SPIKE_PIPELINE_ID
   if (taskType === 'review') return REVIEW_PIPELINE_ID
   return undefined
 }
