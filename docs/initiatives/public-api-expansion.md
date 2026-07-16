@@ -52,44 +52,44 @@ The existing public surface IS the template; every new endpoint copies its shape
 
 ### Tier 1 — complete the task lifecycle (do first)
 
-| # | Endpoint | Backing internal capability | Status | PR |
-| - | -------- | --------------------------- | ------ | -- |
-| 1 | `PATCH /api/v1/tasks/:taskId` (title/description/taskType, pre-start edits) | `boardService.updateBlock` (`updateBlockContract`) | ⬜ todo | |
-| 2 | `POST /api/v1/tasks/:taskId/stop` | `executionService.cancel` (`stopAgentRunContract`) | ⬜ todo | |
-| 3 | `POST /api/v1/tasks/:taskId/retry` (must reuse the `personalGateForBlock` refusal) | `retryAgentRunContract` path | ⬜ todo | |
-| 4 | `DELETE /api/v1/tasks/:taskId` (archive semantics) | `boardService` remove/archive (`removeBlockContract` / `archiveBlockContract`) | ⬜ todo | |
-| 5 | `GET /api/v1/tasks/:taskId/run` — richer run projection (per-step status, subtasks, failure kind/message, PR branch) | `executionRepository.get` + a new `publicRun` projection | ⬜ todo | |
-| 6 | `GET /api/v1/tasks/:taskId/events` (SSE, live run progress) | the jobs-SSE bounded-poll pattern, verbatim | ⬜ todo | |
+| #   | Endpoint                                                                                                             | Backing internal capability                                                    | Status  | PR  |
+| --- | -------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------ | ------- | --- |
+| 1   | `PATCH /api/v1/tasks/:taskId` (title/description/taskType, pre-start edits)                                          | `boardService.updateBlock` (`updateBlockContract`)                             | ⬜ todo |     |
+| 2   | `POST /api/v1/tasks/:taskId/stop`                                                                                    | `executionService.cancel` (`stopAgentRunContract`)                             | ⬜ todo |     |
+| 3   | `POST /api/v1/tasks/:taskId/retry` (must reuse the `personalGateForBlock` refusal)                                   | `retryAgentRunContract` path                                                   | ⬜ todo |     |
+| 4   | `DELETE /api/v1/tasks/:taskId` (archive semantics)                                                                   | `boardService` remove/archive (`removeBlockContract` / `archiveBlockContract`) | ⬜ todo |     |
+| 5   | `GET /api/v1/tasks/:taskId/run` — richer run projection (per-step status, subtasks, failure kind/message, PR branch) | `executionRepository.get` + a new `publicRun` projection                       | ⬜ todo |     |
+| 6   | `GET /api/v1/tasks/:taskId/events` (SSE, live run progress)                                                          | the jobs-SSE bounded-poll pattern, verbatim                                    | ⬜ todo |     |
 
 ### Tier 2 — discovery metadata the lifecycle needs
 
-| # | Endpoint | Backing internal capability | Status | PR |
-| - | -------- | --------------------------- | ------ | -- |
-| 7 | `GET /api/v1/pipelines` — id/name/steps + a headless-startable flag (closes the `pipeline_required`-with-no-way-to-discover gap) | `pipelineService.list` + `isHeadlessInlinePipeline` | ⬜ todo | |
-| 8 | `GET /api/v1/jobs` — list the workspace's initiative jobs (a restarted integration currently loses every job id) | `executionRepository` + internal-anchor scoping (`loadPublicJob` generalized to a list) | ⬜ todo | |
-| 9 | Pagination + status/`since` filters on `GET /services/:id/tasks` (and the new `/jobs`) | new bounded list port methods where needed (no JS-side filtering of unbounded reads) | ⬜ todo | |
+| #   | Endpoint                                                                                                                         | Backing internal capability                                                             | Status  | PR  |
+| --- | -------------------------------------------------------------------------------------------------------------------------------- | --------------------------------------------------------------------------------------- | ------- | --- |
+| 7   | `GET /api/v1/pipelines` — id/name/steps + a headless-startable flag (closes the `pipeline_required`-with-no-way-to-discover gap) | `pipelineService.list` + `isHeadlessInlinePipeline`                                     | ⬜ todo |     |
+| 8   | `GET /api/v1/jobs` — list the workspace's initiative jobs (a restarted integration currently loses every job id)                 | `executionRepository` + internal-anchor scoping (`loadPublicJob` generalized to a list) | ⬜ todo |     |
+| 9   | Pagination + status/`since` filters on `GET /services/:id/tasks` (and the new `/jobs`)                                           | new bounded list port methods where needed (no JS-side filtering of unbounded reads)    | ⬜ todo |     |
 
 ### Tier 3 — eventing & operations
 
-| #  | Endpoint / feature | Backing internal capability | Status | PR |
-| -- | ------------------ | --------------------------- | ------ | -- |
-| 10 | **Outbound webhooks**: register per-key/workspace callback URLs for task transitions + job completion; HMAC-signed, retried delivery | new table (D1 ⇄ Drizzle, conformance-asserted) + a webhook `NotificationChannel` behind `CompositeNotificationChannel` (the seam built for exactly this) | ⬜ todo | |
-| 11 | `GET /api/v1/notifications` + `POST …/:id/act\|dismiss` (merge_review / pipeline_complete / ci_failed resolution) — **blocked on key scopes (#13)**: `act` on a merge_review performs a real GitHub merge | `NotificationService` (`listNotificationsContract` / `actNotificationContract` / `dismissNotificationContract`) | ⬜ todo | |
-| 12 | `GET /api/v1/usage` — spend/usage read for external dashboards | `getSpendStatusContract` / `getWorkspaceUsageContract` | ⬜ todo | |
+| #   | Endpoint / feature                                                                                                                                                                                        | Backing internal capability                                                                                                                              | Status  | PR  |
+| --- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------- | ------- | --- |
+| 10  | **Outbound webhooks**: register per-key/workspace callback URLs for task transitions + job completion; HMAC-signed, retried delivery                                                                      | new table (D1 ⇄ Drizzle, conformance-asserted) + a webhook `NotificationChannel` behind `CompositeNotificationChannel` (the seam built for exactly this) | ⬜ todo |     |
+| 11  | `GET /api/v1/notifications` + `POST …/:id/act\|dismiss` (merge_review / pipeline_complete / ci_failed resolution) — **blocked on key scopes (#13)**: `act` on a merge_review performs a real GitHub merge | `NotificationService` (`listNotificationsContract` / `actNotificationContract` / `dismissNotificationContract`)                                          | ⬜ todo |     |
+| 12  | `GET /api/v1/usage` — spend/usage read for external dashboards                                                                                                                                            | `getSpendStatusContract` / `getWorkspaceUsageContract`                                                                                                   | ⬜ todo |     |
 
 ### Cross-cutting prerequisite
 
-| #  | Item | Notes | Status | PR |
-| -- | ---- | ----- | ------ | -- |
-| 13 | **Per-key scopes** (`read` / `write` / `admin`) on `public_api_keys` | Required before any merge-adjacent or destructive endpoint (#4, #11); land it alongside Tier 1 while the key population is still small — pre-1.0, no back-compat: existing keys may simply be re-minted | ⬜ todo | |
+| #   | Item                                                                 | Notes                                                                                                                                                                                                   | Status  | PR  |
+| --- | -------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ------- | --- |
+| 13  | **Per-key scopes** (`read` / `write` / `admin`) on `public_api_keys` | Required before any merge-adjacent or destructive endpoint (#4, #11); land it alongside Tier 1 while the key population is still small — pre-1.0, no back-compat: existing keys may simply be re-minted | ⬜ todo |     |
 
 ### Tier 4 — larger surface, only on demand (deliberately deferred)
 
-| #  | Endpoint / feature | Why deferred | Status |
-| -- | ------------------ | ------------ | ------ |
-| 14 | `POST /api/v1/bootstrap` (headless repo bootstrap) | container-backed + force-pushes to GitHub — breaks the current "public runs never touch GitHub" invariant; needs scopes + explicit design | ⬜ deferred |
-| 15 | Document/requirements ingestion (attach a PRD body at task creation) | wants the documents model exposed externally; scope unclear until a consumer exists | ⬜ deferred |
-| 16 | `GET /api/v1/openapi.json` — SERVE the already-generated spec (`docs/openapi.json` exists, produced by `pnpm gen:openapi` from the Valibot contracts and drift-guarded by `pnpm check:openapi` in CI) | trivial once wanted; today the spec ships as a repo file, an endpoint is only packaging | ⬜ deferred |
+| #   | Endpoint / feature                                                                                                                                                                                    | Why deferred                                                                                                                              | Status      |
+| --- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------- | ----------- |
+| 14  | `POST /api/v1/bootstrap` (headless repo bootstrap)                                                                                                                                                    | container-backed + force-pushes to GitHub — breaks the current "public runs never touch GitHub" invariant; needs scopes + explicit design | ⬜ deferred |
+| 15  | Document/requirements ingestion (attach a PRD body at task creation)                                                                                                                                  | wants the documents model exposed externally; scope unclear until a consumer exists                                                       | ⬜ deferred |
+| 16  | `GET /api/v1/openapi.json` — SERVE the already-generated spec (`docs/openapi.json` exists, produced by `pnpm gen:openapi` from the Valibot contracts and drift-guarded by `pnpm check:openapi` in CI) | trivial once wanted; today the spec ships as a repo file, an endpoint is only packaging                                                   | ⬜ deferred |
 
 ## Conventions & gotchas carried between iterations
 

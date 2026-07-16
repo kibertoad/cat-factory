@@ -370,7 +370,6 @@ function buildTraceSink(config: AppConfig): CoreDependencies['llmTraceSink'] {
  */
 function selectNodeSlackDeps(
   config: AppConfig,
-  db: DrizzleDb,
   repos: ReturnType<typeof createDrizzleRepositories>,
   // The remote-source seam (mothership mode): `sourced('name', build)` returns the remote registry
   // entry when there's no `db`, else builds the Drizzle repo. Routing the three Slack repos through
@@ -2167,7 +2166,7 @@ export function buildNodeContainer(options: NodeContainerOptions): ServerContain
   // events reach EVERY board that mounts it (parity with the Worker's selectEventPublisher).
   // The in-app push is also a notification channel, composed alongside Slack (when
   // enabled) so a raised notification both lands in the inbox live AND fans to Slack.
-  const slackDeps = selectNodeSlackDeps(config, db, repos, sourced)
+  const slackDeps = selectNodeSlackDeps(config, repos, sourced)
   const executionEventPublisher = options.realtimeSink
     ? new FanOutEventPublisher(new NodeEventPublisher(options.realtimeSink), {
         workspaceMountRepository: repos.workspaceMountRepository,
