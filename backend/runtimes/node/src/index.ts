@@ -101,6 +101,8 @@ export {
   type CoreRepositories,
   DrizzleLocalSettingsRepository,
   DrizzleWorkspaceSettingsRepository,
+  DrizzleWorkspaceRepository,
+  DrizzleWorkspaceMemberRepository,
 } from './repositories/drizzle.js'
 export {
   DrizzleGitHubInstallationRepository,
