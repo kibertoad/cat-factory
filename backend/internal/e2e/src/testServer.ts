@@ -87,6 +87,15 @@ const confidence = process.env.E2E_CONFIDENCE ? Number(process.env.E2E_CONFIDENC
 const baseOptions: FakeOptions = {
   confidence,
   decisionOnSteps,
+  // A real code-producing pipeline (coder/build) opens a PR — so the fake reports one by
+  // default. This is not cosmetic: `RunStateMachine.finalizeBlock` finalizes a merger-less
+  // run to `pr_ready` (+ a `pipeline_complete` notification) ONLY when the block has a PR;
+  // a run that produced NO PR takes the read-only/findings terminal path and finalizes
+  // silently `done` (no notification). Without a default PR every run-to-terminal spec
+  // (run/notifications/approval-gate/fork-decision/pipeline-progress/recurring-run) would
+  // hit that no-PR path and never reach `pr_ready`/raise the inbox item they assert on. A
+  // spec that needs a different PR (or the gate specs, which set their own) overrides it.
+  pullRequest: { url: 'https://github.com/o/r/pull/1', number: 1, branch: 'feat/login' },
   ...(asyncKinds.length || dispatchThrowKinds.length
     ? {
         // A thrown dispatch is only meaningful for an async (polled) kind.
