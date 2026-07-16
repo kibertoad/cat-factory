@@ -40,7 +40,7 @@ one as part of a delivery pipeline.
   pattern) and `FragmentSourceService` is refactored onto it — shared design over
   copy-the-shape.
 - **Instructions + resource manifest are persisted on our side**; resource bodies are
-  fetched at the skill's immutable `pinned_commit` at dispatch. The run path never *depends*
+  fetched at the skill's immutable `pinned_commit` at dispatch. The run path never _depends_
   on a live GitHub fetch — a probe/GitHub failure degrades to the last-synced content.
 
 ## Target pattern
@@ -69,13 +69,13 @@ The reference implementations to copy per slice:
 
 ## Slice checklist
 
-| # | Slice                                                                                                                                                                                                                                                                                                                                       | Status | PR  |
-| - | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ------ | --- |
-| 0 | Tracker (this doc)                                                                                                                                                                                                                                                                                                                          | done   | —   |
-| 1 | **Data + sync core**: shared `repo-source-sync` helper extraction + `FragmentSourceService` refactor; kernel ports (`SkillSourceRepository`, `AccountSkillRepository`); `skill_sources` + `account_skills` D1 ⇄ Drizzle + conformance; `SkillSourceService` / `SkillCatalogService`; `AppCaches.skillCatalog`; contracts + `SkillLibraryController` (account tier) + facade wiring | todo   | —   |
-| 2 | **Execution**: `stepOptionsSchema.skillId`; `registerSkillAgentKind` (surface `container-coding`, `noChangesTolerated`); `AgentRunContext.skill`; `skillResolver` in `AgentContextBuilder` + facade wiring; `ContainerAgentExecutor` harness-aware rendering (top-level `skill` job-body field); executor-harness native claude-code skills write + image-tag bump; pipeline-save validation; per-run `skillVersion` pinning | todo   | —   |
-| 3 | **Frontend**: `skill` palette block + per-step skill picker bound to `stepOptions[i].skillId`; snapshot `skills` list; account-settings Skills management UI (link/sync/status); i18n in ALL locales                                                                                                                                          | todo   | —   |
-| 4 | **Freshness automation**: push-webhook `skill-source-resync` enqueue + queue handler (both runtimes); dispatch-time self-verifying probe on `skillCatalog` (per-source `latestCommitSha`, degrade to last-synced on failure)                                                                                                                  | todo   | —   |
+| #   | Slice                                                                                                                                                                                                                                                                                                                                                                                                                        | Status | PR        |
+| --- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ------ | --------- |
+| 0   | Tracker (this doc)                                                                                                                                                                                                                                                                                                                                                                                                           | done   | —         |
+| 1   | **Data + sync core**: shared `repo-source-sync` helper extraction + `FragmentSourceService` refactor; kernel ports (`SkillSourceRepository`, `AccountSkillRepository`); `skill_sources` + `account_skills` D1 ⇄ Drizzle + conformance; `SkillSourceService` / `SkillCatalogService`; `AppCaches.skillCatalog`; contracts + `SkillLibraryController` (account tier) + facade wiring                                           | done   | (this PR) |
+| 2   | **Execution**: `stepOptionsSchema.skillId`; `registerSkillAgentKind` (surface `container-coding`, `noChangesTolerated`); `AgentRunContext.skill`; `skillResolver` in `AgentContextBuilder` + facade wiring; `ContainerAgentExecutor` harness-aware rendering (top-level `skill` job-body field); executor-harness native claude-code skills write + image-tag bump; pipeline-save validation; per-run `skillVersion` pinning | todo   | —         |
+| 3   | **Frontend**: `skill` palette block + per-step skill picker bound to `stepOptions[i].skillId`; snapshot `skills` list; account-settings Skills management UI (link/sync/status); i18n in ALL locales                                                                                                                                                                                                                         | todo   | —         |
+| 4   | **Freshness automation**: push-webhook `skill-source-resync` enqueue + queue handler (both runtimes); dispatch-time self-verifying probe on `skillCatalog` (per-source `latestCommitSha`, degrade to last-synced on failure)                                                                                                                                                                                                 | todo   | —         |
 
 Wrap-up: convert this tracker into an ADR under `backend/docs/adr/` and delete it (repo rule).
 
@@ -110,3 +110,28 @@ Wrap-up: convert this tracker into an ADR under `backend/docs/adr/` and delete i
 - **No N+1**: one installation resolve per sync; per-source (not per-skill) freshness probes;
   the webhook lookup rides an index on `skill_sources(repo_owner, repo_name)`; snapshot skills
   come from the account catalog cache in one read.
+
+### Slice 1 notes (carried forward)
+
+- **The shared sync engine lives in `@cat-factory/agents/src/repoSourceSync/`** —
+  `repo-source-sync.ts` (`syncRepoSource` / `probeRepoSourceStatus` / `normalizeDirPath`) owns
+  the commit-pin-before-read + id-keyed tombstone sweep + invalidate-only-on-change mechanics;
+  `frontmatter.ts` is the shared small-YAML parser. Both `FragmentSourceService` and
+  `SkillSourceService` inject a `reconcile` callback for their unit shape (a Markdown file vs a
+  `<skill>/SKILL.md` directory). Reuse this seam for any future repo-sourced tier rather than
+  copying the loop.
+- **The whole-dir head commit IS the skill staleness signal.** `SkillSourceService.sync`
+  short-circuits when the source dir's head commit hasn't advanced (`!commitMoved`) — nothing
+  under it changed, so every skill is `unchanged` with zero per-directory reads. A resource-only
+  edit advances that commit, so it lands in the `commitMoved` path and re-lists the manifest
+  even though `SKILL.md`'s blob sha is untouched (the tracker's resource-only-change wrinkle).
+- **Skills are ONE tier (account).** `skill_sources`/`account_skills` key on `account_id` (not
+  the fragment `(owner_kind, owner_id)` pair); `SkillLibraryController` mounts only under
+  `/accounts/:accountId`. Opt-in rides the existing `fragmentLibrary.enabled` flag (both are the
+  repo-sourced prompt library) — no new env var.
+- **Mothership mode: skills are OFF until the RPC surfaces them.** `buildNodeContainer` overrides
+  the (db-less) Drizzle skill repos with `remoteRepos.*`, which are undefined today, leaving the
+  module unassembled (the controller 503s) rather than assembling over a broken db — a clean
+  follow-up, exactly like fragment repo-sync.
+- **`RepoContentEntry.size`** is now optional on the kernel port, populated by the GitHub
+  contents API path (`FetchGitHubClient.listDirectory`); GitLab/fakes leave it undefined.

@@ -1,5 +1,6 @@
 import type {
   AccountModelPolicyCacheValue,
+  AccountSkillRecord,
   AppCaches,
   BudgetLimitCacheValue,
   CachedRepoRead,
@@ -59,6 +60,7 @@ export interface GroupCacheProfile {
 /** One profile entry per named cache in the kernel {@link AppCaches} bag. */
 export interface AppCachesProfile {
   fragmentCatalog: GroupCacheProfile
+  skillCatalog: GroupCacheProfile
   fragmentDocumentBody: GroupCacheProfile
   repoProjection: GroupCacheProfile
   repoFiles: GroupCacheProfile
@@ -77,6 +79,10 @@ export const DEFAULT_APP_CACHES_PROFILE: AppCachesProfile = {
   // One merged catalog per workspace; the key varies only when the workspace's
   // account changes, so a small per-group bound is plenty.
   fragmentCatalog: { enabled: true, ttlInMsecs: 5 * 60_000, maxGroups: 500, maxItemsPerGroup: 4 },
+  // One repo-sourced skill catalog per account, keyed by account id (one entry per group).
+  // Invalidation-driven (the skill-source sync drops the group after a change); no version
+  // probe — a DB read as the probe would cost as much as the DB read as the load.
+  skillCatalog: { enabled: true, ttlInMsecs: 5 * 60_000, maxGroups: 2000, maxItemsPerGroup: 1 },
   // The live external body of a document-backed fragment, grouped by workspace and
   // keyed per document. Self-verifying: an entry entering the last minute of its TTL
   // runs the source's cheap version probe (bump on unchanged, background reload on
@@ -179,6 +185,9 @@ export const DEFAULT_APP_CACHES_PROFILE: AppCachesProfile = {
  */
 export const ISOLATE_SAFE_APP_CACHES_PROFILE: AppCachesProfile = {
   fragmentCatalog: { ...DEFAULT_APP_CACHES_PROFILE.fragmentCatalog, enabled: false },
+  // Pass-through for the same reason as `fragmentCatalog`: the skill catalog is our own
+  // mutable D1 state with no cross-isolate invalidation bus on the Worker.
+  skillCatalog: { ...DEFAULT_APP_CACHES_PROFILE.skillCatalog, enabled: false },
   fragmentDocumentBody: { ...DEFAULT_APP_CACHES_PROFILE.fragmentDocumentBody },
   // Pass-through: the repo projection is our own mutable D1 state, and a Worker
   // isolate has no cross-isolate invalidation bus (unlike `fragmentDocumentBody`,
@@ -358,6 +367,11 @@ export function createAppCaches(options: CreateAppCachesOptions = {}): AppCaches
     profile.fragmentCatalog,
     options,
   )
+  const skillCatalog = buildGroupCache<AccountSkillRecord[]>(
+    'skill-catalog',
+    profile.skillCatalog,
+    options,
+  )
   const fragmentDocumentBody = buildGroupCache<DocumentContent>(
     'fragment-document-body',
     profile.fragmentDocumentBody,
@@ -407,6 +421,7 @@ export function createAppCaches(options: CreateAppCachesOptions = {}): AppCaches
   )
   return {
     fragmentCatalog,
+    skillCatalog,
     fragmentDocumentBody,
     repoProjection,
     repoFiles,
@@ -421,6 +436,7 @@ export function createAppCaches(options: CreateAppCachesOptions = {}): AppCaches
     close: async () => {
       await Promise.all([
         fragmentCatalog.close(),
+        skillCatalog.close(),
         fragmentDocumentBody.close(),
         repoProjection.close(),
         repoFiles.close(),

@@ -403,3 +403,26 @@ export {
   selectDeterministic,
 } from './fragmentLibrary/fragment-catalog.js'
 export * as fragmentSourceLogic from './fragmentLibrary/fragment-source.logic.js'
+
+// ---- repo-sourced Claude Skills library (docs/initiatives/repo-skills.md) ----
+export {
+  SkillSourceService,
+  type SkillSourceServiceDependencies,
+  type ResolveSkillInstallationId,
+} from './skillLibrary/SkillSourceService.js'
+export {
+  SkillCatalogService,
+  type SkillCatalogServiceDependencies,
+} from './skillLibrary/SkillCatalogService.js'
+export * as skillSourceLogic from './skillLibrary/skill-source.logic.js'
+export {
+  syncRepoSource,
+  probeRepoSourceStatus,
+  normalizeDirPath,
+  type RepoSourceCoords,
+  type RepoSourceSyncOutcome,
+  type RepoSourceStatus,
+  type ReconcileContext,
+  type ReconcileResult,
+  type SyncRepoSourceParams,
+} from './repoSourceSync/repo-source-sync.js'

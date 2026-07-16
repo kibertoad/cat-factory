@@ -14,6 +14,7 @@ import { eventsController } from './modules/events/EventsController.js'
 import { eventsRelayController } from './modules/events/EventsRelayController.js'
 import { executionController } from './modules/execution/ExecutionController.js'
 import { fragmentLibraryController } from './modules/fragmentLibrary/FragmentLibraryController.js'
+import { skillLibraryController } from './modules/skillLibrary/SkillLibraryController.js'
 import { githubController } from './modules/github/GitHubController.js'
 import { githubWebhookController } from './modules/github/GitHubWebhookController.js'
 import { vcsWebhookController } from './modules/vcs/VcsWebhookController.js'
@@ -138,6 +139,7 @@ export function registerCoreControllers<E extends AppEnv>(app: Hono<E>): void {
   // for a cached machine token; 503 unless the local facade wired the connector.
   app.route('/', mothershipConnectController())
   app.route('/accounts/:accountId', fragmentLibraryController('account'))
+  app.route('/accounts/:accountId', skillLibraryController())
   app.route('/', workspaceController())
   // Real-time WebSocket event stream (self-authenticates via ?ticket=; the facade's
   // gate bypasses only its exact upgrade shape). The upgrade is delegated to the
