@@ -35,7 +35,8 @@
               "bug",
               "document",
               "spike",
-              "review"
+              "review",
+              "ralph"
             ],
             "type": "string"
           },
@@ -506,6 +507,7 @@
               "document",
               "spike",
               "review",
+              "ralph",
               "recurring"
             ],
             "type": "string"
