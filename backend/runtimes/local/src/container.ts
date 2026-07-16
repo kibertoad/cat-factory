@@ -4,6 +4,7 @@ import {
   DrizzleGitHubInstallationRepository,
   DrizzleLocalSettingsRepository,
   DrizzleRunnerPoolConnectionRepository,
+  LayeredEventPropagator,
   ProvisioningLogRecorder,
   SystemClock,
   buildNodeContainer,
@@ -13,7 +14,12 @@ import {
   loadNodeConfig,
   withProvisioningLog,
 } from '@cat-factory/node-server'
-import type { CoreRepositories, NodeContainerOptions } from '@cat-factory/node-server'
+import type {
+  CoreRepositories,
+  LocalEventSink,
+  NodeContainerOptions,
+  NodeRealtimeHub,
+} from '@cat-factory/node-server'
 import {
   SqliteWorkRunner,
   type MothershipComposition,
@@ -573,11 +579,28 @@ export function buildLocalContainer(options: NodeContainerOptions): ServerContai
         )
       : undefined
 
+  // Real-time UPSTREAM (docs/initiatives/mothership-mode.md, PR 2): in mothership mode, fan every
+  // engine event to the laptop's own SPA (the injected local hub) AND to the mothership over
+  // `POST /internal/events/publish`, so a hosted teammate on the shared board sees the local node's
+  // activity live. This layers the mothership adapter over the hub via the SAME WebSocketPropagator
+  // seam the Redis cross-node adapter uses — `LayeredEventPropagator.broadcast` already fans to the
+  // hub + each adapter, so no engine change is needed. Off (or no hub wired) → the hub is passed
+  // straight through unchanged, exactly as before.
+  const realtimeSink: LocalEventSink | undefined =
+    mothership && options.realtimeSink
+      ? new LayeredEventPropagator(options.realtimeSink as NodeRealtimeHub, [
+          mothership.realtimeAdapter,
+        ])
+      : options.realtimeSink
+
   const container = buildNodeContainer({
     ...options,
     env,
     config,
     repos,
+    // Override the spread `options.realtimeSink` with the mothership-layered sink (a no-op wrap
+    // when not in mothership mode — it stays the injected hub).
+    ...(realtimeSink ? { realtimeSink } : {}),
     // Local mode seeds a fresh workspace's model-preset library with Claude Opus 4.8 as the
     // default: the local facade runs subscription-only models (via the developer's ambient
     // `claude` CLI for inline steps + a leased personal credential for container steps), so
