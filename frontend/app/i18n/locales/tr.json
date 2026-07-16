@@ -104,6 +104,7 @@
     "workspaceSettings": "Çalışma alanı ayarları",
     "modelConfiguration": "Model yapılandırması",
     "accountSettings": "Hesap ayarları",
+    "operatorDashboard": "Platform gözlemlenebilirliği",
     "environmentSetup": "Ortam kurulumu"
   },
   "board": {
@@ -1304,6 +1305,64 @@
       "provider": "Sağlayıcı",
       "resultsCount": "{count} sonuç | {count} sonuç",
       "queriesTitle": "Yapılan aramalar"
+    }
+  },
+  "platformObservability": {
+    "title": "Platform gözlemlenebilirliği",
+    "refresh": "Yenile",
+    "close": "Kapat",
+    "loading": "Platform durumu yükleniyor…",
+    "retry": "Yeniden dene",
+    "window": {
+      "oneHour": "Son bir saat",
+      "oneDay": "Son 24 saat",
+      "sevenDays": "Son 7 gün"
+    },
+    "outcomes": {
+      "title": "Çalıştırma sonuçları",
+      "total": "Toplam çalıştırma",
+      "done": "Tamamlandı",
+      "failed": "Başarısız",
+      "successRate": "Başarı oranı",
+      "running": "Çalışıyor",
+      "blocked": "Engellendi",
+      "paused": "Duraklatıldı",
+      "pending": "Beklemede"
+    },
+    "trend": {
+      "title": "Sonuç eğilimi",
+      "done": "Tamamlandı",
+      "failed": "Başarısız",
+      "other": "Diğer",
+      "empty": "Bu aralıkta çalıştırma yok."
+    },
+    "failures": {
+      "title": "Hata dökümü",
+      "empty": "Bu aralıkta hata yok."
+    },
+    "failureKind": {
+      "preflight": "Ön kontrol",
+      "dispatch": "Gönderim",
+      "environment": "Ortam",
+      "evicted": "Tahliye edildi",
+      "timeout": "Zaman aşımı",
+      "agent": "Aracı",
+      "job_failed": "İş başarısız",
+      "rejected": "Reddedildi",
+      "companion_rejected": "Yardımcı reddedildi",
+      "stalled": "Takıldı",
+      "cancelled": "İptal edildi",
+      "unknown": "Bilinmiyor"
+    },
+    "durations": {
+      "title": "Çalıştırma süresi",
+      "avg": "Ortalama",
+      "min": "En düşük",
+      "max": "En yüksek",
+      "empty": "Bu aralıkta tamamlanmış çalıştırma yok."
+    },
+    "live": {
+      "title": "Şu anda etkin"
     }
   },
   "auth": {

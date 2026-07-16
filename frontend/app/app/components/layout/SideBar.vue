@@ -24,6 +24,10 @@ const auth = useAuthStore()
 const providerConnections = useProviderConnectionsStore()
 const ui = useUiStore()
 
+// The operator dashboard (deployment-level run health) is sensitive cross-workspace data,
+// so it's shown only to an admin of the active account (matching the backend admin gate).
+const isAccountAdmin = computed(() => accounts.activeAccount?.roles?.includes('admin') ?? false)
+
 // The Infrastructure menu (agent-container execution + test environments) shows whenever the
 // deployment reports its infrastructure capability — every facade populates `auth.infrastructure`
 // (it drives the execution-backend selector), so there is always an execution + test-env backend
@@ -366,6 +370,20 @@ watch(
             @click="ui.openAccountSettings()"
           >
             {{ t('nav.accountSettings') }}
+          </UButton>
+          <!-- Platform observability: deployment-level run health. Admin-only, like the backend gate. -->
+          <UButton
+            v-if="accounts.enabled && isAccountAdmin"
+            block
+            color="primary"
+            variant="soft"
+            size="sm"
+            icon="i-lucide-gauge"
+            class="justify-start"
+            data-testid="nav-operator-dashboard"
+            @click="ui.openOperatorDashboard()"
+          >
+            {{ t('nav.operatorDashboard') }}
           </UButton>
         </div>
       </section>

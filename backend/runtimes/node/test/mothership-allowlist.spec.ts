@@ -156,6 +156,18 @@ const NON_REMOTE: Record<string, Record<string, Reason>> = {
     liveRunIds: 'sweeper',
     listPausedExecutions: 'sweeper',
   },
+  // The operator-dashboard rollups are admin-gated reads (`GET /accounts/:id/observability/platform`
+  // guards on `requireAdmin`), and the machine RPC bypasses that service-layer gate, so they stay
+  // mothership-internal exactly like the account-settings reads. `accountScope` is a private query-
+  // scope helper (a `workspaces` sub-select), not a port method.
+  platformMetricsRepository: {
+    accountScope: 'helper',
+    runOutcomesSince: 'admin',
+    runOutcomeTrend: 'admin',
+    failureKindBreakdown: 'admin',
+    activeAndParkedCounts: 'admin',
+    durationStatsSince: 'admin',
+  },
   tokenUsageRepository: { record: 'telemetry', totalsSince: 'sweeper', deleteOlderThan: 'sweeper' },
   llmCallMetricRepository: {
     record: 'telemetry',

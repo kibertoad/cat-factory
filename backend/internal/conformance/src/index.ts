@@ -61,6 +61,11 @@ export { defineSharedStackSuite } from './shared-stack-suite.js'
 export { defineKaizenSuite } from './kaizen-suite.js'
 export { defineProvisioningLogSuite } from './provisioning-log-suite.js'
 export { defineNotificationSuite } from './notification-suite.js'
+export {
+  definePlatformMetricsSuite,
+  type PlatformMetricsSeed,
+  type PlatformMetricsSeedRun,
+} from './platform-metrics-suite.js'
 export { defineUserRepoAccessSuite } from './user-repo-access-suite.js'
 export { defineEnvironmentHandlersSuite } from './environment-handlers-suite.js'
 export { defineEnvironmentTestSuite } from './environment-test-suite.js'

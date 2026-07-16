@@ -86,6 +86,14 @@ export type {
 } from './llm-metrics.js'
 export { LLM_WARNING_FINISH_REASONS } from './llm-metrics.js'
 export type {
+  PlatformDurationStats,
+  PlatformFailureCount,
+  PlatformLiveCounts,
+  PlatformMetricsRepository,
+  PlatformRunOutcome,
+  PlatformRunTrendPoint,
+} from './platform-metrics.js'
+export type {
   AgentContextFile,
   AgentContextFragment,
   AgentContextRecorder,

@@ -103,6 +103,7 @@
     "workspaceSettings": "Paramètres de l’espace de travail",
     "modelConfiguration": "Configuration du modèle",
     "accountSettings": "Paramètres du compte",
+    "operatorDashboard": "Observabilité de la plateforme",
     "infrastructure": "Infrastructure",
     "environmentSetup": "Configuration d'environnement"
   },
@@ -1304,6 +1305,64 @@
       "provider": "Fournisseur",
       "resultsCount": "{count} résultat | {count} résultats",
       "queriesTitle": "Recherches effectuées"
+    }
+  },
+  "platformObservability": {
+    "title": "Observabilité de la plateforme",
+    "refresh": "Actualiser",
+    "close": "Fermer",
+    "loading": "Chargement de l'état de la plateforme…",
+    "retry": "Réessayer",
+    "window": {
+      "oneHour": "Dernière heure",
+      "oneDay": "Dernières 24 heures",
+      "sevenDays": "7 derniers jours"
+    },
+    "outcomes": {
+      "title": "Résultats des exécutions",
+      "total": "Exécutions totales",
+      "done": "Terminées",
+      "failed": "Échouées",
+      "successRate": "Taux de réussite",
+      "running": "En cours",
+      "blocked": "Bloquées",
+      "paused": "En pause",
+      "pending": "En attente"
+    },
+    "trend": {
+      "title": "Tendance des résultats",
+      "done": "Terminées",
+      "failed": "Échouées",
+      "other": "Autres",
+      "empty": "Aucune exécution sur cette période."
+    },
+    "failures": {
+      "title": "Répartition des échecs",
+      "empty": "Aucun échec sur cette période."
+    },
+    "failureKind": {
+      "preflight": "Contrôle préalable",
+      "dispatch": "Envoi",
+      "environment": "Environnement",
+      "evicted": "Évincée",
+      "timeout": "Délai dépassé",
+      "agent": "Agent",
+      "job_failed": "Tâche échouée",
+      "rejected": "Rejetée",
+      "companion_rejected": "Compagnon rejeté",
+      "stalled": "Bloquée",
+      "cancelled": "Annulée",
+      "unknown": "Inconnu"
+    },
+    "durations": {
+      "title": "Durée des exécutions",
+      "avg": "Moyenne",
+      "min": "Min.",
+      "max": "Max.",
+      "empty": "Aucune exécution terminée sur cette période."
+    },
+    "live": {
+      "title": "En direct"
     }
   },
   "auth": {

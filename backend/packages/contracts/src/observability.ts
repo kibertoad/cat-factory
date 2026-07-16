@@ -260,3 +260,83 @@ export const agentSearchQuerySchema = v.object({
   createdAt: v.number(),
 })
 export type AgentSearchQuery = v.InferOutput<typeof agentSearchQuerySchema>
+
+// ---------------------------------------------------------------------------
+// Platform-operator observability: deployment-level aggregate health, the dual of
+// the per-run detail above. Where the schemas above describe ONE run, these describe
+// the WHOLE deployment (scoped to an account) over a time window — run outcomes,
+// failure taxonomy, live/parked depth, duration stats + a bucketed trend. Every
+// number is a SQL rollup over `agent_runs` behind the kernel `PlatformMetricsRepository`
+// port; this schema is the wire projection the admin dashboard renders.
+// ---------------------------------------------------------------------------
+
+/** The time window the dashboard aggregates over. */
+export const platformObservabilityWindowSchema = v.picklist(['1h', '24h', '7d'])
+export type PlatformObservabilityWindow = v.InferOutput<typeof platformObservabilityWindowSchema>
+
+/** Run-outcome totals over the window (each a status bucket, plus the derived success rate). */
+export const platformOutcomeTotalsSchema = v.object({
+  /** All runs created in the window. */
+  total: v.number(),
+  done: v.number(),
+  failed: v.number(),
+  running: v.number(),
+  blocked: v.number(),
+  paused: v.number(),
+  /** Anything not one of the above (e.g. `pending`). */
+  other: v.number(),
+  /** `done / (done + failed)`, 0..1; null when no run reached a terminal outcome. */
+  successRate: v.nullable(v.number()),
+})
+export type PlatformOutcomeTotals = v.InferOutput<typeof platformOutcomeTotalsSchema>
+
+/** One contiguous time bucket of the outcome trend (zero-filled, oldest first). */
+export const platformTrendPointSchema = v.object({
+  /** Epoch-ms start of the bucket. */
+  start: v.number(),
+  done: v.number(),
+  failed: v.number(),
+  /** Every other status in the bucket (running/blocked/paused/pending). */
+  other: v.number(),
+})
+export type PlatformTrendPoint = v.InferOutput<typeof platformTrendPointSchema>
+
+/** One failure-kind slice of the failed-run taxonomy. */
+export const platformFailureSliceSchema = v.object({
+  /** The `agentFailureKind` (or `unknown`); kept as a string so an out-of-enum value still renders. */
+  kind: v.string(),
+  count: v.number(),
+})
+export type PlatformFailureSlice = v.InferOutput<typeof platformFailureSliceSchema>
+
+/** The complete deployment-health projection the admin dashboard renders. */
+export const platformObservabilitySchema = v.object({
+  window: platformObservabilityWindowSchema,
+  /** When the projection was computed (epoch ms). */
+  generatedAt: v.number(),
+  /** Start of the window (epoch ms) — `generatedAt - window`. */
+  since: v.number(),
+  outcomes: platformOutcomeTotalsSchema,
+  trend: v.object({
+    /** Width of each trend bucket (ms). */
+    bucketMs: v.number(),
+    points: v.array(platformTrendPointSchema),
+  }),
+  /** Failure taxonomy over the window, most frequent first. */
+  failures: v.array(platformFailureSliceSchema),
+  /** Live/parked run depth right now (a snapshot, not windowed). */
+  live: v.object({
+    running: v.number(),
+    blocked: v.number(),
+    paused: v.number(),
+    pending: v.number(),
+  }),
+  /** Wall-clock duration over terminal runs in the window (ms). */
+  durations: v.object({
+    count: v.number(),
+    avgMs: v.nullable(v.number()),
+    minMs: v.nullable(v.number()),
+    maxMs: v.nullable(v.number()),
+  }),
+})
+export type PlatformObservability = v.InferOutput<typeof platformObservabilitySchema>

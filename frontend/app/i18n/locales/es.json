@@ -103,6 +103,7 @@
     "workspaceSettings": "Ajustes del espacio de trabajo",
     "modelConfiguration": "Configuración del modelo",
     "accountSettings": "Ajustes de la cuenta",
+    "operatorDashboard": "Observabilidad de la plataforma",
     "infrastructure": "Infraestructura",
     "environmentSetup": "Configuración de entorno"
   },
@@ -1304,6 +1305,64 @@
       "provider": "Proveedor",
       "resultsCount": "{count} resultado | {count} resultados",
       "queriesTitle": "Búsquedas realizadas"
+    }
+  },
+  "platformObservability": {
+    "title": "Observabilidad de la plataforma",
+    "refresh": "Actualizar",
+    "close": "Cerrar",
+    "loading": "Cargando el estado de la plataforma…",
+    "retry": "Reintentar",
+    "window": {
+      "oneHour": "Última hora",
+      "oneDay": "Últimas 24 horas",
+      "sevenDays": "Últimos 7 días"
+    },
+    "outcomes": {
+      "title": "Resultados de las ejecuciones",
+      "total": "Ejecuciones totales",
+      "done": "Completadas",
+      "failed": "Fallidas",
+      "successRate": "Tasa de éxito",
+      "running": "En ejecución",
+      "blocked": "Bloqueadas",
+      "paused": "En pausa",
+      "pending": "Pendientes"
+    },
+    "trend": {
+      "title": "Tendencia de resultados",
+      "done": "Completadas",
+      "failed": "Fallidas",
+      "other": "Otras",
+      "empty": "No hay ejecuciones en este periodo."
+    },
+    "failures": {
+      "title": "Desglose de fallos",
+      "empty": "No hay fallos en este periodo."
+    },
+    "failureKind": {
+      "preflight": "Verificación previa",
+      "dispatch": "Despacho",
+      "environment": "Entorno",
+      "evicted": "Desalojada",
+      "timeout": "Tiempo agotado",
+      "agent": "Agente",
+      "job_failed": "Trabajo fallido",
+      "rejected": "Rechazada",
+      "companion_rejected": "Acompañante rechazado",
+      "stalled": "Estancada",
+      "cancelled": "Cancelada",
+      "unknown": "Desconocido"
+    },
+    "durations": {
+      "title": "Duración de las ejecuciones",
+      "avg": "Media",
+      "min": "Mín.",
+      "max": "Máx.",
+      "empty": "No hay ejecuciones completadas en este periodo."
+    },
+    "live": {
+      "title": "Activas ahora"
     }
   },
   "auth": {

@@ -28,6 +28,7 @@ import type { PreviewTransport } from '@cat-factory/kernel'
 import type { AgentExecutor } from '@cat-factory/kernel'
 import type { TokenUsageRepository } from '@cat-factory/kernel'
 import type { LlmCallMetricRepository } from '@cat-factory/kernel'
+import type { PlatformMetricsRepository } from '@cat-factory/kernel'
 import type { ProvisioningLogRepository } from '@cat-factory/kernel'
 import type { LlmTraceSink } from '@cat-factory/kernel'
 import { type WorkRunner, NoopWorkRunner } from '@cat-factory/kernel'
@@ -141,6 +142,7 @@ import type { OpenRouterModelMeta } from '@cat-factory/contracts'
 import { LlmObservabilityService } from './modules/observability/LlmObservabilityService.js'
 import { AgentContextObservabilityService } from './modules/observability/AgentContextObservabilityService.js'
 import { SearchQueryObservabilityService } from './modules/observability/SearchQueryObservabilityService.js'
+import { PlatformObservabilityService } from './modules/observability/PlatformObservabilityService.js'
 import {
   GitHubInstallationService,
   RepoProvisioningService,
@@ -386,6 +388,13 @@ export interface CoreDependencies {
    * tests/unconfigured facades are unaffected.
    */
   llmCallMetricRepository?: LlmCallMetricRepository
+  /**
+   * Deployment-level rollup port over `agent_runs` (run outcomes, failure taxonomy, live/parked
+   * depth, duration + trend) backing the platform-operator dashboard. Optional: when wired,
+   * `createCore` builds {@link PlatformObservabilityService} and re-exposes it for the admin read
+   * endpoint; absent (tests / unconfigured facades) → no platform view, engine unaffected.
+   */
+  platformMetricsRepository?: PlatformMetricsRepository
   /**
    * Whether the LLM observability sink persists the full prompt body with each metric.
    * Defaults to true; set false (via `LLM_RECORD_PROMPTS=false`) to keep the numeric
@@ -1197,6 +1206,8 @@ export interface Core {
   executionEventPublisher: ExecutionEventPublisher
   /** Present only when the LLM-metric repository is wired (see CoreDependencies). */
   llmObservability?: LlmObservabilityService
+  /** Present only when the platform-metrics rollup repository is wired (see CoreDependencies). */
+  platformObservability?: PlatformObservabilityService
   /** Present only when the agent-context snapshot repository is wired (see CoreDependencies). */
   agentContextObservability?: AgentContextObservabilityService
   /** Present only when the agent-search-query repository is wired (see CoreDependencies). */
@@ -2671,6 +2682,12 @@ export function createCore(dependencies: CoreDependencies): Core {
         workspaceSettingsCache: caches.workspaceSettings,
       })
     : undefined
+  const platformObservability = dependencies.platformMetricsRepository
+    ? new PlatformObservabilityService({
+        platformMetricsRepository: dependencies.platformMetricsRepository,
+        clock: dependencies.clock,
+      })
+    : undefined
   // The provisioning event log lives in a separate high-churn store. When its
   // repository is wired, build a best-effort recorder (threaded into the env
   // services) + the read service (exposed for the logs controller). The container
@@ -2933,6 +2950,7 @@ export function createCore(dependencies: CoreDependencies): Core {
     initiativePresetRegistry,
     executionEventPublisher,
     ...(llmObservability ? { llmObservability } : {}),
+    ...(platformObservability ? { platformObservability } : {}),
     ...(dependencies.agentContextObservability
       ? { agentContextObservability: dependencies.agentContextObservability }
       : {}),

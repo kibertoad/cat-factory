@@ -104,6 +104,7 @@
     "workspaceSettings": "הגדרות סביבת עבודה",
     "modelConfiguration": "תצורת מודל",
     "accountSettings": "הגדרות חשבון",
+    "operatorDashboard": "תצפית על הפלטפורמה",
     "environmentSetup": "הגדרת סביבה"
   },
   "board": {
@@ -1304,6 +1305,64 @@
       "provider": "ספק",
       "resultsCount": "תוצאה {count} | {count} תוצאות",
       "queriesTitle": "חיפושים שבוצעו"
+    }
+  },
+  "platformObservability": {
+    "title": "תצפית על הפלטפורמה",
+    "refresh": "רענון",
+    "close": "סגירה",
+    "loading": "טוען את תקינות הפלטפורמה…",
+    "retry": "נסה שוב",
+    "window": {
+      "oneHour": "השעה האחרונה",
+      "oneDay": "24 השעות האחרונות",
+      "sevenDays": "7 הימים האחרונים"
+    },
+    "outcomes": {
+      "title": "תוצאות ההרצות",
+      "total": "סך כל ההרצות",
+      "done": "הושלמו",
+      "failed": "נכשלו",
+      "successRate": "שיעור הצלחה",
+      "running": "רצות",
+      "blocked": "חסומות",
+      "paused": "מושהות",
+      "pending": "ממתינות"
+    },
+    "trend": {
+      "title": "מגמת התוצאות",
+      "done": "הושלמו",
+      "failed": "נכשלו",
+      "other": "אחר",
+      "empty": "אין הרצות בטווח זה."
+    },
+    "failures": {
+      "title": "פירוט הכשלים",
+      "empty": "אין כשלים בטווח זה."
+    },
+    "failureKind": {
+      "preflight": "בדיקה מקדימה",
+      "dispatch": "שיגור",
+      "environment": "סביבה",
+      "evicted": "פונתה",
+      "timeout": "פסק זמן",
+      "agent": "סוכן",
+      "job_failed": "המשימה נכשלה",
+      "rejected": "נדחתה",
+      "companion_rejected": "המלווה נדחה",
+      "stalled": "נתקעה",
+      "cancelled": "בוטלה",
+      "unknown": "לא ידוע"
+    },
+    "durations": {
+      "title": "משך ההרצה",
+      "avg": "ממוצע",
+      "min": "מינימום",
+      "max": "מקסימום",
+      "empty": "אין הרצות שהושלמו בטווח זה."
+    },
+    "live": {
+      "title": "פעילות כעת"
     }
   },
   "auth": {

@@ -2367,6 +2367,8 @@ export function buildNodeContainer(options: NodeContainerOptions): ServerContain
     workspaceMountRepository: repos.workspaceMountRepository,
     tokenUsageRepository: repos.tokenUsageRepository,
     llmCallMetricRepository: repos.llmCallMetricRepository,
+    // Deployment-level rollups over `agent_runs` for the operator dashboard.
+    platformMetricsRepository: repos.platformMetricsRepository,
     // Unified provisioning event log (its own Postgres schema). Threads the recorder
     // into the env services and exposes the read service for the logs controller.
     provisioningLogRepository: repos.provisioningLogRepository,

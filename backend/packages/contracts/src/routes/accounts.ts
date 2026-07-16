@@ -15,6 +15,7 @@ import {
 } from '../accounts.js'
 import { accountSettingsViewSchema, updateAccountSettingsSchema } from '../accountSettings.js'
 import { addApiKeySchema, apiKeyListResultSchema, apiKeySchema } from '../api-keys.js'
+import { platformObservabilitySchema, platformObservabilityWindowSchema } from '../observability.js'
 import { errorResponses, singleStringParam } from './_shared.js'
 
 // ---------------------------------------------------------------------------
@@ -184,4 +185,16 @@ export const updateAccountSettingsContract = defineApiContract({
   pathResolver: ({ accountId }) => `/accounts/${accountId}/settings`,
   requestBodySchema: updateAccountSettingsSchema,
   responsesByStatusCode: { 200: accountSettingsViewSchema, ...errorResponses },
+})
+
+// ---- platform-operator observability (admin-only) -------------------------
+
+// Deployment-level aggregate health for the account, over a time window. Admin-gated
+// (sensitive cross-workspace operational data). See PlatformObservabilityController.
+export const getPlatformObservabilityContract = defineApiContract({
+  method: 'get',
+  requestPathParamsSchema: accountIdParams,
+  requestQuerySchema: v.object({ window: v.optional(platformObservabilityWindowSchema) }),
+  pathResolver: ({ accountId }) => `/accounts/${accountId}/observability/platform`,
+  responsesByStatusCode: { 200: platformObservabilitySchema, ...errorResponses },
 })
