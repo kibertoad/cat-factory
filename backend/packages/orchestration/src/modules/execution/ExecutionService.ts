@@ -101,6 +101,8 @@ import {
   type VisualConfirmActions,
 } from './gate-window-facades.js'
 import { TesterController } from './TesterController.js'
+import { RalphController } from './RalphController.js'
+import { isRalphKind, resolveRalphConfig, seedRalphState } from './ralph.logic.js'
 import type { TesterQualityReviewer } from './TesterQualityReviewService.js'
 import { HumanTestController } from './HumanTestController.js'
 import { VisualConfirmationController } from './VisualConfirmationController.js'
@@ -562,6 +564,7 @@ export class ExecutionService {
   private readonly companionController: CompanionController
   /** Drives the Tester gate's fix loop: report → greenlight / dispatch fixer / fail. */
   private readonly testerController: TesterController
+  private readonly ralphController: RalphController
   /** Drives the human-testing gate: provision env → park → confirm / fix / pull-main / recreate. */
   private readonly humanTestController: HumanTestController
   /** Drives the visual-confirmation gate: gather screenshots → park → approve / fix / recapture. */
@@ -773,6 +776,14 @@ export class ExecutionService {
       ...(testerQualityReviewer ? { qualityReviewer: testerQualityReviewer } : {}),
       clockNow: () => this.clock.now(),
     })
+    this.ralphController = new RalphController({
+      blockRepository,
+      notificationService,
+      agentExecutor,
+      contextBuilder: this.contextBuilder,
+      stateMachine: this.runStateMachine,
+      clockNow: () => this.clock.now(),
+    })
     this.humanTestController = new HumanTestController({
       blockRepository,
       executionRepository,
@@ -929,6 +940,7 @@ export class ExecutionService {
       mergeResolver: this.mergeResolver,
       companionController: this.companionController,
       testerController: this.testerController,
+      ralphController: this.ralphController,
       humanTestController: this.humanTestController,
       visualConfirmationController: this.visualConfirmationController,
       reviewGate: this.reviewGate,
@@ -1699,6 +1711,19 @@ export class ExecutionService {
     // runs, so the two can't drift. See assertRunnable.
     await this.assertRunnable(workspaceId, block, pipeline, initiatedBy)
 
+    // A Ralph-loop step needs a programmatic completion command (its exit condition); refuse to
+    // start a misconfigured run rather than dispatch a validation-less coding pass that never
+    // gates. The command is a per-task agent-config value (the SPA also requires it at creation).
+    if (
+      pipeline.agentKinds.some(isRalphKind) &&
+      !resolveRalphConfig(block.agentConfig).validationCommand
+    ) {
+      throw new ValidationError(
+        'A Ralph loop task needs a validation command (its completion criterion) before it can ' +
+          'start. Set one in the task configuration.',
+      )
+    }
+
     // START-ONLY gates below: a retry REPLACES the failed run rather than adding a new one, so
     // the concurrency limit doesn't apply to it, and a re-drive of an already-started task isn't
     // re-gated on its dependencies.
@@ -1821,6 +1846,13 @@ export class ExecutionService {
                     : {}),
                 },
               }
+            : {}),
+          // A `ralph` step carries its persistent-loop state — the iteration count, the budget,
+          // and the programmatic completion command — seeded from the block's per-task agent
+          // config. Riding the persisted step is what lets a mid-loop run survive a restart
+          // (both durable drivers + sweepers re-drive from it). See ralph.logic.ts.
+          ...(isRalphKind(kind)
+            ? { ralph: seedRalphState(resolveRalphConfig(block.agentConfig)) }
             : {}),
         }
       })

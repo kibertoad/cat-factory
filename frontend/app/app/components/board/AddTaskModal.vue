@@ -81,6 +81,7 @@ const TASK_TYPES = computed<{ value: TaskTypeChoice; label: string; icon: string
       label: t('board.addTask.types.review'),
       icon: 'i-lucide-clipboard-check',
     },
+    { value: 'ralph', label: t('board.addTask.types.ralph'), icon: 'i-lucide-infinity' },
     { value: 'recurring', label: t('board.addTask.types.recurring'), icon: 'i-lucide-repeat' },
   ]
   // A document repository only accepts document/spike tasks (see BoardService.addTask).
@@ -309,6 +310,15 @@ const selectedPipelineLabel = computed(
   () => pipelines.getPipeline(pipelineId.value)?.name ?? t('board.addTask.chooseAtRunTime'),
 )
 
+// Picking the Ralph loop task type auto-selects its pipeline, so the per-task validation
+// command + iteration budget (contributed by the `ralph` agent) surface immediately — the
+// loop is meaningless without them, so "choose at run time" would be a dead end here.
+watch(taskType, (next) => {
+  if (next !== 'ralph') return
+  const ralph = pipelines.pipelines.find((p) => p.id === 'pl_ralph')
+  if (ralph) pipelineId.value = ralph.id
+})
+
 // Task-level agent config contributed by the selected pipeline's agents (e.g. the
 // Tester's environment). Editable up front; persisted on the task and frozen once
 // the contributing agent runs. Defaults to each descriptor's default until changed.
@@ -489,10 +499,20 @@ const { requestClose } = useUnsavedGuard({
 
 // A recurring task only needs a target frame (its details are filled in the schedule
 // modal); every other type needs a title. A review task additionally needs a target PR.
+// The Ralph loop's completion criterion (its `ralph.validationCommand` agent-config id). The
+// loop is meaningless without it, so the create form requires it up front — the backend also
+// refuses to start a Ralph run without one (a 422), this just fails fast in the UI.
+const RALPH_VALIDATION_COMMAND_ID = 'ralph.validationCommand'
+
 const canAdd = computed(() => {
   if (isRecurring.value) return recurringFrameId.value !== null
   if (title.value.trim().length === 0) return false
   if (taskType.value === 'review' && !parseReviewPrRef(reviewPrRef.value)) return false
+  if (
+    taskType.value === 'ralph' &&
+    configValue(RALPH_VALIDATION_COMMAND_ID, '').trim().length === 0
+  )
+    return false
   return true
 })
 
@@ -898,7 +918,7 @@ async function add() {
             </span>
             <div v-for="d in configDescriptors" :key="d.id" class="space-y-1">
               <div class="text-[11px] text-slate-400">{{ d.label }}</div>
-              <div class="flex flex-wrap gap-1">
+              <div v-if="d.type === 'select'" class="flex flex-wrap gap-1">
                 <UButton
                   v-for="opt in d.options"
                   :key="opt.value"
@@ -910,6 +930,15 @@ async function add() {
                   {{ opt.label }}
                 </UButton>
               </div>
+              <UInput
+                v-else
+                :model-value="configValue(d.id, d.default)"
+                :type="d.type === 'number' ? 'number' : 'text'"
+                :placeholder="d.placeholder"
+                size="xs"
+                :data-testid="`agent-config-${d.id}`"
+                @update:model-value="(v: string | number) => setConfig(d.id, String(v))"
+              />
               <p class="text-[11px] leading-snug text-slate-500">{{ d.description }}</p>
             </div>
           </div>

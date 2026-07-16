@@ -102,6 +102,20 @@ export interface AgentRunContext {
     /** Titles of the rejected alternatives, so the coder doesn't drift into them. */
     alternativesConsidered: string[]
   }
+  /**
+   * Ralph-loop iteration parameters, set by the engine when dispatching a `ralph` step from
+   * its `step.ralph` state: the programmatic completion COMMAND the harness runs against the
+   * checkout AFTER the coding agent commits (exit 0 = the loop is done), the repo-relative
+   * progress-log path the harness maintains, and the 1-based iteration number. The container
+   * executor forwards these to the harness as the coding job's `validation` block; the
+   * harness runs the command and reports the verdict on the result (never the model — that is
+   * what keeps the exit condition a real programmatic check). Absent for every non-`ralph` step.
+   */
+  ralphValidation?: {
+    command: string
+    progressPath: string
+    iteration: number
+  }
   block: {
     /** Stable block id (set by the engine; used by repo-aware executors). */
     id?: string
@@ -485,6 +499,15 @@ export interface AgentRunResult {
    * it before use.
    */
   testReport?: unknown
+  /**
+   * A `ralph` step iteration's harness-computed validation verdict (whether the configured
+   * completion command exited 0, its exit code, and a bounded output tail). Produced by the
+   * executor-harness running the command — NOT model output — so the loop's exit condition
+   * stays a real programmatic check. The engine reads it to decide done / retry / exhausted.
+   * Carried as `unknown` so the port stays free of the contracts schema; the engine parses
+   * it before use. Absent for every non-`ralph` kind.
+   */
+  ralphVerdict?: unknown
   /**
    * A `tester` step's in-container docker-compose dependency stand-up record (explore mode,
    * local infra): whether the dependencies came up and the captured (redacted, bounded)

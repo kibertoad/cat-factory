@@ -28,6 +28,7 @@ import MergerResultView from '~/components/panels/MergerResultView.vue'
 import InitiativeTrackerWindow from '~/components/initiative/InitiativeTrackerWindow.vue'
 import InitiativePlanningWindow from '~/components/initiative/InitiativePlanningWindow.vue'
 import DocInterviewWindow from '~/components/docs/DocInterviewWindow.vue'
+import RalphLoopResultView from '~/components/ralph/RalphLoopResultView.vue'
 
 const ui = useUiStore()
 
@@ -72,6 +73,9 @@ const STEP_RESULT_VIEWS: Record<string, Component> = {
   // The interactive document-interview gate (WS5): the interviewer's clarifying questions +
   // answer / continue / proceed, opened as the `doc-interviewer` step's result view.
   'doc-interview': DocInterviewWindow,
+  // The Ralph loop: the persistent retry-until-done iteration history + the programmatic
+  // validation command + its latest exit code / output. Opened as the `ralph` step's view.
+  'ralph-loop': RalphLoopResultView,
 }
 
 const active = computed<Component | null>(() => {

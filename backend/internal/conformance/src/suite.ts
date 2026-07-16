@@ -9780,6 +9780,132 @@ export function defineExecutionConformance(harness: ConformanceHarness): void {
         expect(task.status).toBe('blocked')
       })
     })
+
+    // The Ralph loop: a persistent retry-until-done coding step whose exit condition is a
+    // harness-run validation command. These assert the loop drives to completion, exhausts its
+    // budget, and refuses to start unconfigured — identically on D1 and Postgres, and (because
+    // the loop state rides the persisted `step.ralph`) resumable across the durable driver.
+    describe('ralph loop', () => {
+      const ralphPr = {
+        url: 'https://github.com/o/r/pull/7',
+        number: 7,
+        branch: 'cat-factory/ralph',
+      }
+
+      it('loops a ralph step until its validation command passes, then advances', async () => {
+        // The fake reports a failing validation for iterations 1–2 and a pass on iteration 3
+        // (based on the iteration number the engine folds in), so the engine must re-dispatch
+        // twice before finishing — proving the retry loop and the persisted iteration count.
+        const app = harness.makeApp({
+          asyncKinds: ['ralph'],
+          ralphPassOnIteration: 3,
+          pullRequest: ralphPr,
+        })
+        const { workspace } = await app.createWorkspace()
+        const wsId = workspace.id
+        const task = await app.call<Block>(
+          'POST',
+          `/workspaces/${wsId}/blocks/mod_sessions/tasks`,
+          {
+            title: 'Ralph task',
+            taskType: 'ralph',
+            agentConfig: {
+              'ralph.validationCommand': 'echo build && echo test',
+              'ralph.maxIterations': '6',
+            },
+          },
+        )
+        expect(task.status).toBe(201)
+        const pipeline = await app.call<Pipeline>('POST', `/workspaces/${wsId}/pipelines`, {
+          name: 'Ralph only',
+          agentKinds: ['ralph'],
+        })
+        const start = await app.call<ExecutionInstance>(
+          'POST',
+          `/workspaces/${wsId}/blocks/${task.body.id}/executions`,
+          { pipelineId: pipeline.body.id },
+        )
+        expect(start.status).toBe(201)
+
+        const done = (await app.drive(wsId)).find((e) => e.blockId === task.body.id)!
+        const step = done.steps.find((s) => s.agentKind === 'ralph')!
+        expect(step.state).toBe('done')
+        // Looped exactly three iterations: fail, fail, pass.
+        expect(step.ralph?.attempts).toBe(3)
+        expect(step.ralph?.attemptLog).toHaveLength(3)
+        expect(step.ralph?.attemptLog?.[0]?.validationPassed).toBe(false)
+        expect(step.ralph?.attemptLog?.at(-1)?.validationPassed).toBe(true)
+        expect(step.ralph?.lastExitCode).toBe(0)
+      })
+
+      it('gives up a ralph loop that never passes, at its iteration budget', async () => {
+        // The validation never passes (target far above the budget), so the loop must exhaust
+        // its 2-iteration budget and fail the run for a human rather than spinning forever.
+        const app = harness.makeApp({
+          asyncKinds: ['ralph'],
+          ralphPassOnIteration: 99,
+          pullRequest: ralphPr,
+        })
+        const { workspace } = await app.createWorkspace()
+        const wsId = workspace.id
+        const task = await app.call<Block>(
+          'POST',
+          `/workspaces/${wsId}/blocks/mod_sessions/tasks`,
+          {
+            title: 'Ralph never-passes',
+            taskType: 'ralph',
+            agentConfig: {
+              'ralph.validationCommand': 'exit 1',
+              'ralph.maxIterations': '2',
+            },
+          },
+        )
+        const pipeline = await app.call<Pipeline>('POST', `/workspaces/${wsId}/pipelines`, {
+          name: 'Ralph only',
+          agentKinds: ['ralph'],
+        })
+        const start = await app.call<ExecutionInstance>(
+          'POST',
+          `/workspaces/${wsId}/blocks/${task.body.id}/executions`,
+          { pipelineId: pipeline.body.id },
+        )
+        expect(start.status).toBe(201)
+
+        const failed = (await app.drive(wsId)).find((e) => e.blockId === task.body.id)!
+        const step = failed.steps.find((s) => s.agentKind === 'ralph')!
+        expect(failed.status).toBe('failed')
+        expect(step.state).not.toBe('done')
+        // Ran exactly the budgeted number of iterations, no more.
+        expect(step.ralph?.attempts).toBe(2)
+        // The block is left blocked for a human (never falsely done).
+        const snap = (await app.call<WorkspaceSnapshot>('GET', `/workspaces/${wsId}`)).body
+        expect(snap.blocks.find((b) => b.id === task.body.id)?.status).toBe('blocked')
+      })
+
+      it('refuses to start a ralph pipeline with no validation command', async () => {
+        // A ralph loop is meaningless without a programmatic completion criterion — the engine
+        // rejects the start rather than dispatching a validation-less coding pass.
+        const app = harness.makeApp({ asyncKinds: ['ralph'] })
+        const { workspace } = await app.createWorkspace()
+        const wsId = workspace.id
+        const task = await app.call<Block>(
+          'POST',
+          `/workspaces/${wsId}/blocks/mod_sessions/tasks`,
+          { title: 'Ralph unconfigured', taskType: 'ralph' },
+        )
+        const pipeline = await app.call<Pipeline>('POST', `/workspaces/${wsId}/pipelines`, {
+          name: 'Ralph only',
+          agentKinds: ['ralph'],
+        })
+        const start = await app.call(
+          'POST',
+          `/workspaces/${wsId}/blocks/${task.body.id}/executions`,
+          { pipelineId: pipeline.body.id },
+        )
+        // A validation error (missing completion criterion) — refused, run never started.
+        expect(start.status).toBe(422)
+      })
+    })
   })
 }
 

@@ -351,6 +351,19 @@ function buildRegisteredAgentBody(
         // commit; forward the output spec so the harness parses the final reply into `custom`
         // (same shape the explore branch sends). Absent for the plain coder/fixers.
         ...structuredOutputField(step.output),
+        // Ralph loop: after the coding agent commits, the harness runs this programmatic
+        // completion command in the checkout, records the outcome to the progress log, and
+        // reports the exit code back on `result.ralphVerdict` (never the model). Present only
+        // for a `ralph` iteration (the engine folds it in from `step.ralph`).
+        ...(context.ralphValidation
+          ? {
+              validation: {
+                command: context.ralphValidation.command,
+                progressPath: context.ralphValidation.progressPath,
+                iteration: context.ralphValidation.iteration,
+              },
+            }
+          : {}),
         // The Coder (follow-up companion enabled) streams forward-looking items out via the
         // sentinel file; tell the harness to tail it. Only on the SINGLE-REPO implementer path:
         // the multi-repo flow (`peerRepos`) runs `runMultiRepoCoding`, which does NOT tail the
