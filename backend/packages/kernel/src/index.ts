@@ -8,6 +8,7 @@ export {
   ValidationError,
   ConflictError,
   CredentialRequiredError,
+  ForbiddenError,
   RunContendedError,
   assertFound,
   getErrorMessage,
@@ -304,5 +305,15 @@ export {
   WORKSPACE_CASCADE_SPECIAL_TABLES,
   type WorkspaceScopedTable,
 } from './domain/workspace-cascade.js'
+
+export {
+  WORKSPACE_ROLE_PERMISSIONS,
+  workspaceRoleAtLeast,
+  permissionsForRole,
+  resolveWorkspaceAccess,
+  type WorkspaceAccess,
+  type WorkspaceAccessRow,
+  type ResolveWorkspaceAccessInput,
+} from './domain/workspace-access.js'
 
 export { type TaskContextView, renderTaskContext } from './shared/tasks-prompt.logic.js'

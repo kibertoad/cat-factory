@@ -1,5 +1,35 @@
 # @cat-factory/local-server
 
+## 0.68.6
+
+### Patch Changes
+
+- Updated dependencies [b12d7a8]
+  - @cat-factory/contracts@0.138.0
+  - @cat-factory/kernel@0.132.0
+  - @cat-factory/server@0.127.1
+  - @cat-factory/node-server@0.98.1
+  - @cat-factory/agents@0.61.1
+  - @cat-factory/gitlab@0.10.5
+  - @cat-factory/integrations@0.84.8
+  - @cat-factory/orchestration@0.115.1
+  - @cat-factory/executor-harness@1.45.0
+
+## 0.68.5
+
+### Patch Changes
+
+- Updated dependencies [5b1cbbf]
+  - @cat-factory/kernel@0.131.0
+  - @cat-factory/contracts@0.137.0
+  - @cat-factory/agents@0.61.0
+  - @cat-factory/orchestration@0.115.0
+  - @cat-factory/server@0.127.0
+  - @cat-factory/node-server@0.98.0
+  - @cat-factory/gitlab@0.10.4
+  - @cat-factory/integrations@0.84.7
+  - @cat-factory/executor-harness@1.45.0
+
 ## 0.68.4
 
 ### Patch Changes

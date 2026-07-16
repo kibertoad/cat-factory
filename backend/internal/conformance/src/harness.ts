@@ -25,6 +25,8 @@ import type {
   RunRepoContext,
   Service,
   TaskSourceProvider,
+  WorkspaceMemberRepository,
+  WorkspaceRepository,
   WorkspaceSnapshot,
 } from '@cat-factory/kernel'
 import type { FakeAgentOptions } from './FakeAgentExecutor.js'
@@ -185,6 +187,18 @@ export interface ConformanceApp {
    * on D1 and Postgres.
    */
   blockRepository(): BlockRepository
+  /**
+   * The facade's workspace repository over its real store, so the workspace-RBAC suite can
+   * assert the `accessRowOf` / `setAccessMode` access-mode round-trip identically on D1 and
+   * Postgres (no HTTP route sets the access mode until a later slice wires the members API).
+   */
+  workspaceRepository(): WorkspaceRepository
+  /**
+   * The facade's workspace-member repository over its real store, so the workspace-RBAC suite
+   * can assert the roster CRUD, the batched `getRolesForUserInWorkspaces`, and the
+   * `removeByAccountMembership` cascade identically on D1 and Postgres.
+   */
+  workspaceMemberRepository(): WorkspaceMemberRepository
   /**
    * The facade's initiative repository over its real store. Lets the suite seed an initiative
    * entity (with a registered preset) directly, so it can assert the engine folds that preset's

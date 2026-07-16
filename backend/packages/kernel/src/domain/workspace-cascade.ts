@@ -92,6 +92,7 @@ export const WORKSPACE_SCOPED_TABLES = [
   'token_usage',
   'tracker_settings',
   'workspace_fragment_defaults',
+  'workspace_members',
   'workspace_settings',
 ] as const
 

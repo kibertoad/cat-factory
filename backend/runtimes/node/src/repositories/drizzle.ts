@@ -215,7 +215,11 @@ export function createDrizzleRepositories(db: DrizzleDb, clock: Clock): CoreRepo
 }
 
 // Re-exported for direct consumers (see index.ts / test harness).
-export { DrizzleServiceRepository } from './drizzle/board.js'
+export {
+  DrizzleServiceRepository,
+  DrizzleWorkspaceMemberRepository,
+  DrizzleWorkspaceRepository,
+} from './drizzle/board.js'
 export {
   DrizzleLocalSettingsRepository,
   DrizzleWorkspaceSettingsRepository,
