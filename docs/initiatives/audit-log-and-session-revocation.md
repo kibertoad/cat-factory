@@ -12,14 +12,14 @@ Two related org-adoption/compliance gaps:
 - **No audit trail.** Privileged and destructive actions — invitations sent/accepted, role
   changes, budget/policy/preset edits, provider-key changes, workspace/service archival,
   run start/stop/retry, notification `act` (which can perform a real merge) — leave no
-  record of *who did what, when*. The only history surfaces are per-run failure/step
+  record of _who did what, when_. The only history surfaces are per-run failure/step
   histories. For any org rollout (and any future SOC2-ish story) an account-level audit
   log is table stakes.
 - **No user-session revocation.** Sessions are stateless HMAC-signed tokens
   (`server/src/auth/signing.ts`); logout is client-side drop, and a leaked bearer stays
   valid until expiry. "Sign out all devices" / "revoke on role removal" is impossible.
   `backend/docs/auth.md` names revocation as a possible follow-up, and security-hardening
-  round 1 item 8 covers *machine*-token revocation — **user sessions are covered by
+  round 1 item 8 covers _machine_-token revocation — **user sessions are covered by
   neither tracker**.
 
 End state: an append-only `audit_events` store written at the service layer for a defined
@@ -30,7 +30,7 @@ revocation via a per-user session-generation check.
 
 1. **One writer seam, not scattered calls**: an `AuditService` (orchestration/integrations)
    with a single `record(event)` — `{ accountId, workspaceId?, actor (userId | apiKeyRef |
-   'system'), action, targetType, targetId, summary, at }`. Services call it at the point
+'system'), action, targetType, targetId, summary, at }`. Services call it at the point
    the mutation **commits** (not in controllers — the service layer is where actor +
    outcome are both known). Best-effort: an audit write failure logs, never fails the
    action.
@@ -42,7 +42,7 @@ revocation via a per-user session-generation check.
 3. **Storage**: append-only `audit_events` table (D1 ⇄ Drizzle + conformance), indexed by
    account + time, paginated reads only (`listByAccount(cursor)`), retention-swept on a
    long window (audit wants years, not days — but pre-1.0, pick a pragmatic default env
-   knob). **Payloads are summaries, never secrets** — key *names*, not values; no prompt
+   knob). **Payloads are summaries, never secrets** — key _names_, not values; no prompt
    bodies.
 4. **Viewer**: an account-admin panel (filter by action class / actor / time; beside
    `AccountTeamSettings.vue`), reading the paginated endpoint.
@@ -55,15 +55,15 @@ revocation via a per-user session-generation check.
 
 ## Prioritized checklist
 
-| # | Slice | Status | PR |
-| - | ----- | ------ | -- |
-| 1 | `AuditAction` contracts union + kernel port + `audit_events` D1 ⇄ Drizzle + conformance | ⬜ todo | |
-| 2 | `AuditService.record` + instrumentation of the membership/role/invitation + budget/policy paths | ⬜ todo | |
-| 3 | Instrument run lifecycle (start/stop/retry, notification `act`) + credential/API-key metadata events | ⬜ todo | |
-| 4 | Paginated `GET /accounts/:id/audit-events` + admin viewer UI (i18n all locales; action labels via exhaustive Record) | ⬜ todo | |
-| 5 | `sessionGeneration` claim + middleware check + "sign out all devices" (self-serve) | ⬜ todo | |
-| 6 | Admin-forced revocation on member removal / role downgrade (auto-increment) — audited, naturally | ⬜ todo | |
-| 7 | Retention sweep + env knob (both runtimes) | ⬜ todo | |
+| #   | Slice                                                                                                                | Status  | PR  |
+| --- | -------------------------------------------------------------------------------------------------------------------- | ------- | --- |
+| 1   | `AuditAction` contracts union + kernel port + `audit_events` D1 ⇄ Drizzle + conformance                              | ⬜ todo |     |
+| 2   | `AuditService.record` + instrumentation of the membership/role/invitation + budget/policy paths                      | ⬜ todo |     |
+| 3   | Instrument run lifecycle (start/stop/retry, notification `act`) + credential/API-key metadata events                 | ⬜ todo |     |
+| 4   | Paginated `GET /accounts/:id/audit-events` + admin viewer UI (i18n all locales; action labels via exhaustive Record) | ⬜ todo |     |
+| 5   | `sessionGeneration` claim + middleware check + "sign out all devices" (self-serve)                                   | ⬜ todo |     |
+| 6   | Admin-forced revocation on member removal / role downgrade (auto-increment) — audited, naturally                     | ⬜ todo |     |
+| 7   | Retention sweep + env knob (both runtimes)                                                                           | ⬜ todo |     |
 
 ## Conventions & gotchas
 
@@ -72,7 +72,7 @@ revocation via a per-user session-generation check.
 - **Append-only means append-only**: no update/delete surface on the table besides the
   retention sweep; the viewer is read-only.
 - **Never audit secret material** — a credential change event carries provider + key name
-  + actor, not the value; agent contexts and prompts are out of scope entirely.
+  - actor, not the value; agent contexts and prompts are out of scope entirely.
 - **Generation check must not add a query**: fold it into the user/principal resolution the
   request already performs; if a route authenticates without touching the user row, that
   route needs a deliberate decision (cheap cached read via the `AppCaches` seam,

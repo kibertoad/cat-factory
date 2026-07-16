@@ -11,7 +11,6 @@ ones.
 
 | #   | Candidate                                       | Area                | Impact    | Effort |
 | --- | ----------------------------------------------- | ------------------- | --------- | ------ |
-| 1   | Split the monolithic Drizzle repositories file  | Backend persistence | Medium    | Low    |
 | 2   | Generic row mappers                             | Backend persistence | Medium    | Low    |
 | 3   | Finish the store pattern-factory adoption       | Frontend            | Medium    | Low    |
 | 4   | Split the `ui.ts` store                         | Frontend            | High      | Medium |
@@ -24,33 +23,6 @@ See [Recently landed](#recently-landed) at the bottom for candidates that have s
 shipped and were removed from the active list.
 
 ---
-
-## 1. Split the monolithic Drizzle repositories file
-
-**File:** `backend/runtimes/node/src/repositories/drizzle.ts` — **3,946 lines**, **39
-repository classes** in a single module.
-
-**Problem.** Every core Drizzle repository (`DrizzleWorkspaceRepository`,
-`DrizzleBlockRepository`, `DrizzleExecutionRepository`, the sandbox suite, the kaizen
-suite, requirement reviews, merge presets, observability, …) lives in one file. This is an
-outlier in the tree: the Node facade's _other_ repositories are already split one-per-domain
-(`bootstrap.ts`, `documents.ts`, `environments.ts`, `github.ts`, `tasks.ts`, … — 18
-separate files), and the symmetric Cloudflare D1 side is split into **69** per-repository
-files under `infrastructure/repositories/`. The single 3,946-line file is the hardest place
-in the persistence layer to navigate, review a diff against, or find the D1 counterpart of —
-and it grows with every new table.
-
-**Approach.** Mechanically split `drizzle.ts` into per-domain files under
-`backend/runtimes/node/src/repositories/` (e.g. `drizzle/board.ts`, `drizzle/execution.ts`,
-`drizzle/sandbox.ts`, `drizzle/kaizen.ts`, `drizzle/reviews.ts`), mirroring the D1 layout so
-a repository and its D1 twin are trivially locatable. Pure code movement — no behavioural
-change, no schema change — with a barrel re-export to keep `container.ts`'s imports stable.
-
-**Why high-impact for the effort.** Low effort and near-zero risk (it is a file move behind
-a barrel), but it makes the whole persistence layer navigable, shrinks review surface, and
-restores the one-file-per-repository symmetry the rest of the codebase already follows. It
-is also the natural precursor to #7 (shared base repositories): the D1 ⇄ Drizzle pairs are
-much easier to dedup once each Drizzle repo sits in its own file next to its twin.
 
 ## 2. Generic row mappers
 
@@ -186,7 +158,8 @@ single composition root every module flows through. Pairs naturally with #8.
 
 **Files:** the ~39 D1 repositories under
 `backend/runtimes/cloudflare/src/infrastructure/repositories/` and their ~39 Drizzle twins
-(post-#1, one file per repo under `backend/runtimes/node/src/repositories/`).
+(now split per-domain under `backend/runtimes/node/src/repositories/drizzle/`, see
+[Recently landed](#recently-landed) #2).
 
 **Problem.** Every persisted table has **two** repository implementations — a D1 (SQLite)
 one and a Drizzle (Postgres) one — that are behaviourally identical port implementations
@@ -200,13 +173,14 @@ duplication; the query/CRUD bodies are what remain duplicated.
 insert/patch via the shared mappers, chunked deletes) into a small dialect-parameterized base
 so each concrete repository declares only its table + its genuinely dialect-specific queries.
 The conformance suite already asserts parity, so the extraction can be verified per-repo.
-This was previously deferred (see the note under #8); with the Drizzle file now split (#1)
-each pair sits side-by-side and the dedup is far more tractable.
+This was previously deferred (see the note under #8); with the Drizzle file now split
+([Recently landed](#recently-landed) #2) each pair sits side-by-side and the dedup is far
+more tractable.
 
 **Why high-impact.** Halves the per-table maintenance cost and turns "keep the runtimes
 symmetric" from a hand-enforced rule into a structural property. Highly intrusive — it
 reshapes both facades' persistence layers — so it is best done one repository pair at a time
-behind the cross-runtime conformance suite. Compose with #1 (do that first) and #8.
+behind the cross-runtime conformance suite. Compose with the now-landed Drizzle split and #8.
 
 ## 8. Shared container builder (Node ⇄ Cloudflare)
 
@@ -267,6 +241,19 @@ register a resolver" loop is now the shared `createScopedModelProviderResolver`
 (`@cat-factory/server`), consumed by both `runtimes/node/src/modelProvider.ts` and
 `runtimes/cloudflare/src/infrastructure/container.ts`. Adding a vendor is now a one-line
 table entry both runtimes pick up.
+
+### 2. Split the monolithic Drizzle repositories file ✅
+
+The ~5,000-line `backend/runtimes/node/src/repositories/drizzle.ts` (39 repository classes
+in one module) is split into per-domain files under `repositories/drizzle/` — `board.ts`,
+`execution.ts`, `accounts.ts`, `telemetry.ts`, `settings.ts`, `reviews.ts`, `kaizen.ts`,
+`initiatives.ts`, `sandbox.ts`, `connections.ts`, plus a small `_shared.ts` for the one
+cross-domain helper. `drizzle.ts` remains as a thin barrel that assembles the
+`CoreRepositories` set (`createDrizzleRepositories`) and re-exports the handful of classes
+consumed directly, so every `./repositories/drizzle.js` importer (index/container/test
+harness) is unchanged. Pure code movement — no schema or behavioural change — verified by
+the cross-runtime conformance suite. This is the precursor that makes #7 (shared base
+repositories) tractable: each Drizzle repo now sits in its own file next to its D1 twin.
 
 ### 8 (original). Split `ExecutionService` into step handlers + a completion-resolver registry ✅
 

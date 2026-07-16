@@ -49,13 +49,13 @@ need Redis.)
 
 ## Prioritized checklist
 
-| # | Slice | Status | PR |
-| - | ----- | ------ | -- |
-| 1 | Kernel port + `auth_attempts` D1 ⇄ Drizzle impls + migrations | ⬜ todo | |
-| 2 | Conformance assertions: over-limit 429 behaviour on both runtimes; window expiry | ⬜ todo | |
-| 3 | `AuthController` switch to the durable check (Map demoted to store-failure backstop) | ⬜ todo | |
-| 4 | Retention sweep wiring (both runtimes) | ⬜ todo | |
-| 5 | Config: window/limit env knobs with today's constants as defaults | ⬜ todo | |
+| #   | Slice                                                                                | Status  | PR  |
+| --- | ------------------------------------------------------------------------------------ | ------- | --- |
+| 1   | Kernel port + `auth_attempts` D1 ⇄ Drizzle impls + migrations                        | ⬜ todo |     |
+| 2   | Conformance assertions: over-limit 429 behaviour on both runtimes; window expiry     | ⬜ todo |     |
+| 3   | `AuthController` switch to the durable check (Map demoted to store-failure backstop) | ⬜ todo |     |
+| 4   | Retention sweep wiring (both runtimes)                                               | ⬜ todo |     |
+| 5   | Config: window/limit env knobs with today's constants as defaults                    | ⬜ todo |     |
 
 ## Conventions & gotchas
 
