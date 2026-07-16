@@ -17,12 +17,28 @@ import type { WorkspaceAccessRow } from '../domain/workspace-access.js'
 // ---------------------------------------------------------------------------
 
 /**
- * The set of boards a signed-in user may see: those belonging to an account they
- * are a member of, plus any legacy boards they personally own (account_id NULL,
- * owner_user_id = them). `null` means "no scoping" — the auth-disabled / local-dev
- * path, where every board is returned.
+ * The set of boards a signed-in user may see, resolved SQL-side (never a JS post-filter —
+ * the banned N+1 class). A board is visible when ANY of these holds:
+ *  - it is an UNRESTRICTED board in an account the user belongs to
+ *    (`account_id IN (accountIds) AND access_mode = 'account'`);
+ *  - it is ANY board (incl. restricted) in an account the user is an ADMIN of
+ *    (`account_id IN (adminAccountIds)` — the escape hatch, no lock-out is possible);
+ *  - the user holds an explicit `workspace_members` row on it, ANDed with the caller's
+ *    account ids so an orphaned row in a foreign account can't resurface a denied board;
+ *  - it is a legacy board the user personally owns (`account_id IS NULL AND
+ *    owner_user_id = them`).
+ *
+ * `null` means "no scoping" — the auth-disabled / local-dev path, where every board is
+ * returned. `ownerUserId` matches the legacy-board owner column; `userId` is the same
+ * caller identity used for the admin/membership predicates (kept distinct so the semantic
+ * of each clause reads at the call site).
  */
-export type WorkspaceVisibility = { accountIds: string[]; ownerUserId: string } | null
+export type WorkspaceVisibility = {
+  accountIds: string[]
+  adminAccountIds: string[]
+  ownerUserId: string
+  userId: string
+} | null
 
 export interface WorkspaceRepository {
   /**

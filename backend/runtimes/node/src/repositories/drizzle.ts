@@ -46,6 +46,7 @@ import type {
   TrackerSettingsRepository,
   UserRepository,
   UserSettingsRepository,
+  WorkspaceMemberRepository,
   WorkspaceMountRepository,
   WorkspaceRepository,
   WorkspaceSettingsRepository,
@@ -57,6 +58,7 @@ import {
   DrizzleBlockRepository,
   DrizzleServiceFragmentDefaultsRepository,
   DrizzleServiceRepository,
+  DrizzleWorkspaceMemberRepository,
   DrizzleWorkspaceMountRepository,
   DrizzleWorkspaceRepository,
 } from './drizzle/board.js'
@@ -125,6 +127,7 @@ import {
 
 export interface CoreRepositories {
   workspaceRepository: WorkspaceRepository
+  workspaceMemberRepository: WorkspaceMemberRepository
   accountRepository: AccountRepository
   membershipRepository: MembershipRepository
   userRepository: UserRepository
@@ -173,6 +176,7 @@ export interface CoreRepositories {
 export function createDrizzleRepositories(db: DrizzleDb, clock: Clock): CoreRepositories {
   return {
     workspaceRepository: new DrizzleWorkspaceRepository(db),
+    workspaceMemberRepository: new DrizzleWorkspaceMemberRepository(db),
     accountRepository: new DrizzleAccountRepository(db),
     membershipRepository: new DrizzleMembershipRepository(db),
     userRepository: new DrizzleUserRepository(db),

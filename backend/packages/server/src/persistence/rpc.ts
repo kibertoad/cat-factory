@@ -1030,7 +1030,9 @@ const fail = (
 
 interface VisibilityScope {
   accountIds: string[]
+  adminAccountIds: string[]
   ownerUserId: string
+  userId: string
 }
 
 /**
@@ -1287,7 +1289,13 @@ export async function dispatchPersistenceCall(
       const requested = args[rule.arg] as VisibilityScope | null
       if (!requested || typeof requested !== 'object') return denied
       const accountIds = (requested.accountIds ?? []).filter((id) => inScope(id))
-      args[rule.arg] = { accountIds, ownerUserId: opts.scope.userId } satisfies VisibilityScope
+      const adminAccountIds = (requested.adminAccountIds ?? []).filter((id) => inScope(id))
+      args[rule.arg] = {
+        accountIds,
+        adminAccountIds,
+        ownerUserId: opts.scope.userId,
+        userId: opts.scope.userId,
+      } satisfies VisibilityScope
       break
     }
     default: {

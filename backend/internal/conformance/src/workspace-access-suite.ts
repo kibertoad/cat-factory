@@ -118,8 +118,11 @@ export function defineWorkspaceAccessSuite(harness: ConformanceHarness): void {
       await repo.upsert(member({ workspaceId: wsId, userId: u2, role: 'member', createdAt: 2 }))
       await repo.upsert(member({ workspaceId: otherId, userId: u1, role: 'viewer', createdAt: 3 }))
 
+      // The board's creator is auto-enrolled as a workspace admin (workspace-rbac slice 3), so a
+      // board created through `createOrgWorkspace` already carries the owner's row — assert the two
+      // explicitly-added members are PRESENT rather than an exact roster.
       const roster = await repo.listByWorkspace(wsId)
-      expect(roster.map((r) => r.userId).sort()).toEqual([u1, u2].sort())
+      expect(roster.map((r) => r.userId)).toEqual(expect.arrayContaining([u1, u2]))
 
       const forU1 = await repo.listWorkspaceIdsForUser(u1)
       expect(forU1.sort()).toEqual([wsId, otherId].sort())

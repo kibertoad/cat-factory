@@ -7,6 +7,7 @@ import type {
   ResolveRunRepoContext,
   RunInitiatorScope,
   RunRepoContext,
+  WorkspaceMemberRepository,
   WorkspaceRepository,
 } from '@cat-factory/kernel'
 import { createAppCaches } from '@cat-factory/caching'
@@ -240,6 +241,13 @@ import type { InitiativePresetRegistry } from '@cat-factory/kernel'
 
 export interface CoreDependencies {
   workspaceRepository: WorkspaceRepository
+  /**
+   * Workspace-level RBAC roster (workspace-rbac initiative). Threaded into
+   * `WorkspaceService` so the gate can resolve a caller's effective role + the creator
+   * auto-enroll can seed an admin row. Optional: absent (unwired / tests) ⇒ resolution
+   * falls back to the account tier and auto-enroll is skipped.
+   */
+  workspaceMemberRepository?: WorkspaceMemberRepository
   /** Account tenancy: accounts own workspaces; memberships grant access (0017). */
   accountRepository: AccountRepository
   membershipRepository: MembershipRepository

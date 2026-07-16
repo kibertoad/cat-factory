@@ -2339,6 +2339,7 @@ export function buildNodeContainer(options: NodeContainerOptions): ServerContain
     // gate; resolving to null (no storage configured) ⇒ the gate passes through.
     resolveBinaryArtifactStore,
     workspaceRepository: repos.workspaceRepository,
+    workspaceMemberRepository: repos.workspaceMemberRepository,
     accountRepository: repos.accountRepository,
     membershipRepository: repos.membershipRepository,
     userRepository: repos.userRepository,

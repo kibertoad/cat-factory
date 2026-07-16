@@ -82,5 +82,17 @@ export const workspaceMemberSchema = v.object({
 })
 export type WorkspaceMember = v.InferOutput<typeof workspaceMemberSchema>
 
+/**
+ * The signed-in caller's resolved access to one board — their effective workspace role
+ * plus the permission set it grants. Attached to the workspace snapshot (see
+ * {@link workspaceSnapshotSchema}) so the SPA can hide/disable affordances the caller
+ * lacks. Optional on the wire: absent ⇒ dev-open (auth disabled) ⇒ the SPA allows all.
+ */
+export const workspaceAccessSchema = v.object({
+  role: workspaceRoleSchema,
+  permissions: v.array(workspacePermissionSchema),
+})
+export type WorkspaceAccess = v.InferOutput<typeof workspaceAccessSchema>
+
 // Request bodies for the member-management API land with that API (a later slice of the
 // workspace-rbac initiative) — this file is the shared VOCABULARY only.

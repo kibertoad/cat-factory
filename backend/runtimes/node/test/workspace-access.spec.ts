@@ -1,11 +1,16 @@
-import { type ConformanceHarness, defineWorkspaceAccessSuite } from '@cat-factory/conformance'
+import {
+  type ConformanceHarness,
+  defineWorkspaceAccessSuite,
+  defineWorkspaceRbacSuite,
+} from '@cat-factory/conformance'
 import { describe, it } from 'vitest'
 import { makeConformanceApp, setupTestDb } from './harness.js'
 
-// Cross-runtime parity for the workspace-RBAC persistence (workspace-rbac initiative, slice 2)
-// against the Node facade's real Drizzle/Postgres store. The Cloudflare Worker runs the
-// identical suite over its D1 tables, so the `workspace_members` roster + `access_mode` column
-// can't drift. CI provides Postgres via `DATABASE_URL`.
+// Cross-runtime parity for workspace RBAC (workspace-rbac initiative) against the Node facade's
+// real Drizzle/Postgres store: the slice-2 persistence (`workspace_members` roster + `access_mode`
+// column) AND the slice-3 HTTP enforcement (gate resolution + viewer floor + list filtering). The
+// Cloudflare Worker runs the identical suites over its D1 tables, so neither can drift. CI provides
+// Postgres via `DATABASE_URL`.
 
 const databaseUrl = process.env.DATABASE_URL
 
@@ -16,6 +21,7 @@ if (databaseUrl) {
     makeApp: (agentOptions, opts) => makeConformanceApp(db, agentOptions, opts),
   }
   defineWorkspaceAccessSuite(harness)
+  defineWorkspaceRbacSuite(harness)
 } else {
   describe.skip('[node] workspace access (set DATABASE_URL to run)', () => {
     it('requires Postgres', () => {})

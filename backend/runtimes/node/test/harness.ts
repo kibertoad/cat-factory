@@ -16,6 +16,7 @@ import {
   makeIncorporatedReview,
   makeOnboardingProbe,
   makeReadyReviewWithOpenItem,
+  mintSession,
 } from '@cat-factory/conformance'
 import type { AgentKindRegistry } from '@cat-factory/agents'
 import type { GateProviderOverrides } from '@cat-factory/gates'
@@ -53,6 +54,11 @@ const TEST_ENV: NodeJS.ProcessEnv = {
   ...process.env,
   AUTH_DEV_OPEN: 'true',
   ENVIRONMENT: 'test',
+  // A session secret so the workspace-RBAC conformance suite can drive requests as real signed
+  // sessions (a dev-open harness resolves no access and passes RBAC assertions vacuously). Harmless
+  // to the other suites: with no OAuth/password provider configured, `enabled` stays false and
+  // dev-open still passes anonymous (token-less) requests through unchanged.
+  AUTH_SESSION_SECRET: 'test-session-secret-0123456789abcdef',
   // The always-on task-source integration makes `loadNodeConfig` require the shared
   // ENCRYPTION_KEY (32 zero bytes, base64) or it throws at config load. Integration
   // toggles that need extra wiring (GitHub/runners) stay off — matching Node defaults.
@@ -374,6 +380,14 @@ export function makeConformanceApp(
     call,
     createWorkspace,
     createOrgWorkspace,
+    authEnabled: Boolean(TEST_ENV.AUTH_SESSION_SECRET),
+    session: (user) => mintSession(TEST_ENV.AUTH_SESSION_SECRET!, user),
+    createWorkspaceInAccount: (accountId, ownerUserId, options) =>
+      container.workspaceService.create(
+        { name: options?.name ?? 'RBAC board', seed: options?.seed ?? false },
+        ownerUserId,
+        accountId,
+      ),
     drive,
     startExecution: (workspaceId, blockId, pipelineId, opts) =>
       container.executionService.start(

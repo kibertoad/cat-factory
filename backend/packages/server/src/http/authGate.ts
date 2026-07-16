@@ -1,6 +1,8 @@
+import { ForbiddenError, workspaceRoleAtLeast } from '@cat-factory/kernel'
 import type { Hono } from 'hono'
 import { requireAuth } from '../auth/middleware.js'
 import type { AppEnv } from './env.js'
+import { loadWorkspaceAccess } from './workspaceAccess.js'
 
 // The runtime-neutral authentication + authorization gate, shared by every facade.
 // Each facade builds its own app (CORS, the per-request container, runtime-specific
@@ -26,6 +28,13 @@ const PUBLIC_PREFIXES = ['/health', '/auth', '/v1', '/github', '/slack', '/inter
 
 /** The exact WebSocket-upgrade shape that self-authenticates via `?ticket=`. */
 const WS_EVENTS_PATH = /^\/workspaces\/[^/]+\/events$/
+
+/**
+ * The one write that is read-equivalent and so allowlisted past the viewer floor: minting a
+ * read-only WebSocket stream ticket. A viewer may watch a board's live stream (the stream
+ * carries only read-tier data), so this POST is exempt from the "≥ member" floor.
+ */
+const WS_TICKET_MINT_PATH = /^\/workspaces\/[^/]+\/events\/ticket$/
 
 /**
  * Mount the default-deny session gate and the per-workspace authorization check.
@@ -68,18 +77,37 @@ export function mountAuthGate<E extends AppEnv>(app: Hono<E>): void {
     if (!match) return next()
     const workspaceId = decodeURIComponent(match[1]!)
     const container = c.get('container')
-    const accountId = await container.workspaceService.accountOf(workspaceId)
-    if (accountId === undefined) return next() // missing board → let the handler 404 normally
 
-    const notFound = () =>
-      c.json({ error: { code: 'not_found', message: 'Workspace not found' } }, 404)
+    // Resolve the caller's effective workspace-RBAC role once (the single decision point).
+    // `null` ⇒ the board doesn't exist; pass through so the handler 404s as it always has.
+    const access = await loadWorkspaceAccess(container, workspaceId, user.id)
+    if (access === null) return next()
 
-    if (accountId === null) {
-      // Legacy/unscoped board: only the user who personally owns it may access it.
-      const owner = await container.workspaceService.ownerOf(workspaceId)
-      return owner === user.id ? next() : notFound()
+    // Denied ⇒ the SAME 404 shape the pre-RBAC gate returned, so existence isn't leaked.
+    if (!access.allowed) {
+      return c.json({ error: { code: 'not_found', message: 'Workspace not found' } }, 404)
     }
-    if (await container.accountService.isMember(accountId, user.id)) return next()
-    return notFound()
+
+    // Publish the resolved access for the controllers (`requirePermission`) + the snapshot
+    // attach; carrying `workspaceId` lets a helper assert it matches its route.
+    c.set('workspaceAccess', {
+      workspaceId,
+      role: access.role,
+      permissions: access.permissions,
+    })
+
+    // The viewer write floor: any state-changing method requires at least `member`. This
+    // covers the whole member tier (`board.write` + `runs.execute`) with ZERO per-controller
+    // code — a forgotten controller check fails safe. The sole read-equivalent write, the
+    // read-only stream ticket mint, is allowlisted; the admin-tier route groups add their own
+    // `requirePermission` on top (a later slice). Insufficiency ⇒ 403 (the caller already sees
+    // the board, so only capability — not existence — is revealed).
+    const method = c.req.method
+    const isRead = method === 'GET' || method === 'HEAD'
+    const isTicketMint = method === 'POST' && WS_TICKET_MINT_PATH.test(c.req.path)
+    if (!isRead && !isTicketMint && !workspaceRoleAtLeast(access.role, 'member')) {
+      throw new ForbiddenError('This action requires at least member access to this workspace')
+    }
+    return next()
   })
 }

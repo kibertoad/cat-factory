@@ -7,6 +7,8 @@ import type {
   UserRepoAccessRepository,
   VcsIdentityRegistry,
   VcsWebhookSink,
+  WorkspacePermission,
+  WorkspaceRole,
 } from '@cat-factory/kernel'
 import type {
   ApiKeyService,
@@ -297,11 +299,26 @@ export interface MothershipConnector {
   >
 }
 
+/**
+ * The signed-in caller's resolved workspace-RBAC access to the `:workspaceId` on the
+ * route, set by the auth gate (`mountAuthGate`) after a successful resolution. Controllers
+ * CONSUME this (`requirePermission`) — they never re-derive membership. Carries the
+ * `workspaceId` so a helper can assert it matches the route it's called from. Absent when
+ * there's no signed-in user (dev-open) or the route carries no workspace segment.
+ */
+export interface WorkspaceAccessContext {
+  workspaceId: string
+  role: WorkspaceRole
+  permissions: ReadonlySet<WorkspacePermission>
+}
+
 /** Hono generics shared by the cross-runtime controllers (Variables only — no Bindings). */
 export type AppEnv = {
   Variables: {
     container: ServerContainer
     /** The authenticated user, set by `requireAuth` when auth is enabled. */
     user?: SessionPayload
+    /** The caller's resolved workspace access, set by the gate — see {@link WorkspaceAccessContext}. */
+    workspaceAccess?: WorkspaceAccessContext
   }
 }
