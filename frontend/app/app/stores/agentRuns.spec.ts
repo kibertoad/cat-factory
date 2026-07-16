@@ -1,5 +1,5 @@
 import { describe, it, expect, beforeEach } from 'vitest'
-import type { BootstrapJob } from '~/types/domain'
+import type { BootstrapJob, EnvConfigRepairJob } from '~/types/domain'
 import { useAgentRunsStore } from '~/stores/agentRuns'
 
 /** Minimal BootstrapJob factory — only the fields the store's reconcile logic touches. */
@@ -70,5 +70,58 @@ describe('agentRuns store — monotonic bootstrap reconcile', () => {
     expect(store.bootstrapJobs[0]!.status).toBe('failed')
     store.upsertBootstrap(job('j1', { status: 'succeeded', updatedAt: 5 })) // equal → applied
     expect(store.bootstrapJobs[0]!.status).toBe('succeeded')
+  })
+})
+
+/** Minimal EnvConfigRepairJob factory — only the fields the store touches. */
+function repairJob(id: string, over: Partial<EnvConfigRepairJob> = {}): EnvConfigRepairJob {
+  return {
+    id,
+    workspaceId: 'ws_test',
+    owner: 'acme',
+    repo: 'svc',
+    branch: 'main',
+    status: 'running',
+    ok: null,
+    issues: [],
+    subtasks: null,
+    error: null,
+    failure: null,
+    createdAt: 1,
+    updatedAt: 1,
+    ...over,
+  }
+}
+
+describe('agentRuns store — env-config-repair (plain useUpsertList adoption, candidate #3)', () => {
+  let store: ReturnType<typeof useAgentRunsStore>
+  beforeEach(() => {
+    store = useAgentRunsStore()
+  })
+
+  it('upsertEnvConfigRepair prepends a new run (newest-first) and replaces in place by id', () => {
+    store.upsertEnvConfigRepair(repairJob('r1'))
+    store.upsertEnvConfigRepair(repairJob('r2'))
+    // Newest prepended, so r2 leads r1.
+    expect(store.envConfigRepairJobs.map((j) => j.id)).toEqual(['r2', 'r1'])
+    // A later event for r1 replaces it IN PLACE (no reorder), unlike a monotonic-guarded list.
+    store.upsertEnvConfigRepair(repairJob('r1', { status: 'succeeded' }))
+    expect(store.envConfigRepairJobs.map((j) => j.id)).toEqual(['r2', 'r1'])
+    expect(store.envConfigRepairById('r1')?.status).toBe('succeeded')
+  })
+
+  it('envConfigRepairById looks a run up by id (absent → undefined)', () => {
+    store.upsertEnvConfigRepair(repairJob('r1'))
+    expect(store.envConfigRepairById('r1')?.id).toBe('r1')
+    expect(store.envConfigRepairById('nope')).toBeUndefined()
+  })
+
+  it('hydrateEnvConfigRepair replaces the cache newest-first', () => {
+    store.upsertEnvConfigRepair(repairJob('stale'))
+    store.hydrateEnvConfigRepair([
+      repairJob('old', { createdAt: 1 }),
+      repairJob('new', { createdAt: 9 }),
+    ])
+    expect(store.envConfigRepairJobs.map((j) => j.id)).toEqual(['new', 'old'])
   })
 })
