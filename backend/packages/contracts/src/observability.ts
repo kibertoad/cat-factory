@@ -337,6 +337,13 @@ export const platformObservabilitySchema = v.object({
     avgMs: v.nullable(v.number()),
     minMs: v.nullable(v.number()),
     maxMs: v.nullable(v.number()),
+    /**
+     * Discrete (nearest-rank) duration percentiles (ms), null when no terminal runs. The
+     * median plus the tail percentiles that expose slow-run outliers the average hides.
+     */
+    p50Ms: v.nullable(v.number()),
+    p90Ms: v.nullable(v.number()),
+    p99Ms: v.nullable(v.number()),
   }),
 })
 export type PlatformObservability = v.InferOutput<typeof platformObservabilitySchema>

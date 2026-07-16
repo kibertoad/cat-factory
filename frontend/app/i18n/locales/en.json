@@ -1416,6 +1416,9 @@
       "avg": "Average",
       "min": "Min",
       "max": "Max",
+      "p50": "p50",
+      "p90": "p90",
+      "p99": "p99",
       "empty": "No completed runs in this window."
     },
     "live": {

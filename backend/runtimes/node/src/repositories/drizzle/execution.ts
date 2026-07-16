@@ -607,12 +607,19 @@ export class DrizzlePlatformMetricsRepository implements PlatformMetricsReposito
     sinceEpochMs: number,
   ): Promise<PlatformDurationStats> {
     const delta = sql`(${agentRuns.updated_at} - ${agentRuns.created_at})`
+    // avg/min/max AND the p50/p90/p99 percentiles over ONE scan of the same terminal-run set.
+    // `percentile_disc` is the DISCRETE (nearest-rank) percentile — it returns an actual member
+    // duration, matching the D1/SQLite `row_number()/count()` cumulative-fraction workaround
+    // (SQLite has no percentile aggregate); the conformance suite pins that the two agree.
     const [row] = await this.db
       .select({
         count: sql<number>`count(*)::int`,
         avgMs: sql<number | null>`avg(${delta})::float8`,
         minMs: sql<number | null>`min(${delta})`,
         maxMs: sql<number | null>`max(${delta})`,
+        p50Ms: sql<number | null>`percentile_disc(0.5) within group (order by ${delta})`,
+        p90Ms: sql<number | null>`percentile_disc(0.9) within group (order by ${delta})`,
+        p99Ms: sql<number | null>`percentile_disc(0.99) within group (order by ${delta})`,
       })
       .from(agentRuns)
       .where(
@@ -623,11 +630,15 @@ export class DrizzlePlatformMetricsRepository implements PlatformMetricsReposito
         ),
       )
     const count = Number(row?.count ?? 0)
+    const at = (v: number | null | undefined) => (count > 0 && v != null ? Number(v) : null)
     return {
       count,
       avgMs: count > 0 && row?.avgMs != null ? Math.round(Number(row.avgMs)) : null,
-      minMs: count > 0 && row?.minMs != null ? Number(row.minMs) : null,
-      maxMs: count > 0 && row?.maxMs != null ? Number(row.maxMs) : null,
+      minMs: at(row?.minMs),
+      maxMs: at(row?.maxMs),
+      p50Ms: at(row?.p50Ms),
+      p90Ms: at(row?.p90Ms),
+      p99Ms: at(row?.p99Ms),
     }
   }
 }

@@ -1359,6 +1359,9 @@
       "avg": "Średnia",
       "min": "Min",
       "max": "Maks",
+      "p50": "p50",
+      "p90": "p90",
+      "p99": "p99",
       "empty": "Brak ukończonych uruchomień w tym okresie."
     },
     "live": {

@@ -61,7 +61,15 @@ describe('PlatformObservabilityService', () => {
     runOutcomeTrend: async () => [{ bucketStart: 0, status: 'done', count: 3 }],
     failureKindBreakdown: async () => [{ failureKind: 'agent', count: 1 }],
     activeAndParkedCounts: async () => ({ running: 1, blocked: 0, paused: 0, pending: 2 }),
-    durationStatsSince: async () => ({ count: 4, avgMs: 2000, minMs: 1000, maxMs: 3000 }),
+    durationStatsSince: async () => ({
+      count: 4,
+      avgMs: 2000,
+      minMs: 1000,
+      maxMs: 3000,
+      p50Ms: 2000,
+      p90Ms: 3000,
+      p99Ms: 3000,
+    }),
   })
 
   it('composes the windowed projection from the rollups', async () => {
@@ -79,7 +87,15 @@ describe('PlatformObservabilityService', () => {
     expect(view.outcomes.successRate).toBeCloseTo(0.75)
     expect(view.failures).toEqual([{ kind: 'agent', count: 1 }])
     expect(view.live).toEqual({ running: 1, blocked: 0, paused: 0, pending: 2 })
-    expect(view.durations).toEqual({ count: 4, avgMs: 2000, minMs: 1000, maxMs: 3000 })
+    expect(view.durations).toEqual({
+      count: 4,
+      avgMs: 2000,
+      minMs: 1000,
+      maxMs: 3000,
+      p50Ms: 2000,
+      p90Ms: 3000,
+      p99Ms: 3000,
+    })
     // The trend is contiguous and zero-filled across all 24 hourly buckets.
     expect(view.trend.points.length).toBeGreaterThanOrEqual(24)
   })

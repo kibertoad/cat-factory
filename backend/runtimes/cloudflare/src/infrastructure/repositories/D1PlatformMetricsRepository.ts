@@ -109,15 +109,28 @@ export class D1PlatformMetricsRepository implements PlatformMetricsRepository {
     accountId: string,
     sinceEpochMs: number,
   ): Promise<PlatformDurationStats> {
+    // avg/min/max AND the p50/p90/p99 percentiles over ONE scan of the same terminal-run set.
+    // SQLite has no percentile aggregate, so the inner query tags each duration with its
+    // cumulative fraction (`row_number() / count()`, ORDER BY duration) and the outer query
+    // takes the smallest duration whose fraction crosses each threshold — the discrete
+    // nearest-rank percentile, matching Postgres `percentile_disc` (conformance pins parity).
     const row = await this.db
       .prepare(
         `SELECT COUNT(*) AS count,
-                AVG(updated_at - created_at) AS avg_ms,
-                MIN(updated_at - created_at) AS min_ms,
-                MAX(updated_at - created_at) AS max_ms
-         FROM agent_runs
-         WHERE workspace_id IN (${ACCOUNT_WORKSPACES}) AND created_at >= ?
-           AND status IN ('done', 'failed')`,
+                AVG(d) AS avg_ms,
+                MIN(d) AS min_ms,
+                MAX(d) AS max_ms,
+                MIN(CASE WHEN cume >= 0.5 THEN d END) AS p50_ms,
+                MIN(CASE WHEN cume >= 0.9 THEN d END) AS p90_ms,
+                MIN(CASE WHEN cume >= 0.99 THEN d END) AS p99_ms
+         FROM (
+           SELECT (updated_at - created_at) AS d,
+                  CAST(ROW_NUMBER() OVER (ORDER BY (updated_at - created_at)) AS REAL)
+                    / COUNT(*) OVER () AS cume
+           FROM agent_runs
+           WHERE workspace_id IN (${ACCOUNT_WORKSPACES}) AND created_at >= ?
+             AND status IN ('done', 'failed')
+         )`,
       )
       .bind(accountId, sinceEpochMs)
       .first<{
@@ -125,13 +138,20 @@ export class D1PlatformMetricsRepository implements PlatformMetricsRepository {
         avg_ms: number | null
         min_ms: number | null
         max_ms: number | null
+        p50_ms: number | null
+        p90_ms: number | null
+        p99_ms: number | null
       }>()
     const count = Number(row?.count ?? 0)
+    const at = (v: number | null | undefined) => (count > 0 && v != null ? Number(v) : null)
     return {
       count,
       avgMs: count > 0 && row?.avg_ms != null ? Math.round(Number(row.avg_ms)) : null,
-      minMs: count > 0 && row?.min_ms != null ? Number(row.min_ms) : null,
-      maxMs: count > 0 && row?.max_ms != null ? Number(row.max_ms) : null,
+      minMs: at(row?.min_ms),
+      maxMs: at(row?.max_ms),
+      p50Ms: at(row?.p50_ms),
+      p90Ms: at(row?.p90_ms),
+      p99Ms: at(row?.p99_ms),
     }
   }
 }
