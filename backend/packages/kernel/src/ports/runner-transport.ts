@@ -112,6 +112,19 @@ export interface RunnerJobResult {
    */
   infraSetup?: RunnerInfraSetup
   /**
+   * A `ralph` iteration's validation verdict: whether the configured completion command
+   * exited 0, its exit code, and a bounded output tail. Computed by the harness (it runs
+   * the command after the coding agent commits), so the loop's exit condition is a real
+   * programmatic check rather than a model self-report. The executor's `toRunResult`
+   * forwards it onto {@link AgentRunResult.ralphVerdict}. Absent for non-`ralph` kinds.
+   */
+  ralphVerdict?: {
+    validationPassed: boolean
+    exitCode: number
+    validationOutputTail?: string
+    iteration?: number
+  }
+  /**
    * Token usage the harness lifted from the agent CLI's own event stream. Reported
    * by the subscription harnesses (Claude Code / Codex), whose traffic bypasses the
    * LLM proxy — so this is the only usage signal for them. The dispatch path folds

@@ -99,6 +99,7 @@ const TASK_TYPE_KEYS: Record<CreateTaskType, string> = {
   document: 'settings.workspaceSettings.taskTypes.document',
   spike: 'settings.workspaceSettings.taskTypes.spike',
   review: 'settings.workspaceSettings.taskTypes.review',
+  ralph: 'settings.workspaceSettings.taskTypes.ralph',
 }
 
 const MODES = computed<{ value: TaskLimitMode; label: string }[]>(() => [

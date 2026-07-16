@@ -168,7 +168,8 @@
         "document": "מסמך",
         "spike": "ספייק",
         "recurring": "מחזורי",
-        "review": "סקירה"
+        "review": "סקירה",
+        "ralph": "לולאת Ralph"
       },
       "recurringWithFrame": "משימה מחזורית מריצה צינור במרווחים קבועים. המשך כדי להגדיר את התזמון והפרומפט.",
       "recurringNoFrame": "משימה מחזורית חייבת להתקיים על שירות. הוסף אותה ממסגרת שירות (או ממודול בתוכה).",
@@ -2541,7 +2542,8 @@
         "bug": "באג",
         "document": "מסמך",
         "spike": "חקירה",
-        "review": "סקירה"
+        "review": "סקירה",
+        "ralph": "לולאת Ralph"
       },
       "observability": {
         "heading": "תצפיתיות סוכנים",
@@ -4795,6 +4797,29 @@
       "style": "סגנון",
       "test": "בדיקות",
       "other": "אחר"
+    }
+  },
+  "ralph": {
+    "subtitle": "לולאה מתמשכת: לעבוד על המשימה, להריץ את פקודת האימות, ולחזור עד שהיא עוברת.",
+    "status": {
+      "passed": "עבר",
+      "gaveUp": "ויתר",
+      "running": "פועל",
+      "failing": "נכשל"
+    },
+    "noActivity": "עדיין אין איטרציות.",
+    "validationCommand": "פקודת אימות",
+    "lastOutput": "אימות אחרון (יציאה {exit})",
+    "viewPr": "הצג בקשת משיכה",
+    "iterationsHeading": "איטרציות",
+    "iteration": "איטרציה {number}",
+    "iterationPassed": "האימות עבר",
+    "iterationFailed": "יציאה {exit}",
+    "sidebar": {
+      "state": "מצב",
+      "iterations": "איטרציות",
+      "count": "{attempts} מתוך {max}",
+      "footer": "הלולאה חוזרת עד שפקודת האימות עוברת או שתקציב האיטרציות מסתיים."
     }
   }
 }

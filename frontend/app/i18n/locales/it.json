@@ -724,7 +724,8 @@
         "bug": "bug",
         "document": "documento",
         "spike": "spike",
-        "review": "revisione"
+        "review": "revisione",
+        "ralph": "Ciclo Ralph"
       },
       "observability": {
         "heading": "Osservabilita degli agenti",
@@ -2026,7 +2027,8 @@
         "document": "Documento",
         "spike": "Spike",
         "recurring": "Ricorrente",
-        "review": "Revisione"
+        "review": "Revisione",
+        "ralph": "Ciclo Ralph"
       },
       "recurringWithFrame": "Un'attività ricorrente esegue una pipeline a cadenza regolare. Continua per impostare la pianificazione e il prompt.",
       "recurringNoFrame": "Un'attività ricorrente deve risiedere su un servizio. Aggiungila da un frame di servizio (o da un modulo al suo interno).",
@@ -4796,6 +4798,29 @@
       "style": "Stile",
       "test": "Test",
       "other": "Altro"
+    }
+  },
+  "ralph": {
+    "subtitle": "Un ciclo persistente: lavora sull'attività, esegui il comando di validazione e ripeti finché non passa.",
+    "status": {
+      "passed": "Superato",
+      "gaveUp": "Interrotto",
+      "running": "In esecuzione",
+      "failing": "In errore"
+    },
+    "noActivity": "Ancora nessuna iterazione.",
+    "validationCommand": "Comando di validazione",
+    "lastOutput": "Ultima validazione (uscita {exit})",
+    "viewPr": "Visualizza pull request",
+    "iterationsHeading": "Iterazioni",
+    "iteration": "Iterazione {number}",
+    "iterationPassed": "validazione superata",
+    "iterationFailed": "uscita {exit}",
+    "sidebar": {
+      "state": "Stato",
+      "iterations": "Iterazioni",
+      "count": "{attempts} di {max}",
+      "footer": "Il ciclo riprova finché il comando di validazione non passa o il budget di iterazioni è esaurito."
     }
   }
 }
