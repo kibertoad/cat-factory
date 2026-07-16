@@ -12,6 +12,7 @@ import { documentSourceController } from './modules/documents/DocumentSourceCont
 import { environmentController } from './modules/environments/EnvironmentController.js'
 import { environmentUserHandlerController } from './modules/environments/EnvironmentUserHandlerController.js'
 import { eventsController } from './modules/events/EventsController.js'
+import { eventsRelayController } from './modules/events/EventsRelayController.js'
 import { executionController } from './modules/execution/ExecutionController.js'
 import { fragmentLibraryController } from './modules/fragmentLibrary/FragmentLibraryController.js'
 import { githubController } from './modules/github/GitHubController.js'
@@ -111,6 +112,12 @@ export function registerCoreControllers<E extends AppEnv>(app: Hono<E>): void {
   // mothership. Machine-token gated like the persistence RPC; 503 unless the facade wired
   // `githubTokenDelegation`. Mounted on both facades so either can be a mothership.
   app.route('/', githubDelegationController())
+  // Mothership-mode real-time upstream (`/internal/events/publish`): a mothership-mode local node
+  // POSTs its engine events here so the mothership's own realtime fan-out (hosted teammates on the
+  // shared board) sees the local node's activity live. Machine-token gated like the persistence
+  // RPC; 503 unless the facade wired `machineEventRelay`. Mounted on both facades so either can be
+  // a mothership. See docs/initiatives/mothership-mode.md.
+  app.route('/', eventsRelayController())
   // The PUBLIC external API (`/api/v1/*`): key-authenticated in-controller (its `/api` prefix
   // bypasses the session gate), for external systems to run a public inline pipeline headlessly.
   app.route('/', publicApiController())

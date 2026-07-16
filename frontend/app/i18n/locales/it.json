@@ -519,6 +519,36 @@
         "removeFailed": "Impossibile rimuovere la voce del registry"
       }
     },
+    "apiTokens": {
+      "title": "Token di accesso API",
+      "intro": "Crea token che i sistemi esterni presentano all'API di cat-factory. Ogni token si autentica come questo spazio di lavoro sugli endpoint /api/v1. Il segreto viene mostrato una sola volta, al momento della creazione, e non può essere recuperato, quindi conservalo subito.",
+      "secret": {
+        "heading": "Copia il tuo token ora",
+        "warning": "Questa è l'unica volta in cui viene mostrato il token completo. Conservalo in un luogo sicuro; non può essere recuperato.",
+        "copy": "Copia token",
+        "done": "Fatto"
+      },
+      "list": {
+        "heading": "Token attivi",
+        "created": "Creato il {date}",
+        "lastUsed": "ultimo utilizzo il {date}",
+        "neverUsed": "mai utilizzato",
+        "revoke": "Revoca token"
+      },
+      "add": {
+        "heading": "Crea un token",
+        "label": "Etichetta",
+        "labelHelp": "Un nome per riconoscere questo token in seguito.",
+        "labelPlaceholder": "es. pipeline CI",
+        "create": "Crea token"
+      },
+      "toast": {
+        "loadFailed": "Impossibile caricare i token API",
+        "created": "Token creato",
+        "createFailed": "Impossibile creare il token",
+        "revokeFailed": "Impossibile revocare il token"
+      }
+    },
     "sharedStacks": {
       "tab": "Stack condivisi",
       "intro": "Infrastruttura compose a lunga durata (database, broker, ricerca, mail) avviata una volta per workspace e riutilizzata tra run e pull request. Un ambiente di test si collega alla rete gestita di uno stack. L'avvio di uno stack viene eseguito su un deployment Docker locale; su altri backend puoi comunque gestire la definizione.",
@@ -1915,6 +1945,10 @@
         "packageRegistries": {
           "label": "Registry di pacchetti privati",
           "description": "Token npm e GitHub Packages che gli agenti usano per installare dipendenze private."
+        },
+        "apiTokens": {
+          "label": "Token di accesso API",
+          "description": "Token che i sistemi esterni presentano per chiamare l'API di cat-factory."
         },
         "githubPat": {
           "label": "Il mio token GitHub",

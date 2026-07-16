@@ -202,6 +202,7 @@ import {
   createNodeModelProviderResolver,
 } from './modelProvider.js'
 import { ConsensusAgentExecutor, registerConsensusTraits } from '@cat-factory/consensus'
+import { LocalMachineEventRelay } from './machineEventRelay.js'
 import { type LocalEventSink, NodeEventPublisher } from './realtime.js'
 import {
   DrizzleGitHubInstallationRepository,
@@ -370,17 +371,36 @@ function buildTraceSink(config: AppConfig): CoreDependencies['llmTraceSink'] {
  */
 function selectNodeSlackDeps(
   config: AppConfig,
-  db: DrizzleDb,
   repos: ReturnType<typeof createDrizzleRepositories>,
+  // The remote-source seam (mothership mode): `sourced('name', build)` returns the remote registry
+  // entry when there's no `db`, else builds the Drizzle repo. Routing the three Slack repos through
+  // it makes the connect / route / member-map management surface functional in mothership mode —
+  // AND keeps the `SlackNotificationChannel` (which captures these repos directly) reading the SAME
+  // remote-backed repos, so it can't drift to the broken db-less Drizzle instances. The bot token
+  // rides a SEALED `tokenCipher` (sealed/decrypted under the LOCAL key), so the sealed blob — never
+  // plaintext — crosses the machine API; the settings + member-mapping rows carry no secrets. The
+  // RPC allow-list gates each method by its account/workspace scope. (Mothership-SIDE delivery for a
+  // hosted teammate's notification — the mothership decrypting a laptop-sealed token — is the later
+  // secrets-delegation slice; local delivery, where the run's own node holds the key, works.)
+  sourced: <T>(name: string, build: (d: DrizzleDb) => T) => T,
 ): Partial<CoreDependencies> {
   if (!config.slack.enabled || !config.slack.encryptionKey) return {}
   const secretCipher = new WebCryptoSecretCipher({
     masterKeyBase64: config.slack.encryptionKey,
     info: SLACK_CIPHER_INFO,
   })
-  const slackConnectionRepository = new DrizzleSlackConnectionRepository(db)
-  const slackSettingsRepository = new DrizzleSlackSettingsRepository(db)
-  const slackMemberMappingRepository = new DrizzleSlackMemberMappingRepository(db)
+  const slackConnectionRepository = sourced(
+    'slackConnectionRepository',
+    (d) => new DrizzleSlackConnectionRepository(d),
+  )
+  const slackSettingsRepository = sourced(
+    'slackSettingsRepository',
+    (d) => new DrizzleSlackSettingsRepository(d),
+  )
+  const slackMemberMappingRepository = sourced(
+    'slackMemberMappingRepository',
+    (d) => new DrizzleSlackMemberMappingRepository(d),
+  )
   return {
     notificationChannel: new SlackNotificationChannel({
       workspaceRepository: repos.workspaceRepository,
@@ -2147,7 +2167,7 @@ export function buildNodeContainer(options: NodeContainerOptions): ServerContain
   // events reach EVERY board that mounts it (parity with the Worker's selectEventPublisher).
   // The in-app push is also a notification channel, composed alongside Slack (when
   // enabled) so a raised notification both lands in the inbox live AND fans to Slack.
-  const slackDeps = selectNodeSlackDeps(config, db, repos)
+  const slackDeps = selectNodeSlackDeps(config, repos, sourced)
   const executionEventPublisher = options.realtimeSink
     ? new FanOutEventPublisher(new NodeEventPublisher(options.realtimeSink), {
         workspaceMountRepository: repos.workspaceMountRepository,
@@ -2736,6 +2756,15 @@ export function buildNodeContainer(options: NodeContainerOptions): ServerContain
     // private key never leaves this service. The registry satisfies the seam structurally.
     // Wired symmetrically on the Cloudflare facade.
     ...(appRegistry ? { githubTokenDelegation: appRegistry } : {}),
+    // Mothership-side real-time UPSTREAM delivery (`POST /internal/events/publish`): when this
+    // deployment is a mothership (its realtime transport is wired), a machine-authed mothership-mode
+    // node's relayed engine events land in this deployment's OWN fan-out (`options.realtimeSink` —
+    // the hub, or the layered propagator on a multi-node deployment), so hosted teammates on the
+    // shared board see the local node's activity live. Wired symmetrically on the Cloudflare facade
+    // (the per-workspace WorkspaceEventsHub Durable Object). Absent realtime ⇒ the endpoint 503s.
+    ...(options.realtimeSink
+      ? { machineEventRelay: new LocalMachineEventRelay(options.realtimeSink) }
+      : {}),
     repositories: {
       ...dependencies,
       agentRunRepository: repos.agentRunRepository,

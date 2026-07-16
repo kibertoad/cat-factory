@@ -146,6 +146,15 @@ export function persistenceController(): Hono<AppEnv> {
         for (const service of services ?? []) map.set(service.id, service.accountId)
         return map
       },
+      // The member-display scope (`user`/`userList`): a userId is in scope iff a co-member of an
+      // in-scope account, so resolve each in-scope account's roster to userIds. Bounded by the
+      // token's account scope, not the requested user list.
+      resolveAccountMemberIds: async (accountId) => {
+        const memberships = (await registry.membershipRepository?.listByAccount?.(accountId)) as
+          | Array<{ userId: string }>
+          | undefined
+        return (memberships ?? []).map((m) => m.userId)
+      },
     })
     return c.json(result.body, result.status as 200 | 400 | 403 | 404 | 409 | 422 | 428 | 500)
   })

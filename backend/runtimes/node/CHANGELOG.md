@@ -1,5 +1,130 @@
 # @cat-factory/node-server
 
+## 0.97.2
+
+### Patch Changes
+
+- 6dc444e: feat(mothership): expose member-display user reads over the persistence RPC
+
+  A mothership-mode local node delegates org/durable state to the mothership, but the account members
+  panel could not enrich its roster with real display details — `userRepository.get`/`listByIds` were
+  not remotely callable, so names/emails/avatars came back empty. This allow-lists those two
+  member-display reads.
+
+  - A new scope-rule pair **`user`/`userList`** in the persistence RPC (`src/persistence/rpc.ts`).
+    A userId is neither an account nor a workspace, so it is bound by CO-MEMBERSHIP: a user's display
+    record is readable iff they are a member of one of the machine token's in-scope accounts, resolved
+    server-side from the account rosters via a new `resolveAccountMemberIds` dispatch resolver (bounded
+    by the token's account scope, not the requested user list — no N+1). A user in no in-scope account
+    fails closed (404, no existence leak), like every other entity scope.
+  - The shared `PersistenceController` wires `resolveAccountMemberIds` from
+    `membershipRepository.listByAccount`, so both facades (Node + Cloudflare mothership) pick it up.
+
+  Safe because the reads carry only the presentational `UserRecord` (id/name/email/avatarUrl/createdAt);
+  the password `secret` lives on `UserIdentityRecord`, reachable only via `getIdentity`/`listIdentities`,
+  which — with the `update` profile write and `findByIdentity`/`findByEmail` — stay off the machine API
+  (the account-lifecycle / login surface). See `docs/initiatives/mothership-mode.md`.
+
+  The `@cat-factory/node-server` patch is a test-only change: its mothership-allowlist drift guard moves
+  `userRepository.get`/`listByIds` out of `pending` to reflect the new remote surface.
+
+- Updated dependencies [6dc444e]
+  - @cat-factory/server@0.124.0
+
+## 0.97.1
+
+### Patch Changes
+
+- Updated dependencies [bd0a42a]
+  - @cat-factory/server@0.123.1
+
+## 0.97.0
+
+### Minor Changes
+
+- 745de02: feat(mothership): real-time upstream publish (the outbound half of PR 2's real-time both directions)
+
+  A mothership-mode local node runs the engine on the laptop but delegates org/durable state to the
+  mothership. Until now its engine events (a run advancing, a board change, a notification) never
+  reached the mothership's real-time fan-out, so a hosted teammate watching the same shared board
+  couldn't see the local node's activity live. This adds the upstream channel.
+
+  - `@cat-factory/server`: a new machine-authed `POST /internal/events/publish` endpoint
+    (`eventsRelayController`) + the `MachineEventRelay` seam on `ServerContainer` + the
+    `HttpMachineEventClient`. Mounted on both facades; account-scoped and default-deny exactly like
+    the persistence RPC (a workspace outside the token's scope is a uniform 404). The verbatim-forwarded
+    payload is size-capped (413 above the ceiling) so a compromised node can't inject an unbounded frame.
+  - `@cat-factory/node-server`: `LocalMachineEventRelay` delivers a relayed event into the facade's
+    own real-time sink (the hub / layered propagator); attached whenever a realtime sink is wired.
+  - `@cat-factory/worker`: `DurableObjectMachineEventRelay` delivers a relayed event into the
+    per-workspace `WorkspaceEventsHub` Durable Object — the symmetric Cloudflare side.
+  - `@cat-factory/local-server`: `MothershipWebSocketPropagator` (a `WebSocketPropagator` adapter,
+    reusing the existing cross-node seam) forwards the local node's engine events upstream; it is
+    layered over the hub in mothership mode so every event fans to the laptop's own SPA AND the
+    mothership.
+
+  Scope: this is the OUTBOUND direction only. The INBOUND subscribe leg (the local node receiving org
+  events raised on the mothership / by peer laptops) is a distinct, runtime-shaped follow-up — see
+  `docs/initiatives/mothership-mode.md`.
+
+### Patch Changes
+
+- 6108525: perf(db): index `password_reset_tokens.expires_at` so the token-expiry sweep is index-driven instead of a full-table scan (performance initiative item 21). Lands symmetrically on both runtimes — a D1 migration and the mirrored Drizzle `idx_password_reset_tokens_expiry`.
+- Updated dependencies [745de02]
+- Updated dependencies [6108525]
+  - @cat-factory/server@0.123.0
+  - @cat-factory/orchestration@0.113.1
+  - @cat-factory/kernel@0.129.1
+  - @cat-factory/caching@0.8.6
+  - @cat-factory/agents@0.59.1
+  - @cat-factory/consensus@0.10.55
+  - @cat-factory/eks@0.1.82
+  - @cat-factory/gates@0.5.39
+  - @cat-factory/gitlab@0.10.1
+  - @cat-factory/integrations@0.84.4
+  - @cat-factory/observability-langfuse@0.7.209
+  - @cat-factory/observability-otel@0.1.3
+  - @cat-factory/provider-bedrock@0.7.225
+  - @cat-factory/provider-cloudflare@0.7.226
+  - @cat-factory/provider-s3@0.2.159
+  - @cat-factory/spend@0.12.35
+
+## 0.96.1
+
+### Patch Changes
+
+- 6227908: refactor(node): split the monolithic `repositories/drizzle.ts` into per-domain files
+
+  The ~5,000-line `repositories/drizzle.ts` (39 repository classes in one module) is broken
+  into per-domain files under `repositories/drizzle/` (`board`, `execution`, `accounts`,
+  `telemetry`, `settings`, `reviews`, `kaizen`, `initiatives`, `sandbox`, `connections`, plus
+  a shared helper), mirroring the Cloudflare D1 per-repository layout. `drizzle.ts` stays as a
+  thin barrel that assembles `CoreRepositories` and re-exports the directly-consumed classes,
+  so every importer is unchanged. Pure code movement — no schema or behavioural change.
+
+## 0.96.0
+
+### Minor Changes
+
+- 1b90387: Mothership mode: expose the Slack integration management surface over the persistence RPC.
+
+  Adds a new `accountField` persistence-RPC scope rule (the account-owned mirror of `workspaceField`,
+  binding on an `upsert(record)`'s `accountId` field) and allow-lists the Slack settings repositories
+  so the connect / route / member-map panels persist in mothership mode:
+  `slackConnectionRepository` (`getByAccount`/`upsert`/`softDelete` — the bot token rides a sealed
+  `tokenCipher`, so only ciphertext crosses the machine API), `slackSettingsRepository`
+  (`getByWorkspace`/`upsert`) and `slackMemberMappingRepository` (`getByAccount`/`upsert`). The Node
+  facade routes the three Slack repos through the `pickRepoSource` seam inside `selectNodeSlackDeps`,
+  so both the management services and the `SlackNotificationChannel` read the remote-backed repos.
+  `slackConnectionRepository.getByTeam` (the global inbound-OAuth teamId lookup) stays
+  mothership-internal, and mothership-side Slack delivery for a hosted teammate remains a later
+  secrets-delegation slice.
+
+### Patch Changes
+
+- Updated dependencies [1b90387]
+  - @cat-factory/server@0.122.0
+
 ## 0.95.2
 
 ### Patch Changes

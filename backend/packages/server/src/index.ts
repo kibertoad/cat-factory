@@ -121,6 +121,12 @@ export {
   type FanOutEventPublisherDependencies,
 } from './events/FanOutEventPublisher.js'
 export { InAppNotificationChannel } from './events/InAppNotificationChannel.js'
+export {
+  type MachineEventRelay,
+  type MachineEventClient,
+  type RelayedRealtimeEvent,
+  HttpMachineEventClient,
+} from './events/machineEvents.js'
 export { mountAuthGate } from './http/authGate.js'
 export { param } from './http/params.js'
 export { handleError } from './http/errorHandler.js'

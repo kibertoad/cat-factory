@@ -35,6 +35,10 @@ export {
   DEFAULT_REALTIME_CHANNEL,
   type RedisWebSocketPropagatorOptions,
 } from './redisPropagator.js'
+// Mothership-side real-time upstream delivery: injects a relayed engine event from a
+// mothership-mode node into this deployment's own fan-out (the symmetric Node side of the
+// per-workspace Durable Object relay on Cloudflare).
+export { LocalMachineEventRelay } from './machineEventRelay.js'
 export {
   warnIfRedisUnreachable,
   probeRedisReachable,

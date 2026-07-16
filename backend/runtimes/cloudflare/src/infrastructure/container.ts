@@ -160,6 +160,7 @@ import { ContainerRepoBootstrapper } from './ai/ContainerRepoBootstrapper'
 import { CompositeAgentExecutor } from './ai/CompositeAgentExecutor'
 import { ContainerSessionService } from './containers/ContainerSessionService'
 import { DurableObjectEventPublisher } from './events/DurableObjectEventPublisher'
+import { DurableObjectMachineEventRelay } from './events/DurableObjectMachineEventRelay'
 import { WorkflowsWorkRunner } from './workflows/WorkflowsWorkRunner'
 import { WorkflowsBootstrapRunner } from './workflows/WorkflowsBootstrapRunner'
 import { WorkflowsEnvConfigRepairRunner } from './workflows/WorkflowsEnvConfigRepairRunner'
@@ -2515,6 +2516,15 @@ export function buildContainer(
     // Wired symmetrically on the Node facade.
     ...(config.github.enabled
       ? { githubTokenDelegation: buildAppRegistry(env, config, db, clock) }
+      : {}),
+    // Mothership-side real-time UPSTREAM delivery (`POST /internal/events/publish`): when this
+    // Worker is a mothership (its WORKSPACE_EVENTS hub is bound), a machine-authed mothership-mode
+    // node's relayed engine events are injected into the per-workspace WorkspaceEventsHub Durable
+    // Object, so hosted teammates on the shared board see the local node's activity live. Wired
+    // symmetrically on the Node facade (the in-process hub / propagator). Absent binding ⇒ the
+    // endpoint 503s.
+    ...(env.WORKSPACE_EVENTS
+      ? { machineEventRelay: new DurableObjectMachineEventRelay(env.WORKSPACE_EVENTS) }
       : {}),
     // The repository registry the mothership-mode machine API (`/internal/persistence`) reflects
     // over, so a Cloudflare deployment can act as a mothership for mothership-mode local nodes.

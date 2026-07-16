@@ -2229,7 +2229,10 @@ function createSlackModule(deps: CoreDependencies): SlackModule | undefined {
 }
 
 /** Assemble the merge-preset module when its repository is present. */
-function createRiskPoliciesModule(deps: CoreDependencies): RiskPoliciesModule | undefined {
+function createRiskPoliciesModule(
+  deps: CoreDependencies,
+  caches: AppCaches,
+): RiskPoliciesModule | undefined {
   const { riskPolicyRepository } = deps
   if (!riskPolicyRepository) return undefined
   const service = new RiskPolicyService({
@@ -2237,6 +2240,8 @@ function createRiskPoliciesModule(deps: CoreDependencies): RiskPoliciesModule | 
     workspaceRepository: deps.workspaceRepository,
     idGenerator: deps.idGenerator,
     clock: deps.clock,
+    // Invalidate the read-through slice the engine's `resolveRiskPolicy` uses on every write.
+    riskPolicyCache: caches.riskPolicy,
   })
   return { service }
 }
@@ -2676,7 +2681,7 @@ export function createCore(dependencies: CoreDependencies): Core {
   // pipeline-complete notifications during a run (when the module is configured).
   const notifications = createNotificationsModule(dependencies)
   const slack = createSlackModule(dependencies)
-  const riskPolicies = createRiskPoliciesModule(dependencies)
+  const riskPolicies = createRiskPoliciesModule(dependencies, caches)
   const sandbox = createSandboxModule(dependencies, agentKindRegistry)
   // Built before the execution engine so the per-service running-task limit can be
   // enforced at start() (and the escalation sweep can read the waiting threshold).
@@ -2768,6 +2773,9 @@ export function createCore(dependencies: CoreDependencies): Core {
     pokeInitiativeLoop,
     bugIntakeService: tasks?.bugIntakeService,
     spendService,
+    // Read-through slice for `resolveRiskPolicy` (the merge preset re-read on every gate
+    // evaluation); `RiskPolicyService` invalidates it on every preset write.
+    riskPolicyCache: caches.riskPolicy,
     // Route runtime fragment-id resolution through the merged tenant catalog (so
     // managed + document-backed fragments reach a run), present only when the
     // library is configured; otherwise the engine falls back to the static pool.

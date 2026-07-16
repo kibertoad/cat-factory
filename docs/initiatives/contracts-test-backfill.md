@@ -13,7 +13,7 @@ schemas plus the hand-written parse/normalize/default logic every ingest path re
 `parseAccountSettingsSecrets` / `accountSettingsSummary`, the service-connection indexing,
 requirement-review shapes, step-options bags, …). It currently has **142 source files and
 zero test files**. These are exactly the branchy pure functions on untrusted input where a
-regression means *silent* data loss or acceptance of malformed state — the schema quietly
+regression means _silent_ data loss or acceptance of malformed state — the schema quietly
 drops a field, a default flips, a lenient coercion widens — and nothing downstream notices
 until a run behaves wrongly. Downstream suites (conformance, worker/node integration)
 exercise happy paths incidentally; nothing pins rejection behaviour, defaulting, or
@@ -31,7 +31,7 @@ spec) and are included as the final row rather than a separate tracker.
 
 1. **Test the exported behaviour, not the schema internals**: for each parse/normalize
    entry point — (a) canonical valid input round-trips with expected defaults applied,
-   (b) each *class* of invalid input is rejected (or leniently coerced, where that is the
+   (b) each _class_ of invalid input is rejected (or leniently coerced, where that is the
    documented intent — pin whichever it is), (c) unknown keys / extra fields behave as
    intended (stripped vs rejected), (d) boundary values on unions/enums/lengths.
 2. **Prioritize by blast radius**, not file order: ingest-side parsers that accept
@@ -49,16 +49,16 @@ spec) and are included as the final row rather than a separate tracker.
 
 ## Prioritized checklist
 
-| # | Slice | Status | PR |
-| - | ----- | ------ | -- |
-| 1 | Vitest scaffolding for `@cat-factory/contracts` + pilot spec (`parseBlueprintService`: valid/lenient-coerce/reject/never-half-shape) | ⬜ todo | |
-| 2 | Account settings: `parseAccountSettingsConfig` / `parseAccountSettingsSecrets` / `accountSettingsSummary` (incl. secret-redaction behaviour of the summary) | ⬜ todo | |
-| 3 | `parseInitiativePreset` + initiative shapes | ⬜ todo | |
-| 4 | Service-connections indexing + entities defaults/normalization | ⬜ todo | |
-| 5 | Requirements/review, step-options, merge-preset shapes | ⬜ todo | |
-| 6 | Public-API projections (`publicTask`/`publicService`/`publicJob` + route contracts) — no credential-bearing field can slip into a projection | ⬜ todo | |
-| 7 | Seeded fuzz/mutation pass over the lenient-coercion parsers | ⬜ todo | |
-| 8 | Sibling: per-strategy tests for `@cat-factory/consensus` (`debate`, `rankedVoting`, `specialistPanel`, `gating`) | ⬜ todo | |
+| #   | Slice                                                                                                                                                       | Status  | PR  |
+| --- | ----------------------------------------------------------------------------------------------------------------------------------------------------------- | ------- | --- |
+| 1   | Vitest scaffolding for `@cat-factory/contracts` + pilot spec (`parseBlueprintService`: valid/lenient-coerce/reject/never-half-shape)                        | ⬜ todo |     |
+| 2   | Account settings: `parseAccountSettingsConfig` / `parseAccountSettingsSecrets` / `accountSettingsSummary` (incl. secret-redaction behaviour of the summary) | ⬜ todo |     |
+| 3   | `parseInitiativePreset` + initiative shapes                                                                                                                 | ⬜ todo |     |
+| 4   | Service-connections indexing + entities defaults/normalization                                                                                              | ⬜ todo |     |
+| 5   | Requirements/review, step-options, merge-preset shapes                                                                                                      | ⬜ todo |     |
+| 6   | Public-API projections (`publicTask`/`publicService`/`publicJob` + route contracts) — no credential-bearing field can slip into a projection                | ⬜ todo |     |
+| 7   | Seeded fuzz/mutation pass over the lenient-coercion parsers                                                                                                 | ⬜ todo |     |
+| 8   | Sibling: per-strategy tests for `@cat-factory/consensus` (`debate`, `rankedVoting`, `specialistPanel`, `gating`)                                            | ⬜ todo |     |
 
 ## Conventions & gotchas
 
@@ -67,7 +67,7 @@ spec) and are included as the final row rather than a separate tracker.
   visible commit (possibly a flagged breaking change in the changeset) — never a silent
   by-product of adding tests.
 - **Tests are excluded from build configs** — run them via `pnpm exec turbo run typecheck
-  --filter=@cat-factory/contracts` + the root `test:run`, per the repo convention that
+--filter=@cat-factory/contracts` + the root `test:run`, per the repo convention that
   typecheck covers tests.
 - **Changesets**: test-only slices take an empty changeset; any slice that also changes a
   schema's behaviour needs a real one (contracts is a published package consumed by the
