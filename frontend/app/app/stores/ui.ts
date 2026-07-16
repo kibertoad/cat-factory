@@ -168,6 +168,9 @@ export const useUiStore = defineStore('ui', () => {
   // Private package registries: the workspace's npm/GitHub-Packages entries agent
   // containers install with. Opened from the Integrations hub.
   const packageRegistriesOpen = ref(false)
+  // API access tokens: the workspace's inbound public-API keys external systems present to
+  // the `/api/v1` surface. Opened from the Integrations hub.
+  const apiTokensOpen = ref(false)
   // The single tabbed Infrastructure window — a TOP-LEVEL navbar destination (no longer
   // reached via the Integrations hub). Two topical tabs: "Agent containers" (the execution
   // backend + self-hosted runner pool, plus the local-mode warm pool/checkout) and "Test
@@ -618,6 +621,13 @@ export const useUiStore = defineStore('ui', () => {
   function closePackageRegistries() {
     packageRegistriesOpen.value = false
   }
+  function openApiTokens() {
+    resetHubReturn()
+    apiTokensOpen.value = true
+  }
+  function closeApiTokens() {
+    apiTokensOpen.value = false
+  }
   // Top-level navbar entry into the Infrastructure window. No hub-return marker (it isn't
   // reached from the Integrations hub), so the window shows no "Back to Integrations" control.
   function openInfrastructure(tab: 'environment' | 'runner-pool' = 'runner-pool') {
@@ -923,6 +933,7 @@ export const useUiStore = defineStore('ui', () => {
     accountSettingsScrollTarget,
     observabilityConnectionOpen,
     packageRegistriesOpen,
+    apiTokensOpen,
     infrastructureOpen,
     infrastructureTab,
     openInfrastructure,
@@ -1021,6 +1032,8 @@ export const useUiStore = defineStore('ui', () => {
     closeObservabilityConnection,
     openPackageRegistries,
     closePackageRegistries,
+    openApiTokens,
+    closeApiTokens,
     openProviderConnection,
     closeProviderConnection,
     k3sSetupPrefill,

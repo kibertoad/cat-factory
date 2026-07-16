@@ -25,6 +25,7 @@ import { notificationsApi } from './api/notifications'
 import { packageRegistriesApi } from './api/packageRegistries'
 import { preflightsApi } from './api/preflights'
 import { presetsApi } from './api/presets'
+import { publicApiKeysApi } from './api/publicApiKeys'
 import { sharedStacksApi } from './api/sharedStacks'
 import { providerConnectionsApi } from './api/providerConnections'
 import { provisioningLogsApi } from './api/provisioningLogs'
@@ -121,6 +122,7 @@ export function useApi() {
     ...notificationsApi(ctx),
     ...presetsApi(ctx),
     ...preflightsApi(ctx),
+    ...publicApiKeysApi(ctx),
     ...sharedStacksApi(ctx),
     ...providerConnectionsApi(ctx),
     ...infraHandlersApi(ctx),
