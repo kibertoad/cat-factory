@@ -129,6 +129,7 @@ export async function seedGitHubForWorkspace(
     accountLogin: E2E_REPO.owner,
     targetType: 'Organization',
     appId: null,
+    provider: 'github',
     cachedToken: null,
     tokenExpiresAt: null,
     createdAt: now,

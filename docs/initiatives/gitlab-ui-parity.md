@@ -1,6 +1,6 @@
 # Initiative: GitLab product-surface parity (SPA)
 
-**Status:** in progress (slice 1 audit landed) · **Owner:** core · **Started:** 2026-07-16
+**Status:** in progress (slice 1 audit + provider pre-slice landed) · **Owner:** core · **Started:** 2026-07-16
 
 > Durable source of truth for a multi-PR initiative. Read it first before picking up the
 > next slice; update the checklist at the end of each PR.
@@ -32,8 +32,8 @@ pipelines entirely through the UI, at feature parity with GitHub.
   `useGitHubStore` / `listGitHubAvailableRepos` already return GitLab projects through the
   adapter, and "there is no separate GitLab store; do not add one" (CLAUDE.md, VCS section).
   Parity work therefore means: (a) a connect flow that creates the GitLab connection rows
-  the projection needs, (b) making the shared components provider-aware in *presentation*
-  (labels, icons, URL shapes) while staying provider-neutral in *data*.
+  the projection needs, (b) making the shared components provider-aware in _presentation_
+  (labels, icons, URL shapes) while staying provider-neutral in _data_.
 - **Provider-neutral vocabulary** everywhere new: `VcsProvider` / `VcsRepoRef` /
   `VcsConnectionRef` (`kernel/src/domain/vcs-types.ts`) — never a new `github*`-named field
   (see "Git-provider-agnostic naming" in CLAUDE.md).
@@ -48,16 +48,17 @@ pipelines entirely through the UI, at feature parity with GitHub.
 
 ## Prioritized checklist
 
-| # | Slice | Status | PR |
-| - | ----- | ------ | -- |
-| 1 | Audit pass: enumerate every GitHub-only affordance/copy in `components/github/*` + stores; classify neutral vs provider-keyed (write findings into this tracker) | ✅ done | this PR |
-| 2 | Per-workspace GitLab PAT connect flow (backend rows + connect UI mirroring `GitHubConnect.vue`) | ⬜ todo | |
-| 3 | Project browse / add-service-from-project through the shared store (provider-aware labels) | ⬜ todo | |
-| 4 | Webhook setup surface (register the GitLab webhook + secret for a connected project) | ⬜ todo | |
-| 5 | Provider-keyed copy pass: PR/MR terminology, host/URL rendering, icons — i18n'd, all locales | ⬜ todo | |
-| 6 | Onboarding: provider choice step (GitHub App / GitHub PAT / GitLab PAT) in the connect onboarding | ⬜ todo | |
-| 7 | OAuth-based GitLab connect (the `gitlab-parity.md` future-work item) | ⬜ todo | |
-| 8 | e2e: GitLab-flavoured connect→add-service against a faked VCS boundary (MSW at the backend outbound boundary) | ⬜ todo | |
+| #   | Slice                                                                                                                                                                                                                | Status  | PR      |
+| --- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ------- | ------- |
+| 1   | Audit pass: enumerate every GitHub-only affordance/copy in `components/github/*` + stores; classify neutral vs provider-keyed (write findings into this tracker)                                                     | ✅ done | #1138   |
+| 1b  | **Provider pre-slice (gates all visual work):** add + populate a `provider: VcsProvider` discriminator on the repo/connection wire types + projections, symmetric across both runtimes, with a conformance assertion | ✅ done | this PR |
+| 2   | Per-workspace GitLab PAT connect flow (backend rows + connect UI mirroring `GitHubConnect.vue`)                                                                                                                      | ⬜ todo |         |
+| 3   | Project browse / add-service-from-project through the shared store (provider-aware labels)                                                                                                                           | ⬜ todo |         |
+| 4   | Webhook setup surface (register the GitLab webhook + secret for a connected project)                                                                                                                                 | ⬜ todo |         |
+| 5   | Provider-keyed copy pass: PR/MR terminology, host/URL rendering, icons — i18n'd, all locales                                                                                                                         | ⬜ todo |         |
+| 6   | Onboarding: provider choice step (GitHub App / GitHub PAT / GitLab PAT) in the connect onboarding                                                                                                                    | ⬜ todo |         |
+| 7   | OAuth-based GitLab connect (the `gitlab-parity.md` future-work item)                                                                                                                                                 | ⬜ todo |         |
+| 8   | e2e: GitLab-flavoured connect→add-service against a faked VCS boundary (MSW at the backend outbound boundary)                                                                                                        | ⬜ todo |         |
 
 ## Findings (slice 1 audit)
 
@@ -96,7 +97,7 @@ this before picking up slice 2.
   `GitHubOnboarding.vue` are built entirely around App installations (`installationId`,
   `targetType: Organization|User`, the install-redirect to `github.com/apps/<slug>/…`, and a
   manual installation-id entry). None of these concepts exist for a GitLab PAT connect. The
-  connect UI is therefore a genuine new surface (mirroring the *shape*, not the App
+  connect UI is therefore a genuine new surface (mirroring the _shape_, not the App
   vocabulary), not a copy-tweak of the GitHub component.
 
 ### Surface inventory & classification
@@ -148,6 +149,21 @@ everything visual)** → then slice 2 (per-workspace GitLab connection persisten
 controller) → slice 3 (project browse) → slice 5 (provider-keyed copy, now that the data
 carries `provider`) → slices 4/6/7/8. Slice 5's copy work can be catalog-scaffolded in
 parallel but stays inert until the `provider` field is on the data.
+
+**Update — pre-slice (a) is DONE (slice 1b, this PR).** `provider: VcsProvider` is now on
+`GitHubRepo` / `GitHubConnection` / `GitHubAvailableRepo` (contracts) and kernel
+`GitHubInstallation`, persisted on `github_repos` + `github_installations` (D1 migration
+`0051_vcs_provider.sql` + a Drizzle migration + both mappers), and asserted by
+`defineVcsProviderSuite` on both runtimes. The value is a per-connection fact: the connection
+records it (GitHub-App connect → `github`; local `AutoProvisioningInstallationRepository` →
+the deployment provider, `gitlab` for a GitLab-PAT deployment) and repos inherit it via the
+sync service (`installation.provider`), bootstrapper, and CLI `linkRepo`. Legacy rows default
+to `github`. **The SPA still reads nothing off it yet** — slices 3 & 5 are now unblocked to
+switch presentation on `repo.provider` / `connection.provider` (fall back to `'github'` when
+absent). Note the hosted GitLab facades (CF/Node) don't write these projection tables at all
+(GitLab ingests via the neutral `/vcs/:provider/webhooks` route), so a persisted `gitlab`
+provider only appears in local GitLab mode today; the wire field is what slices 2+ populate
+for the hosted connect flow.
 
 ## Conventions & gotchas
 

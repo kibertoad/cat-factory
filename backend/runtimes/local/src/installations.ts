@@ -1,5 +1,9 @@
 import { createHash } from 'node:crypto'
-import type { GitHubInstallation, GitHubInstallationRepository } from '@cat-factory/kernel'
+import type {
+  GitHubInstallation,
+  GitHubInstallationRepository,
+  VcsProvider,
+} from '@cat-factory/kernel'
 
 // Local mode has no GitHub-App connect flow: a single developer runs the whole product
 // against one PAT. So instead of binding a real App installation, every workspace is
@@ -40,6 +44,13 @@ export class AutoProvisioningInstallationRepository implements GitHubInstallatio
   constructor(
     private readonly inner: GitHubInstallationRepository,
     private readonly resolveAccount: () => Promise<PatAccount>,
+    /**
+     * The deployment's VCS provider ('github' with a GitHub PAT, 'gitlab' with a GitLab PAT).
+     * Local mode is single-provider, so the synthetic connection is stamped with it — the
+     * account metadata can't distinguish the two (a GitLab-only deployment can't read GitHub's
+     * `/user`), so it's injected rather than inferred.
+     */
+    private readonly provider: VcsProvider = 'github',
     private readonly now: () => number = () => Date.now(),
   ) {}
 
@@ -54,6 +65,7 @@ export class AutoProvisioningInstallationRepository implements GitHubInstallatio
       accountLogin: account.accountLogin,
       targetType: account.targetType,
       appId: null,
+      provider: this.provider,
       cachedToken: null,
       tokenExpiresAt: null,
       createdAt: this.now(),

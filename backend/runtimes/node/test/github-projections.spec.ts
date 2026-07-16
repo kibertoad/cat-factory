@@ -301,6 +301,7 @@ describe('GitHub projections (Postgres)', () => {
       accountLogin: 'octo',
       targetType: 'Organization' as const,
       appId: null,
+      provider: 'github' as const,
       cachedToken: null,
       tokenExpiresAt: null,
       createdAt: 1000,

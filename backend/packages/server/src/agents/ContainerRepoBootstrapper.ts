@@ -357,7 +357,10 @@ export class ContainerRepoBootstrapper implements RepoBootstrapper {
       owner: outcome.owner,
       repo: outcome.name,
     })
-    await this.deps.repoRepository.upsertMany(workspaceId, [repo])
+    // The bootstrapped repo is reached through this connection, so it inherits its provider.
+    await this.deps.repoRepository.upsertMany(workspaceId, [
+      { ...repo, provider: installation.provider },
+    ])
     await this.deps.repoProjectionCache?.invalidateGroup(workspaceId)
     log.info(
       { repo: `${outcome.owner}/${outcome.name}`, githubId: repo.githubId },
