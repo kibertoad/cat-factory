@@ -1,6 +1,6 @@
 # Initiative: performance optimizations (prioritized)
 
-**Status:** in progress — items 1, 2, 3, 4, 7, 8, 9, 12, 14, 15, 16, 17, 18 landed (emit metrics rollup · gate-poll GitHub reads · live-run projection · parallel dispatch waves · spend/workspace-settings/account-settings cache slices · GitHub-sync + fan-out-publisher parallelism · reuse-the-loaded-list batch across autoStart/initiative-spawn/blueprint-reconcile/block-delete) · **Owner:** core · **Started:** 2026-07-09
+**Status:** in progress — items 1, 2, 3, 4, 7, 8, 9, 12, 13, 14, 15, 16, 17, 18, 21, 23 landed (emit metrics rollup · gate-poll GitHub reads · live-run projection · parallel dispatch waves · spend/workspace-settings/account-settings cache slices · GitHub-sync + fan-out-publisher parallelism · reuse-the-loaded-list batch across autoStart/initiative-spawn/blueprint-reconcile/block-delete · agent-context single frame-walk + parallel wave · password-reset-token expiry index · risk-policy merge-preset cache slice) · **Owner:** core · **Started:** 2026-07-09
 
 > This is the durable source of truth for a multi-PR initiative. Read it first before
 > picking up the next slice; update the checklist at the end of each PR.
@@ -61,7 +61,7 @@ symmetric" (CLAUDE.md).
 | 10  | P2  | frontend     | Shared `useBlockQueries` index invalidates ALL BlockNodes on every execution event                                                  | ⬜ todo |                                                           |
 | 11  | P2  | frontend     | Two unconditional 60fps RAF loops doing DOM measurement while idle                                                                  | ⬜ todo |                                                           |
 | 12  | P2  | integrations | `GitHubSyncService`: serial per-workspace fan-out + serial resource syncs                                                           | ✅ done | branch `claude/performance-tracker-next-phase-kky9ny`     |
-| 13  | P2  | engine       | `AgentContextBuilder` re-walks block ancestry per resolver, sequentially                                                            | ⬜ todo |                                                           |
+| 13  | P2  | engine       | `AgentContextBuilder` re-walks block ancestry per resolver, sequentially                                                            | ✅ done | branch `claude/performance-initiative-next-phase-exeew1`  |
 | 14  | P2  | events       | `FanOutEventPublisher` forwards to N mounted workspaces serially                                                                    | ✅ done | branch `claude/performance-tracker-next-phase-kky9ny`     |
 | 15  | P3  | engine       | `autoStartDependents`: per-dependent pipeline point-read in loop                                                                    | ✅ done | branch `claude/performance-tracker-next-phase-caz67j`     |
 | 16  | P3  | engine       | `InitiativeLoopService.spawnItem`: per-item pipeline point-read in loop                                                             | ✅ done | branch `claude/performance-tracker-next-phase-caz67j`     |
@@ -69,9 +69,9 @@ symmetric" (CLAUDE.md).
 | 18  | P3  | board        | Block delete: teardown + remove each re-list the whole board                                                                        | ✅ done | branch `claude/performance-tracker-next-phase-caz67j`     |
 | 19  | P3  | persistence  | `notifications.listOpen` unbounded `SELECT *` (body+payload) on snapshot                                                            | ⬜ todo |                                                           |
 | 20  | P3  | frontend     | `board.hydrate` JSON.stringifies every block per refresh; global decision/approval maps rebuilt per event; no node virtualization   | ⬜ todo |                                                           |
-| 21  | P3  | persistence  | `password_reset_tokens.deleteExpired` full-table scan (no `expires_at` index)                                                       | ⬜ todo |                                                           |
+| 21  | P3  | persistence  | `password_reset_tokens.deleteExpired` full-table scan (no `expires_at` index)                                                       | ✅ done | branch `claude/performance-initiative-next-phase-exeew1`  |
 | 22  | P3  | spend        | `isOverBudget`: up to 3 live SUM aggregates per proxied LLM call (design decision)                                                  | ⬜ todo |                                                           |
-| 23  | P3  | engine       | `resolveRiskPolicy` re-reads merge preset per gate evaluation (optional slice)                                                      | ⬜ todo |                                                           |
+| 23  | P3  | engine       | `resolveRiskPolicy` re-reads merge preset per gate evaluation (optional slice)                                                      | ✅ done | branch `claude/performance-initiative-next-phase-exeew1`  |
 | 24  | P2  | gateways     | Dispatch GH client: no single-flight / throttle — concurrent same-run steps duplicate token mint + branch probe                     | ⬜ todo |                                                           |
 
 ## Detailed findings
@@ -395,6 +395,23 @@ redundant reads rather than unbounded scaling.
 resolvers (several already accept a pre-fetched block — see the `resolveServiceFrame`
 docstring); `Promise.all` the independent resolvers. Reuse-not-cache.
 
+**Landed (branch `claude/performance-initiative-next-phase-exeew1`):** `buildContext` now walks
+the ancestry ONCE via a private `serviceFrameFor(block)` (walks from the block in hand — no
+re-fetch — frame→module→task, cycle-guarded) and threads that frame into every service-frame
+resolver: `resolveEnvironment` (frame id), `serviceConfigFrom` (frame block — this also drops the
+old resolve-id-then-re-`get` double read), `frontendConfigFrom`/`frontendResolutionFrom` (frame
+block), and `resolveFragments` (reads the frame's `serviceFragmentIds` directly — the standalone
+`resolveServiceFragmentIds` walk is deleted). The description substitution + the frame walk run
+in a first `Promise.all`, then the ten mutually-independent resolutions (linked context,
+environment, service, frontend, involved services, test secrets, initiative, brainstorm
+direction, fragments, doc authoring) fan out in ONE wave rather than ten sequential awaits. The
+public `resolveServiceConfig`/`resolveFrontendConfig`/`resolveFrontendRunInfo`/`resolveServiceFrame`
+keep their walk-from-a-block-id contract for external callers (they delegate to the `*From`
+variants). Pure orchestration, no persistence surface; pinned by `AgentContextBuilder.reuse.test.ts`
+(exactly one block read for a frame→module→task chain — the walk length, not once-per-resolver —
+zero reads for a frame-level block, and two previously-sequential resolvers now overlapping in the
+wave), with the existing `AgentContextBuilder.*` suites unchanged.
+
 ### 14. `FanOutEventPublisher` serial per-workspace forwards — P2
 
 `backend/packages/server/src/events/FanOutEventPublisher.ts:57-108`: each event method
@@ -519,6 +536,13 @@ codebase indexes `expires_at` everywhere else (`idx_environments_expiry`,
 `idx_personal_subs_expiry`). One-line fix on both runtimes:
 `CREATE INDEX idx_password_reset_tokens_expiry ON password_reset_tokens (expires_at);`
 
+**Landed (branch `claude/performance-initiative-next-phase-exeew1`):** `idx_password_reset_tokens_expiry`
+added symmetrically on both runtimes — the D1 migration
+`0051_password_reset_tokens_expiry_index.sql` and the mirrored Drizzle index in `schema.ts` (with a
+generated Postgres migration), so `deleteExpired`'s `expires_at < ?` sweep is index-driven on
+either facade. Pure additive index, no schema/data change and no new port method, so no conformance
+surface.
+
 ### 22. `isOverBudget` synchronous aggregates per proxied LLM call — P3 (design decision)
 
 `backend/packages/spend/src/SpendService.ts:347-373`, awaited at
@@ -541,6 +565,24 @@ controllers + `MergeResolver`. Slow-moving admin config, re-read per gate evalua
 `maxAttempts` on `step.gate` and reuses it, `RunDispatcher.ts:3130-3132`, don't touch
 that). Optional `mergePreset` cache slice keyed by `(workspaceId, riskPolicyId|default)`,
 invalidated from `RiskPolicyService.create/update/remove/reseed` (`RiskPolicyService.ts:77-162`).
+
+**Landed (branch `claude/performance-initiative-next-phase-exeew1`):** the new `riskPolicy` AppCaches
+slice (grouped by workspace id, keyed per resolved preset — `picked:<id>` / `default`) replaces the
+per-gate repository re-read. `ExecutionService.resolveRiskPolicy` reads each preset through
+`riskPolicyCache.get(...)` when wired (a `RiskPolicyCacheValue` wrapper so a deleted picked id or an
+unseeded null default caches as a value and still falls through, exactly as an uncached read would),
+and `RiskPolicyService` drops the workspace group after EVERY write path — create / update / remove /
+reseed AND the lazy first-use `ensureSeeded` (so a gate that resolved the pre-seed null default
+re-reads the seeded default, not the built-in fallback). Registered on the kernel `AppCaches`
+interface + both profiles + `createAppCaches`; pass-through (`enabled: false`) on the Worker's
+isolate-safe profile (our own mutable D1 state, no cross-isolate bus). Wired entirely inside
+`createCore` (`caches.riskPolicy` into both `ExecutionService` and `RiskPolicyService`), so BOTH
+facades pick it up with no facade-container edits. The coherence contract is exercised against the
+REAL cache by `RiskPolicyService.cache.test.ts` (warmed read served from cache; every write path
+re-loads on the next read; no-cache pass-through). No conformance HTTP assertion: `resolveRiskPolicy`
+is engine-internal (read only by the merge gate, not any HTTP GET), the wiring is 100% shared
+(`createCore`), and the profile mirrors the four already-conformance-covered slices — so the
+facade-drift a conformance test guards against has no per-facade surface here.
 
 ### 24. Dispatch GH client has no single-flight / throttle — P2
 

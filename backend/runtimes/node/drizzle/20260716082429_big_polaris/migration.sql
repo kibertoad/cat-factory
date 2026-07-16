@@ -1,0 +1,1 @@
+CREATE INDEX "idx_password_reset_tokens_expiry" ON "password_reset_tokens" ("expires_at");
