@@ -22,7 +22,7 @@
  * `@cat-factory/deploy-harness`'s version (the value CI tags the published image with, and the same
  * tag `deploy/backend` pins) by the runner-image-tag sync — do not bump it by hand.
  */
-export const RECOMMENDED_DEPLOY_IMAGE = 'ghcr.io/kibertoad/cat-factory-deploy:0.2.7'
+export const RECOMMENDED_DEPLOY_IMAGE = 'ghcr.io/kibertoad/cat-factory-deploy:0.2.8'
 
 /**
  * The effective deploy-harness image ref for `container` mode: an explicit `LOCAL_DEPLOY_IMAGE`
