@@ -11,6 +11,9 @@ const STATUS_BY_CODE: Record<DomainError['code'], ContentfulStatusCode> = {
   // Precondition Required: a user-scoped personal credential (password/subscription)
   // must be supplied before the action can proceed (individual-usage restricted mode).
   credential_required: 428,
+  // Forbidden: the caller sees the resource but lacks the capability (workspace RBAC).
+  // A caller who may not even see the resource gets a 404, never this — see ForbiddenError.
+  forbidden: 403,
 }
 
 /** Maps domain errors to HTTP responses; anything else is a 500. */

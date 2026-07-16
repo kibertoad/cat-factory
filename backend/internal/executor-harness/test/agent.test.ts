@@ -1,6 +1,6 @@
 import { afterEach, describe, expect, it, vi } from 'vitest'
 import { parseAgentJob } from '../src/job.js'
-import { buildInfraNotes, buildPreviewOutcome } from '../src/agent.js'
+import { buildInfraNotes, buildPreviewOutcome, ralphUnsupportedOnMultiRepo } from '../src/agent.js'
 import { installCommand } from '../src/frontend-infra.js'
 
 // The generic, manifest-driven agent kind's body validator. The handler itself
@@ -681,5 +681,33 @@ describe('parseAgentJob (preview mode)', () => {
 
   it('rejects a job with an unknown mode', () => {
     expect(() => parseAgentJob({ ...base, mode: 'serve' })).toThrow(/mode/)
+  })
+})
+
+describe('ralphUnsupportedOnMultiRepo', () => {
+  const validation = { command: 'pnpm test' }
+  const repo = {
+    owner: 'acme',
+    name: 'email',
+    baseBranch: 'main',
+    cloneUrl: 'https://github.com/acme/email.git',
+  }
+  const peer = [{ repo }]
+
+  it('is true for a ralph iteration (validation set) on a peer-repo job', () => {
+    expect(ralphUnsupportedOnMultiRepo({ validation, peerRepos: peer })).toBe(true)
+  })
+
+  it('is true for a ralph iteration on a reference-repo job', () => {
+    expect(ralphUnsupportedOnMultiRepo({ validation, referenceRepos: [{ repo }] })).toBe(true)
+  })
+
+  it('is false for a ralph iteration on a single-repo job (the supported path)', () => {
+    expect(ralphUnsupportedOnMultiRepo({ validation })).toBe(false)
+    expect(ralphUnsupportedOnMultiRepo({ validation, peerRepos: [] })).toBe(false)
+  })
+
+  it('is false for a non-ralph multi-repo job (no validation set)', () => {
+    expect(ralphUnsupportedOnMultiRepo({ peerRepos: peer })).toBe(false)
   })
 })

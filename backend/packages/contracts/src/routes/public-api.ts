@@ -9,10 +9,13 @@ import {
   createPublicTaskSchema,
   initiativeAcceptedSchema,
   publicJobSchema,
+  publicPipelineListSchema,
+  publicRunSchema,
   publicServiceListSchema,
   publicTaskListSchema,
   publicTaskSchema,
   startPublicTaskSchema,
+  updatePublicTaskSchema,
 } from '../public-api.js'
 import { errorResponses, singleStringParam } from './_shared.js'
 
@@ -111,4 +114,48 @@ export const startPublicTaskContract = defineApiContract({
   pathResolver: ({ taskId }) => `/api/v1/tasks/${taskId}/start`,
   requestBodySchema: startPublicTaskSchema,
   responsesByStatusCode: { 202: publicTaskSchema, ...errorResponses },
+})
+
+/** Edit a task's title/description (pre-start edits). */
+export const updatePublicTaskContract = defineApiContract({
+  method: 'patch',
+  requestPathParamsSchema: taskIdParams,
+  pathResolver: ({ taskId }) => `/api/v1/tasks/${taskId}`,
+  requestBodySchema: updatePublicTaskSchema,
+  responsesByStatusCode: { 200: publicTaskSchema, ...errorResponses },
+})
+
+/** Stop a task's in-flight run (records a `cancelled` terminal state, leaving it retryable). */
+export const stopPublicTaskContract = defineApiContract({
+  method: 'post',
+  requestPathParamsSchema: taskIdParams,
+  pathResolver: ({ taskId }) => `/api/v1/tasks/${taskId}/stop`,
+  requestBodySchema: ContractNoBody,
+  responsesByStatusCode: { 200: publicTaskSchema, ...errorResponses },
+})
+
+/** Retry a task's failed run. */
+export const retryPublicTaskContract = defineApiContract({
+  method: 'post',
+  requestPathParamsSchema: taskIdParams,
+  pathResolver: ({ taskId }) => `/api/v1/tasks/${taskId}/retry`,
+  requestBodySchema: ContractNoBody,
+  responsesByStatusCode: { 202: publicTaskSchema, ...errorResponses },
+})
+
+/** Read a task's rich run projection (per-step status, subtasks, failure, PR branch). */
+export const getPublicRunContract = defineApiContract({
+  method: 'get',
+  requestPathParamsSchema: taskIdParams,
+  pathResolver: ({ taskId }) => `/api/v1/tasks/${taskId}/run`,
+  responsesByStatusCode: { 200: publicRunSchema, ...errorResponses },
+})
+
+// ---- pipeline discovery (key-authenticated) --------------------------------
+
+/** List the workspace's pipelines (id/name/steps + a headless-startable flag). */
+export const listPublicPipelinesContract = defineApiContract({
+  method: 'get',
+  pathResolver: () => '/api/v1/pipelines',
+  responsesByStatusCode: { 200: publicPipelineListSchema, ...errorResponses },
 })

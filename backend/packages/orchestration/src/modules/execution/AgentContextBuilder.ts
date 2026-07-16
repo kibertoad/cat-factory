@@ -42,6 +42,7 @@ import {
 import { connectionDescription } from '@cat-factory/contracts'
 import { frameOf, validInvolvedServiceFrames } from './frame.logic.js'
 import { buildImplementationChoice } from './forkDecision.logic.js'
+import { buildRalphValidation } from './ralph.logic.js'
 import { isTesterKind } from './ci.logic.js'
 import { getFragment } from '@cat-factory/prompt-fragments'
 import { extractReferences } from '@cat-factory/integrations'
@@ -99,7 +100,7 @@ function buildRevisionContext(step: PipelineStep): {
  * to a prior round's completed job. A step with neither (dispatched once) is epoch 0.
  */
 export function dispatchEpochFor(step: PipelineStep): number {
-  const base = step.test?.attempts ?? step.gate?.attempts ?? 0
+  const base = step.test?.attempts ?? step.gate?.attempts ?? step.ralph?.attempts ?? 0
   // The optional fork-decision phase dispatches the read-only proposer on the coder step
   // BEFORE the Coder itself (Phase A then Phase B). Both dispatch on the same step, so once
   // the phase resolves (`chosen` / `single_path`) bump the epoch by one — the Phase-B Coder
@@ -325,6 +326,17 @@ export class AgentContextBuilder {
         ? (() => {
             const choice = buildImplementationChoice(step.forkDecision)
             return choice ? { implementationChoice: choice } : {}
+          })()
+        : {}),
+      // Ralph loop: fold the iteration's programmatic completion command + progress-log path
+      // + 1-based iteration number (`attempts + 1`) into the context so the container executor
+      // forwards them to the harness as the coding job's `validation` block. Only when
+      // dispatching the step's own `ralph` kind (there is no helper kind for the loop). Absent
+      // for a step with no `ralph` state / any other kind. See {@link buildRalphValidation}.
+      ...(agentKind === step.agentKind
+        ? (() => {
+            const validation = buildRalphValidation(step.ralph)
+            return validation ? { ralphValidation: validation } : {}
           })()
         : {}),
       // Consensus config for this step (copied onto the step at run start). Read only

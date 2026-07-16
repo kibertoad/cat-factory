@@ -15,6 +15,11 @@ import type {
   PromptFragmentRepository,
 } from '@cat-factory/kernel'
 import { isMarkdownFile, parseFragmentMarkdown, slugFromPath } from './fragment-source.logic.js'
+import {
+  normalizeDirPath,
+  probeRepoSourceStatus,
+  syncRepoSource,
+} from '../repoSourceSync/repo-source-sync.js'
 
 /**
  * Resolve the GitHub App installation id that can read a tier's repos. A
@@ -79,7 +84,7 @@ export class FragmentSourceService {
       repoOwner: input.repoOwner.trim(),
       repoName: input.repoName.trim(),
       gitRef: input.gitRef?.trim() || 'HEAD',
-      dirPath: normalizeDir(input.dirPath),
+      dirPath: normalizeDirPath(input.dirPath),
       lastSyncedCommit: null,
       lastSyncedAt: null,
       createdAt: now,
@@ -114,82 +119,61 @@ export class FragmentSourceService {
   ): Promise<FragmentSyncResult> {
     const source = await this.require(ownerKind, ownerId, sourceId)
     // The installation is invariant across the whole sync — resolve it ONCE here,
-    // never per file (the per-entry reads below share it).
+    // never per file (the per-entry reads share it via the shared helper).
     const installationId = await this.requireInstallation(source)
-    // Pin the dir's head commit BEFORE reading so we never record a newer commit than
-    // the content we actually pulled: if a commit lands mid-sync we read at (and stamp)
-    // the pinned sha, and the next status flags it as changed rather than silently
-    // treating stale content as current. Read the tree at that exact commit when known.
-    const headCommit = await this.deps.githubClient.latestCommitSha(
+    // The shared repo-source engine (repoSourceSync) owns the mechanics — pin the head
+    // commit before reading, sweep tombstones by produced id, stamp the sync state,
+    // invalidate only when a row changed. The fragment differentiator is the reconcile:
+    // one Markdown file per fragment, change-detected by blob sha.
+    return syncRepoSource<PromptFragmentRecord>({
+      source,
       installationId,
-      { owner: source.repoOwner, repo: source.repoName },
-      source.dirPath,
-      source.gitRef,
-    )
-    const readRef = headCommit ?? source.gitRef
-    const entries = await this.readMarkdown(source, installationId, readRef)
-    const existing = await this.deps.promptFragmentRepository.listBySource(sourceId)
-    const existingByPath = new Map(existing.map((f) => [f.sourcePath ?? '', f]))
-    // Keyed by fragment id too, so `syncEntry` can inherit an existing fragment's
-    // version/createdAt when a RENAME reaches it under a new path (path lookup misses,
-    // id lookup hits) rather than silently resetting them to defaults.
-    const existingById = new Map(existing.map((f) => [f.fragmentId, f]))
-    const now = this.deps.clock.now()
-
-    let upserted = 0
-    let unchanged = 0
-    // The fragment ids the CURRENT tree produces — the survivors. Keyed by id, not
-    // path: a rename of a file that pins an explicit frontmatter `id` keeps the same
-    // fragment id under a new path, and a path-keyed sweep would tombstone the row
-    // the rename just updated. Conversely a file whose explicit `id` changed leaves
-    // its OLD id unproduced, which an id-keyed sweep correctly retires.
-    const liveIds = new Set<string>()
-
-    for (const entry of entries) {
-      const prior = existingByPath.get(entry.path)
-      if (prior && prior.sourceSha === entry.sha) {
-        unchanged++
-        liveIds.add(prior.fragmentId)
-        continue
-      }
-      const syncedId = await this.syncEntry(
-        source,
-        entry,
-        existingById,
-        now,
-        installationId,
-        readRef,
-      )
-      if (syncedId) {
-        liveIds.add(syncedId)
-        upserted++
-      } else if (prior) {
-        // Unreadable/unparseable this round: keep the prior fragment alive rather
-        // than retiring guidance over a transient read or an in-progress edit.
-        liveIds.add(prior.fragmentId)
-      }
-    }
-
-    // Tombstone fragments the current tree no longer produces (file removed upstream,
-    // or its explicit frontmatter `id` changed).
-    let tombstoned = 0
-    for (const f of existing) {
-      if (!liveIds.has(f.fragmentId)) {
-        await this.deps.promptFragmentRepository.softDelete(
-          f.ownerKind,
-          f.ownerId,
-          f.fragmentId,
-          now,
-        )
-        tombstoned++
-      }
-    }
-
-    await this.deps.fragmentSourceRepository.updateSyncState(source.id, headCommit, now)
-    // Invalidate AFTER the sync state commits, and only when fragments actually
-    // changed — a no-op resync must not churn every peer's cached catalog.
-    if (upserted > 0 || tombstoned > 0) await this.deps.invalidateCatalog?.(ownerKind, ownerId)
-    return { upserted, tombstoned, unchanged, lastSyncedCommit: headCommit }
+      githubClient: this.deps.githubClient,
+      now: this.deps.clock.now(),
+      listExisting: () => this.deps.promptFragmentRepository.listBySource(sourceId),
+      existingId: (f) => f.fragmentId,
+      reconcile: async ({ readRef, now }, existing) => {
+        const entries = await this.readMarkdown(source, installationId, readRef)
+        const existingByPath = new Map(existing.map((f) => [f.sourcePath ?? '', f]))
+        // Keyed by fragment id too, so `syncEntry` can inherit an existing fragment's
+        // version/createdAt when a RENAME reaches it under a new path (path lookup misses,
+        // id lookup hits) rather than silently resetting them to defaults.
+        const existingById = new Map(existing.map((f) => [f.fragmentId, f]))
+        const liveIds = new Set<string>()
+        let upserted = 0
+        let unchanged = 0
+        for (const entry of entries) {
+          const prior = existingByPath.get(entry.path)
+          if (prior && prior.sourceSha === entry.sha) {
+            unchanged++
+            liveIds.add(prior.fragmentId)
+            continue
+          }
+          const syncedId = await this.syncEntry(
+            source,
+            entry,
+            existingById,
+            now,
+            installationId,
+            readRef,
+          )
+          if (syncedId) {
+            liveIds.add(syncedId)
+            upserted++
+          } else if (prior) {
+            // Unreadable/unparseable this round: keep the prior fragment alive rather
+            // than retiring guidance over a transient read or an in-progress edit.
+            liveIds.add(prior.fragmentId)
+          }
+        }
+        return { liveIds, upserted, unchanged }
+      },
+      tombstone: (f, now) =>
+        this.deps.promptFragmentRepository.softDelete(f.ownerKind, f.ownerId, f.fragmentId, now),
+      updateSyncState: (commit, now) =>
+        this.deps.fragmentSourceRepository.updateSyncState(source.id, commit, now),
+      invalidate: () => this.deps.invalidateCatalog?.(ownerKind, ownerId) ?? Promise.resolve(),
+    })
   }
 
   /**
@@ -206,17 +190,7 @@ export class FragmentSourceService {
   ): Promise<FragmentSourceStatus> {
     const source = await this.require(ownerKind, ownerId, sourceId)
     const installationId = await this.requireInstallation(source)
-    const remoteCommit = await this.deps.githubClient.latestCommitSha(
-      installationId,
-      { owner: source.repoOwner, repo: source.repoName },
-      source.dirPath,
-      source.gitRef,
-    )
-    return {
-      changed: remoteCommit !== source.lastSyncedCommit,
-      lastSyncedCommit: source.lastSyncedCommit,
-      remoteCommit,
-    }
+    return probeRepoSourceStatus({ source, installationId, githubClient: this.deps.githubClient })
   }
 
   // --- internals ----------------------------------------------------------
@@ -325,10 +299,6 @@ export class FragmentSourceService {
     await this.deps.promptFragmentRepository.upsert(record)
     return fragmentId
   }
-}
-
-function normalizeDir(dirPath: string | undefined): string {
-  return (dirPath ?? '').replace(/^\/+|\/+$/g, '')
 }
 
 function toWire(record: FragmentSourceRecord): FragmentSource {

@@ -37,15 +37,20 @@ export interface WorkspaceRow {
   description?: string | null
   created_at: number
   account_id: string | null
+  /** Workspace RBAC access mode (`account` | `restricted`); absent on pre-RBAC rows. */
+  access_mode?: string | null
 }
 
 // Declared once; `description`/`accountId` are always-present nullables (never omitted).
+// `accessMode` surfaces only when the column carries a value (absent on a pre-RBAC row),
+// matching its optional wire shape.
 const workspaceReader = makeRowReader<WorkspaceRow, Workspace>([
   readScalar('id'),
   readScalar('name'),
   readNullable('description'),
   readScalar('createdAt', 'created_at'),
   readNullable('accountId', 'account_id'),
+  readOptScalar('accessMode', 'access_mode'),
 ])
 
 export function rowToWorkspace(row: WorkspaceRow): Workspace {

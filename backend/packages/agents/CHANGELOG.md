@@ -1,5 +1,90 @@
 # @cat-factory/agents
 
+## 0.61.1
+
+### Patch Changes
+
+- Updated dependencies [b12d7a8]
+  - @cat-factory/contracts@0.138.0
+  - @cat-factory/kernel@0.132.0
+  - @cat-factory/prompt-fragments@0.13.27
+
+## 0.61.0
+
+### Minor Changes
+
+- 5b1cbbf: feat: repo-sourced Claude Skills library — data + sync core (slice 1)
+
+  Land the persistence + sync foundation for the repo-sourced Claude Skills
+  initiative (docs/initiatives/repo-skills.md):
+
+  - New account-tier tables `skill_sources` + `account_skills` (D1 migration 0052
+    ⇄ Drizzle schema + migration), with matching kernel ports
+    (`SkillSourceRepository`, `AccountSkillRepository`) and both D1 and Drizzle
+    repositories, asserted by a new cross-runtime conformance suite.
+  - A shared `repo-source-sync` helper extracted from the fragment library's sync
+    mechanics (commit-pin-before-read, id-keyed tombstone sweep, invalidate-only-on-
+    change, the status probe) plus a shared frontmatter parser; `FragmentSourceService`
+    is refactored onto it, and the new `SkillSourceService` reuses it for the
+    directory-per-skill (`<skill>/SKILL.md` + resources) sync unit.
+  - `SkillCatalogService` (the account skill-catalog read) backed by a new
+    `AppCaches.skillCatalog` cache slice (pass-through on the Worker, like
+    `fragmentCatalog`).
+  - Contracts + an account-scoped `SkillLibraryController` (list skills; link / list /
+    sync / status / unlink sources), wired into all runtime facades. Opt-in behind the
+    existing prompt-library flag.
+
+  `RepoContentEntry` gains an optional `size` (populated from the GitHub contents API)
+  so the skill resource manifest can record file sizes.
+
+### Patch Changes
+
+- Updated dependencies [5b1cbbf]
+  - @cat-factory/kernel@0.131.0
+  - @cat-factory/contracts@0.137.0
+  - @cat-factory/prompt-fragments@0.13.26
+
+## 0.60.0
+
+### Minor Changes
+
+- 1869ad3: Add a "Ralph loop" task type: a persistent retry-until-done coding loop whose exit condition is
+  a programmatic validation command the harness runs against the checkout (exit 0 = done), bounded
+  by a per-task iteration budget and surviving restarts.
+
+  Each iteration is a fresh-context container-coding run that works the task spec; the harness then
+  runs the task's configured `ralph.validationCommand` (bounded timeout, redacted output tail) and
+  reports the verdict on the run result — never a model self-report. The engine (`RalphController` +
+  a `ralph-verdict` step-completion interceptor, modelled on the Tester→Fixer loop) re-dispatches a
+  fresh iteration on a failing verdict until it passes or the `ralph.maxIterations` budget (default 10) is spent, then hands off to a human. Loop state rides the persisted `step.ralph` (no
+  migration), so a mid-loop run is re-driven from where it was by both durable drivers + sweepers.
+
+  - New `ralph` agent kind (the reusable loop-body primitive) + the `pl_ralph` pipeline
+    (`ralph → conflicts → ci → merger`) + a `ralph` task type (a one-click creation entry point).
+  - The validation command + iteration budget are per-task agent config; `AgentConfigDescriptor`
+    gained `text`/`number` control types for them.
+  - Cross-runtime conformance coverage (loop completes / exhausts / refuses to start unconfigured)
+    and pure-logic unit tests.
+
+  Breaking: none (pre-1.0; `taskType` / `step.ralph` / the descriptor types are additive). The
+  executor-harness image is bumped for the new in-container validation capability.
+
+### Patch Changes
+
+- Updated dependencies [1869ad3]
+  - @cat-factory/contracts@0.136.0
+  - @cat-factory/kernel@0.130.0
+  - @cat-factory/prompt-fragments@0.13.25
+
+## 0.59.2
+
+### Patch Changes
+
+- Updated dependencies [06a094a]
+  - @cat-factory/contracts@0.135.0
+  - @cat-factory/kernel@0.129.2
+  - @cat-factory/prompt-fragments@0.13.24
+
 ## 0.59.1
 
 ### Patch Changes

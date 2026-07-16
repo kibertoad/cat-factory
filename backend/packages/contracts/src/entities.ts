@@ -1,10 +1,12 @@
 import * as v from 'valibot'
+import { workspaceAccessModeSchema } from './workspace-members.js'
 import { subscriptionVendorSchema } from './vendor-credentials.js'
 import { agentConfigValuesSchema } from './agent-config.js'
 import { testConcernSchema, testReportSchema, testerInfraSetupSchema } from './testing.js'
 import { consensusStepConfigSchema, stepGatingSchema, taskEstimateSchema } from './consensus.js'
 import { followUpsStepStateSchema } from './followUp.js'
 import { forkDecisionStepStateSchema } from './forkDecision.js'
+import { ralphStepStateSchema } from './ralph.js'
 import { prReviewStepStateSchema } from './prReview.js'
 import { cloudProviderSchema, instanceSizeSchema } from './compute-provisioning.js'
 import { releaseSignalSchema } from './release.js'
@@ -1798,6 +1800,15 @@ export const pipelineStepSchema = v.object({
    */
   forkDecision: v.optional(v.nullable(forkDecisionStepStateSchema)),
   /**
+   * Live "Ralph loop" state carried on a `ralph` step: the persistent retry-until-done
+   * loop's iteration count, budget, validation command, and per-iteration history. Seeded
+   * from the block's per-task agent config at step start, then advanced each iteration by
+   * the engine's `RalphController`. Because it rides the run's persisted `detail` blob, both
+   * durable drivers + both stale-run sweepers re-drive a mid-loop run from exactly this
+   * state after a restart. Absent for non-`ralph` steps. See {@link ralphStepStateSchema}.
+   */
+  ralph: v.optional(v.nullable(ralphStepStateSchema)),
+  /**
    * Transient re-entry marker carried on a parked `coder` step whose fork decision is
    * `answering`: set when the human sends a chat message so the run is signalled to
    * wake and the durable driver, on re-entering, runs the inline chat LLM and appends
@@ -2163,6 +2174,12 @@ export const workspaceSchema = v.object({
   createdAt: v.number(),
   /** The account this board belongs to, or null for a legacy/unscoped board. */
   accountId: v.nullable(v.string()),
+  /**
+   * Workspace-level access mode (RBAC). `account` (the default) keeps the legacy
+   * behaviour — every account member sees the board; `restricted` limits it to the
+   * explicit member roster. Optional on the wire: absent ⇒ `account`.
+   */
+  accessMode: v.optional(workspaceAccessModeSchema),
 })
 export type Workspace = v.InferOutput<typeof workspaceSchema>
 

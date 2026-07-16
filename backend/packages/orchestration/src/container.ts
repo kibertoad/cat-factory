@@ -116,6 +116,7 @@ import type {
 import type { SecretCipher } from '@cat-factory/kernel'
 import type { FragmentSourceRepository, PromptFragmentRepository } from '@cat-factory/kernel'
 import type { FragmentSelector } from '@cat-factory/kernel'
+import type { AccountSkillRepository, SkillSourceRepository } from '@cat-factory/kernel'
 import type {
   BranchProjectionRepository,
   CheckRunProjectionRepository,
@@ -225,6 +226,9 @@ import {
   FragmentLibraryService,
   FragmentSourceService,
   type ResolveFragmentInstallationId,
+  SkillCatalogService,
+  SkillSourceService,
+  type ResolveSkillInstallationId,
 } from '@cat-factory/agents'
 import type { InitiativePresetRegistry } from '@cat-factory/kernel'
 
@@ -758,6 +762,14 @@ export interface CoreDependencies {
    */
   documentContentResolver?: DocumentContentResolver
 
+  // ---- Repo-sourced Claude Skills library (opt-in; docs/initiatives/repo-skills.md) ----
+  // An account's catalog of repo-authored Claude skills. The catalog read assembles
+  // whenever `accountSkillRepository` is present; the source sync additionally needs
+  // `skillSourceRepository`, the `githubClient` (above) and an installation resolver.
+  accountSkillRepository?: AccountSkillRepository
+  skillSourceRepository?: SkillSourceRepository
+  resolveSkillInstallationId?: ResolveSkillInstallationId
+
   // ---- Notifications + merge lifecycle (optional; wired when configured) ----
   // The notifications subsystem (the in-app inbox + the board's human-action
   // surfaces) assembles whenever `notificationRepository` is present (the worker
@@ -1148,6 +1160,17 @@ export interface FragmentLibraryModule {
   sourceService?: FragmentSourceService
 }
 
+/**
+ * The repo-sourced Claude Skills library's services, present only when configured
+ * (docs/initiatives/repo-skills.md). Assembles whenever `accountSkillRepository` is wired.
+ */
+export interface SkillLibraryModule {
+  /** The account skill-catalog read (cached), consumed by the management surface + the run path. */
+  catalogService: SkillCatalogService
+  /** Repo-source sync; present only when the GitHub client + source repo are wired. */
+  sourceService?: SkillSourceService
+}
+
 export interface Core {
   workspaceService: WorkspaceService
   accountService: AccountService
@@ -1245,6 +1268,8 @@ export interface Core {
   serviceFragmentDefaults?: ServiceFragmentDefaultsModule
   /** Present only when the prompt-fragment library is configured (see CoreDependencies). */
   fragmentLibrary?: FragmentLibraryModule
+  /** Present only when the repo-sourced Claude Skills library is configured (see CoreDependencies). */
+  skillLibrary?: SkillLibraryModule
   /** Present only when the initiative repository is wired (see CoreDependencies). */
   initiatives?: InitiativesModule
   /** Present only when the recurring-pipeline repository is wired (see CoreDependencies). */
@@ -2166,6 +2191,42 @@ function createFragmentLibraryModule(
 }
 
 /**
+ * Assemble the repo-sourced Claude Skills library when its skill repository is
+ * present (docs/initiatives/repo-skills.md). The catalog read always assembles; the
+ * repo-source sync additionally needs the GitHub client, the source repository and an
+ * installation resolver. Returns undefined so the feature stays cleanly opt-in.
+ */
+function createSkillLibraryModule(
+  deps: CoreDependencies,
+  caches: AppCaches,
+): SkillLibraryModule | undefined {
+  const { accountSkillRepository } = deps
+  if (!accountSkillRepository) return undefined
+
+  const catalogService = new SkillCatalogService({
+    accountSkillRepository,
+    catalogCache: caches.skillCatalog,
+  })
+
+  const sourceService =
+    deps.skillSourceRepository && deps.githubClient && deps.resolveSkillInstallationId
+      ? new SkillSourceService({
+          skillSourceRepository: deps.skillSourceRepository,
+          accountSkillRepository,
+          githubClient: deps.githubClient,
+          resolveInstallationId: deps.resolveSkillInstallationId,
+          idGenerator: deps.idGenerator,
+          clock: deps.clock,
+          // A sync/unlink mutates the same catalog the read caches — route its
+          // invalidation through the catalog service so the eviction policy stays in one place.
+          invalidateCatalog: (accountId) => catalogService.invalidate(accountId),
+        })
+      : undefined
+
+  return { catalogService, sourceService }
+}
+
+/**
  * Assemble the notifications module when its repository is present (the worker
  * wires it unconditionally). The delivery channel is optional within the module —
  * without it the rows still persist (the inbox + snapshot work) but nothing is
@@ -2669,6 +2730,7 @@ export function createCore(dependencies: CoreDependencies): Core {
     documents?.contentResolver,
     caches,
   )
+  const skillLibrary = createSkillLibraryModule(dependencies, caches)
 
   // Reconciles a `blueprints` step's decomposition onto the board. Needs only the
   // board service + block repository (both always present), so it is wired
@@ -2925,6 +2987,7 @@ export function createCore(dependencies: CoreDependencies): Core {
     ...(modelPresets ? { modelPresets } : {}),
     ...(serviceFragmentDefaults ? { serviceFragmentDefaults } : {}),
     ...(fragmentLibrary ? { fragmentLibrary } : {}),
+    ...(skillLibrary ? { skillLibrary } : {}),
     ...(initiatives ? { initiatives } : {}),
     ...(recurring ? { recurring } : {}),
     ...(tracker ? { tracker } : {}),

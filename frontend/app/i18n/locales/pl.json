@@ -169,7 +169,8 @@
         "document": "Dokument",
         "spike": "Spike",
         "recurring": "Cykliczne",
-        "review": "Przegląd"
+        "review": "Przegląd",
+        "ralph": "Pętla Ralph"
       },
       "recurringWithFrame": "Zadanie cykliczne uruchamia pipeline w określonym rytmie. Kontynuuj, aby ustawić harmonogram i prompt.",
       "recurringNoFrame": "Zadanie cykliczne musi należeć do usługi. Dodaj je z ramki usługi (lub modułu w jej obrębie).",
@@ -2479,7 +2480,8 @@
         "bug": "błąd",
         "document": "dokument",
         "spike": "spike",
-        "review": "przegląd"
+        "review": "przegląd",
+        "ralph": "Pętla Ralph"
       },
       "observability": {
         "heading": "Obserwowalność agenta",
@@ -4843,6 +4845,29 @@
       "style": "Styl",
       "test": "Testy",
       "other": "Inne"
+    }
+  },
+  "ralph": {
+    "subtitle": "Trwała pętla: pracuj nad zadaniem, uruchom polecenie walidacji i powtarzaj, aż się powiedzie.",
+    "status": {
+      "passed": "Zaliczono",
+      "gaveUp": "Poddano się",
+      "running": "Działa",
+      "failing": "Niepowodzenie"
+    },
+    "noActivity": "Brak iteracji.",
+    "validationCommand": "Polecenie walidacji",
+    "lastOutput": "Ostatnia walidacja (kod {exit})",
+    "viewPr": "Zobacz pull request",
+    "iterationsHeading": "Iteracje",
+    "iteration": "Iteracja {number}",
+    "iterationPassed": "walidacja zaliczona",
+    "iterationFailed": "kod {exit}",
+    "sidebar": {
+      "state": "Stan",
+      "iterations": "Iteracje",
+      "count": "{attempts} z {max}",
+      "footer": "Pętla ponawia próby, aż polecenie walidacji się powiedzie lub wyczerpie się budżet iteracji."
     }
   }
 }

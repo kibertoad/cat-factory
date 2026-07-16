@@ -1,11 +1,12 @@
 import type { AgentKind, BlockType } from '@cat-factory/kernel'
 import type { FragmentAppliesTo } from '@cat-factory/kernel'
+import { parseSimpleYaml, splitFrontmatter, str, strArray } from '../repoSourceSync/frontmatter.js'
 
 // Pure logic for repo-sourced fragments (ADR 0006 §4): parse one Markdown file
 // with YAML frontmatter into a fragment, plus the small helpers the sync flow
-// needs (slugging an id from a path, recognising Markdown files). No I/O lives here
-// so it is unit-testable. Staleness is a commit-sha probe (see FragmentSourceService),
-// so no directory-digest helper lives here any more.
+// needs (slugging an id from a path, recognising Markdown files). The generic
+// frontmatter split + small-YAML parse are shared with the skill library
+// (repoSourceSync/frontmatter). No I/O lives here so it is unit-testable.
 
 const BLOCK_TYPES: readonly string[] = [
   'frontend',
@@ -80,73 +81,6 @@ export function parseFragmentMarkdown(path: string, content: string): ParsedFrag
 }
 
 // --- internals ------------------------------------------------------------
-
-function splitFrontmatter(content: string): { frontmatter: string; body: string } {
-  // Tolerate a leading BOM/whitespace before the opening fence.
-  const match = content.match(/^﻿?\s*---\r?\n([\s\S]*?)\r?\n---\r?\n?([\s\S]*)$/)
-  if (!match) return { frontmatter: '', body: content }
-  return { frontmatter: match[1] ?? '', body: match[2] ?? '' }
-}
-
-/** A deliberately small YAML subset: top-level `key: value` and one nested map. */
-function parseSimpleYaml(text: string): Record<string, unknown> {
-  const out: Record<string, unknown> = {}
-  const lines = text.split(/\r?\n/)
-  let nestedKey: string | null = null
-  let nested: Record<string, unknown> | null = null
-  for (const raw of lines) {
-    if (!raw.trim() || raw.trim().startsWith('#')) continue
-    const indented = /^\s+/.test(raw)
-    const colon = raw.indexOf(':')
-    if (colon === -1) continue
-    const key = raw.slice(0, colon).trim()
-    const value = raw.slice(colon + 1).trim()
-    if (indented && nested) {
-      nested[key] = parseScalarOrArray(value)
-      continue
-    }
-    if (value === '') {
-      // Opens a nested map (e.g. `appliesTo:`).
-      nestedKey = key
-      nested = {}
-      out[key] = nested
-    } else {
-      nestedKey = null
-      nested = null
-      out[key] = parseScalarOrArray(value)
-    }
-  }
-  void nestedKey
-  return out
-}
-
-function parseScalarOrArray(value: string): unknown {
-  const inline = value.match(/^\[(.*)\]$/)
-  if (inline) {
-    return inline[1]!
-      .split(',')
-      .map((s) => unquote(s.trim()))
-      .filter((s) => s.length > 0)
-  }
-  return unquote(value)
-}
-
-function unquote(s: string): string {
-  if ((s.startsWith('"') && s.endsWith('"')) || (s.startsWith("'") && s.endsWith("'"))) {
-    return s.slice(1, -1)
-  }
-  return s
-}
-
-function str(value: unknown): string | undefined {
-  return typeof value === 'string' && value.trim() !== '' ? value.trim() : undefined
-}
-
-function strArray(value: unknown): string[] {
-  if (Array.isArray(value)) return value.map((v) => String(v).trim()).filter(Boolean)
-  const single = str(value)
-  return single ? [single] : []
-}
 
 function parseAppliesTo(value: unknown): FragmentAppliesTo | undefined {
   if (!value || typeof value !== 'object') return undefined

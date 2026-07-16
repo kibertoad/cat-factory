@@ -169,7 +169,8 @@
         "document": "Belge",
         "spike": "Spike",
         "recurring": "Yinelenen",
-        "review": "İnceleme"
+        "review": "İnceleme",
+        "ralph": "Ralph döngüsü"
       },
       "recurringWithFrame": "Yinelenen bir görev, bir işlem hattını belirli bir aralıkta çalıştırır. Programı ve istemi ayarlamak için devam edin.",
       "recurringNoFrame": "Yinelenen bir görev bir serviste bulunmalıdır. Bir servis çerçevesinden (veya içindeki bir modülden) ekleyin.",
@@ -2601,7 +2602,8 @@
         "bug": "hata",
         "document": "belge",
         "spike": "inceleme",
-        "review": "inceleme"
+        "review": "inceleme",
+        "ralph": "Ralph döngüsü"
       },
       "observability": {
         "heading": "Agent gözlemlenebilirliği",
@@ -4855,6 +4857,29 @@
       "style": "Stil",
       "test": "Testler",
       "other": "Diğer"
+    }
+  },
+  "ralph": {
+    "subtitle": "Kalıcı bir döngü: görev üzerinde çalış, doğrulama komutunu çalıştır ve geçene kadar tekrarla.",
+    "status": {
+      "passed": "Geçti",
+      "gaveUp": "Vazgeçildi",
+      "running": "Çalışıyor",
+      "failing": "Başarısız"
+    },
+    "noActivity": "Henüz yineleme yok.",
+    "validationCommand": "Doğrulama komutu",
+    "lastOutput": "Son doğrulama (çıkış {exit})",
+    "viewPr": "Pull request'i görüntüle",
+    "iterationsHeading": "Yinelemeler",
+    "iteration": "Yineleme {number}",
+    "iterationPassed": "doğrulama geçti",
+    "iterationFailed": "çıkış {exit}",
+    "sidebar": {
+      "state": "Durum",
+      "iterations": "Yinelemeler",
+      "count": "{max} içinden {attempts}",
+      "footer": "Döngü, doğrulama komutu geçene kadar veya yineleme bütçesi tükenene kadar yeniden dener."
     }
   }
 }

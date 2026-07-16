@@ -35,7 +35,8 @@
               "bug",
               "document",
               "spike",
-              "review"
+              "review",
+              "ralph"
             ],
             "type": "string"
           },
@@ -206,6 +207,193 @@
         ],
         "type": "object"
       },
+      "PublicPipeline": {
+        "properties": {
+          "headlessStartable": {
+            "type": "boolean"
+          },
+          "name": {
+            "type": "string"
+          },
+          "pipelineId": {
+            "type": "string"
+          },
+          "public": {
+            "type": "boolean"
+          },
+          "steps": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array"
+          }
+        },
+        "required": [
+          "pipelineId",
+          "name",
+          "steps",
+          "public",
+          "headlessStartable"
+        ],
+        "type": "object"
+      },
+      "PublicPipelineList": {
+        "properties": {
+          "pipelines": {
+            "items": {
+              "$ref": "#/components/schemas/PublicPipeline"
+            },
+            "type": "array"
+          }
+        },
+        "required": [
+          "pipelines"
+        ],
+        "type": "object"
+      },
+      "PublicRun": {
+        "properties": {
+          "createdAt": {
+            "type": "number"
+          },
+          "currentStep": {
+            "type": "number"
+          },
+          "error": {
+            "anyOf": [
+              {
+                "properties": {
+                  "code": {
+                    "type": "string"
+                  },
+                  "message": {
+                    "type": "string"
+                  }
+                },
+                "required": [
+                  "code",
+                  "message"
+                ],
+                "type": "object"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "pullRequest": {
+            "anyOf": [
+              {
+                "properties": {
+                  "branch": {
+                    "anyOf": [
+                      {
+                        "type": "string"
+                      },
+                      {
+                        "type": "null"
+                      }
+                    ]
+                  },
+                  "url": {
+                    "type": "string"
+                  }
+                },
+                "required": [
+                  "url",
+                  "branch"
+                ],
+                "type": "object"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "runId": {
+            "type": "string"
+          },
+          "status": {
+            "enum": [
+              "running",
+              "blocked",
+              "paused",
+              "done",
+              "failed"
+            ],
+            "type": "string"
+          },
+          "steps": {
+            "items": {
+              "properties": {
+                "agentKind": {
+                  "type": "string"
+                },
+                "progress": {
+                  "type": "number"
+                },
+                "state": {
+                  "enum": [
+                    "pending",
+                    "working",
+                    "waiting_decision",
+                    "done"
+                  ],
+                  "type": "string"
+                },
+                "subtasks": {
+                  "anyOf": [
+                    {
+                      "properties": {
+                        "completed": {
+                          "type": "number"
+                        },
+                        "inProgress": {
+                          "type": "number"
+                        },
+                        "total": {
+                          "type": "number"
+                        }
+                      },
+                      "required": [
+                        "completed",
+                        "inProgress",
+                        "total"
+                      ],
+                      "type": "object"
+                    },
+                    {
+                      "type": "null"
+                    }
+                  ]
+                }
+              },
+              "required": [
+                "agentKind",
+                "state",
+                "progress",
+                "subtasks"
+              ],
+              "type": "object"
+            },
+            "type": "array"
+          },
+          "taskId": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "runId",
+          "taskId",
+          "status",
+          "createdAt",
+          "currentStep",
+          "steps",
+          "pullRequest",
+          "error"
+        ],
+        "type": "object"
+      },
       "PublicService": {
         "properties": {
           "description": {
@@ -319,6 +507,7 @@
               "document",
               "spike",
               "review",
+              "ralph",
               "recurring"
             ],
             "type": "string"
@@ -358,6 +547,21 @@
         "properties": {
           "pipelineId": {
             "maxLength": 120,
+            "minLength": 1,
+            "type": "string"
+          }
+        },
+        "required": [],
+        "type": "object"
+      },
+      "UpdatePublicTask": {
+        "properties": {
+          "description": {
+            "maxLength": 2000,
+            "type": "string"
+          },
+          "title": {
+            "maxLength": 200,
             "minLength": 1,
             "type": "string"
           }
@@ -528,6 +732,48 @@
         "summary": "Stream an initiative job (SSE)",
         "tags": [
           "Initiatives"
+        ]
+      }
+    },
+    "/api/v1/pipelines": {
+      "get": {
+        "description": "List the pipelines in the key’s workspace — id/name/steps plus whether each is public and safe to run headlessly — so a caller can pick a pipelineId to start a task with.",
+        "operationId": "listPublicPipelines",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PublicPipelineList"
+                }
+              }
+            },
+            "description": "Success"
+          },
+          "4XX": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Client error (validation, unauthorized, not found, conflict, rate limit)"
+          },
+          "5XX": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Server error"
+          }
+        },
+        "summary": "List the workspace's pipelines",
+        "tags": [
+          "Pipelines"
         ]
       }
     },
@@ -735,6 +981,212 @@
         "tags": [
           "Tasks"
         ]
+      },
+      "patch": {
+        "description": "Edit a task’s human-authored fields (title/description) before it runs. Both fields are optional.",
+        "operationId": "updatePublicTask",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "taskId",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/UpdatePublicTask"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PublicTask"
+                }
+              }
+            },
+            "description": "Success"
+          },
+          "4XX": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Client error (validation, unauthorized, not found, conflict, rate limit)"
+          },
+          "5XX": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Server error"
+          }
+        },
+        "summary": "Edit a task's title/description",
+        "tags": [
+          "Tasks"
+        ]
+      }
+    },
+    "/api/v1/tasks/{taskId}/events": {
+      "get": {
+        "description": "Server-sent events for a board task run: `progress` frames (the rich run projection) until a terminal `done`/`error` event, or a `timeout` when the connection cap is reached. Authenticated by the API key header.",
+        "operationId": "streamPublicTaskRun",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "taskId",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "text/event-stream": {
+                "schema": {
+                  "type": "string"
+                }
+              }
+            },
+            "description": "An event stream of run updates"
+          },
+          "4XX": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Client error (validation, unauthorized, not found, conflict, rate limit)"
+          }
+        },
+        "summary": "Stream a task run (SSE)",
+        "tags": [
+          "Tasks"
+        ]
+      }
+    },
+    "/api/v1/tasks/{taskId}/retry": {
+      "post": {
+        "description": "Retry a task’s failed run. A task on an individual-usage model cannot be retried through the API (no headless personal-credential unlock).",
+        "operationId": "retryPublicTask",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "taskId",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "202": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PublicTask"
+                }
+              }
+            },
+            "description": "Accepted — the run has started"
+          },
+          "4XX": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Client error (validation, unauthorized, not found, conflict, rate limit)"
+          },
+          "5XX": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Server error"
+          }
+        },
+        "summary": "Retry a task's failed run",
+        "tags": [
+          "Tasks"
+        ]
+      }
+    },
+    "/api/v1/tasks/{taskId}/run": {
+      "get": {
+        "description": "Read a task’s run in detail: per-step status/progress/subtasks, the failure kind and message, and the PR (url + branch).",
+        "operationId": "getPublicRun",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "taskId",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PublicRun"
+                }
+              }
+            },
+            "description": "Success"
+          },
+          "4XX": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Client error (validation, unauthorized, not found, conflict, rate limit)"
+          },
+          "5XX": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Server error"
+          }
+        },
+        "summary": "Get a task's run (rich projection)",
+        "tags": [
+          "Tasks"
+        ]
       }
     },
     "/api/v1/tasks/{taskId}/start": {
@@ -798,6 +1250,58 @@
           "Tasks"
         ]
       }
+    },
+    "/api/v1/tasks/{taskId}/stop": {
+      "post": {
+        "description": "Stop a task’s in-flight run. Records a `cancelled` terminal state, leaving the run retryable.",
+        "operationId": "stopPublicTask",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "taskId",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PublicTask"
+                }
+              }
+            },
+            "description": "Success"
+          },
+          "4XX": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Client error (validation, unauthorized, not found, conflict, rate limit)"
+          },
+          "5XX": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Server error"
+          }
+        },
+        "summary": "Stop a task's run",
+        "tags": [
+          "Tasks"
+        ]
+      }
     }
   },
   "security": [
@@ -817,11 +1321,15 @@
       "name": "Initiatives"
     },
     {
+      "description": "The workspace’s pipelines (discover a pipelineId to start a task with).",
+      "name": "Pipelines"
+    },
+    {
       "description": "The workspace’s board services.",
       "name": "Services"
     },
     {
-      "description": "Board tasks under a service (create, list, read status, start).",
+      "description": "Board tasks under a service (create, list, read, edit, start, stop, retry, stream).",
       "name": "Tasks"
     }
   ]

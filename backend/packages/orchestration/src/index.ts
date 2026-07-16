@@ -283,6 +283,7 @@ export {
   type ModelPresetsModule,
   type ServiceFragmentDefaultsModule,
   type FragmentLibraryModule,
+  type SkillLibraryModule,
   type InitiativesModule,
   type RecurringModule,
   type TrackerModule,

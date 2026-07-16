@@ -330,6 +330,15 @@ export function seedPipelines(): Pipeline[] {
         'merger',
       ],
     },
+    // The "Ralph loop": a single persistent, retry-until-done coding step. Each iteration is
+    // a fresh-context container run that works the task spec, after which the harness runs the
+    // task's configured programmatic validation command (exit 0 = done) and the engine loops
+    // the iteration until it passes or the per-task budget is spent — then the standard
+    // conflicts / CI / merge tail ships the validated PR. The completion criterion and
+    // iteration budget are per-task agent config on the `ralph` step (no design/spec phases;
+    // the task description is the spec, and prior iterations' validation output is threaded
+    // forward as feedback). See backend/docs/ralph-loop.md.
+    { id: 'pl_ralph', name: 'Ralph loop', agentKinds: ['ralph', 'conflicts', 'ci', 'merger'] },
     {
       id: 'pl_integrate',
       name: 'Integrate & ship',
@@ -780,6 +789,9 @@ export const DOCUMENT_QUICK_PIPELINE_ID = 'pl_document_quick'
  */
 export const REVIEW_PIPELINE_ID = 'pl_review'
 
+/** Pipeline id of the Ralph loop (a persistent retry-until-done build; see backend/docs/ralph-loop.md). */
+export const RALPH_PIPELINE_ID = 'pl_ralph'
+
 /**
  * The pipeline a task of the given task type should default to when the creator pins none.
  * `document` → `pl_document`, `spike` → `pl_spike`, and `review` → `pl_review` (the full-build
@@ -791,6 +803,7 @@ export function defaultPipelineIdForTaskType(taskType: Block['taskType']): strin
   if (taskType === 'document') return DOCUMENT_PIPELINE_ID
   if (taskType === 'spike') return SPIKE_PIPELINE_ID
   if (taskType === 'review') return REVIEW_PIPELINE_ID
+  if (taskType === 'ralph') return RALPH_PIPELINE_ID
   return undefined
 }
 

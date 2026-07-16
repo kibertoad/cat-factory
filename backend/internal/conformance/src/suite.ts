@@ -963,6 +963,139 @@ export function defineCoreConformance(harness: ConformanceHarness): void {
         ).toBe(204)
         expect((await call('GET', `/api/v1/jobs/${jobId}`, undefined, auth)).status).toBe(401)
       })
+
+      it('serves the full task lifecycle (edit / stop / retry / rich run) + pipeline discovery, workspace-scoped', async () => {
+        const { call, createOrgWorkspace, drive } = harness.makeApp()
+        const { workspace } = await createOrgWorkspace({ seed: true })
+        const wsId = workspace.id
+
+        const created = await call<{ secret: string }>(
+          'POST',
+          `/workspaces/${wsId}/public-api-keys`,
+          { label: 'external' },
+        )
+        expect(created.status).toBe(201)
+        const auth = { authorization: `Bearer ${created.body.secret}` }
+
+        // Pipeline discovery: the public inline pipeline is public + headless-startable; a
+        // container pipeline (pl_quick) is listed but neither. Closes the "start demands a
+        // pipelineId, nothing lists them" gap.
+        const pipelines = await call<{
+          pipelines: {
+            pipelineId: string
+            steps: string[]
+            public: boolean
+            headlessStartable: boolean
+          }[]
+        }>('GET', '/api/v1/pipelines', undefined, auth)
+        expect(pipelines.status).toBe(200)
+        const byId = new Map(pipelines.body.pipelines.map((p) => [p.pipelineId, p]))
+        const breakdown = byId.get('pl_initiative_breakdown')
+        expect(breakdown?.public).toBe(true)
+        expect(breakdown?.headlessStartable).toBe(true)
+        expect(breakdown && breakdown.steps.length > 0).toBe(true)
+        const quick = byId.get('pl_quick')
+        expect(quick).toBeTruthy()
+        expect(quick?.headlessStartable).toBe(false)
+
+        // Create a task under a fresh service frame (via the dev-open session board route).
+        const frame = await call<{ id: string }>('POST', `/workspaces/${wsId}/blocks`, {
+          type: 'service',
+          position: { x: 500, y: 500 },
+        })
+        const task = await call<{ taskId: string }>(
+          'POST',
+          `/api/v1/services/${frame.body.id}/tasks`,
+          { title: 'Lifecycle task', description: 'original' },
+          auth,
+        )
+        expect(task.status).toBe(201)
+        const taskId = task.body.taskId
+
+        // Edit (PATCH) the title/description before it runs.
+        const edited = await call<{ title: string; description: string }>(
+          'PATCH',
+          `/api/v1/tasks/${taskId}`,
+          { title: 'Lifecycle task (edited)', description: 'reworded' },
+          auth,
+        )
+        expect(edited.status).toBe(200)
+        expect(edited.body.title).toBe('Lifecycle task (edited)')
+        expect(edited.body.description).toBe('reworded')
+
+        // A not-yet-started task has no run to read or stop.
+        expect((await call('GET', `/api/v1/tasks/${taskId}/run`, undefined, auth)).status).toBe(404)
+        expect((await call('POST', `/api/v1/tasks/${taskId}/stop`, undefined, auth)).status).toBe(
+          409,
+        )
+
+        // Start it (async — left running until driven), then read the rich run projection.
+        const started = await call<{ executionId: string | null }>(
+          'POST',
+          `/api/v1/tasks/${taskId}/start`,
+          { pipelineId: 'pl_quick' },
+          auth,
+        )
+        expect(started.status).toBe(202)
+        const run = await call<{
+          runId: string
+          taskId: string
+          status: string
+          steps: { agentKind: string; state: string; progress: number }[]
+        }>('GET', `/api/v1/tasks/${taskId}/run`, undefined, auth)
+        expect(run.status).toBe(200)
+        expect(run.body.taskId).toBe(taskId)
+        expect(run.body.steps.length).toBeGreaterThan(0)
+        expect(['running', 'blocked', 'paused', 'done']).toContain(run.body.status)
+
+        // Stop the run → it settles `failed` with a `cancelled` error, and stays retryable.
+        expect((await call('POST', `/api/v1/tasks/${taskId}/stop`, undefined, auth)).status).toBe(
+          200,
+        )
+        const stopped = await call<{ status: string; error: { code: string } | null }>(
+          'GET',
+          `/api/v1/tasks/${taskId}/run`,
+          undefined,
+          auth,
+        )
+        expect(stopped.body.status).toBe('failed')
+        expect(stopped.body.error?.code).toBe('cancelled')
+
+        // Retry the failed run, then drive it to completion.
+        expect((await call('POST', `/api/v1/tasks/${taskId}/retry`, undefined, auth)).status).toBe(
+          202,
+        )
+        await drive(wsId)
+        const finished = await call<{ status: string }>(
+          'GET',
+          `/api/v1/tasks/${taskId}/run`,
+          undefined,
+          auth,
+        )
+        expect(finished.body.status).toBe('done')
+
+        // Every lifecycle route double-scopes to the key's workspace: a key from ANOTHER
+        // workspace 404s on this task (never edits/stops/retries/reads it).
+        const other = await createOrgWorkspace({ seed: true })
+        const otherKey = await call<{ secret: string }>(
+          'POST',
+          `/workspaces/${other.workspace.id}/public-api-keys`,
+          { label: 'other' },
+        )
+        const otherAuth = { authorization: `Bearer ${otherKey.body.secret}` }
+        expect(
+          (await call('GET', `/api/v1/tasks/${taskId}/run`, undefined, otherAuth)).status,
+        ).toBe(404)
+        expect(
+          (await call('PATCH', `/api/v1/tasks/${taskId}`, { title: 'x' }, otherAuth)).status,
+        ).toBe(404)
+        expect(
+          (await call('POST', `/api/v1/tasks/${taskId}/stop`, undefined, otherAuth)).status,
+        ).toBe(404)
+        expect(
+          (await call('POST', `/api/v1/tasks/${taskId}/retry`, undefined, otherAuth)).status,
+        ).toBe(404)
+      })
     })
 
     describe('pipeline versioning + reseed', () => {
@@ -9645,6 +9778,132 @@ export function defineExecutionConformance(harness: ConformanceHarness): void {
         expect(run.steps[0]!.approval?.status).toBe('rejected')
         const task = snapshot.blocks.find((b) => b.id === 'task_login')!
         expect(task.status).toBe('blocked')
+      })
+    })
+
+    // The Ralph loop: a persistent retry-until-done coding step whose exit condition is a
+    // harness-run validation command. These assert the loop drives to completion, exhausts its
+    // budget, and refuses to start unconfigured — identically on D1 and Postgres, and (because
+    // the loop state rides the persisted `step.ralph`) resumable across the durable driver.
+    describe('ralph loop', () => {
+      const ralphPr = {
+        url: 'https://github.com/o/r/pull/7',
+        number: 7,
+        branch: 'cat-factory/ralph',
+      }
+
+      it('loops a ralph step until its validation command passes, then advances', async () => {
+        // The fake reports a failing validation for iterations 1–2 and a pass on iteration 3
+        // (based on the iteration number the engine folds in), so the engine must re-dispatch
+        // twice before finishing — proving the retry loop and the persisted iteration count.
+        const app = harness.makeApp({
+          asyncKinds: ['ralph'],
+          ralphPassOnIteration: 3,
+          pullRequest: ralphPr,
+        })
+        const { workspace } = await app.createWorkspace()
+        const wsId = workspace.id
+        const task = await app.call<Block>(
+          'POST',
+          `/workspaces/${wsId}/blocks/mod_sessions/tasks`,
+          {
+            title: 'Ralph task',
+            taskType: 'ralph',
+            agentConfig: {
+              'ralph.validationCommand': 'echo build && echo test',
+              'ralph.maxIterations': '6',
+            },
+          },
+        )
+        expect(task.status).toBe(201)
+        const pipeline = await app.call<Pipeline>('POST', `/workspaces/${wsId}/pipelines`, {
+          name: 'Ralph only',
+          agentKinds: ['ralph'],
+        })
+        const start = await app.call<ExecutionInstance>(
+          'POST',
+          `/workspaces/${wsId}/blocks/${task.body.id}/executions`,
+          { pipelineId: pipeline.body.id },
+        )
+        expect(start.status).toBe(201)
+
+        const done = (await app.drive(wsId)).find((e) => e.blockId === task.body.id)!
+        const step = done.steps.find((s) => s.agentKind === 'ralph')!
+        expect(step.state).toBe('done')
+        // Looped exactly three iterations: fail, fail, pass.
+        expect(step.ralph?.attempts).toBe(3)
+        expect(step.ralph?.attemptLog).toHaveLength(3)
+        expect(step.ralph?.attemptLog?.[0]?.validationPassed).toBe(false)
+        expect(step.ralph?.attemptLog?.at(-1)?.validationPassed).toBe(true)
+        expect(step.ralph?.lastExitCode).toBe(0)
+      })
+
+      it('gives up a ralph loop that never passes, at its iteration budget', async () => {
+        // The validation never passes (target far above the budget), so the loop must exhaust
+        // its 2-iteration budget and fail the run for a human rather than spinning forever.
+        const app = harness.makeApp({
+          asyncKinds: ['ralph'],
+          ralphPassOnIteration: 99,
+          pullRequest: ralphPr,
+        })
+        const { workspace } = await app.createWorkspace()
+        const wsId = workspace.id
+        const task = await app.call<Block>(
+          'POST',
+          `/workspaces/${wsId}/blocks/mod_sessions/tasks`,
+          {
+            title: 'Ralph never-passes',
+            taskType: 'ralph',
+            agentConfig: {
+              'ralph.validationCommand': 'exit 1',
+              'ralph.maxIterations': '2',
+            },
+          },
+        )
+        const pipeline = await app.call<Pipeline>('POST', `/workspaces/${wsId}/pipelines`, {
+          name: 'Ralph only',
+          agentKinds: ['ralph'],
+        })
+        const start = await app.call<ExecutionInstance>(
+          'POST',
+          `/workspaces/${wsId}/blocks/${task.body.id}/executions`,
+          { pipelineId: pipeline.body.id },
+        )
+        expect(start.status).toBe(201)
+
+        const failed = (await app.drive(wsId)).find((e) => e.blockId === task.body.id)!
+        const step = failed.steps.find((s) => s.agentKind === 'ralph')!
+        expect(failed.status).toBe('failed')
+        expect(step.state).not.toBe('done')
+        // Ran exactly the budgeted number of iterations, no more.
+        expect(step.ralph?.attempts).toBe(2)
+        // The block is left blocked for a human (never falsely done).
+        const snap = (await app.call<WorkspaceSnapshot>('GET', `/workspaces/${wsId}`)).body
+        expect(snap.blocks.find((b) => b.id === task.body.id)?.status).toBe('blocked')
+      })
+
+      it('refuses to start a ralph pipeline with no validation command', async () => {
+        // A ralph loop is meaningless without a programmatic completion criterion — the engine
+        // rejects the start rather than dispatching a validation-less coding pass.
+        const app = harness.makeApp({ asyncKinds: ['ralph'] })
+        const { workspace } = await app.createWorkspace()
+        const wsId = workspace.id
+        const task = await app.call<Block>(
+          'POST',
+          `/workspaces/${wsId}/blocks/mod_sessions/tasks`,
+          { title: 'Ralph unconfigured', taskType: 'ralph' },
+        )
+        const pipeline = await app.call<Pipeline>('POST', `/workspaces/${wsId}/pipelines`, {
+          name: 'Ralph only',
+          agentKinds: ['ralph'],
+        })
+        const start = await app.call(
+          'POST',
+          `/workspaces/${wsId}/blocks/${task.body.id}/executions`,
+          { pipelineId: pipeline.body.id },
+        )
+        // A validation error (missing completion criterion) — refused, run never started.
+        expect(start.status).toBe(422)
       })
     })
   })
