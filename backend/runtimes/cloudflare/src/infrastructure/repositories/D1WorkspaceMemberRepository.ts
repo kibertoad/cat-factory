@@ -4,6 +4,7 @@ import type {
   WorkspaceRole,
 } from '@cat-factory/kernel'
 import type { D1Database } from '@cloudflare/workers-types'
+import { chunkForIn } from './chunk'
 
 interface WorkspaceMemberRow {
   workspace_id: string
@@ -66,9 +67,10 @@ export class D1WorkspaceMemberRepository implements WorkspaceMemberRepository {
   ): Promise<Map<string, WorkspaceRole>> {
     const out = new Map<string, WorkspaceRole>()
     if (workspaceIds.length === 0) return out
-    // ONE chunked-IN read per chunk (never a per-board point-read loop).
-    for (let i = 0; i < workspaceIds.length; i += 500) {
-      const chunk = workspaceIds.slice(i, i + 500)
+    // ONE chunked-IN read per chunk (never a per-board point-read loop). Chunk via the
+    // shared helper so each statement stays under D1's 100 bound-parameter ceiling — the
+    // leading `user_id = ?` is the reason the helper leaves headroom below 100.
+    for (const chunk of chunkForIn(workspaceIds)) {
       const placeholders = chunk.map(() => '?').join(', ')
       const { results } = await this.db
         .prepare(

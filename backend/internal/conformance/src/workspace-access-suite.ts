@@ -151,6 +151,34 @@ export function defineWorkspaceAccessSuite(harness: ConformanceHarness): void {
       expect((await repo.getRolesForUserInWorkspaces(userId, [])).size).toBe(0)
     })
 
+    it('batches a large workspace-id list across chunk boundaries (D1 param ceiling)', async () => {
+      const app = harness.makeApp()
+      const tag = uniq()
+      // Two REAL boards carrying a member row; the rest of the id list is synthetic (a
+      // SELECT ... IN never touches the FKs, so ghosts just resolve to "absent"). The list
+      // is padded past 100 ids so D1's 100-bound-parameter ceiling forces >1 chunk — and
+      // the two real ids sit in DIFFERENT chunks (positions 0 and 100), proving the map is
+      // merged across chunks rather than clobbered per-chunk. Postgres does it in one query;
+      // both must return the identical map (cross-runtime parity).
+      const a = await app.createOrgWorkspace({ name: `WA big-a ${tag}` })
+      const b = await app.createOrgWorkspace({ name: `WA big-b ${tag}` })
+      const userId = await makeUser(app, tag)
+      const repo = app.workspaceMemberRepository()
+
+      await repo.upsert(member({ workspaceId: a.workspace.id, userId, role: 'admin' }))
+      await repo.upsert(member({ workspaceId: b.workspace.id, userId, role: 'viewer' }))
+
+      const ghosts = Array.from({ length: 150 }, (_, i) => `ghost-${tag}-${i}`)
+      const ids = [a.workspace.id, ...ghosts]
+      ids.splice(100, 0, b.workspace.id)
+
+      const roles = await repo.getRolesForUserInWorkspaces(userId, ids)
+      expect(roles.get(a.workspace.id)).toBe('admin')
+      expect(roles.get(b.workspace.id)).toBe('viewer')
+      // Only the two real rows resolve; every ghost id is absent.
+      expect(roles.size).toBe(2)
+    })
+
     it('removeByAccountMembership drops only the boards owned by the given account', async () => {
       const app = harness.makeApp()
       const tag = uniq()
