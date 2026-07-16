@@ -168,7 +168,8 @@
         "document": "Documento",
         "spike": "Spike",
         "recurring": "Recurrente",
-        "review": "Revisión"
+        "review": "Revisión",
+        "ralph": "Bucle Ralph"
       },
       "recurringWithFrame": "Una tarea recurrente ejecuta una pipeline con cierta cadencia. Continúa para definir el horario y el prompt.",
       "recurringNoFrame": "Una tarea recurrente debe vivir en un servicio. Añádela desde un marco de servicio (o un módulo dentro de él).",
@@ -2420,7 +2421,8 @@
         "bug": "error",
         "document": "documento",
         "spike": "spike",
-        "review": "revisión"
+        "review": "revisión",
+        "ralph": "Bucle Ralph"
       },
       "observability": {
         "heading": "Observabilidad del agente",
@@ -4784,6 +4786,29 @@
       "style": "Estilo",
       "test": "Pruebas",
       "other": "Otros"
+    }
+  },
+  "ralph": {
+    "subtitle": "Un bucle persistente: trabaja la tarea, ejecuta el comando de validación y repite hasta que pase.",
+    "status": {
+      "passed": "Superado",
+      "gaveUp": "Abandonado",
+      "running": "En ejecución",
+      "failing": "Fallando"
+    },
+    "noActivity": "Aún no hay iteraciones.",
+    "validationCommand": "Comando de validación",
+    "lastOutput": "Última validación (salida {exit})",
+    "viewPr": "Ver pull request",
+    "iterationsHeading": "Iteraciones",
+    "iteration": "Iteración {number}",
+    "iterationPassed": "validación superada",
+    "iterationFailed": "salida {exit}",
+    "sidebar": {
+      "state": "Estado",
+      "iterations": "Iteraciones",
+      "count": "{attempts} de {max}",
+      "footer": "El bucle se repite hasta que el comando de validación pasa o se agota el presupuesto de iteraciones."
     }
   }
 }

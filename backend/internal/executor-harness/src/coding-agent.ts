@@ -1,5 +1,8 @@
 import { mkdir } from 'node:fs/promises'
 import { join } from 'node:path'
+import { spawn } from 'node:child_process'
+import { killChildProcess, spawnDetached } from './process.js'
+import { MAX_CAPTURED_OUTPUT_CHARS, redactSecrets } from './redact.js'
 import type {
   AgentJob,
   AgentResult,
@@ -36,7 +39,7 @@ import {
 } from './pi-workspace.js'
 import type { ProgressGuardLimits } from './pi.js'
 import type { RunOptions } from './runner.js'
-import { log } from './logger.js'
+import { log, type Logger } from './logger.js'
 
 // The shared skeleton for the container coding agents that clone a repo, run Pi
 // against it and push the result on a branch. The implementation (`/run`) and
@@ -92,6 +95,12 @@ export interface CodingAgentSpec extends HarnessAuthFields {
    * them. Best-effort per branch. Absent/empty ⇒ none fetched.
    */
   referenceBranches?: string[]
+  /**
+   * Ralph loop: run this programmatic completion command in the checkout AFTER the agent
+   * commits + pushes, capturing its exit code + a bounded output tail (the loop's exit
+   * condition — computed by the harness, never the model). Absent for every non-`ralph` run.
+   */
+  validation?: { command: string; iteration?: number }
 }
 
 /** The outcome of a coding agent run, before each caller maps it to its own result shape. */
@@ -107,6 +116,17 @@ export interface CodingAgentOutcome {
   usage?: { inputTokens: number; outputTokens: number }
   /** Per-model-call telemetry from a subscription harness's CLI stream (absent for Pi). */
   callMetrics?: HarnessCallMetric[]
+  /**
+   * Ralph loop: the verdict of the post-commit validation command (whether it exited 0, the
+   * exit code, and a bounded/redacted output tail). Present only when {@link CodingAgentSpec.validation}
+   * was set. The exit code is the loop's authoritative completion signal.
+   */
+  validation?: {
+    validationPassed: boolean
+    exitCode: number
+    validationOutputTail?: string
+    iteration?: number
+  }
 }
 
 /**
@@ -425,6 +445,14 @@ export async function runCodingAgent(
             ...(callMetrics ? { callMetrics } : {}),
           }
         }
+
+        // Ralph loop: run the programmatic completion command against the pushed/committed
+        // state and attach its verdict (exit code = the loop's authoritative done signal).
+        // Runs regardless of whether this pass pushed — a no-op iteration must still be able
+        // to report that the criterion is (already) met. The harness runs it, never the model.
+        if (spec.validation) {
+          outcome.validation = await runRalphValidation(workDir, spec.validation, logger, opts)
+        }
       } finally {
         // Safety net for the throw path (the happy path already cleared these above).
         clearInterval(checkpoint)
@@ -433,6 +461,94 @@ export async function runCodingAgent(
       return outcome
     },
   )
+}
+
+/**
+ * The Ralph-loop validation watchdog: the longest a completion command may run before it is
+ * killed and treated as a failure (a hung `pnpm test` must never block the loop forever).
+ * Overridable via env for tests; defaults to 15 minutes.
+ */
+function ralphValidationTimeoutMs(): number {
+  const n = Number(process.env.RALPH_VALIDATION_TIMEOUT_MS)
+  return Number.isFinite(n) && n > 0 ? Math.floor(n) : 15 * 60_000
+}
+
+/**
+ * Ralph loop: run the programmatic completion command in the checkout and return its exit
+ * code plus a bounded, redacted tail of its output. The EXIT CODE is the loop's authoritative
+ * done signal (0 = the criterion is met) — computed here by the harness, never self-reported
+ * by the model, which is the whole point of a programmatic exit condition. Runs
+ * `sh -c <command>` in `cwd`; a watchdog kills the whole process tree on timeout (a hung
+ * command counts as a failure so the loop is never blocked), and an aborted run resolves to a
+ * non-zero code too. The command runs INSIDE the sandboxed run container (the same trust
+ * boundary as the coding agent) — there is no host/backend execution.
+ */
+async function runRalphValidation(
+  cwd: string,
+  validation: { command: string; iteration?: number },
+  logger: Logger,
+  opts: RunOptions,
+): Promise<{
+  validationPassed: boolean
+  exitCode: number
+  validationOutputTail?: string
+  iteration?: number
+}> {
+  const timeoutMs = ralphValidationTimeoutMs()
+  logger.info('coding-agent(ralph): running validation command', {
+    iteration: validation.iteration,
+  })
+  return new Promise((resolve) => {
+    let out = ''
+    let settled = false
+    const child = spawn('sh', ['-c', validation.command], {
+      cwd,
+      detached: spawnDetached,
+      stdio: ['ignore', 'pipe', 'pipe'],
+    })
+    // Keep only the tail; guard against unbounded buffering on a chatty command.
+    const capture = (chunk: Buffer): void => {
+      out = (out + chunk.toString('utf8')).slice(-MAX_CAPTURED_OUTPUT_CHARS)
+    }
+    child.stdout?.on('data', capture)
+    child.stderr?.on('data', capture)
+    const finish = (exitCode: number): void => {
+      if (settled) return
+      settled = true
+      clearTimeout(timer)
+      opts.signal?.removeEventListener('abort', onAbort)
+      const trimmed = out.trim()
+      const tail = trimmed ? redactSecrets(trimmed) : undefined
+      logger.info('coding-agent(ralph): validation finished', {
+        exitCode,
+        iteration: validation.iteration,
+      })
+      resolve({
+        validationPassed: exitCode === 0,
+        exitCode,
+        ...(tail ? { validationOutputTail: tail } : {}),
+        ...(validation.iteration !== undefined ? { iteration: validation.iteration } : {}),
+      })
+    }
+    const timer = setTimeout(() => {
+      logger.warn('coding-agent(ralph): validation command timed out', { timeoutMs })
+      killChildProcess(child, undefined, logger)
+      finish(124) // conventional timeout exit code (a non-zero fail)
+    }, timeoutMs)
+    timer.unref?.()
+    const onAbort = (): void => {
+      killChildProcess(child, undefined, logger)
+      finish(130) // aborted (a non-zero fail)
+    }
+    opts.signal?.addEventListener('abort', onAbort, { once: true })
+    child.on('error', (err) => {
+      logger.warn('coding-agent(ralph): validation command failed to spawn', {
+        error: err instanceof Error ? err.message : String(err),
+      })
+      finish(127) // spawn error / command not found (a non-zero fail)
+    })
+    child.on('close', (code) => finish(code ?? 1))
+  })
 }
 
 /** Sanitise an owner/name into a safe single path segment for a sibling checkout directory. */

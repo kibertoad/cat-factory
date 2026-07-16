@@ -168,7 +168,8 @@
         "document": "Document",
         "spike": "Spike",
         "recurring": "Récurrent",
-        "review": "Revue"
+        "review": "Revue",
+        "ralph": "Boucle Ralph"
       },
       "recurringWithFrame": "Une tâche récurrente exécute une pipeline selon une cadence. Continuez pour définir le calendrier et le prompt.",
       "recurringNoFrame": "Une tâche récurrente doit appartenir à un service. Ajoutez-la depuis un cadre de service (ou un module à l’intérieur).",
@@ -2420,7 +2421,8 @@
         "bug": "bug",
         "document": "document",
         "spike": "spike",
-        "review": "revue"
+        "review": "revue",
+        "ralph": "Boucle Ralph"
       },
       "observability": {
         "heading": "Observabilité de l'agent",
@@ -4784,6 +4786,29 @@
       "style": "Style",
       "test": "Tests",
       "other": "Autre"
+    }
+  },
+  "ralph": {
+    "subtitle": "Une boucle persistante : traiter la tâche, exécuter la commande de validation, et recommencer jusqu'à ce qu'elle réussisse.",
+    "status": {
+      "passed": "Réussi",
+      "gaveUp": "Abandonné",
+      "running": "En cours",
+      "failing": "En échec"
+    },
+    "noActivity": "Aucune itération pour l'instant.",
+    "validationCommand": "Commande de validation",
+    "lastOutput": "Dernière validation (code {exit})",
+    "viewPr": "Voir la pull request",
+    "iterationsHeading": "Itérations",
+    "iteration": "Itération {number}",
+    "iterationPassed": "validation réussie",
+    "iterationFailed": "code {exit}",
+    "sidebar": {
+      "state": "État",
+      "iterations": "Itérations",
+      "count": "{attempts} sur {max}",
+      "footer": "La boucle réessaie jusqu'à ce que la commande de validation réussisse ou que le budget d'itérations soit épuisé."
     }
   }
 }

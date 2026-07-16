@@ -15,6 +15,7 @@ import {
   type AgentKindRegistry,
   defaultAgentKindRegistry,
   isCompanionKind,
+  RALPH_AGENT_KIND,
 } from '@cat-factory/agents'
 
 export interface FakeAgentOptions {
@@ -216,6 +217,14 @@ export interface FakeAgentOptions {
    */
   pooledContainer?: boolean
   /**
+   * Ralph loop: the 1-based iteration on which the harness-run validation command first
+   * "passes" (exit 0). Every earlier iteration reports a failing verdict, so the engine loops.
+   * The fake bases this on `context.ralphValidation.iteration` (the engine folds it in per
+   * dispatch), so it's robust to how the job is re-dispatched. Default 1 (passes immediately);
+   * set it higher than the task's `maxIterations` to drive the budget-exhausted (give-up) path.
+   */
+  ralphPassOnIteration?: number
+  /**
    * The app-owned agent-kind registry the fake reads to detect a structured `container-explore`
    * kind (built-in `bug-investigator` or a registered CUSTOM kind) so it returns `result.custom`.
    * The custom-kind conformance case injects the SAME instance the container was built with;
@@ -407,6 +416,28 @@ export class FakeAgentExecutor implements AgentExecutor {
         output: `[initiative-planner] planned "${context.block.title}"`,
         model: 'fake',
         initiativePlan: this.options.initiativePlan,
+      }
+    }
+
+    // A `ralph` iteration: the harness runs the validation command and reports the verdict.
+    // The fake derives pass/fail from the iteration number the engine folded in (attempts + 1)
+    // vs `ralphPassOnIteration`, so the loop advances deterministically: iterations before the
+    // target report a failing exit code (the engine re-dispatches), the target iteration passes
+    // (the engine finishes + advances). A target above `maxIterations` never passes (exhaust).
+    if (context.agentKind === RALPH_AGENT_KIND) {
+      const iteration = context.ralphValidation?.iteration ?? 1
+      const passed = iteration >= (this.options.ralphPassOnIteration ?? 1)
+      return {
+        output: `[ralph] iteration ${iteration} — ${passed ? 'validation passed' : 'validation failed'}`,
+        model: 'fake',
+        ralphVerdict: {
+          validationPassed: passed,
+          exitCode: passed ? 0 : 1,
+          ...(passed ? {} : { validationOutputTail: 'fake: 1 check still failing' }),
+          iteration,
+        },
+        ...(this.options.pullRequest ? { pullRequest: this.options.pullRequest } : {}),
+        ...this.usageFields(),
       }
     }
 

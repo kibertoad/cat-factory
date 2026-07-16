@@ -1,6 +1,6 @@
 {
   "name": "@cat-factory/gates",
-  "version": "0.5.40",
+  "version": "0.5.41",
   "description": "The built-in polling-gate suite (CI, merge-conflicts, post-release health + the on-call escalation) for the Agent Architecture Board, authored entirely through the public gate-registry seam — depends only on @cat-factory/kernel + @cat-factory/contracts, never the engine. A deployment imports it for side effect and wires each gate's provider via the exported wireX handles.",
   "repository": {
     "type": "git",
