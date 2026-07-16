@@ -1,4 +1,9 @@
-import type { GitHubRepo, ModelFamilyPolicy, WorkspaceSettings } from '../domain/types.js'
+import type {
+  GitHubRepo,
+  ModelFamilyPolicy,
+  RiskPolicy,
+  WorkspaceSettings,
+} from '../domain/types.js'
 import type { ResolvedAccountSettings } from './account-settings-repositories.js'
 import type { DocumentContent } from './document-source.js'
 import type { ResolvedCatalogEntry } from './fragment-repositories.js'
@@ -223,6 +228,20 @@ export interface AppCaches {
    * builds a PAT-backed client anyway).
    */
   patInstallationRepos: GroupCacheHandle<GitHubRepo[]>
+  /**
+   * A task's resolved merge-threshold preset (`riskPolicyRepository.get(id)` for a task's
+   * picked preset, else `getDefault`), grouped by workspace id and keyed by the resolved id
+   * (`picked:<id>` / `default`) — the slow-moving, admin-changed row `resolveRiskPolicy` re-reads
+   * on every gate evaluation (per review/tester/human-test/visual gate action and per merge
+   * resolve). Wrapped ({@link RiskPolicyCacheValue}) so a picked-preset miss (deleted id falling
+   * through to the default) or an unseeded workspace's null default caches as a value rather than
+   * a re-loaded null. Coherence is invalidation-driven: every `RiskPolicyService` write
+   * (create/update/remove/reseed + the lazy first-use seed) drops the workspace group after the
+   * write commits, so a preset edit is visible on the very next gate. Pass-through on the Worker's
+   * isolate-safe profile (our own mutable D1 state, no cross-isolate bus), so it caches only on the
+   * Node/local facades.
+   */
+  riskPolicy: GroupCacheHandle<RiskPolicyCacheValue>
   /** Release notification-bus resources (a no-op for bare in-memory caches). */
   close(): Promise<void>
 }
@@ -240,6 +259,15 @@ export interface WorkspaceSettingsCacheValue {
 /** Cache-friendly wrapper for a budget tier's configured limit (`null` ⇒ no limit set). */
 export interface BudgetLimitCacheValue {
   limit: number | null
+}
+
+/**
+ * Cache-friendly wrapper for a merge-threshold preset read (`null` ⇒ the preset id doesn't
+ * resolve — a deleted picked id or an unseeded workspace's absent default — so the caller falls
+ * through, exactly as an uncached read would).
+ */
+export interface RiskPolicyCacheValue {
+  policy: RiskPolicy | null
 }
 
 /**

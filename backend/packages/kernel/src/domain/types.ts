@@ -82,6 +82,7 @@ export type {
   GitHubIssueState,
   GitHubPullRequest,
   GitHubPullRequestState,
+  OpenedPullRequest,
   GitHubRepo,
   RepoTreeEntry,
   SetRepoMonorepoInput,

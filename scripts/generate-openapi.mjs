@@ -46,6 +46,10 @@ const COMPONENT_SCHEMAS = {
   PublicTaskList: 'publicTaskListSchema',
   CreatePublicTask: 'createPublicTaskSchema',
   StartPublicTask: 'startPublicTaskSchema',
+  UpdatePublicTask: 'updatePublicTaskSchema',
+  PublicRun: 'publicRunSchema',
+  PublicPipeline: 'publicPipelineSchema',
+  PublicPipelineList: 'publicPipelineListSchema',
 }
 
 /** Per-operation docs, keyed by operationId (the exported contract const name minus `Contract`). */
@@ -92,13 +96,44 @@ const OPERATION_DOCS = {
     description:
       'Start a task’s pipeline. Uses the request’s pipelineId, else the task’s pinned pipeline. A task on an individual-usage model cannot be started through the API (no headless personal-credential unlock).',
   },
+  updatePublicTask: {
+    tag: 'Tasks',
+    summary: "Edit a task's title/description",
+    description:
+      'Edit a task’s human-authored fields (title/description) before it runs. Both fields are optional.',
+  },
+  stopPublicTask: {
+    tag: 'Tasks',
+    summary: "Stop a task's run",
+    description:
+      'Stop a task’s in-flight run. Records a `cancelled` terminal state, leaving the run retryable.',
+  },
+  retryPublicTask: {
+    tag: 'Tasks',
+    summary: "Retry a task's failed run",
+    description:
+      'Retry a task’s failed run. A task on an individual-usage model cannot be retried through the API (no headless personal-credential unlock).',
+  },
+  getPublicRun: {
+    tag: 'Tasks',
+    summary: "Get a task's run (rich projection)",
+    description:
+      'Read a task’s run in detail: per-step status/progress/subtasks, the failure kind and message, and the PR (url + branch).',
+  },
+  listPublicPipelines: {
+    tag: 'Pipelines',
+    summary: "List the workspace's pipelines",
+    description:
+      'List the pipelines in the key’s workspace — id/name/steps plus whether each is public and safe to run headlessly — so a caller can pick a pipelineId to start a task with.',
+  },
 }
 
 /** Descriptions for the operation tags (groups). */
 const TAG_DESCRIPTIONS = {
   Initiatives: 'Headless initiative-breakdown runs (start, poll, stream).',
   Services: 'The workspace’s board services.',
-  Tasks: 'Board tasks under a service (create, list, read status, start).',
+  Tasks: 'Board tasks under a service (create, list, read, edit, start, stop, retry, stream).',
+  Pipelines: 'The workspace’s pipelines (discover a pipelineId to start a task with).',
 }
 
 /** Human descriptions for the response status codes we emit (OpenAPI requires a description). */
@@ -240,7 +275,7 @@ export async function buildOpenApiDoc() {
     paths[template][contract.method] = operation
   }
 
-  // The one raw SSE route that is NOT a contract (a streaming Hono route), documented by hand.
+  // The raw SSE routes that are NOT contracts (streaming Hono routes), documented by hand.
   tags.add('Initiatives')
   paths[`${API_PREFIX}/jobs/{id}/events`] = {
     get: {
@@ -253,6 +288,29 @@ export async function buildOpenApiDoc() {
       responses: {
         200: {
           description: 'An event stream of job updates',
+          content: { 'text/event-stream': { schema: { type: 'string' } } },
+        },
+        '4XX': {
+          description: STATUS_DESCRIPTIONS['4XX'],
+          content: {
+            'application/json': { schema: { $ref: '#/components/schemas/ErrorResponse' } },
+          },
+        },
+      },
+    },
+  }
+  tags.add('Tasks')
+  paths[`${API_PREFIX}/tasks/{taskId}/events`] = {
+    get: {
+      operationId: 'streamPublicTaskRun',
+      tags: ['Tasks'],
+      summary: 'Stream a task run (SSE)',
+      description:
+        'Server-sent events for a board task run: `progress` frames (the rich run projection) until a terminal `done`/`error` event, or a `timeout` when the connection cap is reached. Authenticated by the API key header.',
+      parameters: [{ name: 'taskId', in: 'path', required: true, schema: { type: 'string' } }],
+      responses: {
+        200: {
+          description: 'An event stream of run updates',
           content: { 'text/event-stream': { schema: { type: 'string' } } },
         },
         '4XX': {

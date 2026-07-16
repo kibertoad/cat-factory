@@ -238,6 +238,36 @@ describe('FetchGitLabClient', () => {
     })
   })
 
+  it('is idempotent: a 409 (MR already exists) resolves to the existing open MR', async () => {
+    // GitLab rejects a duplicate MR for the same source/target branch with a 409; the client
+    // must fall back to a lookup so a durable-driver replay of a committing post-op is safe.
+    const { c, calls } = client({
+      'POST /projects/7/merge_requests': {
+        status: 409,
+        body: { message: ['Another open merge request already exists for this source branch: !5'] },
+      },
+      'GET /projects/7/merge_requests?state=opened&source_branch=feat&target_branch=main&per_page=1':
+        {
+          body: [
+            {
+              id: 100,
+              iid: 5,
+              title: 'PR',
+              state: 'opened',
+              source_branch: 'feat',
+              target_branch: 'main',
+              web_url: 'https://gitlab.com/group/proj/-/merge_requests/5',
+            },
+          ],
+        },
+    })
+    const pr = await c.openPullRequest(connection, ref, { title: 'PR', head: 'feat', base: 'main' })
+    expect(pr).toMatchObject({ number: 5, state: 'open' })
+    expect(pr.url).toBe('https://gitlab.com/group/proj/-/merge_requests/5')
+    expect(calls[0]!.method).toBe('POST')
+    expect(calls[1]!.method).toBe('GET')
+  })
+
   it('follows Link pagination', async () => {
     const { c } = client({
       'GET /projects?membership=true&per_page=100': {

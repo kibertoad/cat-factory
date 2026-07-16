@@ -1,5 +1,141 @@
 # @cat-factory/worker
 
+## 0.85.3
+
+### Patch Changes
+
+- Updated dependencies [06a094a]
+  - @cat-factory/contracts@0.135.0
+  - @cat-factory/server@0.125.0
+  - @cat-factory/agents@0.59.2
+  - @cat-factory/consensus@0.10.56
+  - @cat-factory/eks@0.1.83
+  - @cat-factory/gates@0.5.40
+  - @cat-factory/gitlab@0.10.2
+  - @cat-factory/integrations@0.84.5
+  - @cat-factory/kernel@0.129.2
+  - @cat-factory/orchestration@0.113.2
+  - @cat-factory/prompt-fragments@0.13.24
+  - @cat-factory/spend@0.12.36
+  - @cat-factory/provider-cloudflare@0.7.227
+  - @cat-factory/caching@0.8.7
+  - @cat-factory/observability-langfuse@0.7.210
+  - @cat-factory/observability-otel@0.1.4
+
+## 0.85.2
+
+### Patch Changes
+
+- Updated dependencies [6dc444e]
+  - @cat-factory/server@0.124.0
+
+## 0.85.1
+
+### Patch Changes
+
+- Updated dependencies [bd0a42a]
+  - @cat-factory/server@0.123.1
+
+## 0.85.0
+
+### Minor Changes
+
+- 745de02: feat(mothership): real-time upstream publish (the outbound half of PR 2's real-time both directions)
+
+  A mothership-mode local node runs the engine on the laptop but delegates org/durable state to the
+  mothership. Until now its engine events (a run advancing, a board change, a notification) never
+  reached the mothership's real-time fan-out, so a hosted teammate watching the same shared board
+  couldn't see the local node's activity live. This adds the upstream channel.
+
+  - `@cat-factory/server`: a new machine-authed `POST /internal/events/publish` endpoint
+    (`eventsRelayController`) + the `MachineEventRelay` seam on `ServerContainer` + the
+    `HttpMachineEventClient`. Mounted on both facades; account-scoped and default-deny exactly like
+    the persistence RPC (a workspace outside the token's scope is a uniform 404). The verbatim-forwarded
+    payload is size-capped (413 above the ceiling) so a compromised node can't inject an unbounded frame.
+  - `@cat-factory/node-server`: `LocalMachineEventRelay` delivers a relayed event into the facade's
+    own real-time sink (the hub / layered propagator); attached whenever a realtime sink is wired.
+  - `@cat-factory/worker`: `DurableObjectMachineEventRelay` delivers a relayed event into the
+    per-workspace `WorkspaceEventsHub` Durable Object — the symmetric Cloudflare side.
+  - `@cat-factory/local-server`: `MothershipWebSocketPropagator` (a `WebSocketPropagator` adapter,
+    reusing the existing cross-node seam) forwards the local node's engine events upstream; it is
+    layered over the hub in mothership mode so every event fans to the laptop's own SPA AND the
+    mothership.
+
+  Scope: this is the OUTBOUND direction only. The INBOUND subscribe leg (the local node receiving org
+  events raised on the mothership / by peer laptops) is a distinct, runtime-shaped follow-up — see
+  `docs/initiatives/mothership-mode.md`.
+
+### Patch Changes
+
+- 6108525: perf(db): index `password_reset_tokens.expires_at` so the token-expiry sweep is index-driven instead of a full-table scan (performance initiative item 21). Lands symmetrically on both runtimes — a D1 migration and the mirrored Drizzle `idx_password_reset_tokens_expiry`.
+- Updated dependencies [745de02]
+- Updated dependencies [6108525]
+  - @cat-factory/server@0.123.0
+  - @cat-factory/orchestration@0.113.1
+  - @cat-factory/kernel@0.129.1
+  - @cat-factory/caching@0.8.6
+  - @cat-factory/agents@0.59.1
+  - @cat-factory/consensus@0.10.55
+  - @cat-factory/eks@0.1.82
+  - @cat-factory/gates@0.5.39
+  - @cat-factory/gitlab@0.10.1
+  - @cat-factory/integrations@0.84.4
+  - @cat-factory/observability-langfuse@0.7.209
+  - @cat-factory/observability-otel@0.1.3
+  - @cat-factory/provider-cloudflare@0.7.226
+  - @cat-factory/spend@0.12.35
+
+## 0.84.3
+
+### Patch Changes
+
+- Updated dependencies [1b90387]
+  - @cat-factory/server@0.122.0
+
+## 0.84.2
+
+### Patch Changes
+
+- Updated dependencies [995249b]
+  - @cat-factory/agents@0.59.0
+  - @cat-factory/kernel@0.129.0
+  - @cat-factory/contracts@0.134.0
+  - @cat-factory/orchestration@0.113.0
+  - @cat-factory/server@0.121.0
+  - @cat-factory/gitlab@0.10.0
+  - @cat-factory/consensus@0.10.54
+  - @cat-factory/provider-cloudflare@0.7.225
+  - @cat-factory/caching@0.8.5
+  - @cat-factory/eks@0.1.81
+  - @cat-factory/gates@0.5.38
+  - @cat-factory/integrations@0.84.3
+  - @cat-factory/observability-langfuse@0.7.208
+  - @cat-factory/observability-otel@0.1.2
+  - @cat-factory/spend@0.12.34
+  - @cat-factory/prompt-fragments@0.13.23
+
+## 0.84.1
+
+### Patch Changes
+
+- Updated dependencies [9e9127f]
+  - @cat-factory/contracts@0.133.0
+  - @cat-factory/orchestration@0.112.0
+  - @cat-factory/server@0.120.0
+  - @cat-factory/agents@0.58.1
+  - @cat-factory/consensus@0.10.53
+  - @cat-factory/eks@0.1.80
+  - @cat-factory/gates@0.5.37
+  - @cat-factory/gitlab@0.9.1
+  - @cat-factory/integrations@0.84.2
+  - @cat-factory/kernel@0.128.1
+  - @cat-factory/prompt-fragments@0.13.22
+  - @cat-factory/spend@0.12.33
+  - @cat-factory/provider-cloudflare@0.7.224
+  - @cat-factory/caching@0.8.4
+  - @cat-factory/observability-langfuse@0.7.207
+  - @cat-factory/observability-otel@0.1.1
+
 ## 0.84.0
 
 ### Minor Changes

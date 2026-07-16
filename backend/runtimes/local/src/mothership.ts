@@ -4,12 +4,14 @@ import { mkdirSync } from 'node:fs'
 import { type CoreRepositories, type DriveConfig, driveExecution } from '@cat-factory/node-server'
 import {
   DelegatedAppTokenSource,
+  HttpMachineEventClient,
   HttpPersistenceRpcClient,
   type Logger,
   type MothershipConnector,
   createRemoteRepositoryRegistry,
 } from '@cat-factory/server'
 import type { AgentRunRepository, WorkRunner } from '@cat-factory/kernel'
+import { MothershipWebSocketPropagator } from './mothershipPropagator.js'
 import { type LocalCredentialStore, createLocalCredentialStore } from './sqlite/credentialStore.js'
 import { type LocalSettingsStore, createLocalSettingsStore } from './sqlite/localSettingsStore.js'
 import {
@@ -87,6 +89,16 @@ export interface MothershipComposition {
    * machine token as the persistence RPC (per request, so a post-boot login is picked up).
    */
   githubTokenSource: DelegatedAppTokenSource
+  /**
+   * The real-time UPSTREAM propagation adapter: forwards this local node's engine events to the
+   * mothership over `POST /internal/events/publish`, so a hosted teammate on the same shared board
+   * sees the local node's activity live. `buildLocalContainer` wraps the local hub in a
+   * {@link LayeredEventPropagator} with this adapter, so every event fans to the laptop's own SPA AND
+   * the mothership with no engine change. Reads the SAME per-request machine token as the persistence
+   * RPC (a post-boot login is picked up without a restart). This is the OUTBOUND half of "real-time
+   * both directions"; the inbound subscribe leg is a later slice (see the tracker).
+   */
+  realtimeAdapter: MothershipWebSocketPropagator
   /** The durable local-sqlite execution work queue (the no-pg-boss durability substrate). */
   workQueue: SqliteWorkQueue
   /**
@@ -129,6 +141,12 @@ export function composeMothership(env: NodeJS.ProcessEnv): MothershipComposition
   // Same base URL + per-request token as the persistence RPC, so GitHub delegation follows
   // the exact connect/expiry lifecycle of the rest of the machine API.
   const githubTokenSource = new DelegatedAppTokenSource({ baseUrl, token: machineToken })
+  // Real-time upstream: the SAME base URL + per-request token, so this node's engine events reach
+  // the mothership's fan-out under the same connect/expiry lifecycle. A token-less node just doesn't
+  // publish upstream (its own SPA still gets every event locally).
+  const realtimeAdapter = new MothershipWebSocketPropagator(
+    new HttpMachineEventClient({ baseUrl, token: machineToken }),
+  )
   const credentialStore = createLocalCredentialStore(
     localDbPath(env.LOCAL_MOTHERSHIP_CREDENTIAL_DB, 'credentials.sqlite'),
   )
@@ -139,6 +157,7 @@ export function composeMothership(env: NodeJS.ProcessEnv): MothershipComposition
   return {
     repos,
     githubTokenSource,
+    realtimeAdapter,
     credentialStore,
     localSettingsStore,
     workQueue,

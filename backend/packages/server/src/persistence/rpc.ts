@@ -84,8 +84,26 @@ export function statusForPersistenceError(code: PersistenceErrorCode): number {
  *                       only ever lands in the caller's own in-scope workspace; the service layer
  *                       (bypassed by the RPC) is where block-existence is enforced.
  *   - `account`       — `args[arg]` IS an accountId.
+ *   - `accountField`  — `args[arg]` is a record with an `accountId` string field (an
+ *                       `upsert(record)` whose scope key is a property of the record, not a
+ *                       positional arg); the accountId IS the account, checked in scope directly
+ *                       (the account-owned mirror of `workspaceField`). ONLY the top-level
+ *                       `accountId` is bound — sibling fields are NOT scope-validated here, exactly
+ *                       as the raw repo upsert doesn't cross-check them; the row is stored under (and
+ *                       later read by) the bound `accountId`, so a stray sibling only ever lands in
+ *                       the caller's own in-scope account.
  *   - `accountList`   — `args[arg]` is `string[]` of accountIds; ALL must be in scope.
  *   - `selfUser`      — `args[arg]` is a userId; must equal the token's `userId`.
+ *   - `user`          — `args[arg]` is a userId whose DISPLAY record is being read; in scope iff
+ *                       that user is a CO-MEMBER of one of the token's in-scope accounts (resolved
+ *                       server-side from the account rosters). Unlike `selfUser` (which pins the
+ *                       token's OWN id) this admits any teammate the caller shares an account with —
+ *                       the member-roster display read. A user in no in-scope account (or an
+ *                       unresolvable one) fails closed (404, no existence leak).
+ *   - `userList`      — `args[arg]` is `string[]` of userIds (the batched roster enrichment); EVERY
+ *                       requested user must be a co-member of an in-scope account, so a missing or
+ *                       out-of-scope id fails closed — the batched form of `user`. Empty input is
+ *                       allowed (it returns empty).
  *   - `visibility`    — `args[arg]` is a `WorkspaceVisibility`; intersected with the token
  *                       scope so a node can never widen its own visibility.
  *   - `block`         — `args[arg]` is a blockId with NO workspace arg; resolve the block's
@@ -127,8 +145,11 @@ export type ScopeRule =
   | { kind: 'workspace'; arg: number }
   | { kind: 'workspaceField'; arg: number }
   | { kind: 'account'; arg: number }
+  | { kind: 'accountField'; arg: number }
   | { kind: 'accountList'; arg: number }
   | { kind: 'selfUser'; arg: number }
+  | { kind: 'user'; arg: number }
+  | { kind: 'userList'; arg: number }
   | { kind: 'visibility'; arg: number }
   | { kind: 'block'; arg: number }
   | { kind: 'blockList'; arg: number }
@@ -235,6 +256,26 @@ export const REMOTE_PERSISTENCE_METHODS: PersistenceMethodTable = {
     listByUser: { scope: { kind: 'selfUser', arg: 0 } },
     listByAccount: { scope: { kind: 'account', arg: 0 } },
     get: { scope: { kind: 'account', arg: 0 } },
+  },
+  // --- Member-display read surface ------------------------------------------------
+  // The user DISPLAY records the account members panel enriches its roster with
+  // (`AccountService.members` → `userRepository.listByIds(memberIds)`) and the single-user display
+  // lookup (`get`). These carry only the presentational `UserRecord` (id / name / email / avatarUrl
+  // / createdAt) — NOT the password `secret`, which lives on `UserIdentityRecord` and is reachable
+  // only via `getIdentity`/`listIdentities` (kept off, like the other identity/auth reads). So the
+  // display reads leak no credential and are safe to proxy.
+  //
+  // Scope: a userId is not itself an account/workspace, so it is bound by CO-MEMBERSHIP — the `user`
+  // rule (single id) / `userList` rule (batch) admit a user iff they are a member of one of the
+  // token's in-scope accounts, resolved server-side from the account rosters. The roster read only
+  // ever passes ids that ARE members of the (in-scope) account it just listed, so the batch check
+  // always passes on the real path; a forged out-of-scope id fails closed (404, no existence leak).
+  // The `update` write (profile edit) + the identity/auth reads (`findByIdentity`/`findByEmail`/
+  // `getIdentity`/`listIdentities`) stay off — they are the account-lifecycle / login surface, not
+  // member display, and the identity reads carry the password secret.
+  userRepository: {
+    get: { scope: { kind: 'user', arg: 0 } },
+    listByIds: { scope: { kind: 'userList', arg: 0 } },
   },
   // --- Board-load read surface --------------------------------------------------
   // The workspace-scoped reads a `GET /workspaces/:id` snapshot assembles. Each takes the
@@ -875,6 +916,54 @@ export const REMOTE_PERSISTENCE_METHODS: PersistenceMethodTable = {
   emailConnectionRepository: {
     getByAccount: { scope: { kind: 'account', arg: 0 } },
   },
+  // --- Slack integration management surface ---------------------------------------
+  // The Slack integration settings a mothership-mode SPA manages (`SlackController` →
+  // `SlackConnectionService` / `SlackSettingsService` / `SlackMemberMappingService`): connect /
+  // disconnect the per-account Slack workspace, edit the per-workspace notification routing, and
+  // maintain the per-account GitHub-user → Slack-member mapping. The controller mounts under
+  // `/workspaces/:workspaceId` and is member-level (not admin-gated), so it follows the same policy
+  // as the observability / environment / runner-pool connection panels above.
+  //
+  // Safe to expose exactly like those connection surfaces: the Slack bot token rides a SEALED blob
+  // (`tokenCipher`) — the repo returns it verbatim (it does NOT decrypt); sealing/decryption live in
+  // the Slack service/channel under the LOCAL key, so no plaintext credential crosses the machine
+  // API and the mothership only ever stores ciphertext (the "mothership ENCRYPTION_KEY never reaches
+  // the laptop" split holds). The settings + member-mapping rows carry NO secrets at all.
+  //
+  // Scope of what this unlocks: the settings PANELS work end-to-end (connect / disconnect / route /
+  // map + read back the redacted connection view). What it does NOT change: mothership-side Slack
+  // DELIVERY of a notification raised by a hosted teammate — that reads + decrypts the token on the
+  // mothership, which cannot open a laptop-sealed blob, so it rides the later secrets-delegation
+  // slice, exactly like the observability gate probe. Local delivery (the run's own node raised the
+  // notification and holds the local key) is unaffected.
+  //
+  // `slackConnectionRepository` is per-ACCOUNT: `getByAccount`/`softDelete` take the accountId as
+  // arg0 (the `account` rule — the local service resolves the workspace → account via the already
+  // remote `workspaceRepository.accountOf`, then calls with that in-scope accountId), and the
+  // record-based `upsert(record)` binds on the record's `accountId` FIELD (the new `accountField`
+  // rule). `getByTeam` is NOT here: it is a GLOBAL teamId → connection lookup used only by the
+  // inbound OAuth callback / event webhook, which run on the mothership (never the laptop) and
+  // cannot be account-scoped — it stays mothership-internal (classified `sweeper` in the drift
+  // guard, the same "unscoped, mothership-internal" bucket as `repoProjectionRepository.listByInstallation`).
+  slackConnectionRepository: {
+    getByAccount: { scope: { kind: 'account', arg: 0 } },
+    upsert: { scope: { kind: 'accountField', arg: 0 } },
+    softDelete: { scope: { kind: 'account', arg: 0 } },
+  },
+  // Per-workspace notification routing (channel per notification kind + a mentions flag). No
+  // secrets. `getByWorkspace` takes the workspaceId as arg0 (the `workspace` rule); the
+  // record-based `upsert(record)` binds on the record's `workspaceId` FIELD (the `workspaceField` rule).
+  slackSettingsRepository: {
+    getByWorkspace: { scope: { kind: 'workspace', arg: 0 } },
+    upsert: { scope: { kind: 'workspaceField', arg: 0 } },
+  },
+  // Per-account GitHub-user → Slack-member mapping (for @-mentions). No secrets. Both methods take
+  // the accountId as arg0 positionally (`upsert(accountId, entries, at)` — a positional accountId,
+  // not a record), so the `account` rule binds both.
+  slackMemberMappingRepository: {
+    getByAccount: { scope: { kind: 'account', arg: 0 } },
+    upsert: { scope: { kind: 'account', arg: 0 } },
+  },
 }
 
 // ---------------------------------------------------------------------------
@@ -907,6 +996,13 @@ export interface DispatchOptions {
    * hitting that kind with no resolver fails closed (404).
    */
   resolveServiceAccountIds?(serviceIds: string[]): Promise<Map<string, string | null | undefined>>
+  /**
+   * Resolve the member userIds of an account (the mothership's `MembershipRepository.listByAccount`,
+   * mapped to `userId`s). Required for the `user`/`userList` scope kinds: a requested user is in
+   * scope iff they are a co-member of one of the token's in-scope accounts. A call hitting those
+   * kinds with no resolver fails closed (404), like the other entity resolvers.
+   */
+  resolveAccountMemberIds?(accountId: string): Promise<string[]>
   /** The method table to enforce (defaults to the full remote allow-list). */
   table?: PersistenceMethodTable
 }
@@ -962,6 +1058,24 @@ export async function dispatchPersistenceCall(
   const inScope = (accountId: string | null | undefined): boolean =>
     typeof accountId === 'string' && opts.scope.accountIds.includes(accountId)
 
+  // The set of userIds the token may see the DISPLAY record of: every member of an in-scope
+  // account. Computed at most once per dispatch (lazy) and bounded by the token's account scope
+  // (not by request data), so it is a fixed-size read, not an N+1 over the requested user list.
+  let visibleUsers: Promise<Set<string>> | undefined
+  const visibleUserIds = (): Promise<Set<string>> => {
+    if (!visibleUsers) {
+      visibleUsers = (async () => {
+        const set = new Set<string>()
+        for (const accountId of opts.scope.accountIds) {
+          const members = (await opts.resolveAccountMemberIds?.(accountId)) ?? []
+          for (const userId of members) set.add(userId)
+        }
+        return set
+      })()
+    }
+    return visibleUsers
+  }
+
   // Bind the call to an account and reject anything outside the token scope (404).
   const denied = fail('not_found', 'Not found')
   const rule = spec.scope
@@ -995,6 +1109,21 @@ export async function dispatchPersistenceCall(
       if (!inScope(args[rule.arg] as string)) return denied
       break
     }
+    case 'accountField': {
+      // The scope key is an `accountId` FIELD of the record arg (an `upsert(record)` whose
+      // accountId is a property, not a positional arg). The accountId IS the account, so it is
+      // checked in scope directly — the account-owned mirror of `workspaceField`. A non-object
+      // arg or a missing/non-string field is refused as 404; the write targets exactly
+      // `record.accountId`, so binding on it means the record can only land in an in-scope account.
+      const record = args[rule.arg]
+      const accountId =
+        record && typeof record === 'object'
+          ? (record as { accountId?: unknown }).accountId
+          : undefined
+      if (typeof accountId !== 'string') return denied
+      if (!inScope(accountId)) return denied
+      break
+    }
     case 'accountList': {
       const ids = args[rule.arg]
       if (!Array.isArray(ids) || !ids.every((id) => inScope(id as string))) return denied
@@ -1002,6 +1131,29 @@ export async function dispatchPersistenceCall(
     }
     case 'selfUser': {
       if (args[rule.arg] !== opts.scope.userId) return denied
+      break
+    }
+    case 'user': {
+      // Bind via co-membership: the target user's DISPLAY record is readable iff they are a member
+      // of one of the token's in-scope accounts. No resolver wired ⇒ fail closed (404), like the
+      // other entity resolvers. A user in no in-scope account is refused (no existence leak).
+      const userId = args[rule.arg]
+      if (typeof userId !== 'string' || !opts.resolveAccountMemberIds) return denied
+      if (!(await visibleUserIds()).has(userId)) return denied
+      break
+    }
+    case 'userList': {
+      // The batched roster enrichment: EVERY requested user must be a co-member of an in-scope
+      // account (the batched form of `user`), so a missing or out-of-scope id fails closed. An
+      // empty list is a no-op read (returns empty), so it needs no roster to scope.
+      const ids = args[rule.arg]
+      if (!Array.isArray(ids) || ids.some((id) => typeof id !== 'string')) return denied
+      if (ids.length === 0) break
+      if (!opts.resolveAccountMemberIds) return denied
+      const visible = await visibleUserIds()
+      for (const id of ids as string[]) {
+        if (!visible.has(id)) return denied
+      }
       break
     }
     case 'block': {

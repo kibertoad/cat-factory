@@ -43,6 +43,7 @@ function makeRegistry(): {
   resolveBlockAccountId: NonNullable<DispatchOptions['resolveBlockAccountId']>
   resolveBlockAccountIds: NonNullable<DispatchOptions['resolveBlockAccountIds']>
   resolveServiceAccountIds: NonNullable<DispatchOptions['resolveServiceAccountIds']>
+  resolveAccountMemberIds: NonNullable<DispatchOptions['resolveAccountMemberIds']>
 } {
   const workspaces = new Map<string, Workspace & { accountId: string }>([
     ['ws_in', workspace('ws_in', ACCOUNT)],
@@ -59,6 +60,13 @@ function makeRegistry(): {
   const services = new Map<string, { id: string; accountId: string | null }>([
     ['svc_in', { id: 'svc_in', accountId: ACCOUNT }],
     ['svc_out', { id: 'svc_out', accountId: OTHER_ACCOUNT }],
+  ])
+  // Account rosters, for the member-display scope (`user`/`userList`): USER + a co-member live under
+  // ACCOUNT; a distinct user lives under OTHER_ACCOUNT — the in/out-of-scope split the display reads
+  // are checked on (a co-member is visible; a user only in another account is refused).
+  const accountMembers = new Map<string, string[]>([
+    [ACCOUNT, [USER, 'usr_co']],
+    [OTHER_ACCOUNT, ['usr_out']],
   ])
 
   const registry = {
@@ -124,6 +132,24 @@ function makeRegistry(): {
     accountRepository: {
       get: async (id: string) => ({ id, name: id }),
       listByIds: async (ids: string[]) => ids.map((id) => ({ id, name: id })),
+    },
+    // The account roster read, which the `resolveAccountMemberIds` scope resolver maps to userIds
+    // (the `user`/`userList` scope). `upsert`/`remove` are wired but admin-gated (absent from the
+    // allow-list), so they must be refused as not-callable.
+    membershipRepository: {
+      listByAccount: async (accountId: string) =>
+        (accountMembers.get(accountId) ?? []).map((userId) => ({ accountId, userId, roles: [] })),
+      upsert: async () => undefined,
+      remove: async () => undefined,
+    },
+    // The member-display reads: `get`/`listByIds` echo the requested id(s) as a presentational
+    // `UserRecord`. The identity/auth reads (`getIdentity`/`listIdentities`) are wired but absent
+    // from the allow-list (they carry the password secret), so they must be refused.
+    userRepository: {
+      get: async (id: string) => ({ id, name: id, email: null, avatarUrl: null, createdAt: 0 }),
+      listByIds: async (ids: string[]) =>
+        ids.map((id) => ({ id, name: id, email: null, avatarUrl: null, createdAt: 0 })),
+      getIdentity: async () => null,
     },
     // The workspace-scoped board-load read surface. Each stub echoes its workspaceId so the
     // round-trip can assert the call reached the bound workspace; `deleteByWorkspace` is wired
@@ -398,6 +424,27 @@ function makeRegistry(): {
       getByAccount: async (accountId: string) => ({ accountId }),
       upsert: async () => undefined,
     },
+    // The Slack management surface. `slackConnectionRepository` is per-account: `getByAccount`/
+    // `softDelete` echo the accountId (arg0); the record-based `upsert` binds on the record's
+    // `accountId` FIELD (the new `accountField` rule). `getByTeam` is wired but absent from the
+    // allow-list (the global inbound-OAuth teamId lookup, mothership-internal), so it must be refused.
+    slackConnectionRepository: {
+      getByAccount: async (accountId: string) => ({ accountId }),
+      upsert: async () => undefined,
+      softDelete: async () => undefined,
+      getByTeam: async (teamId: string) => ({ teamId }),
+    },
+    // Per-workspace routing (no secrets): `getByWorkspace` echoes the workspaceId (arg0); the
+    // record-based `upsert` binds on the record's `workspaceId` FIELD.
+    slackSettingsRepository: {
+      getByWorkspace: async (ws: string) => ({ ws }),
+      upsert: async () => undefined,
+    },
+    // Per-account member mapping (no secrets): both methods take the accountId as arg0 positionally.
+    slackMemberMappingRepository: {
+      getByAccount: async (accountId: string) => [{ accountId }],
+      upsert: async () => undefined,
+    },
   } as unknown as PersistenceRegistry
 
   const resolveAccountId = (id: string) =>
@@ -434,6 +481,16 @@ function makeRegistry(): {
       const map = new Map<string, string | null | undefined>()
       for (const service of services) map.set(service.id, service.accountId)
       return map
+    },
+    // Built exactly as the controller builds it (roster → userIds), so the round-trip exercises the
+    // real server-side co-membership resolution for the `user`/`userList` scope.
+    resolveAccountMemberIds: async (accountId) => {
+      const memberships = (await registry.membershipRepository!.listByAccount!(
+        accountId,
+      )) as Array<{
+        userId: string
+      }>
+      return memberships.map((m) => m.userId)
     },
   }
 }
@@ -560,6 +617,65 @@ describe('persistence RPC round-trip', () => {
     )
     // The in-scope subset alone succeeds.
     await expect(repos.accountRepository.listByIds([ACCOUNT])).resolves.toHaveLength(1)
+  })
+})
+
+describe('member-display read surface (co-membership scoped)', () => {
+  function remoteUsers(accountIds = [ACCOUNT]) {
+    const { registry, ...resolvers } = makeRegistry()
+    const client = inProcessClient({
+      registry,
+      ...resolvers,
+      scope: { accountIds, userId: USER },
+    })
+    return createRemoteRepositoryRegistry(client) as unknown as {
+      userRepository: {
+        get(id: string): Promise<{ id: string } | null>
+        listByIds(ids: string[]): Promise<Array<{ id: string }>>
+        getIdentity(provider: string, subject: string): Promise<unknown>
+      }
+    }
+  }
+
+  it('forwards userRepository.get for a co-member of an in-scope account', async () => {
+    // usr_co is a member of ACCOUNT (in scope), so its display record is readable.
+    await expect(remoteUsers().userRepository.get('usr_co')).resolves.toMatchObject({
+      id: 'usr_co',
+    })
+    // The caller reading its OWN display record is a co-member of its own account too.
+    await expect(remoteUsers().userRepository.get(USER)).resolves.toMatchObject({ id: USER })
+  })
+
+  it('rejects userRepository.get for a user only in an out-of-scope account (404)', async () => {
+    // usr_out is a member of OTHER_ACCOUNT only — no existence leak, refused as not-found.
+    await expect(remoteUsers().userRepository.get('usr_out')).rejects.toMatchObject({
+      code: 'not_found',
+    })
+    // A wholly-unknown user (in no account) is likewise refused.
+    await expect(remoteUsers().userRepository.get('usr_ghost')).rejects.toMatchObject({
+      code: 'not_found',
+    })
+  })
+
+  it('forwards userRepository.listByIds when every id is a co-member (roster enrichment)', async () => {
+    const users = await remoteUsers().userRepository.listByIds([USER, 'usr_co'])
+    expect(users).toHaveLength(2)
+    // An empty roster is a no-op read (no member to scope) and still round-trips.
+    await expect(remoteUsers().userRepository.listByIds([])).resolves.toHaveLength(0)
+  })
+
+  it('rejects userRepository.listByIds containing an out-of-scope id (fail closed)', async () => {
+    await expect(
+      remoteUsers().userRepository.listByIds(['usr_co', 'usr_out']),
+    ).rejects.toMatchObject({ code: 'not_found' })
+  })
+
+  it('refuses the identity reads that carry the password secret (not in the allow-list)', async () => {
+    // `getIdentity` returns `UserIdentityRecord` (with the password `secret`), so it must never be
+    // remotely callable even though it is wired on the repo.
+    await expect(remoteUsers().userRepository.getIdentity('password', 'a@b.co')).rejects.toThrow(
+      /not callable/,
+    )
   })
 })
 
@@ -1934,5 +2050,97 @@ describe('account onboarding read surface (account-scoped)', () => {
     await expect(
       remoteRegistry().emailConnectionRepository!.upsert!({ accountId: ACCOUNT }),
     ).rejects.toThrow(/not callable/)
+  })
+})
+
+describe('Slack integration management surface', () => {
+  function remoteRegistry(accountIds = [ACCOUNT]) {
+    const { registry, ...resolvers } = makeRegistry()
+    const client = inProcessClient({
+      registry,
+      ...resolvers,
+      scope: { accountIds, userId: USER },
+    })
+    return createRemoteRepositoryRegistry(client) as unknown as Record<
+      string,
+      Record<string, (...args: unknown[]) => Promise<unknown>>
+    >
+  }
+
+  // Account-scoped methods (arg0 is an accountId → the `account` rule): the per-account connection
+  // read/delete + the member-mapping read/write. Each stub echoes the accountId, proving the call
+  // reached the bound account; an out-of-scope account is refused 404.
+  const ACCOUNT_METHODS: Array<{ repo: string; method: string; extra?: unknown[] }> = [
+    { repo: 'slackConnectionRepository', method: 'getByAccount' },
+    { repo: 'slackConnectionRepository', method: 'softDelete', extra: [123] },
+    { repo: 'slackMemberMappingRepository', method: 'getByAccount' },
+    { repo: 'slackMemberMappingRepository', method: 'upsert', extra: [[], 123] },
+  ]
+
+  for (const { repo, method, extra = [] } of ACCOUNT_METHODS) {
+    it(`forwards ${repo}.${method} for an in-scope account`, async () => {
+      const result = await remoteRegistry()[repo]![method]!(ACCOUNT, ...extra)
+      // Reads echo `{ accountId }`; the void write (`softDelete`/mapping `upsert`) forwards without throwing.
+      if (result !== undefined && result !== null) {
+        expect(Array.isArray(result) ? result[0] : result).toMatchObject({ accountId: ACCOUNT })
+      }
+    })
+
+    it(`rejects ${repo}.${method} for an out-of-scope account (404, no leak)`, async () => {
+      await expect(remoteRegistry()[repo]![method]!(OTHER_ACCOUNT, ...extra)).rejects.toMatchObject(
+        {
+          code: 'not_found',
+        },
+      )
+    })
+  }
+
+  // Per-workspace routing settings: `getByWorkspace` (the `workspace` rule) echoes the workspaceId.
+  it('forwards slackSettingsRepository.getByWorkspace for an in-scope workspace', async () => {
+    expect(await remoteRegistry().slackSettingsRepository!.getByWorkspace!('ws_in')).toMatchObject({
+      ws: 'ws_in',
+    })
+  })
+  it('rejects slackSettingsRepository.getByWorkspace for an out-of-scope workspace (404)', async () => {
+    await expect(
+      remoteRegistry().slackSettingsRepository!.getByWorkspace!('ws_out'),
+    ).rejects.toMatchObject({ code: 'not_found' })
+  })
+
+  // The `workspaceField` record-based `upsert`: binds on the record's `workspaceId` FIELD.
+  it('forwards slackSettingsRepository.upsert for an in-scope workspace field', async () => {
+    await expect(
+      remoteRegistry().slackSettingsRepository!.upsert!({ workspaceId: 'ws_in' }),
+    ).resolves.toBeUndefined()
+  })
+  it('rejects slackSettingsRepository.upsert whose record workspace is out of scope (404)', async () => {
+    await expect(
+      remoteRegistry().slackSettingsRepository!.upsert!({ workspaceId: 'ws_out' }),
+    ).rejects.toMatchObject({ code: 'not_found' })
+  })
+
+  // The new `accountField` rule: the record-based connection `upsert` binds on the record's
+  // `accountId` FIELD (checked in scope directly — the account-owned mirror of `workspaceField`).
+  it('forwards slackConnectionRepository.upsert for an in-scope account field', async () => {
+    await expect(
+      remoteRegistry().slackConnectionRepository!.upsert!({ accountId: ACCOUNT, tokenCipher: 'x' }),
+    ).resolves.toBeUndefined()
+  })
+  it('rejects slackConnectionRepository.upsert whose record account is out of scope (404)', async () => {
+    await expect(
+      remoteRegistry().slackConnectionRepository!.upsert!({ accountId: OTHER_ACCOUNT }),
+    ).rejects.toMatchObject({ code: 'not_found' })
+  })
+  it('rejects an accountField upsert with a missing/non-string accountId (404, no crash)', async () => {
+    await expect(
+      remoteRegistry().slackConnectionRepository!.upsert!({ notAnAccount: true }),
+    ).rejects.toMatchObject({ code: 'not_found' })
+  })
+
+  // `getByTeam` is the global inbound-OAuth teamId lookup — mothership-internal, off the allow-list.
+  it('still refuses slackConnectionRepository.getByTeam (global teamId lookup, off the allow-list)', async () => {
+    await expect(remoteRegistry().slackConnectionRepository!.getByTeam!('T123')).rejects.toThrow(
+      /not callable/,
+    )
   })
 })

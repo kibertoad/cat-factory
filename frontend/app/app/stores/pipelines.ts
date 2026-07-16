@@ -4,6 +4,7 @@ import type { AgentKind, Pipeline } from '~/types/domain'
 import type { ConsensusStepConfig, StepGating } from '~/types/consensus'
 import type { StepOptions, TesterQualityConfig } from '@cat-factory/contracts'
 import { companionForProducer, uid } from '~/utils/catalog'
+import { useUpsertList } from '~/composables/useUpsertList'
 import { useWorkspaceStore } from '~/stores/workspace'
 
 /** A sensible default config when a step is first flipped to consensus in the builder. */
@@ -31,7 +32,11 @@ function defaultConsensusConfig(): ConsensusStepConfig {
  */
 export const usePipelinesStore = defineStore('pipelines', () => {
   const api = useApi()
-  const pipelines = ref<Pipeline[]>([])
+  const {
+    items: pipelines,
+    upsert: upsertPipeline,
+    remove: dropPipeline,
+  } = useUpsertList<Pipeline>({ key: (p) => p.id })
   /**
    * Current built-in catalog versions (`seedPipelines()`), keyed by pipeline id, from the
    * workspace snapshot. A built-in whose stored `version` is below its catalog value here has
@@ -369,13 +374,12 @@ export const usePipelinesStore = defineStore('pipelines', () => {
     const payload = draftPayload()
     if (editingId.value) {
       const updated = await api.updatePipeline(wsId, editingId.value, payload)
-      const i = pipelines.value.findIndex((p) => p.id === updated.id)
-      if (i >= 0) pipelines.value[i] = updated
+      upsertPipeline(updated)
       clearDraft()
       return updated
     }
     const pipeline = await api.createPipeline(wsId, payload)
-    pipelines.value.push(pipeline)
+    upsertPipeline(pipeline)
     clearDraft()
     return pipeline
   }
@@ -383,14 +387,14 @@ export const usePipelinesStore = defineStore('pipelines', () => {
   /** Clone any pipeline (built-in or custom) into an editable copy, ready to edit. */
   async function clonePipeline(id: string): Promise<Pipeline> {
     const clone = await api.clonePipeline(useWorkspaceStore().requireId(), id)
-    pipelines.value.push(clone)
+    upsertPipeline(clone)
     loadForEdit(clone)
     return clone
   }
 
   async function removePipeline(id: string) {
     await api.removePipeline(useWorkspaceStore().requireId(), id)
-    pipelines.value = pipelines.value.filter((p) => p.id !== id)
+    dropPipeline(id)
     if (editingId.value === id) clearDraft()
   }
 
@@ -401,8 +405,7 @@ export const usePipelinesStore = defineStore('pipelines', () => {
    */
   async function reseed(id: string): Promise<Pipeline> {
     const updated = await api.reseedPipeline(useWorkspaceStore().requireId(), id)
-    const i = pipelines.value.findIndex((p) => p.id === updated.id)
-    if (i >= 0) pipelines.value[i] = updated
+    upsertPipeline(updated)
     if (editingId.value === id) clearDraft()
     return updated
   }
@@ -410,8 +413,7 @@ export const usePipelinesStore = defineStore('pipelines', () => {
   /** Set a pipeline's organizational metadata (labels / archive). Works on built-ins too. */
   async function organize(id: string, body: { labels?: string[]; archived?: boolean }) {
     const updated = await api.organizePipeline(useWorkspaceStore().requireId(), id, body)
-    const i = pipelines.value.findIndex((p) => p.id === updated.id)
-    if (i >= 0) pipelines.value[i] = updated
+    upsertPipeline(updated)
     return updated
   }
 

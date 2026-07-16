@@ -103,6 +103,13 @@ const isRecurring = computed(() => taskType.value === 'recurring')
 const severity = ref<'low' | 'medium' | 'high' | 'critical' | ''>('')
 const stepsToReproduce = ref('')
 const timeboxHours = ref<number | undefined>(undefined)
+// Spike research criteria — folded into the spike agent's prompt (see the backend `spike` kind).
+const spikeResearchQuestion = ref('')
+const spikeSuccessCriteria = ref('')
+const spikeOptionsToCompare = ref('')
+// Optional in-repo path the findings document is committed to (else `docs/research/<slug>.md`);
+// shares the `taskTypeFields.targetPath` field + its safe-`.md`-path validation with `document`.
+const spikeTargetPath = ref('')
 // `DOC_KINDS` (and the `DocKind` type) are owned by the contracts package — re-exported via
 // `~/types/domain` — so the picker and the create payload can't drift from the backend list.
 const docKind = ref<DocKind | ''>('')
@@ -172,13 +179,21 @@ function buildTypeFields(): TaskTypeFields | undefined {
     return Object.keys(f).length ? f : undefined
   }
   if (taskType.value === 'spike') {
+    const f: TaskTypeFields = {}
     // `v-model.number` on a cleared number input yields '' (not undefined), which would
     // serialise as a non-number and 400 the create — so require a finite number here.
-    return typeof timeboxHours.value === 'number' &&
+    if (
+      typeof timeboxHours.value === 'number' &&
       Number.isFinite(timeboxHours.value) &&
       timeboxHours.value >= 0
-      ? { timeboxHours: timeboxHours.value }
-      : undefined
+    ) {
+      f.timeboxHours = timeboxHours.value
+    }
+    if (spikeResearchQuestion.value.trim()) f.researchQuestion = spikeResearchQuestion.value.trim()
+    if (spikeSuccessCriteria.value.trim()) f.successCriteria = spikeSuccessCriteria.value.trim()
+    if (spikeOptionsToCompare.value.trim()) f.optionsToCompare = spikeOptionsToCompare.value.trim()
+    if (spikeTargetPath.value.trim()) f.targetPath = spikeTargetPath.value.trim()
+    return Object.keys(f).length ? f : undefined
   }
   if (taskType.value === 'document') {
     const f: TaskTypeFields = {}
@@ -416,6 +431,10 @@ watch(open, (isOpen) => {
   severity.value = ''
   stepsToReproduce.value = ''
   timeboxHours.value = undefined
+  spikeResearchQuestion.value = ''
+  spikeSuccessCriteria.value = ''
+  spikeOptionsToCompare.value = ''
+  spikeTargetPath.value = ''
   docKind.value = ''
   docAudience.value = ''
   docTargetPath.value = ''
@@ -461,6 +480,10 @@ const { requestClose } = useUnsavedGuard({
     severity: severity.value,
     stepsToReproduce: stepsToReproduce.value.trim(),
     timeboxHours: timeboxHours.value ?? null,
+    spikeResearchQuestion: spikeResearchQuestion.value.trim(),
+    spikeSuccessCriteria: spikeSuccessCriteria.value.trim(),
+    spikeOptionsToCompare: spikeOptionsToCompare.value.trim(),
+    spikeTargetPath: spikeTargetPath.value.trim(),
     docKind: docKind.value,
     docAudience: docAudience.value.trim(),
     docTargetPath: docTargetPath.value.trim(),
@@ -681,15 +704,58 @@ async function add() {
             </UFormField>
           </div>
 
-          <UFormField v-else-if="taskType === 'spike'" :label="t('board.addTask.timebox')">
-            <UInput
-              v-model.number="timeboxHours"
-              type="number"
-              min="0"
-              :placeholder="t('board.addTask.timeboxPlaceholder')"
-              class="w-full"
-            />
-          </UFormField>
+          <div v-else-if="taskType === 'spike'" class="space-y-3">
+            <UFormField :label="t('board.addTask.timebox')">
+              <UInput
+                v-model.number="timeboxHours"
+                type="number"
+                min="0"
+                :placeholder="t('board.addTask.timeboxPlaceholder')"
+                class="w-full"
+              />
+            </UFormField>
+            <UFormField
+              :label="t('board.addTask.spikeFields.researchQuestion.label')"
+              :hint="t('board.addTask.optional')"
+            >
+              <UInput
+                v-model="spikeResearchQuestion"
+                :placeholder="t('board.addTask.spikeFields.researchQuestion.placeholder')"
+                class="w-full"
+              />
+            </UFormField>
+            <UFormField
+              :label="t('board.addTask.spikeFields.successCriteria.label')"
+              :hint="t('board.addTask.optional')"
+            >
+              <UTextarea
+                v-model="spikeSuccessCriteria"
+                :rows="2"
+                autoresize
+                :placeholder="t('board.addTask.spikeFields.successCriteria.placeholder')"
+                class="w-full"
+              />
+            </UFormField>
+            <UFormField
+              :label="t('board.addTask.spikeFields.optionsToCompare.label')"
+              :hint="t('board.addTask.optional')"
+            >
+              <UTextarea
+                v-model="spikeOptionsToCompare"
+                :rows="2"
+                autoresize
+                :placeholder="t('board.addTask.spikeFields.optionsToCompare.placeholder')"
+                class="w-full"
+              />
+            </UFormField>
+            <UFormField :label="t('board.addTask.targetPath')" :hint="t('board.addTask.optional')">
+              <UInput
+                v-model="spikeTargetPath"
+                :placeholder="t('board.addTask.targetPathPlaceholder')"
+                class="w-full"
+              />
+            </UFormField>
+          </div>
 
           <div v-else-if="taskType === 'document'" class="space-y-3">
             <UFormField :label="t('board.addTask.documentKind')">

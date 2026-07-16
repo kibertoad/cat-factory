@@ -8,6 +8,7 @@ import {
 import { companionSystemPrompt } from './prompts/companion.js'
 import { companionTargets, isCompanionKind } from './kinds/companions.js'
 import { READ_ONLY_GUARDRAIL, isReadOnlyAgentKind } from './kinds/read-only.js'
+import { SPIKE_AGENT_KIND, spikeContextSection } from './kinds/spike.js'
 import { businessLogicSystemPrompt } from './prompts/business-logic.js'
 import { mockFrontendSection, mockSystemPrompt } from './prompts/mock.js'
 import { testingSystemPrompt, testerEnvironmentSection } from './prompts/testing.js'
@@ -199,6 +200,12 @@ function buildBaseUserPrompt(
   if (companionTarget) lines.push(companionTarget)
   const linked = linkedContextSection(context, opts)
   if (linked) lines.push(linked)
+  // A `spike`'s per-task research criteria + time-box (the create form's spike fields), folded
+  // in after the block description + linked context so the investigation is scoped to them.
+  if (context.agentKind === SPIKE_AGENT_KIND) {
+    const spikeSection = spikeContextSection(context)
+    if (spikeSection) lines.push(spikeSection)
+  }
   const envSection = environmentSection(context)
   if (envSection) lines.push(envSection)
   const involvedSection = involvedServicesSection(context)

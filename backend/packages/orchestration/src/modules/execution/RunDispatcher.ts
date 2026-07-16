@@ -74,6 +74,7 @@ import {
   frontendOriginsForService,
   parseBlueprintService,
   parseSpecDoc,
+  type PullRequestRef,
   resolveAprioriWorkingBranch,
 } from '@cat-factory/contracts'
 import {
@@ -211,6 +212,17 @@ const REVIEW_GATE_AGENT_KINDS: ReadonlySet<string> = new Set([
   REQUIREMENTS_BRAINSTORM_AGENT_KIND,
   ARCHITECTURE_BRAINSTORM_AGENT_KIND,
 ])
+
+/**
+ * Whether a run delivers a committing kind's artifact through a PULL REQUEST rather than a
+ * direct commit — true when the pipeline carries a `merger` step to merge that PR. Threaded to
+ * the pre/post-op {@link RepoOpContext} so a delivering kind (e.g. `spike`) follows the chosen
+ * pipeline's shape (PR tail ⇒ open a PR; no tail ⇒ commit direct) with no separate per-task flag
+ * to drift. Mirrors {@link RunStateMachine.finalizeBlock}'s `hasMerger` distinction.
+ */
+function runOpensPr(instance: ExecutionInstance): boolean {
+  return instance.steps.some((s) => s.agentKind === MERGER_AGENT_KIND)
+}
 
 /**
  * Parse `owner`/`repo` from a GitHub pull-request URL (`https://github.com/o/r/pull/42`).
@@ -506,7 +518,7 @@ export class RunDispatcher {
     // step not having dispatched yet so a Workflows replay (jobId already set) doesn't
     // re-run them; a no-op for built-in kinds and when GitHub isn't wired.
     if (!step.jobId) {
-      await this.runRegisteredPreOps(workspaceId, block, step, context)
+      await this.runRegisteredPreOps(workspaceId, instance, block, step, context)
     }
     const executor = this.agentExecutor
     if (isAsyncAgentExecutor(executor) && executor.runsAsync(context)) {
@@ -2567,6 +2579,7 @@ export class RunDispatcher {
    */
   private async runRegisteredPreOps(
     workspaceId: string,
+    instance: ExecutionInstance,
     block: Block,
     step: PipelineStep,
     context: AgentRunContext,
@@ -2580,7 +2593,7 @@ export class RunDispatcher {
       block,
       runRepo,
     )
-    await runRepoOps(ops, { repo: runRepo.repo, context, branch })
+    await runRepoOps(ops, { repo: runRepo.repo, context, branch, opensPr: runOpensPr(instance) })
   }
 
   /**
@@ -2628,6 +2641,7 @@ export class RunDispatcher {
       isFinalStep,
       block,
     )
+    const opensPr = runOpensPr(instance)
     // Registered (custom) kinds resolve their branch from their declared clone target.
     if (registered.length > 0) {
       const branch = await this.resolveRepoOpBranch(
@@ -2635,14 +2649,47 @@ export class RunDispatcher {
         block,
         runRepo,
       )
-      await runRepoOps(registered, { repo: runRepo.repo, context, branch, result })
+      const opResult = await runRepoOps(registered, {
+        repo: runRepo.repo,
+        context,
+        branch,
+        opensPr,
+        result,
+      })
+      // A delivering kind (e.g. `spike` in PR mode) opened a PR for the findings; record it on
+      // the block so the downstream conflicts/CI/human-review/merge tail acts on it — the SAME
+      // linkage a container-coding step's `result.pullRequest` produces (see recordStepResult).
+      if (opResult.pullRequest) {
+        await this.recordPostOpPullRequest(workspaceId, block.id, opResult.pullRequest)
+      }
     }
     // Built-in (migrated) kinds resolve their branch to MATCH their container dispatch
     // exactly (see {@link builtInRepoOpBranch}), which differs from the generic clone
     // resolution for the no-PR case — so the post-op commits where the agent read.
     if (builtIn.length > 0) {
       const branch = await this.builtInRepoOpBranch(step.agentKind, block, runRepo)
-      await runRepoOps(builtIn, { repo: runRepo.repo, context, branch, result })
+      await runRepoOps(builtIn, { repo: runRepo.repo, context, branch, opensPr, result })
+    }
+  }
+
+  /**
+   * Record a pull request a registered post-op opened onto the block, mirroring the
+   * container-coding path in {@link recordStepResult}: set `block.pullRequest`, and (when newly
+   * opened) fire the best-effort tracker-issue writeback. Idempotent — re-recording the same PR
+   * (a durable-driver replay) writes the same ref and skips the non-idempotent writeback.
+   */
+  private async recordPostOpPullRequest(
+    workspaceId: string,
+    blockId: string,
+    pullRequest: PullRequestRef,
+  ): Promise<void> {
+    const priorBlock = await this.blockRepository.get(workspaceId, blockId)
+    if (priorBlock?.pullRequest?.url === pullRequest.url) return
+    await this.blockRepository.update(workspaceId, blockId, { pullRequest })
+    if (this.issueWriteback && priorBlock) {
+      await this.issueWriteback
+        .onPullRequestOpened(workspaceId, priorBlock, pullRequest)
+        .catch(() => {})
     }
   }
 

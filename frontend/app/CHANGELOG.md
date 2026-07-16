@@ -1,5 +1,105 @@
 # @cat-factory/app
 
+## 0.121.3
+
+### Patch Changes
+
+- Updated dependencies [06a094a]
+  - @cat-factory/contracts@0.135.0
+
+## 0.121.2
+
+### Patch Changes
+
+- bd0a42a: refactor(app): split the `ui.ts` store and finish the plain-upsert store adoption
+
+  Two refactoring candidates, both internal with no behaviour change:
+
+  - **Candidate #4 — split the `ui.ts` store.** The 828-line god-store (40+ unrelated UI
+    concerns) is decomposed into three cohesive slices under `stores/ui/`: `navigation.ts`
+    (selection / focus / zoom / LOD), `resultViews.ts` (the `dispatchStepView` / `ui.resultView`
+    overlay seam + the observability + Kaizen panels), and `modals.ts` (every modal / panel
+    open-close flag, hub markers, deep-link params, and the startup + AI-onboarding advisories).
+    `ui.ts` is now a thin facade composing the three behind the SAME public surface (all 184
+    keys, verified identical), so every `useUiStore()` consumer is untouched.
+  - **Candidate #3 — finish the `useUpsertList` adoption.** The `agentRuns` store's
+    `envConfigRepairJobs` list (the last plain, unguarded find-by-id upsert) now routes through
+    the shared `useUpsertList` composable instead of a hand-rolled `findIndex` block.
+
+## 0.121.1
+
+### Patch Changes
+
+- 33b4d97: refactor(app): route more stores' list mutation through the `useUpsertList` helper
+
+  Finish more of the store pattern-factory adoption (refactoring candidate #3): the plain
+  find-by-key upsert stores `pipelines`, `releaseHealth`, `accounts`, `bootstrap`,
+  `sharedStacks`, and `github` (composite `repoGithubId:number` key) now insert/replace/remove
+  through the shared `useUpsertList` composable instead of hand-rolled `findIndex` blocks.
+  Mechanical dedup with no behaviour change on the loaded path; the only difference is that a
+  few former replace-only sites (updating an already-loaded row) now insert-if-missing rather
+  than silently no-op, which is unreachable in practice since the row is always present. The
+  monotonic/reconcile-guarded stores (`execution`,
+  `board`, `workspace`, `environmentTest`, `agentRuns`' bootstrap list) are deliberately left
+  hand-rolled, since the helper's plain upsert would drop the guard that prevents real-time
+  store clobber.
+
+## 0.121.0
+
+### Minor Changes
+
+- f46de34: Add a UI for managing API access tokens. A new "API access tokens" panel (reached from the
+  Integrations hub, under Development) lists a workspace's inbound public-API keys and lets a
+  member mint a new one, copy the raw secret exactly once at creation, and revoke keys. Backed
+  by the existing public-API-key management endpoints under `/workspaces/:workspaceId/public-api-keys`.
+
+## 0.120.0
+
+### Minor Changes
+
+- 995249b: feat(spike): timeboxed research spike tasks — kind, pipeline, findings document, PR + review delivery
+
+  Spike tasks now run as a real timeboxed investigation that produces a findings document
+  instead of falling through to a full code-and-PR build:
+
+  - A built-in read-only `spike` agent kind (`container-explore`, structured findings + a prose
+    `summary`, opened in the `generic-structured` result view). Its backend post-op renders the
+    findings to `docs/research/<slug>.md` (honouring `taskTypeFields.targetPath`) via the
+    checkout-free `RepoFiles` port — no harness change.
+  - Findings are delivered as a PULL REQUEST by default (`pl_spike`: `requirements-review`(off) →
+    `spike` → `conflicts` → `ci` → `human-review` → `merger`): the post-op commits to a work branch
+    and opens a PR that the review/merge tail lands, so protected base branches are respected and
+    review comments are handled by the existing `human-review` gate + `fixer`. A `pl_spike_direct`
+    pipeline keeps the fast, no-PR path (commit straight to base) for unprotected repos. `spike →
+pl_spike` is the task-type default, so a spike no longer dispatches a coder.
+  - New reusable engine seam: a `RepoOp` may open a pull request and return its ref, which the
+    engine records as `block.pullRequest` (the same linkage a container-coding step produces), so a
+    deterministic backend-rendered artifact can flow through the normal conflicts/CI/human-review/
+    merge tail. `RepoFiles.openPullRequest` (and the underlying `GitHubClient`/`VcsClient` ports)
+    now return the PR web `url` (`OpenedPullRequest`), provider-agnostically.
+  - A no-PR completion path in the engine: a task run that opened no pull requests now finishes
+    `done` (like a frame-level run) instead of stalling at `pr_ready` behind a `pipeline_complete`
+    notification whose confirm threw `no_pr_to_merge`. This benefits every PR-less pipeline.
+  - Spike creation collects research criteria (research question, success criteria, options to
+    compare, target path) alongside the time-box; all are folded into the spike prompt (the
+    time-box as a scope-discipline directive). New copy is translated across all locales.
+
+  A repo-less spike (GitHub unwired, or a docs-only spike) settles on `step.custom` — the findings
+  render is skipped rather than failing the run; a rejected direct commit is best-effort (the
+  findings already live on the step), while a PR-mode open failure is surfaced.
+
+### Patch Changes
+
+- Updated dependencies [995249b]
+  - @cat-factory/contracts@0.134.0
+
+## 0.119.1
+
+### Patch Changes
+
+- Updated dependencies [9e9127f]
+  - @cat-factory/contracts@0.133.0
+
 ## 0.119.0
 
 ### Minor Changes

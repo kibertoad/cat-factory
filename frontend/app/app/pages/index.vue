@@ -96,6 +96,9 @@ const ObservabilityConnectionPanel = defineAsyncComponent(
 const PackageRegistriesPanel = defineAsyncComponent(
   () => import('~/components/settings/PackageRegistriesPanel.vue'),
 )
+const ApiTokensPanel = defineAsyncComponent(
+  () => import('~/components/settings/ApiTokensPanel.vue'),
+)
 const InfrastructureWindow = defineAsyncComponent(
   () => import('~/components/settings/InfrastructureWindow.vue'),
 )
@@ -402,6 +405,7 @@ watch(
       <AccountSettingsPanel v-if="ui.accountSettingsOpen" />
       <ObservabilityConnectionPanel v-if="ui.observabilityConnectionOpen" />
       <PackageRegistriesPanel v-if="ui.packageRegistriesOpen" />
+      <ApiTokensPanel v-if="ui.apiTokensOpen" />
       <InfrastructureWindow v-if="ui.infrastructureOpen" />
       <EnvironmentSetupWizard v-if="ui.environmentWizardOpen" />
       <ModelConfigurationPanel v-if="ui.modelConfigOpen" />

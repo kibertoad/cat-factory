@@ -10,6 +10,7 @@ import type {
   IncidentEnrichmentView,
   UpsertIncidentEnrichmentInput,
 } from '~/types/incidentEnrichment'
+import { useUpsertList } from '~/composables/useUpsertList'
 import { useWorkspaceStore } from '~/stores/workspace'
 
 /**
@@ -26,7 +27,11 @@ export const useReleaseHealthStore = defineStore('releaseHealth', () => {
     provider: null,
     summary: null,
   })
-  const configs = ref<ReleaseHealthConfig[]>([])
+  const {
+    items: configs,
+    upsert: upsertConfig,
+    remove: dropConfig,
+  } = useUpsertList<ReleaseHealthConfig>({ key: (c) => c.blockId })
   // Incident-enrichment (PagerDuty + incident.io) connection — write-only secrets, the
   // store only ever holds the presence summary. Wired alongside observability.
   const incident = ref<IncidentEnrichmentView>({ connected: false, summary: null })
@@ -91,16 +96,14 @@ export const useReleaseHealthStore = defineStore('releaseHealth', () => {
   async function saveConfig(blockId: string, input: UpsertReleaseHealthConfigInput) {
     const ws = useWorkspaceStore()
     const saved = await api.upsertReleaseHealthConfig(ws.requireId(), blockId, input)
-    const idx = configs.value.findIndex((c) => c.blockId === blockId)
-    if (idx >= 0) configs.value[idx] = saved
-    else configs.value.push(saved)
+    upsertConfig(saved)
     return saved
   }
 
   async function removeConfig(blockId: string) {
     const ws = useWorkspaceStore()
     await api.deleteReleaseHealthConfig(ws.requireId(), blockId)
-    configs.value = configs.value.filter((c) => c.blockId !== blockId)
+    dropConfig(blockId)
   }
 
   /** Load the incident-enrichment connection (separate opt-in gate from observability). */

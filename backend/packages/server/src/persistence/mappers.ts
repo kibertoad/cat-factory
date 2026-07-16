@@ -39,14 +39,17 @@ export interface WorkspaceRow {
   account_id: string | null
 }
 
+// Declared once; `description`/`accountId` are always-present nullables (never omitted).
+const workspaceReader = makeRowReader<WorkspaceRow, Workspace>([
+  readScalar('id'),
+  readScalar('name'),
+  readNullable('description'),
+  readScalar('createdAt', 'created_at'),
+  readNullable('accountId', 'account_id'),
+])
+
 export function rowToWorkspace(row: WorkspaceRow): Workspace {
-  return {
-    id: row.id,
-    name: row.name,
-    description: row.description ?? null,
-    createdAt: row.created_at,
-    accountId: row.account_id ?? null,
-  }
+  return workspaceReader(row)
 }
 
 export interface BlockRow {
@@ -292,6 +295,78 @@ function optBoolIntField<D, P>(prop: string, column = toSnake(prop)): FieldMappe
       if (v === undefined) return
       out[column] = v ? 1 : null
     },
+  }
+}
+
+// ---------------------------------------------------------------------------
+// Read-only field mappers
+//
+// `workspace` and `pipeline` are read through the shared field-map machinery but their
+// writes DON'T route through it (the repos bind their columns positionally), so a full
+// {@link FieldMapper} (which also generates insert/patch) would be a poor fit — these
+// declare only the READ direction. A `RowReader` is one column → domain-property mapping;
+// {@link makeRowReader} folds a list of them into a `rowTo*` function, exactly like
+// {@link makeEntityMapper} does for the read direction. This keeps the LAST hand-enumerated
+// read mappers on the same "declare each column once" pattern as `blocks`.
+//
+// NOTE: the `<Row, Domain>` generics on {@link makeRowReader} are a boundary cast only — the
+// readers operate over `AnyRow`, so a mistyped property or column name (or a required `Domain`
+// field left undeclared) compiles cleanly and is caught by `test/mappers.spec.ts`, not `tsc`.
+// Column/field correctness here is TEST-enforced, not type-enforced (same trade as
+// {@link makeEntityMapper}).
+// ---------------------------------------------------------------------------
+
+/** One column → domain property mapping (mutates `out`), skipping absent optionals. */
+type RowReader = (row: AnyRow, out: AnyRow) => void
+
+/** A required column passed straight through (`row.foo → out.foo`). */
+function readScalar(prop: string, column = toSnake(prop)): RowReader {
+  return (row, out) => {
+    out[prop] = row[column]
+  }
+}
+
+/** An always-present column that defaults a null/absent value to `null` (never omitted). */
+function readNullable(prop: string, column = toSnake(prop)): RowReader {
+  return (row, out) => {
+    out[prop] = row[column] ?? null
+  }
+}
+
+/** A required JSON column parsed on read (`agent_kinds`). */
+function readJson(prop: string, column = toSnake(prop)): RowReader {
+  return (row, out) => {
+    out[prop] = JSON.parse(row[column] as string)
+  }
+}
+
+/** An optional JSON column: parse only when a truthy value is stored, else stay absent. */
+function readOptJson(prop: string, column = toSnake(prop)): RowReader {
+  return (row, out) => {
+    if (row[column]) out[prop] = JSON.parse(row[column] as string)
+  }
+}
+
+/** A truthy-flag column (1/true) surfaced as a literal `true`, else absent (`builtin`/`archived`). */
+function readFlag(prop: string, column = toSnake(prop)): RowReader {
+  return (row, out) => {
+    if (row[column]) out[prop] = true
+  }
+}
+
+/** An optional column surfaced as-is only when truthy, else absent (`version`/`availability`). */
+function readOptScalar(prop: string, column = toSnake(prop)): RowReader {
+  return (row, out) => {
+    if (row[column] != null && row[column] !== '') out[prop] = row[column]
+  }
+}
+
+/** Fold a list of {@link RowReader}s into a `rowTo*` reader (the read-only analogue of {@link makeEntityMapper}). */
+function makeRowReader<Row, Domain>(readers: RowReader[]): (row: Row) => Domain {
+  return (row) => {
+    const out: AnyRow = {}
+    for (const r of readers) r(row as AnyRow, out)
+    return out as Domain
   }
 }
 
@@ -622,30 +697,31 @@ export interface PipelineRow {
   availability?: string | null
 }
 
+// Declared once. The many nullable JSON arrays parse only when present; `archived`/`builtin`/
+// `public` are 1/true flags surfaced as literal `true`; `version`/`availability` pass through
+// when set. Column names derive from the property (snake_case) except where noted.
+const pipelineReader = makeRowReader<PipelineRow, Pipeline>([
+  readScalar('id'),
+  readScalar('name'),
+  readJson('agentKinds'),
+  readOptJson('gates'),
+  readOptJson('thresholds'),
+  readOptJson('enabled'),
+  readOptJson('consensus'),
+  readOptJson('gating'),
+  readOptJson('followUps'),
+  readOptJson('testerQuality'),
+  readOptJson('stepOptions'),
+  readOptJson('labels'),
+  readFlag('archived'),
+  readFlag('builtin'),
+  readOptScalar('version'),
+  readFlag('public'),
+  readOptScalar('availability'),
+])
+
 export function rowToPipeline(row: PipelineRow): Pipeline {
-  return {
-    id: row.id,
-    name: row.name,
-    agentKinds: JSON.parse(row.agent_kinds) as Pipeline['agentKinds'],
-    ...(row.gates ? { gates: JSON.parse(row.gates) as boolean[] } : {}),
-    ...(row.thresholds ? { thresholds: JSON.parse(row.thresholds) as Pipeline['thresholds'] } : {}),
-    ...(row.enabled ? { enabled: JSON.parse(row.enabled) as boolean[] } : {}),
-    ...(row.consensus ? { consensus: JSON.parse(row.consensus) as Pipeline['consensus'] } : {}),
-    ...(row.gating ? { gating: JSON.parse(row.gating) as Pipeline['gating'] } : {}),
-    ...(row.follow_ups ? { followUps: JSON.parse(row.follow_ups) as Pipeline['followUps'] } : {}),
-    ...(row.tester_quality
-      ? { testerQuality: JSON.parse(row.tester_quality) as Pipeline['testerQuality'] }
-      : {}),
-    ...(row.step_options
-      ? { stepOptions: JSON.parse(row.step_options) as Pipeline['stepOptions'] }
-      : {}),
-    ...(row.labels ? { labels: JSON.parse(row.labels) as string[] } : {}),
-    ...(row.archived ? { archived: true } : {}),
-    ...(row.builtin ? { builtin: true } : {}),
-    ...(row.version != null ? { version: row.version } : {}),
-    ...(row.public ? { public: true } : {}),
-    ...(row.availability ? { availability: row.availability as Pipeline['availability'] } : {}),
-  }
+  return pipelineReader(row)
 }
 
 /**

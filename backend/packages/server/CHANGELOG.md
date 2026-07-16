@@ -1,5 +1,211 @@
 # @cat-factory/server
 
+## 0.125.0
+
+### Minor Changes
+
+- 06a094a: Grow the external public API (`/api/v1`) into a complete task-lifecycle surface: edit a task
+  (`PATCH /tasks/:taskId`), stop (`POST /tasks/:taskId/stop`) and retry (`POST /tasks/:taskId/retry`)
+  its run, read a rich run projection with per-step status/subtasks/failure/PR branch
+  (`GET /tasks/:taskId/run`), stream it live over SSE (`GET /tasks/:taskId/events`), and discover
+  startable pipelines (`GET /pipelines`). Each is key-authenticated, double-scoped to the key's
+  workspace and to real board tasks, and delegates to the existing service methods; retry reuses the
+  individual-usage-model refusal. The OpenAPI spec (`docs/openapi.json`) is regenerated to cover them.
+
+### Patch Changes
+
+- Updated dependencies [06a094a]
+  - @cat-factory/contracts@0.135.0
+  - @cat-factory/agents@0.59.2
+  - @cat-factory/integrations@0.84.5
+  - @cat-factory/kernel@0.129.2
+  - @cat-factory/orchestration@0.113.2
+  - @cat-factory/prompt-fragments@0.13.24
+  - @cat-factory/spend@0.12.36
+
+## 0.124.0
+
+### Minor Changes
+
+- 6dc444e: feat(mothership): expose member-display user reads over the persistence RPC
+
+  A mothership-mode local node delegates org/durable state to the mothership, but the account members
+  panel could not enrich its roster with real display details — `userRepository.get`/`listByIds` were
+  not remotely callable, so names/emails/avatars came back empty. This allow-lists those two
+  member-display reads.
+
+  - A new scope-rule pair **`user`/`userList`** in the persistence RPC (`src/persistence/rpc.ts`).
+    A userId is neither an account nor a workspace, so it is bound by CO-MEMBERSHIP: a user's display
+    record is readable iff they are a member of one of the machine token's in-scope accounts, resolved
+    server-side from the account rosters via a new `resolveAccountMemberIds` dispatch resolver (bounded
+    by the token's account scope, not the requested user list — no N+1). A user in no in-scope account
+    fails closed (404, no existence leak), like every other entity scope.
+  - The shared `PersistenceController` wires `resolveAccountMemberIds` from
+    `membershipRepository.listByAccount`, so both facades (Node + Cloudflare mothership) pick it up.
+
+  Safe because the reads carry only the presentational `UserRecord` (id/name/email/avatarUrl/createdAt);
+  the password `secret` lives on `UserIdentityRecord`, reachable only via `getIdentity`/`listIdentities`,
+  which — with the `update` profile write and `findByIdentity`/`findByEmail` — stay off the machine API
+  (the account-lifecycle / login surface). See `docs/initiatives/mothership-mode.md`.
+
+  The `@cat-factory/node-server` patch is a test-only change: its mothership-allowlist drift guard moves
+  `userRepository.get`/`listByIds` out of `pending` to reflect the new remote surface.
+
+## 0.123.1
+
+### Patch Changes
+
+- bd0a42a: refactor(server): finish the generic row-mapper adoption (refactoring candidate #2)
+
+  The last two hand-enumerated read mappers in `persistence/mappers.ts` — `rowToWorkspace` and
+  `rowToPipeline` — now derive from a declared field table instead of a hand-written object
+  literal, via a small read-only path (`makeRowReader` + the `readScalar` / `readNullable` /
+  `readJson` / `readOptJson` / `readFlag` / `readOptScalar` builders). Both are read-only in this
+  module (their repos bind columns positionally on write), so they declare only the READ
+  direction rather than a full three-way `FieldMapper`. `rowToExecution` stays deliberately
+  bespoke (its tolerant `detail` JSON envelope isn't a column-per-field shape). Pure refactor,
+  no behaviour change; the flag / version / availability / optional-JSON read semantics are
+  pinned by new `test/mappers.spec.ts` cases.
+
+## 0.123.0
+
+### Minor Changes
+
+- 745de02: feat(mothership): real-time upstream publish (the outbound half of PR 2's real-time both directions)
+
+  A mothership-mode local node runs the engine on the laptop but delegates org/durable state to the
+  mothership. Until now its engine events (a run advancing, a board change, a notification) never
+  reached the mothership's real-time fan-out, so a hosted teammate watching the same shared board
+  couldn't see the local node's activity live. This adds the upstream channel.
+
+  - `@cat-factory/server`: a new machine-authed `POST /internal/events/publish` endpoint
+    (`eventsRelayController`) + the `MachineEventRelay` seam on `ServerContainer` + the
+    `HttpMachineEventClient`. Mounted on both facades; account-scoped and default-deny exactly like
+    the persistence RPC (a workspace outside the token's scope is a uniform 404). The verbatim-forwarded
+    payload is size-capped (413 above the ceiling) so a compromised node can't inject an unbounded frame.
+  - `@cat-factory/node-server`: `LocalMachineEventRelay` delivers a relayed event into the facade's
+    own real-time sink (the hub / layered propagator); attached whenever a realtime sink is wired.
+  - `@cat-factory/worker`: `DurableObjectMachineEventRelay` delivers a relayed event into the
+    per-workspace `WorkspaceEventsHub` Durable Object — the symmetric Cloudflare side.
+  - `@cat-factory/local-server`: `MothershipWebSocketPropagator` (a `WebSocketPropagator` adapter,
+    reusing the existing cross-node seam) forwards the local node's engine events upstream; it is
+    layered over the hub in mothership mode so every event fans to the laptop's own SPA AND the
+    mothership.
+
+  Scope: this is the OUTBOUND direction only. The INBOUND subscribe leg (the local node receiving org
+  events raised on the mothership / by peer laptops) is a distinct, runtime-shaped follow-up — see
+  `docs/initiatives/mothership-mode.md`.
+
+### Patch Changes
+
+- Updated dependencies [6108525]
+  - @cat-factory/orchestration@0.113.1
+  - @cat-factory/kernel@0.129.1
+  - @cat-factory/agents@0.59.1
+  - @cat-factory/integrations@0.84.4
+  - @cat-factory/spend@0.12.35
+
+## 0.122.0
+
+### Minor Changes
+
+- 1b90387: Mothership mode: expose the Slack integration management surface over the persistence RPC.
+
+  Adds a new `accountField` persistence-RPC scope rule (the account-owned mirror of `workspaceField`,
+  binding on an `upsert(record)`'s `accountId` field) and allow-lists the Slack settings repositories
+  so the connect / route / member-map panels persist in mothership mode:
+  `slackConnectionRepository` (`getByAccount`/`upsert`/`softDelete` — the bot token rides a sealed
+  `tokenCipher`, so only ciphertext crosses the machine API), `slackSettingsRepository`
+  (`getByWorkspace`/`upsert`) and `slackMemberMappingRepository` (`getByAccount`/`upsert`). The Node
+  facade routes the three Slack repos through the `pickRepoSource` seam inside `selectNodeSlackDeps`,
+  so both the management services and the `SlackNotificationChannel` read the remote-backed repos.
+  `slackConnectionRepository.getByTeam` (the global inbound-OAuth teamId lookup) stays
+  mothership-internal, and mothership-side Slack delivery for a hosted teammate remains a later
+  secrets-delegation slice.
+
+## 0.121.0
+
+### Minor Changes
+
+- 995249b: feat(spike): timeboxed research spike tasks — kind, pipeline, findings document, PR + review delivery
+
+  Spike tasks now run as a real timeboxed investigation that produces a findings document
+  instead of falling through to a full code-and-PR build:
+
+  - A built-in read-only `spike` agent kind (`container-explore`, structured findings + a prose
+    `summary`, opened in the `generic-structured` result view). Its backend post-op renders the
+    findings to `docs/research/<slug>.md` (honouring `taskTypeFields.targetPath`) via the
+    checkout-free `RepoFiles` port — no harness change.
+  - Findings are delivered as a PULL REQUEST by default (`pl_spike`: `requirements-review`(off) →
+    `spike` → `conflicts` → `ci` → `human-review` → `merger`): the post-op commits to a work branch
+    and opens a PR that the review/merge tail lands, so protected base branches are respected and
+    review comments are handled by the existing `human-review` gate + `fixer`. A `pl_spike_direct`
+    pipeline keeps the fast, no-PR path (commit straight to base) for unprotected repos. `spike →
+pl_spike` is the task-type default, so a spike no longer dispatches a coder.
+  - New reusable engine seam: a `RepoOp` may open a pull request and return its ref, which the
+    engine records as `block.pullRequest` (the same linkage a container-coding step produces), so a
+    deterministic backend-rendered artifact can flow through the normal conflicts/CI/human-review/
+    merge tail. `RepoFiles.openPullRequest` (and the underlying `GitHubClient`/`VcsClient` ports)
+    now return the PR web `url` (`OpenedPullRequest`), provider-agnostically.
+  - A no-PR completion path in the engine: a task run that opened no pull requests now finishes
+    `done` (like a frame-level run) instead of stalling at `pr_ready` behind a `pipeline_complete`
+    notification whose confirm threw `no_pr_to_merge`. This benefits every PR-less pipeline.
+  - Spike creation collects research criteria (research question, success criteria, options to
+    compare, target path) alongside the time-box; all are folded into the spike prompt (the
+    time-box as a scope-discipline directive). New copy is translated across all locales.
+
+  A repo-less spike (GitHub unwired, or a docs-only spike) settles on `step.custom` — the findings
+  render is skipped rather than failing the run; a rejected direct commit is best-effort (the
+  findings already live on the step), while a PR-mode open failure is surfaced.
+
+### Patch Changes
+
+- Updated dependencies [995249b]
+  - @cat-factory/agents@0.59.0
+  - @cat-factory/kernel@0.129.0
+  - @cat-factory/contracts@0.134.0
+  - @cat-factory/orchestration@0.113.0
+  - @cat-factory/integrations@0.84.3
+  - @cat-factory/spend@0.12.34
+  - @cat-factory/prompt-fragments@0.13.23
+
+## 0.120.0
+
+### Minor Changes
+
+- 9e9127f: Expose basic board workloads on the external public API (`/api/v1`), and generate an OpenAPI 3
+  spec for that surface.
+
+  New key-authenticated endpoints, each scoped to the key's workspace:
+
+  - `GET /api/v1/services` — list the workspace's services.
+  - `POST /api/v1/services/:serviceId/tasks` — create a task under a service.
+  - `GET /api/v1/services/:serviceId/tasks` — list a service's tasks.
+  - `GET /api/v1/tasks/:taskId` — get a task's status.
+  - `POST /api/v1/tasks/:taskId/start` — start (run) a task. Refused for a task on a subscription-only
+    individual-usage model (no headless personal-credential unlock), or one whose enclosing service is
+    archived (`409 service_archived` — an archived service's tasks stay readable but not start-able).
+    The response re-reads the task after start, so it reflects the run's authoritative status.
+
+  Reads project a `Block` onto small `publicTask` / `publicService` resources — board/engine
+  internals are never leaked. Added on `BoardService`: `listServices`, `addServiceTask`,
+  `getServiceTask`, `listServiceTasks` (no new repository ports or migrations — both runtimes get
+  the behaviour through the shared server + orchestration layers).
+
+  Also adds a generated `docs/openapi.json` (OpenAPI 3.1) for the whole `/api/v1` surface, produced
+  from the Valibot contracts (`pnpm gen:openapi`) and guarded against drift in CI (`pnpm check:openapi`).
+
+### Patch Changes
+
+- Updated dependencies [9e9127f]
+  - @cat-factory/contracts@0.133.0
+  - @cat-factory/orchestration@0.112.0
+  - @cat-factory/agents@0.58.1
+  - @cat-factory/integrations@0.84.2
+  - @cat-factory/kernel@0.128.1
+  - @cat-factory/prompt-fragments@0.13.22
+  - @cat-factory/spend@0.12.33
+
 ## 0.119.0
 
 ### Minor Changes

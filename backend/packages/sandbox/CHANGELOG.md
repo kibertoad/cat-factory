@@ -1,5 +1,43 @@
 # @cat-factory/sandbox
 
+## 0.9.86
+
+### Patch Changes
+
+- Updated dependencies [06a094a]
+  - @cat-factory/contracts@0.135.0
+  - @cat-factory/agents@0.59.2
+  - @cat-factory/kernel@0.129.2
+  - @cat-factory/sandbox-fixtures@0.7.159
+
+## 0.9.85
+
+### Patch Changes
+
+- Updated dependencies [6108525]
+  - @cat-factory/kernel@0.129.1
+  - @cat-factory/agents@0.59.1
+
+## 0.9.84
+
+### Patch Changes
+
+- Updated dependencies [995249b]
+  - @cat-factory/agents@0.59.0
+  - @cat-factory/kernel@0.129.0
+  - @cat-factory/contracts@0.134.0
+  - @cat-factory/sandbox-fixtures@0.7.158
+
+## 0.9.83
+
+### Patch Changes
+
+- Updated dependencies [9e9127f]
+  - @cat-factory/contracts@0.133.0
+  - @cat-factory/agents@0.58.1
+  - @cat-factory/kernel@0.128.1
+  - @cat-factory/sandbox-fixtures@0.7.157
+
 ## 0.9.82
 
 ### Patch Changes

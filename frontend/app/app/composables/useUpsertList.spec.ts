@@ -25,6 +25,19 @@ describe('useUpsertList', () => {
     expect(items.value.map((x) => x.id)).toEqual(['b', 'a'])
   })
 
+  it('replaces an existing item in place under prepend (no reorder)', () => {
+    // The github `pulls` list is prepend (newest-first); re-opening / optimistically
+    // merging an existing PR must replace it where it sits, not bump it to the front.
+    const { items, upsert } = useUpsertList<Item>({ key: (x) => x.id, prepend: true })
+    upsert({ id: 'a', v: 1 })
+    upsert({ id: 'b', v: 2 })
+    upsert({ id: 'a', v: 9 }) // existing key → replace in place
+    expect(items.value).toEqual([
+      { id: 'b', v: 2 },
+      { id: 'a', v: 9 },
+    ])
+  })
+
   it('removes by key and looks up by key', () => {
     const { items, upsert, remove, get } = useUpsertList<Item>({ key: (x) => x.id })
     upsert({ id: 'a', v: 1 })

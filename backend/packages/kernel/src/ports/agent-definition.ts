@@ -1,3 +1,4 @@
+import type { PullRequestRef } from '../domain/types.js'
 import type { AgentRunContext, AgentRunResult } from './agent-executor.js'
 import type { RepoFiles } from './repo-files.js'
 
@@ -105,10 +106,31 @@ export interface RepoOpContext {
   /** The branch the op reads/writes (the engine resolves base/pr/work to a concrete name). */
   branch: string
   /**
+   * Whether this run delivers its committed artifact through a PULL REQUEST rather than a
+   * direct commit — true when the pipeline carries a merge tail (a `merger` step) to merge
+   * that PR. A committing post-op uses this to decide between committing straight to the base
+   * branch (no PR) and committing to a work branch + opening a PR (returned via
+   * {@link RepoOpResult.pullRequest} for the engine to record on the block). Derived by the
+   * engine from the run's steps, so the delivery mode follows the chosen pipeline with no
+   * separate per-task flag to drift.
+   */
+  opensPr: boolean
+  /**
    * The finished agent's structured result. Present for postOps (which consume it —
    * e.g. render `spec/` from `result.spec`); absent for preOps.
    */
   result?: AgentRunResult
+}
+
+/**
+ * What a {@link RepoOp} may report back to the engine. A committing post-op that opened a
+ * pull request returns its {@link PullRequestRef} here so the engine records it on the block
+ * (`block.pullRequest`) — the SAME linkage a container-coding step's `result.pullRequest`
+ * produces — so the downstream conflicts/CI/human-review/merge tail acts on it unchanged.
+ */
+export interface RepoOpResult {
+  /** A pull request the op opened, for the engine to record as the block's `pullRequest`. */
+  pullRequest?: PullRequestRef
 }
 
 /**
@@ -117,4 +139,4 @@ export interface RepoOpContext {
  * consumes the agent's structured output (render + commit artifact files). Pure of
  * container concerns; throwing fails the step.
  */
-export type RepoOp = (ctx: RepoOpContext) => Promise<void>
+export type RepoOp = (ctx: RepoOpContext) => Promise<RepoOpResult | void>

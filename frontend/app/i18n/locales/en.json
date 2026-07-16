@@ -259,6 +259,20 @@
           "placeholder": "The endpoints or surface in scope"
         }
       },
+      "spikeFields": {
+        "researchQuestion": {
+          "label": "Research question",
+          "placeholder": "The question or hypothesis the spike must answer"
+        },
+        "successCriteria": {
+          "label": "Success criteria",
+          "placeholder": "The acceptance criteria or the decision the findings must inform"
+        },
+        "optionsToCompare": {
+          "label": "Options to compare",
+          "placeholder": "The options to weigh against each other"
+        }
+      },
       "optional": "optional",
       "pipeline": "Pipeline",
       "chooseAtRunTime": "Choose at run time",
@@ -1846,6 +1860,10 @@
           "label": "Private package registries",
           "description": "npm and GitHub Packages tokens agents use to install private dependencies."
         },
+        "apiTokens": {
+          "label": "API access tokens",
+          "description": "Tokens external systems present to call the cat-factory API."
+        },
         "githubPat": {
           "label": "My GitHub token",
           "description": "A personal access token used for runs you start (pushes, PRs, CI, merge)."
@@ -2381,6 +2399,36 @@
         "added": "Registry added",
         "addFailed": "Could not add the registry",
         "removeFailed": "Could not remove the registry entry"
+      }
+    },
+    "apiTokens": {
+      "title": "API access tokens",
+      "intro": "Create tokens that external systems present to the cat-factory API. Each token authenticates as this workspace on the /api/v1 endpoints. The secret is shown only once, when you create it, and cannot be recovered, so store it right away.",
+      "secret": {
+        "heading": "Copy your token now",
+        "warning": "This is the only time the full token is shown. Store it somewhere safe; it cannot be recovered.",
+        "copy": "Copy token",
+        "done": "Done"
+      },
+      "list": {
+        "heading": "Active tokens",
+        "created": "Created {date}",
+        "lastUsed": "last used {date}",
+        "neverUsed": "never used",
+        "revoke": "Revoke token"
+      },
+      "add": {
+        "heading": "Create a token",
+        "label": "Label",
+        "labelHelp": "A name to recognize this token by later.",
+        "labelPlaceholder": "e.g. CI pipeline",
+        "create": "Create token"
+      },
+      "toast": {
+        "loadFailed": "Could not load API tokens",
+        "created": "Token created",
+        "createFailed": "Could not create the token",
+        "revokeFailed": "Could not revoke the token"
       }
     },
     "sharedStacks": {

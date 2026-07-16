@@ -17,8 +17,17 @@ import type { AgentKind } from '@cat-factory/kernel'
 // The `bug-investigator` joins this set: it reads the codebase from a raw bug report and
 // returns a prose enriched report (+ an optional, confidence-gated hypothesis), making no
 // edits — the same read-only contract as architect/analysis.
+//
+// The `spike` (a timeboxed research/investigation kind) joins it too: it explores the codebase
+// read-only and returns structured findings; the findings document is committed by a BACKEND
+// post-op over `RepoFiles`, not by the container, so the read-only container contract holds.
 /** Container agent kinds that operate read-only (explore + report; no edits/commits/PR). */
-export const READ_ONLY_AGENT_KINDS = new Set<string>(['architect', 'analysis', 'bug-investigator'])
+export const READ_ONLY_AGENT_KINDS = new Set<string>([
+  'architect',
+  'analysis',
+  'bug-investigator',
+  'spike',
+])
 
 /** Whether `kind` is a read-only container agent (runs the harness `/explore` path). */
 export function isReadOnlyAgentKind(kind: AgentKind): boolean {

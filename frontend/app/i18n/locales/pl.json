@@ -241,6 +241,20 @@
           "placeholder": "Endpointy lub zakres objęty dokumentem"
         }
       },
+      "spikeFields": {
+        "researchQuestion": {
+          "label": "Pytanie badawcze",
+          "placeholder": "Pytanie lub hipoteza, na które ma odpowiedzieć spike"
+        },
+        "successCriteria": {
+          "label": "Kryteria sukcesu",
+          "placeholder": "Kryteria akceptacji lub decyzja, którą mają uzasadnić wyniki"
+        },
+        "optionsToCompare": {
+          "label": "Opcje do porównania",
+          "placeholder": "Opcje do rozważenia względem siebie"
+        }
+      },
       "optional": "opcjonalne",
       "pipeline": "Pipeline",
       "chooseAtRunTime": "Wybierz przy uruchomieniu",
@@ -1779,6 +1793,10 @@
           "label": "Prywatne rejestry pakietów",
           "description": "Tokeny npm i GitHub Packages, których agenci używają do instalowania prywatnych zależności."
         },
+        "apiTokens": {
+          "label": "Tokeny dostępu do API",
+          "description": "Tokeny, które systemy zewnętrzne przedstawiają, aby wywołać API cat-factory."
+        },
         "githubPat": {
           "label": "Mój token GitHub",
           "description": "Osobisty token dostępu używany do uruchomień, które rozpoczynasz (pushe, PR-y, CI, scalanie)."
@@ -2196,6 +2214,36 @@
         "added": "Rejestr dodany",
         "addFailed": "Nie udało się dodać rejestru",
         "removeFailed": "Nie udało się usunąć wpisu rejestru"
+      }
+    },
+    "apiTokens": {
+      "title": "Tokeny dostępu do API",
+      "intro": "Twórz tokeny, które systemy zewnętrzne przedstawiają API cat-factory. Każdy token uwierzytelnia się jako ten obszar roboczy w punktach końcowych /api/v1. Sekret jest wyświetlany tylko raz, podczas tworzenia, i nie można go odzyskać, więc zapisz go od razu.",
+      "secret": {
+        "heading": "Skopiuj token teraz",
+        "warning": "To jedyny raz, gdy wyświetlany jest pełny token. Przechowuj go w bezpiecznym miejscu; nie można go odzyskać.",
+        "copy": "Kopiuj token",
+        "done": "Gotowe"
+      },
+      "list": {
+        "heading": "Aktywne tokeny",
+        "created": "Utworzono {date}",
+        "lastUsed": "ostatnio użyto {date}",
+        "neverUsed": "nigdy nie użyto",
+        "revoke": "Unieważnij token"
+      },
+      "add": {
+        "heading": "Utwórz token",
+        "label": "Etykieta",
+        "labelHelp": "Nazwa, po której później rozpoznasz ten token.",
+        "labelPlaceholder": "np. potok CI",
+        "create": "Utwórz token"
+      },
+      "toast": {
+        "loadFailed": "Nie udało się załadować tokenów API",
+        "created": "Token utworzony",
+        "createFailed": "Nie udało się utworzyć tokenu",
+        "revokeFailed": "Nie udało się unieważnić tokenu"
       }
     },
     "sharedStacks": {

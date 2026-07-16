@@ -241,6 +241,20 @@
           "placeholder": "Los endpoints o la superficie dentro del alcance"
         }
       },
+      "spikeFields": {
+        "researchQuestion": {
+          "label": "Pregunta de investigación",
+          "placeholder": "La pregunta o hipótesis que el spike debe responder"
+        },
+        "successCriteria": {
+          "label": "Criterios de éxito",
+          "placeholder": "Los criterios de aceptación o la decisión que deben fundamentar los hallazgos"
+        },
+        "optionsToCompare": {
+          "label": "Opciones a comparar",
+          "placeholder": "Las opciones a sopesar entre sí"
+        }
+      },
       "optional": "opcional",
       "pipeline": "Pipeline",
       "chooseAtRunTime": "Elegir al ejecutar",
@@ -1779,6 +1793,10 @@
           "label": "Registros privados de paquetes",
           "description": "Tokens de npm y GitHub Packages que los agentes usan para instalar dependencias privadas."
         },
+        "apiTokens": {
+          "label": "Tokens de acceso a la API",
+          "description": "Tokens que los sistemas externos presentan para llamar a la API de cat-factory."
+        },
         "githubPat": {
           "label": "Mi token de GitHub",
           "description": "Un token de acceso personal usado para las ejecuciones que inicias (pushes, PR, CI, fusión)."
@@ -2196,6 +2214,36 @@
         "added": "Registro agregado",
         "addFailed": "No se pudo agregar el registro",
         "removeFailed": "No se pudo eliminar la entrada del registro"
+      }
+    },
+    "apiTokens": {
+      "title": "Tokens de acceso a la API",
+      "intro": "Crea tokens que los sistemas externos presentan a la API de cat-factory. Cada token se autentica como este espacio de trabajo en los endpoints /api/v1. El secreto se muestra una sola vez, al crearlo, y no se puede recuperar, así que guárdalo de inmediato.",
+      "secret": {
+        "heading": "Copia tu token ahora",
+        "warning": "Esta es la única vez que se muestra el token completo. Guárdalo en un lugar seguro; no se puede recuperar.",
+        "copy": "Copiar token",
+        "done": "Listo"
+      },
+      "list": {
+        "heading": "Tokens activos",
+        "created": "Creado el {date}",
+        "lastUsed": "usado por última vez el {date}",
+        "neverUsed": "nunca usado",
+        "revoke": "Revocar token"
+      },
+      "add": {
+        "heading": "Crear un token",
+        "label": "Etiqueta",
+        "labelHelp": "Un nombre para reconocer este token más adelante.",
+        "labelPlaceholder": "p. ej. pipeline de CI",
+        "create": "Crear token"
+      },
+      "toast": {
+        "loadFailed": "No se pudieron cargar los tokens de la API",
+        "created": "Token creado",
+        "createFailed": "No se pudo crear el token",
+        "revokeFailed": "No se pudo revocar el token"
       }
     },
     "sharedStacks": {

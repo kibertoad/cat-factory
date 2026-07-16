@@ -15,6 +15,7 @@ import type {
   InstallationSummary,
   ListOptions,
   MergePullRequestInput,
+  OpenedPullRequest,
   OpenPullRequestInput,
   Paged,
   RepoContentEntry,
@@ -267,7 +268,7 @@ export class FakeGitHubClient implements GitHubClient {
     _installationId: number,
     ref: GitHubRepoRef,
     input: OpenPullRequestInput,
-  ): Promise<GitHubPullRequest> {
+  ): Promise<OpenedPullRequest> {
     this.writes.push({ method: 'openPullRequest', ref, args: input })
     const repoId =
       this.repos.find((r) => r.owner === ref.owner && r.name === ref.repo)?.githubId ?? 0
@@ -284,6 +285,7 @@ export class FakeGitHubClient implements GitHubClient {
       author: 'acme-bot',
       updatedAt: 0,
       syncedAt: 0,
+      url: `https://github.test/${ref.owner}/${ref.repo}/pull/1`,
     }
   }
 

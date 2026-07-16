@@ -191,6 +191,7 @@ export type {
   AgentSurface,
   RepoOp,
   RepoOpContext,
+  RepoOpResult,
 } from './agent-definition.js'
 export type {
   BranchProjectionRepository,
@@ -252,6 +253,7 @@ export type {
   BudgetLimitCacheValue,
   CachedRepoRead,
   GroupCacheHandle,
+  RiskPolicyCacheValue,
   WorkspaceSettingsCacheValue,
 } from './caching.js'
 export { readCachedWorkspaceSettings, repoFilesCacheGroup } from './caching.js'
