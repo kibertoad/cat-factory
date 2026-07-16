@@ -477,7 +477,7 @@ function buildContextFiles(context: AgentRunContext): {
 }
 
 /** The top-level `skill` job-body field the harness materialises (harness-aware). */
-interface SkillJobBody {
+export interface SkillJobBody {
   name: string
   description: string
   instructions: string
@@ -500,7 +500,7 @@ interface SkillJobBody {
  * unreadable) is referenced by its repo path in the prompt rather than materialised. No skill ⇒
  * everything empty.
  */
-function renderSkillForHarness(
+export function renderSkillForHarness(
   skill: AgentRunContext['skill'],
   harness: HarnessKind,
 ): { body?: SkillJobBody; section?: string } {
@@ -1289,8 +1289,10 @@ export class ContainerAgentExecutor implements AsyncAgentExecutor {
       repo: buildRepoSpec(repo, origin),
       ...(this.deps.githubApiBase ? { githubApiBase: this.deps.githubApiBase } : {}),
       ...(contextFiles.length ? { contextFiles } : {}),
-      // The claude-code harness materialises this into ~/.claude/skills/<name>/ natively (Pi/codex
-      // instead receive the resources via `contextFiles` above + the instructions in the prompt).
+      // The resolved skill always travels as this dedicated top-level field (never a context
+      // file). The claude-code harness materialises it into ~/.claude/skills/<name>/ natively;
+      // Pi/codex materialise the same field's resources under `.cat-context/skill/` and receive
+      // the instructions folded into the prompt (skillSection) instead.
       ...(skillRender.body ? { skill: skillRender.body } : {}),
       ...(artifactUpload ? { artifactUpload } : {}),
       ...(tuning?.guardLimits ? { guardLimits: tuning.guardLimits } : {}),

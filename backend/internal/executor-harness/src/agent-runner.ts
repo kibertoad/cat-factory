@@ -219,6 +219,12 @@ function streamCli(
  * `SKILL.md` (YAML frontmatter `name`/`description` + the instructions body, the format the CLI
  * expects) plus every resource file at its path within the skill directory. Resource sub-paths
  * were sanitized at the job boundary (no traversal), so nested dirs are created as needed.
+ *
+ * The frontmatter `name`/`description` values are emitted as JSON-encoded (double-quoted) YAML
+ * scalars, not bare plain scalars: an author's description routinely contains `: ` (colon-space)
+ * or a leading YAML indicator (`#`, `-`, `[`, `{`, `"`, …), which is invalid as a plain scalar and
+ * would make the CLI fail to parse the frontmatter and silently skip the skill. A JSON string is a
+ * valid YAML double-quoted scalar, so quoting makes the manifest robust to arbitrary text.
  */
 async function writeNativeSkill(
   skillsRoot: string,
@@ -226,7 +232,9 @@ async function writeNativeSkill(
 ): Promise<void> {
   const dir = join(skillsRoot, skill.name)
   await mkdir(dir, { recursive: true })
-  const frontmatter = `---\nname: ${skill.name}\ndescription: ${skill.description.replace(/\r?\n/g, ' ')}\n---\n`
+  const name = JSON.stringify(skill.name)
+  const description = JSON.stringify(skill.description.replace(/\r?\n/g, ' '))
+  const frontmatter = `---\nname: ${name}\ndescription: ${description}\n---\n`
   await writeFile(join(dir, 'SKILL.md'), `${frontmatter}\n${skill.instructions}\n`, 'utf8')
   for (const resource of skill.resources) {
     const dest = join(dir, resource.relPath)

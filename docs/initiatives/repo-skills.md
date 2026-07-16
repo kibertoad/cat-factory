@@ -171,3 +171,21 @@ Wrap-up: convert this tracker into an ADR under `backend/docs/adr/` and delete i
   `validatePipelineShape` site (create / update / clone / `assertRunnable` via `runnableShapeOf`).
 - **Harness image bump**: `@cat-factory/executor-harness` 1.45.0 → 1.46.0 (native claude-code
   skills write); `pnpm sync:image-tags` reconciled the three pins.
+- **Robustness gotchas (review follow-up):**
+  - The native `SKILL.md` frontmatter emits `name`/`description` as JSON-encoded (double-quoted)
+    YAML scalars, not bare plain scalars — an authored description routinely contains `: `
+    (colon-space) or a leading YAML indicator, which is invalid as a plain scalar and would make
+    the CLI silently skip the skill (`writeNativeSkill`).
+  - An unsafe/empty skill NAME falls back to a safe default (`'skill'`) at the harness job boundary
+    rather than dropping the whole skill — a drop would leave the claude-code prompt pointing at a
+    skill that was never installed (a blind run). Only a skill with no instructions is dropped
+    (`parseSkillSpec`).
+- **Observability trade-off (claude-code):** because the skill travels as a top-level job-body
+  field (dropped from the agent-context snapshot) and the claude-code prompt is only a short
+  pointer, the actual instructions a claude-code run executed are NOT captured in the agent-context
+  telemetry — only `step.skillVersion` (skillId + commit + sha) traces it to source. The Pi/codex
+  path DOES capture them (folded into the prompt). Acceptable; noted so it isn't mistaken for a bug.
+- **External dependency:** the claude-code path relies on the CLI auto-loading skills from
+  `CLAUDE_CONFIG_DIR/skills/<name>/SKILL.md` (what the 1.46.0 image bump is for). If a future CLI
+  version changes skill discovery, the run loses its guidance silently — keep the harness image's
+  claude-code version in step with this contract.

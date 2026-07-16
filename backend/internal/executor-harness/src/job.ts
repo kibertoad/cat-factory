@@ -990,7 +990,15 @@ function sanitizeSkillRelPath(value: unknown): string | undefined {
   return clean.length ? clean.join('/') : undefined
 }
 
-/** A skill's own directory name, sanitized to a safe single path segment. */
+/**
+ * Fallback native-skill directory name when the authored name has no id-safe characters (e.g. a
+ * purely non-ASCII skill name). The name is only a path segment / manifest label, so a safe
+ * default keeps the skill installable rather than dropping it — which, on the claude-code path,
+ * would leave the prompt pointing at a skill that was never installed (a blind run).
+ */
+const FALLBACK_SKILL_NAME = 'skill'
+
+/** A skill's own directory name, sanitized to a safe single path segment (undefined if empty). */
 function sanitizeSkillName(value: unknown): string | undefined {
   if (typeof value !== 'string') return undefined
   const base = value.replace(/\\/g, '/').split('/').pop() ?? ''
@@ -1003,11 +1011,12 @@ function sanitizeSkillName(value: unknown): string | undefined {
 function parseSkillSpec(value: unknown): SkillSpec | undefined {
   if (typeof value !== 'object' || value === null) return undefined
   const o = value as Record<string, unknown>
-  const name = sanitizeSkillName(o.name)
   const instructions = typeof o.instructions === 'string' ? o.instructions : undefined
-  // A skill with no safe name or no instructions is not installable — drop it rather than fail
-  // the job (the prompt still carries the folded-in directive on the Pi/codex path).
-  if (!name || !instructions) return undefined
+  // No instructions ⇒ there is nothing to run — drop the skill (the prompt still carries the
+  // folded-in directive on the Pi/codex path). An unsafe/empty NAME only affects the install
+  // directory, so fall back to a safe default rather than dropping the whole skill.
+  if (!instructions) return undefined
+  const name = sanitizeSkillName(o.name) ?? FALLBACK_SKILL_NAME
   const description = typeof o.description === 'string' ? o.description : ''
   const resources: SkillResourceSpec[] = []
   if (Array.isArray(o.resources)) {

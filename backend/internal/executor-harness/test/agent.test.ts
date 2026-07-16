@@ -753,16 +753,20 @@ describe('parseAgentJob — skill', () => {
     expect(job.skill?.resources.map((r) => r.relPath)).toEqual(['abs/path.md', 'ok/file.md'])
   })
 
-  it('drops a skill with no safe name or no instructions', () => {
-    // A name that sanitises to nothing (pure traversal) is unsafe → the whole skill is dropped.
-    expect(
-      parseAgentJob({
-        ...base,
-        mode: 'coding',
-        skill: { name: '..', description: 'd', instructions: 'i', resources: [] },
-      }).skill,
-    ).toBeUndefined()
-    // No instructions ⇒ not installable.
+  it('falls back to a safe name when the authored name sanitises to nothing', () => {
+    // A name that sanitises to nothing (pure traversal / non-ASCII) only affects the install
+    // directory, so the skill is kept under a safe fallback name rather than dropped — otherwise
+    // the claude-code prompt would point at a skill that was never installed.
+    const job = parseAgentJob({
+      ...base,
+      mode: 'coding',
+      skill: { name: '..', description: 'd', instructions: 'i', resources: [] },
+    })
+    expect(job.skill?.name).toBe('skill')
+    expect(job.skill?.instructions).toBe('i')
+  })
+
+  it('drops a skill with no instructions (nothing to run)', () => {
     expect(
       parseAgentJob({ ...base, mode: 'coding', skill: { name: 'x', description: 'd' } }).skill,
     ).toBeUndefined()
