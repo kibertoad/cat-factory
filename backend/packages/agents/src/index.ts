@@ -246,6 +246,7 @@ export {
   type SpikeFindings,
   registerSpikeAgent,
 } from './agents/kinds/spike.js'
+export { SKILL_AGENT_KIND, SKILL_AGENT_KINDS, registerSkillAgent } from './agents/kinds/skill.js'
 export {
   FORK_PROPOSER_KIND,
   FORK_PROPOSER_AGENT_KINDS,
@@ -423,6 +424,7 @@ export {
   SkillCatalogService,
   type SkillCatalogServiceDependencies,
 } from './skillLibrary/SkillCatalogService.js'
+export { SkillRunResolver, type ResolvedSkillForRun } from './skillLibrary/SkillRunResolver.js'
 export * as skillSourceLogic from './skillLibrary/skill-source.logic.js'
 export {
   syncRepoSource,

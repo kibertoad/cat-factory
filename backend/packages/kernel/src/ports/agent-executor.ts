@@ -116,6 +116,36 @@ export interface AgentRunContext {
     progressPath: string
     iteration: number
   }
+  /**
+   * The repo-sourced Claude Skill this step executes, resolved by the engine at dispatch from
+   * the step's `stepOptions.skillId` (see `docs/initiatives/repo-skills.md`). Present only on a
+   * `skill` step whose skill resolved; carries the procedural instructions (the `SKILL.md` body)
+   * and the sibling resource files fetched at the skill's pinned commit. The container executor
+   * renders it HARNESS-AWARE: for the claude-code harness it travels as the dedicated top-level
+   * `skill` job-body field (the harness materialises `~/.claude/skills/<name>/` natively); for
+   * Pi/codex the instructions are folded into the prompt and the resources materialised as
+   * `.cat-context/skill/*` context files. A resource's `body` is absent when it was oversized /
+   * binary / unreadable at the pinned commit — the agent is pointed at its repo `path` instead.
+   */
+  skill?: {
+    /** The skill id (`src:<sourceId>:<dirName>`). */
+    skillId: string
+    /** Skill name (the native CLI skill directory name + the `SKILL.md` frontmatter `name`). */
+    name: string
+    /** One-line description (the `SKILL.md` frontmatter `description`; feeds the native manifest). */
+    description: string
+    /** The procedural instructions — the `SKILL.md` body. */
+    instructions: string
+    /** Sibling resource files fetched at the pinned commit (capped; oversized/binary omit `body`). */
+    resources: {
+      /** Repo-relative path (used to reference an un-materialised resource in the prompt). */
+      path: string
+      /** Path within the skill directory (where it materialises, under the skill / `.cat-context/skill`). */
+      relPath: string
+      /** File body; absent when the resource was oversized / binary / unreadable at dispatch. */
+      body?: string
+    }[]
+  }
   block: {
     /** Stable block id (set by the engine; used by repo-aware executors). */
     id?: string

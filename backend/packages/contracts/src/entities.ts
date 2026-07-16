@@ -683,6 +683,16 @@ export const stepOptionsSchema = v.object({
    * ⇒ enabled. Ignored on non-`requirements-review` steps.
    */
   autoRecommend: v.optional(v.boolean()),
+  /**
+   * `skill` steps only. The id of the account-tier repo-sourced Claude Skill this step
+   * executes (`src:<sourceId>:<dirName>`; see `docs/initiatives/repo-skills.md`). The one
+   * generic `skill` agent kind is parametrized by THIS field — the picked skill's
+   * instructions + resources are resolved at dispatch and folded into the step (natively for
+   * the claude-code harness, as prompt + `.cat-context/skill/*` for Pi/codex). A `skill` step
+   * with no `skillId` has nothing to run and is rejected at pipeline save. Ignored on every
+   * other kind.
+   */
+  skillId: v.optional(v.string()),
 })
 export type StepOptions = v.InferOutput<typeof stepOptionsSchema>
 
@@ -1941,6 +1951,21 @@ export const pipelineStepSchema = v.object({
    * the fragment-library module is not configured.
    */
   selectedFragmentIds: v.optional(v.array(v.string())),
+  /**
+   * The repo-sourced Claude Skill this step was PINNED to at dispatch (a `skill` step; see
+   * `docs/initiatives/repo-skills.md`). Recorded so a run executes a stable version of the
+   * skill even if its source resyncs mid-run, and so a later investigation knows exactly
+   * which skill (and at which commit / manifest blob) ran. `commit` is the source dir's head
+   * commit the resources were fetched at (null if the skill was never synced to a commit);
+   * `sha` is the `SKILL.md` blob sha. Absent for every non-`skill` step.
+   */
+  skillVersion: v.optional(
+    v.object({
+      skillId: v.string(),
+      commit: v.nullable(v.string()),
+      sha: v.string(),
+    }),
+  ),
   /**
    * Identifier of an in-flight asynchronous agent job (a container run polled by
    * the durable driver). Set while the step is dispatched-but-not-yet-finished so

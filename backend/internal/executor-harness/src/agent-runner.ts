@@ -1,7 +1,7 @@
 import { spawn } from 'node:child_process'
-import { mkdtemp, rm, writeFile } from 'node:fs/promises'
-import { tmpdir } from 'node:os'
-import { join } from 'node:path'
+import { mkdir, mkdtemp, rm, writeFile } from 'node:fs/promises'
+import { homedir, tmpdir } from 'node:os'
+import { dirname, join } from 'node:path'
 import type { HarnessCallMetric, PiRunOutcome, PiRunStats, TodoProgress } from './pi.js'
 import { killChildProcess, spawnDetached } from './process.js'
 import { redact, secretsToRedact } from './redact.js'
@@ -52,6 +52,18 @@ export interface SubscriptionRunOptions {
    * container.
    */
   ambientAuth?: boolean
+  /**
+   * A repo-sourced Claude Skill to install natively before launch (repo-sourced Claude Skills,
+   * slice 2). The claude-code runner writes it to `CLAUDE_CONFIG_DIR/skills/<name>/SKILL.md`
+   * (+ resource files) so the CLI loads it; the codex runner ignores it (codex reads the
+   * checkout's `.cat-context/skill/`, materialised by the caller). Absent ⇒ no skill installed.
+   */
+  skill?: {
+    name: string
+    description: string
+    instructions: string
+    resources: { relPath: string; content: string }[]
+  }
   /** Aborting this kills the CLI (the job's inactivity/max-duration watchdog). */
   signal?: AbortSignal
   /** Called on every chunk of CLI output, so the watchdog sees the agent is alive. */
@@ -202,6 +214,27 @@ function streamCli(
  * `TodoWrite` tool calls onto subtask progress and the terminal `result` event
  * onto the summary + usage.
  */
+/**
+ * Write a repo-sourced skill as a NATIVE Claude Code skill under `<skillsRoot>/<name>/`: a
+ * `SKILL.md` (YAML frontmatter `name`/`description` + the instructions body, the format the CLI
+ * expects) plus every resource file at its path within the skill directory. Resource sub-paths
+ * were sanitized at the job boundary (no traversal), so nested dirs are created as needed.
+ */
+async function writeNativeSkill(
+  skillsRoot: string,
+  skill: NonNullable<SubscriptionRunOptions['skill']>,
+): Promise<void> {
+  const dir = join(skillsRoot, skill.name)
+  await mkdir(dir, { recursive: true })
+  const frontmatter = `---\nname: ${skill.name}\ndescription: ${skill.description.replace(/\r?\n/g, ' ')}\n---\n`
+  await writeFile(join(dir, 'SKILL.md'), `${frontmatter}\n${skill.instructions}\n`, 'utf8')
+  for (const resource of skill.resources) {
+    const dest = join(dir, resource.relPath)
+    await mkdir(dirname(dest), { recursive: true })
+    await writeFile(dest, resource.content, 'utf8')
+  }
+}
+
 export async function runClaudeCode(opts: SubscriptionRunOptions): Promise<PiRunOutcome> {
   const stats: PiRunStats = { toolCalls: 0, assistantChars: 0 }
   let summary = ''
@@ -295,6 +328,17 @@ export async function runClaudeCode(opts: SubscriptionRunOptions): Promise<PiRun
       }),
       { mode: 0o600 },
     ).catch(() => {})
+  }
+
+  // Repo-sourced Claude Skill (slice 2): install it as a native skill under the config dir's
+  // `skills/<name>/` so the CLI discovers and can invoke it. Written to the isolated per-run
+  // config home when present, else the developer's `~/.claude` (ambient/native mode). Best-effort:
+  // a write failure must not wedge the run — the prompt still names the skill.
+  if (opts.skill) {
+    const skillsRoot = configHome
+      ? join(configHome, 'skills')
+      : join(homedir(), '.claude', 'skills')
+    await writeNativeSkill(skillsRoot, opts.skill).catch(() => {})
   }
 
   // Anthropic itself authenticates with the subscription OAuth token; a

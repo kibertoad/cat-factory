@@ -73,7 +73,7 @@ The reference implementations to copy per slice:
 | --- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ------ | --------- |
 | 0   | Tracker (this doc)                                                                                                                                                                                                                                                                                                                                                                                                           | done   | —         |
 | 1   | **Data + sync core**: shared `repo-source-sync` helper extraction + `FragmentSourceService` refactor; kernel ports (`SkillSourceRepository`, `AccountSkillRepository`); `skill_sources` + `account_skills` D1 ⇄ Drizzle + conformance; `SkillSourceService` / `SkillCatalogService`; `AppCaches.skillCatalog`; contracts + `SkillLibraryController` (account tier) + facade wiring                                           | done   | (this PR) |
-| 2   | **Execution**: `stepOptionsSchema.skillId`; `registerSkillAgentKind` (surface `container-coding`, `noChangesTolerated`); `AgentRunContext.skill`; `skillResolver` in `AgentContextBuilder` + facade wiring; `ContainerAgentExecutor` harness-aware rendering (top-level `skill` job-body field); executor-harness native claude-code skills write + image-tag bump; pipeline-save validation; per-run `skillVersion` pinning | todo   | —         |
+| 2   | **Execution**: `stepOptionsSchema.skillId`; `registerSkillAgentKind` (surface `container-coding`, `noChangesTolerated`); `AgentRunContext.skill`; `skillResolver` in `AgentContextBuilder` + facade wiring; `ContainerAgentExecutor` harness-aware rendering (top-level `skill` job-body field); executor-harness native claude-code skills write + image-tag bump; pipeline-save validation; per-run `skillVersion` pinning | done   | (this PR) |
 | 3   | **Frontend**: `skill` palette block + per-step skill picker bound to `stepOptions[i].skillId`; snapshot `skills` list; account-settings Skills management UI (link/sync/status); i18n in ALL locales                                                                                                                                                                                                                         | todo   | —         |
 | 4   | **Freshness automation**: push-webhook `skill-source-resync` enqueue + queue handler (both runtimes); dispatch-time self-verifying probe on `skillCatalog` (per-source `latestCommitSha`, degrade to last-synced on failure)                                                                                                                                                                                                 | todo   | —         |
 
@@ -135,3 +135,39 @@ Wrap-up: convert this tracker into an ADR under `backend/docs/adr/` and delete i
   follow-up, exactly like fragment repo-sync.
 - **`RepoContentEntry.size`** is now optional on the kernel port, populated by the GitHub
   contents API path (`FetchGitHubClient.listDirectory`); GitLab/fakes leave it undefined.
+
+### Slice 2 notes (carried forward)
+
+- **One parametrized `skill` kind**, `SKILL_AGENT_KIND = 'skill'`
+  (`@cat-factory/agents/src/agents/kinds/skill.ts`, in `defaultAgentKindRegistry`). It is
+  `container-coding` + `noChangesTolerated` + a `pr-or-work` clone (amend the block's PR if one
+  exists, else open its own), copying the `code-commenter` shape. Its prompt is deliberately
+  SKILL-AGNOSTIC — the picked skill is injected around it by the executor, not baked in. Like
+  every side-effect coding kind it does NOT carry `FINAL_ANSWER_IN_REPLY`.
+- **`skillResolver` is a HARD dependency for a skill step, not a graceful degrade.** Unlike
+  `fragmentResolver` (absent ⇒ static pool), a `skill` step dispatched with the resolver unwired
+  throws a `ValidationError` in `AgentContextBuilder.resolveSkillForStep` — a skill step running
+  against nothing is a silent wrong run. Only the RESOURCE-BODY fetch degrades (a transient GitHub
+  failure / missing installation ⇒ the resource is referenced by repo path, no body).
+- **The resolver assembles from the SAME slice-1 deps** (`SkillRunResolver` in the skill library
+  module, built whenever `skillSourceRepository` + `githubClient` + `resolveSkillInstallationId`
+  are wired), so BOTH facades pick it up through `createSkillLibraryModule` with zero per-facade
+  code — no runtime-symmetry gap to guard (the skill EXECUTION path is runtime-neutral
+  orchestration; the repos already have the slice-1 parity suite). Mothership stays off (the
+  db-less remote repos leave the module unassembled), exactly like sync.
+- **Harness-aware rendering lives in `ContainerAgentExecutor.renderSkillForHarness`**, keyed off
+  the resolved `harness`. The skill payload ALWAYS travels as the dedicated top-level `skill`
+  job-body field (never a context file — the agent-context snapshot copies context files verbatim
+  but drops unknown top-level fields, the `JobPackageRegistrySpec` precedent). The harness
+  materialises it: `CLAUDE_CONFIG_DIR/skills/<name>/SKILL.md` (+ resources) for claude-code (the
+  CLI loads it; the prompt is a short pointer), or `.cat-context/skill/<relPath>` for Pi/codex
+  (whose prompt carries the full instructions). Resource `relPath`s are sanitised at the job
+  boundary (subdirs kept, traversal/absolute rejected).
+- **Per-run pinning** is `step.skillVersion = { skillId, commit, sha }`, set by the resolver. It
+  rides the runtime step's `detail` JSON (spread raw in `rowToExecution`), so NO migration —
+  exactly like `stepOptions.skillId` itself.
+- **Pipeline-save (and run-start) validation**: `assertValidSkillSteps` rejects an enabled `skill`
+  step with no `stepOptions[i].skillId`. Threaded through `PipelineShape.stepOptions` at every
+  `validatePipelineShape` site (create / update / clone / `assertRunnable` via `runnableShapeOf`).
+- **Harness image bump**: `@cat-factory/executor-harness` 1.45.0 → 1.46.0 (native claude-code
+  skills write); `pnpm sync:image-tags` reconciled the three pins.

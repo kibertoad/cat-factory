@@ -621,6 +621,26 @@ export interface ContextFileSpec {
   content: string
 }
 
+/** One materialisable resource file of a skill (repo-sourced Claude Skills). */
+export interface SkillResourceSpec {
+  /** Path within the skill directory, e.g. `templates/report.md` (subdirs preserved, no traversal). */
+  relPath: string
+  content: string
+}
+
+/**
+ * A repo-sourced Claude Skill to make available for a `skill` step. Materialised HARNESS-AWARE:
+ * `CLAUDE_CONFIG_DIR/skills/<name>/SKILL.md` (+ resources) for the claude-code CLI to load
+ * natively, or `.cat-context/skill/<relPath>` for the Pi/codex checkout (their prompt carries the
+ * instructions). A dedicated top-level body field (like `packageRegistries`), never a context file.
+ */
+export interface SkillSpec {
+  name: string
+  description: string
+  instructions: string
+  resources: SkillResourceSpec[]
+}
+
 /** How an explore agent's reply is consumed. */
 export interface AgentOutputSpec {
   /** `prose` keeps the reply text; `structured` parses (and optionally repairs) it to JSON. */
@@ -707,6 +727,12 @@ export interface AgentJob extends HarnessAuthFields {
    * job on a reused container is removed.
    */
   packageRegistries?: PackageRegistrySpec[]
+  /**
+   * A repo-sourced Claude Skill to make available for a `skill` step (see {@link SkillSpec}).
+   * Materialised harness-aware before the run: natively into `CLAUDE_CONFIG_DIR/skills/<name>/`
+   * for claude-code, or `.cat-context/skill/<relPath>` for Pi/codex. Absent ⇒ no skill installed.
+   */
+  skill?: SkillSpec
   /**
    * Tester kinds only: sensitive test credentials injected into the run's ENVIRONMENT (out of
    * band) as `{ key, value }` env pairs, so the tester's shell can read `$KEY` without the value
@@ -941,6 +967,62 @@ function parseContextFiles(value: unknown): ContextFileSpec[] {
     })
   }
   return files
+}
+
+/**
+ * Sanitize a skill resource's relative path: keep the subdirectory structure (so
+ * `templates/report.md` materialises nested) but reject anything that could escape the skill
+ * directory — absolute paths, `..` traversal, backslashes, empty/dot segments. Returns undefined
+ * for an unsafe path (the resource is then dropped).
+ */
+function sanitizeSkillRelPath(value: unknown): string | undefined {
+  if (typeof value !== 'string') return undefined
+  const segments = value.replace(/\\/g, '/').split('/')
+  const clean: string[] = []
+  for (const seg of segments) {
+    if (seg === '' || seg === '.') continue
+    if (seg === '..') return undefined
+    // Same character class as a context-file name, per segment.
+    const c = seg.replace(/[^A-Za-z0-9._-]/g, '')
+    if (!c || c === '.' || c === '..' || c.startsWith('.')) return undefined
+    clean.push(c)
+  }
+  return clean.length ? clean.join('/') : undefined
+}
+
+/** A skill's own directory name, sanitized to a safe single path segment. */
+function sanitizeSkillName(value: unknown): string | undefined {
+  if (typeof value !== 'string') return undefined
+  const base = value.replace(/\\/g, '/').split('/').pop() ?? ''
+  const cleaned = base.replace(/[^A-Za-z0-9._-]/g, '')
+  if (!cleaned || cleaned === '.' || cleaned === '..' || cleaned.startsWith('.')) return undefined
+  return cleaned
+}
+
+/** Validate the optional `skill` field, or undefined when absent/malformed. */
+function parseSkillSpec(value: unknown): SkillSpec | undefined {
+  if (typeof value !== 'object' || value === null) return undefined
+  const o = value as Record<string, unknown>
+  const name = sanitizeSkillName(o.name)
+  const instructions = typeof o.instructions === 'string' ? o.instructions : undefined
+  // A skill with no safe name or no instructions is not installable — drop it rather than fail
+  // the job (the prompt still carries the folded-in directive on the Pi/codex path).
+  if (!name || !instructions) return undefined
+  const description = typeof o.description === 'string' ? o.description : ''
+  const resources: SkillResourceSpec[] = []
+  if (Array.isArray(o.resources)) {
+    const used = new Set<string>()
+    for (const entry of o.resources) {
+      if (typeof entry !== 'object' || entry === null) continue
+      const e = entry as Record<string, unknown>
+      const relPath = sanitizeSkillRelPath(e.relPath)
+      if (!relPath || used.has(relPath)) continue
+      if (typeof e.content !== 'string') continue
+      used.add(relPath)
+      resources.push({ relPath, content: e.content })
+    }
+  }
+  return { name, description, instructions, resources }
 }
 
 /** Parse the explore-mode infra stand-up spec, or undefined when absent/unrecognised. */
@@ -1182,6 +1264,7 @@ export function parseAgentJob(input: unknown): AgentJob {
   const bootstrap = parseAgentBootstrapSpec(o.bootstrap)
   const contextFiles = parseContextFiles(o.contextFiles)
   const packageRegistries = parsePackageRegistries(o.packageRegistries)
+  const skill = parseSkillSpec(o.skill)
   const testSecrets = parseTestSecrets(o.testSecrets)
   const guardLimits = parseGuardLimits(o.guardLimits)
   const validation = parseValidationSpec(o.validation)
@@ -1204,6 +1287,7 @@ export function parseAgentJob(input: unknown): AgentJob {
     ...(output ? { output } : {}),
     ...(contextFiles.length ? { contextFiles } : {}),
     ...(packageRegistries.length ? { packageRegistries } : {}),
+    ...(skill ? { skill } : {}),
     ...(testSecrets.length ? { testSecrets } : {}),
     ...(infra ? { infra } : {}),
     ...(typeof o.newBranch === 'string' && o.newBranch ? { newBranch: o.newBranch } : {}),
