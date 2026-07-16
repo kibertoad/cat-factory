@@ -30,6 +30,9 @@ import KeyboardShortcutsHelp from '~/components/common/KeyboardShortcutsHelp.vue
 const ObservabilityPanel = defineAsyncComponent(
   () => import('~/components/panels/ObservabilityPanel.vue'),
 )
+const OperatorDashboardPanel = defineAsyncComponent(
+  () => import('~/components/panels/OperatorDashboardPanel.vue'),
+)
 const KaizenPanel = defineAsyncComponent(() => import('~/components/kaizen/KaizenPanel.vue'))
 // Occasional, externally store-gated surfaces — deferred to their own chunks like the
 // sibling document modals above. Each mounts only while its ui open-flag is set, so it
@@ -386,6 +389,7 @@ watch(
       <TaskImportModal v-if="ui.taskImport" />
       <RecurringPipelineModal v-if="ui.addRecurringFrameId" />
       <ObservabilityPanel v-if="ui.observabilityInstanceId" />
+      <OperatorDashboardPanel v-if="ui.operatorDashboardOpen" />
       <KaizenPanel v-if="ui.kaizenScreenOpen" />
       <DocumentSourceConnectModal v-if="ui.documentConnect" />
       <DocumentImportModal v-if="ui.documentImport" />

@@ -15,10 +15,7 @@ import {
 } from '../accounts.js'
 import { accountSettingsViewSchema, updateAccountSettingsSchema } from '../accountSettings.js'
 import { addApiKeySchema, apiKeyListResultSchema, apiKeySchema } from '../api-keys.js'
-import {
-  platformObservabilitySchema,
-  platformObservabilityWindowSchema,
-} from '../observability.js'
+import { platformObservabilitySchema, platformObservabilityWindowSchema } from '../observability.js'
 import { errorResponses, singleStringParam } from './_shared.js'
 
 // ---------------------------------------------------------------------------

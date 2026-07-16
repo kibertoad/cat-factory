@@ -119,6 +119,7 @@
     "workspaceSettings": "Workspace settings",
     "modelConfiguration": "Model configuration",
     "accountSettings": "Account settings",
+    "operatorDashboard": "Platform observability",
     "environmentSetup": "Environment setup"
   },
   "board": {
@@ -1360,6 +1361,64 @@
       "provider": "Provider",
       "resultsCount": "{count} result | {count} results",
       "queriesTitle": "Performed searches"
+    }
+  },
+  "platformObservability": {
+    "title": "Platform observability",
+    "refresh": "Refresh",
+    "close": "Close",
+    "loading": "Loading platform health…",
+    "retry": "Retry",
+    "window": {
+      "oneHour": "Last hour",
+      "oneDay": "Last 24 hours",
+      "sevenDays": "Last 7 days"
+    },
+    "outcomes": {
+      "title": "Run outcomes",
+      "total": "Total runs",
+      "done": "Completed",
+      "failed": "Failed",
+      "successRate": "Success rate",
+      "running": "Running",
+      "blocked": "Blocked",
+      "paused": "Paused",
+      "pending": "Pending"
+    },
+    "trend": {
+      "title": "Outcome trend",
+      "done": "Completed",
+      "failed": "Failed",
+      "other": "Other",
+      "empty": "No runs in this window."
+    },
+    "failures": {
+      "title": "Failure breakdown",
+      "empty": "No failures in this window."
+    },
+    "failureKind": {
+      "preflight": "Preflight",
+      "dispatch": "Dispatch",
+      "environment": "Environment",
+      "evicted": "Evicted",
+      "timeout": "Timeout",
+      "agent": "Agent",
+      "job_failed": "Job failed",
+      "rejected": "Rejected",
+      "companion_rejected": "Companion rejected",
+      "stalled": "Stalled",
+      "cancelled": "Cancelled",
+      "unknown": "Unknown"
+    },
+    "durations": {
+      "title": "Run duration",
+      "avg": "Average",
+      "min": "Min",
+      "max": "Max",
+      "empty": "No completed runs in this window."
+    },
+    "live": {
+      "title": "Live now"
     }
   },
   "auth": {

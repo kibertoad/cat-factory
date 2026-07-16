@@ -2743,6 +2743,64 @@
       "queriesTitle": "Ricerche effettuate"
     }
   },
+  "platformObservability": {
+    "title": "Osservabilità della piattaforma",
+    "refresh": "Aggiorna",
+    "close": "Chiudi",
+    "loading": "Caricamento dello stato della piattaforma…",
+    "retry": "Riprova",
+    "window": {
+      "oneHour": "Ultima ora",
+      "oneDay": "Ultime 24 ore",
+      "sevenDays": "Ultimi 7 giorni"
+    },
+    "outcomes": {
+      "title": "Esiti delle esecuzioni",
+      "total": "Esecuzioni totali",
+      "done": "Completate",
+      "failed": "Fallite",
+      "successRate": "Tasso di successo",
+      "running": "In esecuzione",
+      "blocked": "Bloccate",
+      "paused": "In pausa",
+      "pending": "In attesa"
+    },
+    "trend": {
+      "title": "Andamento degli esiti",
+      "done": "Completate",
+      "failed": "Fallite",
+      "other": "Altro",
+      "empty": "Nessuna esecuzione in questo periodo."
+    },
+    "failures": {
+      "title": "Ripartizione dei fallimenti",
+      "empty": "Nessun fallimento in questo periodo."
+    },
+    "failureKind": {
+      "preflight": "Controllo preliminare",
+      "dispatch": "Invio",
+      "environment": "Ambiente",
+      "evicted": "Sfrattata",
+      "timeout": "Timeout",
+      "agent": "Agente",
+      "job_failed": "Job fallito",
+      "rejected": "Rifiutata",
+      "companion_rejected": "Companion rifiutato",
+      "stalled": "In stallo",
+      "cancelled": "Annullata",
+      "unknown": "Sconosciuto"
+    },
+    "durations": {
+      "title": "Durata delle esecuzioni",
+      "avg": "Media",
+      "min": "Min",
+      "max": "Max",
+      "empty": "Nessuna esecuzione completata in questo periodo."
+    },
+    "live": {
+      "title": "Attive ora"
+    }
+  },
   "auth": {
     "gate": {
       "loading": "Caricamento…"
@@ -3847,6 +3905,7 @@
     "workspaceSettings": "Impostazioni dello workspace",
     "modelConfiguration": "Configurazione del modello",
     "accountSettings": "Impostazioni dell'account",
+    "operatorDashboard": "Osservabilità della piattaforma",
     "environmentSetup": "Configurazione dell'ambiente"
   },
   "errors": {

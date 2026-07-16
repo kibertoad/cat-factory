@@ -50,7 +50,9 @@ export class D1PlatformMetricsRepository implements PlatformMetricsRepository {
   ): Promise<PlatformRunTrendPoint[]> {
     const { results } = await this.db
       .prepare(
-        `SELECT (created_at / ?) * ? AS bucket_start, status, COUNT(*) AS count
+        // CAST(... AS INTEGER) forces integer (floor) division: D1 binds JS numbers as REAL,
+        // so a bare `created_at / ?` would be floating-point and never land on a bucket edge.
+        `SELECT CAST(created_at / ? AS INTEGER) * ? AS bucket_start, status, COUNT(*) AS count
          FROM agent_runs
          WHERE workspace_id IN (${ACCOUNT_WORKSPACES}) AND created_at >= ?
          GROUP BY bucket_start, status

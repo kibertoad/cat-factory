@@ -1,7 +1,4 @@
-import {
-  type PlatformMetricsSeed,
-  definePlatformMetricsSuite,
-} from '@cat-factory/conformance'
+import { type PlatformMetricsSeed, definePlatformMetricsSuite } from '@cat-factory/conformance'
 import { describe, it } from 'vitest'
 import { agentRuns, workspaces } from '../src/db/schema.js'
 import { createDrizzleRepositories } from '../src/repositories/drizzle.js'
@@ -36,7 +33,11 @@ if (databaseUrl) {
       })
     },
   }
-  definePlatformMetricsSuite('node', () => repos.platformMetricsRepository, () => seed)
+  definePlatformMetricsSuite(
+    'node',
+    () => repos.platformMetricsRepository,
+    () => seed,
+  )
 } else {
   describe.skip('[node] platform metrics (set DATABASE_URL to run)', () => {
     it('requires Postgres', () => {})

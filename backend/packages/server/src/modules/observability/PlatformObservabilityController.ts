@@ -11,7 +11,10 @@ function accountUser<E extends AppEnv>(c: Context<E>) {
 }
 
 const signInRequired = <E extends AppEnv>(c: Context<E>) =>
-  c.json({ error: { code: 'unauthorized', message: 'Sign in to view platform observability' } }, 401)
+  c.json(
+    { error: { code: 'unauthorized', message: 'Sign in to view platform observability' } },
+    401,
+  )
 
 /**
  * Platform-operator observability: `GET /accounts/:accountId/observability/platform` — the

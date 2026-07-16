@@ -103,6 +103,7 @@
     "workspaceSettings": "Ustawienia obszaru roboczego",
     "modelConfiguration": "Konfiguracja modelu",
     "accountSettings": "Ustawienia konta",
+    "operatorDashboard": "Obserwowalność platformy",
     "infrastructure": "Infrastruktura",
     "environmentSetup": "Konfiguracja środowiska"
   },
@@ -1303,6 +1304,64 @@
       "provider": "Dostawca",
       "resultsCount": "{count} wynik | {count} wyniki | {count} wyników",
       "queriesTitle": "Wykonane wyszukiwania"
+    }
+  },
+  "platformObservability": {
+    "title": "Obserwowalność platformy",
+    "refresh": "Odśwież",
+    "close": "Zamknij",
+    "loading": "Ładowanie stanu platformy…",
+    "retry": "Ponów",
+    "window": {
+      "oneHour": "Ostatnia godzina",
+      "oneDay": "Ostatnie 24 godziny",
+      "sevenDays": "Ostatnie 7 dni"
+    },
+    "outcomes": {
+      "title": "Wyniki uruchomień",
+      "total": "Łącznie uruchomień",
+      "done": "Ukończone",
+      "failed": "Nieudane",
+      "successRate": "Wskaźnik sukcesu",
+      "running": "W toku",
+      "blocked": "Zablokowane",
+      "paused": "Wstrzymane",
+      "pending": "Oczekujące"
+    },
+    "trend": {
+      "title": "Trend wyników",
+      "done": "Ukończone",
+      "failed": "Nieudane",
+      "other": "Inne",
+      "empty": "Brak uruchomień w tym okresie."
+    },
+    "failures": {
+      "title": "Podział błędów",
+      "empty": "Brak błędów w tym okresie."
+    },
+    "failureKind": {
+      "preflight": "Kontrola wstępna",
+      "dispatch": "Wysłanie",
+      "environment": "Środowisko",
+      "evicted": "Usunięte",
+      "timeout": "Przekroczono czas",
+      "agent": "Agent",
+      "job_failed": "Zadanie nieudane",
+      "rejected": "Odrzucone",
+      "companion_rejected": "Towarzysz odrzucony",
+      "stalled": "Zawieszone",
+      "cancelled": "Anulowane",
+      "unknown": "Nieznane"
+    },
+    "durations": {
+      "title": "Czas trwania uruchomienia",
+      "avg": "Średnia",
+      "min": "Min",
+      "max": "Maks",
+      "empty": "Brak ukończonych uruchomień w tym okresie."
+    },
+    "live": {
+      "title": "Aktywne teraz"
     }
   },
   "auth": {

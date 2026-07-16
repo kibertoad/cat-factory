@@ -2743,6 +2743,64 @@
       "queriesTitle": "Durchgeführte Suchen"
     }
   },
+  "platformObservability": {
+    "title": "Plattform-Observability",
+    "refresh": "Aktualisieren",
+    "close": "Schließen",
+    "loading": "Plattformzustand wird geladen…",
+    "retry": "Erneut versuchen",
+    "window": {
+      "oneHour": "Letzte Stunde",
+      "oneDay": "Letzte 24 Stunden",
+      "sevenDays": "Letzte 7 Tage"
+    },
+    "outcomes": {
+      "title": "Lauf-Ergebnisse",
+      "total": "Läufe gesamt",
+      "done": "Abgeschlossen",
+      "failed": "Fehlgeschlagen",
+      "successRate": "Erfolgsquote",
+      "running": "Läuft",
+      "blocked": "Blockiert",
+      "paused": "Pausiert",
+      "pending": "Ausstehend"
+    },
+    "trend": {
+      "title": "Ergebnisverlauf",
+      "done": "Abgeschlossen",
+      "failed": "Fehlgeschlagen",
+      "other": "Sonstige",
+      "empty": "Keine Läufe in diesem Zeitraum."
+    },
+    "failures": {
+      "title": "Fehleraufschlüsselung",
+      "empty": "Keine Fehler in diesem Zeitraum."
+    },
+    "failureKind": {
+      "preflight": "Vorprüfung",
+      "dispatch": "Zustellung",
+      "environment": "Umgebung",
+      "evicted": "Verdrängt",
+      "timeout": "Zeitüberschreitung",
+      "agent": "Agent",
+      "job_failed": "Job fehlgeschlagen",
+      "rejected": "Abgelehnt",
+      "companion_rejected": "Begleiter abgelehnt",
+      "stalled": "Hängengeblieben",
+      "cancelled": "Abgebrochen",
+      "unknown": "Unbekannt"
+    },
+    "durations": {
+      "title": "Laufdauer",
+      "avg": "Durchschnitt",
+      "min": "Min.",
+      "max": "Max.",
+      "empty": "Keine abgeschlossenen Läufe in diesem Zeitraum."
+    },
+    "live": {
+      "title": "Jetzt aktiv"
+    }
+  },
   "auth": {
     "gate": {
       "loading": "Wird geladen…"
@@ -3847,6 +3905,7 @@
     "workspaceSettings": "Workspace-Einstellungen",
     "modelConfiguration": "Modellkonfiguration",
     "accountSettings": "Kontoeinstellungen",
+    "operatorDashboard": "Plattform-Observability",
     "environmentSetup": "Umgebungseinrichtung"
   },
   "errors": {

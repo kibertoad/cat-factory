@@ -2,6 +2,7 @@ import type { FragmentOwnerKind } from '~/types/domain'
 import { createApiClient, createSend, createSendWith } from './api/client'
 import type { ApiContext } from './api/context'
 import { accountsApi } from './api/accounts'
+import { platformObservabilityApi } from './api/platformObservability'
 import { authApi } from './api/auth'
 import { bootstrapApi } from './api/bootstrap'
 import { boardApi } from './api/board'
@@ -104,6 +105,7 @@ export function useApi() {
     ...fragmentsApi(ctx),
     ...modelsApi(ctx),
     ...accountsApi(ctx),
+    ...platformObservabilityApi(ctx),
     ...workspacesApi(ctx),
     ...boardApi(ctx),
     ...executionApi(ctx),

@@ -50,14 +50,57 @@ export function definePlatformMetricsSuite(
       await seed.workspace(ws, account)
       await seed.workspace(other.ws, other.account)
       // In-window rows for the account.
-      await seed.run({ workspaceId: ws, id: `${ws}-1`, kind: 'execution', status: 'done', createdAt: 2_000, updatedAt: 2_500 })
-      await seed.run({ workspaceId: ws, id: `${ws}-2`, kind: 'execution', status: 'done', createdAt: 2_100, updatedAt: 2_600 })
-      await seed.run({ workspaceId: ws, id: `${ws}-3`, kind: 'execution', status: 'failed', createdAt: 2_200, updatedAt: 2_700, failureKind: 'agent' })
-      await seed.run({ workspaceId: ws, id: `${ws}-4`, kind: 'bootstrap', status: 'done', createdAt: 2_300, updatedAt: 2_800 })
+      await seed.run({
+        workspaceId: ws,
+        id: `${ws}-1`,
+        kind: 'execution',
+        status: 'done',
+        createdAt: 2_000,
+        updatedAt: 2_500,
+      })
+      await seed.run({
+        workspaceId: ws,
+        id: `${ws}-2`,
+        kind: 'execution',
+        status: 'done',
+        createdAt: 2_100,
+        updatedAt: 2_600,
+      })
+      await seed.run({
+        workspaceId: ws,
+        id: `${ws}-3`,
+        kind: 'execution',
+        status: 'failed',
+        createdAt: 2_200,
+        updatedAt: 2_700,
+        failureKind: 'agent',
+      })
+      await seed.run({
+        workspaceId: ws,
+        id: `${ws}-4`,
+        kind: 'bootstrap',
+        status: 'done',
+        createdAt: 2_300,
+        updatedAt: 2_800,
+      })
       // Before the window → excluded.
-      await seed.run({ workspaceId: ws, id: `${ws}-old`, kind: 'execution', status: 'done', createdAt: 500, updatedAt: 600 })
+      await seed.run({
+        workspaceId: ws,
+        id: `${ws}-old`,
+        kind: 'execution',
+        status: 'done',
+        createdAt: 500,
+        updatedAt: 600,
+      })
       // Different account → excluded.
-      await seed.run({ workspaceId: other.ws, id: `${other.ws}-x`, kind: 'execution', status: 'done', createdAt: 2_000, updatedAt: 2_100 })
+      await seed.run({
+        workspaceId: other.ws,
+        id: `${other.ws}-x`,
+        kind: 'execution',
+        status: 'done',
+        createdAt: 2_000,
+        updatedAt: 2_100,
+      })
 
       const outcomes = await repo.runOutcomesSince(account, 1_000)
       const key = (o: { kind: string; status: string }) => `${o.kind}/${o.status}`
@@ -75,13 +118,51 @@ export function definePlatformMetricsSuite(
       const seed = makeSeed()
       const { account, ws } = ids()
       await seed.workspace(ws, account)
-      await seed.run({ workspaceId: ws, id: `${ws}-a`, kind: 'execution', status: 'failed', createdAt: 2_000, updatedAt: 2_100, failureKind: 'evicted' })
-      await seed.run({ workspaceId: ws, id: `${ws}-b`, kind: 'execution', status: 'failed', createdAt: 2_010, updatedAt: 2_110, failureKind: 'evicted' })
-      await seed.run({ workspaceId: ws, id: `${ws}-c`, kind: 'execution', status: 'failed', createdAt: 2_020, updatedAt: 2_120, failureKind: 'timeout' })
+      await seed.run({
+        workspaceId: ws,
+        id: `${ws}-a`,
+        kind: 'execution',
+        status: 'failed',
+        createdAt: 2_000,
+        updatedAt: 2_100,
+        failureKind: 'evicted',
+      })
+      await seed.run({
+        workspaceId: ws,
+        id: `${ws}-b`,
+        kind: 'execution',
+        status: 'failed',
+        createdAt: 2_010,
+        updatedAt: 2_110,
+        failureKind: 'evicted',
+      })
+      await seed.run({
+        workspaceId: ws,
+        id: `${ws}-c`,
+        kind: 'execution',
+        status: 'failed',
+        createdAt: 2_020,
+        updatedAt: 2_120,
+        failureKind: 'timeout',
+      })
       // Failed with no failure JSON → unknown.
-      await seed.run({ workspaceId: ws, id: `${ws}-d`, kind: 'execution', status: 'failed', createdAt: 2_030, updatedAt: 2_130 })
+      await seed.run({
+        workspaceId: ws,
+        id: `${ws}-d`,
+        kind: 'execution',
+        status: 'failed',
+        createdAt: 2_030,
+        updatedAt: 2_130,
+      })
       // Not failed → excluded.
-      await seed.run({ workspaceId: ws, id: `${ws}-ok`, kind: 'execution', status: 'done', createdAt: 2_040, updatedAt: 2_140 })
+      await seed.run({
+        workspaceId: ws,
+        id: `${ws}-ok`,
+        kind: 'execution',
+        status: 'done',
+        createdAt: 2_040,
+        updatedAt: 2_140,
+      })
 
       const breakdown = await repo.failureKindBreakdown(account, 1_000)
       const byKind = new Map(breakdown.map((f) => [f.failureKind, f.count]))
@@ -97,12 +178,54 @@ export function definePlatformMetricsSuite(
       const seed = makeSeed()
       const { account, ws } = ids()
       await seed.workspace(ws, account)
-      await seed.run({ workspaceId: ws, id: `${ws}-r1`, kind: 'execution', status: 'running', createdAt: 1, updatedAt: 1 })
-      await seed.run({ workspaceId: ws, id: `${ws}-r2`, kind: 'execution', status: 'running', createdAt: 1, updatedAt: 1 })
-      await seed.run({ workspaceId: ws, id: `${ws}-b1`, kind: 'execution', status: 'blocked', createdAt: 1, updatedAt: 1 })
-      await seed.run({ workspaceId: ws, id: `${ws}-p1`, kind: 'execution', status: 'paused', createdAt: 1, updatedAt: 1 })
-      await seed.run({ workspaceId: ws, id: `${ws}-pd`, kind: 'bootstrap', status: 'pending', createdAt: 1, updatedAt: 1 })
-      await seed.run({ workspaceId: ws, id: `${ws}-done`, kind: 'execution', status: 'done', createdAt: 1, updatedAt: 1 })
+      await seed.run({
+        workspaceId: ws,
+        id: `${ws}-r1`,
+        kind: 'execution',
+        status: 'running',
+        createdAt: 1,
+        updatedAt: 1,
+      })
+      await seed.run({
+        workspaceId: ws,
+        id: `${ws}-r2`,
+        kind: 'execution',
+        status: 'running',
+        createdAt: 1,
+        updatedAt: 1,
+      })
+      await seed.run({
+        workspaceId: ws,
+        id: `${ws}-b1`,
+        kind: 'execution',
+        status: 'blocked',
+        createdAt: 1,
+        updatedAt: 1,
+      })
+      await seed.run({
+        workspaceId: ws,
+        id: `${ws}-p1`,
+        kind: 'execution',
+        status: 'paused',
+        createdAt: 1,
+        updatedAt: 1,
+      })
+      await seed.run({
+        workspaceId: ws,
+        id: `${ws}-pd`,
+        kind: 'bootstrap',
+        status: 'pending',
+        createdAt: 1,
+        updatedAt: 1,
+      })
+      await seed.run({
+        workspaceId: ws,
+        id: `${ws}-done`,
+        kind: 'execution',
+        status: 'done',
+        createdAt: 1,
+        updatedAt: 1,
+      })
 
       const live = await repo.activeAndParkedCounts(account)
       expect(live).toEqual({ running: 2, blocked: 1, paused: 1, pending: 1 })
@@ -114,12 +237,41 @@ export function definePlatformMetricsSuite(
       const { account, ws } = ids()
       await seed.workspace(ws, account)
       // Terminal, in window: durations 1000, 3000 → avg 2000, min 1000, max 3000.
-      await seed.run({ workspaceId: ws, id: `${ws}-t1`, kind: 'execution', status: 'done', createdAt: 2_000, updatedAt: 3_000 })
-      await seed.run({ workspaceId: ws, id: `${ws}-t2`, kind: 'execution', status: 'failed', createdAt: 2_000, updatedAt: 5_000, failureKind: 'agent' })
+      await seed.run({
+        workspaceId: ws,
+        id: `${ws}-t1`,
+        kind: 'execution',
+        status: 'done',
+        createdAt: 2_000,
+        updatedAt: 3_000,
+      })
+      await seed.run({
+        workspaceId: ws,
+        id: `${ws}-t2`,
+        kind: 'execution',
+        status: 'failed',
+        createdAt: 2_000,
+        updatedAt: 5_000,
+        failureKind: 'agent',
+      })
       // Non-terminal → excluded.
-      await seed.run({ workspaceId: ws, id: `${ws}-run`, kind: 'execution', status: 'running', createdAt: 2_000, updatedAt: 9_000 })
+      await seed.run({
+        workspaceId: ws,
+        id: `${ws}-run`,
+        kind: 'execution',
+        status: 'running',
+        createdAt: 2_000,
+        updatedAt: 9_000,
+      })
       // Terminal but before window → excluded.
-      await seed.run({ workspaceId: ws, id: `${ws}-oldt`, kind: 'execution', status: 'done', createdAt: 100, updatedAt: 800 })
+      await seed.run({
+        workspaceId: ws,
+        id: `${ws}-oldt`,
+        kind: 'execution',
+        status: 'done',
+        createdAt: 100,
+        updatedAt: 800,
+      })
 
       const stats = await repo.durationStatsSince(account, 1_000)
       expect(stats.count).toBe(2)
@@ -133,7 +285,14 @@ export function definePlatformMetricsSuite(
       const seed = makeSeed()
       const { account, ws } = ids()
       await seed.workspace(ws, account)
-      await seed.run({ workspaceId: ws, id: `${ws}-run`, kind: 'execution', status: 'running', createdAt: 2_000, updatedAt: 9_000 })
+      await seed.run({
+        workspaceId: ws,
+        id: `${ws}-run`,
+        kind: 'execution',
+        status: 'running',
+        createdAt: 2_000,
+        updatedAt: 9_000,
+      })
 
       const stats = await repo.durationStatsSince(account, 1_000)
       expect(stats).toEqual({ count: 0, avgMs: null, minMs: null, maxMs: null })
@@ -146,9 +305,31 @@ export function definePlatformMetricsSuite(
       await seed.workspace(ws, account)
       const bucketMs = 1_000
       // Two runs in bucket starting at 2000, one in bucket starting at 4000.
-      await seed.run({ workspaceId: ws, id: `${ws}-a`, kind: 'execution', status: 'done', createdAt: 2_100, updatedAt: 2_200 })
-      await seed.run({ workspaceId: ws, id: `${ws}-b`, kind: 'execution', status: 'done', createdAt: 2_900, updatedAt: 3_000 })
-      await seed.run({ workspaceId: ws, id: `${ws}-c`, kind: 'execution', status: 'failed', createdAt: 4_050, updatedAt: 4_200, failureKind: 'agent' })
+      await seed.run({
+        workspaceId: ws,
+        id: `${ws}-a`,
+        kind: 'execution',
+        status: 'done',
+        createdAt: 2_100,
+        updatedAt: 2_200,
+      })
+      await seed.run({
+        workspaceId: ws,
+        id: `${ws}-b`,
+        kind: 'execution',
+        status: 'done',
+        createdAt: 2_900,
+        updatedAt: 3_000,
+      })
+      await seed.run({
+        workspaceId: ws,
+        id: `${ws}-c`,
+        kind: 'execution',
+        status: 'failed',
+        createdAt: 4_050,
+        updatedAt: 4_200,
+        failureKind: 'agent',
+      })
 
       const trend = await repo.runOutcomeTrend(account, 1_000, bucketMs)
       const byBucket = new Map<string, number>()

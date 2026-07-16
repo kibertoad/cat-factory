@@ -1,6 +1,6 @@
 # Initiative: platform operator observability & alerting
 
-**Status:** planned (tracker only — no slices landed) · **Owner:** core · **Started:** 2026-07-16
+**Status:** in progress (read-path dashboard landed; alerting pending) · **Owner:** core · **Started:** 2026-07-16
 
 > Durable source of truth for a multi-PR initiative. Read it first before picking up the
 > next slice; update the checklist at the end of each PR.
@@ -50,15 +50,38 @@ delivered through the existing `NotificationChannel` seam.
 
 ## Prioritized checklist
 
-| #   | Slice                                                                                                                | Status  | PR  |
-| --- | -------------------------------------------------------------------------------------------------------------------- | ------- | --- |
-| 1   | Rollup port + D1 ⇄ Drizzle impls (`runOutcomesSince`, `failureKindBreakdown`, `activeAndParkedCounts`) + conformance | ⬜ todo |     |
-| 2   | `GET /observability/platform` controller + contracts (windowed aggregate projections; admin-gated)                   | ⬜ todo |     |
-| 3   | Operator dashboard panel in the SPA (outcome trend, failure taxonomy, durations; i18n all locales)                   | ⬜ todo |     |
-| 4   | Duration percentiles + per-step/gate attempt stats (CI-fixer attempts, gate exhaustion counts)                       | ⬜ todo |     |
-| 5   | Threshold alert sweep + `platform_health` notification type (state-change dedup; both runtimes)                      | ⬜ todo |     |
-| 6   | Alert threshold config surface (deployment env defaults + settings UI)                                               | ⬜ todo |     |
-| 7   | Optional daily rollup table for >3d trends (coordinate with storage-and-retention's deferred rollup)                 | ⬜ todo |     |
+| #   | Slice                                                                                                                | Status  | PR      |
+| --- | -------------------------------------------------------------------------------------------------------------------- | ------- | ------- |
+| 1   | Rollup port + D1 ⇄ Drizzle impls (`runOutcomesSince`, `failureKindBreakdown`, `activeAndParkedCounts`) + conformance | ✅ done | this PR |
+| 2   | `GET /observability/platform` controller + contracts (windowed aggregate projections; admin-gated)                   | ✅ done | this PR |
+| 3   | Operator dashboard panel in the SPA (outcome trend, failure taxonomy, durations; i18n all locales)                   | ✅ done | this PR |
+| 4   | Duration percentiles + per-step/gate attempt stats (CI-fixer attempts, gate exhaustion counts)                       | ⬜ todo |         |
+| 5   | Threshold alert sweep + `platform_health` notification type (state-change dedup; both runtimes)                      | ⬜ todo |         |
+| 6   | Alert threshold config surface (deployment env defaults + settings UI)                                               | ⬜ todo |         |
+| 7   | Optional daily rollup table for >3d trends (coordinate with storage-and-retention's deferred rollup)                 | ⬜ todo |         |
+
+## What the read-path PR (slices 1–3) shipped
+
+- **Scope is per-ACCOUNT, not global.** `requireAdmin` is account-scoped and there is no
+  superadmin, so the port + route take an `accountId` and filter `agent_runs` via a
+  `workspace_id IN (SELECT id FROM workspaces WHERE account_id = ?)` sub-select — tenancy-correct
+  on both single-account (Node/local) and multi-account (mothership) deployments. The route lives on
+  the accounts contract file: `GET /accounts/:accountId/observability/platform?window=1h|24h|7d`.
+- **Single store.** The port reads ONLY `agent_runs` (main DB) — outcome/failure/timing all live
+  there — so it never crosses into the telemetry store. Token/cost rollups (which need
+  `llm_call_metrics`) are deferred to a later slice with its own store-local read.
+- **Port methods delivered:** `runOutcomesSince`, `runOutcomeTrend` (bucketed for the sparkline),
+  `failureKindBreakdown`, `activeAndParkedCounts`, and `durationStatsSince` (avg/min/max/count).
+  Percentiles are intentionally left to slice 4 (SQLite has no native percentile fn — needs the
+  order-statistic workaround), so only the SQL-trivial duration stats ship now.
+- **Wiring:** `PlatformMetricsRepository` (kernel) ⇄ `D1PlatformMetricsRepository` /
+  `DrizzlePlatformMetricsRepository` (in `drizzle/execution.ts`) + `definePlatformMetricsSuite`
+  conformance on both runtimes; `PlatformObservabilityService` (orchestration, on `Core`) +
+  `PlatformObservabilityController` (server, admin-gated); SPA `platformObservability` store + API +
+  `OperatorDashboardPanel.vue` + sidebar entry (admin-only), i18n in all 10 locales.
+- **Mothership caveat:** a mothership-mode local node (no DB, RPC-backed repos) would 503 the
+  dashboard until the platform-metrics reads are added to the persistence-RPC allow-list — not wired
+  here since the dashboard is intended for the DB-backed (hosted) deployment. Follow-up if needed.
 
 ## Conventions & gotchas
 
