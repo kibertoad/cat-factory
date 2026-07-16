@@ -18,6 +18,9 @@ import { useUpsertList } from '~/composables/useUpsertList'
 import { useWorkspaceStore } from '~/stores/workspace'
 import { useServicesStore } from '~/stores/services'
 
+/** Stable identity for a pull request in the `pulls` list: repo + PR number. */
+const pullKey = (repoGithubId: number, number: number) => `${repoGithubId}:${number}`
+
 /**
  * GitHub integration state: the workspace's App installation, the projected
  * repos/branches/pull-requests/issues the backend caches in D1, and the actions
@@ -48,7 +51,7 @@ export const useGitHubStore = defineStore('github', () => {
     upsert: upsertPull,
     get: getPull,
   } = useUpsertList<GitHubPullRequest>({
-    key: (p) => `${p.repoGithubId}:${p.number}`,
+    key: (p) => pullKey(p.repoGithubId, p.number),
     prepend: true,
   })
   const issues = ref<GitHubIssue[]>([])
@@ -288,7 +291,7 @@ export const useGitHubStore = defineStore('github', () => {
   ) {
     await api.mergeGitHubPullRequest(workspace.requireId(), repoGithubId, number, input)
     // Optimistically reflect the merge until the next sync confirms it.
-    const existing = getPull(`${repoGithubId}:${number}`)
+    const existing = getPull(pullKey(repoGithubId, number))
     if (existing) upsertPull({ ...existing, state: 'closed', merged: true })
   }
 
