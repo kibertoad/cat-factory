@@ -95,7 +95,9 @@ type Reason =
 // API. Keep in sync with the reflected surface — a NEW method missing from BOTH this map and the
 // allow-list fails the partition assertion below.
 const NON_REMOTE: Record<string, Record<string, Reason>> = {
-  workspaceRepository: { create: 'onboarding', delete: 'sweeper' },
+  // `setAccessMode` is the workspace-RBAC access-mode flip — `members.manage` (admin-tier), so
+  // it stays off the role-blind machine RPC exactly like the account/membership admin mutations.
+  workspaceRepository: { create: 'onboarding', delete: 'sweeper', setAccessMode: 'admin' },
   accountRepository: {
     create: 'onboarding',
     ensurePersonal: 'onboarding',

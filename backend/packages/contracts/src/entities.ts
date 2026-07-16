@@ -1,4 +1,5 @@
 import * as v from 'valibot'
+import { workspaceAccessModeSchema } from './workspace-members.js'
 import { subscriptionVendorSchema } from './vendor-credentials.js'
 import { agentConfigValuesSchema } from './agent-config.js'
 import { testConcernSchema, testReportSchema, testerInfraSetupSchema } from './testing.js'
@@ -2173,6 +2174,12 @@ export const workspaceSchema = v.object({
   createdAt: v.number(),
   /** The account this board belongs to, or null for a legacy/unscoped board. */
   accountId: v.nullable(v.string()),
+  /**
+   * Workspace-level access mode (RBAC). `account` (the default) keeps the legacy
+   * behaviour — every account member sees the board; `restricted` limits it to the
+   * explicit member roster. Optional on the wire: absent ⇒ `account`.
+   */
+  accessMode: v.optional(workspaceAccessModeSchema),
 })
 export type Workspace = v.InferOutput<typeof workspaceSchema>
 

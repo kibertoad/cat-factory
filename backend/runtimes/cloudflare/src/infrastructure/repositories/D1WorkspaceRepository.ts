@@ -1,6 +1,11 @@
-import type { ServiceRehome, WorkspaceRepository, WorkspaceVisibility } from '@cat-factory/kernel'
+import type {
+  ServiceRehome,
+  WorkspaceAccessRow,
+  WorkspaceRepository,
+  WorkspaceVisibility,
+} from '@cat-factory/kernel'
 import { WORKSPACE_SCOPED_TABLES } from '@cat-factory/kernel'
-import type { Workspace } from '@cat-factory/contracts'
+import type { Workspace, WorkspaceAccessMode } from '@cat-factory/contracts'
 import type { D1Database } from '@cloudflare/workers-types'
 import { type WorkspaceRow, rowToWorkspace } from './mappers'
 
@@ -67,6 +72,27 @@ export class D1WorkspaceRepository implements WorkspaceRepository {
       .first<{ account_id: string | null }>()
     // Row absent → undefined (missing); present → the (possibly null) account id.
     return row ? row.account_id : undefined
+  }
+
+  async accessRowOf(id: string): Promise<WorkspaceAccessRow | undefined> {
+    const row = await this.db
+      .prepare('SELECT account_id, owner_user_id, access_mode FROM workspaces WHERE id = ?')
+      .bind(id)
+      .first<{
+        account_id: string | null
+        owner_user_id: string | null
+        access_mode: string | null
+      }>()
+    if (!row) return undefined
+    return {
+      accountId: row.account_id,
+      ownerUserId: row.owner_user_id,
+      accessMode: row.access_mode === 'restricted' ? 'restricted' : 'account',
+    }
+  }
+
+  async setAccessMode(id: string, mode: WorkspaceAccessMode): Promise<void> {
+    await this.db.prepare('UPDATE workspaces SET access_mode = ? WHERE id = ?').bind(mode, id).run()
   }
 
   async create(

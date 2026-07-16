@@ -14,10 +14,15 @@ import type {
   ServiceRehome,
   ServiceRepository,
   Workspace,
+  WorkspaceAccessMode,
+  WorkspaceAccessRow,
+  WorkspaceMemberRecord,
+  WorkspaceMemberRepository,
   WorkspaceMount,
   WorkspaceMountPatch,
   WorkspaceMountRepository,
   WorkspaceRepository,
+  WorkspaceRole,
   WorkspaceVisibility,
 } from '@cat-factory/kernel'
 import { WORKSPACE_SCOPED_TABLES } from '@cat-factory/kernel'
@@ -35,6 +40,7 @@ import {
   blocks,
   services,
   workspaceFragmentDefaults,
+  workspaceMembers,
   workspaceServices,
   workspaces,
 } from '../../db/schema.js'
@@ -82,6 +88,27 @@ export class DrizzleWorkspaceRepository implements WorkspaceRepository {
       .from(workspaces)
       .where(eq(workspaces.id, id))
     return row ? row.account : undefined
+  }
+
+  async accessRowOf(id: string): Promise<WorkspaceAccessRow | undefined> {
+    const [row] = await this.db
+      .select({
+        account: workspaces.account_id,
+        owner: workspaces.owner_user_id,
+        mode: workspaces.access_mode,
+      })
+      .from(workspaces)
+      .where(eq(workspaces.id, id))
+    if (!row) return undefined
+    return {
+      accountId: row.account,
+      ownerUserId: row.owner,
+      accessMode: row.mode === 'restricted' ? 'restricted' : 'account',
+    }
+  }
+
+  async setAccessMode(id: string, mode: WorkspaceAccessMode): Promise<void> {
+    await this.db.update(workspaces).set({ access_mode: mode }).where(eq(workspaces.id, id))
   }
 
   async create(
@@ -158,6 +185,119 @@ export class DrizzleWorkspaceRepository implements WorkspaceRepository {
       }
       await tx.delete(workspaces).where(eq(workspaces.id, id))
     })
+  }
+}
+
+/** Coerce a stored role string to a valid {@link WorkspaceRole}, defaulting to viewer. */
+function parseWorkspaceRole(role: string): WorkspaceRole {
+  return role === 'admin' || role === 'member' || role === 'viewer' ? role : 'viewer'
+}
+
+function rowToWorkspaceMember(row: typeof workspaceMembers.$inferSelect): WorkspaceMemberRecord {
+  return {
+    workspaceId: row.workspace_id,
+    userId: row.user_id,
+    role: parseWorkspaceRole(row.role),
+    createdAt: row.created_at,
+    addedByUserId: row.added_by_user_id,
+  }
+}
+
+/** Drizzle/Postgres store of workspace memberships (workspace RBAC; migration 0052). */
+export class DrizzleWorkspaceMemberRepository implements WorkspaceMemberRepository {
+  constructor(private readonly db: DrizzleDb) {}
+
+  async get(workspaceId: string, userId: string): Promise<WorkspaceMemberRecord | null> {
+    const [row] = await this.db
+      .select()
+      .from(workspaceMembers)
+      .where(
+        and(eq(workspaceMembers.workspace_id, workspaceId), eq(workspaceMembers.user_id, userId)),
+      )
+    return row ? rowToWorkspaceMember(row) : null
+  }
+
+  async listByWorkspace(workspaceId: string): Promise<WorkspaceMemberRecord[]> {
+    const rows = await this.db
+      .select()
+      .from(workspaceMembers)
+      .where(eq(workspaceMembers.workspace_id, workspaceId))
+      .orderBy(workspaceMembers.created_at)
+    return rows.map(rowToWorkspaceMember)
+  }
+
+  async listWorkspaceIdsForUser(userId: string): Promise<string[]> {
+    const rows = await this.db
+      .select({ id: workspaceMembers.workspace_id })
+      .from(workspaceMembers)
+      .where(eq(workspaceMembers.user_id, userId))
+    return rows.map((r) => r.id)
+  }
+
+  async getRolesForUserInWorkspaces(
+    userId: string,
+    workspaceIds: string[],
+  ): Promise<Map<string, WorkspaceRole>> {
+    const out = new Map<string, WorkspaceRole>()
+    if (workspaceIds.length === 0) return out
+    // ONE chunked-IN read per chunk (never a per-board point-read loop).
+    for (let i = 0; i < workspaceIds.length; i += 500) {
+      const rows = await this.db
+        .select({ id: workspaceMembers.workspace_id, role: workspaceMembers.role })
+        .from(workspaceMembers)
+        .where(
+          and(
+            eq(workspaceMembers.user_id, userId),
+            inArray(workspaceMembers.workspace_id, workspaceIds.slice(i, i + 500)),
+          ),
+        )
+      for (const r of rows) out.set(r.id, parseWorkspaceRole(r.role))
+    }
+    return out
+  }
+
+  async upsert(member: WorkspaceMemberRecord): Promise<void> {
+    await this.db
+      .insert(workspaceMembers)
+      .values({
+        workspace_id: member.workspaceId,
+        user_id: member.userId,
+        role: member.role,
+        created_at: member.createdAt,
+        added_by_user_id: member.addedByUserId,
+      })
+      .onConflictDoUpdate({
+        target: [workspaceMembers.workspace_id, workspaceMembers.user_id],
+        set: { role: member.role },
+      })
+  }
+
+  async remove(workspaceId: string, userId: string): Promise<void> {
+    await this.db
+      .delete(workspaceMembers)
+      .where(
+        and(eq(workspaceMembers.workspace_id, workspaceId), eq(workspaceMembers.user_id, userId)),
+      )
+  }
+
+  async removeByAccountMembership(accountId: string, userId: string): Promise<number> {
+    // One DELETE scoped to the owning account's boards (Postgres has no cross-table DELETE
+    // without USING, so filter workspace_id by the account's workspaces subquery).
+    const result = await this.db
+      .delete(workspaceMembers)
+      .where(
+        and(
+          eq(workspaceMembers.user_id, userId),
+          inArray(
+            workspaceMembers.workspace_id,
+            this.db
+              .select({ id: workspaces.id })
+              .from(workspaces)
+              .where(eq(workspaces.account_id, accountId)),
+          ),
+        ),
+      )
+    return result.rowCount ?? 0
   }
 }
 
