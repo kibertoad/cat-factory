@@ -89,6 +89,16 @@ export const githubPullRequestSchema = v.object({
 })
 export type GitHubPullRequest = v.InferOutput<typeof githubPullRequestSchema>
 
+/**
+ * The result of OPENING a pull request: the synced {@link GitHubPullRequest} projection PLUS
+ * the web `url`. The projection deliberately omits `url` (it isn't a sync cursor and never
+ * hits the DB), but the create call's response DOES carry it (`html_url` / `web_url`), so a
+ * caller that just opened a PR — e.g. a backend post-op recording {@link PullRequestRef} on a
+ * block — gets a real link without reconstructing a provider-specific URL. Each VCS provider
+ * fills `url` from its own field, keeping the shared layer provider-agnostic.
+ */
+export type OpenedPullRequest = GitHubPullRequest & { url: string }
+
 export const githubIssueStateSchema = v.picklist(['open', 'closed'])
 export type GitHubIssueState = v.InferOutput<typeof githubIssueStateSchema>
 

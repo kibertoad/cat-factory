@@ -240,6 +240,20 @@
           "placeholder": "Kapsamdaki uç noktalar veya yüzey"
         }
       },
+      "spikeFields": {
+        "researchQuestion": {
+          "label": "Araştırma sorusu",
+          "placeholder": "Spike'ın yanıtlaması gereken soru veya hipotez"
+        },
+        "successCriteria": {
+          "label": "Başarı ölçütleri",
+          "placeholder": "Kabul ölçütleri veya bulguların dayanak oluşturması gereken karar"
+        },
+        "optionsToCompare": {
+          "label": "Karşılaştırılacak seçenekler",
+          "placeholder": "Birbirine karşı tartılacak seçenekler"
+        }
+      },
       "optional": "isteğe bağlı",
       "pipeline": "İşlem hattı",
       "chooseAtRunTime": "Çalıştırma sırasında seç",

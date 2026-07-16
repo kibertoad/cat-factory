@@ -13,6 +13,7 @@ import type {
   GitHubPullRequestReview,
   GitHubRepo,
   GitHubReviewThread,
+  OpenedPullRequest,
   Paged,
   RepoContentEntry,
   RepoEntry,
@@ -272,8 +273,8 @@ export class FakeVcsClient implements VcsClient {
     return { number: 0, url: '' }
   }
   async closeIssue(): Promise<void> {}
-  async openPullRequest(): Promise<GitHubPullRequest> {
-    return { number: 1 } as unknown as GitHubPullRequest
+  async openPullRequest(): Promise<OpenedPullRequest> {
+    return { number: 1, url: 'https://gitlab.test/mr/1' } as unknown as OpenedPullRequest
   }
   async updatePullRequest(): Promise<GitHubPullRequest> {
     return { number: 1 } as unknown as GitHubPullRequest

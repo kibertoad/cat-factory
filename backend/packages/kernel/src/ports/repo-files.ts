@@ -1,4 +1,4 @@
-import type { CommitFilesInput, GitHubPullRequest, OpenPullRequestInput } from '../domain/types.js'
+import type { CommitFilesInput, OpenedPullRequest, OpenPullRequestInput } from '../domain/types.js'
 import type {
   CommitFilesResult,
   CreateReviewInput,
@@ -58,8 +58,12 @@ export interface RepoFiles {
    * re-committing identical bytes is avoided by comparing the version hash).
    */
   commitFiles(input: CommitFilesInput): Promise<CommitFilesResult>
-  /** Open a pull request (idempotent: returns the existing open PR if one matches head/base). */
-  openPullRequest(input: OpenPullRequestInput): Promise<GitHubPullRequest>
+  /**
+   * Open a pull request (idempotent: returns the existing open PR if one matches head/base).
+   * Returns the {@link OpenedPullRequest} — the projection plus the web `url` — so a post-op
+   * can record a {@link PullRequestRef} (with a real link) on the block.
+   */
+  openPullRequest(input: OpenPullRequestInput): Promise<OpenedPullRequest>
   /**
    * The source (head) branch of a pull request by number, or null when the PR can't be read.
    * The PR-deep-review "fix" resolution reads this to point the Fixer's clone/push at the
