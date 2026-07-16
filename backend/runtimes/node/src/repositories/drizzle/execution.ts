@@ -541,13 +541,22 @@ export class DrizzlePlatformMetricsRepository implements PlatformMetricsReposito
     sinceEpochMs: number,
     bucketMs: number,
   ): Promise<PlatformRunTrendPoint[]> {
-    const bucket = sql<number>`((${agentRuns.created_at} / ${bucketMs}::bigint) * ${bucketMs}::bigint)`
+    // Alias the bucket expression and GROUP BY / ORDER BY the alias, NOT the raw fragment:
+    // Drizzle re-emits an inline `sql` expression with fresh bind-parameter placeholders in
+    // each clause (SELECT `$1,$2` vs GROUP BY `$5,$6`), and Postgres matches GROUP BY columns
+    // to the SELECT list by parse-tree identity — distinct placeholders read as different
+    // expressions and it rejects the query with 42803. Referencing the output name sidesteps
+    // that. (SQLite is lenient here, so the D1 repo works with the inline form.)
+    const bucket =
+      sql<number>`((${agentRuns.created_at} / ${bucketMs}::bigint) * ${bucketMs}::bigint)`.as(
+        'bucket_start',
+      )
     const rows = await this.db
       .select({ bucketStart: bucket, status: agentRuns.status, count: sql<number>`count(*)::int` })
       .from(agentRuns)
       .where(and(this.accountScope(accountId), gte(agentRuns.created_at, sinceEpochMs)))
-      .groupBy(bucket, agentRuns.status)
-      .orderBy(bucket)
+      .groupBy(sql`bucket_start`, agentRuns.status)
+      .orderBy(sql`bucket_start`)
     return rows.map((r) => ({
       bucketStart: Number(r.bucketStart),
       status: r.status,

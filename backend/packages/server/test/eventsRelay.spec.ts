@@ -211,11 +211,12 @@ describe('HttpMachineEventClient (client side)', () => {
       fetchImpl,
     })
     client.publish({ workspaceId: 'ws_1', payload: EVENT.payload, originConnectionId: 'cid_9' })
-    // publish is fire-and-forget; let the microtask settle.
-    await new Promise((r) => setTimeout(r, 0))
-    expect(ingested).toEqual([
-      { workspaceId: 'ws_1', payload: EVENT.payload, originConnectionId: 'cid_9' },
-    ])
+    // publish is fire-and-forget and the relay only ingests AFTER the controller's async machine-
+    // token verification (crypto.subtle, thread-pool-backed) resolves — which can outlast a single
+    // macrotask tick under CI load. Poll for the side effect instead of assuming one `setTimeout(0)`.
+    await expect
+      .poll(() => ingested)
+      .toEqual([{ workspaceId: 'ws_1', payload: EVENT.payload, originConnectionId: 'cid_9' }])
   })
 
   it('skips the round-trip entirely when no token is available yet (no fetch)', async () => {
