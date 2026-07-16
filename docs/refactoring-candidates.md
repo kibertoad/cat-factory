@@ -9,119 +9,17 @@ disruption to existing code, not just effort. That ordering doubles as a recomme
 sequence: land the contained, low-risk wins first and work down toward the structural
 ones.
 
-| #   | Candidate                                       | Area                | Impact    | Effort |
-| --- | ----------------------------------------------- | ------------------- | --------- | ------ |
-| 1   | Split the monolithic Drizzle repositories file  | Backend persistence | Medium    | Low    |
-| 2   | Generic row mappers                             | Backend persistence | Medium    | Low    |
-| 3   | Finish the store pattern-factory adoption       | Frontend            | Medium    | Low    |
-| 4   | Split the `ui.ts` store                         | Frontend            | High      | Medium |
-| 5   | Finish the manifest-driven agent-kind registry  | Backend engine      | High      | Medium |
-| 6   | Module registry for the orchestration container | Backend DI          | High      | High   |
-| 7   | Shared base repositories (D1 ⇄ Drizzle)         | Cross-runtime       | High      | High   |
-| 8   | Shared container builder (Node ⇄ Cloudflare)    | Cross-runtime       | Very high | High   |
+| #   | Candidate                                       | Area           | Impact    | Effort |
+| --- | ----------------------------------------------- | -------------- | --------- | ------ |
+| 5   | Finish the manifest-driven agent-kind registry  | Backend engine | High      | Medium |
+| 6   | Module registry for the orchestration container | Backend DI     | High      | High   |
+| 7   | Shared base repositories (D1 ⇄ Drizzle)         | Cross-runtime  | High      | High   |
+| 8   | Shared container builder (Node ⇄ Cloudflare)    | Cross-runtime  | Very high | High   |
 
 See [Recently landed](#recently-landed) at the bottom for candidates that have since
 shipped and were removed from the active list.
 
 ---
-
-## 1. Split the monolithic Drizzle repositories file
-
-**File:** `backend/runtimes/node/src/repositories/drizzle.ts` — **3,946 lines**, **39
-repository classes** in a single module.
-
-**Problem.** Every core Drizzle repository (`DrizzleWorkspaceRepository`,
-`DrizzleBlockRepository`, `DrizzleExecutionRepository`, the sandbox suite, the kaizen
-suite, requirement reviews, merge presets, observability, …) lives in one file. This is an
-outlier in the tree: the Node facade's _other_ repositories are already split one-per-domain
-(`bootstrap.ts`, `documents.ts`, `environments.ts`, `github.ts`, `tasks.ts`, … — 18
-separate files), and the symmetric Cloudflare D1 side is split into **69** per-repository
-files under `infrastructure/repositories/`. The single 3,946-line file is the hardest place
-in the persistence layer to navigate, review a diff against, or find the D1 counterpart of —
-and it grows with every new table.
-
-**Approach.** Mechanically split `drizzle.ts` into per-domain files under
-`backend/runtimes/node/src/repositories/` (e.g. `drizzle/board.ts`, `drizzle/execution.ts`,
-`drizzle/sandbox.ts`, `drizzle/kaizen.ts`, `drizzle/reviews.ts`), mirroring the D1 layout so
-a repository and its D1 twin are trivially locatable. Pure code movement — no behavioural
-change, no schema change — with a barrel re-export to keep `container.ts`'s imports stable.
-
-**Why high-impact for the effort.** Low effort and near-zero risk (it is a file move behind
-a barrel), but it makes the whole persistence layer navigable, shrinks review surface, and
-restores the one-file-per-repository symmetry the rest of the codebase already follows. It
-is also the natural precursor to #7 (shared base repositories): the D1 ⇄ Drizzle pairs are
-much easier to dedup once each Drizzle repo sits in its own file next to its twin.
-
-## 2. Generic row mappers
-
-**File:** `backend/packages/server/src/persistence/mappers.ts` — **632 lines**.
-
-**Problem.** Dozens of hand-written, manually-enumerated functions (`rowToWorkspace`,
-`rowToBlock`, `blockInsertValues`, `blockPatchToColumns`, `rowToExecution`, …). A new
-persisted field must be added to the row type, the `rowTo*` mapper, the `*InsertValues` /
-`*PatchToColumns` writer, and the domain type — and a renamed column is only caught at
-runtime if that mapper is exercised.
-
-**Approach.** Introduce a small mapper factory driven by a per-entity field map (with
-snake_case↔camelCase derivation and explicit JSON/serialized-column overrides), so each
-entity declares its columns once and the read/insert/patch directions are generated. Keep
-hand-written mappers only where shape genuinely diverges. Both D1 and Drizzle repos already
-share this module, so the win lands on both runtimes at once.
-
-**Why high-impact for the effort.** Low effort, removes a whole class of silent
-schema-drift bugs, and shrinks the per-field change surface from 3–4 edits to 1. Contained
-to one shared module, so the blast radius stays small.
-
-## 3. Finish the store pattern-factory adoption
-
-**Files:** `frontend/app/app/composables/useUpsertList.ts` and
-`frontend/app/app/composables/useSourceIntegration.ts` (the extracted helpers), plus the
-~12 stores under `frontend/app/app/stores/` that still hand-roll the patterns
-(`board`, `execution`, `agentRuns`, `pipelines`, `github`, `accounts`, `releaseHealth`,
-`bootstrap`, `workspace`, `infraConfig`, …).
-
-**Problem.** The two duplicated patterns the original candidate called out —
-
-- Find-by-id upsert (`findIndex` → replace or prepend) reimplemented per store.
-- Integration lifecycle (`available` flag + `probe()` + `connect()` + `disconnect()` +
-  `connectionFor()`) reimplemented per integration store, with inconsistent error handling.
-
-— now have shared helpers (`useUpsertList`, `useSourceIntegration`), but **adoption is
-partial**: only `tasks`, `documents`, and `notifications` use `useUpsertList`, and only
-`tasks` + `documents` use `useSourceIntegration`. The remaining ~12 stores still call
-`findIndex` directly, so the duplication (and the inconsistent probe error handling) lives
-on in most of the layer.
-
-**Approach.** Finish migrating the remaining stores onto the two helpers, store-by-store —
-each migration is independently shippable and removes ~20–30 duplicated lines. Where a
-store's list is large, opt into the helper's Set-backed lookup. Retire any lingering
-bespoke integration-lifecycle code in favour of the factory.
-
-**Why high-impact for the effort.** The hard part (designing + proving the helpers) is
-done; this is low-effort mechanical follow-through that collapses the last of the
-duplication and gives one place to fix/optimize list mutation and integration error
-handling.
-
-## 4. Split the `ui.ts` store
-
-**File:** `frontend/app/app/stores/ui.ts` — **828 lines**.
-
-**Problem.** A single Pinia store owns 40+ unrelated UI concerns: modal/panel open-close
-state (document import, task import, bootstrap, integrations, workspace/account settings),
-navigation (selected/focus block, zoom, level-of-detail), transient context
-(decision context, result-view dispatch, step detail), and vendor-specific UI
-(sandbox, human-test, kaizen), plus per-modal deep-link params. Every modal interaction
-touches this god object.
-
-**Approach.** Split into domain-scoped stores — e.g. `uiModals`, `uiNavigation`,
-`uiContext`, `uiVendor` — keeping the result-view dispatch seam
-(`dispatchStepView`/`ui.resultView`) intact. Hot paths (zoom/pan/select) isolate from modal
-state.
-
-**Why high-impact.** Removes the central contention point for every new modal/panel,
-shrinks the surface a feature must understand, and enables selective hydration. More
-intrusive than the helpers above: the split ripples to every component that imports the
-`ui` store, so consumers must be updated alongside it.
 
 ## 5. Finish the manifest-driven agent-kind registry (strangler work)
 
@@ -160,6 +58,18 @@ two switches. The seam and the generic path already exist, so the remaining work
 per-kind migration — moderately intrusive (it touches the dispatch hot path) but each step
 is small and independently shippable.
 
+**Status (further along than first written).** The bespoke _harness_ handlers are already
+gone: every built-in kind now synthesizes an `AgentStepSpec` and dispatches through the ONE
+generic `buildRegisteredAgentBody` path (see `buildMigratedBuiltInBody` in `jobBody.ts`) with
+`kind:'agent'` — no per-kind harness endpoint, no image bump per conversion. What remains are
+two thin _backend_ switches: `buildMigratedBuiltInBody` (built-in kind → its synthesized spec
+
+- system/user prompt) and the `toRunResult` `agentKind === …` coercion chain
+  (`containerAgentResult.ts`). The final step of this candidate is to fold those two into
+  registry lookups off a single `registerAgentKind`-style definition per built-in (carrying its
+  `buildJobBody` + `toRunResult`), so the switches collapse and a deployment can override a
+  built-in's prompt through the public seam.
+
 ## 6. Module registry for the orchestration container
 
 **File:** `backend/packages/orchestration/src/container.ts` — **2,146 lines**, ~17
@@ -186,27 +96,30 @@ single composition root every module flows through. Pairs naturally with #8.
 
 **Files:** the ~39 D1 repositories under
 `backend/runtimes/cloudflare/src/infrastructure/repositories/` and their ~39 Drizzle twins
-(post-#1, one file per repo under `backend/runtimes/node/src/repositories/`).
+(now split per-domain under `backend/runtimes/node/src/repositories/drizzle/`, see
+[Recently landed](#recently-landed) #2).
 
 **Problem.** Every persisted table has **two** repository implementations — a D1 (SQLite)
 one and a Drizzle (Postgres) one — that are behaviourally identical port implementations
 differing only in the SQL dialect and the row shape. `CLAUDE.md`'s "keep the runtimes
 symmetric" rule means every schema change, every new batch (`listByIds`-shaped) read, and
 every new table must be written **twice**, and drift is caught only if a conformance test
-happens to cover it. The shared `mappers.ts` (see #2) already removes the row↔domain
-duplication; the query/CRUD bodies are what remain duplicated.
+happens to cover it. The shared `mappers.ts` (the field-map factory, now landed — see
+[Recently landed](#recently-landed)) already removes the row↔domain duplication; the
+query/CRUD bodies are what remain duplicated.
 
 **Approach.** Extract the common CRUD/query shape (single-row read, batch `IN` read,
 insert/patch via the shared mappers, chunked deletes) into a small dialect-parameterized base
 so each concrete repository declares only its table + its genuinely dialect-specific queries.
 The conformance suite already asserts parity, so the extraction can be verified per-repo.
-This was previously deferred (see the note under #8); with the Drizzle file now split (#1)
-each pair sits side-by-side and the dedup is far more tractable.
+This was previously deferred (see the note under #8); with the Drizzle file now split
+([Recently landed](#recently-landed) #2) each pair sits side-by-side and the dedup is far
+more tractable.
 
 **Why high-impact.** Halves the per-table maintenance cost and turns "keep the runtimes
 symmetric" from a hand-enforced rule into a structural property. Highly intrusive — it
 reshapes both facades' persistence layers — so it is best done one repository pair at a time
-behind the cross-runtime conformance suite. Compose with #1 (do that first) and #8.
+behind the cross-runtime conformance suite. Compose with the now-landed Drizzle split and #8.
 
 ## 8. Shared container builder (Node ⇄ Cloudflare)
 
@@ -267,6 +180,58 @@ register a resolver" loop is now the shared `createScopedModelProviderResolver`
 (`@cat-factory/server`), consumed by both `runtimes/node/src/modelProvider.ts` and
 `runtimes/cloudflare/src/infrastructure/container.ts`. Adding a vendor is now a one-line
 table entry both runtimes pick up.
+
+### 2. Split the monolithic Drizzle repositories file ✅
+
+The ~5,000-line `backend/runtimes/node/src/repositories/drizzle.ts` (39 repository classes
+in one module) is split into per-domain files under `repositories/drizzle/` — `board.ts`,
+`execution.ts`, `accounts.ts`, `telemetry.ts`, `settings.ts`, `reviews.ts`, `kaizen.ts`,
+`initiatives.ts`, `sandbox.ts`, `connections.ts`, plus a small `_shared.ts` for the one
+cross-domain helper. `drizzle.ts` remains as a thin barrel that assembles the
+`CoreRepositories` set (`createDrizzleRepositories`) and re-exports the handful of classes
+consumed directly, so every `./repositories/drizzle.js` importer (index/container/test
+harness) is unchanged. Pure code movement — no schema or behavioural change — verified by
+the cross-runtime conformance suite. This is the precursor that makes #7 (shared base
+repositories) tractable: each Drizzle repo now sits in its own file next to its D1 twin.
+
+### 2 (candidate). Generic row mappers ✅
+
+`backend/packages/server/src/persistence/mappers.ts` now drives EVERY non-divergent
+row↔domain mapper off a declared field table. The `blocks` win (a single `blockFields`
+table generating read/insert/patch) landed earlier; the two remaining hand-enumerated read
+mappers — `rowToWorkspace` and `rowToPipeline` — are now folded onto the same "declare each
+column once" pattern via a small read-only path (`makeRowReader` + the `readScalar` /
+`readNullable` / `readJson` / `readOptJson` / `readFlag` / `readOptScalar` builders). These
+two are read-only in this module (their repos bind columns positionally on write), so they
+declare only the READ direction rather than a full three-way `FieldMapper`. `rowToExecution`
+stays deliberately bespoke — it packs/unpacks a `detail` JSON envelope with tolerant
+per-field parsers, a shape the factory doesn't model. So the only hand-written mappers left
+are the genuinely-divergent ones. Verified by `test/mappers.spec.ts` (the flag / version /
+availability / optional-JSON read semantics are pinned).
+
+### 3 (candidate). Finish the store pattern-factory adoption ✅
+
+Every plain find-by-key upsert store now routes list mutation through the shared
+`useUpsertList` composable; the last holdout — the `agentRuns` store's `envConfigRepairJobs`
+list (a plain prepend + replace-in-place, no monotonic guard) — is migrated, so the only
+remaining hand-rolled `findIndex` sites are the deliberately-divergent monotonic/reconcile-guarded
+stores (`execution`, `board`, `workspace`, `environmentTest`, and `agentRuns`' bootstrap list)
+plus `infraConfig`'s composite-key `upsertInto`. The `useSourceIntegration` factory already
+backs the document + task source stores. Verified by `app/stores/agentRuns.spec.ts`.
+
+### 4 (candidate). Split the `ui.ts` store ✅
+
+The 828-line `stores/ui.ts` god-store (40+ unrelated UI concerns) is decomposed into three
+cohesive, independently-testable slices under `stores/ui/`: `navigation.ts` (selection /
+focus / zoom / LOD — the hot paths, isolated from modal state), `resultViews.ts` (the
+`dispatchStepView` / `ui.resultView` overlay seam + the observability + Kaizen panels), and
+`modals.ts` (every modal / panel open-close flag, hub came-from markers, deep-link params,
+and the startup + AI-onboarding advisories). `ui.ts` is now a thin facade that composes the
+three and re-exports the SAME public surface (all 184 keys, verified identical), so every
+existing `useUiStore()` consumer is untouched — the split is internal. Promoting a slice to a
+separately-consumed store (for selective hydration) is a future, opt-in follow-up; the
+maintainability win (each concern in its own file, no central contention point) is realized
+now. Verified by `nuxt typecheck`.
 
 ### 8 (original). Split `ExecutionService` into step handlers + a completion-resolver registry ✅
 

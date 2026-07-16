@@ -183,6 +183,16 @@ the nearest recent ADR.
     not be afraid of the excessive visible churn, do not revert the mass reformat, and do not
     try to hand-pick the files CI named — run `pnpm exec oxfmt .`, stage everything, and let
     git collapse the noise.
+  - **Run it ONCE at the end and trust the result — do NOT audit what it changed.** Format
+    the whole tree a single time when the work is otherwise done, stage everything, and move
+    on. Do **not** then investigate, diff, `git stash`, or re-run `oxfmt --check` to work out
+    _why_ some file you didn't touch was reformatted, and do not try to separate "your"
+    formatting changes from unrelated ones. `oxfmt` also fixes **pre-existing formatting
+    drift** in files your change never touched (a doc or source file someone committed
+    unformatted); sweeping that drift up is correct and expected, not a mistake to reverse or
+    explain. Second-guessing the formatter's output is wasted effort — the only check that
+    matters is the final `oxfmt --check .` that CI runs, which a single whole-tree `oxfmt .`
+    already satisfies.
 
 ## Keep the runtimes symmetric
 

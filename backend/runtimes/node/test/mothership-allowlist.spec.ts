@@ -103,13 +103,17 @@ const NON_REMOTE: Record<string, Record<string, Reason>> = {
     updateSettings: 'admin',
   },
   membershipRepository: { upsert: 'admin', remove: 'admin' },
+  // `get`/`listByIds` are now allow-listed (the member-display reads: the account members panel's
+  // roster enrichment + the single-user display lookup, bound by co-membership via the `user`/
+  // `userList` scope rules). They carry only the presentational `UserRecord` — the password
+  // `secret` lives on `UserIdentityRecord`, read only via `getIdentity`/`listIdentities` (kept off).
+  // `update` (profile write) + `findByIdentity`/`findByEmail`/`getIdentity`/`listIdentities` are the
+  // account-lifecycle / login surface (the identity reads leak the hash), so they stay off.
   userRepository: {
-    get: 'pending',
     create: 'onboarding',
     update: 'pending',
     findByIdentity: 'pending',
     findByEmail: 'pending',
-    listByIds: 'pending',
     getIdentity: 'pending',
     linkIdentity: 'onboarding',
     listIdentities: 'pending',

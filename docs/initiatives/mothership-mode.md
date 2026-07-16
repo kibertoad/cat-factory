@@ -58,6 +58,21 @@
   `LOCAL_MOTHERSHIP_WORK_DB`): pg-boss's durability without Postgres (one row per run, rerun-coalescing,
   boot-time orphan reset + lease-expiry recovery poll). A **local-sqlite bucket** differentiator (no
   symmetry obligation). Tested in `sqlite/workQueue.test.ts` + `mothership.test.ts`.
+- **PR 2 (real-time UPSTREAM publish)** — the OUTBOUND half of "real-time both directions". A new
+  machine-authed `POST /internal/events/publish` (`eventsRelayController`, `@cat-factory/server`) +
+  the `MachineEventRelay` seam on `ServerContainer`, mounted + attached symmetrically on BOTH facades
+  (`LocalMachineEventRelay` over the Node hub/propagator; `DurableObjectMachineEventRelay` over the
+  per-workspace `WorkspaceEventsHub` DO). The laptop publishes each engine event upstream through a
+  `MothershipWebSocketPropagator` — a `WebSocketPropagator` adapter reusing the existing cross-node
+  seam, layered over the local hub — so hosted teammates on the shared board see the local node's
+  activity live. Account-scoped + default-deny like the persistence RPC (out-of-scope workspace →
+  404). Tested in `packages/server/test/eventsRelay.spec.ts`, `runtimes/node/test/machineEventRelay.spec.ts`,
+  the Cloudflare `events-stream.spec.ts` (relay delivery + `buildContainer` wiring-parity assertion),
+  and `runtimes/local/src/mothership.test.ts`. The relay-wiring parity is asserted per-facade (Node
+  `mothership.test.ts`, Cloudflare `events-stream.spec.ts`); folding an end-to-end relay assertion into
+  the shared cross-runtime suite rides with the INBOUND leg + the mothership conformance-server binding
+  below (the mothership harness has no realtime sink today). The INBOUND (subscribe) leg is the
+  remaining PR 2 work (see "Cross-cutting delegation").
 - **Repository conformance** — the shared conformance suite runs a THIRD `[mothership]` config (a
   no-Postgres node whose `CoreRepositories` are RPC-backed by a real in-process Node mothership), so
   an un-proxied / mis-scoped / non-serializing run-path method fails an EXISTING assertion. The static
@@ -218,6 +233,18 @@
   DELIVERY of a notification raised by a HOSTED teammate — the mothership decrypting a laptop-sealed
   token — mirrors the observability gate-probe residual; local-node delivery (the run's own node holds
   the key) is unaffected.
+- **Member-display reads** — the account members panel now renders real names/emails/avatars in
+  mothership mode: `userRepository.get` + `userRepository.listByIds` (the roster enrichment behind
+  `AccountService.members`) are allow-listed. Introduces a new scope rule pair **`user`/`userList`**
+  bound by CO-MEMBERSHIP — a userId is not an account/workspace, so it is admitted iff the user is a
+  member of one of the token's in-scope accounts, resolved server-side from the account rosters via a
+  new `resolveAccountMemberIds` dispatch resolver (bounded by the token's account scope, not the
+  requested user list — no N+1). Safe because the reads carry only the presentational `UserRecord`
+  (id/name/email/avatarUrl/createdAt); the password `secret` lives on `UserIdentityRecord`, reachable
+  only via `getIdentity`/`listIdentities`, which — with `update` (profile write) and
+  `findByIdentity`/`findByEmail` — stay OFF (the account-lifecycle / login surface). Round-trip +
+  co-membership-scope + secret-read-refusal tests in `persistenceRpc.spec.ts`; the drift guard moves
+  `get`/`listByIds` out of `pending`.
 
 **Login (PR 3)**
 
@@ -397,66 +424,66 @@ never remotely invocable (mothership-internal cron).
 
 **Org / durable (remote — the mothership RPC):**
 
-| Port                                     | Status  | Remote surface / what's still off                                                       |
-| ---------------------------------------- | ------- | --------------------------------------------------------------------------------------- |
-| `workspaceRepository`                    | ✅ done | board reads + rename/setDescription; `create` onboarding, `delete` sweeper              |
-| `blockRepository`                        | ◑ part  | board/run reads+writes; `listByService`/`countActiveInternal` (public API) pending      |
-| `executionRepository` (CAS/rev)          | ◑ part  | run surface; `listByService` pending, `listStale` sweeper                               |
-| `pipelineRepository`                     | ✅ done | full CRUD                                                                               |
-| `accountRepository`                      | ✅ done | reads only; `rename`/`updateSettings` admin, `create`/`ensurePersonal` onboarding       |
-| `membershipRepository`                   | ✅ done | reads only; `upsert`/`remove` admin                                                     |
-| `userSettingsRepository`                 | ✅ done | self-scoped get/upsert (user-tier budget)                                               |
-| `riskPolicyRepository` (merge presets)   | ✅ done | full library CRUD                                                                       |
-| `modelPresetRepository`                  | ✅ done | full library CRUD                                                                       |
-| `sharedStackRepository`                  | ✅ done | full library CRUD                                                                       |
-| `workspaceSettingsRepository`            | ✅ done | get/upsert; `listByWorkspaceIds` sweeper                                                |
-| `serviceFragmentDefaultsRepository`      | ✅ done | get/set                                                                                 |
-| `trackerSettingsRepository`              | ✅ done | get/put                                                                                 |
-| `pipelineScheduleRepository`             | ◑ part  | schedule mgmt + runNow; `listByService` pending, sweeper reads internal                 |
-| `serviceRepository`                      | ◑ part  | mount + board-composition + run-path reads; CRUD/`getByRepo` pending (GitHub sync)      |
-| `workspaceMountRepository`               | ◑ part  | mount mgmt; fan-out/batch cleanup reads pending                                         |
-| `notificationRepository`                 | ✅ done | inbox read/act/dismiss/escalate; retention prune sweeper                                |
-| `requirementReviewRepository`            | ✅ done | full get/upsert/deleteByBlock                                                           |
-| `docInterviewRepository`                 | ✅ done | run-path + interview window get/upsert/deleteByBlock                                    |
-| `clarityReviewRepository`                | ✅ done | full get/upsert/deleteByBlock                                                           |
-| `brainstormSessionRepository`            | ✅ done | full get/upsert/deleteByBlockStage                                                      |
-| `consensusSessionRepository`             | ✅ done | full get/upsert                                                                         |
-| `initiativeRepository`                   | ✅ done | CRUD + rev-CAS; `listExecuting` sweeper                                                 |
-| `kaizenGradingRepository`                | ◑ part  | run-path + screen reads; single-grade `get` internal, sweep reads internal              |
-| `kaizenVerifiedComboRepository`          | ◑ part  | `getByKey`/`listByWorkspace`; `upsert` (streak write) pending                           |
-| `agentRunRepository`                     | ✅ done | `getRef` (retry/stop entry); sweeper reads internal                                     |
-| `bootstrapJobRepository`                 | ✅ done | start/poll/retry/stop mgmt; `listByService` pending                                     |
-| `referenceArchitectureRepository`        | ✅ done | full library CRUD + retry re-resolve                                                    |
-| `envConfigRepairJobRepository`           | ✅ done | full run-mgmt (list/get/insert/update)                                                  |
-| `environmentTestRunRepository`           | ✅ done | whole repo; full self-test still gated on provisioning writes below                     |
-| `environmentConnectionRepository`        | ✅ done | connection + handler mgmt (sealed `secretsCipher`)                                      |
-| `customManifestTypeRepository`           | ✅ done | full catalog CRUD (no secrets)                                                          |
-| `environmentRegistryRepository`          | ◑ part  | reads only; provision writes/access-cipher decrypt = secrets-delegation slice           |
-| `observabilityConnectionRepository`      | ✅ done | settings CRUD (sealed); gate-probe decrypt = secrets-delegation slice                   |
-| `releaseHealthConfigRepository`          | ✅ done | per-block config CRUD                                                                   |
-| `incidentEnrichmentConnectionRepository` | ✅ done | settings CRUD (sealed)                                                                  |
-| `packageRegistryConnectionRepository`    | ✅ done | settings + decrypt-time reads (sealed)                                                  |
-| `testSecretsRepository`                  | ◑ part  | inspector CRUD + run-path read (sealed); `listByWorkspace` no consumer yet              |
-| `runnerPoolConnectionRepository`         | ✅ done | connect/rotate/disconnect (sealed `secretsCipher`)                                      |
-| `binaryArtifactMetadataStore` (metadata) | ✅ done | metadata CRUD; bytes → per-account blob backend; retention sweeper                      |
-| `slackConnectionRepository`              | ✅ done | connect/disconnect (sealed `tokenCipher`); `getByTeam` inbound-OAuth internal           |
-| `slackSettingsRepository`                | ✅ done | per-workspace routing (no secrets)                                                      |
-| `slackMemberMappingRepository`           | ✅ done | per-account mention map (no secrets)                                                    |
-| `promptFragmentRepository`               | ◑ part  | owner-scoped library mgmt; `listBySource` (repo-sync) pending                           |
-| `fragmentSourceRepository`               | ◑ part  | owner-scoped list + link; id-keyed sync mgmt pending                                    |
-| `documentRepository`                     | ◑ part  | run-path context reads; mgmt writes pending (module needs the connection repo)          |
-| `taskRepository`                         | ◑ part  | run-path context reads; mgmt writes pending (module needs the connection repo)          |
-| `githubInstallationRepository`           | ◑ part  | `getByWorkspace` run-path read; id-keyed reads / sync writes pending                    |
-| `repoProjectionRepository`               | ◑ part  | `list` (SPA + run path); sync/repo-write surface pending; `listByInstallation` internal |
-| `branchProjectionRepository`             | ◑ part  | `listByRepo` read; `upsertMany` sync pending                                            |
-| `pullRequestProjectionRepository`        | ◑ part  | `listByWorkspace` read; sync/per-repo reads pending                                     |
-| `issueProjectionRepository`              | ◑ part  | `listByWorkspace` read; sync/per-repo reads pending                                     |
-| `commitProjectionRepository`             | ⬜ todo | sync-write slice (all pending/sweeper/helper)                                           |
-| `checkRunProjectionRepository`           | ⬜ todo | sync-write slice (all pending)                                                          |
-| `userRepository`                         | ⬜ todo | member-display reads pending (needs a scope rule; identity reads leak hash → off)       |
-| `invitationRepository`                   | ◑ part  | `listByAccount` read; `create`/`setStatus` admin, accept-invite lookups pre-auth        |
-| `emailConnectionRepository`              | ◑ part  | `getByAccount` read (sealed); connect/disconnect admin                                  |
-| `passwordResetTokenRepository`           | ⬜ todo | pre-auth flow (all pending; `deleteExpired` sweeper)                                    |
+| Port                                     | Status  | Remote surface / what's still off                                                                  |
+| ---------------------------------------- | ------- | -------------------------------------------------------------------------------------------------- |
+| `workspaceRepository`                    | ✅ done | board reads + rename/setDescription; `create` onboarding, `delete` sweeper                         |
+| `blockRepository`                        | ◑ part  | board/run reads+writes; `listByService`/`countActiveInternal` (public API) pending                 |
+| `executionRepository` (CAS/rev)          | ◑ part  | run surface; `listByService` pending, `listStale` sweeper                                          |
+| `pipelineRepository`                     | ✅ done | full CRUD                                                                                          |
+| `accountRepository`                      | ✅ done | reads only; `rename`/`updateSettings` admin, `create`/`ensurePersonal` onboarding                  |
+| `membershipRepository`                   | ✅ done | reads only; `upsert`/`remove` admin                                                                |
+| `userSettingsRepository`                 | ✅ done | self-scoped get/upsert (user-tier budget)                                                          |
+| `riskPolicyRepository` (merge presets)   | ✅ done | full library CRUD                                                                                  |
+| `modelPresetRepository`                  | ✅ done | full library CRUD                                                                                  |
+| `sharedStackRepository`                  | ✅ done | full library CRUD                                                                                  |
+| `workspaceSettingsRepository`            | ✅ done | get/upsert; `listByWorkspaceIds` sweeper                                                           |
+| `serviceFragmentDefaultsRepository`      | ✅ done | get/set                                                                                            |
+| `trackerSettingsRepository`              | ✅ done | get/put                                                                                            |
+| `pipelineScheduleRepository`             | ◑ part  | schedule mgmt + runNow; `listByService` pending, sweeper reads internal                            |
+| `serviceRepository`                      | ◑ part  | mount + board-composition + run-path reads; CRUD/`getByRepo` pending (GitHub sync)                 |
+| `workspaceMountRepository`               | ◑ part  | mount mgmt; fan-out/batch cleanup reads pending                                                    |
+| `notificationRepository`                 | ✅ done | inbox read/act/dismiss/escalate; retention prune sweeper                                           |
+| `requirementReviewRepository`            | ✅ done | full get/upsert/deleteByBlock                                                                      |
+| `docInterviewRepository`                 | ✅ done | run-path + interview window get/upsert/deleteByBlock                                               |
+| `clarityReviewRepository`                | ✅ done | full get/upsert/deleteByBlock                                                                      |
+| `brainstormSessionRepository`            | ✅ done | full get/upsert/deleteByBlockStage                                                                 |
+| `consensusSessionRepository`             | ✅ done | full get/upsert                                                                                    |
+| `initiativeRepository`                   | ✅ done | CRUD + rev-CAS; `listExecuting` sweeper                                                            |
+| `kaizenGradingRepository`                | ◑ part  | run-path + screen reads; single-grade `get` internal, sweep reads internal                         |
+| `kaizenVerifiedComboRepository`          | ◑ part  | `getByKey`/`listByWorkspace`; `upsert` (streak write) pending                                      |
+| `agentRunRepository`                     | ✅ done | `getRef` (retry/stop entry); sweeper reads internal                                                |
+| `bootstrapJobRepository`                 | ✅ done | start/poll/retry/stop mgmt; `listByService` pending                                                |
+| `referenceArchitectureRepository`        | ✅ done | full library CRUD + retry re-resolve                                                               |
+| `envConfigRepairJobRepository`           | ✅ done | full run-mgmt (list/get/insert/update)                                                             |
+| `environmentTestRunRepository`           | ✅ done | whole repo; full self-test still gated on provisioning writes below                                |
+| `environmentConnectionRepository`        | ✅ done | connection + handler mgmt (sealed `secretsCipher`)                                                 |
+| `customManifestTypeRepository`           | ✅ done | full catalog CRUD (no secrets)                                                                     |
+| `environmentRegistryRepository`          | ◑ part  | reads only; provision writes/access-cipher decrypt = secrets-delegation slice                      |
+| `observabilityConnectionRepository`      | ✅ done | settings CRUD (sealed); gate-probe decrypt = secrets-delegation slice                              |
+| `releaseHealthConfigRepository`          | ✅ done | per-block config CRUD                                                                              |
+| `incidentEnrichmentConnectionRepository` | ✅ done | settings CRUD (sealed)                                                                             |
+| `packageRegistryConnectionRepository`    | ✅ done | settings + decrypt-time reads (sealed)                                                             |
+| `testSecretsRepository`                  | ◑ part  | inspector CRUD + run-path read (sealed); `listByWorkspace` no consumer yet                         |
+| `runnerPoolConnectionRepository`         | ✅ done | connect/rotate/disconnect (sealed `secretsCipher`)                                                 |
+| `binaryArtifactMetadataStore` (metadata) | ✅ done | metadata CRUD; bytes → per-account blob backend; retention sweeper                                 |
+| `slackConnectionRepository`              | ✅ done | connect/disconnect (sealed `tokenCipher`); `getByTeam` inbound-OAuth internal                      |
+| `slackSettingsRepository`                | ✅ done | per-workspace routing (no secrets)                                                                 |
+| `slackMemberMappingRepository`           | ✅ done | per-account mention map (no secrets)                                                               |
+| `promptFragmentRepository`               | ◑ part  | owner-scoped library mgmt; `listBySource` (repo-sync) pending                                      |
+| `fragmentSourceRepository`               | ◑ part  | owner-scoped list + link; id-keyed sync mgmt pending                                               |
+| `documentRepository`                     | ◑ part  | run-path context reads; mgmt writes pending (module needs the connection repo)                     |
+| `taskRepository`                         | ◑ part  | run-path context reads; mgmt writes pending (module needs the connection repo)                     |
+| `githubInstallationRepository`           | ◑ part  | `getByWorkspace` run-path read; id-keyed reads / sync writes pending                               |
+| `repoProjectionRepository`               | ◑ part  | `list` (SPA + run path); sync/repo-write surface pending; `listByInstallation` internal            |
+| `branchProjectionRepository`             | ◑ part  | `listByRepo` read; `upsertMany` sync pending                                                       |
+| `pullRequestProjectionRepository`        | ◑ part  | `listByWorkspace` read; sync/per-repo reads pending                                                |
+| `issueProjectionRepository`              | ◑ part  | `listByWorkspace` read; sync/per-repo reads pending                                                |
+| `commitProjectionRepository`             | ⬜ todo | sync-write slice (all pending/sweeper/helper)                                                      |
+| `checkRunProjectionRepository`           | ⬜ todo | sync-write slice (all pending)                                                                     |
+| `userRepository`                         | ◑ part  | member-display reads (`get`/`listByIds`, co-membership scope); identity/auth reads leak hash → off |
+| `invitationRepository`                   | ◑ part  | `listByAccount` read; `create`/`setStatus` admin, accept-invite lookups pre-auth                   |
+| `emailConnectionRepository`              | ◑ part  | `getByAccount` read (sealed); connect/disconnect admin                                             |
+| `passwordResetTokenRepository`           | ⬜ todo | pre-auth flow (all pending; `deleteExpired` sweeper)                                               |
 
 **Excluded (never remotely invocable — admin-gated, so the token-scopes-accounts-not-roles rule keeps them off):**
 
@@ -503,19 +530,32 @@ never remotely invocable (mothership-internal cron).
   mothership projects. (Projection WRITES — sync ingest, `setMonorepo`, cursors — remain
   mothership-owned; the repo-write projection-refresh slice is still open.)
 
-  > **Reality check (code vs plan).** Only GitHub token delegation (above) and the persistence RPC are
-  > IMPLEMENTED. The four bullets below are the DESIGN for PR 2 / PR 4 / PR 5 and are **NOT yet in
-  > code** — no `/internal/events`, `/internal/notifications`, `/internal/email`, or
-  > `/internal/telemetry` endpoint exists yet (a grep finds them only in this doc + ADR 0009). The two
-  > live `/internal/*` routes today are `POST /internal/persistence` and
-  > `POST /internal/github/installation-token`. The remote `notificationRepository` PERSISTS a
-  > notification row today (allow-listed), but in-app/Slack/email DELIVERY delegation is unbuilt.
+  > **Reality check (code vs plan).** GitHub token delegation (above), the persistence RPC, and the
+  > real-time UPSTREAM publish (below) are IMPLEMENTED. The remaining bullets below are the DESIGN for
+  > PR 4 / PR 5 and are **NOT yet in code** — no `/internal/notifications`, `/internal/email`, or
+  > `/internal/telemetry` endpoint exists yet (a grep finds them only in this doc + ADR 0009). The
+  > three live `/internal/*` routes today are `POST /internal/persistence`,
+  > `POST /internal/github/installation-token`, and `POST /internal/events/publish`. The remote
+  > `notificationRepository` PERSISTS a notification row today (allow-listed), but in-app/Slack/email
+  > DELIVERY delegation is unbuilt.
 
-- **Real-time both directions (PR 2 — planned, not built).** `RpcEventPublisher` (`@cat-factory/server`)
-  would POST each engine event to `POST /internal/events/publish` so hosted teammates see the local
-  node's activity; an `UpstreamEventSubscriber` would open `GET /internal/events/subscribe?scope=…` and
-  re-publish into the local `NodeRealtimeHub` so the local SPA sees org activity. SPA wire protocol
-  unchanged.
+- **Real-time — UPSTREAM (outbound) ✅ landed; INBOUND (subscribe) planned.** The OUTBOUND leg is
+  built via the EXISTING cross-node `WebSocketPropagator` seam rather than a bespoke publisher: a
+  `MothershipWebSocketPropagator` (`@cat-factory/local-server`) POSTs each engine event to the new
+  machine-authed `POST /internal/events/publish`, layered over the local hub so every event fans to
+  the laptop's own SPA AND the mothership. The mothership injects it into its OWN real-time fan-out
+  via the `MachineEventRelay` seam (`@cat-factory/server`), implemented symmetrically on both facades
+  — `LocalMachineEventRelay` (the Node hub / propagator) and `DurableObjectMachineEventRelay` (the
+  per-workspace `WorkspaceEventsHub` Durable Object) — so hosted teammates see the local node's
+  activity live. Account-scoped + default-deny exactly like the persistence RPC.
+  The INBOUND leg — the local node opening a subscription (`GET /internal/events/subscribe`) and
+  re-broadcasting org activity into its `NodeRealtimeHub` — is a distinct, runtime-shaped follow-up:
+  the mothership SERVE side is a long-lived fan-out that is genuinely different per runtime (an
+  in-process subscriber registry on Node vs. DO-held connections on Cloudflare), so it is not
+  half-wired here. The cleanest design reuses the SAME per-workspace realtime `upgrade` seam
+  (`gateways.realtime.upgrade`) with machine auth, and suppresses the origin node's echo by threading
+  its stable subscribe `?cid=` through the outbound publish as `originConnectionId` (the mechanism the
+  outbound leg already carries). SPA wire protocol unchanged in both directions.
 - **Notifications (PR 4 — planned, not built).** Row persists via the remote `notificationRepository`
   (done); in-app delivery would ride the event fan-out (needs PR 2); **Slack** delivery would stay
   mothership-side via a `RemoteNotificationChannel` → `POST /internal/notifications/deliver`. (Slack
@@ -534,8 +574,10 @@ never remotely invocable (mothership-internal cron).
   See "Landed so far". The board-load + run end-to-end surface that makes it functional landed under
   Phase 3 (the merge gate, **MET**).
 - **PR 2 — real-time both directions + durable SQLite work queue.** Durable SQLite work queue **✅
-  landed**. **Remaining:** real-time both directions (`RpcEventPublisher` + `UpstreamEventSubscriber`)
-  and the local-sqlite conformance binding via a fake mothership server.
+  landed**. Real-time **UPSTREAM (outbound)** **✅ landed** — see "Landed so far". **Remaining:** the
+  INBOUND (subscribe) leg (the local node receiving org events raised on the mothership / by peer
+  laptops and re-broadcasting them to the laptop's SPA) and the local-sqlite conformance binding via
+  a fake mothership server.
 
 ### Phase 3 — Functional repository surface (THE MERGE GATE)
 
@@ -553,7 +595,8 @@ backend, asserted by `mothership-integration.spec.ts` (green). The three parts o
    no-ops over the remote for now.)
 2. **Widen `REMOTE_PERSISTENCE_METHODS`** to the board-load + run methods, each with a correct scope
    rule (`workspace` / `workspaceField` / `account` / `accountField` / `block` / `blockList` /
-   `serviceList` / `service` / `serviceMount` / `owner` / `ownerField` / `visibility` / `selfUser`). The
+   `serviceList` / `service` / `serviceMount` / `owner` / `ownerField` / `visibility` / `selfUser` /
+   `user` / `userList`). The
    boundary is security-sensitive: a machine token scopes ACCOUNTS not roles, so admin-gated mutations
    and global sweeper reads stay excluded. Ongoing surface-completion is the follow-up slices + the
    `pending` entries in the drift guard.

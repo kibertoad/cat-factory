@@ -75,7 +75,11 @@ export interface WebSocketPropagator {
  */
 export class LayeredEventPropagator implements LocalEventSink {
   constructor(
-    private readonly hub: NodeRealtimeHub,
+    // The LOCAL delivery target every published event fans to first. Typed as the {@link LocalEventSink}
+    // seam (not the concrete {@link NodeRealtimeHub}) because the layer only ever calls `.broadcast` on
+    // it — this is the bare hub in production, and lets a caller (local mothership mode) layer an adapter
+    // over an already-injected sink without an unsafe cast.
+    private readonly hub: LocalEventSink,
     private readonly adapters: readonly WebSocketPropagator[] = [],
   ) {}
 

@@ -27,6 +27,7 @@ import type { InitiativePresetRegistry } from '@cat-factory/kernel'
 import type { ResolveRepoTarget } from '../agents/ContainerAgentExecutor.js'
 import type { SessionPayload, SessionUser } from '../auth/signing.js'
 import type { AppConfig } from '../config/types.js'
+import type { MachineEventRelay } from '../events/machineEvents.js'
 import type { PersistenceRegistry } from '../persistence/rpc.js'
 import type { RuntimeGateways, WebSearchUpstream } from '../runtime/gateways.js'
 
@@ -255,6 +256,15 @@ export interface ServerContainer extends Core {
    * docs/initiatives/mothership-mode.md.
    */
   githubTokenDelegation?: GitHubTokenDelegation
+  /**
+   * Mothership-side real-time UPSTREAM delivery: injects a relayed engine event from a
+   * machine-authed mothership-mode node (`POST /internal/events/publish`) into THIS deployment's
+   * own real-time fan-out, so a hosted teammate watching the same shared board sees the local
+   * node's activity live. Wired by a facade acting as a mothership whose realtime transport is
+   * enabled (both Node + Cloudflare — the symmetric change); absent ⇒ the endpoint 503s. This is
+   * the OUTBOUND half of "real-time both directions"; see docs/initiatives/mothership-mode.md.
+   */
+  machineEventRelay?: MachineEventRelay
   /**
    * Local-mode mothership login seam: exchange a mothership SESSION token for a machine token
    * and cache it locally, so the node can talk to the mothership without a pasted static token.

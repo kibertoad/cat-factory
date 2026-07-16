@@ -214,6 +214,9 @@ export const passwordResetTokens = pgTable(
   (t) => [
     uniqueIndex('idx_password_reset_tokens_token').on(t.token_hash),
     index('idx_password_reset_tokens_user').on(t.user_id, t.status),
+    // `deleteExpired` sweeps on `expires_at < ?`; index it like every other TTL column
+    // (idx_environments_expiry / idx_personal_subs_expiry) so the sweep isn't a full scan.
+    index('idx_password_reset_tokens_expiry').on(t.expires_at),
   ],
 )
 

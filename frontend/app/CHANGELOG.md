@@ -1,5 +1,58 @@
 # @cat-factory/app
 
+## 0.121.3
+
+### Patch Changes
+
+- Updated dependencies [06a094a]
+  - @cat-factory/contracts@0.135.0
+
+## 0.121.2
+
+### Patch Changes
+
+- bd0a42a: refactor(app): split the `ui.ts` store and finish the plain-upsert store adoption
+
+  Two refactoring candidates, both internal with no behaviour change:
+
+  - **Candidate #4 — split the `ui.ts` store.** The 828-line god-store (40+ unrelated UI
+    concerns) is decomposed into three cohesive slices under `stores/ui/`: `navigation.ts`
+    (selection / focus / zoom / LOD), `resultViews.ts` (the `dispatchStepView` / `ui.resultView`
+    overlay seam + the observability + Kaizen panels), and `modals.ts` (every modal / panel
+    open-close flag, hub markers, deep-link params, and the startup + AI-onboarding advisories).
+    `ui.ts` is now a thin facade composing the three behind the SAME public surface (all 184
+    keys, verified identical), so every `useUiStore()` consumer is untouched.
+  - **Candidate #3 — finish the `useUpsertList` adoption.** The `agentRuns` store's
+    `envConfigRepairJobs` list (the last plain, unguarded find-by-id upsert) now routes through
+    the shared `useUpsertList` composable instead of a hand-rolled `findIndex` block.
+
+## 0.121.1
+
+### Patch Changes
+
+- 33b4d97: refactor(app): route more stores' list mutation through the `useUpsertList` helper
+
+  Finish more of the store pattern-factory adoption (refactoring candidate #3): the plain
+  find-by-key upsert stores `pipelines`, `releaseHealth`, `accounts`, `bootstrap`,
+  `sharedStacks`, and `github` (composite `repoGithubId:number` key) now insert/replace/remove
+  through the shared `useUpsertList` composable instead of hand-rolled `findIndex` blocks.
+  Mechanical dedup with no behaviour change on the loaded path; the only difference is that a
+  few former replace-only sites (updating an already-loaded row) now insert-if-missing rather
+  than silently no-op, which is unreachable in practice since the row is always present. The
+  monotonic/reconcile-guarded stores (`execution`,
+  `board`, `workspace`, `environmentTest`, `agentRuns`' bootstrap list) are deliberately left
+  hand-rolled, since the helper's plain upsert would drop the guard that prevents real-time
+  store clobber.
+
+## 0.121.0
+
+### Minor Changes
+
+- f46de34: Add a UI for managing API access tokens. A new "API access tokens" panel (reached from the
+  Integrations hub, under Development) lists a workspace's inbound public-API keys and lets a
+  member mint a new one, copy the raw secret exactly once at creation, and revoke keys. Backed
+  by the existing public-API-key management endpoints under `/workspaces/:workspaceId/public-api-keys`.
+
 ## 0.120.0
 
 ### Minor Changes
