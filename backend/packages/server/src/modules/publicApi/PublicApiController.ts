@@ -1,10 +1,18 @@
 import {
+  type Block,
   createInitiativeJobContract,
+  createPublicTaskContract,
   getPublicJobContract,
+  getPublicTaskContract,
+  listPublicServiceTasksContract,
+  listPublicServicesContract,
+  startPublicTaskContract,
   type ExecutionInstance,
   type ExecutionStatus,
   type PublicJob,
   type PublicJobStatus,
+  type PublicService,
+  type PublicTask,
 } from '@cat-factory/contracts'
 import {
   type AgentKindRegistry,
@@ -14,11 +22,13 @@ import {
   REQUIREMENTS_BRAINSTORM_AGENT_KIND,
   REQUIREMENTS_REVIEW_AGENT_KIND,
 } from '@cat-factory/agents'
+import { CredentialRequiredError } from '@cat-factory/kernel'
 import type { PublicApiKeyAuth } from '@cat-factory/integrations'
 import { buildHonoRoute } from '@toad-contracts/hono'
 import { Hono } from 'hono'
 import type { Context } from 'hono'
 import { streamSSE } from 'hono/streaming'
+import { personalGateForBlock } from '../providers/personalCredentialGate.js'
 import type { AppEnv } from '../../http/env.js'
 
 // The PUBLIC external API (`/api/v1/*`). Unlike the SPA surface it is NOT behind the user-session
@@ -28,6 +38,14 @@ import type { AppEnv } from '../../http/env.js'
 // initiative" — start a public, inline pipeline headlessly and retrieve its DB-persisted result
 // asynchronously (poll `GET /jobs/:id` or stream `GET /jobs/:id/events`). Nothing is pushed to
 // GitHub: the pipeline is inline-only, so the run produces its output purely in the DB.
+//
+// Second use-case: "basic board workloads" — the external counterparts of the SPA's board
+// operations, all scoped to the key's workspace: list the workspace's services
+// (`GET /services`), create a task under one (`POST /services/:serviceId/tasks`), list a
+// service's tasks (`GET /services/:serviceId/tasks`), read a task's status
+// (`GET /tasks/:taskId`), and start a task (`POST /tasks/:taskId/start`). Reads project a
+// `Block` onto small `publicTask`/`publicService` resources; `start` refuses an
+// individual-usage-model task (no headless personal-credential unlock).
 
 /** How often the SSE stream re-reads the job, and the hard cap on how long it stays open. */
 const SSE_POLL_MS = 1000
@@ -109,6 +127,32 @@ function toPublicJob(execution: ExecutionInstance): PublicJob {
       execution.createdAt ?? execution.steps.find((s) => s.startedAt != null)?.startedAt ?? 0,
     result,
     error,
+  }
+}
+
+/** Project a board task block onto the external task resource (no block/board internals). */
+function toPublicTask(block: Block, serviceId: string): PublicTask {
+  return {
+    taskId: block.id,
+    serviceId,
+    title: block.title,
+    description: block.description,
+    taskType: block.taskType ?? 'feature',
+    status: block.status,
+    progress: block.progress,
+    executionId: block.executionId,
+    pullRequestUrl: block.pullRequest?.url ?? null,
+  }
+}
+
+/** Project a service frame block onto the external service resource. */
+function toPublicService(frame: Block): PublicService {
+  return {
+    serviceId: frame.id,
+    title: frame.title,
+    description: frame.description,
+    type: frame.type,
+    status: frame.status,
   }
 }
 
@@ -369,6 +413,166 @@ export function publicApiController(): Hono<AppEnv> {
         await stream.sleep(SSE_POLL_MS)
       }
     })
+  })
+
+  // --- Basic board workloads: services + tasks -------------------------------
+  // The external counterparts of the SPA's board operations, scoped to the key's workspace
+  // via `resolveKey`. Reads project a `Block` onto the small `publicTask`/`publicService`
+  // resources (never the raw block). `start` runs a task's pipeline headlessly (no human in
+  // the loop): it refuses an individual-usage-model task, which needs a personal-credential
+  // unlock only an interactive user can supply.
+
+  // List the workspace's services (board service frames).
+  buildHonoRoute(app, listPublicServicesContract, async (c) => {
+    const gate = await resolveKey(c)
+    if ('fail' in gate) {
+      return c.json(
+        { error: { code: gate.fail.code, message: gate.fail.message } },
+        gate.fail.status,
+      )
+    }
+    const services = await c.get('container').boardService.listServices(gate.auth.workspaceId)
+    return c.json({ services: services.map(toPublicService) }, 200)
+  })
+
+  // Create a task under a service.
+  buildHonoRoute(app, createPublicTaskContract, async (c) => {
+    const gate = await resolveKey(c)
+    if ('fail' in gate) {
+      return c.json(
+        { error: { code: gate.fail.code, message: gate.fail.message } },
+        gate.fail.status,
+      )
+    }
+    const { serviceId } = c.req.valid('param')
+    const block = await c
+      .get('container')
+      .boardService.addServiceTask(gate.auth.workspaceId, serviceId, c.req.valid('json'))
+    return c.json(toPublicTask(block, serviceId), 201)
+  })
+
+  // List a service's tasks (whole subtree, headless anchors excluded).
+  buildHonoRoute(app, listPublicServiceTasksContract, async (c) => {
+    const gate = await resolveKey(c)
+    if ('fail' in gate) {
+      return c.json(
+        { error: { code: gate.fail.code, message: gate.fail.message } },
+        gate.fail.status,
+      )
+    }
+    const { serviceId } = c.req.valid('param')
+    const tasks = await c
+      .get('container')
+      .boardService.listServiceTasks(gate.auth.workspaceId, serviceId)
+    if (!tasks) {
+      return c.json({ error: { code: 'not_found', message: 'Service not found' } }, 404)
+    }
+    return c.json({ tasks: tasks.map((t) => toPublicTask(t, serviceId)) }, 200)
+  })
+
+  // Get a task's status.
+  buildHonoRoute(app, getPublicTaskContract, async (c) => {
+    const gate = await resolveKey(c)
+    if ('fail' in gate) {
+      return c.json(
+        { error: { code: gate.fail.code, message: gate.fail.message } },
+        gate.fail.status,
+      )
+    }
+    const found = await c
+      .get('container')
+      .boardService.getServiceTask(gate.auth.workspaceId, c.req.valid('param').taskId)
+    if (!found) {
+      return c.json({ error: { code: 'not_found', message: 'Task not found' } }, 404)
+    }
+    return c.json(toPublicTask(found.block, found.service.id), 200)
+  })
+
+  // Start (run) a task.
+  buildHonoRoute(app, startPublicTaskContract, async (c) => {
+    const gate = await resolveKey(c)
+    if ('fail' in gate) {
+      return c.json(
+        { error: { code: gate.fail.code, message: gate.fail.message } },
+        gate.fail.status,
+      )
+    }
+    const { auth } = gate
+    const container = c.get('container')
+    const { taskId } = c.req.valid('param')
+    const found = await container.boardService.getServiceTask(auth.workspaceId, taskId)
+    if (!found) {
+      return c.json({ error: { code: 'not_found', message: 'Task not found' } }, 404)
+    }
+    // A task under an ARCHIVED service is still READABLE (poll a run that was in flight when the
+    // service was archived) but not START-able — consistent with `listServiceTasks`, which hides
+    // an archived service entirely, and with `addServiceTask`, which refuses to add work to one.
+    if (found.service.archived) {
+      return c.json(
+        {
+          error: {
+            code: 'service_archived',
+            message: 'This task belongs to an archived service and cannot be started',
+          },
+        },
+        409,
+      )
+    }
+    // The pipeline to run: the request's, else the task's pinned pipeline. A task with
+    // neither can't be started headlessly (there is no run-time picker for an API caller).
+    const pipelineId = c.req.valid('json').pipelineId ?? found.block.pipelineId
+    if (!pipelineId) {
+      return c.json(
+        {
+          error: {
+            code: 'pipeline_required',
+            message: 'This task has no pipeline; pass a pipelineId to start it',
+          },
+        },
+        400,
+      )
+    }
+    // A headless key has no user/password to unlock a personal (individual-usage)
+    // subscription, so refuse a task whose model resolves to such a vendor (Claude / Codex)
+    // up front. The gate throws `CredentialRequiredError` (→ 428) for exactly that case; it
+    // is a no-op for an ordinary poolable model. Passing no user means only subscription-ONLY
+    // vendors gate (a dual-mode GLM task still runs on the poolable Cloudflare base).
+    try {
+      await personalGateForBlock(
+        container,
+        auth.workspaceId,
+        taskId,
+        pipelineId,
+        undefined,
+        undefined,
+      )
+    } catch (err) {
+      if (err instanceof CredentialRequiredError) {
+        return c.json(
+          {
+            error: {
+              code: 'individual_model_unsupported',
+              message:
+                'This task runs on an individual-usage model that needs an interactive personal-credential unlock; it cannot be started through the API',
+            },
+          },
+          409,
+        )
+      }
+      throw err
+    }
+    // Headless / system-initiated: no `usr_*` initiator. The engine's own start-time gates
+    // (per-service running-task cap, dependency gate, runnability) apply as for any board start;
+    // their `DomainError`s map to the right HTTP status via the shared error handler. This is the
+    // abuse backstop for board starts — the analogue of the initiative surface's active-run cap.
+    await container.executionService.start(auth.workspaceId, taskId, pipelineId, null)
+    // Re-read the task so the caller gets its AUTHORITATIVE post-start projection (status,
+    // executionId, progress) rather than an optimistic guess — a run may park/block at its first
+    // step rather than land on `in_progress`. `getServiceTask` never returns null here (start did
+    // not delete the block), but fall back to the pre-start projection if the row is somehow gone.
+    const after = await container.boardService.getServiceTask(auth.workspaceId, taskId)
+    const projected = after ?? found
+    return c.json(toPublicTask(projected.block, projected.service.id), 202)
   })
 
   return app

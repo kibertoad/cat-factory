@@ -87,3 +87,197 @@ describe('public API — break down an initiative', () => {
     expect(afterRevoke.status).toBe(401)
   })
 })
+
+// The basic board workloads: list services, create a task under one, read its status, list a
+// service's tasks, and start a task — all key-scoped to the caller's workspace. Runtime-neutral
+// (shared server + orchestration over already-symmetric repo reads), so the Worker spec is the
+// primary guard; the conformance suite covers the underlying repo parity.
+
+interface Svc {
+  serviceId: string
+  title: string
+  type: string
+  status: string
+}
+interface Task {
+  taskId: string
+  serviceId: string
+  title: string
+  taskType: string
+  status: string
+  executionId: string | null
+  pullRequestUrl: string | null
+}
+
+async function mintKey(app: ReturnType<typeof makeApp>, workspaceId: string) {
+  const created = await app.call<{ key: { id: string }; secret: string }>(
+    'POST',
+    `/workspaces/${workspaceId}/public-api-keys`,
+    { label: 'external system' },
+  )
+  expect(created.status).toBe(201)
+  return { authorization: `Bearer ${created.body.secret}` }
+}
+
+describe('public API — basic board workloads (services + tasks)', () => {
+  it('lists services, creates/reads/lists tasks, and enforces workspace scoping', async () => {
+    const app = makeApp(new FakeAgentExecutor())
+    const snapshot = await app.createOrgWorkspace({ seed: true })
+    const workspaceId = snapshot.workspace.id
+    const auth = await mintKey(app, workspaceId)
+
+    // Seed a fresh service frame via the session board API, then find it over the public API.
+    const frame = await app.call<{ id: string }>('POST', `/workspaces/${workspaceId}/blocks`, {
+      type: 'service',
+      position: { x: 400, y: 400 },
+    })
+    expect(frame.status).toBe(201)
+    const serviceId = frame.body.id
+
+    const services = await app.call<{ services: Svc[] }>('GET', '/api/v1/services', undefined, auth)
+    expect(services.status).toBe(200)
+    expect(services.body.services.some((s) => s.serviceId === serviceId)).toBe(true)
+
+    // Create a task under the service.
+    const created = await app.call<Task>(
+      'POST',
+      `/api/v1/services/${serviceId}/tasks`,
+      { title: 'Add a cat photo endpoint', description: 'GET /cats/:id/photo' },
+      auth,
+    )
+    expect(created.status).toBe(201)
+    expect(created.body.serviceId).toBe(serviceId)
+    expect(created.body.status).toBe('planned')
+    expect(created.body.taskType).toBe('feature')
+    expect(created.body.executionId).toBeNull()
+    const taskId = created.body.taskId
+
+    // Read its status.
+    const got = await app.call<Task>('GET', `/api/v1/tasks/${taskId}`, undefined, auth)
+    expect(got.status).toBe(200)
+    expect(got.body.status).toBe('planned')
+    expect(got.body.serviceId).toBe(serviceId)
+
+    // List the service's tasks.
+    const list = await app.call<{ tasks: Task[] }>(
+      'GET',
+      `/api/v1/services/${serviceId}/tasks`,
+      undefined,
+      auth,
+    )
+    expect(list.status).toBe(200)
+    expect(list.body.tasks.map((t) => t.taskId)).toContain(taskId)
+
+    // Negatives: unknown ids 404; a non-frame container is rejected; a missing key is 401.
+    expect((await app.call('GET', '/api/v1/tasks/task_nope', undefined, auth)).status).toBe(404)
+    expect((await app.call('GET', '/api/v1/services/svc_nope/tasks', undefined, auth)).status).toBe(
+      404,
+    )
+    expect(
+      (await app.call('POST', '/api/v1/services/svc_nope/tasks', { title: 'x' }, auth)).status,
+    ).toBe(404)
+    expect((await app.call('GET', `/api/v1/tasks/${taskId}`)).status).toBe(401)
+
+    // Workspace scoping: a key from ANOTHER workspace cannot see this task.
+    const other = await app.createOrgWorkspace({ seed: true })
+    const otherAuth = await mintKey(app, other.workspace.id)
+    expect((await app.call('GET', `/api/v1/tasks/${taskId}`, undefined, otherAuth)).status).toBe(
+      404,
+    )
+    expect(
+      (await app.call('GET', `/api/v1/services/${serviceId}/tasks`, undefined, otherAuth)).status,
+    ).toBe(404)
+  })
+
+  it('starts a task and reflects the run status; refuses an individual-usage model', async () => {
+    const app = makeApp(new FakeAgentExecutor())
+    const workspaceId = (await app.createOrgWorkspace({ seed: true })).workspace.id
+    const auth = await mintKey(app, workspaceId)
+
+    // Start the seeded task via the public API (no pinned pipeline → pass one explicitly).
+    const started = await app.call<Task>(
+      'POST',
+      '/api/v1/tasks/task_login/start',
+      { pipelineId: 'pl_quick' },
+      auth,
+    )
+    expect(started.status).toBe(202)
+    expect(started.body.status).toBe('in_progress')
+    expect(started.body.executionId).toBeTruthy()
+
+    // Drive the durable run to completion and confirm the status surfaces.
+    await app.drive(workspaceId)
+    const done = await app.call<Task>('GET', '/api/v1/tasks/task_login', undefined, auth)
+    expect(done.status).toBe(200)
+    expect(done.body.status).toBe('done')
+
+    // A task with no pipeline (none pinned, none supplied) can't be started.
+    const frame = await app.call<{ id: string }>('POST', `/workspaces/${workspaceId}/blocks`, {
+      type: 'service',
+      position: { x: 700, y: 700 },
+    })
+    const task = await app.call<Task>(
+      'POST',
+      `/api/v1/services/${frame.body.id}/tasks`,
+      { title: 'Pin an individual model' },
+      auth,
+    )
+    expect(
+      (await app.call('POST', `/api/v1/tasks/${task.body.taskId}/start`, {}, auth)).status,
+    ).toBe(400)
+
+    // Pin a subscription-only individual-usage model (no poolable base) → start is refused (no
+    // headless personal-credential unlock). A base-backed model like claude-opus would instead
+    // run on its OpenRouter base, so it is deliberately NOT the case under test here.
+    await app.call('PATCH', `/workspaces/${workspaceId}/blocks/${task.body.taskId}`, {
+      modelId: 'claude-sonnet',
+    })
+    const refused = await app.call<{ error: { code: string } }>(
+      'POST',
+      `/api/v1/tasks/${task.body.taskId}/start`,
+      { pipelineId: 'pl_quick' },
+      auth,
+    )
+    expect(refused.status).toBe(409)
+    expect(refused.body.error.code).toBe('individual_model_unsupported')
+  })
+
+  it('refuses to start a task under an archived service, but still lets it be read', async () => {
+    const app = makeApp(new FakeAgentExecutor())
+    const workspaceId = (await app.createOrgWorkspace({ seed: true })).workspace.id
+    const auth = await mintKey(app, workspaceId)
+
+    const frame = await app.call<{ id: string }>('POST', `/workspaces/${workspaceId}/blocks`, {
+      type: 'service',
+      position: { x: 900, y: 900 },
+    })
+    const task = await app.call<Task>(
+      'POST',
+      `/api/v1/services/${frame.body.id}/tasks`,
+      { title: 'Task on a soon-to-be-archived service' },
+      auth,
+    )
+    const taskId = task.body.taskId
+
+    // Archive the enclosing service via the session board API.
+    expect(
+      (await app.call('POST', `/workspaces/${workspaceId}/blocks/${frame.body.id}/archive`)).status,
+    ).toBe(200)
+
+    // Start is refused (409 service_archived) — consistent with listServiceTasks hiding an
+    // archived service and addServiceTask refusing to add work to one.
+    const refused = await app.call<{ error: { code: string } }>(
+      'POST',
+      `/api/v1/tasks/${taskId}/start`,
+      { pipelineId: 'pl_quick' },
+      auth,
+    )
+    expect(refused.status).toBe(409)
+    expect(refused.body.error.code).toBe('service_archived')
+
+    // But the task remains READABLE (poll a run that was in flight when the service was archived).
+    const got = await app.call<Task>('GET', `/api/v1/tasks/${taskId}`, undefined, auth)
+    expect(got.status).toBe(200)
+    expect(got.body.taskId).toBe(taskId)
+  })
+})

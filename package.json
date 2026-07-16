@@ -15,6 +15,8 @@
     "lint:monorepo": "sherif -i typescript -i @types/node",
     "lint:knip": "knip",
     "check:publish": "node scripts/check-publish-integrity.mjs",
+    "gen:openapi": "node scripts/generate-openapi.mjs",
+    "check:openapi": "node scripts/check-openapi.mjs",
     "dev:backend": "turbo run dev --filter=@cat-factory/deploy-backend",
     "dev:node": "turbo run dev --filter=@cat-factory/deploy-node",
     "dev:frontend": "turbo run dev --filter=@cat-factory/deploy-frontend",
@@ -26,6 +28,7 @@
   "devDependencies": {
     "@arethetypeswrong/cli": "^0.18.4",
     "@changesets/cli": "^2.31.0",
+    "@valibot/to-json-schema": "^1.7.1",
     "knip": "^6.26.0",
     "oxfmt": "^0.57.0",
     "oxlint": "^1.73.0",
