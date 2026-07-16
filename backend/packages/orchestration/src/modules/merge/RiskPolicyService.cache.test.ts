@@ -124,6 +124,25 @@ describe('RiskPolicyService risk-policy cache coherence', () => {
     expect(loads.n).toBe(2)
   })
 
+  it('lazy first-use seed (list) invalidates the warmed null default', async () => {
+    // A gate can resolve `default` on a never-listed workspace and cache the null; the very
+    // first `list()` seeds the built-in catalog, and its invalidation must drop that warm null
+    // so the next gate reads the freshly-seeded default rather than the DEFAULT_RISK_POLICY
+    // fallback. (Pins the `ensureSeeded` invalidation the other cases only cover transitively.)
+    const repo = fakeRepo()
+    const service = makeService(repo, caches.riskPolicy)
+    const loads = { n: 0 }
+    // Warm the null default (empty workspace), then confirm it's cached.
+    expect((await readDefault(repo, loads)).policy).toBeNull()
+    await readDefault(repo, loads)
+    expect(loads.n).toBe(1)
+    // First list seeds the built-in catalog and invalidates the group.
+    expect((await service.list(WS)).length).toBeGreaterThan(0)
+    // The next read re-loads and now sees the seeded default (not the warmed null).
+    expect((await readDefault(repo, loads)).policy).not.toBeNull()
+    expect(loads.n).toBe(2)
+  })
+
   it('works with no cache wired (pass-through: every write is a no-op invalidation)', async () => {
     const repo = fakeRepo()
     const service = makeService(repo) // no riskPolicyCache

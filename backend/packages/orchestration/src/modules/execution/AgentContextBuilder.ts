@@ -512,14 +512,17 @@ export class AgentContextBuilder {
    * every service-frame resolver (environment / service config / frontend / fragments) so the
    * ancestry walk runs a single time per dispatch instead of once per resolver. A `frame`-level
    * block is its own frame (no reads); every other level walks up via `parentId`.
+   *
+   * Delegates to the shared {@link resolveServiceFrameBlock} walk, passing the block in hand as
+   * the pre-fetched start so the walk skips re-fetching it (the only difference from the public
+   * {@link resolveServiceFrame}, which starts from a block id).
    */
   private async serviceFrameFor(workspaceId: string, block: Block): Promise<Block | null> {
-    let current: Block | null = block
-    for (let i = 0; current && i < 8; i++) {
-      if (current.level === 'frame' || !current.parentId) return current
-      current = await this.deps.blockRepository.get(workspaceId, current.parentId)
-    }
-    return current ?? null
+    return resolveServiceFrameBlock(
+      (id) => this.deps.blockRepository.get(workspaceId, id),
+      block.id,
+      block,
+    )
   }
 
   /**
