@@ -2,7 +2,12 @@
 // them to HTTP status codes. Keeping them framework-agnostic means the same core
 // can be wrapped by a different transport (queue consumer, RPC, CLI) unchanged.
 
-export type DomainErrorCode = 'not_found' | 'validation' | 'conflict' | 'credential_required'
+export type DomainErrorCode =
+  | 'not_found'
+  | 'validation'
+  | 'conflict'
+  | 'credential_required'
+  | 'forbidden'
 
 export class DomainError extends Error {
   constructor(
@@ -90,6 +95,19 @@ export type CredentialRequiredReason =
 export class CredentialRequiredError extends DomainError {
   constructor(message: string, details: { vendor: string; reason: CredentialRequiredReason }) {
     super('credential_required', message, details)
+  }
+}
+
+/**
+ * The caller is authenticated and CAN see the resource, but lacks the capability for
+ * this action (→ 403 Forbidden). Distinct from a {@link NotFoundError} 404, which is
+ * how workspace RBAC hides a board the caller may not even know exists: 403 reveals
+ * only insufficiency (the caller already sees the workspace), 404 reveals nothing. Do
+ * NOT copy the account tier's legacy `requireAdmin` 409 shape into workspace enforcement.
+ */
+export class ForbiddenError extends DomainError {
+  constructor(message = 'Forbidden', details?: Record<string, unknown>) {
+    super('forbidden', message, details)
   }
 }
 

@@ -18,6 +18,10 @@ export type {
   MembershipRepository,
 } from './account-repositories.js'
 export type {
+  WorkspaceMemberRecord,
+  WorkspaceMemberRepository,
+} from './workspace-member-repositories.js'
+export type {
   IdentityProvider,
   UserRecord,
   UserIdentityRecord,

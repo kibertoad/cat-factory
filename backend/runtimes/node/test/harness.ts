@@ -36,6 +36,8 @@ import {
   DrizzleDocInterviewRepository,
   DrizzleRequirementReviewRepository,
   DrizzleServiceRepository,
+  DrizzleWorkspaceMemberRepository,
+  DrizzleWorkspaceRepository,
   createDrizzleRepositories,
 } from '../src/repositories/drizzle.js'
 import { DrizzleNotificationRepository } from '../src/repositories/notifications.js'
@@ -393,6 +395,8 @@ export function makeConformanceApp(
     executionRepository: () => container.executionRepository,
     agentRunRepository: () => container.agentRunRepository,
     blockRepository: () => createDrizzleRepositories(db, { now: () => Date.now() }).blockRepository,
+    workspaceRepository: () => new DrizzleWorkspaceRepository(db),
+    workspaceMemberRepository: () => new DrizzleWorkspaceMemberRepository(db),
     initiativeRepository: () =>
       createDrizzleRepositories(db, { now: () => Date.now() }).initiativeRepository,
     notificationRepository: () => new DrizzleNotificationRepository(db),

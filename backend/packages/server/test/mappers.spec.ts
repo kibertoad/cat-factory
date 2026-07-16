@@ -451,7 +451,7 @@ describe('rowToExecution', () => {
 })
 
 describe('rowToWorkspace / rowToPipeline', () => {
-  it('maps a workspace, defaulting account_id to null', () => {
+  it('maps a workspace, defaulting account_id to null and omitting an absent access_mode', () => {
     expect(rowToWorkspace({ id: 'ws_1', name: 'W', created_at: 5, account_id: null })).toEqual({
       id: 'ws_1',
       name: 'W',
@@ -459,6 +459,29 @@ describe('rowToWorkspace / rowToPipeline', () => {
       createdAt: 5,
       accountId: null,
     })
+  })
+
+  it('surfaces access_mode only when the column carries a value (workspace RBAC)', () => {
+    expect(
+      rowToWorkspace({
+        id: 'ws_2',
+        name: 'W',
+        created_at: 5,
+        account_id: 'acc_1',
+        access_mode: 'restricted',
+      }).accessMode,
+    ).toBe('restricted')
+    // Empty/null column ⇒ absent (a pre-RBAC row), not a spurious value.
+    expect(
+      'accessMode' in
+        rowToWorkspace({
+          id: 'ws_3',
+          name: 'W',
+          created_at: 5,
+          account_id: null,
+          access_mode: null,
+        }),
+    ).toBe(false)
   })
 
   it('includes gates only when present', () => {

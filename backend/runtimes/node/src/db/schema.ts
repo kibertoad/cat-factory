@@ -52,6 +52,9 @@ export const workspaces = pgTable(
     created_at: bigint('created_at', { mode: 'number' }).notNull(),
     account_id: text('account_id'),
     owner_user_id: text('owner_user_id'),
+    // Workspace RBAC access mode ('account' | 'restricted'); default preserves the legacy
+    // "every account member sees it" behaviour so no existing row changes.
+    access_mode: text('access_mode').notNull().default('account'),
   },
   // listVisible filters by owner_user_id (legacy) and account_id (membership scope).
   (t) => [
@@ -138,6 +141,34 @@ export const memberships = pgTable(
   (t) => [
     primaryKey({ columns: [t.account_id, t.user_id] }),
     index('idx_memberships_user').on(t.user_id),
+  ],
+)
+
+// Workspace membership (workspace RBAC, migration 0052). Scopes a user to a board with a
+// single-valued workspace role; a restricted board reads it as the sole grant, an
+// account-mode board honours it as an upgrade-only overlay.
+export const workspaceMembers = pgTable(
+  'workspace_members',
+  {
+    // ON DELETE CASCADE: a deleted board takes its roster (the Drizzle FK; the D1 side
+    // relies on the workspace-delete cascade list since D1 doesn't enforce FKs).
+    workspace_id: text('workspace_id')
+      .notNull()
+      .references(() => workspaces.id, { onDelete: 'cascade' }),
+    // ON DELETE RESTRICT: mirrors memberships.user_id — can't drop a user with a live row.
+    user_id: text('user_id')
+      .notNull()
+      .references(() => users.id, { onDelete: 'restrict' }),
+    // Single value: admin | member | viewer (a strict hierarchy, not a CSV set).
+    role: text('role').notNull(),
+    created_at: bigint('created_at', { mode: 'number' }).notNull(),
+    // Audit: who granted the row; null for system grants (creator auto-enroll). No FK.
+    added_by_user_id: text('added_by_user_id'),
+  },
+  (t) => [
+    primaryKey({ columns: [t.workspace_id, t.user_id] }),
+    // Drives listWorkspaceIdsForUser + the visibility subquery.
+    index('idx_workspace_members_user').on(t.user_id),
   ],
 )
 

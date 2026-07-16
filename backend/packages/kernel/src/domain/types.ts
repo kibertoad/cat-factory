@@ -66,6 +66,11 @@ export type {
   AccountMember,
   CreateAccountInput,
   AddMemberInput,
+  // Workspace-level RBAC & membership shapes (the tier below account tenancy).
+  WorkspaceRole,
+  WorkspacePermission,
+  WorkspaceAccessMode,
+  WorkspaceMember,
   // In-org shared services (account-owned services + per-workspace mounts).
   Service,
   WorkspaceMount,
