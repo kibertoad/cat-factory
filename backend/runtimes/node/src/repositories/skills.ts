@@ -111,6 +111,13 @@ export class DrizzleAccountSkillRepository implements AccountSkillRepository {
       .where(and(eq(accountSkills.account_id, accountId), eq(accountSkills.skill_id, skillId)))
   }
 
+  async softDeleteBySource(sourceId: string, at: number): Promise<void> {
+    await this.db
+      .update(accountSkills)
+      .set({ deleted_at: at, updated_at: at })
+      .where(and(eq(accountSkills.source_id, sourceId), isNull(accountSkills.deleted_at)))
+  }
+
   async listBySource(sourceId: string): Promise<AccountSkillRecord[]> {
     const rows = await this.db
       .select()

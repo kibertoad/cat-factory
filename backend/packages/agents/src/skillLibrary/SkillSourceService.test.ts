@@ -40,6 +40,11 @@ class FakeAccountSkillRepo implements AccountSkillRepository {
     const r = this.rows.get(this.key(accountId, skillId))
     if (r) r.deletedAt = at
   }
+  async softDeleteBySource(sourceId: string, at: number) {
+    for (const r of this.rows.values()) {
+      if (r.sourceId === sourceId && r.deletedAt === null) r.deletedAt = at
+    }
+  }
   async listBySource(sourceId: string) {
     return [...this.rows.values()].filter((r) => r.sourceId === sourceId && r.deletedAt === null)
   }
@@ -231,6 +236,51 @@ describe('SkillSourceService.sync', () => {
     const triage = await harness.skills.get('acct1', `src:${sourceId}:triage`)
     expect(triage).not.toBeNull()
     expect(triage?.instructions).toBe('- Reproduce') // prior content preserved
+  })
+
+  it('does not advance the source pin over a stale keep, and recovers on the next sync', async () => {
+    // A changed manifest that reads back empty (an unapplied change) must leave the source
+    // NOT caught up: status still reports changed, and the next sync re-reads it.
+    const before = await harness.service.status('acct1', sourceId)
+    github.files['.claude/skills/triage/SKILL.md'] = {
+      sha: 'm1b',
+      content: manifest('Triage', 'x'),
+    }
+    github.unreadable.add('.claude/skills/triage/SKILL.md')
+    const stale = await harness.service.sync('acct1', sourceId)
+    // The pin was held at the last good sync (not advanced to the new head), so a later
+    // probe still flags a change rather than reporting the stale content as current.
+    expect(stale.lastSyncedCommit).toBe(before.lastSyncedCommit)
+    expect((await harness.service.status('acct1', sourceId)).changed).toBe(true)
+
+    // The transient clears; the next sync applies the change (no new upstream commit needed).
+    github.unreadable.delete('.claude/skills/triage/SKILL.md')
+    const recovered = await harness.service.sync('acct1', sourceId)
+    expect(recovered.upserted).toBe(1)
+    const triage = await harness.skills.get('acct1', `src:${sourceId}:triage`)
+    expect(triage?.instructions).toBe('x')
+    expect((await harness.service.status('acct1', sourceId)).changed).toBe(false)
+  })
+
+  it('keeps only the first of two directories that slug to the same skill id', async () => {
+    // `release-notes` and `release_notes` both slug to `release-notes`; the first (sorted)
+    // wins and the collision is skipped rather than silently overwriting the row.
+    github.files['.claude/skills/release-notes/SKILL.md'] = {
+      sha: 'rn1',
+      content: manifest('Release notes A', '- A'),
+    }
+    github.files['.claude/skills/release_notes/SKILL.md'] = {
+      sha: 'rn2',
+      content: manifest('Release notes B', '- B'),
+    }
+    await harness.service.sync('acct1', sourceId)
+    const collided = await harness.skills.get('acct1', `src:${sourceId}:release-notes`)
+    expect(collided?.instructions).toBe('- A') // the alphabetically-first dir wins
+    // Exactly one row for the colliding slug (no duplicate / overwrite churn).
+    const rows = (await harness.skills.listByAccount('acct1')).filter(
+      (r) => r.skillId === `src:${sourceId}:release-notes`,
+    )
+    expect(rows).toHaveLength(1)
   })
 
   it('reports changed=true from status when the source dir moved', async () => {

@@ -53,6 +53,16 @@ export interface ReconcileResult {
   liveIds: Set<string>
   upserted: number
   unchanged: number
+  /**
+   * A changed unit was detected but could NOT be applied this round (e.g. its
+   * manifest read back as a 404/non-file, or parsed empty) and the prior row was kept
+   * alive instead of retiring it. When set, the engine does NOT advance the pinned
+   * commit to the new head — otherwise the source would look "caught up" while a stale
+   * row is served indefinitely, since a later status probe (head unchanged) would
+   * report no change and the next resync would short-circuit. Leaving the pin behind
+   * makes the next sync re-read that unit (self-healing once the transient clears).
+   */
+  incomplete?: boolean
 }
 
 export interface SyncRepoSourceParams<Existing> {
@@ -89,7 +99,7 @@ export async function syncRepoSource<Existing>(
   const readRef = headCommit ?? source.gitRef
   const commitMoved = headCommit !== source.lastSyncedCommit
   const existing = await params.listExisting()
-  const { liveIds, upserted, unchanged } = await params.reconcile(
+  const { liveIds, upserted, unchanged, incomplete } = await params.reconcile(
     { readRef, commitMoved, now },
     existing,
   )
@@ -105,9 +115,13 @@ export async function syncRepoSource<Existing>(
     }
   }
 
-  await params.updateSyncState(headCommit, now)
+  // Only advance the pin when the tree was fully reconciled: an incomplete pass (a
+  // changed unit kept stale over an unreadable/empty manifest) leaves the pin behind so
+  // the next sync re-reads it rather than silently serving stale content forever.
+  const syncedCommit = incomplete ? source.lastSyncedCommit : headCommit
+  await params.updateSyncState(syncedCommit, now)
   if (upserted > 0 || tombstoned > 0) await params.invalidate?.()
-  return { upserted, tombstoned, unchanged, lastSyncedCommit: headCommit }
+  return { upserted, tombstoned, unchanged, lastSyncedCommit: syncedCommit }
 }
 
 export interface RepoSourceStatus {

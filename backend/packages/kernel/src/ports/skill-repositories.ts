@@ -72,6 +72,11 @@ export interface AccountSkillRepository {
   get(accountId: string, skillId: string): Promise<AccountSkillRecord | null>
   upsert(record: AccountSkillRecord): Promise<void>
   softDelete(accountId: string, skillId: string, at: number): Promise<void>
+  /**
+   * Tombstone EVERY live skill produced by a source in one write (used on unlink), so
+   * retiring a source's catalog isn't a point-write per skill.
+   */
+  softDeleteBySource(sourceId: string, at: number): Promise<void>
   /** Live skills produced by a given source, for resync diffing/tombstoning. */
   listBySource(sourceId: string): Promise<AccountSkillRecord[]>
 }

@@ -89,8 +89,8 @@ export class SkillSourceService {
     const source = await this.require(accountId, sourceId)
     const now = this.deps.clock.now()
     const skills = await this.deps.accountSkillRepository.listBySource(sourceId)
-    for (const s of skills) {
-      await this.deps.accountSkillRepository.softDelete(s.accountId, s.skillId, now)
+    if (skills.length > 0) {
+      await this.deps.accountSkillRepository.softDeleteBySource(sourceId, now)
     }
     await this.deps.skillSourceRepository.softDelete(source.id, now)
     if (skills.length > 0) await this.deps.invalidateCatalog?.(accountId)
@@ -124,14 +124,24 @@ export class SkillSourceService {
             unchanged: existing.length,
           }
         }
-        const dirs = (await this.listDir(source, installationId, source.dirPath, readRef)).filter(
-          (e) => e.type === 'dir',
-        )
+        // Sort dirs by name (code-unit order, locale-independent) so slug-collision
+        // resolution is deterministic — first wins — regardless of ICU collation.
+        const dirs = (await this.listDir(source, installationId, source.dirPath, readRef))
+          .filter((e) => e.type === 'dir')
+          .sort((a, b) => (a.name < b.name ? -1 : a.name > b.name ? 1 : 0))
         const liveIds = new Set<string>()
+        const seenSlugs = new Set<string>()
         let upserted = 0
         let unchanged = 0
+        let incomplete = false
         for (const dir of dirs) {
-          const skillId = `src:${source.id}:${slugFromDirName(dir.name)}`
+          const slug = slugFromDirName(dir.name)
+          // Two sibling dirs can slug to the same id (e.g. `release_notes` + `release-notes`,
+          // both → `release-notes`). Keep the first (sorted order) deterministically and skip
+          // the rest rather than silently overwriting one skill's row with another's.
+          if (seenSlugs.has(slug)) continue
+          seenSlugs.add(slug)
+          const skillId = `src:${source.id}:${slug}`
           const synced = await this.syncSkillDir(
             source,
             dir.name,
@@ -143,14 +153,15 @@ export class SkillSourceService {
             now,
           )
           if (synced === 'skip') continue
-          // 'kept' (unchanged OR a transient read/parse failure with a prior row) and
-          // 'upserted' both survive the tombstone sweep — a transient failure must never
-          // retire an existing skill.
+          // 'kept'/'stale' (both keep a prior row) and 'upserted' all survive the tombstone
+          // sweep — a transient failure must never retire an existing skill.
           liveIds.add(skillId)
           if (synced === 'upserted') upserted++
           else unchanged++
+          // A detected-but-unapplied change leaves us not caught up to the head commit.
+          if (synced === 'stale') incomplete = true
         }
-        return { liveIds, upserted, unchanged }
+        return { liveIds, upserted, unchanged, incomplete }
       },
       tombstone: (s, now) =>
         this.deps.accountSkillRepository.softDelete(s.accountId, s.skillId, now),
@@ -209,8 +220,10 @@ export class SkillSourceService {
   /**
    * Reconcile one `<skill>/` directory:
    * - 'skip' — not a skill (no `SKILL.md`), or unreadable/unparseable with NO prior row.
-   * - 'kept' — nothing changed, OR a transient read/parse failure with a prior row to
-   *   preserve (never retire a skill over a transient error).
+   * - 'kept' — nothing changed; the prior row is current and untouched.
+   * - 'stale' — a change WAS detected but couldn't be applied this round (manifest read
+   *   back as a 404/non-file, or parsed empty) so the prior row is kept alive rather than
+   *   retired. Signals the caller to leave the source pin behind and retry next sync.
    * - 'upserted' — the manifest or its resource manifest moved and was written.
    */
   private async syncSkillDir(
@@ -222,7 +235,7 @@ export class SkillSourceService {
     installationId: number,
     readRef: string,
     now: number,
-  ): Promise<'skip' | 'kept' | 'upserted'> {
+  ): Promise<'skip' | 'kept' | 'stale' | 'upserted'> {
     const entries = await this.listDir(source, installationId, dirPath, readRef)
     const manifest = entries.find((e) => e.type === 'file' && isSkillManifest(e.name))
     if (!manifest) return 'skip' // not a skill directory (SKILL.md removed → prior tombstoned)
@@ -259,9 +272,11 @@ export class SkillSourceService {
     )
     // Unreadable / unparseable this round: keep a prior skill alive rather than retiring
     // it over a transient read or an in-progress edit; with no prior there's nothing to keep.
-    if (!file) return prior ? 'kept' : 'skip'
+    // Either way a change was detected (the manifest sha moved) but not applied, so report
+    // 'stale' so the source pin is NOT advanced and the next sync re-reads.
+    if (!file) return prior ? 'stale' : 'skip'
     const parsed = parseSkillManifest(dirName, file.content)
-    if (!parsed) return prior ? 'kept' : 'skip'
+    if (!parsed) return prior ? 'stale' : 'skip'
 
     await this.deps.accountSkillRepository.upsert({
       skillId,

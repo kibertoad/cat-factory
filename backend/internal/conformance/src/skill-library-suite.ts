@@ -130,5 +130,44 @@ export function defineSkillLibrarySuite(name: string, makeRepos: () => SkillLibr
       expect(read?.resources).toEqual([])
       expect(read?.pinnedCommit).toBeNull()
     })
+
+    it('tombstones an entire source in one batch write (unlink)', async () => {
+      const { accountSkills } = makeRepos()
+      const accountId = scope()
+      const sourceId = `${accountId}-src`
+      const base = {
+        accountId,
+        name: 'S',
+        description: 'd',
+        instructions: 'i',
+        resources: [],
+        sourceId,
+        sourcePath: '.claude/skills/x/SKILL.md',
+        sourceSha: 'sha',
+        pinnedCommit: null,
+        createdAt: 1_000,
+        updatedAt: 1_000,
+        deletedAt: null,
+      } satisfies Omit<AccountSkillRecord, 'skillId'>
+      await accountSkills.upsert({ ...base, skillId: `src:${sourceId}:a` })
+      await accountSkills.upsert({ ...base, skillId: `src:${sourceId}:b` })
+      // A skill from a different source must be untouched.
+      const otherSource = `${accountId}-other`
+      await accountSkills.upsert({
+        ...base,
+        skillId: `src:${otherSource}:c`,
+        sourceId: otherSource,
+      })
+
+      await accountSkills.softDeleteBySource(sourceId, 5_000)
+      expect(await accountSkills.listBySource(sourceId)).toEqual([])
+      const live = await accountSkills.listByAccount(accountId)
+      expect(live.map((s) => s.skillId)).toEqual([`src:${otherSource}:c`])
+      // Both retired rows carry the tombstone timestamp.
+      const withDeleted = await accountSkills.listByAccount(accountId, true)
+      const retired = withDeleted.filter((s) => s.sourceId === sourceId)
+      expect(retired).toHaveLength(2)
+      expect(retired.every((s) => s.deletedAt === 5_000)).toBe(true)
+    })
   })
 }

@@ -115,6 +115,15 @@ export class D1AccountSkillRepository implements AccountSkillRepository {
       .run()
   }
 
+  async softDeleteBySource(sourceId: string, at: number): Promise<void> {
+    await this.db
+      .prepare(
+        'UPDATE account_skills SET deleted_at = ?, updated_at = ? WHERE source_id = ? AND deleted_at IS NULL',
+      )
+      .bind(at, at, sourceId)
+      .run()
+  }
+
   async listBySource(sourceId: string): Promise<AccountSkillRecord[]> {
     const { results } = await this.db
       .prepare('SELECT * FROM account_skills WHERE source_id = ? AND deleted_at IS NULL')
