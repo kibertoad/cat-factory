@@ -1,6 +1,6 @@
 {
   "name": "@cat-factory/gitlab",
-  "version": "0.10.4",
+  "version": "0.10.5",
   "description": "Opt-in GitLab VCS provider for cat-factory. Implements the provider-neutral VcsClient / webhook / provisioning ports against the GitLab REST v4 API and registers itself via registerVcsProvider('gitlab'). Depends only on @cat-factory/kernel + @cat-factory/contracts.",
   "repository": {
     "type": "git",
