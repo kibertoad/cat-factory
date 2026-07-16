@@ -66,7 +66,10 @@ export function eventsRelayController(): Hono<AppEnv> {
     }
     if (!body || typeof body.workspaceId !== 'string' || typeof body.payload !== 'string') {
       return c.json(
-        { ok: false, error: { code: 'validation', message: 'workspaceId and payload are required' } },
+        {
+          ok: false,
+          error: { code: 'validation', message: 'workspaceId and payload are required' },
+        },
         422,
       )
     }
@@ -79,7 +82,10 @@ export function eventsRelayController(): Hono<AppEnv> {
       workspaceRepository.accountOf(body.workspaceId) as Promise<string | null | undefined>
     ).catch(() => undefined)) as string | null | undefined
     if (!accountId || !payload.scope.accountIds.includes(accountId)) {
-      return c.json({ ok: false, error: { code: 'not_found', message: 'workspace not found' } }, 404)
+      return c.json(
+        { ok: false, error: { code: 'not_found', message: 'workspace not found' } },
+        404,
+      )
     }
 
     // Deliver into the mothership's realtime fan-out. Best-effort by contract (the relay swallows its
@@ -87,7 +93,8 @@ export function eventsRelayController(): Hono<AppEnv> {
     await relay.ingest({
       workspaceId: body.workspaceId,
       payload: body.payload,
-      originConnectionId: typeof body.originConnectionId === 'string' ? body.originConnectionId : null,
+      originConnectionId:
+        typeof body.originConnectionId === 'string' ? body.originConnectionId : null,
     })
     return c.json({ ok: true })
   })

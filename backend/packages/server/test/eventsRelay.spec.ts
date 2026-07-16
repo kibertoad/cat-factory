@@ -29,11 +29,17 @@ function makeApp(
   const container = {
     ...(opts.relay === false
       ? {}
-      : { machineEventRelay: { ingest: (event: RelayedRealtimeEvent) => void ingested.push(event) } }),
+      : {
+          machineEventRelay: { ingest: (event: RelayedRealtimeEvent) => void ingested.push(event) },
+        }),
     repositories:
       opts.repositories === false
         ? undefined
-        : { workspaceRepository: { accountOf: async (id: string) => ACCOUNT_BY_WORKSPACE[id] ?? null } },
+        : {
+            workspaceRepository: {
+              accountOf: async (id: string) => ACCOUNT_BY_WORKSPACE[id] ?? null,
+            },
+          },
     config: { auth: { sessionSecret: SECRET } },
   } as unknown as ServerContainer
   const app = new Hono<AppEnv>()
@@ -127,7 +133,10 @@ describe('POST /internal/events/publish', () => {
 
   it('rejects a machine token signed under a DIFFERENT secret (403 — bad MAC)', async () => {
     const forged = (
-      await mintMachineToken('another-secret-9876543210', { userId: 'usr_1', accountIds: [ACCOUNT] })
+      await mintMachineToken('another-secret-9876543210', {
+        userId: 'usr_1',
+        accountIds: [ACCOUNT],
+      })
     ).token
     expect((await publish(makeApp(), forged, EVENT)).status).toBe(403)
   })
@@ -168,7 +177,7 @@ describe('HttpMachineEventClient (client side)', () => {
 
   it('skips the round-trip entirely when no token is available yet (no fetch)', async () => {
     let calls = 0
-    const fetchImpl: typeof fetch = async (input, init) => {
+    const fetchImpl: typeof fetch = async () => {
       calls++
       return new Response('{}')
     }
