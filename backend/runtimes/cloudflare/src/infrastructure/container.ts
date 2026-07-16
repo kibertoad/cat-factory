@@ -204,6 +204,7 @@ import { D1BootstrapJobRepository } from './repositories/D1BootstrapJobRepositor
 import { D1EnvConfigRepairJobRepository } from './repositories/D1EnvConfigRepairJobRepository'
 import { D1EnvironmentTestRunRepository } from './repositories/D1EnvironmentTestRunRepository'
 import { D1AgentRunRepository } from './repositories/D1AgentRunRepository'
+import { D1PlatformMetricsRepository } from './repositories/D1PlatformMetricsRepository'
 import { D1BinaryArtifactMetadataStore } from './repositories/D1BinaryArtifactMetadataStore'
 import { R2BinaryBlobBackend } from './storage/R2BinaryBlobBackend'
 import type { ContentStorageCapability } from '@cat-factory/contracts'
@@ -2313,6 +2314,8 @@ export function buildContainer(
     tokenUsageRepository: new D1TokenUsageRepository({ db }),
     // Telemetry lives in the dedicated TELEMETRY_DB database.
     llmCallMetricRepository: new D1LlmCallMetricRepository({ db: telemetryDb }),
+    // Deployment-level rollups over `agent_runs` (MAIN db, not telemetry) for the operator dashboard.
+    platformMetricsRepository: new D1PlatformMetricsRepository({ db }),
     // Unified provisioning event log (separate D1 binding). Threads the recorder into
     // the env services and exposes the read service for the logs controller; undefined
     // when PROVISIONING_DB isn't bound.

@@ -61,6 +61,12 @@ import type {
   LlmCallMetricRepository,
   LlmCallMetricSummary,
   LlmPromptChainTip,
+  PlatformDurationStats,
+  PlatformFailureCount,
+  PlatformLiveCounts,
+  PlatformMetricsRepository,
+  PlatformRunOutcome,
+  PlatformRunTrendPoint,
   ProvisioningLogQuery,
   ProvisioningLogRecord,
   ProvisioningLogRepository,
@@ -938,6 +944,123 @@ class DrizzleAgentRunRepository implements AgentRunRepository {
       for (const r of rows) live.push(r.id)
     }
     return live
+  }
+}
+
+/**
+ * Deployment-level rollups over `agent_runs`, scoped to an account by a sub-select on
+ * `workspaces` (both main-DB tables). Every method is one aggregate query — no row is
+ * loaded to be reduced in JS. Mirrors {@link D1PlatformMetricsRepository}; the
+ * cross-runtime conformance suite asserts the two agree.
+ */
+class DrizzlePlatformMetricsRepository implements PlatformMetricsRepository {
+  constructor(private readonly db: DrizzleDb) {}
+
+  /** `agent_runs.workspace_id ∈ the account's workspaces` — the account scope for every query. */
+  private accountScope(accountId: string) {
+    return inArray(
+      agentRuns.workspace_id,
+      this.db.select({ id: workspaces.id }).from(workspaces).where(eq(workspaces.account_id, accountId)),
+    )
+  }
+
+  async runOutcomesSince(accountId: string, sinceEpochMs: number): Promise<PlatformRunOutcome[]> {
+    const rows = await this.db
+      .select({ kind: agentRuns.kind, status: agentRuns.status, count: sql<number>`count(*)::int` })
+      .from(agentRuns)
+      .where(and(this.accountScope(accountId), gte(agentRuns.created_at, sinceEpochMs)))
+      .groupBy(agentRuns.kind, agentRuns.status)
+    return rows.map((r) => ({
+      kind: decodeEnum(agentRunKindSchema, r.kind, { table: 'agent_runs', column: 'kind', id: '' }),
+      status: r.status,
+      count: Number(r.count),
+    }))
+  }
+
+  async runOutcomeTrend(
+    accountId: string,
+    sinceEpochMs: number,
+    bucketMs: number,
+  ): Promise<PlatformRunTrendPoint[]> {
+    const bucket = sql<number>`((${agentRuns.created_at} / ${bucketMs}::bigint) * ${bucketMs}::bigint)`
+    const rows = await this.db
+      .select({ bucketStart: bucket, status: agentRuns.status, count: sql<number>`count(*)::int` })
+      .from(agentRuns)
+      .where(and(this.accountScope(accountId), gte(agentRuns.created_at, sinceEpochMs)))
+      .groupBy(bucket, agentRuns.status)
+      .orderBy(bucket)
+    return rows.map((r) => ({
+      bucketStart: Number(r.bucketStart),
+      status: r.status,
+      count: Number(r.count),
+    }))
+  }
+
+  async failureKindBreakdown(
+    accountId: string,
+    sinceEpochMs: number,
+  ): Promise<PlatformFailureCount[]> {
+    const failureKind = sql<string>`coalesce((${agentRuns.failure}::jsonb ->> 'kind'), 'unknown')`
+    const rows = await this.db
+      .select({ failureKind, count: sql<number>`count(*)::int` })
+      .from(agentRuns)
+      .where(
+        and(
+          this.accountScope(accountId),
+          gte(agentRuns.created_at, sinceEpochMs),
+          eq(agentRuns.status, 'failed'),
+        ),
+      )
+      .groupBy(failureKind)
+      .orderBy(desc(sql`count(*)`))
+    return rows.map((r) => ({ failureKind: r.failureKind, count: Number(r.count) }))
+  }
+
+  async activeAndParkedCounts(accountId: string): Promise<PlatformLiveCounts> {
+    const rows = await this.db
+      .select({ status: agentRuns.status, count: sql<number>`count(*)::int` })
+      .from(agentRuns)
+      .where(
+        and(
+          this.accountScope(accountId),
+          inArray(agentRuns.status, ['running', 'blocked', 'paused', 'pending']),
+        ),
+      )
+      .groupBy(agentRuns.status)
+    const counts: PlatformLiveCounts = { running: 0, blocked: 0, paused: 0, pending: 0 }
+    for (const r of rows) {
+      if (r.status in counts) counts[r.status as keyof PlatformLiveCounts] = Number(r.count)
+    }
+    return counts
+  }
+
+  async durationStatsSince(
+    accountId: string,
+    sinceEpochMs: number,
+  ): Promise<PlatformDurationStats> {
+    const delta = sql`(${agentRuns.updated_at} - ${agentRuns.created_at})`
+    const [row] = await this.db
+      .select({
+        count: sql<number>`count(*)::int`,
+        avgMs: sql<number | null>`avg(${delta})::float8`,
+        minMs: sql<number | null>`min(${delta})`,
+        maxMs: sql<number | null>`max(${delta})`,
+      })
+      .from(agentRuns)
+      .where(
+        and(
+          this.accountScope(accountId),
+          gte(agentRuns.created_at, sinceEpochMs),
+          inArray(agentRuns.status, ['done', 'failed']),
+        ),
+      )
+    const count = Number(row?.count ?? 0)
+    return {
+      count,
+      avgMs: count > 0 && row?.avgMs != null ? Math.round(Number(row.avgMs)) : null,
+      minMs: count > 0 && row?.minMs != null ? Number(row.minMs) : null,
+      maxMs: count > 0 && row?.maxMs != null ? Number(row.maxMs) : null,
+    }
   }
 }
 
@@ -4988,6 +5111,7 @@ export interface CoreRepositories {
   agentSearchQueryRepository: AgentSearchQueryRepository
   binaryArtifactMetadataStore: BinaryArtifactMetadataStore
   agentRunRepository: AgentRunRepository
+  platformMetricsRepository: PlatformMetricsRepository
   modelPresetRepository: ModelPresetRepository
   serviceFragmentDefaultsRepository: ServiceFragmentDefaultsRepository
   pipelineScheduleRepository: PipelineScheduleRepository
@@ -5035,6 +5159,7 @@ export function createDrizzleRepositories(db: DrizzleDb, clock: Clock): CoreRepo
     agentSearchQueryRepository: new DrizzleAgentSearchQueryRepository(db),
     binaryArtifactMetadataStore: new DrizzleBinaryArtifactMetadataStore(db),
     agentRunRepository: new DrizzleAgentRunRepository(db),
+    platformMetricsRepository: new DrizzlePlatformMetricsRepository(db),
     modelPresetRepository: new DrizzleModelPresetRepository(db),
     serviceFragmentDefaultsRepository: new DrizzleServiceFragmentDefaultsRepository(db),
     pipelineScheduleRepository: new DrizzlePipelineScheduleRepository(db),
