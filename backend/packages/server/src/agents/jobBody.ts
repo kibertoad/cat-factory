@@ -116,6 +116,13 @@ export interface KindBodyParts {
    * commit to or push them). Appended to the consumer kind's system prompt; absent otherwise.
    */
   referenceBranchesSection?: string
+  /**
+   * The backend-rendered skill directive for a `skill` step (repo-sourced Claude Skills, slice 2),
+   * appended to the kind's system prompt. For the claude-code harness it is a short pointer to the
+   * natively-installed skill; for Pi/codex it carries the folded-in instructions + a pointer to the
+   * skill's `.cat-context/skill/*` resources. Absent for every non-skill step.
+   */
+  skillSection?: string
 }
 
 /**
@@ -149,7 +156,13 @@ export function buildKindBody(
   // `bugFixGuidanceFor` returns '' for every other kind / when no repro-test preceded, so this
   // is a no-op everywhere else.
   const bugFix = bugFixGuidanceFor(context)
-  const roleSystemPrompt = bugFix ? `${withFollowUp}\n\n${bugFix}` : withFollowUp
+  const withBugFix = bugFix ? `${withFollowUp}\n\n${bugFix}` : withFollowUp
+  // A `skill` step folds its picked skill's directive (harness-aware — a native-skill pointer for
+  // claude-code, the full instructions for Pi/codex) into the system prompt. Present only on a
+  // skill step whose skill resolved; a no-op for every other kind.
+  const roleSystemPrompt = parts.skillSection
+    ? `${withBugFix}\n\n${parts.skillSection}`
+    : withBugFix
 
   // A registered (custom or migrated) kind that declares an `agent` step dispatches
   // through the generic, manifest-driven `agent` harness kind — no per-kind case here.

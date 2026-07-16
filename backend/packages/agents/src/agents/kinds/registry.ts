@@ -19,6 +19,7 @@ import { registerCodeCommenterAgent } from './code-commenter.js'
 import { registerInitiativeAgents } from './initiative.js'
 import { registerEnvironmentAnalystAgent } from './environment-analyst.js'
 import { registerSpikeAgent } from './spike.js'
+import { registerSkillAgent } from './skill.js'
 
 // Installation-level extension point for custom agent kinds, mirroring the
 // model-provider registry seam (`registerModelRegistry` / `@cat-factory/provider-bedrock`).
@@ -277,5 +278,6 @@ export function defaultAgentKindRegistry(): AgentKindRegistry {
   registerInitiativeAgents(registry)
   registerEnvironmentAnalystAgent(registry)
   registerSpikeAgent(registry)
+  registerSkillAgent(registry)
   return registry
 }

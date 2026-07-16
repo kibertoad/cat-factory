@@ -1,6 +1,16 @@
 import { ValidationError } from '@cat-factory/kernel'
-import type { PipelineAvailability, StepGating, TesterQualityConfig } from '@cat-factory/kernel'
-import { companionTargets, isCompanionKind, TASK_ESTIMATOR_AGENT_KIND } from '@cat-factory/agents'
+import type {
+  PipelineAvailability,
+  StepGating,
+  StepOptions,
+  TesterQualityConfig,
+} from '@cat-factory/kernel'
+import {
+  companionTargets,
+  isCompanionKind,
+  SKILL_AGENT_KIND,
+  TASK_ESTIMATOR_AGENT_KIND,
+} from '@cat-factory/agents'
 import { isTesterKind } from '../execution/ci.logic.js'
 
 /**
@@ -57,12 +67,37 @@ export interface PipelineShape {
   enabled?: boolean[]
   gating?: (StepGating | null)[]
   testerQuality?: (TesterQualityConfig | null)[]
+  stepOptions?: (StepOptions | null)[]
 }
 
 export function validatePipelineShape(pipeline: PipelineShape): void {
   assertValidCompanionPlacement(pipeline.agentKinds, pipeline.enabled)
   assertValidGating(pipeline.agentKinds, pipeline.enabled, pipeline.gating)
   assertValidTesterQualityGating(pipeline.agentKinds, pipeline.enabled, pipeline.testerQuality)
+  assertValidSkillSteps(pipeline.agentKinds, pipeline.enabled, pipeline.stepOptions)
+}
+
+/**
+ * Every ENABLED `skill` step must name the skill it runs (`stepOptions[i].skillId`). The one
+ * generic `skill` agent kind is parametrized entirely by that id — with none it has nothing to
+ * execute — so a skill step missing it is rejected at pipeline save (and again at run start,
+ * since both boundaries share this validation) rather than failing deep in dispatch. A DISABLED
+ * skill step never runs, so it imposes no requirement.
+ */
+export function assertValidSkillSteps(
+  agentKinds: string[],
+  enabled?: boolean[],
+  stepOptions?: (StepOptions | null)[],
+): void {
+  const isEnabled = (i: number) => enabled?.[i] !== false
+  for (let i = 0; i < agentKinds.length; i++) {
+    if (agentKinds[i] !== SKILL_AGENT_KIND || !isEnabled(i)) continue
+    if (!stepOptions?.[i]?.skillId?.trim()) {
+      throw new ValidationError(
+        `A '${SKILL_AGENT_KIND}' step must select a skill — set its skill in the step options.`,
+      )
+    }
+  }
 }
 
 /**
