@@ -499,10 +499,20 @@ const { requestClose } = useUnsavedGuard({
 
 // A recurring task only needs a target frame (its details are filled in the schedule
 // modal); every other type needs a title. A review task additionally needs a target PR.
+// The Ralph loop's completion criterion (its `ralph.validationCommand` agent-config id). The
+// loop is meaningless without it, so the create form requires it up front — the backend also
+// refuses to start a Ralph run without one (a 422), this just fails fast in the UI.
+const RALPH_VALIDATION_COMMAND_ID = 'ralph.validationCommand'
+
 const canAdd = computed(() => {
   if (isRecurring.value) return recurringFrameId.value !== null
   if (title.value.trim().length === 0) return false
   if (taskType.value === 'review' && !parseReviewPrRef(reviewPrRef.value)) return false
+  if (
+    taskType.value === 'ralph' &&
+    configValue(RALPH_VALIDATION_COMMAND_ID, '').trim().length === 0
+  )
+    return false
   return true
 })
 

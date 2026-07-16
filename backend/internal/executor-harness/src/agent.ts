@@ -798,6 +798,19 @@ async function runMultiRepoExplore(job: AgentJob, opts: RunOptions): Promise<Age
 }
 
 /**
+ * Whether a Ralph iteration ({@link AgentJob.validation} set) landed on a MULTI-REPO job (writable
+ * peer repos or read-only reference repos). The post-commit validation command is only wired into
+ * the single-repo flow, so a multi-repo run would silently skip it and degenerate the loop into a
+ * one-shot with no completion gate — multi-repo ralph is out of scope for v1 (see
+ * backend/docs/ralph-loop.md), so {@link runCodingMode} fails loudly on this instead.
+ */
+export function ralphUnsupportedOnMultiRepo(
+  job: Pick<AgentJob, 'validation' | 'peerRepos' | 'referenceRepos'>,
+): boolean {
+  return Boolean(job.validation) && Boolean(job.peerRepos?.length || job.referenceRepos?.length)
+}
+
+/**
  * Edit-and-push coding, dispatching on job DATA: repo-bootstrap (force-push a fresh history to a
  * separate target repo), conflict-resolution (merge the base in, resolve, push back), multi-repo
  * fan-out (sibling checkouts + one PR per changed repo), else the ordinary single-repo flow.
@@ -819,10 +832,22 @@ async function runCodingMode(job: AgentJob, opts: RunOptions): Promise<AgentResu
   // all of them. Keyed off job DATA, not the agent kind — set for the implementer's writable
   // peer repos (service-connections phase 3, `peerRepos`) OR the doc-writer's READ-ONLY
   // reference repos (`referenceRepos`, cloned but never pushed).
-  const result =
-    job.peerRepos?.length || job.referenceRepos?.length
-      ? await runMultiRepoCoding(job, opts)
-      : await runSingleRepoCoding(job, opts)
+  const multiRepo = Boolean(job.peerRepos?.length || job.referenceRepos?.length)
+  // Ralph loop (v1): the post-commit validation command is only wired into the single-repo
+  // flow, so a multi-repo run would silently skip it and the loop would degenerate into a
+  // one-shot with no completion gate. Multi-repo ralph is deliberately out of scope for v1
+  // (see backend/docs/ralph-loop.md), so FAIL LOUDLY rather than run a validation-less pass.
+  if (ralphUnsupportedOnMultiRepo(job)) {
+    return {
+      error:
+        'Ralph loop is not supported on a multi-repo task (connected service repos). ' +
+        'Its validation command runs only in the single primary-repo checkout. ' +
+        'Run the Ralph loop on a task scoped to a single repo.',
+    }
+  }
+  const result = multiRepo
+    ? await runMultiRepoCoding(job, opts)
+    : await runSingleRepoCoding(job, opts)
 
   // Structured coding kind (repro-test): fold the final reply's JSON onto `custom` so the
   // backend post-completion resolver records the outcome. Skipped on a failed run (its `error`

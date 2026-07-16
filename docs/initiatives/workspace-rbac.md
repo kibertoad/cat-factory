@@ -37,28 +37,30 @@ Roles stay **fixed** (`admin | member | viewer`; no custom roles pre-1.0), and m
 ```ts
 export type WorkspaceRole = 'admin' | 'member' | 'viewer'
 export type WorkspacePermission =
-  | 'workspace.read'       // snapshot, runs/spend/usage/llm-metrics/agent-context/kaizen reads,
-                           // notifications list, artifacts blobs, spec, consensus, per-workspace
-                           // models, events stream + ticket mint
-  | 'board.write'          // blocks CRUD/move/reparent/archive/dependencies, epics, service
-                           // mount/unmount, initiatives CRUD + planning, pipelines CRUD
-  | 'runs.execute'         // execution start/stop/merge/restart, agent-run retry/stop, recurring
-                           // pipelines, ALL HITL windows (requirement/clarity/brainstorm reviews,
-                           // doc-interview, fork-decision, pr-review, follow-ups, human-review/test,
-                           // visual-confirm), spend resume, notification act/dismiss
-  | 'settings.manage'      // workspace settings PUT, board rename/description/delete, tracker
-                           // settings, model presets, risk policies / merge presets, prompt-fragment
-                           // library writes, observability / release-health / incident-enrichment
-  | 'integrations.manage'  // GitHub/Slack/environments/runner-pool/task-source/document-source
-                           // connections, package registries, shared stacks, bootstrap + reference
-                           // architectures, sandbox, preview config
-  | 'secrets.manage'       // vendor credentials, workspace api-keys, public-api-keys, test-secrets
-  | 'members.manage'       // workspace member CRUD + access-mode flip
+  | 'workspace.read' // snapshot, runs/spend/usage/llm-metrics/agent-context/kaizen reads,
+  // notifications list, artifacts blobs, spec, consensus, per-workspace
+  // models, events stream + ticket mint
+  | 'board.write' // blocks CRUD/move/reparent/archive/dependencies, epics, service
+  // mount/unmount, initiatives CRUD + planning, pipelines CRUD
+  | 'runs.execute' // execution start/stop/merge/restart, agent-run retry/stop, recurring
+  // pipelines, ALL HITL windows (requirement/clarity/brainstorm reviews,
+  // doc-interview, fork-decision, pr-review, follow-ups, human-review/test,
+  // visual-confirm), spend resume, notification act/dismiss
+  | 'settings.manage' // workspace settings PUT, board rename/description/delete, tracker
+  // settings, model presets, risk policies / merge presets, prompt-fragment
+  // library writes, observability / release-health / incident-enrichment
+  | 'integrations.manage' // GitHub/Slack/environments/runner-pool/task-source/document-source
+  // connections, package registries, shared stacks, bootstrap + reference
+  // architectures, sandbox, preview config
+  | 'secrets.manage' // vendor credentials, workspace api-keys, public-api-keys, test-secrets
+  | 'members.manage' // workspace member CRUD + access-mode flip
 
 export const WORKSPACE_ROLE_PERMISSIONS: Record<WorkspaceRole, readonly WorkspacePermission[]> = {
   viewer: ['workspace.read'],
   member: ['workspace.read', 'board.write', 'runs.execute'],
-  admin:  [/* all seven */],
+  admin: [
+    /* all seven */
+  ],
 }
 ```
 
@@ -72,7 +74,7 @@ export const WORKSPACE_ROLE_PERMISSIONS: Record<WorkspaceRole, readonly Workspac
   post-1.0 custom-role model will want the split — the cost of carrying it now is one
   string.
 - **HITL actions = `runs.execute`** (decision): approving a review / fork decision /
-  human test *advances a run* — the member surface. Pipelines CRUD = `board.write`
+  human test _advances a run_ — the member surface. Pipelines CRUD = `board.write`
   (board configuration, authored by developers). Recurring pipelines = `runs.execute`
   (scheduling runs).
 - **Placement.** The wire unions (`workspaceRoleSchema`, `workspacePermissionSchema`,
@@ -95,8 +97,12 @@ export type WorkspaceAccess =
 
 export function resolveWorkspaceAccess(input: {
   userId: string
-  workspace: { accountId: string | null; ownerUserId: string | null; accessMode: WorkspaceAccessMode }
-  accountRoles: AccountRole[]      // [] when not an account member
+  workspace: {
+    accountId: string | null
+    ownerUserId: string | null
+    accessMode: WorkspaceAccessMode
+  }
+  accountRoles: AccountRole[] // [] when not an account member
   memberRole: WorkspaceRole | null // the workspace_members row, if any
 }): WorkspaceAccess
 ```
@@ -107,7 +113,7 @@ grants):
 1. **Legacy board (`accountId === null`)**: `ownerUserId === userId` ⇒ `admin`; else
    denied. Preserves today's owner-only gate byte-for-byte.
 2. **Not an account member** (`accountRoles` empty) ⇒ **denied**, regardless of any
-   `workspace_members` row. Account membership is a *prerequisite* — the workspace tier
+   `workspace_members` row. Account membership is a _prerequisite_ — the workspace tier
    restricts within an account, it never grants across accounts. This also makes orphaned
    member rows (e.g. after a future account-member removal) inert and fail-closed.
 3. **Account `admin`** ⇒ workspace `admin` (the escape hatch; no lock-out state is
@@ -116,7 +122,7 @@ grants):
 4. **`accessMode: 'account'`**: account `developer`/`product` ⇒ workspace `member`
    (today's behaviour). A `workspace_members` row is honoured as an **upgrade-only
    overlay** (max) — an account admin can appoint a workspace `admin` without flipping
-   the board to restricted. A `viewer` row in account mode is *ignored* (restriction is
+   the board to restricted. A `viewer` row in account mode is _ignored_ (restriction is
    opt-in via `accessMode`, not per-user demotion — keeps `account` mode byte-compatible).
 5. **`accessMode: 'restricted'`**: effective role = the member row's role; no row (and
    not account admin) ⇒ denied (404).
@@ -140,13 +146,13 @@ existing 404 JSON shape, unchanged. Controllers **consume, never re-derive**; ca
 
 **`workspace_members`** (new table, both runtimes):
 
-| column | type | notes |
-| ------ | ---- | ----- |
-| `workspace_id` | TEXT NOT NULL | FK → `workspaces(id)` **ON DELETE CASCADE** (a deleted board takes its roster) |
-| `user_id` | TEXT NOT NULL | FK → `users(id)` **ON DELETE RESTRICT** (mirrors `memberships.user_id`) |
-| `role` | TEXT NOT NULL | single value: `admin \| member \| viewer` |
-| `created_at` | INTEGER/BIGINT NOT NULL | epoch ms |
-| `added_by_user_id` | TEXT NULL | audit: who granted; null for system grants (creator auto-enroll); no FK |
+| column             | type                    | notes                                                                          |
+| ------------------ | ----------------------- | ------------------------------------------------------------------------------ |
+| `workspace_id`     | TEXT NOT NULL           | FK → `workspaces(id)` **ON DELETE CASCADE** (a deleted board takes its roster) |
+| `user_id`          | TEXT NOT NULL           | FK → `users(id)` **ON DELETE RESTRICT** (mirrors `memberships.user_id`)        |
+| `role`             | TEXT NOT NULL           | single value: `admin \| member \| viewer`                                      |
+| `created_at`       | INTEGER/BIGINT NOT NULL | epoch ms                                                                       |
+| `added_by_user_id` | TEXT NULL               | audit: who granted; null for system grants (creator auto-enroll); no FK        |
 
 PK `(workspace_id, user_id)`; index `idx_workspace_members_user (user_id)` (drives
 `listWorkspaceIdsForUser` and the visibility subquery).
@@ -169,7 +175,10 @@ PK `(workspace_id, user_id)`; index `idx_workspace_members_user (user_id)` (driv
     listByWorkspace(workspaceId: string): Promise<WorkspaceMemberRecord[]>
     listWorkspaceIdsForUser(userId: string): Promise<string[]>
     /** ONE chunked-IN read to annotate a workspace LIST with the caller's role. */
-    getRolesForUserInWorkspaces(userId: string, workspaceIds: string[]): Promise<Map<string, WorkspaceRole>>
+    getRolesForUserInWorkspaces(
+      userId: string,
+      workspaceIds: string[],
+    ): Promise<Map<string, WorkspaceRole>>
     upsert(member: WorkspaceMemberRecord): Promise<void>
     remove(workspaceId: string, userId: string): Promise<void>
     /** Hygiene cascade when an account membership is removed: one DELETE joined on workspaces.account_id. */
@@ -178,6 +187,7 @@ PK `(workspace_id, user_id)`; index `idx_workspace_members_user (user_id)` (driv
   ```
 
   Implemented in both runtimes with conformance assertions.
+
 - **`WorkspaceRepository`** gains `accessRowOf(id): { accountId, ownerUserId, accessMode } | undefined`
   (one narrow hot-path read replacing the gate's `accountOf` call) and
   `setAccessMode(id, mode)`. The contracts `workspaceSchema` gains `accessMode`.
@@ -188,9 +198,12 @@ Extend `WorkspaceVisibility` (kernel `ports/repositories.ts`) — SQL-level in
 `listVisible`, both runtimes; JS post-filtering is rejected (the banned N+1 class):
 
 ```ts
-export type WorkspaceVisibility =
-  | { accountIds: string[]; adminAccountIds: string[]; ownerUserId: string; userId: string }
-  | null
+export type WorkspaceVisibility = {
+  accountIds: string[]
+  adminAccountIds: string[]
+  ownerUserId: string
+  userId: string
+} | null
 ```
 
 Predicate: unrestricted boards in my accounts (`account_id IN (accountIds) AND
@@ -213,7 +226,7 @@ Resolution runs on **every** `/workspaces/:ws/*` request (3 reads: access row, a
 membership, member row) → one slice on the app cache seam, never a hand-rolled Map:
 
 - **Handle**: `workspaceAccess: GroupCacheHandle<{ access: WorkspaceAccess }>` on the
-  kernel `AppCaches` port; the *denied* outcome caches as a value too (negative caching —
+  kernel `AppCaches` port; the _denied_ outcome caches as a value too (negative caching —
   the wrap convention, since layered-loader treats bare `null` as unresolved).
 - **Key/group**: group = `workspaceId`, key = `userId`. Everything (access row, account
   roles, member row) is resolved inside the load, so a hit costs zero reads; a workspace
@@ -246,33 +259,33 @@ middleware (a ~200-route shadow table that silently drifts).
    for the **admin-tier groups only**: reads `workspaceAccess`; absent access with no
    user ⇒ allow (dev-open); otherwise throws the new kernel `ForbiddenError`
    (`DomainErrorCode 'forbidden'`) mapped to **403** in `errorHandler.ts` + contracts
-   `errorResponses`. 403 (not 404) is correct here: the caller already *sees* the
+   `errorResponses`. 403 (not 404) is correct here: the caller already _sees_ the
    workspace, so only capability — not existence — is revealed. (The account tier's
    `requireAdmin` → 409 is a legacy shape; do not copy it.)
 
 Route-group → permission table (the slice-6 worklist; groups under
 `/workspaces/:workspaceId` unless noted):
 
-| Route group | Permission | Enforced by |
-| ----------- | ---------- | ----------- |
-| Snapshot, spend/usage, llm-metrics, agent-context, kaizen reads, notifications list, artifacts blobs, spec, consensus, per-workspace models, events WS + ticket mint | `workspace.read` | resolution itself + floor |
-| Blocks CRUD/move/reparent/archive/dependencies, epics, service mount/unmount, initiatives CRUD + planning, pipelines CRUD | `board.write` | middleware floor (≥ member) |
-| Execution start/stop/merge/restart, agent-run retry/stop, recurring pipelines, all HITL windows, spend resume, notifications act/dismiss | `runs.execute` | middleware floor (≥ member) |
-| `PUT /settings`, board rename/description/delete, tracker-settings, model presets, risk policies / merge presets, prompt-fragment library writes, observability / release-health / incident-enrichment | `settings.manage` | `requirePermission` |
-| GitHub/Slack/environments/runner-pool/task-source/document-source connections, package-registries, shared-stacks, sandbox, bootstrap + reference-architectures, preview config | `integrations.manage` | `requirePermission` |
-| Vendor credentials, workspace api-keys, public-api-keys, test-secrets | `secrets.manage` | `requirePermission` |
-| `GET/POST/PATCH/DELETE /members`, `PUT /access-mode` (§8) | GET: `workspace.read`; writes: `members.manage` | `requirePermission` |
+| Route group                                                                                                                                                                                            | Permission                                      | Enforced by                 |
+| ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ | ----------------------------------------------- | --------------------------- |
+| Snapshot, spend/usage, llm-metrics, agent-context, kaizen reads, notifications list, artifacts blobs, spec, consensus, per-workspace models, events WS + ticket mint                                   | `workspace.read`                                | resolution itself + floor   |
+| Blocks CRUD/move/reparent/archive/dependencies, epics, service mount/unmount, initiatives CRUD + planning, pipelines CRUD                                                                              | `board.write`                                   | middleware floor (≥ member) |
+| Execution start/stop/merge/restart, agent-run retry/stop, recurring pipelines, all HITL windows, spend resume, notifications act/dismiss                                                               | `runs.execute`                                  | middleware floor (≥ member) |
+| `PUT /settings`, board rename/description/delete, tracker-settings, model presets, risk policies / merge presets, prompt-fragment library writes, observability / release-health / incident-enrichment | `settings.manage`                               | `requirePermission`         |
+| GitHub/Slack/environments/runner-pool/task-source/document-source connections, package-registries, shared-stacks, sandbox, bootstrap + reference-architectures, preview config                         | `integrations.manage`                           | `requirePermission`         |
+| Vendor credentials, workspace api-keys, public-api-keys, test-secrets                                                                                                                                  | `secrets.manage`                                | `requirePermission`         |
+| `GET/POST/PATCH/DELETE /members`, `PUT /access-mode` (§8)                                                                                                                                              | GET: `workspace.read`; writes: `members.manage` | `requirePermission`         |
 
 ### 7. Side doors
 
-| Surface | Decision |
-| ------- | -------- |
-| **WS ticket mint** (`POST /workspaces/:ws/events/ticket`) | Passes the gate ⇒ resolution applies (any role — viewers may read runs). The ticket (`auth/wsTicket.ts`) gains `userId` for audit; **verify stays membership-blind** — the 60s TTL bounds post-revocation minting and the stream carries only read-tier data. |
-| **Open sockets after revocation** | A revoked member's already-open socket keeps streaming. Accepted pre-1.0; the clean follow-up is the events hub dropping a workspace's sockets on the membership-change signal (piggyback the cache invalidation), never per-message checks. |
-| **Public API keys** (`/api/v1/*`) | Key auth in-controller, unchanged. `public_api_keys` gains `created_by_user_id` (audit + UI); **minting** requires `secrets.manage`. **A key does NOT die when its minter loses access**: it is a workspace-scoped *service* credential and external integrations must not break on offboarding — revocation is an explicit admin action; the keys UI surfaces the minter. Rejected: re-resolving the minter per call (a membership read on machine traffic, and semantically wrong — the authority is the workspace, granted at mint time). Coordinate the column with `public-api-expansion` scopes. |
-| **`/me/environment-handlers/:workspaceId`** (mounted at `/` — bypasses the workspace gate entirely today, a real gap) | The controller calls the same shared resolution helper the middleware uses and requires `runs.execute`; no access ⇒ 404. |
-| **Harness artifact ingest** (container token) | Unchanged. The token is minted per-run by a dispatch an authorized (≥ member) user initiated — authorization happened at run start; revocation stops *new* initiations, not in-flight machine work. |
-| **`/internal` machine API** | Unchanged; machine tokens stay account-granular (`scope.accountIds`). Per-workspace machine scoping is explicitly out of scope. |
+| Surface                                                                                                               | Decision                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                               |
+| --------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| **WS ticket mint** (`POST /workspaces/:ws/events/ticket`)                                                             | Passes the gate ⇒ resolution applies (any role — viewers may read runs). The ticket (`auth/wsTicket.ts`) gains `userId` for audit; **verify stays membership-blind** — the 60s TTL bounds post-revocation minting and the stream carries only read-tier data.                                                                                                                                                                                                                                                                                                                                          |
+| **Open sockets after revocation**                                                                                     | A revoked member's already-open socket keeps streaming. Accepted pre-1.0; the clean follow-up is the events hub dropping a workspace's sockets on the membership-change signal (piggyback the cache invalidation), never per-message checks.                                                                                                                                                                                                                                                                                                                                                           |
+| **Public API keys** (`/api/v1/*`)                                                                                     | Key auth in-controller, unchanged. `public_api_keys` gains `created_by_user_id` (audit + UI); **minting** requires `secrets.manage`. **A key does NOT die when its minter loses access**: it is a workspace-scoped _service_ credential and external integrations must not break on offboarding — revocation is an explicit admin action; the keys UI surfaces the minter. Rejected: re-resolving the minter per call (a membership read on machine traffic, and semantically wrong — the authority is the workspace, granted at mint time). Coordinate the column with `public-api-expansion` scopes. |
+| **`/me/environment-handlers/:workspaceId`** (mounted at `/` — bypasses the workspace gate entirely today, a real gap) | The controller calls the same shared resolution helper the middleware uses and requires `runs.execute`; no access ⇒ 404.                                                                                                                                                                                                                                                                                                                                                                                                                                                                               |
+| **Harness artifact ingest** (container token)                                                                         | Unchanged. The token is minted per-run by a dispatch an authorized (≥ member) user initiated — authorization happened at run start; revocation stops _new_ initiations, not in-flight machine work.                                                                                                                                                                                                                                                                                                                                                                                                    |
+| **`/internal` machine API**                                                                                           | Unchanged; machine tokens stay account-granular (`scope.accountIds`). Per-workspace machine scoping is explicitly out of scope.                                                                                                                                                                                                                                                                                                                                                                                                                                                                        |
 
 ### 8. Member management API
 
@@ -280,13 +293,13 @@ New `WorkspaceMemberService` (`backend/packages/workspaces/src/modules/workspace
 beside `WorkspaceService`) + `workspaceMemberController` (`@cat-factory/server`) +
 contracts routes (`contracts/src/routes/workspace-members.ts`):
 
-| Route | Caller | Semantics |
-| ----- | ------ | --------- |
-| `GET /workspaces/:ws/members` | any resolved role | Roster enriched with user display details via one `userRepository.listByIds` batch (the `AccountService.members` pattern). |
-| `POST /workspaces/:ws/members` `{userId, role}` | `members.manage` | **Target must be a member of the owning account** (else `ValidationError`) — contractors join the account first (existing invitation flow), then get scoped. Rejected: cross-account grants (a sharing feature with different trust maths). Upsert semantics. |
-| `PATCH /workspaces/:ws/members/:userId` `{role}` | `members.manage` | Role change. **No last-admin protection needed** — account admins always resolve to workspace admin, so lock-out is impossible; self-demotion/removal is permitted ("leave"). |
-| `DELETE /workspaces/:ws/members/:userId` | `members.manage` | Remove row + invalidate group. |
-| `PUT /workspaces/:ws/access-mode` `{accessMode}` | `members.manage` | Separate route (different permission than `settings.manage`). Flipping to `restricted` needs no auto-enroll of the actor (they're an account admin or already hold the row that let them call this). |
+| Route                                            | Caller            | Semantics                                                                                                                                                                                                                                                     |
+| ------------------------------------------------ | ----------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `GET /workspaces/:ws/members`                    | any resolved role | Roster enriched with user display details via one `userRepository.listByIds` batch (the `AccountService.members` pattern).                                                                                                                                    |
+| `POST /workspaces/:ws/members` `{userId, role}`  | `members.manage`  | **Target must be a member of the owning account** (else `ValidationError`) — contractors join the account first (existing invitation flow), then get scoped. Rejected: cross-account grants (a sharing feature with different trust maths). Upsert semantics. |
+| `PATCH /workspaces/:ws/members/:userId` `{role}` | `members.manage`  | Role change. **No last-admin protection needed** — account admins always resolve to workspace admin, so lock-out is impossible; self-demotion/removal is permitted ("leave").                                                                                 |
+| `DELETE /workspaces/:ws/members/:userId`         | `members.manage`  | Remove row + invalidate group.                                                                                                                                                                                                                                |
+| `PUT /workspaces/:ws/access-mode` `{accessMode}` | `members.manage`  | Separate route (different permission than `settings.manage`). Flipping to `restricted` needs no auto-enroll of the actor (they're an account admin or already hold the row that let them call this).                                                          |
 
 **Creator auto-enroll**: `WorkspaceService.create` inserts a `workspace_members` row
 (`role: 'admin'`, `addedByUserId: null`) for the creator — harmless in `account` mode
@@ -304,11 +317,11 @@ created even if the board is later restricted.
 - **`useWorkspaceAccess()` composable** (`frontend/app/app/composables/`): `role`,
   `can(p: WorkspacePermission)`, `isViewer`, …; absent access ⇒ `can()` true (dev-open
   parity with the backend). This is the central helper replacing ad-hoc checks for
-  *workspace*-scoped affordances; the existing account-scoped
+  _workspace_-scoped affordances; the existing account-scoped
   `activeAccount?.roles?.includes('admin')` call sites stay account-scoped (see §10).
 - **Viewer degradation** (hide/disable, never client-enforce): board editing
   (drag/create/context menus) on `can('board.write')`; run start/stop + HITL action
-  buttons on `can('runs.execute')` (windows stay *visible* read-only); settings panels
+  buttons on `can('runs.execute')` (windows stay _visible_ read-only); settings panels
   per admin permission; disabled affordances carry tooltips.
 - **Membership UI**: `WorkspaceMembersSettings.vue` beside `AccountTeamSettings.vue` —
   restrict toggle (`accessMode`), roster with role selects, add-member picker sourced
@@ -322,9 +335,9 @@ created even if the board is later restricted.
 
 The account tier stays as-is in this initiative — folding `requireAdmin`/`hasRole` into a
 unified `AccountPermission` catalog now would triple the blast radius for zero
-user-visible gain. End state to record in the closing ADR: `AccountRole` answers *"what
-can you do to the tenant"* (billing, roster, account credentials); `WorkspaceRole`
-answers *"what can you do inside one board"*; they meet at exactly two seams, both owned
+user-visible gain. End state to record in the closing ADR: `AccountRole` answers _"what
+can you do to the tenant"_ (billing, roster, account credentials); `WorkspaceRole`
+answers _"what can you do inside one board"_; they meet at exactly two seams, both owned
 by `resolveWorkspaceAccess` — account membership as prerequisite, account `admin` ⇒
 workspace `admin`. `product` remains data-only. Deferred follow-ups: an
 `AccountPermission` catalog in the same kernel module, `requireAdmin`'s 409 realigned to
@@ -354,18 +367,18 @@ workspace `admin`. `product` remains data-only. Deferred follow-ups: an
 
 ## Prioritized checklist
 
-| # | Slice | Status | PR |
-| - | ----- | ------ | -- |
-| 1 | **Contracts + kernel vocabulary**: `workspaceRoleSchema` / `workspacePermissionSchema` / `workspaceAccessModeSchema` + `WorkspaceMember` wire shape (`contracts/src/workspace-members.ts`); `workspaceSchema.accessMode`; kernel `domain/workspace-access.ts` (`WORKSPACE_ROLE_PERMISSIONS`, `resolveWorkspaceAccess`, `workspaceRoleAtLeast`) + decision-table tests; `ForbiddenError` + 403 mapping | ⬜ todo | |
-| 2 | **Persistence**: D1 `0051_workspace_rbac.sql` ⇄ Drizzle + `pnpm db:generate` (`workspace_members`, `workspaces.access_mode`); `WorkspaceMemberRepository` port + both impls (incl. `getRolesForUserInWorkspaces`, `removeByAccountMembership`); `WorkspaceRepository.accessRowOf` + `setAccessMode`; board-delete cascade; conformance repo assertions | ⬜ todo | |
-| 3 | **Resolution in the gate**: `mountAuthGate` resolves `WorkspaceAccess` (escape hatch, legacy branch, 404 shape unchanged), sets `workspaceAccess` on the context (`env.ts`), **viewer write floor** (non-GET ⇒ ≥ member; ticket-mint allowlist); `WorkspaceVisibility` extension + `listVisible` both runtimes + `AccountService.accessibleAccountScopes`; list `viewerRole` annotation (batch); snapshot/create attach `access`; creator auto-enroll; conformance (404, floor, escape hatch, list filtering) | ⬜ todo | |
-| 4 | **`workspaceAccess` AppCaches slice**: kernel handle + wrap type, both profiles (isolate-safe: disabled), read-through in the gate, all invalidation sites (member writes, access-mode, workspace delete, account-membership writes ⇒ `invalidateAll`), cache-coherence conformance assertion | ⬜ todo | |
-| 5 | **Member management API**: `WorkspaceMemberService` (only-account-members rule), `workspaceMemberController` + contracts routes (`GET/POST/PATCH/DELETE /members`, `PUT /access-mode`), `requirePermission` helper (`http/workspaceAccess.ts`), conformance member-CRUD assertions | ⬜ todo | |
-| 6 | **Admin-tier enforcement pass**: `requirePermission('settings.manage' \| 'integrations.manage' \| 'secrets.manage')` across the §6 table's admin route groups; conformance: member 403 on settings/integrations/secrets | ⬜ todo | |
-| 7 | **Side doors**: `/me/environment-handlers/:ws` through shared resolution (`runs.execute`, 404); WS ticket gains `userId`; `public_api_keys.created_by_user_id` (both runtimes) + mint under `secrets.manage` + minter in the keys UI | ⬜ todo | |
-| 8 | **SPA read side**: `useWorkspaceAccess()` composable, store hydration of `access` / `viewerRole`, viewer read-only degradation (board editing, run starts, HITL actions), settings nav gating, i18n (en + all locales) | ⬜ todo | |
-| 9 | **SPA membership management**: `WorkspaceMembersSettings.vue` (restrict toggle, roster, role select, add from account roster, remove), picker badges, i18n (all locales) | ⬜ todo | |
-| 10 | **e2e spec** (restricted board vanishes live; viewer read-only) + convert this tracker → ADR `backend/docs/adr/0024-workspace-rbac.md` and `git rm` the tracker | ⬜ todo | |
+| #   | Slice                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                         | Status  | PR  |
+| --- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ------- | --- |
+| 1   | **Contracts + kernel vocabulary**: `workspaceRoleSchema` / `workspacePermissionSchema` / `workspaceAccessModeSchema` + `WorkspaceMember` wire shape (`contracts/src/workspace-members.ts`); `workspaceSchema.accessMode`; kernel `domain/workspace-access.ts` (`WORKSPACE_ROLE_PERMISSIONS`, `resolveWorkspaceAccess`, `workspaceRoleAtLeast`) + decision-table tests; `ForbiddenError` + 403 mapping                                                                                                         | ⬜ todo |     |
+| 2   | **Persistence**: D1 `0051_workspace_rbac.sql` ⇄ Drizzle + `pnpm db:generate` (`workspace_members`, `workspaces.access_mode`); `WorkspaceMemberRepository` port + both impls (incl. `getRolesForUserInWorkspaces`, `removeByAccountMembership`); `WorkspaceRepository.accessRowOf` + `setAccessMode`; board-delete cascade; conformance repo assertions                                                                                                                                                        | ⬜ todo |     |
+| 3   | **Resolution in the gate**: `mountAuthGate` resolves `WorkspaceAccess` (escape hatch, legacy branch, 404 shape unchanged), sets `workspaceAccess` on the context (`env.ts`), **viewer write floor** (non-GET ⇒ ≥ member; ticket-mint allowlist); `WorkspaceVisibility` extension + `listVisible` both runtimes + `AccountService.accessibleAccountScopes`; list `viewerRole` annotation (batch); snapshot/create attach `access`; creator auto-enroll; conformance (404, floor, escape hatch, list filtering) | ⬜ todo |     |
+| 4   | **`workspaceAccess` AppCaches slice**: kernel handle + wrap type, both profiles (isolate-safe: disabled), read-through in the gate, all invalidation sites (member writes, access-mode, workspace delete, account-membership writes ⇒ `invalidateAll`), cache-coherence conformance assertion                                                                                                                                                                                                                 | ⬜ todo |     |
+| 5   | **Member management API**: `WorkspaceMemberService` (only-account-members rule), `workspaceMemberController` + contracts routes (`GET/POST/PATCH/DELETE /members`, `PUT /access-mode`), `requirePermission` helper (`http/workspaceAccess.ts`), conformance member-CRUD assertions                                                                                                                                                                                                                            | ⬜ todo |     |
+| 6   | **Admin-tier enforcement pass**: `requirePermission('settings.manage' \| 'integrations.manage' \| 'secrets.manage')` across the §6 table's admin route groups; conformance: member 403 on settings/integrations/secrets                                                                                                                                                                                                                                                                                       | ⬜ todo |     |
+| 7   | **Side doors**: `/me/environment-handlers/:ws` through shared resolution (`runs.execute`, 404); WS ticket gains `userId`; `public_api_keys.created_by_user_id` (both runtimes) + mint under `secrets.manage` + minter in the keys UI                                                                                                                                                                                                                                                                          | ⬜ todo |     |
+| 8   | **SPA read side**: `useWorkspaceAccess()` composable, store hydration of `access` / `viewerRole`, viewer read-only degradation (board editing, run starts, HITL actions), settings nav gating, i18n (en + all locales)                                                                                                                                                                                                                                                                                        | ⬜ todo |     |
+| 9   | **SPA membership management**: `WorkspaceMembersSettings.vue` (restrict toggle, roster, role select, add from account roster, remove), picker badges, i18n (all locales)                                                                                                                                                                                                                                                                                                                                      | ⬜ todo |     |
+| 10  | **e2e spec** (restricted board vanishes live; viewer read-only) + convert this tracker → ADR `backend/docs/adr/0024-workspace-rbac.md` and `git rm` the tracker                                                                                                                                                                                                                                                                                                                                               | ⬜ todo |     |
 
 Dependencies: 3 needs 1+2; 4–7 need 3; 8–9 need 3 (8 is usable before 5/6 land — the
 floor already returns 403s); 10 last. Every slice ships a changeset (contracts / kernel /
@@ -400,7 +413,7 @@ server / workspaces / caching / app + both runtimes are versioned packages).
   role does NOT bypass PAT-based frame redaction (repo reachability ≠ role).
 - **Viewers see spend and run streams — intentional.** They're account members already
   and `workspace.read` covers run reads; revisit only if a "billing-blind viewer"
-  requirement appears. The real gap is *revoked* members' already-open sockets (ticket
+  requirement appears. The real gap is _revoked_ members' already-open sockets (ticket
   TTL only bounds new mints) — follow-up: the events hub drops a workspace's sockets on
   the membership-change signal; never per-message checks.
 - **Revocation stops new initiations, not in-flight machine work.** Recurring pipelines
