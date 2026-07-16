@@ -18,7 +18,6 @@ import type {
   CoreRepositories,
   LocalEventSink,
   NodeContainerOptions,
-  NodeRealtimeHub,
 } from '@cat-factory/node-server'
 import {
   SqliteWorkRunner,
@@ -588,9 +587,7 @@ export function buildLocalContainer(options: NodeContainerOptions): ServerContai
   // straight through unchanged, exactly as before.
   const realtimeSink: LocalEventSink | undefined =
     mothership && options.realtimeSink
-      ? new LayeredEventPropagator(options.realtimeSink as NodeRealtimeHub, [
-          mothership.realtimeAdapter,
-        ])
+      ? new LayeredEventPropagator(options.realtimeSink, [mothership.realtimeAdapter])
       : options.realtimeSink
 
   const container = buildNodeContainer({

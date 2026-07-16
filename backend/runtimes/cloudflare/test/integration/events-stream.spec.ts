@@ -2,6 +2,7 @@ import { env } from 'cloudflare:test'
 import { describe, expect, it } from 'vitest'
 import type { LlmCallActivity } from '@cat-factory/contracts'
 import { createApp } from '../../src/app'
+import { buildContainer } from '../../src/infrastructure/container'
 import { DurableObjectEventPublisher } from '../../src/infrastructure/events/DurableObjectEventPublisher'
 import { DurableObjectMachineEventRelay } from '../../src/infrastructure/events/DurableObjectMachineEventRelay'
 import { FakeAgentExecutor } from '../fakes/FakeAgentExecutor'
@@ -132,6 +133,15 @@ describe('WorkspaceEventsHub', () => {
     await relay.ingest({ workspaceId, payload, originConnectionId: null })
 
     expect(await received).toBe(payload)
+  })
+
+  // Wiring parity: `buildContainer` must attach the `machineEventRelay` seam whenever the Worker's
+  // WORKSPACE_EVENTS hub is bound (it is in the test env), so a Cloudflare mothership actually serves
+  // `POST /internal/events/publish`. This mirrors the Node facade's `mothership.test.ts` assertion and
+  // is the guard against a facade silently forgetting the symmetric relay wiring.
+  it('wires the machineEventRelay seam when the hub binding is present', () => {
+    const container = buildContainer(env, { agentExecutor: new FakeAgentExecutor() })
+    expect(container.machineEventRelay).toBeInstanceOf(DurableObjectMachineEventRelay)
   })
 })
 

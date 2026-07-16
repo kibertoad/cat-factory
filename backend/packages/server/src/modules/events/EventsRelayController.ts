@@ -4,6 +4,14 @@ import type { RelayedRealtimeEvent } from '../../events/machineEvents.js'
 import type { AppEnv } from '../../http/env.js'
 
 /**
+ * Upper bound on a relayed `payload` frame (characters). A serialized `WorkspaceEvent` is small
+ * (ids + a reason + a compact instance snapshot); 1 MiB is a generous ceiling that still brakes a
+ * compromised node from forwarding an unbounded blob into the mothership's fan-out. The frame is
+ * delivered to browsers verbatim, so this is the one size backstop on a new machine-facing surface.
+ */
+const MAX_RELAYED_PAYLOAD_CHARS = 1_000_000
+
+/**
  * The mothership-mode real-time UPSTREAM machine API: `POST /internal/events/publish`.
  *
  * A mothership-mode local node runs the engine locally but delegates org/durable state to the
@@ -73,6 +81,11 @@ export function eventsRelayController(): Hono<AppEnv> {
         422,
       )
     }
+    // Size backstop: the payload is forwarded to browsers verbatim (never re-parsed), so cap it so a
+    // compromised node token can't inject an unbounded frame into the mothership's fan-out.
+    if (body.payload.length > MAX_RELAYED_PAYLOAD_CHARS) {
+      return c.json({ ok: false, error: { code: 'validation', message: 'payload too large' } }, 413)
+    }
 
     // Account-scope binding: resolve the event's workspace to its owning account and reject anything
     // outside the token's scope as 404 (no existence leak), matching the persistence RPC. A workspace
@@ -88,14 +101,20 @@ export function eventsRelayController(): Hono<AppEnv> {
       )
     }
 
-    // Deliver into the mothership's realtime fan-out. Best-effort by contract (the relay swallows its
-    // own errors), so a delivery hiccup still acks — the persisted row is the source of truth.
-    await relay.ingest({
-      workspaceId: body.workspaceId,
-      payload: body.payload,
-      originConnectionId:
-        typeof body.originConnectionId === 'string' ? body.originConnectionId : null,
-    })
+    // Deliver into the mothership's realtime fan-out. Best-effort by contract — the current relays
+    // swallow their own errors, and the controller wraps the call too so a future relay that throws
+    // can't turn a best-effort publish into a 500: a delivery hiccup still acks (the persisted row is
+    // the source of truth, and the mothership's clients reconcile on reconnect).
+    try {
+      await relay.ingest({
+        workspaceId: body.workspaceId,
+        payload: body.payload,
+        originConnectionId:
+          typeof body.originConnectionId === 'string' ? body.originConnectionId : null,
+      })
+    } catch {
+      // Swallowed by contract (see above).
+    }
     return c.json({ ok: true })
   })
 

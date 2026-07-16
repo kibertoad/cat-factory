@@ -67,8 +67,12 @@
   seam, layered over the local hub — so hosted teammates on the shared board see the local node's
   activity live. Account-scoped + default-deny like the persistence RPC (out-of-scope workspace →
   404). Tested in `packages/server/test/eventsRelay.spec.ts`, `runtimes/node/test/machineEventRelay.spec.ts`,
-  the Cloudflare `events-stream.spec.ts`, and `runtimes/local/src/mothership.test.ts`. The INBOUND
-  (subscribe) leg is the remaining PR 2 work (see "Cross-cutting delegation").
+  the Cloudflare `events-stream.spec.ts` (relay delivery + `buildContainer` wiring-parity assertion),
+  and `runtimes/local/src/mothership.test.ts`. The relay-wiring parity is asserted per-facade (Node
+  `mothership.test.ts`, Cloudflare `events-stream.spec.ts`); folding an end-to-end relay assertion into
+  the shared cross-runtime suite rides with the INBOUND leg + the mothership conformance-server binding
+  below (the mothership harness has no realtime sink today). The INBOUND (subscribe) leg is the
+  remaining PR 2 work (see "Cross-cutting delegation").
 - **Repository conformance** — the shared conformance suite runs a THIRD `[mothership]` config (a
   no-Postgres node whose `CoreRepositories` are RPC-backed by a real in-process Node mothership), so
   an un-proxied / mis-scoped / non-serializing run-path method fails an EXISTING assertion. The static

@@ -153,6 +153,49 @@ describe('POST /internal/events/publish', () => {
     expect((await publish(makeApp(), token, { workspaceId: 'ws_1' })).status).toBe(422)
     expect((await publish(makeApp(), token, { workspaceId: 1, payload: 'x' })).status).toBe(422)
   })
+
+  it('413s an oversized payload (never delivered) but accepts one at the limit', async () => {
+    const token = await machineToken()
+    const ingested: RelayedRealtimeEvent[] = []
+    const tooBig = 'a'.repeat(1_000_001)
+    const res = await publish(makeApp({ ingested }), token, {
+      workspaceId: 'ws_1',
+      payload: tooBig,
+    })
+    expect(res.status).toBe(413)
+    expect(ingested).toHaveLength(0)
+    // A payload exactly at the ceiling still delivers.
+    const atLimit = 'a'.repeat(1_000_000)
+    const ok = await publish(makeApp({ ingested }), token, {
+      workspaceId: 'ws_1',
+      payload: atLimit,
+    })
+    expect(ok.status).toBe(200)
+    expect(ingested).toHaveLength(1)
+  })
+
+  it('acks even when the relay throws (best-effort delivery, controller-wrapped)', async () => {
+    const container = {
+      machineEventRelay: {
+        ingest: () => {
+          throw new Error('sink exploded')
+        },
+      },
+      repositories: {
+        workspaceRepository: { accountOf: async (id: string) => ACCOUNT_BY_WORKSPACE[id] ?? null },
+      },
+      config: { auth: { sessionSecret: SECRET } },
+    } as unknown as ServerContainer
+    const app = new Hono<AppEnv>()
+    app.use('*', async (c, next) => {
+      c.set('container', container)
+      await next()
+    })
+    app.route('/', eventsRelayController())
+    app.onError(handleError)
+    const res = await publish(app, await machineToken(), EVENT)
+    expect(res.status).toBe(200)
+  })
 })
 
 describe('HttpMachineEventClient (client side)', () => {

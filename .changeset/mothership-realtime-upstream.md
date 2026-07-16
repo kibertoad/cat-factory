@@ -15,7 +15,8 @@ couldn't see the local node's activity live. This adds the upstream channel.
 - `@cat-factory/server`: a new machine-authed `POST /internal/events/publish` endpoint
   (`eventsRelayController`) + the `MachineEventRelay` seam on `ServerContainer` + the
   `HttpMachineEventClient`. Mounted on both facades; account-scoped and default-deny exactly like
-  the persistence RPC (a workspace outside the token's scope is a uniform 404).
+  the persistence RPC (a workspace outside the token's scope is a uniform 404). The verbatim-forwarded
+  payload is size-capped (413 above the ceiling) so a compromised node can't inject an unbounded frame.
 - `@cat-factory/node-server`: `LocalMachineEventRelay` delivers a relayed event into the facade's
   own real-time sink (the hub / layered propagator); attached whenever a realtime sink is wired.
 - `@cat-factory/worker`: `DurableObjectMachineEventRelay` delivers a relayed event into the
