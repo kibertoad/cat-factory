@@ -398,6 +398,27 @@ function makeRegistry(): {
       getByAccount: async (accountId: string) => ({ accountId }),
       upsert: async () => undefined,
     },
+    // The Slack management surface. `slackConnectionRepository` is per-account: `getByAccount`/
+    // `softDelete` echo the accountId (arg0); the record-based `upsert` binds on the record's
+    // `accountId` FIELD (the new `accountField` rule). `getByTeam` is wired but absent from the
+    // allow-list (the global inbound-OAuth teamId lookup, mothership-internal), so it must be refused.
+    slackConnectionRepository: {
+      getByAccount: async (accountId: string) => ({ accountId }),
+      upsert: async () => undefined,
+      softDelete: async () => undefined,
+      getByTeam: async (teamId: string) => ({ teamId }),
+    },
+    // Per-workspace routing (no secrets): `getByWorkspace` echoes the workspaceId (arg0); the
+    // record-based `upsert` binds on the record's `workspaceId` FIELD.
+    slackSettingsRepository: {
+      getByWorkspace: async (ws: string) => ({ ws }),
+      upsert: async () => undefined,
+    },
+    // Per-account member mapping (no secrets): both methods take the accountId as arg0 positionally.
+    slackMemberMappingRepository: {
+      getByAccount: async (accountId: string) => [{ accountId }],
+      upsert: async () => undefined,
+    },
   } as unknown as PersistenceRegistry
 
   const resolveAccountId = (id: string) =>
@@ -1934,5 +1955,97 @@ describe('account onboarding read surface (account-scoped)', () => {
     await expect(
       remoteRegistry().emailConnectionRepository!.upsert!({ accountId: ACCOUNT }),
     ).rejects.toThrow(/not callable/)
+  })
+})
+
+describe('Slack integration management surface', () => {
+  function remoteRegistry(accountIds = [ACCOUNT]) {
+    const { registry, ...resolvers } = makeRegistry()
+    const client = inProcessClient({
+      registry,
+      ...resolvers,
+      scope: { accountIds, userId: USER },
+    })
+    return createRemoteRepositoryRegistry(client) as unknown as Record<
+      string,
+      Record<string, (...args: unknown[]) => Promise<unknown>>
+    >
+  }
+
+  // Account-scoped methods (arg0 is an accountId → the `account` rule): the per-account connection
+  // read/delete + the member-mapping read/write. Each stub echoes the accountId, proving the call
+  // reached the bound account; an out-of-scope account is refused 404.
+  const ACCOUNT_METHODS: Array<{ repo: string; method: string; extra?: unknown[] }> = [
+    { repo: 'slackConnectionRepository', method: 'getByAccount' },
+    { repo: 'slackConnectionRepository', method: 'softDelete', extra: [123] },
+    { repo: 'slackMemberMappingRepository', method: 'getByAccount' },
+    { repo: 'slackMemberMappingRepository', method: 'upsert', extra: [[], 123] },
+  ]
+
+  for (const { repo, method, extra = [] } of ACCOUNT_METHODS) {
+    it(`forwards ${repo}.${method} for an in-scope account`, async () => {
+      const result = await remoteRegistry()[repo]![method]!(ACCOUNT, ...extra)
+      // Reads echo `{ accountId }`; the void write (`softDelete`/mapping `upsert`) forwards without throwing.
+      if (result !== undefined && result !== null) {
+        expect(Array.isArray(result) ? result[0] : result).toMatchObject({ accountId: ACCOUNT })
+      }
+    })
+
+    it(`rejects ${repo}.${method} for an out-of-scope account (404, no leak)`, async () => {
+      await expect(remoteRegistry()[repo]![method]!(OTHER_ACCOUNT, ...extra)).rejects.toMatchObject(
+        {
+          code: 'not_found',
+        },
+      )
+    })
+  }
+
+  // Per-workspace routing settings: `getByWorkspace` (the `workspace` rule) echoes the workspaceId.
+  it('forwards slackSettingsRepository.getByWorkspace for an in-scope workspace', async () => {
+    expect(await remoteRegistry().slackSettingsRepository!.getByWorkspace!('ws_in')).toMatchObject({
+      ws: 'ws_in',
+    })
+  })
+  it('rejects slackSettingsRepository.getByWorkspace for an out-of-scope workspace (404)', async () => {
+    await expect(
+      remoteRegistry().slackSettingsRepository!.getByWorkspace!('ws_out'),
+    ).rejects.toMatchObject({ code: 'not_found' })
+  })
+
+  // The `workspaceField` record-based `upsert`: binds on the record's `workspaceId` FIELD.
+  it('forwards slackSettingsRepository.upsert for an in-scope workspace field', async () => {
+    await expect(
+      remoteRegistry().slackSettingsRepository!.upsert!({ workspaceId: 'ws_in' }),
+    ).resolves.toBeUndefined()
+  })
+  it('rejects slackSettingsRepository.upsert whose record workspace is out of scope (404)', async () => {
+    await expect(
+      remoteRegistry().slackSettingsRepository!.upsert!({ workspaceId: 'ws_out' }),
+    ).rejects.toMatchObject({ code: 'not_found' })
+  })
+
+  // The new `accountField` rule: the record-based connection `upsert` binds on the record's
+  // `accountId` FIELD (checked in scope directly — the account-owned mirror of `workspaceField`).
+  it('forwards slackConnectionRepository.upsert for an in-scope account field', async () => {
+    await expect(
+      remoteRegistry().slackConnectionRepository!.upsert!({ accountId: ACCOUNT, tokenCipher: 'x' }),
+    ).resolves.toBeUndefined()
+  })
+  it('rejects slackConnectionRepository.upsert whose record account is out of scope (404)', async () => {
+    await expect(
+      remoteRegistry().slackConnectionRepository!.upsert!({ accountId: OTHER_ACCOUNT }),
+    ).rejects.toMatchObject({ code: 'not_found' })
+  })
+  it('rejects an accountField upsert with a missing/non-string accountId (404, no crash)', async () => {
+    await expect(
+      remoteRegistry().slackConnectionRepository!.upsert!({ notAnAccount: true }),
+    ).rejects.toMatchObject({ code: 'not_found' })
+  })
+
+  // `getByTeam` is the global inbound-OAuth teamId lookup — mothership-internal, off the allow-list.
+  it('still refuses slackConnectionRepository.getByTeam (global teamId lookup, off the allow-list)', async () => {
+    await expect(remoteRegistry().slackConnectionRepository!.getByTeam!('T123')).rejects.toThrow(
+      /not callable/,
+    )
   })
 })

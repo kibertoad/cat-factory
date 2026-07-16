@@ -1792,6 +1792,10 @@
           "label": "Özel paket kayıt defterleri",
           "description": "Aracıların özel bağımlılıkları yüklemek için kullandığı npm ve GitHub Packages token'ları."
         },
+        "apiTokens": {
+          "label": "API erişim belirteçleri",
+          "description": "Harici sistemlerin cat-factory API'sini çağırmak için sunduğu belirteçler."
+        },
         "githubPat": {
           "label": "GitHub token'ım",
           "description": "Başlattığınız çalıştırmalar için kullanılan kişisel erişim token'ı (push'lar, PR'lar, CI, birleştirme)."
@@ -2331,6 +2335,36 @@
         "added": "Kayıt defteri eklendi",
         "addFailed": "Kayıt defteri eklenemedi",
         "removeFailed": "Kayıt defteri girdisi kaldırılamadı"
+      }
+    },
+    "apiTokens": {
+      "title": "API erişim belirteçleri",
+      "intro": "Harici sistemlerin cat-factory API'sine sunduğu belirteçler oluşturun. Her belirteç, /api/v1 uç noktalarında bu çalışma alanı olarak kimlik doğrular. Gizli anahtar yalnızca oluşturulduğunda bir kez gösterilir ve kurtarılamaz, bu yüzden onu hemen saklayın.",
+      "secret": {
+        "heading": "Belirtecinizi şimdi kopyalayın",
+        "warning": "Belirtecin tamamı yalnızca bu sefer gösterilir. Güvenli bir yerde saklayın; kurtarılamaz.",
+        "copy": "Belirteci kopyala",
+        "done": "Tamam"
+      },
+      "list": {
+        "heading": "Etkin belirteçler",
+        "created": "{date} tarihinde oluşturuldu",
+        "lastUsed": "son kullanım {date}",
+        "neverUsed": "hiç kullanılmadı",
+        "revoke": "Belirteci iptal et"
+      },
+      "add": {
+        "heading": "Belirteç oluştur",
+        "label": "Etiket",
+        "labelHelp": "Bu belirteci daha sonra tanımak için bir ad.",
+        "labelPlaceholder": "örn. CI hattı",
+        "create": "Belirteç oluştur"
+      },
+      "toast": {
+        "loadFailed": "API belirteçleri yüklenemedi",
+        "created": "Belirteç oluşturuldu",
+        "createFailed": "Belirteç oluşturulamadı",
+        "revokeFailed": "Belirteç iptal edilemedi"
       }
     },
     "sharedStacks": {

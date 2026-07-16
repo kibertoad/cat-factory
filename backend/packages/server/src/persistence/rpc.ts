@@ -84,6 +84,14 @@ export function statusForPersistenceError(code: PersistenceErrorCode): number {
  *                       only ever lands in the caller's own in-scope workspace; the service layer
  *                       (bypassed by the RPC) is where block-existence is enforced.
  *   - `account`       — `args[arg]` IS an accountId.
+ *   - `accountField`  — `args[arg]` is a record with an `accountId` string field (an
+ *                       `upsert(record)` whose scope key is a property of the record, not a
+ *                       positional arg); the accountId IS the account, checked in scope directly
+ *                       (the account-owned mirror of `workspaceField`). ONLY the top-level
+ *                       `accountId` is bound — sibling fields are NOT scope-validated here, exactly
+ *                       as the raw repo upsert doesn't cross-check them; the row is stored under (and
+ *                       later read by) the bound `accountId`, so a stray sibling only ever lands in
+ *                       the caller's own in-scope account.
  *   - `accountList`   — `args[arg]` is `string[]` of accountIds; ALL must be in scope.
  *   - `selfUser`      — `args[arg]` is a userId; must equal the token's `userId`.
  *   - `visibility`    — `args[arg]` is a `WorkspaceVisibility`; intersected with the token
@@ -127,6 +135,7 @@ export type ScopeRule =
   | { kind: 'workspace'; arg: number }
   | { kind: 'workspaceField'; arg: number }
   | { kind: 'account'; arg: number }
+  | { kind: 'accountField'; arg: number }
   | { kind: 'accountList'; arg: number }
   | { kind: 'selfUser'; arg: number }
   | { kind: 'visibility'; arg: number }
@@ -875,6 +884,54 @@ export const REMOTE_PERSISTENCE_METHODS: PersistenceMethodTable = {
   emailConnectionRepository: {
     getByAccount: { scope: { kind: 'account', arg: 0 } },
   },
+  // --- Slack integration management surface ---------------------------------------
+  // The Slack integration settings a mothership-mode SPA manages (`SlackController` →
+  // `SlackConnectionService` / `SlackSettingsService` / `SlackMemberMappingService`): connect /
+  // disconnect the per-account Slack workspace, edit the per-workspace notification routing, and
+  // maintain the per-account GitHub-user → Slack-member mapping. The controller mounts under
+  // `/workspaces/:workspaceId` and is member-level (not admin-gated), so it follows the same policy
+  // as the observability / environment / runner-pool connection panels above.
+  //
+  // Safe to expose exactly like those connection surfaces: the Slack bot token rides a SEALED blob
+  // (`tokenCipher`) — the repo returns it verbatim (it does NOT decrypt); sealing/decryption live in
+  // the Slack service/channel under the LOCAL key, so no plaintext credential crosses the machine
+  // API and the mothership only ever stores ciphertext (the "mothership ENCRYPTION_KEY never reaches
+  // the laptop" split holds). The settings + member-mapping rows carry NO secrets at all.
+  //
+  // Scope of what this unlocks: the settings PANELS work end-to-end (connect / disconnect / route /
+  // map + read back the redacted connection view). What it does NOT change: mothership-side Slack
+  // DELIVERY of a notification raised by a hosted teammate — that reads + decrypts the token on the
+  // mothership, which cannot open a laptop-sealed blob, so it rides the later secrets-delegation
+  // slice, exactly like the observability gate probe. Local delivery (the run's own node raised the
+  // notification and holds the local key) is unaffected.
+  //
+  // `slackConnectionRepository` is per-ACCOUNT: `getByAccount`/`softDelete` take the accountId as
+  // arg0 (the `account` rule — the local service resolves the workspace → account via the already
+  // remote `workspaceRepository.accountOf`, then calls with that in-scope accountId), and the
+  // record-based `upsert(record)` binds on the record's `accountId` FIELD (the new `accountField`
+  // rule). `getByTeam` is NOT here: it is a GLOBAL teamId → connection lookup used only by the
+  // inbound OAuth callback / event webhook, which run on the mothership (never the laptop) and
+  // cannot be account-scoped — it stays mothership-internal (classified `sweeper` in the drift
+  // guard, the same "unscoped, mothership-internal" bucket as `repoProjectionRepository.listByInstallation`).
+  slackConnectionRepository: {
+    getByAccount: { scope: { kind: 'account', arg: 0 } },
+    upsert: { scope: { kind: 'accountField', arg: 0 } },
+    softDelete: { scope: { kind: 'account', arg: 0 } },
+  },
+  // Per-workspace notification routing (channel per notification kind + a mentions flag). No
+  // secrets. `getByWorkspace` takes the workspaceId as arg0 (the `workspace` rule); the
+  // record-based `upsert(record)` binds on the record's `workspaceId` FIELD (the `workspaceField` rule).
+  slackSettingsRepository: {
+    getByWorkspace: { scope: { kind: 'workspace', arg: 0 } },
+    upsert: { scope: { kind: 'workspaceField', arg: 0 } },
+  },
+  // Per-account GitHub-user → Slack-member mapping (for @-mentions). No secrets. Both methods take
+  // the accountId as arg0 positionally (`upsert(accountId, entries, at)` — a positional accountId,
+  // not a record), so the `account` rule binds both.
+  slackMemberMappingRepository: {
+    getByAccount: { scope: { kind: 'account', arg: 0 } },
+    upsert: { scope: { kind: 'account', arg: 0 } },
+  },
 }
 
 // ---------------------------------------------------------------------------
@@ -993,6 +1050,21 @@ export async function dispatchPersistenceCall(
     }
     case 'account': {
       if (!inScope(args[rule.arg] as string)) return denied
+      break
+    }
+    case 'accountField': {
+      // The scope key is an `accountId` FIELD of the record arg (an `upsert(record)` whose
+      // accountId is a property, not a positional arg). The accountId IS the account, so it is
+      // checked in scope directly — the account-owned mirror of `workspaceField`. A non-object
+      // arg or a missing/non-string field is refused as 404; the write targets exactly
+      // `record.accountId`, so binding on it means the record can only land in an in-scope account.
+      const record = args[rule.arg]
+      const accountId =
+        record && typeof record === 'object'
+          ? (record as { accountId?: unknown }).accountId
+          : undefined
+      if (typeof accountId !== 'string') return denied
+      if (!inScope(accountId)) return denied
       break
     }
     case 'accountList': {
