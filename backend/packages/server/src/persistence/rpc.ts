@@ -94,6 +94,16 @@ export function statusForPersistenceError(code: PersistenceErrorCode): number {
  *                       the caller's own in-scope account.
  *   - `accountList`   — `args[arg]` is `string[]` of accountIds; ALL must be in scope.
  *   - `selfUser`      — `args[arg]` is a userId; must equal the token's `userId`.
+ *   - `user`          — `args[arg]` is a userId whose DISPLAY record is being read; in scope iff
+ *                       that user is a CO-MEMBER of one of the token's in-scope accounts (resolved
+ *                       server-side from the account rosters). Unlike `selfUser` (which pins the
+ *                       token's OWN id) this admits any teammate the caller shares an account with —
+ *                       the member-roster display read. A user in no in-scope account (or an
+ *                       unresolvable one) fails closed (404, no existence leak).
+ *   - `userList`      — `args[arg]` is `string[]` of userIds (the batched roster enrichment); EVERY
+ *                       requested user must be a co-member of an in-scope account, so a missing or
+ *                       out-of-scope id fails closed — the batched form of `user`. Empty input is
+ *                       allowed (it returns empty).
  *   - `visibility`    — `args[arg]` is a `WorkspaceVisibility`; intersected with the token
  *                       scope so a node can never widen its own visibility.
  *   - `block`         — `args[arg]` is a blockId with NO workspace arg; resolve the block's
@@ -138,6 +148,8 @@ export type ScopeRule =
   | { kind: 'accountField'; arg: number }
   | { kind: 'accountList'; arg: number }
   | { kind: 'selfUser'; arg: number }
+  | { kind: 'user'; arg: number }
+  | { kind: 'userList'; arg: number }
   | { kind: 'visibility'; arg: number }
   | { kind: 'block'; arg: number }
   | { kind: 'blockList'; arg: number }
@@ -244,6 +256,26 @@ export const REMOTE_PERSISTENCE_METHODS: PersistenceMethodTable = {
     listByUser: { scope: { kind: 'selfUser', arg: 0 } },
     listByAccount: { scope: { kind: 'account', arg: 0 } },
     get: { scope: { kind: 'account', arg: 0 } },
+  },
+  // --- Member-display read surface ------------------------------------------------
+  // The user DISPLAY records the account members panel enriches its roster with
+  // (`AccountService.members` → `userRepository.listByIds(memberIds)`) and the single-user display
+  // lookup (`get`). These carry only the presentational `UserRecord` (id / name / email / avatarUrl
+  // / createdAt) — NOT the password `secret`, which lives on `UserIdentityRecord` and is reachable
+  // only via `getIdentity`/`listIdentities` (kept off, like the other identity/auth reads). So the
+  // display reads leak no credential and are safe to proxy.
+  //
+  // Scope: a userId is not itself an account/workspace, so it is bound by CO-MEMBERSHIP — the `user`
+  // rule (single id) / `userList` rule (batch) admit a user iff they are a member of one of the
+  // token's in-scope accounts, resolved server-side from the account rosters. The roster read only
+  // ever passes ids that ARE members of the (in-scope) account it just listed, so the batch check
+  // always passes on the real path; a forged out-of-scope id fails closed (404, no existence leak).
+  // The `update` write (profile edit) + the identity/auth reads (`findByIdentity`/`findByEmail`/
+  // `getIdentity`/`listIdentities`) stay off — they are the account-lifecycle / login surface, not
+  // member display, and the identity reads carry the password secret.
+  userRepository: {
+    get: { scope: { kind: 'user', arg: 0 } },
+    listByIds: { scope: { kind: 'userList', arg: 0 } },
   },
   // --- Board-load read surface --------------------------------------------------
   // The workspace-scoped reads a `GET /workspaces/:id` snapshot assembles. Each takes the
@@ -964,6 +996,13 @@ export interface DispatchOptions {
    * hitting that kind with no resolver fails closed (404).
    */
   resolveServiceAccountIds?(serviceIds: string[]): Promise<Map<string, string | null | undefined>>
+  /**
+   * Resolve the member userIds of an account (the mothership's `MembershipRepository.listByAccount`,
+   * mapped to `userId`s). Required for the `user`/`userList` scope kinds: a requested user is in
+   * scope iff they are a co-member of one of the token's in-scope accounts. A call hitting those
+   * kinds with no resolver fails closed (404), like the other entity resolvers.
+   */
+  resolveAccountMemberIds?(accountId: string): Promise<string[]>
   /** The method table to enforce (defaults to the full remote allow-list). */
   table?: PersistenceMethodTable
 }
@@ -1018,6 +1057,24 @@ export async function dispatchPersistenceCall(
   const args = Array.isArray(request.args) ? [...request.args] : []
   const inScope = (accountId: string | null | undefined): boolean =>
     typeof accountId === 'string' && opts.scope.accountIds.includes(accountId)
+
+  // The set of userIds the token may see the DISPLAY record of: every member of an in-scope
+  // account. Computed at most once per dispatch (lazy) and bounded by the token's account scope
+  // (not by request data), so it is a fixed-size read, not an N+1 over the requested user list.
+  let visibleUsers: Promise<Set<string>> | undefined
+  const visibleUserIds = (): Promise<Set<string>> => {
+    if (!visibleUsers) {
+      visibleUsers = (async () => {
+        const set = new Set<string>()
+        for (const accountId of opts.scope.accountIds) {
+          const members = (await opts.resolveAccountMemberIds?.(accountId)) ?? []
+          for (const userId of members) set.add(userId)
+        }
+        return set
+      })()
+    }
+    return visibleUsers
+  }
 
   // Bind the call to an account and reject anything outside the token scope (404).
   const denied = fail('not_found', 'Not found')
@@ -1074,6 +1131,29 @@ export async function dispatchPersistenceCall(
     }
     case 'selfUser': {
       if (args[rule.arg] !== opts.scope.userId) return denied
+      break
+    }
+    case 'user': {
+      // Bind via co-membership: the target user's DISPLAY record is readable iff they are a member
+      // of one of the token's in-scope accounts. No resolver wired ⇒ fail closed (404), like the
+      // other entity resolvers. A user in no in-scope account is refused (no existence leak).
+      const userId = args[rule.arg]
+      if (typeof userId !== 'string' || !opts.resolveAccountMemberIds) return denied
+      if (!(await visibleUserIds()).has(userId)) return denied
+      break
+    }
+    case 'userList': {
+      // The batched roster enrichment: EVERY requested user must be a co-member of an in-scope
+      // account (the batched form of `user`), so a missing or out-of-scope id fails closed. An
+      // empty list is a no-op read (returns empty), so it needs no roster to scope.
+      const ids = args[rule.arg]
+      if (!Array.isArray(ids) || ids.some((id) => typeof id !== 'string')) return denied
+      if (ids.length === 0) break
+      if (!opts.resolveAccountMemberIds) return denied
+      const visible = await visibleUserIds()
+      for (const id of ids as string[]) {
+        if (!visible.has(id)) return denied
+      }
       break
     }
     case 'block': {
