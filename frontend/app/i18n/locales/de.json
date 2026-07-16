@@ -694,7 +694,8 @@
         "bug": "Bug",
         "document": "Dokument",
         "spike": "Spike",
-        "review": "Review"
+        "review": "Review",
+        "ralph": "Ralph-Schleife"
       },
       "observability": {
         "heading": "Agenten-Observability",
@@ -1992,7 +1993,8 @@
         "document": "Dokument",
         "spike": "Spike",
         "recurring": "Wiederkehrend",
-        "review": "Review"
+        "review": "Review",
+        "ralph": "Ralph-Schleife"
       },
       "recurringWithFrame": "Eine wiederkehrende Aufgabe führt eine Pipeline in einem Takt aus. Fahren Sie fort, um Zeitplan + Prompt festzulegen.",
       "recurringNoFrame": "Eine wiederkehrende Aufgabe muss auf einem Service liegen. Fügen Sie sie aus einem Service-Frame (oder einem darin enthaltenen Modul) hinzu.",
@@ -4748,6 +4750,29 @@
       "style": "Stil",
       "test": "Tests",
       "other": "Sonstiges"
+    }
+  },
+  "ralph": {
+    "subtitle": "Eine dauerhafte Schleife: Aufgabe bearbeiten, Validierungsbefehl ausführen und wiederholen, bis er erfolgreich ist.",
+    "status": {
+      "passed": "Bestanden",
+      "gaveUp": "Aufgegeben",
+      "running": "Läuft",
+      "failing": "Fehlgeschlagen"
+    },
+    "noActivity": "Noch keine Iterationen.",
+    "validationCommand": "Validierungsbefehl",
+    "lastOutput": "Letzte Validierung (Exit {exit})",
+    "viewPr": "Pull Request ansehen",
+    "iterationsHeading": "Iterationen",
+    "iteration": "Iteration {number}",
+    "iterationPassed": "Validierung bestanden",
+    "iterationFailed": "Exit {exit}",
+    "sidebar": {
+      "state": "Status",
+      "iterations": "Iterationen",
+      "count": "{attempts} von {max}",
+      "footer": "Die Schleife wird wiederholt, bis der Validierungsbefehl erfolgreich ist oder das Iterationsbudget aufgebraucht ist."
     }
   }
 }

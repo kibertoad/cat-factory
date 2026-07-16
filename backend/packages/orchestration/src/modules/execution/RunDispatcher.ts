@@ -154,6 +154,8 @@ import type { InterviewGateController } from './InterviewGateController.js'
 import { RunStateMachine } from './RunStateMachine.js'
 import { StepGraph } from './StepGraph.js'
 import { TesterController } from './TesterController.js'
+import { RalphController } from './RalphController.js'
+import { isRalphKind } from './ralph.logic.js'
 import { VisualConfirmationController } from './VisualConfirmationController.js'
 import {
   FALLTHROUGH_STEP_HANDLER_ORDER,
@@ -289,6 +291,7 @@ export interface RunDispatcherDeps {
   mergeResolver: MergeResolver
   companionController: CompanionController
   testerController: TesterController
+  ralphController: RalphController
   humanTestController: HumanTestController
   visualConfirmationController: VisualConfirmationController
   reviewGate: ReviewGateController
@@ -357,6 +360,7 @@ export class RunDispatcher {
   private readonly mergeResolver: MergeResolver
   private readonly companionController: CompanionController
   private readonly testerController: TesterController
+  private readonly ralphController: RalphController
   private readonly humanTestController: HumanTestController
   private readonly visualConfirmationController: VisualConfirmationController
   private readonly reviewGate: ReviewGateController
@@ -412,6 +416,7 @@ export class RunDispatcher {
     this.mergeResolver = deps.mergeResolver
     this.companionController = deps.companionController
     this.testerController = deps.testerController
+    this.ralphController = deps.ralphController
     this.humanTestController = deps.humanTestController
     this.visualConfirmationController = deps.visualConfirmationController
     this.reviewGate = deps.reviewGate
@@ -3073,6 +3078,20 @@ export class RunDispatcher {
           isTesterKind(step.agentKind) && result.testReport !== undefined,
         intercept: ({ workspaceId, instance, step, result }) =>
           this.testerController.resolveTesterResult(workspaceId, instance, step, result),
+      },
+      // A `ralph` iteration finished and the harness attached its programmatic validation
+      // verdict. Hand it to the ralph loop: a passing command finishes + advances (returns
+      // null → normal completion), a failing one re-dispatches a fresh iteration within the
+      // budget or gives up for a human — never the normal single-shot completion. Keyed on the
+      // `ralph` kind carrying a `ralphVerdict`; a ralph run that errored before validation (no
+      // verdict) falls through to the normal failure path.
+      {
+        kind: 'ralph-verdict',
+        order: 115,
+        canIntercept: ({ step, result }) =>
+          isRalphKind(step.agentKind) && result.ralphVerdict !== undefined,
+        intercept: ({ workspaceId, instance, step, result }) =>
+          this.ralphController.resolveRalphResult(workspaceId, instance, step, result),
       },
     ]
     return interceptors.sort((a, b) => a.order - b.order)

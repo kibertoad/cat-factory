@@ -277,6 +277,15 @@ export {
   BUG_FIX_GUIDANCE,
   bugFixGuidanceFor,
 } from './agents/kinds/repro-test.js'
+export {
+  RALPH_AGENT_KIND,
+  RALPH_AGENT_KINDS,
+  RALPH_VALIDATION_COMMAND_CONFIG_ID,
+  RALPH_MAX_ITERATIONS_CONFIG_ID,
+  RALPH_DEFAULT_MAX_ITERATIONS,
+  ralphConfigContributions,
+  registerRalphAgent,
+} from './agents/kinds/ralph.js'
 export { MOCK_AGENT_KIND, isMockKind, mockSystemPrompt } from './agents/prompts/mock.js'
 export {
   type BusinessLogicAgentKind,

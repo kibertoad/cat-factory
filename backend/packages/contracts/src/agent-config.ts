@@ -45,12 +45,20 @@ export const agentConfigDescriptorSchema = v.object({
   label: v.string(),
   /** One-line explanation shown under the field. */
   description: v.string(),
-  /** The control type. Only `select` today; designed to grow. */
-  type: v.picklist(['select']),
-  /** The choices for a `select` descriptor. */
-  options: v.array(agentConfigOptionSchema),
-  /** The value used when the task has made no explicit choice. */
-  default: v.pipe(v.string(), v.minLength(1)),
+  /**
+   * The control type:
+   *   - `select` — one of a fixed set of {@link options}.
+   *   - `text`   — a free-text value (e.g. the Ralph loop's validation command).
+   *   - `number` — a numeric value entered as a string (e.g. the Ralph loop's iteration cap).
+   * `select` was the only type historically; `text`/`number` were always anticipated here.
+   */
+  type: v.picklist(['select', 'text', 'number']),
+  /** The choices for a `select` descriptor; empty (and ignored) for `text`/`number`. */
+  options: v.optional(v.array(agentConfigOptionSchema), []),
+  /** The value used when the task has made no explicit choice (may be empty for `text`). */
+  default: v.optional(v.string(), ''),
+  /** Optional placeholder shown in an empty `text`/`number` input. */
+  placeholder: v.optional(v.string()),
 })
 export type AgentConfigDescriptor = v.InferOutput<typeof agentConfigDescriptorSchema>
 
@@ -88,6 +96,15 @@ export function resolveAgentConfigValue(
   values: AgentConfigValues | undefined,
 ): string {
   const chosen = values?.[descriptor.id]
-  if (chosen && descriptor.options.some((o) => o.value === chosen)) return chosen
-  return descriptor.default
+  if (descriptor.type === 'select') {
+    if (chosen && descriptor.options.some((o) => o.value === chosen)) return chosen
+    return descriptor.default
+  }
+  if (descriptor.type === 'number') {
+    // A numeric field: accept any finite-number string, else fall back to the default.
+    if (chosen !== undefined && chosen !== '' && Number.isFinite(Number(chosen))) return chosen
+    return descriptor.default
+  }
+  // `text`: any explicitly-set string wins (including empty); else the default.
+  return chosen ?? descriptor.default
 }

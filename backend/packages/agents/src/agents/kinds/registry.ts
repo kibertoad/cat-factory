@@ -13,6 +13,7 @@ import { registerBugInvestigatorAgent } from './bug-investigator.js'
 import { registerForkProposerAgent } from './fork-proposer.js'
 import { registerPrReviewerAgent } from './pr-reviewer.js'
 import { registerReproTestAgent } from './repro-test.js'
+import { registerRalphAgent } from './ralph.js'
 import { registerDocumentAgents } from './document.js'
 import { registerCodeCommenterAgent } from './code-commenter.js'
 import { registerInitiativeAgents } from './initiative.js'
@@ -269,6 +270,7 @@ export function defaultAgentKindRegistry(): AgentKindRegistry {
   registerForkProposerAgent(registry)
   registerPrReviewerAgent(registry)
   registerReproTestAgent(registry)
+  registerRalphAgent(registry)
   registerDocumentAgents(registry)
   registerCodeCommenterAgent(registry)
   registerInitiativeAgents(registry)

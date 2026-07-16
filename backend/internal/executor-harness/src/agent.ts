@@ -843,34 +843,49 @@ async function runCodingMode(job: AgentJob, opts: RunOptions): Promise<AgentResu
  */
 async function runSingleRepoCoding(job: AgentJob, opts: RunOptions): Promise<AgentResult> {
   const pushBranch = job.pushBranch ?? job.newBranch ?? job.branch
-  const { summary, stats, stderrTail, pushed, usage, callMetrics } = await runCodingAgent(
-    {
-      kind: 'agent',
-      jobId: job.jobId,
-      repo: job.repo,
-      cloneBranch: job.branch,
-      ...(job.newBranch ? { newBranch: job.newBranch } : {}),
-      pushBranch,
-      ghToken: job.ghToken,
-      systemPrompt: job.systemPrompt,
-      userPrompt: job.userPrompt,
-      model: job.model,
-      harness: job.harness,
-      subscriptionToken: job.subscriptionToken,
-      subscriptionBaseUrl: job.subscriptionBaseUrl,
-      ambientAuth: job.ambientAuth,
-      proxyBaseUrl: job.proxyBaseUrl,
-      sessionToken: job.sessionToken,
-      commitMessage: job.commitMessage ?? job.pr?.title ?? 'Agent changes',
-      webToolsGuidance: job.webToolsGuidance,
-      webSearchProxy: job.webSearch,
-      guardLimits: job.guardLimits,
-      ...(job.persistentCheckout ? { persistentCheckout: true } : {}),
-      ...(job.streamFollowUps ? { streamFollowUps: true } : {}),
-      ...(job.referenceBranches?.length ? { referenceBranches: job.referenceBranches } : {}),
-    },
-    opts,
-  )
+  const { summary, stats, stderrTail, pushed, usage, callMetrics, validation } =
+    await runCodingAgent(
+      {
+        kind: 'agent',
+        jobId: job.jobId,
+        repo: job.repo,
+        cloneBranch: job.branch,
+        ...(job.newBranch ? { newBranch: job.newBranch } : {}),
+        pushBranch,
+        ghToken: job.ghToken,
+        systemPrompt: job.systemPrompt,
+        userPrompt: job.userPrompt,
+        model: job.model,
+        harness: job.harness,
+        subscriptionToken: job.subscriptionToken,
+        subscriptionBaseUrl: job.subscriptionBaseUrl,
+        ambientAuth: job.ambientAuth,
+        proxyBaseUrl: job.proxyBaseUrl,
+        sessionToken: job.sessionToken,
+        commitMessage: job.commitMessage ?? job.pr?.title ?? 'Agent changes',
+        webToolsGuidance: job.webToolsGuidance,
+        webSearchProxy: job.webSearch,
+        guardLimits: job.guardLimits,
+        ...(job.persistentCheckout ? { persistentCheckout: true } : {}),
+        ...(job.streamFollowUps ? { streamFollowUps: true } : {}),
+        ...(job.referenceBranches?.length ? { referenceBranches: job.referenceBranches } : {}),
+        // Ralph loop: run the completion command after the agent commits and report its verdict.
+        ...(job.validation
+          ? {
+              validation: {
+                command: job.validation.command,
+                ...(job.validation.iteration !== undefined
+                  ? { iteration: job.validation.iteration }
+                  : {}),
+              },
+            }
+          : {}),
+      },
+      opts,
+    )
+  // Ralph loop: the harness-computed validation verdict, forwarded onto the coding result as
+  // `ralphVerdict` so the backend's `toRunResult` lifts it onto `AgentRunResult.ralphVerdict`.
+  const ralphVerdict = validation ? { ralphVerdict: validation } : {}
 
   if (!pushed) {
     // A no-op: a failure for the implementer, a clean non-event for the fixers.
@@ -882,6 +897,7 @@ async function runSingleRepoCoding(job: AgentJob, opts: RunOptions): Promise<Age
         stats,
         ...(usage ? { usage } : {}),
         ...(callMetrics ? { callMetrics } : {}),
+        ...ralphVerdict,
       }
     }
     return {
@@ -951,6 +967,7 @@ async function runSingleRepoCoding(job: AgentJob, opts: RunOptions): Promise<Age
       stats,
       ...(usage ? { usage } : {}),
       ...(callMetrics ? { callMetrics } : {}),
+      ...ralphVerdict,
     }
   }
   return {
@@ -960,6 +977,7 @@ async function runSingleRepoCoding(job: AgentJob, opts: RunOptions): Promise<Age
     stats,
     ...(usage ? { usage } : {}),
     ...(callMetrics ? { callMetrics } : {}),
+    ...ralphVerdict,
   }
 }
 

@@ -154,6 +154,26 @@ function parseGuardLimits(value: unknown): GuardLimitsSpec | undefined {
 }
 
 /**
+ * Parse the optional Ralph-loop validation spec. Requires a non-empty `command` string (the
+ * completion criterion the harness runs); `progressPath`/`iteration` are optional metadata.
+ * Returns undefined when absent or malformed (a coding run then behaves like any other — no
+ * post-commit validation). See {@link ValidationSpec}.
+ */
+function parseValidationSpec(value: unknown): ValidationSpec | undefined {
+  if (typeof value !== 'object' || value === null) return undefined
+  const o = value as Record<string, unknown>
+  if (typeof o.command !== 'string' || o.command.trim() === '') return undefined
+  const iteration = posInt(o.iteration)
+  return {
+    command: o.command,
+    ...(typeof o.progressPath === 'string' && o.progressPath
+      ? { progressPath: o.progressPath }
+      : {}),
+    ...(iteration !== undefined ? { iteration } : {}),
+  }
+}
+
+/**
  * Parse the shared per-job auth fields, validating per harness: a subscription
  * harness (`claude-code` / `codex`) requires `subscriptionToken`; the default Pi
  * harness requires `proxyBaseUrl` + `sessionToken`.
@@ -627,6 +647,23 @@ export interface AgentOutputSpec {
  * RUNNING — no agent runs and the serve is deliberately not torn down when the job returns
  * (see {@link AgentResult.preview}).
  */
+/**
+ * Coding mode (Ralph loop): the programmatic completion criterion. After the coding agent
+ * commits + pushes, the harness runs {@link command} in the checkout and reports its exit
+ * code back on {@link AgentResult.ralphVerdict} — exit 0 means the loop is done. This is the
+ * whole point of a Ralph loop's exit condition being a REAL check: the harness runs it, not
+ * the model. The command runs only inside the sandboxed run container (same trust boundary
+ * as the coding agent). Absent for every non-`ralph` coding run.
+ */
+export interface ValidationSpec {
+  /** The shell command the harness runs against the checkout (exit 0 = the criterion is met). */
+  command: string
+  /** Repo-relative progress-log path the agent maintains (informational; the harness doesn't write it). */
+  progressPath?: string
+  /** 1-based iteration number, echoed back on the verdict for the engine's attempt log. */
+  iteration?: number
+}
+
 export interface AgentJob extends HarnessAuthFields {
   jobId: string
   mode: AgentMode
@@ -753,6 +790,11 @@ export interface AgentJob extends HarnessAuthFields {
    * killed for a kind's normal working pattern. Absent ⇒ env/default for all knobs.
    */
   guardLimits?: GuardLimitsSpec
+  /**
+   * Coding mode (Ralph loop): the programmatic completion command the harness runs after the
+   * agent commits + pushes. Present only for a `ralph` iteration. See {@link ValidationSpec}.
+   */
+  validation?: ValidationSpec
 }
 
 /** Per-job, per-knob progress-guard overrides (see {@link AgentJob.guardLimits}). */
@@ -809,6 +851,18 @@ export interface AgentResult {
   pushed?: boolean
   prUrl?: string
   branch?: string
+  /**
+   * Coding mode (Ralph loop): the harness-computed verdict of the post-commit validation
+   * command — whether it exited 0, its exit code, and a bounded, redacted output tail. The
+   * engine reads this (never a model self-report) to decide whether the loop is done or must
+   * iterate again. Present only for a `ralph` iteration ({@link AgentJob.validation} set).
+   */
+  ralphVerdict?: {
+    validationPassed: boolean
+    exitCode: number
+    validationOutputTail?: string
+    iteration?: number
+  }
   /**
    * Coding mode (multi-repo): the PRs opened in the connected services' PEER repos, one per
    * repo the run actually changed (service-connections phase 3). Beside the own-service
@@ -1130,6 +1184,7 @@ export function parseAgentJob(input: unknown): AgentJob {
   const packageRegistries = parsePackageRegistries(o.packageRegistries)
   const testSecrets = parseTestSecrets(o.testSecrets)
   const guardLimits = parseGuardLimits(o.guardLimits)
+  const validation = parseValidationSpec(o.validation)
   const job: AgentJob = {
     jobId: str(o.jobId, 'jobId'),
     mode,
@@ -1164,6 +1219,7 @@ export function parseAgentJob(input: unknown): AgentJob {
     ...(o.persistentCheckout === true ? { persistentCheckout: true } : {}),
     ...(o.streamFollowUps === true ? { streamFollowUps: true } : {}),
     ...(guardLimits ? { guardLimits } : {}),
+    ...(validation ? { validation } : {}),
   }
   assertAllowedHost(job.repo.cloneUrl, 'repo.cloneUrl')
   if (job.githubApiBase) assertAllowedHost(job.githubApiBase, 'githubApiBase')

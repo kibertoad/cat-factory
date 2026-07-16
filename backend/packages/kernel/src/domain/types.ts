@@ -322,6 +322,10 @@ export type {
   GateStepState,
   GateFailingCheck,
   GateAttempt,
+  // Ralph-loop shapes (persistent retry-until-done step state + iteration verdict).
+  RalphStepState,
+  RalphVerdict,
+  RalphAttempt,
   // Human-testing gate shapes (ephemeral env + human validation loop).
   HumanTestStepState,
   HumanTestEnvironment,

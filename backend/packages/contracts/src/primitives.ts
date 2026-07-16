@@ -78,12 +78,20 @@ export const taskTypeSchema = v.picklist([
   'document',
   'spike',
   'review',
+  'ralph',
   'recurring',
 ])
 export type TaskType = v.InferOutput<typeof taskTypeSchema>
 
 /** The task types a human can pick in the create-task form (recurring is created via a schedule). */
-export const createTaskTypeSchema = v.picklist(['feature', 'bug', 'document', 'spike', 'review'])
+export const createTaskTypeSchema = v.picklist([
+  'feature',
+  'bug',
+  'document',
+  'spike',
+  'review',
+  'ralph',
+])
 export type CreateTaskType = v.InferOutput<typeof createTaskTypeSchema>
 
 /**

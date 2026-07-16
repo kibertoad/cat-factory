@@ -186,7 +186,8 @@
         "document": "Document",
         "spike": "Spike",
         "recurring": "Recurring",
-        "review": "Review"
+        "review": "Review",
+        "ralph": "Ralph loop"
       },
       "recurringWithFrame": "A recurring task runs a pipeline on a cadence. Continue to set the schedule + prompt.",
       "recurringNoFrame": "A recurring task must live on a service. Add it from a service frame (or a module inside one).",
@@ -2557,7 +2558,8 @@
         "bug": "bug",
         "document": "document",
         "spike": "spike",
-        "review": "review"
+        "review": "review",
+        "ralph": "Ralph loop"
       },
       "observability": {
         "heading": "Agent observability",
@@ -4874,6 +4876,29 @@
       "style": "Style",
       "test": "Tests",
       "other": "Other"
+    }
+  },
+  "ralph": {
+    "subtitle": "A persistent loop: work the task, run the validation command, and repeat until it passes.",
+    "status": {
+      "passed": "Passed",
+      "gaveUp": "Gave up",
+      "running": "Running",
+      "failing": "Failing"
+    },
+    "noActivity": "No iterations yet.",
+    "validationCommand": "Validation command",
+    "lastOutput": "Latest validation (exit {exit})",
+    "viewPr": "View pull request",
+    "iterationsHeading": "Iterations",
+    "iteration": "Iteration {number}",
+    "iterationPassed": "validation passed",
+    "iterationFailed": "exit {exit}",
+    "sidebar": {
+      "state": "State",
+      "iterations": "Iterations",
+      "count": "{attempts} of {max}",
+      "footer": "The loop retries until the validation command passes or the iteration budget is spent."
     }
   }
 }

@@ -168,7 +168,8 @@
         "document": "ドキュメント",
         "spike": "スパイク",
         "recurring": "繰り返し",
-        "review": "レビュー"
+        "review": "レビュー",
+        "ralph": "Ralph ループ"
       },
       "recurringWithFrame": "繰り返しタスクは一定の周期でパイプラインを実行します。続行してスケジュールとプロンプトを設定してください。",
       "recurringNoFrame": "繰り返しタスクはサービス上に配置する必要があります。サービスフレーム（またはその中のモジュール）から追加してください。",
@@ -2494,7 +2495,8 @@
         "bug": "バグ",
         "document": "ドキュメント",
         "spike": "スパイク",
-        "review": "レビュー"
+        "review": "レビュー",
+        "ralph": "Ralph ループ"
       },
       "observability": {
         "heading": "エージェントの可観測性",
@@ -4748,6 +4750,29 @@
       "style": "スタイル",
       "test": "テスト",
       "other": "その他"
+    }
+  },
+  "ralph": {
+    "subtitle": "永続的なループ：タスクを進め、検証コマンドを実行し、成功するまで繰り返します。",
+    "status": {
+      "passed": "合格",
+      "gaveUp": "中止",
+      "running": "実行中",
+      "failing": "失敗中"
+    },
+    "noActivity": "まだ反復はありません。",
+    "validationCommand": "検証コマンド",
+    "lastOutput": "最新の検証（終了コード {exit}）",
+    "viewPr": "プルリクエストを表示",
+    "iterationsHeading": "反復",
+    "iteration": "反復 {number}",
+    "iterationPassed": "検証に合格",
+    "iterationFailed": "終了コード {exit}",
+    "sidebar": {
+      "state": "状態",
+      "iterations": "反復",
+      "count": "{max} 回中 {attempts} 回",
+      "footer": "検証コマンドが成功するか、反復の上限に達するまでループは再試行します。"
     }
   }
 }
