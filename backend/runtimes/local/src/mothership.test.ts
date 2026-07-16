@@ -1,5 +1,5 @@
 import { afterEach, describe, expect, it, vi } from 'vitest'
-import type { DriveConfig } from '@cat-factory/node-server'
+import { type DriveConfig, NodeRealtimeHub } from '@cat-factory/node-server'
 import { buildLocalContainer } from './container.js'
 import {
   SqliteWorkRunner,
@@ -555,5 +555,95 @@ describe('buildLocalContainer (mothership, no Postgres)', () => {
     expect(container.localSettings).toBeDefined()
     // The SPA flag is surfaced so the UI can label local-vs-mothership storage.
     expect(container.config.localMode?.mothership).toBe(true)
+  })
+})
+
+describe('composeMothership realtime upstream adapter', () => {
+  it('publishes an engine event to the mothership over /internal/events/publish with the machine token', async () => {
+    const seen: { url: string; auth: string | null; body: unknown }[] = []
+    vi.stubGlobal('fetch', async (url: string, init: RequestInit) => {
+      seen.push({
+        url: String(url),
+        auth: new Headers(init.headers).get('authorization'),
+        body: JSON.parse(String(init.body)),
+      })
+      return new Response(JSON.stringify({ ok: true }), {
+        status: 200,
+        headers: { 'content-type': 'application/json' },
+      })
+    })
+    const composed = composeMothership(
+      BASE_ENV({ LOCAL_MOTHERSHIP_URL: 'https://m.test', LOCAL_MOTHERSHIP_TOKEN: 'env-tok' }),
+    )
+    try {
+      composed.realtimeAdapter.publish({
+        workspaceId: 'ws_1',
+        payload: '{"type":"board","reason":"x","at":1}',
+        originConnectionId: 'cid_3',
+      })
+      // publish is fire-and-forget — let the POST settle.
+      await new Promise((r) => setTimeout(r, 0))
+      expect(seen).toHaveLength(1)
+      expect(seen[0]!.url).toBe('https://m.test/internal/events/publish')
+      expect(seen[0]!.auth).toBe('Bearer env-tok')
+      expect(seen[0]!.body).toEqual({
+        workspaceId: 'ws_1',
+        payload: '{"type":"board","reason":"x","at":1}',
+        originConnectionId: 'cid_3',
+      })
+    } finally {
+      composed.close()
+    }
+  })
+
+  it('never throws when the mothership is unreachable (best-effort, delivered locally already)', async () => {
+    vi.stubGlobal('fetch', async () => {
+      throw new Error('network down')
+    })
+    const composed = composeMothership(
+      BASE_ENV({ LOCAL_MOTHERSHIP_URL: 'https://m.test', LOCAL_MOTHERSHIP_TOKEN: 'env-tok' }),
+    )
+    try {
+      expect(() =>
+        composed.realtimeAdapter.publish({ workspaceId: 'ws_1', payload: '{}' }),
+      ).not.toThrow()
+      await new Promise((r) => setTimeout(r, 0))
+    } finally {
+      composed.close()
+    }
+  })
+
+  it('attaches the machineEventRelay seam and fans engine events upstream when a hub is wired', async () => {
+    // The Node facade's mothership-side inbound seam is attached whenever a realtime sink is wired
+    // (both facades — the symmetric change), so a mothership-mode node can ALSO serve as a
+    // mothership if pointed at. And with the mothership adapter layered over the hub, a broadcast
+    // fans to the local hub AND up to the mothership.
+    const posted: string[] = []
+    vi.stubGlobal('fetch', async (url: string, init: RequestInit) => {
+      posted.push(`${String(url)}::${String(init.body)}`)
+      return new Response(JSON.stringify({ ok: true }), {
+        status: 200,
+        headers: { 'content-type': 'application/json' },
+      })
+    })
+    const hub = new NodeRealtimeHub()
+    const container = buildLocalContainer({
+      env: BASE_ENV({
+        ENVIRONMENT: 'test',
+        AUTH_SESSION_SECRET: 'test-session-secret-0123456789abcdef',
+        ENCRYPTION_KEY: Buffer.alloc(32).toString('base64'),
+        HARNESS_SHARED_SECRET: 'mothership-test-harness-secret',
+        LOCAL_MOTHERSHIP_URL: 'https://m.test',
+        LOCAL_MOTHERSHIP_TOKEN: 'env-tok',
+      }),
+      realtimeSink: hub,
+    })
+    // Seam attached (this deployment can be a mothership too).
+    expect(container.machineEventRelay).toBeDefined()
+    // A relayed event is delivered into the local hub via that seam (no throw with no sockets).
+    expect(() =>
+      container.machineEventRelay!.ingest({ workspaceId: 'ws_1', payload: '{}' }),
+    ).not.toThrow()
+    await container.onShutdown?.()
   })
 })

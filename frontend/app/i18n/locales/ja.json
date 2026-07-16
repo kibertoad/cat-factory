@@ -1792,6 +1792,10 @@
           "label": "プライベートパッケージレジストリ",
           "description": "エージェントがプライベート依存関係のインストールに使う npm と GitHub Packages のトークン。"
         },
+        "apiTokens": {
+          "label": "APIアクセストークン",
+          "description": "外部システムが cat-factory API を呼び出すために提示するトークン。"
+        },
         "githubPat": {
           "label": "マイ GitHub トークン",
           "description": "自分が開始した実行 (push、PR、CI、マージ) に使用するパーソナルアクセストークン。"
@@ -2331,6 +2335,36 @@
         "added": "レジストリを追加しました",
         "addFailed": "レジストリを追加できませんでした",
         "removeFailed": "レジストリエントリを削除できませんでした"
+      }
+    },
+    "apiTokens": {
+      "title": "APIアクセストークン",
+      "intro": "外部システムが cat-factory API に提示するトークンを作成します。各トークンは /api/v1 エンドポイントでこのワークスペースとして認証されます。シークレットは作成時に一度だけ表示され、復元できないため、すぐに保存してください。",
+      "secret": {
+        "heading": "今すぐトークンをコピーしてください",
+        "warning": "完全なトークンが表示されるのはこの一度だけです。安全な場所に保管してください。復元はできません。",
+        "copy": "トークンをコピー",
+        "done": "完了"
+      },
+      "list": {
+        "heading": "有効なトークン",
+        "created": "{date} に作成",
+        "lastUsed": "最終使用 {date}",
+        "neverUsed": "未使用",
+        "revoke": "トークンを取り消す"
+      },
+      "add": {
+        "heading": "トークンを作成",
+        "label": "ラベル",
+        "labelHelp": "後でこのトークンを識別するための名前。",
+        "labelPlaceholder": "例: CI パイプライン",
+        "create": "トークンを作成"
+      },
+      "toast": {
+        "loadFailed": "APIトークンを読み込めませんでした",
+        "created": "トークンを作成しました",
+        "createFailed": "トークンを作成できませんでした",
+        "revokeFailed": "トークンを取り消せませんでした"
       }
     },
     "sharedStacks": {

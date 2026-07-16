@@ -143,3 +143,98 @@ export const startPublicTaskSchema = v.object({
   pipelineId: v.optional(v.pipe(v.string(), v.trim(), v.minLength(1), v.maxLength(120))),
 })
 export type StartPublicTaskInput = v.InferOutput<typeof startPublicTaskSchema>
+
+/**
+ * Edit a task's mutable fields (typically before it runs) — the external counterpart of the
+ * SPA's inline title/description edit. Deliberately narrower than the internal `updateBlock`
+ * patch (which also carries model/risk/pipeline pins and board-layout knobs that have no
+ * external meaning): the public surface exposes only the two human-authored fields, so it
+ * stays small and stable. Both fields are optional; an empty patch is a harmless no-op.
+ */
+export const updatePublicTaskSchema = v.object({
+  title: v.optional(v.pipe(v.string(), v.trim(), v.minLength(1), v.maxLength(200))),
+  description: v.optional(v.pipe(v.string(), v.trim(), v.maxLength(2000))),
+})
+export type UpdatePublicTaskInput = v.InferOutput<typeof updatePublicTaskSchema>
+
+// ---------------------------------------------------------------------------
+// Richer run projection + live stream (the task-lifecycle surface).
+// ---------------------------------------------------------------------------
+
+/**
+ * A task run's status as exposed externally. Mirrors the internal `ExecutionStatus`
+ * members but is a DECOUPLED public type, so the external contract stays stable if the
+ * engine ever adds an internal status. Unlike the coarse initiative-job status
+ * (`running`/`succeeded`/`failed`), the richer run view surfaces the parked states a
+ * caller may want to react to (`blocked` = awaiting a human, `paused` = spend-gated).
+ */
+export const publicRunStatusSchema = v.picklist(['running', 'blocked', 'paused', 'done', 'failed'])
+export type PublicRunStatus = v.InferOutput<typeof publicRunStatusSchema>
+
+/** A single step of a task run — a small projection of the internal `PipelineStep`. */
+export const publicRunStepSchema = v.object({
+  /** The step's agent kind (`architect`, `coder`, `ci`, `merger`, a custom kind, …). */
+  agentKind: v.string(),
+  /** Lifecycle state: `pending` → `working` → `waiting_decision` → `done`. */
+  state: v.picklist(['pending', 'working', 'waiting_decision', 'done']),
+  /** 0..1 progress of this step. */
+  progress: v.number(),
+  /** Live subtask counts while an async (container) step runs; null when none. */
+  subtasks: v.nullable(
+    v.object({ completed: v.number(), inProgress: v.number(), total: v.number() }),
+  ),
+})
+export type PublicRunStep = v.InferOutput<typeof publicRunStepSchema>
+
+/**
+ * The rich external view of a task's run — per-step status/progress/subtasks, the failure
+ * kind+message, and the PR the run opened (url + branch). A larger projection than the
+ * coarse `publicJob`, deliberately scoped to a BOARD task run (created/owned via the public
+ * task surface), never a headless initiative job or a raw `ExecutionInstance`.
+ */
+export const publicRunSchema = v.object({
+  runId: v.string(),
+  taskId: v.string(),
+  status: publicRunStatusSchema,
+  createdAt: v.number(),
+  /** Index of the step the run is currently on. */
+  currentStep: v.number(),
+  steps: v.array(publicRunStepSchema),
+  /** The PR the run opened, once one exists; null otherwise. */
+  pullRequest: v.nullable(v.object({ url: v.string(), branch: v.nullable(v.string()) })),
+  /** Present when `status` is `failed` (the failure kind + message); null otherwise. */
+  error: v.nullable(v.object({ code: v.string(), message: v.string() })),
+})
+export type PublicRun = v.InferOutput<typeof publicRunSchema>
+
+// ---------------------------------------------------------------------------
+// Pipeline discovery.
+// ---------------------------------------------------------------------------
+
+/**
+ * A pipeline as exposed externally — enough to pick a `pipelineId` for `start` and know
+ * whether it is safe to run headlessly. Closes the gap where `start` demands a `pipelineId`
+ * for an unpinned task yet nothing lists the valid ids. A small projection of the internal
+ * `Pipeline` (its id/name + the enabled step chain), plus the two headless-relevant flags.
+ */
+export const publicPipelineSchema = v.object({
+  pipelineId: v.string(),
+  name: v.string(),
+  /** The enabled step chain, in order (each an agent kind). */
+  steps: v.array(v.string()),
+  /**
+   * Whether this pipeline is exposed as a PUBLIC initiative pipeline (`POST /initiatives`).
+   * A non-public pipeline can still back a board task `start` when pinned or passed by id.
+   */
+  public: v.boolean(),
+  /**
+   * Whether the pipeline is safe to run headlessly (every enabled step is inline — no
+   * container/GitHub push — and none parks on a human gate). A headless-startable pipeline
+   * can be driven end-to-end with no interactive user; others may park awaiting input.
+   */
+  headlessStartable: v.boolean(),
+})
+export type PublicPipeline = v.InferOutput<typeof publicPipelineSchema>
+
+export const publicPipelineListSchema = v.object({ pipelines: v.array(publicPipelineSchema) })
+export type PublicPipelineList = v.InferOutput<typeof publicPipelineListSchema>

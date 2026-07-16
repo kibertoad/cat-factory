@@ -36,7 +36,7 @@ notifications and the palette alike.
    debounced query → grouped results → selecting one dispatches through the existing
    `stores/ui.ts` step/window dispatch (`dispatchStepView` / `openStepDetail` are the
    seams) and pans the board to the block.
-3. **Deep links**: encode the *navigational* UI state in the URL — `?ws=<id>&block=<id>&run=<id>&view=<resultViewId>`
+3. **Deep links**: encode the _navigational_ UI state in the URL — `?ws=<id>&block=<id>&run=<id>&view=<resultViewId>`
    (query params on the single page; no new pages, no SSR implications with `ssr: false`).
    On boot, after the workspace snapshot + WS `connected` gate settles, replay the params
    through the same ui-store dispatch. State→URL sync is one watcher (`router.replace`, no
@@ -47,16 +47,16 @@ notifications and the palette alike.
 
 ## Prioritized checklist
 
-| # | Slice | Status | PR |
-| - | ----- | ------ | -- |
-| 1 | Search port + D1 ⇄ Drizzle impls (blocks + executions first) + conformance | ⬜ todo | |
-| 2 | `GET /workspaces/:ws/search` controller + contracts (typed result projections) | ⬜ todo | |
-| 3 | `SearchPalette.vue` + Cmd-K binding + ui-store dispatch on select (+ i18n, all locales) | ⬜ todo | |
-| 4 | Deep-link query params: parse-on-boot (after `connected` gate) + state→URL sync | ⬜ todo | |
-| 5 | Extend search to notifications + documents | ⬜ todo | |
-| 6 | Deep links in notification payloads (in-app inbox + Slack blocks; frontend base-URL config) | ⬜ todo | |
-| 7 | e2e: palette search → select → board pans + inspector opens, live (no reload) | ⬜ todo | |
-| 8 | (Optional, perf-gated) FTS upgrade: SQLite FTS5 ⇄ Postgres `tsvector` behind the same port | ⬜ todo | |
+| #   | Slice                                                                                       | Status  | PR  |
+| --- | ------------------------------------------------------------------------------------------- | ------- | --- |
+| 1   | Search port + D1 ⇄ Drizzle impls (blocks + executions first) + conformance                  | ⬜ todo |     |
+| 2   | `GET /workspaces/:ws/search` controller + contracts (typed result projections)              | ⬜ todo |     |
+| 3   | `SearchPalette.vue` + Cmd-K binding + ui-store dispatch on select (+ i18n, all locales)     | ⬜ todo |     |
+| 4   | Deep-link query params: parse-on-boot (after `connected` gate) + state→URL sync             | ⬜ todo |     |
+| 5   | Extend search to notifications + documents                                                  | ⬜ todo |     |
+| 6   | Deep links in notification payloads (in-app inbox + Slack blocks; frontend base-URL config) | ⬜ todo |     |
+| 7   | e2e: palette search → select → board pans + inspector opens, live (no reload)               | ⬜ todo |     |
+| 8   | (Optional, perf-gated) FTS upgrade: SQLite FTS5 ⇄ Postgres `tsvector` behind the same port  | ⬜ todo |     |
 
 ## Conventions & gotchas
 
@@ -70,4 +70,4 @@ notifications and the palette alike.
   point-reads — the projection carries what the palette renders.
 - **Palette copy is i18n'd** (result-type labels are enum-keyed — use the exhaustive
   `Record` tier-2 guard for type→label lookups).
-- URL params are *navigational* state only — never auth material, never raw entity data.
+- URL params are _navigational_ state only — never auth material, never raw entity data.

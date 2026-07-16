@@ -31,7 +31,7 @@ WORKDIR /app
 COPY tsconfig.json ./
 RUN --mount=type=secret,id=extra_ca,target=/tmp/extra_ca.crt \
     sh -eu -c 'if [ -s /tmp/extra_ca.crt ]; then export NODE_EXTRA_CA_CERTS=/tmp/extra_ca.crt; fi; \
-    npm install --no-save --no-package-lock typescript@^5.6.0 @types/node@^22.0.0'
+    npm install --no-save --no-package-lock typescript@^7.0.0 @types/node@^26.0.0'
 COPY src ./src
 RUN --mount=type=secret,id=extra_ca,target=/tmp/extra_ca.crt \
     sh -eu -c 'if [ -s /tmp/extra_ca.crt ]; then export NODE_EXTRA_CA_CERTS=/tmp/extra_ca.crt; fi; \

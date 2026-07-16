@@ -519,6 +519,36 @@
         "removeFailed": "Der Registry-Eintrag konnte nicht entfernt werden"
       }
     },
+    "apiTokens": {
+      "title": "API-Zugriffstokens",
+      "intro": "Erstelle Tokens, die externe Systeme der cat-factory-API vorlegen. Jedes Token authentifiziert sich als dieser Arbeitsbereich an den /api/v1-Endpunkten. Das Geheimnis wird nur einmal bei der Erstellung angezeigt und kann nicht wiederhergestellt werden. Speichere es daher sofort.",
+      "secret": {
+        "heading": "Kopiere dein Token jetzt",
+        "warning": "Dies ist das einzige Mal, dass das vollständige Token angezeigt wird. Bewahre es sicher auf; es kann nicht wiederhergestellt werden.",
+        "copy": "Token kopieren",
+        "done": "Fertig"
+      },
+      "list": {
+        "heading": "Aktive Tokens",
+        "created": "Erstellt am {date}",
+        "lastUsed": "zuletzt verwendet am {date}",
+        "neverUsed": "nie verwendet",
+        "revoke": "Token widerrufen"
+      },
+      "add": {
+        "heading": "Token erstellen",
+        "label": "Bezeichnung",
+        "labelHelp": "Ein Name, um dieses Token später wiederzuerkennen.",
+        "labelPlaceholder": "z. B. CI-Pipeline",
+        "create": "Token erstellen"
+      },
+      "toast": {
+        "loadFailed": "API-Tokens konnten nicht geladen werden",
+        "created": "Token erstellt",
+        "createFailed": "Token konnte nicht erstellt werden",
+        "revokeFailed": "Token konnte nicht widerrufen werden"
+      }
+    },
     "sharedStacks": {
       "tab": "Gemeinsame Stacks",
       "intro": "Langlebige Compose-Infrastruktur (Datenbanken, Broker, Suche, Mail), die einmal pro Workspace hochgefahren und über Ausführungen und Pull Requests hinweg wiederverwendet wird. Eine Testumgebung verbindet sich mit dem verwalteten Netzwerk eines Stacks. Das Hochfahren eines Stacks läuft auf einem lokalen Docker-Deployment; auf anderen Backends kannst du die Definition dennoch verwalten.",
@@ -1915,6 +1945,10 @@
         "packageRegistries": {
           "label": "Private Package-Registries",
           "description": "npm- und GitHub-Packages-Tokens, mit denen Agenten private Abhängigkeiten installieren."
+        },
+        "apiTokens": {
+          "label": "API-Zugriffstokens",
+          "description": "Tokens, die externe Systeme vorlegen, um die cat-factory-API aufzurufen."
         },
         "githubPat": {
           "label": "Mein GitHub-Token",

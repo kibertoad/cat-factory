@@ -474,4 +474,89 @@ describe('rowToWorkspace / rowToPipeline', () => {
         .gates,
     ).toEqual([true, false])
   })
+
+  it('surfaces the truthy flag columns as literal true, omitting them otherwise', () => {
+    const on = rowToPipeline({
+      id: 'pl_3',
+      name: 'P',
+      agent_kinds: '["coder"]',
+      gates: null,
+      archived: 1,
+      builtin: true,
+      public: 1,
+    })
+    expect(on.archived).toBe(true)
+    expect(on.builtin).toBe(true)
+    expect(on.public).toBe(true)
+
+    const off = rowToPipeline({
+      id: 'pl_4',
+      name: 'P',
+      agent_kinds: '["coder"]',
+      gates: null,
+      archived: null,
+      builtin: 0,
+      public: null,
+    })
+    expect('archived' in off).toBe(false)
+    expect('builtin' in off).toBe(false)
+    expect('public' in off).toBe(false)
+  })
+
+  it('keeps a version (including 0) but omits null; passes availability through when set', () => {
+    expect(
+      rowToPipeline({ id: 'pl_5', name: 'P', agent_kinds: '["coder"]', gates: null, version: 0 })
+        .version,
+    ).toBe(0)
+    expect(
+      'version' in
+        rowToPipeline({
+          id: 'pl_6',
+          name: 'P',
+          agent_kinds: '["coder"]',
+          gates: null,
+          version: null,
+        }),
+    ).toBe(false)
+    expect(
+      rowToPipeline({
+        id: 'pl_7',
+        name: 'P',
+        agent_kinds: '["coder"]',
+        gates: null,
+        availability: 'recurring',
+      }).availability,
+    ).toBe('recurring')
+    expect(
+      'availability' in
+        rowToPipeline({ id: 'pl_8', name: 'P', agent_kinds: '["coder"]', gates: null }),
+    ).toBe(false)
+  })
+
+  it('parses the many optional JSON columns only when present (snake_case → camelCase)', () => {
+    const full = rowToPipeline({
+      id: 'pl_9',
+      name: 'P',
+      agent_kinds: '["coder","tester"]',
+      gates: null,
+      thresholds: '[0.5]',
+      enabled: '[true]',
+      follow_ups: '[true]',
+      tester_quality: '[{"enabled":true}]',
+      step_options: '[{"foo":1}]',
+      labels: '["a","b"]',
+    })
+    expect(full.agentKinds).toEqual(['coder', 'tester'])
+    expect(full.thresholds).toEqual([0.5])
+    expect(full.enabled).toEqual([true])
+    expect(full.followUps).toEqual([true])
+    expect(full.testerQuality).toEqual([{ enabled: true }])
+    expect(full.stepOptions).toEqual([{ foo: 1 }])
+    expect(full.labels).toEqual(['a', 'b'])
+    // The absent ones stay off the object entirely.
+    const bare = rowToPipeline({ id: 'pl_10', name: 'P', agent_kinds: '[]', gates: null })
+    expect('thresholds' in bare).toBe(false)
+    expect('followUps' in bare).toBe(false)
+    expect('labels' in bare).toBe(false)
+  })
 })

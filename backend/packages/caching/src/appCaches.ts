@@ -8,6 +8,7 @@ import type {
   GroupCacheHandle,
   ResolvedAccountSettings,
   ResolvedCatalogEntry,
+  RiskPolicyCacheValue,
   WorkspaceSettingsCacheValue,
 } from '@cat-factory/kernel'
 // Deep imports on purpose: layered-loader's root index eagerly requires its Redis
@@ -68,6 +69,7 @@ export interface AppCachesProfile {
   userBudgetLimit: GroupCacheProfile
   viewerRepos: GroupCacheProfile
   patInstallationRepos: GroupCacheProfile
+  riskPolicy: GroupCacheProfile
 }
 
 /** The default (Node/local/test) profile: caching on, modest bounds. */
@@ -156,6 +158,10 @@ export const DEFAULT_APP_CACHES_PROFILE: AppCachesProfile = {
   // freshly-created repo can't hide for long). A local deployment has very few installations,
   // so the group bound is small.
   patInstallationRepos: { enabled: true, ttlInMsecs: 60_000, maxGroups: 100, maxItemsPerGroup: 1 },
+  // A workspace's resolved merge-threshold presets, keyed per resolved id (`picked:<id>` /
+  // `default`) — a workspace has a small preset library, so a modest per-group bound covers the
+  // picked presets plus the default. Slow-moving (admin-changed); invalidation-driven, no probe.
+  riskPolicy: { enabled: true, ttlInMsecs: 5 * 60_000, maxGroups: 1000, maxItemsPerGroup: 32 },
 }
 
 /**
@@ -205,6 +211,10 @@ export const ISOLATE_SAFE_APP_CACHES_PROFILE: AppCachesProfile = {
   // Pass-through for the same reasons as `viewerRepos` — and the Worker never constructs the
   // local facade's PAT-backed client, so this slice is only ever read on Node/local.
   patInstallationRepos: { ...DEFAULT_APP_CACHES_PROFILE.patInstallationRepos, enabled: false },
+  // Pass-through: the merge-preset library is our own mutable D1 state with no cross-isolate
+  // invalidation bus on the Worker, so the isolate resolves it live — same class as
+  // `workspaceSettings`/`accountModelPolicy`.
+  riskPolicy: { ...DEFAULT_APP_CACHES_PROFILE.riskPolicy, enabled: false },
 }
 
 /**
@@ -390,6 +400,11 @@ export function createAppCaches(options: CreateAppCachesOptions = {}): AppCaches
     profile.patInstallationRepos,
     options,
   )
+  const riskPolicy = buildGroupCache<RiskPolicyCacheValue>(
+    'risk-policy',
+    profile.riskPolicy,
+    options,
+  )
   return {
     fragmentCatalog,
     fragmentDocumentBody,
@@ -402,6 +417,7 @@ export function createAppCaches(options: CreateAppCachesOptions = {}): AppCaches
     userBudgetLimit,
     viewerRepos,
     patInstallationRepos,
+    riskPolicy,
     close: async () => {
       await Promise.all([
         fragmentCatalog.close(),
@@ -415,6 +431,7 @@ export function createAppCaches(options: CreateAppCachesOptions = {}): AppCaches
         userBudgetLimit.close(),
         viewerRepos.close(),
         patInstallationRepos.close(),
+        riskPolicy.close(),
       ])
     },
   }

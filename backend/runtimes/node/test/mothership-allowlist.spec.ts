@@ -103,13 +103,17 @@ const NON_REMOTE: Record<string, Record<string, Reason>> = {
     updateSettings: 'admin',
   },
   membershipRepository: { upsert: 'admin', remove: 'admin' },
+  // `get`/`listByIds` are now allow-listed (the member-display reads: the account members panel's
+  // roster enrichment + the single-user display lookup, bound by co-membership via the `user`/
+  // `userList` scope rules). They carry only the presentational `UserRecord` — the password
+  // `secret` lives on `UserIdentityRecord`, read only via `getIdentity`/`listIdentities` (kept off).
+  // `update` (profile write) + `findByIdentity`/`findByEmail`/`getIdentity`/`listIdentities` are the
+  // account-lifecycle / login surface (the identity reads leak the hash), so they stay off.
   userRepository: {
-    get: 'pending',
     create: 'onboarding',
     update: 'pending',
     findByIdentity: 'pending',
     findByEmail: 'pending',
-    listByIds: 'pending',
     getIdentity: 'pending',
     linkIdentity: 'onboarding',
     listIdentities: 'pending',
@@ -268,7 +272,15 @@ const NON_REMOTE: Record<string, Record<string, Reason>> = {
   // The private package-registry connection surface is fully remote too (the registries
   // panel's get/upsert/delete + the container dispatch's decrypt-time get).
   packageRegistryConnectionRepository: {},
-  accountSettingsRepository: { getByAccount: 'pending', upsert: 'pending', listAll: 'sweeper' },
+  // Account settings (the per-account deployment secrets/tuning: Slack/Linear OAuth, web-search
+  // keys, Langfuse). Both the READ (`getByAccount`) and the WRITE (`upsert`) endpoints are
+  // admin-gated (`AccountController` guards `/accounts/:id/settings` GET+PUT with `requireAdmin`),
+  // and the machine token scopes ACCOUNTS not ROLES while the RPC bypasses the service-layer
+  // `requireAdmin` — so exposing either would let any account member read/rewrite the account's
+  // secrets over the wire. They stay mothership-internal until a later slice adds a role dimension
+  // to the scope (or routes them through the service), exactly like `accountRepository.updateSettings`.
+  // `listAll` is the global cross-account sweep.
+  accountSettingsRepository: { getByAccount: 'admin', upsert: 'admin', listAll: 'sweeper' },
   releaseHealthConfigRepository: {},
   // The sealed sensitive test-credential surface is allow-listed for the inspector CRUD +
   // run-path frame read (`getByBlock`/`upsert`/`deleteByBlock` — the sealed blob rides the
@@ -378,14 +390,15 @@ const NON_REMOTE: Record<string, Record<string, Reason>> = {
   // The inbox's read/act/dismiss/escalate surface is fully remote (see REMOTE_PERSISTENCE_METHODS);
   // only the retention sweep's global prune of resolved cards stays mothership-internal cron.
   notificationRepository: { deleteResolvedOlderThan: 'sweeper' },
-  slackConnectionRepository: {
-    getByAccount: 'pending',
-    getByTeam: 'pending',
-    upsert: 'pending',
-    softDelete: 'pending',
-  },
-  slackSettingsRepository: { getByWorkspace: 'pending', upsert: 'pending' },
-  slackMemberMappingRepository: { getByAccount: 'pending', upsert: 'pending' },
+  // The Slack management surface is now remote (the settings panels' connect/disconnect/route/map):
+  // `slackConnectionRepository` get/upsert/softDelete (sealed `tokenCipher` — no plaintext crosses
+  // the machine API), and the secret-free settings + member-mapping repos. `getByTeam` is the GLOBAL
+  // teamId → connection lookup the inbound OAuth callback / event webhook use on the mothership (never
+  // the laptop); it cannot be account-scoped, so it stays mothership-internal — the same "unscoped,
+  // mothership-internal" bucket as `repoProjectionRepository.listByInstallation`.
+  slackConnectionRepository: { getByTeam: 'sweeper' },
+  slackSettingsRepository: {},
+  slackMemberMappingRepository: {},
   taskRepository: {
     upsert: 'pending',
     listByWorkspace: 'pending',

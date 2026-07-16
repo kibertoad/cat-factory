@@ -33,7 +33,7 @@ batching, and deep links into the app (see the `global-search-and-deep-links` in
    `SlackNotificationChannel`, which is the shape to copy): implements
    `NotificationChannel`, resolves the account's configured `EmailSender`, renders the
    notification into a plain, translated-later subject/body pair, and sends to the
-   *resolved recipients* (see #3). Registered into `CompositeNotificationChannel` in every
+   _resolved recipients_ (see #3). Registered into `CompositeNotificationChannel` in every
    facade **only when an email sender is configured** (the opt-in wiring convention).
 2. **Recipient + preference model**: a small `notification_preferences` per-user store
    (D1 ⇄ Drizzle + conformance): per notification type, `email: on|off`. Default OFF for
@@ -53,14 +53,14 @@ batching, and deep links into the app (see the `global-search-and-deep-links` in
 
 ## Prioritized checklist
 
-| # | Slice | Status | PR |
-| - | ----- | ------ | -- |
-| 1 | `EmailNotificationChannel` (fixed sensible type filter, no preferences yet) + facade wiring behind "sender configured" + conformance/pass-through assertion | ⬜ todo | |
-| 2 | `notification_preferences` store (D1 ⇄ Drizzle) + service + contracts | ⬜ todo | |
-| 3 | Preferences UI (per-type toggles in personal settings; i18n all locales) | ⬜ todo | |
-| 4 | Recipient resolution via workspace access (coordinate with `workspace-rbac`) | ⬜ todo | |
-| 5 | Deep links in bodies (after `global-search-and-deep-links` slice 6) | ⬜ todo | |
-| 6 | Rate/dedup guard: coalesce repeat notifications for the same entity within a window | ⬜ todo | |
+| #   | Slice                                                                                                                                                       | Status  | PR  |
+| --- | ----------------------------------------------------------------------------------------------------------------------------------------------------------- | ------- | --- |
+| 1   | `EmailNotificationChannel` (fixed sensible type filter, no preferences yet) + facade wiring behind "sender configured" + conformance/pass-through assertion | ⬜ todo |     |
+| 2   | `notification_preferences` store (D1 ⇄ Drizzle) + service + contracts                                                                                       | ⬜ todo |     |
+| 3   | Preferences UI (per-type toggles in personal settings; i18n all locales)                                                                                    | ⬜ todo |     |
+| 4   | Recipient resolution via workspace access (coordinate with `workspace-rbac`)                                                                                | ⬜ todo |     |
+| 5   | Deep links in bodies (after `global-search-and-deep-links` slice 6)                                                                                         | ⬜ todo |     |
+| 6   | Rate/dedup guard: coalesce repeat notifications for the same entity within a window                                                                         | ⬜ todo |     |
 
 ## Conventions & gotchas
 

@@ -963,6 +963,139 @@ export function defineCoreConformance(harness: ConformanceHarness): void {
         ).toBe(204)
         expect((await call('GET', `/api/v1/jobs/${jobId}`, undefined, auth)).status).toBe(401)
       })
+
+      it('serves the full task lifecycle (edit / stop / retry / rich run) + pipeline discovery, workspace-scoped', async () => {
+        const { call, createOrgWorkspace, drive } = harness.makeApp()
+        const { workspace } = await createOrgWorkspace({ seed: true })
+        const wsId = workspace.id
+
+        const created = await call<{ secret: string }>(
+          'POST',
+          `/workspaces/${wsId}/public-api-keys`,
+          { label: 'external' },
+        )
+        expect(created.status).toBe(201)
+        const auth = { authorization: `Bearer ${created.body.secret}` }
+
+        // Pipeline discovery: the public inline pipeline is public + headless-startable; a
+        // container pipeline (pl_quick) is listed but neither. Closes the "start demands a
+        // pipelineId, nothing lists them" gap.
+        const pipelines = await call<{
+          pipelines: {
+            pipelineId: string
+            steps: string[]
+            public: boolean
+            headlessStartable: boolean
+          }[]
+        }>('GET', '/api/v1/pipelines', undefined, auth)
+        expect(pipelines.status).toBe(200)
+        const byId = new Map(pipelines.body.pipelines.map((p) => [p.pipelineId, p]))
+        const breakdown = byId.get('pl_initiative_breakdown')
+        expect(breakdown?.public).toBe(true)
+        expect(breakdown?.headlessStartable).toBe(true)
+        expect(breakdown && breakdown.steps.length > 0).toBe(true)
+        const quick = byId.get('pl_quick')
+        expect(quick).toBeTruthy()
+        expect(quick?.headlessStartable).toBe(false)
+
+        // Create a task under a fresh service frame (via the dev-open session board route).
+        const frame = await call<{ id: string }>('POST', `/workspaces/${wsId}/blocks`, {
+          type: 'service',
+          position: { x: 500, y: 500 },
+        })
+        const task = await call<{ taskId: string }>(
+          'POST',
+          `/api/v1/services/${frame.body.id}/tasks`,
+          { title: 'Lifecycle task', description: 'original' },
+          auth,
+        )
+        expect(task.status).toBe(201)
+        const taskId = task.body.taskId
+
+        // Edit (PATCH) the title/description before it runs.
+        const edited = await call<{ title: string; description: string }>(
+          'PATCH',
+          `/api/v1/tasks/${taskId}`,
+          { title: 'Lifecycle task (edited)', description: 'reworded' },
+          auth,
+        )
+        expect(edited.status).toBe(200)
+        expect(edited.body.title).toBe('Lifecycle task (edited)')
+        expect(edited.body.description).toBe('reworded')
+
+        // A not-yet-started task has no run to read or stop.
+        expect((await call('GET', `/api/v1/tasks/${taskId}/run`, undefined, auth)).status).toBe(404)
+        expect((await call('POST', `/api/v1/tasks/${taskId}/stop`, undefined, auth)).status).toBe(
+          409,
+        )
+
+        // Start it (async — left running until driven), then read the rich run projection.
+        const started = await call<{ executionId: string | null }>(
+          'POST',
+          `/api/v1/tasks/${taskId}/start`,
+          { pipelineId: 'pl_quick' },
+          auth,
+        )
+        expect(started.status).toBe(202)
+        const run = await call<{
+          runId: string
+          taskId: string
+          status: string
+          steps: { agentKind: string; state: string; progress: number }[]
+        }>('GET', `/api/v1/tasks/${taskId}/run`, undefined, auth)
+        expect(run.status).toBe(200)
+        expect(run.body.taskId).toBe(taskId)
+        expect(run.body.steps.length).toBeGreaterThan(0)
+        expect(['running', 'blocked', 'paused', 'done']).toContain(run.body.status)
+
+        // Stop the run → it settles `failed` with a `cancelled` error, and stays retryable.
+        expect((await call('POST', `/api/v1/tasks/${taskId}/stop`, undefined, auth)).status).toBe(
+          200,
+        )
+        const stopped = await call<{ status: string; error: { code: string } | null }>(
+          'GET',
+          `/api/v1/tasks/${taskId}/run`,
+          undefined,
+          auth,
+        )
+        expect(stopped.body.status).toBe('failed')
+        expect(stopped.body.error?.code).toBe('cancelled')
+
+        // Retry the failed run, then drive it to completion.
+        expect((await call('POST', `/api/v1/tasks/${taskId}/retry`, undefined, auth)).status).toBe(
+          202,
+        )
+        await drive(wsId)
+        const finished = await call<{ status: string }>(
+          'GET',
+          `/api/v1/tasks/${taskId}/run`,
+          undefined,
+          auth,
+        )
+        expect(finished.body.status).toBe('done')
+
+        // Every lifecycle route double-scopes to the key's workspace: a key from ANOTHER
+        // workspace 404s on this task (never edits/stops/retries/reads it).
+        const other = await createOrgWorkspace({ seed: true })
+        const otherKey = await call<{ secret: string }>(
+          'POST',
+          `/workspaces/${other.workspace.id}/public-api-keys`,
+          { label: 'other' },
+        )
+        const otherAuth = { authorization: `Bearer ${otherKey.body.secret}` }
+        expect(
+          (await call('GET', `/api/v1/tasks/${taskId}/run`, undefined, otherAuth)).status,
+        ).toBe(404)
+        expect(
+          (await call('PATCH', `/api/v1/tasks/${taskId}`, { title: 'x' }, otherAuth)).status,
+        ).toBe(404)
+        expect(
+          (await call('POST', `/api/v1/tasks/${taskId}/stop`, undefined, otherAuth)).status,
+        ).toBe(404)
+        expect(
+          (await call('POST', `/api/v1/tasks/${taskId}/retry`, undefined, otherAuth)).status,
+        ).toBe(404)
+      })
     })
 
     describe('pipeline versioning + reseed', () => {
