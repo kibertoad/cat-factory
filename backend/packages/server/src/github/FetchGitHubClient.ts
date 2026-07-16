@@ -13,6 +13,7 @@ import {
   type GitHubIssueSearchHit,
   type GitHubSubIssue,
   type GitHubPullRequest,
+  type OpenedPullRequest,
   type GitHubPullRequestReview,
   type GitHubPullRequestComment,
   type GitHubReviewThread,
@@ -1118,14 +1119,54 @@ export class FetchGitHubClient implements GitHubClient {
     installationId: number,
     ref: GitHubRepoRef,
     input: OpenPullRequestInput,
-  ): Promise<GitHubPullRequest> {
-    const { json } = await this.request(`/repos/${ref.owner}/${ref.repo}/pulls`, {
-      installationId,
-      method: 'POST',
-      body: input,
-    })
+  ): Promise<OpenedPullRequest> {
+    try {
+      const { json } = await this.request(`/repos/${ref.owner}/${ref.repo}/pulls`, {
+        installationId,
+        method: 'POST',
+        body: input,
+      })
+      return this.toOpenedPullRequest(json)
+    } catch (err) {
+      // Idempotency (see the RepoFiles/GitHubClient port doc): re-opening a PR for a head/base
+      // that already has an open one is a 422 from GitHub ("A pull request already exists"). A
+      // durable-driver replay of a committing post-op (e.g. the `spike` findings PR) hits this,
+      // so treat it as a success: look up and return the existing open PR instead of failing.
+      if (!(err instanceof GitHubApiError) || err.status !== 422) throw err
+      const existing = await this.findOpenPullRequest(installationId, ref, input.head, input.base)
+      if (!existing) throw err
+      return existing
+    }
+  }
+
+  /** Map a `/pulls` create/list payload to the {@link OpenedPullRequest} (projection + web url). */
+  private toOpenedPullRequest(json: unknown): OpenedPullRequest {
     const p = json as gp.GhPullPayload
-    return gp.toPullRequestProjection(p, gp.pullRepoGithubId(p) ?? 0, this.deps.clock.now())
+    // The projection drops `html_url` (not a sync field); the create/list response carries it, so
+    // surface it as the `OpenedPullRequest.url` a post-op records on the block.
+    const url = (json as { html_url?: string }).html_url ?? ''
+    return {
+      ...gp.toPullRequestProjection(p, gp.pullRepoGithubId(p) ?? 0, this.deps.clock.now()),
+      url,
+    }
+  }
+
+  /** The open PR matching `head`/`base` (for {@link openPullRequest}'s idempotent replay), or null. */
+  private async findOpenPullRequest(
+    installationId: number,
+    ref: GitHubRepoRef,
+    head: string,
+    base: string,
+  ): Promise<OpenedPullRequest | null> {
+    // GitHub filters `head` by `owner:branch`; the work branch lives on the target repo itself.
+    const headFilter = head.includes(':') ? head : `${ref.owner}:${head}`
+    const { json } = await this.request(
+      `/repos/${ref.owner}/${ref.repo}/pulls?state=open&head=${encodeURIComponent(headFilter)}` +
+        `&base=${encodeURIComponent(base)}&per_page=1`,
+      { installationId },
+    )
+    const first = (json as gp.GhPullPayload[] | null)?.[0]
+    return first ? this.toOpenedPullRequest(first) : null
   }
 
   async createIssue(

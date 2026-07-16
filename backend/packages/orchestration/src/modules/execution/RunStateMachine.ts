@@ -424,9 +424,13 @@ export class RunStateMachine {
    * looked merged when the PR was still open with red CI. Instead:
    *   - if the pipeline has a `merger` step, it already owned the merge/notify
    *     decision (see `resolveMergerStep`); we only backstop a missing one;
-   *   - otherwise the work is complete but unmerged: leave the PR open (`pr_ready`)
-   *     and raise a `pipeline_complete` notification for a human to confirm + merge.
-   * `done` now strictly means the PR was merged (see the engine's `finalizeMerge`).
+   *   - if there is no merger AND the run opened NO PR (a research/findings pipeline
+   *     such as a `spike`), it finishes cleanly as `done` — nothing to merge or confirm;
+   *   - if there is no merger but a PR IS open, the work is complete but unmerged: leave
+   *     the PR open (`pr_ready`) and raise a `pipeline_complete` notification for a human
+   *     to confirm + merge.
+   * `done` means either the PR was merged (see the engine's `finalizeMerge`) or the run
+   * produced no PR to merge.
    */
   async finalizeBlock(
     workspaceId: string,

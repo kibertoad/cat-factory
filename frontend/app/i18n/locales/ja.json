@@ -240,6 +240,20 @@
           "placeholder": "対象となるエンドポイントや範囲"
         }
       },
+      "spikeFields": {
+        "researchQuestion": {
+          "label": "調査課題",
+          "placeholder": "スパイクで答えるべき問いや仮説"
+        },
+        "successCriteria": {
+          "label": "成功基準",
+          "placeholder": "受け入れ基準、または調査結果が判断材料とすべき決定事項"
+        },
+        "optionsToCompare": {
+          "label": "比較する選択肢",
+          "placeholder": "互いに比較検討する選択肢"
+        }
+      },
       "optional": "任意",
       "pipeline": "パイプライン",
       "chooseAtRunTime": "実行時に選択",

@@ -7,6 +7,7 @@ import type {
   GitHubPullRequest,
   GitHubRepo,
   MergePullRequestInput,
+  OpenedPullRequest,
   OpenPullRequestInput,
 } from '../domain/types.js'
 
@@ -649,7 +650,7 @@ export interface GitHubClient {
     installationId: number,
     ref: GitHubRepoRef,
     input: OpenPullRequestInput,
-  ): Promise<GitHubPullRequest>
+  ): Promise<OpenedPullRequest>
   updatePullRequest(
     installationId: number,
     ref: GitHubRepoRef,

@@ -240,6 +240,13 @@ export {
   registerBugInvestigatorAgent,
 } from './agents/kinds/bug-investigator.js'
 export {
+  SPIKE_AGENT_KIND,
+  SPIKE_AGENT_KINDS,
+  spikeFindings,
+  type SpikeFindings,
+  registerSpikeAgent,
+} from './agents/kinds/spike.js'
+export {
   FORK_PROPOSER_KIND,
   FORK_PROPOSER_AGENT_KINDS,
   FORK_PROPOSER_SYSTEM_PROMPT,
