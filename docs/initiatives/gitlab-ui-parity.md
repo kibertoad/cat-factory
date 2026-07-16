@@ -32,8 +32,8 @@ pipelines entirely through the UI, at feature parity with GitHub.
   `useGitHubStore` / `listGitHubAvailableRepos` already return GitLab projects through the
   adapter, and "there is no separate GitLab store; do not add one" (CLAUDE.md, VCS section).
   Parity work therefore means: (a) a connect flow that creates the GitLab connection rows
-  the projection needs, (b) making the shared components provider-aware in *presentation*
-  (labels, icons, URL shapes) while staying provider-neutral in *data*.
+  the projection needs, (b) making the shared components provider-aware in _presentation_
+  (labels, icons, URL shapes) while staying provider-neutral in _data_.
 - **Provider-neutral vocabulary** everywhere new: `VcsProvider` / `VcsRepoRef` /
   `VcsConnectionRef` (`kernel/src/domain/vcs-types.ts`) — never a new `github*`-named field
   (see "Git-provider-agnostic naming" in CLAUDE.md).
@@ -48,16 +48,16 @@ pipelines entirely through the UI, at feature parity with GitHub.
 
 ## Prioritized checklist
 
-| # | Slice | Status | PR |
-| - | ----- | ------ | -- |
-| 1 | Audit pass: enumerate every GitHub-only affordance/copy in `components/github/*` + stores; classify neutral vs provider-keyed (write findings into this tracker) | ✅ done | this PR |
-| 2 | Per-workspace GitLab PAT connect flow (backend rows + connect UI mirroring `GitHubConnect.vue`) | ⬜ todo | |
-| 3 | Project browse / add-service-from-project through the shared store (provider-aware labels) | ⬜ todo | |
-| 4 | Webhook setup surface (register the GitLab webhook + secret for a connected project) | ⬜ todo | |
-| 5 | Provider-keyed copy pass: PR/MR terminology, host/URL rendering, icons — i18n'd, all locales | ⬜ todo | |
-| 6 | Onboarding: provider choice step (GitHub App / GitHub PAT / GitLab PAT) in the connect onboarding | ⬜ todo | |
-| 7 | OAuth-based GitLab connect (the `gitlab-parity.md` future-work item) | ⬜ todo | |
-| 8 | e2e: GitLab-flavoured connect→add-service against a faked VCS boundary (MSW at the backend outbound boundary) | ⬜ todo | |
+| #   | Slice                                                                                                                                                            | Status  | PR      |
+| --- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------- | ------- | ------- |
+| 1   | Audit pass: enumerate every GitHub-only affordance/copy in `components/github/*` + stores; classify neutral vs provider-keyed (write findings into this tracker) | ✅ done | this PR |
+| 2   | Per-workspace GitLab PAT connect flow (backend rows + connect UI mirroring `GitHubConnect.vue`)                                                                  | ⬜ todo |         |
+| 3   | Project browse / add-service-from-project through the shared store (provider-aware labels)                                                                       | ⬜ todo |         |
+| 4   | Webhook setup surface (register the GitLab webhook + secret for a connected project)                                                                             | ⬜ todo |         |
+| 5   | Provider-keyed copy pass: PR/MR terminology, host/URL rendering, icons — i18n'd, all locales                                                                     | ⬜ todo |         |
+| 6   | Onboarding: provider choice step (GitHub App / GitHub PAT / GitLab PAT) in the connect onboarding                                                                | ⬜ todo |         |
+| 7   | OAuth-based GitLab connect (the `gitlab-parity.md` future-work item)                                                                                             | ⬜ todo |         |
+| 8   | e2e: GitLab-flavoured connect→add-service against a faked VCS boundary (MSW at the backend outbound boundary)                                                    | ⬜ todo |         |
 
 ## Findings (slice 1 audit)
 
@@ -96,7 +96,7 @@ this before picking up slice 2.
   `GitHubOnboarding.vue` are built entirely around App installations (`installationId`,
   `targetType: Organization|User`, the install-redirect to `github.com/apps/<slug>/…`, and a
   manual installation-id entry). None of these concepts exist for a GitLab PAT connect. The
-  connect UI is therefore a genuine new surface (mirroring the *shape*, not the App
+  connect UI is therefore a genuine new surface (mirroring the _shape_, not the App
   vocabulary), not a copy-tweak of the GitHub component.
 
 ### Surface inventory & classification

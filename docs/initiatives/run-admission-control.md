@@ -50,16 +50,16 @@ Interactive (human-started) runs outrank background (recurring/initiative/Kaizen
 
 ## Prioritized checklist
 
-| # | Slice | Status | PR |
-| - | ----- | ------ | -- |
-| 1 | `countActiveByWorkspace` (+ list-queued-ordered) port methods, D1 ⇄ Drizzle + conformance | ⬜ todo | |
-| 2 | `queued` run state + admission check in `start`/`retry` (re-count backstop) — cap unset ⇒ no behaviour change | ⬜ todo | |
-| 3 | Terminal-hook promotion + sweeper backstop (both runtimes) | ⬜ todo | |
-| 4 | Priority derivation (interactive vs background) + ordered promotion | ⬜ todo | |
-| 5 | Workspace-settings cap + env ceiling clamp + contracts | ⬜ todo | |
-| 6 | SPA queued state (board card, inspector, cancel) + i18n (all locales) | ⬜ todo | |
-| 7 | Conformance: fill-cap → queue → terminal → auto-promote, asserted on both runtimes | ⬜ todo | |
-| 8 | Public API: `start` over cap returns `queued` (not an error); document in the public-api tracker's surface | ⬜ todo | |
+| #   | Slice                                                                                                         | Status  | PR  |
+| --- | ------------------------------------------------------------------------------------------------------------- | ------- | --- |
+| 1   | `countActiveByWorkspace` (+ list-queued-ordered) port methods, D1 ⇄ Drizzle + conformance                     | ⬜ todo |     |
+| 2   | `queued` run state + admission check in `start`/`retry` (re-count backstop) — cap unset ⇒ no behaviour change | ⬜ todo |     |
+| 3   | Terminal-hook promotion + sweeper backstop (both runtimes)                                                    | ⬜ todo |     |
+| 4   | Priority derivation (interactive vs background) + ordered promotion                                           | ⬜ todo |     |
+| 5   | Workspace-settings cap + env ceiling clamp + contracts                                                        | ⬜ todo |     |
+| 6   | SPA queued state (board card, inspector, cancel) + i18n (all locales)                                         | ⬜ todo |     |
+| 7   | Conformance: fill-cap → queue → terminal → auto-promote, asserted on both runtimes                            | ⬜ todo |     |
+| 8   | Public API: `start` over cap returns `queued` (not an error); document in the public-api tracker's surface    | ⬜ todo |     |
 
 ## Conventions & gotchas
 
