@@ -1,5 +1,12 @@
 # @cat-factory/sandbox-fixtures
 
+## 0.7.158
+
+### Patch Changes
+
+- Updated dependencies [995249b]
+  - @cat-factory/contracts@0.134.0
+
 ## 0.7.157
 
 ### Patch Changes
