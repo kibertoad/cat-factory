@@ -44,6 +44,15 @@ share this module, so the win lands on both runtimes at once.
 schema-drift bugs, and shrinks the per-field change surface from 3–4 edits to 1. Contained
 to one shared module, so the blast radius stays small.
 
+**Status (largely landed).** The field-map factory itself now exists in `mappers.ts`
+(`makeEntityMapper` + the `scalarField` / `optField` / `optJsonField` / `optBoolIntField` /
+`enumField` builders), and the big win — the `blocks` entity, by far the widest column set —
+is fully driven by a single `blockFields` table. The remaining hand-written mappers are the
+trivial `rowToWorkspace` and the optional-JSON-spread `rowToPipeline`; `rowToExecution` is
+genuinely divergent (it packs/unpacks a `detail` JSON envelope with tolerant per-field
+parsers) and is correctly left bespoke. So this candidate is mostly done — only the two
+small holdouts remain.
+
 ## 3. Finish the store pattern-factory adoption
 
 **Files:** `frontend/app/app/composables/useUpsertList.ts` and
@@ -58,19 +67,30 @@ to one shared module, so the blast radius stays small.
 - Integration lifecycle (`available` flag + `probe()` + `connect()` + `disconnect()` +
   `connectionFor()`) reimplemented per integration store, with inconsistent error handling.
 
-— now have shared helpers (`useUpsertList`, `useSourceIntegration`), but **adoption is
-partial**: only `tasks`, `documents`, and `notifications` use `useUpsertList`, and only
-`tasks` + `documents` use `useSourceIntegration`. The remaining ~12 stores still call
-`findIndex` directly, so the duplication (and the inconsistent probe error handling) lives
-on in most of the layer.
+— now have shared helpers (`useUpsertList`, `useSourceIntegration`), and **adoption is
+progressing**. On top of `tasks`, `documents`, and `notifications`, the plain find-by-key
+upsert stores `pipelines`, `releaseHealth`, `accounts`, `bootstrap`, `sharedStacks`, and
+`github` (composite `repoGithubId:number` key) now route their list mutation through
+`useUpsertList`.
 
-**Approach.** Finish migrating the remaining stores onto the two helpers, store-by-store —
-each migration is independently shippable and removes ~20–30 duplicated lines. Where a
-store's list is large, opt into the helper's Set-backed lookup. Retire any lingering
-bespoke integration-lifecycle code in favour of the factory.
+**What is deliberately NOT migrated (and why).** A chunk of the remaining `findIndex` sites
+are _not_ the plain upsert the helper models — they carry a **monotonic / reconcile guard**
+that `useUpsertList.upsert` intentionally does not have, so folding them onto the helper
+would drop that guard and reintroduce the real-time clobber bugs `CLAUDE.md`'s "real-time
+store coherence" section warns about. These stay hand-rolled on purpose: `execution`
+(`rev`-monotonic upsert + reconcile hydrate), `board` (`pendingDoomed` / `liveUpsertAt`
+stamping), `workspace` (monotonic refresh sequence), `environmentTest` and `agentRuns`'
+bootstrap list (`updatedAt`-monotonic). `infraConfig` already dedupes via its own local
+`upsertInto` helper (composite key). So the candidate is now: keep migrating the genuinely
+plain stores, and treat the guarded ones as legitimately divergent, not duplication.
+
+**Approach.** Finish migrating the remaining _plain_ stores onto the two helpers,
+store-by-store — each migration is independently shippable and removes ~10–20 duplicated
+lines. Where a store's list is large, opt into the helper's Set-backed lookup. Retire any
+lingering bespoke integration-lifecycle code in favour of the factory.
 
 **Why high-impact for the effort.** The hard part (designing + proving the helpers) is
-done; this is low-effort mechanical follow-through that collapses the last of the
+done; this is low-effort mechanical follow-through that collapses the plain-upsert
 duplication and gives one place to fix/optimize list mutation and integration error
 handling.
 
@@ -131,6 +151,18 @@ built-in prompts via the public seam, and means a new kind is a registration, no
 two switches. The seam and the generic path already exist, so the remaining work is the
 per-kind migration — moderately intrusive (it touches the dispatch hot path) but each step
 is small and independently shippable.
+
+**Status (further along than first written).** The bespoke _harness_ handlers are already
+gone: every built-in kind now synthesizes an `AgentStepSpec` and dispatches through the ONE
+generic `buildRegisteredAgentBody` path (see `buildMigratedBuiltInBody` in `jobBody.ts`) with
+`kind:'agent'` — no per-kind harness endpoint, no image bump per conversion. What remains are
+two thin _backend_ switches: `buildMigratedBuiltInBody` (built-in kind → its synthesized spec
+
+- system/user prompt) and the `toRunResult` `agentKind === …` coercion chain
+  (`containerAgentResult.ts`). The final step of this candidate is to fold those two into
+  registry lookups off a single `registerAgentKind`-style definition per built-in (carrying its
+  `buildJobBody` + `toRunResult`), so the switches collapse and a deployment can override a
+  built-in's prompt through the public seam.
 
 ## 6. Module registry for the orchestration container
 

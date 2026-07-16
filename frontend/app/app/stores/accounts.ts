@@ -1,5 +1,6 @@
 import { defineStore } from 'pinia'
 import { computed, ref } from 'vue'
+import { useUpsertList } from '~/composables/useUpsertList'
 import type {
   Account,
   AccountInvitation,
@@ -23,7 +24,7 @@ export const useAccountsStore = defineStore(
   () => {
     const api = useApi()
 
-    const accounts = ref<Account[]>([])
+    const { items: accounts, upsert: upsertAccount } = useUpsertList<Account>({ key: (a) => a.id })
     /** Active account id (persisted so a reload keeps the same context). */
     const activeAccountId = ref<string | null>(null)
     const ready = ref(false)
@@ -46,7 +47,7 @@ export const useAccountsStore = defineStore(
     /** Create a shared org account and make it active. */
     async function createOrg(name: string) {
       const account = await api.createAccount({ name })
-      accounts.value.push(account)
+      upsertAccount(account)
       activeAccountId.value = account.id
       return account
     }
@@ -62,8 +63,7 @@ export const useAccountsStore = defineStore(
      */
     async function setDefaultCloudProvider(id: string, provider: CloudProvider) {
       const updated = await api.updateAccount(id, { defaultCloudProvider: provider })
-      const i = accounts.value.findIndex((a) => a.id === id)
-      if (i >= 0) accounts.value[i] = updated
+      upsertAccount(updated)
       return updated
     }
 
@@ -73,14 +73,15 @@ export const useAccountsStore = defineStore(
      */
     async function setSpendMonthlyLimit(id: string, limit: number | null) {
       const updated = await api.updateAccount(id, { spendMonthlyLimit: limit })
-      const i = accounts.value.findIndex((a) => a.id === id)
-      if (i >= 0) accounts.value[i] = updated
+      upsertAccount(updated)
       return updated
     }
 
     // ---- members + invitations -------------------------------------------
 
-    const members = ref<AccountMember[]>([])
+    const { items: members, upsert: upsertMember } = useUpsertList<AccountMember>({
+      key: (m) => m.userId,
+    })
     const invitations = ref<AccountInvitation[]>([])
 
     /** Load the active account's member roster + pending invitations. */
@@ -108,8 +109,7 @@ export const useAccountsStore = defineStore(
     /** Set a member's role set (admin-only); patches the loaded roster in place. */
     async function setMemberRoles(accountId: string, userId: string, roles: AccountRole[]) {
       const updated = await api.setMemberRoles(accountId, userId, roles)
-      const i = members.value.findIndex((m) => m.userId === userId)
-      if (i >= 0) members.value[i] = updated
+      upsertMember(updated)
       return updated
     }
 

@@ -14,6 +14,7 @@ import type {
   ResyncRequest,
 } from '~/types/domain'
 import { useSingleFlightProbe } from '~/composables/useSingleFlightProbe'
+import { useUpsertList } from '~/composables/useUpsertList'
 import { useWorkspaceStore } from '~/stores/workspace'
 import { useServicesStore } from '~/stores/services'
 
@@ -42,7 +43,14 @@ export const useGitHubStore = defineStore('github', () => {
   const availableRepos = ref<GitHubAvailableRepo[]>([])
   const loadingAvailable = ref(false)
   const savingRepos = ref(false)
-  const pulls = ref<GitHubPullRequest[]>([])
+  const {
+    items: pulls,
+    upsert: upsertPull,
+    get: getPull,
+  } = useUpsertList<GitHubPullRequest>({
+    key: (p) => `${p.repoGithubId}:${p.number}`,
+    prepend: true,
+  })
   const issues = ref<GitHubIssue[]>([])
   /** Branches loaded lazily per repo (by GitHub numeric id). */
   const branches = ref<Record<number, GitHubBranch[]>>({})
@@ -269,11 +277,7 @@ export const useGitHubStore = defineStore('github', () => {
 
   async function openPullRequest(repoGithubId: number, input: OpenPullRequestInput) {
     const pr = await api.openGitHubPullRequest(workspace.requireId(), repoGithubId, input)
-    const i = pulls.value.findIndex(
-      (p) => p.repoGithubId === pr.repoGithubId && p.number === pr.number,
-    )
-    if (i >= 0) pulls.value[i] = pr
-    else pulls.value.unshift(pr)
+    upsertPull(pr)
     return pr
   }
 
@@ -284,8 +288,8 @@ export const useGitHubStore = defineStore('github', () => {
   ) {
     await api.mergeGitHubPullRequest(workspace.requireId(), repoGithubId, number, input)
     // Optimistically reflect the merge until the next sync confirms it.
-    const i = pulls.value.findIndex((p) => p.repoGithubId === repoGithubId && p.number === number)
-    if (i >= 0) pulls.value[i] = { ...pulls.value[i]!, state: 'closed', merged: true }
+    const existing = getPull(`${repoGithubId}:${number}`)
+    if (existing) upsertPull({ ...existing, state: 'closed', merged: true })
   }
 
   function comment(repoGithubId: number, number: number, body: string) {

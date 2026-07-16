@@ -6,6 +6,7 @@ import type {
   ReferenceArchitecture,
   UpdateReferenceArchitectureInput,
 } from '~/types/domain'
+import { useUpsertList } from '~/composables/useUpsertList'
 import { useWorkspaceStore } from '~/stores/workspace'
 import { useAgentRunsStore } from '~/stores/agentRuns'
 
@@ -27,7 +28,11 @@ export const useBootstrapStore = defineStore('bootstrap', () => {
 
   /** null = unknown (not probed yet), true/false = module reachable or not. */
   const available = ref<boolean | null>(null)
-  const architectures = ref<ReferenceArchitecture[]>([])
+  const {
+    items: architectures,
+    upsert: upsertArchitecture,
+    remove: dropArchitecture,
+  } = useUpsertList<ReferenceArchitecture>({ key: (a) => a.id, prepend: true })
   const loading = ref(false)
 
   const hasArchitectures = computed(() => architectures.value.length > 0)
@@ -50,22 +55,21 @@ export const useBootstrapStore = defineStore('bootstrap', () => {
   /** Register a new reference architecture. */
   async function createArchitecture(input: CreateReferenceArchitectureInput) {
     const created = await api.createReferenceArchitecture(workspace.requireId(), input)
-    architectures.value.unshift(created)
+    upsertArchitecture(created)
     return created
   }
 
   /** Patch a reference architecture. */
   async function updateArchitecture(id: string, input: UpdateReferenceArchitectureInput) {
     const updated = await api.updateReferenceArchitecture(workspace.requireId(), id, input)
-    const i = architectures.value.findIndex((a) => a.id === id)
-    if (i >= 0) architectures.value[i] = updated
+    upsertArchitecture(updated)
     return updated
   }
 
   /** Remove a reference architecture. */
   async function deleteArchitecture(id: string) {
     await api.deleteReferenceArchitecture(workspace.requireId(), id)
-    architectures.value = architectures.value.filter((a) => a.id !== id)
+    dropArchitecture(id)
   }
 
   /**
