@@ -48,16 +48,16 @@ in ONE place — the shared authz middleware — not scattered per controller.
 
 ## Prioritized checklist
 
-| # | Slice | Status | PR |
-| - | ----- | ------ | -- |
-| 1 | Contracts + kernel types (`WorkspaceRole`, `WorkspaceMember`, `accessMode`) | ⬜ todo | |
-| 2 | `WorkspaceMemberRepository` port + D1 ⇄ Drizzle impls + conformance assertions | ⬜ todo | |
-| 3 | Effective-role resolution in the shared authz middleware (404 on non-membership; account-admin escape hatch) | ⬜ todo | |
-| 4 | Role enforcement pass over the workspace-scoped controllers (write surfaces honour `viewer`/`member`/`admin`) | ⬜ todo | |
-| 5 | Public-API keys: a key minted for a restricted workspace respects membership of the minting user (coordinate with `public-api-expansion` #13 scopes) | ⬜ todo | |
-| 6 | SPA: membership management UI + filtered workspace picker + role-gated affordances (+ i18n, all locales) | ⬜ todo | |
-| 7 | Real-time: WS ticket mint (`auth/wsTicket.ts`) verifies workspace access for restricted workspaces | ⬜ todo | |
-| 8 | e2e spec: restricted workspace invisible to a non-member (seed via REST, assert live UI) | ⬜ todo | |
+| #   | Slice                                                                                                                                                | Status  | PR  |
+| --- | ---------------------------------------------------------------------------------------------------------------------------------------------------- | ------- | --- |
+| 1   | Contracts + kernel types (`WorkspaceRole`, `WorkspaceMember`, `accessMode`)                                                                          | ⬜ todo |     |
+| 2   | `WorkspaceMemberRepository` port + D1 ⇄ Drizzle impls + conformance assertions                                                                       | ⬜ todo |     |
+| 3   | Effective-role resolution in the shared authz middleware (404 on non-membership; account-admin escape hatch)                                         | ⬜ todo |     |
+| 4   | Role enforcement pass over the workspace-scoped controllers (write surfaces honour `viewer`/`member`/`admin`)                                        | ⬜ todo |     |
+| 5   | Public-API keys: a key minted for a restricted workspace respects membership of the minting user (coordinate with `public-api-expansion` #13 scopes) | ⬜ todo |     |
+| 6   | SPA: membership management UI + filtered workspace picker + role-gated affordances (+ i18n, all locales)                                             | ⬜ todo |     |
+| 7   | Real-time: WS ticket mint (`auth/wsTicket.ts`) verifies workspace access for restricted workspaces                                                   | ⬜ todo |     |
+| 8   | e2e spec: restricted workspace invisible to a non-member (seed via REST, assert live UI)                                                             | ⬜ todo |     |
 
 ## Conventions & gotchas
 

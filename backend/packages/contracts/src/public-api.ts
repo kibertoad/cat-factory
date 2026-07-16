@@ -145,8 +145,8 @@ export const startPublicTaskSchema = v.object({
 export type StartPublicTaskInput = v.InferOutput<typeof startPublicTaskSchema>
 
 /**
- * Edit a task's mutable fields before it runs — the external counterpart of the SPA's
- * inline title/description edit. Deliberately narrower than the internal `updateBlock`
+ * Edit a task's mutable fields (typically before it runs) — the external counterpart of the
+ * SPA's inline title/description edit. Deliberately narrower than the internal `updateBlock`
  * patch (which also carries model/risk/pipeline pins and board-layout knobs that have no
  * external meaning): the public surface exposes only the two human-authored fields, so it
  * stays small and stable. Both fields are optional; an empty patch is a harmless no-op.

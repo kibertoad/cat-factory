@@ -35,7 +35,7 @@ import { buildHonoRoute } from '@toad-contracts/hono'
 import { Hono } from 'hono'
 import type { Context } from 'hono'
 import { streamSSE } from 'hono/streaming'
-import { personalGateForBlock } from '../providers/personalCredentialGate.js'
+import { personalGateForBlock, personalGateForRun } from '../providers/personalCredentialGate.js'
 import type { AppEnv } from '../../http/env.js'
 
 // The PUBLIC external API (`/api/v1/*`). Unlike the SPA surface it is NOT behind the user-session
@@ -653,7 +653,9 @@ export function publicApiController(): Hono<AppEnv> {
   // headless anchors) — so an external key can never edit/stop/retry/read an arbitrary
   // in-workspace run. Each delegates to the SAME service method the SPA uses; no new logic.
 
-  // Edit a task's title/description (pre-start edits).
+  // Edit a task's title/description. Intended for pre-start authoring, but — like the SPA's
+  // inline edit and the underlying `updateBlock` — it is NOT restricted to the pre-start
+  // window; editing a running/finished task's title/description does not re-drive the run.
   buildHonoRoute(app, updatePublicTaskContract, async (c) => {
     const gate = await resolveKey(c)
     if ('fail' in gate) {
@@ -697,7 +699,7 @@ export function publicApiController(): Hono<AppEnv> {
     }
     const run = await container.executionRepository.getByBlock(auth.workspaceId, taskId)
     if (!run) {
-      return c.json({ error: { code: 'not_running', message: 'Task has no run to stop' } }, 409)
+      return c.json({ error: { code: 'no_run', message: 'Task has no run to stop' } }, 409)
     }
     await container.executionService.stopRun(auth.workspaceId, run.id)
     // Re-read for the authoritative post-stop projection (a stopped run leaves the block
@@ -708,9 +710,13 @@ export function publicApiController(): Hono<AppEnv> {
   })
 
   // Retry a task's failed run. Mirrors the initiative/start refusals: a headless key has no
-  // user/password to unlock an individual-usage (personal) subscription, so refuse a task
-  // whose model resolves to such a vendor up front (`personalGateForBlock` → 409). The
-  // engine's `retry` then throws `run_not_retryable` (→ 409) unless the run actually failed.
+  // user/password to unlock an individual-usage (personal) subscription, so refuse a run
+  // whose model resolves to such a vendor up front (→ 409). Uses `personalGateForRun` (the
+  // same primitive the SPA retry path uses): it resolves the individual vendors from the
+  // run's STORED steps — what the retry actually re-drives — rather than re-deriving them
+  // from the current pipeline definition (which may have drifted), matching how
+  // `ExecutionService.retry` validates. The engine's `retry` then throws `run_not_retryable`
+  // (→ 409) unless the run actually failed.
   buildHonoRoute(app, retryPublicTaskContract, async (c) => {
     const gate = await resolveKey(c)
     if ('fail' in gate) {
@@ -731,14 +737,7 @@ export function publicApiController(): Hono<AppEnv> {
       return c.json({ error: { code: 'no_run', message: 'Task has no run to retry' } }, 409)
     }
     try {
-      await personalGateForBlock(
-        container,
-        auth.workspaceId,
-        taskId,
-        run.pipelineId,
-        undefined,
-        undefined,
-      )
+      await personalGateForRun(container, auth.workspaceId, run.id, undefined, undefined)
     } catch (err) {
       if (err instanceof CredentialRequiredError) {
         return c.json(

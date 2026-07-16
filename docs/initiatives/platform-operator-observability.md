@@ -16,7 +16,7 @@ container eviction rates, and **no alerting on the platform itself**. Diagnosing
 been failing since yesterday" means ad-hoc SQL against `agent_runs` in the Cloudflare
 dashboard (the `investigate-telemetry` skill automates exactly this — evidence the surface
 is missing, not that it exists). Note the irony: the product ships a `post-release-health`
-gate that watches the *user's* Datadog for regressions, while cat-factory itself has no
+gate that watches the _user's_ Datadog for regressions, while cat-factory itself has no
 equivalent self-watch.
 
 End state: an **operator dashboard** (aggregate health of the deployment: run outcomes,
@@ -50,15 +50,15 @@ delivered through the existing `NotificationChannel` seam.
 
 ## Prioritized checklist
 
-| # | Slice | Status | PR |
-| - | ----- | ------ | -- |
-| 1 | Rollup port + D1 ⇄ Drizzle impls (`runOutcomesSince`, `failureKindBreakdown`, `activeAndParkedCounts`) + conformance | ⬜ todo | |
-| 2 | `GET /observability/platform` controller + contracts (windowed aggregate projections; admin-gated) | ⬜ todo | |
-| 3 | Operator dashboard panel in the SPA (outcome trend, failure taxonomy, durations; i18n all locales) | ⬜ todo | |
-| 4 | Duration percentiles + per-step/gate attempt stats (CI-fixer attempts, gate exhaustion counts) | ⬜ todo | |
-| 5 | Threshold alert sweep + `platform_health` notification type (state-change dedup; both runtimes) | ⬜ todo | |
-| 6 | Alert threshold config surface (deployment env defaults + settings UI) | ⬜ todo | |
-| 7 | Optional daily rollup table for >3d trends (coordinate with storage-and-retention's deferred rollup) | ⬜ todo | |
+| #   | Slice                                                                                                                | Status  | PR  |
+| --- | -------------------------------------------------------------------------------------------------------------------- | ------- | --- |
+| 1   | Rollup port + D1 ⇄ Drizzle impls (`runOutcomesSince`, `failureKindBreakdown`, `activeAndParkedCounts`) + conformance | ⬜ todo |     |
+| 2   | `GET /observability/platform` controller + contracts (windowed aggregate projections; admin-gated)                   | ⬜ todo |     |
+| 3   | Operator dashboard panel in the SPA (outcome trend, failure taxonomy, durations; i18n all locales)                   | ⬜ todo |     |
+| 4   | Duration percentiles + per-step/gate attempt stats (CI-fixer attempts, gate exhaustion counts)                       | ⬜ todo |     |
+| 5   | Threshold alert sweep + `platform_health` notification type (state-change dedup; both runtimes)                      | ⬜ todo |     |
+| 6   | Alert threshold config surface (deployment env defaults + settings UI)                                               | ⬜ todo |     |
+| 7   | Optional daily rollup table for >3d trends (coordinate with storage-and-retention's deferred rollup)                 | ⬜ todo |     |
 
 ## Conventions & gotchas
 
