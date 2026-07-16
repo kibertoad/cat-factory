@@ -19,10 +19,11 @@
 > **Residuals that are explicitly NOT gating** (a maintainer decides if/when to lift any draft
 > status in light of them): decrypting a remotely-sealed PROVISIONED environment's access cipher
 > (needs the mothership's key — the secrets-delegation slice); the best-effort kaizen / telemetry
-> no-ops a run makes over the remote (telemetry is local-first, Phase 5); and the `fragments` /
-> `slack` connect/provision surfaces. (Subscription activation is no longer among these — PR 3 gave
-> it, and the rest of the subscription-credential trio + local settings, their real `local-sqlite`
-> home; see the [local-sqlite bucket pattern](#the-local-sqlite-bucket-pattern-credentials--settings).)
+> no-ops a run makes over the remote (telemetry is local-first, Phase 5); and the document/task
+> connection integration (blocked on its decrypt-inside connection repos). (Subscription activation,
+> the prompt-fragment library, and the Slack settings surface are no longer among these — PR 3 gave
+> them, and the subscription-credential trio + local settings their real `local-sqlite` home; see the
+> [local-sqlite bucket pattern](#the-local-sqlite-bucket-pattern-credentials--settings).)
 > The remaining `pending` org methods are the live per-repo checklist below.
 
 ### Landed so far
@@ -199,6 +200,24 @@
   `apiKeyCipher` blob — the repo never decrypts), both via the `account` rule. The account-lifecycle
   WRITES stay off: invite `create`/`setStatus` (admin-gated), the pre-auth `findByTokenHash`/`get`
   accept-invite lookups, and email `upsert`/`softDelete` (connect/disconnect, admin-gated).
+- **Slack integration management surface** — the Slack settings panels (`SlackController` →
+  `SlackConnectionService` / `SlackSettingsService` / `SlackMemberMappingService`: connect / disconnect
+  the per-account Slack workspace, edit the per-workspace notification routing, maintain the per-account
+  GitHub-user → Slack-member mapping) now PERSIST over the mothership. Introduces a new scope rule
+  **`accountField`** — the account-owned mirror of `workspaceField`, binding on an `upsert(record)`'s
+  `accountId` FIELD — used by `slackConnectionRepository.upsert`. Allow-listed:
+  `slackConnectionRepository` `getByAccount`/`upsert`/`softDelete` (the bot token rides a SEALED
+  `tokenCipher`, so only ciphertext crosses the machine API — the observability/runner-connection
+  precedent), `slackSettingsRepository` `getByWorkspace`/`upsert` and `slackMemberMappingRepository`
+  `getByAccount`/`upsert` (no secrets). The Node facade routes the three Slack repos through the
+  `sourced`/`pickRepoSource` seam inside `selectNodeSlackDeps` (so both the management services AND the
+  `SlackNotificationChannel` read the remote-backed repos, not the db-less Drizzle instances).
+  **Still off:** `slackConnectionRepository.getByTeam` — the GLOBAL teamId → connection lookup the
+  inbound OAuth callback / event webhook use on the mothership (never the laptop), unscopable by
+  account, so mothership-internal. **Residual (later secrets-delegation slice):** mothership-SIDE Slack
+  DELIVERY of a notification raised by a HOSTED teammate — the mothership decrypting a laptop-sealed
+  token — mirrors the observability gate-probe residual; local-node delivery (the run's own node holds
+  the key) is unaffected.
 
 **Login (PR 3)**
 
@@ -369,59 +388,109 @@ Every persistence port, and where it lives in mothership mode. `remote` = mother
 `local-sqlite` = local `node:sqlite` store; `telemetry` = local-first + batched up; `excluded` =
 never remotely invocable (mothership-internal cron).
 
-| Port                                                        | Bucket                                                             | Status  | PR                               |
-| ----------------------------------------------------------- | ------------------------------------------------------------------ | ------- | -------------------------------- |
-| `workspaceRepository`                                       | remote                                                             | ✅ done | PR 1                             |
-| `blockRepository`                                           | remote                                                             | ✅ done | PR 1                             |
-| `executionRepository` (CAS/rev)                             | remote                                                             | ✅ done | PR 1                             |
-| `accountRepository`                                         | remote                                                             | ✅ done | PR 1                             |
-| `membershipRepository`                                      | remote                                                             | ✅ done | PR 1                             |
-| `pipelineRepository`                                        | remote                                                             | ✅ done | PR 1                             |
-| `userRepository`                                            | remote                                                             | ⬜ todo | PR 3                             |
-| `invitationRepository`                                      | remote (`listByAccount` read; writes admin/pre-auth pending)       | ◑ part  | PR 3 (account onboarding reads)  |
-| `passwordResetTokenRepository`                              | remote                                                             | ⬜ todo | PR 3                             |
-| `emailConnectionRepository`                                 | remote (`getByAccount` read, sealed; connect/disconnect admin)     | ◑ part  | PR 3 (account onboarding reads)  |
-| `promptFragmentRepository`                                  | remote (owner-scoped library mgmt; `listBySource` sync pending)    | ◑ part  | PR 3 (fragment library surface)  |
-| `fragmentSourceRepository`                                  | remote (owner-scoped list + link; id-keyed sync mgmt pending)      | ◑ part  | PR 3 (fragment library surface)  |
-| `agentRunRepository`                                        | remote (`getRef`; sweeper reads internal)                          | ✅ done | PR 3 (retry/stop surface)        |
-| `modelPresetRepository`                                     | remote                                                             | ✅ done | PR 3 (settings writes)           |
-| `serviceFragmentDefaultsRepository`                         | remote                                                             | ✅ done | PR 3 (settings writes)           |
-| `pipelineScheduleRepository`                                | remote (mgmt; `listByService` pending)                             | ◑ part  | PR 3 (settings writes)           |
-| `trackerSettingsRepository`                                 | remote                                                             | ✅ done | PR 3 (settings writes)           |
-| `serviceRepository`                                         | remote (mount + board-composition reads; CRUD/`getByRepo` pending) | ◑ part  | PR 3 (board-composition read)    |
-| `workspaceMountRepository`                                  | remote (mount mgmt; fan-out/batch pending)                         | ◑ part  | PR 3 (mount management)          |
-| `requirementReviewRepository`                               | remote                                                             | ✅ done | PR 3 (advanced-review surface)   |
-| `kaizenGradingRepository`                                   | remote (run-path + screen reads; `get`/sweep off)                  | ◑ part  | PR 3 (kaizen read surface)       |
-| `kaizenVerifiedComboRepository`                             | remote (`getByKey`/`listByWorkspace`; `upsert` off)                | ◑ part  | PR 3 (kaizen read surface)       |
-| `consensusSessionRepository`                                | remote                                                             | ✅ done | PR 3 (advanced-review surface)   |
-| `clarityReviewRepository`                                   | remote                                                             | ✅ done | PR 3 (advanced-review surface)   |
-| `brainstormSessionRepository`                               | remote                                                             | ✅ done | PR 3 (advanced-review surface)   |
-| `mergePresetRepository`                                     | remote                                                             | ✅ done | PR 3 (settings writes)           |
-| `workspaceSettingsRepository`                               | remote                                                             | ✅ done | PR 3 (settings writes)           |
-| `observabilityConnectionRepository`                         | remote                                                             | ✅ done | PR 3 (release-health settings)   |
-| `incidentEnrichmentConnectionRepository`                    | remote                                                             | ✅ done | PR 3 (release-health settings)   |
-| `accountSettingsRepository`                                 | remote                                                             | ⬜ todo | PR 3                             |
-| `releaseHealthConfigRepository`                             | remote                                                             | ✅ done | PR 3 (release-health settings)   |
-| `environmentConnectionRepository`                           | remote                                                             | ✅ done | PR 3 (env connection surface)    |
-| `customManifestTypeRepository`                              | remote                                                             | ✅ done | PR 3 (env connection surface)    |
-| `environmentRegistryRepository`                             | remote (reads; provision writes/decrypt pending)                   | ◑ part  | PR 3 (secrets-delegation later)  |
-| `environmentTestRunRepository`                              | remote (whole repo; full self-test rides provision writes)         | ✅ done | PR 3 (GitHub delegation slice)   |
-| `binaryArtifactMetadataStore` (metadata)                    | remote; blobs → shared backend (S3 / mothership)                   | ✅ done | PR 3 (visual-gate metadata)      |
-| `githubInstallationRepository`                              | remote (`getByWorkspace` run-path read; rest pending)              | ◑ part  | PR 3 (VCS projection reads)      |
-| `runnerPoolConnectionRepository`                            | remote                                                             | ✅ done | PR 3 (runner-backend connection) |
-| GitHub projection repos (repo/branch/PR/issue/commit/check) | remote (board-panel reads; sync/repo-writes pending)               | ◑ part  | PR 3 (VCS projection reads)      |
-| `providerApiKeyRepository`                                  | local-sqlite                                                       | ✅ done | PR 1 (store)                     |
-| `localModelEndpointRepository`                              | local-sqlite                                                       | ✅ done | PR 1 (store)                     |
-| `providerSubscriptionTokenRepository`                       | local-sqlite                                                       | ✅ done | PR 3 (local subscription bucket) |
-| `personalSubscriptionRepository`                            | local-sqlite                                                       | ✅ done | PR 3 (local subscription bucket) |
-| `subscriptionActivationRepository`                          | local-sqlite                                                       | ✅ done | PR 3 (local subscription bucket) |
-| `localSettingsRepository`                                   | local-sqlite                                                       | ✅ done | PR 3 (local subscription bucket) |
-| durable execution work queue                                | local-sqlite (replaces pg-boss)                                    | ✅ done | PR 1 (in-proc) → PR 2 (durable)  |
-| cached mothership machine token                             | local-sqlite                                                       | ✅ done | PR 3                             |
-| `llmCallMetricRepository`                                   | telemetry                                                          | ⬜ todo | PR 5                             |
-| `agentContextSnapshotRepository`                            | telemetry                                                          | ⬜ todo | PR 5                             |
-| `tokenUsageRepository`                                      | telemetry                                                          | ⬜ todo | PR 5                             |
-| `provisioningLogRepository`                                 | telemetry                                                          | ⬜ todo | PR 5                             |
+> **This table is reconciled against the ground truth** — the server-side allow-list
+> (`REMOTE_PERSISTENCE_METHODS` in `backend/packages/server/src/persistence/rpc.ts`) and the
+> coverage-independent drift guard (`backend/runtimes/node/test/mothership-allowlist.spec.ts`,
+> which classifies EVERY Drizzle repository method as `remote` / `pending` / `local` / `telemetry` /
+> `admin` / `sweeper` / `onboarding` / `helper`). When in doubt, trust those two files over this
+> table. `◑ part` = some methods remote, some still `pending` (the surface-completion backlog).
+
+**Org / durable (remote — the mothership RPC):**
+
+| Port                                     | Status  | Remote surface / what's still off                                                       |
+| ---------------------------------------- | ------- | --------------------------------------------------------------------------------------- |
+| `workspaceRepository`                    | ✅ done | board reads + rename/setDescription; `create` onboarding, `delete` sweeper              |
+| `blockRepository`                        | ◑ part  | board/run reads+writes; `listByService`/`countActiveInternal` (public API) pending      |
+| `executionRepository` (CAS/rev)          | ◑ part  | run surface; `listByService` pending, `listStale` sweeper                               |
+| `pipelineRepository`                     | ✅ done | full CRUD                                                                               |
+| `accountRepository`                      | ✅ done | reads only; `rename`/`updateSettings` admin, `create`/`ensurePersonal` onboarding       |
+| `membershipRepository`                   | ✅ done | reads only; `upsert`/`remove` admin                                                     |
+| `userSettingsRepository`                 | ✅ done | self-scoped get/upsert (user-tier budget)                                               |
+| `riskPolicyRepository` (merge presets)   | ✅ done | full library CRUD                                                                       |
+| `modelPresetRepository`                  | ✅ done | full library CRUD                                                                       |
+| `sharedStackRepository`                  | ✅ done | full library CRUD                                                                       |
+| `workspaceSettingsRepository`            | ✅ done | get/upsert; `listByWorkspaceIds` sweeper                                                |
+| `serviceFragmentDefaultsRepository`      | ✅ done | get/set                                                                                 |
+| `trackerSettingsRepository`              | ✅ done | get/put                                                                                 |
+| `pipelineScheduleRepository`             | ◑ part  | schedule mgmt + runNow; `listByService` pending, sweeper reads internal                 |
+| `serviceRepository`                      | ◑ part  | mount + board-composition + run-path reads; CRUD/`getByRepo` pending (GitHub sync)      |
+| `workspaceMountRepository`               | ◑ part  | mount mgmt; fan-out/batch cleanup reads pending                                         |
+| `notificationRepository`                 | ✅ done | inbox read/act/dismiss/escalate; retention prune sweeper                                |
+| `requirementReviewRepository`            | ✅ done | full get/upsert/deleteByBlock                                                           |
+| `docInterviewRepository`                 | ✅ done | run-path + interview window get/upsert/deleteByBlock                                    |
+| `clarityReviewRepository`                | ✅ done | full get/upsert/deleteByBlock                                                           |
+| `brainstormSessionRepository`            | ✅ done | full get/upsert/deleteByBlockStage                                                      |
+| `consensusSessionRepository`             | ✅ done | full get/upsert                                                                         |
+| `initiativeRepository`                   | ✅ done | CRUD + rev-CAS; `listExecuting` sweeper                                                 |
+| `kaizenGradingRepository`                | ◑ part  | run-path + screen reads; single-grade `get` internal, sweep reads internal              |
+| `kaizenVerifiedComboRepository`          | ◑ part  | `getByKey`/`listByWorkspace`; `upsert` (streak write) pending                           |
+| `agentRunRepository`                     | ✅ done | `getRef` (retry/stop entry); sweeper reads internal                                     |
+| `bootstrapJobRepository`                 | ✅ done | start/poll/retry/stop mgmt; `listByService` pending                                     |
+| `referenceArchitectureRepository`        | ✅ done | full library CRUD + retry re-resolve                                                    |
+| `envConfigRepairJobRepository`           | ✅ done | full run-mgmt (list/get/insert/update)                                                  |
+| `environmentTestRunRepository`           | ✅ done | whole repo; full self-test still gated on provisioning writes below                     |
+| `environmentConnectionRepository`        | ✅ done | connection + handler mgmt (sealed `secretsCipher`)                                      |
+| `customManifestTypeRepository`           | ✅ done | full catalog CRUD (no secrets)                                                          |
+| `environmentRegistryRepository`          | ◑ part  | reads only; provision writes/access-cipher decrypt = secrets-delegation slice           |
+| `observabilityConnectionRepository`      | ✅ done | settings CRUD (sealed); gate-probe decrypt = secrets-delegation slice                   |
+| `releaseHealthConfigRepository`          | ✅ done | per-block config CRUD                                                                   |
+| `incidentEnrichmentConnectionRepository` | ✅ done | settings CRUD (sealed)                                                                  |
+| `packageRegistryConnectionRepository`    | ✅ done | settings + decrypt-time reads (sealed)                                                  |
+| `testSecretsRepository`                  | ◑ part  | inspector CRUD + run-path read (sealed); `listByWorkspace` no consumer yet              |
+| `runnerPoolConnectionRepository`         | ✅ done | connect/rotate/disconnect (sealed `secretsCipher`)                                      |
+| `binaryArtifactMetadataStore` (metadata) | ✅ done | metadata CRUD; bytes → per-account blob backend; retention sweeper                      |
+| `slackConnectionRepository`              | ✅ done | connect/disconnect (sealed `tokenCipher`); `getByTeam` inbound-OAuth internal           |
+| `slackSettingsRepository`                | ✅ done | per-workspace routing (no secrets)                                                      |
+| `slackMemberMappingRepository`           | ✅ done | per-account mention map (no secrets)                                                    |
+| `promptFragmentRepository`               | ◑ part  | owner-scoped library mgmt; `listBySource` (repo-sync) pending                           |
+| `fragmentSourceRepository`               | ◑ part  | owner-scoped list + link; id-keyed sync mgmt pending                                    |
+| `documentRepository`                     | ◑ part  | run-path context reads; mgmt writes pending (module needs the connection repo)          |
+| `taskRepository`                         | ◑ part  | run-path context reads; mgmt writes pending (module needs the connection repo)          |
+| `githubInstallationRepository`           | ◑ part  | `getByWorkspace` run-path read; id-keyed reads / sync writes pending                    |
+| `repoProjectionRepository`               | ◑ part  | `list` (SPA + run path); sync/repo-write surface pending; `listByInstallation` internal |
+| `branchProjectionRepository`             | ◑ part  | `listByRepo` read; `upsertMany` sync pending                                            |
+| `pullRequestProjectionRepository`        | ◑ part  | `listByWorkspace` read; sync/per-repo reads pending                                     |
+| `issueProjectionRepository`              | ◑ part  | `listByWorkspace` read; sync/per-repo reads pending                                     |
+| `commitProjectionRepository`             | ⬜ todo | sync-write slice (all pending/sweeper/helper)                                           |
+| `checkRunProjectionRepository`           | ⬜ todo | sync-write slice (all pending)                                                          |
+| `userRepository`                         | ⬜ todo | member-display reads pending (needs a scope rule; identity reads leak hash → off)       |
+| `invitationRepository`                   | ◑ part  | `listByAccount` read; `create`/`setStatus` admin, accept-invite lookups pre-auth        |
+| `emailConnectionRepository`              | ◑ part  | `getByAccount` read (sealed); connect/disconnect admin                                  |
+| `passwordResetTokenRepository`           | ⬜ todo | pre-auth flow (all pending; `deleteExpired` sweeper)                                    |
+
+**Excluded (never remotely invocable — admin-gated, so the token-scopes-accounts-not-roles rule keeps them off):**
+
+| Port                        | Reason                                                                               |
+| --------------------------- | ------------------------------------------------------------------------------------ |
+| `accountSettingsRepository` | admin (read + write both `requireAdmin`; sealed but role-scoped) — NOT a remote TODO |
+
+**Local (`node:sqlite` — per-user/per-deployment credentials + settings, never the mothership):**
+
+| Port                                  | Status  | PR                                |
+| ------------------------------------- | ------- | --------------------------------- |
+| `providerApiKeyRepository`            | ✅ done | PR 1 (store)                      |
+| `localModelEndpointRepository`        | ✅ done | PR 1 (store)                      |
+| `providerModelCatalogRepository`      | ✅ done | local bucket                      |
+| `providerSubscriptionTokenRepository` | ✅ done | PR 3 (local subscription bucket)  |
+| `personalSubscriptionRepository`      | ✅ done | PR 3 (local subscription bucket)  |
+| `subscriptionActivationRepository`    | ✅ done | PR 3 (local subscription bucket)  |
+| `userSecretRepository`                | ✅ done | local bucket                      |
+| `userRepoAccessRepository`            | ✅ done | local bucket (per-user redaction) |
+| `environmentUserHandlerRepository`    | ✅ done | local bucket (per-user handlers)  |
+| `localSettingsRepository`             | ✅ done | PR 3 (local subscription bucket)  |
+| durable execution work queue          | ✅ done | PR 1 (in-proc) → PR 2 (durable)   |
+| cached mothership machine token       | ✅ done | PR 3                              |
+
+**Telemetry (local-first + batch-synced-up — Phase 5, not yet built):**
+
+| Port                               | Status  | Notes                                                                       |
+| ---------------------------------- | ------- | --------------------------------------------------------------------------- |
+| `llmCallMetricRepository`          | ◑ part  | `summarizeByExecution` remote stopgap (run path); writes telemetry, Phase 5 |
+| `agentContextSnapshotRepository`   | ⬜ todo | telemetry (Phase 5)                                                         |
+| `agentSearchQueryRepository`       | ⬜ todo | telemetry (Phase 5)                                                         |
+| `tokenUsageRepository`             | ◑ part  | budget-rollup reads remote; `record` telemetry, retention sweeper           |
+| `subscriptionQuotaCycleRepository` | ⬜ todo | telemetry (Phase 5)                                                         |
+| `provisioningLogRepository`        | ⬜ todo | `append` telemetry, `list` read pending, prune sweeper                      |
 
 ## Cross-cutting delegation (not per-call repo proxies)
 
@@ -433,17 +502,30 @@ never remotely invocable (mothership-internal cron).
   private key never leaves the mothership, and a delegated token never grants more than the
   mothership projects. (Projection WRITES — sync ingest, `setMonorepo`, cursors — remain
   mothership-owned; the repo-write projection-refresh slice is still open.)
-- **Real-time both directions.** `RpcEventPublisher` (`@cat-factory/server`) POSTs each engine event
-  to `POST /internal/events/publish` so hosted teammates see the local node's activity; an
-  `UpstreamEventSubscriber` opens `GET /internal/events/subscribe?scope=…` and re-publishes into the
-  local `NodeRealtimeHub` so the local SPA sees org activity. SPA wire protocol unchanged.
-- **Notifications.** Row persists via the remote `notificationRepository`; in-app delivery rides the
-  event fan-out; **Slack** stays mothership-side via a `RemoteNotificationChannel` →
-  `POST /internal/notifications/deliver`.
-- **Email.** `RemoteEmailSender` → `POST /internal/email/send`; the mothership decrypts the account
-  key and sends. Email/Slack keys never reach the laptop.
-- **Telemetry ingest.** Bulk `POST /internal/telemetry/ingest` (append-only, excluded from the
-  generic allow-list); finished-runs batch sweeper + short local-TTL pruner + read-through.
+
+  > **Reality check (code vs plan).** Only GitHub token delegation (above) and the persistence RPC are
+  > IMPLEMENTED. The four bullets below are the DESIGN for PR 2 / PR 4 / PR 5 and are **NOT yet in
+  > code** — no `/internal/events`, `/internal/notifications`, `/internal/email`, or
+  > `/internal/telemetry` endpoint exists yet (a grep finds them only in this doc + ADR 0009). The two
+  > live `/internal/*` routes today are `POST /internal/persistence` and
+  > `POST /internal/github/installation-token`. The remote `notificationRepository` PERSISTS a
+  > notification row today (allow-listed), but in-app/Slack/email DELIVERY delegation is unbuilt.
+
+- **Real-time both directions (PR 2 — planned, not built).** `RpcEventPublisher` (`@cat-factory/server`)
+  would POST each engine event to `POST /internal/events/publish` so hosted teammates see the local
+  node's activity; an `UpstreamEventSubscriber` would open `GET /internal/events/subscribe?scope=…` and
+  re-publish into the local `NodeRealtimeHub` so the local SPA sees org activity. SPA wire protocol
+  unchanged.
+- **Notifications (PR 4 — planned, not built).** Row persists via the remote `notificationRepository`
+  (done); in-app delivery would ride the event fan-out (needs PR 2); **Slack** delivery would stay
+  mothership-side via a `RemoteNotificationChannel` → `POST /internal/notifications/deliver`. (Slack
+  settings MANAGEMENT already persists over the RPC — see "Landed so far"; only mothership-side
+  DELIVERY is unbuilt.)
+- **Email (PR 4 — planned, not built).** `RemoteEmailSender` → `POST /internal/email/send`; the
+  mothership decrypts the account key and sends. Email/Slack keys never reach the laptop.
+- **Telemetry ingest (PR 5 — planned, not built).** Bulk `POST /internal/telemetry/ingest`
+  (append-only, excluded from the generic allow-list); finished-runs batch sweeper + short local-TTL
+  pruner + read-through.
 
 ## Phased delivery
 
@@ -464,20 +546,24 @@ backend, asserted by `mothership-integration.spec.ts` (green). The three parts o
 
 1. **Route every direct-db store through the remote surface when `db` is undefined** — via the
    `pickRepoSource(remoteRepos, name, build)` seam (slice 3, extended in slice 4 for the
-   `AgentContextBuilder` sub-helper repos). STILL TODO: the sub-helper surfaces genuinely off the
-   board-load + run path — `fragments` / `slack` connect/provision. (Telemetry repos stay local-first,
-   Phase 5, degrading as best-effort no-ops over the remote for now.)
+   `AgentContextBuilder` sub-helper repos, then documents/tasks/environments/fragments/**slack**).
+   STILL TODO: the sub-helper surfaces genuinely off the board-load + run path — the document/task
+   CONNECTION repos (which decrypt inside, so their whole integration module stays off) and
+   environment PROVISION writes. (Telemetry repos stay local-first, Phase 5, degrading as best-effort
+   no-ops over the remote for now.)
 2. **Widen `REMOTE_PERSISTENCE_METHODS`** to the board-load + run methods, each with a correct scope
-   rule (`workspace` / `workspaceField` / `block` / `serviceList` / `service` / `serviceMount`). The
+   rule (`workspace` / `workspaceField` / `account` / `accountField` / `block` / `blockList` /
+   `serviceList` / `service` / `serviceMount` / `owner` / `ownerField` / `visibility` / `selfUser`). The
    boundary is security-sensitive: a machine token scopes ACCOUNTS not roles, so admin-gated mutations
    and global sweeper reads stay excluded. Ongoing surface-completion is the follow-up slices + the
    `pending` entries in the drift guard.
 3. **Expose those repos in the mothership-side registry** (the dispatcher reflects over it) with
    round-trip + cross-account-scope tests + the fake-mothership integration test (slice 4).
 
-Residual items (provisioned-env secret decryption; best-effort kaizen/telemetry no-ops;
-`fragments` / `slack` connect surfaces) are NOT on the basic board-load + run path. (Subscription
-activation is no longer a residual — PR 3 landed its `local-sqlite` bucket; see "Landed so far".)
+Residual items (provisioned-env secret decryption; best-effort kaizen/telemetry no-ops; the
+document/task connection integration, blocked on the decrypt-inside connection repos) are NOT on the
+basic board-load + run path. (Subscription activation and the Slack settings surface are no longer
+residuals — PR 3 landed them; see "Landed so far".)
 
 - **PR 4 — notifications + email + Slack delegation.**
 - **PR 5 — telemetry/logs local-first sync.**
