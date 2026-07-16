@@ -1,5 +1,95 @@
 # @cat-factory/local-server
 
+## 0.67.3
+
+### Patch Changes
+
+- d68e3a8: Add opt-in OpenTelemetry (OTLP) observability. A new `@cat-factory/observability-otel`
+  package implements the kernel `LlmTraceSink` port and exports LLM generations (+ container
+  tool spans) and metrics to any OTLP/HTTP backend — a workerd-safe fetch exporter on the
+  Cloudflare Worker facade and the official `@opentelemetry/*` SDK exporter on Node, kept
+  conformant by a shared mapping layer + a conformity test.
+
+  - **kernel:** new `CompositeTraceSink` + `composeTraceSinks` so multiple external trace
+    destinations (Langfuse and/or OTLP) fan out through the single sink slot.
+  - **server:** new `OtelConfig` on `AppConfig`.
+  - **worker / node-server:** wire the OTLP exporter (fetch on the Worker, SDK on Node)
+    everywhere the Langfuse sink is wired, composed alongside Langfuse. Enabled with
+    `OTEL_ENABLED=true` + `OTEL_EXPORTER_OTLP_ENDPOINT` (`OTEL_EXPORTER_OTLP_HEADERS` /
+    `OTEL_SERVICE_NAME` optional).
+  - **cli:** advertise the `OTEL_*` vars in the generated `.env`.
+
+  Refinements: the Node facade shares ONE trace-sink instance across the core, the container
+  executor and the inline model-provider (so the SDK exporter's batch processors/timers aren't
+  duplicated) and flushes + shuts it down on graceful shutdown (via `LlmTraceSink.shutdown` /
+  `CompositeTraceSink` fan-out) so the final batch isn't dropped. Metric data points carry only
+  the low-cardinality `gen_ai.*` dimensions — the unbounded workspace id stays on spans, off
+  metrics — to keep metric-backend cardinality bounded.
+
+- Updated dependencies [d68e3a8]
+- Updated dependencies [b414f34]
+  - @cat-factory/kernel@0.128.0
+  - @cat-factory/server@0.119.0
+  - @cat-factory/node-server@0.95.0
+  - @cat-factory/contracts@0.132.0
+  - @cat-factory/agents@0.58.0
+  - @cat-factory/orchestration@0.111.0
+  - @cat-factory/gitlab@0.9.0
+  - @cat-factory/integrations@0.84.1
+  - @cat-factory/executor-harness@1.43.6
+
+## 0.67.2
+
+### Patch Changes
+
+- Updated dependencies [a552283]
+  - @cat-factory/contracts@0.131.0
+  - @cat-factory/kernel@0.127.0
+  - @cat-factory/agents@0.57.0
+  - @cat-factory/orchestration@0.110.0
+  - @cat-factory/integrations@0.84.0
+  - @cat-factory/server@0.118.0
+  - @cat-factory/gitlab@0.8.1
+  - @cat-factory/node-server@0.94.8
+  - @cat-factory/executor-harness@1.43.6
+
+## 0.67.1
+
+### Patch Changes
+
+- Updated dependencies [55cae97]
+  - @cat-factory/contracts@0.130.0
+  - @cat-factory/kernel@0.126.0
+  - @cat-factory/agents@0.56.0
+  - @cat-factory/orchestration@0.109.0
+  - @cat-factory/server@0.117.0
+  - @cat-factory/gitlab@0.8.0
+  - @cat-factory/integrations@0.83.3
+  - @cat-factory/node-server@0.94.7
+  - @cat-factory/executor-harness@1.43.6
+
+## 0.67.0
+
+### Minor Changes
+
+- 86bbd18: Resolve the local `container` deploy runner's image automatically — `LOCAL_DEPLOY_IMAGE` is now an
+  escape hatch, not a mandatory companion.
+
+  - **local-server:** `LOCAL_DEPLOY_RUNTIME=container` now works out of the box with no other
+    variable. The deploy-harness image defaults to `RECOMMENDED_DEPLOY_IMAGE` — the version this
+    backend release supports, kept in lockstep with the Worker's `wrangler.toml` pin and the
+    deploy-harness `version` by the runner-image-tag sync (`scripts/sync-runner-image-tags.mjs`), so
+    every facade resolves the SAME supported deploy image. This mirrors how `LOCAL_HARNESS_IMAGE`
+    defaults to `RECOMMENDED_HARNESS_IMAGE`. `LOCAL_DEPLOY_IMAGE` is retained ONLY as an override to
+    pin a custom/older build or a private-registry mirror (container mode no longer breaks boot when
+    it is unset — only `native` still requires its `LOCAL_DEPLOY_HARNESS_ENTRY` companion).
+  - **cli:** `cat-factory init`/`env` now steer to the one-line `container` mode in the generated
+    `.env` (and the scaffolded `.env.example`), documenting `LOCAL_DEPLOY_IMAGE` as an escape hatch
+    with an auto-resolved default. `cat-factory k3s`, after provisioning a local cluster connection,
+    now also points the user at enabling the deploy runner (`LOCAL_DEPLOY_RUNTIME=container`) so a
+    guided Kubernetes-test-environment setup no longer stops one step short and fails mid-run with
+    "no deploy runner wired".
+
 ## 0.66.0
 
 ### Minor Changes

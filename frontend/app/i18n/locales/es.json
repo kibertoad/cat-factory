@@ -167,7 +167,8 @@
         "bug": "Error",
         "document": "Documento",
         "spike": "Spike",
-        "recurring": "Recurrente"
+        "recurring": "Recurrente",
+        "review": "Revisión"
       },
       "recurringWithFrame": "Una tarea recurrente ejecuta una pipeline con cierta cadencia. Continúa para definir el horario y el prompt.",
       "recurringNoFrame": "Una tarea recurrente debe vivir en un servicio. Añádela desde un marco de servicio (o un módulo dentro de él).",
@@ -277,7 +278,13 @@
       "continue": "Continuar",
       "submit": "Añadir tarea",
       "addFailedTitle": "No se pudo añadir la tarea",
-      "linkFailed": "Tarea añadida, pero no se pudo vincular {count} adjunto | Tarea añadida, pero no se pudieron vincular {count} adjuntos"
+      "linkFailed": "Tarea añadida, pero no se pudo vincular {count} adjunto | Tarea añadida, pero no se pudieron vincular {count} adjuntos",
+      "review": {
+        "prUrl": "Pull request",
+        "prUrlHint": "URL o número de la pull request a revisar",
+        "focus": "Enfoque de la revisión",
+        "focusPlaceholder": "p. ej., céntrate en los cambios de autenticación y el manejo de errores"
+      }
     },
     "recurring": {
       "title": "Añadir una pipeline recurrente",
@@ -1567,7 +1574,8 @@
         "followup_pending": "Marcar como leída",
         "initiative": "Marcar como leída",
         "markRead": "Marcar como leída",
-        "fork_decision_pending": "Marcar como leído"
+        "fork_decision_pending": "Marcar como leído",
+        "pr_review_ready": "Marcar como leída"
       },
       "toast": {
         "acted": "Marcado como resuelto",
@@ -2377,7 +2385,8 @@
         "feature": "función",
         "bug": "error",
         "document": "documento",
-        "spike": "spike"
+        "spike": "spike",
+        "review": "revisión"
       },
       "observability": {
         "heading": "Observabilidad del agente",
@@ -2985,6 +2994,7 @@
       "release_regression": "Regresion de version",
       "human_test_ready": "Listo para pruebas humanas",
       "visual_confirmation_ready": "Listo para confirmacion visual",
+      "pr_review_ready": "Hallazgos de revisión de PR",
       "initiative": "Actualizaciones de la iniciativa"
     },
     "role": {
@@ -4695,6 +4705,51 @@
     },
     "empty": {
       "title": "Nada que decidir"
+    }
+  },
+  "prReview": {
+    "title": "Revisión de PR",
+    "titleWithBlock": "Revisión de PR: {title}",
+    "subtitle": "Selecciona los hallazgos sobre los que actuar.",
+    "openPr": "Abrir PR",
+    "summaryLabel": "Resumen:",
+    "noFindings": "Sin hallazgos: el pull request parece correcto.",
+    "unsliced": "Otros",
+    "selectAll": "Seleccionar todo",
+    "clear": "Limpiar",
+    "selectedCount": "{count} seleccionados",
+    "finish": "Finalizar revisión",
+    "fix": "Corregir seleccionados",
+    "post": "Publicar como comentarios",
+    "suggestedFix": "Corrección sugerida:",
+    "line": "línea {line}",
+    "reviewing": {
+      "title": "Revisando el pull request…",
+      "hint": "Dividiendo el diff en bloques coherentes y revisando cada uno."
+    },
+    "fixing": {
+      "title": "Corrigiendo los hallazgos seleccionados…",
+      "hint": "Un corrector está confirmando cambios para los hallazgos seleccionados en la rama del pull request."
+    },
+    "posting": {
+      "title": "Publicando comentarios de revisión…",
+      "hint": "Publicando los hallazgos seleccionados como comentarios en línea en el pull request."
+    },
+    "severity": {
+      "blocker": "Bloqueante",
+      "high": "Alta",
+      "medium": "Media",
+      "low": "Baja",
+      "nit": "Menor"
+    },
+    "category": {
+      "correctness": "Corrección",
+      "security": "Seguridad",
+      "performance": "Rendimiento",
+      "maintainability": "Mantenibilidad",
+      "style": "Estilo",
+      "test": "Pruebas",
+      "other": "Otros"
     }
   }
 }

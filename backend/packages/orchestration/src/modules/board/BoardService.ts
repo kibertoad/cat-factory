@@ -543,6 +543,23 @@ export class BoardService {
     if (input.taskTypeFields && Object.keys(input.taskTypeFields).length) {
       block.taskTypeFields = input.taskTypeFields
     }
+    // A REVIEW task targets an existing open PR — fold its reference (URL / #number) and any
+    // review focus into the description so the read-only `pr-reviewer` (which clones the base
+    // branch and fetches the PR head by number) knows WHICH PR to review from its prompt.
+    if (taskType === 'review') {
+      const fields = block.taskTypeFields
+      const ref = fields?.prUrl?.trim() || (fields?.prNumber ? `#${fields.prNumber}` : '')
+      const focus = fields?.reviewFocus?.trim()
+      const preamble = [
+        ref ? `Review pull request ${ref}.` : '',
+        focus ? `Review focus: ${focus}` : '',
+      ]
+        .filter(Boolean)
+        .join(' ')
+      if (preamble) {
+        block.description = [preamble, block.description].filter(Boolean).join('\n\n')
+      }
+    }
     // A document task starts with the universal writing-style fragments pre-selected
     // (default-on, user-removable like any block pin). These fold into the `doc-aware`
     // authoring/review kinds via the engine's fragment path — the selection default lives

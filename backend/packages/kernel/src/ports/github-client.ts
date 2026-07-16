@@ -141,6 +141,58 @@ export interface GitHubReviewThreadComment {
   createdAt: number
 }
 
+/**
+ * One inline comment to post via {@link GitHubClient.createReview}: anchored to a `path` +
+ * `line` on the given `side` of the PR diff (`RIGHT` = the head, the default; `LEFT` = a
+ * base/removed line). A finding with no resolvable line is folded into the review's overall
+ * `body` instead of becoming an inline comment.
+ */
+export interface CreateReviewComment {
+  path: string
+  line: number
+  side?: 'LEFT' | 'RIGHT'
+  body: string
+}
+
+/**
+ * A pull-request review to submit via {@link GitHubClient.createReview}
+ * (`POST /repos/{o}/{r}/pulls/{n}/reviews`). The PR-deep-review "post" resolution always
+ * submits a plain `COMMENT` review (it neither approves nor blocks the PR), carrying the
+ * human-selected findings as inline `comments` and summarising any unanchored ones in `body`.
+ */
+export interface CreateReviewInput {
+  /** Overall review body (Markdown): the summary + any findings that couldn't be anchored inline. */
+  body?: string
+  /** The review action. The deep-review flow uses `COMMENT` (advisory, non-blocking). */
+  event: 'COMMENT' | 'APPROVE' | 'REQUEST_CHANGES'
+  /** Inline comments anchored to a path+line on the PR diff. May be empty (a body-only review). */
+  comments: CreateReviewComment[]
+}
+
+/**
+ * One file changed by a pull request, from `GET /repos/{o}/{r}/pulls/{n}/files`. The
+ * PR-review slicer/reviewer consume these: the slicer reads only the CHEAP fields
+ * (`path`, `additions`, `deletions`, `status`) to group files into cohesive slices,
+ * while a per-slice reviewer reads the `patch` for the files in its slice.
+ */
+export interface GitHubChangedFile {
+  /** Repo-relative path of the file on the PR head. */
+  path: string
+  /** For a rename, the file's path on the base (else null). */
+  previousPath: string | null
+  /** GitHub's change status: added / modified / removed / renamed / copied / changed / unchanged. */
+  status: string
+  /** Lines added. */
+  additions: number
+  /** Lines removed. */
+  deletions: number
+  /**
+   * The unified-diff hunk for this file, or null when GitHub omits it (binary files, or a
+   * diff too large to inline). The reviewer treats a null patch as "read the file bodies instead".
+   */
+  patch: string | null
+}
+
 /** A general (conversation) comment on a pull request, from the issue-comments API. */
 export interface GitHubPullRequestComment {
   /** GitHub comment id (as a string). */
@@ -484,6 +536,31 @@ export interface GitHubClient {
     number: number,
   ): Promise<string | null>
   /**
+   * The source (head) branch of a PR (`pulls/{n}.head.ref`), or null when the PR can't be read.
+   * The PR-deep-review "fix" resolution reads this to point the Fixer's clone/push at the
+   * reviewed PR's head branch (a `review` task carries only the PR number, never an own work
+   * branch). Optional (see {@link getPullRequestBaseRef}); a provider that can't read it omits
+   * it and the fix resolution reports the PR branch is unresolvable rather than pushing blind.
+   */
+  getPullRequestHeadRef?(
+    installationId: number,
+    ref: GitHubRepoRef,
+    number: number,
+  ): Promise<string | null>
+  /**
+   * List the files a PR changed (`GET /repos/{o}/{r}/pulls/{n}/files`, paginated & fully
+   * drained). The PR-deep-review slicer partitions these into cohesive slices from the cheap
+   * fields, and the per-slice reviewer reads the `patch`. Optional (see
+   * {@link listRequestedReviewers}); a provider that can't enumerate a PR's files omits it and
+   * the review step passes through. Note GitHub caps this endpoint at 3000 files, so a
+   * pathologically huge PR is truncated at that ceiling.
+   */
+  listChangedFiles?(
+    installationId: number,
+    ref: GitHubRepoRef,
+    number: number,
+  ): Promise<GitHubChangedFile[]>
+  /**
    * List a PR's review threads via GraphQL (`pullRequest.reviewThreads`), with each thread's
    * resolved state, anchor and comments — the precise "addressed?" signal the REST review-
    * comment reads can't give. Optional (see {@link listRequestedReviewers}).
@@ -510,6 +587,19 @@ export interface GitHubClient {
    * addressed the thread.
    */
   resolveReviewThread?(installationId: number, ref: GitHubRepoRef, threadId: string): Promise<void>
+  /**
+   * Submit a pull-request review (`POST /repos/{o}/{r}/pulls/{n}/reviews`) with inline
+   * comments. Used by the PR-deep-review "post" resolution to publish the human-selected
+   * findings as a single advisory (`COMMENT`) review on the reviewed PR. Optional (see
+   * {@link listRequestedReviewers}); a provider that can't post a batched inline review omits
+   * it and the "post" resolution reports it unsupported instead of silently dropping findings.
+   */
+  createReview?(
+    installationId: number,
+    ref: GitHubRepoRef,
+    number: number,
+    input: CreateReviewInput,
+  ): Promise<void>
 
   // ---- writes -------------------------------------------------------------
   createBranch(

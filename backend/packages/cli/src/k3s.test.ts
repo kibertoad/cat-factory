@@ -268,6 +268,19 @@ describe('setupK3s', () => {
     expect(io.lines.join('\n')).toContain('pre-filled Local k3s connect form')
   })
 
+  it('steers the user to enable the deploy runner (the WHAT, separate from the connection)', async () => {
+    // A provisioned connection only says WHERE to deploy; the guided flow must also point at the
+    // deploy RUNNER so the user does not hit "no deploy runner wired" mid-run. The steered path is
+    // the one-line `container` mode (image resolved automatically), with native as the alternative.
+    const io = captureIo()
+    await setupK3s(opts({ yes: true }), { io, shell: scriptShell({ ...REACHABLE, ...PROVISION }) })
+    const out = io.lines.join('\n')
+    expect(out).toContain('DEPLOY RUNNER')
+    expect(out).toContain('LOCAL_DEPLOY_RUNTIME=container')
+    expect(out).toContain('resolved automatically')
+    expect(out).toContain('LOCAL_DEPLOY_HARNESS_ENTRY')
+  })
+
   it('prints the deep-link but does not open a browser in --yes / --no-open runs', async () => {
     const io = captureIo()
     await setupK3s(opts({ yes: true }), { io, shell: scriptShell({ ...REACHABLE, ...PROVISION }) })

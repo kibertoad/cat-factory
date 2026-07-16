@@ -199,6 +199,7 @@ export class NotificationService {
       'decision_required',
       'followup_pending',
       'fork_decision_pending',
+      'pr_review_ready',
     ] as const) {
       const existing = await this.notifications.findOpenByBlock(workspaceId, blockId, type)
       if (!existing) continue

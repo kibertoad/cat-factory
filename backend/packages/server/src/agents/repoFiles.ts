@@ -76,6 +76,20 @@ export function makeRepoFiles(
     deleteBranch: (branch) => client.deleteBranch(installationId, ref, branch),
     commitFiles: (input) => client.commitFiles(installationId, ref, input),
     openPullRequest: (input) => client.openPullRequest(installationId, ref, input),
+    // The PR-deep-review resolutions: present only when the wired client can read a PR head /
+    // post a batched inline review (the deep-review "fix" / "post" resolutions probe for them).
+    ...(client.getPullRequestHeadRef
+      ? {
+          pullRequestHeadRef: (number: number) =>
+            client.getPullRequestHeadRef!(installationId, ref, number),
+        }
+      : {}),
+    ...(client.createReview
+      ? {
+          createReview: (number: number, input) =>
+            client.createReview!(installationId, ref, number, input),
+        }
+      : {}),
   }
   if (!cache) return base
 

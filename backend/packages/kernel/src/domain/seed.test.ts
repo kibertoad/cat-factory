@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { seedPipelines } from './seed.js'
+import { defaultPipelineIdForTaskType, REVIEW_PIPELINE_ID, seedPipelines } from './seed.js'
 
 // The built-in catalog is authored with the named-step form (`definePipeline`), which lowers to the
 // wire `Pipeline`'s index-aligned `agentKinds`/`gates`/`enabled` arrays. These assertions pin that
@@ -33,6 +33,17 @@ describe('seedPipelines — named-gate lowering', () => {
       'ci',
       'merger',
     ])
+  })
+
+  it('seeds the PR-review pipeline and defaults a review task to it', () => {
+    const review = byId().get(REVIEW_PIPELINE_ID)
+    expect(review, 'pl_review must be seeded').toBeDefined()
+    // A read-only single-step review: just the pr-reviewer, no merge tail (nothing to merge).
+    expect(review!.agentKinds).toEqual(['pr-reviewer'])
+    expect(review!.gates).toBeUndefined()
+    // A `review` task type pins the PR-review pipeline; other non-document types get no default.
+    expect(defaultPipelineIdForTaskType('review')).toBe(REVIEW_PIPELINE_ID)
+    expect(defaultPipelineIdForTaskType('feature')).toBeUndefined()
   })
 
   it('lowers pl_full: human gates + opt-in brainstorms land on the named steps', () => {

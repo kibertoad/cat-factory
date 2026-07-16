@@ -104,7 +104,9 @@ export type {
 } from './llm-trace-sink.js'
 export {
   INLINE_OBSERVABILITY_NS,
+  CompositeTraceSink,
   catFactoryObservability,
+  composeTraceSinks,
   readInlineObservabilityContext,
 } from './llm-trace-sink.js'
 export type {
@@ -122,6 +124,9 @@ export { type WorkRunner, NoopWorkRunner } from './work-runner.js'
 export { type ExecutionEventPublisher, NoopEventPublisher } from './execution-events.js'
 export type {
   CommitFilesResult,
+  CreateReviewComment,
+  CreateReviewInput,
+  GitHubChangedFile,
   GitHubClient,
   GitHubCodeSearchHit,
   GitHubIssueComment,

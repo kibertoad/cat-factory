@@ -1,6 +1,8 @@
 import type {
   CommitFilesResult,
+  CreateReviewInput,
   GitHubBranch,
+  GitHubChangedFile,
   GitHubCheckRun,
   GitHubCommit,
   GitHubIssue,
@@ -53,6 +55,10 @@ export interface FakeVcsClientOptions {
   rebaseOutcome?: 'merged' | 'noop' | 'conflict'
   /** The repo's default branch (default: `main`). */
   defaultBranch?: string
+  /** Files a PR changed (default: none) — the PR-deep-review slicer/reviewer read these. */
+  changedFiles?: GitHubChangedFile[]
+  /** A PR's source (head) branch (default: `pr-head`) — the deep-review "fix" resolution reads it. */
+  headRef?: string
 }
 
 const emptyPaged = <T>(): Paged<T> => ({ items: [] })
@@ -63,19 +69,39 @@ export interface FakeVcsCalls {
   rebased: number[]
   resolvedThreads: string[]
   comments: { number: number; body: string }[]
+  /** Reviews posted via {@link FakeVcsClient.createReview} (the deep-review "post" resolution). */
+  reviewsPosted: { number: number; input: CreateReviewInput }[]
 }
 
 export class FakeVcsClient implements VcsClient {
-  readonly calls: FakeVcsCalls = { merged: [], rebased: [], resolvedThreads: [], comments: [] }
+  readonly calls: FakeVcsCalls = {
+    merged: [],
+    rebased: [],
+    resolvedThreads: [],
+    comments: [],
+    reviewsPosted: [],
+  }
   private readonly o: Required<
     Omit<
       FakeVcsClientOptions,
-      'checks' | 'reviews' | 'requestedReviewers' | 'reviewThreads' | 'mergeability' | 'comments'
+      | 'checks'
+      | 'reviews'
+      | 'requestedReviewers'
+      | 'reviewThreads'
+      | 'mergeability'
+      | 'comments'
+      | 'changedFiles'
     >
   > &
     Pick<
       FakeVcsClientOptions,
-      'checks' | 'reviews' | 'requestedReviewers' | 'reviewThreads' | 'mergeability' | 'comments'
+      | 'checks'
+      | 'reviews'
+      | 'requestedReviewers'
+      | 'reviewThreads'
+      | 'mergeability'
+      | 'comments'
+      | 'changedFiles'
     >
 
   constructor(options: FakeVcsClientOptions = {}) {
@@ -83,6 +109,7 @@ export class FakeVcsClient implements VcsClient {
       headSha: options.headSha ?? 'headsha',
       requiredApprovingReviewCount: options.requiredApprovingReviewCount ?? 1,
       baseRef: options.baseRef ?? 'main',
+      headRef: options.headRef ?? 'pr-head',
       rebaseOutcome: options.rebaseOutcome ?? 'merged',
       defaultBranch: options.defaultBranch ?? 'main',
       checks: options.checks ?? [
@@ -102,6 +129,7 @@ export class FakeVcsClient implements VcsClient {
       requestedReviewers: options.requestedReviewers ?? [],
       reviewThreads: options.reviewThreads ?? [],
       comments: options.comments,
+      changedFiles: options.changedFiles,
       mergeability: options.mergeability ?? { mergeable: true, mergeableState: 'clean' },
     }
   }
@@ -146,11 +174,17 @@ export class FakeVcsClient implements VcsClient {
   async getPullRequestBaseRef(): Promise<string | null> {
     return this.o.baseRef
   }
+  async getPullRequestHeadRef(): Promise<string | null> {
+    return this.o.headRef
+  }
   async listReviewThreads(): Promise<GitHubReviewThread[]> {
     return this.o.reviewThreads ?? []
   }
   async listIssueComments(): Promise<GitHubPullRequestComment[]> {
     return this.o.comments ?? []
+  }
+  async listChangedFiles(): Promise<GitHubChangedFile[]> {
+    return this.o.changedFiles ?? []
   }
 
   // ---- writes (recorded) --------------------------------------------------
@@ -169,6 +203,14 @@ export class FakeVcsClient implements VcsClient {
     this.calls.resolvedThreads.push(threadId)
   }
   async replyToReviewThread(): Promise<void> {}
+  async createReview(
+    _c: VcsConnectionRef,
+    _r: VcsRepoRef,
+    number: number,
+    input: CreateReviewInput,
+  ): Promise<void> {
+    this.calls.reviewsPosted.push({ number, input })
+  }
   async comment(_c: VcsConnectionRef, _r: VcsRepoRef, number: number, body: string): Promise<void> {
     this.calls.comments.push({ number, body })
   }

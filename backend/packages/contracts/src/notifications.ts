@@ -37,6 +37,10 @@ import { onCallAssessmentSchema, releaseSignalSchema } from './release.js'
 //                          run parked for a human to choose. Informational + a deep-link to the
 //                          parked task (where the fork-decision window lets the human pick /
 //                          type a custom approach / chat); `act` just marks it read.
+//   - `pr_review_ready`  — the `pr-reviewer` deep-reviewed an open PR and the run parked for a
+//                          human to SELECT which of the sliced, prioritized findings to act on.
+//                          Informational + a deep-link to the parked task (where the PR-review
+//                          window lists the findings grouped by slice); `act` just marks it read.
 //   - `initiative`       — the initiative execution loop needs a human: a spawned task was
 //                          blocked (its phase is halted until it is retried/skipped), or the
 //                          initiative finished (every planned task resolved). Informational +
@@ -72,6 +76,7 @@ export const notificationTypeSchema = v.picklist([
   'human_review',
   'followup_pending',
   'fork_decision_pending',
+  'pr_review_ready',
   'initiative',
 ])
 export type NotificationType = v.InferOutput<typeof notificationTypeSchema>
@@ -112,6 +117,8 @@ export const notificationPayloadSchema = v.object({
   findingCount: v.optional(v.number()),
   /** Number of materially different implementation forks surfaced, on a `fork_decision_pending`. */
   forkCount: v.optional(v.number()),
+  /** Number of cohesive slices the PR was grouped into, on a `pr_review_ready`. */
+  sliceCount: v.optional(v.number()),
   /** The `on-call` agent's assessment, on a `release_regression`. */
   onCallAssessment: v.optional(onCallAssessmentSchema),
   /** The monitors/SLOs that regressed, on a `release_regression`. */

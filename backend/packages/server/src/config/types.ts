@@ -314,6 +314,22 @@ export interface LangfuseConfig {
   baseUrl?: string
 }
 
+export interface OtelConfig {
+  /**
+   * Opt-in flag (`OTEL_ENABLED=true`). Requires {@link endpoint}; when false (or the
+   * endpoint is missing) no OpenTelemetry exporter is built and there is no external
+   * emission. Off by default, like every other opt-in integration. Composes ALONGSIDE
+   * Langfuse (both feed the single trace sink via a fan-out) when both are enabled.
+   */
+  enabled: boolean
+  /** OTLP/HTTP base URL (`OTEL_EXPORTER_OTLP_ENDPOINT`), e.g. `http://collector:4318`. */
+  endpoint?: string
+  /** Parsed `OTEL_EXPORTER_OTLP_HEADERS` (comma-separated `k=v`), e.g. auth tokens. */
+  headers?: Record<string, string>
+  /** OTLP resource `service.name` (`OTEL_SERVICE_NAME`); defaults to `cat-factory`. */
+  serviceName?: string
+}
+
 /**
  * Opt-in GitLab VCS provider config (the neutral-VCS abstraction's second backend).
  * `enabled` is false unless a `GITLAB_TOKEN` is configured. Single-token model (mirrors
@@ -370,6 +386,8 @@ export interface AppConfig {
   observability: ObservabilityConfig
   /** Optional Langfuse trace-sink config; `enabled` is false unless opted in. */
   langfuse: LangfuseConfig
+  /** Optional OpenTelemetry (OTLP) trace + metrics config; `enabled` is false unless opted in. */
+  otel: OtelConfig
   /**
    * Local-mode facade signals surfaced to the SPA; present only on the local facade
    * (the Worker/Node facades leave it undefined). Carries the missing-PAT setup prompt.

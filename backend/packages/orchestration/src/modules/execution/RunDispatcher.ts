@@ -21,6 +21,9 @@ import type {
   ForkDecisionStepState,
   ChooseForkInput,
   ForkChatRequestInput,
+  PrReviewAgentOutput,
+  PrReviewStepState,
+  ResolvePrReviewInput,
   GateContext,
   GateDefinition,
   GateHelperJobResult,
@@ -49,6 +52,7 @@ import {
   ConflictError,
   DEFAULT_RISK_POLICY,
   failureKindFromHarnessCause,
+  FIXER_AGENT_KIND,
   getErrorMessage,
   getErrorReason,
   getProvider,
@@ -77,6 +81,7 @@ import {
   blueprintPostOp,
   commitInitiativeTracker,
   FORK_PROPOSER_KIND,
+  PR_REVIEWER_KIND,
   hasTrait,
   isCompanionKind,
   isContainerBackedCompanion,
@@ -138,6 +143,8 @@ import { HumanTestController } from './HumanTestController.js'
 import { MergeResolver } from './MergeResolver.js'
 import { ReviewGateController, type ReviewKind } from './ReviewGateController.js'
 import { ForkDecisionController } from './ForkDecisionController.js'
+import { PrReviewController, PR_REVIEW_STEP_KIND } from './PrReviewController.js'
+import { buildPrReviewPost, renderPrReviewFixerFeedback } from './prReview.logic.js'
 import {
   DEFAULT_FORK_MAX_CHAT_TURNS,
   forkPhasePending,
@@ -226,6 +233,19 @@ function parseRepoFromPullUrl(url: string): { owner: string; repo: string } | un
   return { owner: match[1]!, repo: match[2]! }
 }
 
+/**
+ * The PR number a `review` task targets: the explicit `prNumber` field wins, else parse it from
+ * the `prUrl` (`…/pull/42` on GitHub, `…/merge_requests/42` on GitLab). Undefined when neither
+ * yields one — the PR-review `fix`/`post` resolutions then report the PR unresolvable.
+ */
+function reviewPrNumber(block: Block | null | undefined): number | undefined {
+  const fields = block?.taskTypeFields
+  if (typeof fields?.prNumber === 'number') return fields.prNumber
+  const url = fields?.prUrl?.trim()
+  const match = url ? /\/(?:pull|merge_requests)\/(\d+)/.exec(url) : null
+  return match ? Number(match[1]) : undefined
+}
+
 /** One service frame a `deployer` step provisions an environment for (own or an involved peer). */
 interface DeployTarget {
   frameId: string
@@ -285,6 +305,7 @@ export interface RunDispatcherDeps {
   visualConfirmationController: VisualConfirmationController
   reviewGate: ReviewGateController
   forkDecisionController: ForkDecisionController
+  prReviewController: PrReviewController
   requirementsKind: ReviewKind<RequirementReview>
   clarityKind: ReviewKind<ClarityReview>
   requirementsBrainstormKind: ReviewKind<BrainstormSession>
@@ -352,6 +373,7 @@ export class RunDispatcher {
   private readonly visualConfirmationController: VisualConfirmationController
   private readonly reviewGate: ReviewGateController
   private readonly forkDecisionController: ForkDecisionController
+  private readonly prReviewController: PrReviewController
   private readonly requirementsKind: ReviewKind<RequirementReview>
   private readonly clarityKind: ReviewKind<ClarityReview>
   private readonly requirementsBrainstormKind: ReviewKind<BrainstormSession>
@@ -406,6 +428,7 @@ export class RunDispatcher {
     this.visualConfirmationController = deps.visualConfirmationController
     this.reviewGate = deps.reviewGate
     this.forkDecisionController = deps.forkDecisionController
+    this.prReviewController = deps.prReviewController
     this.requirementsKind = deps.requirementsKind
     this.clarityKind = deps.clarityKind
     this.requirementsBrainstormKind = deps.requirementsBrainstormKind
@@ -459,6 +482,7 @@ export class RunDispatcher {
   private async handleAgentStep(
     ctx: StepHandlerContext,
     dispatchKind?: string,
+    augmentContext?: (context: AgentRunContext) => void,
   ): Promise<AdvanceResult> {
     const { workspaceId, instance, step, block, isFinalStep, options } = ctx
 
@@ -480,6 +504,10 @@ export class RunDispatcher {
       block,
       dispatchKind ? { agentKind: dispatchKind } : undefined,
     )
+    // A caller re-dispatching this step under an overriding kind can fold extra context in
+    // (e.g. the PR-review `fix` resolution points the Fixer at the reviewed PR's head branch and
+    // hands it the selected findings). Runs before pre-ops / dispatch so the job body sees it.
+    augmentContext?.(context)
     // A registered custom kind's PRE-ops run deterministic backend repo work before the
     // agent dispatches (e.g. read a baseline `spec/` shard into the prompt). Gated on the
     // step not having dispatched yet so a Workflows replay (jobId already set) doesn't
@@ -2956,6 +2984,20 @@ export class RunDispatcher {
           forkPhasePending(step, resolveForkTriState(block.agentConfig)),
         handle: (ctx) => this.handleForkDecisionPhase(ctx),
       },
+      // The PR deep-review RESOLUTION phase (PR 3): after the human resolved a parked review with
+      // `fix` / `post`, `PrReviewController.resolve` re-armed this `pr-reviewer` step and woke the
+      // driver. Claim it by the re-armed status so it re-dispatches as the Fixer (`fixing`) or
+      // posts the selected findings as inline PR comments (`posting`) — never the generic
+      // pr-reviewer clone the fallthrough would run. A `reviewing`/`awaiting_selection`/resolved
+      // step falls through (this handler doesn't claim it). See {@link handlePrReviewResolution}.
+      {
+        kind: 'pr-review-resolution',
+        order: 175,
+        canHandle: ({ step }) =>
+          step.agentKind === PR_REVIEW_STEP_KIND &&
+          (step.prReview?.status === 'fixing' || step.prReview?.status === 'posting'),
+        handle: (ctx) => this.handlePrReviewResolution(ctx),
+      },
       // The generic container/inline-agent step — claims every step no more-specific handler
       // did. Highest order so it always runs last. See {@link handleAgentStep}.
       {
@@ -3040,6 +3082,30 @@ export class RunDispatcher {
             step,
             proposal,
             step.model,
+          )
+        },
+      },
+      // The read-only `pr-reviewer` deep-review job just finished on a review task's step. Its
+      // structured `result.custom` is the sliced, prioritized findings; record them onto the
+      // step's `prReview` and PARK for the human to select which findings matter (≥1 finding),
+      // rather than the normal completion. A clean PR (no findings) returns null and falls
+      // through to the normal finish. Keyed on the `pr-reviewer` step kind.
+      {
+        kind: 'pr-review',
+        order: 106,
+        canIntercept: ({ step }) => step.agentKind === PR_REVIEW_STEP_KIND,
+        intercept: async ({ workspaceId, instance, step, result }) => {
+          const output = this.agentKindRegistry
+            .structuredOutput(PR_REVIEWER_KIND)
+            ?.safeParse(result.custom) as PrReviewAgentOutput | undefined
+          const block = await this.blockRepository.get(workspaceId, instance.blockId)
+          return this.prReviewController.recordFindings(
+            workspaceId,
+            instance,
+            step,
+            output,
+            result.model ?? step.model,
+            block,
           )
         },
       },
@@ -3658,6 +3724,135 @@ export class RunDispatcher {
     return this.handleAgentStep(ctx, FORK_PROPOSER_KIND)
   }
 
+  /**
+   * Drive a re-armed PR-review step's RESOLUTION (PR 3). The human resolved a parked review with
+   * `fix` or `post`; {@link PrReviewController.resolve} re-armed this step and woke the driver.
+   * - `fixing`: dispatch the Fixer against the reviewed PR's head branch with the selected
+   *   findings folded in (parks on the job; its completion marks the review `done`).
+   * - `posting`: publish the selected findings as inline PR review comments, then finish the step.
+   */
+  private async handlePrReviewResolution(ctx: StepHandlerContext): Promise<AdvanceResult> {
+    const { step } = ctx
+    if (step.prReview?.status === 'posting') return this.postPrReview(ctx)
+    return this.dispatchPrReviewFixer(ctx)
+  }
+
+  /**
+   * Dispatch the Fixer for a PR-review `fix` resolution. A `review` task carries no own work
+   * branch — it reviews an EXISTING PR — so resolve the PR's head branch (via the checkout-free
+   * `RepoFiles`) and point the Fixer's clone/push at it: fold a synthetic `pullRequest` + an
+   * apriori WORKING branch into the dispatch context so the shared `container-coding` +
+   * `clone:{branch:'pr'}` fixer body clones + pushes that branch (no new PR), and hand it the
+   * selected findings as a prior output (the same injection point the gate helpers use). Fails
+   * the run loudly when the PR branch can't be resolved (nothing to push to) rather than pushing
+   * blind. On a replay (jobId already set) it re-attaches without re-resolving.
+   */
+  private async dispatchPrReviewFixer(ctx: StepHandlerContext): Promise<AdvanceResult> {
+    const { workspaceId, instance, step, block } = ctx
+    const review = step.prReview!
+    const selected = (review.findings ?? []).filter((f) =>
+      review.selectedFindingIds?.includes(f.id),
+    )
+    let headRef: string | null = null
+    let prNumber: number | undefined
+    if (!step.jobId) {
+      prNumber = reviewPrNumber(block)
+      const runRepo =
+        prNumber != null ? await this.resolveRunRepoContext?.(workspaceId, block.id) : null
+      const repo = runRepo?.repo
+      headRef =
+        prNumber != null && repo?.pullRequestHeadRef
+          ? await this.runInitiatorScope(instance.initiatedBy, () =>
+              repo.pullRequestHeadRef!(prNumber!),
+            )
+          : null
+      if (prNumber == null || !headRef) {
+        return {
+          kind: 'job_failed',
+          failureKind: 'preflight',
+          error:
+            "Can't resolve the reviewed pull request's head branch to push fixes to. The " +
+            "'fix' resolution needs a same-repo pull request on this service's linked repository " +
+            '(a cross-repo or fork PR is not yet supported — post the findings as comments instead).',
+        }
+      }
+    }
+    const resolvedHeadRef = headRef
+    const resolvedPrNumber = prNumber
+    return this.handleAgentStep(ctx, FIXER_AGENT_KIND, (context) => {
+      if (resolvedHeadRef && resolvedPrNumber != null) {
+        context.block.pullRequest = {
+          number: resolvedPrNumber,
+          branch: resolvedHeadRef,
+          url: review.prUrl ?? '',
+        }
+        // Build inside the PR head branch (probed, never created) so the work-branch machinery
+        // targets it rather than minting a stray `cat-factory/<blockId>` off base.
+        context.aprioriBranches = [{ name: resolvedHeadRef, mode: 'working' }]
+      }
+      context.priorOutputs = [
+        ...context.priorOutputs,
+        { agentKind: FIXER_AGENT_KIND, output: renderPrReviewFixerFeedback(selected) },
+      ]
+    })
+  }
+
+  /**
+   * Post a PR-review `post` resolution: publish the human-selected findings as a single advisory
+   * (`COMMENT`) inline review on the reviewed PR via the checkout-free `RepoFiles.createReview`,
+   * then finish the step. At-most-once: the `pendingPrReviewPost` marker is consumed (cleared +
+   * persisted) BEFORE the (side-effecting) post so a Workflows retry can't submit it twice. When
+   * no VCS review write is wired (tests / no GitHub) the findings are still recorded and the step
+   * finishes — the review pipeline never reaches this without GitHub in practice.
+   *
+   * If `createReview` itself throws (GitHub rejects the batched review — e.g. a finding anchored
+   * to a line outside the PR diff 422s the WHOLE review — or a transient network/5xx error), the
+   * marker is already consumed, so a driver retry would NOT re-post. Rather than silently
+   * completing the step as `done` with nothing actually posted (the human would believe the
+   * comments landed), fail the step LOUDLY so the failure surfaces on the board — mirroring the
+   * `fix` resolution's loud preflight failure. `post` is a fallback resolution, so a hard failure
+   * is visible and the human can re-run or choose `fix`/`finish` instead.
+   */
+  private async postPrReview(ctx: StepHandlerContext): Promise<AdvanceResult> {
+    const { workspaceId, instance, step, block, isFinalStep } = ctx
+    const review = step.prReview!
+    const selected = (review.findings ?? []).filter((f) =>
+      review.selectedFindingIds?.includes(f.id),
+    )
+    let posted = false
+    if (step.pendingPrReviewPost) {
+      step.pendingPrReviewPost = null
+      await this.runStateMachine.casPersist(workspaceId, instance)
+      const prNumber = reviewPrNumber(block)
+      const runRepo =
+        prNumber != null ? await this.resolveRunRepoContext?.(workspaceId, block.id) : null
+      const repo = runRepo?.repo
+      if (prNumber != null && repo?.createReview) {
+        try {
+          await this.runInitiatorScope(instance.initiatedBy, () =>
+            repo.createReview!(prNumber, buildPrReviewPost(selected, review.summary)),
+          )
+        } catch (error) {
+          return {
+            kind: 'job_failed',
+            failureKind: 'agent',
+            error:
+              `Failed to post the ${selected.length} selected finding` +
+              `${selected.length === 1 ? '' : 's'} as a pull-request review: ${getErrorMessage(error)}. ` +
+              'GitHub rejects a review whose inline comment anchors a line outside the PR diff — ' +
+              "try the 'fix' resolution, or re-run to post again.",
+          }
+        }
+        posted = true
+      }
+    }
+    step.prReview = { ...review, status: 'done' }
+    const output = posted
+      ? `Posted ${selected.length} review comment${selected.length === 1 ? '' : 's'} to the pull request.`
+      : `Recorded ${selected.length} selected finding${selected.length === 1 ? '' : 's'}.`
+    return this.recordStepResult(workspaceId, instance, step, isFinalStep, { output })
+  }
+
   /** Read a run's active implementation-fork decision state, or null. */
   getForkDecision(workspaceId: string, executionId: string): Promise<ForkDecisionStepState | null> {
     return this.forkDecisionController.getActive(workspaceId, executionId)
@@ -3679,6 +3874,20 @@ export class RunDispatcher {
     input: ForkChatRequestInput,
   ): Promise<ForkDecisionStepState> {
     return this.forkDecisionController.chat(workspaceId, executionId, input)
+  }
+
+  /** Read a run's active PR deep-review state, or null. */
+  getPrReview(workspaceId: string, executionId: string): Promise<PrReviewStepState | null> {
+    return this.prReviewController.getActive(workspaceId, executionId)
+  }
+
+  /** Resolve a parked PR review: record the human's finding selection and advance the run. */
+  resolvePrReview(
+    workspaceId: string,
+    executionId: string,
+    input: ResolvePrReviewInput,
+  ): Promise<PrReviewStepState> {
+    return this.prReviewController.resolve(workspaceId, executionId, input)
   }
 
   /**

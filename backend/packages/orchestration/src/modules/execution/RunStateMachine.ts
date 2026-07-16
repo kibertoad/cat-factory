@@ -480,17 +480,19 @@ export class RunStateMachine {
       return
     }
 
-    // No merger in this pipeline. Two shapes:
-    //  - The run produced NO pull requests (a research/findings pipeline, e.g. a `spike`):
-    //    there is nothing to merge and nothing to confirm, so finish it cleanly like a
-    //    frame-level run rather than parking at `pr_ready` behind a PR-asserting notification
-    //    whose confirm would throw `no_pr_to_merge`. This benefits every PR-less pipeline.
-    //  - The run DID open a PR but has no merger (a hand-composed code pipeline): complete but
-    //    unmerged — leave the PR open (`pr_ready`) and ask a human to confirm + merge.
+    // No merger AND no PR was produced: a read-only / findings pipeline (a PR deep-review, a
+    // spike, a bare analysis) opened nothing to merge — the run's OUTPUT is the deliverable, so
+    // the task is simply `done`. Marking it `pr_ready` + raising the (PR-assuming)
+    // `pipeline_complete` card would strand it in a confirm-and-merge flow that has no PR to act
+    // on. This is the no-PR terminal path the review/spike pipelines rely on to finish cleanly.
+    // (`allPullRequests` already counts `block.pullRequest`, so a zero result means there is no
+    // primary PR nor any peer PR.)
     if (allPullRequests(block).length === 0) {
       await this.blockRepository.update(workspaceId, block.id, { status: 'done', progress: 1 })
       return
     }
+
+    // No merger in this pipeline: complete but unmerged — ask a human to confirm.
     await this.blockRepository.update(workspaceId, block.id, { status: 'pr_ready', progress: 1 })
     await this.raisePipelineComplete(workspaceId, instance, block)
   }

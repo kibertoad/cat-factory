@@ -167,7 +167,8 @@
         "bug": "Błąd",
         "document": "Dokument",
         "spike": "Spike",
-        "recurring": "Cykliczne"
+        "recurring": "Cykliczne",
+        "review": "Przegląd"
       },
       "recurringWithFrame": "Zadanie cykliczne uruchamia pipeline w określonym rytmie. Kontynuuj, aby ustawić harmonogram i prompt.",
       "recurringNoFrame": "Zadanie cykliczne musi należeć do usługi. Dodaj je z ramki usługi (lub modułu w jej obrębie).",
@@ -277,7 +278,13 @@
       "continue": "Dalej",
       "submit": "Dodaj zadanie",
       "addFailedTitle": "Nie udało się dodać zadania",
-      "linkFailed": "Zadanie dodane, ale nie udało się powiązać {count} załącznika | Zadanie dodane, ale nie udało się powiązać {count} załączników | Zadanie dodane, ale nie udało się powiązać {count} załączników"
+      "linkFailed": "Zadanie dodane, ale nie udało się powiązać {count} załącznika | Zadanie dodane, ale nie udało się powiązać {count} załączników | Zadanie dodane, ale nie udało się powiązać {count} załączników",
+      "review": {
+        "prUrl": "Pull request",
+        "prUrlHint": "URL lub numer pull requesta do przeglądu",
+        "focus": "Zakres przeglądu",
+        "focusPlaceholder": "np. skup się na zmianach uwierzytelniania i obsłudze błędów"
+      }
     },
     "recurring": {
       "title": "Dodaj cykliczny pipeline",
@@ -1567,7 +1574,8 @@
         "followup_pending": "Oznacz jako przeczytane",
         "initiative": "Oznacz jako przeczytane",
         "markRead": "Oznacz jako przeczytane",
-        "fork_decision_pending": "Oznacz jako przeczytane"
+        "fork_decision_pending": "Oznacz jako przeczytane",
+        "pr_review_ready": "Oznacz jako przeczytane"
       },
       "toast": {
         "acted": "Oznaczono jako obsłużone",
@@ -2377,7 +2385,8 @@
         "feature": "funkcja",
         "bug": "błąd",
         "document": "dokument",
-        "spike": "spike"
+        "spike": "spike",
+        "review": "przegląd"
       },
       "observability": {
         "heading": "Obserwowalność agenta",
@@ -2985,6 +2994,7 @@
       "release_regression": "Regresja wydania",
       "human_test_ready": "Gotowe do testow przez czlowieka",
       "visual_confirmation_ready": "Gotowe do potwierdzenia wizualnego",
+      "pr_review_ready": "Uwagi z przeglądu PR",
       "initiative": "Aktualizacje inicjatywy"
     },
     "role": {
@@ -4695,6 +4705,51 @@
     },
     "empty": {
       "title": "Nie ma czego decydować"
+    }
+  },
+  "prReview": {
+    "title": "Przegląd PR",
+    "titleWithBlock": "Przegląd PR: {title}",
+    "subtitle": "Wybierz uwagi, którymi chcesz się zająć.",
+    "openPr": "Otwórz PR",
+    "summaryLabel": "Podsumowanie:",
+    "noFindings": "Brak uwag — pull request wygląda dobrze.",
+    "unsliced": "Inne",
+    "selectAll": "Zaznacz wszystko",
+    "clear": "Wyczyść",
+    "selectedCount": "Wybrano: {count}",
+    "finish": "Zakończ przegląd",
+    "fix": "Napraw wybrane",
+    "post": "Opublikuj jako komentarze",
+    "suggestedFix": "Sugerowana poprawka:",
+    "line": "wiersz {line}",
+    "reviewing": {
+      "title": "Przeglądanie pull requesta…",
+      "hint": "Dzielenie zmian na spójne części i przeglądanie każdej z nich."
+    },
+    "fixing": {
+      "title": "Naprawianie wybranych uwag…",
+      "hint": "Fixer zatwierdza zmiany dla wybranych uwag w gałęzi pull requesta."
+    },
+    "posting": {
+      "title": "Publikowanie komentarzy przeglądu…",
+      "hint": "Publikowanie wybranych uwag jako komentarzy w treści pull requesta."
+    },
+    "severity": {
+      "blocker": "Blokujące",
+      "high": "Wysokie",
+      "medium": "Średnie",
+      "low": "Niskie",
+      "nit": "Drobiazg"
+    },
+    "category": {
+      "correctness": "Poprawność",
+      "security": "Bezpieczeństwo",
+      "performance": "Wydajność",
+      "maintainability": "Utrzymywalność",
+      "style": "Styl",
+      "test": "Testy",
+      "other": "Inne"
     }
   }
 }

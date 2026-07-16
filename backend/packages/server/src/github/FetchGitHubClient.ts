@@ -1,7 +1,9 @@
 import {
   type Clock,
   type CommitFilesResult,
+  type CreateReviewInput,
   type GitHubBranch,
+  type GitHubChangedFile,
   type GitHubCheckRun,
   type GitHubClient,
   type GitHubCodeSearchHit,
@@ -852,6 +854,35 @@ export class FetchGitHubClient implements GitHubClient {
     )
   }
 
+  async listChangedFiles(
+    installationId: number,
+    ref: GitHubRepoRef,
+    number: number,
+  ): Promise<GitHubChangedFile[]> {
+    return this.paginate<GitHubChangedFile>(
+      `/repos/${ref.owner}/${ref.repo}/pulls/${number}/files?per_page=${PER_PAGE}`,
+      { installationId },
+      (json) =>
+        (
+          json as {
+            filename?: string
+            previous_filename?: string | null
+            status?: string
+            additions?: number
+            deletions?: number
+            patch?: string | null
+          }[]
+        ).map((f) => ({
+          path: f.filename ?? '',
+          previousPath: f.previous_filename ?? null,
+          status: f.status ?? 'modified',
+          additions: f.additions ?? 0,
+          deletions: f.deletions ?? 0,
+          patch: f.patch ?? null,
+        })),
+    )
+  }
+
   async getRequiredApprovingReviewCount(
     installationId: number,
     ref: GitHubRepoRef,
@@ -889,6 +920,24 @@ export class FetchGitHubClient implements GitHubClient {
     } catch (error) {
       // A deleted/missing PR (404) just means "no base to gate against" — fall back to the
       // caller's default. Other errors propagate (the gate's probe maps them to "keep waiting").
+      if (error instanceof GitHubApiError && error.status === 404) return null
+      throw error
+    }
+  }
+
+  async getPullRequestHeadRef(
+    installationId: number,
+    ref: GitHubRepoRef,
+    number: number,
+  ): Promise<string | null> {
+    try {
+      const { json } = await this.request(`/repos/${ref.owner}/${ref.repo}/pulls/${number}`, {
+        installationId,
+      })
+      return (json as { head?: { ref?: string } }).head?.ref ?? null
+    } catch (error) {
+      // A deleted/missing PR (404) means the head branch is unresolvable — the "fix" resolution
+      // then reports the PR branch can't be pushed to rather than cloning the wrong ref.
       if (error instanceof GitHubApiError && error.status === 404) return null
       throw error
     }
@@ -961,6 +1010,32 @@ export class FetchGitHubClient implements GitHubClient {
   ): Promise<void> {
     const mutation = `mutation($threadId:ID!){ resolveReviewThread(input:{threadId:$threadId}){ thread{ id } } }`
     await this.graphql(installationId, mutation, { threadId })
+  }
+
+  async createReview(
+    installationId: number,
+    ref: GitHubRepoRef,
+    number: number,
+    input: CreateReviewInput,
+  ): Promise<void> {
+    // GitHub's inline-review comments carry `path`/`line`/`side`/`body`; `side` defaults to
+    // RIGHT (the head) when omitted. A review with no inline comments is still valid — it posts
+    // a body-only advisory. The event is COMMENT for the deep-review flow (neither approves nor
+    // blocks the PR).
+    await this.request(`/repos/${ref.owner}/${ref.repo}/pulls/${number}/reviews`, {
+      installationId,
+      method: 'POST',
+      body: {
+        event: input.event,
+        ...(input.body ? { body: input.body } : {}),
+        comments: input.comments.map((c) => ({
+          path: c.path,
+          line: c.line,
+          side: c.side ?? 'RIGHT',
+          body: c.body,
+        })),
+      },
+    })
   }
 
   // ---- writes -------------------------------------------------------------

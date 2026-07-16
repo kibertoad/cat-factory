@@ -693,7 +693,8 @@
         "feature": "Feature",
         "bug": "Bug",
         "document": "Dokument",
-        "spike": "Spike"
+        "spike": "Spike",
+        "review": "Review"
       },
       "observability": {
         "heading": "Agenten-Observability",
@@ -1696,7 +1697,8 @@
         "followup_pending": "Als gelesen markieren",
         "initiative": "Als gelesen markieren",
         "markRead": "Als gelesen markieren",
-        "fork_decision_pending": "Als gelesen markieren"
+        "fork_decision_pending": "Als gelesen markieren",
+        "pr_review_ready": "Als gelesen markieren"
       }
     },
     "aiProvidersBanner": {
@@ -1989,7 +1991,8 @@
         "bug": "Bug",
         "document": "Dokument",
         "spike": "Spike",
-        "recurring": "Wiederkehrend"
+        "recurring": "Wiederkehrend",
+        "review": "Review"
       },
       "recurringWithFrame": "Eine wiederkehrende Aufgabe führt eine Pipeline in einem Takt aus. Fahren Sie fort, um Zeitplan + Prompt festzulegen.",
       "recurringNoFrame": "Eine wiederkehrende Aufgabe muss auf einem Service liegen. Fügen Sie sie aus einem Service-Frame (oder einem darin enthaltenen Modul) hinzu.",
@@ -2099,7 +2102,13 @@
       "continue": "Weiter",
       "submit": "Aufgabe hinzufügen",
       "addFailedTitle": "Aufgabe konnte nicht hinzugefügt werden",
-      "linkFailed": "Aufgabe hinzugefügt, aber {count} Anhang konnte nicht verknüpft werden | Aufgabe hinzugefügt, aber {count} Anhänge konnten nicht verknüpft werden"
+      "linkFailed": "Aufgabe hinzugefügt, aber {count} Anhang konnte nicht verknüpft werden | Aufgabe hinzugefügt, aber {count} Anhänge konnten nicht verknüpft werden",
+      "review": {
+        "prUrl": "Pull Request",
+        "prUrlHint": "URL oder Nummer des zu prüfenden Pull Requests",
+        "focus": "Prüfungsschwerpunkt",
+        "focusPlaceholder": "z. B. Fokus auf die Auth-Änderungen und Fehlerbehandlung"
+      }
     },
     "recurring": {
       "title": "Eine wiederkehrende Pipeline hinzufügen",
@@ -3929,6 +3938,7 @@
       "release_regression": "Release-Regression",
       "human_test_ready": "Bereit für manuelle Tests",
       "visual_confirmation_ready": "Bereit für visuelle Bestätigung",
+      "pr_review_ready": "PR-Review-Befunde",
       "initiative": "Initiativen-Updates"
     },
     "role": {
@@ -4707,6 +4717,51 @@
     },
     "empty": {
       "title": "Nichts zu entscheiden"
+    }
+  },
+  "prReview": {
+    "title": "PR-Review",
+    "titleWithBlock": "PR-Review: {title}",
+    "subtitle": "Wähle die Befunde aus, die bearbeitet werden sollen.",
+    "openPr": "PR öffnen",
+    "summaryLabel": "Zusammenfassung:",
+    "noFindings": "Keine Befunde – der Pull Request sieht sauber aus.",
+    "unsliced": "Sonstige",
+    "selectAll": "Alle auswählen",
+    "clear": "Zurücksetzen",
+    "selectedCount": "{count} ausgewählt",
+    "finish": "Review abschließen",
+    "fix": "Ausgewählte beheben",
+    "post": "Als Kommentare posten",
+    "suggestedFix": "Lösungsvorschlag:",
+    "line": "Zeile {line}",
+    "reviewing": {
+      "title": "Pull Request wird geprüft…",
+      "hint": "Der Diff wird in zusammenhängende Teile zerlegt und einzeln geprüft."
+    },
+    "fixing": {
+      "title": "Ausgewählte Befunde werden behoben…",
+      "hint": "Ein Fixer committet Änderungen für die ausgewählten Befunde auf den Pull-Request-Branch."
+    },
+    "posting": {
+      "title": "Review-Kommentare werden gepostet…",
+      "hint": "Die ausgewählten Befunde werden als Inline-Kommentare im Pull Request veröffentlicht."
+    },
+    "severity": {
+      "blocker": "Blocker",
+      "high": "Hoch",
+      "medium": "Mittel",
+      "low": "Niedrig",
+      "nit": "Kleinigkeit"
+    },
+    "category": {
+      "correctness": "Korrektheit",
+      "security": "Sicherheit",
+      "performance": "Performance",
+      "maintainability": "Wartbarkeit",
+      "style": "Stil",
+      "test": "Tests",
+      "other": "Sonstiges"
     }
   }
 }

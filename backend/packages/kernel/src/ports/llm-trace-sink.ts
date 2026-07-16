@@ -81,10 +81,97 @@ export interface LlmTraceSink {
   /** Emit one completed LLM call as a generation under its run's trace. */
   recordGeneration(event: LlmGenerationEvent): Promise<void> | void
   /**
-   * Emit a drained batch of container tool spans as child spans under the run trace.
+   * Emit a drained batch of container tool spans, grouped under the run's trace.
    * Optional: a sink that only cares about generations can omit it.
    */
   recordToolSpans?(context: LlmToolSpanContext, spans: LlmToolSpan[]): Promise<void> | void
+  /**
+   * Flush any buffered telemetry (best-effort). Implemented by sinks that batch before
+   * export (e.g. the OpenTelemetry SDK exporter); a fetch-per-call sink that already
+   * awaits each request omits it. Never throws into the caller.
+   */
+  forceFlush?(): Promise<void> | void
+  /**
+   * Release resources and flush a final time before the process exits (best-effort). Wire
+   * into the facade's graceful-shutdown path so the last batch isn't dropped. Implemented
+   * only by sinks that own background exporters/timers; never throws into the caller.
+   */
+  shutdown?(): Promise<void> | void
+}
+
+/**
+ * Fan one trace out to every configured sink, isolating per-sink failures. A deployment
+ * that enables more than one external destination (e.g. Langfuse AND an OpenTelemetry
+ * collector) wires them behind this so the single {@link LlmTraceSink} slot the facades
+ * expose reaches all of them. Mirrors `CompositeNotificationChannel`: observability must
+ * never break the caller, so every per-sink call is isolated — one sink throwing (or its
+ * network round trip failing) can never affect the others or the LLM path.
+ */
+export class CompositeTraceSink implements LlmTraceSink {
+  constructor(private readonly sinks: LlmTraceSink[]) {}
+
+  async recordGeneration(event: LlmGenerationEvent): Promise<void> {
+    await Promise.all(
+      this.sinks.map(async (sink) => {
+        try {
+          await sink.recordGeneration(event)
+        } catch {
+          // Best-effort: one sink failing must not block the others or the caller.
+        }
+      }),
+    )
+  }
+
+  async recordToolSpans(context: LlmToolSpanContext, spans: LlmToolSpan[]): Promise<void> {
+    await Promise.all(
+      this.sinks.map(async (sink) => {
+        try {
+          await sink.recordToolSpans?.(context, spans)
+        } catch {
+          // Best-effort, as above.
+        }
+      }),
+    )
+  }
+
+  async forceFlush(): Promise<void> {
+    await Promise.all(
+      this.sinks.map(async (sink) => {
+        try {
+          await sink.forceFlush?.()
+        } catch {
+          // Best-effort, as above.
+        }
+      }),
+    )
+  }
+
+  async shutdown(): Promise<void> {
+    await Promise.all(
+      this.sinks.map(async (sink) => {
+        try {
+          await sink.shutdown?.()
+        } catch {
+          // Best-effort, as above.
+        }
+      }),
+    )
+  }
+}
+
+/**
+ * Compose zero or more optional sinks into a single one: none ⇒ `undefined` (nothing
+ * wired, no external emission), exactly one ⇒ that sink verbatim (no wrapper overhead),
+ * more than one ⇒ a {@link CompositeTraceSink} fanning out to all. The one helper every
+ * facade uses so the "0/1/many" collapse is identical across runtimes.
+ */
+export function composeTraceSinks(
+  sinks: readonly (LlmTraceSink | undefined)[],
+): LlmTraceSink | undefined {
+  const active = sinks.filter((sink): sink is LlmTraceSink => sink != null)
+  if (active.length === 0) return undefined
+  if (active.length === 1) return active[0]
+  return new CompositeTraceSink(active)
 }
 
 // ----------------------------------------------------------------------------

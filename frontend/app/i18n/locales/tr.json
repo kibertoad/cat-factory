@@ -167,7 +167,8 @@
         "bug": "Hata",
         "document": "Belge",
         "spike": "Spike",
-        "recurring": "Yinelenen"
+        "recurring": "Yinelenen",
+        "review": "İnceleme"
       },
       "recurringWithFrame": "Yinelenen bir görev, bir işlem hattını belirli bir aralıkta çalıştırır. Programı ve istemi ayarlamak için devam edin.",
       "recurringNoFrame": "Yinelenen bir görev bir serviste bulunmalıdır. Bir servis çerçevesinden (veya içindeki bir modülden) ekleyin.",
@@ -277,7 +278,13 @@
       "continue": "Devam",
       "submit": "Görev ekle",
       "addFailedTitle": "Görev eklenemedi",
-      "linkFailed": "Görev eklendi, ancak {count} ek bağlanamadı | Görev eklendi, ancak {count} ek bağlanamadı"
+      "linkFailed": "Görev eklendi, ancak {count} ek bağlanamadı | Görev eklendi, ancak {count} ek bağlanamadı",
+      "review": {
+        "prUrl": "Pull request",
+        "prUrlHint": "İncelenecek pull request'in URL'si veya numarası",
+        "focus": "İnceleme odağı",
+        "focusPlaceholder": "örn. kimlik doğrulama değişikliklerine ve hata yönetimine odaklan"
+      }
     },
     "recurring": {
       "title": "Yinelenen bir işlem hattı ekle",
@@ -1567,7 +1574,8 @@
         "followup_pending": "Okundu işaretle",
         "initiative": "Okundu işaretle",
         "markRead": "Okundu işaretle",
-        "fork_decision_pending": "Okundu olarak işaretle"
+        "fork_decision_pending": "Okundu olarak işaretle",
+        "pr_review_ready": "Okundu işaretle"
       },
       "toast": {
         "acted": "İşlendi olarak işaretlendi",
@@ -2499,7 +2507,8 @@
         "feature": "özellik",
         "bug": "hata",
         "document": "belge",
-        "spike": "inceleme"
+        "spike": "inceleme",
+        "review": "inceleme"
       },
       "observability": {
         "heading": "Agent gözlemlenebilirliği",
@@ -2997,6 +3006,7 @@
       "release_regression": "Sürüm gerilemesi",
       "human_test_ready": "İnsan testine hazır",
       "visual_confirmation_ready": "Görsel onaya hazır",
+      "pr_review_ready": "PR inceleme bulguları",
       "initiative": "Girisim guncellemeleri"
     },
     "role": {
@@ -4707,6 +4717,51 @@
     },
     "empty": {
       "title": "Karar verilecek bir şey yok"
+    }
+  },
+  "prReview": {
+    "title": "PR incelemesi",
+    "titleWithBlock": "PR incelemesi: {title}",
+    "subtitle": "İşlem yapılacak bulguları seçin.",
+    "openPr": "PR'ı aç",
+    "summaryLabel": "Özet:",
+    "noFindings": "Bulgu yok — pull request temiz görünüyor.",
+    "unsliced": "Diğer",
+    "selectAll": "Tümünü seç",
+    "clear": "Temizle",
+    "selectedCount": "{count} seçildi",
+    "finish": "İncelemeyi bitir",
+    "fix": "Seçilenleri düzelt",
+    "post": "Yorum olarak gönder",
+    "suggestedFix": "Önerilen düzeltme:",
+    "line": "satır {line}",
+    "reviewing": {
+      "title": "Pull request inceleniyor…",
+      "hint": "Fark tutarlı parçalara bölünüp her biri inceleniyor."
+    },
+    "fixing": {
+      "title": "Seçili bulgular düzeltiliyor…",
+      "hint": "Bir düzeltici, seçili bulgular için değişiklikleri pull request dalına işliyor."
+    },
+    "posting": {
+      "title": "İnceleme yorumları gönderiliyor…",
+      "hint": "Seçili bulgular pull request üzerinde satır içi yorum olarak yayımlanıyor."
+    },
+    "severity": {
+      "blocker": "Engelleyici",
+      "high": "Yüksek",
+      "medium": "Orta",
+      "low": "Düşük",
+      "nit": "Küçük"
+    },
+    "category": {
+      "correctness": "Doğruluk",
+      "security": "Güvenlik",
+      "performance": "Performans",
+      "maintainability": "Bakım kolaylığı",
+      "style": "Stil",
+      "test": "Testler",
+      "other": "Diğer"
     }
   }
 }

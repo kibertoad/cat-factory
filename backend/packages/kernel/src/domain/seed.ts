@@ -528,6 +528,12 @@ export function seedPipelines(): Pipeline[] {
     // A blueprint-only pipeline, run after a bootstrap to create the initial
     // service map (and populate the board) from the freshly bootstrapped repo.
     { id: 'pl_blueprint', name: 'Map service', agentKinds: ['blueprints'] },
+    // The PR deep-review pipeline (the DEFAULT for a `review` task): a single read-only
+    // `pr-reviewer` step that slices an open PR's diff into cohesive chunks, reviews each,
+    // and returns prioritized findings. No code is written and no PR is opened, so there is
+    // no merge tail — the run terminates cleanly via the no-PR terminal path in
+    // `RunStateMachine.finalizeBlock`. See backend/docs/adr/0023-pr-deep-review.md.
+    { id: 'pl_review', name: 'Review a pull request', agentKinds: ['pr-reviewer'] },
     definePipeline({
       // The Initiative Planning pipeline — the ONLY pipeline runnable on an
       // `initiative`-level block (and initiative blocks accept no other; see the
@@ -768,15 +774,23 @@ export const SPIKE_PIPELINE_ID = 'pl_spike'
 export const DOCUMENT_QUICK_PIPELINE_ID = 'pl_document_quick'
 
 /**
+ * Pipeline id of the PR deep-review pipeline (`pr-reviewer`). The DEFAULT pipeline a
+ * `taskType: 'review'` task is pinned to at creation ({@link defaultPipelineIdForTaskType}) — the
+ * full-build pipeline makes no sense for a review (no code / spec / tests, no PR opened).
+ */
+export const REVIEW_PIPELINE_ID = 'pl_review'
+
+/**
  * The pipeline a task of the given task type should default to when the creator pins none.
- * `document` → `pl_document` and `spike` → `pl_spike` (the full-build `pl_full` is wrong for
- * both — a document has no code, a spike has no code AND no PR); every other task type falls
- * through to the workspace's positional default. Returns `undefined` when there is no
- * type-specific default, so the caller leaves `pipelineId` unset.
+ * `document` → `pl_document`, `spike` → `pl_spike`, and `review` → `pl_review` (the full-build
+ * `pl_full` is wrong for all three — a document has no code, a spike has no code, a review opens
+ * no PR); every other task type falls through to the workspace's positional default. Returns
+ * `undefined` when there is no type-specific default, so the caller leaves `pipelineId` unset.
  */
 export function defaultPipelineIdForTaskType(taskType: Block['taskType']): string | undefined {
   if (taskType === 'document') return DOCUMENT_PIPELINE_ID
   if (taskType === 'spike') return SPIKE_PIPELINE_ID
+  if (taskType === 'review') return REVIEW_PIPELINE_ID
   return undefined
 }
 

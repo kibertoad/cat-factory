@@ -5,6 +5,7 @@ import { testConcernSchema, testReportSchema, testerInfraSetupSchema } from './t
 import { consensusStepConfigSchema, stepGatingSchema, taskEstimateSchema } from './consensus.js'
 import { followUpsStepStateSchema } from './followUp.js'
 import { forkDecisionStepStateSchema } from './forkDecision.js'
+import { prReviewStepStateSchema } from './prReview.js'
 import { cloudProviderSchema, instanceSizeSchema } from './compute-provisioning.js'
 import { releaseSignalSchema } from './release.js'
 import {
@@ -1805,6 +1806,22 @@ export const pipelineStepSchema = v.object({
    * `pendingInterview`. Absent when no chat turn is pending.
    */
   pendingForkChat: v.optional(v.nullable(v.object({ messageId: v.string() }))),
+  /**
+   * Live PR deep-review state carried on a `pr-reviewer` step: the sliced, severity-ordered
+   * findings the read-only reviewer produced, the human's curated selection, and how it was
+   * resolved. Recorded by the engine when the reviewer container job completes; the run then
+   * parks (`awaiting_selection`) for the human to select findings through the dedicated
+   * window and resolve. Absent for non-`pr-reviewer` steps. See {@link prReviewStepStateSchema}.
+   */
+  prReview: v.optional(v.nullable(prReviewStepStateSchema)),
+  /**
+   * The at-most-once driver marker for the PR-review "post" resolution: set when the human
+   * resolves a parked review with `post`, so the durable driver — on re-entry, off the HTTP
+   * request — publishes the selected findings as inline PR review comments (via
+   * `RepoFiles.createReview`) exactly once. Consumed (cleared + persisted) BEFORE the posting
+   * side effect so a Workflows retry/replay can't post the review twice. Cleared once posted.
+   */
+  pendingPrReviewPost: v.optional(v.nullable(v.boolean())),
   /**
    * Transient rework feedback carried on a PRODUCER step while it is being re-run by
    * a downstream companion (the analogue of an approval's `changes_requested`

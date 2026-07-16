@@ -9,6 +9,7 @@ import { documentsApi } from './api/documents'
 import { executionApi } from './api/execution'
 import { followUpsApi } from './api/followUps'
 import { forkDecisionApi } from './api/forkDecision'
+import { prReviewApi } from './api/prReview'
 import { fragmentsApi } from './api/fragments'
 import { githubApi } from './api/github'
 import { humanReviewApi } from './api/humanReview'
@@ -110,6 +111,7 @@ export function useApi() {
     ...reviewsApi(ctx),
     ...followUpsApi(ctx),
     ...forkDecisionApi(ctx),
+    ...prReviewApi(ctx),
     ...humanTestApi(ctx),
     ...visualConfirmApi(ctx),
     ...humanReviewApi(ctx),

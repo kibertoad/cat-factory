@@ -18,6 +18,8 @@ import type { VcsConnectionRef, VcsRepoRef } from '../domain/vcs-types.js'
 // until then they are reused as-is (their shapes are not GitHub-specific).
 import type {
   CommitFilesResult,
+  CreateReviewInput,
+  GitHubChangedFile,
   GitHubCodeSearchHit,
   GitHubIssueComment,
   GitHubIssueDetail,
@@ -35,6 +37,7 @@ import type {
 
 export type {
   CommitFilesResult,
+  GitHubChangedFile,
   GitHubCodeSearchHit,
   GitHubIssueComment,
   GitHubIssueDetail,
@@ -192,6 +195,18 @@ export interface VcsClient {
     ref: VcsRepoRef,
     number: number,
   ): Promise<string | null>
+  /** The source (head) branch of a PR, or null when the PR can't be read. Optional. */
+  getPullRequestHeadRef?(
+    connection: VcsConnectionRef,
+    ref: VcsRepoRef,
+    number: number,
+  ): Promise<string | null>
+  /** List the files a PR changed (path + stats + patch), for PR-deep-review slicing. Optional. */
+  listChangedFiles?(
+    connection: VcsConnectionRef,
+    ref: VcsRepoRef,
+    number: number,
+  ): Promise<GitHubChangedFile[]>
   /** List a PR's review threads with resolved state + anchor + comments. Optional. */
   listReviewThreads?(
     connection: VcsConnectionRef,
@@ -210,6 +225,13 @@ export interface VcsClient {
     connection: VcsConnectionRef,
     ref: VcsRepoRef,
     threadId: string,
+  ): Promise<void>
+  /** Submit a PR review with inline comments (the deep-review "post" resolution). Optional. */
+  createReview?(
+    connection: VcsConnectionRef,
+    ref: VcsRepoRef,
+    number: number,
+    input: CreateReviewInput,
   ): Promise<void>
 
   // ---- writes -------------------------------------------------------------

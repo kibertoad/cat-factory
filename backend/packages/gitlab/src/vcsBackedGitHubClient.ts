@@ -147,6 +147,16 @@ export function asGitHubClient(options: VcsBackedGitHubClientOptions): GitHubCli
     client.getPullRequestBaseRef = (i, ref, n) =>
       vcs.getPullRequestBaseRef!(conn(i), toRepoRef(ref), n)
   }
+  if (vcs.getPullRequestHeadRef) {
+    client.getPullRequestHeadRef = (i, ref, n) =>
+      vcs.getPullRequestHeadRef!(conn(i), toRepoRef(ref), n)
+  }
+  if (vcs.createReview) {
+    client.createReview = (i, ref, n, input) => vcs.createReview!(conn(i), toRepoRef(ref), n, input)
+  }
+  if (vcs.listChangedFiles) {
+    client.listChangedFiles = (i, ref, n) => vcs.listChangedFiles!(conn(i), toRepoRef(ref), n)
+  }
   if (vcs.listReviewThreads) {
     client.listReviewThreads = (i, ref, n) => vcs.listReviewThreads!(conn(i), toRepoRef(ref), n)
   }
