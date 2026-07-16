@@ -1,5 +1,46 @@
 # @cat-factory/worker
 
+## 0.86.1
+
+### Patch Changes
+
+- b12d7a8: feat(rbac): workspace-RBAC vocabulary + membership persistence (initiative slices 1–2)
+
+  Lay the foundation for workspace-level access control below the account tier — no enforcement
+  yet (that is a later slice), just the shared vocabulary and the persistence both facades need.
+
+  - **Contracts**: `workspaceRoleSchema` (`admin | member | viewer`), `workspacePermissionSchema`
+    (the seven-permission capability catalog), `workspaceAccessModeSchema` (`account | restricted`),
+    and the `WorkspaceMember` wire shape; `workspaceSchema` gains an optional `accessMode`.
+  - **Kernel**: `domain/workspace-access.ts` — the static `WORKSPACE_ROLE_PERMISSIONS` map plus the
+    pure `resolveWorkspaceAccess` / `workspaceRoleAtLeast` / `permissionsForRole` helpers (with a
+    decision-table test); a new `ForbiddenError` (`DomainErrorCode 'forbidden'`, mapped to 403); and
+    the `WorkspaceMemberRepository` port (batch-shaped: `getRolesForUserInWorkspaces`,
+    `removeByAccountMembership`) plus `WorkspaceRepository.accessRowOf` / `setAccessMode`.
+  - **Persistence (both runtimes)**: a new `workspace_members` table + a `workspaces.access_mode`
+    column (D1 migration `0052_workspace_rbac.sql` ⇄ Drizzle), the D1 and Drizzle repository impls,
+    and a cross-runtime conformance suite asserting the roster CRUD, the batched role annotation, the
+    account-membership cascade, and the access-mode round-trip on both stores. The default access
+    mode is `account`, so every existing board is unchanged (no data migration).
+
+- Updated dependencies [b12d7a8]
+  - @cat-factory/contracts@0.138.0
+  - @cat-factory/kernel@0.132.0
+  - @cat-factory/server@0.127.1
+  - @cat-factory/agents@0.61.1
+  - @cat-factory/consensus@0.10.59
+  - @cat-factory/eks@0.1.86
+  - @cat-factory/gates@0.5.43
+  - @cat-factory/gitlab@0.10.5
+  - @cat-factory/integrations@0.84.8
+  - @cat-factory/orchestration@0.115.1
+  - @cat-factory/prompt-fragments@0.13.27
+  - @cat-factory/spend@0.12.39
+  - @cat-factory/caching@0.9.1
+  - @cat-factory/observability-langfuse@0.7.213
+  - @cat-factory/observability-otel@0.1.7
+  - @cat-factory/provider-cloudflare@0.7.230
+
 ## 0.86.0
 
 ### Minor Changes
