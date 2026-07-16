@@ -55,7 +55,9 @@ export const usePublicApiKeysStore = defineStore('publicApiKeys', () => {
   async function create(label: string): Promise<CreatedPublicApiKey> {
     const ws = useWorkspaceStore()
     const created = await api.createPublicApiKey(ws.requireId(), { label })
-    keys.value = [...keys.value, created.key]
+    // Prepend: the backend lists newest-first, so the freshly minted key belongs at the
+    // top — matching the order a subsequent `load()` would produce.
+    keys.value = [created.key, ...keys.value]
     available.value = true
     return created
   }
