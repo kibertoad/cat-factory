@@ -240,6 +240,20 @@
           "placeholder": "Les endpoints ou la surface concernés"
         }
       },
+      "spikeFields": {
+        "researchQuestion": {
+          "label": "Question de recherche",
+          "placeholder": "La question ou l'hypothèse à laquelle le spike doit répondre"
+        },
+        "successCriteria": {
+          "label": "Critères de réussite",
+          "placeholder": "Les critères d'acceptation ou la décision que les conclusions doivent éclairer"
+        },
+        "optionsToCompare": {
+          "label": "Options à comparer",
+          "placeholder": "Les options à mettre en balance"
+        }
+      },
       "optional": "optionnel",
       "pipeline": "Pipeline",
       "chooseAtRunTime": "Choisir au lancement",

@@ -134,6 +134,8 @@ export const taskTypeFieldsSchema = v.object({
   stepsToReproduce: v.optional(v.pipe(v.string(), v.maxLength(4000))),
   /** Spike: the investigation time-box, in hours. */
   timeboxHours: v.optional(v.pipe(v.number(), v.minValue(0), v.maxValue(1000))),
+  /** Spike: the success/acceptance criteria or the decision the investigation must inform. */
+  successCriteria: v.optional(v.pipe(v.string(), v.maxLength(2000))),
   /** Document: what kind of document this task produces. */
   docKind: v.optional(v.picklist(DOC_KINDS)),
   /** Document: the intended audience (e.g. "platform engineers", "product stakeholders"). */
@@ -178,9 +180,9 @@ export const taskTypeFieldsSchema = v.object({
   whenToUse: v.optional(v.pipe(v.string(), v.maxLength(2000))),
   /** Runbook: who to contact and how to escalate when the procedure fails. */
   escalationPath: v.optional(v.pipe(v.string(), v.maxLength(2000))),
-  /** Research: the question or hypothesis the research sets out to answer. */
+  /** Research / spike: the question or hypothesis the investigation sets out to answer. */
   researchQuestion: v.optional(v.pipe(v.string(), v.maxLength(2000))),
-  /** Research: the options to weigh against each other. */
+  /** Research / spike: the options to weigh against each other. */
   optionsToCompare: v.optional(v.pipe(v.string(), v.maxLength(2000))),
   /** API: the endpoints / surface in scope for the reference. */
   apiSurface: v.optional(v.pipe(v.string(), v.maxLength(2000))),

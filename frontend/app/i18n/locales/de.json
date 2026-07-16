@@ -2064,6 +2064,20 @@
           "placeholder": "Die Endpoints oder die Oberfläche im Geltungsbereich"
         }
       },
+      "spikeFields": {
+        "researchQuestion": {
+          "label": "Forschungsfrage",
+          "placeholder": "Die Frage oder Hypothese, die der Spike beantworten soll"
+        },
+        "successCriteria": {
+          "label": "Erfolgskriterien",
+          "placeholder": "Die Akzeptanzkriterien oder die Entscheidung, die die Ergebnisse stützen sollen"
+        },
+        "optionsToCompare": {
+          "label": "Zu vergleichende Optionen",
+          "placeholder": "Die gegeneinander abzuwägenden Optionen"
+        }
+      },
       "optional": "optional",
       "pipeline": "Pipeline",
       "chooseAtRunTime": "Zur Laufzeit auswählen",
