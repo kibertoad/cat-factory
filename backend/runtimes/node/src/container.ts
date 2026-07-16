@@ -202,6 +202,7 @@ import {
   createNodeModelProviderResolver,
 } from './modelProvider.js'
 import { ConsensusAgentExecutor, registerConsensusTraits } from '@cat-factory/consensus'
+import { LocalMachineEventRelay } from './machineEventRelay.js'
 import { type LocalEventSink, NodeEventPublisher } from './realtime.js'
 import {
   DrizzleGitHubInstallationRepository,
@@ -2753,6 +2754,15 @@ export function buildNodeContainer(options: NodeContainerOptions): ServerContain
     // private key never leaves this service. The registry satisfies the seam structurally.
     // Wired symmetrically on the Cloudflare facade.
     ...(appRegistry ? { githubTokenDelegation: appRegistry } : {}),
+    // Mothership-side real-time UPSTREAM delivery (`POST /internal/events/publish`): when this
+    // deployment is a mothership (its realtime transport is wired), a machine-authed mothership-mode
+    // node's relayed engine events land in this deployment's OWN fan-out (`options.realtimeSink` —
+    // the hub, or the layered propagator on a multi-node deployment), so hosted teammates on the
+    // shared board see the local node's activity live. Wired symmetrically on the Cloudflare facade
+    // (the per-workspace WorkspaceEventsHub Durable Object). Absent realtime ⇒ the endpoint 503s.
+    ...(options.realtimeSink
+      ? { machineEventRelay: new LocalMachineEventRelay(options.realtimeSink) }
+      : {}),
     repositories: {
       ...dependencies,
       agentRunRepository: repos.agentRunRepository,

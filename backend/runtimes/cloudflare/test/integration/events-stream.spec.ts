@@ -2,7 +2,9 @@ import { env } from 'cloudflare:test'
 import { describe, expect, it } from 'vitest'
 import type { LlmCallActivity } from '@cat-factory/contracts'
 import { createApp } from '../../src/app'
+import { buildContainer } from '../../src/infrastructure/container'
 import { DurableObjectEventPublisher } from '../../src/infrastructure/events/DurableObjectEventPublisher'
+import { DurableObjectMachineEventRelay } from '../../src/infrastructure/events/DurableObjectMachineEventRelay'
 import { FakeAgentExecutor } from '../fakes/FakeAgentExecutor'
 
 /**
@@ -101,6 +103,45 @@ describe('WorkspaceEventsHub', () => {
     expect(event.type).toBe('llmCall')
     expect(event.call).toEqual(activity)
     expect(typeof event.at).toBe('number')
+  })
+
+  // The mothership-side real-time UPSTREAM delivery (docs/initiatives/mothership-mode.md): a
+  // relayed event from a mothership-mode node is injected into the per-workspace hub DO and fanned
+  // to its connected sockets, exactly like the Worker's own publisher — the symmetric Cloudflare
+  // side of the Node `LocalMachineEventRelay`.
+  it('injects a relayed event (raw frame) into the hub and fans it to a connected socket', async () => {
+    const workspaceId = 'ws_events_relay'
+    const stub = hub(workspaceId)
+
+    const upgrade = await stub.fetch('http://hub/connect', { headers: { Upgrade: 'websocket' } })
+    expect(upgrade.status).toBe(101)
+    const client = upgrade.webSocket!
+    client.accept()
+
+    const received = new Promise<string>((resolve, reject) => {
+      const timer = setTimeout(() => reject(new Error('no event received')), 5000)
+      client.addEventListener('message', (e: MessageEvent) => {
+        clearTimeout(timer)
+        resolve(typeof e.data === 'string' ? e.data : '')
+      })
+    })
+
+    // The relayed payload is the already-serialized WorkspaceEvent frame the origin node produced;
+    // the relay forwards it verbatim (never re-parses it).
+    const payload = JSON.stringify({ type: 'board', reason: 'relayed', at: 7 })
+    const relay = new DurableObjectMachineEventRelay(env.WORKSPACE_EVENTS!)
+    await relay.ingest({ workspaceId, payload, originConnectionId: null })
+
+    expect(await received).toBe(payload)
+  })
+
+  // Wiring parity: `buildContainer` must attach the `machineEventRelay` seam whenever the Worker's
+  // WORKSPACE_EVENTS hub is bound (it is in the test env), so a Cloudflare mothership actually serves
+  // `POST /internal/events/publish`. This mirrors the Node facade's `mothership.test.ts` assertion and
+  // is the guard against a facade silently forgetting the symmetric relay wiring.
+  it('wires the machineEventRelay seam when the hub binding is present', () => {
+    const container = buildContainer(env, { agentExecutor: new FakeAgentExecutor() })
+    expect(container.machineEventRelay).toBeInstanceOf(DurableObjectMachineEventRelay)
   })
 })
 
