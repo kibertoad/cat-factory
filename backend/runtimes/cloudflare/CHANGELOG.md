@@ -1,5 +1,12 @@
 # @cat-factory/worker
 
+## 0.85.1
+
+### Patch Changes
+
+- Updated dependencies [bd0a42a]
+  - @cat-factory/server@0.123.1
+
 ## 0.85.0
 
 ### Minor Changes
