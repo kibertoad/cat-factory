@@ -1638,7 +1638,8 @@
         "initiative": "Marquer comme lu",
         "markRead": "Marquer comme lu",
         "fork_decision_pending": "Marquer comme lu",
-        "pr_review_ready": "Marquer comme lu"
+        "pr_review_ready": "Marquer comme lu",
+        "budget_paused": "Marquer comme lu"
       },
       "toast": {
         "acted": "Marqué comme traité",

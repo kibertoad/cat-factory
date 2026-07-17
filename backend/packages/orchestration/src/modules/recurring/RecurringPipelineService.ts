@@ -492,7 +492,16 @@ export class RecurringPipelineService {
     }
 
     const prior = await this.executionRepository.getByBlock(workspaceId, schedule.blockId)
-    if (prior && (prior.status === 'running' || prior.status === 'paused')) {
+    // A prior run is "still live" — and must not be overwritten — while it is `running`,
+    // spend-`paused`, OR `blocked` on a human gate (a review / decision park). `blocked` is
+    // load-bearing here: the whole point of a park is that the run is waiting on a person, so
+    // firing the next cadence over it orphans that run's durable driver against a replaced
+    // execution and a later human resolve then hits `NotFound`. The park IS the pipeline's
+    // current state; leave it and retry next pass.
+    if (
+      prior &&
+      (prior.status === 'running' || prior.status === 'paused' || prior.status === 'blocked')
+    ) {
       if (opts.force) {
         throw new ConflictError('This recurring pipeline already has a run in progress.')
       }

@@ -66,6 +66,7 @@ function onDemandSchedule(): PipelineSchedule {
 function makeService(overrides: {
   scheduleGet?: PipelineSchedule | null
   start?: () => Promise<ExecutionInstance>
+  priorRun?: ExecutionInstance | null
 }) {
   const insertRun = vi.fn(async (_ws: string, _run: { status: string }) => {})
   const upsert = vi.fn(async () => {})
@@ -92,7 +93,7 @@ function makeService(overrides: {
       insert: blockInsert,
     } as unknown as RecurringPipelineServiceDependencies['blockRepository'],
     executionRepository: {
-      getByBlock: async () => null,
+      getByBlock: async () => overrides.priorRun ?? null,
     } as unknown as RecurringPipelineServiceDependencies['executionRepository'],
     executionService: {
       start,
@@ -138,6 +139,37 @@ describe('RecurringPipelineService.runNow credential gate', () => {
     await expect(service.runNow(WS, 'sch_1', { initiatedBy: 'usr_1' })).resolves.toBeDefined()
     expect(insertRun).toHaveBeenCalledTimes(1)
     expect(insertRun.mock.calls[0]![1]).toMatchObject({ status: 'failed' })
+  })
+})
+
+describe('RecurringPipelineService active-run overlap guard', () => {
+  beforeEach(() => vi.clearAllMocks())
+
+  // F10 (stuck-run audit): a prior run parked `blocked` on a human gate (a review / decision)
+  // is STILL live — firing the next pass over it would orphan its durable driver against a
+  // replaced execution, so a later human resolve hits NotFound. `blocked` must be treated the
+  // same as `running`/`paused` by the overlap guard.
+  for (const status of ['running', 'paused', 'blocked'] as const) {
+    it(`refuses a run-now (force) fire when the prior run is ${status}`, async () => {
+      const { service, start } = makeService({
+        scheduleGet: onDemandSchedule(),
+        priorRun: { id: 'exec_prior', status } as ExecutionInstance,
+      })
+      await expect(service.runNow(WS, 'sch_1', { initiatedBy: 'usr_1' })).rejects.toBeInstanceOf(
+        ConflictError,
+      )
+      // The guard fires BEFORE start(), so the parked run is never replaced.
+      expect(start).not.toHaveBeenCalled()
+    })
+  }
+
+  it('allows a run-now fire when the prior run is terminal (done)', async () => {
+    const { service, start } = makeService({
+      scheduleGet: onDemandSchedule(),
+      priorRun: { id: 'exec_prior', status: 'done' } as ExecutionInstance,
+    })
+    await service.runNow(WS, 'sch_1', { initiatedBy: 'usr_1' })
+    expect(start).toHaveBeenCalledTimes(1)
   })
 })
 

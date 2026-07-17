@@ -1737,7 +1737,8 @@
         "initiative": "Segna come letto",
         "markRead": "Segna come letto",
         "fork_decision_pending": "Segna come letto",
-        "pr_review_ready": "Segna come letto"
+        "pr_review_ready": "Segna come letto",
+        "budget_paused": "Segna come letto"
       }
     },
     "aiProvidersBanner": {

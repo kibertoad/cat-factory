@@ -75,6 +75,9 @@ const MENTION_AUDIENCE: Record<NotificationType, MentionAudience> = {
   // An initiative needs attention (a blocked task, or completion): tell the creator (who owns
   // the initiative) and the engineers driving its work.
   initiative: { roles: ['engineering'], includeCreator: true },
+  // A workspace-wide spend pause: no task creator (block-less), so it @-mentions no one. It is
+  // in-app-only (absent from SLACK_ROUTABLE_TYPES) — this entry only satisfies the exhaustive map.
+  budget_paused: { roles: [], includeCreator: false },
 }
 
 /** The mention audience for a notification type. */
@@ -162,6 +165,7 @@ const TYPE_LABEL: Record<NotificationType, string> = {
   fork_decision_pending: ':fork_and_knife: Choose an implementation approach',
   pr_review_ready: ':clipboard: PR review findings',
   initiative: ':world_map: Initiative update',
+  budget_paused: ':moneybag: Runs paused — spend budget reached',
 }
 
 /** Format a percentage from a 0..1 score for the assessment context line. */

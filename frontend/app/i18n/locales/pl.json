@@ -1638,7 +1638,8 @@
         "initiative": "Oznacz jako przeczytane",
         "markRead": "Oznacz jako przeczytane",
         "fork_decision_pending": "Oznacz jako przeczytane",
-        "pr_review_ready": "Oznacz jako przeczytane"
+        "pr_review_ready": "Oznacz jako przeczytane",
+        "budget_paused": "Oznacz jako przeczytane"
       },
       "toast": {
         "acted": "Oznaczono jako obsłużone",

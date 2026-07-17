@@ -2095,6 +2095,9 @@ export class ExecutionService {
           instance.status = 'paused'
           await this.runStateMachine.casPersist(workspaceId, instance)
           await this.runStateMachine.emitInstance(workspaceId, instance)
+          // Surface the pause in the inbox (F3): a `paused` run is invisible to the sweeper and
+          // has no auto-resume, so without this card the paused board badge is its only signal.
+          await this.runStateMachine.raiseBudgetPaused(workspaceId)
         }
         return { kind: 'paused' }
       }
@@ -3607,6 +3610,9 @@ export class ExecutionService {
         await this.runStateMachine.emitInstance(workspaceId, resumed)
       }
     }
+    // Clear the workspace-scoped `budget_paused` card now the pause is being lifted (F3). If the
+    // budget is still exhausted a resumed run re-pauses and re-raises it on its next step.
+    await this.runStateMachine.clearBudgetPaused(workspaceId)
     return this.executionRepository.listByWorkspace(workspaceId)
   }
 
