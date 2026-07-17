@@ -1888,6 +1888,40 @@
     },
     "accountSkills": {
       "intro": "Ekibinizin Claude Skills oluşturduğu depoları bağlayın (bir SKILL.md klasörü artı kaynak dosyaları). Senkronize edilen beceriler bu hesabın kataloguna eklenir, tüm panolarca paylaşılır ve bir hattın Skill adımı bir görev için bunlardan birini çalıştırır."
+    },
+    "workspaceMembers": {
+      "you": "{name} (sen)",
+      "roles": {
+        "admin": "Yönetici",
+        "member": "Üye",
+        "viewer": "İzleyici"
+      },
+      "accessMode": {
+        "title": "Pano erişimi",
+        "accountHint": "Sahip hesaptaki herkes bu panoyu görebilir.",
+        "restrictedHint": "Bu panoyu yalnızca aşağıda listelenen üyeler görebilir.",
+        "restrictToggle": "Üyelerle sınırla"
+      },
+      "roster": {
+        "title": "Üyeler",
+        "empty": "Henüz üye yok.",
+        "remove": "Üyeyi kaldır"
+      },
+      "add": {
+        "title": "Üye ekle",
+        "selectMember": "Bir hesap üyesi seç",
+        "submit": "Ekle",
+        "added": "Üye eklendi",
+        "allAdded": "Hesabın tüm üyeleri zaten bu panoda.",
+        "noAccount": "Bu pano henüz bir hesaba bağlı değil."
+      },
+      "errors": {
+        "load": "Üyeler yüklenemedi",
+        "accessMode": "Pano erişimi değiştirilemedi",
+        "setRole": "Üye rolü güncellenemedi",
+        "add": "Üye eklenemedi",
+        "remove": "Üye kaldırılamadı"
+      }
     }
   },
   "settings": {
@@ -2600,7 +2634,8 @@
         "budget": "Bütçe",
         "merge": "Risk ilkeleri",
         "tracker": "Sorun takipçisi",
-        "fragments": "Servis en iyi uygulamaları"
+        "fragments": "Servis en iyi uygulamaları",
+        "members": "Üyeler"
       },
       "waiting": {
         "heading": "Bir kişi bekleniyor",

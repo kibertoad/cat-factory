@@ -1,13 +1,22 @@
 import {
+  addWorkspaceMemberContract,
   createWorkspaceContract,
   deleteWorkspaceContract,
   getWorkspaceContract,
   getWorkspaceSettingsContract,
+  listWorkspaceMembersContract,
   listWorkspacesContract,
+  removeWorkspaceMemberContract,
+  setWorkspaceAccessModeContract,
+  setWorkspaceMemberRoleContract,
   updateWorkspaceContract,
   updateWorkspaceSettingsContract,
 } from '@cat-factory/contracts'
-import type { UpdateWorkspaceSettingsInput } from '~/types/domain'
+import type {
+  UpdateWorkspaceSettingsInput,
+  WorkspaceAccessMode,
+  WorkspaceRole,
+} from '~/types/domain'
 import type { ApiContext } from './context'
 
 /** Workspace CRUD + the full snapshot read. */
@@ -38,5 +47,26 @@ export function workspacesApi({ send, ws }: ApiContext) {
 
     updateWorkspaceSettings: (workspaceId: string, body: UpdateWorkspaceSettingsInput) =>
       send(updateWorkspaceSettingsContract, { pathPrefix: ws(workspaceId), body }),
+
+    // ---- workspace membership (RBAC roster + access-mode) -----------------
+    // The roster read is open to any resolved role; every write requires `members.manage`
+    // (the backend gates it — the SPA only shows this surface to workspace admins).
+    listWorkspaceMembers: (workspaceId: string) =>
+      send(listWorkspaceMembersContract, { pathParams: { workspaceId } }),
+
+    addWorkspaceMember: (workspaceId: string, userId: string, role: WorkspaceRole) =>
+      send(addWorkspaceMemberContract, { pathParams: { workspaceId }, body: { userId, role } }),
+
+    setWorkspaceMemberRole: (workspaceId: string, userId: string, role: WorkspaceRole) =>
+      send(setWorkspaceMemberRoleContract, {
+        pathParams: { workspaceId, userId },
+        body: { role },
+      }),
+
+    removeWorkspaceMember: (workspaceId: string, userId: string) =>
+      send(removeWorkspaceMemberContract, { pathParams: { workspaceId, userId } }),
+
+    setWorkspaceAccessMode: (workspaceId: string, accessMode: WorkspaceAccessMode) =>
+      send(setWorkspaceAccessModeContract, { pathParams: { workspaceId }, body: { accessMode } }),
   }
 }

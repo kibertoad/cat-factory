@@ -14,11 +14,14 @@ import IssueTrackerPanel from '~/components/settings/IssueTrackerPanel.vue'
 import ServiceFragmentDefaultsPanel from '~/components/settings/ServiceFragmentDefaultsPanel.vue'
 import BudgetSettings from '~/components/settings/BudgetSettings.vue'
 import UsageSettings from '~/components/settings/UsageSettings.vue'
+import WorkspaceMembersSettings from '~/components/layout/WorkspaceMembersSettings.vue'
 import IntegrationBackTitle from '~/components/layout/IntegrationBackTitle.vue'
 
 const { t, te } = useI18n()
 const ui = useUiStore()
 const store = useWorkspaceSettingsStore()
+const workspace = useWorkspaceStore()
+const access = useWorkspaceAccess()
 const toast = useToast()
 
 const open = computed({
@@ -71,6 +74,18 @@ const tabs = computed(() => [
     icon: 'i-lucide-book-open-check',
     slot: 'fragments',
   },
+  // Roster + access-mode management is `members.manage` (workspace admins only). Hidden
+  // for everyone else — the backend 403s the writes and the tab has nothing to read.
+  ...(access.canManageMembers.value
+    ? [
+        {
+          value: 'members',
+          label: t('settings.workspaceSettings.tabs.members'),
+          icon: 'i-lucide-users',
+          slot: 'members',
+        },
+      ]
+    : []),
 ])
 
 // Tab strip styling: the labels must always fit (never truncate) and the strip must never
@@ -358,6 +373,11 @@ async function save() {
         <!-- Service best practices -->
         <template #fragments>
           <ServiceFragmentDefaultsPanel />
+        </template>
+
+        <!-- Members (workspace RBAC roster + access mode; admins only) -->
+        <template v-if="access.canManageMembers.value && workspace.workspaceId" #members>
+          <WorkspaceMembersSettings :workspace-id="workspace.workspaceId" />
         </template>
       </UTabs>
     </template>
