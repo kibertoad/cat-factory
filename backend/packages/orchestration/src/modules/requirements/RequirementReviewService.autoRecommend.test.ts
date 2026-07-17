@@ -15,6 +15,9 @@ const BLOCK = {
   title: 'Widgets endpoint',
   type: 'service',
   description: 'expose a widgets list endpoint',
+  // The active run: the review notification must carry it (F7 — so the executionId-scoped
+  // waiting-card guard treats it as THIS run's richer card).
+  executionId: 'exec_active',
 } as unknown as Block
 
 let idCounter = 0
@@ -152,7 +155,7 @@ describe('RequirementReviewService.autoRecommend', () => {
     expect(notificationService.raise).toHaveBeenCalledTimes(1)
     expect(notificationService.raise).toHaveBeenCalledWith(
       'ws',
-      expect.objectContaining({ type: 'requirement_review' }),
+      expect.objectContaining({ type: 'requirement_review', executionId: 'exec_active' }),
     )
   })
 })
