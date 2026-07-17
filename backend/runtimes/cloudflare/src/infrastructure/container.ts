@@ -176,6 +176,7 @@ import { D1AgentContextSnapshotRepository } from './repositories/D1AgentContextS
 import { D1AgentSearchQueryRepository } from './repositories/D1AgentSearchQueryRepository'
 import { D1ProvisioningLogRepository } from './repositories/D1ProvisioningLogRepository'
 import { D1WorkspaceRepository } from './repositories/D1WorkspaceRepository'
+import { D1WorkspaceMemberRepository } from './repositories/D1WorkspaceMemberRepository'
 import {
   D1SlackConnectionRepository,
   D1SlackMemberMappingRepository,
@@ -2328,6 +2329,7 @@ export function buildContainer(
     // visual-confirmation gate; resolving to null ⇒ the gate passes through.
     resolveBinaryArtifactStore,
     workspaceRepository: new D1WorkspaceRepository({ db }),
+    workspaceMemberRepository: new D1WorkspaceMemberRepository({ db }),
     accountRepository: new D1AccountRepository({ db }),
     membershipRepository: new D1MembershipRepository({ db }),
     userRepository: new D1UserRepository({ db }),

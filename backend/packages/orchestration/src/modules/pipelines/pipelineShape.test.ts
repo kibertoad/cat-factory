@@ -4,6 +4,7 @@ import {
   assertPipelineLaunchable,
   assertValidCompanionPlacement,
   assertValidGating,
+  assertValidSkillSteps,
   assertValidTesterQualityGating,
   validatePipelineShape,
 } from './pipelineShape.js'
@@ -213,5 +214,31 @@ describe('assertPipelineLaunchable', () => {
         true,
       ]),
     ).toThrow()
+  })
+})
+
+describe('assertValidSkillSteps', () => {
+  it('rejects an enabled skill step that selects no skill', () => {
+    expect(() => assertValidSkillSteps(['skill'], undefined, undefined)).toThrow(
+      /must select a skill/,
+    )
+    expect(() => assertValidSkillSteps(['skill'], undefined, [{}])).toThrow(/must select a skill/)
+    expect(() => assertValidSkillSteps(['skill'], undefined, [{ skillId: '  ' }])).toThrow(
+      /must select a skill/,
+    )
+  })
+
+  it('accepts a skill step that names a skill', () => {
+    expect(() =>
+      assertValidSkillSteps(['coder', 'skill'], undefined, [null, { skillId: 'src:s:x' }]),
+    ).not.toThrow()
+  })
+
+  it('imposes no requirement on a DISABLED skill step', () => {
+    expect(() => assertValidSkillSteps(['skill'], [false], undefined)).not.toThrow()
+  })
+
+  it('ignores stepOptions.skillId on a non-skill kind', () => {
+    expect(() => assertValidSkillSteps(['coder'], undefined, [{}])).not.toThrow()
   })
 })

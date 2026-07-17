@@ -244,6 +244,38 @@ export async function materializeContextFiles(
   }
 }
 
+/** Subdirectory of {@link CONTEXT_DIR} where a repo-sourced skill's resources are materialised. */
+export const SKILL_CONTEXT_SUBDIR = 'skill'
+
+/**
+ * Materialise a repo-sourced skill's RESOURCE files under `.cat-context/skill/` in the checkout
+ * (repo-sourced Claude Skills, slice 2) — the Pi/codex path, whose agents read the checkout rather
+ * than a native `~/.claude/skills` dir (the skill's instructions are folded into their prompt by
+ * the backend). Resource sub-paths were sanitized at the job boundary (no traversal), so nested
+ * dirs are created as needed. Kept out of the agent's commits via the same `.cat-context/` git
+ * exclude entry. A skill with no resource bodies is a no-op.
+ */
+export async function materializeSkillResources(
+  cwd: string,
+  skill: { resources: { relPath: string; content: string }[] },
+): Promise<void> {
+  if (!skill.resources.length) return
+  const dir = join(cwd, CONTEXT_DIR, SKILL_CONTEXT_SUBDIR)
+  await mkdir(dir, { recursive: true })
+  for (const r of skill.resources) {
+    const dest = join(dir, r.relPath)
+    await mkdir(dirname(dest), { recursive: true })
+    await writeFile(dest, r.content, 'utf8')
+  }
+  const gitRoot = await findGitRoot(cwd)
+  if (!gitRoot) return
+  try {
+    await appendFile(join(gitRoot, '.git', 'info', 'exclude'), `\n${CONTEXT_DIR}/\n`, 'utf8')
+  } catch {
+    // No writable .git/info; the files simply stay untracked.
+  }
+}
+
 /** Walk up from `dir` (bounded) to the directory containing a `.git` folder, or null. */
 async function findGitRoot(dir: string): Promise<string | null> {
   let current = dir

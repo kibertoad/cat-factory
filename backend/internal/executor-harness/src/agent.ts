@@ -894,6 +894,8 @@ async function runSingleRepoCoding(job: AgentJob, opts: RunOptions): Promise<Age
         ...(job.persistentCheckout ? { persistentCheckout: true } : {}),
         ...(job.streamFollowUps ? { streamFollowUps: true } : {}),
         ...(job.referenceBranches?.length ? { referenceBranches: job.referenceBranches } : {}),
+        // Repo-sourced skill (slice 2): installed harness-aware by runAgentInWorkspace.
+        ...(job.skill ? { skill: job.skill } : {}),
         // Ralph loop: run the completion command after the agent commits and report its verdict.
         ...(job.validation
           ? {

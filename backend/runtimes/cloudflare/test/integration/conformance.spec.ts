@@ -8,10 +8,12 @@ import {
   defineCacheSuite,
   defineConformanceSuite,
   defineWorkspaceAccessSuite,
+  defineWorkspaceRbacSuite,
   makeIncorporatedClarityReview,
   makeIncorporatedReview,
   makeOnboardingProbe,
   makeReadyReviewWithOpenItem,
+  mintSession,
 } from '@cat-factory/conformance'
 import { env } from 'cloudflare:test'
 import { makeApp, fragmentLibraryDeps, tasksDeps } from '../helpers'
@@ -136,8 +138,17 @@ const harness: ConformanceHarness = {
         gateProviders: opts?.gateProviders,
       },
     )
+    const sessionSecret = (env as { AUTH_SESSION_SECRET?: string }).AUTH_SESSION_SECRET ?? ''
     return {
       ...app,
+      authEnabled: Boolean(sessionSecret),
+      session: (user) => mintSession(sessionSecret, user),
+      createWorkspaceInAccount: (accountId, ownerUserId, options) =>
+        buildContainer(env, { agentExecutor: new FakeAgentExecutor() }).workspaceService.create(
+          { name: options?.name ?? 'RBAC board', seed: options?.seed ?? false },
+          ownerUserId,
+          accountId,
+        ),
       executionEmits: (blockId) =>
         blockId ? recorder.emits.filter((e) => e.blockId === blockId) : recorder.emits,
       boardEmits: (blockId) =>
@@ -239,6 +250,9 @@ defineConformanceSuite(harness)
 // Workspace-RBAC initiative (slice 2): the membership roster + access-mode persistence
 // must round-trip identically on D1 and Postgres.
 defineWorkspaceAccessSuite(harness)
+// Workspace-RBAC initiative (slice 3): the gate's resolution + viewer write floor + list
+// filtering, enforced over the real HTTP gate — identically on D1 and Postgres.
+defineWorkspaceRbacSuite(harness)
 // Caching initiative: the Worker serves the fragment catalog through the
 // ISOLATE-SAFE (pass-through) profile — coherence must hold there exactly as it
 // does through Node's live in-memory cache.

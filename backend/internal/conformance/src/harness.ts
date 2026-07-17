@@ -93,6 +93,29 @@ export interface ConformanceApp {
   /** Create (and optionally seed) a workspace, returning its snapshot. */
   createWorkspace(options?: { name?: string; seed?: boolean }): Promise<WorkspaceSnapshot>
   /**
+   * Whether this harness runs auth-ENABLED — i.e. it has a `config.auth.sessionSecret`, so a
+   * signed session resolves to its user and the workspace-RBAC gate actually enforces. The
+   * dev-open harnesses resolve no access object and allow everything, so the RBAC suite gates
+   * every assertion on this (a dev-open harness would pass vacuously).
+   */
+  authEnabled: boolean
+  /**
+   * Mint a real signed user session (`Authorization: Bearer <token>`) for a chosen user, so the
+   * RBAC suite can drive requests AS a specific member/viewer/admin. Requires {@link authEnabled}.
+   */
+  session(user: { id: string; login?: string; name?: string | null }): Promise<string>
+  /**
+   * Create a workspace owned by `ownerUserId` inside `accountId`, straight through the facade's
+   * `WorkspaceService` — the seam the RBAC suite needs to place a board in a SPECIFIC account
+   * with a SPECIFIC (or no) creator. A `null` owner skips the creator auto-enroll, so the suite
+   * can exercise the account-admin escape hatch (an admin with no explicit member row).
+   */
+  createWorkspaceInAccount(
+    accountId: string,
+    ownerUserId: string | null,
+    options?: { name?: string; seed?: boolean },
+  ): Promise<WorkspaceSnapshot>
+  /**
    * Create a workspace owned by an ORG account (a fresh org + owner created straight through
    * the facade's services, since dev-open has no signed-in user to drive the HTTP account flow).
    * Unseeded by default; pass `seed: true` for the demo board + built-in pipelines (e.g. the

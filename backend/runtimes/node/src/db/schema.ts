@@ -2029,6 +2029,9 @@ export const githubInstallations = pgTable(
     account_login: text('account_login').notNull(),
     target_type: text('target_type').notNull(),
     app_id: text('app_id'),
+    // Which VCS this connection talks to (github / gitlab). See contracts `GitHubConnection`
+    // + kernel `GitHubInstallation.provider`.
+    provider: text('provider').notNull().default('github'),
     cached_token: text('cached_token'),
     token_expires_at: bigint('token_expires_at', { mode: 'number' }),
     created_at: bigint('created_at', { mode: 'number' }).notNull(),
@@ -2064,6 +2067,9 @@ export const githubRepos = pgTable(
     // to every member) or 'user_pat' (reachable only via the linker's personal token).
     // Link-owned — sync preserves it. See contracts `GitHubRepo.linkedVia`.
     linked_via: text('linked_via').notNull().default('app'),
+    // Which VCS the repo belongs to (github / gitlab) — the connection's provider, inherited
+    // by the repo. See contracts `GitHubRepo.provider`.
+    provider: text('provider').notNull().default('github'),
     etag: text('etag'),
     synced_at: bigint('synced_at', { mode: 'number' }).notNull(),
     deleted_at: bigint('deleted_at', { mode: 'number' }),

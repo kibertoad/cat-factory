@@ -1,5 +1,103 @@
 # @cat-factory/kernel
 
+## 0.134.0
+
+### Minor Changes
+
+- 32a0720: feat: repo-sourced Claude Skills — executable pipeline step (slice 2)
+
+  Make a synced repo-sourced Claude Skill runnable as a pipeline step
+  (docs/initiatives/repo-skills.md):
+
+  - **One generic `skill` agent kind** (`container-coding`, `noChangesTolerated`,
+    `pr-or-work` clone), parametrized per step by a new `stepOptions.skillId` — not a
+    dynamic kind per skill. Pipeline save (and run-start re-validation) rejects a `skill`
+    step that names no skill.
+  - **`SkillRunResolver`** resolves the picked skill at dispatch: the persisted
+    instructions from the account catalog plus the sibling resource bodies fetched at the
+    skill's immutable pinned commit (per-file + total caps; oversized/binary files are
+    referenced by repo path instead). The run never depends on a live GitHub fetch — a
+    fetch failure degrades a resource to a path reference rather than failing the run.
+    Wired into the engine as `skillResolver` in `AgentContextBuilder` (a skill step
+    dispatched with the library unconfigured fails loudly rather than running blank), and
+    the run step is pinned with `skillVersion: { skillId, commit, sha }`.
+  - **Harness-aware rendering** in `ContainerAgentExecutor`: the resolved skill travels as
+    a dedicated top-level `skill` job-body field (never a context file). The
+    executor-harness materialises it natively into `CLAUDE_CONFIG_DIR/skills/<name>/` for
+    the claude-code subscription harness (so the CLI loads it), and under
+    `.cat-context/skill/` for the Pi/codex harnesses (whose prompt carries the folded-in
+    instructions).
+  - Bumps `@cat-factory/executor-harness` (native claude-code skills write) and the pinned
+    runner image tag in the Node/local facades.
+
+- 54e117e: GitLab UI parity (pre-slice): carry a `provider` VCS discriminator on the repo/connection
+  projection.
+
+  The GitLab-parity SPA work (provider-aware labels, icons, host/URL shapes) needs a
+  `provider: VcsProvider` (`'github' | 'gitlab'`) it can read off the data. This adds that
+  field to the `GitHubRepo` / `GitHubConnection` / `GitHubAvailableRepo` wire types and the
+  kernel `GitHubInstallation`, and persists it symmetrically on both runtimes' projection
+  tables (D1 migration `0051_vcs_provider.sql` + a Drizzle migration + both sets of mappers).
+  The tables keep their GitHub names — the entity-rename fold is separate, acknowledged Phase-1
+  work.
+
+  `provider` is a per-connection fact: a connection records it (`GitHubInstallationService.connect`
+  → `'github'`; local mode's `AutoProvisioningInstallationRepository` → the deployment's provider,
+  `'gitlab'` for a GitLab-PAT deployment), and the repos reached through it inherit it (the sync
+  service stamps `installation.provider`, the bootstrapper and CLI `linkRepo` stamp their own).
+  Rows written before the column default to `'github'`. A cross-runtime conformance suite
+  (`defineVcsProviderSuite`) asserts the round-trip on both stores. No SPA behaviour changes yet;
+  this unblocks the presentation-switch slices.
+
+- be6e109: Workspace RBAC (slice 3): resolve effective workspace access in the shared auth gate.
+
+  `mountAuthGate` now resolves a signed-in caller's effective workspace role once (via the
+  new `loadWorkspaceAccess` helper over the kernel `resolveWorkspaceAccess` decision) and
+  publishes it on the request context as `workspaceAccess`. A denied board returns the
+  existing 404 shape (existence is never leaked); a resolved-but-insufficient write hits the
+  **viewer write floor** — any non-GET method requires at least `member`, with the read-only
+  `POST /workspaces/:ws/events/ticket` mint allowlisted — returning `403 forbidden`. The
+  account-admin escape hatch and the legacy owner-only board are preserved byte-for-byte.
+
+  `WorkspaceVisibility` is extended (unrestricted account boards, an admin-account escape
+  hatch, an explicit-membership branch, and legacy-owned boards) and enforced SQL-side in
+  both the D1 and Drizzle `listVisible`; `AccountService.accessibleAccountScopes` derives the
+  member/admin account sets from the single existing membership read. `GET /workspaces`
+  annotates each board with the caller's effective `viewerRole` via one batched member-row
+  read, and the board snapshot (GET + create) carries the resolved `access` (role +
+  permissions). `WorkspaceService.create` auto-enrolls the creator as a workspace admin. The
+  `workspace_members` repository is now wired into both runtime facades' containers. Cross-
+  runtime conformance asserts the 404 invisibility, the viewer floor + ticket allowlist, the
+  escape hatch, and list filtering over the real HTTP gate on both D1 and Postgres.
+
+### Patch Changes
+
+- Updated dependencies [32a0720]
+- Updated dependencies [54e117e]
+- Updated dependencies [be6e109]
+  - @cat-factory/contracts@0.140.0
+
+## 0.133.0
+
+### Minor Changes
+
+- 6564507: Add platform-operator observability: a deployment-level operator dashboard.
+
+  A new `PlatformMetricsRepository` kernel port exposes SQL rollups over `agent_runs`
+  (run outcomes, failure-kind taxonomy, live/parked depth, duration stats, and a
+  time-bucketed outcome trend), scoped to an account and implemented on both the D1
+  (Cloudflare) and Drizzle (Postgres/Node) stores with cross-runtime conformance. The
+  admin-gated `GET /accounts/:accountId/observability/platform` endpoint returns a
+  windowed (1h / 24h / 7d) projection, surfaced in the SPA as an operator dashboard
+  panel (outcome tiles + success rate, an outcome-trend sparkline, the failure
+  breakdown, live depth, and duration stats), reachable from the sidebar by account
+  admins. Fully internationalized.
+
+### Patch Changes
+
+- Updated dependencies [6564507]
+  - @cat-factory/contracts@0.139.0
+
 ## 0.132.0
 
 ### Minor Changes

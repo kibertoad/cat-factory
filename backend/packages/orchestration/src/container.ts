@@ -7,6 +7,7 @@ import type {
   ResolveRunRepoContext,
   RunInitiatorScope,
   RunRepoContext,
+  WorkspaceMemberRepository,
   WorkspaceRepository,
 } from '@cat-factory/kernel'
 import { createAppCaches } from '@cat-factory/caching'
@@ -228,6 +229,7 @@ import {
   type ResolveFragmentInstallationId,
   SkillCatalogService,
   SkillSourceService,
+  SkillRunResolver,
   type ResolveSkillInstallationId,
 } from '@cat-factory/agents'
 import type { InitiativePresetRegistry } from '@cat-factory/kernel'
@@ -240,6 +242,13 @@ import type { InitiativePresetRegistry } from '@cat-factory/kernel'
 
 export interface CoreDependencies {
   workspaceRepository: WorkspaceRepository
+  /**
+   * Workspace-level RBAC roster (workspace-rbac initiative). Threaded into
+   * `WorkspaceService` so the gate can resolve a caller's effective role + the creator
+   * auto-enroll can seed an admin row. Optional: absent (unwired / tests) ⇒ resolution
+   * falls back to the account tier and auto-enroll is skipped.
+   */
+  workspaceMemberRepository?: WorkspaceMemberRepository
   /** Account tenancy: accounts own workspaces; memberships grant access (0017). */
   accountRepository: AccountRepository
   membershipRepository: MembershipRepository
@@ -1169,6 +1178,13 @@ export interface SkillLibraryModule {
   catalogService: SkillCatalogService
   /** Repo-source sync; present only when the GitHub client + source repo are wired. */
   sourceService?: SkillSourceService
+  /**
+   * Resolves a `skill` step's picked skill (instructions + resource bodies at the pinned commit)
+   * for the execution engine (`skillResolver`). Present only when the source repo + GitHub client
+   * are wired (it needs them to fetch resource bodies) — the same prerequisites as the sync
+   * service. Absent ⇒ a skill step fails loudly at dispatch.
+   */
+  runResolver?: SkillRunResolver
 }
 
 export interface Core {
@@ -2223,7 +2239,21 @@ function createSkillLibraryModule(
         })
       : undefined
 
-  return { catalogService, sourceService }
+  // The run-path resolver needs the source repo (for the resource repo owner/name) + the GitHub
+  // client + an installation resolver to fetch resource bodies at the pinned commit — the same
+  // prerequisites as the sync service, so it assembles under the same guard.
+  const runResolver =
+    deps.skillSourceRepository && deps.githubClient && deps.resolveSkillInstallationId
+      ? new SkillRunResolver({
+          workspaceRepository: deps.workspaceRepository,
+          catalogService,
+          skillSourceRepository: deps.skillSourceRepository,
+          githubClient: deps.githubClient,
+          resolveInstallationId: deps.resolveSkillInstallationId,
+        })
+      : undefined
+
+  return { catalogService, sourceService, runResolver }
 }
 
 /**
@@ -2842,6 +2872,10 @@ export function createCore(dependencies: CoreDependencies): Core {
     // managed + document-backed fragments reach a run), present only when the
     // library is configured; otherwise the engine falls back to the static pool.
     fragmentResolver: fragmentLibrary?.libraryService,
+    // Route a `skill` step's skill resolution (instructions + resource bodies at the pinned
+    // commit) through the skill library, present only when it's configured; a skill step
+    // dispatched without it fails loudly rather than running blank.
+    skillResolver: skillLibrary?.runResolver,
     // Canonicalise a URL pasted into a block description to the document's stable
     // (source, externalId) via the providers' parseRef, so a Figma/Notion/etc. link
     // auto-matches its imported page even with a title segment or tracking params the

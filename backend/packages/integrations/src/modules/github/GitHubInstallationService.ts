@@ -43,6 +43,7 @@ function toConnection(
     accountLogin: installation.accountLogin,
     targetType: installation.targetType,
     connectedAt: installation.createdAt,
+    provider: installation.provider,
     canCreateRepos,
     canManageWorkflows,
   }
@@ -89,6 +90,9 @@ export class GitHubInstallationService {
       // The App that owns this installation (probed at connect), so every later
       // token mint routes to the right App's key (ADR 0005).
       appId: meta.appId,
+      // The GitHub-App connect flow is GitHub by construction; a GitLab connection is
+      // materialised through its own (deployment-level) path, never here.
+      provider: 'github',
       cachedToken: null,
       tokenExpiresAt: null,
       createdAt: existing?.createdAt ?? this.deps.clock.now(),

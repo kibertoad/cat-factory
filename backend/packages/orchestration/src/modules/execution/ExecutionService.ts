@@ -82,6 +82,7 @@ import {
   AgentContextBuilder,
   type DocumentUrlResolver,
   type FragmentBodyResolver,
+  type SkillResolver,
 } from './AgentContextBuilder.js'
 import { CompanionController } from './CompanionController.js'
 import { StepGraph } from './StepGraph.js'
@@ -316,6 +317,12 @@ export interface ExecutionServiceDependencies {
    * configured; absent → the engine resolves against the static built-in pool.
    */
   fragmentResolver?: FragmentBodyResolver
+  /**
+   * Optional: resolves a `skill` step's picked skill to its instructions + resource bodies for
+   * the run (see {@link SkillResolver}). Wired only when the repo-sourced Claude Skills library is
+   * configured; a skill step dispatched with this unwired fails loudly rather than running blank.
+   */
+  skillResolver?: SkillResolver
   /**
    * Optional: when the individual-usage subscription store is configured, a finished
    * run's per-run credential activation is deleted here the moment it reaches a terminal
@@ -664,6 +671,7 @@ export class ExecutionService {
     brainstormServices,
     brainstormSessionRepository,
     fragmentResolver,
+    skillResolver,
     environmentProvisioning,
     resolveTestSecretRefs,
     environmentTeardown,
@@ -746,6 +754,7 @@ export class ExecutionService {
       environmentProvisioning,
       resolveTestSecretRefs,
       fragmentResolver,
+      skillResolver,
     })
     this.mergeResolver = new MergeResolver({
       blockRepository,
@@ -1642,6 +1651,9 @@ export class ExecutionService {
       // The QC companion's live step-state carries the same `gating` config the pipeline set, so
       // the tester-QC gating validation re-runs on a retry against exactly what re-executes.
       testerQuality: steps.map((s) => s.testerQuality ?? null),
+      // The per-step options bag (carrying a `skill` step's `skillId`) is copied onto the run
+      // step at start, so the skill-step validation re-runs on retry against what re-executes.
+      stepOptions: steps.map((s) => s.stepOptions ?? null),
     }
   }
 

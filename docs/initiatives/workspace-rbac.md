@@ -1,6 +1,6 @@
 # Initiative: workspace-level RBAC & membership
 
-**Status:** in progress (slices 1–2 landed) · **Owner:** core · **Started:** 2026-07-16
+**Status:** in progress (slices 1–3 landed) · **Owner:** core · **Started:** 2026-07-16
 
 > Durable source of truth for a multi-PR initiative. Read it first before picking up the
 > next slice; update the checklist at the end of each PR.
@@ -372,7 +372,7 @@ workspace `admin`. `product` remains data-only. Deferred follow-ups: an
 | --- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ------- | ----- |
 | 1   | **Contracts + kernel vocabulary**: `workspaceRoleSchema` / `workspacePermissionSchema` / `workspaceAccessModeSchema` + `WorkspaceMember` wire shape (`contracts/src/workspace-members.ts`); `workspaceSchema.accessMode`; kernel `domain/workspace-access.ts` (`WORKSPACE_ROLE_PERMISSIONS`, `resolveWorkspaceAccess`, `workspaceRoleAtLeast`) + decision-table tests; `ForbiddenError` + 403 mapping                                                                                                         | ✅ done | #1159 |
 | 2   | **Persistence**: D1 `0052_workspace_rbac.sql` ⇄ Drizzle + `pnpm db:generate` (`workspace_members`, `workspaces.access_mode`); `WorkspaceMemberRepository` port + both impls (incl. `getRolesForUserInWorkspaces`, `removeByAccountMembership`); `WorkspaceRepository.accessRowOf` + `setAccessMode`; board-delete cascade; conformance repo assertions                                                                                                                                                        | ✅ done | #1159 |
-| 3   | **Resolution in the gate**: `mountAuthGate` resolves `WorkspaceAccess` (escape hatch, legacy branch, 404 shape unchanged), sets `workspaceAccess` on the context (`env.ts`), **viewer write floor** (non-GET ⇒ ≥ member; ticket-mint allowlist); `WorkspaceVisibility` extension + `listVisible` both runtimes + `AccountService.accessibleAccountScopes`; list `viewerRole` annotation (batch); snapshot/create attach `access`; creator auto-enroll; conformance (404, floor, escape hatch, list filtering) | ⬜ todo |       |
+| 3   | **Resolution in the gate**: `mountAuthGate` resolves `WorkspaceAccess` (escape hatch, legacy branch, 404 shape unchanged), sets `workspaceAccess` on the context (`env.ts`), **viewer write floor** (non-GET ⇒ ≥ member; ticket-mint allowlist); `WorkspaceVisibility` extension + `listVisible` both runtimes + `AccountService.accessibleAccountScopes`; list `viewerRole` annotation (batch); snapshot/create attach `access`; creator auto-enroll; conformance (404, floor, escape hatch, list filtering) | ✅ done | #1166 |
 | 4   | **`workspaceAccess` AppCaches slice**: kernel handle + wrap type, both profiles (isolate-safe: disabled), read-through in the gate, all invalidation sites (member writes, access-mode, workspace delete, account-membership writes ⇒ `invalidateAll`), cache-coherence conformance assertion                                                                                                                                                                                                                 | ⬜ todo |       |
 | 5   | **Member management API**: `WorkspaceMemberService` (only-account-members rule), `workspaceMemberController` + contracts routes (`GET/POST/PATCH/DELETE /members`, `PUT /access-mode`), `requirePermission` helper (`http/workspaceAccess.ts`), conformance member-CRUD assertions                                                                                                                                                                                                                            | ⬜ todo |       |
 | 6   | **Admin-tier enforcement pass**: `requirePermission('settings.manage' \| 'integrations.manage' \| 'secrets.manage')` across the §6 table's admin route groups; conformance: member 403 on settings/integrations/secrets                                                                                                                                                                                                                                                                                       | ⬜ todo |       |
@@ -429,6 +429,38 @@ server / workspaces / caching / app + both runtimes are versioned packages).
 - **Drizzle snapshot DAG**: slice 2's migration will conflict with any
   concurrently-landed migration — use `scripts/rebase-migration-snapshot.mjs`, never
   hand-merge snapshots.
+- **Slice 3 — resolution helper + wiring.** The gate calls ONE shared
+  `loadWorkspaceAccess(container, workspaceId, userId)` (`server/src/http/workspaceAccess.ts`):
+  `accessRowOf` → (for account boards) `accountService.rolesFor` + `workspaceService.memberRoleOf`
+  → the pure `resolveWorkspaceAccess`. Returns `null` for a MISSING board (the gate passes through
+  so the handler 404s as before) vs a `{allowed:false}` DENIAL (the gate 404s). Slice 4 wraps THIS
+  function in the `workspaceAccess` cache; slice 7's `/me/environment-handlers` reuses it. The
+  member repo is threaded via `CoreDependencies.workspaceMemberRepository` (optional) →
+  `WorkspaceService` (so `createCore(dependencies)` wires it for free); the facades build it in
+  their `dependencies` bag (D1 inline; Node/local via `createDrizzleRepositories`).
+- **Creator auto-enroll changes existing rosters.** `WorkspaceService.create` now seeds an admin
+  member row for a non-null `ownerUserId`, so any test/flow that creates an org board via a signed
+  owner sees that owner in `listByWorkspace`. The slice-2 conformance roster test was relaxed to
+  `arrayContaining`. To exercise the account-admin escape hatch (admin with NO row), create the
+  board with a **null** owner (the conformance `createWorkspaceInAccount(accountId, null, …)` seam).
+- **Conformance MUST run auth-enabled.** A dev-open harness resolves no access object and passes
+  every RBAC assertion vacuously, so `AUTH_SESSION_SECRET` is now set in ALL THREE harness envs
+  (Node `TEST_ENV`, Worker vitest bindings, local already had it) — harmless because with no OAuth/
+  password provider `config.auth.enabled` stays false and token-less requests still pass dev-open.
+  `ConformanceApp` gained `authEnabled` + `session(user)` (mints a real `Bearer` via the shared
+  `mintSession`) + `createWorkspaceInAccount`; `defineWorkspaceRbacSuite` drives the gate as real
+  signed users. The mothership harness reports `authEnabled:false` (it does not run the suite).
+- **The viewer write floor is method-based, and the ticket mint is its SOLE exemption — on
+  purpose.** The floor rejects EVERY non-GET method under `/workspaces/:ws/*` for a `viewer`,
+  allowlisting only `POST …/events/ticket`. A repo audit found ~13 other non-GET routes that
+  don't persist anything (the `detect`/`plan`/`search`/`test`/`validate`/`preflight`/`probe`
+  endpoints that prefill a create/edit form or probe an integration connection). These were
+  deliberately NOT allowlisted: they belong to the `member`+ authoring / integration-setup
+  surface, not to read-only viewing, and the SPA already gates their affordances by permission —
+  so a viewer never reaches them. Do NOT "fix" a viewer 403 on one of those by widening the
+  allowlist to "read-equivalent POST" as a class; the ticket mint is exempt only because it is
+  the one write the pure _viewing_ experience needs (the live stream). Add a new exact-path
+  exemption only for a genuinely viewing-required write.
 
 ## Out of scope
 

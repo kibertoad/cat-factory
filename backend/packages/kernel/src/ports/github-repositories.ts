@@ -6,6 +6,7 @@ import type {
   GitHubPullRequest,
   GitHubRepo,
 } from '../domain/types.js'
+import type { VcsProvider } from '../domain/vcs-types.js'
 import type { RateLimitSnapshot } from './github-client.js'
 
 // ---------------------------------------------------------------------------
@@ -29,6 +30,14 @@ export interface GitHubInstallation {
   accountId: string | null
   accountLogin: string
   targetType: 'Organization' | 'User'
+  /**
+   * Which VCS this connection talks to (github / gitlab). The projection tables are still
+   * GitHub-named but VCS-neutral in shape, so a connection records its provider here; the
+   * repos reached through it inherit it, and the connect/repo wire types surface it so the
+   * SPA can switch presentation. GitHub-App and local-GitHub-PAT connections are `'github'`;
+   * a local GitLab-PAT deployment's synthetic connection is `'gitlab'`.
+   */
+  provider: VcsProvider
   /**
    * Which GitHub App registration owns this installation (ADR 0005). null for
    * rows created before the multi-App tier — treated as the default App. An
