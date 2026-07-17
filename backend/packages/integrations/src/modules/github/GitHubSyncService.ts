@@ -4,6 +4,7 @@ import type {
   BranchProjectionRepository,
   CheckRunProjectionRepository,
   CommitProjectionRepository,
+  GitHubInstallation,
   GitHubInstallationRepository,
   GroupCacheHandle,
   IssueProjectionRepository,
@@ -149,6 +150,9 @@ export class GitHubSyncService {
       linked: tracked.has(r.githubId),
       isMonorepo: tracked.get(r.githubId)?.isMonorepo ?? false,
       personal: false,
+      // Every listed repo is reachable through the workspace's one connection, so it carries
+      // that connection's provider.
+      provider: installation.provider,
     }))
     for (const r of personalRepos) {
       if (appIds.has(r.githubId)) continue
@@ -161,6 +165,7 @@ export class GitHubSyncService {
         linked: tracked.has(r.githubId),
         isMonorepo: tracked.get(r.githubId)?.isMonorepo ?? false,
         personal: true,
+        provider: installation.provider,
       })
     }
     return merged
@@ -330,6 +335,7 @@ export class GitHubSyncService {
         ...match,
         installationId,
         linkedVia: 'app',
+        provider: installation.provider,
         syncedAt: this.deps.clock.now(),
       }
       await this.deps.repoProjectionRepository.upsertMany(workspaceId, [repo])
@@ -344,13 +350,13 @@ export class GitHubSyncService {
     // it, but marked `user_pat`), record the linker's access, and SKIP the App-based sync (the
     // App token can't read its branches/PRs). Runs against it use the initiator's PAT (already
     // wired via the PAT-preferring token mint).
-    return this.linkPersonalRepo(workspaceId, repoGithubId, installationId, opts)
+    return this.linkPersonalRepo(workspaceId, repoGithubId, installation, opts)
   }
 
   private async linkPersonalRepo(
     workspaceId: string,
     repoGithubId: number,
-    installationId: number,
+    installation: GitHubInstallation,
     opts: { userId?: string; userToken?: string },
   ): Promise<GitHubRepo | null> {
     const { userToken, userId } = opts
@@ -359,8 +365,9 @@ export class GitHubSyncService {
     if (!personal) return null
     const repo: GitHubRepo = {
       ...personal,
-      installationId,
+      installationId: installation.installationId,
       linkedVia: 'user_pat',
+      provider: installation.provider,
       syncedAt: this.deps.clock.now(),
     }
     await this.deps.repoProjectionRepository.upsertMany(workspaceId, [repo])
@@ -386,7 +393,12 @@ export class GitHubSyncService {
     const { items } = await this.deps.githubClient.listInstallationRepos(installationId)
     const selected = items
       .filter((r) => wanted.has(r.githubId))
-      .map((r) => ({ ...r, installationId, syncedAt: this.deps.clock.now() }))
+      .map((r) => ({
+        ...r,
+        installationId,
+        provider: installation.provider,
+        syncedAt: this.deps.clock.now(),
+      }))
 
     if (selected.length > 0) {
       await this.deps.repoProjectionRepository.upsertMany(workspaceId, selected)

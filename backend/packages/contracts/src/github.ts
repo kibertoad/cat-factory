@@ -1,4 +1,5 @@
 import * as v from 'valibot'
+import { vcsProviderSchema } from './routes/auth.js'
 
 // ---------------------------------------------------------------------------
 // GitHub integration wire contracts. These describe the *projected* GitHub data
@@ -40,6 +41,14 @@ export const githubRepoSchema = v.object({
    * Owned by the link, so sync never overwrites it. Absent ⇒ `'app'`.
    */
   linkedVia: v.optional(v.picklist(['app', 'user_pat'])),
+  /**
+   * Which VCS the repo belongs to (github / gitlab). Presentation switches on this — labels
+   * ("Merge request" vs "Pull request"), icons, and host/URL shapes — while the data stays
+   * provider-neutral. Owned by the connection the repo is reached through (the sync service
+   * stamps the installation's provider). Absent on rows written before the column existed ⇒
+   * treated as `'github'` (the only provider that populated these tables before).
+   */
+  provider: v.optional(vcsProviderSchema),
   /** When this projection row was last refreshed (epoch ms). */
   syncedAt: v.number(),
 })
@@ -149,6 +158,11 @@ export const githubConnectionSchema = v.object({
   targetType: v.picklist(['Organization', 'User']),
   connectedAt: v.number(),
   /**
+   * The VCS this connection talks to (github / gitlab). The SPA switches connect-surface
+   * copy/icons on it. Absent on backends predating the column ⇒ treated as `'github'`.
+   */
+  provider: v.optional(vcsProviderSchema),
+  /**
    * Whether cat-factory can create repositories under this account itself — true
    * only for accounts served by the privileged App tier (ADR 0005). When false,
    * the UI keeps the manual "create on GitHub" flow.
@@ -202,6 +216,12 @@ export const githubAvailableRepoSchema = v.object({
    * these so the user knows the difference. Absent/false ⇒ an App-reachable repo.
    */
   personal: v.optional(v.boolean(), false),
+  /**
+   * The VCS this repo lives on (github / gitlab) — every listed repo is reachable through the
+   * workspace's one connection, so this is the connection's provider. Drives the picker's
+   * provider-keyed labels/icons. Absent ⇒ treated as `'github'`.
+   */
+  provider: v.optional(vcsProviderSchema),
 })
 export type GitHubAvailableRepo = v.InferOutput<typeof githubAvailableRepoSchema>
 

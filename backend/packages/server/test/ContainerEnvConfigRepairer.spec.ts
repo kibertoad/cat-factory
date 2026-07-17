@@ -24,6 +24,7 @@ const INSTALLATION: GitHubInstallation = {
   accountId: 'acc_1',
   accountLogin: 'kibertoad',
   targetType: 'User',
+  provider: 'github',
   appId: 'app-default',
   cachedToken: null,
   tokenExpiresAt: null,

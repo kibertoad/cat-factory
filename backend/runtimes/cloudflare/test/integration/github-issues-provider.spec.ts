@@ -19,6 +19,7 @@ function installation(overrides: Partial<GitHubInstallation>): GitHubInstallatio
     accountLogin: 'octo',
     targetType: 'Organization',
     appId: 'app-default',
+    provider: 'github',
     cachedToken: null,
     tokenExpiresAt: null,
     createdAt: 0,

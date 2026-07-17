@@ -21,6 +21,7 @@ function installation(appId: string | null): GitHubInstallation {
     accountId: null,
     accountLogin: 'acme',
     targetType: 'Organization',
+    provider: 'github',
     appId,
     cachedToken: null,
     tokenExpiresAt: null,
