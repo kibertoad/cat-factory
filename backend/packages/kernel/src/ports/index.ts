@@ -265,6 +265,7 @@ export type {
   AccountSkillRepository,
   SkillSourceRecord,
   SkillSourceRepository,
+  SkillSourceResyncRequest,
 } from './skill-repositories.js'
 export type {
   AppCaches,

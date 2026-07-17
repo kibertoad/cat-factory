@@ -42,6 +42,14 @@ export interface GitHubWebhookIngest {
   enqueueWebhook(eventName: string, payload: unknown): Promise<boolean>
   /** Enqueue an incremental single-repo resync. */
   queueRepoResync(workspaceId: string, repoGithubId: number): Promise<boolean>
+  /**
+   * Enqueue a targeted skill-source resync — the push-webhook freshness fan-out (slice 4).
+   * When a push advances a repo that skill sources are linked to, the async consumer re-syncs
+   * each affected source so its skills stay current. `false` (no queue bound: local/dev/tests)
+   * means the fan-out is skipped; freshness is then guaranteed at dispatch by the resolver's
+   * head-commit probe rather than proactively here.
+   */
+  queueSkillResync(accountId: string, sourceId: string): Promise<boolean>
 }
 
 /** OpenAI-style token usage scraped from an upstream completion, for spend metering. */

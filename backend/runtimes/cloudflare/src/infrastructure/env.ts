@@ -20,12 +20,14 @@ export interface ExecutionStartMessage {
 /**
  * Work enqueued on GITHUB_SYNC_QUEUE so the webhook endpoint can ack fast and
  * apply projection updates asynchronously. A discriminated union: verified
- * webhook deliveries, and targeted repo resyncs (from the cron reconciler / the
- * on-demand resync endpoint).
+ * webhook deliveries, targeted repo resyncs (from the cron reconciler / the
+ * on-demand resync endpoint), and targeted skill-source resyncs (the push-webhook
+ * freshness fan-out, slice 4).
  */
 export type GitHubSyncMessage =
   | { kind: 'webhook'; eventName: string; payload: unknown }
   | { kind: 'resync-repo'; workspaceId: string; repoGithubId: number }
+  | { kind: 'skill-source-resync'; accountId: string; sourceId: string }
 
 /** Bindings and vars available to the Worker (declared in wrangler.toml). */
 export interface Env {

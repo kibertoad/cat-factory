@@ -108,8 +108,29 @@ export interface SkillSourceRecord {
 
 export interface SkillSourceRepository {
   listByAccount(accountId: string): Promise<SkillSourceRecord[]>
+  /**
+   * Live sources (across every account) whose repo matches `(repoOwner, repoName)`. Drives
+   * the push-webhook freshness fan-out (slice 4): a push delivery knows the repo owner/name,
+   * not an account or source id, so this is the reverse lookup that turns "this repo was
+   * pushed" into "these skill sources may be stale". Rides the
+   * `skill_sources(repo_owner, repo_name)` index; excludes tombstones. Matched exactly on the
+   * stored casing (GitHub echoes the canonical owner/name in both the webhook payload and the
+   * link form, so they agree).
+   */
+  listByRepo(repoOwner: string, repoName: string): Promise<SkillSourceRecord[]>
   get(id: string): Promise<SkillSourceRecord | null>
   upsert(record: SkillSourceRecord): Promise<void>
   updateSyncState(id: string, lastSyncedCommit: string | null, lastSyncedAt: number): Promise<void>
   softDelete(id: string, at: number): Promise<void>
+}
+
+/**
+ * A targeted skill-source resync, enqueued by the push-webhook fan-out (slice 4) onto the
+ * runtime's GitHub-sync queue. The async consumer runs {@link SkillSourceService.sync} for
+ * this one source, so a stale skill is refreshed shortly after the upstream push without the
+ * management surface (or a run) having to re-sync it by hand.
+ */
+export interface SkillSourceResyncRequest {
+  accountId: string
+  sourceId: string
 }

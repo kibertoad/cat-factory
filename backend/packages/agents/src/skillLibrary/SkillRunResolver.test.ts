@@ -64,8 +64,13 @@ function makeResolver(opts: {
   source?: SkillSourceRecord | null
   installationId?: number | null
   getFileContent?: GitHubClient['getFileContent']
+  /** Head-commit probe result for the dispatch-time freshness check (slice 4). */
+  latestCommitSha?: GitHubClient['latestCommitSha']
+  /** The freshness re-sync seam; absent ⇒ no dispatch-time probe at all. */
+  syncSource?: (accountId: string, sourceId: string) => Promise<unknown>
 }) {
-  const record = opts.record === undefined ? skillRecord() : opts.record
+  // Mutable so a `syncSource` fake can swap in a refreshed record, modelling a real re-sync.
+  let record = opts.record === undefined ? skillRecord() : opts.record
   const accountSkillRepository = {
     get: vi.fn(async (accountId: string, skillId: string) =>
       record && record.accountId === accountId && record.skillId === skillId ? record : null,
@@ -84,6 +89,9 @@ function makeResolver(opts: {
       vi.fn(
         async (): Promise<RepoFileContent | null> => ({ content: 'REPORT BODY', sha: 'sha-r' }),
       ),
+    // Default: the source dir head equals the last-synced commit → the probe reports "unchanged"
+    // and no re-sync fires, so the non-freshness tests are unaffected.
+    latestCommitSha: opts.latestCommitSha ?? vi.fn(async () => sourceRecord().lastSyncedCommit),
   } as unknown as GitHubClient
   const resolver = new SkillRunResolver({
     workspaceRepository,
@@ -92,8 +100,9 @@ function makeResolver(opts: {
     githubClient,
     resolveInstallationId: async () =>
       opts.installationId === undefined ? 42 : opts.installationId,
+    syncSource: opts.syncSource,
   })
-  return { resolver, githubClient }
+  return { resolver, githubClient, setRecord: (r: AccountSkillRecord) => (record = r) }
 }
 
 describe('SkillRunResolver', () => {
@@ -155,5 +164,69 @@ describe('SkillRunResolver', () => {
     await expect(resolver.resolveForRun(WORKSPACE, SKILL_ID)).rejects.toBeInstanceOf(
       ValidationError,
     )
+  })
+
+  // Dispatch-time freshness probe (slice 4): a self-verifying head-commit check that re-syncs a
+  // stale source before running, and degrades to the last-synced record on any failure.
+  describe('dispatch-time freshness probe', () => {
+    it('does not re-sync when the source head has not advanced', async () => {
+      const syncSource = vi.fn(async () => {})
+      const { resolver, githubClient } = makeResolver({
+        syncSource,
+        // Head equals the last-synced commit → unchanged.
+        latestCommitSha: vi.fn(async () => 'commit-abc'),
+      })
+      const { skill } = await resolver.resolveForRun(WORKSPACE, SKILL_ID)
+      expect(githubClient.latestCommitSha).toHaveBeenCalledOnce()
+      expect(syncSource).not.toHaveBeenCalled()
+      expect(skill.instructions).toContain('Reproduce')
+    })
+
+    it('re-syncs and uses the refreshed record when the source head advanced', async () => {
+      const { resolver, setRecord } = makeResolver({
+        latestCommitSha: vi.fn(async () => 'commit-new'),
+        syncSource: vi.fn(async () => {
+          setRecord(skillRecord({ instructions: 'FRESH INSTRUCTIONS', pinnedCommit: 'commit-new' }))
+        }),
+      })
+      const { skill, version } = await resolver.resolveForRun(WORKSPACE, SKILL_ID)
+      expect(skill.instructions).toBe('FRESH INSTRUCTIONS')
+      expect(version.commit).toBe('commit-new')
+    })
+
+    it('degrades to the last-synced record when the probe fails (never throws)', async () => {
+      const syncSource = vi.fn(async () => {})
+      const { resolver } = makeResolver({
+        syncSource,
+        latestCommitSha: vi.fn(async () => {
+          throw new Error('github 503')
+        }),
+      })
+      const { skill } = await resolver.resolveForRun(WORKSPACE, SKILL_ID)
+      expect(syncSource).not.toHaveBeenCalled()
+      expect(skill.instructions).toContain('Reproduce')
+    })
+
+    it('degrades to the last-synced record when the re-sync itself fails', async () => {
+      const { resolver } = makeResolver({
+        latestCommitSha: vi.fn(async () => 'commit-new'),
+        syncSource: vi.fn(async () => {
+          throw new Error('sync blew up')
+        }),
+      })
+      const { skill } = await resolver.resolveForRun(WORKSPACE, SKILL_ID)
+      // The stale-but-usable record still resolves; the run proceeds one push behind, not failing.
+      expect(skill.instructions).toContain('Reproduce')
+    })
+
+    it('skips the probe entirely when no syncSource is wired', async () => {
+      const { resolver, githubClient } = makeResolver({
+        latestCommitSha: vi.fn(async () => 'commit-new'),
+        // syncSource omitted → the probe must not run.
+      })
+      const { skill } = await resolver.resolveForRun(WORKSPACE, SKILL_ID)
+      expect(githubClient.latestCommitSha).not.toHaveBeenCalled()
+      expect(skill.instructions).toContain('Reproduce')
+    })
   })
 })

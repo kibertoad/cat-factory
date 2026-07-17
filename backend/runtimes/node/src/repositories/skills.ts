@@ -159,6 +159,20 @@ export class DrizzleSkillSourceRepository implements SkillSourceRepository {
     return rows.map(rowToSource)
   }
 
+  async listByRepo(repoOwner: string, repoName: string): Promise<SkillSourceRecord[]> {
+    const rows = await this.db
+      .select()
+      .from(skillSources)
+      .where(
+        and(
+          eq(skillSources.repo_owner, repoOwner),
+          eq(skillSources.repo_name, repoName),
+          isNull(skillSources.deleted_at),
+        ),
+      )
+    return rows.map(rowToSource)
+  }
+
   async get(id: string): Promise<SkillSourceRecord | null> {
     const rows = await this.db.select().from(skillSources).where(eq(skillSources.id, id)).limit(1)
     return rows[0] ? rowToSource(rows[0]) : null

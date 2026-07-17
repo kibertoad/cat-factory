@@ -1,3 +1,4 @@
+import { NotFoundError } from '@cat-factory/kernel'
 import type { GitHubModule } from '@cat-factory/orchestration'
 import type { Logger, ServerContainer } from '@cat-factory/server'
 import type { Job, PgBoss } from 'pg-boss'
@@ -69,6 +70,17 @@ function fakeGitHub() {
   return { github, calls }
 }
 
+/** A container carrying the given modules, for the apply/worker functions. */
+function fakeContainer(parts: {
+  github?: GitHubModule
+  skillSync?: (accountId: string, sourceId: string) => Promise<void>
+}): ServerContainer {
+  return {
+    github: parts.github,
+    skillLibrary: parts.skillSync ? { sourceService: { sync: parts.skillSync } } : undefined,
+  } as unknown as ServerContainer
+}
+
 describe('createNodeGateways async GitHub ingest', () => {
   it('enqueues webhook / resync / backfill onto the queue and returns true when a boss is wired', async () => {
     const { boss, sends } = fakeBoss()
@@ -76,9 +88,11 @@ describe('createNodeGateways async GitHub ingest', () => {
 
     await expect(gw.githubWebhook.enqueueWebhook('push', { a: 1 })).resolves.toBe(true)
     await expect(gw.githubWebhook.queueRepoResync('ws-1', 42)).resolves.toBe(true)
+    await expect(gw.githubWebhook.queueSkillResync('acct-1', 'src-1')).resolves.toBe(true)
     await expect(gw.githubBackfill.scheduleBackfill(99)).resolves.toBe(true)
 
     expect(sends.map((s) => s.name)).toEqual([
+      GITHUB_SYNC_QUEUE,
       GITHUB_SYNC_QUEUE,
       GITHUB_SYNC_QUEUE,
       GITHUB_SYNC_QUEUE,
@@ -86,6 +100,7 @@ describe('createNodeGateways async GitHub ingest', () => {
     expect(sends.map((s) => s.data)).toEqual([
       { kind: 'webhook', eventName: 'push', payload: { a: 1 } },
       { kind: 'resync-repo', workspaceId: 'ws-1', repoGithubId: 42 },
+      { kind: 'skill-source-resync', accountId: 'acct-1', sourceId: 'src-1' },
       { kind: 'backfill', installationId: 99 },
     ])
   })
@@ -94,6 +109,7 @@ describe('createNodeGateways async GitHub ingest', () => {
     const gw = createNodeGateways(process.env)
     await expect(gw.githubWebhook.enqueueWebhook('push', {})).resolves.toBe(false)
     await expect(gw.githubWebhook.queueRepoResync('ws-1', 42)).resolves.toBe(false)
+    await expect(gw.githubWebhook.queueSkillResync('acct-1', 'src-1')).resolves.toBe(false)
     await expect(gw.githubBackfill.scheduleBackfill(99)).resolves.toBe(false)
   })
 })
@@ -101,10 +117,66 @@ describe('createNodeGateways async GitHub ingest', () => {
 describe('applyGitHubSyncJob', () => {
   it('routes each kind to the matching sync/webhook service method', async () => {
     const { github, calls } = fakeGitHub()
-    await applyGitHubSyncJob(github, { kind: 'webhook', eventName: 'pull_request', payload: {} })
-    await applyGitHubSyncJob(github, { kind: 'resync-repo', workspaceId: 'ws-2', repoGithubId: 7 })
-    await applyGitHubSyncJob(github, { kind: 'backfill', installationId: 5 })
+    const skills: string[] = []
+    const container = fakeContainer({
+      github,
+      skillSync: async (accountId, sourceId) => {
+        skills.push(`skill:${accountId}:${sourceId}`)
+      },
+    })
+    await applyGitHubSyncJob(container, { kind: 'webhook', eventName: 'pull_request', payload: {} })
+    await applyGitHubSyncJob(container, {
+      kind: 'resync-repo',
+      workspaceId: 'ws-2',
+      repoGithubId: 7,
+    })
+    await applyGitHubSyncJob(container, { kind: 'backfill', installationId: 5 })
+    await applyGitHubSyncJob(container, {
+      kind: 'skill-source-resync',
+      accountId: 'acct-2',
+      sourceId: 'src-2',
+    })
     expect(calls).toEqual(['webhook:pull_request', 'resync:ws-2:7', 'backfill:5'])
+    expect(skills).toEqual(['skill:acct-2:src-2'])
+  })
+
+  it('drops a skill-source-resync when the skill library is unwired', async () => {
+    const { github } = fakeGitHub()
+    const container = fakeContainer({ github })
+    await expect(
+      applyGitHubSyncJob(container, {
+        kind: 'skill-source-resync',
+        accountId: 'acct-3',
+        sourceId: 'src-3',
+      }),
+    ).resolves.toBeUndefined()
+  })
+
+  it('swallows a NotFoundError from a skill-source-resync (source unlinked since enqueue)', async () => {
+    const container = fakeContainer({
+      skillSync: async () => Promise.reject(new NotFoundError('SkillSource', 'src-4')),
+    })
+    // Terminal, not transient — must NOT throw (else pg-boss retries a gone source forever).
+    await expect(
+      applyGitHubSyncJob(container, {
+        kind: 'skill-source-resync',
+        accountId: 'acct-4',
+        sourceId: 'src-4',
+      }),
+    ).resolves.toBeUndefined()
+  })
+
+  it('rethrows a transient skill-source-resync failure so pg-boss retries', async () => {
+    const container = fakeContainer({
+      skillSync: async () => Promise.reject(new Error('github 503')),
+    })
+    await expect(
+      applyGitHubSyncJob(container, {
+        kind: 'skill-source-resync',
+        accountId: 'acct-5',
+        sourceId: 'src-5',
+      }),
+    ).rejects.toThrow('github 503')
   })
 })
 
