@@ -818,10 +818,13 @@ export function publicApiController(): Hono<AppEnv> {
   // top of the ladder) — a `read`/`write` key gets 403 `insufficient_scope`. Double-scoped to the
   // key's workspace AND a real board task (`getServiceTask` excludes headless anchors, so an
   // external key can never delete an arbitrary in-workspace block), then delegates to the SAME
-  // `removeBlock` the SPA delete uses — idempotent, and it drops the task's run via `deleteByBlock`
-  // so nothing dangles for the stale-run sweeper. (A leaf task is always deletable; the
-  // unfinished-work guard in `removeBlock` only protects top-level service frames, which this
-  // task-scoped route never targets.)
+  // teardown-then-`removeBlock` sequence the SPA delete uses (`BoardController` remove) —
+  // idempotent. `teardownForBlockTree` FIRST kills any running container + durable driver and
+  // drops the run record so deleting a *running* task never orphans a container that would idle
+  // until its watchdog; it also hands back the board list it loaded so `removeBlock` reuses it
+  // instead of paying a second full board read on the same DELETE. (A leaf task is always
+  // deletable; the unfinished-work guard in `removeBlock` only protects top-level service frames,
+  // which this task-scoped route never targets.)
   buildHonoRoute(app, deletePublicTaskContract, async (c) => {
     const gate = await authorize(c, 'admin')
     if ('fail' in gate) {
@@ -837,7 +840,11 @@ export function publicApiController(): Hono<AppEnv> {
     if (!found) {
       return c.json({ error: { code: 'not_found', message: 'Task not found' } }, 404)
     }
-    await container.boardService.removeBlock(auth.workspaceId, taskId)
+    const preloaded = await container.executionService.teardownForBlockTree(
+      auth.workspaceId,
+      taskId,
+    )
+    await container.boardService.removeBlock(auth.workspaceId, taskId, { preloaded })
     return c.body(null, 204)
   })
 
