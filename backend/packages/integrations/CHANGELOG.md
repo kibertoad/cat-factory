@@ -1,5 +1,65 @@
 # @cat-factory/integrations
 
+## 0.85.1
+
+### Patch Changes
+
+- 74c21ab: feat: repo-sourced Claude Skills — freshness automation (slice 4)
+
+  Keep a running pipeline from ever executing a stale skill, without the management
+  surface having to resync by hand (docs/initiatives/repo-skills.md, final slice):
+
+  - **Push-webhook fan-out.** A verified `push` webhook to a repo that skill sources are
+    linked to now enqueues a targeted `skill-source-resync` job per affected source, so its
+    skills are refreshed shortly after the upstream change. One indexed
+    `SkillSourceRepository.listByRepo(owner, name)` lookup (new port method, D1 ⇄ Drizzle
+    with a conformance assertion; the `skill_sources(repo_owner, repo_name)` index was
+    already in place) drives the fan-out; the enqueue rides the existing GitHub-sync queue
+    through a new `GitHubWebhookIngest.queueSkillResync` seam (Cloudflare Queue ⇄ Node
+    pg-boss), and the async consumer runs `SkillSourceService.sync` for the one source
+    (a source unlinked between enqueue and processing is swallowed, not retried forever).
+  - **Dispatch-time self-verifying probe.** At skill-step dispatch, `SkillRunResolver` now
+    probes the source dir's head commit; if it advanced since the last sync it re-syncs so
+    the run uses current instructions. It never fails the run — any probe/re-sync error
+    degrades to the last-synced record (a run may be at most one push behind, never broken),
+    and it's a no-op on the common unchanged path (one `latestCommitSha` read).
+
+  Together with the push fan-out this is the layered freshness story: the webhook keeps the
+  account catalog warm, and the dispatch probe is the correctness backstop for deployments
+  with no sync queue (local/dev) or a missed delivery. Backend-only; no harness/image change.
+
+- Updated dependencies [74c21ab]
+  - @cat-factory/kernel@0.137.0
+
+## 0.85.0
+
+### Minor Changes
+
+- f5ddc02: Public API: per-key permission scopes + task deletion.
+
+  Inbound public-API keys now carry a `scope` on the `/api/v1` surface — an inclusive ladder
+  (`read` ⊂ `write` ⊂ `admin`) the controller enforces per endpoint: reads need `read`,
+  non-destructive mutations (create/start/stop/retry/edit a task, start an initiative run)
+  need `write`, and destructive operations need `admin`. A valid key whose scope is too low
+  gets `403 insufficient_scope` (distinct from the `401` an unknown key gets).
+
+  This unblocks the first destructive endpoint: `DELETE /api/v1/tasks/:taskId` (admin-scoped)
+  deletes a task and its run history, completing the Tier-1 task lifecycle.
+
+  The workspace token UI gains a scope selector on create; a minted key defaults to `write`.
+
+  Breaking (pre-1.0, external surface): `publicApiKeySchema` gains a required `scope` field
+  and the `public_api_keys` table gains a `scope` column (D1 ⇄ Drizzle). Existing keys backfill
+  to `write` — they keep every capability the surface shipped before scopes existed but do not
+  auto-gain the new destructive power, which must be minted `admin` explicitly.
+
+### Patch Changes
+
+- Updated dependencies [f5ddc02]
+- Updated dependencies [576f2e0]
+  - @cat-factory/contracts@0.143.0
+  - @cat-factory/kernel@0.136.0
+
 ## 0.84.12
 
 ### Patch Changes

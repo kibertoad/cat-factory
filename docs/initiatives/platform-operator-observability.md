@@ -1,6 +1,6 @@
 # Initiative: platform operator observability & alerting
 
-**Status:** in progress (read-path dashboard landed; alerting pending) · **Owner:** core · **Started:** 2026-07-16
+**Status:** in progress (read-path dashboard + OpenTelemetry export landed; alerting pending) · **Owner:** core · **Started:** 2026-07-16
 
 > Durable source of truth for a multi-PR initiative. Read it first before picking up the
 > next slice; update the checklist at the end of each PR.
@@ -55,11 +55,40 @@ delivered through the existing `NotificationChannel` seam.
 | 1   | Rollup port + D1 ⇄ Drizzle impls (`runOutcomesSince`, `failureKindBreakdown`, `activeAndParkedCounts`) + conformance | ✅ done | #1157   |
 | 2   | `GET /observability/platform` controller + contracts (windowed aggregate projections; admin-gated)                   | ✅ done | #1157   |
 | 3   | Operator dashboard panel in the SPA (outcome trend, failure taxonomy, durations; i18n all locales)                   | ✅ done | #1157   |
-| 4a  | Duration percentiles (p50/p90/p99) on `durationStatsSince` (D1 ⇄ Drizzle parity) + dashboard render                  | ✅ done | this PR |
+| 4a  | Duration percentiles (p50/p90/p99) on `durationStatsSince` (D1 ⇄ Drizzle parity) + dashboard render                  | ✅ done | #1165   |
 | 4b  | Per-step/gate attempt stats (CI-fixer attempts, gate exhaustion counts) — needs a queryable gate-attempt projection  | ⬜ todo |         |
 | 5   | Threshold alert sweep + `platform_health` notification type (state-change dedup; both runtimes)                      | ⬜ todo |         |
 | 6   | Alert threshold config surface (deployment env defaults + settings UI)                                               | ⬜ todo |         |
 | 7   | Optional daily rollup table for >3d trends (coordinate with storage-and-retention's deferred rollup)                 | ⬜ todo |         |
+| 8   | Export the aggregates via OpenTelemetry (periodic OTLP gauge push, per account; both runtimes)                       | ✅ done | this PR |
+
+### What slice 8 (OpenTelemetry export) shipped
+
+The read-path dashboard is a pull surface (an admin loads it). Slice 8 adds the **push**
+counterpart for the deployment operator: a periodic, runtime-symmetric sweep (Worker
+`scheduled` cron ⇄ Node interval, exactly like the retention sweeps) that computes the SAME
+`PlatformObservability` projection per account and pushes it to any OTLP/HTTP backend as
+OpenTelemetry **gauge** metrics — so the operator watches run outcomes / failure taxonomy /
+live depth / duration percentiles in Grafana/Datadog/etc. The dual of `post-release-health`,
+which watches the _user's_ release; this watches the platform.
+
+- **Reuses the existing account-scoped read** (`PlatformObservabilityService.summarize`) — no
+  new SQL, no port change, no deployment-wide/null-account query (which the account-isolated
+  conformance suite couldn't test anyway). Accounts are enumerated from the workspace
+  projection (`listVisible(null)` → `distinctAccountIds`), the same shape the artifact-retention
+  sweep uses to enumerate tenants — NOT a per-row N+1.
+- **Exporter** (`PlatformMetricsOtelExporter` in `@cat-factory/observability-otel`) is the
+  **fetch transport on both runtimes** — the platform push is a stateless snapshot POST, so it
+  needs no `@opentelemetry/*` SDK counterpart (mirrors the Langfuse fetch-on-both shape). Gauge
+  points carry `cat_factory.account_id` (bounded tenant scope) + `cat_factory.window`; the pure
+  mapping lives in `mapping.ts` alongside the per-call metric mapping. The runtime-neutral
+  `sweepPlatformMetrics` driver lives in `@cat-factory/orchestration`.
+- **Opt-in on top of the base OTel exporter** (`OTEL_PLATFORM_METRICS=true`, since it adds
+  recurring DB rollup load); off ⇒ no sweep, no emission. `OTEL_PLATFORM_METRICS_WINDOW` +
+  (Node) `OTEL_PLATFORM_METRICS_INTERVAL_MS` tune it; the Worker is cron-driven.
+- **Mothership caveat** carries over: mothership-mode local nodes skip the Postgres-backed
+  sweeps (their own scheduler owns them), so the OTel push runs on the DB-backed Node/Worker
+  deployments — consistent with where the dashboard read is intended.
 
 ### Why slice 4 was split (4a done, 4b deferred)
 

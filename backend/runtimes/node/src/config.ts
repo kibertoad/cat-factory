@@ -27,7 +27,11 @@ import {
   resolveMachineTokenTtlMs,
 } from '@cat-factory/server'
 import { GITLAB_PUBLIC_API_BASE } from '@cat-factory/gitlab'
-import { parseOtlpHeaders } from '@cat-factory/observability-otel'
+import {
+  parseOtlpHeaders,
+  parsePlatformMetricsIntervalMs,
+  parsePlatformMetricsWindow,
+} from '@cat-factory/observability-otel'
 import { DEFAULT_SPEND_PRICING, budgetCapsOverlay, modelCostResolver } from '@cat-factory/spend'
 
 // Translate the Node process environment into the shared AppConfig contract. This is
@@ -357,6 +361,11 @@ export function loadNodeConfig(env: NodeJS.ProcessEnv): AppConfig {
     ),
   }
 
+  // OpenTelemetry OTLP exporter: on only with `OTEL_ENABLED=true` AND an endpoint (a
+  // half-configured exporter silently does nothing, like every other opt-in integration).
+  const otelEnabled =
+    env.OTEL_ENABLED?.trim() === 'true' && !!env.OTEL_EXPORTER_OTLP_ENDPOINT?.trim()
+
   return {
     agents: {
       routing: {
@@ -543,10 +552,16 @@ export function loadNodeConfig(env: NodeJS.ProcessEnv): AppConfig {
     // Optional OpenTelemetry OTLP exporter: off unless `OTEL_ENABLED=true` AND an endpoint
     // is set. On Node this uses the official @opentelemetry/* SDK (see container.ts).
     otel: {
-      enabled: env.OTEL_ENABLED?.trim() === 'true' && !!env.OTEL_EXPORTER_OTLP_ENDPOINT?.trim(),
+      enabled: otelEnabled,
       endpoint: env.OTEL_EXPORTER_OTLP_ENDPOINT?.trim() || undefined,
       headers: parseOtlpHeaders(env.OTEL_EXPORTER_OTLP_HEADERS),
       serviceName: env.OTEL_SERVICE_NAME?.trim() || undefined,
+      platformMetrics: {
+        // A further opt-in on top of the base exporter (adds recurring DB rollup load).
+        enabled: otelEnabled && env.OTEL_PLATFORM_METRICS?.trim() === 'true',
+        intervalMs: parsePlatformMetricsIntervalMs(env.OTEL_PLATFORM_METRICS_INTERVAL_MS),
+        window: parsePlatformMetricsWindow(env.OTEL_PLATFORM_METRICS_WINDOW),
+      },
     },
   }
 }

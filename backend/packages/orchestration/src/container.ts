@@ -117,7 +117,11 @@ import type {
 import type { SecretCipher } from '@cat-factory/kernel'
 import type { FragmentSourceRepository, PromptFragmentRepository } from '@cat-factory/kernel'
 import type { FragmentSelector } from '@cat-factory/kernel'
-import type { AccountSkillRepository, SkillSourceRepository } from '@cat-factory/kernel'
+import type {
+  AccountSkillRepository,
+  SkillSourceRepository,
+  SkillSourceResyncRequest,
+} from '@cat-factory/kernel'
 import type {
   BranchProjectionRepository,
   CheckRunProjectionRepository,
@@ -779,6 +783,13 @@ export interface CoreDependencies {
   accountSkillRepository?: AccountSkillRepository
   skillSourceRepository?: SkillSourceRepository
   resolveSkillInstallationId?: ResolveSkillInstallationId
+  /**
+   * Enqueues a targeted skill-source resync onto the runtime's GitHub-sync queue — the
+   * push-webhook freshness fan-out (slice 4). Facade-provided (Worker Queue / Node pg-boss);
+   * absent (no queue, or a pure-logic test) ⇒ no proactive resync, and freshness is guaranteed
+   * at dispatch by the resolver's head-commit probe instead.
+   */
+  enqueueSkillResync?: (request: SkillSourceResyncRequest) => Promise<void>
 
   // ---- Notifications + merge lifecycle (optional; wired when configured) ----
   // The notifications subsystem (the in-app inbox + the board's human-action
@@ -1396,6 +1407,11 @@ function createGitHubModule(deps: CoreDependencies, caches: AppCaches): GitHubMo
     repoProjectionCache: caches.repoProjection,
     // Drop a pushed branch's cached RepoFiles reads (slice 4) when a branch moves out-of-band.
     repoFilesCache: caches.repoFiles,
+    // Repo-sourced skill freshness fan-out (slice 4): on a push, resync every skill source
+    // linked to the repo. Both are facade-provided (the queue-backed enqueue only exists where
+    // a runtime has a sync queue); unwired ⇒ the dispatch-time probe is the freshness backstop.
+    skillSourceRepository: deps.skillSourceRepository,
+    enqueueSkillResync: deps.enqueueSkillResync,
   })
   const service = new GitHubService({
     githubClient,
@@ -2248,7 +2264,9 @@ function createSkillLibraryModule(
 
   // The run-path resolver needs the source repo (for the resource repo owner/name) + the GitHub
   // client + an installation resolver to fetch resource bodies at the pinned commit — the same
-  // prerequisites as the sync service, so it assembles under the same guard.
+  // prerequisites as the sync service, so it assembles under the same guard. It also drives the
+  // dispatch-time freshness probe (slice 4) through the sync service, which is built under the
+  // identical guard, so it's always present here.
   const runResolver =
     deps.skillSourceRepository && deps.githubClient && deps.resolveSkillInstallationId
       ? new SkillRunResolver({
@@ -2257,6 +2275,9 @@ function createSkillLibraryModule(
           skillSourceRepository: deps.skillSourceRepository,
           githubClient: deps.githubClient,
           resolveInstallationId: deps.resolveSkillInstallationId,
+          syncSource: sourceService
+            ? (accountId, sourceId) => sourceService.sync(accountId, sourceId)
+            : undefined,
         })
       : undefined
 

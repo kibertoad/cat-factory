@@ -10,6 +10,8 @@ import type {
   IssueProjectionRepository,
   PullRequestProjectionRepository,
   RepoProjectionRepository,
+  SkillSourceRepository,
+  SkillSourceResyncRequest,
 } from '@cat-factory/kernel'
 import { repoFilesCacheGroup } from '@cat-factory/kernel'
 import {
@@ -63,12 +65,45 @@ export interface WebhookServiceDependencies {
    * Absent (tests / no cache) ⇒ no-op; the head-sha probe still bounds staleness regardless.
    */
   repoFilesCache?: GroupCacheHandle<CachedRepoRead>
+  /**
+   * Repo-sourced skill freshness (slice 4). When a push advances a branch, any skill source
+   * linked to that repo may be stale, so the affected sources are looked up here (by the
+   * pushed repo's owner/name, one indexed query — never a point-read per source) and handed
+   * to {@link enqueueSkillResync} for an async targeted resync. Both must be wired for the
+   * fan-out to fire (GitHub + skills configured on a runtime with a queue); absent ⇒ no
+   * proactive resync, and freshness falls to the dispatch-time head-commit probe.
+   */
+  skillSourceRepository?: SkillSourceRepository
+  enqueueSkillResync?: (request: SkillSourceResyncRequest) => Promise<void>
 }
 
 type Json = Record<string, unknown>
 
 function asObject(value: unknown): Json | null {
   return typeof value === 'object' && value !== null ? (value as Json) : null
+}
+
+/**
+ * Whether a branch push to `pushedBranch` could have moved a skill source's tracked ref, so the
+ * source is worth resyncing (slice 4 fan-out). A source tracks a branch via `gitRef`; `HEAD` (or
+ * empty) means the repo's default branch, which the push payload carries as `default_branch`.
+ * Returns `true` whenever a mismatch can't be proven — an unknown default, or a non-`refs/heads`
+ * gitRef — so the filter never suppresses a resync it isn't certain about. This is a pure
+ * optimisation: the dispatch-time head-commit probe is the correctness backstop, so a wrong
+ * skip could only ever cost a warm-up, never a stale run.
+ */
+function pushAffectsSkillSource(
+  gitRef: string | undefined,
+  pushedBranch: string,
+  defaultBranch: string | undefined,
+): boolean {
+  const ref = gitRef ?? ''
+  const tracked = ref.startsWith('refs/heads/') ? ref.slice('refs/heads/'.length) : ref
+  if (tracked === '' || tracked === 'HEAD') {
+    // Tracks the default branch: match it when the payload named one, else stay conservative.
+    return defaultBranch ? pushedBranch === defaultBranch : true
+  }
+  return tracked === pushedBranch
 }
 
 export class WebhookService {
@@ -141,16 +176,35 @@ export class WebhookService {
             )
           }
         })
+        // The remaining freshness fan-outs are branch-head concerns (skill sources track a
+        // branch ref; a tag push never moves it), and need the repo's owner/name.
+        const repo = asObject(root.repository)
+        const owner = asObject(repo?.owner)?.login
+        const name = repo?.name
+        if (!ref.startsWith('refs/heads/') || typeof owner !== 'string' || typeof name !== 'string')
+          return
         // Drop the pushed branch's cached RepoFiles reads (slice 4). Workspace-independent —
         // the cache is grouped by installation+repo+branch — so one call, outside the fan-out.
-        if (ref.startsWith('refs/heads/') && this.deps.repoFilesCache) {
-          const repo = asObject(root.repository)
-          const owner = asObject(repo?.owner)?.login
-          const name = repo?.name
-          if (typeof owner === 'string' && typeof name === 'string') {
-            await this.deps.repoFilesCache.invalidateGroup(
-              repoFilesCacheGroup(installationId, owner, name, ref.slice('refs/heads/'.length)),
-            )
+        if (this.deps.repoFilesCache) {
+          await this.deps.repoFilesCache.invalidateGroup(
+            repoFilesCacheGroup(installationId, owner, name, ref.slice('refs/heads/'.length)),
+          )
+        }
+        // Skill-source freshness fan-out (slice 4): a branch push may have changed a linked skill
+        // directory, so resync every skill source that TRACKS the pushed branch. One indexed
+        // lookup, then a targeted async resync per matching source (typically zero or one). Sources
+        // that track a different branch are skipped here — a source's dir can't have moved on a
+        // branch it doesn't follow, so enqueuing them would only queue guaranteed no-op resyncs.
+        // Skipping is always safe: the dispatch-time head-commit probe is the correctness backstop,
+        // so a missed enqueue costs at most a warm-up, never a stale run.
+        if (this.deps.skillSourceRepository && this.deps.enqueueSkillResync) {
+          const pushedBranch = ref.slice('refs/heads/'.length)
+          const defaultBranch =
+            typeof repo?.default_branch === 'string' ? repo.default_branch : undefined
+          const sources = await this.deps.skillSourceRepository.listByRepo(owner, name)
+          for (const source of sources) {
+            if (!pushAffectsSkillSource(source.gitRef, pushedBranch, defaultBranch)) continue
+            await this.deps.enqueueSkillResync({ accountId: source.accountId, sourceId: source.id })
           }
         }
         return
