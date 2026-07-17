@@ -68,3 +68,40 @@ const sink = createNodeOtelSink({ endpoint: process.env.OTEL_EXPORTER_OTLP_ENDPO
 Wired into a facade via its container's `buildTraceSink(config)`; absent config (no
 `OTEL_ENABLED=true` + endpoint) ⇒ the sink is never built and there is no external
 emission or behaviour change.
+
+## Platform-operator metrics (deployment health)
+
+The per-call sink above answers "what did THIS run do". The **`PlatformMetricsOtelExporter`**
+(`createPlatformMetricsOtelExporter`, the `.` entry) answers "how is the WHOLE deployment
+doing": a periodic sweep (Worker `scheduled` cron ⇄ Node interval, runtime-symmetric) computes
+the platform-observability projection per account and this exporter pushes it to the same
+OTLP endpoint as OpenTelemetry **gauge** metrics — so an operator watches deployment health in
+their own metrics backend, the dual of the `post-release-health` gate that watches the
+_user's_ release.
+
+Metrics (`cat_factory.platform.*`, all gauges — the OTel backend trends the series over time):
+
+| Metric                                  | Unit    | Split dimension             |
+| --------------------------------------- | ------- | --------------------------- |
+| `cat_factory.platform.runs`             | `{run}` | `cat_factory.run_status`    |
+| `cat_factory.platform.run_success_rate` | `1`     | —                           |
+| `cat_factory.platform.run_failures`     | `{run}` | `cat_factory.failure_kind`  |
+| `cat_factory.platform.live_runs`        | `{run}` | `cat_factory.run_state`     |
+| `cat_factory.platform.run_duration`     | `s`     | `cat_factory.duration_stat` |
+
+Every point carries `cat_factory.account_id` (the bounded tenant scope — safe on a metric,
+unlike the unbounded workspace id excluded from the per-call metrics); the windowed gauges
+also carry `cat_factory.window`. Null aggregates (a success rate / percentiles with no
+terminal runs) are omitted rather than emitted as a misleading zero.
+
+Unlike the per-call LLM path, the platform exporter is the **fetch transport on both
+runtimes** (there is no SDK counterpart): the push is a stateless, low-frequency snapshot
+POST with no need for the SDK's async instruments / periodic reader, so one workerd-safe
+exporter serves both facades and is tested once.
+
+**Opt-in on top of the base exporter** (it adds recurring DB rollup load): off unless
+`OTEL_ENABLED=true` + an endpoint AND `OTEL_PLATFORM_METRICS=true`. `OTEL_PLATFORM_METRICS_WINDOW`
+(`1h`/`24h`/`7d`, default `1h`) sets the trailing window; on Node
+`OTEL_PLATFORM_METRICS_INTERVAL_MS` (default 60s) sets the sweep cadence (the Worker is
+cron-driven). The runtime-neutral `sweepPlatformMetrics` driver + `distinctAccountIds`
+account enumeration live in `@cat-factory/orchestration`.

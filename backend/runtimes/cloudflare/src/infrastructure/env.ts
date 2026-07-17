@@ -504,6 +504,17 @@ export interface Env {
   OTEL_EXPORTER_OTLP_HEADERS?: string
   /** OTLP resource `service.name`; defaults to `cat-factory` when unset. */
   OTEL_SERVICE_NAME?: string
+  /**
+   * Opt-in flag ('true') for the deployment-level (platform-operator) metrics sweep: pushes
+   * per-account run-health aggregates (outcomes, failures, live depth, duration percentiles)
+   * as OTLP GAUGE metrics to the same endpoint. A further opt-in on top of OTEL_ENABLED (it
+   * adds recurring DB rollup load); the `scheduled` cron drives it.
+   */
+  OTEL_PLATFORM_METRICS?: string
+  /** Trailing window each platform-metrics snapshot aggregates over (`1h`/`24h`/`7d`; default `1h`). */
+  OTEL_PLATFORM_METRICS_WINDOW?: string
+  /** Node-only sweep interval (ms); the Worker is cron-driven and ignores it. */
+  OTEL_PLATFORM_METRICS_INTERVAL_MS?: string
 
   // ---- Storage retention (see config.ts and docs/storage-and-retention.md) -
   /**

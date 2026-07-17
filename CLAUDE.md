@@ -81,6 +81,45 @@ commit task work directly to `main` unless you're explicitly asked to** (and if 
 started from `main`, branch off it before committing) — by default `main` should only
 receive changes by merging a PR.
 
+## Sweep for documentation staleness before every PR (and keep root docs pointing at the deep ones)
+
+Docs are part of the change, not a follow-up. **Before opening (or updating) a PR, do a
+documentation-staleness sweep: find every doc the change made inaccurate or incomplete, and
+fix it in the SAME PR.** A change that ships new/altered behaviour with stale docs is an
+unfinished change, even when the code is perfect. This is on the author — CI cannot catch it:
+`check-package-catalog.mjs` only verifies that every package has _a_ row in the README tables,
+NOT that the row's content is current or that a shipped capability is represented anywhere, so
+a stale description or a missing feature entry passes CI silently (exactly how a new export
+once shipped with a README row still describing only the old behaviour).
+
+What the sweep covers — walk OUTWARD from what you touched:
+
+- **The package's own docs** — its `README.md` + `AGENTS.md` (the public entry point + the
+  "where things live" map). New public export, env var, config field, or behaviour ⇒ update
+  them.
+- **The root [`README.md`](./README.md)** — refresh the package's **repository-layout** row so
+  its description matches what the package now does (not just that a row exists), AND, when the
+  change adds or materially changes a **user-facing capability**, add/adjust a row in the
+  "What it supports" table. Don't let a shipped feature be invisible at the top level because a
+  row existed for the package that houses it.
+- **[`CLAUDE.md`](./CLAUDE.md)** (this file) — update the runtime-flow notes when you change a
+  flow it describes; add a rule when you establish a new convention.
+- **Cross-references / deeper docs** — this repo is deliberately layered (root `README.md` →
+  per-package `README.md`/`AGENTS.md` → `backend/docs/*`, `docs/*`, ADRs, initiative trackers).
+  **A higher-level doc must POINT AT the deeper doc where one exists** rather than restating or
+  omitting it: the root README's rows link the package README; a feature write-up links its ADR
+  / initiative tracker / `backend/docs/` page. When you add a deep doc (a new ADR, a
+  `backend/docs/*` page, an initiative tracker), add the reference from the doc a reader starts
+  at, so the deep doc is reachable — an unreferenced deep doc is effectively lost. When you make
+  a higher-level claim, link down to the authoritative detail instead of duplicating it (and
+  letting the copy rot).
+- **Initiative trackers / ADRs** — update the tracker's per-item checklist at the end of each
+  slice (see below), and keep any ADR that describes the changed design honest.
+
+Match the doc edits to the change's blast radius — a one-line internal fix needs no sweep; a new
+export/env var/capability/flow does. When in doubt, grep the docs for the names and concepts you
+changed and read the hits.
+
 ## Backwards compatibility is NOT a goal
 
 This project is pre-1.0 and under active development with **no external consumers to

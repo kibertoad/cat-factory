@@ -1,4 +1,5 @@
 import type { LlmGenerationEvent, LlmToolSpan, LlmToolSpanContext } from '@cat-factory/kernel'
+import type { PlatformObservability } from '@cat-factory/contracts'
 
 // The SINGLE source of truth for how a cat-factory observability event becomes
 // OpenTelemetry telemetry. BOTH transports import from here — the workerd-safe fetch
@@ -219,6 +220,162 @@ export function mapGenerationMetrics(event: LlmGenerationEvent): MappedMetrics {
     startTimeMs: event.startedAt,
     endTimeMs: event.endedAt,
   }
+}
+
+// ---------------------------------------------------------------------------
+// Platform-operator observability → OpenTelemetry metrics. The dual of the per-run
+// generation metrics above: where those describe ONE LLM call, these describe the
+// deployment's aggregate run health (outcomes, failure taxonomy, live/parked depth,
+// durations) over a trailing window, scoped to an account. A periodic sweep computes the
+// `PlatformObservability` projection and feeds it here; the fetch exporter (`./platform`)
+// encodes the result as OTLP GAUGE data points (point-in-time aggregates the OTel backend
+// itself trends over the series). Emitted here (not `./index`) so the mapping stays the
+// single source of truth for both signals.
+// ---------------------------------------------------------------------------
+
+/** Metric names for the deployment-level platform observability gauges. */
+export const PLATFORM_METRIC = {
+  /** Windowed run count, split by run status (done/failed/running/…). */
+  runs: 'cat_factory.platform.runs',
+  /** Windowed `done / (done + failed)` success ratio (0..1). */
+  runSuccessRate: 'cat_factory.platform.run_success_rate',
+  /** Windowed failed-run count, split by failure kind. */
+  runFailures: 'cat_factory.platform.run_failures',
+  /** Current live/parked run count (a snapshot, not windowed), split by lifecycle state. */
+  liveRuns: 'cat_factory.platform.live_runs',
+  /** Windowed wall-clock run duration (seconds), split by statistic (avg/min/max/pNN). */
+  runDuration: 'cat_factory.platform.run_duration',
+} as const
+
+/**
+ * Attribute keys for the platform metrics. `account_id` is the tenant scope (bounded — the
+ * billing entity, far fewer than workspaces, so safe on a metric time series, unlike the
+ * workspace id excluded from the per-call metrics); `window` labels the trailing aggregation
+ * window. The remaining keys are the bounded split dimensions of each gauge.
+ */
+export const PLATFORM_ATTR = {
+  accountId: 'cat_factory.account_id',
+  window: 'cat_factory.window',
+  runStatus: 'cat_factory.run_status',
+  runState: 'cat_factory.run_state',
+  failureKind: 'cat_factory.failure_kind',
+  durationStat: 'cat_factory.duration_stat',
+} as const
+
+/** Metric units: a dimensionless run count, a dimensionless ratio, and seconds. */
+export const RUN_UNIT = '{run}'
+export const RATIO_UNIT = '1'
+
+/** One gauge data point: its dimensions, value, and whether to encode as int or double. */
+export interface MappedGaugePoint {
+  attributes: AttributeMap
+  value: number
+  /** true ⇒ encode as an integer (counts); false ⇒ a double (ratios/durations). */
+  isInt: boolean
+}
+
+/** A gauge metric ready to encode as OTLP or feed the SDK meter. */
+export interface MappedGauge {
+  name: string
+  unit: string
+  points: MappedGaugePoint[]
+}
+
+/**
+ * Map a {@link PlatformObservability} projection to the OpenTelemetry gauge metrics. All are
+ * point-in-time gauges (the OTel backend builds trends from the series over time), stamped
+ * with the projection's `generatedAt`. Every point carries the `account_id`; the windowed
+ * gauges additionally carry the `window` label. Null/absent aggregates (e.g. a success rate
+ * or percentiles with no terminal runs) are omitted rather than emitted as a misleading zero.
+ */
+export function mapPlatformMetrics(
+  snapshot: PlatformObservability,
+  dims: { accountId: string },
+): MappedGauge[] {
+  const base: AttributeMap = { [PLATFORM_ATTR.accountId]: dims.accountId }
+  const windowed: AttributeMap = { ...base, [PLATFORM_ATTR.window]: snapshot.window }
+  const gauges: MappedGauge[] = []
+
+  const o = snapshot.outcomes
+  const runStatuses: [string, number][] = [
+    ['done', o.done],
+    ['failed', o.failed],
+    ['running', o.running],
+    ['blocked', o.blocked],
+    ['paused', o.paused],
+    ['other', o.other],
+  ]
+  gauges.push({
+    name: PLATFORM_METRIC.runs,
+    unit: RUN_UNIT,
+    points: runStatuses.map(([status, value]) => ({
+      attributes: { ...windowed, [PLATFORM_ATTR.runStatus]: status },
+      value,
+      isInt: true,
+    })),
+  })
+
+  if (o.successRate !== null) {
+    gauges.push({
+      name: PLATFORM_METRIC.runSuccessRate,
+      unit: RATIO_UNIT,
+      points: [{ attributes: windowed, value: o.successRate, isInt: false }],
+    })
+  }
+
+  if (snapshot.failures.length > 0) {
+    gauges.push({
+      name: PLATFORM_METRIC.runFailures,
+      unit: RUN_UNIT,
+      points: snapshot.failures.map((f) => ({
+        attributes: { ...windowed, [PLATFORM_ATTR.failureKind]: f.kind },
+        value: f.count,
+        isInt: true,
+      })),
+    })
+  }
+
+  const live = snapshot.live
+  gauges.push({
+    name: PLATFORM_METRIC.liveRuns,
+    unit: RUN_UNIT,
+    // Live/parked depth is a snapshot, NOT windowed — so these points carry no window label.
+    points: (
+      [
+        ['running', live.running],
+        ['blocked', live.blocked],
+        ['paused', live.paused],
+        ['pending', live.pending],
+      ] as [string, number][]
+    ).map(([state, value]) => ({
+      attributes: { ...base, [PLATFORM_ATTR.runState]: state },
+      value,
+      isInt: true,
+    })),
+  })
+
+  const d = snapshot.durations
+  const durationStats: [string, number | null][] = [
+    ['avg', d.avgMs],
+    ['min', d.minMs],
+    ['max', d.maxMs],
+    ['p50', d.p50Ms],
+    ['p90', d.p90Ms],
+    ['p99', d.p99Ms],
+  ]
+  const durationPoints: MappedGaugePoint[] = durationStats
+    .filter(([, ms]) => ms !== null)
+    .map(([stat, ms]) => ({
+      attributes: { ...windowed, [PLATFORM_ATTR.durationStat]: stat },
+      // OTel duration convention is seconds; the projection carries ms.
+      value: (ms as number) / 1000,
+      isInt: false,
+    }))
+  if (durationPoints.length > 0) {
+    gauges.push({ name: PLATFORM_METRIC.runDuration, unit: DURATION_UNIT, points: durationPoints })
+  }
+
+  return gauges
 }
 
 /** Map one container tool call to a neutral span under its run's trace. */

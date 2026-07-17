@@ -49,6 +49,7 @@ import { DrizzleGitHubInstallationRepository } from './repositories/containerExe
 import { createDrizzleRepositories } from './repositories/drizzle.js'
 import { DrizzleEnvironmentTestRunRepository } from './repositories/environmentTest.js'
 import { startGitHubReconcileSweeper } from './githubReconcile.js'
+import { startPlatformMetricsSweeper } from './platformMetrics.js'
 import {
   DrizzleCommitProjectionRepository,
   DrizzleRepoProjectionRepository,
@@ -549,6 +550,20 @@ async function bootServer(
         logger,
       )
     : () => {}
+  // Push deployment-level (platform-operator) observability aggregates to the OTLP endpoint
+  // as OpenTelemetry gauge metrics (the Worker uses cron). No-op unless the platform
+  // observability read is wired AND `OTEL_PLATFORM_METRICS` opted in on top of the exporter.
+  const stopPlatformMetrics = container.platformObservability
+    ? startPlatformMetricsSweeper(
+        {
+          otel: container.config.otel,
+          platformObservability: container.platformObservability,
+          workspaceRepository: repos.workspaceRepository,
+        },
+        clock,
+        logger,
+      )
+    : () => {}
 
   // Ordered graceful shutdown: stop accepting connections, halt the sweeper + pg-boss
   // worker, release the pool, then exit. Without closing the HTTP server the process
@@ -571,6 +586,7 @@ async function bootServer(
     stopNotificationEscalation()
     stopKaizenSweeper()
     stopGitHubReconcile()
+    stopPlatformMetrics()
     stopRealtime()
     // Release any cross-node propagation adapters (Redis connections); a no-op when none.
     await realtimePropagator.stop()
