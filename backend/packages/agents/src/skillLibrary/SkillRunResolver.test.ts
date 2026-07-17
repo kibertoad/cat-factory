@@ -1,0 +1,159 @@
+import type {
+  AccountSkillRecord,
+  AccountSkillRepository,
+  GitHubClient,
+  RepoFileContent,
+  SkillSourceRecord,
+  SkillSourceRepository,
+  WorkspaceRepository,
+} from '@cat-factory/kernel'
+import { ValidationError } from '@cat-factory/kernel'
+import { describe, expect, it, vi } from 'vitest'
+import { SkillCatalogService } from './SkillCatalogService.js'
+import { SkillRunResolver } from './SkillRunResolver.js'
+
+// Coverage for the run-path skill resolver: it reads the persisted skill + resource
+// manifest from the account catalog, fetches resource bodies at the pinned commit
+// (bounded), degrades a fetch failure to a body-less reference (never throws), and
+// throws only for an unknown/tombstoned skill.
+
+const ACCOUNT = 'acct-1'
+const WORKSPACE = 'ws-1'
+const SOURCE_ID = 'sklsrc-1'
+const SKILL_ID = `src:${SOURCE_ID}:triage`
+
+function skillRecord(overrides: Partial<AccountSkillRecord> = {}): AccountSkillRecord {
+  return {
+    skillId: SKILL_ID,
+    accountId: ACCOUNT,
+    name: 'triage',
+    description: 'Triage a bug',
+    instructions: '1. Reproduce\n2. Classify',
+    resources: [
+      { path: '.claude/skills/triage/templates/report.md', sha: 'sha-r', size: 40 },
+      { path: '.claude/skills/triage/big.bin', sha: 'sha-b', size: 200_000 },
+    ],
+    sourceId: SOURCE_ID,
+    sourcePath: '.claude/skills/triage/SKILL.md',
+    sourceSha: 'sha-manifest',
+    pinnedCommit: 'commit-abc',
+    createdAt: 1,
+    updatedAt: 1,
+    deletedAt: null,
+    ...overrides,
+  }
+}
+
+function sourceRecord(): SkillSourceRecord {
+  return {
+    id: SOURCE_ID,
+    accountId: ACCOUNT,
+    repoOwner: 'acme',
+    repoName: 'skills',
+    gitRef: 'HEAD',
+    dirPath: '.claude/skills',
+    lastSyncedCommit: 'commit-abc',
+    lastSyncedAt: 1,
+    createdAt: 1,
+    deletedAt: null,
+  }
+}
+
+function makeResolver(opts: {
+  record?: AccountSkillRecord | null
+  source?: SkillSourceRecord | null
+  installationId?: number | null
+  getFileContent?: GitHubClient['getFileContent']
+}) {
+  const record = opts.record === undefined ? skillRecord() : opts.record
+  const accountSkillRepository = {
+    get: vi.fn(async (accountId: string, skillId: string) =>
+      record && record.accountId === accountId && record.skillId === skillId ? record : null,
+    ),
+    listByAccount: vi.fn(async () => (record ? [record] : [])),
+  } as unknown as AccountSkillRepository
+  const skillSourceRepository = {
+    get: vi.fn(async () => (opts.source === undefined ? sourceRecord() : opts.source)),
+  } as unknown as SkillSourceRepository
+  const workspaceRepository = {
+    accountOf: vi.fn(async () => ACCOUNT),
+  } as unknown as WorkspaceRepository
+  const githubClient = {
+    getFileContent:
+      opts.getFileContent ??
+      vi.fn(
+        async (): Promise<RepoFileContent | null> => ({ content: 'REPORT BODY', sha: 'sha-r' }),
+      ),
+  } as unknown as GitHubClient
+  const resolver = new SkillRunResolver({
+    workspaceRepository,
+    catalogService: new SkillCatalogService({ accountSkillRepository }),
+    skillSourceRepository,
+    githubClient,
+    resolveInstallationId: async () =>
+      opts.installationId === undefined ? 42 : opts.installationId,
+  })
+  return { resolver, githubClient }
+}
+
+describe('SkillRunResolver', () => {
+  it('resolves instructions + fetches in-bounds resource bodies, referencing oversized ones by path', async () => {
+    const { resolver } = makeResolver({})
+    const { skill, version } = await resolver.resolveForRun(WORKSPACE, SKILL_ID)
+
+    expect(skill.name).toBe('triage')
+    expect(skill.instructions).toContain('Reproduce')
+    // The small template gets a body at its relative path; the 200KB .bin is over the
+    // per-file cap, so it is referenced by repo path with no body.
+    const tpl = skill.resources.find((r) => r.relPath === 'templates/report.md')
+    expect(tpl?.body).toBe('REPORT BODY')
+    const bin = skill.resources.find((r) => r.relPath === 'big.bin')
+    expect(bin?.body).toBeUndefined()
+    expect(bin?.path).toBe('.claude/skills/triage/big.bin')
+    // Pins the version onto the step.
+    expect(version).toEqual({ skillId: SKILL_ID, commit: 'commit-abc', sha: 'sha-manifest' })
+  })
+
+  it('fetches resource bodies at the pinned commit', async () => {
+    const getFileContent = vi.fn(async () => ({ content: 'x', sha: 's' }))
+    const { resolver } = makeResolver({ getFileContent })
+    await resolver.resolveForRun(WORKSPACE, SKILL_ID)
+    expect(getFileContent).toHaveBeenCalledWith(
+      42,
+      { owner: 'acme', repo: 'skills' },
+      '.claude/skills/triage/templates/report.md',
+      'commit-abc',
+    )
+  })
+
+  it('degrades a GitHub fetch failure to a body-less reference (never throws)', async () => {
+    const getFileContent = vi.fn(async () => {
+      throw new Error('boom')
+    })
+    const { resolver } = makeResolver({ getFileContent })
+    const { skill } = await resolver.resolveForRun(WORKSPACE, SKILL_ID)
+    expect(skill.resources.every((r) => r.body === undefined)).toBe(true)
+  })
+
+  it('drops resource bodies (no throw) when no installation is available', async () => {
+    const { resolver } = makeResolver({ installationId: null })
+    const { skill } = await resolver.resolveForRun(WORKSPACE, SKILL_ID)
+    expect(skill.resources).toHaveLength(2)
+    expect(skill.resources.every((r) => r.body === undefined)).toBe(true)
+  })
+
+  it('treats a binary (NUL-byte) body as unmaterialisable', async () => {
+    const getFileContent = vi.fn(async () => ({ content: 'a\u0000b', sha: 's' }))
+    const { resolver } = makeResolver({ getFileContent })
+    const { skill } = await resolver.resolveForRun(WORKSPACE, SKILL_ID)
+    const tpl = skill.resources.find((r) => r.relPath === 'templates/report.md')
+    expect(tpl?.body).toBeUndefined()
+  })
+
+  it('throws a ValidationError for an unknown / tombstoned skill', async () => {
+    const { resolver } = makeResolver({ record: null })
+    await expect(resolver.resolveForRun(WORKSPACE, SKILL_ID)).rejects.toBeInstanceOf(
+      ValidationError,
+    )
+  })
+})

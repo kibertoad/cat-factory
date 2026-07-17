@@ -476,6 +476,75 @@ function buildContextFiles(context: AgentRunContext): {
   return { files, contextDocs: keptDocs, contextTasks: keptTasks }
 }
 
+/** The top-level `skill` job-body field the harness materialises (harness-aware). */
+export interface SkillJobBody {
+  name: string
+  description: string
+  instructions: string
+  /** Sibling resource files, keyed by their path within the skill dir (only those with a body). */
+  resources: { relPath: string; content: string }[]
+}
+
+/**
+ * Render a resolved `skill` for the running harness (repo-sourced Claude Skills, slice 2). The
+ * skill payload always travels as the dedicated top-level `skill` job-body field (NEVER a context
+ * file — the agent-context snapshot copies context files verbatim, whereas an unknown top-level
+ * field is omitted by its allow-list). The harness materialises it HARNESS-AWARE from that field:
+ * `CLAUDE_CONFIG_DIR/skills/<name>/` natively for claude-code (the CLI loads it), or
+ * `.cat-context/skill/<relPath>` for Pi/codex (which read the checkout).
+ *
+ * Only the PROMPT differs by harness: claude-code gets a short pointer (its instructions live in
+ * the installed SKILL.md, so they are not duplicated into the prompt), while Pi/codex get the full
+ * instructions folded in (their agents don't natively load a skill) plus a pointer to the
+ * materialised resources. A resource whose body couldn't be fetched (oversized / binary /
+ * unreadable) is referenced by its repo path in the prompt rather than materialised. No skill ⇒
+ * everything empty.
+ */
+export function renderSkillForHarness(
+  skill: AgentRunContext['skill'],
+  harness: HarnessKind,
+): { body?: SkillJobBody; section?: string } {
+  if (!skill) return {}
+  const withBody = skill.resources.filter(
+    (r): r is { path: string; relPath: string; body: string } => typeof r.body === 'string',
+  )
+  const withoutBody = skill.resources.filter((r) => typeof r.body !== 'string')
+  const missingNote = withoutBody.length
+    ? ` Some resources were too large or binary to include — read them from the repo if you need them: ${withoutBody
+        .map((r) => r.path)
+        .join(', ')}.`
+    : ''
+  const body: SkillJobBody = {
+    name: skill.name,
+    description: skill.description,
+    instructions: skill.instructions,
+    resources: withBody.map((r) => ({ relPath: r.relPath, content: r.body })),
+  }
+
+  if (harness === 'claude-code') {
+    return {
+      body,
+      section:
+        `Apply the "${skill.name}" skill, installed for this step as a Claude skill (its SKILL.md ` +
+        `and resource files are available to you). Follow it precisely.${missingNote}`,
+    }
+  }
+
+  // Pi / codex: fold the instructions into the prompt; the harness materialises the resources
+  // under `.cat-context/skill/` (see the harness `skill` handling), which the prompt points at.
+  const resourceNote = withBody.length
+    ? ` The skill's resource files are available under \`.cat-context/skill/\`: ${withBody
+        .map((r) => r.relPath)
+        .join(', ')}.`
+    : ''
+  return {
+    body,
+    section:
+      `Apply the following skill "${skill.name}" to this task — follow its steps and honour its ` +
+      `constraints:\n\n${skill.instructions}\n${resourceNote}${missingNote}`,
+  }
+}
+
 export interface ContainerAgentExecutorDependencies {
   /** Resolve which runner backend (Cloudflare container or self-hosted pool) a job runs on. */
   resolveTransport: ResolveRunnerTransport
@@ -1184,6 +1253,10 @@ export class ContainerAgentExecutor implements AsyncAgentExecutor {
       contextDocs: keptDocs,
       contextTasks: keptTasks,
     } = buildContextFiles(context)
+    // A `skill` step's resolved skill, rendered harness-aware (repo-skills slice 2): the payload
+    // travels as the top-level `skill` job-body field (the harness materialises it — natively for
+    // claude-code, under `.cat-context/skill/` for Pi/codex), and `skillSection` primes the prompt.
+    const skillRender = renderSkillForHarness(context.skill, harness)
     // The UI tester uploads its captured screenshots back to the backend from inside the
     // container. It reuses the SAME container session token it already carries for the LLM
     // proxy (auth.sessionToken), POSTing to the harness ingest route that shares the proxy
@@ -1216,6 +1289,11 @@ export class ContainerAgentExecutor implements AsyncAgentExecutor {
       repo: buildRepoSpec(repo, origin),
       ...(this.deps.githubApiBase ? { githubApiBase: this.deps.githubApiBase } : {}),
       ...(contextFiles.length ? { contextFiles } : {}),
+      // The resolved skill always travels as this dedicated top-level field (never a context
+      // file). The claude-code harness materialises it into ~/.claude/skills/<name>/ natively;
+      // Pi/codex materialise the same field's resources under `.cat-context/skill/` and receive
+      // the instructions folded into the prompt (skillSection) instead.
+      ...(skillRender.body ? { skill: skillRender.body } : {}),
       ...(artifactUpload ? { artifactUpload } : {}),
       ...(tuning?.guardLimits ? { guardLimits: tuning.guardLimits } : {}),
     }
@@ -1482,6 +1560,7 @@ export class ContainerAgentExecutor implements AsyncAgentExecutor {
         ...(referenceReposSection ? { referenceReposSection } : {}),
         ...(referenceBranches ? { referenceBranches } : {}),
         ...(referenceBranchesSection ? { referenceBranchesSection } : {}),
+        ...(skillRender.section ? { skillSection: skillRender.section } : {}),
       },
       this.agentKindRegistry,
     )

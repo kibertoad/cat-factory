@@ -114,6 +114,7 @@ export class PipelineService {
       enabled: input.enabled,
       gating: input.gating,
       testerQuality: input.testerQuality,
+      stepOptions: input.stepOptions,
     })
     // Launch-constraint validation (no origin — a save, not a launch): a `bug-intake` step
     // requires a recurring pipeline. `availability` absent ⇒ `'both'` (unrestricted). Evaluated
@@ -159,6 +160,7 @@ export class PipelineService {
       enabled: source.enabled,
       gating: source.gating,
       testerQuality: source.testerQuality,
+      stepOptions: source.stepOptions,
     })
     // Same launch-constraint guarantee create/update give: a clone preserves the source's
     // agentKinds + availability, so re-check that the pair is launchable (e.g. a bug-intake step
@@ -216,8 +218,14 @@ export class PipelineService {
     // while leaving its companion on would orphan the companion, and adding gating (step or
     // tester-QC) without an estimator is illegal — so validate whenever the chain, enable
     // flags, gating, OR tester-QC change, not just on a chain replacement.
-    if (input.agentKinds || input.enabled || input.gating || input.testerQuality) {
-      validatePipelineShape({ agentKinds, enabled, gating, testerQuality })
+    if (
+      input.agentKinds ||
+      input.enabled ||
+      input.gating ||
+      input.testerQuality ||
+      input.stepOptions
+    ) {
+      validatePipelineShape({ agentKinds, enabled, gating, testerQuality, stepOptions })
       await this.assertObservabilityGatedStepAllowed(workspaceId, agentKinds, enabled)
     }
     // Re-check the launch constraint when the chain, the enable mask, or the availability

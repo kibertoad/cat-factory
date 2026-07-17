@@ -10,6 +10,7 @@ import type {
   PeerRepoSpec,
   ReferenceRepoSpec,
   RepoSpec,
+  SkillSpec,
 } from './job.js'
 import {
   branchAheadOfBase,
@@ -101,6 +102,12 @@ export interface CodingAgentSpec extends HarnessAuthFields {
    * condition — computed by the harness, never the model). Absent for every non-`ralph` run.
    */
   validation?: { command: string; iteration?: number }
+  /**
+   * A repo-sourced Claude Skill to make available for this run (a `skill` step, slice 2). Threaded
+   * into {@link runAgentInWorkspace}, which installs it harness-aware (native `~/.claude/skills`
+   * for claude-code, `.cat-context/skill/` for Pi/codex). Absent ⇒ no skill.
+   */
+  skill?: SkillSpec
 }
 
 /** The outcome of a coding agent run, before each caller maps it to its own result shape. */
@@ -370,6 +377,7 @@ export async function runCodingAgent(
             webToolsGuidance: spec.webToolsGuidance,
             webSearchProxy: spec.webSearchProxy,
             guardLimits: spec.guardLimits,
+            ...(spec.skill ? { skill: spec.skill } : {}),
           },
           opts,
         )
