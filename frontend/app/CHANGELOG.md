@@ -1,5 +1,12 @@
 # @cat-factory/app
 
+## 0.126.1
+
+### Patch Changes
+
+- Updated dependencies [5924903]
+  - @cat-factory/contracts@0.144.0
+
 ## 0.126.0
 
 ### Minor Changes
