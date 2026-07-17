@@ -83,6 +83,29 @@ function asObject(value: unknown): Json | null {
   return typeof value === 'object' && value !== null ? (value as Json) : null
 }
 
+/**
+ * Whether a branch push to `pushedBranch` could have moved a skill source's tracked ref, so the
+ * source is worth resyncing (slice 4 fan-out). A source tracks a branch via `gitRef`; `HEAD` (or
+ * empty) means the repo's default branch, which the push payload carries as `default_branch`.
+ * Returns `true` whenever a mismatch can't be proven — an unknown default, or a non-`refs/heads`
+ * gitRef — so the filter never suppresses a resync it isn't certain about. This is a pure
+ * optimisation: the dispatch-time head-commit probe is the correctness backstop, so a wrong
+ * skip could only ever cost a warm-up, never a stale run.
+ */
+function pushAffectsSkillSource(
+  gitRef: string | undefined,
+  pushedBranch: string,
+  defaultBranch: string | undefined,
+): boolean {
+  const ref = gitRef ?? ''
+  const tracked = ref.startsWith('refs/heads/') ? ref.slice('refs/heads/'.length) : ref
+  if (tracked === '' || tracked === 'HEAD') {
+    // Tracks the default branch: match it when the payload named one, else stay conservative.
+    return defaultBranch ? pushedBranch === defaultBranch : true
+  }
+  return tracked === pushedBranch
+}
+
 export class WebhookService {
   constructor(private readonly deps: WebhookServiceDependencies) {}
 
@@ -168,12 +191,19 @@ export class WebhookService {
           )
         }
         // Skill-source freshness fan-out (slice 4): a branch push may have changed a linked skill
-        // directory, so resync every skill source on this repo. One indexed lookup, then a
-        // targeted async resync per source (typically zero or one). The resync's own head-commit
-        // probe cheaply no-ops when the push didn't touch the source's tracked ref/dir.
+        // directory, so resync every skill source that TRACKS the pushed branch. One indexed
+        // lookup, then a targeted async resync per matching source (typically zero or one). Sources
+        // that track a different branch are skipped here — a source's dir can't have moved on a
+        // branch it doesn't follow, so enqueuing them would only queue guaranteed no-op resyncs.
+        // Skipping is always safe: the dispatch-time head-commit probe is the correctness backstop,
+        // so a missed enqueue costs at most a warm-up, never a stale run.
         if (this.deps.skillSourceRepository && this.deps.enqueueSkillResync) {
+          const pushedBranch = ref.slice('refs/heads/'.length)
+          const defaultBranch =
+            typeof repo?.default_branch === 'string' ? repo.default_branch : undefined
           const sources = await this.deps.skillSourceRepository.listByRepo(owner, name)
           for (const source of sources) {
+            if (!pushAffectsSkillSource(source.gitRef, pushedBranch, defaultBranch)) continue
             await this.deps.enqueueSkillResync({ accountId: source.accountId, sourceId: source.id })
           }
         }

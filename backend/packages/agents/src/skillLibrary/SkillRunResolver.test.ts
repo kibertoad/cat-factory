@@ -102,7 +102,7 @@ function makeResolver(opts: {
       opts.installationId === undefined ? 42 : opts.installationId,
     syncSource: opts.syncSource,
   })
-  return { resolver, githubClient, setRecord: (r: AccountSkillRecord) => (record = r) }
+  return { resolver, githubClient, setRecord: (r: AccountSkillRecord | null) => (record = r) }
 }
 
 describe('SkillRunResolver', () => {
@@ -226,6 +226,46 @@ describe('SkillRunResolver', () => {
       })
       const { skill } = await resolver.resolveForRun(WORKSPACE, SKILL_ID)
       expect(githubClient.latestCommitSha).not.toHaveBeenCalled()
+      expect(skill.instructions).toContain('Reproduce')
+    })
+
+    it('keeps the last-synced record when a re-sync tombstones the skill (dir renamed upstream)', async () => {
+      // The head advanced, the re-sync succeeds, but it retired THIS skill id (its dir was
+      // renamed/removed), so the re-read finds nothing. The run must still proceed on the
+      // last-synced record rather than throw — a genuinely gone skill fails later at the
+      // pipeline-validation gate, not here.
+      const { resolver, setRecord } = makeResolver({
+        latestCommitSha: vi.fn(async () => 'commit-new'),
+        syncSource: vi.fn(async () => setRecord(null)),
+      })
+      const { skill, version } = await resolver.resolveForRun(WORKSPACE, SKILL_ID)
+      expect(skill.instructions).toContain('Reproduce')
+      expect(version.commit).toBe('commit-abc')
+    })
+
+    it('does not probe when the source has been tombstoned', async () => {
+      const syncSource = vi.fn(async () => {})
+      const { resolver, githubClient } = makeResolver({
+        syncSource,
+        source: { ...sourceRecord(), deletedAt: 5_000 },
+        latestCommitSha: vi.fn(async () => 'commit-new'),
+      })
+      const { skill } = await resolver.resolveForRun(WORKSPACE, SKILL_ID)
+      expect(githubClient.latestCommitSha).not.toHaveBeenCalled()
+      expect(syncSource).not.toHaveBeenCalled()
+      expect(skill.instructions).toContain('Reproduce')
+    })
+
+    it('does not probe when no installation is available', async () => {
+      const syncSource = vi.fn(async () => {})
+      const { resolver, githubClient } = makeResolver({
+        syncSource,
+        installationId: null,
+        latestCommitSha: vi.fn(async () => 'commit-new'),
+      })
+      const { skill } = await resolver.resolveForRun(WORKSPACE, SKILL_ID)
+      expect(githubClient.latestCommitSha).not.toHaveBeenCalled()
+      expect(syncSource).not.toHaveBeenCalled()
       expect(skill.instructions).toContain('Reproduce')
     })
   })
