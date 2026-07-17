@@ -1,5 +1,34 @@
 # @cat-factory/orchestration
 
+## 0.118.0
+
+### Minor Changes
+
+- 720539f: Add duration percentiles (p50/p90/p99) to the platform-operator dashboard.
+
+  `PlatformMetricsRepository.durationStatsSince` now returns the discrete (nearest-rank)
+  p50/p90/p99 wall-clock duration percentiles alongside the existing avg/min/max, computed
+  over the same terminal-run set in one aggregate query per dialect — Postgres via
+  `percentile_disc`, D1/SQLite via a `row_number()/count()` cumulative-fraction
+  order-statistic workaround (SQLite has no percentile aggregate). The cross-runtime
+  conformance suite pins that the two dialects agree. The `GET /accounts/:accountId/observability/platform`
+  projection carries the new fields, and the operator dashboard's "Run duration" panel
+  renders them (internationalized across all locales), so tail-latency outliers the average
+  hides are visible.
+
+### Patch Changes
+
+- Updated dependencies [720539f]
+  - @cat-factory/kernel@0.135.0
+  - @cat-factory/contracts@0.142.0
+  - @cat-factory/agents@0.62.2
+  - @cat-factory/caching@0.9.5
+  - @cat-factory/integrations@0.84.12
+  - @cat-factory/sandbox@0.9.93
+  - @cat-factory/spend@0.12.43
+  - @cat-factory/workspaces@0.14.2
+  - @cat-factory/prompt-fragments@0.13.31
+
 ## 0.117.1
 
 ### Patch Changes
