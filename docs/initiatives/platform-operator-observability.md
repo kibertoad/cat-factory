@@ -52,13 +52,36 @@ delivered through the existing `NotificationChannel` seam.
 
 | #   | Slice                                                                                                                | Status  | PR      |
 | --- | -------------------------------------------------------------------------------------------------------------------- | ------- | ------- |
-| 1   | Rollup port + D1 ⇄ Drizzle impls (`runOutcomesSince`, `failureKindBreakdown`, `activeAndParkedCounts`) + conformance | ✅ done | this PR |
-| 2   | `GET /observability/platform` controller + contracts (windowed aggregate projections; admin-gated)                   | ✅ done | this PR |
-| 3   | Operator dashboard panel in the SPA (outcome trend, failure taxonomy, durations; i18n all locales)                   | ✅ done | this PR |
-| 4   | Duration percentiles + per-step/gate attempt stats (CI-fixer attempts, gate exhaustion counts)                       | ⬜ todo |         |
+| 1   | Rollup port + D1 ⇄ Drizzle impls (`runOutcomesSince`, `failureKindBreakdown`, `activeAndParkedCounts`) + conformance | ✅ done | #1157   |
+| 2   | `GET /observability/platform` controller + contracts (windowed aggregate projections; admin-gated)                   | ✅ done | #1157   |
+| 3   | Operator dashboard panel in the SPA (outcome trend, failure taxonomy, durations; i18n all locales)                   | ✅ done | #1157   |
+| 4a  | Duration percentiles (p50/p90/p99) on `durationStatsSince` (D1 ⇄ Drizzle parity) + dashboard render                  | ✅ done | this PR |
+| 4b  | Per-step/gate attempt stats (CI-fixer attempts, gate exhaustion counts) — needs a queryable gate-attempt projection  | ⬜ todo |         |
 | 5   | Threshold alert sweep + `platform_health` notification type (state-change dedup; both runtimes)                      | ⬜ todo |         |
 | 6   | Alert threshold config surface (deployment env defaults + settings UI)                                               | ⬜ todo |         |
 | 7   | Optional daily rollup table for >3d trends (coordinate with storage-and-retention's deferred rollup)                 | ⬜ todo |         |
+
+### Why slice 4 was split (4a done, 4b deferred)
+
+The original slice 4 bundled duration percentiles with per-step/gate attempt stats. They
+turned out to be two different modelling problems:
+
+- **4a (percentiles) is a clean SQL rollup** over the SAME `agent_runs` columns the rest of
+  the dashboard reads, so it fits the "one aggregate query, mirrored D1 ⇄ Drizzle +
+  conformance" pattern exactly. Shipped: `durationStatsSince` now also returns discrete
+  (nearest-rank) p50/p90/p99. Postgres uses `percentile_disc`; SQLite (no percentile
+  aggregate) uses the `row_number()/count()` cumulative-fraction order-statistic workaround.
+  The conformance suite seeds a known distribution and pins that both dialects return the
+  same values.
+- **4b (gate/CI-fixer attempt stats) is NOT cleanly SQL-aggregatable today.** Gate attempts
+  (`attempts` / `attemptLog`) and CI-fixer/exhaustion state live INSIDE the per-run `detail`
+  JSON blob (`steps[].gate.*`), not in queryable columns. Rolling them up in SQL would mean
+  dialect-divergent JSON-array expansion (`json_each` vs `jsonb_array_elements`) reaching into
+  the internal step-serialization shape — a fragile coupling that violates "clean over quick"
+  and the one-GROUP-BY rule. The right shape is a dedicated **queryable gate-attempt
+  projection** (a small telemetry-style table written when a gate round settles, mirrored on
+  both runtimes) that these rollups then GROUP BY — a self-contained slice that touches the
+  gate machinery, kept separate from the percentiles read.
 
 ## What the read-path PR (slices 1–3) shipped
 
@@ -71,9 +94,8 @@ delivered through the existing `NotificationChannel` seam.
   there — so it never crosses into the telemetry store. Token/cost rollups (which need
   `llm_call_metrics`) are deferred to a later slice with its own store-local read.
 - **Port methods delivered:** `runOutcomesSince`, `runOutcomeTrend` (bucketed for the sparkline),
-  `failureKindBreakdown`, `activeAndParkedCounts`, and `durationStatsSince` (avg/min/max/count).
-  Percentiles are intentionally left to slice 4 (SQLite has no native percentile fn — needs the
-  order-statistic workaround), so only the SQL-trivial duration stats ship now.
+  `failureKindBreakdown`, `activeAndParkedCounts`, and `durationStatsSince` (avg/min/max/count in
+  the read-path PR; **slice 4a** extended it with discrete p50/p90/p99 percentiles — see below).
 - **Wiring:** `PlatformMetricsRepository` (kernel) ⇄ `D1PlatformMetricsRepository` /
   `DrizzlePlatformMetricsRepository` (in `drizzle/execution.ts`) + `definePlatformMetricsSuite`
   conformance on both runtimes; `PlatformObservabilityService` (orchestration, on `Core`) +

@@ -278,6 +278,11 @@ export function definePlatformMetricsSuite(
       expect(stats.avgMs).toBe(2_000)
       expect(stats.minMs).toBe(1_000)
       expect(stats.maxMs).toBe(3_000)
+      // Nearest-rank percentiles over the sorted [1000, 3000] (cume 0.5, 1.0): the first
+      // value whose cumulative fraction crosses each threshold.
+      expect(stats.p50Ms).toBe(1_000)
+      expect(stats.p90Ms).toBe(3_000)
+      expect(stats.p99Ms).toBe(3_000)
     })
 
     it('returns empty duration stats when there are no terminal runs', async () => {
@@ -295,7 +300,45 @@ export function definePlatformMetricsSuite(
       })
 
       const stats = await repo.durationStatsSince(account, 1_000)
-      expect(stats).toEqual({ count: 0, avgMs: null, minMs: null, maxMs: null })
+      expect(stats).toEqual({
+        count: 0,
+        avgMs: null,
+        minMs: null,
+        maxMs: null,
+        p50Ms: null,
+        p90Ms: null,
+        p99Ms: null,
+      })
+    })
+
+    it('computes discrete (nearest-rank) duration percentiles identically across dialects', async () => {
+      const repo = makeRepo()
+      const seed = makeSeed()
+      const { account, ws } = ids()
+      await seed.workspace(ws, account)
+      // Ten terminal runs with durations 100..1000. Nearest-rank (cume = k/10): the p-th
+      // percentile is the k-th smallest where k/10 >= p — p50 → 500, p90 → 900, p99 → 1000.
+      // Seed out of duration order to prove the SQL orders, not the insert sequence.
+      const durations = [700, 200, 1_000, 400, 900, 100, 600, 300, 800, 500]
+      for (const [i, d] of durations.entries()) {
+        await seed.run({
+          workspaceId: ws,
+          id: `${ws}-d${i}`,
+          kind: 'execution',
+          status: i % 2 === 0 ? 'done' : 'failed',
+          createdAt: 2_000 + i,
+          updatedAt: 2_000 + i + d,
+        })
+      }
+
+      const stats = await repo.durationStatsSince(account, 1_000)
+      expect(stats.count).toBe(10)
+      expect(stats.minMs).toBe(100)
+      expect(stats.maxMs).toBe(1_000)
+      expect(stats.avgMs).toBe(550)
+      expect(stats.p50Ms).toBe(500)
+      expect(stats.p90Ms).toBe(900)
+      expect(stats.p99Ms).toBe(1_000)
     })
 
     it('buckets the outcome trend by the given bucket width', async () => {

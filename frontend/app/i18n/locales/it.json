@@ -2801,6 +2801,9 @@
       "avg": "Media",
       "min": "Min",
       "max": "Max",
+      "p50": "p50",
+      "p90": "p90",
+      "p99": "p99",
       "empty": "Nessuna esecuzione completata in questo periodo."
     },
     "live": {

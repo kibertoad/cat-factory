@@ -52,6 +52,16 @@ export interface PlatformDurationStats {
   avgMs: number | null
   minMs: number | null
   maxMs: number | null
+  /**
+   * Discrete (nearest-rank) duration percentiles (ms), or null when no terminal runs. Both
+   * facades compute the SAME nearest-rank value: Postgres via `percentile_disc`, SQLite via
+   * the `row_number()/count()` cumulative-fraction order-statistic workaround (D1/SQLite has
+   * no percentile aggregate) — the conformance suite pins that the two agree. `p50Ms` is the
+   * median; the tail percentiles surface slow-run outliers the average hides.
+   */
+  p50Ms: number | null
+  p90Ms: number | null
+  p99Ms: number | null
 }
 
 export interface PlatformMetricsRepository {
@@ -80,6 +90,10 @@ export interface PlatformMetricsRepository {
    * `running`, `blocked`, `paused`, or `pending` right now — the queue/park depth.
    */
   activeAndParkedCounts(accountId: string): Promise<PlatformLiveCounts>
-  /** Wall-clock duration stats over terminal runs created in the window. */
+  /**
+   * Wall-clock duration stats over terminal runs created in the window: count, avg/min/max,
+   * and the discrete p50/p90/p99 percentiles — all over the SAME filtered row set in ONE
+   * aggregate query (never a second scan to add the percentiles).
+   */
   durationStatsSince(accountId: string, sinceEpochMs: number): Promise<PlatformDurationStats>
 }

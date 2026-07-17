@@ -2801,6 +2801,9 @@
       "avg": "Durchschnitt",
       "min": "Min.",
       "max": "Max.",
+      "p50": "p50",
+      "p90": "p90",
+      "p99": "p99",
       "empty": "Keine abgeschlossenen Läufe in diesem Zeitraum."
     },
     "live": {
