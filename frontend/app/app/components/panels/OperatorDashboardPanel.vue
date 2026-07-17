@@ -389,7 +389,10 @@ watch(
                         <dt class="text-[11px] text-slate-500">
                           {{ t('platformObservability.durations.p90') }}
                         </dt>
-                        <dd class="font-semibold text-slate-300">
+                        <dd
+                          class="font-semibold text-slate-300"
+                          data-testid="operator-duration-p90"
+                        >
                           {{ view.durations.p90Ms == null ? '—' : formatMs(view.durations.p90Ms) }}
                         </dd>
                       </div>
@@ -397,7 +400,10 @@ watch(
                         <dt class="text-[11px] text-slate-500">
                           {{ t('platformObservability.durations.p99') }}
                         </dt>
-                        <dd class="font-semibold text-slate-300">
+                        <dd
+                          class="font-semibold text-slate-300"
+                          data-testid="operator-duration-p99"
+                        >
                           {{ view.durations.p99Ms == null ? '—' : formatMs(view.durations.p99Ms) }}
                         </dd>
                       </div>
