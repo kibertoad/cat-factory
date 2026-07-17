@@ -1630,6 +1630,7 @@
         "requirement_review": "Marcar como leída",
         "clarity_review": "Marcar como leída",
         "release_regression": "Confirmar recepción",
+        "platform_health": "Confirmar recepción",
         "decision_required": "Marcar como leída",
         "human_test_ready": "Marcar como leída",
         "visual_confirmation_ready": "Marcar como leída",
@@ -3097,6 +3098,7 @@
       "incompleteBody": "Antes de guardar, completa tanto el id de usuario como el id de miembro de Slack, o elimina la fila."
     },
     "routable": {
+      "platform_health": "Estado de la plataforma",
       "merge_review": "Revision de fusion",
       "pipeline_complete": "Pipeline completado",
       "ci_failed": "CI fallido",

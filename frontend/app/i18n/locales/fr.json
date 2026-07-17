@@ -1630,6 +1630,7 @@
         "requirement_review": "Marquer comme lu",
         "clarity_review": "Marquer comme lu",
         "release_regression": "Accuser réception",
+        "platform_health": "Accuser réception",
         "decision_required": "Marquer comme lu",
         "human_test_ready": "Marquer comme lu",
         "visual_confirmation_ready": "Marquer comme lu",
@@ -3097,6 +3098,7 @@
       "incompleteBody": "Avant d’enregistrer, renseignez l’id utilisateur et l’id de membre Slack, ou supprimez la ligne."
     },
     "routable": {
+      "platform_health": "Santé de la plateforme",
       "merge_review": "Revue de fusion",
       "pipeline_complete": "Pipeline termine",
       "ci_failed": "Echec de CI",

@@ -518,6 +518,28 @@ export interface Env {
   /** Node-only sweep interval (ms); the Worker is cron-driven and ignores it. */
   OTEL_PLATFORM_METRICS_INTERVAL_MS?: string
 
+  // ---- Platform-health alerting (see docs/environment-variables.md) --------
+  /**
+   * Opt-in flag ('true') for platform-health alerting: a periodic sweep raises a
+   * `platform_health` notification when the deployment's OWN run health crosses a threshold
+   * (elevated failure rate, slow-run tail, backlog depth) per account, auto-clearing when it
+   * recovers. Independent of the OTel exporter — it fans out through the notification channel
+   * seam (in-app + Slack); the `scheduled` cron drives it. Off by default (recurring DB load).
+   */
+  PLATFORM_ALERTS?: string
+  /** Trailing window each evaluation aggregates over (`1h`/`24h`/`7d`; default `1h`). */
+  PLATFORM_ALERTS_WINDOW?: string
+  /** Node-only sweep interval (ms); the Worker is cron-driven and ignores it. */
+  PLATFORM_ALERTS_INTERVAL_MS?: string
+  /** Minimum terminal runs in the window before the failure-rate alert can fire (default 5). */
+  PLATFORM_ALERTS_MIN_RUNS?: string
+  /** Failure rate (0..1) at or above which the failure-rate alert fires (default 0.5). */
+  PLATFORM_ALERTS_MAX_FAILURE_RATE?: string
+  /** p99 run duration (minutes) at or above which the slow-run alert fires (default 60). */
+  PLATFORM_ALERTS_MAX_P99_MINUTES?: string
+  /** Live running/blocked/paused/pending depth at or above which the backlog alert fires (default 50). */
+  PLATFORM_ALERTS_MAX_BACKLOG?: string
+
   // ---- Storage retention (see config.ts and docs/storage-and-retention.md) -
   /**
    * Days of `token_usage` ledger history to keep. The spend budget only reads the

@@ -1630,6 +1630,7 @@
         "requirement_review": "Позначити прочитаним",
         "clarity_review": "Позначити прочитаним",
         "release_regression": "Підтвердити отримання",
+        "platform_health": "Підтвердити отримання",
         "decision_required": "Позначити прочитаним",
         "human_test_ready": "Позначити прочитаним",
         "visual_confirmation_ready": "Позначити прочитаним",
@@ -3097,6 +3098,7 @@
       "incompleteBody": "Перед збереженням заповніть і ідентифікатор користувача, і ідентифікатор учасника Slack, або видаліть рядок."
     },
     "routable": {
+      "platform_health": "Стан платформи",
       "merge_review": "Перевірка злиття",
       "pipeline_complete": "Конвеєр завершено",
       "ci_failed": "Збій CI",

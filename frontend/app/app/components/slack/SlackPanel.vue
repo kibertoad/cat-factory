@@ -41,6 +41,7 @@ const ROUTABLE = computed<{ type: NotificationType; label: string }[]>(() => [
   { type: 'visual_confirmation_ready', label: t('slack.routable.visual_confirmation_ready') },
   { type: 'pr_review_ready', label: t('slack.routable.pr_review_ready') },
   { type: 'initiative', label: t('slack.routable.initiative') },
+  { type: 'platform_health', label: t('slack.routable.platform_health') },
 ])
 
 /** Notification-role options for a mapped member (drives who gets @-mentioned). */
@@ -67,6 +68,7 @@ const routes = reactive<Record<NotificationType, SlackRoute>>({
   fork_decision_pending: { enabled: false, channel: '' },
   pr_review_ready: { enabled: false, channel: '' },
   initiative: { enabled: false, channel: '' },
+  platform_health: { enabled: false, channel: '' },
   budget_paused: { enabled: false, channel: '' },
 })
 const mentionsEnabled = ref(false)

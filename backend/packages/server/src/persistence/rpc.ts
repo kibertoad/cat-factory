@@ -537,6 +537,10 @@ export const REMOTE_PERSISTENCE_METHODS: PersistenceMethodTable = {
     // run persists its inbox card on the mothership. Workspace-scoped, member-level (the inbox
     // act/dismiss endpoints are not admin-gated) — the same policy as the block/pipeline writes.
     findOpenByBlock: { scope: { kind: 'workspace', arg: 0 } },
+    // The block-less dedup lookup for deployment/workspace-wide cards (`platform_health`). A
+    // local node runs the platform-health sweep too, so it proxies this like `findOpenByBlock`.
+    // Workspace-scoped, member-level — same policy as the reads above.
+    findOpenByType: { scope: { kind: 'workspace', arg: 0 } },
     upsertOpenForBlock: { scope: { kind: 'workspace', arg: 0 } },
     // Block-less raises (a card with no `blockId`) and every status transition the inbox
     // performs right after a run settles — act / dismiss / escalate — go through `upsert`

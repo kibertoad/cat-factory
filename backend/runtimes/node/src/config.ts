@@ -25,6 +25,7 @@ import {
   requireEncryptionKey,
   requireGitHubAppPrivateKey,
   resolveMachineTokenTtlMs,
+  resolvePlatformAlertConfig,
 } from '@cat-factory/server'
 import { GITLAB_PUBLIC_API_BASE } from '@cat-factory/gitlab'
 import {
@@ -563,5 +564,17 @@ export function loadNodeConfig(env: NodeJS.ProcessEnv): AppConfig {
         window: parsePlatformMetricsWindow(env.OTEL_PLATFORM_METRICS_WINDOW),
       },
     },
+    // Platform-health alerting: a periodic sweep raises a `platform_health` notification when
+    // the deployment's own run health crosses a threshold. Opt-in (`PLATFORM_ALERTS=true`);
+    // independent of the OTel exporter (it fans out through the notification channel seam).
+    platformAlerts: resolvePlatformAlertConfig({
+      enabled: env.PLATFORM_ALERTS?.trim() === 'true',
+      window: env.PLATFORM_ALERTS_WINDOW,
+      intervalMs: env.PLATFORM_ALERTS_INTERVAL_MS,
+      minRuns: env.PLATFORM_ALERTS_MIN_RUNS,
+      maxFailureRate: env.PLATFORM_ALERTS_MAX_FAILURE_RATE,
+      maxP99Minutes: env.PLATFORM_ALERTS_MAX_P99_MINUTES,
+      maxBacklog: env.PLATFORM_ALERTS_MAX_BACKLOG,
+    }),
   }
 }

@@ -1696,6 +1696,7 @@
         "requirement_review": "Mark read",
         "clarity_review": "Mark read",
         "release_regression": "Acknowledge",
+        "platform_health": "Acknowledge",
         "decision_required": "Mark read",
         "human_test_ready": "Mark read",
         "visual_confirmation_ready": "Mark read",
@@ -3190,6 +3191,7 @@
       "incompleteBody": "Fill in both the user id and the Slack member id, or remove the row, before saving."
     },
     "routable": {
+      "platform_health": "Platform health",
       "merge_review": "Merge review",
       "pipeline_complete": "Pipeline complete",
       "ci_failed": "CI failed",

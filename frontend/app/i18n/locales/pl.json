@@ -1630,6 +1630,7 @@
         "requirement_review": "Oznacz jako przeczytane",
         "clarity_review": "Oznacz jako przeczytane",
         "release_regression": "Potwierdź",
+        "platform_health": "Potwierdź",
         "decision_required": "Oznacz jako przeczytane",
         "human_test_ready": "Oznacz jako przeczytane",
         "visual_confirmation_ready": "Oznacz jako przeczytane",
@@ -3097,6 +3098,7 @@
       "incompleteBody": "Przed zapisaniem uzupełnij zarówno identyfikator użytkownika, jak i identyfikator członka Slack, albo usuń wiersz."
     },
     "routable": {
+      "platform_health": "Kondycja platformy",
       "merge_review": "Przeglad scalenia",
       "pipeline_complete": "Pipeline ukonczony",
       "ci_failed": "Niepowodzenie CI",
