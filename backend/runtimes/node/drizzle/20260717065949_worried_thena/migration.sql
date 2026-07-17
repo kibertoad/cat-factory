@@ -1,0 +1,1 @@
+ALTER TABLE "public_api_keys" ADD COLUMN "scope" text DEFAULT 'write' NOT NULL;

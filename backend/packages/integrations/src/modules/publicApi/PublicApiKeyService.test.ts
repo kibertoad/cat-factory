@@ -1,6 +1,6 @@
 import type { PublicApiKeyRecord, PublicApiKeyRepository } from '@cat-factory/kernel'
 import { describe, expect, it } from 'vitest'
-import { PublicApiKeyService } from './PublicApiKeyService.js'
+import { PublicApiKeyService, scopeSatisfies } from './PublicApiKeyService.js'
 
 // In-memory repository — the service's hashing/auth logic is what's under test, not persistence.
 class FakeRepo implements PublicApiKeyRepository {
@@ -58,7 +58,23 @@ describe('PublicApiKeyService', () => {
     expect(secret).not.toContain(stored.secretHash)
 
     const auth = await service.authenticate(secret)
-    expect(auth).toEqual({ keyId: record.id, accountId: 'acc_1', workspaceId: 'ws_1' })
+    // A key defaults to `write` scope when none is requested.
+    expect(auth).toEqual({
+      keyId: record.id,
+      accountId: 'acc_1',
+      workspaceId: 'ws_1',
+      scope: 'write',
+    })
+  })
+
+  it('persists the requested scope and authenticates back with it', async () => {
+    const { service } = makeService()
+    const readKey = await service.issue({ accountId: 'a', workspaceId: 'w' }, 'monitor', 'read')
+    const adminKey = await service.issue({ accountId: 'a', workspaceId: 'w' }, 'ops', 'admin')
+    expect(readKey.record.scope).toBe('read')
+    expect(adminKey.record.scope).toBe('admin')
+    expect((await service.authenticate(readKey.secret))?.scope).toBe('read')
+    expect((await service.authenticate(adminKey.secret))?.scope).toBe('admin')
   })
 
   it('rejects a wrong secret, a malformed key, and an unknown id', async () => {
@@ -117,5 +133,21 @@ describe('PublicApiKeyService', () => {
     expect(await service.isActive('pak_unknown')).toBe(false)
     await service.revoke('w', record.id)
     expect(await service.isActive(record.id)).toBe(false)
+  })
+})
+
+describe('scopeSatisfies (the /api/v1 scope ladder)', () => {
+  it('treats the ladder as inclusive: admin ⊃ write ⊃ read', () => {
+    // A key satisfies any requirement at or below its own level.
+    expect(scopeSatisfies('read', 'read')).toBe(true)
+    expect(scopeSatisfies('write', 'read')).toBe(true)
+    expect(scopeSatisfies('write', 'write')).toBe(true)
+    expect(scopeSatisfies('admin', 'read')).toBe(true)
+    expect(scopeSatisfies('admin', 'write')).toBe(true)
+    expect(scopeSatisfies('admin', 'admin')).toBe(true)
+    // But never above it.
+    expect(scopeSatisfies('read', 'write')).toBe(false)
+    expect(scopeSatisfies('read', 'admin')).toBe(false)
+    expect(scopeSatisfies('write', 'admin')).toBe(false)
   })
 })

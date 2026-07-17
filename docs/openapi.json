@@ -932,6 +932,48 @@
       }
     },
     "/api/v1/tasks/{taskId}": {
+      "delete": {
+        "operationId": "deletePublicTask",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "taskId",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "204": {
+            "description": "No content"
+          },
+          "4XX": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Client error (validation, unauthorized, not found, conflict, rate limit)"
+          },
+          "5XX": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Server error"
+          }
+        },
+        "summary": "deletePublicTask",
+        "tags": [
+          "Public API"
+        ]
+      },
       "get": {
         "description": "Read a task’s current lifecycle status, run progress, execution id, and PR URL (once one exists).",
         "operationId": "getPublicTask",
@@ -1323,6 +1365,9 @@
     {
       "description": "The workspace’s pipelines (discover a pipelineId to start a task with).",
       "name": "Pipelines"
+    },
+    {
+      "name": "Public API"
     },
     {
       "description": "The workspace’s board services.",

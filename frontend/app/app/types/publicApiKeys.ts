@@ -4,6 +4,7 @@
 // Re-exported from the shared contracts package (the single source of truth).
 export type {
   PublicApiKey,
+  PublicApiScope,
   PublicApiKeyListResult,
   CreatePublicApiKeyInput,
   CreatedPublicApiKey,
