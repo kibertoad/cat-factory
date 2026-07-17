@@ -50,6 +50,8 @@ const COMPONENT_SCHEMAS = {
   PublicRun: 'publicRunSchema',
   PublicPipeline: 'publicPipelineSchema',
   PublicPipelineList: 'publicPipelineListSchema',
+  Notification: 'notificationSchema',
+  PublicNotificationList: 'publicNotificationListSchema',
 }
 
 /** Per-operation docs, keyed by operationId (the exported contract const name minus `Contract`). */
@@ -126,6 +128,23 @@ const OPERATION_DOCS = {
     description:
       'List the pipelines in the key’s workspace — id/name/steps plus whether each is public and safe to run headlessly — so a caller can pick a pipelineId to start a task with.',
   },
+  listPublicNotifications: {
+    tag: 'Notifications',
+    summary: "List the workspace's open notifications",
+    description:
+      'List the open, human-actionable notifications in the key’s workspace (merge reviews, pipeline-complete confirmations, CI/test failures, and informational cards).',
+  },
+  actPublicNotification: {
+    tag: 'Notifications',
+    summary: 'Act on a notification',
+    description:
+      'Run a notification’s typed side-effect and resolve it: merge the PR (merge_review / pipeline_complete) or retry the run (ci_failed / test_failed); informational cards are just marked read. Performs a real GitHub merge, so it requires an admin-scoped key. A card that would retry a run on an individual-usage model cannot be acted on through the API.',
+  },
+  dismissPublicNotification: {
+    tag: 'Notifications',
+    summary: 'Dismiss a notification',
+    description: 'Dismiss a notification without acting on it.',
+  },
 }
 
 /** Descriptions for the operation tags (groups). */
@@ -134,6 +153,8 @@ const TAG_DESCRIPTIONS = {
   Services: 'The workspace’s board services.',
   Tasks: 'Board tasks under a service (create, list, read, edit, start, stop, retry, stream).',
   Pipelines: 'The workspace’s pipelines (discover a pipelineId to start a task with).',
+  Notifications:
+    'The workspace’s human-actionable notifications (list, act on, or dismiss the run tails).',
 }
 
 /** Human descriptions for the response status codes we emit (OpenAPI requires a description). */

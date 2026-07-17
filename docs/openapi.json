@@ -128,6 +128,261 @@
         ],
         "type": "object"
       },
+      "Notification": {
+        "properties": {
+          "blockId": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "body": {
+            "type": "string"
+          },
+          "createdAt": {
+            "type": "number"
+          },
+          "executionId": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "id": {
+            "type": "string"
+          },
+          "payload": {
+            "anyOf": [
+              {
+                "properties": {
+                  "assessment": {
+                    "properties": {
+                      "complexity": {
+                        "maximum": 1,
+                        "minimum": 0,
+                        "type": "number"
+                      },
+                      "impact": {
+                        "maximum": 1,
+                        "minimum": 0,
+                        "type": "number"
+                      },
+                      "rationale": {
+                        "type": "string"
+                      },
+                      "risk": {
+                        "maximum": 1,
+                        "minimum": 0,
+                        "type": "number"
+                      }
+                    },
+                    "required": [
+                      "complexity",
+                      "risk",
+                      "impact",
+                      "rationale"
+                    ],
+                    "type": "object"
+                  },
+                  "findingCount": {
+                    "type": "number"
+                  },
+                  "forkCount": {
+                    "type": "number"
+                  },
+                  "initiativeReason": {
+                    "enum": [
+                      "item_blocked",
+                      "complete",
+                      "checkpoint"
+                    ],
+                    "type": "string"
+                  },
+                  "mergedRepos": {
+                    "items": {
+                      "type": "string"
+                    },
+                    "type": "array"
+                  },
+                  "onCallAssessment": {
+                    "properties": {
+                      "culpritConfidence": {
+                        "maximum": 1,
+                        "minimum": 0,
+                        "type": "number"
+                      },
+                      "evidence": {
+                        "default": [],
+                        "items": {
+                          "type": "string"
+                        },
+                        "type": "array"
+                      },
+                      "rationale": {
+                        "type": "string"
+                      },
+                      "recommendation": {
+                        "enum": [
+                          "revert",
+                          "hold",
+                          "monitor"
+                        ],
+                        "type": "string"
+                      }
+                    },
+                    "required": [
+                      "culpritConfidence",
+                      "recommendation",
+                      "rationale"
+                    ],
+                    "type": "object"
+                  },
+                  "pipelineName": {
+                    "type": "string"
+                  },
+                  "prUrl": {
+                    "type": "string"
+                  },
+                  "releaseSignals": {
+                    "items": {
+                      "properties": {
+                        "detail": {
+                          "type": "string"
+                        },
+                        "id": {
+                          "type": "string"
+                        },
+                        "kind": {
+                          "enum": [
+                            "monitor",
+                            "slo"
+                          ],
+                          "type": "string"
+                        },
+                        "name": {
+                          "type": "string"
+                        },
+                        "state": {
+                          "enum": [
+                            "ok",
+                            "warn",
+                            "alert",
+                            "no_data"
+                          ],
+                          "type": "string"
+                        }
+                      },
+                      "required": [
+                        "kind",
+                        "id",
+                        "name",
+                        "state"
+                      ],
+                      "type": "object"
+                    },
+                    "type": "array"
+                  },
+                  "revertUrl": {
+                    "type": "string"
+                  },
+                  "sliceCount": {
+                    "type": "number"
+                  },
+                  "targetUserId": {
+                    "anyOf": [
+                      {
+                        "type": "string"
+                      },
+                      {
+                        "type": "null"
+                      }
+                    ]
+                  },
+                  "unmergedRepos": {
+                    "items": {
+                      "type": "string"
+                    },
+                    "type": "array"
+                  }
+                },
+                "required": [],
+                "type": "object"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "resolvedAt": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "severity": {
+            "enum": [
+              "normal",
+              "urgent"
+            ],
+            "type": "string"
+          },
+          "status": {
+            "enum": [
+              "open",
+              "acted",
+              "dismissed"
+            ],
+            "type": "string"
+          },
+          "title": {
+            "type": "string"
+          },
+          "type": {
+            "enum": [
+              "merge_review",
+              "pipeline_complete",
+              "ci_failed",
+              "test_failed",
+              "requirement_review",
+              "clarity_review",
+              "release_regression",
+              "decision_required",
+              "human_test_ready",
+              "visual_confirmation_ready",
+              "human_review",
+              "followup_pending",
+              "fork_decision_pending",
+              "pr_review_ready",
+              "initiative"
+            ],
+            "type": "string"
+          }
+        },
+        "required": [
+          "id",
+          "type",
+          "status",
+          "blockId",
+          "executionId",
+          "title",
+          "body",
+          "createdAt",
+          "resolvedAt"
+        ],
+        "type": "object"
+      },
       "PublicJob": {
         "properties": {
           "createdAt": {
@@ -204,6 +459,20 @@
           "createdAt",
           "result",
           "error"
+        ],
+        "type": "object"
+      },
+      "PublicNotificationList": {
+        "properties": {
+          "notifications": {
+            "items": {
+              "$ref": "#/components/schemas/Notification"
+            },
+            "type": "array"
+          }
+        },
+        "required": [
+          "notifications"
         ],
         "type": "object"
       },
@@ -732,6 +1001,152 @@
         "summary": "Stream an initiative job (SSE)",
         "tags": [
           "Initiatives"
+        ]
+      }
+    },
+    "/api/v1/notifications": {
+      "get": {
+        "description": "List the open, human-actionable notifications in the key’s workspace (merge reviews, pipeline-complete confirmations, CI/test failures, and informational cards).",
+        "operationId": "listPublicNotifications",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PublicNotificationList"
+                }
+              }
+            },
+            "description": "Success"
+          },
+          "4XX": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Client error (validation, unauthorized, not found, conflict, rate limit)"
+          },
+          "5XX": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Server error"
+          }
+        },
+        "summary": "List the workspace's open notifications",
+        "tags": [
+          "Notifications"
+        ]
+      }
+    },
+    "/api/v1/notifications/{id}/act": {
+      "post": {
+        "description": "Run a notification’s typed side-effect and resolve it: merge the PR (merge_review / pipeline_complete) or retry the run (ci_failed / test_failed); informational cards are just marked read. Performs a real GitHub merge, so it requires an admin-scoped key. A card that would retry a run on an individual-usage model cannot be acted on through the API.",
+        "operationId": "actPublicNotification",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "id",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Notification"
+                }
+              }
+            },
+            "description": "Success"
+          },
+          "4XX": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Client error (validation, unauthorized, not found, conflict, rate limit)"
+          },
+          "5XX": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Server error"
+          }
+        },
+        "summary": "Act on a notification",
+        "tags": [
+          "Notifications"
+        ]
+      }
+    },
+    "/api/v1/notifications/{id}/dismiss": {
+      "post": {
+        "description": "Dismiss a notification without acting on it.",
+        "operationId": "dismissPublicNotification",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "id",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Notification"
+                }
+              }
+            },
+            "description": "Success"
+          },
+          "4XX": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Client error (validation, unauthorized, not found, conflict, rate limit)"
+          },
+          "5XX": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Server error"
+          }
+        },
+        "summary": "Dismiss a notification",
+        "tags": [
+          "Notifications"
         ]
       }
     },
@@ -1361,6 +1776,10 @@
     {
       "description": "Headless initiative-breakdown runs (start, poll, stream).",
       "name": "Initiatives"
+    },
+    {
+      "description": "The workspace’s human-actionable notifications (list, act on, or dismiss the run tails).",
+      "name": "Notifications"
     },
     {
       "description": "The workspace’s pipelines (discover a pipelineId to start a task with).",

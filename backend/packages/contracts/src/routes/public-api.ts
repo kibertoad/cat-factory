@@ -4,11 +4,13 @@ import {
   createdPublicApiKeySchema,
   publicApiKeyListResultSchema,
 } from '../public-api-keys.js'
+import { notificationSchema } from '../notifications.js'
 import {
   createInitiativeJobSchema,
   createPublicTaskSchema,
   initiativeAcceptedSchema,
   publicJobSchema,
+  publicNotificationListSchema,
   publicPipelineListSchema,
   publicRunSchema,
   publicServiceListSchema,
@@ -166,4 +168,36 @@ export const listPublicPipelinesContract = defineApiContract({
   method: 'get',
   pathResolver: () => '/api/v1/pipelines',
   responsesByStatusCode: { 200: publicPipelineListSchema, ...errorResponses },
+})
+
+// ---- notification inbox: merge / confirm / retry the run tails -------------
+// The external counterparts of the SPA's notification-inbox operations, scoped to the
+// key's workspace. They complete the task lifecycle: `act` resolves a human-gated tail
+// (merge a `merge_review` / `pipeline_complete` PR, retry a `ci_failed` / `test_failed`
+// run), `dismiss` waves a card off. `act` performs a real GitHub merge, so it is the
+// top of the scope ladder (`admin`); `dismiss` is `write`; the list is `read`.
+
+/** List the workspace's OPEN notifications (the inbox). */
+export const listPublicNotificationsContract = defineApiContract({
+  method: 'get',
+  pathResolver: () => '/api/v1/notifications',
+  responsesByStatusCode: { 200: publicNotificationListSchema, ...errorResponses },
+})
+
+/** Act on a notification (run its typed side-effect, then resolve it). Requires an `admin` key. */
+export const actPublicNotificationContract = defineApiContract({
+  method: 'post',
+  requestPathParamsSchema: idParams,
+  pathResolver: ({ id }) => `/api/v1/notifications/${id}/act`,
+  requestBodySchema: ContractNoBody,
+  responsesByStatusCode: { 200: notificationSchema, ...errorResponses },
+})
+
+/** Dismiss a notification without acting on it. */
+export const dismissPublicNotificationContract = defineApiContract({
+  method: 'post',
+  requestPathParamsSchema: idParams,
+  pathResolver: ({ id }) => `/api/v1/notifications/${id}/dismiss`,
+  requestBodySchema: ContractNoBody,
+  responsesByStatusCode: { 200: notificationSchema, ...errorResponses },
 })

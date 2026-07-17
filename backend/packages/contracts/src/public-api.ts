@@ -1,4 +1,5 @@
 import * as v from 'valibot'
+import { notificationSchema } from './notifications.js'
 import { blockTypeSchema, createTaskTypeSchema, taskTypeSchema } from './primitives.js'
 
 // ---------------------------------------------------------------------------
@@ -238,3 +239,19 @@ export type PublicPipeline = v.InferOutput<typeof publicPipelineSchema>
 
 export const publicPipelineListSchema = v.object({ pipelines: v.array(publicPipelineSchema) })
 export type PublicPipelineList = v.InferOutput<typeof publicPipelineListSchema>
+
+// ---------------------------------------------------------------------------
+// Notification inbox (the operational loop: merge / confirm / retry).
+// ---------------------------------------------------------------------------
+
+/**
+ * The external view of the workspace's OPEN notifications. Deliberately reuses the
+ * SAME `notificationSchema` the SPA inbox consumes — a notification is already a small,
+ * client-facing projection (no raw block / execution / credential fields), so there is
+ * no separate `publicNotification` shape to keep in step. The list is naturally bounded
+ * (only `open` cards, which humans resolve), unlike the paginated task/job reads.
+ */
+export const publicNotificationListSchema = v.object({
+  notifications: v.array(notificationSchema),
+})
+export type PublicNotificationList = v.InferOutput<typeof publicNotificationListSchema>
