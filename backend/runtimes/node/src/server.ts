@@ -41,6 +41,7 @@ import { startScheduleSweeper } from './recurring.js'
 import { resolveSweepInterval, startInitiativeLoopSweeper } from './initiativeLoop.js'
 import { startKaizenSweeper } from './kaizen.js'
 import { startNotificationEscalationSweeper } from './notifications.js'
+import { startPlatformHealthSweeper } from './platformHealth.js'
 import { buildRealtimePropagator } from './propagator.js'
 import { warnIfRedisUnreachableInBackground } from './redisProbe.js'
 import { type ReadinessProbe, makeReadinessProbe } from './readiness.js'
@@ -564,6 +565,10 @@ async function bootServer(
         logger,
       )
     : () => {}
+  // Raise/clear `platform_health` notifications when the deployment's own run health crosses a
+  // threshold (the Worker uses cron). No-op unless `PLATFORM_ALERTS` is opted in and the
+  // notifications + platform-observability reads are wired.
+  const stopPlatformHealth = startPlatformHealthSweeper(container, clock, logger)
 
   // Ordered graceful shutdown: stop accepting connections, halt the sweeper + pg-boss
   // worker, release the pool, then exit. Without closing the HTTP server the process
@@ -587,6 +592,7 @@ async function bootServer(
     stopKaizenSweeper()
     stopGitHubReconcile()
     stopPlatformMetrics()
+    stopPlatformHealth()
     stopRealtime()
     // Release any cross-node propagation adapters (Redis connections); a no-op when none.
     await realtimePropagator.stop()

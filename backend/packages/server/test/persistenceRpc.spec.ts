@@ -245,6 +245,7 @@ function makeRegistry(): {
     notificationRepository: {
       listOpen: async (ws: string) => [{ ws }],
       findOpenByBlock: async (ws: string) => ({ ws }),
+      findOpenByType: async (ws: string) => ({ ws }),
       upsertOpenForBlock: async (ws: string) => ({ ws }),
       upsert: async (ws: string) => ({ ws }),
     },
@@ -907,6 +908,7 @@ describe('agent-context run-path + lazy-seed surface (workspace-scoped)', () => 
       method: 'findOpenByBlock',
       args: ['blk_1', 'pipeline_complete'],
     },
+    { repo: 'notificationRepository', method: 'findOpenByType', args: ['platform_health'] },
     { repo: 'notificationRepository', method: 'upsertOpenForBlock', args: [{ id: 'n_1' }] },
     // Block-less raises + inbox act/dismiss/escalate transitions route through `upsert`.
     { repo: 'notificationRepository', method: 'upsert', args: [{ id: 'n_1' }] },

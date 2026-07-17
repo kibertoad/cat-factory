@@ -70,6 +70,9 @@ const META: Record<Notification['type'], { icon: string; color: Accent }> = {
   // The initiative loop needs attention (a blocked task, or completion). Clicking the title
   // opens the initiative tracker window; "act" just marks it read.
   initiative: { icon: 'i-lucide-milestone', color: 'primary' },
+  // The deployment's OWN run health crossed an operator threshold. Not block-scoped: clicking
+  // the title opens the operator dashboard (where the live numbers are); "act" marks it read.
+  platform_health: { icon: 'i-lucide-server-cog', color: 'warning' },
   // Runs were paused by the spend safeguard. Workspace-scoped (no block to reveal); "act" just
   // marks it read (the human raises the budget then resumes from the spend panel).
   budget_paused: { icon: 'i-lucide-wallet', color: 'warning' },
@@ -94,6 +97,7 @@ const ACTION_KEYS: Record<Notification['type'], string> = {
   fork_decision_pending: 'layout.notifications.action.fork_decision_pending',
   pr_review_ready: 'layout.notifications.action.pr_review_ready',
   initiative: 'layout.notifications.action.initiative',
+  platform_health: 'layout.notifications.action.platform_health',
   budget_paused: 'layout.notifications.action.budget_paused',
 }
 
@@ -156,6 +160,9 @@ async function dismiss(n: Notification) {
  * type just focuses the related block on the board.
  */
 function reveal(n: Notification) {
+  // A `platform_health` card is deployment-scoped (no block) — send the operator to the
+  // dashboard where the live aggregate numbers behind the alert live.
+  if (n.type === 'platform_health') return ui.openOperatorDashboard()
   if (!n.blockId) return
   if (n.type === 'requirement_review') ui.openRequirementReview(n.blockId)
   else if (n.type === 'clarity_review') ui.openClarityReview(n.blockId)

@@ -56,6 +56,69 @@ export function defineNotificationSuite(
       expect(open.map((n) => n.id)).toEqual([`${ws}-b`, `${ws}-a`])
     })
 
+    it('finds the open block-less card of a type, ignoring block-scoped + resolved ones', async () => {
+      const repo = makeRepo()
+      const { ws } = ids()
+      // Block-scoped card of the type → never returned by the block-less lookup.
+      await repo.upsert(
+        ws,
+        notification({ id: `${ws}-scoped`, type: 'platform_health', blockId: 'blk-1' }),
+      )
+      // Resolved block-less card of the type → not open, so ignored.
+      await repo.upsert(
+        ws,
+        notification({
+          id: `${ws}-resolved`,
+          type: 'platform_health',
+          status: 'dismissed',
+          resolvedAt: 5,
+        }),
+      )
+      expect(await repo.findOpenByType(ws, 'platform_health')).toBeNull()
+
+      // The open block-less card of the type → returned.
+      await repo.upsert(ws, notification({ id: `${ws}-open`, type: 'platform_health' }))
+      const found = await repo.findOpenByType(ws, 'platform_health')
+      expect(found?.id).toBe(`${ws}-open`)
+      // A different type is not matched.
+      expect(await repo.findOpenByType(ws, 'ci_failed')).toBeNull()
+    })
+
+    it('lists the open block-less card of a type per workspace (batched), newest per workspace', async () => {
+      const repo = makeRepo()
+      const a = ids().ws
+      const b = ids().ws
+      const empty = ids().ws // has no card → absent from the result
+      // Workspace A: two open block-less cards → the NEWEST wins (matches findOpenByType).
+      await repo.upsert(a, notification({ id: `${a}-old`, type: 'platform_health', createdAt: 1 }))
+      await repo.upsert(a, notification({ id: `${a}-new`, type: 'platform_health', createdAt: 9 }))
+      // Workspace A noise: block-scoped + resolved cards of the type are never returned.
+      await repo.upsert(
+        a,
+        notification({ id: `${a}-scoped`, type: 'platform_health', blockId: 'blk-1' }),
+      )
+      await repo.upsert(
+        a,
+        notification({
+          id: `${a}-done`,
+          type: 'platform_health',
+          status: 'dismissed',
+          resolvedAt: 5,
+        }),
+      )
+      // Workspace B: one open block-less card.
+      await repo.upsert(b, notification({ id: `${b}-open`, type: 'platform_health' }))
+      // A card of a DIFFERENT type must not leak in.
+      await repo.upsert(b, notification({ id: `${b}-ci`, type: 'ci_failed' }))
+
+      const found = await repo.listOpenByType([a, b, empty], 'platform_health')
+      expect(found.get(a)?.id).toBe(`${a}-new`)
+      expect(found.get(b)?.id).toBe(`${b}-open`)
+      expect(found.has(empty)).toBe(false)
+      // Empty input → empty map (no query).
+      expect((await repo.listOpenByType([], 'platform_health')).size).toBe(0)
+    })
+
     it('prunes resolved rows past the cutoff, keeping open + fresh-resolved ones', async () => {
       const repo = makeRepo()
       const { ws } = ids()

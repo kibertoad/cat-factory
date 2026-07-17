@@ -31,6 +31,24 @@ function fakeRepo() {
         ) ?? null
       )
     },
+    async findOpenByType(_ws, type) {
+      // Block-LESS dedup: the open card of `type` with no block, newest first.
+      return (
+        [...rows.values()]
+          .filter((n) => n.status === 'open' && n.blockId === null && n.type === type)
+          .sort((a, b) => b.createdAt - a.createdAt)[0] ?? null
+      )
+    },
+    async listOpenByType(workspaceIds, type) {
+      // Batched block-less dedup: the newest open block-less card of `type` per workspace.
+      // The fake keys rows by id (single workspace), so all requested ids share `rows`.
+      const out = new Map<string, Notification>()
+      const newest = [...rows.values()]
+        .filter((n) => n.status === 'open' && n.blockId === null && n.type === type)
+        .sort((a, b) => b.createdAt - a.createdAt)[0]
+      if (newest) for (const ws of workspaceIds) out.set(ws, newest)
+      return out
+    },
     async upsert(_ws, n) {
       rows.set(n.id, { ...n })
     },
@@ -189,6 +207,44 @@ describe('NotificationService', () => {
     // the inbox no longer shows a settled decision as overdue.
     await service.clearWaitingDecision(WS, 'blk_1')
     expect(await service.listOpen(WS)).toHaveLength(0)
+  })
+
+  it('de-dupes a block-less card by (workspace, type), re-delivering only on content change', async () => {
+    const { service, rows, delivered } = makeService(() => time)
+    const blockLess = (over: Partial<Parameters<NotificationService['raise']>[1]> = {}) =>
+      raiseInput({ type: 'platform_health', blockId: null, executionId: null, ...over })
+
+    // First raise creates the card and delivers it.
+    const first = await service.raise(WS, blockLess())
+    expect(delivered).toHaveLength(1)
+
+    // An identical re-raise reuses the id (no stacking) and does NOT re-deliver.
+    const second = await service.raise(WS, blockLess())
+    expect(second.id).toBe(first.id)
+    expect(await service.listOpen(WS)).toHaveLength(1)
+    expect(delivered).toHaveLength(1)
+
+    // A content change (the firing-condition set changed) re-delivers the SAME card.
+    const third = await service.raise(WS, blockLess({ body: 'now also slow' }))
+    expect(third.id).toBe(first.id)
+    expect(rows.get(first.id)?.body).toBe('now also slow')
+    expect(delivered).toHaveLength(2)
+  })
+
+  it('clearByType dismisses the open block-less card, and is a no-op when none is open', async () => {
+    const { service, rows } = makeService(() => time)
+    expect(await service.clearByType(WS, 'platform_health')).toBeNull()
+
+    const raised = await service.raise(
+      WS,
+      raiseInput({ type: 'platform_health', blockId: null, executionId: null }),
+    )
+    const cleared = await service.clearByType(WS, 'platform_health')
+    expect(cleared?.id).toBe(raised.id)
+    expect(rows.get(raised.id)?.status).toBe('dismissed')
+    expect(await service.listOpen(WS)).toHaveLength(0)
+    // Idempotent: nothing open now.
+    expect(await service.clearByType(WS, 'platform_health')).toBeNull()
   })
 
   it('raise returns the canonical persisted card when a concurrent insert won (no phantom id)', async () => {

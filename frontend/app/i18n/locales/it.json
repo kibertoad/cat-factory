@@ -1729,6 +1729,7 @@
         "requirement_review": "Segna come letto",
         "clarity_review": "Segna come letto",
         "release_regression": "Conferma presa visione",
+        "platform_health": "Conferma presa visione",
         "decision_required": "Segna come letto",
         "human_test_ready": "Segna come letto",
         "visual_confirmation_ready": "Segna come letto",
@@ -4043,6 +4044,7 @@
       "incompleteBody": "Prima di salvare, compila sia l’id utente sia l’id membro Slack, oppure rimuovi la riga."
     },
     "routable": {
+      "platform_health": "Salute della piattaforma",
       "merge_review": "Revisione del merge",
       "pipeline_complete": "Pipeline completata",
       "ci_failed": "CI non riuscita",

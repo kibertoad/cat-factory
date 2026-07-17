@@ -7,6 +7,7 @@ import {
 } from '@cat-factory/contracts'
 import { decodeEnum, decodeEnumOr } from '@cat-factory/server'
 import type { D1Database } from '@cloudflare/workers-types'
+import { chunkForIn } from './chunk'
 
 interface NotificationRow {
   id: string
@@ -97,6 +98,44 @@ export class D1NotificationRepository implements NotificationRepository {
       .bind(workspaceId, blockId, type)
       .first<NotificationRow>()
     return row ? rowToNotification(row) : null
+  }
+
+  async findOpenByType(workspaceId: string, type: NotificationType): Promise<Notification | null> {
+    const row = await this.db
+      .prepare(
+        `SELECT * FROM notifications
+           WHERE workspace_id = ? AND block_id IS NULL AND type = ? AND status = 'open'
+           ORDER BY created_at DESC LIMIT 1`,
+      )
+      .bind(workspaceId, type)
+      .first<NotificationRow>()
+    return row ? rowToNotification(row) : null
+  }
+
+  async listOpenByType(
+    workspaceIds: string[],
+    type: NotificationType,
+  ): Promise<Map<string, Notification>> {
+    const out = new Map<string, Notification>()
+    if (workspaceIds.length === 0) return out
+    // Chunk the IN list to stay under D1's bound-parameter limit. Ordered newest-first so the
+    // first row seen per workspace is the one `findOpenByType` would have returned.
+    for (const chunk of chunkForIn(workspaceIds)) {
+      const placeholders = chunk.map(() => '?').join(', ')
+      const { results } = await this.db
+        .prepare(
+          `SELECT * FROM notifications
+             WHERE workspace_id IN (${placeholders}) AND block_id IS NULL AND type = ?
+                   AND status = 'open'
+             ORDER BY created_at DESC`,
+        )
+        .bind(...chunk, type)
+        .all<NotificationRow & { workspace_id: string }>()
+      for (const row of results ?? []) {
+        if (!out.has(row.workspace_id)) out.set(row.workspace_id, rowToNotification(row))
+      }
+    }
+    return out
   }
 
   async upsert(workspaceId: string, notification: Notification): Promise<void> {

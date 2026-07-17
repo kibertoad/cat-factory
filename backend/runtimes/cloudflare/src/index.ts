@@ -19,7 +19,11 @@ import { D1SubscriptionQuotaCycleRepository } from './infrastructure/repositorie
 import { D1PasswordResetTokenRepository } from './infrastructure/repositories/D1PasswordResetTokenRepository'
 import { D1NotificationRepository } from './infrastructure/repositories/D1NotificationRepository'
 import { buildContainer, buildCloudflareArtifactStoreResolver } from './infrastructure/container'
-import { GITHUB_RECONCILE_STALE_MS, escalateStaleNotifications } from '@cat-factory/server'
+import {
+  GITHUB_RECONCILE_STALE_MS,
+  escalateStaleNotifications,
+  sweepPlatformHealth,
+} from '@cat-factory/server'
 import { CryptoIdGenerator, SystemClock } from './infrastructure/runtime'
 import { WorkflowsWorkRunner } from './infrastructure/workflows/WorkflowsWorkRunner'
 import { WorkflowsBootstrapRunner } from './infrastructure/workflows/WorkflowsBootstrapRunner'
@@ -562,6 +566,26 @@ export default {
         logger,
       })
       if (sweep) ctx.waitUntil(sweep)
+    }
+
+    // Raise/clear `platform_health` notifications when the deployment's OWN run health crosses
+    // an operator threshold, per account (the push counterpart to the operator dashboard read).
+    // Opt-in (`PLATFORM_ALERTS`); the container (hence the platform-observability read) is built
+    // only when opted in so a deployment that hasn't opted in pays nothing.
+    if (loadConfig(env).platformAlerts.enabled) {
+      ctx.waitUntil(
+        sweepPlatformHealth(buildContainer(env), logger)
+          .then(({ raised, cleared }) => {
+            if (raised > 0 || cleared > 0)
+              logger.info({ cron: 'platform-health', raised, cleared }, 'platform health sweep')
+          })
+          .catch((error) =>
+            logger.error(
+              { cron: 'platform-health', err: errInfo(error) },
+              'platform health sweep failed',
+            ),
+          ),
+      )
     }
   },
 

@@ -1,5 +1,6 @@
 import * as v from 'valibot'
 import { mergeAssessmentSchema } from './merge.js'
+import { platformAlertReasonSchema, platformObservabilityWindowSchema } from './observability.js'
 import { onCallAssessmentSchema, releaseSignalSchema } from './release.js'
 
 // ---------------------------------------------------------------------------
@@ -51,6 +52,13 @@ import { onCallAssessmentSchema, releaseSignalSchema } from './release.js'
 //                          this the three-choice decision is reachable only by drilling
 //                          into the parked step, so the run looks silently stuck; acting
 //                          on it opens that step's decision surface.
+//   - `platform_health`  — the platform-health sweep found the deployment's own aggregate
+//                          run health crossed an operator threshold (elevated failure rate,
+//                          slow-run tail, or backlog depth) for an account. NOT block-scoped
+//                          (blockId is null) — it concerns the whole deployment; it auto-clears
+//                          when the account recovers, and re-notifies only when the firing set
+//                          of conditions changes (not every sweep). Informational: clicking it
+//                          opens the operator dashboard; `act` just marks it read.
 //   - `budget_paused`    — one or more runs were paused by the spend safeguard (the workspace,
 //                          account, or user budget is exhausted). Workspace-scoped (one card,
 //                          not one per run) and purely informational: the sweeper never re-drives
@@ -84,6 +92,7 @@ export const notificationTypeSchema = v.picklist([
   'fork_decision_pending',
   'pr_review_ready',
   'initiative',
+  'platform_health',
   'budget_paused',
 ])
 export type NotificationType = v.InferOutput<typeof notificationTypeSchema>
@@ -148,6 +157,17 @@ export const notificationPayloadSchema = v.object({
   mergedRepos: v.optional(v.array(v.string())),
   /** The repos whose PRs are still UNMERGED after a partial multi-repo merge (see {@link mergedRepos}). */
   unmergedRepos: v.optional(v.array(v.string())),
+  /** The window the aggregate was computed over, on a `platform_health` notification. */
+  platformWindow: v.optional(platformObservabilityWindowSchema),
+  /**
+   * On a `platform_health` notification: the alert conditions currently firing, sorted. This
+   * is the card's dedup identity — the sweep re-raises the SAME card every pass, but the
+   * service only re-delivers when this set (hence the content) changes, so a persistently
+   * unhealthy deployment doesn't re-toast the inbox on every sweep. Live per-condition NUMBERS
+   * are deliberately NOT carried here (they fluctuate every sweep and live on the dashboard the
+   * card links to); the reason set + window are enough to convey "what's wrong, go look".
+   */
+  platformAlerts: v.optional(v.array(platformAlertReasonSchema)),
 })
 export type NotificationPayload = v.InferOutput<typeof notificationPayloadSchema>
 

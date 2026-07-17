@@ -1630,6 +1630,7 @@
         "requirement_review": "סמן כנקרא",
         "clarity_review": "סמן כנקרא",
         "release_regression": "אשר",
+        "platform_health": "אשר",
         "decision_required": "סמן כנקרא",
         "human_test_ready": "סמן כנקרא",
         "visual_confirmation_ready": "סמן כנקרא",
@@ -3106,6 +3107,7 @@
       "incompleteBody": "לפני השמירה מלא גם את מזהה המשתמש וגם את מזהה החבר ב-Slack, או הסר את השורה."
     },
     "routable": {
+      "platform_health": "תקינות הפלטפורמה",
       "merge_review": "סקירת מיזוג",
       "pipeline_complete": "הצינור הושלם",
       "ci_failed": "CI נכשל",
