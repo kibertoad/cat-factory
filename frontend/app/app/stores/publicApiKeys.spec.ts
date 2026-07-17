@@ -10,6 +10,7 @@ function key(over: Partial<PublicApiKey> = {}): PublicApiKey {
     accountId: 'acc1',
     workspaceId: 'ws1',
     label: 'CI',
+    scope: 'write',
     createdAt: 1,
     lastUsedAt: null,
     revokedAt: null,
@@ -83,7 +84,7 @@ describe('publicApiKeys store', () => {
 
     const store = usePublicApiKeysStore()
     await store.load()
-    const result = await store.create('deploy')
+    const result = await store.create('deploy', 'admin')
 
     expect(result.secret).toBe('cf_live_pak_new.abc')
     expect(store.keys.map((k) => k.id)).toEqual(['pak_new', 'pak_old'])

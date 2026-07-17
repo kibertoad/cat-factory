@@ -27,6 +27,7 @@ function publicApiKeyToWire(record: PublicApiKeyRecord): PublicApiKey {
     accountId: record.accountId,
     workspaceId: record.workspaceId,
     label: record.label,
+    scope: record.scope,
     createdAt: record.createdAt,
     lastUsedAt: record.lastUsedAt,
     revokedAt: record.revokedAt,
@@ -56,10 +57,8 @@ export function publicApiKeyController(): Hono<AppEnv> {
     if (accountId == null) {
       return c.json({ error: { code: 'not_found', message: 'Workspace not found' } }, 404)
     }
-    const { record, secret } = await publicApiKeys.issue(
-      { accountId, workspaceId },
-      c.req.valid('json').label,
-    )
+    const { label, scope } = c.req.valid('json')
+    const { record, secret } = await publicApiKeys.issue({ accountId, workspaceId }, label, scope)
     return c.json({ key: publicApiKeyToWire(record), secret }, 201)
   })
 

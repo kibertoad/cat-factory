@@ -2296,7 +2296,14 @@
         "label": "Etiqueta",
         "labelHelp": "Un nombre para reconocer este token más adelante.",
         "labelPlaceholder": "p. ej. pipeline de CI",
+        "scope": "Alcance",
+        "scopeHelp": "Lo que puede hacer este token: solo lectura, lectura y escritura o acceso completo (que también permite eliminar).",
         "create": "Crear token"
+      },
+      "scopes": {
+        "read": "Solo lectura",
+        "write": "Lectura y escritura",
+        "admin": "Acceso completo"
       },
       "toast": {
         "loadFailed": "No se pudieron cargar los tokens de la API",

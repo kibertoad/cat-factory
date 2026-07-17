@@ -2418,7 +2418,14 @@
         "label": "Etiket",
         "labelHelp": "Bu belirteci daha sonra tanımak için bir ad.",
         "labelPlaceholder": "örn. CI hattı",
+        "scope": "Kapsam",
+        "scopeHelp": "Bu belirtecin yapabilecekleri: yalnızca okuma, okuma ve yazma ya da tam erişim (silmeye de izin verir).",
         "create": "Belirteç oluştur"
+      },
+      "scopes": {
+        "read": "Yalnızca okuma",
+        "write": "Okuma ve yazma",
+        "admin": "Tam erişim"
       },
       "toast": {
         "loadFailed": "API belirteçleri yüklenemedi",

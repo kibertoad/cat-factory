@@ -1855,6 +1855,10 @@ export const publicApiKeys = pgTable(
     account_id: text('account_id').notNull(),
     workspace_id: text('workspace_id').notNull(),
     label: text('label').notNull(),
+    // Permission on `/api/v1`: read ⊂ write ⊂ admin. Existing rows backfill to `write` (D1
+    // migration 0053). Kept as text (matches D1) rather than a pg enum, so the two runtimes'
+    // storage stays column-for-column identical.
+    scope: text('scope').notNull().default('write'),
     secret_hash: text('secret_hash').notNull(),
     created_at: bigint('created_at', { mode: 'number' }).notNull(),
     last_used_at: bigint('last_used_at', { mode: 'number' }),

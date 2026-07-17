@@ -356,6 +356,7 @@ export {
 } from './modules/providers/ApiKeyService.js'
 export {
   PublicApiKeyService,
+  scopeSatisfies,
   type PublicApiKeyServiceDependencies,
   type PublicApiKeyAuth,
   type IssuedPublicApiKey,

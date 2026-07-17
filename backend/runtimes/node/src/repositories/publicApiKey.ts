@@ -1,11 +1,12 @@
 import type { PublicApiKeyRecord, PublicApiKeyRepository } from '@cat-factory/kernel'
+import type { PublicApiScope } from '@cat-factory/contracts'
 import { and, desc, eq, isNull } from 'drizzle-orm'
 import type { DrizzleDb } from '../db/client.js'
 import { publicApiKeys } from '../db/schema.js'
 
-// Postgres-backed store of the inbound public-API keys (mirror of D1 migration 0034 /
-// D1PublicApiKeyRepository, column-for-column). The secret is stored ONLY as a one-way peppered
-// hash — this repo never sees the raw key.
+// Postgres-backed store of the inbound public-API keys (mirror of D1 migrations 0034 + 0053 /
+// D1PublicApiKeyRepository, column-for-column, `scope` included). The secret is stored ONLY as a
+// one-way peppered hash — this repo never sees the raw key.
 
 type Row = typeof publicApiKeys.$inferSelect
 
@@ -15,6 +16,7 @@ function rowToRecord(row: Row): PublicApiKeyRecord {
     accountId: row.account_id,
     workspaceId: row.workspace_id,
     label: row.label,
+    scope: row.scope as PublicApiScope,
     secretHash: row.secret_hash,
     createdAt: row.created_at,
     lastUsedAt: row.last_used_at,
@@ -31,6 +33,7 @@ export class DrizzlePublicApiKeyRepository implements PublicApiKeyRepository {
       account_id: record.accountId,
       workspace_id: record.workspaceId,
       label: record.label,
+      scope: record.scope,
       secret_hash: record.secretHash,
       created_at: record.createdAt,
       last_used_at: record.lastUsedAt,

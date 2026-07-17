@@ -2296,7 +2296,14 @@
         "label": "Etykieta",
         "labelHelp": "Nazwa, po której później rozpoznasz ten token.",
         "labelPlaceholder": "np. potok CI",
+        "scope": "Zakres",
+        "scopeHelp": "Co może ten token: tylko odczyt, odczyt i zapis lub pełny dostęp (który pozwala także na usuwanie).",
         "create": "Utwórz token"
+      },
+      "scopes": {
+        "read": "Tylko odczyt",
+        "write": "Odczyt i zapis",
+        "admin": "Pełny dostęp"
       },
       "toast": {
         "loadFailed": "Nie udało się załadować tokenów API",

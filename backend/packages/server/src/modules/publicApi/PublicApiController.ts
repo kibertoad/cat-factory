@@ -2,6 +2,7 @@ import {
   type Block,
   createInitiativeJobContract,
   createPublicTaskContract,
+  deletePublicTaskContract,
   getPublicJobContract,
   getPublicRunContract,
   getPublicTaskContract,
@@ -17,6 +18,7 @@ import {
   type PublicJob,
   type PublicJobStatus,
   type PublicPipeline,
+  type PublicApiScope,
   type PublicRun,
   type PublicService,
   type PublicTask,
@@ -30,7 +32,7 @@ import {
   REQUIREMENTS_REVIEW_AGENT_KIND,
 } from '@cat-factory/agents'
 import { CredentialRequiredError } from '@cat-factory/kernel'
-import type { PublicApiKeyAuth } from '@cat-factory/integrations'
+import { scopeSatisfies, type PublicApiKeyAuth } from '@cat-factory/integrations'
 import { buildHonoRoute } from '@toad-contracts/hono'
 import { Hono } from 'hono'
 import type { Context } from 'hono'
@@ -80,7 +82,7 @@ const PARKING_INLINE_KINDS = new Set<string>([
 
 type KeyResult =
   | { auth: PublicApiKeyAuth }
-  | { fail: { status: 401 | 503; code: string; message: string } }
+  | { fail: { status: 401 | 403 | 503; code: string; message: string } }
 
 /**
  * Resolve the caller's public-API key to a workspace scope, or a `fail` describing the error the
@@ -97,6 +99,31 @@ async function resolveKey<E extends AppEnv>(c: Context<E>): Promise<KeyResult> {
     return { fail: { status: 401, code: 'unauthorized', message: 'Invalid or missing API key' } }
   }
   return { auth }
+}
+
+/**
+ * Authenticate the caller AND require a minimum permission scope. The scope ladder is inclusive
+ * (read ⊂ write ⊂ admin), so a `write` key satisfies a `read` requirement and an `admin` key
+ * satisfies any. A valid key whose scope is too low is a 403 `insufficient_scope` (distinct from
+ * the 401 an unknown/absent key gets) — the caller can tell "wrong key" from "key can't do this".
+ * Every `/api/v1` handler gates through this, naming the least scope it needs.
+ */
+async function authorize<E extends AppEnv>(
+  c: Context<E>,
+  need: PublicApiScope,
+): Promise<KeyResult> {
+  const result = await resolveKey(c)
+  if ('fail' in result) return result
+  if (!scopeSatisfies(result.auth.scope, need)) {
+    return {
+      fail: {
+        status: 403,
+        code: 'insufficient_scope',
+        message: `This action requires a '${need}'-scope key; this key is scoped '${result.auth.scope}'`,
+      },
+    }
+  }
+  return result
 }
 
 function mapStatus(status: ExecutionStatus): PublicJobStatus {
@@ -297,7 +324,7 @@ export function publicApiController(): Hono<AppEnv> {
   // Start an initiative run: validate the pipeline is public + inline, create a headless internal
   // block to anchor the run, and start it. Returns 202 with the job id + follow-up links.
   buildHonoRoute(app, createInitiativeJobContract, async (c) => {
-    const gate = await resolveKey(c)
+    const gate = await authorize(c, 'write')
     if ('fail' in gate) {
       return c.json(
         { error: { code: gate.fail.code, message: gate.fail.message } },
@@ -402,7 +429,7 @@ export function publicApiController(): Hono<AppEnv> {
   // Poll a job's status + result. Scoped to the key's workspace AND to headless initiative runs
   // (see loadPublicJob), so a job in another workspace — or a normal board run — is a 404.
   buildHonoRoute(app, getPublicJobContract, async (c) => {
-    const gate = await resolveKey(c)
+    const gate = await authorize(c, 'read')
     if ('fail' in gate) {
       return c.json(
         { error: { code: gate.fail.code, message: gate.fail.message } },
@@ -421,7 +448,7 @@ export function publicApiController(): Hono<AppEnv> {
   // it serves identically on the Worker and Node. Authenticated by the API key header (an external
   // client can set headers, unlike a browser EventSource). Not a JSON contract, so a raw route.
   app.get('/api/v1/jobs/:id/events', async (c) => {
-    const gate = await resolveKey(c)
+    const gate = await authorize(c, 'read')
     if ('fail' in gate) {
       return c.json(
         { error: { code: gate.fail.code, message: gate.fail.message } },
@@ -496,7 +523,7 @@ export function publicApiController(): Hono<AppEnv> {
 
   // List the workspace's services (board service frames).
   buildHonoRoute(app, listPublicServicesContract, async (c) => {
-    const gate = await resolveKey(c)
+    const gate = await authorize(c, 'read')
     if ('fail' in gate) {
       return c.json(
         { error: { code: gate.fail.code, message: gate.fail.message } },
@@ -509,7 +536,7 @@ export function publicApiController(): Hono<AppEnv> {
 
   // Create a task under a service.
   buildHonoRoute(app, createPublicTaskContract, async (c) => {
-    const gate = await resolveKey(c)
+    const gate = await authorize(c, 'write')
     if ('fail' in gate) {
       return c.json(
         { error: { code: gate.fail.code, message: gate.fail.message } },
@@ -525,7 +552,7 @@ export function publicApiController(): Hono<AppEnv> {
 
   // List a service's tasks (whole subtree, headless anchors excluded).
   buildHonoRoute(app, listPublicServiceTasksContract, async (c) => {
-    const gate = await resolveKey(c)
+    const gate = await authorize(c, 'read')
     if ('fail' in gate) {
       return c.json(
         { error: { code: gate.fail.code, message: gate.fail.message } },
@@ -544,7 +571,7 @@ export function publicApiController(): Hono<AppEnv> {
 
   // Get a task's status.
   buildHonoRoute(app, getPublicTaskContract, async (c) => {
-    const gate = await resolveKey(c)
+    const gate = await authorize(c, 'read')
     if ('fail' in gate) {
       return c.json(
         { error: { code: gate.fail.code, message: gate.fail.message } },
@@ -562,7 +589,7 @@ export function publicApiController(): Hono<AppEnv> {
 
   // Start (run) a task.
   buildHonoRoute(app, startPublicTaskContract, async (c) => {
-    const gate = await resolveKey(c)
+    const gate = await authorize(c, 'write')
     if ('fail' in gate) {
       return c.json(
         { error: { code: gate.fail.code, message: gate.fail.message } },
@@ -657,7 +684,7 @@ export function publicApiController(): Hono<AppEnv> {
   // inline edit and the underlying `updateBlock` — it is NOT restricted to the pre-start
   // window; editing a running/finished task's title/description does not re-drive the run.
   buildHonoRoute(app, updatePublicTaskContract, async (c) => {
-    const gate = await resolveKey(c)
+    const gate = await authorize(c, 'write')
     if ('fail' in gate) {
       return c.json(
         { error: { code: gate.fail.code, message: gate.fail.message } },
@@ -683,7 +710,7 @@ export function publicApiController(): Hono<AppEnv> {
   // run is returned as-is): it records a `cancelled` terminal state on the run rather than
   // deleting it, so the run stays retryable (composing with the retry endpoint below).
   buildHonoRoute(app, stopPublicTaskContract, async (c) => {
-    const gate = await resolveKey(c)
+    const gate = await authorize(c, 'write')
     if ('fail' in gate) {
       return c.json(
         { error: { code: gate.fail.code, message: gate.fail.message } },
@@ -718,7 +745,7 @@ export function publicApiController(): Hono<AppEnv> {
   // `ExecutionService.retry` validates. The engine's `retry` then throws `run_not_retryable`
   // (→ 409) unless the run actually failed.
   buildHonoRoute(app, retryPublicTaskContract, async (c) => {
-    const gate = await resolveKey(c)
+    const gate = await authorize(c, 'write')
     if ('fail' in gate) {
       return c.json(
         { error: { code: gate.fail.code, message: gate.fail.message } },
@@ -766,7 +793,7 @@ export function publicApiController(): Hono<AppEnv> {
   // and the PR (url + branch). A larger projection than the coarse task status — for a caller
   // that wants to render live run progress or diagnose a failure.
   buildHonoRoute(app, getPublicRunContract, async (c) => {
-    const gate = await resolveKey(c)
+    const gate = await authorize(c, 'read')
     if ('fail' in gate) {
       return c.json(
         { error: { code: gate.fail.code, message: gate.fail.message } },
@@ -787,12 +814,39 @@ export function publicApiController(): Hono<AppEnv> {
     return c.json(toPublicRun(run, found.block), 200)
   })
 
+  // Delete a task (and its run history). DESTRUCTIVE, so it requires an `admin`-scoped key (the
+  // top of the ladder) — a `read`/`write` key gets 403 `insufficient_scope`. Double-scoped to the
+  // key's workspace AND a real board task (`getServiceTask` excludes headless anchors, so an
+  // external key can never delete an arbitrary in-workspace block), then delegates to the SAME
+  // `removeBlock` the SPA delete uses — idempotent, and it drops the task's run via `deleteByBlock`
+  // so nothing dangles for the stale-run sweeper. (A leaf task is always deletable; the
+  // unfinished-work guard in `removeBlock` only protects top-level service frames, which this
+  // task-scoped route never targets.)
+  buildHonoRoute(app, deletePublicTaskContract, async (c) => {
+    const gate = await authorize(c, 'admin')
+    if ('fail' in gate) {
+      return c.json(
+        { error: { code: gate.fail.code, message: gate.fail.message } },
+        gate.fail.status,
+      )
+    }
+    const { auth } = gate
+    const container = c.get('container')
+    const { taskId } = c.req.valid('param')
+    const found = await container.boardService.getServiceTask(auth.workspaceId, taskId)
+    if (!found) {
+      return c.json({ error: { code: 'not_found', message: 'Task not found' } }, 404)
+    }
+    await container.boardService.removeBlock(auth.workspaceId, taskId)
+    return c.body(null, 204)
+  })
+
   // Stream a task's run over SSE: the same bounded-poll pattern as the jobs stream (runtime-
   // symmetric by construction — no per-facade event-hub wiring), re-reading the persisted run
   // + its block each tick so a mid-run PR-open surfaces. Terminal on `done`/`failed`; a parked
   // `blocked`/`paused` keeps polling until the run resumes or the connection hits SSE_MAX_MS.
   app.get('/api/v1/tasks/:taskId/events', async (c) => {
-    const gate = await resolveKey(c)
+    const gate = await authorize(c, 'read')
     if ('fail' in gate) {
       return c.json(
         { error: { code: gate.fail.code, message: gate.fail.message } },
@@ -856,7 +910,7 @@ export function publicApiController(): Hono<AppEnv> {
   // (closing the `pipeline_required`-with-no-way-to-discover gap) and whether each is safe to
   // run headlessly. Archived pipelines are hidden.
   buildHonoRoute(app, listPublicPipelinesContract, async (c) => {
-    const gate = await resolveKey(c)
+    const gate = await authorize(c, 'read')
     if ('fail' in gate) {
       return c.json(
         { error: { code: gate.fail.code, message: gate.fail.message } },

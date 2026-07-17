@@ -1,6 +1,6 @@
 # Initiative: public API expansion (`/api/v1` external surface)
 
-**Status:** in progress (Tier 1 task-lifecycle + Tier 2 pipeline discovery landed) · **Owner:** core · **Started:** 2026-07-16
+**Status:** in progress (Tier 1 task-lifecycle complete inc. delete; per-key scopes + Tier 2 pipeline discovery landed) · **Owner:** core · **Started:** 2026-07-16
 
 > This is the durable source of truth for a multi-PR initiative. Read it first before
 > picking up the next slice; update the checklist at the end of each PR.
@@ -52,14 +52,14 @@ The existing public surface IS the template; every new endpoint copies its shape
 
 ### Tier 1 — complete the task lifecycle (do first)
 
-| #   | Endpoint                                                                                                             | Backing internal capability                                                    | Status                                        | PR      |
-| --- | -------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------ | --------------------------------------------- | ------- |
-| 1   | `PATCH /api/v1/tasks/:taskId` (title/description pre-start edits)                                                    | `boardService.updateBlock` (`updateBlockContract`)                             | ✅ done                                       | this PR |
-| 2   | `POST /api/v1/tasks/:taskId/stop`                                                                                    | `executionService.stopRun` (records a retryable `cancelled` terminal)          | ✅ done                                       | this PR |
-| 3   | `POST /api/v1/tasks/:taskId/retry` (reuses the `personalGateForBlock` refusal)                                       | `executionService.retry` (resolved from the block's run)                       | ✅ done                                       | this PR |
-| 4   | `DELETE /api/v1/tasks/:taskId` (archive semantics)                                                                   | `boardService` remove/archive (`removeBlockContract` / `archiveBlockContract`) | ⬜ todo (blocked on #13 scopes — destructive) |         |
-| 5   | `GET /api/v1/tasks/:taskId/run` — richer run projection (per-step status, subtasks, failure kind/message, PR branch) | `executionRepository.getByBlock` + the new `publicRun` projection              | ✅ done                                       | this PR |
-| 6   | `GET /api/v1/tasks/:taskId/events` (SSE, live run progress)                                                          | the jobs-SSE bounded-poll pattern, verbatim                                    | ✅ done                                       | this PR |
+| #   | Endpoint                                                                                                             | Backing internal capability                                                | Status  | PR      |
+| --- | -------------------------------------------------------------------------------------------------------------------- | -------------------------------------------------------------------------- | ------- | ------- |
+| 1   | `PATCH /api/v1/tasks/:taskId` (title/description pre-start edits)                                                    | `boardService.updateBlock` (`updateBlockContract`)                         | ✅ done | this PR |
+| 2   | `POST /api/v1/tasks/:taskId/stop`                                                                                    | `executionService.stopRun` (records a retryable `cancelled` terminal)      | ✅ done | this PR |
+| 3   | `POST /api/v1/tasks/:taskId/retry` (reuses the `personalGateForBlock` refusal)                                       | `executionService.retry` (resolved from the block's run)                   | ✅ done | this PR |
+| 4   | `DELETE /api/v1/tasks/:taskId` (delete task + run history, `admin`-scoped)                                           | `boardService.removeBlock` (idempotent; drops the run via `deleteByBlock`) | ✅ done | this PR |
+| 5   | `GET /api/v1/tasks/:taskId/run` — richer run projection (per-step status, subtasks, failure kind/message, PR branch) | `executionRepository.getByBlock` + the new `publicRun` projection          | ✅ done | this PR |
+| 6   | `GET /api/v1/tasks/:taskId/events` (SSE, live run progress)                                                          | the jobs-SSE bounded-poll pattern, verbatim                                | ✅ done | this PR |
 
 > **Note on #1:** `updateBlock`'s patch has no `taskType` field (task type is set at creation
 > and re-stamped on reparent), so the public PATCH exposes only `title`/`description` — the two
@@ -83,9 +83,9 @@ The existing public surface IS the template; every new endpoint copies its shape
 
 ### Cross-cutting prerequisite
 
-| #   | Item                                                                 | Notes                                                                                                                                                                                                   | Status  | PR  |
-| --- | -------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ------- | --- |
-| 13  | **Per-key scopes** (`read` / `write` / `admin`) on `public_api_keys` | Required before any merge-adjacent or destructive endpoint (#4, #11); land it alongside Tier 1 while the key population is still small — pre-1.0, no back-compat: existing keys may simply be re-minted | ⬜ todo |     |
+| #   | Item                                                                 | Notes                                                                                                                                                                                                                                                                                                                                                                                                | Status  | PR      |
+| --- | -------------------------------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ------- | ------- |
+| 13  | **Per-key scopes** (`read` / `write` / `admin`) on `public_api_keys` | Inclusive ladder (`read` ⊂ `write` ⊂ `admin`) enforced per-route by `authorize(c, need)` in `PublicApiController` via `scopeSatisfies`; too-low scope → `403 insufficient_scope`. `scope` column D1 ⇄ Drizzle, existing keys backfill to `write` (kept their pre-scope capabilities, no auto-grant of destructive power). Token UI gains a scope selector (default `write`). Unblocked #4; #11 next. | ✅ done | this PR |
 
 ### Tier 4 — larger surface, only on demand (deliberately deferred)
 

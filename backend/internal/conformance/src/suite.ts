@@ -1096,6 +1096,84 @@ export function defineCoreConformance(harness: ConformanceHarness): void {
           (await call('POST', `/api/v1/tasks/${taskId}/retry`, undefined, otherAuth)).status,
         ).toBe(404)
       })
+
+      it('gates each route on the key scope ladder (read ⊂ write ⊂ admin) and deletes with admin', async () => {
+        const { call, createOrgWorkspace } = harness.makeApp()
+        const { workspace } = await createOrgWorkspace({ seed: true })
+        const wsId = workspace.id
+
+        // Mint one key per scope. An omitted scope defaults to `write`.
+        const mint = async (scope: 'read' | 'write' | 'admin') => {
+          const res = await call<{ key: { scope: string }; secret: string }>(
+            'POST',
+            `/workspaces/${wsId}/public-api-keys`,
+            { label: scope, scope },
+          )
+          expect(res.status).toBe(201)
+          expect(res.body.key.scope).toBe(scope)
+          return { authorization: `Bearer ${res.body.secret}` }
+        }
+        const readAuth = await mint('read')
+        const writeAuth = await mint('write')
+        const adminAuth = await mint('admin')
+        // The default (no scope in the body) is `write`.
+        const defaulted = await call<{ key: { scope: string } }>(
+          'POST',
+          `/workspaces/${wsId}/public-api-keys`,
+          { label: 'defaulted' },
+        )
+        expect(defaulted.body.key.scope).toBe('write')
+
+        const frame = await call<{ id: string }>('POST', `/workspaces/${wsId}/blocks`, {
+          type: 'service',
+          position: { x: 400, y: 400 },
+        })
+        const serviceId = frame.body.id
+
+        // A `read` key can read (list services) but is refused (403 insufficient_scope) on any
+        // write — e.g. creating a task.
+        expect((await call('GET', '/api/v1/services', undefined, readAuth)).status).toBe(200)
+        const readCreate = await call<{ error: { code: string } }>(
+          'POST',
+          `/api/v1/services/${serviceId}/tasks`,
+          { title: 'nope', description: 'x' },
+          readAuth,
+        )
+        expect(readCreate.status).toBe(403)
+        expect(readCreate.body.error.code).toBe('insufficient_scope')
+
+        // A `write` key creates the task (and can read it) but is refused on the destructive DELETE.
+        const created = await call<{ taskId: string }>(
+          'POST',
+          `/api/v1/services/${serviceId}/tasks`,
+          { title: 'Scoped task', description: 'x' },
+          writeAuth,
+        )
+        expect(created.status).toBe(201)
+        const taskId = created.body.taskId
+        expect((await call('GET', `/api/v1/tasks/${taskId}`, undefined, readAuth)).status).toBe(200)
+        const writeDelete = await call<{ error: { code: string } }>(
+          'DELETE',
+          `/api/v1/tasks/${taskId}`,
+          undefined,
+          writeAuth,
+        )
+        expect(writeDelete.status).toBe(403)
+        expect(writeDelete.body.error.code).toBe('insufficient_scope')
+        // Still present after the refused delete.
+        expect((await call('GET', `/api/v1/tasks/${taskId}`, undefined, readAuth)).status).toBe(200)
+
+        // An `admin` key deletes it; the task is then gone (404) for every scope.
+        expect((await call('DELETE', `/api/v1/tasks/${taskId}`, undefined, adminAuth)).status).toBe(
+          204,
+        )
+        expect((await call('GET', `/api/v1/tasks/${taskId}`, undefined, readAuth)).status).toBe(404)
+        // Deleting an already-gone task is idempotent-but-scoped: a real task no longer resolves,
+        // so it 404s (never a 5xx) even for admin.
+        expect((await call('DELETE', `/api/v1/tasks/${taskId}`, undefined, adminAuth)).status).toBe(
+          404,
+        )
+      })
     })
 
     describe('pipeline versioning + reseed', () => {
