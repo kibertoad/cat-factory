@@ -19,10 +19,12 @@ import type {
 import type {
   BlockRepository,
   ExecutionRepository,
+  GroupCacheHandle,
   PipelineRepository,
   ResolveBinaryArtifactStore,
   ServiceRehome,
   ServiceRepository,
+  WorkspaceAccessCacheValue,
   WorkspaceMemberRepository,
   WorkspaceMountRepository,
   WorkspaceRepository,
@@ -55,6 +57,14 @@ export interface WorkspaceServiceDependencies {
    */
   workspaceMemberRepository?: WorkspaceMemberRepository
   /**
+   * The `workspaceAccess` cache slice (workspace-rbac initiative). When wired, a board delete
+   * drops the deleted board's whole access GROUP so no stale (grant/denial) entry outlives it —
+   * hygiene, since the board id is never reused. Optional — absent (tests / no cache) ⇒ the delete
+   * simply skips the invalidation (the gate resolves live). The roster + access-mode write paths
+   * (a later slice's member-management service) invalidate the same group on their own writes.
+   */
+  workspaceAccessCache?: GroupCacheHandle<WorkspaceAccessCacheValue>
+  /**
    * Resolves a workspace's binary-artifact store (screenshots + reference images) so a board
    * delete can reclaim their heavy blob bytes. Optional — when unwired (no content storage
    * configured, or in tests) the delete path simply skips the purge. Absent from the
@@ -78,6 +88,7 @@ export class WorkspaceService {
   private readonly serviceRepository?: ServiceRepository
   private readonly workspaceMountRepository?: WorkspaceMountRepository
   private readonly workspaceMemberRepository?: WorkspaceMemberRepository
+  private readonly workspaceAccessCache?: GroupCacheHandle<WorkspaceAccessCacheValue>
   private readonly resolveBinaryArtifactStore?: ResolveBinaryArtifactStore
   private readonly logger?: { info(obj: Record<string, unknown>, msg?: string): void }
 
@@ -91,6 +102,7 @@ export class WorkspaceService {
     serviceRepository,
     workspaceMountRepository,
     workspaceMemberRepository,
+    workspaceAccessCache,
     resolveBinaryArtifactStore,
     logger,
   }: WorkspaceServiceDependencies) {
@@ -103,6 +115,7 @@ export class WorkspaceService {
     this.serviceRepository = serviceRepository
     this.workspaceMountRepository = workspaceMountRepository
     this.workspaceMemberRepository = workspaceMemberRepository
+    this.workspaceAccessCache = workspaceAccessCache
     this.resolveBinaryArtifactStore = resolveBinaryArtifactStore
     this.logger = logger
   }
@@ -433,6 +446,11 @@ export class WorkspaceService {
     // re-home plan; services with no other mount fall through to the normal reclaim.
     const rehome = await this.planSharedServiceRehome(id)
     await this.workspaceRepository.delete(id, rehome)
+    // Drop every cached access decision for the now-deleted board (workspace-rbac): the roster
+    // cascaded away with the row, so a stale grant/denial entry would just be dead weight until
+    // its TTL. Invalidate after the delete commits (invalidation is the coherence story, not the
+    // TTL). No-op when the cache isn't wired.
+    await this.workspaceAccessCache?.invalidateGroup(id)
   }
 
   /** Purge every binary artifact (rows + blob bytes) of a board being deleted. No-op when the

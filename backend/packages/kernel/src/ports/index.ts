@@ -273,6 +273,7 @@ export type {
   CachedRepoRead,
   GroupCacheHandle,
   RiskPolicyCacheValue,
+  WorkspaceAccessCacheValue,
   WorkspaceSettingsCacheValue,
 } from './caching.js'
 export { readCachedWorkspaceSettings, repoFilesCacheGroup } from './caching.js'

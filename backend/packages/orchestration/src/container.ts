@@ -2620,7 +2620,11 @@ export function createCore(dependencies: CoreDependencies): Core {
     executionEventPublisher,
     repoProjectionCache: caches.repoProjection,
   })
-  const workspaceService = new WorkspaceService(dependencies)
+  const workspaceService = new WorkspaceService({
+    ...dependencies,
+    // A board delete drops its cached access decisions (workspace-rbac).
+    workspaceAccessCache: caches.workspaceAccess,
+  })
   // Late-bound so the account service can invalidate the spend service's cached
   // account-budget limit on an account-budget edit (spendService is built below).
   let spendServiceRef: SpendService | undefined
@@ -2631,6 +2635,9 @@ export function createCore(dependencies: CoreDependencies): Core {
     idGenerator: dependencies.idGenerator,
     clock: dependencies.clock,
     onAccountBudgetChanged: (accountId) => spendServiceRef?.invalidateAccountLimit(accountId),
+    // A membership grant/role change alters board access across the account, so drop the
+    // workspace-access cache wholesale (workspace-rbac — the coarse fallback for a rare write).
+    onAccountMembershipChanged: () => caches.workspaceAccess.invalidateAll(),
     // Reject an account budget above the operator cap on write (late-bound: spendService
     // is built below, and the cap is a static deployment fact once it is).
     resolveAccountBudgetCap: () => spendServiceRef?.budgetCaps().accountMonthlyLimitMax,
@@ -2659,6 +2666,8 @@ export function createCore(dependencies: CoreDependencies): Core {
         // Resolve the inviting account's own (DB-stored) email sender at send time.
         resolveEmailSender: email ? (accountId) => email.resolveSender(accountId) : undefined,
         appBaseUrl: dependencies.appBaseUrl,
+        // Accepting an invitation grants membership ⇒ drop the workspace-access cache (workspace-rbac).
+        onAccountMembershipChanged: () => caches.workspaceAccess.invalidateAll(),
       })
     : undefined
   const passwordReset = dependencies.passwordResetTokenRepository
