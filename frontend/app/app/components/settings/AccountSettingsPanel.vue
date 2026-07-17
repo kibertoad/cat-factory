@@ -62,7 +62,12 @@ const tabs = computed(() => [
           <AccountFragmentSettings :account-id="accounts.activeAccountId" />
         </template>
         <template #skills>
-          <AccountSkillSettings :account-id="accounts.activeAccountId" />
+          <!-- Key on the account so a mid-modal account switch remounts against a fresh
+               account-keyed skill-library store rather than the stale initial one. -->
+          <AccountSkillSettings
+            :key="accounts.activeAccountId ?? undefined"
+            :account-id="accounts.activeAccountId"
+          />
         </template>
       </UTabs>
     </template>

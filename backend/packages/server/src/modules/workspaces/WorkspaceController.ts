@@ -129,7 +129,13 @@ async function snapshotSkills(
     return skills.length
       ? skills.map((s) => ({ id: s.id, name: s.name, description: s.description }))
       : undefined
-  } catch {
+  } catch (err) {
+    // Best-effort: log the swallowed fault (like the infra-setup probe above) so a misconfigured
+    // library is visible in the operator log, but never let it 500 the board snapshot.
+    sharedLogger.warn(
+      { accountId, err: err instanceof Error ? err.message : String(err) },
+      'skill catalog read failed; degrading snapshot skills to none',
+    )
     return undefined
   }
 }

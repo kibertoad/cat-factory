@@ -18,10 +18,5 @@ export const useSkillsStore = defineStore('skills', () => {
     catalog.value = list
   }
 
-  /** Resolve a skill summary by id (for rendering a picked skill's name in the builder). */
-  function byId(id: string): SkillSummary | undefined {
-    return catalog.value.find((s) => s.id === id)
-  }
-
-  return { catalog, hydrate, byId }
+  return { catalog, hydrate }
 })
