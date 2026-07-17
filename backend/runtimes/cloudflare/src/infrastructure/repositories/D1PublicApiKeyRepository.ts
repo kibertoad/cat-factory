@@ -1,4 +1,5 @@
 import type { PublicApiKeyRecord, PublicApiKeyRepository } from '@cat-factory/kernel'
+import type { PublicApiScope } from '@cat-factory/contracts'
 import type { D1Database } from '@cloudflare/workers-types'
 
 interface PublicApiKeyRow {
@@ -6,6 +7,7 @@ interface PublicApiKeyRow {
   account_id: string
   workspace_id: string
   label: string
+  scope: string
   secret_hash: string
   created_at: number
   last_used_at: number | null
@@ -18,6 +20,7 @@ function rowToRecord(row: PublicApiKeyRow): PublicApiKeyRecord {
     accountId: row.account_id,
     workspaceId: row.workspace_id,
     label: row.label,
+    scope: row.scope as PublicApiScope,
     secretHash: row.secret_hash,
     createdAt: row.created_at,
     lastUsedAt: row.last_used_at,
@@ -37,14 +40,15 @@ export class D1PublicApiKeyRepository implements PublicApiKeyRepository {
     await this.db
       .prepare(
         `INSERT INTO public_api_keys
-          (id, account_id, workspace_id, label, secret_hash, created_at, last_used_at, revoked_at)
-         VALUES (?, ?, ?, ?, ?, ?, ?, ?)`,
+          (id, account_id, workspace_id, label, scope, secret_hash, created_at, last_used_at, revoked_at)
+         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`,
       )
       .bind(
         record.id,
         record.accountId,
         record.workspaceId,
         record.label,
+        record.scope,
         record.secretHash,
         record.createdAt,
         record.lastUsedAt,

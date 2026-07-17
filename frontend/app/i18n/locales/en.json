@@ -1416,6 +1416,9 @@
       "avg": "Average",
       "min": "Min",
       "max": "Max",
+      "p50": "p50",
+      "p90": "p90",
+      "p99": "p99",
       "empty": "No completed runs in this window."
     },
     "live": {
@@ -2485,7 +2488,14 @@
         "label": "Label",
         "labelHelp": "A name to recognize this token by later.",
         "labelPlaceholder": "e.g. CI pipeline",
+        "scope": "Scope",
+        "scopeHelp": "What this token can do: read-only, read and write, or full access (which also allows deleting).",
         "create": "Create token"
+      },
+      "scopes": {
+        "read": "Read only",
+        "write": "Read and write",
+        "admin": "Full access"
       },
       "toast": {
         "loadFailed": "Could not load API tokens",

@@ -5,6 +5,7 @@ import type {
   PublicApiKeyRepository,
 } from '@cat-factory/kernel'
 import { ConflictError } from '@cat-factory/kernel'
+import { PUBLIC_API_SCOPES, type PublicApiScope } from '@cat-factory/contracts'
 
 // PublicApiKeyService: owns the INBOUND public-API keys external systems present to the
 // `/api/v1` surface. Unlike the outbound provider keys (`ApiKeyService`, encrypted so the
@@ -47,6 +48,20 @@ export interface PublicApiKeyAuth {
   keyId: string
   accountId: string
   workspaceId: string
+  /** What this key may do (read ⊂ write ⊂ admin) — the public surface gates each route on it. */
+  scope: PublicApiScope
+}
+
+/** The scope ladder as a rank, so a `have ≥ need` check is one comparison. */
+const SCOPE_RANK: Record<PublicApiScope, number> = { read: 0, write: 1, admin: 2 }
+
+/**
+ * Whether a key that HOLDS `have` satisfies an endpoint that NEEDS `need`. The ladder is
+ * inclusive — an `admin` key satisfies a `write` or `read` requirement — so this is a simple
+ * rank comparison, the single source of truth for every `/api/v1` scope gate.
+ */
+export function scopeSatisfies(have: PublicApiScope, need: PublicApiScope): boolean {
+  return SCOPE_RANK[have] >= SCOPE_RANK[need]
 }
 
 /** The result of issuing a key: the stored record + the one-time raw secret to hand back. */
@@ -61,25 +76,36 @@ export class PublicApiKeyService {
 
   constructor(private readonly deps: PublicApiKeyServiceDependencies) {}
 
-  /** Mint a new key for a workspace, returning the record + the one-time raw secret. */
+  /**
+   * Mint a new key for a workspace, returning the record + the one-time raw secret. `scope`
+   * (default `write`) is the permission the key carries on `/api/v1` (read ⊂ write ⊂ admin).
+   */
   async issue(
-    scope: { accountId: string; workspaceId: string },
+    owner: { accountId: string; workspaceId: string },
     label: string,
+    scope: PublicApiScope = 'write',
   ): Promise<IssuedPublicApiKey> {
-    const live = await this.deps.repository.listByWorkspace(scope.workspaceId)
+    const live = await this.deps.repository.listByWorkspace(owner.workspaceId)
     if (live.length >= MAX_KEYS_PER_WORKSPACE) {
       throw new ConflictError(
         `This workspace already has the maximum of ${MAX_KEYS_PER_WORKSPACE} public-API keys; ` +
           'revoke one before creating another',
       )
     }
+    // Defensive: reject a scope outside the known ladder rather than persisting a row the
+    // gate can't rank (the contract already validates the wire input, but `issue` is a public
+    // service method other callers could reach).
+    if (!PUBLIC_API_SCOPES.includes(scope)) {
+      throw new ConflictError(`Unknown public-API key scope: ${scope}`)
+    }
     const id = this.deps.idGenerator.next('pak')
     const secret = randomHex(SECRET_BYTES)
     const record: PublicApiKeyRecord = {
       id,
-      accountId: scope.accountId,
-      workspaceId: scope.workspaceId,
+      accountId: owner.accountId,
+      workspaceId: owner.workspaceId,
       label,
+      scope,
       secretHash: await this.hash(secret),
       createdAt: this.deps.clock.now(),
       lastUsedAt: null,
@@ -118,7 +144,12 @@ export class PublicApiKeyService {
     if (record.lastUsedAt === null || now - record.lastUsedAt >= LAST_USED_STAMP_THROTTLE_MS) {
       await this.deps.repository.markUsed(record.id, now)
     }
-    return { keyId: record.id, accountId: record.accountId, workspaceId: record.workspaceId }
+    return {
+      keyId: record.id,
+      accountId: record.accountId,
+      workspaceId: record.workspaceId,
+      scope: record.scope,
+    }
   }
 
   /**

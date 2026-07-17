@@ -1,5 +1,25 @@
 # @cat-factory/sandbox
 
+## 0.9.93
+
+### Patch Changes
+
+- Updated dependencies [720539f]
+  - @cat-factory/kernel@0.135.0
+  - @cat-factory/contracts@0.142.0
+  - @cat-factory/agents@0.62.2
+  - @cat-factory/sandbox-fixtures@0.7.166
+
+## 0.9.92
+
+### Patch Changes
+
+- Updated dependencies [e618bf5]
+  - @cat-factory/contracts@0.141.0
+  - @cat-factory/agents@0.62.1
+  - @cat-factory/kernel@0.134.1
+  - @cat-factory/sandbox-fixtures@0.7.165
+
 ## 0.9.91
 
 ### Patch Changes

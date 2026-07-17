@@ -1,6 +1,6 @@
 import { defineStore } from 'pinia'
 import { ref } from 'vue'
-import type { CreatedPublicApiKey, PublicApiKey } from '~/types/publicApiKeys'
+import type { CreatedPublicApiKey, PublicApiKey, PublicApiScope } from '~/types/publicApiKeys'
 import { useWorkspaceStore } from '~/stores/workspace'
 import { apiErrorStatus } from '~/composables/api/errors'
 
@@ -51,10 +51,13 @@ export const usePublicApiKeysStore = defineStore('publicApiKeys', () => {
     return inFlight
   }
 
-  /** Mint a key. Returns the created record PLUS the one-time raw secret (shown once). */
-  async function create(label: string): Promise<CreatedPublicApiKey> {
+  /**
+   * Mint a key with a permission `scope` (read ⊂ write ⊂ admin). Returns the created record
+   * PLUS the one-time raw secret (shown once).
+   */
+  async function create(label: string, scope: PublicApiScope): Promise<CreatedPublicApiKey> {
     const ws = useWorkspaceStore()
-    const created = await api.createPublicApiKey(ws.requireId(), { label })
+    const created = await api.createPublicApiKey(ws.requireId(), { label, scope })
     // Prepend: the backend lists newest-first, so the freshly minted key belongs at the
     // top — matching the order a subsequent `load()` would produce.
     keys.value = [created.key, ...keys.value]

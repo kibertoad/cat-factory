@@ -151,6 +151,14 @@ export const getPublicRunContract = defineApiContract({
   responsesByStatusCode: { 200: publicRunSchema, ...errorResponses },
 })
 
+/** Delete a task (and its run history). Destructive — requires an `admin`-scoped key. */
+export const deletePublicTaskContract = defineApiContract({
+  method: 'delete',
+  requestPathParamsSchema: taskIdParams,
+  pathResolver: ({ taskId }) => `/api/v1/tasks/${taskId}`,
+  responsesByStatusCode: { 204: ContractNoBody, ...errorResponses },
+})
+
 // ---- pipeline discovery (key-authenticated) --------------------------------
 
 /** List the workspace's pipelines (id/name/steps + a headless-startable flag). */

@@ -541,7 +541,14 @@
         "label": "Etichetta",
         "labelHelp": "Un nome per riconoscere questo token in seguito.",
         "labelPlaceholder": "es. pipeline CI",
+        "scope": "Ambito",
+        "scopeHelp": "Cosa può fare questo token: sola lettura, lettura e scrittura o accesso completo (che consente anche l'eliminazione).",
         "create": "Crea token"
+      },
+      "scopes": {
+        "read": "Sola lettura",
+        "write": "Lettura e scrittura",
+        "admin": "Accesso completo"
       },
       "toast": {
         "loadFailed": "Impossibile caricare i token API",
@@ -2801,6 +2808,9 @@
       "avg": "Media",
       "min": "Min",
       "max": "Max",
+      "p50": "p50",
+      "p90": "p90",
+      "p99": "p99",
       "empty": "Nessuna esecuzione completata in questo periodo."
     },
     "live": {

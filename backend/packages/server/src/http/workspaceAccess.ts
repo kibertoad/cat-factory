@@ -9,16 +9,33 @@ import type { ServerContainer } from './env.js'
 // It performs the three reads `resolveWorkspaceAccess` needs — the board access row, the
 // caller's account roles, and their explicit member row — then hands them to the pure
 // kernel decision function. Legacy boards (`accountId === null`) are owner-only, so the
-// account/member reads are skipped there. The `workspaceAccess` AppCaches slice (a later
-// slice) wraps THIS load; today it reads straight through.
+// account/member reads are skipped there. The `workspaceAccess` AppCaches slice wraps this
+// read-through (group = workspace id, key = user id): a hit costs zero reads, and every write
+// that changes the outcome invalidates the entry (the roster/access-mode/delete write paths
+// drop the workspace group; the account-tier membership writes drop everything). Pass-through
+// on the Worker's isolate-safe profile, so there it reads straight through every time.
 // ---------------------------------------------------------------------------
 
 /**
- * Resolve a signed-in user's effective access to one board. Returns `null` when the board
- * doesn't exist (the gate then lets the handler 404 on its own, preserving the pre-RBAC
- * behaviour); otherwise a {@link WorkspaceAccess} decision (`allowed` grant or denial).
+ * Resolve a signed-in user's effective access to one board, THROUGH the `workspaceAccess` cache.
+ * Returns `null` when the board doesn't exist (the gate then lets the handler 404 on its own,
+ * preserving the pre-RBAC behaviour); otherwise a {@link WorkspaceAccess} decision (`allowed`
+ * grant or denial). Both the denial and the missing-board `null` cache as values (negative
+ * caching), so a repeat request from the same user on the same board issues no repository reads.
  */
 export async function loadWorkspaceAccess(
+  container: ServerContainer,
+  workspaceId: string,
+  userId: string,
+): Promise<WorkspaceAccess | null> {
+  const { access } = await container.caches.workspaceAccess.get(userId, workspaceId, async () => ({
+    access: await resolveWorkspaceAccessUncached(container, workspaceId, userId),
+  }))
+  return access
+}
+
+/** The uncached three-read resolution the cache load wraps (also the pass-through on the Worker). */
+async function resolveWorkspaceAccessUncached(
   container: ServerContainer,
   workspaceId: string,
   userId: string,

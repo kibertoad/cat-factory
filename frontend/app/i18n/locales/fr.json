@@ -1359,6 +1359,9 @@
       "avg": "Moyenne",
       "min": "Min.",
       "max": "Max.",
+      "p50": "p50",
+      "p90": "p90",
+      "p99": "p99",
       "empty": "Aucune exécution terminée sur cette période."
     },
     "live": {
@@ -2300,7 +2303,14 @@
         "label": "Libellé",
         "labelHelp": "Un nom pour reconnaître ce jeton plus tard.",
         "labelPlaceholder": "ex. pipeline CI",
+        "scope": "Portée",
+        "scopeHelp": "Ce que ce jeton peut faire : lecture seule, lecture et écriture, ou accès complet (qui autorise aussi la suppression).",
         "create": "Créer le jeton"
+      },
+      "scopes": {
+        "read": "Lecture seule",
+        "write": "Lecture et écriture",
+        "admin": "Accès complet"
       },
       "toast": {
         "loadFailed": "Impossible de charger les jetons d'API",

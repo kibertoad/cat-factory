@@ -541,7 +541,14 @@
         "label": "Bezeichnung",
         "labelHelp": "Ein Name, um dieses Token später wiederzuerkennen.",
         "labelPlaceholder": "z. B. CI-Pipeline",
+        "scope": "Berechtigung",
+        "scopeHelp": "Was dieses Token darf: nur Lesen, Lesen und Schreiben oder Vollzugriff (der auch das Löschen erlaubt).",
         "create": "Token erstellen"
+      },
+      "scopes": {
+        "read": "Nur Lesen",
+        "write": "Lesen und Schreiben",
+        "admin": "Vollzugriff"
       },
       "toast": {
         "loadFailed": "API-Tokens konnten nicht geladen werden",
@@ -2801,6 +2808,9 @@
       "avg": "Durchschnitt",
       "min": "Min.",
       "max": "Max.",
+      "p50": "p50",
+      "p90": "p90",
+      "p99": "p99",
       "empty": "Keine abgeschlossenen Läufe in diesem Zeitraum."
     },
     "live": {

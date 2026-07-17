@@ -10,6 +10,7 @@ import type {
   ResolvedAccountSettings,
   ResolvedCatalogEntry,
   RiskPolicyCacheValue,
+  WorkspaceAccessCacheValue,
   WorkspaceSettingsCacheValue,
 } from '@cat-factory/kernel'
 // Deep imports on purpose: layered-loader's root index eagerly requires its Redis
@@ -72,6 +73,7 @@ export interface AppCachesProfile {
   viewerRepos: GroupCacheProfile
   patInstallationRepos: GroupCacheProfile
   riskPolicy: GroupCacheProfile
+  workspaceAccess: GroupCacheProfile
 }
 
 /** The default (Node/local/test) profile: caching on, modest bounds. */
@@ -168,6 +170,12 @@ export const DEFAULT_APP_CACHES_PROFILE: AppCachesProfile = {
   // `default`) — a workspace has a small preset library, so a modest per-group bound covers the
   // picked presets plus the default. Slow-moving (admin-changed); invalidation-driven, no probe.
   riskPolicy: { enabled: true, ttlInMsecs: 5 * 60_000, maxGroups: 1000, maxItemsPerGroup: 32 },
+  // One resolved access decision per (workspace, user) — grouped by workspace, keyed by user, so a
+  // large board keeps a member entry each. Slow-moving (roster/access-mode are admin actions);
+  // invalidation-driven, no version probe. A SHORT 60s TTL: it's the freshness backstop only (the
+  // roster/access-mode/account-membership writes invalidate on commit), and it bounds how long a
+  // just-revoked member keeps read access on the rare path an invalidation is missed.
+  workspaceAccess: { enabled: true, ttlInMsecs: 60_000, maxGroups: 2000, maxItemsPerGroup: 256 },
 }
 
 /**
@@ -224,6 +232,11 @@ export const ISOLATE_SAFE_APP_CACHES_PROFILE: AppCachesProfile = {
   // invalidation bus on the Worker, so the isolate resolves it live — same class as
   // `workspaceSettings`/`accountModelPolicy`.
   riskPolicy: { ...DEFAULT_APP_CACHES_PROFILE.riskPolicy, enabled: false },
+  // Pass-through: the resolved workspace-access decision reads our own mutable D1 state (the roster
+  // + access-mode + account memberships) with no cross-isolate invalidation bus on the Worker, so a
+  // TTL'd entry would keep granting access after a peer isolate revoked a member. The isolate
+  // resolves it live every request — same class as `workspaceSettings`/`accountModelPolicy`.
+  workspaceAccess: { ...DEFAULT_APP_CACHES_PROFILE.workspaceAccess, enabled: false },
 }
 
 /**
@@ -419,6 +432,11 @@ export function createAppCaches(options: CreateAppCachesOptions = {}): AppCaches
     profile.riskPolicy,
     options,
   )
+  const workspaceAccess = buildGroupCache<WorkspaceAccessCacheValue>(
+    'workspace-access',
+    profile.workspaceAccess,
+    options,
+  )
   return {
     fragmentCatalog,
     skillCatalog,
@@ -433,6 +451,7 @@ export function createAppCaches(options: CreateAppCachesOptions = {}): AppCaches
     viewerRepos,
     patInstallationRepos,
     riskPolicy,
+    workspaceAccess,
     close: async () => {
       await Promise.all([
         fragmentCatalog.close(),
@@ -448,6 +467,7 @@ export function createAppCaches(options: CreateAppCachesOptions = {}): AppCaches
         viewerRepos.close(),
         patInstallationRepos.close(),
         riskPolicy.close(),
+        workspaceAccess.close(),
       ])
     },
   }

@@ -7,8 +7,11 @@
 // yields no usable keys. The raw key is shown exactly once, on issue.
 //
 // A key is scoped to one account + workspace; every call it authenticates is bound to
-// that workspace. Both runtimes implement this (Cloudflare D1 + Node/local Postgres)
-// so behaviour is identical everywhere.
+// that workspace. It also carries a permission `scope` (read ⊂ write ⊂ admin) the public
+// surface gates each endpoint on. Both runtimes implement this (Cloudflare D1 + Node/local
+// Postgres) so behaviour is identical everywhere.
+
+import type { PublicApiScope } from '@cat-factory/contracts'
 
 /** One public-API key row. `secretHash` is the peppered HMAC digest, never the raw key. */
 export interface PublicApiKeyRecord {
@@ -17,6 +20,8 @@ export interface PublicApiKeyRecord {
   accountId: string
   workspaceId: string
   label: string
+  /** What the key may do on `/api/v1` (read ⊂ write ⊂ admin). */
+  scope: PublicApiScope
   /** Hex `HMAC-SHA256(secret, ENCRYPTION_KEY)` of the key's secret portion. */
   secretHash: string
   createdAt: number

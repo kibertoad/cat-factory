@@ -345,8 +345,12 @@ watch(
                     >
                       {{ t('platformObservability.durations.empty') }}
                     </div>
-                    <dl v-else class="flex items-center justify-between gap-2 text-center">
-                      <div class="flex-1">
+                    <dl
+                      v-else
+                      class="grid grid-cols-3 gap-y-3 text-center"
+                      data-testid="operator-durations"
+                    >
+                      <div>
                         <dt class="text-[11px] text-slate-500">
                           {{ t('platformObservability.durations.avg') }}
                         </dt>
@@ -354,7 +358,7 @@ watch(
                           {{ view.durations.avgMs == null ? '—' : formatMs(view.durations.avgMs) }}
                         </dd>
                       </div>
-                      <div class="flex-1">
+                      <div>
                         <dt class="text-[11px] text-slate-500">
                           {{ t('platformObservability.durations.min') }}
                         </dt>
@@ -362,12 +366,45 @@ watch(
                           {{ view.durations.minMs == null ? '—' : formatMs(view.durations.minMs) }}
                         </dd>
                       </div>
-                      <div class="flex-1">
+                      <div>
                         <dt class="text-[11px] text-slate-500">
                           {{ t('platformObservability.durations.max') }}
                         </dt>
                         <dd class="font-semibold text-slate-300">
                           {{ view.durations.maxMs == null ? '—' : formatMs(view.durations.maxMs) }}
+                        </dd>
+                      </div>
+                      <div>
+                        <dt class="text-[11px] text-slate-500">
+                          {{ t('platformObservability.durations.p50') }}
+                        </dt>
+                        <dd
+                          class="font-semibold text-slate-300"
+                          data-testid="operator-duration-p50"
+                        >
+                          {{ view.durations.p50Ms == null ? '—' : formatMs(view.durations.p50Ms) }}
+                        </dd>
+                      </div>
+                      <div>
+                        <dt class="text-[11px] text-slate-500">
+                          {{ t('platformObservability.durations.p90') }}
+                        </dt>
+                        <dd
+                          class="font-semibold text-slate-300"
+                          data-testid="operator-duration-p90"
+                        >
+                          {{ view.durations.p90Ms == null ? '—' : formatMs(view.durations.p90Ms) }}
+                        </dd>
+                      </div>
+                      <div>
+                        <dt class="text-[11px] text-slate-500">
+                          {{ t('platformObservability.durations.p99') }}
+                        </dt>
+                        <dd
+                          class="font-semibold text-slate-300"
+                          data-testid="operator-duration-p99"
+                        >
+                          {{ view.durations.p99Ms == null ? '—' : formatMs(view.durations.p99Ms) }}
                         </dd>
                       </div>
                     </dl>
