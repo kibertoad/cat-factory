@@ -3,6 +3,9 @@
 '@cat-factory/workspaces': minor
 '@cat-factory/orchestration': minor
 '@cat-factory/server': minor
+'@cat-factory/kernel': minor
+'@cat-factory/worker': minor
+'@cat-factory/node-server': minor
 ---
 
 Workspace RBAC (slice 5): the member-management API.
@@ -13,8 +16,19 @@ admin restrict a board to an explicit member list. New `WorkspaceMemberService`
 built in `createCore` whenever the workspace-member repository is wired (both facades wire it;
 absent ⇒ the controller reports 503). The one rule beyond wire validation is that a member must
 already belong to the board's owning account — a `restricted` board narrows WITHIN an account,
-never grants across it — so scoping an outsider is a `ValidationError` (422); a legacy
-(`account_id IS NULL`) board refuses member management.
+never grants across it — so scoping an outsider is a `ValidationError` (422).
+
+Legacy (`account_id IS NULL`) boards are no longer a supported dead end: rather than refusing
+member management, the service AUTO-HEALS the board by adopting it into its owner's account (the
+new `WorkspaceRepository.linkAccount` port, mirrored on D1 and Drizzle), then proceeds — an
+unscoped board is invisible to resolution's account tier, so a roster/restriction on it would
+otherwise be a silent no-op. The adopt target is the owner's SOLE account (on a legacy board the
+owner is the only principal that can reach member management); if that is ambiguous (no owner, or
+the owner belongs to several accounts) the write is a `ValidationError` (422) telling the caller
+to link the board explicitly. The heal also (re)asserts the owner's `admin` member row so a
+follow-up flip to `restricted` can't lock the owner out. `add` now preserves an existing member's
+original grant metadata (`createdAt`/`addedBy`) on a re-add instead of re-stamping it (the upsert
+updates only `role`), and `list` 404s a non-existent board.
 
 New routes under `/workspaces/:ws` (`@cat-factory/contracts` + `@cat-factory/server`):
 `GET/POST/PATCH/DELETE /members` and `PUT /access-mode`. The roster GET is open to any resolved

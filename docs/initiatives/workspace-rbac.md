@@ -473,7 +473,13 @@ WorkspaceAccess | null`). The slice landed invalidation ONLY at the write paths 
   change visible on the immediately-following request, which the Node conformance asserts against the
   enabled cache. The only-account-members rule reads `workspaceRepository.accessRowOf` for the owning
   account then `membershipRepository.get`; a non-member is a `ValidationError` (422, not 400 — the
-  domain error map), a legacy `account_id IS NULL` board refuses member management. `requirePermission(c, perm)`
+  domain error map). A legacy `account_id IS NULL` board is NOT refused but **auto-healed**: the
+  shared `ensureAccountScoped` adopts it into its owner's sole account via the new
+  `WorkspaceRepository.linkAccount` (D1 ⇄ Drizzle), (re)asserts the owner's `admin` member row so a
+  follow-up `restricted` flip can't lock the owner out, then proceeds; an ambiguous owner (none, or
+  in several accounts) is a `ValidationError` (422) to link the board explicitly. `add` also
+  preserves an existing member's `createdAt`/`addedBy` on a re-add (the upsert updates only `role`),
+  and `list` 404s a missing board. `requirePermission(c, perm)`
   (`server/src/http/workspaceAccess.ts`) is the admin-tier helper the writes call with `members.manage`;
   it consumes `c.get('workspaceAccess')` (never re-derives), allows dev-open (no user + no access
   object), and throws `ForbiddenError` (403) otherwise. The member routes use ABSOLUTE

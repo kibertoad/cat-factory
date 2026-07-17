@@ -287,6 +287,118 @@ export function defineWorkspaceRbacSuite(harness: ConformanceHarness): void {
       expect(res.status).toBe(422) // account membership is a prerequisite for a workspace grant
     })
 
+    it('re-adding an existing member preserves the original grant metadata (createdAt/addedBy)', async () => {
+      const app = harness.makeApp()
+      const { adminA, b, wsId } = await scenario(app)
+      const ha = bearer(await app.session({ id: adminA }))
+      await app.call('PUT', `/workspaces/${wsId}/access-mode`, { accessMode: 'restricted' }, ha)
+      // Seed B's row directly with a KNOWN createdAt + grantor, so a re-add that (incorrectly)
+      // re-stamped a fresh clock/actor is caught regardless of the harness clock — the upsert
+      // preserves both on conflict (it updates ONLY `role`), so the response must too.
+      await app.workspaceMemberRepository().upsert({
+        workspaceId: wsId,
+        userId: b,
+        role: 'viewer',
+        createdAt: 4242,
+        addedByUserId: adminA,
+      })
+      const readd = await app.call<{ role: string; createdAt: number; addedBy: string | null }>(
+        'POST',
+        `/workspaces/${wsId}/members`,
+        { userId: b, role: 'member' },
+        ha,
+      )
+      expect(readd.status).toBe(201)
+      expect(readd.body.role).toBe('member') // the role DID change (upsert semantics)
+      expect(readd.body.createdAt).toBe(4242) // original createdAt preserved, not re-stamped
+      expect(readd.body.addedBy).toBe(adminA) // original grantor preserved
+      // The persisted roster agrees with the response (no drift between the 201 body and the store).
+      const roster = await app.call<Array<{ userId: string; createdAt: number; addedBy: string }>>(
+        'GET',
+        `/workspaces/${wsId}/members`,
+        undefined,
+        ha,
+      )
+      const row = roster.body.find((m) => m.userId === b)!
+      expect(row.createdAt).toBe(4242)
+      expect(row.addedBy).toBe(adminA)
+    })
+
+    it('auto-heal: managing members on a legacy (unscoped) board adopts it into the owner’s account, then proceeds', async () => {
+      const app = harness.makeApp()
+      const { accountId, b, c } = await scenario(app)
+      // A legacy board (account_id IS NULL) owned by B, who belongs to exactly one account (the
+      // org). On a legacy board only the OWNER can reach member management (the account-admin
+      // escape hatch does not apply to the null-account branch), so B is the operator here.
+      const legacyId = `legacy-${uniq()}`
+      await app
+        .workspaceRepository()
+        .create(
+          { id: legacyId, name: 'Legacy', description: null, createdAt: 1, accountId: null },
+          b,
+          null,
+        )
+      const hb = bearer(await app.session({ id: b }))
+      // Restricting it heals it: the board is linked to B's account and the flip takes effect.
+      const restrict = await app.call<{ accountId: string | null }>(
+        'PUT',
+        `/workspaces/${legacyId}/access-mode`,
+        { accessMode: 'restricted' },
+        hb,
+      )
+      expect(restrict.status).toBe(200)
+      expect(restrict.body.accountId).toBe(accountId)
+      // Persisted: the board now belongs to the owner's account (no longer legacy).
+      expect((await app.workspaceRepository().accessRowOf(legacyId))?.accountId).toBe(accountId)
+      // B keeps admin control after the heal + restrict (the owner admin row was seeded, so a
+      // restricted board — which reads member rows only — can't lock its owner out).
+      const snap = await app.call<SnapshotBody>('GET', `/workspaces/${legacyId}`, undefined, hb)
+      expect(snap.status).toBe(200)
+      expect(snap.body.access?.role).toBe('admin')
+      // And a fellow account member (C) can now be scoped over HTTP (the board is account-backed).
+      const add = await app.call(
+        'POST',
+        `/workspaces/${legacyId}/members`,
+        { userId: c, role: 'viewer' },
+        hb,
+      )
+      expect(add.status).toBe(201)
+    })
+
+    it('auto-heal is refused when the owner’s account is ambiguous — link the board explicitly (422)', async () => {
+      const app = harness.makeApp()
+      const { accountId, adminA } = await scenario(app)
+      // A second org, and an owner who belongs to BOTH accounts — so the auto-heal can't pick one.
+      const tag = uniq()
+      const { accountId: account2, ownerUserId: adminA2 } = await app
+        .onboarding()
+        .makeOrgOwner(`rbac2-${tag}`)
+      const owner = (
+        await app.onboarding().users.findOrCreateByIdentity('github', `rbac-multi-${tag}`, {
+          name: 'MULTI',
+          email: `rbac-multi-${tag}@example.com`,
+        })
+      ).id
+      await app.onboarding().addAccountMember(accountId, adminA, owner, ['developer'])
+      await app.onboarding().addAccountMember(account2, adminA2, owner, ['developer'])
+      const legacyId = `legacy-${uniq()}`
+      await app
+        .workspaceRepository()
+        .create(
+          { id: legacyId, name: 'Legacy2', description: null, createdAt: 1, accountId: null },
+          owner,
+          null,
+        )
+      const ho = bearer(await app.session({ id: owner }))
+      const res = await app.call(
+        'PUT',
+        `/workspaces/${legacyId}/access-mode`,
+        { accessMode: 'restricted' },
+        ho,
+      )
+      expect(res.status).toBe(422) // ambiguous: no single account to adopt the board into
+    })
+
     it('list annotation: a restricted board reached via an explicit row carries the caller viewerRole', async () => {
       const app = harness.makeApp()
       const { adminA, b, wsId } = await scenario(app)
