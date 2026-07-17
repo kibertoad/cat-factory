@@ -1,5 +1,34 @@
 # @cat-factory/integrations
 
+## 0.84.10
+
+### Patch Changes
+
+- 54e117e: GitLab UI parity (pre-slice): carry a `provider` VCS discriminator on the repo/connection
+  projection.
+
+  The GitLab-parity SPA work (provider-aware labels, icons, host/URL shapes) needs a
+  `provider: VcsProvider` (`'github' | 'gitlab'`) it can read off the data. This adds that
+  field to the `GitHubRepo` / `GitHubConnection` / `GitHubAvailableRepo` wire types and the
+  kernel `GitHubInstallation`, and persists it symmetrically on both runtimes' projection
+  tables (D1 migration `0051_vcs_provider.sql` + a Drizzle migration + both sets of mappers).
+  The tables keep their GitHub names — the entity-rename fold is separate, acknowledged Phase-1
+  work.
+
+  `provider` is a per-connection fact: a connection records it (`GitHubInstallationService.connect`
+  → `'github'`; local mode's `AutoProvisioningInstallationRepository` → the deployment's provider,
+  `'gitlab'` for a GitLab-PAT deployment), and the repos reached through it inherit it (the sync
+  service stamps `installation.provider`, the bootstrapper and CLI `linkRepo` stamp their own).
+  Rows written before the column default to `'github'`. A cross-runtime conformance suite
+  (`defineVcsProviderSuite`) asserts the round-trip on both stores. No SPA behaviour changes yet;
+  this unblocks the presentation-switch slices.
+
+- Updated dependencies [32a0720]
+- Updated dependencies [54e117e]
+- Updated dependencies [be6e109]
+  - @cat-factory/contracts@0.140.0
+  - @cat-factory/kernel@0.134.0
+
 ## 0.84.9
 
 ### Patch Changes
