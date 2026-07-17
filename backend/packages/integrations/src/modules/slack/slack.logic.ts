@@ -80,6 +80,9 @@ const MENTION_AUDIENCE: Record<NotificationType, MentionAudience> = {
   // A platform-health alert is an operational, deployment-wide event with no task creator
   // (block-less): mention the engineers (the operators who watch the deployment).
   platform_health: { roles: ['engineering'], includeCreator: false },
+  // A workspace-wide spend pause: no task creator (block-less), so it @-mentions no one. It is
+  // in-app-only (absent from SLACK_ROUTABLE_TYPES) — this entry only satisfies the exhaustive map.
+  budget_paused: { roles: [], includeCreator: false },
 }
 
 /** The mention audience for a notification type. */
@@ -168,6 +171,7 @@ const TYPE_LABEL: Record<NotificationType, string> = {
   pr_review_ready: ':clipboard: PR review findings',
   initiative: ':world_map: Initiative update',
   platform_health: ':bar_chart: Platform health alert',
+  budget_paused: ':moneybag: Runs paused — spend budget reached',
 }
 
 /** Format a percentage from a 0..1 score for the assessment context line. */

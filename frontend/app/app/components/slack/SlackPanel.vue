@@ -69,6 +69,7 @@ const routes = reactive<Record<NotificationType, SlackRoute>>({
   pr_review_ready: { enabled: false, channel: '' },
   initiative: { enabled: false, channel: '' },
   platform_health: { enabled: false, channel: '' },
+  budget_paused: { enabled: false, channel: '' },
 })
 const mentionsEnabled = ref(false)
 // Editable member rows carry a client-only stable `uid` (see `slackMemberMapping`) so

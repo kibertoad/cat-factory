@@ -7,6 +7,7 @@ import { Hono } from 'hono'
 import type { Context } from 'hono'
 import type { WorkspaceSettingsModule } from '@cat-factory/orchestration'
 import type { AppEnv } from '../../http/env.js'
+import { requireWorkspacePermission } from '../../http/workspaceAccess.js'
 import { param } from '../../http/params.js'
 
 /** Resolve the workspace-settings module or send a 503, returning null when unconfigured. */
@@ -24,6 +25,7 @@ const unavailable = <E extends AppEnv>(c: Context<E>) =>
  */
 export function workspaceSettingsController(): Hono<AppEnv> {
   const app = new Hono<AppEnv>()
+  app.use('*', requireWorkspacePermission('settings.manage'))
 
   buildHonoRoute(app, getWorkspaceSettingsContract, async (c) => {
     const settings = requireSettings(c)

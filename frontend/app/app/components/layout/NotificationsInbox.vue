@@ -73,6 +73,9 @@ const META: Record<Notification['type'], { icon: string; color: Accent }> = {
   // The deployment's OWN run health crossed an operator threshold. Not block-scoped: clicking
   // the title opens the operator dashboard (where the live numbers are); "act" marks it read.
   platform_health: { icon: 'i-lucide-server-cog', color: 'warning' },
+  // Runs were paused by the spend safeguard. Workspace-scoped (no block to reveal); "act" just
+  // marks it read (the human raises the budget then resumes from the spend panel).
+  budget_paused: { icon: 'i-lucide-wallet', color: 'warning' },
 }
 
 // Per-type primary-action label. An exhaustive Record keyed off the notification
@@ -95,6 +98,7 @@ const ACTION_KEYS: Record<Notification['type'], string> = {
   pr_review_ready: 'layout.notifications.action.pr_review_ready',
   initiative: 'layout.notifications.action.initiative',
   platform_health: 'layout.notifications.action.platform_health',
+  budget_paused: 'layout.notifications.action.budget_paused',
 }
 
 /** The localized primary-action label for a notification (te()-guarded against a

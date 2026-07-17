@@ -15,6 +15,7 @@ import { Hono } from 'hono'
 import type { Context } from 'hono'
 import { StateSigner } from '../../github/state.js'
 import type { AppEnv } from '../../http/env.js'
+import { requireWorkspacePermission } from '../../http/workspaceAccess.js'
 import { param } from '../../http/params.js'
 
 // The bot scopes the "Add to Slack" flow requests: post messages + read channels
@@ -41,6 +42,7 @@ const unavailable = <E extends AppEnv>(c: Context<E>) =>
  */
 export function slackController(): Hono<AppEnv> {
   const app = new Hono<AppEnv>()
+  app.use('*', requireWorkspacePermission('integrations.manage'))
 
   // ---- connection (per-account) ------------------------------------------
 

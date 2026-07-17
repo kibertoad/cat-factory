@@ -1864,6 +1864,56 @@ export function defineCoreConformance(harness: ConformanceHarness): void {
         expect(metUsage.body.rows.some((r) => r.billing === 'metered')).toBe(true)
       })
 
+      it('surfaces a spend-paused run as a workspace-scoped budget_paused card, cleared on resume (D1 ⇄ Postgres)', async () => {
+        // F3 (stuck-run audit): a spend-`paused` run is invisible to the sweeper and has no
+        // auto-resume, so the paused board badge used to be its ONLY signal. The pause must now
+        // raise ONE workspace-scoped inbox card (persisted on whichever store the runtime uses),
+        // and lifting the pause via /spend/resume must clear it — asserted on both D1 and Postgres.
+        type Notif = { id: string; type: string; blockId: string | null; status: string }
+        const app = harness.makeApp({ usage: { inputTokens: 1000, outputTokens: 500 } })
+        const wsId = (await app.createWorkspace()).workspace.id
+
+        // A tiny positive budget: the run STARTS (0 spend is within budget, so the up-front
+        // start guard allows it) but the first metered step's usage pushes cumulative cost over
+        // the limit, so the SECOND step pauses mid-run — the exact state the sweeper can't see.
+        expect(
+          (await app.call('PUT', `/workspaces/${wsId}/settings`, { spendMonthlyLimit: 0.0001 }))
+            .status,
+        ).toBe(200)
+
+        const pipe = await app.call<Pipeline>('POST', `/workspaces/${wsId}/pipelines`, {
+          name: 'Code',
+          agentKinds: ['coder', 'documenter'],
+        })
+        const started = await app.call('POST', `/workspaces/${wsId}/blocks/task_login/executions`, {
+          pipelineId: pipe.body.id,
+        })
+        expect(started.status).toBe(201)
+        const driven = await app.drive(wsId)
+        expect(driven.find((e) => e.blockId === 'task_login')?.status).toBe('paused')
+
+        // Exactly one workspace-scoped (block-less) budget_paused card, open.
+        const inbox = await app.call<Notif[]>('GET', `/workspaces/${wsId}/notifications`)
+        const budget = inbox.body.filter((n) => n.type === 'budget_paused')
+        expect(budget).toHaveLength(1)
+        expect(budget[0]!.blockId).toBeNull()
+        expect(budget[0]!.status).toBe('open')
+
+        // Raise the budget and resume: the card is cleared and the run advances off `paused`.
+        expect(
+          (await app.call('PUT', `/workspaces/${wsId}/settings`, { spendMonthlyLimit: 1000 }))
+            .status,
+        ).toBe(200)
+        expect((await app.call('POST', `/workspaces/${wsId}/spend/resume`)).status).toBe(200)
+        const resumed = await app.drive(wsId)
+        expect(resumed.find((e) => e.blockId === 'task_login')?.status).not.toBe('paused')
+
+        const after = await app.call<Notif[]>('GET', `/workspaces/${wsId}/notifications`)
+        expect(after.body.some((n) => n.type === 'budget_paused' && n.status === 'open')).toBe(
+          false,
+        )
+      })
+
       it('round-trips the per-user (user-tier) budget (D1 ⇄ Postgres)', async () => {
         // The user-tier budget lives in the `user_settings` table (PK user_id). It is user-scoped,
         // so — like local model endpoints — it is exercised through the service directly (the

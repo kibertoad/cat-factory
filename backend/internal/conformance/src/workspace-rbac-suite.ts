@@ -116,18 +116,28 @@ export function defineWorkspaceRbacSuite(harness: ConformanceHarness): void {
       expect(snap.status).toBe(200)
       expect(snap.body.access?.role).toBe('viewer')
 
-      // Any state-changing method is refused wholesale (403), even a board rename.
-      const patch = await app.call('PATCH', `/workspaces/${wsId}`, { name: 'nope' }, hb)
-      expect(patch.status).toBe(403)
+      // Any state-changing method is refused wholesale (403) — a board.write like adding a block.
+      const write = await app.call(
+        'POST',
+        `/workspaces/${wsId}/blocks`,
+        { type: 'service', position: { x: 0, y: 0 } },
+        hb,
+      )
+      expect(write.status).toBe(403)
 
       // The read-only stream ticket mint is the one allowlisted write.
       const ticket = await app.call('POST', `/workspaces/${wsId}/events/ticket`, {}, hb)
       expect(ticket.status).toBe(200)
 
-      // A member (C) passes the floor and may write.
+      // A member (C) passes the floor and may perform a board.write (add a block).
       const hc = bearer(await app.session({ id: c }))
-      const patch2 = await app.call('PATCH', `/workspaces/${wsId}`, { name: `ok-${uniq()}` }, hc)
-      expect(patch2.status).toBe(200)
+      const write2 = await app.call(
+        'POST',
+        `/workspaces/${wsId}/blocks`,
+        { type: 'service', position: { x: 0, y: 0 } },
+        hc,
+      )
+      expect(write2.status).toBe(201)
     })
 
     it('cache coherence: granting account membership is visible on the immediately following request', async () => {
@@ -228,8 +238,13 @@ export function defineWorkspaceRbacSuite(harness: ConformanceHarness): void {
         ha,
       )
       expect(promote.status).toBe(200)
-      const bWrite = await app.call('PATCH', `/workspaces/${wsId}`, { name: `ok-${uniq()}` }, hb)
-      expect(bWrite.status).toBe(200)
+      const bWrite = await app.call(
+        'POST',
+        `/workspaces/${wsId}/blocks`,
+        { type: 'service', position: { x: 0, y: 0 } },
+        hb,
+      )
+      expect(bWrite.status).toBe(201)
 
       // Remove B — immediately denied again (the removal dropped the cache group).
       const remove = await app.call('DELETE', `/workspaces/${wsId}/members/${b}`, undefined, ha)
@@ -264,6 +279,96 @@ export function defineWorkspaceRbacSuite(harness: ConformanceHarness): void {
         (await app.call('PUT', `/workspaces/${wsId}/access-mode`, { accessMode: 'account' }, hc))
           .status,
       ).toBe(403)
+    })
+
+    it('admin-tier enforcement: a plain member is refused a write on EVERY settings/integrations/secrets controller (403); the admin is not (slice 6)', async () => {
+      const app = harness.makeApp()
+      const { adminA, c, wsId } = await scenario(app)
+      const ha = bearer(await app.session({ id: adminA }))
+      // Restrict + scope C as a plain member: full board.write / runs.execute, but none of the
+      // admin permissions. Every write below passes the viewer floor (C is a member), so a 403
+      // can ONLY come from the admin-tier `requireWorkspacePermission` gate. The controller-level
+      // middleware runs BEFORE request-body validation and the handler's 503/lookup, so these
+      // writes need no valid body and no configured module — a member is refused whether or not
+      // the integration is wired (its config is never revealed). One representative write per
+      // admin controller, so a controller that forgot to mount the gate fails HERE, not silently
+      // in production (the drift the CLAUDE.md "add a NEW admin controller" note warns about).
+      await app.call('PUT', `/workspaces/${wsId}/access-mode`, { accessMode: 'restricted' }, ha)
+      await app.call('POST', `/workspaces/${wsId}/members`, { userId: c, role: 'member' }, ha)
+      const hc = bearer(await app.session({ id: c }))
+
+      // A representative WRITE per admin controller (path is workspace-relative; the controller is
+      // mounted under `/workspaces/:workspaceId`). `body` is set ONLY where the gate is per-handler
+      // and thus runs AFTER body validation (WorkspaceController) — those need a valid body so the
+      // permission check, not a 422, is what rejects. Controller-level middleware fires at the mount
+      // before validation, so those entries carry no body.
+      const w = (path: string) => `/workspaces/${wsId}${path}`
+      const adminWrites: Array<{
+        perm: string
+        method: 'POST' | 'PUT' | 'PATCH' | 'DELETE'
+        path: string
+        body?: unknown
+      }> = [
+        // settings.manage
+        { perm: 'settings.manage', method: 'PATCH', path: w(''), body: { name: `no-${uniq()}` } }, // board rename (per-handler)
+        { perm: 'settings.manage', method: 'PUT', path: w('/settings') },
+        { perm: 'settings.manage', method: 'PUT', path: w('/tracker-settings') },
+        { perm: 'settings.manage', method: 'DELETE', path: w('/model-presets/none') },
+        { perm: 'settings.manage', method: 'DELETE', path: w('/risk-policies/none') },
+        { perm: 'settings.manage', method: 'DELETE', path: w('/observability/connection') },
+        { perm: 'settings.manage', method: 'DELETE', path: w('/incident-enrichment') },
+        { perm: 'settings.manage', method: 'DELETE', path: w('/prompt-fragments/none') }, // fragment library (workspace scope)
+        // integrations.manage
+        { perm: 'integrations.manage', method: 'DELETE', path: w('/package-registries/none') },
+        {
+          perm: 'integrations.manage',
+          method: 'DELETE',
+          path: w('/bootstrap/reference-architectures/none'),
+        },
+        { perm: 'integrations.manage', method: 'DELETE', path: w('/github/connection') },
+        { perm: 'integrations.manage', method: 'DELETE', path: w('/slack/connection') },
+        { perm: 'integrations.manage', method: 'DELETE', path: w('/environments/connection') },
+        { perm: 'integrations.manage', method: 'DELETE', path: w('/runner-pool/connection') },
+        {
+          perm: 'integrations.manage',
+          method: 'DELETE',
+          path: w('/task-sources/github/connection'),
+        },
+        {
+          perm: 'integrations.manage',
+          method: 'DELETE',
+          path: w('/document-sources/github/connection'),
+        },
+        { perm: 'integrations.manage', method: 'DELETE', path: w('/shared-stacks/none') },
+        { perm: 'integrations.manage', method: 'DELETE', path: w('/sandbox/prompts/none') },
+        { perm: 'integrations.manage', method: 'DELETE', path: w('/frames/none/preview') },
+        // secrets.manage
+        { perm: 'secrets.manage', method: 'DELETE', path: w('/vendor-credentials/none') },
+        { perm: 'secrets.manage', method: 'DELETE', path: w('/api-keys/none') },
+        { perm: 'secrets.manage', method: 'DELETE', path: w('/public-api-keys/none') },
+        { perm: 'secrets.manage', method: 'DELETE', path: w('/services/none/test-secrets') },
+      ]
+
+      // A plain member is refused every one (403). Fold the route into the asserted value so a
+      // regression names the exact controller that let the member through.
+      for (const req of adminWrites) {
+        const res = await app.call(req.method, req.path, req.body, hc)
+        expect({ route: `${req.method} ${req.path}`, status: res.status }).toEqual({
+          route: `${req.method} ${req.path}`,
+          status: 403,
+        })
+      }
+
+      // The account admin (A) clears every admin gate: the SAME writes resolve PAST the permission
+      // check (200/204/404/422/503 by wiring + body), never a 403 — proving each 403 above is the
+      // gate rejecting the member, not a route that simply always rejects.
+      for (const req of adminWrites) {
+        const res = await app.call(req.method, req.path, req.body, ha)
+        expect({ route: `${req.method} ${req.path}`, forbidden: res.status === 403 }).toEqual({
+          route: `${req.method} ${req.path}`,
+          forbidden: false,
+        })
+      }
     })
 
     it('only account members can be scoped: adding an outsider is rejected (422)', async () => {

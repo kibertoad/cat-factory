@@ -4,7 +4,7 @@ import {
   type WorkspaceAccess,
   type WorkspacePermission,
 } from '@cat-factory/kernel'
-import type { Context } from 'hono'
+import type { Context, MiddlewareHandler } from 'hono'
 import type { AppEnv, ServerContainer } from './env.js'
 
 // ---------------------------------------------------------------------------
@@ -93,5 +93,37 @@ export function requirePermission<E extends AppEnv>(
   }
   if (!access.permissions.has(permission)) {
     throw new ForbiddenError(`This action requires the ${permission} permission`, { permission })
+  }
+}
+
+/**
+ * Controller-level admin-tier gate (workspace-rbac, slice 6). Mount ONCE at the top of an
+ * admin route group — `app.use('*', requireWorkspacePermission('integrations.manage'))` —
+ * and every WRITE the controller serves (now and in the future) requires that permission,
+ * with ZERO per-handler code. Reads (GET/HEAD) pass straight through, so the whole controller
+ * stays viewer-readable (`workspace.read`, satisfied by the gate resolution) while its mutations
+ * are admin-only.
+ *
+ * This is the method-shaped counterpart to the gate's viewer floor: the floor rejects viewer
+ * writes wholesale (non-GET ⇒ ≥ member) in ONE place; this rejects member writes on the admin
+ * groups in ONE place per group. Because it is co-located with the controller's mount (not a
+ * central path→permission table), a new route inherits the correct gate automatically — the
+ * drift a shadow route-map would suffer can't happen. It runs BEFORE the handler, so an
+ * unauthorized caller is refused even when the underlying integration is unwired (a member never
+ * learns whether Slack/GitHub/etc. is configured).
+ *
+ * `OPTIONS` (CORS preflight) is never gated. Where a controller mixes gated and ungated writes
+ * under one mount (e.g. workspace create vs rename), call {@link requirePermission} per-handler
+ * instead of mounting this.
+ */
+export function requireWorkspacePermission<E extends AppEnv>(
+  permission: WorkspacePermission,
+): MiddlewareHandler<E> {
+  return (c, next) => {
+    const method = c.req.method
+    if (method !== 'GET' && method !== 'HEAD' && method !== 'OPTIONS') {
+      requirePermission(c, permission)
+    }
+    return next()
   }
 }

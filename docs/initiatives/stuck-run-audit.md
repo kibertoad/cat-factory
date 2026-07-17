@@ -1,7 +1,9 @@
 # Initiative: stuck-run audit (agent / step / container wedge cases)
 
-**Status:** Group A landed (F1/F2/F5); B–D todo · **Owner:** core · **Started:** 2026-07-02
-**Audited at:** `main` @ `fc8df61` (file:line references are against that commit)
+**Status:** Groups A (F1/F2/F5) + B (F3/F7/F10) landed; C–D todo · **Owner:** core · **Started:** 2026-07-02
+**Audited at:** `main` @ `fc8df61` (original file:line references are against that commit; the
+line numbers in individual findings have since drifted — the anchoring file + symbol names are
+kept current, so search by symbol, not line).
 
 > This is the durable source of truth for a multi-PR initiative. Read it first before
 > picking up the next slice; update the checklist at the end of each PR.
@@ -84,16 +86,22 @@ id (`WorkflowsWorkRunner.create`) and a terminal id can never be reused — or
 Decide in the fix PR; add a sweeper unit test pinning "unreachable bootstrap is re-driven, not
 stopped".
 
-**F3 — Spend-paused runs park with zero signal and no auto-resume.**
-`backend/packages/orchestration/src/modules/execution/ExecutionService.ts:1515-1524` flips the
-run to `paused` and stops the driver. No notification is raised (the `NotificationType` enum
-has no budget/paused member at all), the sweeper skips `paused`, and there is no budget-freed
-hook — the only resume is a human manually calling `POST /spend/resume` (`resumePaused`,
-`ExecutionService.ts:2661`). The only visible signal is the paused badge on the board. This is
-the least-discoverable park in the system.
-**Fix:** raise a notification on pause (new `NotificationType`, e.g. `budget_paused`, one per
-workspace not per run; cleared by `resumePaused`) and/or make the sweeper probe paused runs'
-budget and auto-resume when it frees. Runtime-symmetric + conformance assertion.
+**F3 — Spend-paused runs park with zero signal and no auto-resume.** ✅ FIXED (this PR)
+`ExecutionService.stepInstance`'s spend gate (`backend/packages/orchestration/.../ExecutionService.ts`,
+the `instance.status = 'paused'` branch) flipped the run to `paused` and stopped the driver. No
+notification was raised (the `NotificationType` enum had no budget/paused member at all), the
+sweeper skips `paused`, and there is no budget-freed hook — the only resume is a human manually
+calling `POST /spend/resume` (`ExecutionService.resumePaused`). The only visible signal was the
+paused badge on the board. This was the least-discoverable park in the system.
+**Fix (landed):** added the `budget_paused` `NotificationType` (contracts) and
+`RunStateMachine.raiseBudgetPaused` / `clearBudgetPaused`. The pause branch raises ONE
+workspace-scoped (block-less) card, de-duplicated against the open cards (a block-less card has no
+per-type unique index); `resumePaused` clears it. Purely informational (`act` marks it read — the
+human raises the budget then resumes from the spend panel). Runtime-neutral (shared orchestration +
+the pre-existing per-facade notification repo), with a conformance assertion driving a real mid-run
+pause → card → resume-clears on both stores. The sweeper-auto-resume alternative was deliberately
+NOT taken: it would require widening `listStale` to see `paused` runs, and the invisibility of
+`paused`/`blocked` to the sweeper is load-bearing for the decision model.
 
 **F4 — Runner-pool transport: no eviction classification, unknown status → `running`, release
 may be a no-op.**
@@ -139,15 +147,17 @@ close-time summary parse (or reuse the incrementally-parsed events) so the loop 
 ### Medium
 
 **F7 — `ensureWaitingNotification`'s non-clobbering guard can suppress the ONLY signal for a
-`blocked` run.**
-`backend/packages/orchestration/src/modules/execution/RunStateMachine.ts:521-536` — the
-`decision_required` card is suppressed when **any** open notification sits on the block, e.g.
-a stale `pipeline_complete` / `merge_review` / `followup_pending` from a prior run. If the
-human dismisses that unrelated card, the parked run has no discoverable signal and (per the
-recovery model) nothing else ever re-drives a `blocked` run.
-**Fix:** scope the suppression to cards that actually represent this park (match on
-`executionId`, or restrict to decision-relevant types), and/or re-ensure the card on the
-escalation sweep.
+`blocked` run.** ✅ FIXED (this PR)
+`RunStateMachine.ensureWaitingNotification` (`backend/packages/orchestration/.../RunStateMachine.ts`)
+— the `decision_required` card was suppressed when **any** open notification sat on the block, e.g.
+a stale `pipeline_complete` / `merge_review` / `followup_pending` from a prior run. If the human
+dismissed that unrelated card, the parked run had no discoverable signal and (per the recovery
+model) nothing else ever re-drives a `blocked` run.
+**Fix (landed):** the suppression is now scoped to `executionId` — it fires only when an open card
+for THIS run already sits on the block. Every richer card raised during a run (`merge_review`,
+`decision_required`, `pipeline_complete`, …) carries `executionId: instance.id`, so the "richer
+message wins" intent is preserved, while a prior run's card (different `executionId`, or a block-less
+workspace card) no longer masks the new park. Unit-tested.
 
 **F8 — `reinitAndPush` (bootstrap push phase) takes no abort signal.**
 `executor-harness/src/git.ts:688-708`, called from `agent.ts:862`: none of its ~6 git commands
@@ -168,12 +178,16 @@ handler progress, so `classifyAdvanceJob` reports `live` and the sweeper skips i
 CF's 5-min ceiling, funnelling to the same retry/fail path — restoring runtime symmetry on the
 hang bound.
 
-**F10 — Recurring pipeline fire clobbers a human-parked (`blocked`) prior run.**
-`backend/packages/integrations/src/modules/.../RecurringPipelineService.ts:317-324` — the
-active-run guard checks only `running` / `paused`. A prior run parked `blocked` on a review or
-decision gate is replaced by the next cron fire; the parked run's durable driver is orphaned
-against a replaced execution and a later human resolve hits `NotFound`.
-**Fix:** add `blocked` to the guard (skip the fire; the human gate is the pipeline's state).
+**F10 — Recurring pipeline fire clobbers a human-parked (`blocked`) prior run.** ✅ FIXED (this PR)
+`RecurringPipelineService.fire`'s active-run guard (now at
+`backend/packages/orchestration/src/modules/recurring/RecurringPipelineService.ts` — the service
+moved from `integrations` to `orchestration` since the audit) checked only `running` / `paused`. A
+prior run parked `blocked` on a review or decision gate was replaced by the next cron fire; the
+parked run's durable driver was orphaned against a replaced execution and a later human resolve hit
+`NotFound`.
+**Fix (landed):** `blocked` was added to the guard (skip the fire — the human gate is the
+pipeline's current state; leave `nextRunAt` so the next pass retries). Unit-tested across
+`running`/`paused`/`blocked` (skip) vs terminal (fire).
 
 **F11 — Block flipped `pr_ready` BEFORE the `merge_review` card is raised; a raise failure
 loses the only actionable prompt.**
@@ -256,9 +270,9 @@ of each PR.
 | F1  | CF sweeper hard-stall on raw lease age              | CF sweeper             | A — recovery correctness | ✅ done    | this PR |
 | F2  | BootstrapWorkflow terminal-return vs sweeper        | CF workflow/sweeper    | A                        | ✅ done    | this PR |
 | F5  | `blocked` + dead instance discards decision         | CF workflow/sweeper    | A                        | 🟨 partial | this PR |
-| F3  | Spend-pause: no signal, no auto-resume              | engine + notifications | B — invisible parks      | ⬜ todo    |         |
-| F7  | `ensureWaitingNotification` suppression             | engine                 | B                        | ⬜ todo    |         |
-| F10 | Recurring fire clobbers `blocked` run               | integrations           | B                        | ⬜ todo    |         |
+| F3  | Spend-pause: no signal, no auto-resume              | engine + notifications | B — invisible parks      | ✅ done    | this PR |
+| F7  | `ensureWaitingNotification` suppression             | engine                 | B                        | ✅ done    | this PR |
+| F10 | Recurring fire clobbers `blocked` run               | orchestration          | B                        | ✅ done    | this PR |
 | F4  | Pool transport: no eviction mapping / no-op release | integrations           | C — transport bounds     | ⬜ todo    |         |
 | F8  | `reinitAndPush` not abort-aware                     | harness (image bump)   | C                        | ⬜ todo    |         |
 | F11 | `pr_ready` before `merge_review` raise              | engine                 | C                        | ⬜ todo    |         |
@@ -269,7 +283,8 @@ of each PR.
 | F14 | Resumed empty branch fails 422 vs no-op             | harness + engine       | (fixed inline)           | ✅ done    | this PR |
 
 Suggested order: A (guaranteed wrong-kill on common operational events), then B (parks with
-no signal), then C, then D (most invasive; D is deferrable).
+no signal), then C, then D (most invasive; D is deferrable). Next up: **C** (transport bounds +
+the `pr_ready`-before-`merge_review` ordering).
 
 ### Group A implementation notes (landed)
 
@@ -302,6 +317,31 @@ no signal), then C, then D (most invasive; D is deferrable).
   attempt for `signal`/`cancel`. That's a cross-workflow refactor (execution + bootstrap +
   env-config-repair) — carve it out as its own slice before relying on `finalizeOrphan` to
   resume rather than stop.
+
+### Group B implementation notes (landed)
+
+- **F10** — one-line guard widening in `RecurringPipelineService.fire`: the overlap guard now
+  treats `blocked` as live alongside `running`/`paused`. Pure orchestration (runtime-neutral by
+  construction); table-tested over the three live states (skip) vs a terminal prior (fire).
+- **F7** — `ensureWaitingNotification`'s suppression predicate gained `&& n.executionId ===
+instance.id`. The whole point of the card is that it is a `blocked` run's ONLY recovery signal,
+  and every richer card raised during a run carries this run's `executionId`, so scoping by it both
+  preserves "richer card wins" and stops a stale prior-run card (or a block-less workspace card like
+  the new `budget_paused`) from masking the park.
+- **F3** — the `budget_paused` `NotificationType` + `RunStateMachine.raiseBudgetPaused` /
+  `clearBudgetPaused`. Workspace-scoped (block-less) so ONE card covers every paused run; the
+  raiser de-dupes against `listOpen` (a block-less card has no per-type unique index, unlike the
+  block-scoped `upsertOpenForBlock` path). Wired at the pause branch (`stepInstance`) + the resume
+  path (`resumePaused`). Frontend: the inbox `META`/`ACTION_KEYS` maps + the SlackPanel `routes`
+  map + the Slack `MENTION_AUDIENCE`/`TYPE_LABEL` maps are all exhaustive over `NotificationType`,
+  so each needed a new entry (the typecheck enforces this) — `budget_paused` is in-app-only (NOT in
+  `SLACK_ROUTABLE_TYPES`, mentions no one). i18n: one `action.budget_paused` key across all 10
+  locales. Conformance: a real mid-run pause (tiny positive budget so the run starts, then step 1's
+  usage crosses it) → one block-less card → resume clears it, asserted on D1 + Postgres.
+- **Gotcha for C/D:** the spend START guard (`assertBudgetAllowsPipeline`) refuses an over-budget
+  run up front with a 409 — it does NOT pause. A run only reaches the `paused` state by crossing
+  the budget threshold DURING its own run (an earlier step's usage over-runs a later step), which
+  is why the F3 conformance test needs a multi-step pipeline + a tiny (not zero) budget.
 
 ## Conventions & gotchas for implementers
 

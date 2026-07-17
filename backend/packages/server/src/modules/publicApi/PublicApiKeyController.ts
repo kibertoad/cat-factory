@@ -9,6 +9,7 @@ import { buildHonoRoute } from '@toad-contracts/hono'
 import { Hono } from 'hono'
 import type { Context } from 'hono'
 import type { AppEnv } from '../../http/env.js'
+import { requireWorkspacePermission } from '../../http/workspaceAccess.js'
 import { param } from '../../http/params.js'
 
 // Management of INBOUND public-API keys, mounted under `/workspaces/:workspaceId` — so these
@@ -37,6 +38,7 @@ function publicApiKeyToWire(record: PublicApiKeyRecord): PublicApiKey {
 /** Public-API-key management routes, mounted under `/workspaces/:workspaceId`. */
 export function publicApiKeyController(): Hono<AppEnv> {
   const app = new Hono<AppEnv>()
+  app.use('*', requireWorkspacePermission('secrets.manage'))
 
   buildHonoRoute(app, listPublicApiKeysContract, async (c) => {
     const publicApiKeys = c.get('container').publicApiKeys

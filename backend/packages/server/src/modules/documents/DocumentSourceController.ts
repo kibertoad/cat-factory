@@ -22,6 +22,7 @@ import type { Context } from 'hono'
 import { ValidationError } from '@cat-factory/kernel'
 import type { DocumentsModule } from '@cat-factory/orchestration'
 import type { AppEnv } from '../../http/env.js'
+import { requireWorkspacePermission } from '../../http/workspaceAccess.js'
 import { param } from '../../http/params.js'
 
 /** Resolve the documents module or send a 503, returning null when unconfigured. */
@@ -52,6 +53,7 @@ function sourceParam<E extends AppEnv>(c: Context<E>): DocumentSourceKind {
  */
 export function documentSourceController(): Hono<AppEnv> {
   const app = new Hono<AppEnv>()
+  app.use('*', requireWorkspacePermission('integrations.manage'))
 
   // ---- source discovery ---------------------------------------------------
 

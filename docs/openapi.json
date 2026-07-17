@@ -385,7 +385,8 @@
               "fork_decision_pending",
               "pr_review_ready",
               "initiative",
-              "platform_health"
+              "platform_health",
+              "budget_paused"
             ],
             "type": "string"
           }

@@ -1639,7 +1639,8 @@
         "initiative": "Okundu işaretle",
         "markRead": "Okundu işaretle",
         "fork_decision_pending": "Okundu olarak işaretle",
-        "pr_review_ready": "Okundu işaretle"
+        "pr_review_ready": "Okundu işaretle",
+        "budget_paused": "Okundu işaretle"
       },
       "toast": {
         "acted": "İşlendi olarak işaretlendi",

@@ -1639,7 +1639,8 @@
         "initiative": "סמן כנקרא",
         "markRead": "סמן כנקרא",
         "fork_decision_pending": "סמן כנקרא",
-        "pr_review_ready": "סמן כנקרא"
+        "pr_review_ready": "סמן כנקרא",
+        "budget_paused": "סמן כנקרא"
       },
       "toast": {
         "acted": "סומן כטופל",
