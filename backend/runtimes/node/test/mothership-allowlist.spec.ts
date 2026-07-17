@@ -421,8 +421,10 @@ const NON_REMOTE: Record<string, Record<string, Reason>> = {
     listBySource: 'pending',
   },
   // The inbox's read/act/dismiss/escalate surface is fully remote (see REMOTE_PERSISTENCE_METHODS);
-  // only the retention sweep's global prune of resolved cards stays mothership-internal cron.
-  notificationRepository: { deleteResolvedOlderThan: 'sweeper' },
+  // only the cron sweeps stay mothership-internal: the retention prune of resolved cards, and
+  // `listOpenByType` — the platform-health sweep's batched every-workspace dedup read (the
+  // block-less analogue of `workspaceSettingsRepository.listByWorkspaceIds`, a global sweeper read).
+  notificationRepository: { deleteResolvedOlderThan: 'sweeper', listOpenByType: 'sweeper' },
   // The Slack management surface is now remote (the settings panels' connect/disconnect/route/map):
   // `slackConnectionRepository` get/upsert/softDelete (sealed `tokenCipher` — no plaintext crosses
   // the machine API), and the secret-free settings + member-mapping repos. `getByTeam` is the GLOBAL
