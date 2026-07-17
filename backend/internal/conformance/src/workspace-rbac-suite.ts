@@ -90,8 +90,12 @@ export function defineWorkspaceRbacSuite(harness: ConformanceHarness): void {
 
     it('viewer write floor: a viewer reads but cannot write; the ticket mint is allowlisted; a member passes the floor', async () => {
       const app = harness.makeApp()
-      const { adminA, b, wsId } = await scenario(app)
+      const { adminA, b, c, wsId } = await scenario(app)
       await app.workspaceRepository().setAccessMode(wsId, 'restricted')
+      // B is a viewer, C is a member. Seed both rows before either user is read, so each caller's
+      // access resolves fresh on their first request — this test is agnostic to whether the
+      // `workspaceAccess` cache is enabled on the facade (a raw-repo roster write does NOT
+      // invalidate; the coherence of a LIVE roster change is asserted separately below).
       await app.workspaceMemberRepository().upsert({
         workspaceId: wsId,
         userId: b,
@@ -99,30 +103,63 @@ export function defineWorkspaceRbacSuite(harness: ConformanceHarness): void {
         createdAt: 1,
         addedByUserId: adminA,
       })
-      const h = bearer(await app.session({ id: b }))
-
-      const snap = await app.call<SnapshotBody>('GET', `/workspaces/${wsId}`, undefined, h)
-      expect(snap.status).toBe(200)
-      expect(snap.body.access?.role).toBe('viewer')
-
-      // Any state-changing method is refused wholesale (403), even a board rename.
-      const patch = await app.call('PATCH', `/workspaces/${wsId}`, { name: 'nope' }, h)
-      expect(patch.status).toBe(403)
-
-      // The read-only stream ticket mint is the one allowlisted write.
-      const ticket = await app.call('POST', `/workspaces/${wsId}/events/ticket`, {}, h)
-      expect(ticket.status).toBe(200)
-
-      // Upgrade B to member (resolution reads live — no cache until a later slice) ⇒ writes pass.
       await app.workspaceMemberRepository().upsert({
         workspaceId: wsId,
-        userId: b,
+        userId: c,
         role: 'member',
         createdAt: 1,
         addedByUserId: adminA,
       })
-      const patch2 = await app.call('PATCH', `/workspaces/${wsId}`, { name: `ok-${uniq()}` }, h)
+      const hb = bearer(await app.session({ id: b }))
+
+      const snap = await app.call<SnapshotBody>('GET', `/workspaces/${wsId}`, undefined, hb)
+      expect(snap.status).toBe(200)
+      expect(snap.body.access?.role).toBe('viewer')
+
+      // Any state-changing method is refused wholesale (403), even a board rename.
+      const patch = await app.call('PATCH', `/workspaces/${wsId}`, { name: 'nope' }, hb)
+      expect(patch.status).toBe(403)
+
+      // The read-only stream ticket mint is the one allowlisted write.
+      const ticket = await app.call('POST', `/workspaces/${wsId}/events/ticket`, {}, hb)
+      expect(ticket.status).toBe(200)
+
+      // A member (C) passes the floor and may write.
+      const hc = bearer(await app.session({ id: c }))
+      const patch2 = await app.call('PATCH', `/workspaces/${wsId}`, { name: `ok-${uniq()}` }, hc)
       expect(patch2.status).toBe(200)
+    })
+
+    it('cache coherence: granting account membership is visible on the immediately following request', async () => {
+      const app = harness.makeApp()
+      const tag = uniq()
+      const { accountId, ownerUserId: adminA } = await app
+        .onboarding()
+        .makeOrgOwner(`rbac-coh-${tag}`)
+      const outsider = (
+        await app.onboarding().users.findOrCreateByIdentity('github', `rbac-out-${tag}`, {
+          name: 'OUT',
+          email: `rbac-out-${tag}@example.com`,
+        })
+      ).id
+      const w = await app.createWorkspaceInAccount(accountId, null, { name: `W ${tag}` })
+      const wsId = w.workspace.id
+      const h = bearer(await app.session({ id: outsider }))
+
+      // Not an account member yet ⇒ denied (404). On a caching facade this negative outcome is now
+      // cached (group = workspace id, key = user id); on a pass-through facade it's simply re-read.
+      const before = await app.call('GET', `/workspaces/${wsId}`, undefined, h)
+      expect(before.status).toBe(404)
+
+      // Grant account membership through the REAL service — `AccountService.addMember` fires the
+      // `onAccountMembershipChanged` hook the container wires to `workspaceAccess.invalidateAll()`.
+      await app.onboarding().addAccountMember(accountId, adminA, outsider, ['developer'])
+
+      // The cached denial must have been dropped: the very next request re-resolves and now sees
+      // the board as a member. If invalidation were missing, a caching facade would still 404 here.
+      const after = await app.call<SnapshotBody>('GET', `/workspaces/${wsId}`, undefined, h)
+      expect(after.status).toBe(200)
+      expect(after.body.access?.role).toBe('member')
     })
 
     it('account mode: every account member sees + reads the board (legacy behaviour, no member row)', async () => {

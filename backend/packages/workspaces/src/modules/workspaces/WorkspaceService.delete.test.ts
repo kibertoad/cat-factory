@@ -1,8 +1,10 @@
 import { describe, expect, it, vi } from 'vitest'
 import type {
   BinaryArtifactStore,
+  GroupCacheHandle,
   ResolveBinaryArtifactStore,
   Workspace,
+  WorkspaceAccessCacheValue,
   WorkspaceRepository,
 } from '@cat-factory/kernel'
 import { WorkspaceService } from './WorkspaceService.js'
@@ -79,6 +81,36 @@ describe('WorkspaceService.delete — binary-artifact purge', () => {
     const { service, deleteSpy } = baseDeps(resolve)
     await service.delete(WS.id)
     expect(deleteSpy).toHaveBeenCalledWith(WS.id, [])
+  })
+
+  it('drops the deleted board’s workspace-access cache group (after the cascade)', async () => {
+    const order: string[] = []
+    const invalidateGroup = vi.fn((group: string) => {
+      order.push(`invalidate:${group}`)
+      return Promise.resolve()
+    })
+    const workspaceAccessCache = {
+      invalidateGroup,
+    } as unknown as GroupCacheHandle<WorkspaceAccessCacheValue>
+    const deleteSpy = vi.fn(() => {
+      order.push('cascade')
+      return Promise.resolve()
+    })
+    const service = new WorkspaceService({
+      workspaceRepository: fakeWorkspaceRepository(deleteSpy),
+      blockRepository: {} as never,
+      pipelineRepository: {} as never,
+      executionRepository: {} as never,
+      idGenerator: { next: () => 'x' },
+      clock: { now: () => 1 },
+      workspaceAccessCache,
+    })
+
+    await service.delete(WS.id)
+
+    expect(invalidateGroup).toHaveBeenCalledWith(WS.id)
+    // Invalidate only AFTER the row cascade commits (invalidation is the coherence story).
+    expect(order).toEqual(['cascade', `invalidate:${WS.id}`])
   })
 
   it('does not let a blob-backend outage wedge the board delete', async () => {
