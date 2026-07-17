@@ -78,8 +78,10 @@ export class PlatformMetricsOtelExporter {
   /**
    * Export one account's platform-observability snapshot as OTLP gauge metrics. Gauges are
    * stamped with the snapshot's `generatedAt` (the clock the projection was computed at), so
-   * no wall-clock read is needed here. A snapshot that yields no gauges (nothing to report)
-   * is skipped rather than POSTing an empty batch. Best-effort — see the file header.
+   * no wall-clock read is needed here. In practice a snapshot always yields the run-count and
+   * live-depth gauges (even all-zero — a zero-valued gauge is meaningful, not misleading), so
+   * a POST is always sent; the empty-batch guard below is defensive only, in case the mapping
+   * ever becomes fully conditional. Best-effort — see the file header.
    */
   async export(snapshot: PlatformObservability, dims: { accountId: string }): Promise<void> {
     const gauges = mapPlatformMetrics(snapshot, dims)
