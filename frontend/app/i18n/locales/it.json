@@ -50,7 +50,8 @@
       "noAccount": "Nessun account selezionato.",
       "tabs": {
         "team": "Team e accesso",
-        "fragments": "Frammenti di contesto"
+        "fragments": "Frammenti di contesto",
+        "skills": "Competenze"
       }
     },
     "infrastructure": {
@@ -1963,6 +1964,9 @@
           "label": "Template ed esempi"
         }
       }
+    },
+    "accountSkills": {
+      "intro": "Collega i repository dove il tuo team crea le Claude Skills (una cartella SKILL.md più file di risorse). Le competenze sincronizzate entrano nel catalogo di questo account, condiviso da tutte le board, e il passo Skill di una pipeline ne esegue una su un'attività."
     }
   },
   "board": {
@@ -3117,7 +3121,11 @@
         "cloned": "Clonato \"{name}\" — ora si modifica \"{copy}\"",
         "cloneFailed": "Impossibile clonare la pipeline",
         "updateFailed": "Impossibile aggiornare la pipeline"
-      }
+      },
+      "skillPlaceholder": "Seleziona una competenza",
+      "skillNoneAvailable": "Nessuna competenza disponibile. Collega una fonte di competenze nelle impostazioni dell'account.",
+      "skillMissing": "Questa competenza non è più nel catalogo; scegline un'altra.",
+      "skillNeedsPick": "Un passo Skill richiede una competenza selezionata prima di poter salvare."
     },
     "progress": {
       "status": {
@@ -4880,6 +4888,51 @@
       "iterations": "Iterazioni",
       "count": "{attempts} di {max}",
       "footer": "Il ciclo riprova finché il comando di validazione non passa o il budget di iterazioni è esaurito."
+    }
+  },
+  "skills": {
+    "unavailable": "La libreria Claude Skills non è abilitata per questo deployment.",
+    "catalog": {
+      "title": "Competenze sincronizzate",
+      "empty": "Nessuna competenza ancora sincronizzata. Collega una fonte di repository qui sotto per importare le sue cartelle di competenze.",
+      "resources": "{count} risorse",
+      "pinned": "fissata su {commit}"
+    },
+    "sources": {
+      "title": "Fonti di repository",
+      "empty": "Nessuna fonte di competenze collegata. Collega qui sotto una cartella di repository con cartelle di competenze.",
+      "linkTitle": "Collega una fonte di competenze",
+      "link": "Collega e sincronizza",
+      "metaSynced": "sincronizzata {date} · ref {ref}",
+      "metaNever": "mai sincronizzata · ref {ref}",
+      "changes": "Modifiche",
+      "check": "Controlla le modifiche",
+      "sync": "Risincronizza",
+      "unlink": "Scollega",
+      "browseHint": "Esplora il repository e scegli la cartella delle cartelle di competenze (o collega l'intero repo).",
+      "selectedDir": "Cartella:",
+      "wholeRepo": "Intero repository (radice).",
+      "ownerPlaceholder": "proprietario",
+      "repoPlaceholder": "repo",
+      "dirPlaceholder": "percorso cartella (es. .claude/skills)",
+      "refPlaceholder": "ref (HEAD predefinito)",
+      "githubRequired": "Collegare una fonte di competenze richiede l'integrazione GitHub. Collegala prima su una board."
+    },
+    "confirmUnlinkSource": {
+      "title": "Scollegare questa fonte?",
+      "body": "\"{repo}\" e le competenze che ha sincronizzato verranno rimosse. Potrai ricollegarla in seguito.",
+      "confirm": "Scollega"
+    },
+    "toast": {
+      "sourceLinked": "Fonte collegata e sincronizzata",
+      "linkSourceFailed": "Impossibile collegare la fonte",
+      "synced": "Sincronizzato: {updated} aggiornate, {removed} rimosse",
+      "syncFailed": "Impossibile sincronizzare la fonte",
+      "changesAvailable": "Modifiche disponibili",
+      "upToDate": "Aggiornato",
+      "checkSourceFailed": "Impossibile controllare la fonte",
+      "sourceUnlinked": "Fonte scollegata",
+      "unlinkSourceFailed": "Impossibile scollegare la fonte"
     }
   }
 }

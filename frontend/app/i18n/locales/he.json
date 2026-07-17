@@ -1875,6 +1875,9 @@
       "deselect": "בטל בחירה / סגור את המפקח",
       "deleteBlock": "מחק את הבלוק הנבחר",
       "help": "הצג את דף העזר הזה"
+    },
+    "accountSkills": {
+      "intro": "קישור מאגרים שבהם הצוות שלך יוצרת Claude Skills (תיקיית SKILL.md בתוספת קבצי משאבים). כישורים מסונכרנים מתווספים לקטלוג של חשבון זה, המשותף לכל הלוחות, ושלב ה-Skill של צינור מריץ אחד מהם על משימה."
     }
   },
   "settings": {
@@ -1928,7 +1931,8 @@
       "noAccount": "לא נבחר חשבון.",
       "tabs": {
         "team": "צוות וגישה",
-        "fragments": "מקטעי הקשר"
+        "fragments": "מקטעי הקשר",
+        "skills": "כישורים"
       }
     },
     "infrastructure": {
@@ -3388,7 +3392,11 @@
       "confirmDeletePipeline": {
         "title": "למחוק את ה־pipeline הזה?",
         "body": "\"{name}\" יימחק. לא ניתן לבטל פעולה זו."
-      }
+      },
+      "skillPlaceholder": "בחר כישור",
+      "skillNoneAvailable": "אין כישורים זמינים. קישר מקור כישורים בהגדרות החשבון.",
+      "skillMissing": "כישור זה כבר אינו בקטלוג; בחר אחר.",
+      "skillNeedsPick": "שלב Skill דורש כישור נבחר לפני שתוכל לשמור."
     },
     "progress": {
       "status": {
@@ -4879,6 +4887,51 @@
       "iterations": "איטרציות",
       "count": "{attempts} מתוך {max}",
       "footer": "הלולאה חוזרת עד שפקודת האימות עוברת או שתקציב האיטרציות מסתיים."
+    }
+  },
+  "skills": {
+    "unavailable": "ספריית Claude Skills אינה מופעלת בפריסה זו.",
+    "catalog": {
+      "title": "כישורים מסונכרנים",
+      "empty": "עדיין אין כישורים מסונכרנים. קישר מקור מאגר למטה כדי לייבא את תיקיות הכישורים שלו.",
+      "resources": "{count} משאבים",
+      "pinned": "מקובע ל-{commit}"
+    },
+    "sources": {
+      "title": "מקורות מאגר",
+      "empty": "אין מקורות כישורים מקושרים. קישר למטה תיקיית מאגר עם תיקיות כישורים.",
+      "linkTitle": "קישור מקור כישורים",
+      "link": "קשר וסנכרן",
+      "metaSynced": "סונכרן {date} · ref {ref}",
+      "metaNever": "מעולם לא סונכרן · ref {ref}",
+      "changes": "שינויים",
+      "check": "בדוק שינויים",
+      "sync": "סנכרן מחדש",
+      "unlink": "בטל קישור",
+      "browseHint": "עיין במאגר ובחר את תיקיית תיקיות הכישורים (או קשר את כל המאגר).",
+      "selectedDir": "תיקייה:",
+      "wholeRepo": "כל המאגר (שורש).",
+      "ownerPlaceholder": "בעלים",
+      "repoPlaceholder": "מאגר",
+      "dirPlaceholder": "נתיב תיקייה (למשל .claude/skills)",
+      "refPlaceholder": "ref (ברירת מחדל HEAD)",
+      "githubRequired": "קישור מקור כישורים דורש את אינטגרציית GitHub. חבר אותה תחילה בלוח."
+    },
+    "confirmUnlinkSource": {
+      "title": "לבטל את קישור המקור הזה?",
+      "body": "\"{repo}\" והכישורים שסונכרנו ממנו יוסרו. תוכל לקשר אותו שוב מאוחר יותר.",
+      "confirm": "בטל קישור"
+    },
+    "toast": {
+      "sourceLinked": "המקור קושר וסונכרן",
+      "linkSourceFailed": "לא ניתן לקשר את המקור",
+      "synced": "סונכרן: {updated} עודכנו, {removed} הוסרו",
+      "syncFailed": "לא ניתן לסנכרן את המקור",
+      "changesAvailable": "שינויים זמינים",
+      "upToDate": "מעודכן",
+      "checkSourceFailed": "לא ניתן לבדוק את המקור",
+      "sourceUnlinked": "קישור המקור בוטל",
+      "unlinkSourceFailed": "לא ניתן לבטל את קישור המקור"
     }
   }
 }
