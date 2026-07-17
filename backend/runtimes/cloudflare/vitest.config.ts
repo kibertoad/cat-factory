@@ -44,6 +44,11 @@ export default defineConfig(async () => {
             // credentials, so opt into the local/dev-open path (mirrors
             // `.dev.vars` for `wrangler dev`). Production never sets this.
             AUTH_DEV_OPEN: 'true',
+            // A session secret so the workspace-RBAC conformance suite can drive requests as real
+            // signed sessions (a dev-open harness resolves no access and passes RBAC assertions
+            // vacuously). With no OAuth/password provider set, `enabled` stays false and dev-open
+            // still passes token-less requests through unchanged for every other suite.
+            AUTH_SESSION_SECRET: 'test-session-secret-0123456789abcdef',
             // A non-empty secret so the GitHub connect-state HMAC signer works
             // in tests. GITHUB_APP_ID stays unset, so the integration is still
             // "disabled" by config and tests wire the module via overrides.

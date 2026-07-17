@@ -11,7 +11,9 @@ import type {
   Block,
   ExecutionInstance,
   Workspace,
+  WorkspaceAccessRow,
   WorkspaceMount,
+  WorkspaceRole,
   WorkspaceSnapshot,
 } from '@cat-factory/kernel'
 import type {
@@ -21,6 +23,7 @@ import type {
   ResolveBinaryArtifactStore,
   ServiceRehome,
   ServiceRepository,
+  WorkspaceMemberRepository,
   WorkspaceMountRepository,
   WorkspaceRepository,
   WorkspaceVisibility,
@@ -44,6 +47,14 @@ export interface WorkspaceServiceDependencies {
   serviceRepository?: ServiceRepository
   workspaceMountRepository?: WorkspaceMountRepository
   /**
+   * Workspace-level RBAC roster (workspace-rbac initiative). When wired, `create` seeds an
+   * admin member row for the creator (auto-enroll) and {@link WorkspaceService.memberRoleOf}
+   * resolves a caller's explicit role for the gate. Optional — absent (tests / no member tier)
+   * ⇒ auto-enroll is skipped and `memberRoleOf` returns null (resolution falls back to the
+   * account tier).
+   */
+  workspaceMemberRepository?: WorkspaceMemberRepository
+  /**
    * Resolves a workspace's binary-artifact store (screenshots + reference images) so a board
    * delete can reclaim their heavy blob bytes. Optional — when unwired (no content storage
    * configured, or in tests) the delete path simply skips the purge. Absent from the
@@ -66,6 +77,7 @@ export class WorkspaceService {
   private readonly clock: Clock
   private readonly serviceRepository?: ServiceRepository
   private readonly workspaceMountRepository?: WorkspaceMountRepository
+  private readonly workspaceMemberRepository?: WorkspaceMemberRepository
   private readonly resolveBinaryArtifactStore?: ResolveBinaryArtifactStore
   private readonly logger?: { info(obj: Record<string, unknown>, msg?: string): void }
 
@@ -78,6 +90,7 @@ export class WorkspaceService {
     clock,
     serviceRepository,
     workspaceMountRepository,
+    workspaceMemberRepository,
     resolveBinaryArtifactStore,
     logger,
   }: WorkspaceServiceDependencies) {
@@ -89,6 +102,7 @@ export class WorkspaceService {
     this.clock = clock
     this.serviceRepository = serviceRepository
     this.workspaceMountRepository = workspaceMountRepository
+    this.workspaceMemberRepository = workspaceMemberRepository
     this.resolveBinaryArtifactStore = resolveBinaryArtifactStore
     this.logger = logger
   }
@@ -111,6 +125,42 @@ export class WorkspaceService {
     return this.workspaceRepository.accountOf(id)
   }
 
+  /**
+   * The narrow access row workspace-RBAC resolution reads in one hot-path query (owning
+   * account, legacy owner, access mode); `undefined` when the board doesn't exist.
+   */
+  accessRowOf(id: string): Promise<WorkspaceAccessRow | undefined> {
+    return this.workspaceRepository.accessRowOf(id)
+  }
+
+  /**
+   * The caller's explicit `workspace_members` role on a board, or `null` when they hold no
+   * row — INCLUDING when the member tier isn't wired (tests / no roster), so resolution
+   * cleanly falls back to the account tier.
+   */
+  async memberRoleOf(workspaceId: string, userId: string): Promise<WorkspaceRole | null> {
+    const row = await this.workspaceMemberRepository?.get(workspaceId, userId)
+    return row?.role ?? null
+  }
+
+  /**
+   * The caller's explicit member role in each of `workspaceIds`, in ONE chunked-IN read —
+   * used to annotate a workspace LIST with the viewer's effective role without a per-board
+   * round-trip. Empty map when the member tier isn't wired or nothing matches. The repo
+   * returns a serializable `Record` (so it round-trips over the mothership RPC); we rebuild
+   * the `Map` the controller consumes here.
+   */
+  async rolesForUserInWorkspaces(
+    userId: string,
+    workspaceIds: string[],
+  ): Promise<Map<string, WorkspaceRole>> {
+    const roles = await (this.workspaceMemberRepository?.getRolesForUserInWorkspaces(
+      userId,
+      workspaceIds,
+    ) ?? Promise.resolve({}))
+    return new Map(Object.entries(roles))
+  }
+
   async create(
     input: CreateWorkspaceInput,
     ownerUserId: string | null,
@@ -124,6 +174,21 @@ export class WorkspaceService {
       accountId,
     }
     await this.workspaceRepository.create(workspace, ownerUserId, accountId)
+
+    // Creator auto-enroll (workspace-rbac): seed an `admin` member row for the creator so a
+    // non-admin account member keeps admin control of a board they created even if it is later
+    // restricted. Harmless in the default `account` mode (an upgrade-only overlay). System grant
+    // ⇒ `addedByUserId: null`. Skipped when there's no signed-in creator (dev-open) or the member
+    // tier isn't wired.
+    if (ownerUserId && this.workspaceMemberRepository) {
+      await this.workspaceMemberRepository.upsert({
+        workspaceId: workspace.id,
+        userId: ownerUserId,
+        role: 'admin',
+        createdAt: this.clock.now(),
+        addedByUserId: null,
+      })
+    }
 
     // The built-in pipeline catalog is product configuration, not sample data, so
     // every board gets it — including the empty boards real users start with.

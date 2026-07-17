@@ -53,18 +53,40 @@ export class DrizzleWorkspaceRepository implements WorkspaceRepository {
       const rows = await this.db.select().from(workspaces).orderBy(desc(workspaces.created_at))
       return rows.map(rowToWorkspace)
     }
-    const legacy = and(
-      isNull(workspaces.account_id),
-      eq(workspaces.owner_user_id, scope.ownerUserId),
-    )
-    const where =
-      scope.accountIds.length > 0
-        ? or(inArray(workspaces.account_id, scope.accountIds), legacy)
-        : legacy
+    // Resolved SQL-side (see WorkspaceVisibility): unrestricted boards in accounts the user
+    // belongs to, ANY board in accounts they admin (escape hatch), boards they hold an
+    // explicit member row on (ANDed with their account ids so an orphaned foreign-account
+    // row can't resurface), and legacy boards they personally own.
+    const predicates = [
+      and(isNull(workspaces.account_id), eq(workspaces.owner_user_id, scope.ownerUserId)),
+    ]
+    if (scope.accountIds.length > 0) {
+      predicates.push(
+        and(
+          inArray(workspaces.account_id, scope.accountIds),
+          eq(workspaces.access_mode, 'account'),
+        ),
+      )
+      predicates.push(
+        and(
+          inArray(workspaces.account_id, scope.accountIds),
+          inArray(
+            workspaces.id,
+            this.db
+              .select({ id: workspaceMembers.workspace_id })
+              .from(workspaceMembers)
+              .where(eq(workspaceMembers.user_id, scope.userId)),
+          ),
+        ),
+      )
+    }
+    if (scope.adminAccountIds.length > 0) {
+      predicates.push(inArray(workspaces.account_id, scope.adminAccountIds))
+    }
     const rows = await this.db
       .select()
       .from(workspaces)
-      .where(where)
+      .where(or(...predicates))
       .orderBy(desc(workspaces.created_at))
     return rows.map(rowToWorkspace)
   }
@@ -237,8 +259,8 @@ export class DrizzleWorkspaceMemberRepository implements WorkspaceMemberReposito
   async getRolesForUserInWorkspaces(
     userId: string,
     workspaceIds: string[],
-  ): Promise<Map<string, WorkspaceRole>> {
-    const out = new Map<string, WorkspaceRole>()
+  ): Promise<Record<string, WorkspaceRole>> {
+    const out: Record<string, WorkspaceRole> = {}
     if (workspaceIds.length === 0) return out
     // ONE chunked-IN read per chunk (never a per-board point-read loop).
     for (let i = 0; i < workspaceIds.length; i += 500) {
@@ -251,7 +273,7 @@ export class DrizzleWorkspaceMemberRepository implements WorkspaceMemberReposito
             inArray(workspaceMembers.workspace_id, workspaceIds.slice(i, i + 500)),
           ),
         )
-      for (const r of rows) out.set(r.id, parseWorkspaceRole(r.role))
+      for (const r of rows) out[r.id] = parseWorkspaceRole(r.role)
     }
     return out
   }

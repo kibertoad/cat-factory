@@ -27,6 +27,7 @@ import { initiativeSchema } from './initiative.js'
 import { initiativePresetDescriptorSchema } from './initiative-preset.js'
 import { sharedStackSchema } from './shared-stacks.js'
 import { skillSummarySchema } from './skill-library.js'
+import { workspaceAccessSchema } from './workspace-members.js'
 
 // The full board snapshot returned by GET /workspaces/:id (and POST /workspaces).
 // It lives in its own module because it references both ./entities and
@@ -269,5 +270,12 @@ export const workspaceSnapshotSchema = v.object({
    * skills. Full instructions/resources are fetched on demand by the management surface, not here.
    */
   skills: v.optional(v.array(skillSummarySchema)),
+  /**
+   * The signed-in caller's resolved workspace-RBAC access to this board — their effective
+   * role + the permission set it grants — attached from the auth gate's resolution (zero
+   * extra reads). The SPA hides/disables affordances the caller lacks. Optional on the wire:
+   * absent ⇒ dev-open (auth disabled) ⇒ the SPA allows all (backend-parity).
+   */
+  access: v.optional(workspaceAccessSchema),
 })
 export type WorkspaceSnapshot = v.InferOutput<typeof workspaceSnapshotSchema>

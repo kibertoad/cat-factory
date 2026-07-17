@@ -151,6 +151,23 @@ export class AccountService {
     return memberships.map((m) => m.accountId)
   }
 
+  /**
+   * The account scopes that drive workspace-RBAC board visibility: every account the user
+   * belongs to, plus the subset they hold `admin` in (the escape hatch — an account admin
+   * sees every board in the account, incl. `restricted` ones, and resolves to workspace
+   * admin). Derived from the SINGLE `listByUser` read, so it costs no extra query over
+   * {@link accessibleAccountIds}.
+   */
+  async accessibleAccountScopes(
+    userId: string,
+  ): Promise<{ accountIds: string[]; adminAccountIds: string[] }> {
+    const memberships = await this.deps.membershipRepository.listByUser(userId)
+    return {
+      accountIds: memberships.map((m) => m.accountId),
+      adminAccountIds: memberships.filter((m) => m.roles.includes('admin')).map((m) => m.accountId),
+    }
+  }
+
   async isMember(accountId: string, userId: string): Promise<boolean> {
     return (await this.deps.membershipRepository.get(accountId, userId)) !== null
   }

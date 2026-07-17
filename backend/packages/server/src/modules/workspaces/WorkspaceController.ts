@@ -21,7 +21,9 @@ import type {
   WorkspaceSnapshot,
 } from '@cat-factory/contracts'
 import type { AgentKindRegistry, AgentRouting } from '@cat-factory/agents'
-import type { ModelRef } from '@cat-factory/kernel'
+import { resolveWorkspaceAccess } from '@cat-factory/kernel'
+import type { AccountRole, ModelRef, WorkspaceRole } from '@cat-factory/kernel'
+import type { Workspace } from '@cat-factory/contracts'
 import type { ServerContainer } from '../../http/env.js'
 
 /**
@@ -298,6 +300,7 @@ function deploymentModelDefaults(routing: AgentRouting) {
 import type { Context } from 'hono'
 import type { AppEnv } from '../../http/env.js'
 import { param } from '../../http/params.js'
+import { loadWorkspaceAccess } from '../../http/workspaceAccess.js'
 import { redactBoard, resolveDeniedFrameIds } from './redactFrames.js'
 
 /** The signed-in user, narrowed to what the tenancy layer needs. */
@@ -306,20 +309,80 @@ function accountUser<E extends AppEnv>(c: Context<E>) {
   return user ? { id: user.id, login: user.login, name: user.name } : null
 }
 
+/**
+ * The caller's EFFECTIVE workspace role for a board in `GET /workspaces`, computed in-memory
+ * from the visibility scopes + one batched member-row read (no per-board round-trip). Reuses
+ * the SAME `resolveWorkspaceAccess` decision the gate runs, so the badge can't drift from
+ * enforcement. Only `admin`-ness and membership of an account matter to resolution, so the
+ * synthetic account-role stand-in (`['admin']` / `['developer']` / `[]`) is faithful. A legacy
+ * board only appears in the list when the caller owns it, so it resolves to `admin` directly.
+ * `undefined` ⇒ no role to badge (a board reachable purely via account membership in account
+ * mode still resolves to `member`, so `undefined` is effectively unreachable for a listed board
+ * — kept for a denied edge that never surfaces).
+ */
+function effectiveWorkspaceRole(
+  userId: string,
+  workspace: Workspace,
+  ctx: { accountSet: Set<string>; adminSet: Set<string>; memberRole: WorkspaceRole | null },
+): WorkspaceRole | undefined {
+  if (workspace.accountId === null) return 'admin'
+  const accountRoles: AccountRole[] = ctx.adminSet.has(workspace.accountId)
+    ? ['admin']
+    : ctx.accountSet.has(workspace.accountId)
+      ? ['developer']
+      : []
+  const access = resolveWorkspaceAccess({
+    userId,
+    workspace: {
+      accountId: workspace.accountId,
+      ownerUserId: null,
+      accessMode: workspace.accessMode ?? 'account',
+    },
+    accountRoles,
+    memberRole: ctx.memberRole,
+  })
+  return access.allowed ? access.role : undefined
+}
+
 /** Board (workspace) lifecycle and full-snapshot retrieval. */
 export function workspaceController(): Hono<AppEnv> {
   const app = new Hono<AppEnv>()
 
-  // Boards visible to the signed-in user: those in any account they belong to,
-  // plus any legacy board they personally own. When auth is disabled (`user`
-  // unset) the scope is null → no scoping (every board, dev behaviour).
+  // Boards visible to the signed-in user (see WorkspaceVisibility): unrestricted boards in
+  // accounts they belong to, ANY board in accounts they admin (escape hatch), boards they
+  // hold an explicit member row on, and legacy boards they personally own. When auth is
+  // disabled (`user` unset) the scope is null → no scoping (every board, dev behaviour). Each
+  // returned board is annotated with the caller's EFFECTIVE workspace role (`viewerRole`) via
+  // one batched member-row read combined with the in-memory account-scope map.
   buildHonoRoute(app, listWorkspacesContract, async (c) => {
     const container = c.get('container')
     const user = accountUser(c)
     if (!user) return c.json(await container.workspaceService.list(null), 200)
     await container.accountService.ensurePersonalAccount(user)
-    const accountIds = await container.accountService.accessibleAccountIds(user.id)
-    return c.json(await container.workspaceService.list({ accountIds, ownerUserId: user.id }), 200)
+    const { accountIds, adminAccountIds } = await container.accountService.accessibleAccountScopes(
+      user.id,
+    )
+    const boards = await container.workspaceService.list({
+      accountIds,
+      adminAccountIds,
+      ownerUserId: user.id,
+      userId: user.id,
+    })
+    const memberRoles = await container.workspaceService.rolesForUserInWorkspaces(
+      user.id,
+      boards.map((w) => w.id),
+    )
+    const accountSet = new Set(accountIds)
+    const adminSet = new Set(adminAccountIds)
+    const annotated = boards.map((w) => {
+      const role = effectiveWorkspaceRole(user.id, w, {
+        accountSet,
+        adminSet,
+        memberRole: memberRoles.get(w.id) ?? null,
+      })
+      return role ? { ...w, viewerRole: role } : w
+    })
+    return c.json(annotated, 200)
   })
 
   buildHonoRoute(app, createWorkspaceContract, async (c) => {
@@ -358,11 +421,21 @@ export function workspaceController(): Hono<AppEnv> {
     // app-owned registry the container carries — identical for every workspace and both facades —
     // attached here in the shared controller (like `customAgentKinds`) rather than per-facade.
     const initiativePresets = container.initiativePresetRegistry.descriptors()
+    // The creator's resolved access. The gate doesn't run for the id-less create route, so resolve
+    // it here (the creator is auto-enrolled admin, so this is always an admin grant when signed in).
+    const resolved = user
+      ? await loadWorkspaceAccess(container, snapshot.workspace.id, user.id)
+      : null
+    const access =
+      resolved && resolved.allowed
+        ? { role: resolved.role, permissions: [...resolved.permissions] }
+        : undefined
     return c.json(
       {
         ...snapshot,
         spend,
         ...budgetTiers,
+        ...(access ? { access } : {}),
         agentConfigCatalog: snapshotAgentConfigCatalog(snapshot, container.agentKindRegistry),
         deploymentModelDefaults: deploymentModelDefaults(container.config.agents.routing),
         ...(customAgentKinds ? { customAgentKinds } : {}),
@@ -493,12 +566,21 @@ export function workspaceController(): Hono<AppEnv> {
       viewerUserId: c.get('user')?.id,
     })
 
+    // The caller's resolved workspace-RBAC access, published by the gate — zero extra reads.
+    // Absent under dev-open (no signed-in user) ⇒ omitted ⇒ the SPA allows all (backend-parity).
+    const resolvedAccess = c.get('workspaceAccess')
+    const access =
+      resolvedAccess && resolvedAccess.workspaceId === workspaceId
+        ? { role: resolvedAccess.role, permissions: [...resolvedAccess.permissions] }
+        : undefined
+
     return c.json(
       {
         ...snapshot,
         blocks: redacted.blocks,
         executions: redacted.executions,
         spend,
+        ...(access ? { access } : {}),
         ...budgetTiers,
         ...(redacted.bootstrapJobs ? { bootstrapJobs: redacted.bootstrapJobs } : {}),
         ...(envConfigRepairJobs ? { envConfigRepairJobs } : {}),

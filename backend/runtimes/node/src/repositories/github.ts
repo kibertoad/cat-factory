@@ -72,6 +72,7 @@ function rowToRepo(row: typeof githubRepos.$inferSelect): GitHubRepo {
     private: bool(row.private),
     isMonorepo: bool(row.is_monorepo),
     linkedVia: row.linked_via === 'user_pat' ? 'user_pat' : 'app',
+    provider: row.provider === 'gitlab' ? 'gitlab' : 'github',
     syncedAt: row.synced_at,
   }
 }
@@ -101,6 +102,7 @@ export class DrizzleRepoProjectionRepository implements RepoProjectionRepository
             private: intBool(repo.private),
             is_monorepo: intBool(repo.isMonorepo ?? false),
             linked_via: repo.linkedVia ?? 'app',
+            provider: repo.provider ?? 'github',
             synced_at: repo.syncedAt,
             deleted_at: null,
           })),
@@ -113,6 +115,7 @@ export class DrizzleRepoProjectionRepository implements RepoProjectionRepository
             name: excluded(githubRepos.name),
             default_branch: excluded(githubRepos.default_branch),
             private: excluded(githubRepos.private),
+            provider: excluded(githubRepos.provider),
             synced_at: excluded(githubRepos.synced_at),
             deleted_at: null,
           },

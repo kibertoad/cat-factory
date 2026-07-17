@@ -60,7 +60,7 @@ import {
   gitlabPatCreationUrl,
   gitlabVcsHost,
 } from './github.js'
-import type { GitHubClient } from '@cat-factory/kernel'
+import type { GitHubClient, VcsProvider } from '@cat-factory/kernel'
 import type { ResolveRepoOrigin } from '@cat-factory/server'
 import { AutoProvisioningInstallationRepository, type PatAccount } from './installations.js'
 import {
@@ -166,6 +166,9 @@ export function buildLocalContainer(options: NodeContainerOptions): ServerContai
   // so build the clone URL + provider from the configured GitLab host here. Same host the
   // harness allow-list is widened to (`harnessAllowedHosts`), so they can't disagree.
   const gitlabHost = pat ? undefined : gitlabPat ? gitlabVcsHost(env) : undefined
+  // Local mode is single-provider: GitLab when a GitLab host was resolved, GitHub otherwise
+  // (GitHub PAT or mothership delegation). The synthetic connection is stamped with it.
+  const deploymentProvider: VcsProvider = gitlabHost ? 'gitlab' : 'github'
   const resolveRepoOrigin: ResolveRepoOrigin | undefined = gitlabHost
     ? (repo) => ({
         cloneUrl: `https://${gitlabHost}/${repo.owner}/${repo.name}.git`,
@@ -259,6 +262,7 @@ export function buildLocalContainer(options: NodeContainerOptions): ServerContai
       ? new AutoProvisioningInstallationRepository(
           new DrizzleGitHubInstallationRepository(options.db),
           resolveAccount,
+          deploymentProvider,
         )
       : undefined
 

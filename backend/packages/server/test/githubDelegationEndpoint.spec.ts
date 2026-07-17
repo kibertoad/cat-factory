@@ -35,6 +35,7 @@ function installation(
     accountId,
     accountLogin: 'org',
     targetType: 'Organization',
+    provider: 'github',
     appId: null,
     cachedToken: null,
     tokenExpiresAt: null,
