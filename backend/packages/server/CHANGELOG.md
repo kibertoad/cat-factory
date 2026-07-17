@@ -1,5 +1,33 @@
 # @cat-factory/server
 
+## 0.136.0
+
+### Minor Changes
+
+- bae59a7: Platform-operator observability: threshold alerting (initiative slice 5). A periodic,
+  runtime-symmetric sweep (Worker cron ⇄ Node interval) evaluates each account's aggregate
+  run-health projection — the same read the operator dashboard renders, so no new SQL — against
+  operator-configured thresholds (failure rate, p99 run duration, live backlog depth) and raises a
+  new `platform_health` notification through the existing NotificationChannel seam (in-app + Slack)
+  when one is crossed, auto-clearing when the account recovers. The card de-dupes on the firing
+  reason set, so a persistently-unhealthy deployment re-notifies only on state change, not every
+  sweep. Opt-in via `PLATFORM_ALERTS=true` (thresholds/window/interval tunable via
+  `PLATFORM_ALERTS_*`). Adds block-less `NotificationRepository.findOpenByType` (single-workspace
+  dedup) and `listOpenByType` (batched across workspaces, so the sweep avoids a point-read per
+  workspace) lookups (D1 ⇄ Drizzle + conformance) and threads `platform_health` through the Slack
+  transport and the SPA notification inbox (routable/action labels localized in all 10 locales).
+
+### Patch Changes
+
+- Updated dependencies [bae59a7]
+  - @cat-factory/contracts@0.147.0
+  - @cat-factory/kernel@0.139.0
+  - @cat-factory/orchestration@0.123.0
+  - @cat-factory/integrations@0.86.0
+  - @cat-factory/agents@0.62.8
+  - @cat-factory/prompt-fragments@0.13.36
+  - @cat-factory/spend@0.12.49
+
 ## 0.135.0
 
 ### Minor Changes
