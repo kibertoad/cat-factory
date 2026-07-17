@@ -20,6 +20,7 @@ const execution = useExecutionStore()
 const humanTest = useHumanTestStore()
 const { t, d } = useI18n()
 const toast = useToast()
+const access = useWorkspaceAccess()
 const { confirmAction, toastDone } = useConfirmAction()
 
 // Shared seam contract (open/blockId/close + Escape). No `onOpen` loader: the gate state
@@ -230,7 +231,8 @@ const canDestroy = computed(
                   color="neutral"
                   icon="i-lucide-refresh-cw"
                   :loading="busy"
-                  :disabled="busy || !canManageEnv"
+                  :disabled="busy || !canManageEnv || !access.canExecuteRuns.value"
+                  :title="access.canExecuteRuns.value ? undefined : t('access.noRunExecute')"
                   @click="recreate"
                 >
                   {{ t('humanTest.actions.recreate') }}
@@ -240,7 +242,8 @@ const canDestroy = computed(
                   variant="soft"
                   color="neutral"
                   icon="i-lucide-trash-2"
-                  :disabled="busy || !canDestroy"
+                  :disabled="busy || !canDestroy || !access.canExecuteRuns.value"
+                  :title="access.canExecuteRuns.value ? undefined : t('access.noRunExecute')"
                   @click="destroy"
                 >
                   {{ t('humanTest.actions.destroy') }}
@@ -251,7 +254,8 @@ const canDestroy = computed(
                   color="neutral"
                   icon="i-lucide-git-merge"
                   :loading="busy"
-                  :disabled="busy || !canManageEnv"
+                  :disabled="busy || !canManageEnv || !access.canExecuteRuns.value"
+                  :title="access.canExecuteRuns.value ? undefined : t('access.noRunExecute')"
                   @click="pullMain"
                 >
                   {{ t('humanTest.actions.pullMain') }}
@@ -296,7 +300,8 @@ const canDestroy = computed(
                   color="warning"
                   icon="i-lucide-wrench"
                   :loading="busy"
-                  :disabled="busy || !findings.trim()"
+                  :disabled="busy || !findings.trim() || !access.canExecuteRuns.value"
+                  :title="access.canExecuteRuns.value ? undefined : t('access.noRunExecute')"
                   @click="submitFix"
                 >
                   {{ t('humanTest.fix.send') }}
@@ -366,7 +371,8 @@ const canDestroy = computed(
             color="primary"
             icon="i-lucide-circle-check"
             :loading="busy"
-            :disabled="busy || !awaitingHuman"
+            :disabled="busy || !awaitingHuman || !access.canExecuteRuns.value"
+            :title="access.canExecuteRuns.value ? undefined : t('access.noRunExecute')"
             @click="confirm"
           >
             {{ t('humanTest.confirm') }}

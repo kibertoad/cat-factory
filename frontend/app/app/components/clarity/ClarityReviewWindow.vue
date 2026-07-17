@@ -25,6 +25,7 @@ const clarity = useClarityStore()
 const models = useModelsStore()
 const toast = useToast()
 const { t } = useI18n()
+const access = useWorkspaceAccess()
 
 // Draft replies, keyed by item id, so editing one item doesn't disturb others.
 const drafts = ref<Record<string, string>>({})
@@ -474,7 +475,10 @@ async function resolveExceeded(choice: 'extra-round' | 'proceed' | 'stop-reset')
                             variant="ghost"
                             size="xs"
                             icon="i-lucide-x"
-                            :disabled="frozen"
+                            :disabled="frozen || !access.canExecuteRuns.value"
+                            :title="
+                              access.canExecuteRuns.value ? undefined : t('access.noRunExecute')
+                            "
                             @click="setStatus(item, 'dismissed')"
                           >
                             {{ t('clarity.dismissIrrelevant') }}
@@ -489,7 +493,10 @@ async function resolveExceeded(choice: 'extra-round' | 'proceed' | 'stop-reset')
                           variant="ghost"
                           size="xs"
                           icon="i-lucide-rotate-ccw"
-                          :disabled="frozen"
+                          :disabled="frozen || !access.canExecuteRuns.value"
+                          :title="
+                            access.canExecuteRuns.value ? undefined : t('access.noRunExecute')
+                          "
                           @click="setStatus(item, 'open')"
                         >
                           {{ t('clarity.reopen') }}
@@ -577,6 +584,8 @@ async function resolveExceeded(choice: 'extra-round' | 'proceed' | 'stop-reset')
                   icon="i-lucide-arrow-right"
                   :ui="{ leadingIcon: 'rtl:-scale-x-100', trailingIcon: 'rtl:-scale-x-100' }"
                   :loading="acting"
+                  :disabled="!access.canExecuteRuns.value"
+                  :title="access.canExecuteRuns.value ? undefined : t('access.noRunExecute')"
                   @click="proceed"
                 >
                   {{ t('clarity.proceedNothing') }}
@@ -588,7 +597,8 @@ async function resolveExceeded(choice: 'extra-round' | 'proceed' | 'stop-reset')
                   block
                   icon="i-lucide-wand-sparkles"
                   :loading="reworking"
-                  :disabled="!canIncorporate"
+                  :disabled="!canIncorporate || !access.canExecuteRuns.value"
+                  :title="access.canExecuteRuns.value ? undefined : t('access.noRunExecute')"
                   @click="incorporate()"
                 >
                   {{ t('clarity.incorporateAnswers') }}
@@ -612,6 +622,8 @@ async function resolveExceeded(choice: 'extra-round' | 'proceed' | 'stop-reset')
                   block
                   icon="i-lucide-sparkles"
                   :loading="busy"
+                  :disabled="!access.canExecuteRuns.value"
+                  :title="access.canExecuteRuns.value ? undefined : t('access.noRunExecute')"
                   @click="reReview"
                 >
                   {{ busy ? t('clarity.reReviewing') : t('clarity.looksGoodReReview') }}
@@ -646,7 +658,8 @@ async function resolveExceeded(choice: 'extra-round' | 'proceed' | 'stop-reset')
                     block
                     icon="i-lucide-wand-sparkles"
                     :loading="reworking"
-                    :disabled="!redoComment.trim()"
+                    :disabled="!redoComment.trim() || !access.canExecuteRuns.value"
+                    :title="access.canExecuteRuns.value ? undefined : t('access.noRunExecute')"
                     @click="incorporate(redoComment.trim())"
                   >
                     {{ t('clarity.redoWithDirection') }}

@@ -18,6 +18,7 @@ const draggingId = ref<string | null>(null)
 export function useBlockDrag() {
   const board = useBoardStore()
   const ui = useUiStore()
+  const access = useWorkspaceAccess()
 
   function startDrag(
     block: Block,
@@ -25,6 +26,10 @@ export function useBlockDrag() {
     opts: { reparent?: boolean; clamp?: boolean } = {},
   ) {
     if (e.button !== 0) return
+    // Read-only viewers can pan/inspect but never move or reparent a block — the drag
+    // is a `board.write` mutation, so it no-ops for them (the SPA mirror of the backend
+    // member floor; the affordance itself is hidden/disabled at the button level too).
+    if (!access.canWriteBoard.value) return
     e.preventDefault()
     e.stopPropagation()
     const startX = e.clientX

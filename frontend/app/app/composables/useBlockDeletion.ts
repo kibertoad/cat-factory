@@ -18,6 +18,7 @@ export function useBlockDeletion() {
   const toast = useToast()
   const { confirm } = useConfirm()
   const { t } = useI18n()
+  const access = useWorkspaceAccess()
 
   /** A service is any top-level frame; only services are archivable. */
   function isService(block: Block): boolean {
@@ -37,6 +38,9 @@ export function useBlockDeletion() {
    */
   async function archiveBlock(block: Block | undefined | null): Promise<boolean> {
     if (!block || !isService(block)) return false
+    // Archiving is a `board.write` mutation — a read-only viewer's keyboard/inspector path
+    // no-ops (the inspector button is disabled for them; this guards the shortcut too).
+    if (!access.canWriteBoard.value) return false
     const ok = await confirm({
       title: t('panels.inspector.confirmArchive.title'),
       description: t('panels.inspector.confirmArchive.body', { name: block.title }),
@@ -94,6 +98,9 @@ export function useBlockDeletion() {
 
   async function deleteBlock(block: Block | undefined | null): Promise<boolean> {
     if (!block) return false
+    // Deletion is a `board.write` mutation — no-op for a read-only viewer (guards both the
+    // inspector Delete button and the global Delete-key shortcut, which share this path).
+    if (!access.canWriteBoard.value) return false
     // A service with unfinished work can't be deleted (the backend rejects it) — archive it
     // instead. Route straight to the archive flow so the user is never handed a dead-end error.
     if (isService(block) && unfinishedTaskCount(block) > 0) return archiveBlock(block)

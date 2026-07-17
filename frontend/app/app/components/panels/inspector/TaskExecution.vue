@@ -21,6 +21,7 @@ const agentRuns = useAgentRunsStore()
 const ui = useUiStore()
 const models = useModelsStore()
 const reviews = useReviewStage()
+const access = useWorkspaceAccess()
 const { t, te } = useI18n()
 const { confirm } = useConfirm()
 
@@ -232,8 +233,12 @@ async function mergePr() {
             variant="ghost"
             size="xs"
             :loading="stopping"
-            :disabled="resetting"
-            :title="t('inspector.execution.stopTooltip')"
+            :disabled="resetting || !access.canExecuteRuns.value"
+            :title="
+              access.canExecuteRuns.value
+                ? t('inspector.execution.stopTooltip')
+                : t('access.noRunExecute')
+            "
             data-testid="run-stop"
             @click="stopRun"
           >
@@ -246,8 +251,12 @@ async function mergePr() {
             variant="ghost"
             size="xs"
             :loading="resetting"
-            :disabled="stopping"
-            :title="t('inspector.execution.resetTooltip')"
+            :disabled="stopping || !access.canExecuteRuns.value"
+            :title="
+              access.canExecuteRuns.value
+                ? t('inspector.execution.resetTooltip')
+                : t('access.noRunExecute')
+            "
             data-testid="run-reset"
             @click="resetRun"
           >

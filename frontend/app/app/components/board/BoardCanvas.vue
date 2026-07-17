@@ -20,6 +20,7 @@ const execution = useExecutionStore()
 const ui = useUiStore()
 const github = useGitHubStore()
 const toast = useToast()
+const access = useWorkspaceAccess()
 const { t } = useI18n()
 
 const { onNodeDragStop, onViewportChange, screenToFlowCoordinate } = useVueFlow(BOARD_FLOW_ID)
@@ -240,12 +241,22 @@ async function onDrop(event: DragEvent) {
           {{ t('board.canvas.emptyBody') }}
         </p>
       </div>
-      <div class="pointer-events-auto flex flex-wrap items-center justify-center gap-2">
-        <UButton color="primary" icon="i-lucide-git-branch-plus" @click="ui.openBootstrap()">
+      <div
+        v-if="
+          access.canManageIntegrations.value || (github.available && access.canWriteBoard.value)
+        "
+        class="pointer-events-auto flex flex-wrap items-center justify-center gap-2"
+      >
+        <UButton
+          v-if="access.canManageIntegrations.value"
+          color="primary"
+          icon="i-lucide-git-branch-plus"
+          @click="ui.openBootstrap()"
+        >
           {{ t('nav.bootstrapRepo') }}
         </UButton>
         <UButton
-          v-if="github.available"
+          v-if="github.available && access.canWriteBoard.value"
           color="primary"
           variant="soft"
           icon="i-lucide-folder-git-2"
@@ -254,6 +265,8 @@ async function onDrop(event: DragEvent) {
           {{ t('nav.addFromRepo') }}
         </UButton>
       </div>
+      <!-- A read-only viewer sees the empty state but no create affordances. -->
+      <p v-else class="max-w-sm text-xs text-slate-600">{{ t('access.noBoardWrite') }}</p>
     </div>
 
     <!-- task dependency arrows, overlaid in screen space -->

@@ -74,6 +74,11 @@
       "keep": "Seguir editando"
     }
   },
+  "access": {
+    "noBoardWrite": "Acceso de solo lectura: puedes ver este tablero pero no editarlo.",
+    "noRunExecute": "Acceso de solo lectura: puedes ver las ejecuciones pero no iniciarlas ni controlarlas.",
+    "viewerBadge": "Observador"
+  },
   "clarification": {
     "answerPlaceholder": "Tu respuesta",
     "notRelevant": "No relevante",

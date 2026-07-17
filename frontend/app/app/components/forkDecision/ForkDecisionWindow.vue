@@ -18,6 +18,7 @@ import { FORK_DECISION_META } from '~/utils/catalog'
 const execution = useExecutionStore()
 const board = useBoardStore()
 const forkDecision = useForkDecisionStore()
+const access = useWorkspaceAccess()
 
 const { t } = useI18n()
 
@@ -348,7 +349,10 @@ async function onSend() {
                   size="sm"
                   icon="i-lucide-send"
                   :loading="forkDecision.chatting"
-                  :disabled="!canChat || chatInput.trim().length === 0"
+                  :disabled="
+                    !canChat || chatInput.trim().length === 0 || !access.canExecuteRuns.value
+                  "
+                  :title="access.canExecuteRuns.value ? undefined : t('access.noRunExecute')"
                   @click="onSend"
                 >
                   {{ t('forkDecision.chat.send') }}
@@ -380,7 +384,8 @@ async function onSend() {
             size="sm"
             icon="i-lucide-check"
             :loading="forkDecision.choosing"
-            :disabled="!canChoose"
+            :disabled="!canChoose || !access.canExecuteRuns.value"
+            :title="access.canExecuteRuns.value ? undefined : t('access.noRunExecute')"
             @click="onChoose"
           >
             {{ t('forkDecision.choose') }}

@@ -74,6 +74,11 @@
       "keep": "Düzenlemeye devam et"
     }
   },
+  "access": {
+    "noBoardWrite": "Salt okunur erişim: bu panoyu görüntüleyebilirsiniz ancak düzenleyemezsiniz.",
+    "noRunExecute": "Salt okunur erişim: çalıştırmaları görüntüleyebilirsiniz ancak başlatamaz veya denetleyemezsiniz.",
+    "viewerBadge": "İzleyici"
+  },
   "clarification": {
     "answerPlaceholder": "Yanıtınız",
     "notRelevant": "İlgili değil",

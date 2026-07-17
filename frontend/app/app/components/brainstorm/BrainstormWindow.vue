@@ -25,6 +25,7 @@ const brainstorm = useBrainstormStore()
 const ui = useUiStore()
 const toast = useToast()
 const { t } = useI18n()
+const access = useWorkspaceAccess()
 
 const drafts = ref<Record<string, string>>({})
 const redoComment = ref('')
@@ -427,7 +428,14 @@ async function resolveExceeded(choice: 'extra-round' | 'proceed' | 'stop-reset')
                             variant="soft"
                             size="xs"
                             icon="i-lucide-corner-down-left"
-                            :disabled="!(drafts[item.id] ?? '').trim() || frozen"
+                            :disabled="
+                              !(drafts[item.id] ?? '').trim() ||
+                              frozen ||
+                              !access.canExecuteRuns.value
+                            "
+                            :title="
+                              access.canExecuteRuns.value ? undefined : t('access.noRunExecute')
+                            "
                             @click="submitReply(item)"
                           >
                             {{ t('brainstorm.saveChoice') }}
@@ -437,7 +445,10 @@ async function resolveExceeded(choice: 'extra-round' | 'proceed' | 'stop-reset')
                             variant="ghost"
                             size="xs"
                             icon="i-lucide-x"
-                            :disabled="frozen"
+                            :disabled="frozen || !access.canExecuteRuns.value"
+                            :title="
+                              access.canExecuteRuns.value ? undefined : t('access.noRunExecute')
+                            "
                             @click="setStatus(item, 'dismissed')"
                           >
                             {{ t('brainstorm.dismiss') }}
@@ -452,7 +463,10 @@ async function resolveExceeded(choice: 'extra-round' | 'proceed' | 'stop-reset')
                           variant="ghost"
                           size="xs"
                           icon="i-lucide-rotate-ccw"
-                          :disabled="frozen"
+                          :disabled="frozen || !access.canExecuteRuns.value"
+                          :title="
+                            access.canExecuteRuns.value ? undefined : t('access.noRunExecute')
+                          "
                           @click="setStatus(item, 'open')"
                         >
                           {{ t('brainstorm.reopen') }}
@@ -533,6 +547,8 @@ async function resolveExceeded(choice: 'extra-round' | 'proceed' | 'stop-reset')
                   icon="i-lucide-arrow-right"
                   :ui="{ leadingIcon: 'rtl:-scale-x-100', trailingIcon: 'rtl:-scale-x-100' }"
                   :loading="acting"
+                  :disabled="!access.canExecuteRuns.value"
+                  :title="access.canExecuteRuns.value ? undefined : t('access.noRunExecute')"
                   @click="proceed"
                 >
                   {{ t('brainstorm.proceedNothing') }}
@@ -544,7 +560,8 @@ async function resolveExceeded(choice: 'extra-round' | 'proceed' | 'stop-reset')
                   block
                   icon="i-lucide-wand-sparkles"
                   :loading="reworking"
-                  :disabled="!canIncorporate"
+                  :disabled="!canIncorporate || !access.canExecuteRuns.value"
+                  :title="access.canExecuteRuns.value ? undefined : t('access.noRunExecute')"
                   @click="incorporate()"
                 >
                   {{ t('brainstorm.incorporateChoices') }}
@@ -568,6 +585,8 @@ async function resolveExceeded(choice: 'extra-round' | 'proceed' | 'stop-reset')
                   block
                   icon="i-lucide-sparkles"
                   :loading="busy"
+                  :disabled="!access.canExecuteRuns.value"
+                  :title="access.canExecuteRuns.value ? undefined : t('access.noRunExecute')"
                   @click="reReview"
                 >
                   {{ busy ? t('brainstorm.reRunning') : t('brainstorm.reRun') }}
@@ -602,7 +621,8 @@ async function resolveExceeded(choice: 'extra-round' | 'proceed' | 'stop-reset')
                     block
                     icon="i-lucide-wand-sparkles"
                     :loading="reworking"
-                    :disabled="!redoComment.trim()"
+                    :disabled="!redoComment.trim() || !access.canExecuteRuns.value"
+                    :title="access.canExecuteRuns.value ? undefined : t('access.noRunExecute')"
                     @click="incorporate(redoComment.trim())"
                   >
                     {{ t('brainstorm.redoWithDirection') }}

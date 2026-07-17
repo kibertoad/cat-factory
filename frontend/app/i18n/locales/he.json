@@ -74,6 +74,11 @@
       "keep": "להמשיך לערוך"
     }
   },
+  "access": {
+    "noBoardWrite": "גישת קריאה בלבד: אפשר לצפות בלוח הזה אך לא לערוך אותו.",
+    "noRunExecute": "גישת קריאה בלבד: אפשר לצפות בהרצות אך לא להפעיל או לשלוט בהן.",
+    "viewerBadge": "צופה"
+  },
   "clarification": {
     "answerPlaceholder": "התשובה שלך",
     "notRelevant": "לא רלוונטי",

@@ -12,6 +12,7 @@ import type { Block } from '~/types/domain'
 export function useFrameResize() {
   const board = useBoardStore()
   const ui = useUiStore()
+  const access = useWorkspaceAccess()
   /** Id of the frame currently being resized, for cursor/handle styling. */
   const resizingId = ref<string | null>(null)
 
@@ -21,6 +22,9 @@ export function useFrameResize() {
    */
   function startResize(block: Block, e: PointerEvent, edge: 'e' | 's' | 'se') {
     if (e.button !== 0) return
+    // Resizing a frame persists its size — a `board.write` mutation, so a read-only
+    // viewer's resize no-ops (the grips are hidden for them at the component level).
+    if (!access.canWriteBoard.value) return
     e.preventDefault()
     e.stopPropagation()
     const startX = e.clientX

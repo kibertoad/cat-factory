@@ -21,6 +21,7 @@ const props = withDefaults(
 
 const { t } = useI18n()
 const agentRuns = useAgentRunsStore()
+const access = useWorkspaceAccess()
 const toast = useToast()
 const { confirm } = useConfirm()
 const stopping = ref(false)
@@ -68,6 +69,8 @@ async function stop() {
     :size="size"
     icon="i-lucide-circle-stop"
     :loading="stopping"
+    :disabled="!access.canExecuteRuns.value"
+    :title="access.canExecuteRuns.value ? undefined : t('access.noRunExecute')"
     @click.stop="stop"
   >
     {{ displayLabel }}

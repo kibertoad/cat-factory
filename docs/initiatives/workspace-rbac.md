@@ -1,6 +1,6 @@
 # Initiative: workspace-level RBAC & membership
 
-**Status:** in progress (slices 1–7 landed) · **Owner:** core · **Started:** 2026-07-16
+**Status:** in progress (slices 1–8 landed) · **Owner:** core · **Started:** 2026-07-16
 
 > Durable source of truth for a multi-PR initiative. Read it first before picking up the
 > next slice; update the checklist at the end of each PR.
@@ -377,7 +377,7 @@ workspace `admin`. `product` remains data-only. Deferred follow-ups: an
 | 5   | **Member management API**: `WorkspaceMemberService` (only-account-members rule), `workspaceMemberController` + contracts routes (`GET/POST/PATCH/DELETE /members`, `PUT /access-mode`), `requirePermission` helper (`http/workspaceAccess.ts`), **`caches.workspaceAccess.invalidateGroup(ws)` after every roster/access-mode write** (slice 4 landed the slice + delete/account-tier invalidation; these group invalidations belong here), conformance member-CRUD + access-mode cache-coherence assertions  | ✅ done | #1176 |
 | 6   | **Admin-tier enforcement pass**: `requireWorkspacePermission('settings.manage' \| 'integrations.manage' \| 'secrets.manage')` controller-level middleware across the §6 table's admin route groups; conformance: member 403 on settings/integrations/secrets                                                                                                                                                                                                                                                  | ✅ done |       |
 | 7   | **Side doors**: `/me/environment-handlers/:ws` through shared resolution (`runs.execute`, 404); WS ticket gains `userId`; `public_api_keys.created_by_user_id` (both runtimes) + mint under `secrets.manage` + minter in the keys UI                                                                                                                                                                                                                                                                          | ✅ done |       |
-| 8   | **SPA read side**: `useWorkspaceAccess()` composable, store hydration of `access` / `viewerRole`, viewer read-only degradation (board editing, run starts, HITL actions), settings nav gating, i18n (en + all locales)                                                                                                                                                                                                                                                                                        | ⬜ todo |       |
+| 8   | **SPA read side**: `useWorkspaceAccess()` composable, store hydration of `access` / `viewerRole`, viewer read-only degradation (board editing, run starts, HITL actions), settings nav gating, i18n (en + all locales)                                                                                                                                                                                                                                                                                        | ✅ done |       |
 | 9   | **SPA membership management**: `WorkspaceMembersSettings.vue` (restrict toggle, roster, role select, add from account roster, remove), picker badges, i18n (all locales)                                                                                                                                                                                                                                                                                                                                      | ⬜ todo |       |
 | 10  | **e2e spec** (restricted board vanishes live; viewer read-only) + convert this tracker → ADR `backend/docs/adr/0024-workspace-rbac.md` and `git rm` the tracker                                                                                                                                                                                                                                                                                                                                               | ⬜ todo |       |
 
@@ -556,6 +556,35 @@ user.id)` directly, then requires `runs.execute`; a `null`/denied decision throw
   gate there — only the column (D1 `0054` ⇄ Drizzle), the `issue({ …, createdByUserId })` thread,
   the wire field, and the keys-panel "created by" segment (a raw `usr_*` id, or a localized "you"
   when it is the signed-in user — the panel has no user-name lookup).
+- **Slice 8 — the SPA gates through ONE composable; absent access ⇒ allow-all.** All
+  _workspace_-scoped affordance gating goes through `useWorkspaceAccess()`
+  (`frontend/app/app/composables/useWorkspaceAccess.ts`), which reads the `access` the gate
+  attached to the snapshot (`stores/workspace.ts` hydrates it; it is now in the store's public
+  return). `can(permission)` short-circuits to `true` when the store has NO access object, so
+  dev-open (auth disabled — backend attaches nothing) allows everything, exactly matching the
+  backend `requirePermission` "absent access + no user ⇒ allow". Do NOT re-derive role/permission
+  math in a component or reach for a raw role compare — call the composable. Keep it DISTINCT from
+  the account-scoped `accounts.activeAccount?.roles?.includes('admin')` checks (operator dashboard,
+  account settings), which stay account-tier.
+- **Slice 8 — gate at the CHOKEPOINT, not every call site.** Board-mutation gating lives in the
+  three shared composables `useBlockDrag` / `useFrameResize` / `useBlockDeletion` (they no-op for a
+  caller without `board.write`, which also covers the global Delete-key shortcut), so a new
+  drag/resize/delete caller inherits it for free. Discrete buttons are then hidden (creation) or
+  disabled-with-tooltip (destructive/run/HITL). The tooltip copy is the shared `access.noBoardWrite`
+  / `access.noRunExecute` keys — reuse them, don't invent per-affordance strings.
+- **Slice 8 — hide creation, DISABLE action.** Convention: a _create_ affordance (add task/service,
+  build pipeline, add-from-repo/bootstrap, mount/restore, recurring) is `v-if`-hidden for a caller
+  without the permission; a _destructive/run/HITL_ button stays visible but `:disabled` with a
+  `:title` explaining the read-only state (windows stay readable). Gate the SideBar/command-bar nav
+  entries by the SAME controller→permission map slice 6 used (settings/model/fragments =
+  `settings.manage`; integrations/infra/sandbox/bootstrap = `integrations.manage`; board
+  authoring = `board.write`). Kaizen + account settings + local models stay ungated (reads /
+  account-scoped / per-user).
+- **Slice 8 — testids added for the coming e2e (slice 10).** New stable hooks: `run-start`
+  (inspector Run), and `nav-build-pipeline` / `nav-add-from-repo` / `nav-bootstrap-repo` /
+  `nav-workspace-settings` on the SideBar. Existing `frame-add-task` / `frame-add-initiative` /
+  `inspector-archive` / `inspector-delete` / `run-stop` / `run-reset` / `agent-failure-retry` are
+  reused. Slice 9 (membership UI) + slice 10 (e2e + ADR conversion) remain.
 
 ## Out of scope
 

@@ -16,6 +16,7 @@ import { FOLLOW_UP_COMPANION_META } from '~/utils/catalog'
 const execution = useExecutionStore()
 const board = useBoardStore()
 const followUps = useFollowUpsStore()
+const access = useWorkspaceAccess()
 
 const { t } = useI18n()
 
@@ -207,7 +208,12 @@ const STATUS_META: Record<
                           size="xs"
                           color="primary"
                           :loading="followUps.isActing(item.id)"
-                          :disabled="!(drafts[item.id] ?? '').trim()"
+                          :disabled="
+                            !(drafts[item.id] ?? '').trim() || !access.canExecuteRuns.value
+                          "
+                          :title="
+                            access.canExecuteRuns.value ? undefined : t('access.noRunExecute')
+                          "
                           @click="onAnswer(item)"
                         >
                           {{ t('followUp.actions.answerAndSend') }}
@@ -217,6 +223,10 @@ const STATUS_META: Record<
                           color="neutral"
                           variant="ghost"
                           :loading="followUps.isActing(item.id)"
+                          :disabled="!access.canExecuteRuns.value"
+                          :title="
+                            access.canExecuteRuns.value ? undefined : t('access.noRunExecute')
+                          "
                           @click="onDismiss(item)"
                         >
                           {{ t('followUp.actions.dismiss') }}
@@ -231,6 +241,8 @@ const STATUS_META: Record<
                         color="primary"
                         icon="i-lucide-ticket"
                         :loading="followUps.isActing(item.id)"
+                        :disabled="!access.canExecuteRuns.value"
+                        :title="access.canExecuteRuns.value ? undefined : t('access.noRunExecute')"
                         @click="onFile(item)"
                       >
                         {{ t('followUp.actions.fileAsIssue') }}
@@ -241,6 +253,8 @@ const STATUS_META: Record<
                         variant="soft"
                         icon="i-lucide-corner-up-left"
                         :loading="followUps.isActing(item.id)"
+                        :disabled="!access.canExecuteRuns.value"
+                        :title="access.canExecuteRuns.value ? undefined : t('access.noRunExecute')"
                         @click="onQueue(item)"
                       >
                         {{ t('followUp.actions.sendToCoder') }}

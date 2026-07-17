@@ -216,4 +216,23 @@ describe('workspace store cold-open speculative snapshot', () => {
     expect(getWorkspace).toHaveBeenCalledWith('ws3')
     expect(useBoardStore().getBlock('f3')).toBeDefined()
   })
+
+  // Slice 8 (workspace-RBAC frontend): the resolved `access` the auth gate attaches to the
+  // snapshot must land on the store so `useWorkspaceAccess()` can gate affordances.
+  it('hydrates the resolved workspace access from the snapshot', async () => {
+    const snap = snapshot('ws1', [block('f1')]) as WorkspaceSnapshot
+    snap.access = { role: 'viewer', permissions: ['workspace.read'] }
+    const getWorkspace = vi.fn().mockResolvedValue(snap)
+    vi.stubGlobal('useApi', () => ({ getWorkspace }))
+
+    const ws = useWorkspaceStore()
+    await ws.switchTo('ws1')
+    expect(ws.access).toEqual({ role: 'viewer', permissions: ['workspace.read'] })
+
+    // A subsequent snapshot WITHOUT access (older backend / dev-open) clears it back to null.
+    const snap2 = snapshot('ws1', [block('f1')]) as WorkspaceSnapshot
+    getWorkspace.mockResolvedValue(snap2)
+    await ws.refresh()
+    expect(ws.access).toBeNull()
+  })
 })
