@@ -4,11 +4,13 @@ import {
   removeEnvironmentUserHandlerContract,
   upsertEnvironmentUserHandlerContract,
 } from '@cat-factory/contracts'
+import { ForbiddenError, NotFoundError } from '@cat-factory/kernel'
 import { buildHonoRoute } from '@toad-contracts/hono'
 import * as v from 'valibot'
 import { Hono } from 'hono'
 import type { Context } from 'hono'
 import type { AppEnv } from '../../http/env.js'
+import { loadWorkspaceAccess } from '../../http/workspaceAccess.js'
 
 // Per-USER infra handler overrides (local mode). A developer points a provision type at
 // their OWN engine (a personal Docker / k3s), and that override wins for the runs they
@@ -30,24 +32,58 @@ const unavailable = <E extends AppEnv>(c: Context<E>) =>
     503,
   )
 
+/**
+ * Workspace-RBAC (workspace-rbac initiative, slice 7). These routes are mounted at `/`, OUTSIDE
+ * the `/workspaces/:ws/*` gate, so they resolve access themselves through the SAME shared
+ * `loadWorkspaceAccess` the gate uses, then require `runs.execute` — a per-user infra override
+ * steers the runs the caller initiates, so it belongs to the run-execution surface. A caller with
+ * no access at all gets a 404 (existence is hidden exactly as the gate hides a board, via the same
+ * `NotFoundError` the `requireMember`-style guards use); a caller who SEES the board but lacks the
+ * capability gets a 403 (insufficiency, not existence). Throws on denial/insufficiency — the
+ * handler proceeds only when the caller is authorised.
+ */
+async function requireRunsExecute<E extends AppEnv>(
+  c: Context<E>,
+  workspaceId: string,
+  userId: string,
+): Promise<void> {
+  const access = await loadWorkspaceAccess(c.get('container'), workspaceId, userId)
+  if (!access || !access.allowed) {
+    // Missing OR denied → 404, never leaking whether the board exists.
+    throw new NotFoundError('Workspace', workspaceId)
+  }
+  if (!access.permissions.has('runs.execute')) {
+    throw new ForbiddenError('This action requires the runs.execute permission', {
+      permission: 'runs.execute',
+    })
+  }
+}
+
 export function environmentUserHandlerController(): Hono<AppEnv> {
   const app = new Hono<AppEnv>()
 
+  // Authorization runs BEFORE the service-availability (503) check on purpose: a caller who
+  // cannot see the board must get the same 404 whether or not this (local-only) feature is
+  // wired, so an unwired facade never reveals a board's existence to a non-member.
+
   buildHonoRoute(app, listEnvironmentUserHandlersContract, async (c) => {
-    const svc = c.get('container').environments?.userHandlerService
-    if (!svc) return unavailable(c)
     const user = c.get('user')
     if (!user) return signInRequired(c)
-    const handlers = await svc.list(user.id, c.req.valid('param').workspaceId)
+    const workspaceId = c.req.valid('param').workspaceId
+    await requireRunsExecute(c, workspaceId, user.id)
+    const svc = c.get('container').environments?.userHandlerService
+    if (!svc) return unavailable(c)
+    const handlers = await svc.list(user.id, workspaceId)
     return c.json({ handlers }, 200)
   })
 
   buildHonoRoute(app, upsertEnvironmentUserHandlerContract, async (c) => {
-    const svc = c.get('container').environments?.userHandlerService
-    if (!svc) return unavailable(c)
     const user = c.get('user')
     if (!user) return signInRequired(c)
     const { workspaceId, provisionType: rawType } = c.req.valid('param')
+    await requireRunsExecute(c, workspaceId, user.id)
+    const svc = c.get('container').environments?.userHandlerService
+    if (!svc) return unavailable(c)
     // The provision type comes from the path; the body's value is overridden by it.
     const provisionType = v.parse(provisionTypeSchema, rawType)
     const view = await svc.upsert(user.id, workspaceId, {
@@ -58,11 +94,12 @@ export function environmentUserHandlerController(): Hono<AppEnv> {
   })
 
   buildHonoRoute(app, removeEnvironmentUserHandlerContract, async (c) => {
-    const svc = c.get('container').environments?.userHandlerService
-    if (!svc) return unavailable(c)
     const user = c.get('user')
     if (!user) return signInRequired(c)
     const { workspaceId, provisionType: rawType } = c.req.valid('param')
+    await requireRunsExecute(c, workspaceId, user.id)
+    const svc = c.get('container').environments?.userHandlerService
+    if (!svc) return unavailable(c)
     const provisionType = v.parse(provisionTypeSchema, rawType)
     const manifestId = c.req.valid('query').manifestId ?? null
     await svc.remove(user.id, workspaceId, provisionType, manifestId)

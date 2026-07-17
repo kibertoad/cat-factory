@@ -81,7 +81,7 @@ export class PublicApiKeyService {
    * (default `write`) is the permission the key carries on `/api/v1` (read ⊂ write ⊂ admin).
    */
   async issue(
-    owner: { accountId: string; workspaceId: string },
+    owner: { accountId: string; workspaceId: string; createdByUserId?: string | null },
     label: string,
     scope: PublicApiScope = 'write',
   ): Promise<IssuedPublicApiKey> {
@@ -107,6 +107,7 @@ export class PublicApiKeyService {
       label,
       scope,
       secretHash: await this.hash(secret),
+      createdByUserId: owner.createdByUserId ?? null,
       createdAt: this.deps.clock.now(),
       lastUsedAt: null,
       revokedAt: null,

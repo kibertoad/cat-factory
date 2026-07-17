@@ -1,6 +1,6 @@
 # Initiative: workspace-level RBAC & membership
 
-**Status:** in progress (slices 1–6 landed) · **Owner:** core · **Started:** 2026-07-16
+**Status:** in progress (slices 1–7 landed) · **Owner:** core · **Started:** 2026-07-16
 
 > Durable source of truth for a multi-PR initiative. Read it first before picking up the
 > next slice; update the checklist at the end of each PR.
@@ -376,7 +376,7 @@ workspace `admin`. `product` remains data-only. Deferred follow-ups: an
 | 4   | **`workspaceAccess` AppCaches slice**: kernel handle + wrap type, both profiles (isolate-safe: disabled), read-through in the gate, invalidation at the write sites that exist today (workspace delete ⇒ `invalidateGroup`; account-membership writes — add/set-roles/invite-accept ⇒ `invalidateAll`), cache-coherence conformance assertion                                                                                                                                                                 | ✅ done |       |
 | 5   | **Member management API**: `WorkspaceMemberService` (only-account-members rule), `workspaceMemberController` + contracts routes (`GET/POST/PATCH/DELETE /members`, `PUT /access-mode`), `requirePermission` helper (`http/workspaceAccess.ts`), **`caches.workspaceAccess.invalidateGroup(ws)` after every roster/access-mode write** (slice 4 landed the slice + delete/account-tier invalidation; these group invalidations belong here), conformance member-CRUD + access-mode cache-coherence assertions  | ✅ done | #1176 |
 | 6   | **Admin-tier enforcement pass**: `requireWorkspacePermission('settings.manage' \| 'integrations.manage' \| 'secrets.manage')` controller-level middleware across the §6 table's admin route groups; conformance: member 403 on settings/integrations/secrets                                                                                                                                                                                                                                                  | ✅ done |       |
-| 7   | **Side doors**: `/me/environment-handlers/:ws` through shared resolution (`runs.execute`, 404); WS ticket gains `userId`; `public_api_keys.created_by_user_id` (both runtimes) + mint under `secrets.manage` + minter in the keys UI                                                                                                                                                                                                                                                                          | ⬜ todo |       |
+| 7   | **Side doors**: `/me/environment-handlers/:ws` through shared resolution (`runs.execute`, 404); WS ticket gains `userId`; `public_api_keys.created_by_user_id` (both runtimes) + mint under `secrets.manage` + minter in the keys UI                                                                                                                                                                                                                                                                          | ✅ done |       |
 | 8   | **SPA read side**: `useWorkspaceAccess()` composable, store hydration of `access` / `viewerRole`, viewer read-only degradation (board editing, run starts, HITL actions), settings nav gating, i18n (en + all locales)                                                                                                                                                                                                                                                                                        | ⬜ todo |       |
 | 9   | **SPA membership management**: `WorkspaceMembersSettings.vue` (restrict toggle, roster, role select, add from account roster, remove), picker badges, i18n (all locales)                                                                                                                                                                                                                                                                                                                                      | ⬜ todo |       |
 | 10  | **e2e spec** (restricted board vanishes live; viewer read-only) + convert this tracker → ADR `backend/docs/adr/0024-workspace-rbac.md` and `git rm` the tracker                                                                                                                                                                                                                                                                                                                                               | ⬜ todo |       |
@@ -531,6 +531,31 @@ WorkspaceAccess | null`). The slice landed invalidation ONLY at the write paths 
   allowlist to "read-equivalent POST" as a class; the ticket mint is exempt only because it is
   the one write the pure _viewing_ experience needs (the live stream). Add a new exact-path
   exemption only for a genuinely viewing-required write.
+- **Slice 7 — a `/`-mounted side door resolves access ITSELF, not via the gate.**
+  `/me/environment-handlers/:ws` is mounted at `/` (outside `/workspaces/:ws/*`), so the gate never
+  runs and `c.get('workspaceAccess')` is never set — `requirePermission` (which reads that context)
+  is a no-op there. Instead the controller calls the shared `loadWorkspaceAccess(container, ws,
+user.id)` directly, then requires `runs.execute`; a `null`/denied decision throws `NotFoundError`
+  (→404, existence hidden exactly as the gate hides a board), a resolved-but-insufficient decision
+  throws `ForbiddenError` (→403). **Authorization runs BEFORE the local-only service-availability
+  503**, on purpose: the userHandlerService is wired ONLY by the local facade, so ordering the 503
+  first would let a non-member on the Worker/Node facades learn a board's existence (and would make
+  the conformance 404 assertion facade-dependent). Any future `/`-mounted, workspace-scoped route
+  reuses this same helper-call shape (the design's §7 "side doors" pattern).
+- **Slice 7 — WS ticket `userId` is AUDIT-ONLY; verify stays membership-blind.** `mintWsTicket`
+  now stamps the minting session's `userId` (absent in dev-open), but `authorizeWsUpgrade` never
+  reads it — a ticket authorises one workspace handshake, not a role. Do NOT turn the claim into a
+  verify-time check (the 60s TTL bounds post-revocation minting; per-message WS authz is explicitly
+  out of scope).
+- **Slice 7 — `public_api_keys.created_by_user_id` is PROVENANCE, never an authorization input.**
+  A public-API key is a workspace-scoped SERVICE credential that intentionally OUTLIVES its minter's
+  workspace access (an external integration must not break when its author is offboarded), so the
+  column has NO FK and the auth path never re-resolves the minter — revocation is an explicit admin
+  action. It is nullable (a dev-open mint has no session; pre-existing rows predate it). Mint is
+  already gated under `secrets.manage` by the slice-6 controller middleware, so slice 7 added no new
+  gate there — only the column (D1 `0054` ⇄ Drizzle), the `issue({ …, createdByUserId })` thread,
+  the wire field, and the keys-panel "created by" segment (a raw `usr_*` id, or a localized "you"
+  when it is the signed-in user — the panel has no user-name lookup).
 
 ## Out of scope
 

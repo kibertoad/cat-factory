@@ -2297,6 +2297,8 @@
         "created": "Créé le {date}",
         "lastUsed": "dernière utilisation le {date}",
         "neverUsed": "jamais utilisé",
+        "createdBy": "créé par {user}",
+        "createdByYou": "vous",
         "revoke": "Révoquer le jeton"
       },
       "add": {

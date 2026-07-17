@@ -504,6 +504,67 @@ export function defineWorkspaceRbacSuite(harness: ConformanceHarness): void {
       expect(res.status).toBe(422) // ambiguous: no single account to adopt the board into
     })
 
+    it('side door: /me/environment-handlers resolves workspace access — non-member 404, viewer 403, member/admin pass the gate (slice 7)', async () => {
+      const app = harness.makeApp()
+      const { adminA, b, c, wsId } = await scenario(app)
+      await app.workspaceRepository().setAccessMode(wsId, 'restricted')
+      // B is a viewer (sees the board, lacks runs.execute); C is NOT a member of the restricted
+      // board. Each user's access resolves fresh on first read, so this is cache-agnostic.
+      await app.workspaceMemberRepository().upsert({
+        workspaceId: wsId,
+        userId: b,
+        role: 'viewer',
+        createdAt: 1,
+        addedByUserId: adminA,
+      })
+      // This route is mounted at `/` (outside the `/workspaces/:ws/*` gate), so it resolves access
+      // itself through the shared helper and requires `runs.execute`. Authorization runs BEFORE the
+      // local-only service-availability 503, so the verdict is identical on every facade regardless
+      // of whether the handler service is wired.
+      const path = `/me/environment-handlers/${wsId}`
+
+      // C: not a member ⇒ 404 (existence hidden exactly as the gate hides a board).
+      expect(
+        (await app.call('GET', path, undefined, bearer(await app.session({ id: c })))).status,
+      ).toBe(404)
+      // B: a viewer sees the board but lacks runs.execute ⇒ 403 (insufficiency, not existence).
+      expect(
+        (await app.call('GET', path, undefined, bearer(await app.session({ id: b })))).status,
+      ).toBe(403)
+      // A: account admin (escape hatch) holds runs.execute ⇒ clears the RBAC gate (never 404/403).
+      // The concrete status past the gate depends on whether the facade wired the local-only
+      // handler service (200 where wired, 503 where not), so only assert it is NOT a gate refusal.
+      const aStatus = (
+        await app.call('GET', path, undefined, bearer(await app.session({ id: adminA })))
+      ).status
+      expect(aStatus).not.toBe(404)
+      expect(aStatus).not.toBe(403)
+    })
+
+    it('side door: minting a public-API key records the acting user (created_by_user_id parity, slice 7)', async () => {
+      const app = harness.makeApp()
+      const { adminA, wsId } = await scenario(app) // W is account-backed (public API is account-scoped)
+      const ha = bearer(await app.session({ id: adminA }))
+      // Admin A holds `secrets.manage` (slice 6 gates the mint), so the key is minted; the acting
+      // user is stamped onto `created_by_user_id` and surfaced on the wire.
+      const created = await app.call<{ key: { id: string; createdByUserId: string | null } }>(
+        'POST',
+        `/workspaces/${wsId}/public-api-keys`,
+        { label: 'external' },
+        ha,
+      )
+      expect(created.status).toBe(201)
+      expect(created.body.key.createdByUserId).toBe(adminA)
+      // The minter round-trips through the real store identically on D1 and Postgres.
+      const list = await app.call<{ keys: Array<{ id: string; createdByUserId: string | null }> }>(
+        'GET',
+        `/workspaces/${wsId}/public-api-keys`,
+        undefined,
+        ha,
+      )
+      expect(list.body.keys.find((k) => k.id === created.body.key.id)?.createdByUserId).toBe(adminA)
+    })
+
     it('list annotation: a restricted board reached via an explicit row carries the caller viewerRole', async () => {
       const app = harness.makeApp()
       const { adminA, b, wsId } = await scenario(app)

@@ -11,6 +11,7 @@ function key(over: Partial<PublicApiKey> = {}): PublicApiKey {
     workspaceId: 'ws1',
     label: 'CI',
     scope: 'write',
+    createdByUserId: null,
     createdAt: 1,
     lastUsedAt: null,
     revokedAt: null,

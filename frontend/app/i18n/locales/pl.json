@@ -2297,6 +2297,8 @@
         "created": "Utworzono {date}",
         "lastUsed": "ostatnio użyto {date}",
         "neverUsed": "nigdy nie użyto",
+        "createdBy": "utworzone przez {user}",
+        "createdByYou": "Ciebie",
         "revoke": "Unieważnij token"
       },
       "add": {

@@ -534,6 +534,8 @@
         "created": "Creato il {date}",
         "lastUsed": "ultimo utilizzo il {date}",
         "neverUsed": "mai utilizzato",
+        "createdBy": "creato da {user}",
+        "createdByYou": "te",
         "revoke": "Revoca token"
       },
       "add": {

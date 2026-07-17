@@ -24,6 +24,13 @@ export interface PublicApiKeyRecord {
   scope: PublicApiScope
   /** Hex `HMAC-SHA256(secret, ENCRYPTION_KEY)` of the key's secret portion. */
   secretHash: string
+  /**
+   * The user who minted the key — AUDIT + UI attribution. `null` for keys minted with no
+   * signed-in session (dev-open) or predating the column. A key is a workspace-scoped SERVICE
+   * credential: it does NOT die when its minter loses workspace access (revocation is an explicit
+   * admin action), so this is provenance, never an authorization input.
+   */
+  createdByUserId: string | null
   createdAt: number
   /** When the key last authenticated a call (null = never used). */
   lastUsedAt: number | null

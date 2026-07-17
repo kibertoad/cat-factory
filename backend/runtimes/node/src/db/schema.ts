@@ -1860,6 +1860,10 @@ export const publicApiKeys = pgTable(
     // storage stays column-for-column identical.
     scope: text('scope').notNull().default('write'),
     secret_hash: text('secret_hash').notNull(),
+    // The user who minted the key (audit + UI attribution); nullable — a dev-open mint has no
+    // session, and pre-existing rows predate the column (D1 migration 0054). Not a FK: a key is
+    // a workspace-scoped service credential that outlives its minter's access. Mirror of D1 0054.
+    created_by_user_id: text('created_by_user_id'),
     created_at: bigint('created_at', { mode: 'number' }).notNull(),
     last_used_at: bigint('last_used_at', { mode: 'number' }),
     revoked_at: bigint('revoked_at', { mode: 'number' }),

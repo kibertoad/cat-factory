@@ -2419,6 +2419,8 @@
         "created": "{date} に作成",
         "lastUsed": "最終使用 {date}",
         "neverUsed": "未使用",
+        "createdBy": "作成者: {user}",
+        "createdByYou": "あなた",
         "revoke": "トークンを取り消す"
       },
       "add": {
