@@ -19,6 +19,7 @@ import type { Context } from 'hono'
 import type { FragmentLibraryModule } from '@cat-factory/orchestration'
 import type { AppEnv } from '../../http/env.js'
 import { param } from '../../http/params.js'
+import { requireWorkspacePermission } from '../../http/workspaceAccess.js'
 
 type Scope = 'account' | 'workspace'
 
@@ -79,6 +80,13 @@ export function fragmentLibraryController(scope: Scope): Hono<AppEnv> {
     app.use('/document-fragments', accountGuard)
     app.use('/fragment-sources', accountGuard)
     app.use('/fragment-sources/*', accountGuard)
+  }
+
+  // Workspace-scoped fragment WRITES are an admin-tier action (`settings.manage` — the
+  // prompt-fragment library is workspace configuration); reads stay open to any resolved role.
+  // The global gate already resolved the caller's access; account scope is authorized above.
+  if (scope === 'workspace') {
+    app.use('*', requireWorkspacePermission('settings.manage'))
   }
 
   // ---- fragments (this tier, raw — not merged) ----------------------------

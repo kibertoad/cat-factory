@@ -306,7 +306,7 @@ function deploymentModelDefaults(routing: AgentRouting) {
 import type { Context } from 'hono'
 import type { AppEnv } from '../../http/env.js'
 import { param } from '../../http/params.js'
-import { loadWorkspaceAccess } from '../../http/workspaceAccess.js'
+import { loadWorkspaceAccess, requirePermission } from '../../http/workspaceAccess.js'
 import { redactBoard, resolveDeniedFrameIds } from './redactFrames.js'
 
 /** The signed-in user, narrowed to what the tenancy layer needs. */
@@ -615,6 +615,10 @@ export function workspaceController(): Hono<AppEnv> {
   })
 
   buildHonoRoute(app, updateWorkspaceContract, async (c) => {
+    // Board rename/description is workspace configuration (settings.manage), not a member write.
+    // Per-handler (not a controller-level gate) because this controller also serves the ungated,
+    // non-workspace-scoped `POST /workspaces` create + the `workspace.read` snapshot GET.
+    requirePermission(c, 'settings.manage')
     const body = c.req.valid('json')
     const workspace = await c.get('container').workspaceService.update(param(c, 'workspaceId'), {
       ...(body.name !== undefined ? { name: body.name } : {}),
@@ -624,6 +628,7 @@ export function workspaceController(): Hono<AppEnv> {
   })
 
   buildHonoRoute(app, deleteWorkspaceContract, async (c) => {
+    requirePermission(c, 'settings.manage')
     await c.get('container').workspaceService.delete(param(c, 'workspaceId'))
     return c.body(null, 204)
   })

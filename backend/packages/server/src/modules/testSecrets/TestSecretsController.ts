@@ -8,6 +8,7 @@ import { Hono } from 'hono'
 import type { Context } from 'hono'
 import type { TestSecretsService } from '@cat-factory/integrations'
 import type { AppEnv } from '../../http/env.js'
+import { requireWorkspacePermission } from '../../http/workspaceAccess.js'
 import { param } from '../../http/params.js'
 
 /** Resolve the test-secrets service or send a 503, returning null when unconfigured. */
@@ -34,6 +35,7 @@ const unavailable = <E extends AppEnv>(c: Context<E>) =>
  */
 export function testSecretsController(): Hono<AppEnv> {
   const app = new Hono<AppEnv>()
+  app.use('*', requireWorkspacePermission('secrets.manage'))
 
   buildHonoRoute(app, getServiceTestSecretsContract, async (c) => {
     const svc = requireTestSecrets(c)

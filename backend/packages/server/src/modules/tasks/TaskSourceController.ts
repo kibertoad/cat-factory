@@ -25,6 +25,7 @@ import type { TasksModule } from '@cat-factory/orchestration'
 import { LinearOAuth } from '../../auth/LinearOAuth.js'
 import { StateSigner } from '../../github/state.js'
 import type { AppEnv } from '../../http/env.js'
+import { requireWorkspacePermission } from '../../http/workspaceAccess.js'
 import { param } from '../../http/params.js'
 
 /** Resolve the tasks module or send a 503, returning null when unconfigured. */
@@ -114,6 +115,7 @@ async function resolveListScope<E extends AppEnv>(
  */
 export function taskSourceController(): Hono<AppEnv> {
   const app = new Hono<AppEnv>()
+  app.use('*', requireWorkspacePermission('integrations.manage'))
 
   // ---- source discovery ---------------------------------------------------
 

@@ -9,6 +9,7 @@ import { buildHonoRoute } from '@toad-contracts/hono'
 import { Hono } from 'hono'
 import type { Context } from 'hono'
 import type { AppEnv } from '../../http/env.js'
+import { requireWorkspacePermission } from '../../http/workspaceAccess.js'
 import { param } from '../../http/params.js'
 
 // Workspace-scoped vendor-credential (subscription token pool) endpoints. A user
@@ -44,6 +45,7 @@ function toWire(summary: VendorCredentialSummary): VendorCredential {
 
 export function vendorCredentialController(): Hono<AppEnv> {
   const app = new Hono<AppEnv>()
+  app.use('*', requireWorkspacePermission('secrets.manage'))
 
   buildHonoRoute(app, listVendorCredentialsContract, async (c) => {
     const subscriptions = c.get('container').subscriptions

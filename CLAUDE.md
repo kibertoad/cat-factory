@@ -1768,6 +1768,41 @@ Migration is incremental — `usePipelineErrorToast` is the pilot; most componen
 inline strings, so **when you touch a component, lift its visible copy into the catalog**
 rather than adding more raw text.
 
+## Workspace RBAC enforcement (one gate, one floor, one middleware per admin group)
+
+Per-workspace authorization (the `workspace-rbac` initiative — tracker
+[`docs/initiatives/workspace-rbac.md`](./docs/initiatives/workspace-rbac.md)) is enforced in
+exactly three shared places, never re-derived per controller:
+
+1. **Resolution + the 404 hide** — `mountAuthGate` (`server/src/http/authGate.ts`) calls the
+   single `loadWorkspaceAccess` (through the `workspaceAccess` AppCaches slice) on every
+   `/workspaces/:ws/*` request, publishes the effective `{ role, permissions }` on the context
+   (`c.get('workspaceAccess')`), and returns the SAME 404 shape for a denied/absent board (existence
+   is never leaked). Roles (`admin | member | viewer`) map onto seven `WorkspacePermission`s via a
+   fixed kernel table (`domain/workspace-access.ts`).
+2. **The viewer write floor** — also in the gate: any non-GET/HEAD method requires `≥ member`,
+   covering the whole member tier (`board.write` + `runs.execute`) with ZERO per-controller code.
+   Its SOLE exemption is the read-only WS ticket mint.
+3. **The admin-tier permission gate** — `requireWorkspacePermission(perm)`
+   (`server/src/http/workspaceAccess.ts`), a **method-shaped Hono middleware** mounted ONCE at the
+   top of each admin controller (`app.use('*', requireWorkspacePermission('integrations.manage'))`).
+   It gates every WRITE the controller serves (now and future) with that permission while letting
+   reads through; it runs BEFORE the handler's 503/lookup so an unauthorized member gets a clean 403
+   without learning whether the integration is wired. It is co-located with the mount (NOT a central
+   path→permission table), so new routes inherit the correct gate and can't drift. Each admin
+   controller maps to exactly ONE permission (whole-controller). Two spots that mix gated + ungated
+   writes under one mount — `WorkspaceController` (ungated `POST /workspaces` create + `workspace.read`
+   snapshot GET, so `update`/`delete` gate per-handler) and `WorkspaceMemberController` — use the
+   imperative `requirePermission(c, perm)` helper per-handler instead.
+
+**Adding a route to an admin controller needs no authz code** — the mounted middleware already
+covers it. **Adding a NEW admin controller**: mount `requireWorkspacePermission(perm)` at its top
+(settings/integrations/secrets/members) and add a `member 403` case to `defineWorkspaceRbacSuite`
+(`backend/internal/conformance/src/workspace-rbac-suite.ts`). A member-tier controller
+(board/runs) needs nothing — the floor covers it. Dev-open (auth disabled) resolves no access
+object and both the floor and `requirePermission` allow everything, so conformance MUST run
+auth-enabled or it passes vacuously.
+
 ## Conventions
 
 - Hexagonal layering: controllers (`@cat-factory/server`) → services

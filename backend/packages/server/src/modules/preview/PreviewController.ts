@@ -8,6 +8,7 @@ import { Hono } from 'hono'
 import type { Context } from 'hono'
 import type { PreviewModule } from '@cat-factory/orchestration'
 import type { AppEnv } from '../../http/env.js'
+import { requireWorkspacePermission } from '../../http/workspaceAccess.js'
 import { param } from '../../http/params.js'
 
 /**
@@ -40,6 +41,7 @@ const unavailable = <E extends AppEnv>(c: Context<E>) =>
  */
 export function previewController(): Hono<AppEnv> {
   const app = new Hono<AppEnv>()
+  app.use('*', requireWorkspacePermission('integrations.manage'))
 
   buildHonoRoute(app, getPreviewContract, async (c) => {
     const preview = requirePreview(c)

@@ -12,6 +12,7 @@ import { Hono } from 'hono'
 import type { Context } from 'hono'
 import type { BootstrapModule } from '@cat-factory/orchestration'
 import type { AppEnv } from '../../http/env.js'
+import { requireWorkspacePermission } from '../../http/workspaceAccess.js'
 import { param } from '../../http/params.js'
 
 /** Resolve the bootstrap module or send a 503, returning null when unconfigured. */
@@ -30,6 +31,7 @@ const unavailable = <E extends AppEnv>(c: Context<E>, message: string) =>
  */
 export function bootstrapController(): Hono<AppEnv> {
   const app = new Hono<AppEnv>()
+  app.use('*', requireWorkspacePermission('integrations.manage'))
 
   // ---- reference architectures -------------------------------------------
 

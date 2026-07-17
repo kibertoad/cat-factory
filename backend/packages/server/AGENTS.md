@@ -16,9 +16,12 @@ resolve everything from `c.get('container')` (a `ServerContainer` = the domain `
   — those are the runtime **wiring**; the ones here are the shared **abstraction** (see
   `docs/glossary.md` → shared-vs-facade).
 - `auth/` — HMAC signing, GitHub OAuth helper, WS tickets (`wsTicket.ts`).
-- `http/` — request helpers; `config/` — the `AppConfig` contract; `runtime/gateways.ts` — the
-  gateway **interfaces** (real-time, GitHub ingest/backfill, LLM upstream, web-search upstream).
+- `http/` — request helpers, the shared **auth + per-workspace RBAC gate** (`authGate.ts` +
+  `workspaceAccess.ts`: `loadWorkspaceAccess`, the viewer write floor, and
+  `requireWorkspacePermission` — the admin-tier controller middleware); `config/` — the `AppConfig`
+  contract; `runtime/gateways.ts` — the gateway **interfaces** (real-time, GitHub ingest/backfill,
+  LLM upstream, web-search upstream).
 - `persistence/mappers.ts` — the dialect-agnostic row↔domain mappers shared by **both** stores.
 - `github/FetchGitHubClient.ts` — the GitHub client.
 
-**See also:** `CLAUDE.md` → "Multi-runtime facades", "Conventions".
+**See also:** `CLAUDE.md` → "Workspace RBAC enforcement", "Multi-runtime facades", "Conventions".
