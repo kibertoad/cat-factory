@@ -1,5 +1,57 @@
 # @cat-factory/kernel
 
+## 0.136.0
+
+### Minor Changes
+
+- f5ddc02: Public API: per-key permission scopes + task deletion.
+
+  Inbound public-API keys now carry a `scope` on the `/api/v1` surface — an inclusive ladder
+  (`read` ⊂ `write` ⊂ `admin`) the controller enforces per endpoint: reads need `read`,
+  non-destructive mutations (create/start/stop/retry/edit a task, start an initiative run)
+  need `write`, and destructive operations need `admin`. A valid key whose scope is too low
+  gets `403 insufficient_scope` (distinct from the `401` an unknown key gets).
+
+  This unblocks the first destructive endpoint: `DELETE /api/v1/tasks/:taskId` (admin-scoped)
+  deletes a task and its run history, completing the Tier-1 task lifecycle.
+
+  The workspace token UI gains a scope selector on create; a minted key defaults to `write`.
+
+  Breaking (pre-1.0, external surface): `publicApiKeySchema` gains a required `scope` field
+  and the `public_api_keys` table gains a `scope` column (D1 ⇄ Drizzle). Existing keys backfill
+  to `write` — they keep every capability the surface shipped before scopes existed but do not
+  auto-gain the new destructive power, which must be minted `admin` explicitly.
+
+- 576f2e0: Workspace RBAC (slice 4): cache the effective-access resolution behind the app cache seam.
+
+  The shared auth gate resolves a caller's effective workspace access on every
+  `/workspaces/:ws/*` request (three reads: the board access row, the caller's account roles,
+  their member row). This adds a `workspaceAccess` slice to the kernel `AppCaches` port
+  (`@cat-factory/caching`) so `loadWorkspaceAccess` reads through it — grouped by workspace id,
+  keyed by user id, with both a denial and a missing board cached as values (negative caching).
+  A cache hit costs zero repository reads.
+
+  Coherence is invalidation-driven, after each write commits: a board delete drops the
+  workspace group (`WorkspaceService.delete`), and account-tier membership writes
+  (`AccountService.addMember` / `setMemberRoles`, `InvitationService.accept`) drop everything
+  (`invalidateAll` — the deliberate coarse fallback for a rare management action, since a new
+  membership can change access to many boards). The roster + access-mode write paths added by
+  the member-management API (a later slice) invalidate the same workspace group on their own
+  writes.
+
+  The slice follows the established seam rules: the `DEFAULT_APP_CACHES_PROFILE` enables it with
+  a short 60s TTL (a freshness backstop; invalidation is the real coherence story), while the
+  Worker's `ISOLATE_SAFE_APP_CACHES_PROFILE` keeps it **pass-through** — the resolution reads our
+  own mutable D1 state and a Worker isolate has no cross-isolate invalidation bus, so a TTL'd
+  entry could keep granting access after a peer isolate revoked a member. Cross-runtime
+  conformance asserts an account-membership grant is visible on the immediately following request
+  (the cached denial is dropped) on both D1 and Postgres.
+
+### Patch Changes
+
+- Updated dependencies [f5ddc02]
+  - @cat-factory/contracts@0.143.0
+
 ## 0.135.0
 
 ### Minor Changes

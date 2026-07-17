@@ -1,5 +1,50 @@
 # @cat-factory/node-server
 
+## 0.102.0
+
+### Minor Changes
+
+- f5ddc02: Public API: per-key permission scopes + task deletion.
+
+  Inbound public-API keys now carry a `scope` on the `/api/v1` surface — an inclusive ladder
+  (`read` ⊂ `write` ⊂ `admin`) the controller enforces per endpoint: reads need `read`,
+  non-destructive mutations (create/start/stop/retry/edit a task, start an initiative run)
+  need `write`, and destructive operations need `admin`. A valid key whose scope is too low
+  gets `403 insufficient_scope` (distinct from the `401` an unknown key gets).
+
+  This unblocks the first destructive endpoint: `DELETE /api/v1/tasks/:taskId` (admin-scoped)
+  deletes a task and its run history, completing the Tier-1 task lifecycle.
+
+  The workspace token UI gains a scope selector on create; a minted key defaults to `write`.
+
+  Breaking (pre-1.0, external surface): `publicApiKeySchema` gains a required `scope` field
+  and the `public_api_keys` table gains a `scope` column (D1 ⇄ Drizzle). Existing keys backfill
+  to `write` — they keep every capability the surface shipped before scopes existed but do not
+  auto-gain the new destructive power, which must be minted `admin` explicitly.
+
+### Patch Changes
+
+- Updated dependencies [f5ddc02]
+- Updated dependencies [576f2e0]
+  - @cat-factory/contracts@0.143.0
+  - @cat-factory/kernel@0.136.0
+  - @cat-factory/integrations@0.85.0
+  - @cat-factory/server@0.130.0
+  - @cat-factory/caching@0.10.0
+  - @cat-factory/orchestration@0.119.0
+  - @cat-factory/agents@0.62.3
+  - @cat-factory/consensus@0.10.64
+  - @cat-factory/eks@0.1.91
+  - @cat-factory/gates@0.5.48
+  - @cat-factory/gitlab@0.10.10
+  - @cat-factory/prompt-fragments@0.13.32
+  - @cat-factory/spend@0.12.44
+  - @cat-factory/observability-langfuse@0.7.218
+  - @cat-factory/observability-otel@0.1.12
+  - @cat-factory/provider-bedrock@0.7.234
+  - @cat-factory/provider-cloudflare@0.7.235
+  - @cat-factory/provider-s3@0.2.168
+
 ## 0.101.0
 
 ### Minor Changes
