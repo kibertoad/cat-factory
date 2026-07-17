@@ -41,7 +41,10 @@ import { Hono } from 'hono'
 import type { Context } from 'hono'
 import { streamSSE } from 'hono/streaming'
 import { personalGateForBlock, personalGateForRun } from '../providers/personalCredentialGate.js'
-import { notificationActEffect } from '../notifications/notificationActions.js'
+import {
+  HEADLESS_ACTIONABLE_NOTIFICATION_TYPES,
+  notificationActEffect,
+} from '../notifications/notificationActions.js'
 import type { AppEnv } from '../../http/env.js'
 
 // The PUBLIC external API (`/api/v1/*`). Unlike the SPA surface it is NOT behind the user-session
@@ -1001,6 +1004,23 @@ export function publicApiController(): Hono<AppEnv> {
     if (!existing) {
       return c.json({ error: { code: 'not_found', message: 'Notification not found' } }, 404)
     }
+    // Only the types with an AUTOMATED side-effect (merge / retry) are actionable headlessly.
+    // Every other type parks a run on an interactive human decision — `act`-ing it would just
+    // mark the card read while leaving the run parked, silently losing the reminder for a
+    // still-pending decision. Refuse it and steer the caller to `dismiss` instead. (Skipped for
+    // an already-resolved card, which `service.act` returns idempotently.)
+    if (existing.status === 'open' && !HEADLESS_ACTIONABLE_NOTIFICATION_TYPES.has(existing.type)) {
+      return c.json(
+        {
+          error: {
+            code: 'notification_not_actionable',
+            message:
+              'This notification has no automated action; it parks a run on an interactive human decision. Resolve it in the app, or dismiss the card through the API.',
+          },
+        },
+        409,
+      )
+    }
     // A ci-/test-failure card's `act` retries the run — resuming LLM work. Refuse it when the
     // run resolves to an individual-usage model (the same `personalGateForRun` primitive the
     // retry route uses). A no-op for a poolable model, and skipped entirely for a card whose
@@ -1011,7 +1031,13 @@ export function publicApiController(): Hono<AppEnv> {
       existing.executionId
     ) {
       try {
-        await personalGateForRun(container, auth.workspaceId, existing.executionId, undefined, undefined)
+        await personalGateForRun(
+          container,
+          auth.workspaceId,
+          existing.executionId,
+          undefined,
+          undefined,
+        )
       } catch (err) {
         if (err instanceof CredentialRequiredError) {
           return c.json(

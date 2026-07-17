@@ -138,7 +138,7 @@ const OPERATION_DOCS = {
     tag: 'Notifications',
     summary: 'Act on a notification',
     description:
-      'Run a notification’s typed side-effect and resolve it: merge the PR (merge_review / pipeline_complete) or retry the run (ci_failed / test_failed); informational cards are just marked read. Performs a real GitHub merge, so it requires an admin-scoped key. A card that would retry a run on an individual-usage model cannot be acted on through the API.',
+      'Run a notification’s typed side-effect and resolve it: merge the PR (merge_review / pipeline_complete) or retry the run (ci_failed / test_failed). Performs a real GitHub merge, so it requires an admin-scoped key. Only these automated-action types are actionable through the API — a notification that parks a run on an interactive human decision cannot be acted on headlessly (dismiss it instead). A card that would retry a run on an individual-usage model likewise cannot be acted on through the API.',
   },
   dismissPublicNotification: {
     tag: 'Notifications',

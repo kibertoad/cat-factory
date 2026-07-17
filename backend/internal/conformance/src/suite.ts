@@ -1194,14 +1194,15 @@ export function defineCoreConformance(harness: ConformanceHarness): void {
         const writeAuth = await mint('write')
         const adminAuth = await mint('admin')
 
-        // Seed two OPEN notifications directly (the engine raises these mid-run; seeding the
+        // Seed OPEN notifications directly (the engine raises these mid-run; seeding the
         // persisted rows keeps the test targeted at the public routes, not the run machinery).
-        // Both are `requirement_review` — informational, so `act` has no typed side-effect (it
-        // just marks the card read) and needs no block/run/PR to exercise the transition.
-        const seed = (id: string) =>
+        // The actionable cards are `merge_review` with a null `blockId`: `act` admits the type
+        // (it has an automated merge side-effect) but the null block short-circuits the merge, so
+        // the card settles `acted` without needing a real block/run/PR.
+        const seed = (id: string, type: 'merge_review' | 'requirement_review' = 'merge_review') =>
           app.notificationRepository().upsert(wsId, {
             id,
-            type: 'requirement_review',
+            type,
             status: 'open',
             severity: 'normal',
             blockId: null,
@@ -1215,7 +1216,11 @@ export function defineCoreConformance(harness: ConformanceHarness): void {
         await seed('ntf_dismiss')
         await seed('ntf_act')
 
-        // list: a `read` key sees both open cards.
+        // An informational card (`requirement_review`) — it parks a run on an interactive human
+        // decision, so it has NO automated action and `act` must refuse it (→ dismiss instead).
+        await seed('ntf_info', 'requirement_review')
+
+        // list: a `read` key sees all three open cards.
         const listed = await call<{ notifications: { id: string; status: string }[] }>(
           'GET',
           '/api/v1/notifications',
@@ -1224,7 +1229,7 @@ export function defineCoreConformance(harness: ConformanceHarness): void {
         )
         expect(listed.status).toBe(200)
         expect(new Set(listed.body.notifications.map((n) => n.id))).toEqual(
-          new Set(['ntf_dismiss', 'ntf_act']),
+          new Set(['ntf_dismiss', 'ntf_act', 'ntf_info']),
         )
 
         // Scope ladder: a `read` key can't dismiss/act; a `write` key can dismiss but not act
@@ -1264,7 +1269,26 @@ export function defineCoreConformance(harness: ConformanceHarness): void {
         expect(acted.status).toBe(200)
         expect(acted.body.status).toBe('acted')
 
-        // Both resolved, so the inbox is now empty (list is open-only).
+        // `act` refuses an informational card (no automated action) with 409, even for an admin
+        // key — it must be dismissed, not acted — while `dismiss` resolves it normally.
+        const actInfo = await call<{ error: { code: string } }>(
+          'POST',
+          '/api/v1/notifications/ntf_info/act',
+          undefined,
+          adminAuth,
+        )
+        expect(actInfo.status).toBe(409)
+        expect(actInfo.body.error.code).toBe('notification_not_actionable')
+        const dismissInfo = await call<{ status: string }>(
+          'POST',
+          '/api/v1/notifications/ntf_info/dismiss',
+          undefined,
+          writeAuth,
+        )
+        expect(dismissInfo.status).toBe(200)
+        expect(dismissInfo.body.status).toBe('dismissed')
+
+        // All resolved, so the inbox is now empty (list is open-only).
         const after = await call<{ notifications: unknown[] }>(
           'GET',
           '/api/v1/notifications',

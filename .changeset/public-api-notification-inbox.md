@@ -13,10 +13,13 @@ of the task lifecycle so an external CI/bot can resolve the human-gated ends of 
 - `GET /api/v1/notifications` (read) — list the workspace's open notifications.
 - `POST /api/v1/notifications/:id/act` (admin) — run the notification's typed side-effect:
   merge the PR for real (`merge_review` / `pipeline_complete`) or retry the run
-  (`ci_failed` / `test_failed`); informational cards are just marked read. It requires an
-  `admin`-scoped key because it can perform a real GitHub merge. An `act` that would retry a
-  run on an individual-usage model is refused (`409 individual_model_unsupported`), matching
-  the task retry endpoint (a headless key has no personal-credential unlock).
+  (`ci_failed` / `test_failed`). It requires an `admin`-scoped key because it can perform a
+  real GitHub merge. Only these automated-action types are actionable headlessly; a
+  notification that parks a run on an interactive human decision has no automated action and
+  is refused (`409 notification_not_actionable`) — dismiss it instead. An `act` that would
+  retry a run on an individual-usage model is likewise refused
+  (`409 individual_model_unsupported`), matching the task retry endpoint (a headless key has
+  no personal-credential unlock).
 - `POST /api/v1/notifications/:id/dismiss` (write) — dismiss a card without acting on it.
 
 Every route is scoped to the key's workspace via the existing per-key scope ladder

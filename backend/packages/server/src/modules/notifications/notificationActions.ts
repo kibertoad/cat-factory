@@ -1,6 +1,23 @@
-import type { Notification } from '@cat-factory/contracts'
+import type { Notification, NotificationType } from '@cat-factory/contracts'
 import { runWithInitiator } from '../../github/runInitiatorContext.js'
 import type { ServerContainer } from '../../http/env.js'
+
+/**
+ * The notification types whose `act` runs an AUTOMATED side-effect (merge the PR / retry the
+ * run) rather than merely marking the card read. Every OTHER type is informational or parks a
+ * run on an interactive human decision (choose a fork, pick review findings, resolve a
+ * decision), so `act`-ing it does nothing but flip the card to `acted`. That is fine for an
+ * interactive SPA user, but for a HEADLESS API caller it is a footgun: it would silently hide
+ * the reminder while the run stays parked. The public `/api/v1` `act` route therefore admits
+ * only this set and steers everything else to `dismiss`. Keep it in step with the `switch`
+ * below — a type with a `case` here belongs in this set, and vice versa.
+ */
+export const HEADLESS_ACTIONABLE_NOTIFICATION_TYPES: ReadonlySet<NotificationType> = new Set([
+  'merge_review',
+  'pipeline_complete',
+  'ci_failed',
+  'test_failed',
+])
 
 /**
  * The typed side-effect of ACTING on a notification, shared by the SPA notification
