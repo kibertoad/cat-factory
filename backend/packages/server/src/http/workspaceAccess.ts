@@ -1,5 +1,11 @@
-import { resolveWorkspaceAccess, type WorkspaceAccess } from '@cat-factory/kernel'
-import type { ServerContainer } from './env.js'
+import {
+  ForbiddenError,
+  resolveWorkspaceAccess,
+  type WorkspaceAccess,
+  type WorkspacePermission,
+} from '@cat-factory/kernel'
+import type { Context } from 'hono'
+import type { AppEnv, ServerContainer } from './env.js'
 
 // ---------------------------------------------------------------------------
 // The single workspace-RBAC resolution point (workspace-rbac initiative). The auth gate
@@ -59,4 +65,33 @@ async function resolveWorkspaceAccessUncached(
     container.workspaceService.memberRoleOf(workspaceId, userId),
   ])
   return resolveWorkspaceAccess({ userId, workspace: accessRow, accountRoles, memberRole })
+}
+
+/**
+ * The admin-tier enforcement helper (workspace-rbac). The gate already ran the resolution + the
+ * method-shaped viewer write floor (any non-GET ⇒ ≥ member) before a controller executes; this
+ * adds the PERMISSION-shaped check for the admin route groups (`settings.manage` /
+ * `integrations.manage` / `secrets.manage` / `members.manage`). It CONSUMES the access the gate
+ * published — it never re-derives membership.
+ *
+ * Dev-open parity: with auth disabled there is no signed-in user AND no resolved access object, so
+ * the check allows everything (mirroring the gate's `if (!user) return next()` and the SPA's
+ * absent-access ⇒ allow-all). A signed-in user always has a resolved access object here (the gate
+ * set it, or already 404'd), so a missing object for a signed-in caller fails closed.
+ *
+ * Throws {@link ForbiddenError} (→ 403) on insufficiency — the caller already SEES the board, so
+ * only capability, not existence, is revealed (never the 404 the gate uses to hide a board).
+ */
+export function requirePermission<E extends AppEnv>(
+  c: Context<E>,
+  permission: WorkspacePermission,
+): void {
+  const access = c.get('workspaceAccess')
+  if (!access) {
+    if (!c.get('user')) return // dev-open: no user, no access object ⇒ allow all
+    throw new ForbiddenError(`This action requires the ${permission} permission`, { permission })
+  }
+  if (!access.permissions.has(permission)) {
+    throw new ForbiddenError(`This action requires the ${permission} permission`, { permission })
+  }
 }

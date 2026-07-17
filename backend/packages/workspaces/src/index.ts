@@ -5,6 +5,10 @@ export {
   type WorkspaceServiceDependencies,
 } from './modules/workspaces/WorkspaceService.js'
 export {
+  WorkspaceMemberService,
+  type WorkspaceMemberServiceDependencies,
+} from './modules/workspaces/WorkspaceMemberService.js'
+export {
   AccountService,
   type AccountServiceDependencies,
   type AccountUser,

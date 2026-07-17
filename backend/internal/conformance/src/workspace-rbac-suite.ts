@@ -174,6 +174,119 @@ export function defineWorkspaceRbacSuite(harness: ConformanceHarness): void {
       expect(snap.body.access?.role).toBe('member')
     })
 
+    it('member management over HTTP: restrict, add, re-role and remove with LIVE cache coherence (slice 5)', async () => {
+      const app = harness.makeApp()
+      const { adminA, b, c, wsId } = await scenario(app)
+      const ha = bearer(await app.session({ id: adminA }))
+
+      // Restrict the board through the REAL route — admin A is the account-admin escape hatch, so
+      // resolution grants `members.manage` even with no explicit member row. The write must
+      // invalidate the access cache group, so the change is visible on the very next request.
+      const restrict = await app.call(
+        'PUT',
+        `/workspaces/${wsId}/access-mode`,
+        { accessMode: 'restricted' },
+        ha,
+      )
+      expect(restrict.status).toBe(200)
+
+      // Immediately: account member C (no explicit row) is now denied. If the access-mode flip
+      // didn't drop the cache group, a caching facade would still serve the stale `member` grant.
+      const hc = bearer(await app.session({ id: c }))
+      const cDenied = await app.call('GET', `/workspaces/${wsId}`, undefined, hc)
+      expect(cDenied.status).toBe(404)
+
+      // Add B as a viewer over HTTP; visible on the immediately following request.
+      const add = await app.call(
+        'POST',
+        `/workspaces/${wsId}/members`,
+        { userId: b, role: 'viewer' },
+        ha,
+      )
+      expect(add.status).toBe(201)
+      const hb = bearer(await app.session({ id: b }))
+      const bView = await app.call<SnapshotBody>('GET', `/workspaces/${wsId}`, undefined, hb)
+      expect(bView.status).toBe(200)
+      expect(bView.body.access?.role).toBe('viewer')
+      // A viewer still can't write (the method floor).
+      expect((await app.call('PATCH', `/workspaces/${wsId}`, { name: 'no' }, hb)).status).toBe(403)
+
+      // The roster read is open to any resolved role and reflects the add.
+      const roster = await app.call<Array<{ userId: string; role: string }>>(
+        'GET',
+        `/workspaces/${wsId}/members`,
+        undefined,
+        ha,
+      )
+      expect(roster.body.some((m) => m.userId === b && m.role === 'viewer')).toBe(true)
+
+      // Promote B to member — immediately B may write (cache coherence on the role change).
+      const promote = await app.call(
+        'PATCH',
+        `/workspaces/${wsId}/members/${b}`,
+        { role: 'member' },
+        ha,
+      )
+      expect(promote.status).toBe(200)
+      const bWrite = await app.call('PATCH', `/workspaces/${wsId}`, { name: `ok-${uniq()}` }, hb)
+      expect(bWrite.status).toBe(200)
+
+      // Remove B — immediately denied again (the removal dropped the cache group).
+      const remove = await app.call('DELETE', `/workspaces/${wsId}/members/${b}`, undefined, ha)
+      expect(remove.status).toBe(204)
+      const bGone = await app.call('GET', `/workspaces/${wsId}`, undefined, hb)
+      expect(bGone.status).toBe(404)
+    })
+
+    it('members.manage: a plain member reads the roster but cannot mutate it or the access mode (403)', async () => {
+      const app = harness.makeApp()
+      const { adminA, b, c, wsId } = await scenario(app)
+      const ha = bearer(await app.session({ id: adminA }))
+      await app.call('PUT', `/workspaces/${wsId}/access-mode`, { accessMode: 'restricted' }, ha)
+      await app.call('POST', `/workspaces/${wsId}/members`, { userId: c, role: 'member' }, ha)
+      const hc = bearer(await app.session({ id: c }))
+
+      // A member may read the roster (workspace.read, via resolution).
+      expect((await app.call('GET', `/workspaces/${wsId}/members`, undefined, hc)).status).toBe(200)
+      // But every roster/access-mode WRITE needs `members.manage` (403 — the caller sees the board,
+      // so insufficiency, not existence, is revealed).
+      expect(
+        (await app.call('POST', `/workspaces/${wsId}/members`, { userId: b, role: 'viewer' }, hc))
+          .status,
+      ).toBe(403)
+      expect(
+        (await app.call('PATCH', `/workspaces/${wsId}/members/${c}`, { role: 'admin' }, hc)).status,
+      ).toBe(403)
+      expect(
+        (await app.call('DELETE', `/workspaces/${wsId}/members/${c}`, undefined, hc)).status,
+      ).toBe(403)
+      expect(
+        (await app.call('PUT', `/workspaces/${wsId}/access-mode`, { accessMode: 'account' }, hc))
+          .status,
+      ).toBe(403)
+    })
+
+    it('only account members can be scoped: adding an outsider is rejected (422)', async () => {
+      const app = harness.makeApp()
+      const { adminA, wsId } = await scenario(app)
+      const ha = bearer(await app.session({ id: adminA }))
+      await app.call('PUT', `/workspaces/${wsId}/access-mode`, { accessMode: 'restricted' }, ha)
+      const tag = uniq()
+      const outsider = (
+        await app.onboarding().users.findOrCreateByIdentity('github', `rbac-outsider-${tag}`, {
+          name: 'OUTSIDER',
+          email: `rbac-outsider-${tag}@example.com`,
+        })
+      ).id
+      const res = await app.call(
+        'POST',
+        `/workspaces/${wsId}/members`,
+        { userId: outsider, role: 'member' },
+        ha,
+      )
+      expect(res.status).toBe(422) // account membership is a prerequisite for a workspace grant
+    })
+
     it('list annotation: a restricted board reached via an explicit row carries the caller viewerRole', async () => {
       const app = harness.makeApp()
       const { adminA, b, wsId } = await scenario(app)

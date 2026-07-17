@@ -133,6 +133,7 @@ import { BoardService } from './modules/board/BoardService.js'
 import { ExecutionService } from './modules/execution/ExecutionService.js'
 import { PipelineService } from './modules/pipelines/PipelineService.js'
 import { WorkspaceService } from '@cat-factory/workspaces'
+import { WorkspaceMemberService } from '@cat-factory/workspaces'
 import { AccountService } from '@cat-factory/workspaces'
 import { UserService } from '@cat-factory/workspaces'
 import { InvitationService } from '@cat-factory/workspaces'
@@ -1189,6 +1190,12 @@ export interface SkillLibraryModule {
 
 export interface Core {
   workspaceService: WorkspaceService
+  /**
+   * Workspace-RBAC roster + access-mode management (workspace-rbac initiative). Present only
+   * when the workspace-member repository is wired (both facades wire it); absent ⇒ the members
+   * controller reports 503. Every roster/access-mode write invalidates the `workspaceAccess` cache.
+   */
+  workspaceMemberService?: WorkspaceMemberService
   accountService: AccountService
   userService: UserService
   /** Present only when the invitation repository is wired (see CoreDependencies). */
@@ -2625,6 +2632,19 @@ export function createCore(dependencies: CoreDependencies): Core {
     // A board delete drops its cached access decisions (workspace-rbac).
     workspaceAccessCache: caches.workspaceAccess,
   })
+  // Workspace-RBAC roster + access-mode management (workspace-rbac, slice 5). Present only when
+  // the member repository is wired (both facades wire it; tests/no-roster leave it absent, so the
+  // members controller 503s). Every roster/access-mode write drops the board's access cache group.
+  const workspaceMemberService = dependencies.workspaceMemberRepository
+    ? new WorkspaceMemberService({
+        workspaceMemberRepository: dependencies.workspaceMemberRepository,
+        workspaceRepository: dependencies.workspaceRepository,
+        membershipRepository: dependencies.membershipRepository,
+        userRepository: dependencies.userRepository,
+        clock: dependencies.clock,
+        workspaceAccessCache: caches.workspaceAccess,
+      })
+    : undefined
   // Late-bound so the account service can invalidate the spend service's cached
   // account-budget limit on an account-budget edit (spendService is built below).
   let spendServiceRef: SpendService | undefined
@@ -2980,6 +3000,7 @@ export function createCore(dependencies: CoreDependencies): Core {
   return {
     caches,
     workspaceService,
+    workspaceMemberService,
     accountService,
     userService,
     ...(invitations ? { invitations } : {}),
