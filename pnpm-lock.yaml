@@ -498,6 +498,9 @@ importers:
 
   backend/packages/observability-otel:
     dependencies:
+      '@cat-factory/contracts':
+        specifier: workspace:*
+        version: link:../contracts
       '@cat-factory/kernel':
         specifier: workspace:*
         version: link:../kernel

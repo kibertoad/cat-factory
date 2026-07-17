@@ -35,7 +35,13 @@ import { D1EnvironmentTestRunRepository } from './infrastructure/repositories/D1
 import { handleGitHubSyncBatch, reconcileStaleRepos } from './infrastructure/github/sync-consumer'
 import { sweepExpiredEnvironments } from './infrastructure/environments/sweep'
 import { logger } from './infrastructure/observability/logger'
-import { sweepBinaryArtifactRetention, validateRegistrationsOnce } from '@cat-factory/orchestration'
+import {
+  distinctAccountIds,
+  sweepBinaryArtifactRetention,
+  sweepPlatformMetrics,
+  validateRegistrationsOnce,
+} from '@cat-factory/orchestration'
+import { createPlatformMetricsOtelExporter } from '@cat-factory/observability-otel'
 import { defaultAgentKindRegistry, defaultInitiativePresetRegistry } from '@cat-factory/agents'
 import { DEFAULT_WORKSPACE_SETTINGS } from '@cat-factory/kernel'
 import { D1WorkspaceRepository } from './infrastructure/repositories/D1WorkspaceRepository'
@@ -544,6 +550,45 @@ export default {
         logger.error({ cron: 'env-sweeper', err: errInfo(error) }, 'environment sweep failed'),
       ),
     )
+
+    // Push deployment-level (platform-operator) observability aggregates to the OTLP
+    // endpoint as OpenTelemetry gauge metrics (every 2 min). Opt-in on top of the base OTel
+    // exporter (OTEL_PLATFORM_METRICS); a no-op otherwise. Per account, enumerated from the
+    // workspace projection — the same `listVisible(null)` shape the artifact sweep uses.
+    {
+      const otel = loadConfig(env).otel
+      const observability = otel.platformMetrics.enabled
+        ? buildContainer(env).platformObservability
+        : undefined
+      if (otel.endpoint && observability) {
+        const exporter = createPlatformMetricsOtelExporter({
+          endpoint: otel.endpoint,
+          headers: otel.headers,
+          serviceName: otel.serviceName,
+          logger,
+        })
+        ctx.waitUntil(
+          sweepPlatformMetrics({
+            listAccountIds: async () =>
+              distinctAccountIds(await new D1WorkspaceRepository({ db: env.DB }).listVisible(null)),
+            summarize: (accountId, window) => observability.summarize(accountId, window),
+            sink: exporter,
+            window: otel.platformMetrics.window,
+            logger,
+          })
+            .then((exported) => {
+              if (exported > 0)
+                logger.info({ cron: 'platform-metrics', exported }, 'exported platform metrics')
+            })
+            .catch((error) =>
+              logger.error(
+                { cron: 'platform-metrics', err: errInfo(error) },
+                'platform metrics sweep failed',
+              ),
+            ),
+        )
+      }
+    }
   },
 
   async queue(

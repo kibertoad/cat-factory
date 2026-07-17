@@ -201,6 +201,13 @@ export {
   summarizeOutcomes,
 } from './modules/observability/platform-observability.logic.js'
 export {
+  sweepPlatformMetrics,
+  distinctAccountIds,
+  type PlatformMetricsSink,
+  type PlatformMetricsSweepDeps,
+  type PlatformMetricsSweepLogger,
+} from './modules/observability/platformMetricsSweep.js'
+export {
   classifyCall,
   isWarningFinishReason,
   outputHeadroomRatio,

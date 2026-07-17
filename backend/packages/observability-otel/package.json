@@ -1,7 +1,7 @@
 {
   "name": "@cat-factory/observability-otel",
   "version": "0.1.10",
-  "description": "Opt-in OpenTelemetry (OTLP) trace + metrics publisher for the Agent Architecture Board. Streams LLM generations and container tool spans to any OTLP/HTTP backend — the workerd-safe fetch exporter on the Cloudflare Worker facade, the official @opentelemetry/* SDK on Node — kept conformant by a shared mapping layer + tests.",
+  "description": "Opt-in OpenTelemetry (OTLP) trace + metrics publisher for the Agent Architecture Board. Streams LLM generations and container tool spans to any OTLP/HTTP backend — the workerd-safe fetch exporter on the Cloudflare Worker facade, the official @opentelemetry/* SDK on Node — kept conformant by a shared mapping layer + tests. Also publishes deployment-level (platform-operator) run-health aggregates as OTLP gauge metrics.",
   "repository": {
     "type": "git",
     "url": "git+https://github.com/kibertoad/cat-factory.git",
@@ -34,6 +34,7 @@
     "test:run": "vitest run"
   },
   "dependencies": {
+    "@cat-factory/contracts": "workspace:*",
     "@cat-factory/kernel": "workspace:*",
     "@opentelemetry/api": "^1.9.0",
     "@opentelemetry/exporter-metrics-otlp-http": "^0.220.0",

@@ -5,8 +5,6 @@ import type {
   LlmTraceSink,
 } from '@cat-factory/kernel'
 import {
-  type AttributeMap,
-  type AttributeValue,
   type MappedSpan,
   ATTR,
   DEFAULT_SERVICE_NAME,
@@ -20,6 +18,7 @@ import {
   randomSpanId,
   toUnixNano,
 } from './mapping.js'
+import { type KeyValue, keyValues, postOtlp } from './otlp.js'
 
 // A fetch-based OpenTelemetry exporter that speaks OTLP/HTTP with the **JSON** encoding
 // (`POST {endpoint}/v1/traces` and `/v1/metrics`) using only the global `fetch`/`crypto`.
@@ -35,9 +34,6 @@ import {
 // POST per call keeps the exporter stateless (no cross-request buffer to flush), which is
 // the only shape that survives the Worker's per-request isolate lifecycle. Metrics are
 // emitted with DELTA temporality so a single call is a valid, self-contained data point.
-
-/** Hard ceiling on a single OTLP POST, so a hung collector can't tie up the caller. */
-const SEND_TIMEOUT_MS = 10_000
 
 /** OTLP `AggregationTemporality.DELTA` (proto enum value). */
 const TEMPORALITY_DELTA = 1
@@ -67,31 +63,6 @@ export interface OtelSinkConfig {
 }
 
 // ---- OTLP/JSON encoding helpers -------------------------------------------
-
-type AnyValue =
-  | { stringValue: string }
-  | { intValue: string }
-  | { doubleValue: number }
-  | { arrayValue: { values: AnyValue[] } }
-
-interface KeyValue {
-  key: string
-  value: AnyValue
-}
-
-function anyValue(value: AttributeValue): AnyValue {
-  if (Array.isArray(value)) {
-    return { arrayValue: { values: value.map((v) => ({ stringValue: String(v) })) } }
-  }
-  if (typeof value === 'number') {
-    return Number.isInteger(value) ? { intValue: String(value) } : { doubleValue: value }
-  }
-  return { stringValue: value }
-}
-
-function keyValues(attrs: AttributeMap): KeyValue[] {
-  return Object.entries(attrs).map(([key, value]) => ({ key, value: anyValue(value) }))
-}
 
 function encodeSpan(span: MappedSpan, kind: number): Record<string, unknown> {
   return {
@@ -224,29 +195,13 @@ export class OtelTraceSink implements LlmTraceSink {
   }
 
   private async send(endpoint: string, payload: unknown): Promise<void> {
-    try {
-      const res = await this.fetchImpl(endpoint, {
-        method: 'POST',
-        headers: this.headers,
-        body: JSON.stringify(payload),
-        // Bound the request so a hung collector can't tie up the caller's budget; an abort
-        // lands in the catch below and drops the batch (best-effort).
-        signal: AbortSignal.timeout(SEND_TIMEOUT_MS),
-      })
-      // OTLP/HTTP returns 200 on full success and may return 200 with a partial-success
-      // body; any non-2xx is a failure we only log — observability never breaks the caller.
-      if (!res.ok) {
-        this.logger?.warn(
-          { scope: 'otel', status: res.status },
-          'otel: OTLP endpoint rejected batch',
-        )
-      }
-    } catch (err) {
-      this.logger?.warn(
-        { scope: 'otel', err: err instanceof Error ? err.message : String(err) },
-        'otel: failed to POST OTLP batch',
-      )
-    }
+    await postOtlp({
+      fetchImpl: this.fetchImpl,
+      endpoint,
+      headers: this.headers,
+      payload,
+      logger: this.logger,
+    })
   }
 }
 
@@ -254,6 +209,15 @@ export class OtelTraceSink implements LlmTraceSink {
 export function createOtelSink(config: OtelSinkConfig): OtelTraceSink {
   return new OtelTraceSink(config)
 }
+
+// The deployment-level (platform-operator) metrics exporter — the dual of the per-run LLM
+// sink above. Fetch-based on both runtimes (see `./platform`), so it lives in this
+// workerd-safe entry rather than the SDK `./node` one.
+export {
+  PlatformMetricsOtelExporter,
+  type PlatformMetricsOtelExporterConfig,
+  createPlatformMetricsOtelExporter,
+} from './platform.js'
 
 /**
  * Parse the OTLP `OTEL_EXPORTER_OTLP_HEADERS` convention — comma-separated `key=value`
@@ -272,4 +236,33 @@ export function parseOtlpHeaders(raw: string | undefined): Record<string, string
     if (key) headers[key] = value
   }
   return Object.keys(headers).length ? headers : undefined
+}
+
+// ---- platform-metrics sweep config parsing (shared by both facades) --------
+
+/** Default platform-metrics sweep interval (Node timer); the Worker is cron-driven. */
+export const PLATFORM_METRICS_DEFAULT_INTERVAL_MS = 60_000
+
+/** The trailing windows the platform-metrics sweep may aggregate over. */
+export const PLATFORM_METRICS_WINDOWS = ['1h', '24h', '7d'] as const
+export type PlatformMetricsWindow = (typeof PLATFORM_METRICS_WINDOWS)[number]
+
+/**
+ * Parse `OTEL_PLATFORM_METRICS_INTERVAL_MS` into a positive integer ms, falling back to
+ * {@link PLATFORM_METRICS_DEFAULT_INTERVAL_MS} for unset / non-numeric / non-positive values.
+ * Shared by every facade so the sweep cadence is parsed identically.
+ */
+export function parsePlatformMetricsIntervalMs(raw: string | undefined): number {
+  const n = Number(raw?.trim())
+  return Number.isFinite(n) && n > 0 ? Math.floor(n) : PLATFORM_METRICS_DEFAULT_INTERVAL_MS
+}
+
+/**
+ * Parse `OTEL_PLATFORM_METRICS_WINDOW` into a valid trailing window, defaulting to `1h`
+ * (the shortest, most operationally useful — the OTel backend builds longer trends from the
+ * gauge series). Shared so both facades default + validate identically.
+ */
+export function parsePlatformMetricsWindow(raw: string | undefined): PlatformMetricsWindow {
+  const w = raw?.trim()
+  return w === '24h' || w === '7d' ? w : '1h'
 }
