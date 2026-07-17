@@ -92,6 +92,23 @@ export class DrizzleNotificationRepository implements NotificationRepository {
     return rows[0] ? rowToNotification(rows[0]) : null
   }
 
+  async findOpenByType(workspaceId: string, type: NotificationType): Promise<Notification | null> {
+    const rows = await this.db
+      .select()
+      .from(notifications)
+      .where(
+        and(
+          eq(notifications.workspace_id, workspaceId),
+          isNull(notifications.block_id),
+          eq(notifications.type, type),
+          eq(notifications.status, 'open'),
+        ),
+      )
+      .orderBy(desc(notifications.created_at))
+      .limit(1)
+    return rows[0] ? rowToNotification(rows[0]) : null
+  }
+
   async upsert(workspaceId: string, notification: Notification): Promise<void> {
     const values = {
       workspace_id: workspaceId,

@@ -1,4 +1,8 @@
-import { type AppConfig, requireEncryptionKey } from '@cat-factory/server'
+import {
+  type AppConfig,
+  requireEncryptionKey,
+  resolvePlatformAlertConfig,
+} from '@cat-factory/server'
 import {
   ALL_SUBSCRIPTION_VENDORS,
   type ProviderCapabilities,
@@ -91,5 +95,16 @@ export function loadConfig(env: Env): AppConfig {
     observability: loadObservabilityConfig(env),
     langfuse: loadLangfuseConfig(env),
     otel: loadOtelConfig(env),
+    // Platform-health alerting: opt-in (`PLATFORM_ALERTS=true`), independent of the OTel
+    // exporter. The `scheduled` cron drives the sweep; the interval knob is Node-only.
+    platformAlerts: resolvePlatformAlertConfig({
+      enabled: env.PLATFORM_ALERTS?.trim() === 'true',
+      window: env.PLATFORM_ALERTS_WINDOW,
+      intervalMs: env.PLATFORM_ALERTS_INTERVAL_MS,
+      minRuns: env.PLATFORM_ALERTS_MIN_RUNS,
+      maxFailureRate: env.PLATFORM_ALERTS_MAX_FAILURE_RATE,
+      maxP99Minutes: env.PLATFORM_ALERTS_MAX_P99_MINUTES,
+      maxBacklog: env.PLATFORM_ALERTS_MAX_BACKLOG,
+    }),
   }
 }

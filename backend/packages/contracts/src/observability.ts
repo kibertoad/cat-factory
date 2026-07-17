@@ -347,3 +347,39 @@ export const platformObservabilitySchema = v.object({
   }),
 })
 export type PlatformObservability = v.InferOutput<typeof platformObservabilitySchema>
+
+// ---------------------------------------------------------------------------
+// Platform-health alerting: the PUSH counterpart to the pull dashboard above. A
+// periodic sweep evaluates the SAME {@link platformObservabilitySchema} projection per
+// account against operator-configured thresholds and, when one is crossed, raises a
+// `platform_health` notification (the dual of the `post-release-health` gate, which
+// watches the USER's release — this watches the platform itself). These schemas are the
+// machine-readable vocabulary the sweep emits and the SPA maps to localized copy.
+// ---------------------------------------------------------------------------
+
+/**
+ * Why a platform-health alert fired — a closed set of machine-readable reason codes (the
+ * `usePipelineErrorToast` pattern: the backend emits the code, the SPA maps it to i18n
+ * copy). Each names one threshold over the account's windowed aggregate:
+ *   - `failure_rate_high` — the run failure rate over the window exceeded the ceiling
+ *                           (gated by a minimum terminal-run sample so a 1/1 blip is quiet).
+ *   - `duration_p99_high` — the p99 wall-clock run duration exceeded the ceiling (a slow-run
+ *                           tail the average hides).
+ *   - `backlog_high`      — the live running/blocked/paused/pending depth exceeded the ceiling.
+ */
+export const platformAlertReasonSchema = v.picklist([
+  'failure_rate_high',
+  'duration_p99_high',
+  'backlog_high',
+])
+export type PlatformAlertReason = v.InferOutput<typeof platformAlertReasonSchema>
+
+/** One fired platform-health alert: the tripped condition, its observed value + threshold. */
+export const platformAlertSchema = v.object({
+  reason: platformAlertReasonSchema,
+  /** The observed value that crossed the threshold (a rate 0..1, ms, or a count by reason). */
+  value: v.number(),
+  /** The configured threshold it crossed (same unit as {@link value}). */
+  threshold: v.number(),
+})
+export type PlatformAlert = v.InferOutput<typeof platformAlertSchema>

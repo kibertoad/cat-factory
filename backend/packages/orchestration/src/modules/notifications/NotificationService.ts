@@ -4,6 +4,7 @@ import type {
   Notification,
   NotificationChannel,
   NotificationRepository,
+  NotificationType,
   RaiseNotificationInput,
   ResolveNotificationAction,
 } from '@cat-factory/kernel'
@@ -62,7 +63,10 @@ export class NotificationService {
   async raise(workspaceId: string, input: RaiseNotificationInput): Promise<Notification> {
     const existing = input.blockId
       ? await this.notifications.findOpenByBlock(workspaceId, input.blockId, input.type)
-      : null
+      : // A block-LESS card (deployment/workspace-wide, e.g. `platform_health`) de-dupes on
+        // (workspace, type): a periodic sweep re-raising it reuses the open row and only
+        // re-delivers on a content change, exactly like the block-scoped path above.
+        await this.notifications.findOpenByType(workspaceId, input.type)
     const now = this.clock.now()
     const notification: Notification = {
       id: existing?.id ?? this.idGenerator.next('ntf'),
@@ -182,6 +186,27 @@ export class NotificationService {
   /** All open notifications for the workspace (for the inbox + snapshot). */
   async listOpen(workspaceId: string): Promise<Notification[]> {
     return this.notifications.listOpen(workspaceId)
+  }
+
+  /**
+   * Auto-resolve the open, block-less card of `type` for a workspace (dismiss it), if one is
+   * open. The self-clearing counterpart to a periodic sweep that raises a block-less card while
+   * a condition holds (today `platform_health`): when the condition clears the sweep calls this
+   * so the stale alert leaves the inbox instead of lingering (and being escalated red for a
+   * problem that has since resolved). Idempotent + best-effort: a no-op when no such card is
+   * open. Returns the dismissed card, or null when there was nothing to clear.
+   */
+  async clearByType(workspaceId: string, type: NotificationType): Promise<Notification | null> {
+    const existing = await this.notifications.findOpenByType(workspaceId, type)
+    if (!existing) return null
+    const resolved: Notification = {
+      ...existing,
+      status: 'dismissed',
+      resolvedAt: this.clock.now(),
+    }
+    await this.notifications.upsert(workspaceId, resolved)
+    await this.deliver(workspaceId, resolved)
+    return resolved
   }
 
   /**

@@ -1630,6 +1630,7 @@
         "requirement_review": "既読にする",
         "clarity_review": "既読にする",
         "release_regression": "確認",
+        "platform_health": "確認",
         "decision_required": "既読にする",
         "human_test_ready": "既読にする",
         "visual_confirmation_ready": "既読にする",
@@ -3106,6 +3107,7 @@
       "incompleteBody": "保存する前に、ユーザー ID と Slack メンバー ID の両方を入力するか、行を削除してください。"
     },
     "routable": {
+      "platform_health": "プラットフォームの健全性",
       "merge_review": "マージレビュー",
       "pipeline_complete": "パイプライン完了",
       "ci_failed": "CI失敗",

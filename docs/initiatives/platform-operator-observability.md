@@ -1,6 +1,6 @@
 # Initiative: platform operator observability & alerting
 
-**Status:** in progress (read-path dashboard + OpenTelemetry export landed; alerting pending) · **Owner:** core · **Started:** 2026-07-16
+**Status:** in progress (read-path dashboard + OpenTelemetry export + threshold alerting landed) · **Owner:** core · **Started:** 2026-07-16
 
 > Durable source of truth for a multi-PR initiative. Read it first before picking up the
 > next slice; update the checklist at the end of each PR.
@@ -50,17 +50,17 @@ delivered through the existing `NotificationChannel` seam.
 
 ## Prioritized checklist
 
-| #   | Slice                                                                                                                | Status  | PR      |
-| --- | -------------------------------------------------------------------------------------------------------------------- | ------- | ------- |
-| 1   | Rollup port + D1 ⇄ Drizzle impls (`runOutcomesSince`, `failureKindBreakdown`, `activeAndParkedCounts`) + conformance | ✅ done | #1157   |
-| 2   | `GET /observability/platform` controller + contracts (windowed aggregate projections; admin-gated)                   | ✅ done | #1157   |
-| 3   | Operator dashboard panel in the SPA (outcome trend, failure taxonomy, durations; i18n all locales)                   | ✅ done | #1157   |
-| 4a  | Duration percentiles (p50/p90/p99) on `durationStatsSince` (D1 ⇄ Drizzle parity) + dashboard render                  | ✅ done | #1165   |
-| 4b  | Per-step/gate attempt stats (CI-fixer attempts, gate exhaustion counts) — needs a queryable gate-attempt projection  | ⬜ todo |         |
-| 5   | Threshold alert sweep + `platform_health` notification type (state-change dedup; both runtimes)                      | ⬜ todo |         |
-| 6   | Alert threshold config surface (deployment env defaults + settings UI)                                               | ⬜ todo |         |
-| 7   | Optional daily rollup table for >3d trends (coordinate with storage-and-retention's deferred rollup)                 | ⬜ todo |         |
-| 8   | Export the aggregates via OpenTelemetry (periodic OTLP gauge push, per account; both runtimes)                       | ✅ done | this PR |
+| #   | Slice                                                                                                                | Status     | PR      |
+| --- | -------------------------------------------------------------------------------------------------------------------- | ---------- | ------- |
+| 1   | Rollup port + D1 ⇄ Drizzle impls (`runOutcomesSince`, `failureKindBreakdown`, `activeAndParkedCounts`) + conformance | ✅ done    | #1157   |
+| 2   | `GET /observability/platform` controller + contracts (windowed aggregate projections; admin-gated)                   | ✅ done    | #1157   |
+| 3   | Operator dashboard panel in the SPA (outcome trend, failure taxonomy, durations; i18n all locales)                   | ✅ done    | #1157   |
+| 4a  | Duration percentiles (p50/p90/p99) on `durationStatsSince` (D1 ⇄ Drizzle parity) + dashboard render                  | ✅ done    | #1165   |
+| 4b  | Per-step/gate attempt stats (CI-fixer attempts, gate exhaustion counts) — needs a queryable gate-attempt projection  | ⬜ todo    |         |
+| 5   | Threshold alert sweep + `platform_health` notification type (state-change dedup; both runtimes)                      | ✅ done    | this PR |
+| 6   | Alert threshold config surface (env defaults done; settings UI todo)                                                 | 🟨 partial |         |
+| 7   | Optional daily rollup table for >3d trends (coordinate with storage-and-retention's deferred rollup)                 | ⬜ todo    |         |
+| 8   | Export the aggregates via OpenTelemetry (periodic OTLP gauge push, per account; both runtimes)                       | ✅ done    | this PR |
 
 ### What slice 8 (OpenTelemetry export) shipped
 
@@ -89,6 +89,43 @@ which watches the _user's_ release; this watches the platform.
 - **Mothership caveat** carries over: mothership-mode local nodes skip the Postgres-backed
   sweeps (their own scheduler owns them), so the OTel push runs on the DB-backed Node/Worker
   deployments — consistent with where the dashboard read is intended.
+
+### What slice 5 (threshold alerting) shipped
+
+The dashboard is a PULL surface (an admin loads it); slice 5 adds the PUSH alert the tracker's
+goal called out as the biggest gap ("no alerting on the platform itself"). A periodic,
+runtime-symmetric sweep (Worker `scheduled` cron ⇄ Node interval, exactly like the retention +
+platform-metrics sweeps) evaluates the SAME `PlatformObservabilityService.summarize` projection
+per account and raises a `platform_health` notification through the existing `NotificationChannel`
+seam when a threshold is crossed. The dual of `post-release-health` (which watches the USER's
+release); this watches the platform.
+
+- **Reuses the existing account-scoped read** — no new SQL, no port change. Every alert condition
+  reads a field the projection already carries: `failure_rate_high` (window failure rate, gated by
+  `minRuns` so a 1/1 blip is quiet), `duration_p99_high` (the p99 the average hides, from slice
+  4a), `backlog_high` (live running/blocked/paused/pending depth). Conditions needing data the
+  projection lacks (e.g. "N runs stuck > 30min", which needs a per-run age query) are deliberately
+  deferred — the same "needs a new projection" reasoning that split 4b.
+- **Pure evaluation** (`evaluatePlatformHealth` in `@cat-factory/orchestration`
+  `platform-health.logic.ts`) → the sweep composition (`sweepPlatformHealth` in
+  `@cat-factory/server`, the analogue of `escalateStaleNotifications`): enumerate accounts from the
+  workspace projection (`distinctAccountIds`, NOT a per-row N+1), summarize ONCE per account, then
+  raise/clear one card per workspace in the account.
+- **State-change dedup, not every sweep.** `platform_health` is block-LESS, so a new
+  `NotificationRepository.findOpenByType(workspaceId, type)` (D1 ⇄ Drizzle + conformance) lets
+  `NotificationService.raise` de-dupe it on (workspace, type) exactly like the block-scoped path.
+  The card's title/body/payload are a pure function of the FIRING reason SET (sorted; no fluctuating
+  live numbers — those live on the dashboard the card links to), so a persistently-unhealthy
+  deployment re-delivers only when the set changes. When the account recovers the sweep calls
+  `NotificationService.clearByType` to dismiss the stale card.
+- **Opt-in** (`PLATFORM_ALERTS=true`, since it adds recurring DB rollup load); off ⇒ no sweep. The
+  thresholds/window/(Node) interval tune via `PLATFORM_ALERTS_*` (parsed once in the shared
+  `resolvePlatformAlertConfig`, so both facades derive an identical `PlatformAlertConfig`).
+  Independent of the OTel exporter — alerts fan out through the notification channel (in-app +
+  Slack; `platform_health` is a routable Slack type). A no-op unless the notifications module AND
+  the platform-observability read are both wired, so a mothership local node (no DB) is unaffected.
+- **Slice 6 remainder:** the env-default config surface is done here; the per-deployment settings
+  UI (editing thresholds without a redeploy) is the outstanding half of slice 6.
 
 ### Why slice 4 was split (4a done, 4b deferred)
 

@@ -1729,6 +1729,7 @@
         "requirement_review": "Als gelesen markieren",
         "clarity_review": "Als gelesen markieren",
         "release_regression": "Bestätigen",
+        "platform_health": "Bestätigen",
         "decision_required": "Als gelesen markieren",
         "human_test_ready": "Als gelesen markieren",
         "visual_confirmation_ready": "Als gelesen markieren",
@@ -4042,6 +4043,7 @@
       "incompleteBody": "Gib vor dem Speichern sowohl die Benutzer-ID als auch die Slack-Mitglieds-ID ein oder entferne die Zeile."
     },
     "routable": {
+      "platform_health": "Plattformzustand",
       "merge_review": "Merge-Review",
       "pipeline_complete": "Pipeline abgeschlossen",
       "ci_failed": "CI fehlgeschlagen",

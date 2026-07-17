@@ -7,6 +7,7 @@ import type {
 } from '@cat-factory/contracts'
 import type { DetectionConventions } from '@cat-factory/integrations'
 import type { DocumentSourceKind, HarnessKind, ModelRef } from '@cat-factory/kernel'
+import type { PlatformAlertThresholds } from '@cat-factory/orchestration'
 import type { SpendPricing } from '@cat-factory/spend'
 
 // The resolved application configuration shape, shared by every facade. The values
@@ -356,6 +357,30 @@ export interface OtelPlatformMetricsConfig {
 }
 
 /**
+ * Platform-health ALERTING config — the push counterpart to the operator dashboard read. A
+ * periodic sweep (Worker cron ⇄ Node interval, runtime-symmetric) evaluates each account's
+ * aggregate run-health projection against {@link thresholds} and raises a `platform_health`
+ * notification when a ceiling is crossed (auto-clearing when it recovers). Independent of the
+ * OTel exporter: alerts fan out through the existing NotificationChannel seam (in-app + Slack),
+ * so this is on whenever `PLATFORM_ALERTS=true`, not gated on OTel. Off by default (it adds
+ * recurring DB rollup load); a no-op at sweep time unless the notifications module AND the
+ * platform-observability read are both wired.
+ */
+export interface PlatformAlertConfig {
+  /** Opt-in flag (`PLATFORM_ALERTS=true`). */
+  enabled: boolean
+  /** The trailing window each evaluation aggregates over (`1h`/`24h`/`7d`; default `1h`). */
+  window: PlatformObservabilityWindow
+  /**
+   * How often the sweep runs (ms). Node reads `PLATFORM_ALERTS_INTERVAL_MS` (default 5min);
+   * the Worker is cron-driven (its 2-minute `scheduled` tick) and ignores this.
+   */
+  intervalMs: number
+  /** The alert ceilings (env-driven; a settings surface is a later slice). */
+  thresholds: PlatformAlertThresholds
+}
+
+/**
  * Opt-in GitLab VCS provider config (the neutral-VCS abstraction's second backend).
  * `enabled` is false unless a `GITLAB_TOKEN` is configured. Single-token model (mirrors
  * local-mode's PAT): one connection per deployment, registered via `registerGitLab` and
@@ -413,6 +438,8 @@ export interface AppConfig {
   langfuse: LangfuseConfig
   /** Optional OpenTelemetry (OTLP) trace + metrics config; `enabled` is false unless opted in. */
   otel: OtelConfig
+  /** Platform-health alerting config; `enabled` is false unless `PLATFORM_ALERTS=true`. */
+  platformAlerts: PlatformAlertConfig
   /**
    * Local-mode facade signals surfaced to the SPA; present only on the local facade
    * (the Worker/Node facades leave it undefined). Carries the missing-PAT setup prompt.

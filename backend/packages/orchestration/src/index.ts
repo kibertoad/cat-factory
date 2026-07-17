@@ -208,6 +208,13 @@ export {
   type PlatformMetricsSweepLogger,
 } from './modules/observability/platformMetricsSweep.js'
 export {
+  DEFAULT_PLATFORM_ALERT_THRESHOLDS,
+  evaluatePlatformHealth,
+  platformAlertReasons,
+  platformHealthCardContent,
+  type PlatformAlertThresholds,
+} from './modules/observability/platform-health.logic.js'
+export {
   classifyCall,
   isWarningFinishReason,
   outputHeadroomRatio,

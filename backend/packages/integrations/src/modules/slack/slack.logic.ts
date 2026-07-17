@@ -22,6 +22,8 @@ export const SLACK_ROUTABLE_TYPES: NotificationType[] = [
   'requirement_review',
   'release_regression',
   'human_test_ready',
+  // Deployment-level operational alert — an operator wants it in their ops channel.
+  'platform_health',
 ]
 
 /** A mapping entry's role, defaulting to `engineering` when unset (legacy entries). */
@@ -75,6 +77,9 @@ const MENTION_AUDIENCE: Record<NotificationType, MentionAudience> = {
   // An initiative needs attention (a blocked task, or completion): tell the creator (who owns
   // the initiative) and the engineers driving its work.
   initiative: { roles: ['engineering'], includeCreator: true },
+  // A platform-health alert is an operational, deployment-wide event with no task creator
+  // (block-less): mention the engineers (the operators who watch the deployment).
+  platform_health: { roles: ['engineering'], includeCreator: false },
 }
 
 /** The mention audience for a notification type. */
@@ -162,6 +167,7 @@ const TYPE_LABEL: Record<NotificationType, string> = {
   fork_decision_pending: ':fork_and_knife: Choose an implementation approach',
   pr_review_ready: ':clipboard: PR review findings',
   initiative: ':world_map: Initiative update',
+  platform_health: ':bar_chart: Platform health alert',
 }
 
 /** Format a percentage from a 0..1 score for the assessment context line. */

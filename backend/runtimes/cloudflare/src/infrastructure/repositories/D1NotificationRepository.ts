@@ -99,6 +99,18 @@ export class D1NotificationRepository implements NotificationRepository {
     return row ? rowToNotification(row) : null
   }
 
+  async findOpenByType(workspaceId: string, type: NotificationType): Promise<Notification | null> {
+    const row = await this.db
+      .prepare(
+        `SELECT * FROM notifications
+           WHERE workspace_id = ? AND block_id IS NULL AND type = ? AND status = 'open'
+           ORDER BY created_at DESC LIMIT 1`,
+      )
+      .bind(workspaceId, type)
+      .first<NotificationRow>()
+    return row ? rowToNotification(row) : null
+  }
+
   async upsert(workspaceId: string, notification: Notification): Promise<void> {
     await this.db
       .prepare(

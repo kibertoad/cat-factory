@@ -18,6 +18,14 @@ export interface NotificationRepository {
     blockId: string,
     type: NotificationType,
   ): Promise<Notification | null>
+  /**
+   * The open, BLOCK-LESS notification of `type` for a workspace (`block_id IS NULL`), if any.
+   * The block-less analogue of {@link findOpenByBlock}: it de-duplicates deployment/workspace-
+   * wide cards that aren't about any one block (today `platform_health`) so a periodic sweep
+   * re-raising the same card reuses the existing open row instead of stacking a new one each
+   * pass. Newest first; block-SCOPED cards of the same type are never returned.
+   */
+  findOpenByType(workspaceId: string, type: NotificationType): Promise<Notification | null>
   /** Create or replace a notification (keyed by id). Used for status transitions
    * (dismiss/act/escalate) and block-less cards. */
   upsert(workspaceId: string, notification: Notification): Promise<void>

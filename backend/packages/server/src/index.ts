@@ -30,6 +30,7 @@ export {
   DEFAULT_WEB_SEARCH_COUNT,
 } from './modules/webSearch/upstreams.js'
 export { escalateStaleNotifications } from './runtime/escalateNotifications.js'
+export { sweepPlatformHealth, type PlatformHealthSweepLogger } from './runtime/platformHealth.js'
 export { noRunnerBackendAvailableError } from './runtime/runnerBackendError.js'
 export {
   GITHUB_RECONCILE_STALE_MS,
@@ -255,12 +256,18 @@ export type {
   LangfuseConfig,
   ObservabilityConfig,
   OtelConfig,
+  PlatformAlertConfig,
   PrivilegedAppConfig,
   RetentionConfig,
   RunnerPoolConfig,
   SlackConfig,
   TasksConfig,
 } from './config/types.js'
+export {
+  parsePlatformObservabilityWindow,
+  resolvePlatformAlertConfig,
+  type PlatformAlertEnvInput,
+} from './config/platformAlerts.js'
 export { resolveUrlSafetyPolicy } from './config/url-safety.js'
 export {
   parseDetectionConventions,

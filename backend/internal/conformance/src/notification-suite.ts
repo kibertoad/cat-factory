@@ -56,6 +56,34 @@ export function defineNotificationSuite(
       expect(open.map((n) => n.id)).toEqual([`${ws}-b`, `${ws}-a`])
     })
 
+    it('finds the open block-less card of a type, ignoring block-scoped + resolved ones', async () => {
+      const repo = makeRepo()
+      const { ws } = ids()
+      // Block-scoped card of the type → never returned by the block-less lookup.
+      await repo.upsert(
+        ws,
+        notification({ id: `${ws}-scoped`, type: 'platform_health', blockId: 'blk-1' }),
+      )
+      // Resolved block-less card of the type → not open, so ignored.
+      await repo.upsert(
+        ws,
+        notification({
+          id: `${ws}-resolved`,
+          type: 'platform_health',
+          status: 'dismissed',
+          resolvedAt: 5,
+        }),
+      )
+      expect(await repo.findOpenByType(ws, 'platform_health')).toBeNull()
+
+      // The open block-less card of the type → returned.
+      await repo.upsert(ws, notification({ id: `${ws}-open`, type: 'platform_health' }))
+      const found = await repo.findOpenByType(ws, 'platform_health')
+      expect(found?.id).toBe(`${ws}-open`)
+      // A different type is not matched.
+      expect(await repo.findOpenByType(ws, 'ci_failed')).toBeNull()
+    })
+
     it('prunes resolved rows past the cutoff, keeping open + fresh-resolved ones', async () => {
       const repo = makeRepo()
       const { ws } = ids()
