@@ -7,9 +7,9 @@ import type { NotificationsModule } from '@cat-factory/orchestration'
 import { buildHonoRoute } from '@toad-contracts/hono'
 import { Hono } from 'hono'
 import type { Context } from 'hono'
-import { runWithInitiator } from '../../github/runInitiatorContext.js'
 import type { AppEnv } from '../../http/env.js'
 import { param } from '../../http/params.js'
+import { notificationActEffect } from './notificationActions.js'
 
 /** Resolve the notifications module or send a 503, returning null when unconfigured. */
 function requireNotifications<E extends AppEnv>(c: Context<E>): NotificationsModule | null {
@@ -49,27 +49,11 @@ export function notificationController(): Hono<AppEnv> {
     const id = c.req.valid('param').notificationId
     const container = c.get('container')
     const userId = c.get('user')?.id
-    const acted = await notifications.service.act(workspaceId, id, async (notification) => {
-      switch (notification.type) {
-        case 'merge_review':
-        case 'pipeline_complete':
-          // Confirm + merge the PR for real (block is `pr_ready` → `done`). Runs under
-          // the acting user's ambient context so their per-user PAT (when set) merges.
-          if (notification.blockId) {
-            await runWithInitiator(userId, () =>
-              container.executionService.mergePr(workspaceId, notification.blockId!),
-            )
-          }
-          break
-        case 'ci_failed':
-        case 'test_failed':
-          // Re-run the failed pipeline once CI / the tests are presumably fixed.
-          if (notification.executionId) {
-            await container.executionService.retry(workspaceId, notification.executionId)
-          }
-          break
-      }
-    })
+    const acted = await notifications.service.act(
+      workspaceId,
+      id,
+      notificationActEffect(container, workspaceId, userId),
+    )
     return c.json(acted, 200)
   })
 

@@ -1,11 +1,14 @@
 import {
   type Block,
+  actPublicNotificationContract,
   createInitiativeJobContract,
   createPublicTaskContract,
   deletePublicTaskContract,
+  dismissPublicNotificationContract,
   getPublicJobContract,
   getPublicRunContract,
   getPublicTaskContract,
+  listPublicNotificationsContract,
   listPublicPipelinesContract,
   listPublicServiceTasksContract,
   listPublicServicesContract,
@@ -38,6 +41,10 @@ import { Hono } from 'hono'
 import type { Context } from 'hono'
 import { streamSSE } from 'hono/streaming'
 import { personalGateForBlock, personalGateForRun } from '../providers/personalCredentialGate.js'
+import {
+  HEADLESS_ACTIONABLE_NOTIFICATION_TYPES,
+  notificationActEffect,
+} from '../notifications/notificationActions.js'
 import type { AppEnv } from '../../http/env.js'
 
 // The PUBLIC external API (`/api/v1/*`). Unlike the SPA surface it is NOT behind the user-session
@@ -934,6 +941,151 @@ export function publicApiController(): Hono<AppEnv> {
       },
       200,
     )
+  })
+
+  // --- Notification inbox: merge / confirm / retry the run tails --------------
+  // The external counterparts of the SPA's notification inbox — the operational capstone
+  // of the task lifecycle. A run can end parked on a human decision it raised as a
+  // notification (a `merger` scored a PR outside auto-merge thresholds → `merge_review`; a
+  // merger-less pipeline finished → `pipeline_complete`; the ci-/test-fixer exhausted its
+  // budget → `ci_failed`/`test_failed`). These let an external CI/bot resolve those tails
+  // (merge / retry / dismiss) instead of only being able to start + watch a task. Each is
+  // workspace-scoped by the key (the service methods take the key's workspace id, so a
+  // notification in another workspace — or an unknown id — is a 404).
+
+  // List the workspace's OPEN notifications (the inbox). The set is naturally bounded (only
+  // `open` cards, resolved by a human), so it is unpaginated like the SPA inbox it mirrors.
+  buildHonoRoute(app, listPublicNotificationsContract, async (c) => {
+    const gate = await authorize(c, 'read')
+    if ('fail' in gate) {
+      return c.json(
+        { error: { code: gate.fail.code, message: gate.fail.message } },
+        gate.fail.status,
+      )
+    }
+    const notifications = c.get('container').notifications
+    if (!notifications) {
+      return c.json(
+        { error: { code: 'unavailable', message: 'Notifications are not configured' } },
+        503,
+      )
+    }
+    const open = await notifications.service.listOpen(gate.auth.workspaceId)
+    return c.json({ notifications: open }, 200)
+  })
+
+  // Act on a notification: run its typed side-effect (merge the PR / retry the run) exactly
+  // once behind the service's atomic open→acted claim, then return the settled card. It can
+  // perform a REAL GitHub merge, so it sits at the top of the scope ladder (`admin`) — the
+  // same bar as task deletion. Headless: the merge runs under no `usr_*` initiator (the
+  // deployment installation token), and — mirroring the retry route — an `act` that would
+  // RETRY a run on an individual-usage model is refused up front, since a headless key has
+  // no personal-credential unlock (`ci_failed`/`test_failed` are the only side-effects that
+  // resume LLM work; the merge tails need no personal credential).
+  buildHonoRoute(app, actPublicNotificationContract, async (c) => {
+    const gate = await authorize(c, 'admin')
+    if ('fail' in gate) {
+      return c.json(
+        { error: { code: gate.fail.code, message: gate.fail.message } },
+        gate.fail.status,
+      )
+    }
+    const { auth } = gate
+    const container = c.get('container')
+    const notifications = container.notifications
+    if (!notifications) {
+      return c.json(
+        { error: { code: 'unavailable', message: 'Notifications are not configured' } },
+        503,
+      )
+    }
+    const { id } = c.req.valid('param')
+    const existing = await notifications.service.get(auth.workspaceId, id)
+    if (!existing) {
+      return c.json({ error: { code: 'not_found', message: 'Notification not found' } }, 404)
+    }
+    // Only the types with an AUTOMATED side-effect (merge / retry) are actionable headlessly.
+    // Every other type parks a run on an interactive human decision — `act`-ing it would just
+    // mark the card read while leaving the run parked, silently losing the reminder for a
+    // still-pending decision. Refuse it and steer the caller to `dismiss` instead. (Skipped for
+    // an already-resolved card, which `service.act` returns idempotently.)
+    if (existing.status === 'open' && !HEADLESS_ACTIONABLE_NOTIFICATION_TYPES.has(existing.type)) {
+      return c.json(
+        {
+          error: {
+            code: 'notification_not_actionable',
+            message:
+              'This notification has no automated action; it parks a run on an interactive human decision. Resolve it in the app, or dismiss the card through the API.',
+          },
+        },
+        409,
+      )
+    }
+    // A ci-/test-failure card's `act` retries the run — resuming LLM work. Refuse it when the
+    // run resolves to an individual-usage model (the same `personalGateForRun` primitive the
+    // retry route uses). A no-op for a poolable model, and skipped entirely for a card whose
+    // side-effect is a merge (no personal credential needed) or that is already resolved.
+    if (
+      existing.status === 'open' &&
+      (existing.type === 'ci_failed' || existing.type === 'test_failed') &&
+      existing.executionId
+    ) {
+      try {
+        await personalGateForRun(
+          container,
+          auth.workspaceId,
+          existing.executionId,
+          undefined,
+          undefined,
+        )
+      } catch (err) {
+        if (err instanceof CredentialRequiredError) {
+          return c.json(
+            {
+              error: {
+                code: 'individual_model_unsupported',
+                message:
+                  'This notification retries a run on an individual-usage model that needs an interactive personal-credential unlock; it cannot be acted on through the API',
+              },
+            },
+            409,
+          )
+        }
+        throw err
+      }
+    }
+    const acted = await notifications.service.act(
+      auth.workspaceId,
+      id,
+      notificationActEffect(container, auth.workspaceId, null),
+    )
+    return c.json(acted, 200)
+  })
+
+  // Dismiss a notification without acting on it (waves the card off). Mutates state but has
+  // no external side-effect, so it needs `write` (not `admin`). `resolve` is idempotent and
+  // workspace-scoped: an unknown/foreign id throws NotFound → 404 via the shared handler.
+  buildHonoRoute(app, dismissPublicNotificationContract, async (c) => {
+    const gate = await authorize(c, 'write')
+    if ('fail' in gate) {
+      return c.json(
+        { error: { code: gate.fail.code, message: gate.fail.message } },
+        gate.fail.status,
+      )
+    }
+    const notifications = c.get('container').notifications
+    if (!notifications) {
+      return c.json(
+        { error: { code: 'unavailable', message: 'Notifications are not configured' } },
+        503,
+      )
+    }
+    const resolved = await notifications.service.resolve(
+      gate.auth.workspaceId,
+      c.req.valid('param').id,
+      'dismiss',
+    )
+    return c.json(resolved, 200)
   })
 
   return app

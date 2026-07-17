@@ -1,6 +1,6 @@
 # Initiative: public API expansion (`/api/v1` external surface)
 
-**Status:** in progress (Tier 1 task-lifecycle complete inc. delete; per-key scopes + Tier 2 pipeline discovery landed) · **Owner:** core · **Started:** 2026-07-16
+**Status:** in progress (Tier 1 task-lifecycle complete inc. delete; per-key scopes + Tier 2 pipeline discovery landed; Tier 3 notification inbox landed) · **Owner:** core · **Started:** 2026-07-16
 
 > This is the durable source of truth for a multi-PR initiative. Read it first before
 > picking up the next slice; update the checklist at the end of each PR.
@@ -75,11 +75,11 @@ The existing public surface IS the template; every new endpoint copies its shape
 
 ### Tier 3 — eventing & operations
 
-| #   | Endpoint / feature                                                                                                                                                                                        | Backing internal capability                                                                                                                              | Status  | PR  |
-| --- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------- | ------- | --- |
-| 10  | **Outbound webhooks**: register per-key/workspace callback URLs for task transitions + job completion; HMAC-signed, retried delivery                                                                      | new table (D1 ⇄ Drizzle, conformance-asserted) + a webhook `NotificationChannel` behind `CompositeNotificationChannel` (the seam built for exactly this) | ⬜ todo |     |
-| 11  | `GET /api/v1/notifications` + `POST …/:id/act\|dismiss` (merge_review / pipeline_complete / ci_failed resolution) — **blocked on key scopes (#13)**: `act` on a merge_review performs a real GitHub merge | `NotificationService` (`listNotificationsContract` / `actNotificationContract` / `dismissNotificationContract`)                                          | ⬜ todo |     |
-| 12  | `GET /api/v1/usage` — spend/usage read for external dashboards                                                                                                                                            | `getSpendStatusContract` / `getWorkspaceUsageContract`                                                                                                   | ⬜ todo |     |
+| #   | Endpoint / feature                                                                                                                                                                                            | Backing internal capability                                                                                                                              | Status  | PR      |
+| --- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------- | ------- | ------- |
+| 10  | **Outbound webhooks**: register per-key/workspace callback URLs for task transitions + job completion; HMAC-signed, retried delivery                                                                          | new table (D1 ⇄ Drizzle, conformance-asserted) + a webhook `NotificationChannel` behind `CompositeNotificationChannel` (the seam built for exactly this) | ⬜ todo |         |
+| 11  | `GET /api/v1/notifications` + `POST …/:id/act\|dismiss` (merge_review / pipeline_complete / ci_failed resolution) — unblocked by key scopes (#13); `act` performs a real GitHub merge so it is `admin`-scoped | `NotificationService` (`listNotificationsContract` / `actNotificationContract` / `dismissNotificationContract`)                                          | ✅ done | this PR |
+| 12  | `GET /api/v1/usage` — spend/usage read for external dashboards                                                                                                                                                | `getSpendStatusContract` / `getWorkspaceUsageContract`                                                                                                   | ⬜ todo |         |
 
 ### Cross-cutting prerequisite
 
@@ -126,6 +126,21 @@ The existing public surface IS the template; every new endpoint copies its shape
 - **Runtimes stay symmetric by construction** — this whole layer lives in
   `@cat-factory/server`; anything that needs persistence (webhooks table, key scopes)
   lands D1 ⇄ Drizzle together with a conformance assertion in the same PR.
+- **`act` is `admin`-scoped, the side-effect is shared, and the retry tail stays headless-safe.**
+  The notification `act` (#11) can perform a REAL GitHub merge (`merge_review` / `pipeline_complete`),
+  so it sits at the top of the ladder like `delete`; `dismiss` is `write`, the list `read`. The
+  merge/retry side-effect switch was extracted to `notificationActEffect`
+  (`@cat-factory/server`, `modules/notifications/notificationActions.ts`) and is shared by the SPA
+  inbox and the public route — do NOT re-inline it. The set of headlessly-actionable types lives
+  beside it as `HEADLESS_ACTIONABLE_NOTIFICATION_TYPES` (the four with an automated side-effect);
+  the public `act` admits ONLY those and refuses everything else with 409
+  `notification_not_actionable` (an informational card that parks a run on an interactive human
+  decision would otherwise be silently marked read, losing the reminder — a headless caller
+  dismisses it instead). Unlike the interactive SPA `act`, which may mark any card read. A public
+  `act` that would RETRY a run (`ci_failed` / `test_failed`) also reuses `personalGateForRun` to
+  refuse an individual-usage-model run up front (→ 409 `individual_model_unsupported`), exactly
+  like the retry endpoint; the merge tails need no personal credential and run headless (no
+  `usr_*` initiator → installation token).
 - **Regenerate the OpenAPI spec with every contract change** — `docs/openapi.json` is
   generated from the `/api/v1` Valibot contracts (`pnpm gen:openapi`) and CI fails on
   drift (`pnpm check:openapi`); every slice that adds/changes a public contract commits
