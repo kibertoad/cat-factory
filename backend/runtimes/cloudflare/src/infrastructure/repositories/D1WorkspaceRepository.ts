@@ -32,18 +32,32 @@ export class D1WorkspaceRepository implements WorkspaceRepository {
         .all<WorkspaceRow>()
       return results.map(rowToWorkspace)
     }
-    // A signed-in user sees boards in any account they belong to, plus any legacy
-    // board they personally own (account_id NULL, owner_user_id = them).
-    const placeholders = scope.accountIds.map(() => '?').join(', ')
-    const accountClause = scope.accountIds.length > 0 ? `account_id IN (${placeholders})` : '0'
-    const { results } = await this.db
-      .prepare(
-        `SELECT * FROM workspaces
-          WHERE ${accountClause}
-             OR (account_id IS NULL AND owner_user_id = ?)
-          ORDER BY created_at DESC`,
+    // A signed-in user sees, resolved SQL-side (see WorkspaceVisibility): unrestricted
+    // boards in accounts they belong to, ANY board in accounts they admin (escape hatch),
+    // boards they hold an explicit member row on (ANDed with their account ids so an
+    // orphaned foreign-account row can't resurface), and legacy boards they personally own.
+    const inList = (ids: string[]) => ids.map(() => '?').join(', ')
+    const clauses: string[] = []
+    const binds: string[] = []
+    if (scope.accountIds.length > 0) {
+      clauses.push(`(account_id IN (${inList(scope.accountIds)}) AND access_mode = 'account')`)
+      binds.push(...scope.accountIds)
+    }
+    if (scope.adminAccountIds.length > 0) {
+      clauses.push(`account_id IN (${inList(scope.adminAccountIds)})`)
+      binds.push(...scope.adminAccountIds)
+    }
+    if (scope.accountIds.length > 0) {
+      clauses.push(
+        `(account_id IN (${inList(scope.accountIds)}) AND id IN (SELECT workspace_id FROM workspace_members WHERE user_id = ?))`,
       )
-      .bind(...scope.accountIds, scope.ownerUserId)
+      binds.push(...scope.accountIds, scope.userId)
+    }
+    clauses.push('(account_id IS NULL AND owner_user_id = ?)')
+    binds.push(scope.ownerUserId)
+    const { results } = await this.db
+      .prepare(`SELECT * FROM workspaces WHERE ${clauses.join(' OR ')} ORDER BY created_at DESC`)
+      .bind(...binds)
       .all<WorkspaceRow>()
     return results.map(rowToWorkspace)
   }

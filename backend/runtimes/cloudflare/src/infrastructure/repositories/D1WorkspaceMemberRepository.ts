@@ -64,8 +64,8 @@ export class D1WorkspaceMemberRepository implements WorkspaceMemberRepository {
   async getRolesForUserInWorkspaces(
     userId: string,
     workspaceIds: string[],
-  ): Promise<Map<string, WorkspaceRole>> {
-    const out = new Map<string, WorkspaceRole>()
+  ): Promise<Record<string, WorkspaceRole>> {
+    const out: Record<string, WorkspaceRole> = {}
     if (workspaceIds.length === 0) return out
     // ONE chunked-IN read per chunk (never a per-board point-read loop). Chunk via the
     // shared helper so each statement stays under D1's 100 bound-parameter ceiling — the
@@ -79,7 +79,7 @@ export class D1WorkspaceMemberRepository implements WorkspaceMemberRepository {
         )
         .bind(userId, ...chunk)
         .all<{ workspace_id: string; role: string | null }>()
-      for (const r of results) out.set(r.workspace_id, parseRole(r.role))
+      for (const r of results) out[r.workspace_id] = parseRole(r.role)
     }
     return out
   }

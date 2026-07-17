@@ -263,6 +263,20 @@ export const REMOTE_PERSISTENCE_METHODS: PersistenceMethodTable = {
     listByAccount: { scope: { kind: 'account', arg: 0 } },
     get: { scope: { kind: 'account', arg: 0 } },
   },
+  // The workspace-RBAC member-tier READS the gate + list path run on every signed request
+  // (workspace-rbac slice 3). `get` is the gate's per-request effective-role read — workspace-
+  // scoped and secret-free, exactly like `workspaceRepository.accessRowOf`.
+  // `getRolesForUserInWorkspaces` is the `GET /workspaces` list-annotation batch read; it is
+  // pinned to the CALLER's own id (`selfUser`), so it can only ever return the caller's own
+  // membership roles (a board they hold no row in is simply absent — no existence leak), and it
+  // returns a serializable `Record` so it round-trips over this RPC. The roster read
+  // (`listByWorkspace`/`listWorkspaceIdsForUser`) + the writes (`upsert`/`remove`/
+  // `removeByAccountMembership`) stay mothership-internal — the member-management API is a later
+  // slice, and the writes are admin-gated (the machine token is role-blind).
+  workspaceMemberRepository: {
+    get: { scope: { kind: 'workspace', arg: 0 } },
+    getRolesForUserInWorkspaces: { scope: { kind: 'selfUser', arg: 0 } },
+  },
   // --- Member-display read surface ------------------------------------------------
   // The user DISPLAY records the account members panel enriches its roster with
   // (`AccountService.members` → `userRepository.listByIds(memberIds)`) and the single-user display
@@ -1030,7 +1044,9 @@ const fail = (
 
 interface VisibilityScope {
   accountIds: string[]
+  adminAccountIds: string[]
   ownerUserId: string
+  userId: string
 }
 
 /**
@@ -1287,7 +1303,13 @@ export async function dispatchPersistenceCall(
       const requested = args[rule.arg] as VisibilityScope | null
       if (!requested || typeof requested !== 'object') return denied
       const accountIds = (requested.accountIds ?? []).filter((id) => inScope(id))
-      args[rule.arg] = { accountIds, ownerUserId: opts.scope.userId } satisfies VisibilityScope
+      const adminAccountIds = (requested.adminAccountIds ?? []).filter((id) => inScope(id))
+      args[rule.arg] = {
+        accountIds,
+        adminAccountIds,
+        ownerUserId: opts.scope.userId,
+        userId: opts.scope.userId,
+      } satisfies VisibilityScope
       break
     }
     default: {

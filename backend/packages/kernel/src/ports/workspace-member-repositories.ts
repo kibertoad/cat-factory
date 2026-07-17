@@ -31,12 +31,16 @@ export interface WorkspaceMemberRepository {
   /**
    * The caller's role in each of `workspaceIds`, in ONE chunked-IN read — used to
    * annotate a workspace LIST with the viewer's effective member role without a
-   * per-board round-trip. Boards with no row for the user are simply absent from the map.
+   * per-board round-trip. Keyed by workspace id; boards with no row for the user are
+   * simply absent. Returns a plain `Record` (NOT a `Map`) so the value round-trips over
+   * the mothership persistence RPC — this read is on the `GET /workspaces` edge path, so
+   * it must be JSON-serializable (a `Map` serializes to `{}`); `WorkspaceService` rebuilds
+   * a `Map` for its in-process callers.
    */
   getRolesForUserInWorkspaces(
     userId: string,
     workspaceIds: string[],
-  ): Promise<Map<string, WorkspaceRole>>
+  ): Promise<Record<string, WorkspaceRole>>
   upsert(member: WorkspaceMemberRecord): Promise<void>
   remove(workspaceId: string, userId: string): Promise<void>
   /**

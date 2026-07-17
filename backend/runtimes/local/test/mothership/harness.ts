@@ -450,6 +450,18 @@ export function makeMothershipConformanceApp(
     call,
     createWorkspace,
     createOrgWorkspace,
+    // The mothership harness routes persistence over the RPC and does not run the auth-enabled
+    // workspace-RBAC suite; expose the fields to satisfy the type, with auth reported off.
+    authEnabled: false,
+    session: async () => {
+      throw new Error('mothership harness does not run the auth-enabled workspace-RBAC suite')
+    },
+    createWorkspaceInAccount: (accountId, ownerUserId, options) =>
+      container.workspaceService.create(
+        { name: options?.name ?? 'RBAC board', seed: options?.seed ?? false },
+        ownerUserId,
+        accountId,
+      ),
     drive,
     startExecution: (workspaceId, blockId, pipelineId, opts) =>
       container.executionService.start(

@@ -16,6 +16,7 @@ import {
   makeIncorporatedReview,
   makeOnboardingProbe,
   makeReadyReviewWithOpenItem,
+  mintSession,
 } from '@cat-factory/conformance'
 import {
   type DrizzleDb,
@@ -417,6 +418,14 @@ export function makeConformanceApp(
     call,
     createWorkspace,
     createOrgWorkspace,
+    authEnabled: Boolean(TEST_ENV.AUTH_SESSION_SECRET),
+    session: (user) => mintSession(TEST_ENV.AUTH_SESSION_SECRET!, user),
+    createWorkspaceInAccount: (accountId, ownerUserId, options) =>
+      container.workspaceService.create(
+        { name: options?.name ?? 'RBAC board', seed: options?.seed ?? false },
+        ownerUserId,
+        accountId,
+      ),
     drive,
     startExecution: (workspaceId, blockId, pipelineId, opts) =>
       container.executionService.start(
