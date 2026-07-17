@@ -1875,6 +1875,9 @@
       "deselect": "Seçimi kaldır / denetçiyi kapat",
       "deleteBlock": "Seçili bloğu sil",
       "help": "Bu kısayol listesini göster"
+    },
+    "accountSkills": {
+      "intro": "Ekibinizin Claude Skills oluşturduğu depoları bağlayın (bir SKILL.md klasörü artı kaynak dosyaları). Senkronize edilen beceriler bu hesabın kataloguna eklenir, tüm panolarca paylaşılır ve bir hattın Skill adımı bir görev için bunlardan birini çalıştırır."
     }
   },
   "settings": {
@@ -1928,7 +1931,8 @@
       "noAccount": "Hiçbir hesap seçilmedi.",
       "tabs": {
         "team": "Ekip ve erişim",
-        "fragments": "Bağlam parçaları"
+        "fragments": "Bağlam parçaları",
+        "skills": "Beceriler"
       }
     },
     "infrastructure": {
@@ -3389,7 +3393,11 @@
       "confirmDeletePipeline": {
         "title": "Bu pipeline silinsin mi?",
         "body": "\"{name}\" kaldırılacak. Bu işlem geri alınamaz."
-      }
+      },
+      "skillPlaceholder": "Bir beceri seçin",
+      "skillNoneAvailable": "Kullanılabilir beceri yok. Hesap ayarlarında bir beceri kaynağı bağlayın.",
+      "skillMissing": "Bu beceri artık katalogda yok; başka birini seçin.",
+      "skillNeedsPick": "Bir Skill adımı, kaydedebilmeniz için seçilmiş bir beceri gerektirir."
     },
     "progress": {
       "status": {
@@ -4880,6 +4888,51 @@
       "iterations": "Yinelemeler",
       "count": "{max} içinden {attempts}",
       "footer": "Döngü, doğrulama komutu geçene kadar veya yineleme bütçesi tükenene kadar yeniden dener."
+    }
+  },
+  "skills": {
+    "unavailable": "Claude Skills kitaplığı bu dağıtımda etkin değil.",
+    "catalog": {
+      "title": "Senkronize beceriler",
+      "empty": "Henüz senkronize edilmiş beceri yok. Beceri klasörlerini içe aktarmak için aşağıda bir depo kaynağı bağlayın.",
+      "resources": "{count} kaynak",
+      "pinned": "{commit} üzerine sabitlendi"
+    },
+    "sources": {
+      "title": "Depo kaynakları",
+      "empty": "Bağlı beceri kaynağı yok. Aşağıda beceri klasörleri içeren bir depo dizini bağlayın.",
+      "linkTitle": "Bir beceri kaynağı bağla",
+      "link": "Bağla ve senkronize et",
+      "metaSynced": "senkronize edildi {date} · ref {ref}",
+      "metaNever": "hiç senkronize edilmedi · ref {ref}",
+      "changes": "Değişiklikler",
+      "check": "Değişiklikleri denetle",
+      "sync": "Yeniden senkronize et",
+      "unlink": "Bağlantıyı kaldır",
+      "browseHint": "Depoya göz atın ve beceri klasörlerinin bulunduğu dizini seçin (veya tüm depoyu bağlayın).",
+      "selectedDir": "Dizin:",
+      "wholeRepo": "Tüm depo (kök).",
+      "ownerPlaceholder": "sahip",
+      "repoPlaceholder": "depo",
+      "dirPlaceholder": "dizin yolu (örn. .claude/skills)",
+      "refPlaceholder": "ref (varsayılan HEAD)",
+      "githubRequired": "Bir beceri kaynağı bağlamak GitHub entegrasyonunu gerektirir. Önce bir panoda bağlayın."
+    },
+    "confirmUnlinkSource": {
+      "title": "Bu kaynağın bağlantısı kaldırılsın mı?",
+      "body": "\"{repo}\" ve senkronize ettiği beceriler kaldırılacak. Daha sonra yeniden bağlayabilirsiniz.",
+      "confirm": "Bağlantıyı kaldır"
+    },
+    "toast": {
+      "sourceLinked": "Kaynak bağlandı ve senkronize edildi",
+      "linkSourceFailed": "Kaynak bağlanamadı",
+      "synced": "Senkronize edildi: {updated} güncellendi, {removed} kaldırıldı",
+      "syncFailed": "Kaynak senkronize edilemedi",
+      "changesAvailable": "Değişiklikler mevcut",
+      "upToDate": "Güncel",
+      "checkSourceFailed": "Kaynak denetlenemedi",
+      "sourceUnlinked": "Kaynağın bağlantısı kaldırıldı",
+      "unlinkSourceFailed": "Kaynağın bağlantısı kaldırılamadı"
     }
   }
 }

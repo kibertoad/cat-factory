@@ -293,6 +293,23 @@ export const usePipelinesStore = defineStore('pipelines', () => {
     draftStepOptions.value[index] = Object.keys(next).length ? next : null
   }
 
+  /** The skill picked for the draft `skill` step at `index` (its `stepOptions.skillId`). */
+  function draftSkillId(index: number): string | undefined {
+    return draftStepOptions.value[index]?.skillId
+  }
+
+  /**
+   * Set (or clear) the picked skill on the draft `skill` step at `index`. Merges into the
+   * step's `StepOptions` bag rather than clobbering it; clearing drops the field and, if the
+   * bag empties, the whole entry (so it normalizes away like the other options).
+   */
+  function setDraftSkillId(index: number, skillId: string | undefined) {
+    const next: StepOptions = { ...draftStepOptions.value[index] }
+    if (skillId) next.skillId = skillId
+    else delete next.skillId
+    draftStepOptions.value[index] = Object.keys(next).length ? next : null
+  }
+
   function clearDraft() {
     draft.value = []
     draftGates.value = []
@@ -452,6 +469,8 @@ export const usePipelinesStore = defineStore('pipelines', () => {
     toggleDraftTesterQualityGating,
     draftAutoRecommendEnabled,
     toggleDraftAutoRecommend,
+    draftSkillId,
+    setDraftSkillId,
     toggleDraftEnabled,
     toggleDraftConsensus,
     setDraftConsensus,

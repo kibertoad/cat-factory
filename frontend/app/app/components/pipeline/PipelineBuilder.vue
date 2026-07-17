@@ -42,6 +42,26 @@ function toggleGating(i: number) {
 const agents = useAgentsStore()
 const ui = useUiStore()
 const releaseHealth = useReleaseHealthStore()
+const skills = useSkillsStore()
+
+// The account's skill catalog (from the workspace snapshot) as USelect items for the per-step
+// skill picker. A `skill` step is parametrized by the picked skill (`stepOptions.skillId`).
+const skillSelectItems = computed(() => skills.catalog.map((s) => ({ label: s.name, value: s.id })))
+
+// An enabled `skill` step with no picked skill — mirrors the backend save/start rejection
+// (`assertValidSkillSteps`), surfaced as an inline hint so the user fixes it before saving.
+const skillStepNeedsPick = computed(() =>
+  pipelines.draft.some(
+    (k, i) => k === 'skill' && pipelines.draftEnabled[i] !== false && !pipelines.draftSkillId(i),
+  ),
+)
+
+// A step's picked skill id is no longer in the account catalog (the source dir was renamed or
+// unlinked). The step will fail cleanly at dispatch; flag it so the user re-picks.
+function skillMissing(index: number): boolean {
+  const id = pipelines.draftSkillId(index)
+  return !!id && !skills.catalog.some((s) => s.id === id)
+}
 
 const open = computed({
   get: () => ui.builderOpen,
@@ -322,6 +342,14 @@ async function clone(p: Pipeline) {
             {{ t('pipeline.builder.gatingNeedsEstimator') }}
           </p>
 
+          <p
+            v-if="skillStepNeedsPick"
+            class="mb-2 flex items-center gap-1.5 rounded-md border border-amber-800/50 bg-amber-950/30 px-2 py-1 text-[11px] text-amber-300"
+          >
+            <UIcon name="i-lucide-alert-triangle" class="h-3.5 w-3.5 shrink-0" />
+            {{ t('pipeline.builder.skillNeedsPick') }}
+          </p>
+
           <div
             v-if="pipelines.draft.length === 0"
             class="flex flex-1 items-center justify-center rounded-lg border border-dashed border-slate-700 p-4 text-center text-xs text-slate-500"
@@ -515,6 +543,26 @@ async function clone(p: Pipeline) {
                     @click="removeUnit(unit)"
                   />
                 </div>
+              </div>
+
+              <!-- Skill picker: the one generic `skill` kind is parametrized per step by the
+                 picked account skill (its `stepOptions.skillId`). Bind directly to the store. -->
+              <div v-if="unit.kind === 'skill'" class="ms-6 flex flex-col gap-1">
+                <USelect
+                  :model-value="pipelines.draftSkillId(unit.index)"
+                  :items="skillSelectItems"
+                  value-key="value"
+                  size="xs"
+                  :placeholder="t('pipeline.builder.skillPlaceholder')"
+                  :disabled="!skillSelectItems.length"
+                  @update:model-value="pipelines.setDraftSkillId(unit.index, $event)"
+                />
+                <p v-if="!skillSelectItems.length" class="text-[10px] text-slate-500">
+                  {{ t('pipeline.builder.skillNoneAvailable') }}
+                </p>
+                <p v-else-if="skillMissing(unit.index)" class="text-[10px] text-amber-400">
+                  {{ t('pipeline.builder.skillMissing') }}
+                </p>
               </div>
 
               <!-- Attached companion: a dependent reviewer for this producer, optionally

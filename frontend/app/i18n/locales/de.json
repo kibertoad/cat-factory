@@ -50,7 +50,8 @@
       "noAccount": "Kein Konto ausgewählt.",
       "tabs": {
         "team": "Team & Zugriff",
-        "fragments": "Kontextfragmente"
+        "fragments": "Kontextfragmente",
+        "skills": "Skills"
       }
     },
     "infrastructure": {
@@ -1963,6 +1964,9 @@
           "label": "Vorlagen & Beispiele"
         }
       }
+    },
+    "accountSkills": {
+      "intro": "Verknüpfe Repositorys, in denen dein Team Claude Skills erstellt (ein SKILL.md-Ordner plus Ressourcendateien). Synchronisierte Skills landen im Katalog dieses Kontos, der von allen Boards geteilt wird, und der Skill-Schritt einer Pipeline führt einen davon für eine Aufgabe aus."
     }
   },
   "board": {
@@ -3117,7 +3121,11 @@
         "cloned": "\"{name}\" geklont — bearbeite jetzt \"{copy}\"",
         "cloneFailed": "Pipeline konnte nicht geklont werden",
         "updateFailed": "Pipeline konnte nicht aktualisiert werden"
-      }
+      },
+      "skillPlaceholder": "Skill auswählen",
+      "skillNoneAvailable": "Keine Skills verfügbar. Verknüpfe eine Skill-Quelle in den Kontoeinstellungen.",
+      "skillMissing": "Dieser Skill ist nicht mehr im Katalog; wähle einen anderen.",
+      "skillNeedsPick": "Ein Skill-Schritt braucht einen ausgewählten Skill, bevor du speichern kannst."
     },
     "progress": {
       "status": {
@@ -4880,6 +4888,51 @@
       "iterations": "Iterationen",
       "count": "{attempts} von {max}",
       "footer": "Die Schleife wird wiederholt, bis der Validierungsbefehl erfolgreich ist oder das Iterationsbudget aufgebraucht ist."
+    }
+  },
+  "skills": {
+    "unavailable": "Die Claude-Skills-Bibliothek ist für diese Bereitstellung nicht aktiviert.",
+    "catalog": {
+      "title": "Synchronisierte Skills",
+      "empty": "Noch keine Skills synchronisiert. Verknüpfe unten eine Repo-Quelle, um ihre Skill-Ordner zu importieren.",
+      "resources": "{count} Ressourcen",
+      "pinned": "fixiert auf {commit}"
+    },
+    "sources": {
+      "title": "Repo-Quellen",
+      "empty": "Keine verknüpften Skill-Quellen. Verknüpfe unten ein Repo-Verzeichnis mit Skill-Ordnern.",
+      "linkTitle": "Skill-Quelle verknüpfen",
+      "link": "Verknüpfen & synchronisieren",
+      "metaSynced": "synchronisiert {date} · Ref {ref}",
+      "metaNever": "nie synchronisiert · Ref {ref}",
+      "changes": "Änderungen",
+      "check": "Auf Änderungen prüfen",
+      "sync": "Neu synchronisieren",
+      "unlink": "Trennen",
+      "browseHint": "Durchsuche das Repository und wähle das Verzeichnis mit den Skill-Ordnern (oder verknüpfe das ganze Repo).",
+      "selectedDir": "Verzeichnis:",
+      "wholeRepo": "Gesamtes Repository (Wurzel).",
+      "ownerPlaceholder": "Eigentümer",
+      "repoPlaceholder": "Repo",
+      "dirPlaceholder": "Verzeichnispfad (z. B. .claude/skills)",
+      "refPlaceholder": "Ref (Standard HEAD)",
+      "githubRequired": "Zum Verknüpfen einer Skill-Quelle ist die GitHub-Integration erforderlich. Verbinde sie zuerst auf einem Board."
+    },
+    "confirmUnlinkSource": {
+      "title": "Diese Quelle trennen?",
+      "body": "\"{repo}\" und die davon synchronisierten Skills werden entfernt. Du kannst sie später erneut verknüpfen.",
+      "confirm": "Trennen"
+    },
+    "toast": {
+      "sourceLinked": "Quelle verknüpft & synchronisiert",
+      "linkSourceFailed": "Quelle konnte nicht verknüpft werden",
+      "synced": "Synchronisiert: {updated} aktualisiert, {removed} entfernt",
+      "syncFailed": "Quelle konnte nicht synchronisiert werden",
+      "changesAvailable": "Änderungen verfügbar",
+      "upToDate": "Aktuell",
+      "checkSourceFailed": "Quelle konnte nicht geprüft werden",
+      "sourceUnlinked": "Quelle getrennt",
+      "unlinkSourceFailed": "Quelle konnte nicht getrennt werden"
     }
   }
 }

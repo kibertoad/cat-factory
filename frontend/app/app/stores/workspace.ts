@@ -24,6 +24,7 @@ import { useRecurringPipelinesStore } from '~/stores/recurringPipelines'
 import { useInitiativesStore } from '~/stores/initiative'
 import { useServicesStore } from '~/stores/services'
 import { useAgentsStore } from '~/stores/agents'
+import { useSkillsStore } from '~/stores/skills'
 import { useTrackerStore } from '~/stores/tracker'
 import { useRequirementsStore } from '~/stores/requirements'
 import { useClarityStore } from '~/stores/clarity'
@@ -151,6 +152,9 @@ export const useWorkspaceStore = defineStore(
       // Merge the deployment's registered custom agent kinds into the palette catalog so a
       // proprietary kind renders as a first-class block + result view (idempotent on reload).
       useAgentsStore().registerCustomKinds(snapshot.customAgentKinds ?? [])
+      // The account's repo-sourced Claude Skills catalog (shared across its workspaces), so the
+      // pipeline builder's per-step skill picker has its options. A straight replace.
+      useSkillsStore().hydrate(snapshot.skills ?? [])
       // Seed the connect form's backend-kind selectors (built-in + any custom backend a
       // deployment registered), so a programmatically-registered env/runner backend is a
       // first-class connect option instead of a hardcoded manifest/kubernetes list.

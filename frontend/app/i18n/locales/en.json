@@ -1935,6 +1935,9 @@
           "label": "Templates & examples"
         }
       }
+    },
+    "accountSkills": {
+      "intro": "Link repos where your team authors Claude Skills (a SKILL.md folder plus resource files). Synced skills join this account's catalog, shared by every board, and a pipeline's Skill step runs one against a task."
     }
   },
   "settings": {
@@ -1988,7 +1991,8 @@
       "noAccount": "No account selected.",
       "tabs": {
         "team": "Team & access",
-        "fragments": "Context fragments"
+        "fragments": "Context fragments",
+        "skills": "Skills"
       }
     },
     "infrastructure": {
@@ -3473,7 +3477,11 @@
         "cloned": "Cloned \"{name}\" — now editing \"{copy}\"",
         "cloneFailed": "Could not clone pipeline",
         "updateFailed": "Could not update pipeline"
-      }
+      },
+      "skillPlaceholder": "Select a skill",
+      "skillNoneAvailable": "No skills available. Link a skill source in account settings.",
+      "skillMissing": "This skill is no longer in the catalog; pick another.",
+      "skillNeedsPick": "A Skill step needs a skill selected before you can save."
     },
     "progress": {
       "status": {
@@ -5006,6 +5014,51 @@
       "iterations": "Iterations",
       "count": "{attempts} of {max}",
       "footer": "The loop retries until the validation command passes or the iteration budget is spent."
+    }
+  },
+  "skills": {
+    "unavailable": "The Claude Skills library isn't enabled for this deployment.",
+    "catalog": {
+      "title": "Synced skills",
+      "empty": "No skills synced yet. Link a repo source below to import its skill folders.",
+      "resources": "{count} resources",
+      "pinned": "pinned {commit}"
+    },
+    "sources": {
+      "title": "Repo sources",
+      "empty": "No linked skill sources. Link a repo directory of skill folders below.",
+      "linkTitle": "Link a skill source",
+      "link": "Link & sync",
+      "metaSynced": "synced {date} · ref {ref}",
+      "metaNever": "never synced · ref {ref}",
+      "changes": "Changes",
+      "check": "Check for changes",
+      "sync": "Resync",
+      "unlink": "Unlink",
+      "browseHint": "Browse the repo and pick the directory of skill folders (or link the whole repo).",
+      "selectedDir": "Directory:",
+      "wholeRepo": "Whole repository (root).",
+      "ownerPlaceholder": "owner",
+      "repoPlaceholder": "repo",
+      "dirPlaceholder": "dir path (e.g. .claude/skills)",
+      "refPlaceholder": "ref (default HEAD)",
+      "githubRequired": "Linking a skill source requires the GitHub integration. Connect it on a board first."
+    },
+    "confirmUnlinkSource": {
+      "title": "Unlink this source?",
+      "body": "\"{repo}\" and the skills it synced will be removed. You can re-link it later.",
+      "confirm": "Unlink"
+    },
+    "toast": {
+      "sourceLinked": "Source linked & synced",
+      "linkSourceFailed": "Could not link source",
+      "synced": "Synced: {updated} updated, {removed} removed",
+      "syncFailed": "Could not sync source",
+      "changesAvailable": "Changes available",
+      "upToDate": "Up to date",
+      "checkSourceFailed": "Could not check source",
+      "sourceUnlinked": "Source unlinked",
+      "unlinkSourceFailed": "Could not unlink source"
     }
   }
 }

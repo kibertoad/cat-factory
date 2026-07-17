@@ -1875,6 +1875,9 @@
       "deselect": "Deseleccionar / cerrar el inspector",
       "deleteBlock": "Eliminar el bloque seleccionado",
       "help": "Mostrar esta ayuda"
+    },
+    "accountSkills": {
+      "intro": "Vincula repositorios donde tu equipo crea Claude Skills (una carpeta SKILL.md más archivos de recursos). Las habilidades sincronizadas se añaden al catálogo de esta cuenta, compartido por todos los tableros, y el paso Skill de una tubería ejecuta una sobre una tarea."
     }
   },
   "settings": {
@@ -1928,7 +1931,8 @@
       "noAccount": "Ninguna cuenta seleccionada.",
       "tabs": {
         "team": "Equipo y acceso",
-        "fragments": "Fragmentos de contexto"
+        "fragments": "Fragmentos de contexto",
+        "skills": "Habilidades"
       }
     },
     "providerConnection": {
@@ -3377,7 +3381,11 @@
       "confirmDeletePipeline": {
         "title": "¿Eliminar este pipeline?",
         "body": "Se eliminará \"{name}\". Esta acción no se puede deshacer."
-      }
+      },
+      "skillPlaceholder": "Selecciona una habilidad",
+      "skillNoneAvailable": "No hay habilidades disponibles. Vincula una fuente de habilidades en la configuración de la cuenta.",
+      "skillMissing": "Esta habilidad ya no está en el catálogo; elige otra.",
+      "skillNeedsPick": "Un paso Skill necesita una habilidad seleccionada antes de poder guardar."
     },
     "progress": {
       "status": {
@@ -4868,6 +4876,51 @@
       "iterations": "Iteraciones",
       "count": "{attempts} de {max}",
       "footer": "El bucle se repite hasta que el comando de validación pasa o se agota el presupuesto de iteraciones."
+    }
+  },
+  "skills": {
+    "unavailable": "La biblioteca de Claude Skills no está habilitada en este despliegue.",
+    "catalog": {
+      "title": "Habilidades sincronizadas",
+      "empty": "Aún no hay habilidades sincronizadas. Vincula una fuente de repositorio abajo para importar sus carpetas de habilidades.",
+      "resources": "{count} recursos",
+      "pinned": "fijada en {commit}"
+    },
+    "sources": {
+      "title": "Fuentes de repositorio",
+      "empty": "No hay fuentes de habilidades vinculadas. Vincula abajo un directorio de repositorio con carpetas de habilidades.",
+      "linkTitle": "Vincular una fuente de habilidades",
+      "link": "Vincular y sincronizar",
+      "metaSynced": "sincronizada {date} · ref {ref}",
+      "metaNever": "nunca sincronizada · ref {ref}",
+      "changes": "Cambios",
+      "check": "Buscar cambios",
+      "sync": "Resincronizar",
+      "unlink": "Desvincular",
+      "browseHint": "Explora el repositorio y elige el directorio de carpetas de habilidades (o vincula todo el repo).",
+      "selectedDir": "Directorio:",
+      "wholeRepo": "Repositorio completo (raíz).",
+      "ownerPlaceholder": "propietario",
+      "repoPlaceholder": "repo",
+      "dirPlaceholder": "ruta del directorio (p. ej. .claude/skills)",
+      "refPlaceholder": "ref (por defecto HEAD)",
+      "githubRequired": "Vincular una fuente de habilidades requiere la integración de GitHub. Conéctala primero en un tablero."
+    },
+    "confirmUnlinkSource": {
+      "title": "¿Desvincular esta fuente?",
+      "body": "\"{repo}\" y las habilidades que sincronizó se eliminarán. Puedes volver a vincularla más tarde.",
+      "confirm": "Desvincular"
+    },
+    "toast": {
+      "sourceLinked": "Fuente vinculada y sincronizada",
+      "linkSourceFailed": "No se pudo vincular la fuente",
+      "synced": "Sincronizado: {updated} actualizadas, {removed} eliminadas",
+      "syncFailed": "No se pudo sincronizar la fuente",
+      "changesAvailable": "Cambios disponibles",
+      "upToDate": "Actualizado",
+      "checkSourceFailed": "No se pudo comprobar la fuente",
+      "sourceUnlinked": "Fuente desvinculada",
+      "unlinkSourceFailed": "No se pudo desvincular la fuente"
     }
   }
 }

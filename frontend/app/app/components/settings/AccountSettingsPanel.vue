@@ -7,6 +7,7 @@
 // bar; bound to the `ui` store so any surface can open it and deep-link to a tab.
 import AccountTeamSettings from '~/components/layout/AccountTeamSettings.vue'
 import AccountFragmentSettings from '~/components/layout/AccountFragmentSettings.vue'
+import AccountSkillSettings from '~/components/layout/AccountSkillSettings.vue'
 
 const { t } = useI18n()
 const ui = useUiStore()
@@ -32,6 +33,12 @@ const tabs = computed(() => [
     icon: 'i-lucide-book-marked',
     slot: 'fragments',
   },
+  {
+    value: 'skills',
+    label: t('settings.account.tabs.skills'),
+    icon: 'i-lucide-book-open-check',
+    slot: 'skills',
+  },
 ])
 </script>
 
@@ -53,6 +60,14 @@ const tabs = computed(() => [
         </template>
         <template #fragments>
           <AccountFragmentSettings :account-id="accounts.activeAccountId" />
+        </template>
+        <template #skills>
+          <!-- Key on the account so a mid-modal account switch remounts against a fresh
+               account-keyed skill-library store rather than the stale initial one. -->
+          <AccountSkillSettings
+            :key="accounts.activeAccountId ?? undefined"
+            :account-id="accounts.activeAccountId"
+          />
         </template>
       </UTabs>
     </template>

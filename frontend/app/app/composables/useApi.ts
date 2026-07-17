@@ -12,6 +12,7 @@ import { followUpsApi } from './api/followUps'
 import { forkDecisionApi } from './api/forkDecision'
 import { prReviewApi } from './api/prReview'
 import { fragmentsApi } from './api/fragments'
+import { skillsApi } from './api/skills'
 import { githubApi } from './api/github'
 import { humanReviewApi } from './api/humanReview'
 import { humanTestApi } from './api/humanTest'
@@ -84,6 +85,7 @@ export function useApi() {
     password ? { 'X-Personal-Password': password } : undefined
 
   const ws = (workspaceId: string) => `/workspaces/${encodeURIComponent(workspaceId)}`
+  const acct = (accountId: string) => `/accounts/${encodeURIComponent(accountId)}`
   // Prompt-fragment library routes exist at both tiers; resolve the prefix from
   // the owner scope (ADR 0006 §8).
   const scope = (kind: FragmentOwnerKind, id: string) =>
@@ -98,11 +100,12 @@ export function useApi() {
   const send = createSend(client)
   const sendWith = createSendWith(client)
 
-  const ctx: ApiContext = { http, client, send, sendWith, ws, scope, pwHeaders }
+  const ctx: ApiContext = { http, client, send, sendWith, ws, acct, scope, pwHeaders }
 
   return {
     ...authApi(ctx),
     ...fragmentsApi(ctx),
+    ...skillsApi(ctx),
     ...modelsApi(ctx),
     ...accountsApi(ctx),
     ...platformObservabilityApi(ctx),

@@ -1875,6 +1875,9 @@
       "deselect": "選択を解除 / インスペクターを閉じる",
       "deleteBlock": "選択したブロックを削除",
       "help": "このチートシートを表示"
+    },
+    "accountSkills": {
+      "intro": "チームが Claude Skills（SKILL.md フォルダーとリソースファイル）を作成しているリポジトリをリンクします。同期されたスキルはこのアカウントのカタログに追加され、すべてのボードで共有されます。パイプラインの Skill ステップがタスクに対してその 1 つを実行します。"
     }
   },
   "settings": {
@@ -1928,7 +1931,8 @@
       "noAccount": "アカウントが選択されていません。",
       "tabs": {
         "team": "チームとアクセス",
-        "fragments": "コンテキストフラグメント"
+        "fragments": "コンテキストフラグメント",
+        "skills": "スキル"
       }
     },
     "infrastructure": {
@@ -3389,7 +3393,11 @@
       "confirmDeletePipeline": {
         "title": "このパイプラインを削除しますか？",
         "body": "「{name}」が削除されます。この操作は取り消せません。"
-      }
+      },
+      "skillPlaceholder": "スキルを選択",
+      "skillNoneAvailable": "利用できるスキルがありません。アカウント設定でスキルソースをリンクしてください。",
+      "skillMissing": "このスキルはカタログに存在しません。別のスキルを選んでください。",
+      "skillNeedsPick": "Skill ステップを保存するにはスキルの選択が必要です。"
     },
     "progress": {
       "status": {
@@ -4880,6 +4888,51 @@
       "iterations": "反復",
       "count": "{max} 回中 {attempts} 回",
       "footer": "検証コマンドが成功するか、反復の上限に達するまでループは再試行します。"
+    }
+  },
+  "skills": {
+    "unavailable": "このデプロイメントでは Claude Skills ライブラリが有効になっていません。",
+    "catalog": {
+      "title": "同期済みスキル",
+      "empty": "まだスキルが同期されていません。下のリポジトリソースをリンクしてスキルフォルダーをインポートしてください。",
+      "resources": "リソース {count} 件",
+      "pinned": "{commit} に固定"
+    },
+    "sources": {
+      "title": "リポジトリソース",
+      "empty": "リンクされたスキルソースがありません。下でスキルフォルダーを含むリポジトリディレクトリをリンクしてください。",
+      "linkTitle": "スキルソースをリンク",
+      "link": "リンクして同期",
+      "metaSynced": "同期 {date} · ref {ref}",
+      "metaNever": "未同期 · ref {ref}",
+      "changes": "変更",
+      "check": "変更を確認",
+      "sync": "再同期",
+      "unlink": "リンク解除",
+      "browseHint": "リポジトリを参照してスキルフォルダーのディレクトリを選択してください（またはリポジトリ全体をリンク）。",
+      "selectedDir": "ディレクトリ：",
+      "wholeRepo": "リポジトリ全体（ルート）。",
+      "ownerPlaceholder": "オーナー",
+      "repoPlaceholder": "リポジトリ",
+      "dirPlaceholder": "ディレクトリパス（例: .claude/skills）",
+      "refPlaceholder": "ref（デフォルト HEAD）",
+      "githubRequired": "スキルソースのリンクには GitHub 連携が必要です。まずボードで接続してください。"
+    },
+    "confirmUnlinkSource": {
+      "title": "このソースのリンクを解除しますか？",
+      "body": "\"{repo}\" とそれが同期したスキルが削除されます。後で再リンクできます。",
+      "confirm": "リンク解除"
+    },
+    "toast": {
+      "sourceLinked": "ソースをリンクして同期しました",
+      "linkSourceFailed": "ソースをリンクできませんでした",
+      "synced": "同期完了：{updated} 件更新、{removed} 件削除",
+      "syncFailed": "ソースを同期できませんでした",
+      "changesAvailable": "変更があります",
+      "upToDate": "最新です",
+      "checkSourceFailed": "ソースを確認できませんでした",
+      "sourceUnlinked": "ソースのリンクを解除しました",
+      "unlinkSourceFailed": "ソースのリンクを解除できませんでした"
     }
   }
 }
