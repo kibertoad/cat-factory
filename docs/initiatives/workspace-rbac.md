@@ -582,9 +582,12 @@ user.id)` directly, then requires `runs.execute`; a `null`/denied decision throw
   account-scoped / per-user).
 - **Slice 8 — testids added for the coming e2e (slice 10).** New stable hooks: `run-start`
   (inspector Run), and `nav-build-pipeline` / `nav-add-from-repo` / `nav-bootstrap-repo` /
-  `nav-workspace-settings` on the SideBar. Existing `frame-add-task` / `frame-add-initiative` /
-  `inspector-archive` / `inspector-delete` / `run-stop` / `run-reset` / `agent-failure-retry` are
-  reused. Slice 9 (membership UI) + slice 10 (e2e + ADR conversion) remain.
+  `nav-workspace-settings` on the SideBar, plus `frame-add-task-empty` for the empty-state
+  "add first task" button (disambiguated from the frame-header `frame-add-task`, which co-renders
+  with it on an empty frame — two nodes sharing one id would break Playwright strict-mode
+  resolution). Existing `frame-add-task` / `frame-add-initiative` / `inspector-archive` /
+  `inspector-delete` / `run-stop` / `run-reset` / `agent-failure-retry` are reused. Slice 9
+  (membership UI) + slice 10 (e2e + ADR conversion) remain.
 
 ## Out of scope
 
