@@ -8,6 +8,7 @@ import { Hono } from 'hono'
 import type { Context } from 'hono'
 import type { IncidentEnrichmentModule } from '@cat-factory/orchestration'
 import type { AppEnv } from '../../http/env.js'
+import { requireWorkspacePermission } from '../../http/workspaceAccess.js'
 import { param } from '../../http/params.js'
 
 /** Resolve the incident-enrichment module or send a 503, returning null when unconfigured. */
@@ -35,6 +36,7 @@ const unavailable = <E extends AppEnv>(c: Context<E>) =>
  */
 export function incidentEnrichmentController(): Hono<AppEnv> {
   const app = new Hono<AppEnv>()
+  app.use('*', requireWorkspacePermission('settings.manage'))
 
   buildHonoRoute(app, getIncidentEnrichmentContract, async (c) => {
     const ie = requireIncidentEnrichment(c)

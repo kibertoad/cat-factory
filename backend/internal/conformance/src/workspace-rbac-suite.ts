@@ -116,18 +116,28 @@ export function defineWorkspaceRbacSuite(harness: ConformanceHarness): void {
       expect(snap.status).toBe(200)
       expect(snap.body.access?.role).toBe('viewer')
 
-      // Any state-changing method is refused wholesale (403), even a board rename.
-      const patch = await app.call('PATCH', `/workspaces/${wsId}`, { name: 'nope' }, hb)
-      expect(patch.status).toBe(403)
+      // Any state-changing method is refused wholesale (403) — a board.write like adding a block.
+      const write = await app.call(
+        'POST',
+        `/workspaces/${wsId}/blocks`,
+        { type: 'service', position: { x: 0, y: 0 } },
+        hb,
+      )
+      expect(write.status).toBe(403)
 
       // The read-only stream ticket mint is the one allowlisted write.
       const ticket = await app.call('POST', `/workspaces/${wsId}/events/ticket`, {}, hb)
       expect(ticket.status).toBe(200)
 
-      // A member (C) passes the floor and may write.
+      // A member (C) passes the floor and may perform a board.write (add a block).
       const hc = bearer(await app.session({ id: c }))
-      const patch2 = await app.call('PATCH', `/workspaces/${wsId}`, { name: `ok-${uniq()}` }, hc)
-      expect(patch2.status).toBe(200)
+      const write2 = await app.call(
+        'POST',
+        `/workspaces/${wsId}/blocks`,
+        { type: 'service', position: { x: 0, y: 0 } },
+        hc,
+      )
+      expect(write2.status).toBe(201)
     })
 
     it('cache coherence: granting account membership is visible on the immediately following request', async () => {
@@ -228,8 +238,13 @@ export function defineWorkspaceRbacSuite(harness: ConformanceHarness): void {
         ha,
       )
       expect(promote.status).toBe(200)
-      const bWrite = await app.call('PATCH', `/workspaces/${wsId}`, { name: `ok-${uniq()}` }, hb)
-      expect(bWrite.status).toBe(200)
+      const bWrite = await app.call(
+        'POST',
+        `/workspaces/${wsId}/blocks`,
+        { type: 'service', position: { x: 0, y: 0 } },
+        hb,
+      )
+      expect(bWrite.status).toBe(201)
 
       // Remove B — immediately denied again (the removal dropped the cache group).
       const remove = await app.call('DELETE', `/workspaces/${wsId}/members/${b}`, undefined, ha)
@@ -264,6 +279,55 @@ export function defineWorkspaceRbacSuite(harness: ConformanceHarness): void {
         (await app.call('PUT', `/workspaces/${wsId}/access-mode`, { accessMode: 'account' }, hc))
           .status,
       ).toBe(403)
+    })
+
+    it('admin-tier enforcement: a plain member is refused settings/integrations/secrets writes (403); the admin is not (slice 6)', async () => {
+      const app = harness.makeApp()
+      const { adminA, c, wsId } = await scenario(app)
+      const ha = bearer(await app.session({ id: adminA }))
+      // Restrict + scope C as a plain member: full board.write / runs.execute, but none of the
+      // admin permissions. The writes below all pass the viewer floor (C is a member), so a 403
+      // here can ONLY come from the admin-tier `requireWorkspacePermission` gate.
+      await app.call('PUT', `/workspaces/${wsId}/access-mode`, { accessMode: 'restricted' }, ha)
+      await app.call('POST', `/workspaces/${wsId}/members`, { userId: c, role: 'member' }, ha)
+      const hc = bearer(await app.session({ id: c }))
+
+      // settings.manage — board rename (a valid body, so request validation passes and the
+      // permission gate is what rejects).
+      expect(
+        (await app.call('PATCH', `/workspaces/${wsId}`, { name: `no-${uniq()}` }, hc)).status,
+      ).toBe(403)
+      // settings.manage via the controller-level middleware (workspace settings PUT).
+      expect(
+        (await app.call('PUT', `/workspaces/${wsId}/settings`, { storeAgentContext: false }, hc))
+          .status,
+      ).toBe(403)
+      // integrations.manage — the controller-level middleware refuses BEFORE any 503/lookup, so a
+      // member gets 403 whether or not the integration is wired (its config isn't even revealed).
+      expect(
+        (await app.call('DELETE', `/workspaces/${wsId}/package-registries/none`, undefined, hc))
+          .status,
+      ).toBe(403)
+      // secrets.manage.
+      expect(
+        (await app.call('DELETE', `/workspaces/${wsId}/vendor-credentials/none`, undefined, hc))
+          .status,
+      ).toBe(403)
+
+      // The account admin (A) clears every admin gate: the rename succeeds, and the
+      // integration/secret deletes resolve past the permission check (404/503/204 by wiring),
+      // never a 403.
+      expect(
+        (await app.call('PATCH', `/workspaces/${wsId}`, { name: `ok-${uniq()}` }, ha)).status,
+      ).toBe(200)
+      expect(
+        (await app.call('DELETE', `/workspaces/${wsId}/package-registries/none`, undefined, ha))
+          .status,
+      ).not.toBe(403)
+      expect(
+        (await app.call('DELETE', `/workspaces/${wsId}/vendor-credentials/none`, undefined, ha))
+          .status,
+      ).not.toBe(403)
     })
 
     it('only account members can be scoped: adding an outsider is rejected (422)', async () => {
