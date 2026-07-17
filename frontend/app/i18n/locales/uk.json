@@ -2298,6 +2298,8 @@
         "created": "Створено {date}",
         "lastUsed": "востаннє використано {date}",
         "neverUsed": "ніколи не використовувався",
+        "createdBy": "створено {user}",
+        "createdByYou": "вами",
         "revoke": "Відкликати токен"
       },
       "add": {

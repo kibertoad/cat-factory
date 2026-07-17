@@ -41,6 +41,8 @@ export const publicApiKeySchema = v.object({
   label: v.string(),
   /** What the key is allowed to do on `/api/v1` (read ⊂ write ⊂ admin). */
   scope: publicApiScopeSchema,
+  /** The user who minted the key (`usr_*`), for audit/UI attribution; `null` when unknown. */
+  createdByUserId: v.nullable(v.string()),
   createdAt: v.number(),
   lastUsedAt: v.nullable(v.number()),
   /** Set when the key was revoked (tombstone); a revoked key never authenticates. */

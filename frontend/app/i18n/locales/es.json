@@ -2298,6 +2298,8 @@
         "created": "Creado el {date}",
         "lastUsed": "usado por última vez el {date}",
         "neverUsed": "nunca usado",
+        "createdBy": "creado por {user}",
+        "createdByYou": "ti",
         "revoke": "Revocar token"
       },
       "add": {

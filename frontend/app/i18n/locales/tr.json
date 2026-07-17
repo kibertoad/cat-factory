@@ -2420,6 +2420,8 @@
         "created": "{date} tarihinde oluşturuldu",
         "lastUsed": "son kullanım {date}",
         "neverUsed": "hiç kullanılmadı",
+        "createdBy": "oluşturan: {user}",
+        "createdByYou": "siz",
         "revoke": "Belirteci iptal et"
       },
       "add": {

@@ -35,7 +35,9 @@ export function eventsController(): Hono<AppEnv> {
   app.post('/workspaces/:workspaceId/events/ticket', async (c) => {
     const cfg = c.get('container').config.auth
     const workspaceId = param(c, 'workspaceId')
-    const ticket = await mintWsTicket(cfg, workspaceId)
+    // Stamp the minting user onto the ticket for AUDIT only — verification stays
+    // membership-blind (see `authorizeWsUpgrade`). Absent in dev-open (no session).
+    const ticket = await mintWsTicket(cfg, workspaceId, c.get('user')?.id)
     // Auth disabled (dev) yields an empty ticket: the handshake is open, none needed.
     return c.json(ticket ? { ticket, expiresInMs: WS_TICKET_TTL_MS } : { ticket: '' })
   })

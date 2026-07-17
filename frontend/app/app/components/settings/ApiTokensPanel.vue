@@ -30,7 +30,21 @@ function scopeLabel(scope: PublicApiScope): string {
 
 const scopeItems = computed(() => SCOPES.map((value) => ({ value, label: scopeLabel(value) })))
 const ui = useUiStore()
+const auth = useAuthStore()
 const store = usePublicApiKeysStore()
+
+/**
+ * The minter to attribute a key to. `null` when the key predates the audit column (or was
+ * minted with no session), so the row simply omits the segment. When the minter is the
+ * signed-in user we show a localized "you"; otherwise the raw `usr_*` id (the list has no
+ * user-name lookup — the audit id is the honest, non-misleading thing to show).
+ */
+function minterLabel(key: PublicApiKey): string | null {
+  if (!key.createdByUserId) return null
+  return key.createdByUserId === auth.user?.id
+    ? t('settings.apiTokens.list.createdByYou')
+    : key.createdByUserId
+}
 const toast = useToast()
 const { confirmAction, toastDone } = useConfirmAction()
 
@@ -191,6 +205,10 @@ async function revokeToken(key: PublicApiKey) {
                   })
                 }}</template>
                 <template v-else>{{ t('settings.apiTokens.list.neverUsed') }}</template>
+                <template v-if="minterLabel(key)">
+                  <span aria-hidden="true"> · </span>
+                  {{ t('settings.apiTokens.list.createdBy', { user: minterLabel(key) }) }}
+                </template>
               </div>
             </div>
             <UButton

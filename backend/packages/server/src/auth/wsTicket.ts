@@ -19,18 +19,32 @@ export const WS_TICKET_TTL_MS = 60 * 1000
 export interface WsTicket {
   aud: typeof TOKEN_AUDIENCE.wsTicket
   workspaceId: string
+  /**
+   * The signed-in user the ticket was minted for — AUDIT ONLY. Verification stays
+   * membership-blind (a ticket authorises one workspace handshake, not a role), so this
+   * claim is never consulted by {@link authorizeWsUpgrade}; it exists so a mint can be
+   * attributed to a user in logs/traces. Absent (`undefined`) when auth is disabled or the
+   * minting request had no session.
+   */
+  userId?: string
   exp: number
 }
 
 /**
  * Mint a workspace-scoped WS ticket. Returns `''` when auth is disabled (dev) — the
- * handshake is then open and no ticket is needed.
+ * handshake is then open and no ticket is needed. `userId` (the minting session's user, if
+ * any) is stamped for AUDIT only — it is never read on verify (which stays membership-blind).
  */
-export async function mintWsTicket(auth: AuthConfig, workspaceId: string): Promise<string> {
+export async function mintWsTicket(
+  auth: AuthConfig,
+  workspaceId: string,
+  userId?: string,
+): Promise<string> {
   if (!auth.enabled) return ''
   const ticket: WsTicket = {
     aud: TOKEN_AUDIENCE.wsTicket,
     workspaceId,
+    ...(userId ? { userId } : {}),
     exp: Date.now() + WS_TICKET_TTL_MS,
   }
   return signerFor(auth.sessionSecret).sign(ticket)

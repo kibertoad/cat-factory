@@ -286,7 +286,11 @@ POST   /workspaces/:ws/environments/custom-manifest/repair          generate/fix
 ```
 
 Local-mode-only per-user override (`EnvironmentUserHandlerController`, mounted at ROOT with no
-`/workspaces` prefix, 401 without a user, 503 where unwired):
+`/workspaces` prefix, 401 without a user, 503 where unwired). Because it sits outside the
+`/workspaces/:ws/*` gate it resolves workspace access ITSELF via the shared `loadWorkspaceAccess`
+and requires `runs.execute` (workspace-rbac slice 7): a caller with no access gets a 404 (existence
+stays hidden), a resolved-but-insufficient caller a 403 — and that check runs BEFORE the 503, so an
+unwired facade never reveals a board to a non-member:
 
 ```
 GET    /me/environment-handlers/:workspaceId                        list this user's overrides

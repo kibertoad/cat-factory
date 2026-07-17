@@ -29,6 +29,7 @@ function publicApiKeyToWire(record: PublicApiKeyRecord): PublicApiKey {
     workspaceId: record.workspaceId,
     label: record.label,
     scope: record.scope,
+    createdByUserId: record.createdByUserId,
     createdAt: record.createdAt,
     lastUsedAt: record.lastUsedAt,
     revokedAt: record.revokedAt,
@@ -60,7 +61,13 @@ export function publicApiKeyController(): Hono<AppEnv> {
       return c.json({ error: { code: 'not_found', message: 'Workspace not found' } }, 404)
     }
     const { label, scope } = c.req.valid('json')
-    const { record, secret } = await publicApiKeys.issue({ accountId, workspaceId }, label, scope)
+    // Attribute the mint to the acting user (audit + UI); `null` in dev-open (no session).
+    const createdByUserId = c.get('user')?.id ?? null
+    const { record, secret } = await publicApiKeys.issue(
+      { accountId, workspaceId, createdByUserId },
+      label,
+      scope,
+    )
     return c.json({ key: publicApiKeyToWire(record), secret }, 201)
   })
 

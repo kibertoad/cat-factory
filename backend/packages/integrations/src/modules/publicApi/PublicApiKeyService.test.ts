@@ -67,6 +67,18 @@ describe('PublicApiKeyService', () => {
     })
   })
 
+  it('records the minting user (audit), defaulting to null when none is supplied', async () => {
+    const { service } = makeService()
+    const attributed = await service.issue(
+      { accountId: 'a', workspaceId: 'w', createdByUserId: 'usr_7' },
+      'k',
+    )
+    expect(attributed.record.createdByUserId).toBe('usr_7')
+    // A mint with no session (dev-open) stores null rather than an empty string.
+    const anon = await service.issue({ accountId: 'a', workspaceId: 'w' }, 'k2')
+    expect(anon.record.createdByUserId).toBeNull()
+  })
+
   it('persists the requested scope and authenticates back with it', async () => {
     const { service } = makeService()
     const readKey = await service.issue({ accountId: 'a', workspaceId: 'w' }, 'monitor', 'read')

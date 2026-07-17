@@ -9,6 +9,7 @@ interface PublicApiKeyRow {
   label: string
   scope: string
   secret_hash: string
+  created_by_user_id: string | null
   created_at: number
   last_used_at: number | null
   revoked_at: number | null
@@ -22,6 +23,7 @@ function rowToRecord(row: PublicApiKeyRow): PublicApiKeyRecord {
     label: row.label,
     scope: row.scope as PublicApiScope,
     secretHash: row.secret_hash,
+    createdByUserId: row.created_by_user_id,
     createdAt: row.created_at,
     lastUsedAt: row.last_used_at,
     revokedAt: row.revoked_at,
@@ -40,8 +42,8 @@ export class D1PublicApiKeyRepository implements PublicApiKeyRepository {
     await this.db
       .prepare(
         `INSERT INTO public_api_keys
-          (id, account_id, workspace_id, label, scope, secret_hash, created_at, last_used_at, revoked_at)
-         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+          (id, account_id, workspace_id, label, scope, secret_hash, created_by_user_id, created_at, last_used_at, revoked_at)
+         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
       )
       .bind(
         record.id,
@@ -50,6 +52,7 @@ export class D1PublicApiKeyRepository implements PublicApiKeyRepository {
         record.label,
         record.scope,
         record.secretHash,
+        record.createdByUserId,
         record.createdAt,
         record.lastUsedAt,
         record.revokedAt,

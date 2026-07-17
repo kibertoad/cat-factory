@@ -2419,6 +2419,8 @@
         "created": "נוצר בתאריך {date}",
         "lastUsed": "שימוש אחרון בתאריך {date}",
         "neverUsed": "מעולם לא היה בשימוש",
+        "createdBy": "נוצר על ידי {user}",
+        "createdByYou": "אתה",
         "revoke": "בטל אסימון"
       },
       "add": {
