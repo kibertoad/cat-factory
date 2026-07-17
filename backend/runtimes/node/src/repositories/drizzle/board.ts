@@ -259,8 +259,8 @@ export class DrizzleWorkspaceMemberRepository implements WorkspaceMemberReposito
   async getRolesForUserInWorkspaces(
     userId: string,
     workspaceIds: string[],
-  ): Promise<Map<string, WorkspaceRole>> {
-    const out = new Map<string, WorkspaceRole>()
+  ): Promise<Record<string, WorkspaceRole>> {
+    const out: Record<string, WorkspaceRole> = {}
     if (workspaceIds.length === 0) return out
     // ONE chunked-IN read per chunk (never a per-board point-read loop).
     for (let i = 0; i < workspaceIds.length; i += 500) {
@@ -273,7 +273,7 @@ export class DrizzleWorkspaceMemberRepository implements WorkspaceMemberReposito
             inArray(workspaceMembers.workspace_id, workspaceIds.slice(i, i + 500)),
           ),
         )
-      for (const r of rows) out.set(r.id, parseWorkspaceRole(r.role))
+      for (const r of rows) out[r.id] = parseWorkspaceRole(r.role)
     }
     return out
   }

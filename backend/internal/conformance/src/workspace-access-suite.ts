@@ -146,12 +146,12 @@ export function defineWorkspaceAccessSuite(harness: ConformanceHarness): void {
         b.workspace.id,
         c.workspace.id,
       ])
-      expect(roles.get(a.workspace.id)).toBe('admin')
-      expect(roles.get(b.workspace.id)).toBe('viewer')
-      // No row for board c ⇒ simply absent from the map.
-      expect(roles.has(c.workspace.id)).toBe(false)
-      // Empty input ⇒ empty map, no query.
-      expect((await repo.getRolesForUserInWorkspaces(userId, [])).size).toBe(0)
+      expect(roles[a.workspace.id]).toBe('admin')
+      expect(roles[b.workspace.id]).toBe('viewer')
+      // No row for board c ⇒ simply absent from the record.
+      expect(Object.hasOwn(roles, c.workspace.id)).toBe(false)
+      // Empty input ⇒ empty record, no query.
+      expect(Object.keys(await repo.getRolesForUserInWorkspaces(userId, [])).length).toBe(0)
     })
 
     it('batches a large workspace-id list across chunk boundaries (D1 param ceiling)', async () => {
@@ -176,10 +176,10 @@ export function defineWorkspaceAccessSuite(harness: ConformanceHarness): void {
       ids.splice(100, 0, b.workspace.id)
 
       const roles = await repo.getRolesForUserInWorkspaces(userId, ids)
-      expect(roles.get(a.workspace.id)).toBe('admin')
-      expect(roles.get(b.workspace.id)).toBe('viewer')
+      expect(roles[a.workspace.id]).toBe('admin')
+      expect(roles[b.workspace.id]).toBe('viewer')
       // Only the two real rows resolve; every ghost id is absent.
-      expect(roles.size).toBe(2)
+      expect(Object.keys(roles).length).toBe(2)
     })
 
     it('removeByAccountMembership drops only the boards owned by the given account', async () => {

@@ -105,6 +105,19 @@ const NON_REMOTE: Record<string, Record<string, Reason>> = {
     updateSettings: 'admin',
   },
   membershipRepository: { upsert: 'admin', remove: 'admin' },
+  // Workspace-RBAC member tier (slice 3). The gate's per-request `get` + the list-annotation
+  // `getRolesForUserInWorkspaces` are now allow-listed (REMOTE_PERSISTENCE_METHODS — the two
+  // reads that run on every signed edge request). The roster reads back the member-management
+  // API (a later slice, no SPA path yet → pending), and the mutations are admin-gated member
+  // management — the machine token is role-blind, so exposing them would let a member self-grant,
+  // exactly like `membershipRepository.upsert`/`remove`.
+  workspaceMemberRepository: {
+    listByWorkspace: 'pending',
+    listWorkspaceIdsForUser: 'pending',
+    upsert: 'admin',
+    remove: 'admin',
+    removeByAccountMembership: 'admin',
+  },
   // `get`/`listByIds` are now allow-listed (the member-display reads: the account members panel's
   // roster enrichment + the single-user display lookup, bound by co-membership via the `user`/
   // `userList` scope rules). They carry only the presentational `UserRecord` — the password

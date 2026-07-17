@@ -146,16 +146,19 @@ export class WorkspaceService {
   /**
    * The caller's explicit member role in each of `workspaceIds`, in ONE chunked-IN read —
    * used to annotate a workspace LIST with the viewer's effective role without a per-board
-   * round-trip. Empty map when the member tier isn't wired or nothing matches.
+   * round-trip. Empty map when the member tier isn't wired or nothing matches. The repo
+   * returns a serializable `Record` (so it round-trips over the mothership RPC); we rebuild
+   * the `Map` the controller consumes here.
    */
-  rolesForUserInWorkspaces(
+  async rolesForUserInWorkspaces(
     userId: string,
     workspaceIds: string[],
   ): Promise<Map<string, WorkspaceRole>> {
-    return (
-      this.workspaceMemberRepository?.getRolesForUserInWorkspaces(userId, workspaceIds) ??
-      Promise.resolve(new Map())
-    )
+    const roles = await (this.workspaceMemberRepository?.getRolesForUserInWorkspaces(
+      userId,
+      workspaceIds,
+    ) ?? Promise.resolve({}))
+    return new Map(Object.entries(roles))
   }
 
   async create(
