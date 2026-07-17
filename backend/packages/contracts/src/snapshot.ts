@@ -26,6 +26,7 @@ import { infraSetupSchema } from './infra-setup.js'
 import { initiativeSchema } from './initiative.js'
 import { initiativePresetDescriptorSchema } from './initiative-preset.js'
 import { sharedStackSchema } from './shared-stacks.js'
+import { skillSummarySchema } from './skill-library.js'
 
 // The full board snapshot returned by GET /workspaces/:id (and POST /workspaces).
 // It lives in its own module because it references both ./entities and
@@ -259,5 +260,14 @@ export const workspaceSnapshotSchema = v.object({
    * wire (absent on an older backend), the SPA then simply shows no banner.
    */
   infraSetup: v.optional(infraSetupSchema),
+  /**
+   * The account's repo-sourced Claude Skills catalog (lightweight `{ id, name, description }`),
+   * shared across the account's workspaces. The pipeline builder's per-step skill picker binds a
+   * `skill` step's `stepOptions.skillId` to one of these. Attached by the shared
+   * `WorkspaceController` from the account skill-catalog cache (one read) when the skill library
+   * is wired; optional on the wire and omitted when the feature is off or the account has no
+   * skills. Full instructions/resources are fetched on demand by the management surface, not here.
+   */
+  skills: v.optional(v.array(skillSummarySchema)),
 })
 export type WorkspaceSnapshot = v.InferOutput<typeof workspaceSnapshotSchema>

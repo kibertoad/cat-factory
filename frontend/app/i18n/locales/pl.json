@@ -1875,6 +1875,9 @@
       "deselect": "Odznacz / zamknij inspektora",
       "deleteBlock": "Usuń wybrany blok",
       "help": "Pokaż tę ściągę"
+    },
+    "accountSkills": {
+      "intro": "Połącz repozytoria, w których Twój zespół tworzy Claude Skills (folder SKILL.md wraz z plikami zasobów). Zsynchronizowane umiejętności trafiają do katalogu tego konta, współdzielonego przez wszystkie tablice, a krok Skill w potoku uruchamia jedną z nich dla zadania."
     }
   },
   "settings": {
@@ -1928,7 +1931,8 @@
       "noAccount": "Nie wybrano konta.",
       "tabs": {
         "team": "Zespół i dostęp",
-        "fragments": "Fragmenty kontekstu"
+        "fragments": "Fragmenty kontekstu",
+        "skills": "Umiejętności"
       }
     },
     "providerConnection": {
@@ -3377,7 +3381,11 @@
       "confirmDeletePipeline": {
         "title": "Usunąć ten pipeline?",
         "body": "\"{name}\" zostanie usunięty. Tej operacji nie można cofnąć."
-      }
+      },
+      "skillPlaceholder": "Wybierz umiejętność",
+      "skillNoneAvailable": "Brak dostępnych umiejętności. Połącz źródło umiejętności w ustawieniach konta.",
+      "skillMissing": "Tej umiejętności nie ma już w katalogu; wybierz inną.",
+      "skillNeedsPick": "Krok Skill wymaga wybranej umiejętności, zanim będzie można zapisać."
     },
     "progress": {
       "status": {
@@ -4868,6 +4876,51 @@
       "iterations": "Iteracje",
       "count": "{attempts} z {max}",
       "footer": "Pętla ponawia próby, aż polecenie walidacji się powiedzie lub wyczerpie się budżet iteracji."
+    }
+  },
+  "skills": {
+    "unavailable": "Biblioteka Claude Skills nie jest włączona w tym wdrożeniu.",
+    "catalog": {
+      "title": "Zsynchronizowane umiejętności",
+      "empty": "Nie zsynchronizowano jeszcze żadnych umiejętności. Połącz poniżej źródło repozytorium, aby zaimportować jego foldery umiejętności.",
+      "resources": "zasoby: {count}",
+      "pinned": "przypięta do {commit}"
+    },
+    "sources": {
+      "title": "Źródła repozytoriów",
+      "empty": "Brak połączonych źródeł umiejętności. Połącz poniżej katalog repozytorium z folderami umiejętności.",
+      "linkTitle": "Połącz źródło umiejętności",
+      "link": "Połącz i zsynchronizuj",
+      "metaSynced": "zsynchronizowano {date} · ref {ref}",
+      "metaNever": "nigdy nie zsynchronizowano · ref {ref}",
+      "changes": "Zmiany",
+      "check": "Sprawdź zmiany",
+      "sync": "Zsynchronizuj ponownie",
+      "unlink": "Odłącz",
+      "browseHint": "Przejrzyj repozytorium i wybierz katalog z folderami umiejętności (lub połącz całe repozytorium).",
+      "selectedDir": "Katalog:",
+      "wholeRepo": "Całe repozytorium (korzeń).",
+      "ownerPlaceholder": "właściciel",
+      "repoPlaceholder": "repozytorium",
+      "dirPlaceholder": "ścieżka katalogu (np. .claude/skills)",
+      "refPlaceholder": "ref (domyślnie HEAD)",
+      "githubRequired": "Połączenie źródła umiejętności wymaga integracji z GitHub. Najpierw połącz ją na tablicy."
+    },
+    "confirmUnlinkSource": {
+      "title": "Odłączyć to źródło?",
+      "body": "\"{repo}\" oraz zsynchronizowane z niego umiejętności zostaną usunięte. Możesz połączyć je ponownie później.",
+      "confirm": "Odłącz"
+    },
+    "toast": {
+      "sourceLinked": "Źródło połączone i zsynchronizowane",
+      "linkSourceFailed": "Nie udało się połączyć źródła",
+      "synced": "Zsynchronizowano: zaktualizowano {updated}, usunięto {removed}",
+      "syncFailed": "Nie udało się zsynchronizować źródła",
+      "changesAvailable": "Dostępne zmiany",
+      "upToDate": "Aktualne",
+      "checkSourceFailed": "Nie udało się sprawdzić źródła",
+      "sourceUnlinked": "Źródło odłączone",
+      "unlinkSourceFailed": "Nie udało się odłączyć źródła"
     }
   }
 }

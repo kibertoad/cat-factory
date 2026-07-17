@@ -35,6 +35,21 @@ export const accountSkillSchema = v.object({
 })
 export type AccountSkill = v.InferOutput<typeof accountSkillSchema>
 
+/**
+ * The lightweight per-skill projection carried in the workspace snapshot for the pipeline
+ * builder's skill picker (id + name + description only — NOT the full `instructions` / resource
+ * manifest, which would bloat every board load). The account catalog is shared across the
+ * account's workspaces, so this is the account's skills served through the catalog cache in one
+ * read (see docs/initiatives/repo-skills.md "No N+1"). The account-settings management surface
+ * fetches the full {@link AccountSkill} via `GET /accounts/:accountId/skills` instead.
+ */
+export const skillSummarySchema = v.object({
+  id: v.string(),
+  name: v.string(),
+  description: v.string(),
+})
+export type SkillSummary = v.InferOutput<typeof skillSummarySchema>
+
 /** A repo directory an account links as a source of skill folders. */
 export const skillSourceSchema = v.object({
   id: v.string(),

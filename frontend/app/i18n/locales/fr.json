@@ -1875,6 +1875,9 @@
       "deselect": "Désélectionner / fermer l'inspecteur",
       "deleteBlock": "Supprimer le bloc sélectionné",
       "help": "Afficher cet aide-mémoire"
+    },
+    "accountSkills": {
+      "intro": "Reliez les dépôts où votre équipe crée des Claude Skills (un dossier SKILL.md plus des fichiers de ressources). Les compétences synchronisées rejoignent le catalogue de ce compte, partagé par tous les tableaux, et l'étape Skill d'un pipeline en exécute une sur une tâche."
     }
   },
   "settings": {
@@ -1928,7 +1931,8 @@
       "noAccount": "Aucun compte sélectionné.",
       "tabs": {
         "team": "Équipe et accès",
-        "fragments": "Fragments de contexte"
+        "fragments": "Fragments de contexte",
+        "skills": "Compétences"
       }
     },
     "providerConnection": {
@@ -3377,7 +3381,11 @@
       "confirmDeletePipeline": {
         "title": "Supprimer ce pipeline ?",
         "body": "\"{name}\" sera supprimé. Cette action est irréversible."
-      }
+      },
+      "skillPlaceholder": "Sélectionner une compétence",
+      "skillNoneAvailable": "Aucune compétence disponible. Reliez une source de compétences dans les paramètres du compte.",
+      "skillMissing": "Cette compétence n'est plus dans le catalogue ; choisissez-en une autre.",
+      "skillNeedsPick": "Une étape Skill a besoin d'une compétence sélectionnée avant de pouvoir enregistrer."
     },
     "progress": {
       "status": {
@@ -4868,6 +4876,51 @@
       "iterations": "Itérations",
       "count": "{attempts} sur {max}",
       "footer": "La boucle réessaie jusqu'à ce que la commande de validation réussisse ou que le budget d'itérations soit épuisé."
+    }
+  },
+  "skills": {
+    "unavailable": "La bibliothèque Claude Skills n'est pas activée pour ce déploiement.",
+    "catalog": {
+      "title": "Compétences synchronisées",
+      "empty": "Aucune compétence synchronisée pour l'instant. Reliez une source de dépôt ci-dessous pour importer ses dossiers de compétences.",
+      "resources": "{count} ressources",
+      "pinned": "épinglée sur {commit}"
+    },
+    "sources": {
+      "title": "Sources de dépôt",
+      "empty": "Aucune source de compétences reliée. Reliez ci-dessous un répertoire de dépôt contenant des dossiers de compétences.",
+      "linkTitle": "Relier une source de compétences",
+      "link": "Relier et synchroniser",
+      "metaSynced": "synchronisée {date} · réf {ref}",
+      "metaNever": "jamais synchronisée · réf {ref}",
+      "changes": "Modifications",
+      "check": "Vérifier les modifications",
+      "sync": "Resynchroniser",
+      "unlink": "Dissocier",
+      "browseHint": "Parcourez le dépôt et choisissez le répertoire des dossiers de compétences (ou reliez tout le dépôt).",
+      "selectedDir": "Répertoire :",
+      "wholeRepo": "Dépôt entier (racine).",
+      "ownerPlaceholder": "propriétaire",
+      "repoPlaceholder": "dépôt",
+      "dirPlaceholder": "chemin du répertoire (p. ex. .claude/skills)",
+      "refPlaceholder": "réf (HEAD par défaut)",
+      "githubRequired": "Relier une source de compétences nécessite l'intégration GitHub. Connectez-la d'abord sur un tableau."
+    },
+    "confirmUnlinkSource": {
+      "title": "Dissocier cette source ?",
+      "body": "\"{repo}\" et les compétences qu'elle a synchronisées seront supprimées. Vous pourrez la relier de nouveau plus tard.",
+      "confirm": "Dissocier"
+    },
+    "toast": {
+      "sourceLinked": "Source reliée et synchronisée",
+      "linkSourceFailed": "Impossible de relier la source",
+      "synced": "Synchronisé : {updated} mises à jour, {removed} supprimées",
+      "syncFailed": "Impossible de synchroniser la source",
+      "changesAvailable": "Modifications disponibles",
+      "upToDate": "À jour",
+      "checkSourceFailed": "Impossible de vérifier la source",
+      "sourceUnlinked": "Source dissociée",
+      "unlinkSourceFailed": "Impossible de dissocier la source"
     }
   }
 }

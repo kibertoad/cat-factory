@@ -74,7 +74,7 @@ The reference implementations to copy per slice:
 | 0   | Tracker (this doc)                                                                                                                                                                                                                                                                                                                                                                                                           | done   | —         |
 | 1   | **Data + sync core**: shared `repo-source-sync` helper extraction + `FragmentSourceService` refactor; kernel ports (`SkillSourceRepository`, `AccountSkillRepository`); `skill_sources` + `account_skills` D1 ⇄ Drizzle + conformance; `SkillSourceService` / `SkillCatalogService`; `AppCaches.skillCatalog`; contracts + `SkillLibraryController` (account tier) + facade wiring                                           | done   | (this PR) |
 | 2   | **Execution**: `stepOptionsSchema.skillId`; `registerSkillAgentKind` (surface `container-coding`, `noChangesTolerated`); `AgentRunContext.skill`; `skillResolver` in `AgentContextBuilder` + facade wiring; `ContainerAgentExecutor` harness-aware rendering (top-level `skill` job-body field); executor-harness native claude-code skills write + image-tag bump; pipeline-save validation; per-run `skillVersion` pinning | done   | (this PR) |
-| 3   | **Frontend**: `skill` palette block + per-step skill picker bound to `stepOptions[i].skillId`; snapshot `skills` list; account-settings Skills management UI (link/sync/status); i18n in ALL locales                                                                                                                                                                                                                         | todo   | —         |
+| 3   | **Frontend**: `skill` palette block + per-step skill picker bound to `stepOptions[i].skillId`; snapshot `skills` list; account-settings Skills management UI (link/sync/status); i18n in ALL locales                                                                                                                                                                                                                         | done   | (this PR) |
 | 4   | **Freshness automation**: push-webhook `skill-source-resync` enqueue + queue handler (both runtimes); dispatch-time self-verifying probe on `skillCatalog` (per-source `latestCommitSha`, degrade to last-synced on failure)                                                                                                                                                                                                 | todo   | —         |
 
 Wrap-up: convert this tracker into an ADR under `backend/docs/adr/` and delete it (repo rule).
@@ -189,3 +189,31 @@ Wrap-up: convert this tracker into an ADR under `backend/docs/adr/` and delete i
   `CLAUDE_CONFIG_DIR/skills/<name>/SKILL.md` (what the 1.46.0 image bump is for). If a future CLI
   version changes skill discovery, the run loses its guidance silently — keep the harness image's
   claude-code version in step with this contract.
+
+### Slice 3 notes (carried forward)
+
+- **The `skill` palette block needs NO bespoke frontend registration.** Because the `skill` kind
+  is a default registered kind carrying `presentation`, it already flows through the snapshot's
+  `customAgentKinds` → `useAgentsStore().registerCustomKinds`, so it lands as a first-class palette
+  block (category `build`) with no per-kind SPA code. Slice 3's builder work is purely the SKILL
+  PICKER around it.
+- **Snapshot carries a LIGHTWEIGHT skill summary, not the full `AccountSkill`.** A new
+  `skillSummarySchema` (`{ id, name, description }`) is attached to `workspaceSnapshotSchema` as
+  `skills`, read via the account catalog CACHE in one read (per "No N+1") and fault-isolated
+  (`snapshotSkills` degrades to `undefined` on any failure so it never 500s the board). The full
+  `instructions`/resource manifest stays off the board load — the management surface fetches it
+  on demand via `GET /accounts/:accountId/skills`. Two stores: the snapshot-hydrated
+  `useSkillsStore` (picker catalog) and the on-demand account-keyed `useSkillLibrary(accountId)`
+  (management), the latter pushing updated summaries back into the former after a sync so the
+  picker stays in step without a board reload.
+- **Skills are account-tier, so the API prefix is `/accounts/:id` (`acct` helper), NOT the
+  fragment two-tier `scope`.** The management store gates on two 503s: the catalog read
+  (`available`) toggles the whole panel, while the finer `sourcesAvailable` hides only the
+  link/sync form when the GitHub integration is off (the catalog still lists).
+- **Builder validation mirrors the backend.** An enabled `skill` step with no `stepOptions.skillId`
+  shows an inline "needs a skill" hint (like `gatingNeedsEstimator`); the backend
+  `assertValidSkillSteps` remains the hard gate on save/start. A picked-but-missing id
+  (renamed/unlinked source) shows an amber "pick another" note.
+- **i18n:** new `skills.*` namespace + `settings.account.tabs.skills` + `layout.accountSkills.intro`
+  - `pipeline.builder.skill*`, translated for real in all 10 locales. The resource-count line is
+    phrased to avoid plural forms (no pl/uk `pluralRules` dependency).

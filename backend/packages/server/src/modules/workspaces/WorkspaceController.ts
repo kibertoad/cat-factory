@@ -15,6 +15,7 @@ import type {
   BudgetCaps,
   CustomAgentKind,
   InfraSetup,
+  SkillSummary,
   SpendStatus,
   UserSettings,
   WorkspaceSnapshot,
@@ -105,6 +106,30 @@ function snapshotCustomAgentKinds(registry: AgentKindRegistry): CustomAgentKind[
       container: registry.requiresContainer(def.kind),
     }))
   return kinds.length > 0 ? kinds : undefined
+}
+
+/**
+ * The account's repo-sourced Claude Skills as lightweight snapshot summaries (`{ id, name,
+ * description }`) for the pipeline builder's per-step skill picker (docs/initiatives/repo-skills.md
+ * slice 3). Read through the account skill-catalog cache — one read for the whole account, shared
+ * across its workspaces (see "No N+1"). Best-effort: the skill library is optional and must NEVER
+ * break the board load, so an unwired library, an unresolved account, or a read failure degrades
+ * to `undefined` (the picker simply has no options) rather than 500-ing the snapshot. Returns
+ * undefined when there is nothing to attach, so the field is absent on the stock/empty product.
+ */
+async function snapshotSkills(
+  container: ServerContainer,
+  accountId: string | null | undefined,
+): Promise<SkillSummary[] | undefined> {
+  if (!container.skillLibrary || accountId == null) return undefined
+  try {
+    const skills = await container.skillLibrary.catalogService.list(accountId)
+    return skills.length
+      ? skills.map((s) => ({ id: s.id, name: s.name, description: s.description }))
+      : undefined
+  } catch {
+    return undefined
+  }
 }
 
 /**
@@ -322,10 +347,11 @@ export function workspaceController(): Hono<AppEnv> {
     // account/user tier status + editable settings), because the SPA hydrates its stores
     // directly from this create response — omitting them would leave a freshly-created
     // workspace with no operator caps / tier meters until a separate snapshot refresh.
-    const [spend, infraSetup, budgetTiers] = await Promise.all([
+    const [spend, infraSetup, budgetTiers, skills] = await Promise.all([
       container.spendService.status(snapshot.workspace.id),
       snapshotInfraSetup(container, snapshot.workspace.id),
       assembleBudgetTiers(container, { accountId, viewerUserId: user?.id }),
+      snapshotSkills(container, accountId),
     ])
     const customAgentKinds = snapshotCustomAgentKinds(container.agentKindRegistry)
     // The registered initiative presets (built-in generic + any a deployment mixed in). Read off the
@@ -341,6 +367,7 @@ export function workspaceController(): Hono<AppEnv> {
         deploymentModelDefaults: deploymentModelDefaults(container.config.agents.routing),
         ...(customAgentKinds ? { customAgentKinds } : {}),
         ...(initiativePresets.length ? { initiativePresets } : {}),
+        ...(skills ? { skills } : {}),
         ...snapshotBackendKinds(container),
         infraSetup,
       },
@@ -405,6 +432,9 @@ export function workspaceController(): Hono<AppEnv> {
       // redaction can tell an App-reachable frame from a personal-PAT one. Only when GitHub is
       // wired; absent ⇒ no personal repos, so nothing to redact.
       repoProjections,
+      // The account's repo-sourced Claude Skills catalog (lightweight summaries), so the pipeline
+      // builder's per-step skill picker has its options on load. One cached account read.
+      skills,
     ] = await Promise.all([
       container.workspaceService.snapshot(workspaceId),
       container.spendService.status(workspaceId),
@@ -426,6 +456,7 @@ export function workspaceController(): Hono<AppEnv> {
         : undefined,
       snapshotInfraSetup(container, workspaceId),
       container.github ? container.github.service.listRepos(workspaceId) : undefined,
+      snapshotSkills(container, budgetAccountId),
     ])
     const customAgentKinds = snapshotCustomAgentKinds(container.agentKindRegistry)
     // The registered initiative presets (built-in generic + any a deployment mixed in). Read off the
@@ -487,6 +518,7 @@ export function workspaceController(): Hono<AppEnv> {
         deploymentModelDefaults: deploymentModelDefaults(container.config.agents.routing),
         ...(customAgentKinds ? { customAgentKinds } : {}),
         ...(initiativePresets.length ? { initiativePresets } : {}),
+        ...(skills ? { skills } : {}),
         ...snapshotBackendKinds(container),
         infraSetup,
       },

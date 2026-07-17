@@ -133,6 +133,7 @@ export interface AuthUser {
 export type * from './execution'
 export type * from './models'
 export type * from './fragments'
+export type * from './skills'
 export type * from './documents'
 export type * from './tasks'
 export type * from './bootstrap'
