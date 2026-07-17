@@ -58,6 +58,20 @@ export async function sweepPlatformHealth(
     else byAccount.set(ws.accountId, [ws.id])
   }
 
+  // Which workspaces already hold an open `platform_health` card, learned in ONE batched read
+  // up front rather than a `findOpenByType` point-read per workspace inside the loop (that N+1
+  // would run across the whole deployment every sweep — every couple of minutes). A healthy
+  // workspace with no card is the steady-state common case, and it is now skipped entirely: we
+  // only touch `clearByType` for a workspace that actually has a card to clear.
+  const withOpenCard = new Set(
+    (
+      await notifications.service.listOpenByType(
+        workspaces.map((ws) => ws.id),
+        'platform_health',
+      )
+    ).keys(),
+  )
+
   let raised = 0
   let cleared = 0
   for (const accountId of distinctAccountIds(workspaces)) {
@@ -77,7 +91,10 @@ export async function sweepPlatformHealth(
             payload: { platformWindow: cfg.window, platformAlerts: reasons },
           })
           raised += 1
-        } else if (await notifications.service.clearByType(workspaceId, 'platform_health')) {
+        } else if (
+          withOpenCard.has(workspaceId) &&
+          (await notifications.service.clearByType(workspaceId, 'platform_health'))
+        ) {
           cleared += 1
         }
       }

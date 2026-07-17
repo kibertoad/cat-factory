@@ -51,6 +51,7 @@ function container(enabled: boolean, raises: string[]): ServerContainer {
     platformObservability: { summarize: async () => UNHEALTHY },
     notifications: {
       service: {
+        listOpenByType: async () => new Map(),
         raise: async (workspaceId: string) => {
           raises.push(workspaceId)
           return {}

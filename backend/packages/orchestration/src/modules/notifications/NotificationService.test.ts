@@ -39,6 +39,16 @@ function fakeRepo() {
           .sort((a, b) => b.createdAt - a.createdAt)[0] ?? null
       )
     },
+    async listOpenByType(workspaceIds, type) {
+      // Batched block-less dedup: the newest open block-less card of `type` per workspace.
+      // The fake keys rows by id (single workspace), so all requested ids share `rows`.
+      const out = new Map<string, Notification>()
+      const newest = [...rows.values()]
+        .filter((n) => n.status === 'open' && n.blockId === null && n.type === type)
+        .sort((a, b) => b.createdAt - a.createdAt)[0]
+      if (newest) for (const ws of workspaceIds) out.set(ws, newest)
+      return out
+    },
     async upsert(_ws, n) {
       rows.set(n.id, { ...n })
     },

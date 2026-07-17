@@ -56,9 +56,13 @@ function makeContainer(opts: {
   enabled?: boolean
   hasObservability?: boolean
   hasNotifications?: boolean
+  /** Workspaces that already hold an open card (drives the batched `listOpenByType`). Defaults
+   * to "every workspace has one", so a healthy workspace is probed for clearing as before. */
+  openCardWorkspaces?: string[]
 }) {
   const raises: RaiseCall[] = []
   const clears: string[] = []
+  const listByTypeCalls: string[][] = []
   const container = {
     config: {
       platformAlerts: {
@@ -83,6 +87,11 @@ function makeContainer(opts: {
         ? undefined
         : {
             service: {
+              listOpenByType: async (workspaceIds: string[]) => {
+                listByTypeCalls.push(workspaceIds)
+                const held = opts.openCardWorkspaces ?? workspaceIds
+                return new Map(workspaceIds.filter((id) => held.includes(id)).map((id) => [id, {}]))
+              },
               raise: async (
                 workspaceId: string,
                 input: { payload?: { platformAlerts?: unknown } },
@@ -97,7 +106,7 @@ function makeContainer(opts: {
             },
           },
   } as unknown as ServerContainer
-  return { container, raises, clears }
+  return { container, raises, clears, listByTypeCalls }
 }
 
 describe('sweepPlatformHealth', () => {
@@ -122,6 +131,20 @@ describe('sweepPlatformHealth', () => {
     expect(result).toEqual({ raised: 0, cleared: 1 })
     expect(raises).toEqual([])
     expect(clears).toEqual(['ws-1'])
+  })
+
+  it('skips the clear point-read for a healthy workspace that holds no card (batched dedup)', async () => {
+    const { container, clears, listByTypeCalls } = makeContainer({
+      workspaces: [workspace('ws-1', 'acc-1'), workspace('ws-2', 'acc-1')],
+      summaries: { 'acc-1': HEALTHY },
+      openCardWorkspaces: ['ws-2'], // only ws-2 has an open card to clear
+    })
+    const result = await sweepPlatformHealth(container)
+    // ws-1 has no card → never probed; only ws-2 is cleared.
+    expect(result).toEqual({ raised: 0, cleared: 1 })
+    expect(clears).toEqual(['ws-2'])
+    // The open-card set is learned in ONE batched read over all workspaces, not per workspace.
+    expect(listByTypeCalls).toEqual([['ws-1', 'ws-2']])
   })
 
   it('summarizes each account once, fanning the verdict to its workspaces', async () => {

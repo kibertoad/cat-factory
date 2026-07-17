@@ -99,7 +99,7 @@ export function platformAlertReasons(alerts: PlatformAlert[]): PlatformAlertReas
   return alerts.map((a) => a.reason).sort()
 }
 
-/** Human-readable (English) fragment per reason — the SPA localizes from `payload.platformAlerts`. */
+/** Human-readable (English) fragment per reason, used to compose the card body below. */
 const REASON_PHRASE: Record<PlatformAlertReason, string> = {
   failure_rate_high: 'an elevated run failure rate',
   duration_p99_high: 'slow run durations (p99)',
@@ -115,8 +115,10 @@ const WINDOW_PHRASE: Record<PlatformObservabilityWindow, string> = {
 /**
  * The stable card title + body for a fired reason set — a pure function of the reasons + window
  * (no live numbers), so a re-raise with the same firing set produces byte-identical content and
- * is de-duplicated. English is the last-resort fallback the inbox shows; the SPA renders
- * localized copy from `payload.platformAlerts` (the `usePipelineErrorToast` mapping pattern).
+ * is de-duplicated. The inbox renders this backend-composed (English) title/body directly, like
+ * every other notification type; the machine-readable reason set travels on
+ * `payload.platformAlerts` as the dedup identity and the seam for a future localized rendering
+ * (the `usePipelineErrorToast` mapping pattern), not yet wired in the SPA.
  */
 export function platformHealthCardContent(
   reasons: PlatformAlertReason[],

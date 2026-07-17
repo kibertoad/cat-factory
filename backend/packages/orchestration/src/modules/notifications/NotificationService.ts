@@ -189,6 +189,19 @@ export class NotificationService {
   }
 
   /**
+   * Batched: the open, block-less card of `type` for each of `workspaceIds` that has one. The
+   * platform-health sweep uses this ONCE up front to learn which workspaces already hold a card,
+   * so it can skip the `clearByType` point-read for the (steady-state common) healthy workspaces
+   * with none — avoiding a per-workspace N+1 across the whole deployment every sweep.
+   */
+  async listOpenByType(
+    workspaceIds: string[],
+    type: NotificationType,
+  ): Promise<Map<string, Notification>> {
+    return this.notifications.listOpenByType(workspaceIds, type)
+  }
+
+  /**
    * Auto-resolve the open, block-less card of `type` for a workspace (dismiss it), if one is
    * open. The self-clearing counterpart to a periodic sweep that raises a block-less card while
    * a condition holds (today `platform_health`): when the condition clears the sweep calls this

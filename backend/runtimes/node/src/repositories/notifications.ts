@@ -10,7 +10,7 @@ import {
   notificationTypeSchema,
 } from '@cat-factory/contracts'
 import { decodeEnum, decodeEnumOr } from '@cat-factory/server'
-import { and, desc, eq, isNotNull, isNull, lte, ne, or, sql } from 'drizzle-orm'
+import { and, desc, eq, inArray, isNotNull, isNull, lte, ne, or, sql } from 'drizzle-orm'
 import type { DrizzleDb } from '../db/client.js'
 import { notifications } from '../db/schema.js'
 
@@ -107,6 +107,33 @@ export class DrizzleNotificationRepository implements NotificationRepository {
       .orderBy(desc(notifications.created_at))
       .limit(1)
     return rows[0] ? rowToNotification(rows[0]) : null
+  }
+
+  async listOpenByType(
+    workspaceIds: string[],
+    type: NotificationType,
+  ): Promise<Map<string, Notification>> {
+    const out = new Map<string, Notification>()
+    if (workspaceIds.length === 0) return out
+    for (let i = 0; i < workspaceIds.length; i += 500) {
+      const rows = await this.db
+        .select()
+        .from(notifications)
+        .where(
+          and(
+            inArray(notifications.workspace_id, workspaceIds.slice(i, i + 500)),
+            isNull(notifications.block_id),
+            eq(notifications.type, type),
+            eq(notifications.status, 'open'),
+          ),
+        )
+        // Newest-first so the first row per workspace matches `findOpenByType`.
+        .orderBy(desc(notifications.created_at))
+      for (const row of rows) {
+        if (!out.has(row.workspace_id)) out.set(row.workspace_id, rowToNotification(row))
+      }
+    }
+    return out
   }
 
   async upsert(workspaceId: string, notification: Notification): Promise<void> {

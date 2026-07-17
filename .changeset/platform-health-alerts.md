@@ -17,6 +17,7 @@ new `platform_health` notification through the existing NotificationChannel seam
 when one is crossed, auto-clearing when the account recovers. The card de-dupes on the firing
 reason set, so a persistently-unhealthy deployment re-notifies only on state change, not every
 sweep. Opt-in via `PLATFORM_ALERTS=true` (thresholds/window/interval tunable via
-`PLATFORM_ALERTS_*`). Adds a block-less `NotificationRepository.findOpenByType` dedup lookup
-(D1 ⇄ Drizzle + conformance) and threads `platform_health` through the Slack transport and the SPA
-notification inbox (localized in all 10 locales).
+`PLATFORM_ALERTS_*`). Adds block-less `NotificationRepository.findOpenByType` (single-workspace
+dedup) and `listOpenByType` (batched across workspaces, so the sweep avoids a point-read per
+workspace) lookups (D1 ⇄ Drizzle + conformance) and threads `platform_health` through the Slack
+transport and the SPA notification inbox (routable/action labels localized in all 10 locales).

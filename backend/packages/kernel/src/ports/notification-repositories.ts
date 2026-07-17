@@ -26,6 +26,17 @@ export interface NotificationRepository {
    * pass. Newest first; block-SCOPED cards of the same type are never returned.
    */
   findOpenByType(workspaceId: string, type: NotificationType): Promise<Notification | null>
+  /**
+   * BATCHED {@link findOpenByType}: the open, block-less card of `type` for EACH of
+   * `workspaceIds` that has one, as a `Map<workspaceId, Notification>` (newest per workspace;
+   * workspaces with none are simply absent). The platform-health sweep enumerates every
+   * workspace and would otherwise `findOpenByType` per workspace inside the loop — an N+1 that
+   * runs every couple of minutes across the whole deployment. One chunked-`IN` read here lets
+   * the sweep skip the point-read for the (steady-state common) healthy workspaces that hold no
+   * card, mirroring `WorkspaceSettingsRepository.listByWorkspaceIds` in the escalation sweep.
+   * Empty input → empty map.
+   */
+  listOpenByType(workspaceIds: string[], type: NotificationType): Promise<Map<string, Notification>>
   /** Create or replace a notification (keyed by id). Used for status transitions
    * (dismiss/act/escalate) and block-less cards. */
   upsert(workspaceId: string, notification: Notification): Promise<void>

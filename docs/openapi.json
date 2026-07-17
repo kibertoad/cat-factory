@@ -248,6 +248,25 @@
                   "pipelineName": {
                     "type": "string"
                   },
+                  "platformAlerts": {
+                    "items": {
+                      "enum": [
+                        "failure_rate_high",
+                        "duration_p99_high",
+                        "backlog_high"
+                      ],
+                      "type": "string"
+                    },
+                    "type": "array"
+                  },
+                  "platformWindow": {
+                    "enum": [
+                      "1h",
+                      "24h",
+                      "7d"
+                    ],
+                    "type": "string"
+                  },
                   "prUrl": {
                     "type": "string"
                   },
@@ -365,7 +384,8 @@
               "followup_pending",
               "fork_decision_pending",
               "pr_review_ready",
-              "initiative"
+              "initiative",
+              "platform_health"
             ],
             "type": "string"
           }

@@ -354,13 +354,17 @@ export type PlatformObservability = v.InferOutput<typeof platformObservabilitySc
 // account against operator-configured thresholds and, when one is crossed, raises a
 // `platform_health` notification (the dual of the `post-release-health` gate, which
 // watches the USER's release — this watches the platform itself). These schemas are the
-// machine-readable vocabulary the sweep emits and the SPA maps to localized copy.
+// machine-readable vocabulary the sweep emits: the reason set is the card's dedup identity,
+// and it is carried on the notification payload so a future SPA mapping can localize the
+// alert text (the `usePipelineErrorToast` pattern). Today the inbox renders the card's
+// backend-composed title/body like every other notification type.
 // ---------------------------------------------------------------------------
 
 /**
- * Why a platform-health alert fired — a closed set of machine-readable reason codes (the
- * `usePipelineErrorToast` pattern: the backend emits the code, the SPA maps it to i18n
- * copy). Each names one threshold over the account's windowed aggregate:
+ * Why a platform-health alert fired — a closed set of machine-readable reason codes. It is the
+ * card's stable dedup identity AND the seam for a future localized rendering (the
+ * `usePipelineErrorToast` pattern: the backend emits the code, the SPA maps it to i18n copy).
+ * Each names one threshold over the account's windowed aggregate:
  *   - `failure_rate_high` — the run failure rate over the window exceeded the ceiling
  *                           (gated by a minimum terminal-run sample so a 1/1 blip is quiet).
  *   - `duration_p99_high` — the p99 wall-clock run duration exceeded the ceiling (a slow-run
