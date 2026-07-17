@@ -59,6 +59,47 @@ export function defineSkillLibrarySuite(name: string, makeRepos: () => SkillLibr
       expect((await skillSources.get(source.id))?.deletedAt).toBe(3_000)
     })
 
+    it('looks sources up by repo across accounts, excluding tombstones (webhook fan-out)', async () => {
+      const { skillSources } = makeRepos()
+      const owner = `org-${scope()}`
+      const repo = 'shared-skills'
+      // Two accounts link the SAME repo; a push fan-out must find both.
+      const accountA = scope()
+      const accountB = scope()
+      const base = {
+        repoOwner: owner,
+        repoName: repo,
+        gitRef: 'HEAD',
+        dirPath: '.claude/skills',
+        lastSyncedCommit: null,
+        lastSyncedAt: null,
+        createdAt: 1_000,
+        deletedAt: null,
+      }
+      const srcA: SkillSourceRecord = { ...base, id: `${accountA}-src`, accountId: accountA }
+      const srcB: SkillSourceRecord = { ...base, id: `${accountB}-src`, accountId: accountB }
+      // A different repo under the same owner must NOT match.
+      const srcOther: SkillSourceRecord = {
+        ...base,
+        id: `${accountA}-other`,
+        accountId: accountA,
+        repoName: 'unrelated',
+      }
+      await skillSources.upsert(srcA)
+      await skillSources.upsert(srcB)
+      await skillSources.upsert(srcOther)
+
+      const found = await skillSources.listByRepo(owner, repo)
+      expect(found.map((s) => s.id).sort()).toEqual([srcA.id, srcB.id].sort())
+
+      // A tombstoned source drops out of the lookup.
+      await skillSources.softDelete(srcA.id, 4_000)
+      expect((await skillSources.listByRepo(owner, repo)).map((s) => s.id)).toEqual([srcB.id])
+
+      // An unlinked repo returns nothing.
+      expect(await skillSources.listByRepo(owner, 'never-linked')).toEqual([])
+    })
+
     it('round-trips a skill (resources + pinned commit) and lists by source', async () => {
       const { accountSkills } = makeRepos()
       const accountId = scope()

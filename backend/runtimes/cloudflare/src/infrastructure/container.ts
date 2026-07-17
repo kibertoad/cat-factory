@@ -2317,6 +2317,11 @@ export function buildContainer(
     logger,
   })
 
+  // GitHub webhook/resync/backfill ingest via the sync Queue (absent → inline handling). Built
+  // once so the engine's skill-freshness fan-out (slice 4) enqueues through the SAME seam the
+  // gateway exposes, rather than reaching for the queue binding a second time.
+  const githubWebhookIngest = new CfGitHubWebhookIngest(env.GITHUB_SYNC_QUEUE)
+
   const dependencies: CoreDependencies = {
     // App-owned backend registries (kind → provider) the connection services resolve through.
     environmentBackendRegistry,
@@ -2454,6 +2459,12 @@ export function buildContainer(
     ...selectRunnersDeps(env, config, db),
     ...selectFragmentLibraryDeps(env, config, db),
     ...selectSkillLibraryDeps(env, config, db),
+    // Push-webhook skill-source freshness fan-out (slice 4): resync affected sources via the
+    // sync Queue. No queue bound (local/dev) ⇒ no proactive resync; the dispatch-time probe
+    // is the freshness backstop.
+    enqueueSkillResync: async ({ accountId, sourceId }) => {
+      await githubWebhookIngest.queueSkillResync(accountId, sourceId)
+    },
     // The app-owned cache bag (built above so the repo-files + account-policy resolvers share
     // it). Distributed invalidation is a genuine Node-only concern, not a facade-parity gap: the
     // Worker's cross-instance state already lives in globally-addressed DOs / D1.
@@ -2642,7 +2653,7 @@ export function buildContainer(
       // GitHub backfill via Workflows; webhook/resync ingest via the sync Queue. Both
       // fall back to inline handling when their binding is absent (local/dev/tests).
       githubBackfill: new WorkflowsBackfillScheduler(env.GITHUB_BACKFILL_WORKFLOW),
-      githubWebhook: new CfGitHubWebhookIngest(env.GITHUB_SYNC_QUEUE),
+      githubWebhook: githubWebhookIngest,
       // LLM proxy upstream: OpenAI-compatible providers from env keys + the in-process
       // Workers AI binding path (the `workers-ai` provider).
       llmUpstream: new WorkersAiLlmUpstream(env),

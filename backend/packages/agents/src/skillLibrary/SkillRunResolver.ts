@@ -6,6 +6,7 @@ import type {
   WorkspaceRepository,
 } from '@cat-factory/kernel'
 import { ValidationError } from '@cat-factory/kernel'
+import { probeRepoSourceStatus } from '../repoSourceSync/repo-source-sync.js'
 import type { SkillCatalogService } from './SkillCatalogService.js'
 import type { ResolveSkillInstallationId } from './SkillSourceService.js'
 
@@ -44,6 +45,12 @@ export class SkillRunResolver {
       skillSourceRepository: SkillSourceRepository
       githubClient: GitHubClient
       resolveInstallationId: ResolveSkillInstallationId
+      /**
+       * Re-sync one source, used by the dispatch-time freshness probe (slice 4). Wired to
+       * {@link SkillSourceService.sync} by the composition root. Absent ⇒ no dispatch-time
+       * probe (the push-webhook fan-out is then the only freshness path).
+       */
+      syncSource?: (accountId: string, sourceId: string) => Promise<unknown>
     },
   ) {}
 
@@ -59,12 +66,18 @@ export class SkillRunResolver {
         `Cannot resolve skill '${skillId}': workspace ${workspaceId} has no account.`,
       )
     }
-    const record = await this.deps.catalogService.get(accountId, skillId)
-    if (!record) {
+    const cached = await this.deps.catalogService.get(accountId, skillId)
+    if (!cached) {
       throw new ValidationError(
         `Skill '${skillId}' is no longer available (removed or its source was unlinked). Update the pipeline step to a current skill.`,
       )
     }
+    // Freshness backstop: if the source dir advanced since the last sync, re-sync so the run
+    // uses current instructions rather than a stale snapshot (the layered freshness story —
+    // the push-webhook fan-out keeps it warm, this probe is the self-verifying catch at
+    // dispatch). Bounded to ONE head-commit probe on the happy path; degrades to the
+    // last-synced record on ANY failure, never wedging a run over a transient GitHub error.
+    const record = await this.refreshIfStale(accountId, cached)
     const resources = await this.resolveResources(record)
     return {
       skill: {
@@ -75,6 +88,41 @@ export class SkillRunResolver {
         resources,
       },
       version: { skillId: record.skillId, commit: record.pinnedCommit, sha: record.sourceSha },
+    }
+  }
+
+  /**
+   * If the skill's source dir advanced since the last sync, re-sync it and return the refreshed
+   * catalog record; otherwise (or on ANY failure, or when the probe/re-sync isn't wired) return
+   * the last-synced record unchanged. A self-verifying freshness probe — the run never DEPENDS on
+   * it: the worst case is running one push behind, never a failure. Costs one `latestCommitSha`
+   * read on the unchanged path (the common case), plus a re-sync only when the head actually moved.
+   */
+  private async refreshIfStale(
+    accountId: string,
+    record: AccountSkillRecord,
+  ): Promise<AccountSkillRecord> {
+    const syncSource = this.deps.syncSource
+    if (!syncSource) return record
+    try {
+      const source = await this.deps.skillSourceRepository.get(record.sourceId)
+      if (!source || source.deletedAt !== null) return record
+      const installationId = await this.deps.resolveInstallationId(accountId)
+      if (installationId === null) return record
+      const status = await probeRepoSourceStatus({
+        source,
+        installationId,
+        githubClient: this.deps.githubClient,
+      })
+      if (!status.changed) return record
+      await syncSource(accountId, record.sourceId)
+      // Re-read the (now-current) record. A re-sync that tombstoned this skill (its dir was
+      // renamed/removed upstream) leaves nothing to read — keep the last-synced record so the
+      // run still proceeds; a genuinely gone skill fails later at the pipeline-validation gate.
+      const refreshed = await this.deps.catalogService.get(accountId, record.skillId)
+      return refreshed ?? record
+    } catch {
+      return record
     }
   }
 

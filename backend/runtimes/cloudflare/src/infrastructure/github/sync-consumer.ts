@@ -1,7 +1,7 @@
-import type { Clock } from '@cat-factory/kernel'
+import { type Clock, NotFoundError } from '@cat-factory/kernel'
 import type { MessageBatch } from '@cloudflare/workers-types'
-import type { GitHubModule } from '@cat-factory/orchestration'
 import { reconcileStaleRepos as reconcileStaleReposCore } from '@cat-factory/server'
+import type { Container } from '../container'
 import type { Env, GitHubSyncMessage } from '../env'
 import { buildContainer } from '../container'
 import { loadConfig } from '../config'
@@ -14,15 +14,35 @@ import { logger } from '../observability/logger'
 // orchestration over the GitHub module + its ports, so it is unit-testable with
 // fakes (mirroring the execution sweeper's style).
 
-/** Apply one queued message to the projections via the GitHub module. */
+/**
+ * Apply one queued message. Each kind resolves its own optional module and skips gracefully
+ * when unwired: `webhook`/`resync-repo` need the GitHub module, `skill-source-resync` the
+ * skill-library module (the push-webhook freshness fan-out, slice 4) — either can be absent
+ * independently. A source unlinked between enqueue and processing is a terminal `NotFoundError`
+ * (swallowed, not retried); any other error propagates so the batch retries.
+ */
 async function applyGitHubSyncMessage(
-  github: GitHubModule,
+  container: Container,
   message: GitHubSyncMessage,
 ): Promise<void> {
-  if (message.kind === 'webhook') {
-    await github.webhookService.handle(message.eventName, message.payload)
-  } else {
-    await github.syncService.syncRepoById(message.workspaceId, message.repoGithubId)
+  switch (message.kind) {
+    case 'webhook':
+      await container.github?.webhookService.handle(message.eventName, message.payload)
+      return
+    case 'resync-repo':
+      await container.github?.syncService.syncRepoById(message.workspaceId, message.repoGithubId)
+      return
+    case 'skill-source-resync': {
+      const sourceService = container.skillLibrary?.sourceService
+      if (!sourceService) return
+      try {
+        await sourceService.sync(message.accountId, message.sourceId)
+      } catch (error) {
+        if (error instanceof NotFoundError) return
+        throw error
+      }
+      return
+    }
   }
 }
 
@@ -31,14 +51,10 @@ export async function handleGitHubSyncBatch(
   batch: MessageBatch<GitHubSyncMessage>,
   env: Env,
 ): Promise<void> {
-  const github = buildContainer(env).github
+  const container = buildContainer(env)
   for (const message of batch.messages) {
-    if (!github) {
-      message.ack() // GitHub not configured here; drop rather than retry forever.
-      continue
-    }
     try {
-      await applyGitHubSyncMessage(github, message.body)
+      await applyGitHubSyncMessage(container, message.body)
       message.ack()
     } catch {
       message.retry()

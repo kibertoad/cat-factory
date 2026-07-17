@@ -150,3 +150,122 @@ describe('WebhookService — repoFiles cache invalidation (slice 4)', () => {
     expect(invalidated).toEqual([])
   })
 })
+
+// Repo-skills slice 4: a branch push to a repo that skill sources are linked to enqueues a
+// targeted resync per source (the freshness fan-out), keyed by account + source id. Uses the
+// by-repo index lookup, and fires for EVERY account that linked the repo.
+describe('WebhookService — skill-source resync fan-out (repo-skills slice 4)', () => {
+  const skillDeps = (
+    sourcesByRepo: (
+      owner: string,
+      name: string,
+    ) => { id: string; accountId: string; gitRef?: string }[],
+    enqueued: { accountId: string; sourceId: string }[],
+  ) =>
+    ({
+      githubInstallationRepository: {
+        getByInstallationId: async () => ({ installationId: 1, deletedAt: null }),
+        listWorkspacesForInstallation: async () => ['ws-a'],
+      },
+      repoProjectionRepository: { linkedWorkspaces: async (_id: number, c: string[]) => c },
+      branchProjectionRepository: { upsertMany: async () => {} },
+      commitProjectionRepository: { upsertMany: async () => {} },
+      clock: { now: () => 0 },
+      skillSourceRepository: {
+        listByRepo: async (owner: string, name: string) => sourcesByRepo(owner, name),
+      },
+      enqueueSkillResync: async (req: { accountId: string; sourceId: string }) => {
+        enqueued.push(req)
+      },
+    }) as unknown as WebhookServiceDependencies
+
+  it('enqueues a resync for every source linked to the pushed repo', async () => {
+    const enqueued: { accountId: string; sourceId: string }[] = []
+    const deps = skillDeps(
+      (owner, name) =>
+        owner === 'acme' && name === 'widgets'
+          ? [
+              { id: 'src-1', accountId: 'acct-1' },
+              { id: 'src-2', accountId: 'acct-2' },
+            ]
+          : [],
+      enqueued,
+    )
+    await new WebhookService(deps).handle('push', {
+      installation: { id: 1 },
+      repository: { id: 7, name: 'widgets', owner: { login: 'acme' } },
+      ref: 'refs/heads/main',
+      after: 'abc123',
+      commits: [{ id: 'abc123' }],
+    })
+    expect(enqueued).toEqual([
+      { accountId: 'acct-1', sourceId: 'src-1' },
+      { accountId: 'acct-2', sourceId: 'src-2' },
+    ])
+  })
+
+  it('enqueues nothing when no source is linked to the pushed repo', async () => {
+    const enqueued: { accountId: string; sourceId: string }[] = []
+    await new WebhookService(skillDeps(() => [], enqueued)).handle('push', {
+      installation: { id: 1 },
+      repository: { id: 7, name: 'unlinked', owner: { login: 'acme' } },
+      ref: 'refs/heads/main',
+      after: 'abc123',
+      commits: [],
+    })
+    expect(enqueued).toEqual([])
+  })
+
+  it('only resyncs sources tracking the pushed branch (resolving HEAD to the default branch)', async () => {
+    const enqueued: { accountId: string; sourceId: string }[] = []
+    // A push to `feature-x`: only the source tracking `feature-x` should resync. The `main`- and
+    // `HEAD`-tracking sources (HEAD = the default branch `main`) can't have moved, so they're
+    // skipped — the dispatch-time probe remains their freshness guarantee.
+    const deps = skillDeps(
+      () => [
+        { id: 'src-main', accountId: 'acct-1', gitRef: 'main' },
+        { id: 'src-head', accountId: 'acct-2', gitRef: 'HEAD' },
+        { id: 'src-feat', accountId: 'acct-3', gitRef: 'refs/heads/feature-x' },
+      ],
+      enqueued,
+    )
+    await new WebhookService(deps).handle('push', {
+      installation: { id: 1 },
+      repository: { id: 7, name: 'widgets', owner: { login: 'acme' }, default_branch: 'main' },
+      ref: 'refs/heads/feature-x',
+      after: 'abc123',
+      commits: [{ id: 'abc123' }],
+    })
+    expect(enqueued).toEqual([{ accountId: 'acct-3', sourceId: 'src-feat' }])
+  })
+
+  it('resyncs a HEAD-tracking source on a push to the default branch', async () => {
+    const enqueued: { accountId: string; sourceId: string }[] = []
+    const deps = skillDeps(
+      () => [{ id: 'src-head', accountId: 'acct-1', gitRef: 'HEAD' }],
+      enqueued,
+    )
+    await new WebhookService(deps).handle('push', {
+      installation: { id: 1 },
+      repository: { id: 7, name: 'widgets', owner: { login: 'acme' }, default_branch: 'main' },
+      ref: 'refs/heads/main',
+      after: 'abc123',
+      commits: [{ id: 'abc123' }],
+    })
+    expect(enqueued).toEqual([{ accountId: 'acct-1', sourceId: 'src-head' }])
+  })
+
+  it('does not fan out on a tag push (skill sources track a branch)', async () => {
+    const enqueued: { accountId: string; sourceId: string }[] = []
+    await new WebhookService(
+      skillDeps(() => [{ id: 'src-1', accountId: 'acct-1' }], enqueued),
+    ).handle('push', {
+      installation: { id: 1 },
+      repository: { id: 7, name: 'widgets', owner: { login: 'acme' } },
+      ref: 'refs/tags/v1.0.0',
+      after: 'abc123',
+      commits: [],
+    })
+    expect(enqueued).toEqual([])
+  })
+})
