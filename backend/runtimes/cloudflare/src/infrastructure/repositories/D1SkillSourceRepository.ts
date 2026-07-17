@@ -47,6 +47,16 @@ export class D1SkillSourceRepository implements SkillSourceRepository {
     return results.map(rowToRecord)
   }
 
+  async listByRepo(repoOwner: string, repoName: string): Promise<SkillSourceRecord[]> {
+    const { results } = await this.db
+      .prepare(
+        'SELECT * FROM skill_sources WHERE repo_owner = ? AND repo_name = ? AND deleted_at IS NULL',
+      )
+      .bind(repoOwner, repoName)
+      .all<SkillSourceRow>()
+    return results.map(rowToRecord)
+  }
+
   async get(id: string): Promise<SkillSourceRecord | null> {
     const row = await this.db
       .prepare('SELECT * FROM skill_sources WHERE id = ?')

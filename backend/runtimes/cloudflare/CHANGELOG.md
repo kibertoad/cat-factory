@@ -1,5 +1,124 @@
 # @cat-factory/worker
 
+## 0.91.1
+
+### Patch Changes
+
+- 74c21ab: feat: repo-sourced Claude Skills — freshness automation (slice 4)
+
+  Keep a running pipeline from ever executing a stale skill, without the management
+  surface having to resync by hand (docs/initiatives/repo-skills.md, final slice):
+
+  - **Push-webhook fan-out.** A verified `push` webhook to a repo that skill sources are
+    linked to now enqueues a targeted `skill-source-resync` job per affected source, so its
+    skills are refreshed shortly after the upstream change. One indexed
+    `SkillSourceRepository.listByRepo(owner, name)` lookup (new port method, D1 ⇄ Drizzle
+    with a conformance assertion; the `skill_sources(repo_owner, repo_name)` index was
+    already in place) drives the fan-out; the enqueue rides the existing GitHub-sync queue
+    through a new `GitHubWebhookIngest.queueSkillResync` seam (Cloudflare Queue ⇄ Node
+    pg-boss), and the async consumer runs `SkillSourceService.sync` for the one source
+    (a source unlinked between enqueue and processing is swallowed, not retried forever).
+  - **Dispatch-time self-verifying probe.** At skill-step dispatch, `SkillRunResolver` now
+    probes the source dir's head commit; if it advanced since the last sync it re-syncs so
+    the run uses current instructions. It never fails the run — any probe/re-sync error
+    degrades to the last-synced record (a run may be at most one push behind, never broken),
+    and it's a no-op on the common unchanged path (one `latestCommitSha` read).
+
+  Together with the push fan-out this is the layered freshness story: the webhook keeps the
+  account catalog warm, and the dispatch probe is the correctness backstop for deployments
+  with no sync queue (local/dev) or a missed delivery. Backend-only; no harness/image change.
+
+- Updated dependencies [74c21ab]
+  - @cat-factory/kernel@0.137.0
+  - @cat-factory/server@0.132.0
+  - @cat-factory/agents@0.62.4
+  - @cat-factory/integrations@0.85.1
+  - @cat-factory/orchestration@0.120.1
+  - @cat-factory/caching@0.10.1
+  - @cat-factory/consensus@0.10.65
+  - @cat-factory/eks@0.1.92
+  - @cat-factory/gates@0.5.49
+  - @cat-factory/gitlab@0.10.11
+  - @cat-factory/observability-langfuse@0.7.219
+  - @cat-factory/observability-otel@0.2.1
+  - @cat-factory/provider-cloudflare@0.7.236
+  - @cat-factory/spend@0.12.45
+
+## 0.91.0
+
+### Minor Changes
+
+- 27f0ea2: Expose the deployment-level (platform-operator) observability aggregates via OpenTelemetry.
+
+  A periodic, runtime-symmetric sweep (Worker `scheduled` cron ⇄ Node interval, like the
+  retention sweeps) now pushes the same run-health projection the operator dashboard renders —
+  run outcomes by status, the failure-kind taxonomy, live/parked depth, and the avg/min/max +
+  p50/p90/p99 duration percentiles — to any OTLP/HTTP backend as OpenTelemetry **gauge**
+  metrics (`cat_factory.platform.*`), per account (the bounded tenant scope) and stamped with
+  the projection's `generatedAt`. The OTel backend builds trends from the gauge series, so the
+  sweep exports the shortest trailing window (`1h` default).
+
+  `@cat-factory/observability-otel` gains a fetch-based `PlatformMetricsOtelExporter`
+  (`createPlatformMetricsOtelExporter`) — the workerd-safe transport used on BOTH runtimes
+  (the platform push is a stateless snapshot POST, so it needs no SDK, mirroring the Langfuse
+  sink's fetch-on-both shape). The runtime-neutral `sweepPlatformMetrics` driver + the
+  `distinctAccountIds` account enumeration live in `@cat-factory/orchestration`.
+
+  Opt-in on top of the base OTel exporter (it adds recurring DB rollup load): off unless
+  `OTEL_ENABLED=true` + an endpoint AND `OTEL_PLATFORM_METRICS=true`. `OTEL_PLATFORM_METRICS_WINDOW`
+  (`1h`/`24h`/`7d`) and, on Node, `OTEL_PLATFORM_METRICS_INTERVAL_MS` tune it. A deployment
+  that hasn't opted in emits nothing and runs no sweep.
+
+### Patch Changes
+
+- Updated dependencies [27f0ea2]
+  - @cat-factory/observability-otel@0.2.0
+  - @cat-factory/orchestration@0.120.0
+  - @cat-factory/server@0.131.0
+
+## 0.90.0
+
+### Minor Changes
+
+- f5ddc02: Public API: per-key permission scopes + task deletion.
+
+  Inbound public-API keys now carry a `scope` on the `/api/v1` surface — an inclusive ladder
+  (`read` ⊂ `write` ⊂ `admin`) the controller enforces per endpoint: reads need `read`,
+  non-destructive mutations (create/start/stop/retry/edit a task, start an initiative run)
+  need `write`, and destructive operations need `admin`. A valid key whose scope is too low
+  gets `403 insufficient_scope` (distinct from the `401` an unknown key gets).
+
+  This unblocks the first destructive endpoint: `DELETE /api/v1/tasks/:taskId` (admin-scoped)
+  deletes a task and its run history, completing the Tier-1 task lifecycle.
+
+  The workspace token UI gains a scope selector on create; a minted key defaults to `write`.
+
+  Breaking (pre-1.0, external surface): `publicApiKeySchema` gains a required `scope` field
+  and the `public_api_keys` table gains a `scope` column (D1 ⇄ Drizzle). Existing keys backfill
+  to `write` — they keep every capability the surface shipped before scopes existed but do not
+  auto-gain the new destructive power, which must be minted `admin` explicitly.
+
+### Patch Changes
+
+- Updated dependencies [f5ddc02]
+- Updated dependencies [576f2e0]
+  - @cat-factory/contracts@0.143.0
+  - @cat-factory/kernel@0.136.0
+  - @cat-factory/integrations@0.85.0
+  - @cat-factory/server@0.130.0
+  - @cat-factory/caching@0.10.0
+  - @cat-factory/orchestration@0.119.0
+  - @cat-factory/agents@0.62.3
+  - @cat-factory/consensus@0.10.64
+  - @cat-factory/eks@0.1.91
+  - @cat-factory/gates@0.5.48
+  - @cat-factory/gitlab@0.10.10
+  - @cat-factory/prompt-fragments@0.13.32
+  - @cat-factory/spend@0.12.44
+  - @cat-factory/observability-langfuse@0.7.218
+  - @cat-factory/observability-otel@0.1.12
+  - @cat-factory/provider-cloudflare@0.7.235
+
 ## 0.89.0
 
 ### Minor Changes

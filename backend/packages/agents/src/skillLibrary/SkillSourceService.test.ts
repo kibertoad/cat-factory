@@ -55,6 +55,11 @@ class FakeSkillSourceRepo implements SkillSourceRepository {
   async listByAccount(accountId: string) {
     return [...this.rows.values()].filter((r) => r.accountId === accountId && r.deletedAt === null)
   }
+  async listByRepo(repoOwner: string, repoName: string) {
+    return [...this.rows.values()].filter(
+      (r) => r.repoOwner === repoOwner && r.repoName === repoName && r.deletedAt === null,
+    )
+  }
   async get(id: string) {
     return this.rows.get(id) ?? null
   }

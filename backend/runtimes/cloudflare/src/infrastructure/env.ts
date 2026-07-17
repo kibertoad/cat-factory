@@ -20,12 +20,14 @@ export interface ExecutionStartMessage {
 /**
  * Work enqueued on GITHUB_SYNC_QUEUE so the webhook endpoint can ack fast and
  * apply projection updates asynchronously. A discriminated union: verified
- * webhook deliveries, and targeted repo resyncs (from the cron reconciler / the
- * on-demand resync endpoint).
+ * webhook deliveries, targeted repo resyncs (from the cron reconciler / the
+ * on-demand resync endpoint), and targeted skill-source resyncs (the push-webhook
+ * freshness fan-out, slice 4).
  */
 export type GitHubSyncMessage =
   | { kind: 'webhook'; eventName: string; payload: unknown }
   | { kind: 'resync-repo'; workspaceId: string; repoGithubId: number }
+  | { kind: 'skill-source-resync'; accountId: string; sourceId: string }
 
 /** Bindings and vars available to the Worker (declared in wrangler.toml). */
 export interface Env {
@@ -504,6 +506,17 @@ export interface Env {
   OTEL_EXPORTER_OTLP_HEADERS?: string
   /** OTLP resource `service.name`; defaults to `cat-factory` when unset. */
   OTEL_SERVICE_NAME?: string
+  /**
+   * Opt-in flag ('true') for the deployment-level (platform-operator) metrics sweep: pushes
+   * per-account run-health aggregates (outcomes, failures, live depth, duration percentiles)
+   * as OTLP GAUGE metrics to the same endpoint. A further opt-in on top of OTEL_ENABLED (it
+   * adds recurring DB rollup load); the `scheduled` cron drives it.
+   */
+  OTEL_PLATFORM_METRICS?: string
+  /** Trailing window each platform-metrics snapshot aggregates over (`1h`/`24h`/`7d`; default `1h`). */
+  OTEL_PLATFORM_METRICS_WINDOW?: string
+  /** Node-only sweep interval (ms); the Worker is cron-driven and ignores it. */
+  OTEL_PLATFORM_METRICS_INTERVAL_MS?: string
 
   // ---- Storage retention (see config.ts and docs/storage-and-retention.md) -
   /**

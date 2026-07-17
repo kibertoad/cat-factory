@@ -1,5 +1,110 @@
 # @cat-factory/orchestration
 
+## 0.120.1
+
+### Patch Changes
+
+- 74c21ab: feat: repo-sourced Claude Skills — freshness automation (slice 4)
+
+  Keep a running pipeline from ever executing a stale skill, without the management
+  surface having to resync by hand (docs/initiatives/repo-skills.md, final slice):
+
+  - **Push-webhook fan-out.** A verified `push` webhook to a repo that skill sources are
+    linked to now enqueues a targeted `skill-source-resync` job per affected source, so its
+    skills are refreshed shortly after the upstream change. One indexed
+    `SkillSourceRepository.listByRepo(owner, name)` lookup (new port method, D1 ⇄ Drizzle
+    with a conformance assertion; the `skill_sources(repo_owner, repo_name)` index was
+    already in place) drives the fan-out; the enqueue rides the existing GitHub-sync queue
+    through a new `GitHubWebhookIngest.queueSkillResync` seam (Cloudflare Queue ⇄ Node
+    pg-boss), and the async consumer runs `SkillSourceService.sync` for the one source
+    (a source unlinked between enqueue and processing is swallowed, not retried forever).
+  - **Dispatch-time self-verifying probe.** At skill-step dispatch, `SkillRunResolver` now
+    probes the source dir's head commit; if it advanced since the last sync it re-syncs so
+    the run uses current instructions. It never fails the run — any probe/re-sync error
+    degrades to the last-synced record (a run may be at most one push behind, never broken),
+    and it's a no-op on the common unchanged path (one `latestCommitSha` read).
+
+  Together with the push fan-out this is the layered freshness story: the webhook keeps the
+  account catalog warm, and the dispatch probe is the correctness backstop for deployments
+  with no sync queue (local/dev) or a missed delivery. Backend-only; no harness/image change.
+
+- Updated dependencies [74c21ab]
+  - @cat-factory/kernel@0.137.0
+  - @cat-factory/agents@0.62.4
+  - @cat-factory/integrations@0.85.1
+  - @cat-factory/caching@0.10.1
+  - @cat-factory/sandbox@0.9.95
+  - @cat-factory/spend@0.12.45
+  - @cat-factory/workspaces@0.15.1
+
+## 0.120.0
+
+### Minor Changes
+
+- 27f0ea2: Expose the deployment-level (platform-operator) observability aggregates via OpenTelemetry.
+
+  A periodic, runtime-symmetric sweep (Worker `scheduled` cron ⇄ Node interval, like the
+  retention sweeps) now pushes the same run-health projection the operator dashboard renders —
+  run outcomes by status, the failure-kind taxonomy, live/parked depth, and the avg/min/max +
+  p50/p90/p99 duration percentiles — to any OTLP/HTTP backend as OpenTelemetry **gauge**
+  metrics (`cat_factory.platform.*`), per account (the bounded tenant scope) and stamped with
+  the projection's `generatedAt`. The OTel backend builds trends from the gauge series, so the
+  sweep exports the shortest trailing window (`1h` default).
+
+  `@cat-factory/observability-otel` gains a fetch-based `PlatformMetricsOtelExporter`
+  (`createPlatformMetricsOtelExporter`) — the workerd-safe transport used on BOTH runtimes
+  (the platform push is a stateless snapshot POST, so it needs no SDK, mirroring the Langfuse
+  sink's fetch-on-both shape). The runtime-neutral `sweepPlatformMetrics` driver + the
+  `distinctAccountIds` account enumeration live in `@cat-factory/orchestration`.
+
+  Opt-in on top of the base OTel exporter (it adds recurring DB rollup load): off unless
+  `OTEL_ENABLED=true` + an endpoint AND `OTEL_PLATFORM_METRICS=true`. `OTEL_PLATFORM_METRICS_WINDOW`
+  (`1h`/`24h`/`7d`) and, on Node, `OTEL_PLATFORM_METRICS_INTERVAL_MS` tune it. A deployment
+  that hasn't opted in emits nothing and runs no sweep.
+
+## 0.119.0
+
+### Minor Changes
+
+- 576f2e0: Workspace RBAC (slice 4): cache the effective-access resolution behind the app cache seam.
+
+  The shared auth gate resolves a caller's effective workspace access on every
+  `/workspaces/:ws/*` request (three reads: the board access row, the caller's account roles,
+  their member row). This adds a `workspaceAccess` slice to the kernel `AppCaches` port
+  (`@cat-factory/caching`) so `loadWorkspaceAccess` reads through it — grouped by workspace id,
+  keyed by user id, with both a denial and a missing board cached as values (negative caching).
+  A cache hit costs zero repository reads.
+
+  Coherence is invalidation-driven, after each write commits: a board delete drops the
+  workspace group (`WorkspaceService.delete`), and account-tier membership writes
+  (`AccountService.addMember` / `setMemberRoles`, `InvitationService.accept`) drop everything
+  (`invalidateAll` — the deliberate coarse fallback for a rare management action, since a new
+  membership can change access to many boards). The roster + access-mode write paths added by
+  the member-management API (a later slice) invalidate the same workspace group on their own
+  writes.
+
+  The slice follows the established seam rules: the `DEFAULT_APP_CACHES_PROFILE` enables it with
+  a short 60s TTL (a freshness backstop; invalidation is the real coherence story), while the
+  Worker's `ISOLATE_SAFE_APP_CACHES_PROFILE` keeps it **pass-through** — the resolution reads our
+  own mutable D1 state and a Worker isolate has no cross-isolate invalidation bus, so a TTL'd
+  entry could keep granting access after a peer isolate revoked a member. Cross-runtime
+  conformance asserts an account-membership grant is visible on the immediately following request
+  (the cached denial is dropped) on both D1 and Postgres.
+
+### Patch Changes
+
+- Updated dependencies [f5ddc02]
+- Updated dependencies [576f2e0]
+  - @cat-factory/contracts@0.143.0
+  - @cat-factory/kernel@0.136.0
+  - @cat-factory/integrations@0.85.0
+  - @cat-factory/caching@0.10.0
+  - @cat-factory/workspaces@0.15.0
+  - @cat-factory/agents@0.62.3
+  - @cat-factory/prompt-fragments@0.13.32
+  - @cat-factory/sandbox@0.9.94
+  - @cat-factory/spend@0.12.44
+
 ## 0.118.0
 
 ### Minor Changes

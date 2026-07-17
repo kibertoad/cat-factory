@@ -43,4 +43,10 @@ export class CfGitHubWebhookIngest implements GitHubWebhookIngest {
     await this.queue.send({ kind: 'resync-repo', workspaceId, repoGithubId })
     return true
   }
+
+  async queueSkillResync(accountId: string, sourceId: string): Promise<boolean> {
+    if (!this.queue) return false
+    await this.queue.send({ kind: 'skill-source-resync', accountId, sourceId })
+    return true
+  }
 }

@@ -1,5 +1,40 @@
 # @cat-factory/conformance
 
+## 0.11.9
+
+### Patch Changes
+
+- Updated dependencies [74c21ab]
+  - @cat-factory/kernel@0.137.0
+  - @cat-factory/server@0.132.0
+  - @cat-factory/agents@0.62.4
+  - @cat-factory/integrations@0.85.1
+  - @cat-factory/orchestration@0.120.1
+  - @cat-factory/gates@0.5.49
+
+## 0.11.8
+
+### Patch Changes
+
+- Updated dependencies [27f0ea2]
+  - @cat-factory/orchestration@0.120.0
+  - @cat-factory/server@0.131.0
+
+## 0.11.7
+
+### Patch Changes
+
+- Updated dependencies [f5ddc02]
+- Updated dependencies [576f2e0]
+  - @cat-factory/contracts@0.143.0
+  - @cat-factory/kernel@0.136.0
+  - @cat-factory/integrations@0.85.0
+  - @cat-factory/server@0.130.0
+  - @cat-factory/orchestration@0.119.0
+  - @cat-factory/agents@0.62.3
+  - @cat-factory/gates@0.5.48
+  - @cat-factory/prompt-fragments@0.13.32
+
 ## 0.11.6
 
 ### Patch Changes

@@ -3,6 +3,7 @@ import type {
   InfrastructureCapabilities,
   LocalModeConfig,
   ModelOption,
+  PlatformObservabilityWindow,
 } from '@cat-factory/contracts'
 import type { DetectionConventions } from '@cat-factory/integrations'
 import type { DocumentSourceKind, HarnessKind, ModelRef } from '@cat-factory/kernel'
@@ -328,6 +329,30 @@ export interface OtelConfig {
   headers?: Record<string, string>
   /** OTLP resource `service.name` (`OTEL_SERVICE_NAME`); defaults to `cat-factory`. */
   serviceName?: string
+  /**
+   * Deployment-level (platform-operator) metrics export: a periodic sweep pushes the
+   * aggregate run-health projection (outcomes, failure taxonomy, live/parked depth, duration
+   * percentiles) per account to the same OTLP endpoint as OpenTelemetry GAUGE metrics. A
+   * further opt-in ON TOP of the base OTel exporter, since it adds recurring DB rollup load;
+   * off unless {@link enabled} AND `OTEL_PLATFORM_METRICS=true`.
+   */
+  platformMetrics: OtelPlatformMetricsConfig
+}
+
+export interface OtelPlatformMetricsConfig {
+  /** Opt-in flag (`OTEL_PLATFORM_METRICS=true`); only effective when the base OTel exporter is on. */
+  enabled: boolean
+  /**
+   * How often the sweep runs (ms). Node reads `OTEL_PLATFORM_METRICS_INTERVAL_MS` (default
+   * 60s); the Worker is cron-driven (its 2-minute `scheduled` tick) and ignores this.
+   */
+  intervalMs: number
+  /**
+   * The trailing window each pushed snapshot aggregates over (`1h`/`24h`/`7d`; default `1h`).
+   * The OTel backend builds longer trends from the gauge time series, so the shortest window
+   * is the most operationally useful default.
+   */
+  window: PlatformObservabilityWindow
 }
 
 /**

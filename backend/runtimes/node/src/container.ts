@@ -2314,6 +2314,11 @@ export function buildNodeContainer(options: NodeContainerOptions): ServerContain
   // deployment is visible in the logs instead of quietly auto-merging without checking CI.
   warnUnwiredGates(logger)
 
+  // pg-boss-backed async GitHub ingest (webhook/resync/backfill) when the durable engine is
+  // wired; inline fallback with no boss. Built once so the engine's skill-freshness fan-out
+  // (slice 4) enqueues through the SAME `githubWebhook` seam rather than re-deriving the queue.
+  const gateways = createNodeGateways(env, options.boss)
+
   const dependencies: CoreDependencies = {
     ...releaseHealthDeps,
     ...incidentEnrichmentDeps,
@@ -2591,6 +2596,12 @@ export function buildNodeContainer(options: NodeContainerOptions): ServerContain
     // account's catalog of repo-authored skills, wired exactly like the Worker's
     // selectSkillLibraryDeps (account repos + installation resolver).
     ...selectNodeSkillLibraryDeps(config, db, githubClient, githubInstallationRepository),
+    // Push-webhook skill-source freshness fan-out (slice 4): resync affected sources via the
+    // pg-boss GitHub-sync queue. No boss (pure-logic test) ⇒ no proactive resync; the
+    // dispatch-time probe is the freshness backstop.
+    enqueueSkillResync: async ({ accountId, sourceId }) => {
+      await gateways.githubWebhook.queueSkillResync(accountId, sourceId)
+    },
     // Slack: an extra notification transport (the channel) + its management module.
     // Default-off; when enabled its channel is composed into `notificationChannel` below
     // alongside the in-app push, identically to the Worker.
@@ -2839,7 +2850,8 @@ export function buildNodeContainer(options: NodeContainerOptions): ServerContain
     ephemeralEnvironmentsRequireProvider: !testEnvHasZeroConfigDefault(config.infrastructure),
     // pg-boss-backed async GitHub ingest when the durable engine is wired (the real
     // server drains the queue via `startGitHubSyncWorker`); inline fallback with no boss.
-    gateways: createNodeGateways(env, options.boss),
+    // Built once above so the skill-freshness fan-out shares this same instance.
+    gateways,
     // Source-control PAT login: lets a user sign in with their own GitHub/GitLab PAT via
     // `/auth/pat`, held to the server's login/org/domain allowlist. Local mode overrides this
     // (via its container spread) with a configured-token, allowlist-exempt registry.
