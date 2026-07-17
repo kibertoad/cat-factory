@@ -109,6 +109,13 @@ export class D1WorkspaceRepository implements WorkspaceRepository {
     await this.db.prepare('UPDATE workspaces SET access_mode = ? WHERE id = ?').bind(mode, id).run()
   }
 
+  async linkAccount(id: string, accountId: string): Promise<void> {
+    await this.db
+      .prepare('UPDATE workspaces SET account_id = ? WHERE id = ?')
+      .bind(accountId, id)
+      .run()
+  }
+
   async create(
     workspace: Workspace,
     ownerUserId: string | null,

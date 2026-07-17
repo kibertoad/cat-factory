@@ -74,6 +74,7 @@ import {
   taskSourceController,
 } from './modules/tasks/TaskSourceController.js'
 import { workspaceController } from './modules/workspaces/WorkspaceController.js'
+import { workspaceMemberController } from './modules/workspaces/WorkspaceMemberController.js'
 import { persistenceController } from './modules/persistence/PersistenceController.js'
 import { githubDelegationController } from './modules/persistence/GitHubDelegationController.js'
 import { publicApiController } from './modules/publicApi/PublicApiController.js'
@@ -145,6 +146,10 @@ export function registerCoreControllers<E extends AppEnv>(app: Hono<E>): void {
   app.route('/accounts/:accountId', fragmentLibraryController('account'))
   app.route('/accounts/:accountId', skillLibraryController())
   app.route('/', workspaceController())
+  // Workspace-membership roster + access-mode management (workspace-rbac). Absolute
+  // `/workspaces/:ws/members` + `/access-mode` paths (like the workspace root), so mounted at `/`;
+  // 503 until the facade wires the workspace-member repository. Writes require `members.manage`.
+  app.route('/', workspaceMemberController())
   // Real-time WebSocket event stream (self-authenticates via ?ticket=; the facade's
   // gate bypasses only its exact upgrade shape). The upgrade is delegated to the
   // facade's realtime gateway.

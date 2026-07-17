@@ -197,10 +197,10 @@ export type PersistenceMethodTable = Record<string, Record<string, MethodSpec>>
  * slice adds a role dimension to the scope (or routes them through the service). Only the
  * account/membership READS a board load needs are remotely callable. Board-level mutations
  * (`workspaceRepository.rename`/`setDescription`, block/pipeline/execution CRUD) are
- * member-level in the service layer, so they remain. The one board mutation that stays OUT is
- * `workspaceRepository.setAccessMode` — the workspace-RBAC access-mode flip is `members.manage`
- * (admin-tier), so like the account/membership admin mutations it must not be reachable over the
- * role-blind machine RPC.
+ * member-level in the service layer, so they remain. The board mutations that stay OUT are
+ * `workspaceRepository.setAccessMode` (the access-mode flip) and `linkAccount` (the legacy-board
+ * auto-heal that adopts a board into an account) — both are `members.manage` (admin-tier), so like
+ * the account/membership admin mutations they must not be reachable over the role-blind machine RPC.
  */
 export const REMOTE_PERSISTENCE_METHODS: PersistenceMethodTable = {
   workspaceRepository: {

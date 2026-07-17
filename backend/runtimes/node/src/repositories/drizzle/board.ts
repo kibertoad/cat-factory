@@ -133,6 +133,10 @@ export class DrizzleWorkspaceRepository implements WorkspaceRepository {
     await this.db.update(workspaces).set({ access_mode: mode }).where(eq(workspaces.id, id))
   }
 
+  async linkAccount(id: string, accountId: string): Promise<void> {
+    await this.db.update(workspaces).set({ account_id: accountId }).where(eq(workspaces.id, id))
+  }
+
   async create(
     workspace: Workspace,
     ownerUserId: string | null,

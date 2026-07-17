@@ -67,6 +67,13 @@ export interface WorkspaceRepository {
   accessRowOf(id: string): Promise<WorkspaceAccessRow | undefined>
   /** Flip a board's workspace-RBAC access mode (`account` | `restricted`). */
   setAccessMode(id: string, mode: WorkspaceAccessMode): Promise<void>
+  /**
+   * Adopt a legacy (`account_id IS NULL`) board into an account — the auto-heal the member
+   * service runs so a roster / restriction can take effect on a previously unscoped board (an
+   * unscoped board is invisible to resolution's account tier). Sets `account_id` only; the owner
+   * column is left untouched.
+   */
+  linkAccount(id: string, accountId: string): Promise<void>
   create(workspace: Workspace, ownerUserId: string | null, accountId: string | null): Promise<void>
   rename(id: string, name: string): Promise<void>
   /** Update a board's description (null clears it). */

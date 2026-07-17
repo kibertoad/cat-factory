@@ -94,5 +94,30 @@ export const workspaceAccessSchema = v.object({
 })
 export type WorkspaceAccess = v.InferOutput<typeof workspaceAccessSchema>
 
-// Request bodies for the member-management API land with that API (a later slice of the
-// workspace-rbac initiative) — this file is the shared VOCABULARY only.
+// ---- Request bodies (member-management API) -------------------------------
+
+/**
+ * Add a member to a board by their internal user id, at a workspace role. The target
+ * MUST already belong to the board's owning account (contractors join the account first,
+ * then get scoped) — the service rejects a non-account-member. Upsert semantics.
+ */
+export const addWorkspaceMemberSchema = v.object({
+  userId: v.pipe(v.string(), v.minLength(1)),
+  role: workspaceRoleSchema,
+})
+export type AddWorkspaceMemberInput = v.InferOutput<typeof addWorkspaceMemberSchema>
+
+/** Change an existing member's workspace role. */
+export const setWorkspaceMemberRoleSchema = v.object({
+  role: workspaceRoleSchema,
+})
+export type SetWorkspaceMemberRoleInput = v.InferOutput<typeof setWorkspaceMemberRoleSchema>
+
+/**
+ * Flip a board's access mode. `restricted` limits it to the explicit member list;
+ * `account` restores the legacy "every account member sees it" behaviour.
+ */
+export const setWorkspaceAccessModeSchema = v.object({
+  accessMode: workspaceAccessModeSchema,
+})
+export type SetWorkspaceAccessModeInput = v.InferOutput<typeof setWorkspaceAccessModeSchema>
