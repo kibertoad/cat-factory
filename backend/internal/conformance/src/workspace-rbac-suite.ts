@@ -53,6 +53,11 @@ export function defineWorkspaceRbacSuite(harness: ConformanceHarness): void {
 
     const bearer = (token: string) => ({ authorization: `Bearer ${token}` })
 
+    // This first assertion is the suite-wide guard: every harness that wires this suite MUST run
+    // auth-enabled, so the cases below don't need (and deliberately omit) a per-test
+    // `if (!app.authEnabled) return` — that would let a genuine mis-wiring pass VACUOUSLY, the very
+    // thing the suite exists to prevent. A harness with no session secret (e.g. mothership) simply
+    // never wires this suite; if one ever did, this test fails loudly instead of the rest no-oping.
     it('runs auth-enabled (RBAC assertions are meaningful, not vacuous)', () => {
       // Every facade harness MUST configure a session secret so the gate actually enforces.
       expect(harness.makeApp().authEnabled).toBe(true)
@@ -60,7 +65,6 @@ export function defineWorkspaceRbacSuite(harness: ConformanceHarness): void {
 
     it('restricted board: a non-member gets 404 and it is absent from their list; the account admin keeps full access (escape hatch)', async () => {
       const app = harness.makeApp()
-      if (!app.authEnabled) return
       const { adminA, c, wsId } = await scenario(app)
       await app.workspaceRepository().setAccessMode(wsId, 'restricted')
 
@@ -86,7 +90,6 @@ export function defineWorkspaceRbacSuite(harness: ConformanceHarness): void {
 
     it('viewer write floor: a viewer reads but cannot write; the ticket mint is allowlisted; a member passes the floor', async () => {
       const app = harness.makeApp()
-      if (!app.authEnabled) return
       const { adminA, b, wsId } = await scenario(app)
       await app.workspaceRepository().setAccessMode(wsId, 'restricted')
       await app.workspaceMemberRepository().upsert({
@@ -124,7 +127,6 @@ export function defineWorkspaceRbacSuite(harness: ConformanceHarness): void {
 
     it('account mode: every account member sees + reads the board (legacy behaviour, no member row)', async () => {
       const app = harness.makeApp()
-      if (!app.authEnabled) return
       const { c, wsId } = await scenario(app) // W stays in the default `account` mode
       const h = bearer(await app.session({ id: c }))
 
@@ -137,7 +139,6 @@ export function defineWorkspaceRbacSuite(harness: ConformanceHarness): void {
 
     it('list annotation: a restricted board reached via an explicit row carries the caller viewerRole', async () => {
       const app = harness.makeApp()
-      if (!app.authEnabled) return
       const { adminA, b, wsId } = await scenario(app)
       await app.workspaceRepository().setAccessMode(wsId, 'restricted')
       await app.workspaceMemberRepository().upsert({
