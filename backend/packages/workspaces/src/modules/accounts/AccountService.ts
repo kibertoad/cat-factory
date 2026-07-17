@@ -37,6 +37,16 @@ export interface AccountServiceDependencies {
    */
   onAccountBudgetChanged?: (accountId: string) => void | Promise<void>
   /**
+   * Optional: signal that an account's MEMBERSHIP roster changed (a member added or their roles
+   * changed), so the workspace-rbac `workspaceAccess` cache can drop its entries (account
+   * membership is a prerequisite for every board in the account, so a grant/revocation there
+   * changes access to potentially many boards). Wired to `caches.workspaceAccess.invalidateAll()`
+   * — the coarse fallback is deliberate: these are rare management actions and enumerating the
+   * account's boards just to invalidate isn't worth a port method. Absent (tests / no cache) ⇒
+   * resolution reads live.
+   */
+  onAccountMembershipChanged?: (accountId: string) => void | Promise<void>
+  /**
    * The operator hard ceiling on the account-tier budget (`BUDGET_MAX_MONTHLY_PER_ACCOUNT`),
    * or null/undefined when uncapped. Enforced on write so a submitted value can't exceed the
    * cap (the docs promise server-side enforcement; the gate additionally clamps at read time).
@@ -291,6 +301,9 @@ export class AccountService {
       createdAt: this.deps.clock.now(),
     }
     await this.deps.membershipRepository.upsert(membership)
+    // A new account membership grants access to every non-restricted board in the account, so drop
+    // the workspace-access cache (workspace-rbac). After the write commits.
+    await this.deps.onAccountMembershipChanged?.(accountId)
     return toMember(membership)
   }
 
@@ -309,6 +322,9 @@ export class AccountService {
     }
     const membership: Membership = { ...target, roles: next }
     await this.deps.membershipRepository.upsert(membership)
+    // An account-role change (e.g. gaining/losing `admin`) changes the workspace-access escape
+    // hatch, so drop the workspace-access cache (workspace-rbac). After the write commits.
+    await this.deps.onAccountMembershipChanged?.(accountId)
     return toMember(membership)
   }
 

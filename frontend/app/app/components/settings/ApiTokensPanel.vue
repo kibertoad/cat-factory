@@ -5,11 +5,30 @@
 // only (label + created / last-used). To rotate a token, revoke it and mint a new one.
 // Opened from the Integrations hub.
 import { computed, ref, watch } from 'vue'
-import type { PublicApiKey } from '~/types/publicApiKeys'
+import type { PublicApiKey, PublicApiScope } from '~/types/publicApiKeys'
 import IntegrationBackTitle from '~/components/layout/IntegrationBackTitle.vue'
 import CopyButton from '~/components/common/CopyButton.vue'
 
 const { t, d } = useI18n()
+
+// The permission ladder a minted key can carry (read ⊂ write ⊂ admin), mirroring the backend
+// contract. A `read` key can only observe; `write` adds create/start/manage; `admin` adds the
+// destructive/merge-adjacent operations (e.g. deleting a task).
+const SCOPES: PublicApiScope[] = ['read', 'write', 'admin']
+
+/** Localized label for a scope — an exhaustive switch, so a new scope is a compile error here. */
+function scopeLabel(scope: PublicApiScope): string {
+  switch (scope) {
+    case 'read':
+      return t('settings.apiTokens.scopes.read')
+    case 'write':
+      return t('settings.apiTokens.scopes.write')
+    case 'admin':
+      return t('settings.apiTokens.scopes.admin')
+  }
+}
+
+const scopeItems = computed(() => SCOPES.map((value) => ({ value, label: scopeLabel(value) })))
 const ui = useUiStore()
 const store = usePublicApiKeysStore()
 const toast = useToast()
@@ -22,6 +41,8 @@ const open = computed({
 const back = useIntegrationBack(open)
 
 const label = ref('')
+// The scope the next minted key will carry; defaults to the safe middle of the ladder.
+const scope = ref<PublicApiScope>('write')
 const busy = ref(false)
 // The full raw secret from the most recent create — surfaced once, then dismissed. Never
 // re-fetchable, so it lives only in this transient ref (not the store).
@@ -58,9 +79,10 @@ async function createToken() {
   if (!trimmed) return
   busy.value = true
   try {
-    const created = await store.create(trimmed)
+    const created = await store.create(trimmed, scope.value)
     newSecret.value = created.secret
     label.value = ''
+    scope.value = 'write'
     toast.add({
       title: t('settings.apiTokens.toast.created'),
       icon: 'i-lucide-check',
@@ -145,7 +167,17 @@ async function revokeToken(key: PublicApiKey) {
             class="flex items-center justify-between gap-2 rounded-md border border-slate-800 px-3 py-2"
           >
             <div class="min-w-0 space-y-0.5">
-              <div class="truncate text-sm font-medium">{{ key.label }}</div>
+              <div class="flex items-center gap-2">
+                <span class="truncate text-sm font-medium">{{ key.label }}</span>
+                <UBadge
+                  color="neutral"
+                  variant="subtle"
+                  size="sm"
+                  :data-testid="`api-token-scope-${key.id}`"
+                >
+                  {{ scopeLabel(key.scope) }}
+                </UBadge>
+              </div>
               <div class="text-[11px] text-slate-500">
                 {{
                   t('settings.apiTokens.list.created', {
@@ -188,6 +220,17 @@ async function revokeToken(key: PublicApiKey) {
               class="w-full"
               data-testid="api-token-label"
               @keyup.enter="createToken"
+            />
+          </UFormField>
+          <UFormField
+            :label="t('settings.apiTokens.add.scope')"
+            :help="t('settings.apiTokens.add.scopeHelp')"
+          >
+            <USelect
+              v-model="scope"
+              :items="scopeItems"
+              class="w-full"
+              data-testid="api-token-scope"
             />
           </UFormField>
           <UButton

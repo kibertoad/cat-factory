@@ -2488,7 +2488,14 @@
         "label": "Label",
         "labelHelp": "A name to recognize this token by later.",
         "labelPlaceholder": "e.g. CI pipeline",
+        "scope": "Scope",
+        "scopeHelp": "What this token can do: read-only, read and write, or full access (which also allows deleting).",
         "create": "Create token"
+      },
+      "scopes": {
+        "read": "Read only",
+        "write": "Read and write",
+        "admin": "Full access"
       },
       "toast": {
         "loadFailed": "Could not load API tokens",

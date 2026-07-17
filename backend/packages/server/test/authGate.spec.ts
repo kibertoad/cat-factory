@@ -36,6 +36,16 @@ function makeApp(opts: FakeOpts = {}) {
       memberRoleOf: opts.memberRoleOf ?? (async () => null),
     },
     accountService: { rolesFor: opts.rolesFor ?? (async () => []) },
+    // Pass-through `workspaceAccess` slice (the Worker's isolate-safe shape): `get` just runs the
+    // loader, so the gate resolves live every request and these unit assertions stay cache-agnostic.
+    caches: {
+      workspaceAccess: {
+        get: async (_key: string, _group: string, load: () => Promise<unknown>) => load(),
+        invalidate: async () => {},
+        invalidateGroup: async () => {},
+        invalidateAll: async () => {},
+      },
+    },
   } as unknown as ServerContainer
 
   const app = new Hono<AppEnv>()

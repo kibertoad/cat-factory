@@ -36,6 +36,13 @@ export interface InvitationServiceDependencies {
   resolveEmailSender?: (accountId: string) => Promise<EmailSender | null>
   /** Base URL the accept link points at (the SPA origin). */
   appBaseUrl?: string
+  /**
+   * Optional: signal that an account's membership roster changed (an invitation was accepted), so
+   * the workspace-rbac `workspaceAccess` cache can drop its entries — the same coarse
+   * `invalidateAll()` hook `AccountService` uses (account membership is a prerequisite for board
+   * access). Absent (tests / no cache) ⇒ resolution reads live.
+   */
+  onAccountMembershipChanged?: (accountId: string) => void | Promise<void>
 }
 
 /** SHA-256 hex digest — Web Crypto, runs on both runtimes. */
@@ -191,6 +198,9 @@ export class InvitationService {
     }
     await this.deps.membershipRepository.upsert(membership)
     await this.deps.invitationRepository.setStatus(record.id, 'accepted')
+    // The new membership grants board access across the account, so drop the workspace-access
+    // cache (workspace-rbac). After the writes commit.
+    await this.deps.onAccountMembershipChanged?.(record.accountId)
     return record.accountId
   }
 }

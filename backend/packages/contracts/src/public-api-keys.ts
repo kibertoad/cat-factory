@@ -15,6 +15,23 @@ import * as v from 'valibot'
 // bound to that workspace.
 // ---------------------------------------------------------------------------
 
+/**
+ * The permission a key carries on the `/api/v1` surface. An ordered ladder — each level
+ * INCLUDES the ones below it (`admin` ⊃ `write` ⊃ `read`), so an endpoint gates on a MINIMUM:
+ *
+ *  - `read`  — read-only reads/streams (list services/tasks/pipelines, poll a run, SSE).
+ *  - `write` — everything `read` can do, PLUS non-destructive mutations (create/start/stop/
+ *    retry/edit a task, start an initiative run).
+ *  - `admin` — everything `write` can do, PLUS destructive / merge-adjacent operations
+ *    (delete a task; future: resolve a merge-review notification, which performs a real merge).
+ *
+ * The canonical rank order lives beside this schema (`PUBLIC_API_SCOPES`) so both the wire
+ * validation and the server-side `scope ≥ required` check read from one source of truth.
+ */
+export const PUBLIC_API_SCOPES = ['read', 'write', 'admin'] as const
+export const publicApiScopeSchema = v.picklist(PUBLIC_API_SCOPES)
+export type PublicApiScope = v.InferOutput<typeof publicApiScopeSchema>
+
 /** One public-API key as exposed to clients — metadata only, never the secret. */
 export const publicApiKeySchema = v.object({
   /** `pak_*` — also the non-secret lookup id embedded in the raw key. */
@@ -22,6 +39,8 @@ export const publicApiKeySchema = v.object({
   accountId: v.string(),
   workspaceId: v.string(),
   label: v.string(),
+  /** What the key is allowed to do on `/api/v1` (read ⊂ write ⊂ admin). */
+  scope: publicApiScopeSchema,
   createdAt: v.number(),
   lastUsedAt: v.nullable(v.number()),
   /** Set when the key was revoked (tombstone); a revoked key never authenticates. */
@@ -32,9 +51,15 @@ export type PublicApiKey = v.InferOutput<typeof publicApiKeySchema>
 export const publicApiKeyListResultSchema = v.object({ keys: v.array(publicApiKeySchema) })
 export type PublicApiKeyListResult = v.InferOutput<typeof publicApiKeyListResultSchema>
 
-/** Mint a new key. Only a label is supplied; the scope comes from the mounting workspace. */
+/**
+ * Mint a new key. A label plus an optional `scope` (the account/workspace scope comes from the
+ * mounting route). `scope` defaults to `write` — the safe middle of the ladder: a fresh key can
+ * create/start/manage tasks but NOT delete or perform a merge-adjacent action until it is minted
+ * `admin` explicitly. Pass `read` for a monitor-only integration.
+ */
 export const createPublicApiKeySchema = v.object({
   label: v.pipe(v.string(), v.trim(), v.minLength(1), v.maxLength(120)),
+  scope: v.optional(publicApiScopeSchema, 'write'),
 })
 export type CreatePublicApiKeyInput = v.InferOutput<typeof createPublicApiKeySchema>
 

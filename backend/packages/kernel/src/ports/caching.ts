@@ -10,6 +10,7 @@ import type { ResolvedCatalogEntry } from './fragment-repositories.js'
 import type { AccountSkillRecord } from './skill-repositories.js'
 import type { RepoContentEntry, RepoFileContent } from './github-client.js'
 import type { WorkspaceSettingsRepository } from './workspace-settings-repositories.js'
+import type { WorkspaceAccess } from '../domain/workspace-access.js'
 
 // ---------------------------------------------------------------------------
 // The app-level caching seam (docs/initiatives/caching-layer.md). Services read
@@ -251,6 +252,23 @@ export interface AppCaches {
    * Node/local facades.
    */
   riskPolicy: GroupCacheHandle<RiskPolicyCacheValue>
+  /**
+   * The signed-in caller's resolved workspace-RBAC access to one board (workspace-rbac
+   * initiative), grouped by workspace id and keyed by user id — the three-read resolution
+   * (`accessRowOf` + account roles + the member row) the shared auth gate runs on EVERY
+   * `/workspaces/:ws/*` request. Wrapped ({@link WorkspaceAccessCacheValue}) so BOTH a denial
+   * (`{allowed:false}`) and a missing board (`null`) cache as values — negative caching, since
+   * layered-loader treats a bare `null` as unresolved. Group == workspace id / key == user id, so
+   * one workspace-scoped event drops every member's entry; a workspace never changes accounts, so
+   * the (accessRow, accountRoles, memberRole) triple a load resolves is stable under this key.
+   * Coherence is invalidation-driven, after the write commits: workspace-member roster writes,
+   * an access-mode flip, and a workspace delete drop the workspace GROUP; the rarer account-tier
+   * membership writes (add member / set roles / invitation accept) drop EVERYTHING
+   * (`invalidateAll` — over-invalidation is safe and enumerating an account's boards just to
+   * invalidate isn't worth a port method). Pass-through on the Worker's isolate-safe profile (our
+   * own mutable D1 state, no cross-isolate bus), so it caches only on the Node/local facades.
+   */
+  workspaceAccess: GroupCacheHandle<WorkspaceAccessCacheValue>
   /** Release notification-bus resources (a no-op for bare in-memory caches). */
   close(): Promise<void>
 }
@@ -277,6 +295,17 @@ export interface BudgetLimitCacheValue {
  */
 export interface RiskPolicyCacheValue {
   policy: RiskPolicy | null
+}
+
+/**
+ * Cache-friendly wrapper for a resolved workspace-RBAC access decision. `access` is `null` when
+ * the board does NOT exist (the gate then passes through so the handler 404s as it always has),
+ * a `{allowed:false}` denial, or an `{allowed:true}` grant — all three cache as values so a repeat
+ * request costs zero reads (the wrap convention, since layered-loader treats a bare `null` as
+ * unresolved).
+ */
+export interface WorkspaceAccessCacheValue {
+  access: WorkspaceAccess | null
 }
 
 /**

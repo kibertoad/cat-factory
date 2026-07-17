@@ -1,6 +1,6 @@
 # Initiative: workspace-level RBAC & membership
 
-**Status:** in progress (slices 1–3 landed) · **Owner:** core · **Started:** 2026-07-16
+**Status:** in progress (slices 1–4 landed) · **Owner:** core · **Started:** 2026-07-16
 
 > Durable source of truth for a multi-PR initiative. Read it first before picking up the
 > next slice; update the checklist at the end of each PR.
@@ -373,8 +373,8 @@ workspace `admin`. `product` remains data-only. Deferred follow-ups: an
 | 1   | **Contracts + kernel vocabulary**: `workspaceRoleSchema` / `workspacePermissionSchema` / `workspaceAccessModeSchema` + `WorkspaceMember` wire shape (`contracts/src/workspace-members.ts`); `workspaceSchema.accessMode`; kernel `domain/workspace-access.ts` (`WORKSPACE_ROLE_PERMISSIONS`, `resolveWorkspaceAccess`, `workspaceRoleAtLeast`) + decision-table tests; `ForbiddenError` + 403 mapping                                                                                                         | ✅ done | #1159 |
 | 2   | **Persistence**: D1 `0052_workspace_rbac.sql` ⇄ Drizzle + `pnpm db:generate` (`workspace_members`, `workspaces.access_mode`); `WorkspaceMemberRepository` port + both impls (incl. `getRolesForUserInWorkspaces`, `removeByAccountMembership`); `WorkspaceRepository.accessRowOf` + `setAccessMode`; board-delete cascade; conformance repo assertions                                                                                                                                                        | ✅ done | #1159 |
 | 3   | **Resolution in the gate**: `mountAuthGate` resolves `WorkspaceAccess` (escape hatch, legacy branch, 404 shape unchanged), sets `workspaceAccess` on the context (`env.ts`), **viewer write floor** (non-GET ⇒ ≥ member; ticket-mint allowlist); `WorkspaceVisibility` extension + `listVisible` both runtimes + `AccountService.accessibleAccountScopes`; list `viewerRole` annotation (batch); snapshot/create attach `access`; creator auto-enroll; conformance (404, floor, escape hatch, list filtering) | ✅ done | #1166 |
-| 4   | **`workspaceAccess` AppCaches slice**: kernel handle + wrap type, both profiles (isolate-safe: disabled), read-through in the gate, all invalidation sites (member writes, access-mode, workspace delete, account-membership writes ⇒ `invalidateAll`), cache-coherence conformance assertion                                                                                                                                                                                                                 | ⬜ todo |       |
-| 5   | **Member management API**: `WorkspaceMemberService` (only-account-members rule), `workspaceMemberController` + contracts routes (`GET/POST/PATCH/DELETE /members`, `PUT /access-mode`), `requirePermission` helper (`http/workspaceAccess.ts`), conformance member-CRUD assertions                                                                                                                                                                                                                            | ⬜ todo |       |
+| 4   | **`workspaceAccess` AppCaches slice**: kernel handle + wrap type, both profiles (isolate-safe: disabled), read-through in the gate, invalidation at the write sites that exist today (workspace delete ⇒ `invalidateGroup`; account-membership writes — add/set-roles/invite-accept ⇒ `invalidateAll`), cache-coherence conformance assertion                                                                                                                                                                 | ✅ done |       |
+| 5   | **Member management API**: `WorkspaceMemberService` (only-account-members rule), `workspaceMemberController` + contracts routes (`GET/POST/PATCH/DELETE /members`, `PUT /access-mode`), `requirePermission` helper (`http/workspaceAccess.ts`), **`caches.workspaceAccess.invalidateGroup(ws)` after every roster/access-mode write** (slice 4 landed the slice + delete/account-tier invalidation; these group invalidations belong here), conformance member-CRUD + access-mode cache-coherence assertions  | ⬜ todo |       |
 | 6   | **Admin-tier enforcement pass**: `requirePermission('settings.manage' \| 'integrations.manage' \| 'secrets.manage')` across the §6 table's admin route groups; conformance: member 403 on settings/integrations/secrets                                                                                                                                                                                                                                                                                       | ⬜ todo |       |
 | 7   | **Side doors**: `/me/environment-handlers/:ws` through shared resolution (`runs.execute`, 404); WS ticket gains `userId`; `public_api_keys.created_by_user_id` (both runtimes) + mint under `secrets.manage` + minter in the keys UI                                                                                                                                                                                                                                                                          | ⬜ todo |       |
 | 8   | **SPA read side**: `useWorkspaceAccess()` composable, store hydration of `access` / `viewerRole`, viewer read-only degradation (board editing, run starts, HITL actions), settings nav gating, i18n (en + all locales)                                                                                                                                                                                                                                                                                        | ⬜ todo |       |
@@ -450,6 +450,20 @@ server / workspaces / caching / app + both runtimes are versioned packages).
   `ConformanceApp` gained `authEnabled` + `session(user)` (mints a real `Bearer` via the shared
   `mintSession`) + `createWorkspaceInAccount`; `defineWorkspaceRbacSuite` drives the gate as real
   signed users. The mothership harness reports `authEnabled:false` (it does not run the suite).
+- **Slice 4 — cache read-through + invalidation ownership.** The `workspaceAccess` slice wraps
+  `loadWorkspaceAccess` (`server/src/http/workspaceAccess.ts`): group = workspace id, key = user
+  id, and BOTH a denial and a missing board cache as values (`WorkspaceAccessCacheValue.access:
+WorkspaceAccess | null`). The slice landed invalidation ONLY at the write paths that exist
+  today: `WorkspaceService.delete` (`invalidateGroup`, wired via `caches.workspaceAccess`), and the
+  account-tier membership writes `AccountService.addMember` / `setMemberRoles` +
+  `InvitationService.accept` (a narrow `onAccountMembershipChanged` callback the container wires to
+  `invalidateAll()`, mirroring `onAccountBudgetChanged`). The **member-roster + access-mode writes
+  don't exist yet — they arrive with the slice-5 member-management service**, and that service MUST
+  call `caches.workspaceAccess.invalidateGroup(workspaceId)` after each roster/access-mode write (a
+  raw-repo write does NOT invalidate). Until then the RBAC conformance suite uses distinct users
+  for the viewer/member floor case (each resolves fresh) rather than upgrading one user via a raw
+  upsert-then-live-read, which the cache would otherwise serve stale. The Worker keeps the slice
+  pass-through (isolate-safe profile), so on that facade resolution reads live every request.
 - **The viewer write floor is method-based, and the ticket mint is its SOLE exemption — on
   purpose.** The floor rejects EVERY non-GET method under `/workspaces/:ws/*` for a `viewer`,
   allowlisting only `POST …/events/ticket`. A repo audit found ~13 other non-GET routes that
