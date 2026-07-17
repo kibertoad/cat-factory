@@ -30,9 +30,19 @@ const PUBLIC_PREFIXES = ['/health', '/auth', '/v1', '/github', '/slack', '/inter
 const WS_EVENTS_PATH = /^\/workspaces\/[^/]+\/events$/
 
 /**
- * The one write that is read-equivalent and so allowlisted past the viewer floor: minting a
- * read-only WebSocket stream ticket. A viewer may watch a board's live stream (the stream
- * carries only read-tier data), so this POST is exempt from the "≥ member" floor.
+ * The one write that is read-equivalent AND required for the pure *viewing* experience, so it
+ * is allowlisted past the viewer floor: minting a read-only WebSocket stream ticket. A viewer
+ * may watch a board's live stream (the stream carries only read-tier data), so this POST is
+ * exempt from the "≥ member" floor.
+ *
+ * This is deliberately the ONLY exemption. Other non-GET routes that happen not to persist
+ * anything — the `detect` / `plan` / `search` / `test` / `validate` / `preflight` / `probe`
+ * endpoints that prefill a create/edit form or probe an integration connection — are NOT
+ * allowlisted: they belong to the `member`+ authoring / integration-setup surface, not to
+ * read-only viewing (a viewer never reaches them — the SPA gates those affordances by
+ * permission). Blocking them behind the floor is intended; do NOT widen this allowlist to
+ * "read-equivalent POST" as a class. If a genuinely viewing-required write is ever added,
+ * add its own exact-path regex here alongside this one.
  */
 const WS_TICKET_MINT_PATH = /^\/workspaces\/[^/]+\/events\/ticket$/
 

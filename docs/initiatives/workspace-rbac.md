@@ -450,6 +450,17 @@ server / workspaces / caching / app + both runtimes are versioned packages).
   `ConformanceApp` gained `authEnabled` + `session(user)` (mints a real `Bearer` via the shared
   `mintSession`) + `createWorkspaceInAccount`; `defineWorkspaceRbacSuite` drives the gate as real
   signed users. The mothership harness reports `authEnabled:false` (it does not run the suite).
+- **The viewer write floor is method-based, and the ticket mint is its SOLE exemption — on
+  purpose.** The floor rejects EVERY non-GET method under `/workspaces/:ws/*` for a `viewer`,
+  allowlisting only `POST …/events/ticket`. A repo audit found ~13 other non-GET routes that
+  don't persist anything (the `detect`/`plan`/`search`/`test`/`validate`/`preflight`/`probe`
+  endpoints that prefill a create/edit form or probe an integration connection). These were
+  deliberately NOT allowlisted: they belong to the `member`+ authoring / integration-setup
+  surface, not to read-only viewing, and the SPA already gates their affordances by permission —
+  so a viewer never reaches them. Do NOT "fix" a viewer 403 on one of those by widening the
+  allowlist to "read-equivalent POST" as a class; the ticket mint is exempt only because it is
+  the one write the pure _viewing_ experience needs (the live stream). Add a new exact-path
+  exemption only for a genuinely viewing-required write.
 
 ## Out of scope
 
