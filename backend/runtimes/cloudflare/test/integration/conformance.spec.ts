@@ -7,6 +7,7 @@ import {
   RecordingEventPublisher,
   defineCacheSuite,
   defineConformanceSuite,
+  defineWorkspaceAccessSuite,
   makeIncorporatedClarityReview,
   makeIncorporatedReview,
   makeOnboardingProbe,
@@ -20,6 +21,8 @@ import { D1RequirementReviewRepository } from '../../src/infrastructure/reposito
 import { D1ClarityReviewRepository } from '../../src/infrastructure/repositories/D1ClarityReviewRepository'
 import { D1ServiceRepository } from '../../src/infrastructure/repositories/D1ServiceRepository'
 import { D1BlockRepository } from '../../src/infrastructure/repositories/D1BlockRepository'
+import { D1WorkspaceRepository } from '../../src/infrastructure/repositories/D1WorkspaceRepository'
+import { D1WorkspaceMemberRepository } from '../../src/infrastructure/repositories/D1WorkspaceMemberRepository'
 import { D1InitiativeRepository } from '../../src/infrastructure/repositories/D1InitiativeRepository'
 import { D1NotificationRepository } from '../../src/infrastructure/repositories/D1NotificationRepository'
 import { D1DocumentRepository } from '../../src/infrastructure/repositories/D1DocumentRepository'
@@ -222,6 +225,8 @@ const harness: ConformanceHarness = {
       agentRunRepository: () =>
         buildContainer(env, { agentExecutor: new FakeAgentExecutor() }).agentRunRepository,
       blockRepository: () => new D1BlockRepository({ db: env.DB }),
+      workspaceRepository: () => new D1WorkspaceRepository({ db: env.DB }),
+      workspaceMemberRepository: () => new D1WorkspaceMemberRepository({ db: env.DB }),
       initiativeRepository: () => new D1InitiativeRepository({ db: env.DB }),
       notificationRepository: () => new D1NotificationRepository({ db: env.DB }),
       documentRepository: () => new D1DocumentRepository({ db: env.DB }),
@@ -231,6 +236,9 @@ const harness: ConformanceHarness = {
 }
 
 defineConformanceSuite(harness)
+// Workspace-RBAC initiative (slice 2): the membership roster + access-mode persistence
+// must round-trip identically on D1 and Postgres.
+defineWorkspaceAccessSuite(harness)
 // Caching initiative: the Worker serves the fragment catalog through the
 // ISOLATE-SAFE (pass-through) profile — coherence must hold there exactly as it
 // does through Node's live in-memory cache.

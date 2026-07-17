@@ -54,12 +54,18 @@ export {
 export { defineAgentContextSuite } from './agent-context-suite.js'
 export { defineAgentSearchQuerySuite } from './agent-search-queries-suite.js'
 export { defineCacheSuite } from './cache-suite.js'
+export { defineSkillLibrarySuite, type SkillLibraryRepos } from './skill-library-suite.js'
 export { defineBrainstormSuite } from './brainstorm-suite.js'
 export { defineInitiativeSuite } from './initiative-suite.js'
 export { defineSharedStackSuite } from './shared-stack-suite.js'
 export { defineKaizenSuite } from './kaizen-suite.js'
 export { defineProvisioningLogSuite } from './provisioning-log-suite.js'
 export { defineNotificationSuite } from './notification-suite.js'
+export {
+  definePlatformMetricsSuite,
+  type PlatformMetricsSeed,
+  type PlatformMetricsSeedRun,
+} from './platform-metrics-suite.js'
 export { defineUserRepoAccessSuite } from './user-repo-access-suite.js'
 export { defineEnvironmentHandlersSuite } from './environment-handlers-suite.js'
 export { defineEnvironmentTestSuite } from './environment-test-suite.js'
@@ -70,4 +76,5 @@ export { defineVcsProviderSuite } from './vcs-provider-suite.js'
 export { defineScheduleRunSuite } from './schedule-run-suite.js'
 export { defineSubscriptionActivationSuite } from './subscription-activation-suite.js'
 export { defineWorkspaceSettingsSuite } from './workspace-settings-suite.js'
+export { defineWorkspaceAccessSuite } from './workspace-access-suite.js'
 export { CONFORMANCE_DRIVE_CONFIG, driveWorkspace } from './drive.js'

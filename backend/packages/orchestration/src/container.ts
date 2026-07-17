@@ -28,6 +28,7 @@ import type { PreviewTransport } from '@cat-factory/kernel'
 import type { AgentExecutor } from '@cat-factory/kernel'
 import type { TokenUsageRepository } from '@cat-factory/kernel'
 import type { LlmCallMetricRepository } from '@cat-factory/kernel'
+import type { PlatformMetricsRepository } from '@cat-factory/kernel'
 import type { ProvisioningLogRepository } from '@cat-factory/kernel'
 import type { LlmTraceSink } from '@cat-factory/kernel'
 import { type WorkRunner, NoopWorkRunner } from '@cat-factory/kernel'
@@ -115,6 +116,7 @@ import type {
 import type { SecretCipher } from '@cat-factory/kernel'
 import type { FragmentSourceRepository, PromptFragmentRepository } from '@cat-factory/kernel'
 import type { FragmentSelector } from '@cat-factory/kernel'
+import type { AccountSkillRepository, SkillSourceRepository } from '@cat-factory/kernel'
 import type {
   BranchProjectionRepository,
   CheckRunProjectionRepository,
@@ -140,6 +142,7 @@ import type { OpenRouterModelMeta } from '@cat-factory/contracts'
 import { LlmObservabilityService } from './modules/observability/LlmObservabilityService.js'
 import { AgentContextObservabilityService } from './modules/observability/AgentContextObservabilityService.js'
 import { SearchQueryObservabilityService } from './modules/observability/SearchQueryObservabilityService.js'
+import { PlatformObservabilityService } from './modules/observability/PlatformObservabilityService.js'
 import {
   GitHubInstallationService,
   RepoProvisioningService,
@@ -223,6 +226,10 @@ import {
   FragmentLibraryService,
   FragmentSourceService,
   type ResolveFragmentInstallationId,
+  SkillCatalogService,
+  SkillSourceService,
+  SkillRunResolver,
+  type ResolveSkillInstallationId,
 } from '@cat-factory/agents'
 import type { InitiativePresetRegistry } from '@cat-factory/kernel'
 
@@ -382,6 +389,13 @@ export interface CoreDependencies {
    * tests/unconfigured facades are unaffected.
    */
   llmCallMetricRepository?: LlmCallMetricRepository
+  /**
+   * Deployment-level rollup port over `agent_runs` (run outcomes, failure taxonomy, live/parked
+   * depth, duration + trend) backing the platform-operator dashboard. Optional: when wired,
+   * `createCore` builds {@link PlatformObservabilityService} and re-exposes it for the admin read
+   * endpoint; absent (tests / unconfigured facades) → no platform view, engine unaffected.
+   */
+  platformMetricsRepository?: PlatformMetricsRepository
   /**
    * Whether the LLM observability sink persists the full prompt body with each metric.
    * Defaults to true; set false (via `LLM_RECORD_PROMPTS=false`) to keep the numeric
@@ -748,6 +762,14 @@ export interface CoreDependencies {
    * document as a fragment is rejected and run resolution uses cached bodies.
    */
   documentContentResolver?: DocumentContentResolver
+
+  // ---- Repo-sourced Claude Skills library (opt-in; docs/initiatives/repo-skills.md) ----
+  // An account's catalog of repo-authored Claude skills. The catalog read assembles
+  // whenever `accountSkillRepository` is present; the source sync additionally needs
+  // `skillSourceRepository`, the `githubClient` (above) and an installation resolver.
+  accountSkillRepository?: AccountSkillRepository
+  skillSourceRepository?: SkillSourceRepository
+  resolveSkillInstallationId?: ResolveSkillInstallationId
 
   // ---- Notifications + merge lifecycle (optional; wired when configured) ----
   // The notifications subsystem (the in-app inbox + the board's human-action
@@ -1139,6 +1161,24 @@ export interface FragmentLibraryModule {
   sourceService?: FragmentSourceService
 }
 
+/**
+ * The repo-sourced Claude Skills library's services, present only when configured
+ * (docs/initiatives/repo-skills.md). Assembles whenever `accountSkillRepository` is wired.
+ */
+export interface SkillLibraryModule {
+  /** The account skill-catalog read (cached), consumed by the management surface + the run path. */
+  catalogService: SkillCatalogService
+  /** Repo-source sync; present only when the GitHub client + source repo are wired. */
+  sourceService?: SkillSourceService
+  /**
+   * Resolves a `skill` step's picked skill (instructions + resource bodies at the pinned commit)
+   * for the execution engine (`skillResolver`). Present only when the source repo + GitHub client
+   * are wired (it needs them to fetch resource bodies) — the same prerequisites as the sync
+   * service. Absent ⇒ a skill step fails loudly at dispatch.
+   */
+  runResolver?: SkillRunResolver
+}
+
 export interface Core {
   workspaceService: WorkspaceService
   accountService: AccountService
@@ -1174,6 +1214,8 @@ export interface Core {
   executionEventPublisher: ExecutionEventPublisher
   /** Present only when the LLM-metric repository is wired (see CoreDependencies). */
   llmObservability?: LlmObservabilityService
+  /** Present only when the platform-metrics rollup repository is wired (see CoreDependencies). */
+  platformObservability?: PlatformObservabilityService
   /** Present only when the agent-context snapshot repository is wired (see CoreDependencies). */
   agentContextObservability?: AgentContextObservabilityService
   /** Present only when the agent-search-query repository is wired (see CoreDependencies). */
@@ -1234,6 +1276,8 @@ export interface Core {
   serviceFragmentDefaults?: ServiceFragmentDefaultsModule
   /** Present only when the prompt-fragment library is configured (see CoreDependencies). */
   fragmentLibrary?: FragmentLibraryModule
+  /** Present only when the repo-sourced Claude Skills library is configured (see CoreDependencies). */
+  skillLibrary?: SkillLibraryModule
   /** Present only when the initiative repository is wired (see CoreDependencies). */
   initiatives?: InitiativesModule
   /** Present only when the recurring-pipeline repository is wired (see CoreDependencies). */
@@ -2155,6 +2199,56 @@ function createFragmentLibraryModule(
 }
 
 /**
+ * Assemble the repo-sourced Claude Skills library when its skill repository is
+ * present (docs/initiatives/repo-skills.md). The catalog read always assembles; the
+ * repo-source sync additionally needs the GitHub client, the source repository and an
+ * installation resolver. Returns undefined so the feature stays cleanly opt-in.
+ */
+function createSkillLibraryModule(
+  deps: CoreDependencies,
+  caches: AppCaches,
+): SkillLibraryModule | undefined {
+  const { accountSkillRepository } = deps
+  if (!accountSkillRepository) return undefined
+
+  const catalogService = new SkillCatalogService({
+    accountSkillRepository,
+    catalogCache: caches.skillCatalog,
+  })
+
+  const sourceService =
+    deps.skillSourceRepository && deps.githubClient && deps.resolveSkillInstallationId
+      ? new SkillSourceService({
+          skillSourceRepository: deps.skillSourceRepository,
+          accountSkillRepository,
+          githubClient: deps.githubClient,
+          resolveInstallationId: deps.resolveSkillInstallationId,
+          idGenerator: deps.idGenerator,
+          clock: deps.clock,
+          // A sync/unlink mutates the same catalog the read caches — route its
+          // invalidation through the catalog service so the eviction policy stays in one place.
+          invalidateCatalog: (accountId) => catalogService.invalidate(accountId),
+        })
+      : undefined
+
+  // The run-path resolver needs the source repo (for the resource repo owner/name) + the GitHub
+  // client + an installation resolver to fetch resource bodies at the pinned commit — the same
+  // prerequisites as the sync service, so it assembles under the same guard.
+  const runResolver =
+    deps.skillSourceRepository && deps.githubClient && deps.resolveSkillInstallationId
+      ? new SkillRunResolver({
+          workspaceRepository: deps.workspaceRepository,
+          catalogService,
+          skillSourceRepository: deps.skillSourceRepository,
+          githubClient: deps.githubClient,
+          resolveInstallationId: deps.resolveSkillInstallationId,
+        })
+      : undefined
+
+  return { catalogService, sourceService, runResolver }
+}
+
+/**
  * Assemble the notifications module when its repository is present (the worker
  * wires it unconditionally). The delivery channel is optional within the module —
  * without it the rows still persist (the inbox + snapshot work) but nothing is
@@ -2610,6 +2704,12 @@ export function createCore(dependencies: CoreDependencies): Core {
         workspaceSettingsCache: caches.workspaceSettings,
       })
     : undefined
+  const platformObservability = dependencies.platformMetricsRepository
+    ? new PlatformObservabilityService({
+        platformMetricsRepository: dependencies.platformMetricsRepository,
+        clock: dependencies.clock,
+      })
+    : undefined
   // The provisioning event log lives in a separate high-churn store. When its
   // repository is wired, build a best-effort recorder (threaded into the env
   // services) + the read service (exposed for the logs controller). The container
@@ -2652,6 +2752,7 @@ export function createCore(dependencies: CoreDependencies): Core {
     documents?.contentResolver,
     caches,
   )
+  const skillLibrary = createSkillLibraryModule(dependencies, caches)
 
   // Reconciles a `blueprints` step's decomposition onto the board. Needs only the
   // board service + block repository (both always present), so it is wired
@@ -2763,6 +2864,10 @@ export function createCore(dependencies: CoreDependencies): Core {
     // managed + document-backed fragments reach a run), present only when the
     // library is configured; otherwise the engine falls back to the static pool.
     fragmentResolver: fragmentLibrary?.libraryService,
+    // Route a `skill` step's skill resolution (instructions + resource bodies at the pinned
+    // commit) through the skill library, present only when it's configured; a skill step
+    // dispatched without it fails loudly rather than running blank.
+    skillResolver: skillLibrary?.runResolver,
     // Canonicalise a URL pasted into a block description to the document's stable
     // (source, externalId) via the providers' parseRef, so a Figma/Notion/etc. link
     // auto-matches its imported page even with a title segment or tracking params the
@@ -2871,6 +2976,7 @@ export function createCore(dependencies: CoreDependencies): Core {
     initiativePresetRegistry,
     executionEventPublisher,
     ...(llmObservability ? { llmObservability } : {}),
+    ...(platformObservability ? { platformObservability } : {}),
     ...(dependencies.agentContextObservability
       ? { agentContextObservability: dependencies.agentContextObservability }
       : {}),
@@ -2907,6 +3013,7 @@ export function createCore(dependencies: CoreDependencies): Core {
     ...(modelPresets ? { modelPresets } : {}),
     ...(serviceFragmentDefaults ? { serviceFragmentDefaults } : {}),
     ...(fragmentLibrary ? { fragmentLibrary } : {}),
+    ...(skillLibrary ? { skillLibrary } : {}),
     ...(initiatives ? { initiatives } : {}),
     ...(recurring ? { recurring } : {}),
     ...(tracker ? { tracker } : {}),

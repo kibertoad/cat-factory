@@ -66,6 +66,11 @@ export type {
   AccountMember,
   CreateAccountInput,
   AddMemberInput,
+  // Workspace-level RBAC & membership shapes (the tier below account tenancy).
+  WorkspaceRole,
+  WorkspacePermission,
+  WorkspaceAccessMode,
+  WorkspaceMember,
   // In-org shared services (account-owned services + per-workspace mounts).
   Service,
   WorkspaceMount,
@@ -323,6 +328,10 @@ export type {
   GateStepState,
   GateFailingCheck,
   GateAttempt,
+  // Ralph-loop shapes (persistent retry-until-done step state + iteration verdict).
+  RalphStepState,
+  RalphVerdict,
+  RalphAttempt,
   // Human-testing gate shapes (ephemeral env + human validation loop).
   HumanTestStepState,
   HumanTestEnvironment,

@@ -192,6 +192,15 @@ export {
   MAX_SEARCH_QUERY_CHARS,
 } from './modules/observability/SearchQueryObservabilityService.js'
 export {
+  PlatformObservabilityService,
+  type PlatformObservabilityServiceDependencies,
+} from './modules/observability/PlatformObservabilityService.js'
+export {
+  PLATFORM_WINDOWS,
+  buildTrend,
+  summarizeOutcomes,
+} from './modules/observability/platform-observability.logic.js'
+export {
   classifyCall,
   isWarningFinishReason,
   outputHeadroomRatio,
@@ -274,6 +283,7 @@ export {
   type ModelPresetsModule,
   type ServiceFragmentDefaultsModule,
   type FragmentLibraryModule,
+  type SkillLibraryModule,
   type InitiativesModule,
   type RecurringModule,
   type TrackerModule,

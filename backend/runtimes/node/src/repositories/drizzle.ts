@@ -32,6 +32,7 @@ import type {
   PasswordResetTokenRepository,
   PipelineRepository,
   PipelineScheduleRepository,
+  PlatformMetricsRepository,
   ProvisioningLogRepository,
   ReleaseHealthConfigRepository,
   RequirementReviewRepository,
@@ -65,6 +66,7 @@ import {
   DrizzleExecutionRepository,
   DrizzlePipelineRepository,
   DrizzlePipelineScheduleRepository,
+  DrizzlePlatformMetricsRepository,
 } from './drizzle/execution.js'
 
 import {
@@ -138,6 +140,7 @@ export interface CoreRepositories {
   agentSearchQueryRepository: AgentSearchQueryRepository
   binaryArtifactMetadataStore: BinaryArtifactMetadataStore
   agentRunRepository: AgentRunRepository
+  platformMetricsRepository: PlatformMetricsRepository
   modelPresetRepository: ModelPresetRepository
   serviceFragmentDefaultsRepository: ServiceFragmentDefaultsRepository
   pipelineScheduleRepository: PipelineScheduleRepository
@@ -185,6 +188,7 @@ export function createDrizzleRepositories(db: DrizzleDb, clock: Clock): CoreRepo
     agentSearchQueryRepository: new DrizzleAgentSearchQueryRepository(db),
     binaryArtifactMetadataStore: new DrizzleBinaryArtifactMetadataStore(db),
     agentRunRepository: new DrizzleAgentRunRepository(db),
+    platformMetricsRepository: new DrizzlePlatformMetricsRepository(db),
     modelPresetRepository: new DrizzleModelPresetRepository(db),
     serviceFragmentDefaultsRepository: new DrizzleServiceFragmentDefaultsRepository(db),
     pipelineScheduleRepository: new DrizzlePipelineScheduleRepository(db),
@@ -215,7 +219,11 @@ export function createDrizzleRepositories(db: DrizzleDb, clock: Clock): CoreRepo
 }
 
 // Re-exported for direct consumers (see index.ts / test harness).
-export { DrizzleServiceRepository } from './drizzle/board.js'
+export {
+  DrizzleServiceRepository,
+  DrizzleWorkspaceMemberRepository,
+  DrizzleWorkspaceRepository,
+} from './drizzle/board.js'
 export {
   DrizzleLocalSettingsRepository,
   DrizzleWorkspaceSettingsRepository,

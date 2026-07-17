@@ -167,6 +167,11 @@ export function createUiModals() {
   // today, pluggable). NB: distinct from `observabilityInstanceId`, which is the
   // LLM per-call observability panel (see the result-views slice).
   const observabilityConnectionOpen = ref(false)
+  // Platform-operator observability: the deployment-level dashboard (aggregate run health of
+  // the account — outcomes, failure taxonomy, live depth, durations). Admin-gated. Distinct
+  // from `observabilityConnectionOpen` (the Datadog connection) AND `observabilityInstanceId`
+  // (the per-run LLM call panel).
+  const operatorDashboardOpen = ref(false)
   // Private package registries: the workspace's npm/GitHub-Packages entries agent
   // containers install with. Opened from the Integrations hub.
   const packageRegistriesOpen = ref(false)
@@ -497,6 +502,13 @@ export function createUiModals() {
   function closeObservabilityConnection() {
     observabilityConnectionOpen.value = false
   }
+  function openOperatorDashboard() {
+    resetHubReturn()
+    operatorDashboardOpen.value = true
+  }
+  function closeOperatorDashboard() {
+    operatorDashboardOpen.value = false
+  }
   function openPackageRegistries() {
     resetHubReturn()
     packageRegistriesOpen.value = true
@@ -690,6 +702,7 @@ export function createUiModals() {
     accountSettingsTab,
     accountSettingsScrollTarget,
     observabilityConnectionOpen,
+    operatorDashboardOpen,
     packageRegistriesOpen,
     apiTokensOpen,
     infrastructureOpen,
@@ -778,6 +791,8 @@ export function createUiModals() {
     setAccountSettingsTab,
     openObservabilityConnection,
     closeObservabilityConnection,
+    openOperatorDashboard,
+    closeOperatorDashboard,
     openPackageRegistries,
     closePackageRegistries,
     openApiTokens,

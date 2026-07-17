@@ -102,6 +102,50 @@ export interface AgentRunContext {
     /** Titles of the rejected alternatives, so the coder doesn't drift into them. */
     alternativesConsidered: string[]
   }
+  /**
+   * Ralph-loop iteration parameters, set by the engine when dispatching a `ralph` step from
+   * its `step.ralph` state: the programmatic completion COMMAND the harness runs against the
+   * checkout AFTER the coding agent commits (exit 0 = the loop is done), the repo-relative
+   * progress-log path the harness maintains, and the 1-based iteration number. The container
+   * executor forwards these to the harness as the coding job's `validation` block; the
+   * harness runs the command and reports the verdict on the result (never the model — that is
+   * what keeps the exit condition a real programmatic check). Absent for every non-`ralph` step.
+   */
+  ralphValidation?: {
+    command: string
+    progressPath: string
+    iteration: number
+  }
+  /**
+   * The repo-sourced Claude Skill this step executes, resolved by the engine at dispatch from
+   * the step's `stepOptions.skillId` (see `docs/initiatives/repo-skills.md`). Present only on a
+   * `skill` step whose skill resolved; carries the procedural instructions (the `SKILL.md` body)
+   * and the sibling resource files fetched at the skill's pinned commit. The container executor
+   * renders it HARNESS-AWARE: for the claude-code harness it travels as the dedicated top-level
+   * `skill` job-body field (the harness materialises `~/.claude/skills/<name>/` natively); for
+   * Pi/codex the instructions are folded into the prompt and the resources materialised as
+   * `.cat-context/skill/*` context files. A resource's `body` is absent when it was oversized /
+   * binary / unreadable at the pinned commit — the agent is pointed at its repo `path` instead.
+   */
+  skill?: {
+    /** The skill id (`src:<sourceId>:<dirName>`). */
+    skillId: string
+    /** Skill name (the native CLI skill directory name + the `SKILL.md` frontmatter `name`). */
+    name: string
+    /** One-line description (the `SKILL.md` frontmatter `description`; feeds the native manifest). */
+    description: string
+    /** The procedural instructions — the `SKILL.md` body. */
+    instructions: string
+    /** Sibling resource files fetched at the pinned commit (capped; oversized/binary omit `body`). */
+    resources: {
+      /** Repo-relative path (used to reference an un-materialised resource in the prompt). */
+      path: string
+      /** Path within the skill directory (where it materialises, under the skill / `.cat-context/skill`). */
+      relPath: string
+      /** File body; absent when the resource was oversized / binary / unreadable at dispatch. */
+      body?: string
+    }[]
+  }
   block: {
     /** Stable block id (set by the engine; used by repo-aware executors). */
     id?: string
@@ -485,6 +529,15 @@ export interface AgentRunResult {
    * it before use.
    */
   testReport?: unknown
+  /**
+   * A `ralph` step iteration's harness-computed validation verdict (whether the configured
+   * completion command exited 0, its exit code, and a bounded output tail). Produced by the
+   * executor-harness running the command — NOT model output — so the loop's exit condition
+   * stays a real programmatic check. The engine reads it to decide done / retry / exhausted.
+   * Carried as `unknown` so the port stays free of the contracts schema; the engine parses
+   * it before use. Absent for every non-`ralph` kind.
+   */
+  ralphVerdict?: unknown
   /**
    * A `tester` step's in-container docker-compose dependency stand-up record (explore mode,
    * local infra): whether the dependencies came up and the captured (redacted, bounded)

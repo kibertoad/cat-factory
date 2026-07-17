@@ -246,6 +246,7 @@ export {
   type SpikeFindings,
   registerSpikeAgent,
 } from './agents/kinds/spike.js'
+export { SKILL_AGENT_KIND, SKILL_AGENT_KINDS, registerSkillAgent } from './agents/kinds/skill.js'
 export {
   FORK_PROPOSER_KIND,
   FORK_PROPOSER_AGENT_KINDS,
@@ -284,6 +285,15 @@ export {
   BUG_FIX_GUIDANCE,
   bugFixGuidanceFor,
 } from './agents/kinds/repro-test.js'
+export {
+  RALPH_AGENT_KIND,
+  RALPH_AGENT_KINDS,
+  RALPH_VALIDATION_COMMAND_CONFIG_ID,
+  RALPH_MAX_ITERATIONS_CONFIG_ID,
+  RALPH_DEFAULT_MAX_ITERATIONS,
+  ralphConfigContributions,
+  registerRalphAgent,
+} from './agents/kinds/ralph.js'
 export { MOCK_AGENT_KIND, isMockKind, mockSystemPrompt } from './agents/prompts/mock.js'
 export {
   type BusinessLogicAgentKind,
@@ -403,3 +413,27 @@ export {
   selectDeterministic,
 } from './fragmentLibrary/fragment-catalog.js'
 export * as fragmentSourceLogic from './fragmentLibrary/fragment-source.logic.js'
+
+// ---- repo-sourced Claude Skills library (docs/initiatives/repo-skills.md) ----
+export {
+  SkillSourceService,
+  type SkillSourceServiceDependencies,
+  type ResolveSkillInstallationId,
+} from './skillLibrary/SkillSourceService.js'
+export {
+  SkillCatalogService,
+  type SkillCatalogServiceDependencies,
+} from './skillLibrary/SkillCatalogService.js'
+export { SkillRunResolver, type ResolvedSkillForRun } from './skillLibrary/SkillRunResolver.js'
+export * as skillSourceLogic from './skillLibrary/skill-source.logic.js'
+export {
+  syncRepoSource,
+  probeRepoSourceStatus,
+  normalizeDirPath,
+  type RepoSourceCoords,
+  type RepoSourceSyncOutcome,
+  type RepoSourceStatus,
+  type ReconcileContext,
+  type ReconcileResult,
+  type SyncRepoSourceParams,
+} from './repoSourceSync/repo-source-sync.js'

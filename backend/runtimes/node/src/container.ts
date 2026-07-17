@@ -242,6 +242,10 @@ import {
   DrizzleFragmentSourceRepository,
   DrizzlePromptFragmentRepository,
 } from './repositories/fragments.js'
+import {
+  DrizzleAccountSkillRepository,
+  DrizzleSkillSourceRepository,
+} from './repositories/skills.js'
 import { DrizzleNotificationRepository } from './repositories/notifications.js'
 import {
   DrizzleSlackConnectionRepository,
@@ -2363,6 +2367,8 @@ export function buildNodeContainer(options: NodeContainerOptions): ServerContain
     workspaceMountRepository: repos.workspaceMountRepository,
     tokenUsageRepository: repos.tokenUsageRepository,
     llmCallMetricRepository: repos.llmCallMetricRepository,
+    // Deployment-level rollups over `agent_runs` for the operator dashboard.
+    platformMetricsRepository: repos.platformMetricsRepository,
     // Unified provisioning event log (its own Postgres schema). Threads the recorder
     // into the env services and exposes the read service for the logs controller.
     provisioningLogRepository: repos.provisioningLogRepository,
@@ -2580,6 +2586,10 @@ export function buildNodeContainer(options: NodeContainerOptions): ServerContain
       githubInstallationRepository,
       modelProviderResolver,
     ),
+    // Repo-sourced Claude Skills library (docs/initiatives/repo-skills.md; opt-in): the
+    // account's catalog of repo-authored skills, wired exactly like the Worker's
+    // selectSkillLibraryDeps (account repos + installation resolver).
+    ...selectNodeSkillLibraryDeps(config, db, githubClient, githubInstallationRepository),
     // Slack: an extra notification transport (the channel) + its management module.
     // Default-off; when enabled its channel is composed into `notificationChannel` below
     // alongside the in-app push, identically to the Worker.
@@ -2722,6 +2732,19 @@ export function buildNodeContainer(options: NodeContainerOptions): ServerContain
     if (dependencies.fragmentSourceRepository) {
       dependencies.fragmentSourceRepository =
         remoteRepos.fragmentSourceRepository as CoreDependencies['fragmentSourceRepository']
+    }
+    // The Claude Skills library, same shape as the fragment library above: swap the
+    // (db-less, broken) Drizzle repos for the remote ones when the mothership exposes
+    // them. Until the mothership RPC surfaces skills, `remoteRepos.*` is undefined, which
+    // leaves the skill module UNassembled in mothership mode (the controller 503s) rather
+    // than assembling over a broken db — a clean opt-in follow-up, like fragment repo-sync.
+    if (dependencies.accountSkillRepository) {
+      dependencies.accountSkillRepository =
+        remoteRepos.accountSkillRepository as CoreDependencies['accountSkillRepository']
+    }
+    if (dependencies.skillSourceRepository) {
+      dependencies.skillSourceRepository =
+        remoteRepos.skillSourceRepository as CoreDependencies['skillSourceRepository']
     }
   }
 
@@ -3023,5 +3046,32 @@ function selectNodeFragmentLibraryDeps(
           }),
         }
       : {}),
+  }
+}
+
+/**
+ * Wire the repo-sourced Claude Skills library (docs/initiatives/repo-skills.md) for
+ * the Node facade when opted in, mirroring the Worker's `selectSkillLibraryDeps`: the
+ * two Drizzle repositories and the account-only installation resolver the repo-source
+ * sync uses. Gated on the same `fragmentLibrary.enabled` flag (both are the repo-sourced
+ * prompt library). Disabled → `{}` and the module stays unassembled.
+ */
+function selectNodeSkillLibraryDeps(
+  config: AppConfig,
+  db: DrizzleDb,
+  githubClient: GitHubClient | undefined,
+  installations: GitHubInstallationRepository,
+): Partial<CoreDependencies> {
+  if (!config.fragmentLibrary.enabled) return {}
+  const resolveSkillInstallationId = async (accountId: string): Promise<number | null> => {
+    const active = await installations.listActive()
+    return active.find((i) => i.accountId === accountId)?.installationId ?? null
+  }
+  return {
+    accountSkillRepository: new DrizzleAccountSkillRepository(db),
+    skillSourceRepository: new DrizzleSkillSourceRepository(db),
+    // Repo-sourced skills read through the account's App installation; the source sync
+    // is only wired when a real GitHub client is available (parity with the Worker).
+    ...(githubClient ? { githubClient, resolveSkillInstallationId } : {}),
   }
 }

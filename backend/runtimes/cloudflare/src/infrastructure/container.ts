@@ -205,6 +205,7 @@ import { D1BootstrapJobRepository } from './repositories/D1BootstrapJobRepositor
 import { D1EnvConfigRepairJobRepository } from './repositories/D1EnvConfigRepairJobRepository'
 import { D1EnvironmentTestRunRepository } from './repositories/D1EnvironmentTestRunRepository'
 import { D1AgentRunRepository } from './repositories/D1AgentRunRepository'
+import { D1PlatformMetricsRepository } from './repositories/D1PlatformMetricsRepository'
 import { D1BinaryArtifactMetadataStore } from './repositories/D1BinaryArtifactMetadataStore'
 import { R2BinaryBlobBackend } from './storage/R2BinaryBlobBackend'
 import type { ContentStorageCapability } from '@cat-factory/contracts'
@@ -276,6 +277,8 @@ import { D1TaskSourceSettingsRepository } from './repositories/D1TaskSourceSetti
 import { D1TaskRepository } from './repositories/D1TaskRepository'
 import { D1PromptFragmentRepository } from './repositories/D1PromptFragmentRepository'
 import { D1FragmentSourceRepository } from './repositories/D1FragmentSourceRepository'
+import { D1AccountSkillRepository } from './repositories/D1AccountSkillRepository'
+import { D1SkillSourceRepository } from './repositories/D1SkillSourceRepository'
 import { LlmFragmentSelector } from './ai/LlmFragmentSelector'
 import {
   buildApiKeyService,
@@ -2015,6 +2018,31 @@ function selectFragmentLibraryDeps(
 }
 
 /**
+ * Build the repo-sourced Claude Skills library's concrete ports when opted in
+ * (docs/initiatives/repo-skills.md). Skills live in ONE tier (the account), so the
+ * installation resolver is account-only. Gated on the same `fragmentLibrary.enabled`
+ * flag as the fragment library (both are the repo-sourced prompt library). Returns
+ * `{}` when disabled, so `createCore` leaves the skill module unassembled.
+ */
+function selectSkillLibraryDeps(
+  _env: Env,
+  config: AppConfig,
+  db: D1Database,
+): Partial<CoreDependencies> {
+  if (!config.fragmentLibrary.enabled) return {}
+  const installationRepository = new D1GitHubInstallationRepository({ db })
+  const resolveSkillInstallationId = async (accountId: string): Promise<number | null> => {
+    const active = await installationRepository.listActive()
+    return active.find((i) => i.accountId === accountId)?.installationId ?? null
+  }
+  return {
+    accountSkillRepository: new D1AccountSkillRepository({ db }),
+    skillSourceRepository: new D1SkillSourceRepository({ db }),
+    resolveSkillInstallationId,
+  }
+}
+
+/**
  * The hosted PAT-login registry: lets a user sign in by pasting their OWN source-control PAT,
  * which the shared `/auth/pat` flow resolves to the account it belongs to (and holds to the
  * server's login/org/domain allowlist — see `AuthController`). GitHub is always available;
@@ -2314,6 +2342,8 @@ export function buildContainer(
     tokenUsageRepository: new D1TokenUsageRepository({ db }),
     // Telemetry lives in the dedicated TELEMETRY_DB database.
     llmCallMetricRepository: new D1LlmCallMetricRepository({ db: telemetryDb }),
+    // Deployment-level rollups over `agent_runs` (MAIN db, not telemetry) for the operator dashboard.
+    platformMetricsRepository: new D1PlatformMetricsRepository({ db }),
     // Unified provisioning event log (separate D1 binding). Threads the recorder into
     // the env services and exposes the read service for the logs controller; undefined
     // when PROVISIONING_DB isn't bound.
@@ -2421,6 +2451,7 @@ export function buildContainer(
     ...selectDeployDeps(env, config, db, clock),
     ...selectRunnersDeps(env, config, db),
     ...selectFragmentLibraryDeps(env, config, db),
+    ...selectSkillLibraryDeps(env, config, db),
     // The app-owned cache bag (built above so the repo-files + account-policy resolvers share
     // it). Distributed invalidation is a genuine Node-only concern, not a facade-parity gap: the
     // Worker's cross-instance state already lives in globally-addressed DOs / D1.

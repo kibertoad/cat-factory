@@ -1,6 +1,6 @@
 import { afterEach, describe, expect, it, vi } from 'vitest'
 import { parseAgentJob } from '../src/job.js'
-import { buildInfraNotes, buildPreviewOutcome } from '../src/agent.js'
+import { buildInfraNotes, buildPreviewOutcome, ralphUnsupportedOnMultiRepo } from '../src/agent.js'
 import { installCommand } from '../src/frontend-infra.js'
 
 // The generic, manifest-driven agent kind's body validator. The handler itself
@@ -681,5 +681,98 @@ describe('parseAgentJob (preview mode)', () => {
 
   it('rejects a job with an unknown mode', () => {
     expect(() => parseAgentJob({ ...base, mode: 'serve' })).toThrow(/mode/)
+  })
+})
+
+describe('ralphUnsupportedOnMultiRepo', () => {
+  const validation = { command: 'pnpm test' }
+  const repo = {
+    owner: 'acme',
+    name: 'email',
+    baseBranch: 'main',
+    cloneUrl: 'https://github.com/acme/email.git',
+  }
+  const peer = [{ repo }]
+
+  it('is true for a ralph iteration (validation set) on a peer-repo job', () => {
+    expect(ralphUnsupportedOnMultiRepo({ validation, peerRepos: peer })).toBe(true)
+  })
+
+  it('is true for a ralph iteration on a reference-repo job', () => {
+    expect(ralphUnsupportedOnMultiRepo({ validation, referenceRepos: [{ repo }] })).toBe(true)
+  })
+
+  it('is false for a ralph iteration on a single-repo job (the supported path)', () => {
+    expect(ralphUnsupportedOnMultiRepo({ validation })).toBe(false)
+    expect(ralphUnsupportedOnMultiRepo({ validation, peerRepos: [] })).toBe(false)
+  })
+
+  it('is false for a non-ralph multi-repo job (no validation set)', () => {
+    expect(ralphUnsupportedOnMultiRepo({ peerRepos: peer })).toBe(false)
+  })
+})
+
+describe('parseAgentJob — skill', () => {
+  it('parses a skill (name/description/instructions + resources) and preserves sub-paths', () => {
+    const job = parseAgentJob({
+      ...base,
+      mode: 'coding',
+      skill: {
+        name: 'bug-triage',
+        description: 'Triage a bug',
+        instructions: 'Reproduce, then classify.',
+        resources: [
+          { relPath: 'templates/report.md', content: '# report' },
+          { relPath: 'checklist.md', content: '- item' },
+        ],
+      },
+    })
+    expect(job.skill?.name).toBe('bug-triage')
+    expect(job.skill?.instructions).toContain('Reproduce')
+    expect(job.skill?.resources.map((r) => r.relPath)).toEqual([
+      'templates/report.md',
+      'checklist.md',
+    ])
+  })
+
+  it('drops a resource whose relPath traverses out, and normalises a leading slash to a safe relative path', () => {
+    const job = parseAgentJob({
+      ...base,
+      mode: 'coding',
+      skill: {
+        name: 'x',
+        description: 'd',
+        instructions: 'i',
+        resources: [
+          { relPath: '../../etc/passwd', content: 'nope' }, // traversal → dropped
+          { relPath: '/abs/path.md', content: 'yes' }, // leading slash stripped → kept, safe
+          { relPath: 'ok/file.md', content: 'yes' },
+        ],
+      },
+    })
+    expect(job.skill?.resources.map((r) => r.relPath)).toEqual(['abs/path.md', 'ok/file.md'])
+  })
+
+  it('falls back to a safe name when the authored name sanitises to nothing', () => {
+    // A name that sanitises to nothing (pure traversal / non-ASCII) only affects the install
+    // directory, so the skill is kept under a safe fallback name rather than dropped — otherwise
+    // the claude-code prompt would point at a skill that was never installed.
+    const job = parseAgentJob({
+      ...base,
+      mode: 'coding',
+      skill: { name: '..', description: 'd', instructions: 'i', resources: [] },
+    })
+    expect(job.skill?.name).toBe('skill')
+    expect(job.skill?.instructions).toBe('i')
+  })
+
+  it('drops a skill with no instructions (nothing to run)', () => {
+    expect(
+      parseAgentJob({ ...base, mode: 'coding', skill: { name: 'x', description: 'd' } }).skill,
+    ).toBeUndefined()
+  })
+
+  it('leaves skill undefined when absent', () => {
+    expect(parseAgentJob({ ...base, mode: 'coding' }).skill).toBeUndefined()
   })
 })

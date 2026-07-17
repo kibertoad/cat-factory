@@ -103,6 +103,7 @@
     "workspaceSettings": "Ustawienia obszaru roboczego",
     "modelConfiguration": "Konfiguracja modelu",
     "accountSettings": "Ustawienia konta",
+    "operatorDashboard": "Obserwowalność platformy",
     "infrastructure": "Infrastruktura",
     "environmentSetup": "Konfiguracja środowiska"
   },
@@ -168,7 +169,8 @@
         "document": "Dokument",
         "spike": "Spike",
         "recurring": "Cykliczne",
-        "review": "Przegląd"
+        "review": "Przegląd",
+        "ralph": "Pętla Ralph"
       },
       "recurringWithFrame": "Zadanie cykliczne uruchamia pipeline w określonym rytmie. Kontynuuj, aby ustawić harmonogram i prompt.",
       "recurringNoFrame": "Zadanie cykliczne musi należeć do usługi. Dodaj je z ramki usługi (lub modułu w jej obrębie).",
@@ -1305,6 +1307,64 @@
       "queriesTitle": "Wykonane wyszukiwania"
     }
   },
+  "platformObservability": {
+    "title": "Obserwowalność platformy",
+    "refresh": "Odśwież",
+    "close": "Zamknij",
+    "loading": "Ładowanie stanu platformy…",
+    "retry": "Ponów",
+    "window": {
+      "oneHour": "Ostatnia godzina",
+      "oneDay": "Ostatnie 24 godziny",
+      "sevenDays": "Ostatnie 7 dni"
+    },
+    "outcomes": {
+      "title": "Wyniki uruchomień",
+      "total": "Łącznie uruchomień",
+      "done": "Ukończone",
+      "failed": "Nieudane",
+      "successRate": "Wskaźnik sukcesu",
+      "running": "W toku",
+      "blocked": "Zablokowane",
+      "paused": "Wstrzymane",
+      "pending": "Oczekujące"
+    },
+    "trend": {
+      "title": "Trend wyników",
+      "done": "Ukończone",
+      "failed": "Nieudane",
+      "other": "Inne",
+      "empty": "Brak uruchomień w tym okresie."
+    },
+    "failures": {
+      "title": "Podział błędów",
+      "empty": "Brak błędów w tym okresie."
+    },
+    "failureKind": {
+      "preflight": "Kontrola wstępna",
+      "dispatch": "Wysłanie",
+      "environment": "Środowisko",
+      "evicted": "Usunięte",
+      "timeout": "Przekroczono czas",
+      "agent": "Agent",
+      "job_failed": "Zadanie nieudane",
+      "rejected": "Odrzucone",
+      "companion_rejected": "Towarzysz odrzucony",
+      "stalled": "Zawieszone",
+      "cancelled": "Anulowane",
+      "unknown": "Nieznane"
+    },
+    "durations": {
+      "title": "Czas trwania uruchomienia",
+      "avg": "Średnia",
+      "min": "Min",
+      "max": "Maks",
+      "empty": "Brak ukończonych uruchomień w tym okresie."
+    },
+    "live": {
+      "title": "Aktywne teraz"
+    }
+  },
   "auth": {
     "gate": {
       "loading": "Ładowanie…"
@@ -2420,7 +2480,8 @@
         "bug": "błąd",
         "document": "dokument",
         "spike": "spike",
-        "review": "przegląd"
+        "review": "przegląd",
+        "ralph": "Pętla Ralph"
       },
       "observability": {
         "heading": "Obserwowalność agenta",
@@ -4784,6 +4845,29 @@
       "style": "Styl",
       "test": "Testy",
       "other": "Inne"
+    }
+  },
+  "ralph": {
+    "subtitle": "Trwała pętla: pracuj nad zadaniem, uruchom polecenie walidacji i powtarzaj, aż się powiedzie.",
+    "status": {
+      "passed": "Zaliczono",
+      "gaveUp": "Poddano się",
+      "running": "Działa",
+      "failing": "Niepowodzenie"
+    },
+    "noActivity": "Brak iteracji.",
+    "validationCommand": "Polecenie walidacji",
+    "lastOutput": "Ostatnia walidacja (kod {exit})",
+    "viewPr": "Zobacz pull request",
+    "iterationsHeading": "Iteracje",
+    "iteration": "Iteracja {number}",
+    "iterationPassed": "walidacja zaliczona",
+    "iterationFailed": "kod {exit}",
+    "sidebar": {
+      "state": "Stan",
+      "iterations": "Iteracje",
+      "count": "{attempts} z {max}",
+      "footer": "Pętla ponawia próby, aż polecenie walidacji się powiedzie lub wyczerpie się budżet iteracji."
     }
   }
 }

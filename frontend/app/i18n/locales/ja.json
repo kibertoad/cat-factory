@@ -104,6 +104,7 @@
     "workspaceSettings": "ワークスペース設定",
     "modelConfiguration": "モデル設定",
     "accountSettings": "アカウント設定",
+    "operatorDashboard": "プラットフォームの可観測性",
     "environmentSetup": "環境セットアップ"
   },
   "board": {
@@ -168,7 +169,8 @@
         "document": "ドキュメント",
         "spike": "スパイク",
         "recurring": "繰り返し",
-        "review": "レビュー"
+        "review": "レビュー",
+        "ralph": "Ralph ループ"
       },
       "recurringWithFrame": "繰り返しタスクは一定の周期でパイプラインを実行します。続行してスケジュールとプロンプトを設定してください。",
       "recurringNoFrame": "繰り返しタスクはサービス上に配置する必要があります。サービスフレーム（またはその中のモジュール）から追加してください。",
@@ -1303,6 +1305,64 @@
       "provider": "プロバイダー",
       "resultsCount": "{count} 件の結果 | {count} 件の結果",
       "queriesTitle": "実行した検索"
+    }
+  },
+  "platformObservability": {
+    "title": "プラットフォームの可観測性",
+    "refresh": "更新",
+    "close": "閉じる",
+    "loading": "プラットフォームの状態を読み込み中…",
+    "retry": "再試行",
+    "window": {
+      "oneHour": "過去1時間",
+      "oneDay": "過去24時間",
+      "sevenDays": "過去7日間"
+    },
+    "outcomes": {
+      "title": "実行結果",
+      "total": "実行数の合計",
+      "done": "完了",
+      "failed": "失敗",
+      "successRate": "成功率",
+      "running": "実行中",
+      "blocked": "ブロック中",
+      "paused": "一時停止",
+      "pending": "保留中"
+    },
+    "trend": {
+      "title": "結果の推移",
+      "done": "完了",
+      "failed": "失敗",
+      "other": "その他",
+      "empty": "この期間に実行はありません。"
+    },
+    "failures": {
+      "title": "失敗の内訳",
+      "empty": "この期間に失敗はありません。"
+    },
+    "failureKind": {
+      "preflight": "事前チェック",
+      "dispatch": "ディスパッチ",
+      "environment": "環境",
+      "evicted": "退避",
+      "timeout": "タイムアウト",
+      "agent": "エージェント",
+      "job_failed": "ジョブ失敗",
+      "rejected": "却下",
+      "companion_rejected": "コンパニオン却下",
+      "stalled": "停滞",
+      "cancelled": "キャンセル",
+      "unknown": "不明"
+    },
+    "durations": {
+      "title": "実行時間",
+      "avg": "平均",
+      "min": "最小",
+      "max": "最大",
+      "empty": "この期間に完了した実行はありません。"
+    },
+    "live": {
+      "title": "現在アクティブ"
     }
   },
   "auth": {
@@ -2542,7 +2602,8 @@
         "bug": "バグ",
         "document": "ドキュメント",
         "spike": "スパイク",
-        "review": "レビュー"
+        "review": "レビュー",
+        "ralph": "Ralph ループ"
       },
       "observability": {
         "heading": "エージェントの可観測性",
@@ -4796,6 +4857,29 @@
       "style": "スタイル",
       "test": "テスト",
       "other": "その他"
+    }
+  },
+  "ralph": {
+    "subtitle": "永続的なループ：タスクを進め、検証コマンドを実行し、成功するまで繰り返します。",
+    "status": {
+      "passed": "合格",
+      "gaveUp": "中止",
+      "running": "実行中",
+      "failing": "失敗中"
+    },
+    "noActivity": "まだ反復はありません。",
+    "validationCommand": "検証コマンド",
+    "lastOutput": "最新の検証（終了コード {exit}）",
+    "viewPr": "プルリクエストを表示",
+    "iterationsHeading": "反復",
+    "iteration": "反復 {number}",
+    "iterationPassed": "検証に合格",
+    "iterationFailed": "終了コード {exit}",
+    "sidebar": {
+      "state": "状態",
+      "iterations": "反復",
+      "count": "{max} 回中 {attempts} 回",
+      "footer": "検証コマンドが成功するか、反復の上限に達するまでループは再試行します。"
     }
   }
 }

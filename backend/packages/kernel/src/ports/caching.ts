@@ -7,6 +7,7 @@ import type {
 import type { ResolvedAccountSettings } from './account-settings-repositories.js'
 import type { DocumentContent } from './document-source.js'
 import type { ResolvedCatalogEntry } from './fragment-repositories.js'
+import type { AccountSkillRecord } from './skill-repositories.js'
 import type { RepoContentEntry, RepoFileContent } from './github-client.js'
 import type { WorkspaceSettingsRepository } from './workspace-settings-repositories.js'
 
@@ -102,6 +103,14 @@ export function repoFilesCacheGroup(
 export interface AppCaches {
   /** The merged per-workspace prompt-fragment catalog, grouped by workspace id. */
   fragmentCatalog: GroupCacheHandle<ResolvedCatalogEntry[]>
+  /**
+   * An account's repo-sourced Claude Skills catalog (`account_skills`), grouped AND
+   * keyed by account id (one entry per group). Read on every agent dispatch that
+   * resolves a skill step (slice 2) and by the account management surface; the
+   * skill-source sync invalidates the group after a change. Our own mutable D1/Postgres
+   * state, so — like `fragmentCatalog`/`repoProjection` — it passes through on the Worker.
+   */
+  skillCatalog: GroupCacheHandle<AccountSkillRecord[]>
   /**
    * The live body of a document-backed prompt fragment (the external
    * Confluence/Notion/GitHub/… page), grouped by the workspace whose connection

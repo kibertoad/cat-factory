@@ -23,12 +23,18 @@ import type {
   TestSecretRef,
   WorkspaceRepository,
 } from '@cat-factory/kernel'
-import { buildExcerpt, CONTEXT_BUDGET, resolveServiceFrameBlock } from '@cat-factory/kernel'
+import {
+  buildExcerpt,
+  CONTEXT_BUDGET,
+  resolveServiceFrameBlock,
+  ValidationError,
+} from '@cat-factory/kernel'
 import {
   CODE_AWARE_TRAIT,
   DOC_AWARE_TRAIT,
   DOC_FINALIZER_KIND,
   DOC_WRITER_KIND,
+  SKILL_AGENT_KIND,
   hasTrait,
 } from '@cat-factory/agents'
 import type { AgentKindRegistry } from '@cat-factory/agents'
@@ -42,6 +48,7 @@ import {
 import { connectionDescription } from '@cat-factory/contracts'
 import { frameOf, validInvolvedServiceFrames } from './frame.logic.js'
 import { buildImplementationChoice } from './forkDecision.logic.js'
+import { buildRalphValidation } from './ralph.logic.js'
 import { isTesterKind } from './ci.logic.js'
 import { getFragment } from '@cat-factory/prompt-fragments'
 import { extractReferences } from '@cat-factory/integrations'
@@ -99,7 +106,7 @@ function buildRevisionContext(step: PipelineStep): {
  * to a prior round's completed job. A step with neither (dispatched once) is epoch 0.
  */
 export function dispatchEpochFor(step: PipelineStep): number {
-  const base = step.test?.attempts ?? step.gate?.attempts ?? 0
+  const base = step.test?.attempts ?? step.gate?.attempts ?? step.ralph?.attempts ?? 0
   // The optional fork-decision phase dispatches the read-only proposer on the coder step
   // BEFORE the Coder itself (Phase A then Phase B). Both dispatch on the same step, so once
   // the phase resolves (`chosen` / `single_path`) bump the epoch by one — the Phase-B Coder
@@ -118,6 +125,25 @@ export function dispatchEpochFor(step: PipelineStep): number {
  */
 export interface FragmentBodyResolver {
   resolveBodiesForRun(workspaceId: string, ids: string[]): Promise<{ id: string; body: string }[]>
+}
+
+/**
+ * Resolves a `skill` step's picked skill (`stepOptions.skillId`) to the payload the container
+ * executor renders — the persisted instructions + the resource bodies fetched at the skill's
+ * pinned commit — plus the version pin recorded on the step. Implemented by the skill library's
+ * {@link SkillRunResolver}; wired only when the skill library is configured. Unlike the fragment
+ * resolver (whose absence degrades to the static pool), a MISSING skill resolver on a step that
+ * DID pick a skill is a hard {@link ValidationError} at dispatch — a skill step running against
+ * nothing is a silent wrong run, not a graceful degrade.
+ */
+export interface SkillResolver {
+  resolveForRun(
+    workspaceId: string,
+    skillId: string,
+  ): Promise<{
+    skill: NonNullable<AgentRunContext['skill']>
+    version: { skillId: string; commit: string | null; sha: string }
+  }>
 }
 
 /**
@@ -183,6 +209,12 @@ export interface AgentContextBuilderDeps {
    * pool, so curated and living-document fragments actually reach a run.
    */
   fragmentResolver?: FragmentBodyResolver
+  /**
+   * Optional: resolves a `skill` step's picked skill (`stepOptions.skillId`) to its instructions
+   * + resource bodies for the run. Wired only when the repo-sourced Claude Skills library is
+   * configured. A skill step dispatched with this UNWIRED fails loudly (see {@link SkillResolver}).
+   */
+  skillResolver?: SkillResolver
 }
 
 /**
@@ -264,6 +296,11 @@ export class AgentContextBuilder {
       architectureDirection,
       resolved,
       docAuthoring,
+      // A `skill` step's picked skill (stepOptions.skillId), resolved to its instructions +
+      // resource bodies at the pinned commit and pinned onto the step. Gated on the skill kind,
+      // so every other run skips it entirely (no extra read). Throws when a skill was picked but
+      // the resolver is unwired — a skill step must never run against nothing.
+      skill,
     ] = await Promise.all([
       this.resolveLinkedContext(workspaceId, block.id, description, { includeLinked: !reworked }),
       this.resolveEnvironment(workspaceId, block, serviceFrame),
@@ -282,6 +319,7 @@ export class AgentContextBuilder {
       // the wave — single-threaded, no other resolver touches the step).
       this.resolveFragments(workspaceId, agentKind, step, block, serviceFrame),
       this.resolveDocAuthoringContext(workspaceId, agentKind, block),
+      this.resolveSkillForStep(workspaceId, agentKind, step),
     ])
     const agentConfig = block.agentConfig
     const priorOutputs = [
@@ -327,10 +365,25 @@ export class AgentContextBuilder {
             return choice ? { implementationChoice: choice } : {}
           })()
         : {}),
+      // Ralph loop: fold the iteration's programmatic completion command + progress-log path
+      // + 1-based iteration number (`attempts + 1`) into the context so the container executor
+      // forwards them to the harness as the coding job's `validation` block. Only when
+      // dispatching the step's own `ralph` kind (there is no helper kind for the loop). Absent
+      // for a step with no `ralph` state / any other kind. See {@link buildRalphValidation}.
+      ...(agentKind === step.agentKind
+        ? (() => {
+            const validation = buildRalphValidation(step.ralph)
+            return validation ? { ralphValidation: validation } : {}
+          })()
+        : {}),
       // Consensus config for this step (copied onto the step at run start). Read only
       // by the optional consensus executor, which decides — possibly gated on the
       // block estimate below — whether to run the multi-model process. Absent ⇒ standard.
       ...(step.consensus ? { consensus: step.consensus } : {}),
+      // The resolved skill for a `skill` step — its instructions + resource bodies, rendered
+      // harness-aware by the container executor. Pinned onto the step (skillVersion) inside the
+      // resolver. Absent for every non-skill step.
+      ...(skill ? { skill } : {}),
       block: {
         id: block.id,
         title: block.title,
@@ -844,6 +897,35 @@ export class AgentContextBuilder {
       step.selectedFragmentIds = undefined
       return null
     }
+  }
+
+  /**
+   * Resolve a `skill` step's picked skill (`stepOptions.skillId`) for this dispatch: fetch its
+   * instructions + resource bodies at the pinned commit and PIN the version onto the step
+   * (`step.skillVersion`), so the run records exactly which skill (and at which commit/blob) ran.
+   * Gated on the effective dispatched kind being the skill kind, so every other run returns null
+   * with no work. Returns null for a skill step that somehow carries no `skillId` (pipeline-save
+   * validation rejects that case, so it only arises on a legacy/malformed step). THROWS a
+   * {@link ValidationError} when a skill WAS picked but no resolver is wired — a skill step must
+   * fail loudly rather than run against nothing. A resource-fetch failure inside the resolver
+   * degrades to a body-less reference (never throws), so a transient GitHub blip can't wedge a run.
+   */
+  private async resolveSkillForStep(
+    workspaceId: string,
+    agentKind: string,
+    step: PipelineStep,
+  ): Promise<AgentRunContext['skill'] | null> {
+    if (agentKind !== SKILL_AGENT_KIND) return null
+    const skillId = step.stepOptions?.skillId?.trim()
+    if (!skillId) return null
+    if (!this.deps.skillResolver) {
+      throw new ValidationError(
+        `This pipeline step runs the skill '${skillId}', but the skill library is not configured for this deployment.`,
+      )
+    }
+    const { skill, version } = await this.deps.skillResolver.resolveForRun(workspaceId, skillId)
+    step.skillVersion = version
+    return skill
   }
 
   /**

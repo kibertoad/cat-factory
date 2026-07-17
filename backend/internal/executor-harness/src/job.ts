@@ -154,6 +154,26 @@ function parseGuardLimits(value: unknown): GuardLimitsSpec | undefined {
 }
 
 /**
+ * Parse the optional Ralph-loop validation spec. Requires a non-empty `command` string (the
+ * completion criterion the harness runs); `progressPath`/`iteration` are optional metadata.
+ * Returns undefined when absent or malformed (a coding run then behaves like any other — no
+ * post-commit validation). See {@link ValidationSpec}.
+ */
+function parseValidationSpec(value: unknown): ValidationSpec | undefined {
+  if (typeof value !== 'object' || value === null) return undefined
+  const o = value as Record<string, unknown>
+  if (typeof o.command !== 'string' || o.command.trim() === '') return undefined
+  const iteration = posInt(o.iteration)
+  return {
+    command: o.command,
+    ...(typeof o.progressPath === 'string' && o.progressPath
+      ? { progressPath: o.progressPath }
+      : {}),
+    ...(iteration !== undefined ? { iteration } : {}),
+  }
+}
+
+/**
  * Parse the shared per-job auth fields, validating per harness: a subscription
  * harness (`claude-code` / `codex`) requires `subscriptionToken`; the default Pi
  * harness requires `proxyBaseUrl` + `sessionToken`.
@@ -601,6 +621,26 @@ export interface ContextFileSpec {
   content: string
 }
 
+/** One materialisable resource file of a skill (repo-sourced Claude Skills). */
+export interface SkillResourceSpec {
+  /** Path within the skill directory, e.g. `templates/report.md` (subdirs preserved, no traversal). */
+  relPath: string
+  content: string
+}
+
+/**
+ * A repo-sourced Claude Skill to make available for a `skill` step. Materialised HARNESS-AWARE:
+ * `CLAUDE_CONFIG_DIR/skills/<name>/SKILL.md` (+ resources) for the claude-code CLI to load
+ * natively, or `.cat-context/skill/<relPath>` for the Pi/codex checkout (their prompt carries the
+ * instructions). A dedicated top-level body field (like `packageRegistries`), never a context file.
+ */
+export interface SkillSpec {
+  name: string
+  description: string
+  instructions: string
+  resources: SkillResourceSpec[]
+}
+
 /** How an explore agent's reply is consumed. */
 export interface AgentOutputSpec {
   /** `prose` keeps the reply text; `structured` parses (and optionally repairs) it to JSON. */
@@ -627,6 +667,23 @@ export interface AgentOutputSpec {
  * RUNNING — no agent runs and the serve is deliberately not torn down when the job returns
  * (see {@link AgentResult.preview}).
  */
+/**
+ * Coding mode (Ralph loop): the programmatic completion criterion. After the coding agent
+ * commits + pushes, the harness runs {@link command} in the checkout and reports its exit
+ * code back on {@link AgentResult.ralphVerdict} — exit 0 means the loop is done. This is the
+ * whole point of a Ralph loop's exit condition being a REAL check: the harness runs it, not
+ * the model. The command runs only inside the sandboxed run container (same trust boundary
+ * as the coding agent). Absent for every non-`ralph` coding run.
+ */
+export interface ValidationSpec {
+  /** The shell command the harness runs against the checkout (exit 0 = the criterion is met). */
+  command: string
+  /** Repo-relative progress-log path the agent maintains (informational; the harness doesn't write it). */
+  progressPath?: string
+  /** 1-based iteration number, echoed back on the verdict for the engine's attempt log. */
+  iteration?: number
+}
+
 export interface AgentJob extends HarnessAuthFields {
   jobId: string
   mode: AgentMode
@@ -670,6 +727,12 @@ export interface AgentJob extends HarnessAuthFields {
    * job on a reused container is removed.
    */
   packageRegistries?: PackageRegistrySpec[]
+  /**
+   * A repo-sourced Claude Skill to make available for a `skill` step (see {@link SkillSpec}).
+   * Materialised harness-aware before the run: natively into `CLAUDE_CONFIG_DIR/skills/<name>/`
+   * for claude-code, or `.cat-context/skill/<relPath>` for Pi/codex. Absent ⇒ no skill installed.
+   */
+  skill?: SkillSpec
   /**
    * Tester kinds only: sensitive test credentials injected into the run's ENVIRONMENT (out of
    * band) as `{ key, value }` env pairs, so the tester's shell can read `$KEY` without the value
@@ -753,6 +816,11 @@ export interface AgentJob extends HarnessAuthFields {
    * killed for a kind's normal working pattern. Absent ⇒ env/default for all knobs.
    */
   guardLimits?: GuardLimitsSpec
+  /**
+   * Coding mode (Ralph loop): the programmatic completion command the harness runs after the
+   * agent commits + pushes. Present only for a `ralph` iteration. See {@link ValidationSpec}.
+   */
+  validation?: ValidationSpec
 }
 
 /** Per-job, per-knob progress-guard overrides (see {@link AgentJob.guardLimits}). */
@@ -809,6 +877,18 @@ export interface AgentResult {
   pushed?: boolean
   prUrl?: string
   branch?: string
+  /**
+   * Coding mode (Ralph loop): the harness-computed verdict of the post-commit validation
+   * command — whether it exited 0, its exit code, and a bounded, redacted output tail. The
+   * engine reads this (never a model self-report) to decide whether the loop is done or must
+   * iterate again. Present only for a `ralph` iteration ({@link AgentJob.validation} set).
+   */
+  ralphVerdict?: {
+    validationPassed: boolean
+    exitCode: number
+    validationOutputTail?: string
+    iteration?: number
+  }
   /**
    * Coding mode (multi-repo): the PRs opened in the connected services' PEER repos, one per
    * repo the run actually changed (service-connections phase 3). Beside the own-service
@@ -887,6 +967,71 @@ function parseContextFiles(value: unknown): ContextFileSpec[] {
     })
   }
   return files
+}
+
+/**
+ * Sanitize a skill resource's relative path: keep the subdirectory structure (so
+ * `templates/report.md` materialises nested) but reject anything that could escape the skill
+ * directory — absolute paths, `..` traversal, backslashes, empty/dot segments. Returns undefined
+ * for an unsafe path (the resource is then dropped).
+ */
+function sanitizeSkillRelPath(value: unknown): string | undefined {
+  if (typeof value !== 'string') return undefined
+  const segments = value.replace(/\\/g, '/').split('/')
+  const clean: string[] = []
+  for (const seg of segments) {
+    if (seg === '' || seg === '.') continue
+    if (seg === '..') return undefined
+    // Same character class as a context-file name, per segment.
+    const c = seg.replace(/[^A-Za-z0-9._-]/g, '')
+    if (!c || c === '.' || c === '..' || c.startsWith('.')) return undefined
+    clean.push(c)
+  }
+  return clean.length ? clean.join('/') : undefined
+}
+
+/**
+ * Fallback native-skill directory name when the authored name has no id-safe characters (e.g. a
+ * purely non-ASCII skill name). The name is only a path segment / manifest label, so a safe
+ * default keeps the skill installable rather than dropping it — which, on the claude-code path,
+ * would leave the prompt pointing at a skill that was never installed (a blind run).
+ */
+const FALLBACK_SKILL_NAME = 'skill'
+
+/** A skill's own directory name, sanitized to a safe single path segment (undefined if empty). */
+function sanitizeSkillName(value: unknown): string | undefined {
+  if (typeof value !== 'string') return undefined
+  const base = value.replace(/\\/g, '/').split('/').pop() ?? ''
+  const cleaned = base.replace(/[^A-Za-z0-9._-]/g, '')
+  if (!cleaned || cleaned === '.' || cleaned === '..' || cleaned.startsWith('.')) return undefined
+  return cleaned
+}
+
+/** Validate the optional `skill` field, or undefined when absent/malformed. */
+function parseSkillSpec(value: unknown): SkillSpec | undefined {
+  if (typeof value !== 'object' || value === null) return undefined
+  const o = value as Record<string, unknown>
+  const instructions = typeof o.instructions === 'string' ? o.instructions : undefined
+  // No instructions ⇒ there is nothing to run — drop the skill (the prompt still carries the
+  // folded-in directive on the Pi/codex path). An unsafe/empty NAME only affects the install
+  // directory, so fall back to a safe default rather than dropping the whole skill.
+  if (!instructions) return undefined
+  const name = sanitizeSkillName(o.name) ?? FALLBACK_SKILL_NAME
+  const description = typeof o.description === 'string' ? o.description : ''
+  const resources: SkillResourceSpec[] = []
+  if (Array.isArray(o.resources)) {
+    const used = new Set<string>()
+    for (const entry of o.resources) {
+      if (typeof entry !== 'object' || entry === null) continue
+      const e = entry as Record<string, unknown>
+      const relPath = sanitizeSkillRelPath(e.relPath)
+      if (!relPath || used.has(relPath)) continue
+      if (typeof e.content !== 'string') continue
+      used.add(relPath)
+      resources.push({ relPath, content: e.content })
+    }
+  }
+  return { name, description, instructions, resources }
 }
 
 /** Parse the explore-mode infra stand-up spec, or undefined when absent/unrecognised. */
@@ -1128,8 +1273,10 @@ export function parseAgentJob(input: unknown): AgentJob {
   const bootstrap = parseAgentBootstrapSpec(o.bootstrap)
   const contextFiles = parseContextFiles(o.contextFiles)
   const packageRegistries = parsePackageRegistries(o.packageRegistries)
+  const skill = parseSkillSpec(o.skill)
   const testSecrets = parseTestSecrets(o.testSecrets)
   const guardLimits = parseGuardLimits(o.guardLimits)
+  const validation = parseValidationSpec(o.validation)
   const job: AgentJob = {
     jobId: str(o.jobId, 'jobId'),
     mode,
@@ -1149,6 +1296,7 @@ export function parseAgentJob(input: unknown): AgentJob {
     ...(output ? { output } : {}),
     ...(contextFiles.length ? { contextFiles } : {}),
     ...(packageRegistries.length ? { packageRegistries } : {}),
+    ...(skill ? { skill } : {}),
     ...(testSecrets.length ? { testSecrets } : {}),
     ...(infra ? { infra } : {}),
     ...(typeof o.newBranch === 'string' && o.newBranch ? { newBranch: o.newBranch } : {}),
@@ -1164,6 +1312,7 @@ export function parseAgentJob(input: unknown): AgentJob {
     ...(o.persistentCheckout === true ? { persistentCheckout: true } : {}),
     ...(o.streamFollowUps === true ? { streamFollowUps: true } : {}),
     ...(guardLimits ? { guardLimits } : {}),
+    ...(validation ? { validation } : {}),
   }
   assertAllowedHost(job.repo.cloneUrl, 'repo.cloneUrl')
   if (job.githubApiBase) assertAllowedHost(job.githubApiBase, 'githubApiBase')

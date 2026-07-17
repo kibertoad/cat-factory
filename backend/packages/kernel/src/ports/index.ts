@@ -18,6 +18,10 @@ export type {
   MembershipRepository,
 } from './account-repositories.js'
 export type {
+  WorkspaceMemberRecord,
+  WorkspaceMemberRepository,
+} from './workspace-member-repositories.js'
+export type {
   IdentityProvider,
   UserRecord,
   UserIdentityRecord,
@@ -81,6 +85,14 @@ export type {
   LlmPromptChainTip,
 } from './llm-metrics.js'
 export { LLM_WARNING_FINISH_REASONS } from './llm-metrics.js'
+export type {
+  PlatformDurationStats,
+  PlatformFailureCount,
+  PlatformLiveCounts,
+  PlatformMetricsRepository,
+  PlatformRunOutcome,
+  PlatformRunTrendPoint,
+} from './platform-metrics.js'
 export type {
   AgentContextFile,
   AgentContextFragment,
@@ -247,6 +259,13 @@ export type {
   FragmentSourceRepository,
   ResolvedCatalogEntry,
 } from './fragment-repositories.js'
+export type {
+  SkillResource,
+  AccountSkillRecord,
+  AccountSkillRepository,
+  SkillSourceRecord,
+  SkillSourceRepository,
+} from './skill-repositories.js'
 export type {
   AppCaches,
   AccountModelPolicyCacheValue,

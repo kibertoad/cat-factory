@@ -1,5 +1,86 @@
 # @cat-factory/local-server
 
+## 0.68.7
+
+### Patch Changes
+
+- Updated dependencies [6564507]
+  - @cat-factory/kernel@0.133.0
+  - @cat-factory/contracts@0.139.0
+  - @cat-factory/orchestration@0.116.0
+  - @cat-factory/server@0.128.0
+  - @cat-factory/node-server@0.99.0
+  - @cat-factory/agents@0.61.2
+  - @cat-factory/gitlab@0.10.6
+  - @cat-factory/integrations@0.84.9
+  - @cat-factory/executor-harness@1.45.0
+
+## 0.68.6
+
+### Patch Changes
+
+- Updated dependencies [b12d7a8]
+  - @cat-factory/contracts@0.138.0
+  - @cat-factory/kernel@0.132.0
+  - @cat-factory/server@0.127.1
+  - @cat-factory/node-server@0.98.1
+  - @cat-factory/agents@0.61.1
+  - @cat-factory/gitlab@0.10.5
+  - @cat-factory/integrations@0.84.8
+  - @cat-factory/orchestration@0.115.1
+  - @cat-factory/executor-harness@1.45.0
+
+## 0.68.5
+
+### Patch Changes
+
+- Updated dependencies [5b1cbbf]
+  - @cat-factory/kernel@0.131.0
+  - @cat-factory/contracts@0.137.0
+  - @cat-factory/agents@0.61.0
+  - @cat-factory/orchestration@0.115.0
+  - @cat-factory/server@0.127.0
+  - @cat-factory/node-server@0.98.0
+  - @cat-factory/gitlab@0.10.4
+  - @cat-factory/integrations@0.84.7
+  - @cat-factory/executor-harness@1.45.0
+
+## 0.68.4
+
+### Patch Changes
+
+- 1869ad3: Add a "Ralph loop" task type: a persistent retry-until-done coding loop whose exit condition is
+  a programmatic validation command the harness runs against the checkout (exit 0 = done), bounded
+  by a per-task iteration budget and surviving restarts.
+
+  Each iteration is a fresh-context container-coding run that works the task spec; the harness then
+  runs the task's configured `ralph.validationCommand` (bounded timeout, redacted output tail) and
+  reports the verdict on the run result — never a model self-report. The engine (`RalphController` +
+  a `ralph-verdict` step-completion interceptor, modelled on the Tester→Fixer loop) re-dispatches a
+  fresh iteration on a failing verdict until it passes or the `ralph.maxIterations` budget (default 10) is spent, then hands off to a human. Loop state rides the persisted `step.ralph` (no
+  migration), so a mid-loop run is re-driven from where it was by both durable drivers + sweepers.
+
+  - New `ralph` agent kind (the reusable loop-body primitive) + the `pl_ralph` pipeline
+    (`ralph → conflicts → ci → merger`) + a `ralph` task type (a one-click creation entry point).
+  - The validation command + iteration budget are per-task agent config; `AgentConfigDescriptor`
+    gained `text`/`number` control types for them.
+  - Cross-runtime conformance coverage (loop completes / exhausts / refuses to start unconfigured)
+    and pure-logic unit tests.
+
+  Breaking: none (pre-1.0; `taskType` / `step.ralph` / the descriptor types are additive). The
+  executor-harness image is bumped for the new in-container validation capability.
+
+- Updated dependencies [1869ad3]
+  - @cat-factory/contracts@0.136.0
+  - @cat-factory/kernel@0.130.0
+  - @cat-factory/agents@0.60.0
+  - @cat-factory/server@0.126.0
+  - @cat-factory/orchestration@0.114.0
+  - @cat-factory/executor-harness@1.45.0
+  - @cat-factory/gitlab@0.10.3
+  - @cat-factory/integrations@0.84.6
+  - @cat-factory/node-server@0.97.4
+
 ## 0.68.3
 
 ### Patch Changes

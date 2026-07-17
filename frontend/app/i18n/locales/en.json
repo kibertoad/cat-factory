@@ -119,6 +119,7 @@
     "workspaceSettings": "Workspace settings",
     "modelConfiguration": "Model configuration",
     "accountSettings": "Account settings",
+    "operatorDashboard": "Platform observability",
     "environmentSetup": "Environment setup"
   },
   "board": {
@@ -186,7 +187,8 @@
         "document": "Document",
         "spike": "Spike",
         "recurring": "Recurring",
-        "review": "Review"
+        "review": "Review",
+        "ralph": "Ralph loop"
       },
       "recurringWithFrame": "A recurring task runs a pipeline on a cadence. Continue to set the schedule + prompt.",
       "recurringNoFrame": "A recurring task must live on a service. Add it from a service frame (or a module inside one).",
@@ -1360,6 +1362,64 @@
       "provider": "Provider",
       "resultsCount": "{count} result | {count} results",
       "queriesTitle": "Performed searches"
+    }
+  },
+  "platformObservability": {
+    "title": "Platform observability",
+    "refresh": "Refresh",
+    "close": "Close",
+    "loading": "Loading platform health…",
+    "retry": "Retry",
+    "window": {
+      "oneHour": "Last hour",
+      "oneDay": "Last 24 hours",
+      "sevenDays": "Last 7 days"
+    },
+    "outcomes": {
+      "title": "Run outcomes",
+      "total": "Total runs",
+      "done": "Completed",
+      "failed": "Failed",
+      "successRate": "Success rate",
+      "running": "Running",
+      "blocked": "Blocked",
+      "paused": "Paused",
+      "pending": "Pending"
+    },
+    "trend": {
+      "title": "Outcome trend",
+      "done": "Completed",
+      "failed": "Failed",
+      "other": "Other",
+      "empty": "No runs in this window."
+    },
+    "failures": {
+      "title": "Failure breakdown",
+      "empty": "No failures in this window."
+    },
+    "failureKind": {
+      "preflight": "Preflight",
+      "dispatch": "Dispatch",
+      "environment": "Environment",
+      "evicted": "Evicted",
+      "timeout": "Timeout",
+      "agent": "Agent",
+      "job_failed": "Job failed",
+      "rejected": "Rejected",
+      "companion_rejected": "Companion rejected",
+      "stalled": "Stalled",
+      "cancelled": "Cancelled",
+      "unknown": "Unknown"
+    },
+    "durations": {
+      "title": "Run duration",
+      "avg": "Average",
+      "min": "Min",
+      "max": "Max",
+      "empty": "No completed runs in this window."
+    },
+    "live": {
+      "title": "Live now"
     }
   },
   "auth": {
@@ -2605,7 +2665,8 @@
         "bug": "bug",
         "document": "document",
         "spike": "spike",
-        "review": "review"
+        "review": "review",
+        "ralph": "Ralph loop"
       },
       "observability": {
         "heading": "Agent observability",
@@ -4922,6 +4983,29 @@
       "style": "Style",
       "test": "Tests",
       "other": "Other"
+    }
+  },
+  "ralph": {
+    "subtitle": "A persistent loop: work the task, run the validation command, and repeat until it passes.",
+    "status": {
+      "passed": "Passed",
+      "gaveUp": "Gave up",
+      "running": "Running",
+      "failing": "Failing"
+    },
+    "noActivity": "No iterations yet.",
+    "validationCommand": "Validation command",
+    "lastOutput": "Latest validation (exit {exit})",
+    "viewPr": "View pull request",
+    "iterationsHeading": "Iterations",
+    "iteration": "Iteration {number}",
+    "iterationPassed": "validation passed",
+    "iterationFailed": "exit {exit}",
+    "sidebar": {
+      "state": "State",
+      "iterations": "Iterations",
+      "count": "{attempts} of {max}",
+      "footer": "The loop retries until the validation command passes or the iteration budget is spent."
     }
   }
 }

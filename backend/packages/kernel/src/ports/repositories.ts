@@ -5,7 +5,9 @@ import type {
   ExecutionStatus,
   Pipeline,
   Workspace,
+  WorkspaceAccessMode,
 } from '../domain/types.js'
+import type { WorkspaceAccessRow } from '../domain/workspace-access.js'
 
 // ---------------------------------------------------------------------------
 // Repository ports: persistence interfaces the domain layer depends on. The
@@ -41,6 +43,14 @@ export interface WorkspaceRepository {
    * the API's per-workspace authorization check.
    */
   accountOf(id: string): Promise<string | null | undefined>
+  /**
+   * The narrow access row workspace-RBAC resolution reads in one hot-path query
+   * (replacing the gate's separate `accountOf`): the owning account, the legacy owner,
+   * and the board's access mode. `undefined` when the board does not exist.
+   */
+  accessRowOf(id: string): Promise<WorkspaceAccessRow | undefined>
+  /** Flip a board's workspace-RBAC access mode (`account` | `restricted`). */
+  setAccessMode(id: string, mode: WorkspaceAccessMode): Promise<void>
   create(workspace: Workspace, ownerUserId: string | null, accountId: string | null): Promise<void>
   rename(id: string, name: string): Promise<void>
   /** Update a board's description (null clears it). */

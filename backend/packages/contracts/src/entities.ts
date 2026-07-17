@@ -1,10 +1,12 @@
 import * as v from 'valibot'
+import { workspaceAccessModeSchema } from './workspace-members.js'
 import { subscriptionVendorSchema } from './vendor-credentials.js'
 import { agentConfigValuesSchema } from './agent-config.js'
 import { testConcernSchema, testReportSchema, testerInfraSetupSchema } from './testing.js'
 import { consensusStepConfigSchema, stepGatingSchema, taskEstimateSchema } from './consensus.js'
 import { followUpsStepStateSchema } from './followUp.js'
 import { forkDecisionStepStateSchema } from './forkDecision.js'
+import { ralphStepStateSchema } from './ralph.js'
 import { prReviewStepStateSchema } from './prReview.js'
 import { cloudProviderSchema, instanceSizeSchema } from './compute-provisioning.js'
 import { releaseSignalSchema } from './release.js'
@@ -682,6 +684,16 @@ export const stepOptionsSchema = v.object({
    * ⇒ enabled. Ignored on non-`requirements-review` steps.
    */
   autoRecommend: v.optional(v.boolean()),
+  /**
+   * `skill` steps only. The id of the account-tier repo-sourced Claude Skill this step
+   * executes (`src:<sourceId>:<dirName>`; see `docs/initiatives/repo-skills.md`). The one
+   * generic `skill` agent kind is parametrized by THIS field — the picked skill's
+   * instructions + resources are resolved at dispatch and folded into the step (natively for
+   * the claude-code harness, as prompt + `.cat-context/skill/*` for Pi/codex). A `skill` step
+   * with no `skillId` has nothing to run and is rejected at pipeline save. Ignored on every
+   * other kind.
+   */
+  skillId: v.optional(v.string()),
 })
 export type StepOptions = v.InferOutput<typeof stepOptionsSchema>
 
@@ -1798,6 +1810,15 @@ export const pipelineStepSchema = v.object({
    */
   forkDecision: v.optional(v.nullable(forkDecisionStepStateSchema)),
   /**
+   * Live "Ralph loop" state carried on a `ralph` step: the persistent retry-until-done
+   * loop's iteration count, budget, validation command, and per-iteration history. Seeded
+   * from the block's per-task agent config at step start, then advanced each iteration by
+   * the engine's `RalphController`. Because it rides the run's persisted `detail` blob, both
+   * durable drivers + both stale-run sweepers re-drive a mid-loop run from exactly this
+   * state after a restart. Absent for non-`ralph` steps. See {@link ralphStepStateSchema}.
+   */
+  ralph: v.optional(v.nullable(ralphStepStateSchema)),
+  /**
    * Transient re-entry marker carried on a parked `coder` step whose fork decision is
    * `answering`: set when the human sends a chat message so the run is signalled to
    * wake and the durable driver, on re-entering, runs the inline chat LLM and appends
@@ -1931,6 +1952,21 @@ export const pipelineStepSchema = v.object({
    * the fragment-library module is not configured.
    */
   selectedFragmentIds: v.optional(v.array(v.string())),
+  /**
+   * The repo-sourced Claude Skill this step was PINNED to at dispatch (a `skill` step; see
+   * `docs/initiatives/repo-skills.md`). Recorded so a run executes a stable version of the
+   * skill even if its source resyncs mid-run, and so a later investigation knows exactly
+   * which skill (and at which commit / manifest blob) ran. `commit` is the source dir's head
+   * commit the resources were fetched at (null if the skill was never synced to a commit);
+   * `sha` is the `SKILL.md` blob sha. Absent for every non-`skill` step.
+   */
+  skillVersion: v.optional(
+    v.object({
+      skillId: v.string(),
+      commit: v.nullable(v.string()),
+      sha: v.string(),
+    }),
+  ),
   /**
    * Identifier of an in-flight asynchronous agent job (a container run polled by
    * the durable driver). Set while the step is dispatched-but-not-yet-finished so
@@ -2163,6 +2199,12 @@ export const workspaceSchema = v.object({
   createdAt: v.number(),
   /** The account this board belongs to, or null for a legacy/unscoped board. */
   accountId: v.nullable(v.string()),
+  /**
+   * Workspace-level access mode (RBAC). `account` (the default) keeps the legacy
+   * behaviour — every account member sees the board; `restricted` limits it to the
+   * explicit member roster. Optional on the wire: absent ⇒ `account`.
+   */
+  accessMode: v.optional(workspaceAccessModeSchema),
 })
 export type Workspace = v.InferOutput<typeof workspaceSchema>
 

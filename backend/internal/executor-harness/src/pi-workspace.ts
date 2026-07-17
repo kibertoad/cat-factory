@@ -1,7 +1,7 @@
 import { mkdir, mkdtemp, rm } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
-import type { RepoSpec } from './job.js'
+import type { RepoSpec, SkillSpec } from './job.js'
 import { log } from './logger.js'
 import {
   type ContextFileInfo,
@@ -11,6 +11,7 @@ import {
   type RunDiagnostics,
   CONTEXT_DIR,
   materializeContextFiles,
+  materializeSkillResources,
   mergeGuardLimits,
   progressGuardLimitsFromEnv,
   runPi,
@@ -202,6 +203,13 @@ export interface AgentRunSpec {
    */
   contextFiles?: ContextFileInfo[]
   /**
+   * A repo-sourced Claude Skill to make available for this run (slice 2). Installed HARNESS-AWARE:
+   * the claude-code runner writes it natively into the config dir's `skills/`; for Pi/codex the
+   * resource files are materialised under `.cat-context/skill/` (their prompt already carries the
+   * folded-in instructions). Absent ⇒ no skill.
+   */
+  skill?: SkillSpec
+  /**
    * Enable proxy-backed web search: point the rpiv-web-tools SearXNG provider at the
    * backend's search proxy (`${proxyBaseUrl}/web-search`) with the session token as
    * the bearer — so the search runs server-side under the deployment's key and no
@@ -232,6 +240,13 @@ export async function runAgentInWorkspace(
   // harness paths; kept out of the agent's commits via a local git exclude entry.
   const contextFiles = spec.contextFiles ?? []
   await materializeContextFiles(spec.dir, contextFiles)
+  // Repo-sourced skill (slice 2): claude-code installs it natively (written by the runner into the
+  // config dir), so it reads from there. Every other harness (Pi/codex) reads the checkout, so
+  // materialise the skill's resources under `.cat-context/skill/` (its instructions are folded
+  // into the prompt by the backend). A resource-free skill is a no-op here.
+  if (spec.skill && spec.harness !== 'claude-code') {
+    await materializeSkillResources(spec.dir, spec.skill)
+  }
 
   // Subscription harnesses (Claude Code / Codex) authenticate with the leased
   // token and talk direct to the vendor — no proxy config, no AGENTS.md. The
@@ -251,6 +266,7 @@ export async function runAgentInWorkspace(
       ...(spec.subscriptionToken ? { subscriptionToken: spec.subscriptionToken } : {}),
       subscriptionBaseUrl: spec.subscriptionBaseUrl,
       ...(spec.ambientAuth ? { ambientAuth: true } : {}),
+      ...(spec.skill ? { skill: spec.skill } : {}),
       signal: opts.signal,
       onActivity: opts.onActivity,
       onProgress: opts.onProgress,

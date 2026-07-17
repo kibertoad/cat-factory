@@ -1,6 +1,7 @@
 import type { Hono } from 'hono'
 import type { AppEnv } from './http/env.js'
 import { accountController } from './modules/accounts/AccountController.js'
+import { platformObservabilityController } from './modules/observability/PlatformObservabilityController.js'
 import { agentRunController } from './modules/agentRuns/AgentRunController.js'
 import { artifactController } from './modules/artifacts/ArtifactController.js'
 import { harnessArtifactController } from './modules/artifacts/HarnessArtifactController.js'
@@ -14,6 +15,7 @@ import { eventsController } from './modules/events/EventsController.js'
 import { eventsRelayController } from './modules/events/EventsRelayController.js'
 import { executionController } from './modules/execution/ExecutionController.js'
 import { fragmentLibraryController } from './modules/fragmentLibrary/FragmentLibraryController.js'
+import { skillLibraryController } from './modules/skillLibrary/SkillLibraryController.js'
 import { githubController } from './modules/github/GitHubController.js'
 import { githubWebhookController } from './modules/github/GitHubWebhookController.js'
 import { vcsWebhookController } from './modules/vcs/VcsWebhookController.js'
@@ -124,6 +126,9 @@ export function registerCoreControllers<E extends AppEnv>(app: Hono<E>): void {
   app.route('/', promptFragmentController())
   app.route('/', modelController())
   app.route('/', accountController())
+  // Platform-operator observability (`/accounts/:id/observability/platform`); admin-gated,
+  // 503 when the platform-metrics rollup isn't wired.
+  app.route('/', platformObservabilityController())
   app.route('/', personalSubscriptionController())
   app.route('/', localModelEndpointController())
   app.route('/', userSettingsController())
@@ -138,6 +143,7 @@ export function registerCoreControllers<E extends AppEnv>(app: Hono<E>): void {
   // for a cached machine token; 503 unless the local facade wired the connector.
   app.route('/', mothershipConnectController())
   app.route('/accounts/:accountId', fragmentLibraryController('account'))
+  app.route('/accounts/:accountId', skillLibraryController())
   app.route('/', workspaceController())
   // Real-time WebSocket event stream (self-authenticates via ?ticket=; the facade's
   // gate bypasses only its exact upgrade shape). The upgrade is delegated to the

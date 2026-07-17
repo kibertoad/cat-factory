@@ -87,6 +87,12 @@ export interface RepoContentEntry {
   type: string
   /** Blob sha (file) or tree sha (dir) — powers the cheap "changed?" check. */
   sha: string
+  /**
+   * Byte size of a file entry, when the source exposes it (the GitHub contents API
+   * does). Undefined for directories or a source that doesn't report it. Used by the
+   * skill library to bound what a run materialises from a source's resource files.
+   */
+  size?: number
 }
 
 /** A single file's decoded UTF-8 content plus its blob sha. */

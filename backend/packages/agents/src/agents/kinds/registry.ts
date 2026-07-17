@@ -13,11 +13,13 @@ import { registerBugInvestigatorAgent } from './bug-investigator.js'
 import { registerForkProposerAgent } from './fork-proposer.js'
 import { registerPrReviewerAgent } from './pr-reviewer.js'
 import { registerReproTestAgent } from './repro-test.js'
+import { registerRalphAgent } from './ralph.js'
 import { registerDocumentAgents } from './document.js'
 import { registerCodeCommenterAgent } from './code-commenter.js'
 import { registerInitiativeAgents } from './initiative.js'
 import { registerEnvironmentAnalystAgent } from './environment-analyst.js'
 import { registerSpikeAgent } from './spike.js'
+import { registerSkillAgent } from './skill.js'
 
 // Installation-level extension point for custom agent kinds, mirroring the
 // model-provider registry seam (`registerModelRegistry` / `@cat-factory/provider-bedrock`).
@@ -270,10 +272,12 @@ export function defaultAgentKindRegistry(): AgentKindRegistry {
   registerForkProposerAgent(registry)
   registerPrReviewerAgent(registry)
   registerReproTestAgent(registry)
+  registerRalphAgent(registry)
   registerDocumentAgents(registry)
   registerCodeCommenterAgent(registry)
   registerInitiativeAgents(registry)
   registerEnvironmentAnalystAgent(registry)
   registerSpikeAgent(registry)
+  registerSkillAgent(registry)
   return registry
 }

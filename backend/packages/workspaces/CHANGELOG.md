@@ -1,5 +1,37 @@
 # @cat-factory/workspaces
 
+## 0.13.51
+
+### Patch Changes
+
+- Updated dependencies [6564507]
+  - @cat-factory/kernel@0.133.0
+  - @cat-factory/contracts@0.139.0
+
+## 0.13.50
+
+### Patch Changes
+
+- Updated dependencies [b12d7a8]
+  - @cat-factory/contracts@0.138.0
+  - @cat-factory/kernel@0.132.0
+
+## 0.13.49
+
+### Patch Changes
+
+- Updated dependencies [5b1cbbf]
+  - @cat-factory/kernel@0.131.0
+  - @cat-factory/contracts@0.137.0
+
+## 0.13.48
+
+### Patch Changes
+
+- Updated dependencies [1869ad3]
+  - @cat-factory/contracts@0.136.0
+  - @cat-factory/kernel@0.130.0
+
 ## 0.13.47
 
 ### Patch Changes

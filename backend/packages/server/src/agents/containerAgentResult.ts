@@ -136,6 +136,9 @@ export function toRunResult(result: RunnerJobResult, agentKind?: string): AgentR
         ...(result.branch ? { branch: result.branch } : {}),
       },
       ...(peerPullRequests?.length ? { peerPullRequests } : {}),
+      // A ralph iteration opens the PR on its first pass; carry its harness-computed
+      // validation verdict so the ralph loop's completion interceptor can read it.
+      ...(result.ralphVerdict ? { ralphVerdict: result.ralphVerdict } : {}),
     }
   }
   // An in-place coding job with no PR (ci-fixer / fixer / conflict-resolver): it pushed back
@@ -155,6 +158,8 @@ export function toRunResult(result: RunnerJobResult, agentKind?: string): AgentR
     return {
       output: `${base}${peerNote}`,
       ...(peerPullRequests?.length ? { peerPullRequests } : {}),
+      // Later ralph iterations push to the same branch (no new PR); carry the verdict.
+      ...(result.ralphVerdict ? { ralphVerdict: result.ralphVerdict } : {}),
     }
   }
   return { output: result.summary?.trim() || 'Implementation complete.' }

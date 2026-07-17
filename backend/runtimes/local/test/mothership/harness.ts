@@ -21,6 +21,8 @@ import {
   DrizzleDocInterviewRepository,
   DrizzleDocumentRepository,
   DrizzleNotificationRepository,
+  DrizzleWorkspaceMemberRepository,
+  DrizzleWorkspaceRepository,
   buildNodeContainer,
   createApp,
   createDbClient,
@@ -471,6 +473,8 @@ export function makeMothershipConformanceApp(
     agentRunRepository: () => ms.container.agentRunRepository,
     // Direct-store probes read the mothership's authoritative Postgres, like seedService.
     blockRepository: () => mothershipRepos().blockRepository,
+    workspaceRepository: () => new DrizzleWorkspaceRepository(db),
+    workspaceMemberRepository: () => new DrizzleWorkspaceMemberRepository(db),
     initiativeRepository: () => mothershipRepos().initiativeRepository,
     notificationRepository: () => new DrizzleNotificationRepository(db),
     documentRepository: () => new DrizzleDocumentRepository(db),
