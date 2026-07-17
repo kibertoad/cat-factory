@@ -1737,7 +1737,8 @@
         "initiative": "Als gelesen markieren",
         "markRead": "Als gelesen markieren",
         "fork_decision_pending": "Als gelesen markieren",
-        "pr_review_ready": "Als gelesen markieren"
+        "pr_review_ready": "Als gelesen markieren",
+        "budget_paused": "Als gelesen markieren"
       }
     },
     "aiProvidersBanner": {

@@ -51,6 +51,12 @@ import { onCallAssessmentSchema, releaseSignalSchema } from './release.js'
 //                          this the three-choice decision is reachable only by drilling
 //                          into the parked step, so the run looks silently stuck; acting
 //                          on it opens that step's decision surface.
+//   - `budget_paused`    — one or more runs were paused by the spend safeguard (the workspace,
+//                          account, or user budget is exhausted). Workspace-scoped (one card,
+//                          not one per run) and purely informational: the sweeper never re-drives
+//                          a `paused` run, so without this card the ONLY signal is the paused
+//                          badge on the board. Raise the budget then resume from the spend panel;
+//                          `act` just marks it read.
 //
 // In-app delivery is the only channel today, but the core models delivery behind
 // a `NotificationChannel` port so email / Slack channels can be added later
@@ -78,6 +84,7 @@ export const notificationTypeSchema = v.picklist([
   'fork_decision_pending',
   'pr_review_ready',
   'initiative',
+  'budget_paused',
 ])
 export type NotificationType = v.InferOutput<typeof notificationTypeSchema>
 

@@ -1638,7 +1638,8 @@
         "initiative": "Marcar como leída",
         "markRead": "Marcar como leída",
         "fork_decision_pending": "Marcar como leído",
-        "pr_review_ready": "Marcar como leída"
+        "pr_review_ready": "Marcar como leída",
+        "budget_paused": "Marcar como leída"
       },
       "toast": {
         "acted": "Marcado como resuelto",

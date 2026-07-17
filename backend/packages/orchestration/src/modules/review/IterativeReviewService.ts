@@ -543,7 +543,11 @@ export abstract class IterativeReviewService<
       await this.deps.notificationService.raise(workspaceId, {
         type: this.notificationType,
         blockId: block.id,
-        executionId: null,
+        // Carry the run's id so `RunStateMachine.ensureWaitingNotification`'s executionId-scoped
+        // guard (F7) treats this as THIS run's richer card and suppresses the generic
+        // `decision_required` fallback — otherwise a review park raising findings would get a
+        // duplicate card. `block.executionId` is the active run during a step (see `merge_review`).
+        executionId: block.executionId ?? null,
         title: this.notificationTitle(block),
         body: `${this.notificationSubject} raised ${findingCount} finding${
           findingCount === 1 ? '' : 's'

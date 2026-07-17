@@ -656,7 +656,9 @@ export class RequirementReviewService extends IterativeReviewService<
       await this.deps.notificationService.raise(workspaceId, {
         type: 'requirement_review',
         blockId: block.id,
-        executionId: null,
+        // Carry the run's id so the F7 executionId-scoped waiting-card guard treats this as the
+        // park's richer card (see notifyFindings in IterativeReviewService).
+        executionId: block.executionId ?? null,
         title: `Requirements recommendations: ${block.title}`,
         body: `The requirement writer prepared ${count} recommendation${
           count === 1 ? '' : 's'

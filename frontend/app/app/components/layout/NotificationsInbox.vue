@@ -70,6 +70,9 @@ const META: Record<Notification['type'], { icon: string; color: Accent }> = {
   // The initiative loop needs attention (a blocked task, or completion). Clicking the title
   // opens the initiative tracker window; "act" just marks it read.
   initiative: { icon: 'i-lucide-milestone', color: 'primary' },
+  // Runs were paused by the spend safeguard. Workspace-scoped (no block to reveal); "act" just
+  // marks it read (the human raises the budget then resumes from the spend panel).
+  budget_paused: { icon: 'i-lucide-wallet', color: 'warning' },
 }
 
 // Per-type primary-action label. An exhaustive Record keyed off the notification
@@ -91,6 +94,7 @@ const ACTION_KEYS: Record<Notification['type'], string> = {
   fork_decision_pending: 'layout.notifications.action.fork_decision_pending',
   pr_review_ready: 'layout.notifications.action.pr_review_ready',
   initiative: 'layout.notifications.action.initiative',
+  budget_paused: 'layout.notifications.action.budget_paused',
 }
 
 /** The localized primary-action label for a notification (te()-guarded against a

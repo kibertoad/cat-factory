@@ -624,16 +624,22 @@ export class RunStateMachine {
    * the old decision timeout the run waits indefinitely, so the inbox card — which the
    * periodic sweep escalates yellow → red — is the only signal a human is needed.
    *
-   * Non-clobbering: if ANY open notification is already on the block (a more specific
-   * `merge_review`, iteration-cap `decision_required`, etc.), it is left untouched and we
-   * raise nothing — so the richer message wins. Best-effort: no notification service
-   * (tests) or a missing block is a no-op.
+   * Non-clobbering: if an open notification for THIS run already sits on the block (a more
+   * specific `merge_review`, iteration-cap `decision_required`, etc. — all raised with this
+   * `executionId`), it is left untouched and we raise nothing, so the richer message wins.
+   *
+   * The suppression is scoped to `executionId`, NOT the bare block (F7, stuck-run audit): a
+   * `blocked` run's only recovery signal is this card, and a STALE card left on the block by a
+   * PRIOR run (a `pipeline_complete` / `merge_review` / `followup_pending` the human never
+   * cleared) must NOT stand in for it — otherwise dismissing that unrelated card leaves the
+   * parked run with no discoverable signal and nothing re-drives a `blocked` run. Best-effort:
+   * no notification service (tests) or a missing block is a no-op.
    */
   async ensureWaitingNotification(workspaceId: string, instance: ExecutionInstance): Promise<void> {
     const svc = this.notificationService
     if (!svc) return
     const open = await svc.listOpen(workspaceId)
-    if (open.some((n) => n.blockId === instance.blockId)) return
+    if (open.some((n) => n.blockId === instance.blockId && n.executionId === instance.id)) return
     const block = await this.blockRepository.get(workspaceId, instance.blockId)
     if (!block) return
     await svc.raise(workspaceId, {
@@ -656,5 +662,44 @@ export class RunStateMachine {
     const svc = this.notificationService
     if (!svc) return
     await svc.clearWaitingDecision(workspaceId, instance.blockId)
+  }
+
+  /**
+   * Raise the workspace-scoped "runs paused by the spend budget" card (F3, stuck-run audit).
+   * A spend-`paused` run is invisible to the sweeper and has no auto-resume, so the paused board
+   * badge used to be its ONLY signal — the least-discoverable park in the system. This surfaces
+   * it in the inbox (where the escalation sweep can flip it red). Workspace-scoped (`blockId`
+   * null), so ONE card covers every paused run rather than one per run; de-duplicated against the
+   * open cards since a block-less card has no atomic per-type unique index. Best-effort: no
+   * notification service (tests) is a no-op.
+   */
+  async raiseBudgetPaused(workspaceId: string): Promise<void> {
+    const svc = this.notificationService
+    if (!svc) return
+    const open = await svc.listOpen(workspaceId)
+    if (open.some((n) => n.type === 'budget_paused')) return
+    await svc.raise(workspaceId, {
+      type: 'budget_paused',
+      blockId: null,
+      executionId: null,
+      title: 'Runs paused — spend budget reached',
+      body:
+        'One or more runs on metered models are paused because a spend budget (workspace, ' +
+        'account, or user) is exhausted. Raise the budget, then resume from the spend panel.',
+    })
+  }
+
+  /**
+   * Clear the workspace-scoped `budget_paused` card once the spend pause is being lifted (called
+   * from `resumePaused`). Idempotent + best-effort; if the budget is still exhausted a resumed run
+   * simply re-pauses and re-raises the card on its next step.
+   */
+  async clearBudgetPaused(workspaceId: string): Promise<void> {
+    const svc = this.notificationService
+    if (!svc) return
+    const open = await svc.listOpen(workspaceId)
+    for (const n of open) {
+      if (n.type === 'budget_paused') await svc.resolve(workspaceId, n.id, 'dismiss')
+    }
   }
 }

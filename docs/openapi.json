@@ -365,7 +365,8 @@
               "followup_pending",
               "fork_decision_pending",
               "pr_review_ready",
-              "initiative"
+              "initiative",
+              "budget_paused"
             ],
             "type": "string"
           }

@@ -1638,7 +1638,8 @@
         "initiative": "既読にする",
         "markRead": "既読にする",
         "fork_decision_pending": "既読にする",
-        "pr_review_ready": "既読にする"
+        "pr_review_ready": "既読にする",
+        "budget_paused": "既読にする"
       },
       "toast": {
         "acted": "対応済みにしました",

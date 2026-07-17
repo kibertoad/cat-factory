@@ -1704,7 +1704,8 @@
         "initiative": "Mark read",
         "markRead": "Mark read",
         "fork_decision_pending": "Mark read",
-        "pr_review_ready": "Mark read"
+        "pr_review_ready": "Mark read",
+        "budget_paused": "Mark read"
       }
     },
     "aiProvidersBanner": {
