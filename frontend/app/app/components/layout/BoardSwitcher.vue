@@ -12,6 +12,7 @@ const accounts = useAccountsStore()
 const workspace = useWorkspaceStore()
 const ui = useUiStore()
 const toast = useToast()
+const access = useWorkspaceAccess()
 const { confirm } = useConfirm()
 
 const busy = ref(false)
@@ -92,7 +93,9 @@ const accountItems = computed<DropdownMenuItem[][]>(() => [
 
 const boardItems = computed<DropdownMenuItem[][]>(() => [
   workspace.accountWorkspaces.map((w) => ({
-    label: w.name,
+    // Badge a board the caller only reaches as a read-only viewer (a restricted board
+    // they're not a member/admin of), so the switcher shows why it's read-only.
+    label: w.viewerRole === 'viewer' ? `${w.name} · ${t('access.viewerBadge')}` : w.name,
     icon: 'i-lucide-layout-dashboard',
     trailingIcon: w.id === workspace.workspaceId ? 'i-lucide-check' : undefined,
     onSelect: () => void switchBoard(w.id),
@@ -103,17 +106,23 @@ const boardItems = computed<DropdownMenuItem[][]>(() => [
       icon: 'i-lucide-plus',
       onSelect: () => openPrompt('board'),
     },
-    {
-      label: t('layout.boardSwitcher.board.rename'),
-      icon: 'i-lucide-pencil',
-      onSelect: () => openPrompt('rename'),
-    },
-    {
-      label: t('layout.boardSwitcher.board.delete'),
-      icon: 'i-lucide-trash-2',
-      color: 'error' as const,
-      onSelect: () => void removeBoard(),
-    },
+    // Rename/delete of the active board is `settings.manage` — omit for a member/viewer,
+    // who would only get a 403 (the backend gates WorkspaceController update/delete).
+    ...(access.canManageSettings.value
+      ? [
+          {
+            label: t('layout.boardSwitcher.board.rename'),
+            icon: 'i-lucide-pencil',
+            onSelect: () => openPrompt('rename'),
+          },
+          {
+            label: t('layout.boardSwitcher.board.delete'),
+            icon: 'i-lucide-trash-2',
+            color: 'error' as const,
+            onSelect: () => void removeBoard(),
+          },
+        ]
+      : []),
   ],
 ])
 

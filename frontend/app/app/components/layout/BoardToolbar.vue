@@ -10,6 +10,7 @@ const workspace = useWorkspaceStore()
 const workspaceSettings = useWorkspaceSettingsStore()
 const services = useServicesStore()
 const toast = useToast()
+const access = useWorkspaceAccess()
 const { t, n } = useI18n()
 const { fitView, zoomIn, zoomOut, resetZoom } = useBoardFlow()
 
@@ -207,15 +208,18 @@ const decisionItems = computed(() =>
       </UButton>
     </UDropdownMenu>
 
-    <!-- in-org sharing: add an existing org service to this board -->
-    <UDropdownMenu v-if="mountableItems.length" :items="mountableItems">
+    <!-- in-org sharing: add an existing org service to this board (mount = board.write) -->
+    <UDropdownMenu
+      v-if="mountableItems.length && access.canWriteBoard.value"
+      :items="mountableItems"
+    >
       <UButton color="neutral" variant="ghost" size="sm" icon="i-lucide-plus-circle">
         <span class="hidden sm:inline">{{ t('board.toolbar.addService') }}</span>
       </UButton>
     </UDropdownMenu>
 
-    <!-- archived services: hidden from the board, restorable with no expiry -->
-    <UDropdownMenu v-if="archivedItems.length" :items="archivedItems">
+    <!-- archived services: hidden from the board, restorable with no expiry (board.write) -->
+    <UDropdownMenu v-if="archivedItems.length && access.canWriteBoard.value" :items="archivedItems">
       <UButton
         color="neutral"
         variant="ghost"

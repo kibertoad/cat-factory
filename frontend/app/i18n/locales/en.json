@@ -83,6 +83,14 @@
       "keep": "Keep editing"
     }
   },
+  "access": {
+    "noBoardWrite": "Read-only access: you can view this board but can't edit it.",
+    "noRunExecute": "Read-only access: you can view runs but can't start or control them.",
+    "viewerBadge": "Viewer",
+    "@viewerBadge": {
+      "description": "Short badge label on a board the caller can only view (read-only workspace role). Localize as the noun for a read-only observer."
+    }
+  },
   "clarification": {
     "answerPlaceholder": "Your answer",
     "notRelevant": "Not relevant",

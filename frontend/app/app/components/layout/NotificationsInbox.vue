@@ -11,6 +11,7 @@ const { t, te } = useI18n()
 
 const notifications = useNotificationsStore()
 const ui = useUiStore()
+const access = useWorkspaceAccess()
 const execution = useExecutionStore()
 const toast = useToast()
 
@@ -328,6 +329,8 @@ function revealDecision(n: Notification) {
                   variant="soft"
                   size="xs"
                   :loading="busy === n.id"
+                  :disabled="!access.canExecuteRuns.value"
+                  :title="access.canExecuteRuns.value ? undefined : t('access.noRunExecute')"
                   @click="act(n)"
                 >
                   {{ actionLabel(n) }}
@@ -337,7 +340,8 @@ function revealDecision(n: Notification) {
                   color="neutral"
                   variant="ghost"
                   size="xs"
-                  :disabled="busy === n.id"
+                  :disabled="busy === n.id || !access.canExecuteRuns.value"
+                  :title="access.canExecuteRuns.value ? undefined : t('access.noRunExecute')"
                   @click="dismiss(n)"
                 >
                   {{ t('layout.notifications.dismiss') }}

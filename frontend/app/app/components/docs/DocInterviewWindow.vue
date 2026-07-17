@@ -12,6 +12,7 @@ import { computed, reactive, watch } from 'vue'
 const board = useBoardStore()
 const docInterview = useDocInterviewStore()
 const { t } = useI18n()
+const access = useWorkspaceAccess()
 
 const { open, blockId, close } = useResultView('doc-interview', {
   onOpen: (id) => void docInterview.load(id),
@@ -186,6 +187,8 @@ const onProceed = () => flushThen((id) => docInterview.proceedInterview(id))
               variant="ghost"
               size="sm"
               :loading="resuming"
+              :disabled="!access.canExecuteRuns.value"
+              :title="access.canExecuteRuns.value ? undefined : t('access.noRunExecute')"
               data-testid="doc-interview-proceed"
               @click="onProceed"
             >
@@ -195,7 +198,8 @@ const onProceed = () => flushThen((id) => docInterview.proceedInterview(id))
               color="primary"
               size="sm"
               :loading="resuming"
-              :disabled="!allAnswered"
+              :disabled="!allAnswered || !access.canExecuteRuns.value"
+              :title="access.canExecuteRuns.value ? undefined : t('access.noRunExecute')"
               data-testid="doc-interview-continue"
               @click="onContinue"
             >

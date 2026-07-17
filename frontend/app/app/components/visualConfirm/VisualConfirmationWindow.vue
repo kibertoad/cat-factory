@@ -19,6 +19,7 @@ const board = useBoardStore()
 const execution = useExecutionStore()
 const visualConfirm = useVisualConfirmStore()
 const { t } = useI18n()
+const access = useWorkspaceAccess()
 
 // Per-window blob cache; release the cached screenshot/reference object URLs when the window
 // goes away, so the (potentially large) blob bytes don't linger for the rest of the session.
@@ -351,7 +352,8 @@ const canApprove = computed(
                   color="warning"
                   icon="i-lucide-wrench"
                   :loading="busy"
-                  :disabled="busy || !hasFindings"
+                  :disabled="busy || !hasFindings || !access.canExecuteRuns.value"
+                  :title="access.canExecuteRuns.value ? undefined : t('access.noRunExecute')"
                   @click="submitFix"
                 >
                   {{ t('visualConfirm.requestFix.send') }}
@@ -430,7 +432,8 @@ const canApprove = computed(
               color="neutral"
               icon="i-lucide-refresh-cw"
               :loading="busy"
-              :disabled="busy || !awaitingHuman"
+              :disabled="busy || !awaitingHuman || !access.canExecuteRuns.value"
+              :title="access.canExecuteRuns.value ? undefined : t('access.noRunExecute')"
               @click="recapture"
             >
               {{ t('visualConfirm.recapture') }}
@@ -439,7 +442,8 @@ const canApprove = computed(
               color="primary"
               icon="i-lucide-circle-check"
               :loading="busy"
-              :disabled="!canApprove"
+              :disabled="!canApprove || !access.canExecuteRuns.value"
+              :title="access.canExecuteRuns.value ? undefined : t('access.noRunExecute')"
               @click="approve"
             >
               {{ t('visualConfirm.approve') }}

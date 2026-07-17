@@ -35,6 +35,7 @@ const agentRuns = useAgentRunsStore()
 const github = useGitHubStore()
 const recurring = useRecurringPipelinesStore()
 const requirements = useRequirementsStore()
+const access = useWorkspaceAccess()
 const { t } = useI18n()
 
 // When the selected task block backs a recurring pipeline, the inspector shows the
@@ -105,15 +106,20 @@ const runnable = computed(() => (block.value ? board.isRunnable(block.value.id) 
 const unmetDepTitles = computed(() =>
   block.value && isTask.value ? board.unmetDeps(block.value.id).map((b) => b.title) : [],
 )
-const runBlockedReason = computed(() =>
-  unmetDepTitles.value.length
+const runBlockedReason = computed(() => {
+  // A read-only viewer can inspect a task but never start/re-run it — surface WHY on the
+  // locked trigger, exactly like an unmet-dependency lock (the backend rejects it anyway).
+  if (!access.canExecuteRuns.value) return t('access.noRunExecute')
+  return unmetDepTitles.value.length
     ? t(
         'panels.inspector.runBlocked',
         { count: unmetDepTitles.value.length, names: unmetDepTitles.value.join(', ') },
         unmetDepTitles.value.length,
       )
-    : null,
-)
+    : null
+})
+// The Run trigger is enabled only when the task is runnable AND the caller may execute runs.
+const canRun = computed(() => runnable.value && access.canExecuteRuns.value)
 
 // The delete control names what it removes, so selecting a task and deleting it
 // reads as "Delete task" rather than ambiguously removing the whole service.
@@ -564,15 +570,16 @@ const showOriginalDescription = ref(false)
 
       <!-- actions -->
       <div class="flex items-center gap-2">
-        <UDropdownMenu v-if="isTask" :items="runMenu">
+        <UDropdownMenu v-if="isTask" :items="runMenu" :disabled="!canRun">
           <UButton
-            :color="runnable ? 'primary' : 'neutral'"
+            :color="canRun ? 'primary' : 'neutral'"
             variant="soft"
             size="sm"
-            :icon="runnable ? 'i-lucide-play' : 'i-lucide-lock'"
+            :icon="canRun ? 'i-lucide-play' : 'i-lucide-lock'"
             trailing-icon="i-lucide-chevron-down"
-            :disabled="!runnable"
+            :disabled="!canRun"
             :title="runBlockedReason ?? undefined"
+            data-testid="run-start"
           >
             {{ instance ? t('panels.inspector.reRun') : t('panels.inspector.run') }}
           </UButton>
@@ -595,7 +602,12 @@ const showOriginalDescription = ref(false)
           icon="i-lucide-archive"
           :class="isServiceFrame ? 'ms-auto' : ''"
           data-testid="inspector-archive"
-          :title="t('panels.inspector.archiveService')"
+          :disabled="!access.canWriteBoard.value"
+          :title="
+            access.canWriteBoard.value
+              ? t('panels.inspector.archiveService')
+              : t('access.noBoardWrite')
+          "
           @click="archive"
         >
           {{ t('panels.inspector.archiveService') }}
@@ -607,7 +619,8 @@ const showOriginalDescription = ref(false)
           icon="i-lucide-trash-2"
           :class="isServiceFrame ? '' : 'ms-auto'"
           data-testid="inspector-delete"
-          :title="deleteLabel"
+          :disabled="!access.canWriteBoard.value"
+          :title="access.canWriteBoard.value ? deleteLabel : t('access.noBoardWrite')"
           @click="remove"
         >
           {{ deleteLabel }}

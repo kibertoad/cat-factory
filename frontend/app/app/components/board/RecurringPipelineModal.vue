@@ -16,6 +16,7 @@ const recurring = useRecurringPipelinesStore()
 const tracker = useTrackerStore()
 const tasks = useTasksStore()
 const toast = useToast()
+const access = useWorkspaceAccess()
 const { t } = useI18n()
 
 const open = computed({
@@ -200,7 +201,12 @@ function buildIssueIntake(): IssueIntakeConfig {
 }
 
 const canAdd = computed(
-  () => name.value.trim().length > 0 && pipelineId.value.length > 0 && intakeReady.value,
+  () =>
+    name.value.trim().length > 0 &&
+    pipelineId.value.length > 0 &&
+    intakeReady.value &&
+    // Scheduling a recurring pipeline is a `runs.execute` action.
+    access.canExecuteRuns.value,
 )
 
 async function add() {

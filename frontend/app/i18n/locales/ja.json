@@ -74,6 +74,11 @@
       "keep": "編集を続ける"
     }
   },
+  "access": {
+    "noBoardWrite": "読み取り専用アクセス: このボードは閲覧できますが編集はできません。",
+    "noRunExecute": "読み取り専用アクセス: 実行は閲覧できますが、開始や制御はできません。",
+    "viewerBadge": "閲覧者"
+  },
   "clarification": {
     "answerPlaceholder": "回答を入力",
     "notRelevant": "関連なし",

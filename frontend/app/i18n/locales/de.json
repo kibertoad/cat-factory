@@ -3899,6 +3899,11 @@
       "keep": "Weiter bearbeiten"
     }
   },
+  "access": {
+    "noBoardWrite": "Nur-Lese-Zugriff: Sie können dieses Board ansehen, aber nicht bearbeiten.",
+    "noRunExecute": "Nur-Lese-Zugriff: Sie können Ausführungen ansehen, aber nicht starten oder steuern.",
+    "viewerBadge": "Betrachter"
+  },
   "clarification": {
     "answerPlaceholder": "Ihre Antwort",
     "notRelevant": "Nicht relevant",

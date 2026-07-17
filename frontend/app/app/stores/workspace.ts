@@ -4,7 +4,8 @@ import type {
   BudgetCaps,
   InfraSetup,
   SpendStatus,
-  Workspace,
+  WorkspaceAccess,
+  WorkspaceListItem,
   WorkspaceSnapshot,
 } from '~/types/domain'
 import { useAccountsStore } from '~/stores/accounts'
@@ -53,8 +54,12 @@ export const useWorkspaceStore = defineStore(
 
     /** Active workspace id (persisted so a reload reopens the same board). */
     const workspaceId = ref<string | null>(null)
-    /** Every board visible to the user, across the accounts they belong to. */
-    const workspaces = ref<Workspace[]>([])
+    /**
+     * Every board visible to the user, across the accounts they belong to. Each row is
+     * annotated by `GET /workspaces` with the caller's effective workspace-RBAC role
+     * (`viewerRole`) so a restricted board can be badged in the switcher.
+     */
+    const workspaces = ref<WorkspaceListItem[]>([])
     /** True once the initial snapshot has been loaded and stores hydrated. */
     const ready = ref(false)
     /** Set when bootstrap fails so the UI can show a retry. */
@@ -73,6 +78,14 @@ export const useWorkspaceStore = defineStore(
      * doesn't compute it (⇒ no banner).
      */
     const infraSetup = ref<InfraSetup | null>(null)
+    /**
+     * The signed-in caller's resolved workspace-RBAC access to the ACTIVE board — their
+     * effective role + the permission set it grants, from the auth gate's resolution
+     * (attached to the snapshot with zero extra reads). Null on an older backend OR in
+     * dev-open (auth disabled) — `useWorkspaceAccess()` then allows everything (backend
+     * parity). Consumers MUST go through `useWorkspaceAccess()`, never read this directly.
+     */
+    const access = ref<WorkspaceAccess | null>(null)
 
     /** The boards belonging to the active account (all boards when auth is off). */
     const accountWorkspaces = computed(() => {
@@ -118,10 +131,16 @@ export const useWorkspaceStore = defineStore(
       budgetCaps.value = snapshot.budgetCaps ?? null
       useUserSettingsStore().hydrate(snapshot.userSettings ?? null)
       infraSetup.value = snapshot.infraSetup ?? null
-      // Keep the board list in step (e.g. a freshly created board, or a rename).
-      const i = workspaces.value.findIndex((w) => w.id === snapshot.workspace.id)
-      if (i >= 0) workspaces.value[i] = snapshot.workspace
-      else workspaces.value.unshift(snapshot.workspace)
+      access.value = snapshot.access ?? null
+      // Keep the board list in step (e.g. a freshly created board, or a rename). The
+      // snapshot's `workspace` carries no `viewerRole` (that's a `GET /workspaces` list
+      // annotation), so preserve any existing badge rather than clobbering it to absent.
+      const existingRow = workspaces.value.find((w) => w.id === snapshot.workspace.id)
+      if (existingRow) {
+        Object.assign(existingRow, snapshot.workspace)
+      } else {
+        workspaces.value.unshift(snapshot.workspace)
+      }
       useBoardStore().hydrate(snapshot.blocks, boardSince)
       useBoardStore().hydrateArchived(snapshot.archivedServices ?? [])
       usePipelinesStore().hydrate(snapshot.pipelines, snapshot.pipelineCatalogVersions)
@@ -337,6 +356,7 @@ export const useWorkspaceStore = defineStore(
       userSpend,
       budgetCaps,
       infraSetup,
+      access,
       init,
       switchTo,
       selectAccount,

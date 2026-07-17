@@ -74,6 +74,11 @@
       "keep": "Kontynuuj edycję"
     }
   },
+  "access": {
+    "noBoardWrite": "Dostęp tylko do odczytu: możesz przeglądać tę tablicę, ale nie możesz jej edytować.",
+    "noRunExecute": "Dostęp tylko do odczytu: możesz przeglądać uruchomienia, ale nie możesz ich uruchamiać ani nimi sterować.",
+    "viewerBadge": "Obserwator"
+  },
   "clarification": {
     "answerPlaceholder": "Twoja odpowiedź",
     "notRelevant": "Nieistotne",

@@ -3899,6 +3899,11 @@
       "keep": "Continua a modificare"
     }
   },
+  "access": {
+    "noBoardWrite": "Accesso in sola lettura: puoi visualizzare questa board ma non modificarla.",
+    "noRunExecute": "Accesso in sola lettura: puoi visualizzare le esecuzioni ma non avviarle né controllarle.",
+    "viewerBadge": "Osservatore"
+  },
   "clarification": {
     "answerPlaceholder": "La tua risposta",
     "notRelevant": "Non pertinente",

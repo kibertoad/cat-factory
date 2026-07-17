@@ -17,6 +17,7 @@ import CopyButton from '~/components/common/CopyButton.vue'
 const board = useBoardStore()
 const execution = useExecutionStore()
 const { t } = useI18n()
+const access = useWorkspaceAccess()
 
 // Synchronous window: it reads its state straight off the execution step, so there's
 // nothing to fetch on open (no `onOpen` loader).
@@ -305,7 +306,12 @@ const conflictVerdict = computed(() => {
                       color="primary"
                       icon="i-lucide-wrench"
                       :loading="fixBusy"
-                      :disabled="fixBusy || fixInstructions.trim().length === 0"
+                      :disabled="
+                        fixBusy ||
+                        fixInstructions.trim().length === 0 ||
+                        !access.canExecuteRuns.value
+                      "
+                      :title="access.canExecuteRuns.value ? undefined : t('access.noRunExecute')"
                       @click="submitFix"
                     >
                       {{ t('gates.humanReview.requestFix') }}

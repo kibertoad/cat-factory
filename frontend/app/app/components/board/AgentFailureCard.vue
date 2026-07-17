@@ -15,6 +15,7 @@ const props = withDefaults(
 
 const { t } = useI18n()
 const agentRuns = useAgentRunsStore()
+const access = useWorkspaceAccess()
 const ui = useUiStore()
 const auth = useAuthStore()
 const board = useBoardStore()
@@ -171,7 +172,8 @@ async function retry() {
         type="button"
         class="nodrag flex items-center gap-1 rounded-md bg-rose-900/40 text-rose-200 hover:bg-rose-900/70 disabled:opacity-60"
         :class="compact ? 'px-2 py-0.5 text-[10px]' : 'px-2 py-1 text-[11px]'"
-        :disabled="retrying"
+        :disabled="retrying || !access.canExecuteRuns.value"
+        :title="access.canExecuteRuns.value ? undefined : t('access.noRunExecute')"
         data-testid="agent-failure-retry"
         @click.stop="retry"
       >

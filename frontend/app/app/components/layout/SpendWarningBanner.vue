@@ -3,6 +3,7 @@ import { computed } from 'vue'
 
 const { t, n } = useI18n()
 const workspace = useWorkspaceStore()
+const access = useWorkspaceAccess()
 
 const spend = computed(() => workspace.spend)
 /** Show the large warning only once the budget has been reached. */
@@ -80,6 +81,8 @@ async function resume() {
                 variant="solid"
                 icon="i-lucide-play"
                 :loading="resuming"
+                :disabled="!access.canExecuteRuns.value"
+                :title="access.canExecuteRuns.value ? undefined : t('access.noRunExecute')"
                 @click="resume"
               >
                 {{ t('layout.spendWarningBanner.resume') }}

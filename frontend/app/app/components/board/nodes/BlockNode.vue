@@ -23,6 +23,7 @@ const tasks = useTasksStore()
 const agentRuns = useAgentRunsStore()
 const services = useServicesStore()
 const reviews = useReviewStage()
+const access = useWorkspaceAccess()
 const { t } = useI18n()
 const { lod } = useSemanticZoom()
 // Coarse-pointer (touch) bumps the frame-header actions from `xs` to `sm` so
@@ -466,45 +467,50 @@ const ITEM_ICON: Record<string, string> = {
               <UBadge :color="statusMeta.chip as any" variant="subtle" size="sm">{{
                 statusLabel
               }}</UBadge>
-              <UButton
-                class="nodrag"
-                data-testid="frame-add-task"
-                :size="isTouch ? 'sm' : 'xs'"
-                variant="ghost"
-                color="neutral"
-                icon="i-lucide-plus"
-                :title="t('board.frame.addTaskTitle')"
-                @click.stop="addTask"
-              />
-              <UButton
-                v-if="tasks.anyOffered"
-                class="nodrag"
-                :size="isTouch ? 'sm' : 'xs'"
-                variant="ghost"
-                color="neutral"
-                icon="i-lucide-ticket"
-                :title="t('board.frame.createTaskFromIssueTitle')"
-                @click.stop="createTaskFromIssue"
-              />
-              <UButton
-                class="nodrag"
-                :size="isTouch ? 'sm' : 'xs'"
-                variant="ghost"
-                color="neutral"
-                icon="i-lucide-repeat"
-                :title="t('board.frame.addRecurringTitle')"
-                @click.stop="addRecurring"
-              />
-              <UButton
-                class="nodrag"
-                data-testid="frame-add-initiative"
-                :size="isTouch ? 'sm' : 'xs'"
-                variant="ghost"
-                color="neutral"
-                icon="i-lucide-milestone"
-                :title="t('board.frame.createInitiativeTitle')"
-                @click.stop="createInitiative"
-              />
+              <!-- Board-authoring buttons (create task / from issue / recurring / initiative)
+                   are `board.write` — hidden for a read-only viewer, who keeps the badge +
+                   collapse toggle (view-only affordances). -->
+              <template v-if="access.canWriteBoard.value">
+                <UButton
+                  class="nodrag"
+                  data-testid="frame-add-task"
+                  :size="isTouch ? 'sm' : 'xs'"
+                  variant="ghost"
+                  color="neutral"
+                  icon="i-lucide-plus"
+                  :title="t('board.frame.addTaskTitle')"
+                  @click.stop="addTask"
+                />
+                <UButton
+                  v-if="tasks.anyOffered"
+                  class="nodrag"
+                  :size="isTouch ? 'sm' : 'xs'"
+                  variant="ghost"
+                  color="neutral"
+                  icon="i-lucide-ticket"
+                  :title="t('board.frame.createTaskFromIssueTitle')"
+                  @click.stop="createTaskFromIssue"
+                />
+                <UButton
+                  class="nodrag"
+                  :size="isTouch ? 'sm' : 'xs'"
+                  variant="ghost"
+                  color="neutral"
+                  icon="i-lucide-repeat"
+                  :title="t('board.frame.addRecurringTitle')"
+                  @click.stop="addRecurring"
+                />
+                <UButton
+                  class="nodrag"
+                  data-testid="frame-add-initiative"
+                  :size="isTouch ? 'sm' : 'xs'"
+                  variant="ghost"
+                  color="neutral"
+                  icon="i-lucide-milestone"
+                  :title="t('board.frame.createInitiativeTitle')"
+                  @click.stop="createInitiative"
+                />
+              </template>
               <UButton
                 class="nodrag"
                 :size="isTouch ? 'sm' : 'xs'"
@@ -540,9 +546,9 @@ const ITEM_ICON: Record<string, string> = {
           <InitiativeCard v-for="i in initiativeBlocks" :key="i.id" :block-id="i.id" />
           <DraggableTask v-for="t in directTasks" :key="t.id" :task-id="t.id" />
           <button
-            v-if="!hasTasks"
+            v-if="!hasTasks && access.canWriteBoard.value"
             type="button"
-            data-testid="frame-add-task"
+            data-testid="frame-add-task-empty"
             class="absolute inset-4 flex items-center justify-center gap-1 rounded-lg border border-dashed border-slate-700 text-[11px] text-slate-500 hover:border-slate-500 hover:text-slate-300"
             @click.stop="addTask"
           >

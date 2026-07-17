@@ -22,6 +22,7 @@ import type {
 const execution = useExecutionStore()
 const board = useBoardStore()
 const prReview = usePrReviewStore()
+const access = useWorkspaceAccess()
 
 const { t } = useI18n()
 
@@ -305,7 +306,8 @@ async function onResolve(action: PrReviewResolution): Promise<void> {
           <UButton
             color="neutral"
             variant="ghost"
-            :disabled="!canResolve"
+            :disabled="!canResolve || !access.canExecuteRuns.value"
+            :title="access.canExecuteRuns.value ? undefined : t('access.noRunExecute')"
             data-testid="pr-review-finish"
             @click="onResolve('finish')"
           >
@@ -314,7 +316,8 @@ async function onResolve(action: PrReviewResolution): Promise<void> {
           <UButton
             color="neutral"
             variant="soft"
-            :disabled="!canResolve || !hasSelection"
+            :disabled="!canResolve || !hasSelection || !access.canExecuteRuns.value"
+            :title="access.canExecuteRuns.value ? undefined : t('access.noRunExecute')"
             data-testid="pr-review-post"
             @click="onResolve('post')"
           >
@@ -323,7 +326,8 @@ async function onResolve(action: PrReviewResolution): Promise<void> {
           <UButton
             color="primary"
             :loading="prReview.resolving"
-            :disabled="!canResolve || !hasSelection"
+            :disabled="!canResolve || !hasSelection || !access.canExecuteRuns.value"
+            :title="access.canExecuteRuns.value ? undefined : t('access.noRunExecute')"
             data-testid="pr-review-fix"
             @click="onResolve('fix')"
           >
