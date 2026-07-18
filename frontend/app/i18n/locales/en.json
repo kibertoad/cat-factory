@@ -1951,6 +1951,40 @@
     },
     "accountSkills": {
       "intro": "Link repos where your team authors Claude Skills (a SKILL.md folder plus resource files). Synced skills join this account's catalog, shared by every board, and a pipeline's Skill step runs one against a task."
+    },
+    "workspaceMembers": {
+      "you": "{name} (you)",
+      "roles": {
+        "admin": "Admin",
+        "member": "Member",
+        "viewer": "Viewer"
+      },
+      "accessMode": {
+        "title": "Board access",
+        "accountHint": "Everyone in the owning account can see this board.",
+        "restrictedHint": "Only the members listed below can see this board.",
+        "restrictToggle": "Restrict to members"
+      },
+      "roster": {
+        "title": "Members",
+        "empty": "No members yet.",
+        "remove": "Remove member"
+      },
+      "add": {
+        "title": "Add a member",
+        "selectMember": "Select an account member",
+        "submit": "Add",
+        "added": "Member added",
+        "allAdded": "Every account member is already on this board.",
+        "noAccount": "This board isn't linked to an account yet."
+      },
+      "errors": {
+        "load": "Could not load members",
+        "accessMode": "Could not change board access",
+        "setRole": "Could not update member role",
+        "add": "Could not add member",
+        "remove": "Could not remove member"
+      }
     }
   },
   "settings": {
@@ -2666,7 +2700,8 @@
         "budget": "Budget",
         "merge": "Risk policies",
         "tracker": "Issue tracker",
-        "fragments": "Service best practices"
+        "fragments": "Service best practices",
+        "members": "Members"
       },
       "waiting": {
         "heading": "Waiting for a human",

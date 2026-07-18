@@ -96,7 +96,9 @@ const boardItems = computed<DropdownMenuItem[][]>(() => [
     // Badge a board the caller only reaches as a read-only viewer (a restricted board
     // they're not a member/admin of), so the switcher shows why it's read-only.
     label: w.viewerRole === 'viewer' ? `${w.name} · ${t('access.viewerBadge')}` : w.name,
-    icon: 'i-lucide-layout-dashboard',
+    // A restricted board (limited to an explicit roster) gets a lock glyph so an admin who
+    // manages membership can see at a glance which boards are scoped vs open to the account.
+    icon: w.accessMode === 'restricted' ? 'i-lucide-lock' : 'i-lucide-layout-dashboard',
     trailingIcon: w.id === workspace.workspaceId ? 'i-lucide-check' : undefined,
     onSelect: () => void switchBoard(w.id),
   })),

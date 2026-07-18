@@ -1888,6 +1888,40 @@
     },
     "accountSkills": {
       "intro": "Reliez les dépôts où votre équipe crée des Claude Skills (un dossier SKILL.md plus des fichiers de ressources). Les compétences synchronisées rejoignent le catalogue de ce compte, partagé par tous les tableaux, et l'étape Skill d'un pipeline en exécute une sur une tâche."
+    },
+    "workspaceMembers": {
+      "you": "{name} (vous)",
+      "roles": {
+        "admin": "Administrateur",
+        "member": "Membre",
+        "viewer": "Observateur"
+      },
+      "accessMode": {
+        "title": "Accès au tableau",
+        "accountHint": "Tous les membres du compte propriétaire peuvent voir ce tableau.",
+        "restrictedHint": "Seuls les membres listés ci-dessous peuvent voir ce tableau.",
+        "restrictToggle": "Limiter aux membres"
+      },
+      "roster": {
+        "title": "Membres",
+        "empty": "Aucun membre pour l'instant.",
+        "remove": "Retirer le membre"
+      },
+      "add": {
+        "title": "Ajouter un membre",
+        "selectMember": "Sélectionner un membre du compte",
+        "submit": "Ajouter",
+        "added": "Membre ajouté",
+        "allAdded": "Tous les membres du compte sont déjà sur ce tableau.",
+        "noAccount": "Ce tableau n'est pas encore lié à un compte."
+      },
+      "errors": {
+        "load": "Impossible de charger les membres",
+        "accessMode": "Impossible de modifier l'accès au tableau",
+        "setRole": "Impossible de mettre à jour le rôle du membre",
+        "add": "Impossible d'ajouter le membre",
+        "remove": "Impossible de retirer le membre"
+      }
     }
   },
   "settings": {
@@ -2478,7 +2512,8 @@
         "budget": "Budget",
         "merge": "Politiques de risque",
         "tracker": "Suivi des tickets",
-        "fragments": "Bonnes pratiques du service"
+        "fragments": "Bonnes pratiques du service",
+        "members": "Membres"
       },
       "waiting": {
         "heading": "En attente d'un humain",

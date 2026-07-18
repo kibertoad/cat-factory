@@ -1,6 +1,6 @@
 # Initiative: workspace-level RBAC & membership
 
-**Status:** in progress (slices 1–8 landed) · **Owner:** core · **Started:** 2026-07-16
+**Status:** in progress (slices 1–9 landed) · **Owner:** core · **Started:** 2026-07-16
 
 > Durable source of truth for a multi-PR initiative. Read it first before picking up the
 > next slice; update the checklist at the end of each PR.
@@ -378,7 +378,7 @@ workspace `admin`. `product` remains data-only. Deferred follow-ups: an
 | 6   | **Admin-tier enforcement pass**: `requireWorkspacePermission('settings.manage' \| 'integrations.manage' \| 'secrets.manage')` controller-level middleware across the §6 table's admin route groups; conformance: member 403 on settings/integrations/secrets                                                                                                                                                                                                                                                  | ✅ done |       |
 | 7   | **Side doors**: `/me/environment-handlers/:ws` through shared resolution (`runs.execute`, 404); WS ticket gains `userId`; `public_api_keys.created_by_user_id` (both runtimes) + mint under `secrets.manage` + minter in the keys UI                                                                                                                                                                                                                                                                          | ✅ done |       |
 | 8   | **SPA read side**: `useWorkspaceAccess()` composable, store hydration of `access` / `viewerRole`, viewer read-only degradation (board editing, run starts, HITL actions), settings nav gating, i18n (en + all locales)                                                                                                                                                                                                                                                                                        | ✅ done | #1189 |
-| 9   | **SPA membership management**: `WorkspaceMembersSettings.vue` (restrict toggle, roster, role select, add from account roster, remove), picker badges, i18n (all locales)                                                                                                                                                                                                                                                                                                                                      | ⬜ todo |       |
+| 9   | **SPA membership management**: `WorkspaceMembersSettings.vue` (restrict toggle, roster, role select, add from account roster, remove), picker badges, i18n (all locales)                                                                                                                                                                                                                                                                                                                                      | ✅ done |       |
 | 10  | **e2e spec** (restricted board vanishes live; viewer read-only) + convert this tracker → ADR `backend/docs/adr/0024-workspace-rbac.md` and `git rm` the tracker                                                                                                                                                                                                                                                                                                                                               | ⬜ todo |       |
 
 Dependencies: 3 needs 1+2; 4–7 need 3; 8–9 need 3 (8 is usable before 5/6 land — the
@@ -588,6 +588,22 @@ user.id)` directly, then requires `runs.execute`; a `null`/denied decision throw
   resolution). Existing `frame-add-task` / `frame-add-initiative` / `inspector-archive` /
   `inspector-delete` / `run-stop` / `run-reset` / `agent-failure-retry` are reused. Slice 9
   (membership UI) + slice 10 (e2e + ADR conversion) remain.
+- **Slice 9 — the membership admin surface is a lazily-loaded settings tab, not part of the
+  snapshot.** `WorkspaceMembersSettings.vue` (`components/layout/`, beside `AccountTeamSettings.vue`)
+  is mounted as a "Members" tab in `WorkspaceSettingsPanel`, gated by
+  `useWorkspaceAccess().canManageMembers` — hidden for members/viewers (the backend already 403s
+  the writes, and a viewer/member has nothing to manage). It drives the slice-5 routes through the
+  new `useWorkspaceMembersStore` (`load`/`add`/`setRole`/`remove`/`setAccessMode`), loaded on tab
+  open rather than folded into the board snapshot — the roster is admin-only and would be dead
+  weight on every board open. The **add picker is sourced from the OWNING account's roster**
+  (`accounts.loadRoster(board.accountId)` filtered to non-members): the service rejects a
+  non-account-member, so the picker never offers one. `setAccessMode` returns the updated
+  `Workspace`; the store patches the board-LIST row in place (merging only the workspace fields so
+  the `viewerRole` list annotation survives), so the switcher badge/`activeWorkspace.accessMode`
+  reflect the flip with no re-fetch. **Picker badge:** a `restricted` board gets a lock glyph in
+  `BoardSwitcher` (distinct from slice 8's viewer badge, which is role-driven). A legacy board with
+  a null `accountId` shows no picker candidates until the first write auto-heals it (slice 5). Slice
+  10 (e2e + ADR conversion) is the last remaining slice.
 
 ## Out of scope
 

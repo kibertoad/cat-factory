@@ -1888,6 +1888,40 @@
     },
     "accountSkills": {
       "intro": "Vincula repositorios donde tu equipo crea Claude Skills (una carpeta SKILL.md más archivos de recursos). Las habilidades sincronizadas se añaden al catálogo de esta cuenta, compartido por todos los tableros, y el paso Skill de una tubería ejecuta una sobre una tarea."
+    },
+    "workspaceMembers": {
+      "you": "{name} (tú)",
+      "roles": {
+        "admin": "Administrador",
+        "member": "Miembro",
+        "viewer": "Observador"
+      },
+      "accessMode": {
+        "title": "Acceso al tablero",
+        "accountHint": "Todos los miembros de la cuenta propietaria pueden ver este tablero.",
+        "restrictedHint": "Solo los miembros que aparecen abajo pueden ver este tablero.",
+        "restrictToggle": "Restringir a miembros"
+      },
+      "roster": {
+        "title": "Miembros",
+        "empty": "Aún no hay miembros.",
+        "remove": "Quitar miembro"
+      },
+      "add": {
+        "title": "Añadir un miembro",
+        "selectMember": "Selecciona un miembro de la cuenta",
+        "submit": "Añadir",
+        "added": "Miembro añadido",
+        "allAdded": "Todos los miembros de la cuenta ya están en este tablero.",
+        "noAccount": "Este tablero aún no está vinculado a una cuenta."
+      },
+      "errors": {
+        "load": "No se pudieron cargar los miembros",
+        "accessMode": "No se pudo cambiar el acceso al tablero",
+        "setRole": "No se pudo actualizar el rol del miembro",
+        "add": "No se pudo añadir el miembro",
+        "remove": "No se pudo quitar el miembro"
+      }
     }
   },
   "settings": {
@@ -2478,7 +2512,8 @@
         "budget": "Presupuesto",
         "merge": "Políticas de riesgo",
         "tracker": "Gestor de incidencias",
-        "fragments": "Buenas prácticas del servicio"
+        "fragments": "Buenas prácticas del servicio",
+        "members": "Miembros"
       },
       "waiting": {
         "heading": "Esperando a una persona",
