@@ -1822,6 +1822,17 @@ auth-enabled or it passes vacuously.
   renders the component registered for that id (`STEP_RESULT_VIEWS`). Give a new agent a
   bespoke window by declaring `resultView` + registering a component — no caller changes.
   `requirements-review` is the first consumer (the review window).
+- **Frontend module registry seam (`registerAppModule`, `@cat-factory/app`):** the frontend
+  analogue of the backend registries (`registerAgentKind`/`registerGate`). The layer owns a
+  [modular-vue](https://github.com/kibertoad/modular-react) registry (`app/modular/registry.ts`,
+  resolved by `app/plugins/modular.client.ts`) into which first-party feature modules AND a
+  consumer deployment's own modules register through one seam, so a deployment extends the layer
+  without forking. A consumer calls the auto-imported `registerAppModule(...)` from its own
+  plugin; the layer's install plugin is `enforce: 'post'` so consumer registration runs first.
+  Adoption is a phased strangler migration tracked in
+  [`docs/initiatives/modular-vue-adoption.md`](./docs/initiatives/modular-vue-adoption.md) (slice
+  0 = the registry plumbing, behaviour-neutral; later slices convert navigation, result views,
+  wizards, and inspector panels into registered modules).
 - **Final answer must land in the reply, not the reasoning channel.** Any agent whose
   deliverable IS its final reply (a document, report, or JSON object the platform reads
   or parses — spec-writer, blueprinter, merger, on-call, task-estimator, the tester
