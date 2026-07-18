@@ -2,7 +2,8 @@ import type { AnyModuleDescriptor } from '@modular-vue/core'
 import { createRegistry } from '@modular-vue/runtime'
 import type { ModuleRegistry } from '@modular-vue/runtime'
 import { navigationModule } from '~/modular/nav-contributions'
-import type { AppSlots, NavGates } from '~/modular/nav-contributions'
+import type { NavGates } from '~/modular/nav-contributions'
+import type { AppSlots } from '~/modular/slots'
 
 /**
  * modular-vue registry for the `@cat-factory/app` layer (slice 0 of the
@@ -70,23 +71,33 @@ export function __resetConsumerModulesForTest(): void {
 }
 
 /**
- * Build a fresh registry with the first-party modules plus everything a consumer
- * contributed via {@link registerAppModule}. A new registry per call because
- * `resolve()` / `resolveManifest()` are single-commit; the install plugin calls
- * this exactly once at client startup (`ssr: false`, so a singleton app).
+ * Build a fresh registry with the first-party modules, any `extraModules` the
+ * caller supplies, plus everything a consumer contributed via
+ * {@link registerAppModule}. A new registry per call because `resolve()` /
+ * `resolveManifest()` are single-commit; the install plugin calls this exactly
+ * once at client startup (`ssr: false`, so a singleton app).
  *
  * `deps.gates` is the reactive gate service the nav `slotFilter` reads; it's
  * built in the install plugin (Vue context) and registered as a `service` so
- * `useReactiveSlots` tracks it. The `nav` slot default is seeded empty so the
- * key always exists even before any module (or with only consumer modules)
- * contributes.
+ * `useReactiveSlots` tracks it. Each slot default is seeded empty so the key
+ * always exists even before any module (or with only consumer modules)
+ * contributes to it.
+ *
+ * `extraModules` is how the client plugin registers first-party modules that
+ * carry Vue components (the `resultViews` registry): keeping them out of
+ * `FIRST_PARTY_MODULES` keeps this module's static import graph — which the
+ * unit tests exercise — free of `.vue` files (the vitest config has no SFC
+ * transform).
  */
-export function createAppRegistry(deps: AppDeps): ModuleRegistry<AppDeps, AppSlots> {
+export function createAppRegistry(
+  deps: AppDeps,
+  extraModules: readonly AnyModuleDescriptor[] = [],
+): ModuleRegistry<AppDeps, AppSlots> {
   const registry = createRegistry<AppDeps, AppSlots>({
     services: { gates: deps.gates },
-    slots: { nav: [] },
+    slots: { nav: [], resultViews: [], agentKinds: [] },
   })
-  for (const mod of [...FIRST_PARTY_MODULES, ...consumerModules]) {
+  for (const mod of [...FIRST_PARTY_MODULES, ...extraModules, ...consumerModules]) {
     registry.register(mod)
   }
   return registry

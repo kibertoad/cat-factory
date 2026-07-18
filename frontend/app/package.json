@@ -27,8 +27,8 @@
   },
   "dependencies": {
     "@cat-factory/contracts": "workspace:*",
-    "@modular-frontend/core": "^0.1.0",
-    "@modular-vue/core": "^1.0.1",
+    "@modular-frontend/core": "^0.2.0",
+    "@modular-vue/core": "^1.1.0",
     "@modular-vue/nuxt": "^0.1.1",
     "@modular-vue/runtime": "^1.1.0",
     "@modular-vue/vue": "^1.1.0",

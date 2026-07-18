@@ -1818,9 +1818,17 @@ auth-enabled or it passes vacuously.
 - **Dedicated result-view seam (frontend):** an agent step opens the generic prose panel
   (`AgentStepDetail.vue`) UNLESS its archetype declares a `resultView` id (`app/utils/catalog.ts`).
   The `ui` store's step dispatch (`dispatchStepView`, used by both `openStepDetail` and
-  `openApprovalDetail`) routes such a step to `ui.resultView`; `StepResultViewHost.vue`
-  renders the component registered for that id (`STEP_RESULT_VIEWS`). Give a new agent a
-  bespoke window by declaring `resultView` + registering a component — no caller changes.
+  `openApprovalDetail`) routes such a step to `ui.resultView`; `StepResultViewHost.vue` reads the
+  modular `resultViews` slot (`app/modular/result-views.ts`, slice 2 of the modular-vue adoption)
+  via `useReactiveSlots` + `resolveComponentRegistry` and mounts the component registered for that
+  id. Give a new BUILT-IN window a bespoke view by declaring `resultView` + contributing a
+  `{ id, component }` entry to the first-party `resultViews` slot — no caller changes. A CONSUMER
+  deployment ships its own window by contributing to the SAME slot via `registerAppModule` and
+  naming a namespaced `resultView` id (`<ns>:<name>`) on its agent kind. Custom agent kinds
+  themselves flow through the modular `agentKinds` slot (consumer, code) + a per-workspace
+  `RemoteModuleManifest` (backend, `useAgentsStore().hydrateCustomKinds`); the built-in
+  `AGENT_BY_KIND` const is frozen (never mutated), and `agentKindMeta` resolves custom kinds
+  through a slot-sourced reactive projection.
   `requirements-review` is the first consumer (the review window).
 - **Frontend module registry seam (`registerAppModule`, `@cat-factory/app`):** the frontend
   analogue of the backend registries (`registerAgentKind`/`registerGate`). The layer owns a

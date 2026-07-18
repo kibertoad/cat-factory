@@ -3,7 +3,7 @@
 **For:** the modular-react maintainers (`@modular-frontend/*` engine + `@modular-vue/*` bindings + `docs/`).
 **From:** the cat-factory frontend team, driving [modular-vue adoption slice 2 ("Result views")](./modular-vue-adoption.md).
 **Type:** additive library change (new helper + Vue-binding re-export) **plus** a docs/guide addition. No breaking changes; target a `minor` release of the affected packages.
-**Status:** requested — cat-factory slice 2 is **blocked on this being released** (per the initiative's co-evolution rule, we do not ship a local shim that outlives the slice).
+**Status:** ✅ **RELEASED + RE-ADOPTED.** Shipped essentially as specced in `@modular-frontend/core@0.2.0` (`resolveComponentRegistry` / `pairById` / `ComponentEntry` + a `componentPairingPlugin` for static refs), re-exported from `@modular-vue/core@1.1.0`, plus the `remote-capability-manifests.md` pairing guide. cat-factory bumped the pins and landed the consuming slice (§4) with no shim. One residual follow-up: `@modular-vue/{vue,runtime,nuxt}` still peer-range `@modular-frontend/core@^0.1.0` (only `@modular-vue/core` widened to `^0.1.0 || ^0.2.0`) — a benign peer warning (0.1→0.2 is additive) to widen upstream, mirroring slice 0's vue-router peer widen ([modular-react#87](https://github.com/kibertoad/modular-react/pull/87)). The spec below is retained as the design record.
 
 > This document is the co-evolution artifact for slice 2: the upstream half of the work,
 > written before the cat-factory half so the two land as a matched set. It is deliberately
@@ -67,7 +67,7 @@ The `@modular-vue/{core,runtime,vue}` packages re-export a large slice of the en
 core, …) **but not the remote-manifest surface.**
 
 Consequence for a Vue consumer: to use the documented remote-manifest pattern you must import
-from `@modular-frontend/core` directly, reaching *past* the binding you were told to program
+from `@modular-frontend/core` directly, reaching _past_ the binding you were told to program
 against. cat-factory has deliberately touched **only** the `@modular-vue/*` binding through slices
 0–1 (it's the stable, Vue-shaped seam; the neutral engine is an implementation detail with its
 own 0.x cadence). Importing the engine directly for slice 2 is precisely the kind of bend the
@@ -99,7 +99,7 @@ component by a **data id**, so they don't fit.
 ### Gap C — the guide "stops short of" the pairing pattern
 
 `docs/remote-capability-manifests.md` documents merging manifests into slots and the merge-many
-vs swap-one topology, but **not** the case where a manifest entry's *field* is a string id that
+vs swap-one topology, but **not** the case where a manifest entry's _field_ is a string id that
 selects a **code-shipped component registered in a different (local) slot**. It explicitly says
 components must "ship as code" but doesn't show the recommended way to then **wire wire-data to
 that code** — the id-namespacing, the join, and the missing-id handling. That final hop is the
@@ -183,7 +183,7 @@ Notes / semantics:
   needed. Keeping them pure is what lets the same helper serve the React family.
 - `resolveComponentRegistry` default-throws on duplicate id — the loud-failure default matches the
   registry's existing duplicate-id stance; the `last-wins`/`first-wins` escape hatch is for a
-  deployment that *intends* to shadow a first-party view.
+  deployment that _intends_ to shadow a first-party view.
 - `pairById`'s three-bucket return (`paired` / `missing` / `unref`) is deliberately explicit so the
   host can, e.g., dev-`warn` on `missing`, render nothing (or a fallback) for them, and route
   `unref` items to a default panel — without every consumer re-deriving that partition.
@@ -234,7 +234,7 @@ Once released, slice 2 lands on the cat-factory side as:
 
 The one change that stays entirely on cat-factory's side (noted here only so upstream sees the
 full end-to-end): our backend currently validates `presentation.resultView` against a **closed
-picklist** of built-in ids, so a consumer can't yet declare a *new* view id over the wire. Opening
+picklist** of built-in ids, so a consumer can't yet declare a _new_ view id over the wire. Opening
 that validation to consumer-namespaced ids is a cat-factory backend change and is **not** part of
 this upstream request — but it's why the `onDuplicate` policy and id-namespacing guidance in 3C
 matter to us.
@@ -266,5 +266,5 @@ matter to us.
 
 ---
 
-*When this is released, bump the `@modular-vue/*` pins in `frontend/app/package.json`, then land
-the cat-factory slice-2 side described in §4 and close the slice-2 row in the tracker.*
+_When this is released, bump the `@modular-vue/_`pins in`frontend/app/package.json`, then land
+the cat-factory slice-2 side described in §4 and close the slice-2 row in the tracker.\*

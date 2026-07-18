@@ -45,7 +45,7 @@ const ALL_GATES: NavGates = {
   isAccountAdmin: true,
 }
 
-const slots = (): AppSlots => ({ nav: [...NAV_CONTRIBUTIONS] })
+const slots = (): AppSlots => ({ nav: [...NAV_CONTRIBUTIONS], resultViews: [], agentKinds: [] })
 const ids = (s: unknown) => (s as AppSlots).nav.map((i) => i.id)
 
 describe('navSlotFilter', () => {

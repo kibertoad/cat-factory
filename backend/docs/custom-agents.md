@@ -124,12 +124,16 @@ files (a post-op) without ever cloning.
 ### Frontend
 
 The workspace snapshot carries `customAgentKinds` (kind + presentation + container flag).
-The SPA merges them into its palette catalog on load
-(`useAgentsStore().registerCustomKinds`), so a registered kind renders as a first-class
-palette block, and its declared `resultView` opens through the same registry the built-ins
-use. A `container-explore` structured kind's `result.custom` is recorded on the step and
-rendered read-only by the shared `generic-structured` result view — a custom agent gets a
-usable result window with **no bespoke UI**.
+The SPA hydrates them as a per-workspace **remote capability manifest**
+(`useAgentsStore().hydrateCustomKinds`) — modeled as a `RemoteModuleManifest` and merged with
+built-ins + any CODE-shipped consumer kinds — so a registered kind renders as a first-class
+palette block, and its declared `resultView` opens through the modular `resultViews` slot the
+built-ins use. A `container-explore` structured kind's `result.custom` is recorded on the step
+and rendered read-only by the shared `generic-structured` result view — a custom agent gets a
+usable result window with **no bespoke UI**. A `resultView` id may be a built-in
+(`generic-structured`, …) or a consumer-namespaced id (`<ns>:<name>`) that a deployment pairs
+with its own frontend component contributed to the `resultViews` slot via `registerAppModule`
+(see the modular-vue adoption, `docs/initiatives/modular-vue-adoption.md`).
 
 ## The worked example
 

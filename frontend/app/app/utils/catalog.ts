@@ -1,3 +1,4 @@
+import { shallowRef } from 'vue'
 import type {
   AgentArchetype,
   AgentCategory,
@@ -304,9 +305,43 @@ export function isProducerCompanion(kind: string): boolean {
   return COMPANION_KINDS.has(kind)
 }
 
-export const AGENT_BY_KIND: Record<AgentKind, AgentArchetype> = Object.fromEntries(
-  [...AGENT_ARCHETYPES, ...COMPANION_ARCHETYPES].map((a) => [a.kind, a]),
+/**
+ * The BUILT-IN palette + companion catalog, keyed by kind. Frozen and never
+ * mutated: custom (deployment/consumer) kinds no longer reach into this const —
+ * they flow through the modular `agentKinds` slot / the workspace-capability
+ * remote manifest and land in {@link customAgentKindMeta} instead (slice 2 of
+ * the modular-vue adoption). Freezing turns any stray write into a loud runtime
+ * error rather than silently conflating built-ins with custom kinds.
+ */
+export const AGENT_BY_KIND: Record<AgentKind, AgentArchetype> = Object.freeze(
+  Object.fromEntries([...AGENT_ARCHETYPES, ...COMPANION_ARCHETYPES].map((a) => [a.kind, a])),
 ) as Record<AgentKind, AgentArchetype>
+
+/**
+ * Reactive read-model of the deployment's CUSTOM agent kinds (consumer-slot +
+ * backend remote-manifest), kept in sync by the agents store from the resolved
+ * modular `agentKinds` slot. The slot/manifest is the source of truth; this
+ * `shallowRef` is its synchronous projection so the pure kind-meta lookups below
+ * ({@link agentKindMeta} / {@link isKnownAgentKind}) resolve a custom kind — and
+ * re-render when the catalog changes — WITHOUT importing the store (which would
+ * be circular) or mutating {@link AGENT_BY_KIND}. Empty until the store first
+ * populates it, so an unknown custom kind degrades to the generic fallback,
+ * exactly as before registration.
+ */
+const customAgentKindMeta = shallowRef<Record<string, AgentArchetype>>({})
+
+/**
+ * Replace the custom-kind projection (called only by the agents store, whenever
+ * its merged custom catalog changes). Whole-map replace, not per-key mutation.
+ */
+export function setCustomAgentKindMeta(map: Record<string, AgentArchetype>): void {
+  customAgentKindMeta.value = map
+}
+
+/** Test-only: clear the custom-kind projection so a spec starts from built-ins only. */
+export function __resetCustomAgentKindMetaForTest(): void {
+  customAgentKindMeta.value = {}
+}
 
 /**
  * Agent kinds eligible for the optional consensus mechanism (the pipeline builder shows an
@@ -596,30 +631,36 @@ const FALLBACK_AGENT_META: Omit<AgentArchetype, 'kind'> = {
 }
 
 /**
- * Resolve display metadata for ANY agent kind — a palette archetype (incl. custom
- * agents registered into {@link AGENT_BY_KIND}), an engine system kind, or an
- * unknown one — ALWAYS returning a usable icon/label/color. This is the single
- * lookup every pipeline / run renderer should use so a kind missing from the
- * archetype map (e.g. `ci`/`merger`/`blueprints` in a seeded pipeline) can never
- * blow up a component with an undefined access.
+ * Resolve display metadata for ANY agent kind — a built-in palette archetype
+ * ({@link AGENT_BY_KIND}), an engine system kind ({@link SYSTEM_AGENT_META}), a
+ * deployment CUSTOM kind (projected from the modular `agentKinds` slot into
+ * {@link customAgentKindMeta} by the agents store), or an unknown one — ALWAYS
+ * returning a usable icon/label/color. This is the single lookup every pipeline
+ * / run renderer should use so a kind missing from the archetype map (e.g.
+ * `ci`/`merger`/`blueprints` in a seeded pipeline) can never blow up a component
+ * with an undefined access. Reading `customAgentKindMeta` reactively means a
+ * component computed re-runs when the custom catalog changes.
  */
 export function agentKindMeta(kind: string): AgentArchetype {
   return (
     AGENT_BY_KIND[kind as AgentKind] ??
-    SYSTEM_AGENT_META[kind] ?? { kind: kind as AgentKind, ...FALLBACK_AGENT_META }
+    SYSTEM_AGENT_META[kind] ??
+    customAgentKindMeta.value[kind] ?? { kind: kind as AgentKind, ...FALLBACK_AGENT_META }
   )
 }
 
 /**
- * Whether an agent kind is actually known to this build — a palette archetype or companion
- * ({@link AGENT_BY_KIND}, which deployment custom kinds are merged into via
- * `useAgentsStore().registerCustomKinds`), or an engine system/gate kind
- * ({@link SYSTEM_AGENT_META}). Unlike {@link agentKindMeta} (which always returns a usable
- * fallback so renderers never crash), this returns `false` for an unknown kind — used to flag
- * a pipeline that references a nonexistent agent. Call AFTER custom kinds are registered.
+ * Whether an agent kind is actually known to this build — a built-in palette
+ * archetype or companion ({@link AGENT_BY_KIND}), an engine system/gate kind
+ * ({@link SYSTEM_AGENT_META}), or a deployment CUSTOM kind projected from the
+ * modular `agentKinds` slot ({@link customAgentKindMeta}). Unlike
+ * {@link agentKindMeta} (which always returns a usable fallback so renderers
+ * never crash), this returns `false` for an unknown kind — used to flag a
+ * pipeline that references a nonexistent agent. Call AFTER the workspace
+ * snapshot has hydrated the custom kinds.
  */
 export function isKnownAgentKind(kind: string): boolean {
-  return kind in AGENT_BY_KIND || kind in SYSTEM_AGENT_META
+  return kind in AGENT_BY_KIND || kind in SYSTEM_AGENT_META || kind in customAgentKindMeta.value
 }
 
 type BlockTypeMeta = { label: string; icon: string; accent: string }
