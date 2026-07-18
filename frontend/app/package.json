@@ -28,13 +28,14 @@
   "dependencies": {
     "@cat-factory/contracts": "workspace:*",
     "@modular-frontend/core": "^0.2.0",
-    "@modular-vue/core": "^1.1.0",
-    "@modular-vue/nuxt": "^0.1.1",
-    "@modular-vue/runtime": "^1.1.0",
-    "@modular-vue/vue": "^1.1.0",
+    "@modular-vue/core": "^1.2.0",
+    "@modular-vue/journeys": "^1.1.0",
+    "@modular-vue/nuxt": "^0.2.0",
+    "@modular-vue/runtime": "^1.2.0",
+    "@modular-vue/vue": "^1.2.0",
     "@nuxt/ui": "^4.9.0",
     "@nuxtjs/i18n": "^10.4.1",
-    "@pinia/nuxt": "^0.11.3",
+    "@pinia/nuxt": "^1.0.1",
     "@toad-contracts/core": "0.4.0",
     "@toad-contracts/frontend-http-client": "0.3.2",
     "@toad-contracts/valibot": "0.5.0",
@@ -43,7 +44,7 @@
     "@vue-flow/node-resizer": "^1.5.1",
     "@vueuse/core": "^14.3.0",
     "markdown-it": "^14.3.0",
-    "pinia": "^3.0.4",
+    "pinia": "^4.0.2",
     "pinia-plugin-persistedstate": "^4.7.1",
     "valibot": "^1.4.2",
     "vue": "3.5.40",
@@ -54,13 +55,13 @@
     "@types/markdown-it": "^14.1.2",
     "happy-dom": "^20.10.6",
     "msw": "^2.15.0",
-    "nuxt": "^4.4.8",
+    "nuxt": "^4.5.0",
     "typescript": "^6.0.3",
     "vitest": "^4.1.10",
     "vue-i18n-extract": "^2.0.7",
     "vue-tsc": "^3.3.7"
   },
   "peerDependencies": {
-    "nuxt": "^4.4.8"
+    "nuxt": "^4.5.0"
   }
 }

@@ -14,7 +14,7 @@
   },
   "dependencies": {
     "@cat-factory/app": "workspace:*",
-    "nuxt": "^4.4.8"
+    "nuxt": "^4.5.0"
   },
   "devDependencies": {
     "typescript": "^6.0.3",

@@ -1,9 +1,17 @@
 import { installModularApp } from '@modular-vue/nuxt/runtime'
+import type { ApplicationManifest } from '@modular-vue/runtime'
 import { resolveComponentRegistry } from '@modular-vue/core'
+import { provideJourneyRuntime } from '@modular-vue/journeys'
+import type { JourneyRuntime } from '@modular-vue/journeys'
 import { createAppRegistry } from '~/modular/registry'
 import { navSlotFilter } from '~/modular/nav-contributions'
 import { createNavGates } from '~/modular/nav-gates'
 import { resultViewsModule } from '~/modular/result-views'
+import {
+  environmentSetupJourney,
+  environmentSetupModule,
+  environmentSetupPersistence,
+} from '~/modular/journeys/environmentSetup'
 import type { AppSlots, ResultViewContribution } from '~/modular/slots'
 import type { CustomAgentKind } from '~/types/domain'
 
@@ -43,10 +51,34 @@ export default defineNuxtPlugin({
   name: 'cat-factory:modular',
   enforce: 'post',
   setup(nuxtApp) {
-    const registry = createAppRegistry({ gates: createNavGates() }, [resultViewsModule])
-    const manifest = installModularApp({ vueApp: nuxtApp.vueApp, $router: useRouter() }, registry, {
-      slotFilter: navSlotFilter,
+    // Register the step-module carriers (they import `.vue`, so they enter via
+    // `extraModules`, keeping the unit-tested `registry.ts` graph SFC-free) and the
+    // journeys themselves (slice 3). `registerJourney` must run BEFORE the manifest
+    // resolves (inside `installModularApp`).
+    const registry = createAppRegistry({ gates: createNavGates() }, [
+      resultViewsModule,
+      environmentSetupModule,
+    ])
+    registry.registerJourney(environmentSetupJourney, {
+      persistence: environmentSetupPersistence,
     })
+    // Annotate the manifest explicitly: the registry type now carries the journeys
+    // plugin tuple, and letting `defineNuxtPlugin` infer the plugin type through the
+    // returned `{ provide: { modular } }` otherwise trips a self-referential-inference
+    // `any`. The annotation pins it to the concrete manifest shape.
+    const manifest: ApplicationManifest<AppSlots> = installModularApp(
+      { vueApp: nuxtApp.vueApp, $router: useRouter() },
+      registry,
+      { slotFilter: navSlotFilter },
+    )
+    // Provide the resolved `JourneyRuntime` to the Vue app so `<JourneyProvider>` /
+    // `<JourneyHost>` / `<JourneyOutlet>` resolve it from context (the wizard hosts
+    // don't hand-thread a runtime). `installModularApp` types the registry's plugin
+    // tuple as `any`, so the manifest's extension type is erased to `unknown` here —
+    // the cast recovers the `JourneyRuntime` the `journeys` plugin actually resolved.
+    // (Propagating plugin-extension types through `installModularApp` is a small
+    // upstream binding improvement to file — the runtime value is correct regardless.)
+    provideJourneyRuntime(nuxtApp.vueApp, manifest.journeys as JourneyRuntime)
     const slots = manifest.slots as AppSlots
     // Fail FAST on a result-view wiring bug (a duplicate id across the first-party +
     // consumer `resultViews` modules) at BOOT rather than lazily the first time a result

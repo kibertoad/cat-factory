@@ -23,7 +23,7 @@ import { usePreflightsStore } from '~/stores/preflights'
 import { useServicesStore } from '~/stores/services'
 import { useWorkspaceStore } from '~/stores/workspace'
 
-// The environment setup wizard's cross-step state + actions (shared-stacks slice 7). It walks the
+// The environment setup wizard's cross-step DATA + actions (shared-stacks slice 7). It backs the
 // guided flow — pick a service frame → review the recommended `docker-compose` recipe (detector
 // facts + the opt-in analyst draft, merged with provenance) → run the machine preflights → save
 // (persist the recipe on the frame AND register the workspace's docker-compose handler so the
@@ -31,16 +31,18 @@ import { useWorkspaceStore } from '~/stores/workspace'
 //
 // The detector + analyst only RECOMMEND; the human confirms/edits the working `recipe` here and the
 // compose provider keys purely on the saved recipe (the build-flag rule). Mirrors the other infra
-// stores' idiom; the flow state is a singleton so the wizard modal + its step children share it.
+// stores' idiom; the flow state is a singleton so the wizard's step children share it.
+//
+// Since slice 3 of the modular-vue adoption (docs/initiatives/modular-vue-adoption.md) the wizard's
+// step NAVIGATION lives in a modular-vue journey (`app/modular/journeys/environmentSetup.ts`), NOT
+// here — this store no longer holds a `step` / `STEP_ORDER` / `goToStep`. It is purely the per-frame
+// data+action layer the journey's step components drive; `beginForFrame` seeds it when a step first
+// targets a frame.
 
 /** The seeded analyst-only pipeline the "run deep analysis" trigger starts against the frame. */
 const ANALYSIS_PIPELINE_ID = 'pl_environment_analysis'
 /** The analyst agent kind whose `result.custom` carries the drafted recipe. */
 const ANALYST_AGENT_KIND = 'environment-analyst'
-
-/** The wizard's ordered steps. `trial` is an optional post-save action, not a gate. */
-export type EnvWizardStep = 'pick' | 'review' | 'preflight' | 'save'
-export const ENV_WIZARD_STEPS: EnvWizardStep[] = ['pick', 'review', 'preflight', 'save']
 
 /** The analyst run's lifecycle as the wizard surfaces it. */
 export type AnalysisStatus = 'idle' | 'running' | 'ready' | 'failed'
@@ -70,9 +72,11 @@ export const useEnvironmentWizardStore = defineStore('environmentWizard', () => 
   const pipelines = usePipelinesStore()
   const preflights = usePreflightsStore()
 
-  // ---- Flow position ------------------------------------------------------
+  // ---- Target frame -------------------------------------------------------
+  // The frame the flow currently targets. Set by `beginForFrame` when a journey
+  // step first mounts against a frame; the journey (not this store) owns which
+  // step is showing.
   const frameId = ref<string | null>(null)
-  const step = ref<EnvWizardStep>('pick')
 
   // ---- Detection ----------------------------------------------------------
   const detecting = ref(false)
@@ -212,19 +216,18 @@ export const useEnvironmentWizardStore = defineStore('environmentWizard', () => 
     trialStarted.value = false
   }
 
-  /** Reset the flow for a (possibly preselected) frame. */
-  function open(preselectFrameId: string | null) {
-    frameId.value = preselectFrameId
-    step.value = preselectFrameId ? 'review' : 'pick'
-    resetFlowState()
-    if (preselectFrameId) void detect()
-  }
-
-  function selectFrame(id: string) {
+  /**
+   * Seed the data layer for a frame the journey's review step is entering. The
+   * journey owns navigation, so this is idempotent by frame: it (re)seeds +
+   * detects only when the target frame actually changes, so back-navigating to
+   * the review step (or a resume) does NOT clobber the operator's in-progress
+   * recipe edits. Selecting a different frame resets the flow for it.
+   */
+  function beginForFrame(id: string | null) {
+    if (frameId.value === id) return
     frameId.value = id
     resetFlowState()
-    step.value = 'review'
-    void detect()
+    if (id) void detect()
   }
 
   /** Re-seed the working recipe from the current merge (detector-only, or +analyst after apply). */
@@ -435,14 +438,9 @@ export const useEnvironmentWizardStore = defineStore('environmentWizard', () => 
     }
   }
 
-  function goToStep(next: EnvWizardStep) {
-    step.value = next
-  }
-
   return {
     // state
     frameId,
-    step,
     detecting,
     detectError,
     recommendation,
@@ -472,8 +470,7 @@ export const useEnvironmentWizardStore = defineStore('environmentWizard', () => 
     analysisStatus,
     merged,
     // actions
-    open,
-    selectFrame,
+    beginForFrame,
     detect,
     startAnalysis,
     applyAnalystDraft,
@@ -484,6 +481,5 @@ export const useEnvironmentWizardStore = defineStore('environmentWizard', () => 
     runPreflight,
     save,
     trialProvision,
-    goToStep,
   }
 })

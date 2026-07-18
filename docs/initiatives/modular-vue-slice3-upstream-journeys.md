@@ -32,15 +32,15 @@ Two properties matter for cat-factory specifically and drive the two named sub-r
 
 Current published versions (all installable):
 
-| Package | Version | Role |
-| --- | --- | --- |
-| `@modular-frontend/journeys-engine` | `1.7.1` | **Framework-neutral journey runtime** — `createJourneyRuntime`, `defineJourney`, validation, persistence contracts + factories, `journeysPlugin`, authoring helpers, handles, types. Description: *"No UI-framework dependency — the outlet and hooks live in a binding package."* Deps `@modular-frontend/core@0.1.0`. |
-| `@modular-react/journeys` | `1.8.0` | **Complete React binding** — `JourneyOutlet`, `JourneyHost`, `JourneyProvider`, `ModuleTab`, `useJourneyHost`, `useJourneySync`, `useJourneyState`/`useJourneyInstance`/`useJourneyContext`, `useActiveLeafJourney*`, `useWaitForExit`, `useJourneyCallStack`, `createJourneyMountAdapter`, plus a `./testing` entry. Re-exports the whole engine surface. |
-| `@modular-vue/core` `/vue` `/runtime` | `1.1.0` | Vue bindings for **modules, slots, navigation, DI** — `defineModule`, `useReactiveSlots`, `ModuleRoute`, `ModuleErrorBoundary`, `ModuleExitProvider`, `useModuleExit`, `resolveEntryComponent`, `preloadEntry`, … |
-| `@modular-vue/nuxt` | `0.1.1` | Nuxt install — `installModularApp` / `buildModularPluginContents` (module + slots + nav + DI). **Journey-unaware.** |
-| `@modular-vue/compositions` | `1.0.0` | Vue compositions binding. |
-| `@modular-vue/testing` | `1.0.1` | Vue testing helpers. |
-| **`@modular-vue/journeys`** | **— (404)** | **Does not exist.** |
+| Package                               | Version     | Role                                                                                                                                                                                                                                                                                                                                                       |
+| ------------------------------------- | ----------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `@modular-frontend/journeys-engine`   | `1.7.1`     | **Framework-neutral journey runtime** — `createJourneyRuntime`, `defineJourney`, validation, persistence contracts + factories, `journeysPlugin`, authoring helpers, handles, types. Description: _"No UI-framework dependency — the outlet and hooks live in a binding package."_ Deps `@modular-frontend/core@0.1.0`.                                    |
+| `@modular-react/journeys`             | `1.8.0`     | **Complete React binding** — `JourneyOutlet`, `JourneyHost`, `JourneyProvider`, `ModuleTab`, `useJourneyHost`, `useJourneySync`, `useJourneyState`/`useJourneyInstance`/`useJourneyContext`, `useActiveLeafJourney*`, `useWaitForExit`, `useJourneyCallStack`, `createJourneyMountAdapter`, plus a `./testing` entry. Re-exports the whole engine surface. |
+| `@modular-vue/core` `/vue` `/runtime` | `1.1.0`     | Vue bindings for **modules, slots, navigation, DI** — `defineModule`, `useReactiveSlots`, `ModuleRoute`, `ModuleErrorBoundary`, `ModuleExitProvider`, `useModuleExit`, `resolveEntryComponent`, `preloadEntry`, …                                                                                                                                          |
+| `@modular-vue/nuxt`                   | `0.1.1`     | Nuxt install — `installModularApp` / `buildModularPluginContents` (module + slots + nav + DI). **Journey-unaware.**                                                                                                                                                                                                                                        |
+| `@modular-vue/compositions`           | `1.0.0`     | Vue compositions binding.                                                                                                                                                                                                                                                                                                                                  |
+| `@modular-vue/testing`                | `1.0.1`     | Vue testing helpers.                                                                                                                                                                                                                                                                                                                                       |
+| **`@modular-vue/journeys`**           | **— (404)** | **Does not exist.**                                                                                                                                                                                                                                                                                                                                        |
 
 **The neutral runtime is done; the React binding is done; the Vue binding is simply absent.** Concretely:
 
@@ -48,7 +48,7 @@ Current published versions (all installable):
 
 `@modular-vue/vue@1.1.0` ships the **module**-hosting surface (`ModuleRoute`, `ModuleTab`-equivalent via `ModuleExitProvider`/`useModuleExit`, `ModuleErrorBoundary`) — the analogue of `@modular-react/react`. But it has **no journey surface at all**: no `JourneyOutlet` (render the current step), no `JourneyHost`/`useJourneyHost` (own the instance lifecycle: start on mount, abandon on unmount, resume when persisted), no `JourneyProvider`/`useJourneyContext` (thread the runtime through context), no `useJourneyState`/`useJourneyInstance` (tearing-free subscription to instance snapshots), no `useJourneySync` (URL reconciler wrapper), no `useWaitForExit`, no `createJourneyMountAdapter`. Every one of these exists in `@modular-react/journeys`; none exists for Vue.
 
-Interestingly, the React binding's own docs already anticipate the Vue port — `useJourneyHost`'s JSDoc says *"The Vue binding resolves its runtime the same way, once at setup."* The port is expected; it just hasn't been built.
+Interestingly, the React binding's own docs already anticipate the Vue port — `useJourneyHost`'s JSDoc says _"The Vue binding resolves its runtime the same way, once at setup."_ The port is expected; it just hasn't been built.
 
 ### Gap B — no modal/tab mount story for Vue (journeys outside routes)
 
@@ -101,7 +101,12 @@ export function useJourneyHost<TInput>(
   handle: JourneyHandle<string, TInput, unknown>,
   input: MaybeRefOrGetter<TInput>,
   options?: { runtime?: JourneyRuntime },
-): { instanceId: Ref<InstanceId | null>; instance: Ref<JourneyInstance | null>; runtime: JourneyRuntime; stepIndex: Ref<number> }
+): {
+  instanceId: Ref<InstanceId | null>
+  instance: Ref<JourneyInstance | null>
+  runtime: JourneyRuntime
+  stepIndex: Ref<number>
+}
 
 /** One-line host: starts on mount, renders the current step, abandons on unmount.
  *  Chrome (progress/title/cancel) via a scoped slot exposing { instanceId, instance,
@@ -116,11 +121,22 @@ export const JourneyProvider: DefineComponent<JourneyProviderProps>
 export function useJourneyContext(): JourneyProviderValue | null
 
 // ── Instance subscription (tearing-free) ─────────────────────────────────────
-export function useJourneyInstance(instanceId: MaybeRefOrGetter<InstanceId | null>): Ref<JourneyInstance | null>
-export function useJourneyState<TState>(instanceId: MaybeRefOrGetter<InstanceId | null>): Ref<TState | null>
-export function useActiveLeafJourneyInstance(rootId: MaybeRefOrGetter<InstanceId | null>): Ref<JourneyInstance | null>
-export function useActiveLeafJourneyState<TState>(rootId: MaybeRefOrGetter<InstanceId | null>): Ref<TState | null>
-export function useJourneyCallStack(runtime: JourneyRuntime, rootId: InstanceId): Ref<readonly InstanceId[]>
+export function useJourneyInstance(
+  instanceId: MaybeRefOrGetter<InstanceId | null>,
+): Ref<JourneyInstance | null>
+export function useJourneyState<TState>(
+  instanceId: MaybeRefOrGetter<InstanceId | null>,
+): Ref<TState | null>
+export function useActiveLeafJourneyInstance(
+  rootId: MaybeRefOrGetter<InstanceId | null>,
+): Ref<JourneyInstance | null>
+export function useActiveLeafJourneyState<TState>(
+  rootId: MaybeRefOrGetter<InstanceId | null>,
+): Ref<TState | null>
+export function useJourneyCallStack(
+  runtime: JourneyRuntime,
+  rootId: InstanceId,
+): Ref<readonly InstanceId[]>
 
 // ── Module-as-tab host (outside a journey) ───────────────────────────────────
 /** Host a single module entry outside any route/journey — in a tab/modal/panel.
@@ -137,7 +153,10 @@ export function useJourneySync(
 ): void
 
 // ── Exit waiting ─────────────────────────────────────────────────────────────
-export function useWaitForExit<TExits extends ExitPointMap>(exit: ExitFn<TExits>, channels: WaitForExitChannels<TExits>): void
+export function useWaitForExit<TExits extends ExitPointMap>(
+  exit: ExitFn<TExits>,
+  channels: WaitForExitChannels<TExits>,
+): void
 
 // ── Mount adapter (embedding; see §4B) ───────────────────────────────────────
 export function createJourneyMountAdapter(runtime: JourneyRuntime): RuntimeMountAdapter
