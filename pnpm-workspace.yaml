@@ -5,23 +5,26 @@
 # changesets setup spanning FE + BE.
 # Pin the entire Vue runtime family to one version. Nuxt 4.4.8's transitive deps
 # pin parts of the graph to vue@3.5.38 while the frontend app's direct dependency
-# resolves to 3.5.39, so WITHOUT this two copies of Vue get bundled into the SPA.
+# resolves higher, so WITHOUT this two copies of Vue get bundled into the SPA.
 # Vue's render internals are module-level singletons (e.g. `renderSlot` reads
 # `currentRenderingInstance`), so the second copy sees a null instance and the app
 # crashes on boot with `Cannot read properties of null (reading 'ce')` — a blank
 # 500 page that hangs the whole e2e suite. One version = one singleton. Keep these
 # in lockstep with the `vue` range in frontend/app/package.json.
+# The floor is 3.5.40: `@modular-vue/*` peer-requires `vue@^3.5.40`, so the whole
+# family moves up together to keep the single-singleton invariant while satisfying
+# the modular-vue adoption (docs/initiatives/modular-vue-adoption.md).
 overrides:
-  vue: 3.5.39
-  '@vue/compiler-core': 3.5.39
-  '@vue/compiler-dom': 3.5.39
-  '@vue/compiler-sfc': 3.5.39
-  '@vue/compiler-ssr': 3.5.39
-  '@vue/reactivity': 3.5.39
-  '@vue/runtime-core': 3.5.39
-  '@vue/runtime-dom': 3.5.39
-  '@vue/server-renderer': 3.5.39
-  '@vue/shared': 3.5.39
+  vue: 3.5.40
+  '@vue/compiler-core': 3.5.40
+  '@vue/compiler-dom': 3.5.40
+  '@vue/compiler-sfc': 3.5.40
+  '@vue/compiler-ssr': 3.5.40
+  '@vue/reactivity': 3.5.40
+  '@vue/runtime-core': 3.5.40
+  '@vue/runtime-dom': 3.5.40
+  '@vue/server-renderer': 3.5.40
+  '@vue/shared': 3.5.40
 packages:
   - 'backend/packages/*'
   - 'backend/runtimes/*'
@@ -48,5 +51,7 @@ allowBuilds:
 minimumReleaseAgeExclude:
   - '@cat-factory/*'
   - '@toad-contracts/*'
+  - '@modular-vue/*'
+  - '@modular-frontend/*'
   - layered-loader
   - toad-scheduler
