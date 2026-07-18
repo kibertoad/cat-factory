@@ -1,9 +1,10 @@
 import { installModularApp } from '@modular-vue/nuxt/runtime'
+import { resolveComponentRegistry } from '@modular-vue/core'
 import { createAppRegistry } from '~/modular/registry'
 import { navSlotFilter } from '~/modular/nav-contributions'
 import { createNavGates } from '~/modular/nav-gates'
 import { resultViewsModule } from '~/modular/result-views'
-import type { AppSlots } from '~/modular/slots'
+import type { AppSlots, ResultViewContribution } from '~/modular/slots'
 import type { CustomAgentKind } from '~/types/domain'
 
 /**
@@ -46,9 +47,16 @@ export default defineNuxtPlugin({
     const manifest = installModularApp({ vueApp: nuxtApp.vueApp, $router: useRouter() }, registry, {
       slotFilter: navSlotFilter,
     })
+    const slots = manifest.slots as AppSlots
+    // Fail FAST on a result-view wiring bug (a duplicate id across the first-party +
+    // consumer `resultViews` modules) at BOOT rather than lazily the first time a result
+    // window opens: resolve the merged slot once here. `resolveComponentRegistry` throws on
+    // a duplicate id by default, so a misconfigured deployment surfaces at startup with a
+    // clear stack. The slot is static after this resolve, so `StepResultViewHost`'s own
+    // reactive re-resolve is a cheap memoized read that this has already validated.
+    resolveComponentRegistry((slots.resultViews ?? []) as ResultViewContribution[])
     // Consumer agent kinds contributed as CODE to the static `agentKinds` slot
     // (module slots resolve once, so the static base is the full set).
-    const slots = manifest.slots as AppSlots
     useAgentsStore().registerConsumerKinds((slots.agentKinds ?? []) as CustomAgentKind[])
     return { provide: { modular: manifest } }
   },

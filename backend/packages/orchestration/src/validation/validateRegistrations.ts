@@ -8,7 +8,7 @@ import {
   registeredPipelines,
   stubGateContext,
 } from '@cat-factory/kernel'
-import { isNamespacedResultViewId, RESULT_VIEW_ID_SET } from '@cat-factory/contracts'
+import { isValidResultViewId, RESULT_VIEW_ID_SET } from '@cat-factory/contracts'
 
 // ---------------------------------------------------------------------------
 // Boot-time validation of the deployment's registered extensions (agent kinds, gates,
@@ -119,11 +119,7 @@ export function collectRegistrationProblems(
   //    the SPA). A bare unknown id is a typo → error (the SPA would silently fall back to prose).
   for (const def of agentKinds) {
     const resultView = def.presentation?.resultView
-    if (
-      resultView !== undefined &&
-      !knownResultViewIds.has(resultView) &&
-      !isNamespacedResultViewId(resultView)
-    ) {
+    if (resultView !== undefined && !isValidResultViewId(resultView, knownResultViewIds)) {
       problems.push({
         severity: 'error',
         code: 'unknown_result_view',

@@ -1,5 +1,6 @@
+import type { Component } from 'vue'
 import { defineModule } from '@modular-vue/core'
-import { RESULT_VIEW_IDS } from '@cat-factory/contracts'
+import { RESULT_VIEW_IDS, type ResultViewId } from '@cat-factory/contracts'
 import RequirementsReviewWindow from '~/components/requirements/RequirementsReviewWindow.vue'
 import ClarityReviewWindow from '~/components/clarity/ClarityReviewWindow.vue'
 import BrainstormWindow from '~/components/brainstorm/BrainstormWindow.vue'
@@ -41,60 +42,56 @@ import type { ResultViewContribution } from './slots'
  * plugin (`plugins/modular.client.ts`), NOT from `createAppRegistry` — that
  * keeps the pure/unit-tested registry import graph free of `.vue` files (the
  * vitest config has no SFC transform).
+ *
+ * Built-in coverage is enforced at COMPILE time: {@link BUILT_IN_RESULT_VIEWS} is a
+ * `Record<ResultViewId, Component>`, so a built-in added to the contract's
+ * `RESULT_VIEW_IDS` picklist without a component here (or a stray id that isn't a
+ * built-in) is a `nuxt typecheck` failure — a CI gate — rather than a runtime warning
+ * that could ship. Consumer namespaced ids are validated separately by `pairById`.
  */
-export const RESULT_VIEW_CONTRIBUTIONS: readonly ResultViewContribution[] = [
-  { id: 'requirements-review', component: RequirementsReviewWindow },
-  { id: 'clarity-review', component: ClarityReviewWindow },
+const BUILT_IN_RESULT_VIEWS: Record<ResultViewId, Component> = {
+  'requirements-review': RequirementsReviewWindow,
+  'clarity-review': ClarityReviewWindow,
   // Shared by both brainstorm stages (requirements + architecture); the window reads the stage.
-  { id: 'brainstorm', component: BrainstormWindow },
-  { id: 'tester', component: TestReportWindow },
+  brainstorm: BrainstormWindow,
+  tester: TestReportWindow,
   // The human-testing gate: env URL + confirm / request-fix / pull-main / recreate / destroy.
-  { id: 'human-test', component: HumanTestWindow },
+  'human-test': HumanTestWindow,
   // The visual-confirmation gate: actual-vs-reference screenshot gallery + approve / request-fix.
-  { id: 'visual-confirm', component: VisualConfirmationWindow },
+  'visual-confirm': VisualConfirmationWindow,
   // Shared by all polling gates (`ci` / `conflicts` / `human-review` / …); the window branches on kind.
-  { id: 'gate', component: GateResultView },
+  gate: GateResultView,
   // Opened for any step that ran the consensus mechanism (routed in `ui.dispatchStepView`).
-  { id: 'consensus-session', component: ConsensusSessionWindow },
+  'consensus-session': ConsensusSessionWindow,
   // Default dedicated view for a registered CUSTOM kind's structured (`custom`) output —
   // a read-only JSON viewer, so a proprietary agent ships a result view with no bespoke code.
-  { id: 'generic-structured', component: GenericStructuredResultView },
+  'generic-structured': GenericStructuredResultView,
   // The service's prescriptive spec tree (+ Gherkin); opened directly via `ui.openServiceSpec`.
-  { id: 'service-spec', component: ServiceSpecWindow },
+  'service-spec': ServiceSpecWindow,
   // The Follow-up companion: the Coder's surfaced loose ends / questions.
-  { id: 'follow-ups', component: FollowUpWindow },
+  'follow-ups': FollowUpWindow,
   // The implementation-fork decision: the proposer's approaches + the human's pick / custom.
-  { id: 'fork-decision', component: ForkDecisionWindow },
+  'fork-decision': ForkDecisionWindow,
   // The PR deep-review: the reviewer's sliced, prioritized findings + the human's multi-select.
-  { id: 'pr-review', component: PrReviewWindow },
+  'pr-review': PrReviewWindow,
   // The merger's verdict: PR complexity/risk/impact scores + the engine's decision (and why).
-  { id: 'merger', component: MergerResultView },
+  merger: MergerResultView,
   // The initiative tracker: phases, per-item status + PR links, decisions, deviations, caveats.
-  { id: 'initiative-tracker', component: InitiativeTrackerWindow },
-  { id: 'initiative-planning', component: InitiativePlanningWindow },
+  'initiative-tracker': InitiativeTrackerWindow,
+  'initiative-planning': InitiativePlanningWindow,
   // The interactive document-interview gate: clarifying questions + answer / continue / proceed.
-  { id: 'doc-interview', component: DocInterviewWindow },
+  'doc-interview': DocInterviewWindow,
   // The Ralph loop: the retry-until-done iteration history + the validation command + its output.
-  { id: 'ralph-loop', component: RalphLoopResultView },
-]
-
-// Dev guard: the first-party entries must cover EXACTLY the canonical built-in
-// id set (`@cat-factory/contracts` `RESULT_VIEW_IDS`) — a built-in added to the
-// picklist but not registered here (or vice versa) is a wiring bug. Custom
-// consumer ids are namespaced and validated separately by `pairById`'s `missing`
-// bucket, so they're intentionally not part of this equality check.
-if (import.meta.dev) {
-  const registered = new Set(RESULT_VIEW_CONTRIBUTIONS.map((v) => v.id))
-  const canonical = new Set<string>(RESULT_VIEW_IDS)
-  const missing = [...canonical].filter((id) => !registered.has(id))
-  const extra = [...registered].filter((id) => !canonical.has(id))
-  if (missing.length || extra.length) {
-    console.error(
-      `[result-views] built-in registry drift vs RESULT_VIEW_IDS — ` +
-        `missing: [${missing.join(', ')}], unexpected: [${extra.join(', ')}]`,
-    )
-  }
+  'ralph-loop': RalphLoopResultView,
 }
+
+/**
+ * The built-in windows as slot entries, derived from `RESULT_VIEW_IDS` so the slot order matches
+ * the canonical id order. Exhaustiveness is guaranteed by {@link BUILT_IN_RESULT_VIEWS}'s type.
+ */
+export const RESULT_VIEW_CONTRIBUTIONS: readonly ResultViewContribution[] = RESULT_VIEW_IDS.map(
+  (id) => ({ id, component: BUILT_IN_RESULT_VIEWS[id] }),
+)
 
 /**
  * The first-party result-views module: contributes every built-in window to the

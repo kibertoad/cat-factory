@@ -22,7 +22,14 @@ never written to, backend-registered kinds are modeled as a per-workspace
 via a static `agentKinds` slot (`registerConsumerKinds`), and the agents store
 projects the merged catalog into a reactive read-model so `agentKindMeta` /
 `isKnownAgentKind` resolve custom kinds. `registerCustomKinds` (which mutated the
-global) is removed.
+global) is removed. Note a deliberate tightening: a custom kind whose id collides
+with an engine system/gate kind (`ci` / `merger` / `blueprints` / …) is now
+dropped from the palette, not just one colliding with a built-in — matching the
+`agentKindMeta` precedence where such a kind never won anyway. The per-workspace
+manifest carries a content-derived version so an unchanged snapshot re-hydrate
+(which recurs on every board refresh) is a no-op instead of re-invalidating every
+`agentKindMeta` consumer, and built-in result-view coverage is now a compile-time
+invariant (`Record<ResultViewId, Component>`) rather than a runtime dev warning.
 
 `@cat-factory/contracts`: `agentPresentationSchema.resultView` is opened from a
 closed built-in picklist to also accept a consumer-namespaced id (`<ns>:<name>`,

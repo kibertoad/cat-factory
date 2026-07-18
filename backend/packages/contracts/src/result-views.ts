@@ -61,9 +61,22 @@ export function isNamespacedResultViewId(id: string): boolean {
 }
 
 /**
- * Whether `id` is an acceptable `presentation.resultView`: a canonical BUILT-IN id, or a
- * consumer-namespaced one. A bare id that is not a built-in is rejected (the typo guardrail).
+ * Whether `id` is an acceptable `presentation.resultView`: a canonical BUILT-IN id (drawn from
+ * `builtInIds`, defaulting to {@link RESULT_VIEW_ID_SET}) OR a consumer-namespaced one. A bare id
+ * that is not a built-in is rejected (the typo guardrail).
+ *
+ * This is the SINGLE composed rule the backend registration validator (`validateRegistrations`)
+ * checks against — it must not re-open-code `has(id) || isNamespacedResultViewId(id)`. The wire
+ * schema (`agentPresentationSchema.resultView`) expresses the SAME rule as a valibot union
+ * (`picklist ∪ namespaced`) rather than calling this, because the union keeps the built-in
+ * picklist's literal-type narrowing that a boolean predicate would erase. Both sides share the
+ * underlying atoms — {@link RESULT_VIEW_ID_SET} and {@link NAMESPACED_RESULT_VIEW_ID_PATTERN} —
+ * so they can't drift. The `builtInIds` parameter lets the validator inject its (overridable)
+ * known-id set while keeping the composition here.
  */
-export function isValidResultViewId(id: string): boolean {
-  return RESULT_VIEW_ID_SET.has(id) || isNamespacedResultViewId(id)
+export function isValidResultViewId(
+  id: string,
+  builtInIds: ReadonlySet<string> = RESULT_VIEW_ID_SET,
+): boolean {
+  return builtInIds.has(id) || isNamespacedResultViewId(id)
 }

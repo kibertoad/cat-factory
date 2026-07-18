@@ -69,6 +69,17 @@ describe('agents store — custom-kind catalog (slice 2)', () => {
     expect(kinds.filter((k) => k === 'acme-consumer')).toHaveLength(1)
   })
 
+  it('no-ops a re-hydrate of identical content (stable projection, content-versioned manifest)', () => {
+    const agents = useAgentsStore()
+    agents.hydrateCustomKinds([backendKind('acme-x', { resultView: 'acme:x' })])
+    const first = agents.customArchetypes
+    // A new snapshot re-delivering structurally-equal kinds (fresh objects) must not
+    // recompute the merged catalog — the content-derived manifest version is unchanged, so
+    // `hydrateCustomKinds` skips the swap and the computed keeps its cached identity.
+    agents.hydrateCustomKinds([backendKind('acme-x', { resultView: 'acme:x' })])
+    expect(agents.customArchetypes).toBe(first)
+  })
+
   it('swaps the backend catalog wholesale on re-hydrate (per-workspace manifest)', () => {
     const agents = useAgentsStore()
     agents.hydrateCustomKinds([backendKind('ws1-kind')])

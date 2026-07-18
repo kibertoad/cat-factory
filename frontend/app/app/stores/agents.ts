@@ -43,7 +43,11 @@ export const useAgentsStore = defineStore('agents', () => {
   /**
    * The merged CUSTOM catalog (consumer-slot → backend-manifest → runtime), each
    * mapped to display metadata, de-duplicated, and never shadowing a built-in or
-   * system kind (a custom kind can't override a built-in — the old skip guard).
+   * system kind. The old `registerCustomKinds` only guarded `AGENT_BY_KIND`; this
+   * intentionally ALSO drops any custom kind colliding with a `SYSTEM_AGENT_META`
+   * kind (`ci` / `merger` / `blueprints` / gates …), so a snapshot can't override an
+   * engine kind's palette entry either — matching `agentKindMeta`'s precedence
+   * (built-in → system → custom), where a colliding custom kind would never win anyway.
    */
   const customArchetypes = computed<AgentArchetype[]>(() => {
     const seen = new Set<string>()
@@ -119,9 +123,16 @@ export const useAgentsStore = defineStore('agents', () => {
    * snapshot, modeled as a single remote capability manifest (swapped wholesale
    * per workspace). Replaces the old `registerCustomKinds` that mutated
    * {@link AGENT_BY_KIND} directly.
+   *
+   * The snapshot re-delivers the same deployment kinds on every board refresh, so
+   * skip the swap — and the downstream projection invalidation of every
+   * `agentKindMeta` consumer — when the content-derived manifest version is
+   * unchanged. A genuinely different workspace's kinds change the version and swap.
    */
   function hydrateCustomKinds(kinds: CustomAgentKind[]) {
-    capabilitiesManifest.value = buildAgentCapabilitiesManifest(kinds)
+    const next = buildAgentCapabilitiesManifest(kinds)
+    if (capabilitiesManifest.value?.version === next.version) return
+    capabilitiesManifest.value = next
   }
 
   return {

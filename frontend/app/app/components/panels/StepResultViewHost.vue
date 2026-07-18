@@ -36,7 +36,7 @@ const registry = computed(() => resolveComponentRegistry(slots.value.resultViews
 const active = computed<Component | null>(() => {
   const view = ui.resultView?.view
   if (!view) return null
-  return (registry.value.get(view) as Component | undefined) ?? null
+  return registry.value.get(view) ?? null
 })
 
 // Dev guard: surface any CUSTOM kind whose declared `resultView` id resolves to

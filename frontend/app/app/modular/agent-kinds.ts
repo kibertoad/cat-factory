@@ -21,16 +21,43 @@ import type { AppSlots } from './slots'
 export const WORKSPACE_CAPABILITIES_MANIFEST_ID = 'cat-factory:workspace-capabilities'
 
 /**
- * Model the snapshot's `customAgentKinds` as a single remote capability
- * manifest. `version` is a constant — this manifest is swapped wholesale per
- * workspace, not diffed, so it needs no real versioning.
+ * A deterministic, key-order-independent content signature of the custom kinds, used as the
+ * manifest `version`. The workspace snapshot re-delivers the SAME deployment-registered kinds on
+ * every board-event refresh (a full `workspace.refresh()` runs `hydrateCustomKinds` each time), so
+ * a content-derived version lets the store skip re-projecting an UNCHANGED catalog — otherwise
+ * every refresh would replace the `customAgentKindMeta` read-model and needlessly invalidate the
+ * ~17 `agentKindMeta` / `isKnownAgentKind` consumers. It still changes (and swaps wholesale) when a
+ * different workspace's kinds actually differ. Serialized as fixed-order tuples of only the fields
+ * that affect display/pairing, so a re-serialization with reordered object keys can't spuriously
+ * differ.
+ */
+export function capabilitiesManifestVersion(kinds: readonly CustomAgentKind[]): string {
+  return JSON.stringify(
+    kinds.map((k) => [
+      k.kind,
+      k.container,
+      k.presentation.label,
+      k.presentation.icon,
+      k.presentation.color,
+      k.presentation.description,
+      k.presentation.category ?? null,
+      k.presentation.resultView ?? null,
+    ]),
+  )
+}
+
+/**
+ * Model the snapshot's `customAgentKinds` as a single remote capability manifest. The `version` is
+ * a {@link capabilitiesManifestVersion content signature} so identical snapshots produce an
+ * identical manifest — which `useAgentsStore().hydrateCustomKinds` uses to no-op an unchanged
+ * re-hydrate. Swapped wholesale (not diffed) when the content genuinely changes.
  */
 export function buildAgentCapabilitiesManifest(
   kinds: readonly CustomAgentKind[],
 ): RemoteModuleManifest<AppSlots> {
   return {
     id: WORKSPACE_CAPABILITIES_MANIFEST_ID,
-    version: '1',
+    version: capabilitiesManifestVersion(kinds),
     slots: { agentKinds: [...kinds] },
   }
 }
