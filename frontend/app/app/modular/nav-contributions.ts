@@ -65,6 +65,35 @@ export interface NavCommandSpec {
   keywordsKey?: string
 }
 
+/**
+ * The first-party action ids, each resolved to a host `ui`-store handler in
+ * `useNavContributions`. Typing {@link NavContribution.action} against this union
+ * (and the handler map as an exhaustive `Record<NavActionId, …>`) makes a drift
+ * between the catalog and the handler map a compile error instead of a silently
+ * dead button. Consumer modules don't use these — they carry their own `run`.
+ */
+export const NAV_ACTIONS = [
+  'buildPipeline',
+  'addFromRepo',
+  'bootstrapRepo',
+  'integrationsHub',
+  'sandbox',
+  'kaizen',
+  'infrastructure',
+  'environmentSetup',
+  'fragmentLibrary',
+  'mergeThresholds',
+  'workspaceSettings',
+  'modelConfiguration',
+  'serviceFragmentDefaults',
+  'localModels',
+  'accountSettings',
+  'operatorDashboard',
+  'shortcuts',
+] as const
+
+export type NavActionId = (typeof NAV_ACTIONS)[number]
+
 /** One destination, declared once and rendered per surface. */
 export interface NavContribution {
   id: string
@@ -79,7 +108,7 @@ export interface NavContribution {
    * `useNavContributions`. A consumer module that has its own stores instead
    * supplies {@link run} directly.
    */
-  action?: string
+  action?: NavActionId
   /** Direct handler (consumer modules); takes precedence over {@link action}. */
   run?: () => void
   /** Stable selector for e2e / existing specs. */
@@ -183,7 +212,7 @@ export const NAV_CONTRIBUTIONS: readonly NavContribution[] = [
     sidebar: { group: 'integrations', order: 20 },
     command: {
       group: 'workspace',
-      order: 60,
+      order: 70,
       labelKey: 'layout.commandBar.cmd.sandbox',
       keywordsKey: 'layout.commandBar.keywords.sandbox',
     },
@@ -228,7 +257,7 @@ export const NAV_CONTRIBUTIONS: readonly NavContribution[] = [
     sidebar: { group: 'workspaceContext', order: 10 },
     command: {
       group: 'workspace',
-      order: 20,
+      order: 10,
       labelKey: 'layout.commandBar.cmd.fragments',
       keywordsKey: 'layout.commandBar.keywords.fragments',
     },
@@ -242,7 +271,7 @@ export const NAV_CONTRIBUTIONS: readonly NavContribution[] = [
     action: 'mergeThresholds',
     command: {
       group: 'workspace',
-      order: 5,
+      order: 20,
       keywordsKey: 'layout.commandBar.keywords.mergeThresholds',
     },
   },
@@ -257,7 +286,7 @@ export const NAV_CONTRIBUTIONS: readonly NavContribution[] = [
     sidebar: { group: 'configuration', order: 10 },
     command: {
       group: 'workspace',
-      order: 10,
+      order: 30,
       labelKey: 'layout.commandBar.cmd.workspaceSettings',
       keywordsKey: 'layout.commandBar.keywords.workspaceSettings',
     },
@@ -273,7 +302,7 @@ export const NAV_CONTRIBUTIONS: readonly NavContribution[] = [
     sidebar: { group: 'configuration', order: 20 },
     command: {
       group: 'workspace',
-      order: 30,
+      order: 40,
       labelKey: 'layout.commandBar.cmd.modelConfiguration',
       keywordsKey: 'layout.commandBar.keywords.modelConfiguration',
     },
@@ -287,7 +316,7 @@ export const NAV_CONTRIBUTIONS: readonly NavContribution[] = [
     action: 'serviceFragmentDefaults',
     command: {
       group: 'workspace',
-      order: 40,
+      order: 50,
       keywordsKey: 'layout.commandBar.keywords.serviceFragmentDefaults',
     },
   },
@@ -299,7 +328,7 @@ export const NAV_CONTRIBUTIONS: readonly NavContribution[] = [
     action: 'localModels',
     command: {
       group: 'workspace',
-      order: 50,
+      order: 60,
       keywordsKey: 'layout.commandBar.keywords.localModels',
     },
   },
@@ -337,7 +366,7 @@ export const NAV_CONTRIBUTIONS: readonly NavContribution[] = [
     action: 'shortcuts',
     command: {
       group: 'workspace',
-      order: 70,
+      order: 80,
       keywordsKey: 'layout.commandBar.keywords.shortcuts',
     },
   },
@@ -372,4 +401,83 @@ export function navSlotFilter(slots: AppSlots, deps: { gates?: NavGates }): AppS
     // the dev-open "absent access allows all" backend parity.
     nav: gates ? nav.filter((i) => (i.gate ? i.gate(gates) : true)) : nav,
   }
+}
+
+/** Sidebar sections, in render order; each header is `nav.<group>`. */
+export const SIDEBAR_GROUP_ORDER: readonly NavSidebarGroup[] = [
+  'create',
+  'repositories',
+  'integrations',
+  'infrastructure',
+  'workspaceContext',
+  'configuration',
+]
+
+/** Command-palette groups, in render order; each label is `layout.commandBar.groups.<group>`. */
+export const COMMAND_GROUP_ORDER: readonly NavCommandGroup[] = [
+  'create',
+  'repositories',
+  'integrations',
+  'workspace',
+  'account',
+]
+
+export interface SidebarGroup {
+  group: NavSidebarGroup
+  /** i18n key for the section header. */
+  labelKey: string
+  items: NavContribution[]
+}
+
+export interface CommandItem {
+  item: NavContribution
+  /** Resolved palette label i18n key. */
+  labelKey: string
+  /** Resolved palette keywords i18n key, if any. */
+  keywordsKey?: string
+}
+
+export interface CommandGroup {
+  group: NavCommandGroup
+  /** i18n key for the group label. */
+  labelKey: string
+  items: CommandItem[]
+}
+
+/**
+ * Pure grouping/ordering helpers over an already-gated item list. Kept here (not
+ * in the composable) so they're unit-testable without a Vue/Nuxt runtime — the
+ * composable just feeds them the reactive `nav` slot. Each returns groups in
+ * canonical order with empty groups dropped and items sorted by their per-surface
+ * `order`.
+ */
+export function groupSidebar(items: readonly NavContribution[]): SidebarGroup[] {
+  return SIDEBAR_GROUP_ORDER.map((group) => ({
+    group,
+    labelKey: `nav.${group}`,
+    items: items
+      .filter((i) => i.surfaces.includes('sidebar') && i.sidebar?.group === group)
+      .sort((a, b) => (a.sidebar?.order ?? 0) - (b.sidebar?.order ?? 0)),
+  })).filter((g) => g.items.length > 0)
+}
+
+export function groupCommands(items: readonly NavContribution[]): CommandGroup[] {
+  return COMMAND_GROUP_ORDER.map((group) => ({
+    group,
+    labelKey: `layout.commandBar.groups.${group}`,
+    items: items
+      .filter((i) => i.surfaces.includes('command') && i.command?.group === group)
+      .sort((a, b) => (a.command?.order ?? 0) - (b.command?.order ?? 0))
+      .map<CommandItem>((item) => ({
+        item,
+        labelKey: item.command?.labelKey ?? item.labelKey,
+        keywordsKey: item.command?.keywordsKey,
+      })),
+  })).filter((g) => g.items.length > 0)
+}
+
+export function sortToolbar(items: readonly NavContribution[]): NavContribution[] {
+  return items
+    .filter((i) => i.surfaces.includes('toolbar'))
+    .sort((a, b) => (a.toolbar?.order ?? 0) - (b.toolbar?.order ?? 0))
 }

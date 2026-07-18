@@ -1,6 +1,27 @@
 import { describe, expect, it } from 'vitest'
-import { NAV_CONTRIBUTIONS, navSlotFilter } from './nav-contributions'
+import enCatalog from '../../i18n/locales/en.json'
+import {
+  groupCommands,
+  groupSidebar,
+  NAV_ACTIONS,
+  NAV_CONTRIBUTIONS,
+  navSlotFilter,
+  sortToolbar,
+} from './nav-contributions'
 import type { AppSlots, NavGates } from './nav-contributions'
+
+/** The layer's base i18n catalog, used to prove every referenced key resolves. */
+const en = enCatalog as Record<string, unknown>
+
+/** Walk a dotted vue-i18n key path; true when it resolves to a leaf string. */
+function hasKey(path: string): boolean {
+  let node: unknown = en
+  for (const part of path.split('.')) {
+    if (typeof node !== 'object' || node === null || !(part in node)) return false
+    node = (node as Record<string, unknown>)[part]
+  }
+  return typeof node === 'string'
+}
 
 const NO_GATES: NavGates = {
   canWriteBoard: false,
@@ -70,5 +91,92 @@ describe('NAV_CONTRIBUTIONS catalog integrity', () => {
       // A first-party item is actionable (an id resolved host-side, or a run closure).
       expect(item.action ?? item.run, `${item.id} has no action`).toBeTruthy()
     }
+  })
+
+  it('every first-party action id is a known NAV_ACTION (no dead buttons)', () => {
+    // `useNavContributions` resolves an `action` against an exhaustive
+    // `Record<NavActionId, …>` handler map, so a catalog action outside
+    // NAV_ACTIONS would be a dead button. The type system already enforces this;
+    // this asserts it at runtime too (and that NAV_ACTIONS has no stale ids).
+    const declared = new Set<string>(NAV_ACTIONS)
+    const used = new Set<string>()
+    for (const item of NAV_CONTRIBUTIONS) {
+      if (!item.action) continue
+      used.add(item.action)
+      expect(declared.has(item.action), `${item.id} → unknown action ${item.action}`).toBe(true)
+    }
+    // No NAV_ACTION is orphaned (every declared handler id is actually used).
+    for (const action of NAV_ACTIONS) {
+      expect(used.has(action), `NAV_ACTION ${action} is unused`).toBe(true)
+    }
+  })
+
+  it('every referenced i18n key exists in the en catalog (no raw-key leak)', () => {
+    const missing: string[] = []
+    const check = (key: string | undefined) => {
+      if (key && !hasKey(key)) missing.push(key)
+    }
+    for (const group of ['create', 'repositories', 'integrations', 'workspace', 'account']) {
+      check(`layout.commandBar.groups.${group}`)
+    }
+    for (const group of [
+      'create',
+      'repositories',
+      'integrations',
+      'infrastructure',
+      'workspaceContext',
+      'configuration',
+    ]) {
+      check(`nav.${group}`)
+    }
+    for (const item of NAV_CONTRIBUTIONS) {
+      check(item.labelKey)
+      if (item.command) {
+        // Palette label falls back to the item's default labelKey.
+        check(item.command.labelKey ?? item.labelKey)
+        check(item.command.keywordsKey)
+      }
+    }
+    expect(missing).toEqual([])
+  })
+})
+
+describe('nav grouping helpers', () => {
+  it('groupSidebar orders sections + items and drops empty sections', () => {
+    const groups = groupSidebar(NAV_CONTRIBUTIONS)
+    expect(groups.map((g) => g.group)).toEqual([
+      'create',
+      'repositories',
+      'integrations',
+      'infrastructure',
+      'workspaceContext',
+      'configuration',
+    ])
+    const configuration = groups.find((g) => g.group === 'configuration')
+    expect(configuration?.items.map((i) => i.id)).toEqual([
+      'workspace-settings',
+      'model-config',
+      'account-settings',
+      'operator-dashboard',
+    ])
+  })
+
+  it('groupCommands preserves the pre-slice-1 workspace-group order', () => {
+    const workspace = groupCommands(NAV_CONTRIBUTIONS).find((g) => g.group === 'workspace')
+    // Same order the old CommandBar pushed them in (parity, not a reorder).
+    expect(workspace?.items.map((ci) => ci.item.id)).toEqual([
+      'fragments',
+      'merge-thresholds',
+      'workspace-settings',
+      'model-config',
+      'service-fragment-defaults',
+      'local-models',
+      'sandbox',
+      'keyboard-shortcuts',
+    ])
+  })
+
+  it('sortToolbar yields nothing first-party (consumer-only extension point)', () => {
+    expect(sortToolbar(NAV_CONTRIBUTIONS)).toEqual([])
   })
 })

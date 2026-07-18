@@ -137,17 +137,17 @@ const commands = computed<Command[]>(() => {
       keywords: ci.keywordsKey ? t(ci.keywordsKey) : undefined,
       run: () => invoke(ci.item),
     }))
-  const groupOrErr = (name: (typeof commandGroups.value)[number]['group']) => {
+  const groupOrEmpty = (name: (typeof commandGroups.value)[number]['group']) => {
     const g = staticByGroup.get(name)
     return g ? asCommand(g) : []
   }
   return [
-    ...groupOrErr('create'),
-    ...groupOrErr('repositories'),
-    ...groupOrErr('integrations'),
+    ...groupOrEmpty('create'),
+    ...groupOrEmpty('repositories'),
+    ...groupOrEmpty('integrations'),
     ...dynamicIntegrationCommands.value,
-    ...groupOrErr('workspace'),
-    ...groupOrErr('account'),
+    ...groupOrEmpty('workspace'),
+    ...groupOrEmpty('account'),
   ]
 })
 
