@@ -1100,14 +1100,14 @@ importers:
         specifier: ^0.1.0
         version: 0.1.0
       '@modular-vue/core':
-        specifier: ^1.0.0
-        version: 1.0.0(@modular-frontend/core@0.1.0)(@modular-vue/vue@1.0.0(@modular-frontend/core@0.1.0)(vue@3.5.40(typescript@6.0.3)))(vue-router@5.1.0(@vue/compiler-sfc@3.5.40)(esbuild@0.28.1)(pinia@3.0.4(typescript@6.0.3)(vue@3.5.40(typescript@6.0.3)))(rollup@4.62.2)(vite@7.3.6(@types/node@26.1.1)(jiti@2.7.0)(lightningcss@1.32.0)(terser@5.48.0)(tsx@4.22.4)(yaml@2.9.0))(vue@3.5.40(typescript@6.0.3)))(vue@3.5.40(typescript@6.0.3))
+        specifier: ^1.0.1
+        version: 1.0.1(@modular-frontend/core@0.1.0)(@modular-vue/vue@1.0.0(@modular-frontend/core@0.1.0)(vue@3.5.40(typescript@6.0.3)))(vue-router@5.1.0(@vue/compiler-sfc@3.5.40)(esbuild@0.28.1)(pinia@3.0.4(typescript@6.0.3)(vue@3.5.40(typescript@6.0.3)))(rollup@4.62.2)(vite@7.3.6(@types/node@26.1.1)(jiti@2.7.0)(lightningcss@1.32.0)(terser@5.48.0)(tsx@4.22.4)(yaml@2.9.0))(vue@3.5.40(typescript@6.0.3)))(vue@3.5.40(typescript@6.0.3))
       '@modular-vue/nuxt':
-        specifier: ^0.1.0
-        version: 0.1.0(e4e42a1119695867d5531c7c08fc7255)
+        specifier: ^0.1.1
+        version: 0.1.1(66a0fdc0ae9c4bfb1fa3df1ce5ddb9ad)
       '@modular-vue/runtime':
-        specifier: ^1.0.0
-        version: 1.0.0(@modular-frontend/core@0.1.0)(@modular-vue/core@1.0.0(@modular-frontend/core@0.1.0)(@modular-vue/vue@1.0.0(@modular-frontend/core@0.1.0)(vue@3.5.40(typescript@6.0.3)))(vue-router@5.1.0(@vue/compiler-sfc@3.5.40)(esbuild@0.28.1)(pinia@3.0.4(typescript@6.0.3)(vue@3.5.40(typescript@6.0.3)))(rollup@4.62.2)(vite@7.3.6(@types/node@26.1.1)(jiti@2.7.0)(lightningcss@1.32.0)(terser@5.48.0)(tsx@4.22.4)(yaml@2.9.0))(vue@3.5.40(typescript@6.0.3)))(vue@3.5.40(typescript@6.0.3)))(@modular-vue/vue@1.0.0(@modular-frontend/core@0.1.0)(vue@3.5.40(typescript@6.0.3)))(vue-router@5.1.0(@vue/compiler-sfc@3.5.40)(esbuild@0.28.1)(pinia@3.0.4(typescript@6.0.3)(vue@3.5.40(typescript@6.0.3)))(rollup@4.62.2)(vite@7.3.6(@types/node@26.1.1)(jiti@2.7.0)(lightningcss@1.32.0)(terser@5.48.0)(tsx@4.22.4)(yaml@2.9.0))(vue@3.5.40(typescript@6.0.3)))(vue@3.5.40(typescript@6.0.3))
+        specifier: ^1.0.1
+        version: 1.0.1(@modular-frontend/core@0.1.0)(@modular-vue/core@1.0.1(@modular-frontend/core@0.1.0)(@modular-vue/vue@1.0.0(@modular-frontend/core@0.1.0)(vue@3.5.40(typescript@6.0.3)))(vue-router@5.1.0(@vue/compiler-sfc@3.5.40)(esbuild@0.28.1)(pinia@3.0.4(typescript@6.0.3)(vue@3.5.40(typescript@6.0.3)))(rollup@4.62.2)(vite@7.3.6(@types/node@26.1.1)(jiti@2.7.0)(lightningcss@1.32.0)(terser@5.48.0)(tsx@4.22.4)(yaml@2.9.0))(vue@3.5.40(typescript@6.0.3)))(vue@3.5.40(typescript@6.0.3)))(@modular-vue/vue@1.0.0(@modular-frontend/core@0.1.0)(vue@3.5.40(typescript@6.0.3)))(vue-router@5.1.0(@vue/compiler-sfc@3.5.40)(esbuild@0.28.1)(pinia@3.0.4(typescript@6.0.3)(vue@3.5.40(typescript@6.0.3)))(rollup@4.62.2)(vite@7.3.6(@types/node@26.1.1)(jiti@2.7.0)(lightningcss@1.32.0)(terser@5.48.0)(tsx@4.22.4)(yaml@2.9.0))(vue@3.5.40(typescript@6.0.3)))(vue@3.5.40(typescript@6.0.3))
       '@modular-vue/vue':
         specifier: ^1.0.0
         version: 1.0.0(@modular-frontend/core@0.1.0)(vue@3.5.40(typescript@6.0.3))
@@ -2596,30 +2596,30 @@ packages:
   '@modular-frontend/core@0.1.0':
     resolution: {integrity: sha512-UTPyVfGFtHZjr/oh/vj+dC81PZyCxWRLjqZQRoExa1g1/CcLXlowadyHZFocR6WYpaxmrEPNmXFI7so/kzxnjQ==}
 
-  '@modular-vue/core@1.0.0':
-    resolution: {integrity: sha512-NFSBFb9mnz3L+7gEGB6YLKKxeOTobFd7pE0ug34Z0z+VpAisXxiSbGndBvC9Bl8qaE3ZZoYa8OV0ht7UQvPfIA==}
+  '@modular-vue/core@1.0.1':
+    resolution: {integrity: sha512-xIQn5vl1F/RrM57R2ZsfB8LIl2w+WC3XrW+NQ7fibVgiQ402uef4Nb/VUpAwGhK7F6p9lHK9N6h1i/YnjwyQEQ==}
     peerDependencies:
       '@modular-frontend/core': ^0.1.0
       '@modular-vue/vue': ^1.0.0
       vue: 3.5.40
-      vue-router: ^4.5.0
+      vue-router: ^4.5.0 || ^5.0.0
 
-  '@modular-vue/nuxt@0.1.0':
-    resolution: {integrity: sha512-Bmv9TaItOSr2nRNS9PvtGxmE3C1m1SkqHENTjWPrCEdf4xUw0vP5RIZ8zo9NuMwsJ9S7EjuSP9J/p0fuw1UxGQ==}
+  '@modular-vue/nuxt@0.1.1':
+    resolution: {integrity: sha512-RcRNbwy09NRBN8wHL+wW1V+kDz4kMmqAqTmnLOer4qp2UD4ZS0f/YKQY8DFDZ1n8UaFcPCZzgr77WV7kL42ZUg==}
     peerDependencies:
       '@modular-frontend/core': ^0.1.0
       '@modular-vue/runtime': ^1.0.0
       vue: 3.5.40
-      vue-router: ^4.5.0
+      vue-router: ^4.5.0 || ^5.0.0
 
-  '@modular-vue/runtime@1.0.0':
-    resolution: {integrity: sha512-o85KOL88ndGPy21fLhLPoHlzFU3eK5JQHmN/tR8acP3nt0fSjcsidopCC9cNuoot59FM5ug0UitjRA7YUyn8qQ==}
+  '@modular-vue/runtime@1.0.1':
+    resolution: {integrity: sha512-TtHhL4t+/FdwfWlJynA7x9JC4bjIamZUQL8mXUAS2by429L6okhZLNg6zG+zRSHSdjy2DqmULLUynmj4msclXQ==}
     peerDependencies:
       '@modular-frontend/core': ^0.1.0
       '@modular-vue/core': ^1.0.0
       '@modular-vue/vue': ^1.0.0
       vue: 3.5.40
-      vue-router: ^4.5.0
+      vue-router: ^4.5.0 || ^5.0.0
 
   '@modular-vue/vue@1.0.0':
     resolution: {integrity: sha512-pWvvHfiBswR609dTM7VX7I/B0XpNHPRYiLBMv/Lt4OFdgNd/VdLk1hrS29MvvllqcW4uzuQ7lGofTLoRK5Dlsg==}
@@ -10467,27 +10467,27 @@ snapshots:
     dependencies:
       '@standard-schema/spec': 1.1.0
 
-  '@modular-vue/core@1.0.0(@modular-frontend/core@0.1.0)(@modular-vue/vue@1.0.0(@modular-frontend/core@0.1.0)(vue@3.5.40(typescript@6.0.3)))(vue-router@5.1.0(@vue/compiler-sfc@3.5.40)(esbuild@0.28.1)(pinia@3.0.4(typescript@6.0.3)(vue@3.5.40(typescript@6.0.3)))(rollup@4.62.2)(vite@7.3.6(@types/node@26.1.1)(jiti@2.7.0)(lightningcss@1.32.0)(terser@5.48.0)(tsx@4.22.4)(yaml@2.9.0))(vue@3.5.40(typescript@6.0.3)))(vue@3.5.40(typescript@6.0.3))':
+  '@modular-vue/core@1.0.1(@modular-frontend/core@0.1.0)(@modular-vue/vue@1.0.0(@modular-frontend/core@0.1.0)(vue@3.5.40(typescript@6.0.3)))(vue-router@5.1.0(@vue/compiler-sfc@3.5.40)(esbuild@0.28.1)(pinia@3.0.4(typescript@6.0.3)(vue@3.5.40(typescript@6.0.3)))(rollup@4.62.2)(vite@7.3.6(@types/node@26.1.1)(jiti@2.7.0)(lightningcss@1.32.0)(terser@5.48.0)(tsx@4.22.4)(yaml@2.9.0))(vue@3.5.40(typescript@6.0.3)))(vue@3.5.40(typescript@6.0.3))':
     dependencies:
       '@modular-frontend/core': 0.1.0
       '@modular-vue/vue': 1.0.0(@modular-frontend/core@0.1.0)(vue@3.5.40(typescript@6.0.3))
       vue: 3.5.40(typescript@6.0.3)
       vue-router: 5.1.0(@vue/compiler-sfc@3.5.40)(esbuild@0.28.1)(pinia@3.0.4(typescript@6.0.3)(vue@3.5.40(typescript@6.0.3)))(rollup@4.62.2)(vite@7.3.6(@types/node@26.1.1)(jiti@2.7.0)(lightningcss@1.32.0)(terser@5.48.0)(tsx@4.22.4)(yaml@2.9.0))(vue@3.5.40(typescript@6.0.3))
 
-  '@modular-vue/nuxt@0.1.0(e4e42a1119695867d5531c7c08fc7255)':
+  '@modular-vue/nuxt@0.1.1(66a0fdc0ae9c4bfb1fa3df1ce5ddb9ad)':
     dependencies:
       '@modular-frontend/core': 0.1.0
-      '@modular-vue/runtime': 1.0.0(@modular-frontend/core@0.1.0)(@modular-vue/core@1.0.0(@modular-frontend/core@0.1.0)(@modular-vue/vue@1.0.0(@modular-frontend/core@0.1.0)(vue@3.5.40(typescript@6.0.3)))(vue-router@5.1.0(@vue/compiler-sfc@3.5.40)(esbuild@0.28.1)(pinia@3.0.4(typescript@6.0.3)(vue@3.5.40(typescript@6.0.3)))(rollup@4.62.2)(vite@7.3.6(@types/node@26.1.1)(jiti@2.7.0)(lightningcss@1.32.0)(terser@5.48.0)(tsx@4.22.4)(yaml@2.9.0))(vue@3.5.40(typescript@6.0.3)))(vue@3.5.40(typescript@6.0.3)))(@modular-vue/vue@1.0.0(@modular-frontend/core@0.1.0)(vue@3.5.40(typescript@6.0.3)))(vue-router@5.1.0(@vue/compiler-sfc@3.5.40)(esbuild@0.28.1)(pinia@3.0.4(typescript@6.0.3)(vue@3.5.40(typescript@6.0.3)))(rollup@4.62.2)(vite@7.3.6(@types/node@26.1.1)(jiti@2.7.0)(lightningcss@1.32.0)(terser@5.48.0)(tsx@4.22.4)(yaml@2.9.0))(vue@3.5.40(typescript@6.0.3)))(vue@3.5.40(typescript@6.0.3))
+      '@modular-vue/runtime': 1.0.1(@modular-frontend/core@0.1.0)(@modular-vue/core@1.0.1(@modular-frontend/core@0.1.0)(@modular-vue/vue@1.0.0(@modular-frontend/core@0.1.0)(vue@3.5.40(typescript@6.0.3)))(vue-router@5.1.0(@vue/compiler-sfc@3.5.40)(esbuild@0.28.1)(pinia@3.0.4(typescript@6.0.3)(vue@3.5.40(typescript@6.0.3)))(rollup@4.62.2)(vite@7.3.6(@types/node@26.1.1)(jiti@2.7.0)(lightningcss@1.32.0)(terser@5.48.0)(tsx@4.22.4)(yaml@2.9.0))(vue@3.5.40(typescript@6.0.3)))(vue@3.5.40(typescript@6.0.3)))(@modular-vue/vue@1.0.0(@modular-frontend/core@0.1.0)(vue@3.5.40(typescript@6.0.3)))(vue-router@5.1.0(@vue/compiler-sfc@3.5.40)(esbuild@0.28.1)(pinia@3.0.4(typescript@6.0.3)(vue@3.5.40(typescript@6.0.3)))(rollup@4.62.2)(vite@7.3.6(@types/node@26.1.1)(jiti@2.7.0)(lightningcss@1.32.0)(terser@5.48.0)(tsx@4.22.4)(yaml@2.9.0))(vue@3.5.40(typescript@6.0.3)))(vue@3.5.40(typescript@6.0.3))
       '@nuxt/kit': 3.21.8(magicast@0.5.3)
       vue: 3.5.40(typescript@6.0.3)
       vue-router: 5.1.0(@vue/compiler-sfc@3.5.40)(esbuild@0.28.1)(pinia@3.0.4(typescript@6.0.3)(vue@3.5.40(typescript@6.0.3)))(rollup@4.62.2)(vite@7.3.6(@types/node@26.1.1)(jiti@2.7.0)(lightningcss@1.32.0)(terser@5.48.0)(tsx@4.22.4)(yaml@2.9.0))(vue@3.5.40(typescript@6.0.3))
     transitivePeerDependencies:
       - magicast
 
-  '@modular-vue/runtime@1.0.0(@modular-frontend/core@0.1.0)(@modular-vue/core@1.0.0(@modular-frontend/core@0.1.0)(@modular-vue/vue@1.0.0(@modular-frontend/core@0.1.0)(vue@3.5.40(typescript@6.0.3)))(vue-router@5.1.0(@vue/compiler-sfc@3.5.40)(esbuild@0.28.1)(pinia@3.0.4(typescript@6.0.3)(vue@3.5.40(typescript@6.0.3)))(rollup@4.62.2)(vite@7.3.6(@types/node@26.1.1)(jiti@2.7.0)(lightningcss@1.32.0)(terser@5.48.0)(tsx@4.22.4)(yaml@2.9.0))(vue@3.5.40(typescript@6.0.3)))(vue@3.5.40(typescript@6.0.3)))(@modular-vue/vue@1.0.0(@modular-frontend/core@0.1.0)(vue@3.5.40(typescript@6.0.3)))(vue-router@5.1.0(@vue/compiler-sfc@3.5.40)(esbuild@0.28.1)(pinia@3.0.4(typescript@6.0.3)(vue@3.5.40(typescript@6.0.3)))(rollup@4.62.2)(vite@7.3.6(@types/node@26.1.1)(jiti@2.7.0)(lightningcss@1.32.0)(terser@5.48.0)(tsx@4.22.4)(yaml@2.9.0))(vue@3.5.40(typescript@6.0.3)))(vue@3.5.40(typescript@6.0.3))':
+  '@modular-vue/runtime@1.0.1(@modular-frontend/core@0.1.0)(@modular-vue/core@1.0.1(@modular-frontend/core@0.1.0)(@modular-vue/vue@1.0.0(@modular-frontend/core@0.1.0)(vue@3.5.40(typescript@6.0.3)))(vue-router@5.1.0(@vue/compiler-sfc@3.5.40)(esbuild@0.28.1)(pinia@3.0.4(typescript@6.0.3)(vue@3.5.40(typescript@6.0.3)))(rollup@4.62.2)(vite@7.3.6(@types/node@26.1.1)(jiti@2.7.0)(lightningcss@1.32.0)(terser@5.48.0)(tsx@4.22.4)(yaml@2.9.0))(vue@3.5.40(typescript@6.0.3)))(vue@3.5.40(typescript@6.0.3)))(@modular-vue/vue@1.0.0(@modular-frontend/core@0.1.0)(vue@3.5.40(typescript@6.0.3)))(vue-router@5.1.0(@vue/compiler-sfc@3.5.40)(esbuild@0.28.1)(pinia@3.0.4(typescript@6.0.3)(vue@3.5.40(typescript@6.0.3)))(rollup@4.62.2)(vite@7.3.6(@types/node@26.1.1)(jiti@2.7.0)(lightningcss@1.32.0)(terser@5.48.0)(tsx@4.22.4)(yaml@2.9.0))(vue@3.5.40(typescript@6.0.3)))(vue@3.5.40(typescript@6.0.3))':
     dependencies:
       '@modular-frontend/core': 0.1.0
-      '@modular-vue/core': 1.0.0(@modular-frontend/core@0.1.0)(@modular-vue/vue@1.0.0(@modular-frontend/core@0.1.0)(vue@3.5.40(typescript@6.0.3)))(vue-router@5.1.0(@vue/compiler-sfc@3.5.40)(esbuild@0.28.1)(pinia@3.0.4(typescript@6.0.3)(vue@3.5.40(typescript@6.0.3)))(rollup@4.62.2)(vite@7.3.6(@types/node@26.1.1)(jiti@2.7.0)(lightningcss@1.32.0)(terser@5.48.0)(tsx@4.22.4)(yaml@2.9.0))(vue@3.5.40(typescript@6.0.3)))(vue@3.5.40(typescript@6.0.3))
+      '@modular-vue/core': 1.0.1(@modular-frontend/core@0.1.0)(@modular-vue/vue@1.0.0(@modular-frontend/core@0.1.0)(vue@3.5.40(typescript@6.0.3)))(vue-router@5.1.0(@vue/compiler-sfc@3.5.40)(esbuild@0.28.1)(pinia@3.0.4(typescript@6.0.3)(vue@3.5.40(typescript@6.0.3)))(rollup@4.62.2)(vite@7.3.6(@types/node@26.1.1)(jiti@2.7.0)(lightningcss@1.32.0)(terser@5.48.0)(tsx@4.22.4)(yaml@2.9.0))(vue@3.5.40(typescript@6.0.3)))(vue@3.5.40(typescript@6.0.3))
       '@modular-vue/vue': 1.0.0(@modular-frontend/core@0.1.0)(vue@3.5.40(typescript@6.0.3))
       vue: 3.5.40(typescript@6.0.3)
       vue-router: 5.1.0(@vue/compiler-sfc@3.5.40)(esbuild@0.28.1)(pinia@3.0.4(typescript@6.0.3)(vue@3.5.40(typescript@6.0.3)))(rollup@4.62.2)(vite@7.3.6(@types/node@26.1.1)(jiti@2.7.0)(lightningcss@1.32.0)(terser@5.48.0)(tsx@4.22.4)(yaml@2.9.0))(vue@3.5.40(typescript@6.0.3))
@@ -17021,7 +17021,7 @@ snapshots:
       esbuild: 0.28.1
       fdir: 6.5.0(picomatch@4.0.5)
       picomatch: 4.0.5
-      postcss: 8.5.16
+      postcss: 8.5.19
       rollup: 4.62.2
       tinyglobby: 0.2.17
     optionalDependencies:
