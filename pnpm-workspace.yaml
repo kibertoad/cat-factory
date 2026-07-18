@@ -14,7 +14,14 @@
 # The floor is 3.5.40: `@modular-vue/*` peer-requires `vue@^3.5.40`, so the whole
 # family moves up together to keep the single-singleton invariant while satisfying
 # the modular-vue adoption (docs/initiatives/modular-vue-adoption.md).
+# TEMPORARY local link for the modular-vue slice-1 co-evolution loop: cat-factory
+# develops the nav manifest against the unreleased `useReactiveSlots` API from
+# modular-react#88. Remove these two overrides and bump the `@modular-vue/*` pins
+# in frontend/app/package.json once #88 releases (see
+# docs/initiatives/modular-vue-adoption.md — "standard upstream mechanism").
 overrides:
+  '@modular-vue/vue': 'file:../modular-react/packages/vue'
+  '@modular-vue/runtime': 'file:../modular-react/packages/vue-runtime'
   vue: 3.5.40
   '@vue/compiler-core': 3.5.40
   '@vue/compiler-dom': 3.5.40

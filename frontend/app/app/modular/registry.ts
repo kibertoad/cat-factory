@@ -1,7 +1,8 @@
-import { defineModule } from '@modular-vue/core'
 import type { AnyModuleDescriptor } from '@modular-vue/core'
 import { createRegistry } from '@modular-vue/runtime'
 import type { ModuleRegistry } from '@modular-vue/runtime'
+import { navigationModule } from '~/modular/nav-contributions'
+import type { AppSlots, NavGates } from '~/modular/nav-contributions'
 
 /**
  * modular-vue registry for the `@cat-factory/app` layer (slice 0 of the
@@ -13,21 +14,29 @@ import type { ModuleRegistry } from '@modular-vue/runtime'
  * contributes its own, all through the same seam. The registry is resolved and
  * installed by `app/plugins/modular.client.ts`.
  *
- * Slice 0 wires the plumbing behind ZERO behaviour change: the one first-party
- * module carries no navigation / slots / component, so nothing new renders.
- * Later slices convert real areas (navigation, result views, wizards, inspector
- * panels) into modules registered here.
+ * Slice 1 registers the first real feature module: `cat-factory:navigation`
+ * contributes the whole nav/command catalog to the `nav` slot, gated reactively
+ * by a `gates` service + `navSlotFilter` and rendered by `SideBar`, `CommandBar`,
+ * and `BoardToolbar` via `useReactiveSlots`. Later slices add result views,
+ * wizards, and inspector panels as further modules registered here.
  */
 
 /**
- * First-party modules the layer always registers. Kept tiny on purpose for
- * slice 0 — a single descriptor with no contributions, present only to prove the
- * registration pipeline end to end and give the seam a stable anchor. Real
- * feature modules land here as later slices convert each area.
+ * The layer's shared-dependency shape (grows as later slices wire more deps).
+ * A `type` (not `interface`) so it satisfies the registry's
+ * `Record<string, any>` dependency constraint — an interface lacks the implicit
+ * index signature a type-literal has.
  */
-const FIRST_PARTY_MODULES: readonly AnyModuleDescriptor[] = [
-  defineModule({ id: 'cat-factory:core', version: '1.0.0' }),
-]
+export type AppDeps = {
+  /** Reactive RBAC/availability gates the nav `slotFilter` reads. */
+  gates: NavGates
+}
+
+/**
+ * First-party modules the layer always registers. Real feature modules land
+ * here as each area is converted; slice 1 adds the navigation catalog.
+ */
+const FIRST_PARTY_MODULES: readonly AnyModuleDescriptor[] = [navigationModule]
 
 /**
  * Consumer-contributed modules, collected before the layer resolves its
@@ -65,9 +74,18 @@ export function __resetConsumerModulesForTest(): void {
  * contributed via {@link registerAppModule}. A new registry per call because
  * `resolve()` / `resolveManifest()` are single-commit; the install plugin calls
  * this exactly once at client startup (`ssr: false`, so a singleton app).
+ *
+ * `deps.gates` is the reactive gate service the nav `slotFilter` reads; it's
+ * built in the install plugin (Vue context) and registered as a `service` so
+ * `useReactiveSlots` tracks it. The `nav` slot default is seeded empty so the
+ * key always exists even before any module (or with only consumer modules)
+ * contributes.
  */
-export function createAppRegistry(): ModuleRegistry<Record<string, unknown>> {
-  const registry = createRegistry<Record<string, unknown>>({})
+export function createAppRegistry(deps: AppDeps): ModuleRegistry<AppDeps, AppSlots> {
+  const registry = createRegistry<AppDeps, AppSlots>({
+    services: { gates: deps.gates },
+    slots: { nav: [] },
+  })
   for (const mod of [...FIRST_PARTY_MODULES, ...consumerModules]) {
     registry.register(mod)
   }

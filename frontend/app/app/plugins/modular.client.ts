@@ -1,5 +1,7 @@
 import { installModularApp } from '@modular-vue/nuxt/runtime'
 import { createAppRegistry } from '~/modular/registry'
+import { navSlotFilter } from '~/modular/nav-contributions'
+import { createNavGates } from '~/modular/nav-gates'
 
 /**
  * Wire the modular-vue registry into the Nuxt app (slice 0 of the modular-vue
@@ -16,17 +18,23 @@ import { createAppRegistry } from '~/modular/registry'
  *
  * `ssr: false`, so this runs once on the client and a singleton registry is
  * fine. `installModularApp` is the router-owning path: it grafts each module's
- * routes onto Nuxt's router (none yet — slice 0 modules are non-routed) and
- * installs the modular contexts (shared deps, navigation, slots) app-wide. The
- * resolved manifest is exposed as `$modular` for later slices; nothing reads it
- * yet, which is what keeps this behaviour-neutral.
+ * routes onto Nuxt's router (none yet — the nav modules are non-routed) and
+ * installs the modular contexts (shared deps, navigation, slots) app-wide.
+ *
+ * Slice 1 wires the reactive nav gating here: `createNavGates()` builds the
+ * reactive `gates` service (Pinia + composables are available in a `post`
+ * plugin), which the registry registers as a `service` and `navSlotFilter` reads
+ * per item. The shells consume the gated `nav` slot through `useReactiveSlots`,
+ * so a permission/connection flip re-gates them with no `recalculateSlots()`.
  */
 export default defineNuxtPlugin({
   name: 'cat-factory:modular',
   enforce: 'post',
   setup(nuxtApp) {
-    const registry = createAppRegistry()
-    const manifest = installModularApp({ vueApp: nuxtApp.vueApp, $router: useRouter() }, registry)
+    const registry = createAppRegistry({ gates: createNavGates() })
+    const manifest = installModularApp({ vueApp: nuxtApp.vueApp, $router: useRouter() }, registry, {
+      slotFilter: navSlotFilter,
+    })
     return { provide: { modular: manifest } }
   },
 })
