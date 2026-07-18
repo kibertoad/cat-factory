@@ -25,6 +25,13 @@ const tasks = useTasksStore()
 const library = useFragmentLibraryStore()
 const access = useWorkspaceAccess()
 
+// The static destination catalog + its RBAC/availability gating now comes from
+// the shared nav manifest (docs/initiatives/modular-vue-adoption.md, slice 1),
+// rendered here as command entries. The DYNAMIC per-connection commands below
+// (github/slack/doc/task connect + import) stay local to the palette — they vary
+// per live connection, so they are not part of the static manifest this slice.
+const { commandGroups, invoke } = useNavContributions()
+
 const open = computed({
   get: () => ui.commandBarOpen,
   set: (v: boolean) => (v ? ui.openCommandBar() : ui.closeCommandBar()),
@@ -33,209 +40,115 @@ const open = computed({
 const query = ref('')
 const activeIndex = ref(0)
 
-const commands = computed<Command[]>(() => {
-  const list: Command[] = []
-
-  const groupCreate = t('layout.commandBar.groups.create')
-  const groupRepositories = t('layout.commandBar.groups.repositories')
+// The per-connection integration commands the manifest deliberately doesn't
+// carry: their label (connect vs manage) and set (one per document/task source)
+// depend on live connection state. Gated by `integrations.manage`, they render
+// under the palette's Integrations group.
+const dynamicIntegrationCommands = computed<Command[]>(() => {
+  if (!access.canManageIntegrations.value) return []
   const groupIntegrations = t('layout.commandBar.groups.integrations')
-  const groupWorkspace = t('layout.commandBar.groups.workspace')
-  const groupAccount = t('layout.commandBar.groups.account')
-
-  // ---- Create -------------------------------------------------------------
-  // Command entries mirror the SideBar nav gating: each is listed only when the caller
-  // holds the permission its action's writes require (dev-open ⇒ every `can*` is true).
-  if (access.canWriteBoard.value) {
+  const list: Command[] = []
+  if (github.available) {
     list.push({
-      id: 'new-pipeline',
-      label: t('layout.commandBar.cmd.newPipeline'),
-      group: groupCreate,
-      icon: 'i-lucide-workflow',
-      keywords: t('layout.commandBar.keywords.newPipeline'),
-      run: () => ui.openBuilder(),
+      id: 'github',
+      label: github.connected
+        ? t('layout.commandBar.cmd.githubManage')
+        : t('layout.commandBar.cmd.githubConnect'),
+      group: groupIntegrations,
+      icon: 'i-lucide-github',
+      keywords: t('layout.commandBar.keywords.github'),
+      run: () => ui.openGitHub(),
     })
   }
-
-  // ---- Repositories -------------------------------------------------------
-  if (github.available && access.canWriteBoard.value) {
+  if (slack.available) {
     list.push({
-      id: 'add-from-repo',
-      label: t('layout.commandBar.cmd.addFromRepo'),
-      group: groupRepositories,
-      icon: 'i-lucide-folder-git-2',
-      keywords: t('layout.commandBar.keywords.addFromRepo'),
-      run: () => ui.openAddService(),
+      id: 'slack',
+      label: slack.connected
+        ? t('layout.commandBar.cmd.slackManage')
+        : t('layout.commandBar.cmd.slackConnect'),
+      group: groupIntegrations,
+      icon: 'i-lucide-slack',
+      keywords: t('layout.commandBar.keywords.slack'),
+      run: () => ui.openSlack(),
     })
   }
-  if (access.canManageIntegrations.value) {
-    list.push({
-      id: 'bootstrap-repo',
-      label: t('layout.commandBar.cmd.bootstrapRepo'),
-      group: groupRepositories,
-      icon: 'i-lucide-git-branch-plus',
-      keywords: t('layout.commandBar.keywords.bootstrapRepo'),
-      run: () => ui.openBootstrap(),
-    })
-  }
-
-  // ---- Integrations (connection management — `integrations.manage`) --------
-  if (access.canManageIntegrations.value) {
-    if (github.available) {
+  if (documents.available) {
+    for (const src of documents.sources) {
       list.push({
-        id: 'github',
-        label: github.connected
-          ? t('layout.commandBar.cmd.githubManage')
-          : t('layout.commandBar.cmd.githubConnect'),
+        id: `doc-connect-${src.source}`,
+        label: documents.isConnected(src.source)
+          ? t('layout.commandBar.cmd.sourceManage', { source: src.label })
+          : t('layout.commandBar.cmd.sourceConnect', { source: src.label }),
         group: groupIntegrations,
-        icon: 'i-lucide-github',
-        keywords: t('layout.commandBar.keywords.github'),
-        run: () => ui.openGitHub(),
+        icon: src.icon,
+        keywords: t('layout.commandBar.keywords.documentSource'),
+        run: () => ui.openDocumentConnect(src.source),
       })
     }
-    if (slack.available) {
+    if (documents.anyConnected) {
       list.push({
-        id: 'slack',
-        label: slack.connected
-          ? t('layout.commandBar.cmd.slackManage')
-          : t('layout.commandBar.cmd.slackConnect'),
+        id: 'doc-import',
+        label: t('layout.commandBar.cmd.documentImport'),
         group: groupIntegrations,
-        icon: 'i-lucide-slack',
-        keywords: t('layout.commandBar.keywords.slack'),
-        run: () => ui.openSlack(),
+        icon: 'i-lucide-file-down',
+        keywords: t('layout.commandBar.keywords.documentImport'),
+        run: () => ui.openDocumentImport(null),
       })
     }
-    if (documents.available) {
-      for (const src of documents.sources) {
-        list.push({
-          id: `doc-connect-${src.source}`,
-          label: documents.isConnected(src.source)
-            ? t('layout.commandBar.cmd.sourceManage', { source: src.label })
-            : t('layout.commandBar.cmd.sourceConnect', { source: src.label }),
-          group: groupIntegrations,
-          icon: src.icon,
-          keywords: t('layout.commandBar.keywords.documentSource'),
-          run: () => ui.openDocumentConnect(src.source),
-        })
-      }
-      if (documents.anyConnected) {
-        list.push({
-          id: 'doc-import',
-          label: t('layout.commandBar.cmd.documentImport'),
-          group: groupIntegrations,
-          icon: 'i-lucide-file-down',
-          keywords: t('layout.commandBar.keywords.documentImport'),
-          run: () => ui.openDocumentImport(null),
-        })
-      }
-    }
-    if (tasks.available) {
-      for (const src of tasks.sources) {
-        list.push({
-          id: `task-connect-${src.source}`,
-          label: src.available
-            ? t('layout.commandBar.cmd.sourceManage', { source: src.label })
-            : t('layout.commandBar.cmd.sourceConnect', { source: src.label }),
-          group: groupIntegrations,
-          icon: src.icon,
-          keywords: t('layout.commandBar.keywords.taskSource'),
-          run: () => ui.openTaskConnect(src.source),
-        })
-      }
-      if (tasks.anyOffered) {
-        list.push({
-          id: 'task-import',
-          label: t('layout.commandBar.cmd.taskImport'),
-          group: groupIntegrations,
-          icon: 'i-lucide-file-down',
-          keywords: t('layout.commandBar.keywords.taskImport'),
-          run: () => ui.openTaskImport(null),
-        })
-      }
-    }
   }
-
-  // ---- Workspace ----------------------------------------------------------
-  // Workspace + model configuration and the fragment library are `settings.manage`.
-  if (access.canManageSettings.value) {
-    if (library.available) {
+  if (tasks.available) {
+    for (const src of tasks.sources) {
       list.push({
-        id: 'fragments',
-        label: t('layout.commandBar.cmd.fragments'),
-        group: groupWorkspace,
-        icon: 'i-lucide-book-marked',
-        keywords: t('layout.commandBar.keywords.fragments'),
-        run: () => ui.openFragmentLibrary(),
+        id: `task-connect-${src.source}`,
+        label: src.available
+          ? t('layout.commandBar.cmd.sourceManage', { source: src.label })
+          : t('layout.commandBar.cmd.sourceConnect', { source: src.label }),
+        group: groupIntegrations,
+        icon: src.icon,
+        keywords: t('layout.commandBar.keywords.taskSource'),
+        run: () => ui.openTaskConnect(src.source),
       })
     }
-    list.push({
-      id: 'merge-thresholds',
-      label: t('layout.commandBar.cmd.mergeThresholds'),
-      group: groupWorkspace,
-      icon: 'i-lucide-git-merge',
-      keywords: t('layout.commandBar.keywords.mergeThresholds'),
-      run: () => ui.openWorkspaceSettings('merge'),
-    })
-    list.push({
-      id: 'workspace-settings',
-      label: t('layout.commandBar.cmd.workspaceSettings'),
-      group: groupWorkspace,
-      icon: 'i-lucide-sliders-horizontal',
-      keywords: t('layout.commandBar.keywords.workspaceSettings'),
-      run: () => ui.openWorkspaceSettings(),
-    })
-    list.push({
-      id: 'model-configuration',
-      label: t('layout.commandBar.cmd.modelConfiguration'),
-      group: groupWorkspace,
-      icon: 'i-lucide-cpu',
-      keywords: t('layout.commandBar.keywords.modelConfiguration'),
-      run: () => ui.openModelConfig(),
-    })
-    list.push({
-      id: 'service-fragment-defaults',
-      label: t('layout.commandBar.cmd.serviceFragmentDefaults'),
-      group: groupWorkspace,
-      icon: 'i-lucide-book-open-check',
-      keywords: t('layout.commandBar.keywords.serviceFragmentDefaults'),
-      run: () => ui.openWorkspaceSettings('fragments'),
-    })
+    if (tasks.anyOffered) {
+      list.push({
+        id: 'task-import',
+        label: t('layout.commandBar.cmd.taskImport'),
+        group: groupIntegrations,
+        icon: 'i-lucide-file-down',
+        keywords: t('layout.commandBar.keywords.taskImport'),
+        run: () => ui.openTaskImport(null),
+      })
+    }
   }
-  list.push({
-    id: 'account-settings',
-    label: t('layout.commandBar.cmd.accountSettings'),
-    group: groupAccount,
-    icon: 'i-lucide-settings',
-    keywords: t('layout.commandBar.keywords.accountSettings'),
-    run: () => ui.openAccountSettings(),
-  })
-  list.push({
-    id: 'local-models',
-    label: t('layout.commandBar.cmd.localModels'),
-    group: groupWorkspace,
-    icon: 'i-lucide-server',
-    keywords: t('layout.commandBar.keywords.localModels'),
-    run: () => ui.openLocalModels(),
-  })
-  if (access.canManageIntegrations.value) {
-    list.push({
-      id: 'sandbox',
-      label: t('layout.commandBar.cmd.sandbox'),
-      group: groupWorkspace,
-      icon: 'i-lucide-flask-conical',
-      keywords: t('layout.commandBar.keywords.sandbox'),
-      run: () => ui.openSandbox(),
-    })
-  }
-  list.push({
-    id: 'keyboard-shortcuts',
-    label: t('layout.commandBar.cmd.shortcuts'),
-    group: groupWorkspace,
-    icon: 'i-lucide-keyboard',
-    keywords: t('layout.commandBar.keywords.shortcuts'),
-    run: () => ui.openShortcutsHelp(),
-  })
-
   return list
+})
+
+const commands = computed<Command[]>(() => {
+  // Flatten the reactively-gated manifest command groups (already in canonical
+  // order: create, repositories, integrations, workspace, account), splicing the
+  // dynamic per-connection commands into the Integrations group's position.
+  const staticByGroup = new Map(commandGroups.value.map((g) => [g.group, g]))
+  const asCommand = (g: (typeof commandGroups.value)[number]): Command[] =>
+    g.items.map((ci) => ({
+      id: ci.item.id,
+      label: t(ci.labelKey),
+      group: t(g.labelKey),
+      icon: ci.item.icon,
+      keywords: ci.keywordsKey ? t(ci.keywordsKey) : undefined,
+      run: () => invoke(ci.item),
+    }))
+  const groupOrEmpty = (name: (typeof commandGroups.value)[number]['group']) => {
+    const g = staticByGroup.get(name)
+    return g ? asCommand(g) : []
+  }
+  return [
+    ...groupOrEmpty('create'),
+    ...groupOrEmpty('repositories'),
+    ...groupOrEmpty('integrations'),
+    ...dynamicIntegrationCommands.value,
+    ...groupOrEmpty('workspace'),
+    ...groupOrEmpty('account'),
+  ]
 })
 
 const filtered = computed<Command[]>(() => {

@@ -19,53 +19,16 @@ const github = useGitHubStore()
 const slack = useSlackStore()
 const library = useFragmentLibraryStore()
 const workspace = useWorkspaceStore()
-const accounts = useAccountsStore()
-const auth = useAuthStore()
 const providerConnections = useProviderConnectionsStore()
 const ui = useUiStore()
-const access = useWorkspaceAccess()
 
-// The operator dashboard (deployment-level run health) is sensitive cross-workspace data,
-// so it's shown only to an admin of the active account (matching the backend admin gate).
-const isAccountAdmin = computed(() => accounts.activeAccount?.roles?.includes('admin') ?? false)
-
-// Workspace-RBAC nav gating: each management destination is shown only when the caller
-// holds the permission its writes require (the SPA mirror of the admin-tier controller
-// middleware — a member/viewer who'd only get a 403 never sees the entry). Board authoring
-// (create/repos) needs `board.write`; connections/infra/sandbox/bootstrap need
-// `integrations.manage`; workspace + model configuration and the fragment library need
-// `settings.manage`. Kaizen and account settings are reads / account-scoped and stay.
-// Absent access (dev-open) ⇒ every `can*` is true, so nothing is hidden.
-const showCreate = computed(() => access.canWriteBoard.value)
-const showAddFromRepo = computed(() => github.available && access.canWriteBoard.value)
-const showBootstrap = computed(() => access.canManageIntegrations.value)
-const showRepositories = computed(() => showAddFromRepo.value || showBootstrap.value)
-const showIntegrationsHub = computed(() => access.canManageIntegrations.value)
-const showSandbox = computed(() => access.canManageIntegrations.value)
-// The Configuration section carries workspace/model settings (`settings.manage`) AND the
-// account-scoped account-settings / operator-dashboard entries, so it shows when the caller
-// can manage settings OR accounts are enabled (the account entries have their own gates).
-const showConfiguration = computed(() => access.canManageSettings.value || accounts.enabled)
-
-// The Infrastructure menu (agent-container execution + test environments) shows whenever the
-// deployment reports its infrastructure capability — every facade populates `auth.infrastructure`
-// (it drives the execution-backend selector), so there is always an execution + test-env backend
-// to view, even on a Worker/Node deployment with no runner-pool/environment connection registered.
-// The old provider-availability/local-mode signals stay as a defensive fallback for a backend that
-// (somehow) omits the descriptor.
-const showInfrastructure = computed(
-  () =>
-    // Provisioning/managing infrastructure is `integrations.manage`, so a member/viewer
-    // never sees the section (they'd only 403 on the writes inside it).
-    access.canManageIntegrations.value &&
-    (auth.infrastructure != null ||
-      auth.localMode?.enabled === true ||
-      providerConnections.isAvailable('runner-pool') ||
-      providerConnections.isAvailable('environment')),
-)
-
-// The prompt-fragment library is a `settings.manage` authoring surface.
-const showWorkspaceContext = computed(() => library.available && access.canManageSettings.value)
+// The nav catalog + its reactive RBAC/availability gating now lives in the shared
+// modular-vue manifest (docs/initiatives/modular-vue-adoption.md, slice 1): every
+// destination is declared once in `nav-contributions.ts`, gated by `navSlotFilter`
+// over a reactive `gates` service, and rendered here (and in CommandBar / BoardToolbar)
+// from `useReactiveSlots`. Sections + items appear/disappear reactively as a permission
+// or connection flips, so this shell no longer hand-rolls per-item `show*` computeds.
+const { sidebarGroups, invoke } = useNavContributions()
 
 // `isCompact` (< lg) is the breakpoint at which the navbar is an off-canvas drawer;
 // above it the aside is static and the drawer flag is inert.
@@ -191,240 +154,29 @@ watch(
         <UKbd value="⌘K" />
       </button>
 
-      <template v-if="showCreate">
+      <!-- Sections + items come from the shared nav manifest, already gated by the
+         reactive slotFilter (docs/initiatives/modular-vue-adoption.md, slice 1). An
+         empty section is dropped upstream, so there is no per-section `v-if` here. -->
+      <template v-for="section in sidebarGroups" :key="section.group">
         <USeparator />
         <section>
           <h2 class="mb-2 px-1 text-[11px] font-semibold uppercase tracking-wide text-slate-400">
-            {{ t('nav.create') }}
+            {{ t(section.labelKey) }}
           </h2>
           <div class="space-y-1.5">
             <UButton
+              v-for="item in section.items"
+              :key="item.id"
               block
               color="primary"
               variant="soft"
               size="sm"
-              icon="i-lucide-workflow"
+              :icon="item.icon"
               class="justify-start"
-              data-testid="nav-build-pipeline"
-              @click="ui.openBuilder()"
+              :data-testid="item.testId"
+              @click="invoke(item)"
             >
-              {{ t('nav.buildPipeline') }}
-            </UButton>
-          </div>
-        </section>
-      </template>
-
-      <template v-if="showRepositories">
-        <USeparator />
-        <section>
-          <h2 class="mb-2 px-1 text-[11px] font-semibold uppercase tracking-wide text-slate-400">
-            {{ t('nav.repositories') }}
-          </h2>
-          <div class="space-y-1.5">
-            <UButton
-              v-if="showAddFromRepo"
-              block
-              color="primary"
-              variant="soft"
-              size="sm"
-              icon="i-lucide-folder-git-2"
-              class="justify-start"
-              data-testid="nav-add-from-repo"
-              @click="ui.openAddService()"
-            >
-              {{ t('nav.addFromRepo') }}
-            </UButton>
-            <UButton
-              v-if="showBootstrap"
-              block
-              color="primary"
-              variant="soft"
-              size="sm"
-              icon="i-lucide-git-branch-plus"
-              class="justify-start"
-              data-testid="nav-bootstrap-repo"
-              @click="ui.openBootstrap()"
-            >
-              {{ t('nav.bootstrapRepo') }}
-            </UButton>
-          </div>
-        </section>
-      </template>
-
-      <USeparator />
-
-      <section>
-        <h2 class="mb-2 px-1 text-[11px] font-semibold uppercase tracking-wide text-slate-400">
-          {{ t('nav.integrations') }}
-        </h2>
-        <div class="space-y-1.5">
-          <!-- Every external system the workspace can enable/link now lives behind
-             this single button — the hub modal lists them grouped (source control,
-             communication, documents, trackers, observability, model providers). -->
-          <UButton
-            v-if="showIntegrationsHub"
-            block
-            color="primary"
-            variant="soft"
-            size="sm"
-            icon="i-lucide-blocks"
-            class="justify-start"
-            data-testid="nav-integrations"
-            @click="ui.openIntegrations()"
-          >
-            {{ t('nav.integrations') }}
-          </UButton>
-          <!-- The Sandbox: try prompt versions/models against graded fixtures, off to the
-             side of the board. Opens the on-demand testing window. -->
-          <UButton
-            v-if="showSandbox"
-            block
-            color="primary"
-            variant="soft"
-            size="sm"
-            icon="i-lucide-flask-conical"
-            class="justify-start"
-            @click="ui.openSandbox()"
-          >
-            {{ t('nav.sandbox') }}
-          </UButton>
-          <!-- The Kaizen screen: grading history + verified prompt/agent/model combos. A
-             read surface (grading history), so it stays visible to every resolved role. -->
-          <UButton
-            block
-            color="primary"
-            variant="soft"
-            size="sm"
-            icon="i-lucide-sparkles"
-            class="justify-start"
-            @click="ui.openKaizen()"
-          >
-            {{ t('nav.kaizen') }}
-          </UButton>
-        </div>
-      </section>
-
-      <template v-if="showInfrastructure">
-        <USeparator />
-        <section>
-          <h2 class="mb-2 px-1 text-[11px] font-semibold uppercase tracking-wide text-slate-400">
-            {{ t('nav.infrastructure') }}
-          </h2>
-          <div class="space-y-1.5">
-            <!-- Where agent containers run + Tester environments + (local mode) the warm
-               pool/checkout reuse. Its own top-level destination, no longer inside the
-               Integrations hub. -->
-            <UButton
-              block
-              color="primary"
-              variant="soft"
-              size="sm"
-              icon="i-lucide-server-cog"
-              class="justify-start"
-              data-testid="nav-infrastructure"
-              @click="ui.openInfrastructure()"
-            >
-              {{ t('nav.infrastructure') }}
-            </UButton>
-            <!-- Guided detect → review → preflight → save flow for a service frame's
-                 docker-compose provisioning (so the single Deployer stands its env up). -->
-            <UButton
-              block
-              color="primary"
-              variant="soft"
-              size="sm"
-              icon="i-lucide-flask-conical"
-              class="justify-start"
-              data-testid="nav-environment-setup"
-              @click="ui.openEnvironmentSetup()"
-            >
-              {{ t('nav.environmentSetup') }}
-            </UButton>
-          </div>
-        </section>
-      </template>
-
-      <template v-if="showWorkspaceContext">
-        <USeparator />
-        <section>
-          <h2 class="mb-2 px-1 text-[11px] font-semibold uppercase tracking-wide text-slate-400">
-            {{ t('nav.workspaceContext') }}
-          </h2>
-          <UButton
-            block
-            color="primary"
-            variant="soft"
-            size="sm"
-            icon="i-lucide-book-marked"
-            class="justify-start"
-            @click="ui.openFragmentLibrary()"
-          >
-            {{ t('nav.contextFragments') }}
-          </UButton>
-        </section>
-      </template>
-
-      <template v-if="showConfiguration">
-        <USeparator />
-        <section>
-          <h2 class="mb-2 px-1 text-[11px] font-semibold uppercase tracking-wide text-slate-400">
-            {{ t('nav.configuration') }}
-          </h2>
-          <div class="space-y-1.5">
-            <!-- Merge thresholds, issue writeback and default service best practices are
-             now tabs inside Workspace settings. `settings.manage` — hidden for members/viewers. -->
-            <UButton
-              v-if="access.canManageSettings.value"
-              block
-              color="primary"
-              variant="soft"
-              size="sm"
-              icon="i-lucide-sliders-horizontal"
-              class="justify-start"
-              data-testid="nav-workspace-settings"
-              @click="ui.openWorkspaceSettings()"
-            >
-              {{ t('nav.workspaceSettings') }}
-            </UButton>
-            <UButton
-              v-if="access.canManageSettings.value"
-              block
-              color="primary"
-              variant="soft"
-              size="sm"
-              icon="i-lucide-cpu"
-              class="justify-start"
-              @click="ui.openModelConfig()"
-            >
-              {{ t('nav.modelConfiguration') }}
-            </UButton>
-            <!-- Account & team: members + roles, invitations, email sender, account API keys.
-             Shown once accounts (auth) are enabled. -->
-            <UButton
-              v-if="accounts.enabled"
-              block
-              color="primary"
-              variant="soft"
-              size="sm"
-              icon="i-lucide-users"
-              class="justify-start"
-              @click="ui.openAccountSettings()"
-            >
-              {{ t('nav.accountSettings') }}
-            </UButton>
-            <!-- Platform observability: deployment-level run health. Admin-only, like the backend gate. -->
-            <UButton
-              v-if="accounts.enabled && isAccountAdmin"
-              block
-              color="primary"
-              variant="soft"
-              size="sm"
-              icon="i-lucide-gauge"
-              class="justify-start"
-              data-testid="nav-operator-dashboard"
-              @click="ui.openOperatorDashboard()"
-            >
-              {{ t('nav.operatorDashboard') }}
+              {{ t(item.labelKey) }}
             </UButton>
           </div>
         </section>

@@ -5,6 +5,11 @@ import IconButton from '~/components/common/IconButton.vue'
 
 const ui = useUiStore()
 const board = useBoardStore()
+// Toolbar contributions from the shared nav manifest (docs/initiatives/modular-vue-adoption.md,
+// slice 1). First-party contributes none — this is the reactive extension point a consumer
+// deployment uses to add a board-toolbar action via `registerAppModule`, gated + rendered like
+// the sidebar/command entries with zero edits here.
+const { toolbarItems, invoke: invokeNav } = useNavContributions()
 const execution = useExecutionStore()
 const workspace = useWorkspaceStore()
 const workspaceSettings = useWorkspaceSettingsStore()
@@ -232,6 +237,19 @@ const decisionItems = computed(() =>
         <span>{{ n(archivedItems.length) }}</span>
       </UButton>
     </UDropdownMenu>
+
+    <!-- consumer-contributed toolbar actions from the nav manifest (none first-party) -->
+    <IconButton
+      v-for="item in toolbarItems"
+      :key="item.id"
+      :label="t(item.labelKey)"
+      :icon="item.icon"
+      color="neutral"
+      variant="ghost"
+      size="sm"
+      :data-testid="item.testId"
+      @click="invokeNav(item)"
+    />
 
     <!-- human-actionable notifications (merge review, pipeline complete, CI failed) -->
     <NotificationsInbox />
