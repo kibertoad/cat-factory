@@ -293,7 +293,7 @@ describe('validateRegistrations', () => {
         icon: 'i',
         color: '#fff',
         description: 'd',
-        // @ts-expect-error — an unknown view id is exactly what the validator must catch.
+        // A bare id that is neither a built-in nor namespaced — exactly the typo the validator catches.
         resultView: 'no-such-view',
       },
     })
@@ -302,6 +302,26 @@ describe('validateRegistrations', () => {
         (p) => p.code === 'unknown_result_view',
       ),
     ).toBe(true)
+  })
+
+  it('accepts a consumer-namespaced resultView id (paired to a deployment component on the SPA)', () => {
+    registry.register({
+      kind: 'auditor',
+      systemPrompt: 'audit',
+      agent: { surface: 'container-explore', clone: { branch: 'pr' } },
+      presentation: {
+        label: 'Auditor',
+        icon: 'i',
+        color: '#fff',
+        description: 'd',
+        resultView: 'acme:security-report',
+      },
+    })
+    expect(
+      collectRegistrationProblems({ agentKindRegistry: registry }).some(
+        (p) => p.code === 'unknown_result_view',
+      ),
+    ).toBe(false)
   })
 
   it('warns (does not throw) when postOps lack structured output', () => {

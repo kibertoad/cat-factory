@@ -1,7 +1,11 @@
 import { installModularApp } from '@modular-vue/nuxt/runtime'
+import { resolveComponentRegistry } from '@modular-vue/core'
 import { createAppRegistry } from '~/modular/registry'
 import { navSlotFilter } from '~/modular/nav-contributions'
 import { createNavGates } from '~/modular/nav-gates'
+import { resultViewsModule } from '~/modular/result-views'
+import type { AppSlots, ResultViewContribution } from '~/modular/slots'
+import type { CustomAgentKind } from '~/types/domain'
 
 /**
  * Wire the modular-vue registry into the Nuxt app (slice 0 of the modular-vue
@@ -26,15 +30,34 @@ import { createNavGates } from '~/modular/nav-gates'
  * plugin), which the registry registers as a `service` and `navSlotFilter` reads
  * per item. The shells consume the gated `nav` slot through `useReactiveSlots`,
  * so a permission/connection flip re-gates them with no `recalculateSlots()`.
+ *
+ * Slice 2 registers the first-party `resultViews` registry here (via
+ * `extraModules`, so its Vue-component imports stay out of the unit-tested
+ * `registry.ts` import graph), and feeds the resolved static `agentKinds` slot —
+ * the deployment's CODE-shipped consumer agent kinds — into the agents store.
+ * (Backend-registered kinds arrive later as the per-workspace capability
+ * manifest via `hydrateCustomKinds`.) The result-view components themselves are
+ * read reactively by `StepResultViewHost` through `useReactiveSlots`.
  */
 export default defineNuxtPlugin({
   name: 'cat-factory:modular',
   enforce: 'post',
   setup(nuxtApp) {
-    const registry = createAppRegistry({ gates: createNavGates() })
+    const registry = createAppRegistry({ gates: createNavGates() }, [resultViewsModule])
     const manifest = installModularApp({ vueApp: nuxtApp.vueApp, $router: useRouter() }, registry, {
       slotFilter: navSlotFilter,
     })
+    const slots = manifest.slots as AppSlots
+    // Fail FAST on a result-view wiring bug (a duplicate id across the first-party +
+    // consumer `resultViews` modules) at BOOT rather than lazily the first time a result
+    // window opens: resolve the merged slot once here. `resolveComponentRegistry` throws on
+    // a duplicate id by default, so a misconfigured deployment surfaces at startup with a
+    // clear stack. The slot is static after this resolve, so `StepResultViewHost`'s own
+    // reactive re-resolve is a cheap memoized read that this has already validated.
+    resolveComponentRegistry((slots.resultViews ?? []) as ResultViewContribution[])
+    // Consumer agent kinds contributed as CODE to the static `agentKinds` slot
+    // (module slots resolve once, so the static base is the full set).
+    useAgentsStore().registerConsumerKinds((slots.agentKinds ?? []) as CustomAgentKind[])
     return { provide: { modular: manifest } }
   },
 })

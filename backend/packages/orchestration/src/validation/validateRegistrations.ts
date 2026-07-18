@@ -8,7 +8,7 @@ import {
   registeredPipelines,
   stubGateContext,
 } from '@cat-factory/kernel'
-import { RESULT_VIEW_ID_SET } from '@cat-factory/contracts'
+import { isValidResultViewId, RESULT_VIEW_ID_SET } from '@cat-factory/contracts'
 
 // ---------------------------------------------------------------------------
 // Boot-time validation of the deployment's registered extensions (agent kinds, gates,
@@ -114,17 +114,19 @@ export function collectRegistrationProblems(
     }
   }
 
-  // 2. Every registered kind's presentation.resultView must be a known view id (else the SPA
-  //    silently falls back to prose).
+  // 2. Every registered kind's presentation.resultView must be a known BUILT-IN view id or a
+  //    consumer-namespaced id (`<ns>:<name>`, paired to a deployment-registered component on
+  //    the SPA). A bare unknown id is a typo → error (the SPA would silently fall back to prose).
   for (const def of agentKinds) {
     const resultView = def.presentation?.resultView
-    if (resultView !== undefined && !knownResultViewIds.has(resultView)) {
+    if (resultView !== undefined && !isValidResultViewId(resultView, knownResultViewIds)) {
       problems.push({
         severity: 'error',
         code: 'unknown_result_view',
         message:
-          `Agent kind "${def.kind}" declares resultView "${resultView}", which is not a known ` +
-          `result view. Use one of: ${[...knownResultViewIds].join(', ')}.`,
+          `Agent kind "${def.kind}" declares resultView "${resultView}", which is neither a known ` +
+          `built-in result view nor a namespaced consumer id (<ns>:<name>). Use one of: ` +
+          `${[...knownResultViewIds].join(', ')} — or a namespaced id paired with a frontend component.`,
       })
     }
   }

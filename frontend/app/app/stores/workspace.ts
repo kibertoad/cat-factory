@@ -168,9 +168,10 @@ export const useWorkspaceStore = defineStore(
       useInitiativesStore().hydratePresets(snapshot.initiativePresets)
       useTrackerStore().hydrate(snapshot.trackerSettings)
       useServicesStore().hydrate(snapshot.mounts ?? [], snapshot.serviceCatalog ?? [])
-      // Merge the deployment's registered custom agent kinds into the palette catalog so a
-      // proprietary kind renders as a first-class block + result view (idempotent on reload).
-      useAgentsStore().registerCustomKinds(snapshot.customAgentKinds ?? [])
+      // Hydrate the deployment's backend-registered custom agent kinds as the workspace's
+      // remote capability manifest, so a proprietary kind renders as a first-class palette
+      // block + result view. Swapped wholesale per workspace (no global-catalog mutation).
+      useAgentsStore().hydrateCustomKinds(snapshot.customAgentKinds ?? [])
       // The account's repo-sourced Claude Skills catalog (shared across its workspaces), so the
       // pipeline builder's per-step skill picker has its options. A straight replace.
       useSkillsStore().hydrate(snapshot.skills ?? [])

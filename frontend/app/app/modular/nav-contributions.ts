@@ -1,4 +1,11 @@
 import { defineModule } from '@modular-vue/core'
+import type { AppSlots } from './slots'
+
+// Re-exported for the slice-1 importers that reach `AppSlots` through this
+// module (`useNavContributions`, `registry`, the nav specs); its canonical home
+// is now `./slots`, where all slot keys are aggregated (slice 2 added
+// `resultViews` / `agentKinds`).
+export type { AppSlots } from './slots'
 
 /**
  * The single nav/command catalog for the layer (slice 1 of the modular-vue
@@ -119,17 +126,6 @@ export interface NavContribution {
   command?: NavCommandSpec
   /** Toolbar placement (present when `surfaces` includes `'toolbar'`). */
   toolbar?: { order: number }
-}
-
-/**
- * The layer's slot map. Consumer modules contribute to the same `nav` key. The
- * index signature is mutable (`unknown[]`) to satisfy the runtime's `SlotMap`
- * constraint; `unknown[]` still satisfies `useReactiveSlots`' `readonly unknown[]`
- * bound, so both the install and the read side accept it.
- */
-export interface AppSlots {
-  nav: NavContribution[]
-  [key: string]: unknown[]
 }
 
 const S = (...s: NavSurface[]) => s as readonly NavSurface[]

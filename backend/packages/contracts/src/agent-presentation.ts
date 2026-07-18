@@ -1,6 +1,6 @@
 import * as v from 'valibot'
 import { agentKindSchema } from './primitives.js'
-import { RESULT_VIEW_IDS } from './result-views.js'
+import { NAMESPACED_RESULT_VIEW_ID_PATTERN, RESULT_VIEW_IDS } from './result-views.js'
 
 // ---------------------------------------------------------------------------
 // Presentation metadata for an agent kind — the display fields the SPA palette,
@@ -21,6 +21,21 @@ export const agentCategorySchema = v.picklist([
 ])
 export type AgentCategory = v.InferOutput<typeof agentCategorySchema>
 
+/**
+ * A CONSUMER-namespaced result-view id: `<ns>:<name>`, each segment a lowercase
+ * `a-z0-9`(-separated) token (e.g. `acme:security-report`). The colon distinguishes it
+ * from a bare built-in id, so a namespaced consumer view is accepted while a typo'd
+ * built-in (no colon, not in the picklist) is still rejected. The frontend pairs it to a
+ * deployment-registered component; an unpaired id degrades to the generic panel.
+ */
+const namespacedResultViewId = v.pipe(
+  v.string(),
+  v.regex(
+    NAMESPACED_RESULT_VIEW_ID_PATTERN,
+    'Consumer result-view id must be <namespace>:<name> (lowercase a-z0-9, dash-separated)',
+  ),
+)
+
 /** Display metadata for one agent kind (the wire shape sent to the SPA). */
 export const agentPresentationSchema = v.object({
   /** Human label, e.g. `Security Auditor`. */
@@ -39,12 +54,15 @@ export const agentPresentationSchema = v.object({
   /** Palette section; omitted ⇒ the kind is not a standalone palette block (e.g. a companion). */
   category: v.optional(agentCategorySchema),
   /**
-   * Id of a dedicated result-view component to open instead of the generic prose panel
-   * (e.g. `generic-structured` for a custom structured agent). One of the canonical
-   * {@link RESULT_VIEW_IDS} — an unknown id fails validation here rather than silently
-   * falling back to prose. Omitted ⇒ the generic step-detail panel.
+   * Id of a dedicated result-view component to open instead of the generic prose panel.
+   * Either a canonical BUILT-IN id ({@link RESULT_VIEW_IDS}, e.g. `generic-structured`) OR
+   * a CONSUMER-namespaced id (`<ns>:<name>`, e.g. `acme:security-report`) that a deployment
+   * registers a frontend component for through the modular `resultViews` slot. A bare id that
+   * is not a built-in still fails validation (the typo guardrail); a namespaced id is trusted
+   * to the deployment and paired on the frontend (an unpaired one degrades to the generic
+   * panel — the `pairById` `missing` bucket). Omitted ⇒ the generic step-detail panel.
    */
-  resultView: v.optional(v.picklist(RESULT_VIEW_IDS)),
+  resultView: v.optional(v.union([v.picklist(RESULT_VIEW_IDS), namespacedResultViewId])),
 })
 export type AgentPresentation = v.InferOutput<typeof agentPresentationSchema>
 

@@ -108,9 +108,10 @@ export interface AgentArchetype {
   category?: AgentCategory
   /**
    * Optional id of a DEDICATED result window this agent's step opens instead of the
-   * generic prose step-detail panel. Resolved through the result-view registry
-   * (`STEP_RESULT_VIEWS`) so any agent can declare a bespoke visualization without the
-   * renderer hardcoding a kind. Absent → the generic `AgentStepDetail` panel.
+   * generic prose step-detail panel. Resolved through the modular `resultViews` slot
+   * registry (`~/modular/result-views`, read by `StepResultViewHost`) so any agent —
+   * built-in or a consumer's — can declare a bespoke visualization without the renderer
+   * hardcoding a kind. Absent → the generic `AgentStepDetail` panel.
    */
   resultView?: string
 }

@@ -41,6 +41,44 @@ describe('app modular registry', () => {
     expect(() => createAppRegistry({ gates: NO_GATES }).resolveManifest()).toThrow(/duplicate/i)
   })
 
+  it('merges consumer-contributed result-view + agent-kind slots (slice-2 extensibility)', () => {
+    // A deployment ships its OWN dedicated window AND its custom agent kind through the
+    // same slots the first-party modules use — no layer fork. A fake component (plain
+    // object) stands in for the SFC so this stays a pure registry test.
+    const fakeComponent = { name: 'AcmeReportWindow' }
+    registerAppModule(
+      defineModule({
+        id: 'consumer:acme',
+        version: '1.0.0',
+        slots: {
+          resultViews: [{ id: 'acme:report', component: fakeComponent }],
+          agentKinds: [
+            {
+              kind: 'acme-audit',
+              container: true,
+              presentation: {
+                label: 'Acme Audit',
+                icon: 'i-lucide-shield',
+                color: '#fff',
+                description: 'd',
+                resultView: 'acme:report',
+              },
+            },
+          ],
+        },
+      }),
+    )
+
+    const slots = createAppRegistry({ gates: NO_GATES }).resolveManifest().slots as {
+      resultViews: { id: string }[]
+      agentKinds: { kind: string; presentation: { resultView?: string } }[]
+    }
+    expect(slots.resultViews.map((v) => v.id)).toContain('acme:report')
+    const audit = slots.agentKinds.find((k) => k.kind === 'acme-audit')
+    // The custom kind's resultView id pairs against the consumer's own registered component.
+    expect(audit?.presentation.resultView).toBe('acme:report')
+  })
+
   it('merges a consumer-contributed nav item into the resolved nav slot', () => {
     // A deployment extending the layer contributes its own nav destination to the
     // SAME `nav` slot the first-party module fills — it then renders in every shell
