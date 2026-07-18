@@ -709,7 +709,8 @@
         "budget": "Budget",
         "merge": "Criteri di rischio",
         "tracker": "Tracker degli issue",
-        "fragments": "Best practice dei servizi"
+        "fragments": "Best practice dei servizi",
+        "members": "Membri"
       },
       "waiting": {
         "heading": "In attesa di un umano",
@@ -1978,6 +1979,40 @@
     },
     "accountSkills": {
       "intro": "Collega i repository dove il tuo team crea le Claude Skills (una cartella SKILL.md più file di risorse). Le competenze sincronizzate entrano nel catalogo di questo account, condiviso da tutte le board, e il passo Skill di una pipeline ne esegue una su un'attività."
+    },
+    "workspaceMembers": {
+      "you": "{name} (tu)",
+      "roles": {
+        "admin": "Amministratore",
+        "member": "Membro",
+        "viewer": "Osservatore"
+      },
+      "accessMode": {
+        "title": "Accesso alla board",
+        "accountHint": "Tutti i membri dell'account proprietario possono vedere questa board.",
+        "restrictedHint": "Solo i membri elencati di seguito possono vedere questa board.",
+        "restrictToggle": "Limita ai membri"
+      },
+      "roster": {
+        "title": "Membri",
+        "empty": "Ancora nessun membro.",
+        "remove": "Rimuovi membro"
+      },
+      "add": {
+        "title": "Aggiungi un membro",
+        "selectMember": "Seleziona un membro dell'account",
+        "submit": "Aggiungi",
+        "added": "Membro aggiunto",
+        "allAdded": "Tutti i membri dell'account sono già su questa board.",
+        "noAccount": "Questa board non è ancora collegata a un account."
+      },
+      "errors": {
+        "load": "Impossibile caricare i membri",
+        "accessMode": "Impossibile modificare l'accesso alla board",
+        "setRole": "Impossibile aggiornare il ruolo del membro",
+        "add": "Impossibile aggiungere il membro",
+        "remove": "Impossibile rimuovere il membro"
+      }
     }
   },
   "board": {

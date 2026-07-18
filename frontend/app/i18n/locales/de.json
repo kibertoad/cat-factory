@@ -709,7 +709,8 @@
         "budget": "Budget",
         "merge": "Risikorichtlinien",
         "tracker": "Issue-Tracker",
-        "fragments": "Dienst-Best-Practices"
+        "fragments": "Dienst-Best-Practices",
+        "members": "Mitglieder"
       },
       "waiting": {
         "heading": "Warten auf einen Menschen",
@@ -1978,6 +1979,40 @@
     },
     "accountSkills": {
       "intro": "Verknüpfe Repositorys, in denen dein Team Claude Skills erstellt (ein SKILL.md-Ordner plus Ressourcendateien). Synchronisierte Skills landen im Katalog dieses Kontos, der von allen Boards geteilt wird, und der Skill-Schritt einer Pipeline führt einen davon für eine Aufgabe aus."
+    },
+    "workspaceMembers": {
+      "you": "{name} (du)",
+      "roles": {
+        "admin": "Admin",
+        "member": "Mitglied",
+        "viewer": "Betrachter"
+      },
+      "accessMode": {
+        "title": "Board-Zugriff",
+        "accountHint": "Alle im zugehörigen Konto können dieses Board sehen.",
+        "restrictedHint": "Nur die unten aufgeführten Mitglieder können dieses Board sehen.",
+        "restrictToggle": "Auf Mitglieder beschränken"
+      },
+      "roster": {
+        "title": "Mitglieder",
+        "empty": "Noch keine Mitglieder.",
+        "remove": "Mitglied entfernen"
+      },
+      "add": {
+        "title": "Mitglied hinzufügen",
+        "selectMember": "Kontomitglied auswählen",
+        "submit": "Hinzufügen",
+        "added": "Mitglied hinzugefügt",
+        "allAdded": "Alle Kontomitglieder sind bereits auf diesem Board.",
+        "noAccount": "Dieses Board ist noch mit keinem Konto verknüpft."
+      },
+      "errors": {
+        "load": "Mitglieder konnten nicht geladen werden",
+        "accessMode": "Board-Zugriff konnte nicht geändert werden",
+        "setRole": "Mitgliedsrolle konnte nicht aktualisiert werden",
+        "add": "Mitglied konnte nicht hinzugefügt werden",
+        "remove": "Mitglied konnte nicht entfernt werden"
+      }
     }
   },
   "board": {

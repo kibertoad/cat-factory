@@ -1888,6 +1888,40 @@
     },
     "accountSkills": {
       "intro": "Połącz repozytoria, w których Twój zespół tworzy Claude Skills (folder SKILL.md wraz z plikami zasobów). Zsynchronizowane umiejętności trafiają do katalogu tego konta, współdzielonego przez wszystkie tablice, a krok Skill w potoku uruchamia jedną z nich dla zadania."
+    },
+    "workspaceMembers": {
+      "you": "{name} (Ty)",
+      "roles": {
+        "admin": "Administrator",
+        "member": "Członek",
+        "viewer": "Obserwator"
+      },
+      "accessMode": {
+        "title": "Dostęp do tablicy",
+        "accountHint": "Każdy w koncie właściciela może zobaczyć tę tablicę.",
+        "restrictedHint": "Tylko członkowie wymienieni poniżej mogą zobaczyć tę tablicę.",
+        "restrictToggle": "Ogranicz do członków"
+      },
+      "roster": {
+        "title": "Członkowie",
+        "empty": "Brak członków.",
+        "remove": "Usuń członka"
+      },
+      "add": {
+        "title": "Dodaj członka",
+        "selectMember": "Wybierz członka konta",
+        "submit": "Dodaj",
+        "added": "Dodano członka",
+        "allAdded": "Wszyscy członkowie konta są już na tej tablicy.",
+        "noAccount": "Ta tablica nie jest jeszcze powiązana z kontem."
+      },
+      "errors": {
+        "load": "Nie udało się wczytać członków",
+        "accessMode": "Nie udało się zmienić dostępu do tablicy",
+        "setRole": "Nie udało się zaktualizować roli członka",
+        "add": "Nie udało się dodać członka",
+        "remove": "Nie udało się usunąć członka"
+      }
     }
   },
   "settings": {
@@ -2478,7 +2512,8 @@
         "budget": "Budżet",
         "merge": "Zasady ryzyka",
         "tracker": "System zgłoszeń",
-        "fragments": "Dobre praktyki usługi"
+        "fragments": "Dobre praktyki usługi",
+        "members": "Członkowie"
       },
       "waiting": {
         "heading": "Oczekiwanie na człowieka",
