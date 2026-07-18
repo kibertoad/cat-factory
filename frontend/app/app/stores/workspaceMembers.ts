@@ -20,12 +20,22 @@ export const useWorkspaceMembersStore = defineStore('workspaceMembers', () => {
   const { items: members, upsert: upsertMember } = useUpsertList<WorkspaceMember>({
     key: (m) => m.userId,
   })
-  /** The workspace id the current roster belongs to (guards a stale render across boards). */
+  /**
+   * The workspace id the currently-committed roster belongs to. The Members panel renders
+   * the roster only while this matches its own `workspaceId`, so switching boards never
+   * briefly shows the previous board's members before the new load resolves.
+   */
   const loadedFor = ref<string | null>(null)
+  // Monotonic request token: only the latest-issued load() commits, so a slow, superseded
+  // fetch can't clobber a newer board's roster (the ordering hazard the coherence rules warn about).
+  let loadSeq = 0
 
   /** Load the board's member roster (enriched with display details by the backend). */
   async function load(workspaceId: string) {
-    members.value = await api.listWorkspaceMembers(workspaceId)
+    const token = ++loadSeq
+    const roster = await api.listWorkspaceMembers(workspaceId)
+    if (token !== loadSeq) return // a newer load() superseded this one; drop the stale result
+    members.value = roster
     loadedFor.value = workspaceId
   }
 
@@ -60,11 +70,5 @@ export const useWorkspaceMembersStore = defineStore('workspaceMembers', () => {
     return updated
   }
 
-  /** Drop the roster (e.g. on board switch). */
-  function reset() {
-    members.value = []
-    loadedFor.value = null
-  }
-
-  return { members, loadedFor, load, add, setRole, remove, setAccessMode, reset }
+  return { members, loadedFor, load, add, setRole, remove, setAccessMode }
 })

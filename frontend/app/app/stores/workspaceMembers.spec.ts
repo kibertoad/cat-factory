@@ -37,6 +37,28 @@ describe('workspaceMembers store', () => {
     expect(store.loadedFor).toBe('ws1')
   })
 
+  it('load is monotonic — a superseded slow fetch cannot clobber a newer board', async () => {
+    // Two loads in flight; the OLDER-issued one (wsA) resolves LAST. It must be dropped so
+    // the switcher never renders the previous board's roster over the current one.
+    const resolvers = new Map<string, (v: WorkspaceMember[]) => void>()
+    vi.stubGlobal('useApi', () => ({
+      listWorkspaceMembers: (ws: string) =>
+        new Promise<WorkspaceMember[]>((resolve) => resolvers.set(ws, resolve)),
+    }))
+
+    const store = useWorkspaceMembersStore()
+    const first = store.load('wsA') // slow, issued first
+    const second = store.load('wsB') // newer, issued second
+
+    resolvers.get('wsB')?.([member({ userId: 'b', workspaceId: 'wsB' })])
+    await second
+    resolvers.get('wsA')?.([member({ userId: 'a', workspaceId: 'wsA' })])
+    await first
+
+    expect(store.members.map((m) => m.userId)).toEqual(['b'])
+    expect(store.loadedFor).toBe('wsB')
+  })
+
   it('add upserts the returned member', async () => {
     vi.stubGlobal('useApi', () => ({
       listWorkspaceMembers: () => Promise.resolve([member({ userId: 'a' })]),

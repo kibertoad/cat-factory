@@ -35,6 +35,12 @@ const board = computed(() => workspace.workspaces.find((w) => w.id === props.wor
 const accountId = computed(() => board.value?.accountId ?? null)
 /** Whether the board is limited to its explicit roster (vs every account member). */
 const restricted = computed(() => (board.value?.accessMode ?? 'account') === 'restricted')
+/**
+ * True once THIS board's roster is the committed one — the store guards a slow/superseded
+ * load so switching boards never renders the previous board's members. Until then the
+ * roster + picker show a loading state rather than stale rows.
+ */
+const rosterReady = computed(() => members.loadedFor === props.workspaceId)
 
 /**
  * Account members not already on the board — the add picker's options. The service
@@ -93,10 +99,13 @@ async function setAccessMode(next: boolean) {
 }
 
 async function updateRole(userId: string, role: WorkspaceRole) {
+  busy.value = true
   try {
     await members.setRole(props.workspaceId, userId, role)
   } catch (e) {
     notifyError(t('layout.workspaceMembers.errors.setRole'), e)
+  } finally {
+    busy.value = false
   }
 }
 
@@ -118,11 +127,14 @@ async function addMember() {
 
 async function removeMember(userId: string, name: string) {
   if (!(await confirmAction('remove', name))) return
+  busy.value = true
   try {
     await members.remove(props.workspaceId, userId)
     toastDone('remove', name)
   } catch (e) {
     notifyError(t('layout.workspaceMembers.errors.remove'), e)
+  } finally {
+    busy.value = false
   }
 }
 
@@ -168,11 +180,13 @@ function memberLabel(userId: string, name?: string | null, email?: string | null
     <!-- roster -->
     <section>
       <h3 class="mb-2 font-semibold text-white">{{ t('layout.workspaceMembers.roster.title') }}</h3>
-      <ul class="space-y-1">
+      <p v-if="!rosterReady" class="text-slate-500">{{ t('common.loading') }}</p>
+      <ul v-else class="space-y-1" data-testid="workspace-members-roster">
         <li
           v-for="m in members.members"
           :key="m.userId"
           class="flex items-center justify-between gap-2 rounded-md bg-slate-800/40 px-2 py-1"
+          data-testid="workspace-member-row"
         >
           <span class="truncate">{{ memberLabel(m.userId, m.name, m.email) }}</span>
           <span class="flex shrink-0 items-center gap-2">
@@ -182,6 +196,8 @@ function memberLabel(userId: string, name?: string | null, email?: string | null
               value-key="value"
               size="xs"
               class="w-32"
+              :disabled="busy"
+              data-testid="workspace-member-role"
               @update:model-value="(r: WorkspaceRole) => updateRole(m.userId, r)"
             />
             <UButton
@@ -189,7 +205,9 @@ function memberLabel(userId: string, name?: string | null, email?: string | null
               color="error"
               variant="ghost"
               icon="i-lucide-user-minus"
+              :disabled="busy"
               :aria-label="t('layout.workspaceMembers.roster.remove')"
+              data-testid="workspace-member-remove"
               @click="removeMember(m.userId, memberLabel(m.userId, m.name, m.email))"
             />
           </span>
@@ -215,6 +233,7 @@ function memberLabel(userId: string, name?: string | null, email?: string | null
             :placeholder="t('layout.workspaceMembers.add.selectMember')"
             :disabled="candidates.length === 0"
             class="flex-1"
+            data-testid="workspace-member-add-select"
           />
           <USelect v-model="addRole" :items="ROLE_ITEMS" value-key="value" class="w-32" />
           <UButton
@@ -223,6 +242,7 @@ function memberLabel(userId: string, name?: string | null, email?: string | null
             icon="i-lucide-user-plus"
             :loading="busy"
             :disabled="!addUserId"
+            data-testid="workspace-member-add-submit"
           >
             {{ t('layout.workspaceMembers.add.submit') }}
           </UButton>
