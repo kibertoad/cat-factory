@@ -14,8 +14,14 @@
 # The floor is 3.5.40: `@modular-vue/*` peer-requires `vue@^3.5.40`, so the whole
 # family moves up together to keep the single-singleton invariant while satisfying
 # the modular-vue adoption (docs/initiatives/modular-vue-adoption.md).
+# vue-router is likewise pinned to one version. Nuxt 4.5.0 wants `vue-router@^5.2.0`
+# while `@nuxtjs/i18n` still resolves `^5.1.0`, so without this the SPA bundles two
+# copies of vue-router. The `@modular-vue/*` packages peer-require `vue-router@^5.0.0`,
+# so 5.2.0 satisfies every consumer — one version, one router singleton. Keep it in
+# lockstep with whatever `vue-router` Nuxt pulls on the next Nuxt bump.
 overrides:
   vue: 3.5.40
+  vue-router: 5.2.0
   '@vue/compiler-core': 3.5.40
   '@vue/compiler-dom': 3.5.40
   '@vue/compiler-sfc': 3.5.40
@@ -48,6 +54,16 @@ allowBuilds:
 # and must never be age-gated. Do NOT add per-version exceptions for third-party
 # packages: when upgrading, pick the latest version that already satisfies the
 # release-age rule instead.
+#
+# The `nuxt` / `@nuxt/*` entries are a DELIBERATE, owner-authorized exception to
+# that third-party rule: the Nuxt 4.5.0 bump (needed for the modular-vue journeys
+# adoption, docs/initiatives/modular-vue-adoption.md) landed the same day it was
+# published, so its `nuxt` + freshly co-published `@nuxt/*` (kit/schema/
+# vite-builder/nitro-server) sub-packages are all inside the release-age window.
+# These are the Nuxt framework we already run — trusted — so they're excluded to
+# let the bump install. Prune them at the next dependency sweep once 4.5.x has
+# aged past the window (they self-heal — an aged version no longer needs the
+# exclusion). This is the ONLY sanctioned third-party exception; do not add more.
 minimumReleaseAgeExclude:
   - '@cat-factory/*'
   - '@toad-contracts/*'
@@ -55,3 +71,5 @@ minimumReleaseAgeExclude:
   - '@modular-frontend/*'
   - layered-loader
   - toad-scheduler
+  - nuxt
+  - '@nuxt/*'

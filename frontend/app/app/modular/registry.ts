@@ -1,6 +1,6 @@
 import type { AnyModuleDescriptor } from '@modular-vue/core'
 import { createRegistry } from '@modular-vue/runtime'
-import type { ModuleRegistry } from '@modular-vue/runtime'
+import { journeysPlugin } from '@modular-vue/journeys'
 import { navigationModule } from '~/modular/nav-contributions'
 import type { NavGates } from '~/modular/nav-contributions'
 import type { AppSlots } from '~/modular/slots'
@@ -92,11 +92,17 @@ export function __resetConsumerModulesForTest(): void {
 export function createAppRegistry(
   deps: AppDeps,
   extraModules: readonly AnyModuleDescriptor[] = [],
-): ModuleRegistry<AppDeps, AppSlots> {
+) {
+  // `.use(journeysPlugin())` attaches the journeys extension (slice 3): the returned
+  // registry gains `registerJourney(...)` and the resolved manifest exposes the
+  // `JourneyRuntime` at `extensions.journeys`, which the client plugin provides to the
+  // Vue app. The plugin itself carries no `.vue` imports, so it's safe in this
+  // unit-tested import graph; the journeys + their step modules (which DO import SFCs)
+  // are registered from the client plugin via `extraModules` + `registerJourney`.
   const registry = createRegistry<AppDeps, AppSlots>({
     services: { gates: deps.gates },
     slots: { nav: [], resultViews: [], agentKinds: [] },
-  })
+  }).use(journeysPlugin())
   for (const mod of [...FIRST_PARTY_MODULES, ...extraModules, ...consumerModules]) {
     registry.register(mod)
   }

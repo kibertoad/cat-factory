@@ -85,7 +85,16 @@ export default defineConfig({
       timeout: 240_000,
       stdout: 'pipe',
       stderr: 'pipe',
-      env: { NUXT_PUBLIC_API_BASE: BACKEND_URL, PORT: String(FRONTEND_PORT) },
+      // Emit client sourcemaps for this e2e build (Nuxt maps `NUXT_SOURCEMAP_CLIENT`
+      // onto `sourcemap.client`). This is diagnosis material, exactly like the retained
+      // trace/video above: when a spec fails on an in-browser exception, the stack maps
+      // back to source instead of a minified `Nn(...)` frame. Scoped to the e2e build
+      // only — the real `deploy/frontend` production build is unaffected.
+      env: {
+        NUXT_PUBLIC_API_BASE: BACKEND_URL,
+        PORT: String(FRONTEND_PORT),
+        NUXT_SOURCEMAP_CLIENT: 'true',
+      },
     },
   ],
 })
