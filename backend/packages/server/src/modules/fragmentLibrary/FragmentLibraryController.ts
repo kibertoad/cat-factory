@@ -12,14 +12,14 @@ import {
   unlinkFragmentSourceContract,
   updatePromptFragmentContract,
 } from '@cat-factory/contracts'
-import { ValidationError, type FragmentOwnerKind } from '@cat-factory/kernel'
+import { NotFoundError, ValidationError, type FragmentOwnerKind } from '@cat-factory/kernel'
 import { buildHonoRoute } from '@toad-contracts/hono'
 import { Hono } from 'hono'
 import type { Context } from 'hono'
 import type { FragmentLibraryModule } from '@cat-factory/orchestration'
-import type { AppEnv } from '../../http/env.js'
+import type { AppEnv, ServerContainer } from '../../http/env.js'
 import { param } from '../../http/params.js'
-import { requireWorkspacePermission } from '../../http/workspaceAccess.js'
+import { loadWorkspaceAccess, requireWorkspacePermission } from '../../http/workspaceAccess.js'
 
 type Scope = 'account' | 'workspace'
 
@@ -141,6 +141,16 @@ export function fragmentLibraryController(scope: Scope): Hono<AppEnv> {
         'An account-tier document fragment needs `viaWorkspaceId` (the workspace whose connection to fetch through)',
       )
     }
+    // SEC-RBAC-0: the account guard authorized only the PATH account; re-authorize the
+    // body-supplied `viaWorkspaceId` before its credentials are used to fetch a document.
+    if (scope === 'account') {
+      await requireViaWorkspaceAccess(
+        c.get('container'),
+        c.get('user')?.id,
+        ownerId(c),
+        viaWorkspaceId,
+      )
+    }
     const fragment = await lib.libraryService.createFromDocument(
       ownerKind,
       ownerId(c),
@@ -160,6 +170,15 @@ export function fragmentLibraryController(scope: Scope): Hono<AppEnv> {
     if (!viaWorkspaceId) {
       throw new ValidationError(
         'An account-tier refresh needs a `viaWorkspaceId` query param (the workspace whose connection to fetch through)',
+      )
+    }
+    // SEC-RBAC-0: re-authorize the query-supplied `viaWorkspaceId` (see createDocumentFragment).
+    if (scope === 'account') {
+      await requireViaWorkspaceAccess(
+        c.get('container'),
+        c.get('user')?.id,
+        ownerId(c),
+        viaWorkspaceId,
       )
     }
     const fragment = await lib.libraryService.refresh(
@@ -224,6 +243,34 @@ export function fragmentLibraryController(scope: Scope): Hono<AppEnv> {
   }
 
   return app
+}
+
+/**
+ * Re-authorize a BODY/QUERY-supplied `viaWorkspaceId` before it is used to fetch through that
+ * workspace's stored document-source credentials (SEC-RBAC-0). The account guard only authorized
+ * the account in the URL PATH; a `viaWorkspaceId` taken from the request is an unauthorized
+ * secondary id until proven to (a) belong to the SAME account and (b) be accessible to the caller.
+ * Without this an account-A member could point `viaWorkspaceId` at workspace B (any account) and
+ * drive B's stored Confluence/Notion/GitHub secret as a cross-tenant fetch oracle, exfiltrating any
+ * document B's token can read into A's own library. Fails closed with the existence-hiding 404 the
+ * workspace gate uses (never revealing whether the workspace exists / is in another account).
+ *
+ * Dev-open (auth disabled) resolves no signed-in user and no access object, so — mirroring
+ * `requirePermission` — the check allows everything; a real deployment always has a user here (the
+ * account guard already required sign-in).
+ */
+async function requireViaWorkspaceAccess(
+  container: ServerContainer,
+  userId: string | undefined,
+  accountId: string,
+  viaWorkspaceId: string,
+): Promise<void> {
+  if (!userId) return // dev-open: no signed-in user ⇒ allow all (mirrors requirePermission)
+  const account = await container.workspaceService.accountOf(viaWorkspaceId)
+  // Not in the addressed account (or nonexistent) ⇒ 404, exactly as the gate hides a foreign board.
+  if (account !== accountId) throw new NotFoundError('Workspace', viaWorkspaceId)
+  const access = await loadWorkspaceAccess(container, viaWorkspaceId, userId)
+  if (!access?.allowed) throw new NotFoundError('Workspace', viaWorkspaceId)
 }
 
 /** Guard an account-scoped request: require sign-in + membership (404 otherwise). */
