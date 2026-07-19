@@ -12,7 +12,7 @@
 // `useModalBehavior` (`@modular-vue/core`, the slice-5 overlay-host release): focus-trap
 // + focus-return, body-scroll lock, and a shared overlay STACK so the top overlay closes
 // first on Escape. A window becomes body-only markup wrapped in `<ResultWindowShell>`; it
-// keeps its `useResultView` seam but passes `manageEscape: false` (the shell owns Escape).
+// keeps its `useResultView` seam (Escape lives in this shell now, not in `useResultView`).
 //
 // The pick-one SELECTION of which window is active stays exactly the slice-2
 // `resolveComponentRegistry` in `StepResultViewHost.vue` — this shell only owns the

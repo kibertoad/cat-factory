@@ -21,11 +21,9 @@ const access = useWorkspaceAccess()
 
 const { t } = useI18n()
 
-// `manageEscape: false` — `ResultWindowShell` owns Escape (and focus trap + scroll lock +
-// stacking) via the shared overlay behaviour.
-const { open, blockId, instanceId, stepIndex, close } = useResultView('follow-ups', {
-  manageEscape: false,
-})
+// `ResultWindowShell` owns Escape (and focus trap + scroll lock + stacking) via the shared
+// overlay behaviour.
+const { open, blockId, instanceId, stepIndex, close } = useResultView('follow-ups')
 
 const block = computed(() => (blockId.value ? board.getBlock(blockId.value) : undefined))
 const headerTitle = computed(() =>

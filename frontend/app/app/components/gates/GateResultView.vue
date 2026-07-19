@@ -20,11 +20,9 @@ const { t } = useI18n()
 const access = useWorkspaceAccess()
 
 // Synchronous window: it reads its state straight off the execution step, so there's
-// nothing to fetch on open (no `onOpen` loader). `manageEscape: false` — `ResultWindowShell`
-// owns Escape (and focus trap + scroll lock + stacking).
-const { open, blockId, instanceId, stepIndex, close } = useResultView('gate', {
-  manageEscape: false,
-})
+// nothing to fetch on open (no `onOpen` loader). `ResultWindowShell` owns Escape (and focus
+// trap + scroll lock + stacking).
+const { open, blockId, instanceId, stepIndex, close } = useResultView('gate')
 const block = computed(() => (blockId.value ? board.getBlock(blockId.value) : undefined))
 const prUrl = computed(() => block.value?.pullRequest?.url ?? null)
 const headerTitle = computed(

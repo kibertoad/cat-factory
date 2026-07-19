@@ -30,12 +30,10 @@ const blobs = useArtifactBlobs()
 onUnmounted(() => blobs.revokeAll())
 
 // Shared seam contract (open/blockId/close). No `onOpen` loader: this window reads its report
-// straight off the execution step, so there's nothing to fetch on open. `manageEscape: false`
-// — `ResultWindowShell` owns Escape (and the focus trap + scroll lock + stacking) via the
-// shared overlay behaviour; the nested lightbox layers above it on the same stack.
-const { open, blockId, instanceId, stepIndex, close } = useResultView('tester', {
-  manageEscape: false,
-})
+// straight off the execution step, so there's nothing to fetch on open. `ResultWindowShell`
+// owns Escape (and the focus trap + scroll lock + stacking) via the shared overlay behaviour;
+// the nested lightbox layers above it on the same stack.
+const { open, blockId, instanceId, stepIndex, close } = useResultView('tester')
 const block = computed(() => (blockId.value ? board.getBlock(blockId.value) : undefined))
 const headerTitle = computed(
   () => `${t('testing.title')}${block.value ? ` — ${block.value.title}` : ''}`,
