@@ -269,31 +269,48 @@ export interface GateContext {
  */
 export type GateFactory = (ctx: GateContext) => GateDefinition
 
-// Process-wide registry, mirroring the agent-kind / pipeline registry seams. Registration
-// is a startup import side effect, read once when an ExecutionService lazily builds its
-// gate registry on first use. A gate registered AFTER an ExecutionService has already
-// built its registry is invisible to that instance — register at startup, before serving.
-const registry = new Map<string, GateFactory>()
+/**
+ * App-owned registry of polling gates, mirroring the agent-kind registry
+ * ({@link AgentKindRegistry}) and the backend-registries pilot. The composition root news
+ * ONE instance (`defaultGateRegistry()`), threads it through `CoreDependencies`, and the
+ * engine reads it from there when it lazily builds its per-kind gate map — so there is no
+ * module-global `Map`, no `clear*()` test cruft, and no external-adapter module-identity
+ * gotcha: a deployment registers extra gates by reference (`registry.register(kind, factory)`)
+ * on the instance the facade injects.
+ *
+ * Unlike {@link AgentKindRegistry}, the built-in gates are NOT pre-loaded by
+ * `defaultGateRegistry()` — they live in `@cat-factory/gates` (which depends on kernel, not
+ * the reverse), so a facade populates them explicitly via that package's
+ * `registerBuiltinGates(registry)`. A fresh registry is therefore empty; that is the whole
+ * dogfood — the platform's own gates register through the same public seam as anyone's.
+ */
+export class GateRegistry {
+  private readonly registry = new Map<string, GateFactory>()
+
+  /**
+   * Register a polling gate, keyed by the step `agentKind` it gates. A later registration of
+   * the same kind replaces the earlier one (so a deployment can override a built-in). The
+   * `kind` is passed explicitly because the factory's result isn't built until the engine
+   * invokes it.
+   */
+  register(kind: string, factory: GateFactory): void {
+    this.registry.set(kind, factory)
+  }
+
+  /** The registered gates (registration order). */
+  factories(): { kind: string; factory: GateFactory }[] {
+    return [...this.registry].map(([kind, factory]) => ({ kind, factory }))
+  }
+}
 
 /**
- * Register a custom polling gate, keyed by the step `agentKind` it gates. A later
- * registration of the same kind replaces the earlier one, and a registered gate replaces
- * a built-in of the same kind — so a deployment can both add new gates and customize the
- * built-in catalog. The `kind` is passed explicitly because the factory's result isn't
- * built until the engine invokes it.
+ * A fresh gate registry. Empty by design — the built-in gate suite lives in
+ * `@cat-factory/gates` and is installed by a facade via `registerBuiltinGates(registry)`,
+ * since kernel cannot depend on the gate package. A deployment registers its own gates by
+ * reference on the instance the composition root injects.
  */
-export function registerGate(kind: string, factory: GateFactory): void {
-  registry.set(kind, factory)
-}
-
-/** The registered custom gates (registration order). */
-export function registeredGateFactories(): { kind: string; factory: GateFactory }[] {
-  return [...registry].map(([kind, factory]) => ({ kind, factory }))
-}
-
-/** Drop all registered gates. Intended for tests that exercise registration. */
-export function clearRegisteredGates(): void {
-  registry.clear()
+export function defaultGateRegistry(): GateRegistry {
+  return new GateRegistry()
 }
 
 /**

@@ -40,8 +40,13 @@ import { handleGitHubSyncBatch, reconcileStaleRepos } from './infrastructure/git
 import { sweepExpiredEnvironments } from './infrastructure/environments/sweep'
 import { logger } from './infrastructure/observability/logger'
 import { runPlatformMetricsSweep } from './infrastructure/observability/platformMetrics'
-import { sweepBinaryArtifactRetention, validateRegistrationsOnce } from '@cat-factory/orchestration'
+import {
+  defaultStepResolverRegistry,
+  sweepBinaryArtifactRetention,
+  validateRegistrationsOnce,
+} from '@cat-factory/orchestration'
 import { defaultAgentKindRegistry, defaultInitiativePresetRegistry } from '@cat-factory/agents'
+import { gateRegistryWithBuiltins } from '@cat-factory/gates'
 import { DEFAULT_WORKSPACE_SETTINGS } from '@cat-factory/kernel'
 import { D1WorkspaceRepository } from './infrastructure/repositories/D1WorkspaceRepository'
 import { D1WorkspaceSettingsRepository } from './infrastructure/repositories/D1WorkspaceSettingsRepository'
@@ -105,7 +110,17 @@ const agentKindRegistry = defaultAgentKindRegistry()
 // `createApp` override). A deployment injecting custom presets registers them on this instance
 // (or overrides it) before the first request — the same seam as `agentKindRegistry`.
 const initiativePresetRegistry = defaultInitiativePresetRegistry()
-const app = createApp({ overrides: { agentKindRegistry, initiativePresetRegistry } })
+// One app-owned gate registry with the built-in `@cat-factory/gates` suite installed, shared by
+// every per-request container (via the `createApp` override) AND the boot-time validation below —
+// so the check validates the SAME instance the engine uses. A deployment adds custom gates by
+// registering them on this instance (or overrides it) before the first request.
+const gateRegistry = gateRegistryWithBuiltins()
+// One app-owned step-resolver registry (empty by default), shared the same way; a deployment
+// registers its custom resolvers on this instance before the first request.
+const stepResolverRegistry = defaultStepResolverRegistry()
+const app = createApp({
+  overrides: { agentKindRegistry, gateRegistry, stepResolverRegistry, initiativePresetRegistry },
+})
 
 /** Compact, log-friendly shape for an unknown caught value. */
 function errInfo(error: unknown): { message: string; stack?: string } {
@@ -161,6 +176,7 @@ export default {
   fetch(request: Request, env: Env, ctx: ExecutionContext) {
     validateRegistrationsOnce({
       agentKindRegistry,
+      gateRegistry,
       onWarn: (problem) => logger.warn({ code: problem.code }, problem.message),
     })
     return app.fetch(request, env, ctx)
