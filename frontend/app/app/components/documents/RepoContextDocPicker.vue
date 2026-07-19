@@ -128,23 +128,18 @@ const fileQuery = ref('')
 // A query is required so a large repo never renders thousands of rows at once; results
 // are capped for the same reason.
 const FILE_RESULTS_CAP = 50
-const fileMatches = computed(() => {
+// Filter the cached tree ONCE per keystroke, then derive the capped view + the
+// "truncated" flag from that single pass (a large monorepo tree is filtered twice
+// otherwise, once per computed, on every keystroke).
+const fileMatchesAll = computed(() => {
   const q = fileQuery.value.trim().toLowerCase()
   if (!q) return []
-  return files.value
-    .filter((f) => !addedSet.value.has(normalizeRepoPath(f.path)))
-    .filter((f) => f.path.toLowerCase().includes(q))
-    .slice(0, FILE_RESULTS_CAP)
-})
-const fileMatchesTruncated = computed(() => {
-  const q = fileQuery.value.trim().toLowerCase()
-  if (!q) return false
-  return (
-    files.value.filter(
-      (f) => !addedSet.value.has(normalizeRepoPath(f.path)) && f.path.toLowerCase().includes(q),
-    ).length > FILE_RESULTS_CAP
+  return files.value.filter(
+    (f) => !addedSet.value.has(normalizeRepoPath(f.path)) && f.path.toLowerCase().includes(q),
   )
 })
+const fileMatches = computed(() => fileMatchesAll.value.slice(0, FILE_RESULTS_CAP))
+const fileMatchesTruncated = computed(() => fileMatchesAll.value.length > FILE_RESULTS_CAP)
 
 function pickFile(path: string) {
   const repo = selectedRepo.value

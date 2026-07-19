@@ -256,12 +256,17 @@ export class FetchGitLabClient implements VcsClient {
             type?: string
             id?: string
           }>
-          return entries.map((e) => ({
-            path: e.path ?? e.name ?? '',
-            name: e.name ?? (e.path ?? '').split('/').pop() ?? '',
-            type: e.type === 'tree' ? 'dir' : 'file',
-            sha: e.id ?? '',
-          }))
+          // GitLab tree `type` is `tree` | `blob` | `commit` (submodule). Normalise to the
+          // neutral dir/file vocabulary and drop submodules (they have no browsable content
+          // here), matching FetchGitHubClient.listTree so both providers surface the same set.
+          return entries
+            .filter((e) => e.type === 'tree' || e.type === 'blob')
+            .map((e) => ({
+              path: e.path ?? e.name ?? '',
+              name: e.name ?? (e.path ?? '').split('/').pop() ?? '',
+              type: e.type === 'tree' ? 'dir' : 'file',
+              sha: e.id ?? '',
+            }))
         },
       )
     } catch (err) {

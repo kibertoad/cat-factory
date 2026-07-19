@@ -463,13 +463,16 @@ describe('FetchGitLabClient', () => {
     expect(await c.getRequiredApprovingReviewCount(connection, ref, 'main', 3)).toBe(1)
   })
 
-  it('listTree reads the whole tree recursively and normalises tree/blob to dir/file', async () => {
+  it('listTree reads the whole tree recursively, normalises tree/blob to dir/file, drops submodules', async () => {
     const { c, calls } = client({
       'GET /projects/7/repository/tree?per_page=100&recursive=true&ref=main': {
         body: [
           { path: 'README.md', name: 'README.md', type: 'blob', id: 'a' },
           { path: 'docs', name: 'docs', type: 'tree', id: 'b' },
           { path: 'docs/architecture.md', name: 'architecture.md', type: 'blob', id: 'c' },
+          // A git submodule — GitLab reports these as `commit`; they have no browsable
+          // content here, so (like FetchGitHubClient) they must be dropped.
+          { path: 'vendor/lib', name: 'lib', type: 'commit', id: 'd' },
         ],
       },
     })
