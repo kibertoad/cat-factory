@@ -1,5 +1,40 @@
 # @cat-factory/node-server
 
+## 0.107.1
+
+### Patch Changes
+
+- 54c44bb: feat: add a selectable `purpose` classifier to pipelines (`build` / `document` / `review` / `research` / `planning`)
+
+  Pipelines now carry an explicit use-case classifier instead of it being inferred from their steps. It is chosen in the pipeline builder (a new selector), stamped on every built-in preset in `seedPipelines()`, and persisted in a new `pipelines.purpose` column (mirrored D1 ⇄ Drizzle).
+
+  Two surfaces key off it, sharing the pure predicates in `@cat-factory/contracts` (`pipelineAllowedForTaskType`, `purposeAllowsAgentCategory`):
+
+  - **Task pickers** — a `document` task now offers ONLY document pipelines (the add-task modal, the task run-settings default, and the focus-view run menu), and the add-task form defaults a document task to the `pl_document` writing pipeline. Every other task type is unrestricted.
+  - **Builder palette** — selecting a non-`build` purpose hides the Implementation and Testing agent kinds (a document/review/research/planning pipeline writes no product code and runs no tests).
+
+  Every built-in pipeline's `version` is bumped so existing workspaces are offered a reseed that stamps the new `purpose`. Breaking-change note (pre-1.0, no back-fill): a pipeline persisted before this change reads as unclassified — shown everywhere except a document task — until it is reseeded (built-ins) or re-saved with a purpose (custom).
+
+- Updated dependencies [54c44bb]
+  - @cat-factory/contracts@0.150.0
+  - @cat-factory/kernel@0.144.0
+  - @cat-factory/orchestration@0.126.0
+  - @cat-factory/server@0.138.1
+  - @cat-factory/agents@0.65.1
+  - @cat-factory/consensus@0.11.1
+  - @cat-factory/eks@0.1.105
+  - @cat-factory/gates@0.7.1
+  - @cat-factory/gitlab@0.11.1
+  - @cat-factory/integrations@0.88.1
+  - @cat-factory/observability-otel@0.2.14
+  - @cat-factory/prompt-fragments@0.13.41
+  - @cat-factory/spend@0.12.58
+  - @cat-factory/caching@0.10.14
+  - @cat-factory/observability-langfuse@0.7.232
+  - @cat-factory/provider-bedrock@0.7.250
+  - @cat-factory/provider-cloudflare@0.7.251
+  - @cat-factory/provider-s3@0.2.182
+
 ## 0.107.0
 
 ### Minor Changes
