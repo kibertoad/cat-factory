@@ -18,3 +18,6 @@ pipeline pickers — in the add-task modal and the inspector run settings — ar
 master–detail picker: hovering an option reveals that pipeline's description and its ordered agent
 steps (with human-gated steps flagged), so you can see exactly what a pipeline does before choosing
 it.
+
+Every built-in pipeline's catalog `version` is bumped by one so existing workspaces are offered a
+reseed that adopts the new descriptions (fresh workspaces get them on seed).
