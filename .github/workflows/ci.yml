@@ -308,6 +308,12 @@ jobs:
       - name: Guard package catalog
         run: node scripts/check-package-catalog.mjs
 
+      # Soft max-lines budget with ratcheted legacy allowances — the re-accretion guard for
+      # the engine god-files (the 2026-07 quality review's item #5): a file over its budget
+      # fails here instead of silently regrowing between audits. Pure node; no install.
+      - name: Guard file-size budgets
+        run: node scripts/check-file-size.mjs
+
   # The former monolithic "Build & typecheck" job was one long SERIAL chain (build →
   # publint/attw → knip → typechecks → nuxt generate → drizzle) and, at ~3m, a co-critical
   # blocking path. It is split into three lanes that run in PARALLEL — `build-typecheck`

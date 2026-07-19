@@ -7,10 +7,17 @@ that assembles the module services (~2.1k lines; a monolith flagged in
 **Where things live** (`src/modules/*`, one dir per concern):
 
 - `execution/` — **the run engine; start here for anything about how a pipeline step is
-  driven.** The god files live here: `ExecutionService.ts` + `RunDispatcher.ts` (the run/step
-  spine), plus `RunStateMachine`, `StepGraph`, the gate/companion/review controllers, and
-  `*.logic.ts` helpers (`ci.logic`, `release.logic`, `stepGating.logic`, …). The
-  run/step lifecycle reference is `docs/execution-state-machine.md`.
+  driven.** The two largest files are `ExecutionService.ts` (run lifecycle:
+  start/retry/restart/cancel, decisions/approvals, the merge subgraph) +
+  `RunDispatcher.ts` (the per-step dispatch + completion spine and its four registries),
+  each ratcheted by `scripts/check-file-size.mjs`. Their extracted collaborators sit
+  beside them: `RunAdmission` (the start/retry/restart `assert*` preflights),
+  `review-kinds.ts` (the requirements/clarity/brainstorm `ReviewKind` factories),
+  `DeployerStepController` (the deployer provision fan-out + env projection),
+  `FollowUpGateController` (the follow-up companion gate + its human-action API), plus
+  `RunStateMachine`, `StepGraph`, the gate/companion/review controllers, and `*.logic.ts`
+  helpers (`ci.logic`, `release.logic`, `stepGating.logic`, …). The run/step lifecycle
+  reference is `docs/execution-state-machine.md`.
 - `bootstrap/`, `pipelines/`, `board/`, `boardScan/`, `requirements/`, `merge/`,
   `notifications/`, `releaseHealth/`, `review/`, `estimation/`, `kaizen/`, `sandbox/`,
   `recurring/`, `settings/`, … — the other module services.

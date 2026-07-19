@@ -11,11 +11,9 @@ import type {
   ClarityReview,
   Clock,
   ContainerEvictionKind,
-  EnvironmentHandle,
   ExecutionEventPublisher,
   ExecutionInstance,
   ExecutionRepository,
-  FollowUpItem,
   FollowUpsStepState,
   ForkProposal,
   ForkDecisionStepState,
@@ -31,7 +29,6 @@ import type {
   IssueWritebackProvider,
   PipelineStep,
   ProviderCapabilities,
-  ProvisionContext,
   RepoFiles,
   RepoOp,
   RequirementConcernLevel,
@@ -40,11 +37,8 @@ import type {
   ResolveRunRepoContext,
   ResolverContext,
   RunInitiatorScope,
-  RunnerJobRef,
   RunRepoContext,
-  ServiceProvisioning,
   StepCompletionResolver,
-  StreamedFollowUp,
   TicketTrackerProvider,
   WorkRunner,
 } from '@cat-factory/kernel'
@@ -54,7 +48,6 @@ import {
   failureKindFromHarnessCause,
   FIXER_AGENT_KIND,
   getErrorMessage,
-  getErrorReason,
   getProvider,
   INITIATIVE_ANALYST_AGENT_KIND,
   INITIATIVE_COMMITTER_AGENT_KIND,
@@ -70,8 +63,6 @@ import {
   sameSubtasks,
 } from '@cat-factory/kernel'
 import {
-  frameProfile,
-  frontendOriginsForService,
   parseBlueprintService,
   parseSpecDoc,
   type PullRequestRef,
@@ -86,7 +77,6 @@ import {
   isCompanionKind,
   isContainerBackedCompanion,
   INTERVIEW_GATE_TRAIT,
-  moduleSlug,
   runRepoOps,
   specPostOp,
   TASK_ESTIMATOR_AGENT_KIND,
@@ -97,16 +87,12 @@ import type {
   BugIntakeOutcome,
   BugIntakeService,
   EnvironmentProvisioningService,
-  ProvisionArgs,
-  ProvisionDispatch,
 } from '@cat-factory/integrations'
 import { BUG_INTAKE_AGENT_KIND } from '../pipelines/pipelineShape.js'
 import { coerceTaskEstimate, summarizeEstimate } from '../estimation/estimate.logic.js'
 import { reviewableArtifactOutput } from './artifact-review.logic.js'
-import { deployEvictionEpoch, deployJobId, orderProvisionTargets } from './deployer.logic.js'
 import { renderInvestigationDigest } from './bugInvestigation.logic.js'
 import { renderReproDigest } from './reproTest.logic.js'
-import { frameOf, validInvolvedServiceFrames } from './frame.logic.js'
 import {
   ANALYSIS_AGENT_KIND,
   ARCHITECTURE_BRAINSTORM_AGENT_KIND,
@@ -121,23 +107,17 @@ import {
   REQUIREMENTS_BRAINSTORM_AGENT_KIND,
   REQUIREMENTS_REVIEW_AGENT_KIND,
   SPEC_WRITER_AGENT_KIND,
-  TESTER_AGENT_KIND,
   TRACKER_AGENT_KIND,
-  UI_TESTER_AGENT_KIND,
   VISUAL_CONFIRM_AGENT_KIND,
 } from './ci.logic.js'
-import {
-  followUpsToSendBack,
-  hasPendingFollowUps,
-  renderFollowUpRework,
-  shouldLoopCoder,
-} from './followUp.logic.js'
 import {
   classifyDispatchFailure,
   MAX_EVICTION_RECOVERIES,
   MAX_TRANSIENT_EVICTION_RECOVERIES,
 } from './job.logic.js'
 import { AgentContextBuilder } from './AgentContextBuilder.js'
+import { DeployerStepController } from './DeployerStepController.js'
+import { FollowUpGateController } from './FollowUpGateController.js'
 import { CompanionController } from './CompanionController.js'
 import { HumanTestController } from './HumanTestController.js'
 import { MergeResolver } from './MergeResolver.js'
@@ -190,19 +170,6 @@ type ResolvedRiskPolicy = {
 }
 
 /**
- * Step kinds whose run details surface the ephemeral-environment lifecycle: the
- * `deployer` provisions it and the `tester`/`playwright` exercise it. Used to gate
- * the per-poll env projection so the `getByBlock` read never hits the hot path for
- * the many container steps that have no env to show (see attachEnvironmentProjection).
- */
-const ENV_PROJECTION_KINDS = new Set<string>([
-  'deployer',
-  TESTER_AGENT_KIND,
-  UI_TESTER_AGENT_KIND,
-  'playwright',
-])
-
-/**
  * The inline review/brainstorm gate kinds, all driven through the {@link ReviewGateController}
  * by the dispatcher's `review-gate` StepHandler. Kept in sync with the handler's `switch`.
  */
@@ -225,17 +192,6 @@ function runOpensPr(instance: ExecutionInstance): boolean {
 }
 
 /**
- * Parse `owner`/`repo` from a GitHub pull-request URL (`https://github.com/o/r/pull/42`).
- * Returns undefined for any URL that doesn't carry both segments. Host-agnostic on
- * purpose (GitHub Enterprise hosts work too); only the `/owner/repo/...` shape matters.
- */
-function parseRepoFromPullUrl(url: string): { owner: string; repo: string } | undefined {
-  const match = /^https?:\/\/[^/]+\/([^/]+)\/([^/]+)\//.exec(url)
-  if (!match) return undefined
-  return { owner: match[1]!, repo: match[2]! }
-}
-
-/**
  * The PR number a `review` task targets: the explicit `prNumber` field wins, else parse it from
  * the `prUrl` (`…/pull/42` on GitHub, `…/merge_requests/42` on GitLab). Undefined when neither
  * yields one — the PR-review `fix`/`post` resolutions then report the PR unresolvable.
@@ -246,43 +202,6 @@ function reviewPrNumber(block: Block | null | undefined): number | undefined {
   const url = fields?.prUrl?.trim()
   const match = url ? /\/(?:pull|merge_requests)\/(\d+)/.exec(url) : null
   return match ? Number(match[1]) : undefined
-}
-
-/** One service frame a `deployer` step provisions an environment for (own or an involved peer). */
-interface DeployTarget {
-  frameId: string
-  /** The task's OWN service frame (implicitly involved); false for a connected involved service. */
-  isPrimary: boolean
-  provisioning: ServiceProvisioning | undefined
-  frame: Block
-}
-
-/**
- * The `peerEnvUrls` provision input for the frame about to be provisioned: a comma-joined set of
- * `slug=url` pairs for every target frame whose env is ALREADY ready this run — so a later
- * provider (own frame, provisioned last in provider-before-consumer order) can template a
- * connected service's URL into its manifest via `{{input.peerEnvUrls}}`. Empty when no peer is
- * ready yet. Documented limitation: a provider needing its consumer's URL (a cyclic env
- * dependency) is out of scope — there is no reconfigure pass.
- */
-function buildPeerEnvUrls(
-  targets: readonly DeployTarget[],
-  done: NonNullable<PipelineStep['deployEnvs']>,
-): string {
-  const parts: string[] = []
-  const seen = new Map<string, number>()
-  for (const target of targets) {
-    const env = done[target.frameId]
-    if (env?.status !== 'ready' || !env.url) continue
-    // Two ready providers can slugify to the same name; suffix the collision with an ordinal so a
-    // second provider's URL isn't silently dropped (or its entry made ambiguous) in the joined set.
-    const base = moduleSlug(target.frame.title)
-    const count = seen.get(base) ?? 0
-    seen.set(base, count + 1)
-    const slug = count === 0 ? base : `${base}-${count + 1}`
-    parts.push(`${slug}=${env.url}`)
-  }
-  return parts.join(',')
 }
 
 /** Collaborators + leaf dependencies the {@link RunDispatcher} needs. */
@@ -403,6 +322,22 @@ export class RunDispatcher {
   ) => Promise<ResolvedRiskPolicy>
   private readonly modelIdIsMetered: (id: string | undefined, caps: ProviderCapabilities) => boolean
 
+  /**
+   * The deterministic `deployer` step family (the multi-frame provision fan-out, the async
+   * deploy-job poll, and the environment projection env-aware steps surface), extracted to
+   * {@link DeployerStepController}. The completion hub + the shared poll folds are injected
+   * back as callbacks so the agent and deployer paths share one implementation of each.
+   */
+  private readonly deployer: DeployerStepController
+  /**
+   * The Follow-up companion gate (the future-looking Coder's streamed items, the
+   * park-until-decided gate, and the human-action API), extracted to
+   * {@link FollowUpGateController}. The dispatcher folds streamed items on each poll and
+   * evaluates the gate at Coder completion through this; the public follow-up methods below
+   * are thin pass-throughs the execution service re-exports.
+   */
+  private readonly followUpGate: FollowUpGateController
+
   /** Lazily-built polling-gate registry, keyed by `agentKind`. See {@link gateFor}. */
   private gateRegistryCache?: Map<string, GateDefinition>
   /** Lazily-built post-completion resolver registry, keyed by `agentKind`. */
@@ -453,6 +388,30 @@ export class RunDispatcher {
     this.resolveProviderCapabilities = deps.resolveProviderCapabilities
     this.resolveRiskPolicy = deps.resolveRiskPolicy
     this.modelIdIsMetered = deps.modelIdIsMetered
+    this.deployer = new DeployerStepController({
+      blockRepository: deps.blockRepository,
+      contextBuilder: deps.contextBuilder,
+      runStateMachine: deps.runStateMachine,
+      environmentProvisioning: deps.environmentProvisioning,
+      recordStepResult: (ws, instance, step, isFinalStep, result) =>
+        this.recordStepResult(ws, instance, step, isFinalStep, result),
+      applyContainerRunning: (step, update) => this.applyContainerRunning(step, update),
+      applySubtaskProgress: (step, counts) => this.applySubtaskProgress(step, counts),
+      recoverContainerEviction: (ws, instance, step, error, evicted, onBeforeRedispatch) =>
+        this.recoverContainerEviction(ws, instance, step, error, evicted, onBeforeRedispatch),
+    })
+    this.followUpGate = new FollowUpGateController({
+      executionRepository: deps.executionRepository,
+      blockRepository: deps.blockRepository,
+      contextBuilder: deps.contextBuilder,
+      stepGraph: deps.stepGraph,
+      runStateMachine: deps.runStateMachine,
+      workRunner: deps.workRunner,
+      idGenerator: deps.idGenerator,
+      clock: deps.clock,
+      notificationService: deps.notificationService,
+      ticketTrackerProvider: deps.ticketTrackerProvider,
+    })
   }
 
   /**
@@ -536,7 +495,7 @@ export class RunDispatcher {
         step.container = { status: 'starting' }
         // Surface the block's ephemeral environment (if any) alongside the cold-boot
         // phase, so a run's details show the env spinning up next to the container.
-        await this.attachEnvironmentProjection(workspaceId, instance.blockId, step)
+        await this.deployer.attachEnvironmentProjection(workspaceId, instance.blockId, step)
         await this.runStateMachine.casPersist(workspaceId, instance)
         await this.runStateMachine.emitInstance(workspaceId, instance)
 
@@ -745,7 +704,7 @@ export class RunDispatcher {
     // through the environment provisioning service — NOT the agent executor. Route it before
     // the executor resolution below (the deployer never goes through the agent executor).
     if (isDeployStep(step.agentKind) && this.environmentProvisioning) {
-      return this.pollDeployerJob(workspaceId, instance, step)
+      return this.deployer.pollDeployerJob(workspaceId, instance, step)
     }
 
     const executor = this.agentExecutor
@@ -787,10 +746,11 @@ export class RunDispatcher {
         if (this.recordBackendDiagnostics(target, update.backend)) changed = true
         // Append any forward-looking items the Coder streamed since the last poll so the
         // Follow-up companion lights up + accrues items LIVE while the container still runs.
-        if (this.appendStreamedFollowUps(s, update.followUps)) changed = true
+        if (this.followUpGate.appendStreamedFollowUps(s, update.followUps)) changed = true
         // Refresh the env projection so its status transitions (provisioning→ready→
         // expired/torn_down) and any error stay live in the run details during the run.
-        if (await this.attachEnvironmentProjection(workspaceId, target.blockId, s)) changed = true
+        if (await this.deployer.attachEnvironmentProjection(workspaceId, target.blockId, s))
+          changed = true
         return changed
       }
       // Cheap pre-check against the loaded snapshot: skip the write entirely on an idle poll
@@ -1021,7 +981,7 @@ export class RunDispatcher {
     // Capture any final burst of follow-up items the harness drained on the SAME poll that
     // observed completion (the tailer is flushed before the job is marked done), so the
     // completion gate below sees the last items — notably a question that must hold the run.
-    this.appendStreamedFollowUps(step, update.followUps)
+    this.followUpGate.appendStreamedFollowUps(step, update.followUps)
     // Clear the handle before recording so a replay re-attaches to nothing.
     step.jobId = undefined
     return this.recordStepResult(workspaceId, instance, step, isFinalStep, update.result)
@@ -1060,7 +1020,8 @@ export class RunDispatcher {
   /**
    * Apply an async step's live subtask counts to the step (and the derived 0..1 progress
    * fraction), returning whether anything changed. Shared by {@link pollAgentJob} (the agent
-   * executor's `update.subtasks`) and {@link pollDeployerJob} (the deploy job's `view.progress`)
+   * executor's `update.subtasks`) and the {@link DeployerStepController} poll (the deploy job's
+   * `view.progress`)
    * so the progress-fraction math lives in one place.
    */
   private applySubtaskProgress(step: PipelineStep, counts: PipelineStep['subtasks']): boolean {
@@ -1244,67 +1205,6 @@ export class RunDispatcher {
     return this.recordStepResult(workspaceId, instance, step, isFinalStep, {
       output: `${gate.kind} gate passed: watch window elapsed with no regression observed.`,
     })
-  }
-
-  /**
-   * Stamp `step.environment` from the block's live ephemeral environment so a run's
-   * details show its spinning-up / running / shut-down / errored state + the exact
-   * error. Best-effort: a no-op when the env integration isn't wired, and never
-   * throws (a projection failure must not break the run). Returns whether it changed,
-   * so the poll path can fold it into its single emit. The `human-test` gate keeps
-   * its own `humanTest.environment`, so this is for the other env-consuming steps
-   * (tester/coder/deployer).
-   */
-  private async attachEnvironmentProjection(
-    workspaceId: string,
-    blockId: string,
-    step: PipelineStep,
-    frameId?: string,
-  ): Promise<boolean> {
-    if (!this.environmentProvisioning) return false
-    // Only the env-aware kinds run against an ephemeral environment (the `deployer`
-    // provisions it; the `tester`/`playwright` exercise it). Gating here keeps the
-    // per-poll `getByBlock` read off the hot path for the many container steps
-    // (coder/merger/ci-fixer/…) that never have an env to surface.
-    if (!ENV_PROJECTION_KINDS.has(step.agentKind)) return false
-    try {
-      // Project the SPECIFIED service frame's env when given (the in-flight / failed frame of a
-      // multi-env deploy); otherwise the task's OWN frame (a task provisions several envs under
-      // one block, so an un-keyed newest-wins read could surface a peer's). Absent frame ⇒ own.
-      const resolvedFrameId =
-        frameId ??
-        (await this.contextBuilder.resolveServiceFrameId(workspaceId, blockId)) ??
-        undefined
-      const handle = await this.environmentProvisioning.getHandleForBlock(
-        workspaceId,
-        blockId,
-        resolvedFrameId,
-      )
-      const next = handle
-        ? {
-            id: handle.id,
-            url: handle.url,
-            status: handle.status,
-            expiresAt: handle.expiresAt,
-            lastError: handle.lastError,
-            provisionType: handle.provisionType ?? null,
-            engine: handle.engine ?? null,
-          }
-        : null
-      const prev = step.environment ?? null
-      if (
-        prev?.id === next?.id &&
-        prev?.status === next?.status &&
-        prev?.url === next?.url &&
-        (prev?.lastError ?? null) === (next?.lastError ?? null)
-      ) {
-        return false
-      }
-      step.environment = next
-      return true
-    } catch {
-      return false
-    }
   }
 
   /**
@@ -1492,7 +1392,7 @@ export class RunDispatcher {
     // (within the loop budget) before the following steps may start. Runs BEFORE the approval
     // gate so the Coder's follow-ups settle first. A no-op when nothing was surfaced.
     if (step.followUps?.enabled) {
-      const gated = await this.evaluateFollowUpGate(workspaceId, instance, step)
+      const gated = await this.followUpGate.evaluateFollowUpGate(workspaceId, instance, step)
       if (gated) return gated
     }
 
@@ -1588,665 +1488,6 @@ export class RunDispatcher {
     await this.runStateMachine.casPersist(workspaceId, instance)
     await this.runStateMachine.emitInstance(workspaceId, instance)
     return { kind: 'continue' }
-  }
-
-  /**
-   * Deterministically provision an ephemeral environment for a `deployer` step and turn the
-   * outcome into the step's advance result (no LLM, no token usage). On success the env
-   * summary is recorded as the step output. On a provisioning failure — the provider threw
-   * OR returned `status:'failed'` — the breakage is surfaced as a real, DISPLAYED step
-   * failure rather than a green step with the error buried in its prose output: `step.environment`
-   * is stamped with the errored env (its `lastError` renders in the step's Environment panel)
-   * and a structured `environment` failure is returned (the board's failure card). A deployer
-   * that can't provision IS failed — the downstream tester/coder steps need that environment.
-   *
-   * The failure is TERMINAL and surfaced for a human/`Retry`, NOT auto-retried by the durable
-   * driver — DELIBERATELY, and symmetric with {@link handleAgentStep}'s dispatch-failure path
-   * (a container that never started is likewise terminal regardless of `rethrowAgentErrors`).
-   * Environment provisioning is infra spin-up, not agent execution: treating it like the
-   * `dispatch` failure (surface the verbatim cause + one-click retry) keeps the `environment`
-   * classification and the provider's real error visible, where rethrowing for the driver's
-   * per-step retry would re-collapse it into a generic `agent` failure on exhaustion and bury
-   * the root cause. So do NOT reintroduce a `rethrowAgentErrors` branch here.
-   */
-  private async runDeployerStep(
-    workspaceId: string,
-    instance: ExecutionInstance,
-    step: PipelineStep,
-    block: Block,
-    isFinalStep: boolean,
-  ): Promise<AdvanceResult> {
-    // A set `jobId` means a prior (possibly replayed) dispatch already started an async deploy
-    // job for the IN-FLIGHT frame — re-attach by polling instead of re-provisioning (mirrors
-    // {@link handleAgentStep}). Short-circuit BEFORE resolving targets so a parked re-attach
-    // skips the workspace block-list read.
-    if (step.jobId) {
-      return { kind: 'awaiting_job', jobId: step.jobId, stepIndex: instance.currentStep }
-    }
-    // Fan out over every service frame this run provisions an env for — the task's OWN frame plus
-    // each still-valid involved-service frame (the connections initiative), ordered provider-
-    // before-consumer. Resolve the target set ONCE here (one workspace block-list read); the
-    // synchronous/infraless recursion threads it rather than re-reading per frame.
-    const targets = await this.resolveDeployTargets(workspaceId, block, step.deployPrimaryFrameId)
-    // Pin the primary (own) frame once, so every later re-entry/replay classifies it identically
-    // regardless of a mid-flight reparent (see {@link resolveDeployTargets}). Persisted with the
-    // first synchronous-settle / async-park upsert below.
-    step.deployPrimaryFrameId ??= targets.find((t) => t.isPrimary)?.frameId
-    return this.advanceDeployerFrames(workspaceId, instance, step, block, isFinalStep, targets)
-  }
-
-  /**
-   * Advance a `deployer` fan-out over its already-resolved `targets`: dispatch the first un-settled
-   * frame (parking on an async deploy job) or, once every frame has settled, complete the step. One
-   * deploy job per frame, dispatched SEQUENTIALLY (parking between) so a later provider can receive
-   * the already-ready peers' URLs. `step.deployEnvs` records each frame's TERMINAL outcome, so a
-   * replay resumes at the first un-settled frame. Re-entered (with the SAME targets) after each
-   * synchronous/infraless/failed-peer frame settles — never re-reading the block list per frame.
-   */
-  private async advanceDeployerFrames(
-    workspaceId: string,
-    instance: ExecutionInstance,
-    step: PipelineStep,
-    block: Block,
-    isFinalStep: boolean,
-    targets: readonly DeployTarget[],
-  ): Promise<AdvanceResult> {
-    const done = step.deployEnvs ?? {}
-    const next = targets.find((t) => !done[t.frameId])
-    if (!next) {
-      // Every frame settled: finish the step (all ready → done; a primary failure short-circuited).
-      return this.completeDeployerStep(workspaceId, instance, step, isFinalStep, targets)
-    }
-    // The deployer is the SINGLE environment provisioner: it stands the frame's env up whenever
-    // there is genuinely one to stand up, so every downstream consumer (tester / human-test /
-    // playwright) can depend on a pre-provisioned env rather than standing infra up itself:
-    //  - a DECLARED `kubernetes`/`custom` type (resolved through its per-type handler), OR
-    //  - a DECLARED `docker-compose` type on a workspace with a compose handler configured (the
-    //    setup wizard saves one) — the per-PR compose stack is provisioned HERE (attaching shared
-    //    stacks / running preflights), and the tester then targets that provisioned env (see
-    //    `testerInfraSpec`). A compose chain that reaches a tester with no resolvable handler is now
-    //    refused at run start (`assertTesterInfraConfigured`), so this stays the sole compose path, OR
-    //  - an UNDECLARED frame on a workspace with a legacy single-connection registered (the compat
-    //    bridge — preserved so existing single-connection deployments keep provisioning).
-    // Every other frame stands nothing up HERE — `infraless`/none, an undeclared frame with NO
-    // connection, or a frontend frame — so the deployer records `{status:'skipped'}` and re-enters
-    // for the next frame. This makes the deployer a safe NO-OP prefix that can be injected before
-    // every tester/human-test step without failing services that never configured provisioning.
-    // A `library` frame (not `deployable`) is never deployed — a declared compose path is repo-local
-    // TEST infra, not an environment — so it stands nothing up here regardless of its provisioning.
-    // Gating every env branch on `deployable` forces the skip record below (mirroring `infraless`).
-    const deployable = frameProfile(next.frame.type).deployable
-    const provisionType = next.provisioning?.type
-    const declaresEnv = deployable && (provisionType === 'kubernetes' || provisionType === 'custom')
-    const composeEnv =
-      deployable &&
-      provisionType === 'docker-compose' &&
-      next.provisioning !== undefined &&
-      // Thread the run initiator so a local per-user handler OVERRIDE resolves exactly as it does at
-      // provision time (and in the start-time gate) — else an override-only compose setup that
-      // passed `assertDeployerConfigured` would silently no-op here (the very dead-end the gate closes).
-      ((
-        await this.environmentProvisioning?.canProvision(
-          workspaceId,
-          next.provisioning,
-          instance.initiatedBy,
-        )
-      )?.ok ??
-        false)
-    const legacyEnv =
-      deployable &&
-      provisionType === undefined &&
-      (await this.environmentProvisioning?.hasLegacyConnection(workspaceId))
-    if (!declaresEnv && !composeEnv && !legacyEnv) {
-      await this.environmentProvisioning?.supersedeForBlock(workspaceId, block.id, next.frameId)
-      step.deployEnvs = { ...done, [next.frameId]: { status: 'skipped' } }
-      // Persist this frame's TERMINAL outcome BEFORE processing the next frame, so a crash/replay
-      // mid-fan-out resumes at the first un-settled frame rather than re-doing an already-settled
-      // one (which, on the synchronous REST path, would re-hit the provider — no idempotency guard
-      // there, unlike the deterministic async job ref).
-      await this.runStateMachine.casPersist(workspaceId, instance)
-      return this.advanceDeployerFrames(workspaceId, instance, step, block, isFinalStep, targets)
-    }
-    // Start provisioning the next frame: a raw-manifest config provisions SYNCHRONOUSLY over REST
-    // (a final handle); a config that needs rendering dispatches a CONTAINER-backed deploy job we
-    // park on and poll. The job ref is DETERMINISTIC (run id + deployer kind + FRAME + eviction
-    // epoch), so a Workflows replay reproduces the same id and the transport re-attaches instead
-    // of double-dispatching. The frame discriminator keeps each fanned-out job distinct.
-    const ref: RunnerJobRef = {
-      runId: instance.id,
-      jobId: deployJobId(instance.id, deployEvictionEpoch(step), next.frameId),
-    }
-    const peerEnvUrls = buildPeerEnvUrls(targets, done)
-    let dispatch: ProvisionDispatch
-    try {
-      dispatch = await this.environmentProvisioning!.startProvision(
-        await this.deployerProvisionArgs(workspaceId, instance, block, next, peerEnvUrls),
-        ref,
-      )
-    } catch (error) {
-      return this.settleDeployerFailure(
-        workspaceId,
-        instance,
-        step,
-        block,
-        isFinalStep,
-        targets,
-        next,
-        null,
-        getErrorMessage(error),
-        // Propagate the provider's machine-readable cause (e.g. `deploy_runner_unwired`) so the
-        // SPA can render precise, runtime-specific guidance rather than string-matching the prose.
-        getErrorReason(error),
-      )
-    }
-    if (dispatch.kind === 'completed') {
-      // Synchronous provision: record this frame's outcome, then continue to the next frame.
-      return this.settleDeployerFrame(
-        workspaceId,
-        instance,
-        step,
-        block,
-        isFinalStep,
-        targets,
-        next,
-        dispatch.handle,
-      )
-    }
-    // An async deploy job was dispatched: park on this frame. `dispatch` blocked until the job was
-    // accepted, so the container is up; the live phase + the provisioned outcome arrive on the
-    // deployer poll branch. Surface the frame's env spinning up alongside the parked step.
-    step.jobId = dispatch.ref.jobId
-    step.deployFrameId = next.frameId
-    step.container = { status: 'up' }
-    // Pin the provisioning config the container was built from, so the later poll/finalize maps
-    // the job against THIS config rather than a fresh read of the frame (which a person may edit
-    // mid-flight). Absent for the undeclared legacy path, which re-resolution handles harmlessly.
-    step.deployProvisioning = next.provisioning
-    await this.attachEnvironmentProjection(workspaceId, instance.blockId, step, next.frameId)
-    await this.runStateMachine.casPersist(workspaceId, instance)
-    await this.runStateMachine.emitInstance(workspaceId, instance)
-    return { kind: 'awaiting_job', jobId: step.jobId, stepIndex: instance.currentStep }
-  }
-
-  /**
-   * Resolve the ordered set of service frames a `deployer` step provisions environments for: the
-   * task's OWN service frame (always, `isPrimary`) plus each involved-service frame (read-time
-   * stale-filtered to ids that are still a connection neighbour AND resolve to a `service` frame
-   * WITH declared provisioning — an involved frame with none stands nothing up here). Ordered
-   * PROVIDER-before-CONSUMER over the connection edges among the targets (see
-   * {@link orderProvisionTargets}) so a later provision can receive its ready peers' URLs. One
-   * workspace block-list read; no per-frame point read.
-   *
-   * `pinnedPrimaryFrameId` (from {@link PipelineStep.deployPrimaryFrameId}, set on the first
-   * resolution) keeps the OWN/primary frame STABLE across re-entries: once the fan-out has started,
-   * a mid-flight reparent must not re-classify which frame is primary — that would flip an
-   * own-frame failure from terminal to a non-terminal peer failure. Prefer the pinned frame when it
-   * still resolves; fall back to a fresh `frameOf` walk otherwise.
-   */
-  private async resolveDeployTargets(
-    workspaceId: string,
-    block: Block,
-    pinnedPrimaryFrameId?: string,
-  ): Promise<DeployTarget[]> {
-    const blocks = await this.blockRepository.listByWorkspace(workspaceId)
-    const byId = new Map(blocks.map((b) => [b.id, b]))
-    const ownFrame =
-      (pinnedPrimaryFrameId ? byId.get(pinnedPrimaryFrameId) : undefined) ??
-      frameOf(byId, block.id) ??
-      block
-    const targets: DeployTarget[] = [
-      {
-        frameId: ownFrame.id,
-        isPrimary: true,
-        provisioning: ownFrame.provisioning,
-        frame: ownFrame,
-      },
-    ]
-    // The connected involved-service frames, read-time stale-filtered by the shared helper (kept in
-    // sync with `AgentContextBuilder.resolveInvolvedServices`). Include each regardless of declared
-    // provisioning — like the OWN frame, an undeclared service falls through to the legacy
-    // single-connection compat bridge, and an `infraless` one is skipped by the dispatch loop. Only
-    // the dispatch decides what actually stands up.
-    for (const frame of validInvolvedServiceFrames(blocks, block, ownFrame.id)) {
-      if (targets.some((t) => t.frameId === frame.id)) continue
-      targets.push({
-        frameId: frame.id,
-        isPrimary: false,
-        provisioning: frame.provisioning,
-        frame,
-      })
-    }
-    const targetIds = new Set(targets.map((t) => t.frameId))
-    const providersOf = new Map<string, Set<string>>()
-    for (const target of targets) {
-      const providers = new Set<string>()
-      for (const connection of target.frame.serviceConnections ?? []) {
-        if (
-          connection.serviceBlockId !== target.frameId &&
-          targetIds.has(connection.serviceBlockId)
-        ) {
-          providers.add(connection.serviceBlockId)
-        }
-      }
-      providersOf.set(target.frameId, providers)
-    }
-    const order = orderProvisionTargets(
-      targets.map((t) => ({ frameId: t.frameId, isPrimary: t.isPrimary })),
-      providersOf,
-    )
-    const byFrame = new Map(targets.map((t) => [t.frameId, t]))
-    return order.map((id) => byFrame.get(id)!)
-  }
-
-  /**
-   * Record one frame's TERMINAL deploy outcome onto `step.deployEnvs`, then continue the fan-out.
-   * A `ready` handle records the env and re-enters {@link advanceDeployerFrames} for the next
-   * frame; a `failed` handle routes to {@link settleDeployerFailure} (terminal only for the own
-   * frame). Shared by the synchronous-provision and async-finalized paths.
-   */
-  private async settleDeployerFrame(
-    workspaceId: string,
-    instance: ExecutionInstance,
-    step: PipelineStep,
-    block: Block,
-    isFinalStep: boolean,
-    targets: readonly DeployTarget[],
-    target: DeployTarget,
-    handle: EnvironmentHandle,
-  ): Promise<AdvanceResult> {
-    if (handle.status === 'failed') {
-      return this.settleDeployerFailure(
-        workspaceId,
-        instance,
-        step,
-        block,
-        isFinalStep,
-        targets,
-        target,
-        handle.url,
-        handle.lastError ?? 'Provisioning failed.',
-      )
-    }
-    if (handle.status !== 'ready' && !target.isPrimary) {
-      // A PEER env that isn't `ready` (`provisioning`, `expired`, `tearing_down`, …) is not usable
-      // context: `deployEnvs` can only record `ready`/`failed`/`skipped`, and recording it `ready`
-      // would BOTH advertise it "Provisioned involved-service environment …" AND inject its not-live
-      // URL into a consumer's `peerEnvUrls`. Drop it as a non-terminal peer failure instead. (The
-      // OWN frame keeps the historical behaviour — its env is the deploy's product; its live status
-      // is surfaced via the Environment projection, and the run proceeds as before.)
-      return this.settleDeployerFailure(
-        workspaceId,
-        instance,
-        step,
-        block,
-        isFinalStep,
-        targets,
-        target,
-        handle.url,
-        `Environment not ready (status: ${handle.status}).`,
-      )
-    }
-    const done = step.deployEnvs ?? {}
-    step.deployEnvs = { ...done, [target.frameId]: { status: 'ready', url: handle.url } }
-    // Persist this frame's TERMINAL outcome BEFORE provisioning the next frame (see the infraless
-    // branch) so a crash/replay resumes at the first un-settled frame, not re-provisioning this one.
-    await this.runStateMachine.casPersist(workspaceId, instance)
-    return this.advanceDeployerFrames(workspaceId, instance, step, block, isFinalStep, targets)
-  }
-
-  /**
-   * Record a frame's FAILED deploy outcome and decide whether it is terminal. The task's OWN
-   * (primary) service frame failing fails the whole deploy step (unchanged from the single-env
-   * path). An involved PEER frame failing is NON-terminal — the peer's env is best-effort context
-   * enrichment, so the run proceeds to the remaining frames without that peer's URL rather than
-   * failing a task because a service it merely "involves" has a misconfigured provider. The failed
-   * outcome is still recorded (surfaced in {@link completeDeployerStep}).
-   */
-  private async settleDeployerFailure(
-    workspaceId: string,
-    instance: ExecutionInstance,
-    step: PipelineStep,
-    block: Block,
-    isFinalStep: boolean,
-    targets: readonly DeployTarget[],
-    target: DeployTarget,
-    url: string | null | undefined,
-    error: string,
-    /** Machine-readable cause (e.g. `deploy_runner_unwired`) carried to the failure record. */
-    reason?: string,
-  ): Promise<AdvanceResult> {
-    const done = step.deployEnvs ?? {}
-    step.deployEnvs = { ...done, [target.frameId]: { status: 'failed', url: url ?? null, error } }
-    if (target.isPrimary) {
-      return this.failDeployerStep(workspaceId, instance, step, target.frameId, error, reason)
-    }
-    // A PEER failure is non-terminal — persist it BEFORE moving to the next frame so a replay
-    // doesn't re-attempt this failed peer (same rationale as the ready/infraless settle paths).
-    await this.runStateMachine.casPersist(workspaceId, instance)
-    return this.advanceDeployerFrames(workspaceId, instance, step, block, isFinalStep, targets)
-  }
-
-  /**
-   * Poll a `deployer` step's dispatched CONTAINER-backed deploy job (the async kustomize/helm
-   * path) through the environment provisioning service — NOT the agent executor. Mirrors
-   * {@link pollAgentJob}: surfaces live container/subtask progress while running, recovers a
-   * container eviction by re-dispatching a fresh deploy job (within the same budgets), and on a
-   * genuine terminal state finalizes the job into an environment record + the step result.
-   */
-  private async pollDeployerJob(
-    workspaceId: string,
-    instance: ExecutionInstance,
-    step: PipelineStep,
-  ): Promise<AdvanceResult> {
-    const ref: RunnerJobRef = { runId: instance.id, jobId: step.jobId! }
-    // The service frame this in-flight deploy job is provisioning (a multi-env fan-out dispatches
-    // one job per frame). Falls back to the own frame for a single-frame deploy that predates the
-    // discriminator / never fanned out.
-    const inFlightFrameId = step.deployFrameId ?? undefined
-    // Let a status-read failure THROW to the driver, exactly as `pollAgentJob` lets
-    // `executor.pollJob` throw: the driver counts consecutive read failures and fast-fails the
-    // run as `timeout` once `jobPollFailureTolerance` is hit. Swallowing it here would hide every
-    // read failure from that counter, so an unreachable deploy container would only stop at the
-    // full `jobMaxPolls` budget with a misleading "did not finish" message.
-    const view = await this.environmentProvisioning!.pollProvisionJob(workspaceId, ref)
-    if (view.state === 'running') {
-      let changed = false
-      if (this.applyContainerRunning(step, view)) changed = true
-      if (this.applySubtaskProgress(step, view.progress)) changed = true
-      if (
-        await this.attachEnvironmentProjection(workspaceId, instance.blockId, step, inFlightFrameId)
-      ) {
-        changed = true
-      }
-      if (changed) {
-        await this.runStateMachine.casPersist(workspaceId, instance)
-        // Progress-only deploy-job fold: skip the LLM-metrics rollup (same reason as the
-        // agent running fold above — a deploy job makes no LLM calls anyway).
-        await this.runStateMachine.emitInstance(workspaceId, instance, { rollUpMetrics: false })
-      }
-      return { kind: 'awaiting_job', jobId: step.jobId!, stepIndex: instance.currentStep }
-    }
-
-    // The deploy container vanished (evicted/crashed). The shared recovery re-dispatches a fresh
-    // deploy job (the driver loops back into `runDeployerStep`, which re-provisions the same
-    // un-settled frame since `step.jobId` is cleared) within the same per-flavour budgets as the
-    // agent path, reclaiming the dead job's runner first. Null for a non-eviction failure.
-    if (view.state === 'failed') {
-      const recovered = await this.recoverContainerEviction(
-        workspaceId,
-        instance,
-        step,
-        view.error,
-        view.evicted,
-        () => this.environmentProvisioning!.releaseProvisionJob(workspaceId, ref).catch(() => {}),
-      )
-      if (recovered) return recovered
-    }
-
-    // Genuine terminal (done, or a non-eviction failure): finalize the deploy job into an
-    // environment record and record this frame's outcome. A `failed` view maps to a failed env,
-    // which `settleDeployerFrame` surfaces as a displayed step failure.
-    const block = await this.blockRepository.get(workspaceId, instance.blockId)
-    if (!block) return { kind: 'noop' }
-    const isFinalStep = instance.currentStep === instance.steps.length - 1
-    // Resolve the full target set once (also drives the remaining-frames fan-out after this one
-    // settles), honouring the pinned primary frame. Derive the own/primary frame id from that set
-    // rather than a SECOND `resolveServiceFrameId` point-read walk — the primary target's frame id
-    // is the own frame (pinned, so a mid-flight reparent can't flip an own failure to a peer one).
-    const targets = await this.resolveDeployTargets(workspaceId, block, step.deployPrimaryFrameId)
-    const ownFrameId =
-      step.deployPrimaryFrameId ?? targets.find((t) => t.isPrimary)?.frameId ?? block.id
-    const frameId = inFlightFrameId ?? ownFrameId
-    // Recover the in-flight frame's real service-frame block from the target set so finalize
-    // provisions with the FRAME's identity/inputs (a peer's env must not reuse the task block's —
-    // see {@link deployerProvisionArgs}); fall back to a point-read (then the task block) if a
-    // connection was removed mid-flight so the frame is no longer a target.
-    const known = targets.find((t) => t.frameId === frameId)
-    const frame = known?.frame ?? (await this.blockRepository.get(workspaceId, frameId)) ?? block
-    // Map the job against the provisioning config the container was BUILT from (pinned at
-    // dispatch), not a fresh read of the frame a person may have edited mid-flight — else a
-    // config flip (e.g. → `infraless`) would fail a deploy whose container already succeeded. The
-    // pinned config is the in-flight frame's; the fallback resolution is only ever hit for the
-    // undeclared-own compat path (which resolves the own frame correctly).
-    const provisioning =
-      step.deployProvisioning ?? (await this.resolveServiceProvisioning(workspaceId, block))
-    const target: DeployTarget = { frameId, isPrimary: frameId === ownFrameId, provisioning, frame }
-    step.jobId = undefined
-    step.deployFrameId = undefined
-    step.subtasks = undefined
-    // The one-shot deploy container reached a terminal state: reclaim its runner now rather than
-    // letting it idle out its sleepAfter window (billed-but-useless compute) / leak a self-hosted
-    // pool slot. The deploy job is dispatched SEPARATELY from the shared per-run container, so the
-    // agent path's `stopRunContainer` (final step only, run-id keyed) never reclaims it.
-    // Best-effort/idempotent.
-    await this.environmentProvisioning!.releaseProvisionJob(workspaceId, ref).catch(() => {})
-    let handle
-    try {
-      handle = await this.environmentProvisioning!.finalizeProvision(
-        await this.deployerProvisionArgs(workspaceId, instance, block, target, ''),
-        view,
-      )
-    } catch (error) {
-      // The deploy container is gone (released above) but finalize failed: stamp the container
-      // errored so the failed details don't keep showing it "up". A primary failure is terminal; a
-      // peer's is not (the fan-out proceeds), so route through `settleDeployerFailure`.
-      if (step.container) step.container = { ...step.container, status: 'errored' }
-      step.deployProvisioning = undefined
-      return this.settleDeployerFailure(
-        workspaceId,
-        instance,
-        step,
-        block,
-        isFinalStep,
-        targets,
-        target,
-        null,
-        getErrorMessage(error),
-      )
-    }
-    step.deployProvisioning = undefined
-    // Reflect the container's terminal state from the RESOLVED outcome, not the raw view: a `done`
-    // view the provider maps to a FAILED env (e.g. the harness exited 0 but the namespace is
-    // missing) must still show the container errored — keying off `view.state` alone missed that.
-    if (handle.status === 'failed' && step.container) {
-      step.container = { ...step.container, status: 'errored' }
-    }
-    return this.settleDeployerFrame(
-      workspaceId,
-      instance,
-      step,
-      block,
-      isFinalStep,
-      targets,
-      target,
-      handle,
-    )
-  }
-
-  /**
-   * The {@link ProvisionArgs} for provisioning ONE target frame's environment (synchronous or
-   * async). The env is keyed by the task `block.id` + the target `frameId` — so a task's own env
-   * and each involved-service env coexist under the same block, discriminated by frame (see the
-   * per-`(blockId, frameId)` supersede). The repo/clone the provider resolves is the TARGET
-   * FRAME's (via `frameId`), so an involved-service env clones that peer's repo at its default
-   * branch, while the OWN frame targets the task's PR branch (its git/PR context); a peer carries
-   * no PR context. The `{{input.*}}` identity (blockId/title/…) is the TARGET FRAME's for a peer
-   * (see {@link deployTargetInputs}) so each peer's provider namespace is distinct — the task-
-   * scoped inputs would collapse every peer onto one namespace. Injects `frontendOrigins` (the
-   * browser origins binding this service) and `peerEnvUrls` (the already-ready peers) too.
-   */
-  private async deployerProvisionArgs(
-    workspaceId: string,
-    instance: ExecutionInstance,
-    block: Block,
-    target: DeployTarget,
-    peerEnvUrls: string,
-  ): Promise<ProvisionArgs> {
-    const frontendOrigins = await this.frontendOriginsInput(workspaceId, target.frameId)
-    // The OWN frame deploys the task's PR branch (its git/PR context); an involved peer carries no
-    // PR context, so its clone target falls back to that repo's default branch.
-    const context = target.isPrimary ? this.deployContext(block) : { blockId: block.id }
-    return {
-      workspaceId,
-      blockId: block.id,
-      frameId: target.frameId,
-      executionId: instance.id,
-      inputs: {
-        ...this.deployTargetInputs(block, target),
-        ...(frontendOrigins ? { frontendOrigins } : {}),
-        ...(peerEnvUrls ? { peerEnvUrls } : {}),
-      },
-      context,
-      ...(target.provisioning ? { serviceProvisioning: target.provisioning } : {}),
-      initiatedBy: instance.initiatedBy,
-    }
-  }
-
-  /**
-   * The `{{input.*}}` identity a target frame provisions with. The OWN frame keeps the historical
-   * task-scoped inputs (its namespace is uniquified by the task's PR repo/number). An involved PEER
-   * frame is scoped to the PEER FRAME's identity, with a `(task, peer)` composite `blockId` — so
-   * the provider namespace derived from `{{input.blockId}}` is distinct per peer AND per task,
-   * where the task-scoped inputs would collapse every peer of a task onto ONE namespace (each
-   * clobbering the previous, teardown deleting the wrong one).
-   */
-  private deployTargetInputs(block: Block, target: DeployTarget): Record<string, string> {
-    if (target.isPrimary) return this.deployInputs(block)
-    return {
-      blockId: `${block.id}-${target.frameId}`,
-      title: target.frame.title,
-      type: target.frame.type,
-      description: target.frame.description,
-    }
-  }
-
-  /**
-   * The `frontendOrigins` provision input for a service frame: the comma-joined browser origins
-   * of every `frontend` frame that binds this service (see `frontendOriginsForService`), for a
-   * manifest to fold into the backend's CORS allow-list via `{{input.frontendOrigins}}`. Empty
-   * string when no frontend binds it (the key is then omitted). One workspace block-list read —
-   * no per-frame point read (mirrors the visual-pipeline gate).
-   */
-  async frontendOriginsInput(workspaceId: string, serviceFrameId: string): Promise<string> {
-    const blocks = await this.blockRepository.listByWorkspace(workspaceId)
-    return frontendOriginsForService(serviceFrameId, blocks).join(',')
-  }
-
-  /**
-   * Turn a provisioned environment handle into the `deployer` step's advance result: a `failed`
-   * env is surfaced as a displayed step failure (its `lastError` renders in the Environment
-   * panel); otherwise the env summary (status / URL / provision type / engine) is recorded as the
-   * step output. Shared by the synchronous and async-finalized provision paths.
-   */
-  private async completeDeployerStep(
-    workspaceId: string,
-    instance: ExecutionInstance,
-    step: PipelineStep,
-    isFinalStep: boolean,
-    targets: readonly DeployTarget[],
-  ): Promise<AdvanceResult> {
-    const byFrame = new Map(targets.map((t) => [t.frameId, t]))
-    const primaryFrameId = step.deployPrimaryFrameId ?? targets.find((t) => t.isPrimary)?.frameId
-    // Re-project the now-final OWN environment (ready/expired + URL) so the deployer step's
-    // Environment panel + the downstream tester see the task's own service env, not a peer's or the
-    // dispatch-time `provisioning` snapshot the async poll last wrote. Pass the pinned primary frame
-    // so it needn't re-walk the tree to find the own frame.
-    await this.attachEnvironmentProjection(workspaceId, instance.blockId, step, primaryFrameId)
-    // Summarise from the recorded per-frame OUTCOMES (`deployEnvs`), NOT the current `targets`: a
-    // mid-flight involved-services / connection edit can drop a frame from `targets` while its env
-    // is still recorded and live, so iterating outcomes keeps that env visible (never silently
-    // orphaned). Titles come from the target set when the frame is still resolvable, else the id.
-    const done = step.deployEnvs ?? {}
-    const titleOf = (frameId: string): string => byFrame.get(frameId)?.frame.title ?? frameId
-    const isPrimaryFrame = (frameId: string): boolean =>
-      byFrame.get(frameId)?.isPrimary ?? frameId === primaryFrameId
-    const readyEntries = Object.entries(done).filter(([, env]) => env.status === 'ready')
-    if (readyEntries.length === 0) {
-      // Every target was `infraless`/library/skipped — nothing stood up (the single-service
-      // infraless case plus the all-infraless fan-out). A `library` frame reports its own reason
-      // (it is never deployed) so the run timeline stays explainable, per the frame profile.
-      const primaryFrame = primaryFrameId ? byFrame.get(primaryFrameId)?.frame : undefined
-      const output =
-        primaryFrame && !frameProfile(primaryFrame.type).deployable
-          ? 'Library frame; no deployment or environment provisioned.'
-          : 'Service is infraless; no environment provisioned.'
-      return this.recordStepResult(workspaceId, instance, step, isFinalStep, {
-        output,
-        model: 'environment:none',
-      })
-    }
-    const own = step.environment
-    const lines: string[] = []
-    for (const [frameId, env] of readyEntries) {
-      const url = env.url ?? '(pending)'
-      lines.push(
-        isPrimaryFrame(frameId)
-          ? `Provisioned ephemeral environment for '${titleOf(frameId)}': ${url}`
-          : `Provisioned involved-service environment for '${titleOf(frameId)}': ${url}`,
-      )
-    }
-    // A PEER frame that failed is non-terminal (the own deploy proceeded); note it so the failure
-    // is visible rather than silently absent from the fan-out summary. (A primary failure never
-    // reaches here — it fails the step in `settleDeployerFailure`.)
-    for (const [frameId, env] of Object.entries(done)) {
-      if (env.status !== 'failed' || isPrimaryFrame(frameId)) continue
-      lines.push(
-        `Involved-service environment for '${titleOf(frameId)}' failed: ${env.error ?? 'unknown error'}`,
-      )
-    }
-    if (own?.expiresAt) lines.push(`Expires: ${new Date(own.expiresAt).toISOString()}`)
-    if (own?.provisionType) lines.push(`Provision type: ${own.provisionType}`)
-    if (own?.engine) lines.push(`Engine: ${own.engine}`)
-    return this.recordStepResult(workspaceId, instance, step, isFinalStep, {
-      output: lines.join('\n'),
-      model: `environment:${readyEntries.length > 1 ? 'multi' : (own?.engine ?? 'single')}`,
-    })
-  }
-
-  /**
-   * Resolve the SERVICE frame's declared provisioning for a run block. The run may target a
-   * task/module nested under the frame, so walk up to the frame (mirrors the blueprint /
-   * tester-gate resolution) and read its `provisioning`. Returns null when undeclared.
-   */
-  private async resolveServiceProvisioning(
-    workspaceId: string,
-    block: Block,
-  ): Promise<ServiceProvisioning | undefined> {
-    const frameId =
-      (await this.contextBuilder.resolveServiceFrameId(workspaceId, block.id)) ?? block.id
-    const frame =
-      frameId === block.id ? block : await this.blockRepository.get(workspaceId, frameId)
-    return frame?.provisioning
-  }
-
-  /**
-   * Stamp the errored environment onto the deployer step (so its details show the verbatim
-   * `lastError`), persist + emit, then return a structured `environment` failure carrying the
-   * provider's message as the detail. Mirrors {@link handleAgentStep}'s dispatch-failure path.
-   */
-  private async failDeployerStep(
-    workspaceId: string,
-    instance: ExecutionInstance,
-    step: PipelineStep,
-    frameId: string,
-    message: string,
-    /** Machine-readable cause (e.g. `deploy_runner_unwired`) surfaced on the failure so the SPA
-     *  renders precise guidance without string-matching the prose. */
-    reason?: string,
-  ): Promise<AdvanceResult> {
-    // Project the FAILED frame's env (so its `lastError` renders in the Environment panel) — for a
-    // single-frame deploy that is the own env; for a failed involved-service env it surfaces the
-    // peer's error rather than a sibling's healthy env.
-    await this.attachEnvironmentProjection(workspaceId, instance.blockId, step, frameId)
-    await this.runStateMachine.casPersist(workspaceId, instance)
-    await this.runStateMachine.emitInstance(workspaceId, instance)
-    return {
-      kind: 'job_failed',
-      error: 'Environment provisioning failed.',
-      failureKind: 'environment',
-      detail: message,
-      ...(reason ? { reason } : {}),
-    }
   }
 
   /**
@@ -2787,7 +2028,7 @@ export class RunDispatcher {
         order: 100,
         canHandle: ({ step }) => !!this.environmentProvisioning && isDeployStep(step.agentKind),
         handle: ({ workspaceId, instance, step, block, isFinalStep }) =>
-          this.runDeployerStep(workspaceId, instance, step, block, isFinalStep),
+          this.deployer.runDeployerStep(workspaceId, instance, step, block, isFinalStep),
       },
       // A `tracker` step files a GitHub issue / Jira ticket from the preceding `analysis`
       // output (the tech-debt pipeline) — no LLM of its own. It is a pass-through when no
@@ -3556,140 +2797,6 @@ export class RunDispatcher {
     return { kind: 'awaiting_job', jobId: step.jobId, stepIndex: instance.currentStep }
   }
 
-  // ---- Follow-up companion (future-looking Coder) -------------------------
-  // The Coder streams forward-looking items (loose ends / side-tasks / questions) which
-  // accrue on its `step.followUps` live (see pollAgentJob). At the Coder's completion the
-  // run parks while any item is undecided, then loops the Coder for the items the human
-  // queued / answered (within the loop budget) before the following steps may start.
-
-  /**
-   * Append the items the harness streamed since the last poll onto the Coder step's
-   * follow-up state as fresh `pending` items. A no-op when the companion is off or nothing
-   * was streamed. Returns whether anything was added (so the poller persists + emits).
-   */
-  private appendStreamedFollowUps(
-    step: PipelineStep,
-    streamed: StreamedFollowUp[] | undefined,
-  ): boolean {
-    if (!step.followUps?.enabled || !streamed || streamed.length === 0) return false
-    const now = this.clock.now()
-    for (const s of streamed) {
-      const title = (s.title ?? '').trim()
-      if (!title) continue
-      step.followUps.items.push({
-        id: this.idGenerator.next('fu'),
-        kind: s.kind === 'question' ? 'question' : 'follow_up',
-        title,
-        detail: s.detail ?? '',
-        ...(s.suggestedAction ? { suggestedAction: s.suggestedAction } : {}),
-        status: 'pending',
-        createdAt: now,
-        updatedAt: now,
-      })
-    }
-    return true
-  }
-
-  /**
-   * The Follow-up companion gate, evaluated when the Coder step completes: park the run on
-   * a durable decision while any item is undecided; else loop the Coder for the queued /
-   * answered items (within the budget); else fall through (return undefined) so the normal
-   * advance/finish logic runs. Returns an {@link AdvanceResult} only when it parks or loops.
-   */
-  private async evaluateFollowUpGate(
-    workspaceId: string,
-    instance: ExecutionInstance,
-    step: PipelineStep,
-  ): Promise<AdvanceResult | undefined> {
-    const state = step.followUps
-    if (!state?.enabled) return undefined
-    if (hasPendingFollowUps(state)) {
-      await this.raiseFollowUpPending(workspaceId, instance, state)
-      return this.runStateMachine.parkStepOnDecision(workspaceId, instance, step)
-    }
-    if (shouldLoopCoder(state)) {
-      this.loopCoderForFollowUps(instance, step)
-      await this.runStateMachine.updateBlockProgress(workspaceId, instance, 'in_progress')
-      await this.runStateMachine.casPersist(workspaceId, instance)
-      await this.runStateMachine.emitInstance(workspaceId, instance)
-      return { kind: 'continue' }
-    }
-    return undefined
-  }
-
-  /**
-   * Reset the Coder step and fold the human's queued follow-ups / answered questions into
-   * its rework so the next pass extends the prior work. Marks those items `sentToCoder` so
-   * a later completion doesn't re-loop them, and counts the loop against the budget. Shared
-   * by the at-completion path ({@link evaluateFollowUpGate}) and the parked-resume path.
-   */
-  private loopCoderForFollowUps(instance: ExecutionInstance, step: PipelineStep): void {
-    const state = step.followUps!
-    const sending = followUpsToSendBack(state)
-    const feedback = renderFollowUpRework(sending)
-    for (const item of sending) {
-      item.sentToCoder = true
-      item.updatedAt = this.clock.now()
-    }
-    state.loops = (state.loops ?? 0) + 1
-    // Reset the step for a fresh dispatch; `step.followUps` is intentionally preserved
-    // (resetStepForRerun doesn't touch it) so the surfaced items survive the loop.
-    this.stepGraph.resetStepForRerun(step)
-    step.rework = { previousProposal: '', feedback }
-    this.stepGraph.startStep(step)
-    if (instance.status === 'blocked') instance.status = 'running'
-  }
-
-  /** Raise the "follow-ups need decisions" inbox card when the Coder parks on undecided items. */
-  private async raiseFollowUpPending(
-    workspaceId: string,
-    instance: ExecutionInstance,
-    state: FollowUpsStepState,
-  ): Promise<void> {
-    if (!this.notificationService) return
-    const block = await this.blockRepository.get(workspaceId, instance.blockId)
-    if (!block) return
-    const pending = state.items.filter((i) => i.status === 'pending').length
-    await this.notificationService.raise(workspaceId, {
-      type: 'followup_pending',
-      blockId: block.id,
-      executionId: instance.id,
-      title: `"${block.title}" surfaced ${pending} follow-up${pending === 1 ? '' : 's'} to decide`,
-      body:
-        'The Coder flagged forward-looking follow-ups / questions. Open the task to file ' +
-        'each as an issue, send it back to the Coder, answer it, or dismiss it — the ' +
-        'pipeline continues once every item is decided.',
-      payload: { pipelineName: instance.pipelineName, findingCount: pending },
-    })
-  }
-
-  /**
-   * The run's "active" follow-up companion step for a read with no item context (the GET /
-   * the inbox-card open). A pipeline may carry MORE THAN ONE follow-up-enabled Coder step,
-   * so this must not blindly pick the first: prefer the step the run is currently on (a Coder
-   * parked on its follow-up gate), else the latest enabled step that has surfaced items, else
-   * the first enabled one.
-   */
-  private activeFollowUpStep(
-    instance: ExecutionInstance,
-  ): { step: PipelineStep; index: number } | undefined {
-    const current = instance.steps[instance.currentStep]
-    if (current?.followUps?.enabled) return { step: current, index: instance.currentStep }
-    for (let i = instance.steps.length - 1; i >= 0; i--) {
-      const s = instance.steps[i]!
-      if (s.followUps?.enabled && s.followUps.items.length > 0) return { step: s, index: i }
-    }
-    const index = instance.steps.findIndex((s) => s.followUps?.enabled)
-    return index >= 0 ? { step: instance.steps[index]!, index } : undefined
-  }
-
-  /** Read a run's live follow-up companion state (the active Coder step's items), or null. */
-  async getFollowUps(workspaceId: string, executionId: string): Promise<FollowUpsStepState | null> {
-    const instance = await this.executionRepository.get(workspaceId, executionId)
-    if (!instance) throw new NotFoundError('Execution', executionId)
-    return this.activeFollowUpStep(instance)?.step.followUps ?? null
-  }
-
   // ---- Implementation-fork decision phase (Phase A dispatch) --------------
   // The proposer explore job runs as a HELPER off the coder step; its completion is handled
   // by the `fork-proposal` interceptor + {@link ForkDecisionController.recordProposal}, and the
@@ -3909,242 +3016,50 @@ export class RunDispatcher {
     return this.prReviewController.resolve(workspaceId, executionId, input)
   }
 
-  /**
-   * Locate the run + the Coder step that OWNS the addressed item + the item, throwing 404
-   * when absent. Routes by item id (not "the first enabled step") so a pipeline carrying more
-   * than one follow-up-enabled Coder step decides each item on the step that surfaced it —
-   * otherwise a later Coder's items 404 and its gate can never be cleared.
-   */
-  private async loadFollowUpItem(
-    workspaceId: string,
-    executionId: string,
-    itemId: string,
-  ): Promise<{
-    instance: ExecutionInstance
-    step: PipelineStep
-    index: number
-    item: FollowUpItem
-  }> {
-    const instance = await this.executionRepository.get(workspaceId, executionId)
-    if (!instance) throw new NotFoundError('Execution', executionId)
-    const index = instance.steps.findIndex(
-      (s) => s.followUps?.enabled && s.followUps.items.some((i) => i.id === itemId),
-    )
-    if (index < 0) throw new NotFoundError('Follow-up item', itemId)
-    const step = instance.steps[index]!
-    const item = step.followUps!.items.find((i) => i.id === itemId)!
-    return { instance, step, index, item }
+  // ---- Follow-up companion pass-throughs ----------------------------------
+  // The follow-up gate + its human-action API live on {@link FollowUpGateController}; these
+  // thin delegations keep the dispatcher the single surface `ExecutionService` re-exports.
+
+  /** @see FollowUpGateController.getFollowUps */
+  getFollowUps(workspaceId: string, executionId: string): Promise<FollowUpsStepState | null> {
+    return this.followUpGate.getFollowUps(workspaceId, executionId)
   }
 
-  /** File a `follow_up` item as a tracker issue (GitHub / Jira), recording the ticket ref. */
-  async fileFollowUp(
+  /** @see FollowUpGateController.fileFollowUp */
+  fileFollowUp(
     workspaceId: string,
     executionId: string,
     itemId: string,
   ): Promise<FollowUpsStepState> {
-    // Snapshot read for validation + frame resolution before the non-idempotent ticket
-    // creation; the item's ticket refs are then recorded under CAS in applyFollowUpDecision.
-    const { instance, item } = await this.loadFollowUpItem(workspaceId, executionId, itemId)
-    if (item.kind !== 'follow_up') {
-      throw new ConflictError('Only follow-up items can be filed as issues')
-    }
-    if (!this.ticketTrackerProvider) {
-      throw new ConflictError('No issue tracker is configured for this workspace')
-    }
-    const frameId =
-      (await this.contextBuilder.resolveServiceFrameId(workspaceId, instance.blockId)) ??
-      instance.blockId
-    const body = [
-      item.detail,
-      item.suggestedAction ? `\n\nSuggested approach: ${item.suggestedAction}` : '',
-    ]
-      .join('')
-      .trim()
-    const ticket = await this.ticketTrackerProvider.createTicket({
-      workspaceId,
-      frameId,
-      title: item.title,
-      body: body || item.title,
-    })
-    if (!ticket) {
-      throw new ConflictError('No issue tracker is configured for this workspace')
-    }
-    return this.applyFollowUpDecision(workspaceId, executionId, itemId, (target) => {
-      // Re-validated on the fresh snapshot inside the CAS (the ticket was already created above).
-      if (target.kind !== 'follow_up') {
-        throw new ConflictError('Only follow-up items can be filed as issues')
-      }
-      target.status = 'filed'
-      target.ticketExternalId = ticket.externalId
-      target.ticketUrl = ticket.url
-      target.updatedAt = this.clock.now()
-    })
+    return this.followUpGate.fileFollowUp(workspaceId, executionId, itemId)
   }
 
-  /** Queue a `follow_up` item to send back to the Coder on its next pass. */
-  async queueFollowUp(
+  /** @see FollowUpGateController.queueFollowUp */
+  queueFollowUp(
     workspaceId: string,
     executionId: string,
     itemId: string,
   ): Promise<FollowUpsStepState> {
-    return this.applyFollowUpDecision(workspaceId, executionId, itemId, (item) => {
-      if (item.kind !== 'follow_up') {
-        throw new ConflictError('Only follow-up items can be sent back to the Coder')
-      }
-      item.status = 'queued'
-      item.sentToCoder = false
-      item.updatedAt = this.clock.now()
-    })
+    return this.followUpGate.queueFollowUp(workspaceId, executionId, itemId)
   }
 
-  /** Answer a `question` item; the answer is folded into the Coder's next pass. */
-  async answerFollowUp(
+  /** @see FollowUpGateController.answerFollowUp */
+  answerFollowUp(
     workspaceId: string,
     executionId: string,
     itemId: string,
     answer: string,
   ): Promise<FollowUpsStepState> {
-    return this.applyFollowUpDecision(workspaceId, executionId, itemId, (item) => {
-      if (item.kind !== 'question') {
-        throw new ConflictError('Only question items can be answered')
-      }
-      item.status = 'answered'
-      item.answer = answer
-      item.sentToCoder = false
-      item.updatedAt = this.clock.now()
-    })
+    return this.followUpGate.answerFollowUp(workspaceId, executionId, itemId, answer)
   }
 
-  /** Dismiss a follow-up / question item without acting on it. */
-  async dismissFollowUp(
+  /** @see FollowUpGateController.dismissFollowUp */
+  dismissFollowUp(
     workspaceId: string,
     executionId: string,
     itemId: string,
   ): Promise<FollowUpsStepState> {
-    return this.applyFollowUpDecision(workspaceId, executionId, itemId, (item) => {
-      item.status = 'dismissed'
-      item.updatedAt = this.clock.now()
-    })
-  }
-
-  /**
-   * Apply a human follow-up item decision and, when the run is PARKED on this step's follow-up
-   * gate with every item now decided, drive it forward — loop the Coder for the queued/answered
-   * items, hand off to a co-located approval gate, or advance past the gate — all under
-   * OPTIMISTIC CONCURRENCY. A follow-up decision can race the driver's running-poll fold (which
-   * appends newly-streamed items) or another decision on a sibling item, so it RE-READS +
-   * RE-APPLIES on a lost CAS race instead of clobbering — the human-action dual of the driver's
-   * abort-and-redrive (race-audit 2.2). The item mutation + the in-memory gate transition run
-   * INSIDE the CAS callback (idempotent, re-runnable on reload); the non-idempotent side effects
-   * (notifications, `signalDecision`, emit) run once AFTER, on the winning snapshot. `decide`
-   * validates + mutates the item, throwing a `ConflictError`/`NotFoundError` that propagates
-   * immediately (a domain error is not retried).
-   */
-  private async applyFollowUpDecision(
-    workspaceId: string,
-    executionId: string,
-    itemId: string,
-    decide: (item: FollowUpItem) => void,
-  ): Promise<FollowUpsStepState> {
-    // Captured inside the (re-runnable) callback for the last winning attempt; the
-    // non-idempotent side effects below act on them.
-    let outcome: 'record' | 'loop' | 'handoff' | 'advance' = 'record'
-    let index = -1
-    let loopDecisionId: string | undefined
-    const persisted = await this.runStateMachine.mutateInstance(
-      workspaceId,
-      executionId,
-      (fresh) => {
-        outcome = 'record'
-        loopDecisionId = undefined
-        index = fresh.steps.findIndex(
-          (s) => s.followUps?.enabled && s.followUps.items.some((i) => i.id === itemId),
-        )
-        if (index < 0) throw new NotFoundError('Follow-up item', itemId)
-        const step = fresh.steps[index]!
-        decide(step.followUps!.items.find((i) => i.id === itemId)!)
-
-        const parkedHere =
-          fresh.status === 'blocked' &&
-          step.approval?.status === 'pending' &&
-          fresh.currentStep === index
-        // Still collecting decisions (or the run isn't parked on this gate): only record it.
-        if (!parkedHere || hasPendingFollowUps(step.followUps!)) return
-        // Every item decided and the run is parked here: loop the Coder for the send-back items,
-        // hand off to a co-located approval gate, or advance past the gate.
-        if (shouldLoopCoder(step.followUps!)) {
-          loopDecisionId = step.approval!.id
-          this.loopCoderForFollowUps(fresh, step)
-          outcome = 'loop'
-          return
-        }
-        const isFinalStep = index === fresh.steps.length - 1
-        if (step.requiresApproval && !isFinalStep && step.approval?.status === 'pending') {
-          // The follow-up park reused `step.approval`; advancing here would silently SKIP the
-          // approval. Refresh the proposal and hand off to the standard approval gate (the
-          // follow-up card is cleared + the "waiting for input" card re-raised below), preserving
-          // the follow-up-before-approval ordering recordStepResult established across the park.
-          step.approval = { ...step.approval, proposal: step.output ?? '' }
-          outcome = 'handoff'
-          return
-        }
-        this.runStateMachine.advanceRunPastGate(fresh, index)
-        outcome = 'advance'
-      },
-    )
-    // Non-idempotent side effects on the winning snapshot (the CAS write is the source of truth,
-    // so nothing re-persists here). The settled paths first clear the follow-up waiting card.
-    if (outcome === 'record') {
-      await this.runStateMachine.emitInstance(workspaceId, persisted)
-    } else {
-      await this.runStateMachine.clearWaitingNotification(workspaceId, persisted)
-      if (outcome === 'loop') {
-        await this.runStateMachine.updateBlockProgress(workspaceId, persisted, 'in_progress')
-        await this.workRunner.signalDecision(workspaceId, persisted.id, loopDecisionId!, 'approved')
-        await this.runStateMachine.emitInstance(workspaceId, persisted)
-      } else if (outcome === 'handoff') {
-        await this.runStateMachine.ensureWaitingNotification(workspaceId, persisted)
-        await this.runStateMachine.emitInstance(workspaceId, persisted)
-      } else {
-        // advance: block writes + `signalDecision('approved')` + emit — the approveStep template.
-        await this.runStateMachine.settleAdvancedGate(workspaceId, persisted, index)
-      }
-    }
-    return persisted.steps[index]!.followUps!
-  }
-
-  /** Provision inputs (`{{input.*}}`) derived from the block under deployment. */
-  deployInputs(block: Block): Record<string, string> {
-    const inputs: Record<string, string> = {
-      blockId: block.id,
-      title: block.title,
-      type: block.type,
-      description: block.description,
-    }
-    return inputs
-  }
-
-  /**
-   * Typed git/PR/repo context for the deployer, derived from the block's PR ref. A
-   * PR-environment provider (e.g. an in-house adapter) needs the branch/repo to target
-   * the right environment; the same values are also flattened into `{{input.*}}` for
-   * the manifest path. `owner`/`repo` are parsed from the PR url when present.
-   */
-  deployContext(block: Block): ProvisionContext {
-    const context: ProvisionContext = { blockId: block.id }
-    const pr = block.pullRequest
-    if (!pr) return context
-    if (pr.branch) context.branch = pr.branch
-    if (pr.number !== undefined) context.pullNumber = pr.number
-    if (pr.url) {
-      context.pullUrl = pr.url
-      const repo = parseRepoFromPullUrl(pr.url)
-      if (repo) {
-        context.repoOwner = repo.owner
-        context.repoName = repo.repo
-      }
-    }
-    return context
+    return this.followUpGate.dismissFollowUp(workspaceId, executionId, itemId)
   }
 
   /**
