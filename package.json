@@ -26,15 +26,15 @@
     "ci:publish": "pnpm build && changeset publish"
   },
   "devDependencies": {
-    "@arethetypeswrong/cli": "^0.18.4",
-    "@changesets/cli": "^2.31.0",
+    "@arethetypeswrong/cli": "^0.18.5",
+    "@changesets/cli": "^2.31.1",
     "@valibot/to-json-schema": "^1.7.1",
-    "knip": "^6.26.0",
+    "knip": "^6.27.0",
     "oxfmt": "^0.57.0",
-    "oxlint": "^1.73.0",
+    "oxlint": "^1.74.0",
     "publint": "^0.3.21",
     "sherif": "^1.13.0",
-    "turbo": "^2.10.4",
+    "turbo": "^2.10.5",
     "typescript": "7.0.2"
   },
   "engines": {
