@@ -44,6 +44,24 @@ describe('inspector panel group', () => {
     ])
   })
 
+  it('a document frame hides the test-infra / test-credentials / release-health panels', () => {
+    // A doc repo stands up no test env and ships no release, so those panels don't apply.
+    expect(visibleIds(block('frame', 'document'))).toEqual([
+      'container-summary',
+      'service-fragments',
+    ])
+  })
+
+  it('a library frame still shows the test/deploy panels (only document is excluded)', () => {
+    expect(visibleIds(block('frame', 'library'))).toEqual([
+      'container-summary',
+      'service-test-config',
+      'service-test-secrets',
+      'service-fragments',
+      'service-release-health',
+    ])
+  })
+
   it('a frontend frame swaps connections for frontend-config', () => {
     expect(visibleIds(block('frame', 'frontend'))).toEqual([
       'container-summary',
