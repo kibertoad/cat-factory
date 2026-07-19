@@ -81,4 +81,19 @@ describe('inspector panel group', () => {
   it('no subject selected resolves to no panels', () => {
     expect(visibleIds(null)).toEqual([])
   })
+
+  // Locks the contract the client plugin's boot fail-fast depends on: it calls
+  // `resolvePanels(mergedEntries, null)` once at startup so a duplicate panel id
+  // (e.g. a consumer module colliding with a first-party id) throws at BOOT rather
+  // than the first time a block is selected. That only works because `resolvePanels`
+  // runs its duplicate-id check BEFORE the null-subject short-circuit — pin it here
+  // so an upstream reorder (dedup after the null guard) can't silently disarm the
+  // boot check.
+  it('throws on a duplicate panel id even with a null subject (boot fail-fast)', () => {
+    const dup: PanelEntry<Block>[] = [
+      { id: 'container-summary', order: 1, when: () => true, component: () => null },
+      { id: 'container-summary', order: 2, when: () => true, component: () => null },
+    ]
+    expect(() => resolvePanels(dup, null)).toThrow(/duplicate panel id "container-summary"/)
+  })
 })

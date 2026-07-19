@@ -26,7 +26,7 @@ The frame-only "view requirements" button and the cross-cutting run banners
 body panels). All existing sub-panel `data-testid`s are preserved.
 
 Deps: bumped `@modular-frontend/core` `^0.2.0 → ^0.4.0`, `@modular-vue/core` /
-`@modular-vue/vue` `→ ^1.3.0`, `@modular-vue/runtime` `→ ^1.4.0`, `@modular-vue/nuxt`
+`@modular-vue/vue` `→ ^1.3.0`, `@modular-vue/runtime` `→ ^1.4.1`, `@modular-vue/nuxt`
 `→ ^0.4.0`, `@modular-vue/journeys` `→ ^1.3.0`, plus a `@modular-frontend/core: 0.4.0`
 pnpm override so `@modular-frontend/journeys-engine` (which still deps `0.3.0`)
 can't drag a second copy of the neutral core into the tree.

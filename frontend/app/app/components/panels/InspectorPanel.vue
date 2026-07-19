@@ -485,7 +485,15 @@ const showOriginalDescription = ref(false)
            wrapper). Replaces the pre-slice-4 `v-if` fan; `subject-key` is the block
            id, so switching selections remounts panel content (matching the old
            per-panel `:key`). A consumer contributes its own panels to the SAME
-           group via `registerAppModule`. -->
+           group via `registerAppModule`.
+
+           The `subject` cast is an upstream typing quirk, not a modelling escape
+           hatch: `<PanelsOutlet>` declares `subject` as `PropType<unknown>` with
+           `default: null`, which Volar narrows to `null`, so passing a typed
+           `Block | null` is rejected at compile time. `unknown` is the real
+           runtime contract; `as any` is the minimal unblock until the binding
+           types the prop explicitly (filed upstream — see the slice-4 residuals
+           in docs/initiatives/modular-vue-slice4-upstream-zones.md). -->
       <PanelsOutlet
         :group="inspectorPanels"
         :subject="(block ?? null) as any"
