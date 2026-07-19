@@ -35,10 +35,10 @@ built-in) that declares an `agent` step dispatches through `registeredAgentStep`
 one shared `common` body + resolves auth once. But the built-in kinds are still the holdout,
 in **two parallel switches**:
 
-- `buildBespokeKindBody` (`jobBody.ts`) — a `switch (context.agentKind)` with the 9
-  remaining built-in cases (`BLUEPRINTS`, `SPEC_WRITER`, `CI_FIXER`, `FIXER`,
-  `CONFLICT_RESOLVER`, `MERGER`, `ON_CALL`, `TESTER`, `UI_TESTER`) building kind-specific
-  job bodies + system prompts.
+- `buildMigratedBuiltInBody` (`jobBody.ts`) — a `switch (context.agentKind)` with the 7
+  remaining built-in cases (`CI_FIXER`, `FIXER`, `CONFLICT_RESOLVER`, `MERGER`, `ON_CALL`,
+  `TESTER`, `UI_TESTER`) building kind-specific job bodies + system prompts. (`BLUEPRINTS` +
+  `SPEC_WRITER` are now real `registerAgentKind` entries — see the slice note below.)
 - `toRunResult` (`containerAgentResult.ts`) — an `if (agentKind === …)` chain coercing job
   output into domain shapes (`blueprintService`, `spec`, `mergeAssessment`, `onCallAssessment`,
   `testReport`, …) for those same kinds.
@@ -82,11 +82,32 @@ were deleted from `buildMigratedBuiltInBody`**, and the pair were removed from
 `registry.requiresContainer()`). Their `systemPrompt`/`userPrompt` resolve through
 `systemPromptFor`/`userPromptFor` like any registered kind, so the surface directives
 (READ_ONLY_GUARDRAIL / FINAL_ANSWER_IN_REPLY) are applied centrally instead of hand-embedded.
-This is the reference shape for the remaining kernel-id built-ins. Still to do: the
-orchestration-id built-ins (`blueprints`/`spec-writer`/`ci-fixer`/`fixer`/`conflict-resolver`/
+This is the reference shape for the remaining built-ins.
+
+**Slice landed — `blueprints` + `spec-writer` are now real registrations.** The two
+structured-explore + render-post-op built-ins are migrated the same way: their prompts +
+per-kind user builders moved from `@cat-factory/server`'s `prompts.ts` into
+`@cat-factory/agents` (`agents/kinds/spec-blueprints.ts`), and — because agents can't import
+orchestration — their kind-id constants moved down beside the definitions and are re-exported
+by orchestration's `ci.logic.ts` (the pattern the inline-reviewer ids already use). Each is
+registered as a read-only structured `container-explore` kind (blueprints clones the PR
+branch; spec-writer clones the per-block work branch with `failOnUnusableFinal`), so **both
+cases were deleted from `buildMigratedBuiltInBody`** and the pair removed from
+`CompositeAgentExecutor`'s `CONTAINER_KINDS`. Their `toRunResult` coercion still keys off
+their id (→ `blueprintService`/`spec`), and their deterministic render/commit post-ops stay
+in the engine's built-in `BUILT_IN_POST_OPS` map (their commit branch is resolved specially
+in `RunDispatcher.builtInRepoOpBranch`, which the generic clone resolution does not match), so
+engine behaviour is unchanged. Routing their prompts through `systemPromptFor`/`userPromptFor`
+newly applies the central surface directives + declared traits (blueprints now carries the
+read-only guardrail + its `spec-aware` guidance; spec-writer the guardrail; both fold the
+block's fragments) — the enrichment the old bespoke constant bypassed.
+
+Still to do: the remaining orchestration-id built-ins (`ci-fixer`/`fixer`/`conflict-resolver`/
 `merger`/`on-call`/`tester`/`ui-tester`), whose prompts also need repo/`parts` context the
-registry `userPrompt(context)` seam does not yet carry, and folding the `toRunResult` coercion
-chain onto the definitions (the planner's coercion still keys off its id in
+registry `userPrompt(context)` seam does not yet carry (so migrating them needs a seam
+extension first — the blocker `blueprints`/`spec-writer` did not hit, as their builders need
+only `AgentRunContext`), and folding the `toRunResult` coercion chain onto the definitions (the
+planner's + blueprints'/spec-writer's coercions still key off their ids in
 `containerAgentResult.ts`).
 
 ## 6. Module registry for the orchestration container

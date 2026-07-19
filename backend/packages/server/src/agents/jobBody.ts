@@ -10,20 +10,15 @@ import {
   userPromptFor,
 } from '@cat-factory/agents'
 import {
-  BLUEPRINTS_AGENT_KIND,
   CI_FIXER_AGENT_KIND,
   CONFLICT_RESOLVER_AGENT_KIND,
   FIXER_AGENT_KIND,
   MERGER_AGENT_KIND,
   ON_CALL_AGENT_KIND,
-  SPEC_WRITER_AGENT_KIND,
   TESTER_AGENT_KIND,
   UI_TESTER_AGENT_KIND,
 } from '@cat-factory/orchestration'
 import {
-  BLUEPRINT_SHAPE_HINT,
-  BLUEPRINT_SYSTEM_PROMPT,
-  blueprintUserPrompt,
   MERGE_ASSESSMENT_SHAPE_HINT,
   MERGER_SYSTEM_PROMPT,
   mergerMultiRepoUserPrompt,
@@ -32,9 +27,6 @@ import {
   ON_CALL_SYSTEM_PROMPT,
   onCallUserPrompt,
   prBody,
-  SPEC_SHAPE_HINT,
-  SPEC_WRITER_SYSTEM_PROMPT,
-  specWriterUserPrompt,
   TEST_REPORT_SHAPE_HINT,
   testerInfraSpec,
   UI_TEST_REPORT_SHAPE_HINT,
@@ -166,15 +158,17 @@ export function buildKindBody(
     return buildRegisteredAgentBody(context, parts, registeredStep, roleSystemPrompt, registry)
   }
 
-  // Built-in container kinds migrated onto the generic, manifest-driven `agent` harness
-  // kind (they dispatch `kind:'agent'` through `buildRegisteredAgentBody`, exactly like a
-  // registered custom kind, with NO bespoke per-kind harness handler) — the Task-5
-  // strangler. Today: blueprints/spec-writer (structured explore + render post-op), the
-  // in-place fixers (`ci-fixer` / `fixer`, coding-on-PR), the JSON-assessment producers
-  // (`merger` / `on-call`, read-only structured explore whose assessment is coerced
-  // backend-side in `toRunResult`), the `tester` (read-only structured explore with
-  // docker-compose infra stand-up), and the conflict-resolver (coding with a `mergeBase`).
-  // The default coder dispatches the generic coding agent at the end of this method.
+  // Built-in container kinds NOT yet moved onto the public `registerAgentKind` seam, but
+  // dispatched through the generic `buildRegisteredAgentBody` path via a synthesized
+  // `AgentStepSpec` (they dispatch `kind:'agent'`, exactly like a registered custom kind,
+  // with NO bespoke per-kind harness handler) — the Task-5 strangler. Today: the in-place
+  // fixers (`ci-fixer` / `fixer`, coding-on-PR), the JSON-assessment producers (`merger` /
+  // `on-call`, read-only structured explore whose assessment is coerced backend-side in
+  // `toRunResult`), the `tester` (read-only structured explore with docker-compose infra
+  // stand-up), and the conflict-resolver (coding with a `mergeBase`). The already-migrated
+  // built-ins (`blueprints` / `spec-writer` / the initiative kinds) are real registrations,
+  // so the generic `registry.agentStep(...)` path above handles them. The default coder
+  // dispatches the generic coding agent at the end of this method.
   const migrated = buildMigratedBuiltInBody(context, parts, roleSystemPrompt, registry)
   if (migrated) return migrated
 
@@ -712,55 +706,6 @@ function buildMigratedBuiltInBody(
   const { repo } = parts
   const prBranch = context.block.pullRequest?.branch
   switch (context.agentKind) {
-    // The Blueprinter maps the repo into the service → modules tree. It now runs as a
-    // read-only structured explore (clone the PR branch when present, else the default
-    // branch — exactly its old `prBranch ?? baseBranch` clone), returning ONLY the tree
-    // as JSON; the deterministic render + commit of the `blueprints/` artifact that used
-    // to live in the harness `/blueprint` handler is the backend `blueprintPostOp` (run
-    // from ExecutionService), and `toRunResult` coerces the JSON into `blueprintService`
-    // for the board reconcile + that post-op.
-    case BLUEPRINTS_AGENT_KIND:
-      return buildRegisteredAgentBody(
-        context,
-        parts,
-        {
-          surface: 'container-explore',
-          clone: { branch: 'pr' },
-          output: { kind: 'structured', shapeHint: BLUEPRINT_SHAPE_HINT },
-        },
-        BLUEPRINT_SYSTEM_PROMPT,
-        registry,
-        blueprintUserPrompt(),
-      )
-    // The spec-writer maintains the prescriptive `spec/` document. It now runs as a
-    // read-only structured explore on the per-block WORK branch (clone `work` — the
-    // deterministic `cat-factory/<blockId>` the coder resumes, created from base when
-    // absent; it runs BEFORE the coder, so it SEEDS that branch). The agent READS the
-    // baseline spec from its own checkout (`spec/`), applies this ONE task as an increment,
-    // and returns the COMPLETE tree as JSON; the deterministic SHARD + commit of the
-    // `spec/` artifact that used to live in the harness `/spec` handler is the backend
-    // `specPostOp` (run from ExecutionService), and `toRunResult` coerces the JSON into the
-    // `spec` channel the engine strict-validates + that post-op renders/commits from. It
-    // NEVER targets base: the spec is prescriptive for not-yet-landed work, so it merges
-    // WITH the feature, never reaching `main` ahead of it.
-    case SPEC_WRITER_AGENT_KIND:
-      return buildRegisteredAgentBody(
-        context,
-        parts,
-        {
-          surface: 'container-explore',
-          clone: { branch: 'work' },
-          // The spec doc is handed onward to be sharded + committed by `specPostOp`, so a
-          // final answer cut off at the output ceiling must FAIL LOUDLY (the bespoke `/spec`
-          // handler's `unusableFinalAnswerCause` gate) rather than be laundered into a
-          // half-baked spec by the structured repair — exactly what drove the old
-          // spec-writer ⇄ companion rework loop.
-          output: { kind: 'structured', shapeHint: SPEC_SHAPE_HINT, failOnUnusableFinal: true },
-        },
-        SPEC_WRITER_SYSTEM_PROMPT,
-        registry,
-        specWriterUserPrompt(context),
-      )
     // In-place fixers: clone the PR head branch, push fixes back onto it (no new PR);
     // a no-op run is a clean non-event (the gate/loop re-checks the real signal).
     case CI_FIXER_AGENT_KIND:

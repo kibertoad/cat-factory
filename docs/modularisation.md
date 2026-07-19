@@ -82,7 +82,10 @@ above is worked down.
   the `blueprintUserPrompt`/`specWriterUserPrompt`/`mergerUserPrompt`/`onCallUserPrompt`/
   `testerInfraSpec`/`prBody` builders — out of `ContainerAgentExecutor.ts` into `prompts.ts`,
   re-imported at their original call sites; added `test/prompts.spec.ts` characterisation
-  tests. Pure move, no behaviour change.
+  tests. Pure move, no behaviour change. (The `blueprints`/`spec-writer` prompts + builders have
+  since moved on again — down into `@cat-factory/agents`'
+  `agents/kinds/spec-blueprints.ts` — as those two kinds were migrated onto the
+  `registerAgentKind` seam; see `docs/refactoring-candidates.md` #5.)
 - Split #4a (container credential-service wiring): moved the sealed per-scope credential /
   subscription / provider-key service builders out of BOTH facades' `container.ts` into a new
   per-facade `wireCredentialServices.ts` — the Worker's `buildSubscriptionService` /

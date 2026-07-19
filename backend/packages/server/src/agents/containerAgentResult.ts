@@ -1,11 +1,15 @@
 import type { AgentRunResult, RunnerJobResult } from '@cat-factory/kernel'
 import { INITIATIVE_PLANNER_AGENT_KIND } from '@cat-factory/kernel'
-import { coerceBlueprintService, coerceInitiativePlan, coerceSpecDoc } from '@cat-factory/agents'
 import {
   BLUEPRINTS_AGENT_KIND,
+  coerceBlueprintService,
+  coerceInitiativePlan,
+  coerceSpecDoc,
+  SPEC_WRITER_AGENT_KIND,
+} from '@cat-factory/agents'
+import {
   MERGER_AGENT_KIND,
   ON_CALL_AGENT_KIND,
-  SPEC_WRITER_AGENT_KIND,
   TESTER_AGENT_KIND,
   UI_TESTER_AGENT_KIND,
 } from '@cat-factory/orchestration'

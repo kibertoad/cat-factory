@@ -2,11 +2,9 @@ import { describe, expect, it } from 'vitest'
 import type { AgentRunContext } from '@cat-factory/kernel'
 import type { RepoTarget } from '../src/agents/ContainerAgentExecutor.js'
 import {
-  blueprintUserPrompt,
   mergerUserPrompt,
   onCallUserPrompt,
   prBody,
-  specWriterUserPrompt,
   TEST_REPORT_SHAPE_HINT,
   testerInfraSpec,
   UI_TEST_REPORT_SHAPE_HINT,
@@ -35,44 +33,6 @@ const context = (over: Record<string, unknown> = {}): AgentRunContext =>
     priorOutputs: [],
     ...over,
   }) as unknown as AgentRunContext
-
-describe('blueprintUserPrompt', () => {
-  it('instructs an update-or-create that returns the complete tree as JSON only', () => {
-    const p = blueprintUserPrompt()
-    expect(p).toContain('canonical service → modules blueprint')
-    expect(p).toContain('blueprints/blueprint.json')
-    expect(p).toContain('ONLY the JSON object')
-  })
-})
-
-describe('specWriterUserPrompt', () => {
-  it('embeds the block header + description and the default self-determine guidance', () => {
-    const p = specWriterUserPrompt(
-      context({
-        block: { id: 'b9', title: 'Refactor auth', type: 'task', description: 'Tidy it' },
-      }),
-    )
-    expect(p).toContain('### Refactor auth (block b9)')
-    expect(p).toContain('Tidy it')
-    expect(p).toContain('If this task is purely TECHNICAL')
-  })
-
-  it('withdraws the no-specs escape hatch for an explicit BUSINESS task', () => {
-    const p = specWriterUserPrompt(
-      context({ block: { id: 'b1', title: 'T', type: 'task', technical: false } }),
-    )
-    expect(p).toContain('explicitly flagged BUSINESS')
-    expect(p).not.toContain('If this task is purely TECHNICAL')
-  })
-
-  it('tells an explicit TECHNICAL task the empty outcome is expected', () => {
-    const p = specWriterUserPrompt(
-      context({ block: { id: 'b1', title: 'T', type: 'task', technical: true } }),
-    )
-    expect(p).toContain('explicitly flagged TECHNICAL')
-    expect(p).toContain('{"noBusinessSpecs": true}')
-  })
-})
 
 describe('mergerUserPrompt', () => {
   it('names the PR + branches so the agent diffs against the right base', () => {
