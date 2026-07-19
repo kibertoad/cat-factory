@@ -2992,10 +2992,10 @@
       "heading": "Kontextdokumente",
       "hint": "Dokumente, die dieser Aufgabe als Kontext angehängt sind. Ihr Inhalt wird den Agents gegeben, die an der Aufgabe arbeiten.",
       "attach": "Anhängen",
-      "importPage": "Eine Seite importieren…",
+      "connectSource": "Quelle verbinden",
+      "connectSourceNamed": "{source} verbinden",
       "empty": "Hängen Sie eine Anforderung, ein RFC oder ein PRD an, damit Agents es beim Umsetzen dieser Aufgabe sehen.",
-      "attached": "Dokument angehängt",
-      "attachFailed": "Anhängen nicht möglich"
+      "attached": "Dokument angehängt"
     },
     "templates": {
       "title": "Dokumentvorlagen & Beispiele",
@@ -3033,9 +3033,9 @@
       "title": "Kontext-Issues",
       "hint": "Tracker-Issues, die dieser Aufgabe als Kontext angehängt sind. Ihr Inhalt wird den Agents gegeben, die an der Aufgabe arbeiten.",
       "attach": "Anhängen",
+      "connectSource": "Quelle verbinden",
+      "connectSourceNamed": "{source} verbinden",
       "attached": "Issue angehängt",
-      "attachFailed": "Anhängen nicht möglich",
-      "importIssue": "Ein Issue importieren…",
       "emptyHint": "Hängen Sie ein Jira-Issue an, damit Agents seine Beschreibung und Kommentare beim Umsetzen dieser Aufgabe sehen."
     },
     "import": {
