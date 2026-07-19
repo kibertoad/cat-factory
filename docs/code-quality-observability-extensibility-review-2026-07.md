@@ -224,9 +224,13 @@ What remains:
   shapes pass through). ~~injected context-file bodies (`contextFiles[].content`) and
   fragment bodies in `AgentContextObservabilityService` are **not** run through
   `redactSecrets` at all~~ — **addressed**: `record` now scrubs both prompts, every fragment
-  body and every injected file's content through `redactSecrets` before the size budget, and
-  drops the whole body of a secret-shaped file (`.env`/`*.pem`/SSH key/…) via
-  `isSecretShapedFilename` (priorities item #2).
+  body and every injected file's content through `redactSecrets` before the size budget,
+  deep-scrubs the free-text values in the `extras` bag (decisions/revision feedback) via
+  `redactSecretsDeep`, and drops the whole body of a secret-shaped file (`.env`/`*.pem`/SSH
+  key/…) via `isSecretShapedFilename` (priorities item #2). `redactSecrets` additionally
+  matches PEM-armored private keys by header, so a pasted key is caught regardless of
+  filename. The residual best-effort caveat (a novel token shape or a raw secret in an
+  ordinarily-named body) stands by design.
 - **Silent best-effort paths are uncounted**: dropped telemetry batches, failed
   notification deliveries, and oversized snapshots vanish with at most a `warn`; no metric
   counts them, so telemetry completeness is itself unmonitored. Per-run "stuck > 30 min"

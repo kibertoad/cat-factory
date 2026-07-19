@@ -13,6 +13,20 @@ const REPLACEMENT = '[REDACTED]'
 // Each rule matches a secret-bearing fragment; the capture group(s) bracket the literal
 // prefix to keep (so the reader still sees WHAT was redacted) and the secret to drop.
 const RULES: { pattern: RegExp; replace: (m: RegExpMatchArray) => string }[] = [
+  // PEM-armored private keys pasted verbatim (`-----BEGIN … PRIVATE KEY-----` …
+  // `-----END … PRIVATE KEY-----`), covering RSA/EC/OPENSSH/ENCRYPTED/PGP variants. Such a
+  // block has no field-name/URL/token-scheme scaffolding for the shape rules below to catch,
+  // so it is matched on its armor header and dropped wholesale — regardless of the enclosing
+  // filename, so a key pasted into a prompt or an ordinarily-named doc is caught too. The
+  // body is `[\s\S]*?` (non-greedy, bounded by the literal END marker), so no catastrophic
+  // backtracking. Runs FIRST so a later field-name rule (e.g. a `key:` echo preceding the
+  // block) can't consume the `-----BEGIN` marker and leave the body behind. Public certs
+  // (`BEGIN CERTIFICATE`) are intentionally left untouched.
+  {
+    pattern:
+      /-----BEGIN[ A-Z0-9]*PRIVATE KEY[ A-Z0-9]*-----[\s\S]*?-----END[ A-Z0-9]*PRIVATE KEY[ A-Z0-9]*-----/g,
+    replace: () => REPLACEMENT,
+  },
   // `Authorization: Bearer <token>` / `Bearer <token>` (case-insensitive scheme).
   {
     pattern: /\b(bearer|basic|token)\s+([A-Za-z0-9._+/=~-]{8,})/gi,
@@ -98,6 +112,8 @@ const SECRET_SUFFIXES: readonly string[] = [
   '.pkcs12',
   '.asc', // armored PGP key/signature
   '.ppk', // PuTTY private key
+  '.p8', // PKCS#8 private key (also Apple auth keys)
+  '.pkcs8',
 ]
 
 // Dotfiles whose whole purpose is to carry a credential — matched as the basename or a
@@ -108,6 +124,8 @@ const SECRET_DOTFILE_PREFIXES: readonly string[] = [
   '.netrc',
   '.pgpass',
   '.htpasswd',
+  '.git-credentials', // git's plaintext credential store (`https://user:token@host`)
+  '.dockercfg', // legacy Docker registry auth
 ]
 
 /**
@@ -134,4 +152,25 @@ export function isSecretShapedFilename(path: string | null | undefined): boolean
   if (SECRET_DOTFILE_PREFIXES.some((prefix) => base === prefix || base.startsWith(`${prefix}.`)))
     return true
   return false
+}
+
+/**
+ * Recursively apply {@link redactSecrets} to every string reachable inside a JSON-shaped
+ * value — the strings inside a nested object or array, at any depth — leaving non-string
+ * leaves (numbers, booleans, `null`) and the surrounding structure untouched. The
+ * structural shape is returned unchanged (the return type mirrors the input), so a caller
+ * that persists a free-text-bearing `Record<string, unknown>` bag (e.g. an agent-context
+ * snapshot's `extras`, whose values include human-authored decision/feedback prose) can
+ * guarantee NO string in it lands verbatim, without enumerating which keys are free text.
+ * Best-effort and never throws, mirroring {@link redactSecrets}.
+ */
+export function redactSecretsDeep<T>(value: T): T {
+  if (typeof value === 'string') return redactSecrets(value) as T
+  if (Array.isArray(value)) return value.map((item) => redactSecretsDeep(item)) as T
+  if (value !== null && typeof value === 'object') {
+    const out: Record<string, unknown> = {}
+    for (const [key, item] of Object.entries(value)) out[key] = redactSecretsDeep(item)
+    return out as T
+  }
+  return value
 }

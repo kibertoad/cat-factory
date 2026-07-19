@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { isSecretShapedFilename, redactSecrets } from './redact-secrets.logic.js'
+import { isSecretShapedFilename, redactSecrets, redactSecretsDeep } from './redact-secrets.logic.js'
 
 describe('redactSecrets', () => {
   it('passes null/empty through unchanged', () => {
@@ -53,6 +53,27 @@ describe('redactSecrets', () => {
       expect(out, secret).toContain('[REDACTED]')
     }
   })
+
+  it('drops a PEM-armored private key block regardless of the surrounding text', () => {
+    const key = [
+      '-----BEGIN OPENSSH PRIVATE KEY-----',
+      'b3BlbnNzaC1rZXktdjEAAAAABG5vbmUAAAAEbm9uZQAAAAAAAAABAAAAMwAAAAtzc2gt',
+      'ZWQyNTUxOQAAACDsecretkeymaterialthatmustneverbestoredAAAAAA==',
+      '-----END OPENSSH PRIVATE KEY-----',
+    ].join('\n')
+    const out = redactSecrets(`here is my key:\n${key}\nplease use it`)
+    expect(out).not.toContain('secretkeymaterialthatmustneverbestored')
+    expect(out).not.toContain('BEGIN OPENSSH PRIVATE KEY')
+    expect(out).toContain('[REDACTED]')
+    // Surrounding prose is preserved.
+    expect(out).toContain('here is my key:')
+    expect(out).toContain('please use it')
+  })
+
+  it('leaves a public certificate block untouched (only private keys are dropped)', () => {
+    const cert = '-----BEGIN CERTIFICATE-----\nMIIBkTCB+w==\n-----END CERTIFICATE-----'
+    expect(redactSecrets(cert)).toBe(cert)
+  })
 })
 
 describe('isSecretShapedFilename', () => {
@@ -82,6 +103,8 @@ describe('isSecretShapedFilename', () => {
       'release.jks',
       'key.asc',
       'deploy.ppk',
+      'auth.p8',
+      'signing.pkcs8',
     ]) {
       expect(isSecretShapedFilename(path), path).toBe(true)
     }
@@ -96,6 +119,8 @@ describe('isSecretShapedFilename', () => {
       '.netrc',
       '.pgpass',
       '.htpasswd',
+      '.git-credentials',
+      '.dockercfg',
     ]) {
       expect(isSecretShapedFilename(path), path).toBe(true)
     }
@@ -111,5 +136,42 @@ describe('isSecretShapedFilename', () => {
   it('is case-insensitive', () => {
     expect(isSecretShapedFilename('SERVER.PEM')).toBe(true)
     expect(isSecretShapedFilename('.ENV.PROD')).toBe(true)
+  })
+})
+
+describe('redactSecretsDeep', () => {
+  it('returns non-object leaves and nullish values unchanged', () => {
+    expect(redactSecretsDeep(null)).toBeNull()
+    expect(redactSecretsDeep(undefined)).toBeUndefined()
+    expect(redactSecretsDeep(42)).toBe(42)
+    expect(redactSecretsDeep(true)).toBe(true)
+    expect(redactSecretsDeep('plain prose')).toBe('plain prose')
+  })
+
+  it('scrubs a bare string leaf', () => {
+    const out = redactSecretsDeep('token is ghp_ABCDEFGHIJKLMNOPQRSTUVWXYZ012345 now')
+    expect(out).not.toContain('ghp_ABCDEFGHIJKLMNOPQRSTUVWXYZ012345')
+    expect(out).toContain('[REDACTED]')
+  })
+
+  it('scrubs every string reachable inside a nested object/array, keeping structure', () => {
+    const input = {
+      decisions: 'approved; use x-api-key: super-secret-value for the call',
+      count: 3,
+      enabled: false,
+      repo: { owner: 'acme', name: 'widgets' },
+      revision: { feedback: 'clone https://user:s3cr3ttoken0000@github.com/acme/repo.git' },
+      notes: ['keep me', 'sk-ABCDEFGHIJKLMNOP1234567890'],
+    }
+    const out = redactSecretsDeep(input)
+    expect(out.decisions).not.toContain('super-secret-value')
+    expect(out.revision.feedback).not.toContain('s3cr3ttoken0000')
+    expect(out.revision.feedback).toContain('github.com/acme/repo.git')
+    expect(out.notes[1]).not.toContain('sk-ABCDEFGHIJKLMNOP1234567890')
+    expect(out.notes[0]).toBe('keep me')
+    // Non-string leaves and non-secret identifiers pass through untouched.
+    expect(out.count).toBe(3)
+    expect(out.enabled).toBe(false)
+    expect(out.repo).toEqual({ owner: 'acme', name: 'widgets' })
   })
 })

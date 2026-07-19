@@ -172,6 +172,41 @@ describe('AgentContextObservabilityService', () => {
     expect(stored.contextFiles[1]!.content).toBe('ordinary documentation body')
   })
 
+  it('deep-scrubs credentials from free-text values in the extras bag', async () => {
+    const { repo, rows } = fakeRepo()
+    const svc = new AgentContextObservabilityService({
+      agentContextSnapshotRepository: repo,
+      workspaceSettingsRepository: fakeSettings(true),
+      idGenerator,
+      clock,
+      recordPrompts: true,
+    })
+    await svc.record({
+      ...input,
+      extras: {
+        repo: { owner: 'acme', name: 'widgets' },
+        webSearch: false,
+        // Free-text, human-authored values that could embed a pasted token.
+        decisions: 'approved; call it with x-api-key: super-secret-decision-value',
+        revision: { feedback: 'clone https://user:s3cr3tfeedback000@github.com/acme/repo.git' },
+      },
+    })
+
+    const stored = rows[0]!
+    const extras = stored.extras as {
+      repo: { owner: string; name: string }
+      webSearch: boolean
+      decisions: string
+      revision: { feedback: string }
+    }
+    expect(extras.decisions).not.toContain('super-secret-decision-value')
+    expect(extras.decisions).toContain('[REDACTED]')
+    expect(extras.revision.feedback).not.toContain('s3cr3tfeedback000')
+    // Structural, non-secret values are preserved for diagnostics.
+    expect(extras.repo).toEqual({ owner: 'acme', name: 'widgets' })
+    expect(extras.webSearch).toBe(false)
+  })
+
   it('bounds the total snapshot size, preserving the prompts over trailing files', async () => {
     const { repo, rows } = fakeRepo()
     const svc = new AgentContextObservabilityService({

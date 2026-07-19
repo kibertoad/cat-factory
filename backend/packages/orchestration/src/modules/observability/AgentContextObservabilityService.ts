@@ -11,6 +11,7 @@ import {
   DEFAULT_WORKSPACE_SETTINGS,
   isSecretShapedFilename,
   redactSecrets,
+  redactSecretsDeep,
 } from '@cat-factory/kernel'
 
 /**
@@ -130,6 +131,11 @@ export class AgentContextObservabilityService implements AgentContextRecorder {
    * has no scaffolding for the shape rules to catch. Scrub happens BEFORE the size budget so
    * truncation can never split a secret across the cap and defeat the pattern match. Bodies
    * are then clamped so an oversized prompt/file never drops the whole snapshot.
+   *
+   * The `extras` bag is deep-scrubbed too ({@link redactSecretsDeep}): several of its values
+   * are human-authored free text (the run's decisions, revision feedback) — the SAME token-
+   * in-prose risk as a task description — so every string it carries at any depth is scrubbed
+   * rather than trusting the dispatch-site allow-list to have kept it clean.
    */
   async record(input: RecordAgentContextInput): Promise<void> {
     if (!this.recordPrompts) return
@@ -152,6 +158,9 @@ export class AgentContextObservabilityService implements AgentContextRecorder {
           ? budget(SECRET_FILE_PLACEHOLDER)
           : scrub(f.content),
       })),
+      // Structural bits, but some values (decisions, revision feedback) are free-text prose
+      // that can embed a token — scrub every string in the bag, not just the known bodies.
+      extras: redactSecretsDeep(input.extras),
     }
     await this.repository.record(snapshot)
   }

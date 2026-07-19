@@ -185,7 +185,11 @@ export const agentContextFileSchema = v.object({
   path: v.string(),
   title: v.string(),
   url: v.string(),
-  /** The full file body as written into the container. */
+  /**
+   * The file body as written into the container, secret-scrubbed before storage. A
+   * secret-shaped file (`.env`, `*.pem`, an SSH key, …) has its whole body replaced by a
+   * placeholder rather than stored; any other body is passed through the shape scrubber.
+   */
   content: v.string(),
 })
 export type AgentContextFile = v.InferOutput<typeof agentContextFileSchema>
@@ -223,12 +227,13 @@ export const agentContextSnapshotSchema = v.object({
   userPrompt: v.string(),
   /** The best-practice fragments folded into the system prompt (id + body). */
   fragments: v.array(agentContextFragmentSchema),
-  /** The files injected into the container as context, with full content. */
+  /** The files injected into the container as context, with secret-scrubbed content. */
   contextFiles: v.array(agentContextFileSchema),
   /**
    * Redacted structural bits useful for debugging — repo owner/name/branches, the
-   * web-search flag, the infra spec, the run's decisions and revision feedback.
-   * Never any token, secret, or credential-bearing URL.
+   * web-search flag, the infra spec, the run's decisions and revision feedback. Deep
+   * secret-scrubbed before storage (the free-text values, e.g. decisions/feedback, may
+   * embed a token), so it never carries a token, secret, or credential-bearing URL.
    */
   extras: v.record(v.string(), v.unknown()),
 })
