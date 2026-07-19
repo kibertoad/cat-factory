@@ -29,6 +29,7 @@ import { D1InitiativeRepository } from '../../src/infrastructure/repositories/D1
 import { D1NotificationRepository } from '../../src/infrastructure/repositories/D1NotificationRepository'
 import { D1DocumentRepository } from '../../src/infrastructure/repositories/D1DocumentRepository'
 import { D1DocInterviewRepository } from '../../src/infrastructure/repositories/D1DocInterviewRepository'
+import { D1TaskRepository } from '../../src/infrastructure/repositories/D1TaskRepository'
 
 // Run the shared cross-runtime conformance suite against the Cloudflare Worker
 // facade (the real Hono app over a real local D1, inside workerd). The Node
@@ -241,6 +242,7 @@ const harness: ConformanceHarness = {
       initiativeRepository: () => new D1InitiativeRepository({ db: env.DB }),
       notificationRepository: () => new D1NotificationRepository({ db: env.DB }),
       documentRepository: () => new D1DocumentRepository({ db: env.DB }),
+      taskRepository: () => new D1TaskRepository({ db: env.DB }),
       docInterviewRepository: () => new D1DocInterviewRepository({ db: env.DB }),
     }
   },

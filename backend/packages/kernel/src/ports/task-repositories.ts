@@ -78,9 +78,27 @@ export interface TaskRecord {
   deletedAt: number | null
 }
 
+/**
+ * A (source, externalId) pointer to one imported issue — the key {@link TaskRepository.get}
+ * resolves a single row by, and the batch-read key {@link TaskRepository.listByRefs} takes a
+ * list of. Named explicitly so callers pass typed refs instead of positional source strings.
+ */
+export interface TaskRef {
+  source: TaskSourceKind
+  externalId: string
+}
+
 export interface TaskRepository {
   upsert(record: TaskRecord): Promise<void>
   get(workspaceId: string, source: TaskSourceKind, externalId: string): Promise<TaskRecord | null>
+  /**
+   * Batch-resolve live issues by their (source, externalId) refs in ONE chunked-`IN` read
+   * per source — the batch counterpart to {@link get}, so resolving a list of
+   * explicitly-named references never becomes a point-read-per-reference (an N+1). Refs that
+   * don't resolve are simply absent from the result; order is not guaranteed (callers index
+   * the result into a `Map` for per-ref lookup). An empty `refs` list is a no-op.
+   */
+  listByRefs(workspaceId: string, refs: readonly TaskRef[]): Promise<TaskRecord[]>
   /** Every live issue imported into the workspace, across sources. */
   listByWorkspace(workspaceId: string): Promise<TaskRecord[]>
   /**

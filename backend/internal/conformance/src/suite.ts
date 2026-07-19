@@ -60,6 +60,7 @@ import type {
   RunnerJobRef,
   RunnerJobView,
   RunRepoContext,
+  TaskRecord,
 } from '@cat-factory/kernel'
 import {
   clearRegisteredGates,
@@ -5994,6 +5995,57 @@ export function defineIntegrationConformance(harness: ConformanceHarness): void 
         // deleteByBlock clears the block's session(s).
         await repo.deleteByBlock(ws, 'task_doc')
         expect(await repo.getByBlock(ws, 'task_doc')).toBeNull()
+      })
+
+      it('batch-resolves imported issues by (source, externalId) ref (listByRefs)', async () => {
+        // The engine resolves the tracker issues a task's description names explicitly via a
+        // single batched read (AgentContextBuilder → TaskRepository.listByRefs), never a
+        // point-read per reference (an N+1). The import WRITE path needs a live source the
+        // dev-open HTTP `call` path can't reach, so exercise the read through the repository
+        // directly — asserting the chunked-`IN`-per-source batch behaves identically on D1 and
+        // Postgres (a facade that mapped a column or the source filter differently fails here).
+        const app = harness.makeApp()
+        const { workspace } = await app.createWorkspace()
+        const ws = workspace.id
+        const repo = app.taskRepository()
+        const task = (source: TaskRecord['source'], externalId: string): TaskRecord => ({
+          workspaceId: ws,
+          source,
+          externalId,
+          title: `Issue ${externalId}`,
+          url: `https://tracker/${externalId}`,
+          status: 'open',
+          type: 'Story',
+          assignee: null,
+          priority: null,
+          labels: [],
+          description: `Body of ${externalId}`,
+          comments: [],
+          excerpt: '',
+          linkedBlockId: null,
+          syncedAt: 1_000,
+          deletedAt: null,
+        })
+        await repo.upsert(task('jira', 'PROJ-1'))
+        await repo.upsert(task('jira', 'PROJ-2'))
+        await repo.upsert(task('github', 'octo/repo#7'))
+
+        // Empty input is a no-op (no query issued).
+        expect(await repo.listByRefs(ws, [])).toEqual([])
+
+        // A mixed set spanning both sources resolves only the rows that exist; a matching
+        // key under the WRONG source (PROJ-1 as github) and an absent key resolve to nothing.
+        const resolved = await repo.listByRefs(ws, [
+          { source: 'jira', externalId: 'PROJ-1' },
+          { source: 'jira', externalId: 'MISSING-9' },
+          { source: 'github', externalId: 'octo/repo#7' },
+          { source: 'github', externalId: 'PROJ-1' },
+        ])
+        expect(new Set(resolved.map((t) => `${t.source}:${t.externalId}`))).toEqual(
+          new Set(['jira:PROJ-1', 'github:octo/repo#7']),
+        )
+        // Full records come back (not just keys), so the caller renders bodies without re-reading.
+        expect(resolved.find((t) => t.externalId === 'PROJ-1')?.description).toBe('Body of PROJ-1')
       })
     })
 
