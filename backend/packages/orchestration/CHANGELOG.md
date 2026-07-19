@@ -1,5 +1,39 @@
 # @cat-factory/orchestration
 
+## 0.123.4
+
+### Patch Changes
+
+- 9b3b85e: Secret-scrub agent-context snapshots before they are persisted to telemetry.
+
+  `AgentContextObservabilityService.record` now runs every stored body — the composed
+  system/user prompts, the folded-in fragment bodies, and every injected context-file
+  content — through `redactSecrets`, deep-scrubs the free-text values in the `extras` bag
+  (the run's decisions and revision feedback), and drops the whole body of a context file
+  whose name marks it as a raw credential store (`.env`, `*.pem`, an SSH key, `.npmrc`,
+  `.git-credentials`, …). Previously only the dispatch-site allow-list guarded these bodies,
+  so a token embedded in a task description, a decision note, a linked doc, or an injected
+  `.env`-shaped file was stored verbatim when `storeAgentContext` was on. Scrubbing happens
+  before the size budget so truncation can never split a secret across the cap.
+
+  `redactSecrets` additionally matches PEM-armored private keys by their armor header, so a
+  key pasted into any prompt or ordinarily-named file is dropped regardless of filename.
+
+  Adds `isSecretShapedFilename` and `redactSecretsDeep` to `@cat-factory/kernel` (alongside
+  `redactSecrets`) and the first unit coverage for the previously-untested `redactSecrets`
+  scrubber.
+
+- Updated dependencies [9b3b85e]
+  - @cat-factory/kernel@0.140.0
+  - @cat-factory/contracts@0.148.1
+  - @cat-factory/agents@0.62.12
+  - @cat-factory/caching@0.10.9
+  - @cat-factory/integrations@0.86.4
+  - @cat-factory/sandbox@0.9.103
+  - @cat-factory/spend@0.12.53
+  - @cat-factory/workspaces@0.16.6
+  - @cat-factory/prompt-fragments@0.13.39
+
 ## 0.123.3
 
 ### Patch Changes
