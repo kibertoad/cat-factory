@@ -811,6 +811,11 @@ run the guards your change class can trip:**
 
 - `node scripts/check-package-catalog.mjs` — every workspace package must have a row in
   README.md's repository-layout tables.
+- `node scripts/check-file-size.mjs` — soft max-lines budget (default 1,500) for non-test
+  source files, with ratcheted allowances for the legacy oversized files (the engine
+  god-file re-accretion guard). Grew a file past its budget ⇒ split it along a cohesive
+  seam (the `RunDispatcher` controller extractions are the model), or deliberately adjust
+  the allowance in the same PR.
 - `pnpm exec changeset status --since=origin/main` — every changed versioned package needs
   a changeset (run after committing locally; it diffs git refs).
 - `pnpm lint:knip` — unused files/deps/exports (run after `pnpm build`); remember
