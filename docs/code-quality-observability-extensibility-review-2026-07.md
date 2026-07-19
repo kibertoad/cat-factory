@@ -221,10 +221,12 @@ What remains:
   endpoint, no pg-boss queue-depth/job-latency instruments, no cache hit/miss counters in
   `@cat-factory/caching`, no HTTP request rate/latency/error metrics.
 - **Redaction residuals**: `redactSecrets` is regex-shape best-effort (novel credential
-  shapes pass through), and — more actionably — injected context-file bodies
-  (`contextFiles[].content`) and fragment bodies in `AgentContextObservabilityService` are
-  **not** run through `redactSecrets` at all; a secret inside an injected `.env`-like file
-  is stored verbatim when `storeAgentContext` is on.
+  shapes pass through). ~~injected context-file bodies (`contextFiles[].content`) and
+  fragment bodies in `AgentContextObservabilityService` are **not** run through
+  `redactSecrets` at all~~ — **addressed**: `record` now scrubs both prompts, every fragment
+  body and every injected file's content through `redactSecrets` before the size budget, and
+  drops the whole body of a secret-shaped file (`.env`/`*.pem`/SSH key/…) via
+  `isSecretShapedFilename` (priorities item #2).
 - **Silent best-effort paths are uncounted**: dropped telemetry batches, failed
   notification deliveries, and oversized snapshots vanish with at most a `warn`; no metric
   counts them, so telemetry completeness is itself unmonitored. Per-run "stuck > 30 min"
@@ -324,7 +326,7 @@ candidate entry — the recommendation is to prioritize them, not to re-plan the
 | #   | Area            | Recommendation                                                                                                                                                                                                                                          | Impact | Effort  |
 | --- | --------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ------ | ------- |
 | 1   | Security/CI     | Add dependency-vulnerability + SAST + secret scanning to CI (`pnpm audit`/OSV, CodeQL or Semgrep, gitleaks). Today only workflow files are scanned.                                                                                                     | High   | Low     |
-| 2   | Observability   | Run `redactSecrets` over `contextFiles[].content` + `fragments[].body` in `AgentContextObservabilityService`; add a deny filter for secret-shaped filenames (`.env`, `*.pem`).                                                                          | High   | Low     |
+| 2   | Observability   | ✅ **Done** — `AgentContextObservabilityService.record` runs `redactSecrets` over both prompts + `fragments[].body` + `contextFiles[].content`, and drops secret-shaped file bodies (`isSecretShapedFilename`: `.env`, `*.pem`, SSH keys, `.npmrc`, …). | High   | Low     |
 | 3   | Testing         | Enable vitest coverage reporting in the CI test lanes and ratchet-floor the high-value packages (`orchestration`, `server`, `contracts`, `spend`); add tests for `contracts` (zero today).                                                              | High   | Low–Med |
 | 4   | Observability   | Add an operational metrics surface: pg-boss queue depth + job latency, `AppCaches` hit/miss counters, HTTP request rate/latency, and a counter for dropped telemetry/notification batches. Either a `/metrics` scrape endpoint or documented OTLP-only. | High   | Medium  |
 | 5   | Complexity ↗    | Resume the engine split: `RunDispatcher` (4,217 lines — the recorded watch item has come true) and `ExecutionService` (extract the `assert*` admission family + review-kind builders). Add a soft `max-lines` lint budget to stop re-accretion.         | High   | Medium  |

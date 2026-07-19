@@ -11,6 +11,7 @@ import {
   AgentContextObservabilityService,
   MAX_AGENT_CONTEXT_CHARS,
   MAX_AGENT_CONTEXT_TOTAL_CHARS,
+  SECRET_FILE_PLACEHOLDER,
 } from './AgentContextObservabilityService.js'
 
 function fakeRepo() {
@@ -98,6 +99,77 @@ describe('AgentContextObservabilityService', () => {
     })
     await svc.record(input)
     expect(rows).toHaveLength(0)
+  })
+
+  it('scrubs credentials from prompts, fragment bodies, and injected file content', async () => {
+    const { repo, rows } = fakeRepo()
+    const svc = new AgentContextObservabilityService({
+      agentContextSnapshotRepository: repo,
+      workspaceSettingsRepository: fakeSettings(true),
+      idGenerator,
+      clock,
+      recordPrompts: true,
+    })
+    await svc.record({
+      ...input,
+      systemPrompt: 'system prompt with ghp_ABCDEFGHIJKLMNOPQRSTUVWXYZ012345 leaked',
+      userPrompt: 'clone https://user:s3cr3ttoken0000@github.com/acme/repo.git',
+      fragments: [{ id: 'frag1', body: 'x-api-key: super-secret-fragment-value' }],
+      contextFiles: [
+        {
+          path: 'docs/notes.md',
+          title: 'Notes',
+          url: 'https://x/notes',
+          content: 'here is a token: sk-ABCDEFGHIJKLMNOP1234567890',
+        },
+      ],
+    })
+
+    const stored = rows[0]!
+    expect(stored.systemPrompt).not.toContain('ghp_ABCDEFGHIJKLMNOPQRSTUVWXYZ012345')
+    expect(stored.systemPrompt).toContain('[REDACTED]')
+    expect(stored.userPrompt).not.toContain('s3cr3ttoken0000')
+    // Non-secret context (the repo host, the prose) is preserved.
+    expect(stored.userPrompt).toContain('github.com/acme/repo.git')
+    expect(stored.fragments[0]!.body).not.toContain('super-secret-fragment-value')
+    expect(stored.contextFiles[0]!.content).not.toContain('sk-ABCDEFGHIJKLMNOP1234567890')
+    expect(stored.contextFiles[0]!.content).toContain('[REDACTED]')
+  })
+
+  it('drops the whole body of a secret-shaped context file', async () => {
+    const { repo, rows } = fakeRepo()
+    const svc = new AgentContextObservabilityService({
+      agentContextSnapshotRepository: repo,
+      workspaceSettingsRepository: fakeSettings(true),
+      idGenerator,
+      clock,
+      recordPrompts: true,
+    })
+    await svc.record({
+      ...input,
+      contextFiles: [
+        {
+          path: '.env.production',
+          title: 'env',
+          url: 'https://x/env',
+          content: 'DATABASE_URL=postgres://u:p@h/db\nAPI_KEY=raw-value-no-scaffolding',
+        },
+        {
+          path: 'guide.md',
+          title: 'Guide',
+          url: 'https://x/guide',
+          content: 'ordinary documentation body',
+        },
+      ],
+    })
+
+    const stored = rows[0]!
+    // The `.env` body is dropped wholesale — none of its raw content survives.
+    expect(stored.contextFiles[0]!.content).toBe(SECRET_FILE_PLACEHOLDER)
+    expect(stored.contextFiles[0]!.content).not.toContain('raw-value-no-scaffolding')
+    expect(stored.contextFiles[0]!.content).not.toContain('postgres://')
+    // A normal file alongside it is stored as usual.
+    expect(stored.contextFiles[1]!.content).toBe('ordinary documentation body')
   })
 
   it('bounds the total snapshot size, preserving the prompts over trailing files', async () => {

@@ -1320,7 +1320,13 @@ sweep.
   Recorded best-effort by `ContainerAgentExecutor.startJob` (after dispatch) via
   `AgentContextObservabilityService` (orchestration), built per-facade and injected into both
   the executor (write) and `createCore` (read). The snapshot is a **redacted allow-list**
-  projection of the dispatched job — NEVER a token or credential-bearing URL.
+  projection of the dispatched job — NEVER a token or credential-bearing URL. As a
+  defence-in-depth second layer, `AgentContextObservabilityService.record` also runs every
+  stored body (both prompts, each fragment body, each injected file's content) through
+  `redactSecrets` BEFORE the size budget, and drops the whole body of a context file whose
+  name marks it as a raw credential store (`isSecretShapedFilename` — `.env`/`*.pem`/SSH
+  key/`.npmrc`/…), so a token embedded in a task description or an injected secret-shaped
+  file never lands verbatim in the telemetry store.
 - **Gating**: storing requires BOTH the deployment prompt-recording switch
   (`LLM_RECORD_PROMPTS`) AND the per-workspace `storeAgentContext` setting (on by default; a
   toggle in `WorkspaceSettingsPanel.vue`).
