@@ -40,8 +40,9 @@ const LEGACY_ALLOWANCES = new Map([
   // The cross-runtime conformance suite (review §4), split from one 11.2k-line `suite.ts`
   // into per-group modules under `suites/`. `suite.ts` is now a thin aggregator; each group
   // is ratcheted at its post-split size and keeps ratcheting DOWN as groups sub-split.
+  // (`integration.ts` has since sub-split into `integration-{credentials,provisioning,
+  // secrets,sources,environments}.ts` — each under DEFAULT_MAX_LINES, so it needs no entry.)
   ['backend/internal/conformance/src/suites/execution.ts', 3150],
-  ['backend/internal/conformance/src/suites/integration.ts', 2800],
   ['backend/internal/conformance/src/suites/core.ts', 2500],
   ['backend/internal/conformance/src/suites/agents.ts', 1150],
   // The engine files the 2026-07 review names (post-split sizes; keep ratcheting DOWN).

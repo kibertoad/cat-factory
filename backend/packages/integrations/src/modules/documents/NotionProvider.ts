@@ -156,6 +156,7 @@ export class NotionProvider implements DocumentSourceProvider {
   async fetchDocument(
     credentials: DocumentCredentials,
     externalId: string,
+    _workspaceId: string,
   ): Promise<DocumentContent> {
     const page = await this.get<PageResponse>(
       credentials,
@@ -179,7 +180,11 @@ export class NotionProvider implements DocumentSourceProvider {
    * skipping the (bounded but multi-request) block backfill that dominates a full
    * fetch. An unchanged timestamp means the page body is still current.
    */
-  async probeVersion(credentials: DocumentCredentials, externalId: string): Promise<string> {
+  async probeVersion(
+    credentials: DocumentCredentials,
+    externalId: string,
+    _workspaceId: string,
+  ): Promise<string> {
     const page = await this.get<PageResponse>(
       credentials,
       `/pages/${encodeURIComponent(externalId)}`,

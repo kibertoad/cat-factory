@@ -273,6 +273,8 @@
       "contextDocuments": "Документи контексту",
       "contextIssues": "Звернення контексту",
       "attach": "Прикріпити",
+      "connectSource": "Підключити джерело",
+      "connectSourceNamed": "Підключити {source}",
       "done": "Готово",
       "attachDocDisabledConnect": "Спочатку підключіть джерело документів (Інтеграції)",
       "attachDocDisabledEnable": "Спочатку увімкніть інтеграцію документів",

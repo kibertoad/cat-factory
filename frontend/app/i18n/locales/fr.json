@@ -273,6 +273,8 @@
       "contextDocuments": "Documents de contexte",
       "contextIssues": "Tickets de contexte",
       "attach": "Joindre",
+      "connectSource": "Connecter une source",
+      "connectSourceNamed": "Connecter {source}",
       "done": "Terminé",
       "attachDocDisabledConnect": "Connectez d’abord une source de documents (Intégrations)",
       "attachDocDisabledEnable": "Activez d’abord l’intégration de documents",
