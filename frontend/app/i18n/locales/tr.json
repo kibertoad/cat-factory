@@ -4434,7 +4434,7 @@
       "checkSourceFailed": "Kaynak denetlenemedi",
       "sourceUnlinked": "Kaynak bağlantısı kaldırıldı",
       "unlinkSourceFailed": "Kaynak bağlantısı kaldırılamadı",
-      "documentsLinked": "{count} belge canlı parça olarak bağlandı"
+      "documentsLinked": "{count} belge canlı parça olarak bağlandı | {count} belge canlı parça olarak bağlandı"
     },
     "confirmRemove": {
       "title": "Bu parça silinsin mi?",

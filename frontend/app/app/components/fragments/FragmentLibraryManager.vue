@@ -213,8 +213,11 @@ watch(
 )
 
 // A new repo selection clears the previously-staged files (they were repo-scoped).
-watch(docRepoId, () => {
+// When the repo is fully deselected, drop the cached repo too so no stale `docRepo`
+// lingers behind a now-empty picker.
+watch(docRepoId, (id) => {
   docFilePaths.value = []
+  if (id === undefined) docRepo.value = undefined
 })
 
 /** This tier's existing document-backed fragments. */
@@ -262,23 +265,47 @@ async function linkDocumentFragment() {
       .split(',')
       .map((t) => t.trim())
       .filter(Boolean)
-    // The picker stages many files (one fragment each); the free-text field is a single ref.
-    const refs = usingDocPicker.value
-      ? stagedDocRefs.value.map((s) => s.ref)
-      : [docDraft.value.ref.trim()]
-    // Sequential on purpose: each link fetches its document from the source, and a serial
-    // walk keeps a bad ref from being masked by a burst of parallel failures.
-    for (const ref of refs) {
-      await library.createDocumentFragment({ source, ref, tags })
+
+    if (!usingDocPicker.value) {
+      // Free-text field: exactly one ref.
+      await library.createDocumentFragment({ source, ref: docDraft.value.ref.trim(), tags })
+      docDraft.value = { source: '', ref: '', tags: '' }
+      toast.add({ title: t('fragments.toast.documentLinked'), icon: 'i-lucide-link' })
+      return
     }
-    docDraft.value = { source: '', ref: '', tags: '' }
-    toast.add({
-      title:
-        refs.length > 1
-          ? t('fragments.toast.documentsLinked', { count: refs.length })
-          : t('fragments.toast.documentLinked'),
-      icon: 'i-lucide-link',
-    })
+
+    // The picker stages many files (one fragment each). Link them serially — serial, not
+    // parallel, so one bad ref can't be masked by a burst of concurrent failures — and drop
+    // each from the cart the moment it succeeds. Every staged file is attempted even if an
+    // earlier one fails, so a single unlinkable ref never blocks the rest: the successes are
+    // linked and removed from the cart, and only the failures stay staged (with the first
+    // error surfaced) so a retry re-attempts just those, never re-linking what already went in.
+    let linked = 0
+    let firstError: unknown
+    for (const { path, ref } of [...stagedDocRefs.value]) {
+      try {
+        await library.createDocumentFragment({ source, ref, tags })
+        const i = docFilePaths.value.indexOf(path)
+        if (i >= 0) docFilePaths.value.splice(i, 1)
+        linked++
+      } catch (e) {
+        firstError ??= e
+      }
+    }
+    if (linked > 0) {
+      // A vue-i18n plural message (count as the plural choice) so Slavic few/many forms
+      // render correctly, and the count==1 case reads naturally too.
+      toast.add({
+        title: t('fragments.toast.documentsLinked', { count: linked }, linked),
+        icon: 'i-lucide-link',
+      })
+    }
+    if (firstError) {
+      notifyError(t('fragments.toast.linkDocumentFailed'), firstError)
+    } else {
+      // Everything staged linked — clear the whole draft (also resets repo/source selection).
+      docDraft.value = { source: '', ref: '', tags: '' }
+    }
   } catch (e) {
     notifyError(t('fragments.toast.linkDocumentFailed'), e)
   } finally {

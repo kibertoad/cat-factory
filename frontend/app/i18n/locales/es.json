@@ -4422,7 +4422,7 @@
       "checkSourceFailed": "No se pudo comprobar el origen",
       "sourceUnlinked": "Origen desvinculado",
       "unlinkSourceFailed": "No se pudo desvincular el origen",
-      "documentsLinked": "{count} documentos vinculados como fragmentos vivos"
+      "documentsLinked": "{count} documento vinculado como fragmento vivo | {count} documentos vinculados como fragmentos vivos"
     },
     "confirmRemove": {
       "title": "¿Eliminar este fragmento?",

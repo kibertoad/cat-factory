@@ -3598,7 +3598,7 @@
       "checkSourceFailed": "Impossibile controllare la sorgente",
       "sourceUnlinked": "Sorgente scollegata",
       "unlinkSourceFailed": "Impossibile scollegare la sorgente",
-      "documentsLinked": "{count} documenti collegati come frammenti viventi"
+      "documentsLinked": "{count} documento collegato come frammento vivente | {count} documenti collegati come frammenti viventi"
     },
     "confirmRemove": {
       "title": "Eliminare questo frammento?",

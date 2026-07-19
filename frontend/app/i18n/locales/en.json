@@ -4598,7 +4598,7 @@
       "checkSourceFailed": "Could not check source",
       "sourceUnlinked": "Source unlinked",
       "unlinkSourceFailed": "Could not unlink source",
-      "documentsLinked": "Linked {count} documents as living fragments"
+      "documentsLinked": "Linked {count} document as a living fragment | Linked {count} documents as living fragments"
     },
     "confirmRemove": {
       "title": "Delete this fragment?",

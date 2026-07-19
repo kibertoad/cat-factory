@@ -3598,7 +3598,7 @@
       "checkSourceFailed": "Quelle konnte nicht geprüft werden",
       "sourceUnlinked": "Quelle-Verknüpfung aufgehoben",
       "unlinkSourceFailed": "Quelle-Verknüpfung konnte nicht aufgehoben werden",
-      "documentsLinked": "{count} Dokumente als lebende Fragmente verknüpft"
+      "documentsLinked": "{count} Dokument als lebendes Fragment verknüpft | {count} Dokumente als lebende Fragmente verknüpft"
     },
     "confirmRemove": {
       "title": "Dieses Fragment löschen?",

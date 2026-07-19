@@ -4422,7 +4422,7 @@
       "checkSourceFailed": "Impossible de vérifier la source",
       "sourceUnlinked": "Source dissociée",
       "unlinkSourceFailed": "Impossible de dissocier la source",
-      "documentsLinked": "{count} documents liés comme fragments vivants"
+      "documentsLinked": "{count} document lié comme fragment vivant | {count} documents liés comme fragments vivants"
     },
     "confirmRemove": {
       "title": "Supprimer ce fragment ?",

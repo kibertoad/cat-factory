@@ -4434,7 +4434,7 @@
       "checkSourceFailed": "ソースを確認できませんでした",
       "sourceUnlinked": "ソースのリンクを解除しました",
       "unlinkSourceFailed": "ソースのリンクを解除できませんでした",
-      "documentsLinked": "{count}件のドキュメントをリビングフラグメントとしてリンクしました"
+      "documentsLinked": "{count}件のドキュメントをリビングフラグメントとしてリンクしました | {count}件のドキュメントをリビングフラグメントとしてリンクしました"
     },
     "confirmRemove": {
       "title": "このフラグメントを削除しますか？",

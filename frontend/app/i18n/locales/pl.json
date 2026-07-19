@@ -4422,7 +4422,7 @@
       "checkSourceFailed": "Nie udało się sprawdzić źródła",
       "sourceUnlinked": "Odłączono źródło",
       "unlinkSourceFailed": "Nie udało się odłączyć źródła",
-      "documentsLinked": "Połączono {count} dokumentów jako żywe fragmenty"
+      "documentsLinked": "Połączono {count} dokument jako żywy fragment | Połączono {count} dokumenty jako żywe fragmenty | Połączono {count} dokumentów jako żywe fragmenty"
     },
     "confirmRemove": {
       "title": "Usunąć ten fragment?",

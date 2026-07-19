@@ -4433,7 +4433,7 @@
       "checkSourceFailed": "לא ניתן היה לבדוק את המקור",
       "sourceUnlinked": "קישור המקור בוטל",
       "unlinkSourceFailed": "לא ניתן היה לבטל את קישור המקור",
-      "documentsLinked": "{count} מסמכים קושרו כמקטעים חיים"
+      "documentsLinked": "{count} מסמך קושר כמקטע חי | {count} מסמכים קושרו כמקטעים חיים"
     },
     "confirmRemove": {
       "title": "למחוק את המקטע הזה?",
