@@ -3374,6 +3374,13 @@
       "proceed": "Yine de devam et",
       "stopReset": "Durdur ve görevi sıfırla"
     },
+    "preview": {
+      "stepCount": "{count} adım | {count} adım",
+      "gated": "Bu adımdan sonra insan onayı"
+    },
+    "picker": {
+      "noneHint": "Varsayılan pipeline yok. Görevi çalıştırırken birini seçersin."
+    },
     "builder": {
       "title": "Pipeline oluşturucu",
       "agentPalette": "Ajan paleti",
@@ -3382,6 +3389,7 @@
       "configureModels": "Modelleri yapılandır",
       "configureModelsTooltip": "Model ön ayarlarını yönet (her ajanın hangi modelde çalışacağı)",
       "namePlaceholder": "Pipeline adı",
+      "descriptionPlaceholder": "Açıklama (bu pipeline seçilirken gösterilir)",
       "labelPlaceholder": "+ etiket",
       "gatingNeedsEstimator": "Geçitli bir adımın öncesinde bir Görev Tahmincisi gerekir. Bir tane ekleyin yoksa pipeline kaydedilmez.",
       "emptyDraft": "Doğrusal bir pipeline oluşturmak için soldaki ajanlara tıklayın.",

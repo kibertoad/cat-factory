@@ -664,6 +664,8 @@ export function blockPatchToColumns(patch: BlockPatch): Record<string, unknown> 
 export interface PipelineRow {
   id: string
   name: string
+  /** Nullable prose description shown next to the step list in the pickers/builder. */
+  description?: string | null
   agent_kinds: string
   /** Nullable JSON array of per-step approval gates (migration 0022). */
   gates: string | null
@@ -708,6 +710,7 @@ export interface PipelineRow {
 const pipelineReader = makeRowReader<PipelineRow, Pipeline>([
   readScalar('id'),
   readScalar('name'),
+  readOptScalar('description'),
   readJson('agentKinds'),
   readOptJson('gates'),
   readOptJson('thresholds'),

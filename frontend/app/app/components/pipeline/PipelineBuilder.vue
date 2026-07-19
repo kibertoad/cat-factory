@@ -310,6 +310,16 @@ async function clone(p: Pipeline) {
             class="mb-2"
           />
 
+          <!-- Description: the prose summary shown next to the step list in the pipeline pickers. -->
+          <UTextarea
+            v-model="pipelines.draftDescription"
+            :placeholder="t('pipeline.builder.descriptionPlaceholder')"
+            :rows="2"
+            autoresize
+            size="sm"
+            class="mb-2 w-full"
+          />
+
           <!-- Labels: organize the pipeline in the library (filter/search). -->
           <div class="mb-3 flex flex-wrap items-center gap-1.5">
             <UBadge

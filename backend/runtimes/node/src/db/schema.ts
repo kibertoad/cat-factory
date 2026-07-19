@@ -419,6 +419,9 @@ export const pipelines = pgTable(
     workspace_id: text('workspace_id').notNull(),
     id: text('id').notNull(),
     name: text('name').notNull(),
+    // Optional prose description shown next to the step list in the pickers/builder (mirror of D1
+    // migration 0055_pipeline_description); NULL ⇒ no description.
+    description: text('description'),
     agent_kinds: text('agent_kinds').notNull().default('[]'),
     gates: text('gates'),
     thresholds: text('thresholds'),

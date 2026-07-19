@@ -142,20 +142,6 @@ const selectablePipelines = computed(() =>
     pipelineAllowedForManualStart(p, taskFrame.value, board.blocks),
   ),
 )
-const pipelineMenu = computed(() => [
-  [
-    {
-      label: t('inspector.runSettings.noDefault'),
-      icon: 'i-lucide-rotate-ccw',
-      onSelect: () => setPipeline(''),
-    },
-    ...selectablePipelines.value.map((p) => ({
-      label: p.name,
-      icon: 'i-lucide-workflow',
-      onSelect: () => setPipeline(p.id),
-    })),
-  ],
-])
 function setPipeline(id: string) {
   board.updateBlock(props.block.id, { pipelineId: id })
 }
@@ -271,15 +257,22 @@ const technicalLabel = computed(() => {
         <span class="text-[11px] font-semibold uppercase tracking-wide text-slate-400">
           {{ t('inspector.runSettings.pipeline') }}
         </span>
-        <UDropdownMenu :items="pipelineMenu">
-          <UButton
-            size="xs"
-            variant="ghost"
-            color="neutral"
-            icon="i-lucide-workflow"
-            trailing-icon="i-lucide-chevron-down"
-          />
-        </UDropdownMenu>
+        <PipelinePicker
+          :model-value="block.pipelineId ?? ''"
+          :options="selectablePipelines"
+          :none-label="t('inspector.runSettings.noDefault')"
+          @update:model-value="setPipeline"
+        >
+          <template #trigger>
+            <UButton
+              size="xs"
+              variant="ghost"
+              color="neutral"
+              icon="i-lucide-workflow"
+              trailing-icon="i-lucide-chevron-down"
+            />
+          </template>
+        </PipelinePicker>
       </div>
       <div v-if="selectedPipeline" class="flex items-center gap-1">
         <UBadge

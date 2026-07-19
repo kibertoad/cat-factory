@@ -700,6 +700,13 @@ export type StepOptions = v.InferOutput<typeof stepOptionsSchema>
 export const pipelineSchema = v.object({
   id: v.string(),
   name: v.string(),
+  /**
+   * Optional prose description of what the pipeline is for — a one/two-sentence summary shown
+   * alongside its step list in the pipeline pickers (add-task modal, inspector run settings) and
+   * the builder. Authored per built-in in `seedPipelines()` and editable on custom pipelines.
+   * Absent ⇒ no description (the pickers fall back to the step list alone).
+   */
+  description: v.optional(v.string()),
   agentKinds: v.array(agentKindSchema),
   /**
    * Per-step human approval gates, parallel to {@link agentKinds}: when

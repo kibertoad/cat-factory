@@ -226,6 +226,8 @@ export type ToggleDependencyInput = v.InferOutput<typeof toggleDependencySchema>
 
 export const createPipelineSchema = v.object({
   name: v.pipe(v.string(), v.trim(), v.minLength(1), v.maxLength(120)),
+  /** Optional prose description shown next to the step list in the pickers/builder. */
+  description: v.optional(v.pipe(v.string(), v.trim(), v.maxLength(400))),
   agentKinds: v.pipe(v.array(agentKindSchema), v.minLength(1)),
   /**
    * Per-step human approval gates, parallel to {@link agentKinds}. Optional;
@@ -294,6 +296,11 @@ export type CreatePipelineInput = v.InferOutput<typeof createPipelineSchema>
  */
 export const updatePipelineSchema = v.object({
   name: v.optional(v.pipe(v.string(), v.trim(), v.minLength(1), v.maxLength(120))),
+  /**
+   * Change the prose description. Sent by the builder as the full value (possibly empty) so it can
+   * be CLEARED — an empty/blank string drops the description, `undefined` leaves it unchanged.
+   */
+  description: v.optional(v.pipe(v.string(), v.trim(), v.maxLength(400))),
   agentKinds: v.optional(v.pipe(v.array(agentKindSchema), v.minLength(1))),
   gates: v.optional(v.array(v.boolean())),
   thresholds: v.optional(v.array(v.nullable(v.pipe(v.number(), v.minValue(0), v.maxValue(1))))),

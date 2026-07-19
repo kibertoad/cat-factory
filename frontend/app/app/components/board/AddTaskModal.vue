@@ -292,24 +292,6 @@ const selectedModelPresetLabel = computed(() => {
 const selectablePipelines = computed(() =>
   pipelines.pipelines.filter((p) => pipelineAllowedForManualStart(p, frame.value, board.blocks)),
 )
-const pipelineMenu = computed(() => [
-  [
-    {
-      label: t('board.addTask.chooseAtRunTime'),
-      icon: 'i-lucide-rotate-ccw',
-      onSelect: () => (pipelineId.value = ''),
-    },
-    ...selectablePipelines.value.map((p) => ({
-      label: p.name,
-      icon: 'i-lucide-workflow',
-      onSelect: () => (pipelineId.value = p.id),
-    })),
-  ],
-])
-const selectedPipelineLabel = computed(
-  () => pipelines.getPipeline(pipelineId.value)?.name ?? t('board.addTask.chooseAtRunTime'),
-)
-
 // Picking the Ralph loop task type auto-selects its pipeline, so the per-task validation
 // command + iteration budget (contributed by the `ralph` agent) surface immediately — the
 // loop is meaningless without them, so "choose at run time" would be a dead end here.
@@ -891,18 +873,13 @@ async function add() {
 
           <div class="grid grid-cols-2 gap-3">
             <UFormField :label="t('board.addTask.pipeline')">
-              <UDropdownMenu :items="pipelineMenu" class="w-full">
-                <UButton
-                  color="neutral"
-                  variant="subtle"
-                  size="sm"
-                  icon="i-lucide-workflow"
-                  trailing-icon="i-lucide-chevron-down"
-                  class="w-full justify-between"
-                >
-                  {{ selectedPipelineLabel }}
-                </UButton>
-              </UDropdownMenu>
+              <PipelinePicker
+                :model-value="pipelineId"
+                :options="selectablePipelines"
+                :none-label="t('board.addTask.chooseAtRunTime')"
+                trigger-class="w-full justify-between"
+                @update:model-value="pipelineId = $event"
+              />
             </UFormField>
 
             <UFormField :label="t('board.addTask.mergePolicy')">

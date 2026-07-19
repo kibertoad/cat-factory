@@ -3362,6 +3362,13 @@
       "proceed": "Continuer quand même",
       "stopReset": "Arrêter et réinitialiser la tâche"
     },
+    "preview": {
+      "stepCount": "{count} étape | {count} étapes",
+      "gated": "Validation humaine après cette étape"
+    },
+    "picker": {
+      "noneHint": "Aucun pipeline par défaut. Vous en choisissez un au lancement de la tâche."
+    },
     "builder": {
       "title": "Constructeur de pipelines",
       "agentPalette": "Palette d'agents",
@@ -3370,6 +3377,7 @@
       "configureModels": "Configurer les modèles",
       "configureModelsTooltip": "Gérer les préréglages de modèles (quel modèle exécute chaque agent)",
       "namePlaceholder": "Nom du pipeline",
+      "descriptionPlaceholder": "Description (affichée lors du choix de ce pipeline)",
       "labelPlaceholder": "+ étiquette",
       "gatingNeedsEstimator": "Une étape sous condition nécessite un Task Estimator avant elle. Ajoutez-en un, sinon le pipeline ne sera pas enregistré.",
       "emptyDraft": "Cliquez sur les agents à gauche pour assembler un pipeline linéaire.",
