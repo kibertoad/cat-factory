@@ -18,6 +18,7 @@ import type {
   PrReviewSeverity,
   PrReviewStepState,
 } from '~/types/execution'
+import ResultWindowShell from '~/components/panels/ResultWindowShell.vue'
 
 const execution = useExecutionStore()
 const board = useBoardStore()
@@ -122,219 +123,194 @@ async function onResolve(action: PrReviewResolution): Promise<void> {
 </script>
 
 <template>
-  <Teleport to="body">
-    <div
-      v-if="open"
-      data-testid="pr-review-window"
-      class="fixed inset-0 z-50 flex max-h-[100dvh] items-stretch justify-center bg-slate-950/70 backdrop-blur-sm"
-      @click.self="close"
-    >
-      <div
-        class="m-4 flex w-full max-w-3xl flex-col overflow-hidden rounded-2xl border border-slate-800 bg-slate-900 shadow-2xl"
-        role="dialog"
-        aria-modal="true"
+  <ResultWindowShell
+    :open="open"
+    icon="i-lucide-clipboard-check"
+    icon-class="bg-indigo-500/15 text-indigo-300"
+    :title="block ? t('prReview.titleWithBlock', { title: block.title }) : t('prReview.title')"
+    :subtitle="t('prReview.subtitle')"
+    width="3xl"
+    testid="pr-review-window"
+    @close="close"
+  >
+    <template v-if="state?.prUrl" #header-extras>
+      <a
+        :href="state.prUrl"
+        target="_blank"
+        rel="noopener"
+        class="rounded-md px-2 py-1 text-[11px] text-indigo-300 hover:bg-slate-800"
       >
-        <!-- Header -->
-        <header class="flex items-center gap-3 border-b border-slate-800 px-5 py-3">
-          <span
-            class="flex h-8 w-8 items-center justify-center rounded-lg bg-indigo-500/15 text-indigo-300"
-          >
-            <UIcon name="i-lucide-clipboard-check" class="h-4 w-4" />
-          </span>
-          <div class="min-w-0 flex-1">
-            <h2 class="truncate text-sm font-semibold text-slate-100">
-              {{
-                block ? t('prReview.titleWithBlock', { title: block.title }) : t('prReview.title')
-              }}
-            </h2>
-            <p class="truncate text-[11px] text-slate-400">{{ t('prReview.subtitle') }}</p>
-          </div>
-          <a
-            v-if="state?.prUrl"
-            :href="state.prUrl"
-            target="_blank"
-            rel="noopener"
-            class="rounded-md px-2 py-1 text-[11px] text-indigo-300 hover:bg-slate-800"
-          >
-            {{ t('prReview.openPr') }}
-          </a>
-          <button
-            class="rounded-md p-1.5 text-slate-400 hover:bg-slate-800 hover:text-slate-200"
-            @click="close"
-          >
-            <UIcon name="i-lucide-x" class="h-4 w-4" />
-          </button>
-        </header>
+        {{ t('prReview.openPr') }}
+      </a>
+    </template>
 
-        <div class="min-h-0 flex-1 overflow-y-auto px-5 py-4">
-          <!-- Reviewing: the read-only reviewer is still working. -->
-          <div
-            v-if="status === 'reviewing'"
-            class="flex h-full flex-col items-center justify-center gap-2 py-10 text-center text-slate-400"
-          >
-            <UIcon name="i-lucide-loader-circle" class="h-8 w-8 animate-spin opacity-60" />
-            <p class="text-sm">{{ t('prReview.reviewing.title') }}</p>
-            <p class="max-w-sm text-[11px] text-slate-500">{{ t('prReview.reviewing.hint') }}</p>
-          </div>
+    <div class="min-h-0 flex-1 overflow-y-auto px-5 py-4">
+      <!-- Reviewing: the read-only reviewer is still working. -->
+      <div
+        v-if="status === 'reviewing'"
+        class="flex h-full flex-col items-center justify-center gap-2 py-10 text-center text-slate-400"
+      >
+        <UIcon name="i-lucide-loader-circle" class="h-8 w-8 animate-spin opacity-60" />
+        <p class="text-sm">{{ t('prReview.reviewing.title') }}</p>
+        <p class="max-w-sm text-[11px] text-slate-500">{{ t('prReview.reviewing.hint') }}</p>
+      </div>
 
-          <!-- A resolution is executing: the Fixer is committing / comments are being posted. -->
-          <div
-            v-else-if="working"
-            data-testid="pr-review-working"
-            class="flex h-full flex-col items-center justify-center gap-2 py-10 text-center text-slate-400"
-          >
-            <UIcon name="i-lucide-loader-circle" class="h-8 w-8 animate-spin opacity-60" />
-            <p class="text-sm">
-              {{ status === 'fixing' ? t('prReview.fixing.title') : t('prReview.posting.title') }}
-            </p>
-            <p class="max-w-sm text-[11px] text-slate-500">
-              {{ status === 'fixing' ? t('prReview.fixing.hint') : t('prReview.posting.hint') }}
-            </p>
-          </div>
+      <!-- A resolution is executing: the Fixer is committing / comments are being posted. -->
+      <div
+        v-else-if="working"
+        data-testid="pr-review-working"
+        class="flex h-full flex-col items-center justify-center gap-2 py-10 text-center text-slate-400"
+      >
+        <UIcon name="i-lucide-loader-circle" class="h-8 w-8 animate-spin opacity-60" />
+        <p class="text-sm">
+          {{ status === 'fixing' ? t('prReview.fixing.title') : t('prReview.posting.title') }}
+        </p>
+        <p class="max-w-sm text-[11px] text-slate-500">
+          {{ status === 'fixing' ? t('prReview.fixing.hint') : t('prReview.posting.hint') }}
+        </p>
+      </div>
 
-          <template v-else>
-            <p
-              v-if="prReview.error"
-              class="mb-3 rounded-md bg-rose-500/10 px-3 py-2 text-[12px] text-rose-300"
-            >
-              {{ prReview.error }}
-            </p>
+      <template v-else>
+        <p
+          v-if="prReview.error"
+          class="mb-3 rounded-md bg-rose-500/10 px-3 py-2 text-[12px] text-rose-300"
+        >
+          {{ prReview.error }}
+        </p>
 
-            <!-- The reviewer's overall assessment. -->
-            <p
-              v-if="state?.summary"
-              class="mb-3 rounded-md bg-slate-800/50 px-3 py-2 text-[12px] text-slate-300"
-            >
-              <span class="text-slate-500">{{ t('prReview.summaryLabel') }}</span>
-              {{ state.summary }}
-            </p>
+        <!-- The reviewer's overall assessment. -->
+        <p
+          v-if="state?.summary"
+          class="mb-3 rounded-md bg-slate-800/50 px-3 py-2 text-[12px] text-slate-300"
+        >
+          <span class="text-slate-500">{{ t('prReview.summaryLabel') }}</span>
+          {{ state.summary }}
+        </p>
 
-            <!-- A clean PR / resolved review with no findings. -->
-            <div
-              v-if="findings.length === 0"
-              class="rounded-xl border border-slate-800 bg-slate-900/60 px-4 py-6 text-center text-[13px] text-slate-300"
-            >
-              {{ t('prReview.noFindings') }}
-            </div>
-
-            <template v-else>
-              <!-- Selection toolbar -->
-              <div v-if="awaiting" class="mb-2 flex items-center gap-3 text-[11px] text-slate-400">
-                <span data-testid="pr-review-selected-count">
-                  {{ t('prReview.selectedCount', { count: selected.size }) }}
-                </span>
-                <button class="text-indigo-300 hover:underline" @click="selectAll">
-                  {{ t('prReview.selectAll') }}
-                </button>
-                <button class="text-indigo-300 hover:underline" @click="clearAll">
-                  {{ t('prReview.clear') }}
-                </button>
-              </div>
-
-              <!-- Findings grouped by slice -->
-              <section v-for="g in groups" :key="g.id" class="mb-4">
-                <h3 class="mb-1.5 text-[11px] font-semibold uppercase tracking-wide text-slate-400">
-                  {{ g.title }}
-                </h3>
-                <p v-if="g.rationale" class="mb-1.5 text-[11px] text-slate-500">
-                  {{ g.rationale }}
-                </p>
-                <article
-                  v-for="f in g.items"
-                  :key="f.id"
-                  data-testid="pr-review-finding"
-                  class="mb-1.5 rounded-xl border px-3 py-2 transition"
-                  :class="
-                    awaiting && selected.has(f.id)
-                      ? 'border-indigo-500/60 bg-indigo-500/5'
-                      : 'border-slate-800 bg-slate-900/60'
-                  "
-                >
-                  <div class="flex items-start gap-2">
-                    <input
-                      v-if="awaiting"
-                      type="checkbox"
-                      class="mt-1 accent-indigo-500"
-                      data-testid="pr-review-finding-toggle"
-                      :checked="selected.has(f.id)"
-                      @change="toggle(f.id)"
-                    />
-                    <div class="min-w-0 flex-1">
-                      <div class="flex flex-wrap items-center gap-1.5">
-                        <span
-                          class="rounded px-1.5 py-0.5 text-[10px] font-semibold uppercase ring-1"
-                          :class="SEVERITY_CLASS[f.severity]"
-                        >
-                          {{ t(`prReview.severity.${f.severity}`) }}
-                        </span>
-                        <span class="rounded bg-slate-800 px-1.5 py-0.5 text-[10px] text-slate-300">
-                          {{ t(`prReview.category.${f.category}`) }}
-                        </span>
-                        <h4 class="min-w-0 flex-1 text-[13px] font-medium text-slate-100">
-                          {{ f.title }}
-                        </h4>
-                      </div>
-                      <p class="mt-0.5 text-[11px] text-slate-500">
-                        {{ f.path
-                        }}<template v-if="f.line != null">
-                          · {{ t('prReview.line', { line: f.line }) }}</template
-                        >
-                      </p>
-                      <p class="mt-1 whitespace-pre-wrap text-[12px] text-slate-300">
-                        {{ f.detail }}
-                      </p>
-                      <p
-                        v-if="f.suggestedFix"
-                        class="mt-1 whitespace-pre-wrap rounded-md bg-slate-800/50 px-2 py-1 text-[11px] text-slate-300"
-                      >
-                        <span class="text-slate-500">{{ t('prReview.suggestedFix') }}</span>
-                        {{ f.suggestedFix }}
-                      </p>
-                    </div>
-                  </div>
-                </article>
-              </section>
-            </template>
-          </template>
+        <!-- A clean PR / resolved review with no findings. -->
+        <div
+          v-if="findings.length === 0"
+          class="rounded-xl border border-slate-800 bg-slate-900/60 px-4 py-6 text-center text-[13px] text-slate-300"
+        >
+          {{ t('prReview.noFindings') }}
         </div>
 
-        <!-- Footer -->
-        <footer
-          v-if="awaiting"
-          class="flex items-center justify-end gap-2 border-t border-slate-800 px-5 py-3"
-        >
-          <UButton
-            color="neutral"
-            variant="ghost"
-            :disabled="!canResolve || !access.canExecuteRuns.value"
-            :title="access.canExecuteRuns.value ? undefined : t('access.noRunExecute')"
-            data-testid="pr-review-finish"
-            @click="onResolve('finish')"
-          >
-            {{ t('prReview.finish') }}
-          </UButton>
-          <UButton
-            color="neutral"
-            variant="soft"
-            :disabled="!canResolve || !hasSelection || !access.canExecuteRuns.value"
-            :title="access.canExecuteRuns.value ? undefined : t('access.noRunExecute')"
-            data-testid="pr-review-post"
-            @click="onResolve('post')"
-          >
-            {{ t('prReview.post') }}
-          </UButton>
-          <UButton
-            color="primary"
-            :loading="prReview.resolving"
-            :disabled="!canResolve || !hasSelection || !access.canExecuteRuns.value"
-            :title="access.canExecuteRuns.value ? undefined : t('access.noRunExecute')"
-            data-testid="pr-review-fix"
-            @click="onResolve('fix')"
-          >
-            {{ t('prReview.fix') }}
-          </UButton>
-        </footer>
-      </div>
+        <template v-else>
+          <!-- Selection toolbar -->
+          <div v-if="awaiting" class="mb-2 flex items-center gap-3 text-[11px] text-slate-400">
+            <span data-testid="pr-review-selected-count">
+              {{ t('prReview.selectedCount', { count: selected.size }) }}
+            </span>
+            <button class="text-indigo-300 hover:underline" @click="selectAll">
+              {{ t('prReview.selectAll') }}
+            </button>
+            <button class="text-indigo-300 hover:underline" @click="clearAll">
+              {{ t('prReview.clear') }}
+            </button>
+          </div>
+
+          <!-- Findings grouped by slice -->
+          <section v-for="g in groups" :key="g.id" class="mb-4">
+            <h3 class="mb-1.5 text-[11px] font-semibold uppercase tracking-wide text-slate-400">
+              {{ g.title }}
+            </h3>
+            <p v-if="g.rationale" class="mb-1.5 text-[11px] text-slate-500">
+              {{ g.rationale }}
+            </p>
+            <article
+              v-for="f in g.items"
+              :key="f.id"
+              data-testid="pr-review-finding"
+              class="mb-1.5 rounded-xl border px-3 py-2 transition"
+              :class="
+                awaiting && selected.has(f.id)
+                  ? 'border-indigo-500/60 bg-indigo-500/5'
+                  : 'border-slate-800 bg-slate-900/60'
+              "
+            >
+              <div class="flex items-start gap-2">
+                <input
+                  v-if="awaiting"
+                  type="checkbox"
+                  class="mt-1 accent-indigo-500"
+                  data-testid="pr-review-finding-toggle"
+                  :checked="selected.has(f.id)"
+                  @change="toggle(f.id)"
+                />
+                <div class="min-w-0 flex-1">
+                  <div class="flex flex-wrap items-center gap-1.5">
+                    <span
+                      class="rounded px-1.5 py-0.5 text-[10px] font-semibold uppercase ring-1"
+                      :class="SEVERITY_CLASS[f.severity]"
+                    >
+                      {{ t(`prReview.severity.${f.severity}`) }}
+                    </span>
+                    <span class="rounded bg-slate-800 px-1.5 py-0.5 text-[10px] text-slate-300">
+                      {{ t(`prReview.category.${f.category}`) }}
+                    </span>
+                    <h4 class="min-w-0 flex-1 text-[13px] font-medium text-slate-100">
+                      {{ f.title }}
+                    </h4>
+                  </div>
+                  <p class="mt-0.5 text-[11px] text-slate-500">
+                    {{ f.path
+                    }}<template v-if="f.line != null">
+                      · {{ t('prReview.line', { line: f.line }) }}</template
+                    >
+                  </p>
+                  <p class="mt-1 whitespace-pre-wrap text-[12px] text-slate-300">
+                    {{ f.detail }}
+                  </p>
+                  <p
+                    v-if="f.suggestedFix"
+                    class="mt-1 whitespace-pre-wrap rounded-md bg-slate-800/50 px-2 py-1 text-[11px] text-slate-300"
+                  >
+                    <span class="text-slate-500">{{ t('prReview.suggestedFix') }}</span>
+                    {{ f.suggestedFix }}
+                  </p>
+                </div>
+              </div>
+            </article>
+          </section>
+        </template>
+      </template>
     </div>
-  </Teleport>
+
+    <!-- Footer -->
+    <footer
+      v-if="awaiting"
+      class="flex items-center justify-end gap-2 border-t border-slate-800 px-5 py-3"
+    >
+      <UButton
+        color="neutral"
+        variant="ghost"
+        :disabled="!canResolve || !access.canExecuteRuns.value"
+        :title="access.canExecuteRuns.value ? undefined : t('access.noRunExecute')"
+        data-testid="pr-review-finish"
+        @click="onResolve('finish')"
+      >
+        {{ t('prReview.finish') }}
+      </UButton>
+      <UButton
+        color="neutral"
+        variant="soft"
+        :disabled="!canResolve || !hasSelection || !access.canExecuteRuns.value"
+        :title="access.canExecuteRuns.value ? undefined : t('access.noRunExecute')"
+        data-testid="pr-review-post"
+        @click="onResolve('post')"
+      >
+        {{ t('prReview.post') }}
+      </UButton>
+      <UButton
+        color="primary"
+        :loading="prReview.resolving"
+        :disabled="!canResolve || !hasSelection || !access.canExecuteRuns.value"
+        :title="access.canExecuteRuns.value ? undefined : t('access.noRunExecute')"
+        data-testid="pr-review-fix"
+        @click="onResolve('fix')"
+      >
+        {{ t('prReview.fix') }}
+      </UButton>
+    </footer>
+  </ResultWindowShell>
 </template>

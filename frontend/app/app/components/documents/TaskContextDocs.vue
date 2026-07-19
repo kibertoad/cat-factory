@@ -71,6 +71,7 @@ const attachMenu = computed<DropdownMenuItem[][]>(() => {
         v-for="doc in linked"
         :key="`${doc.source}:${doc.externalId}`"
         :href="doc.url"
+        :title="doc.url"
         target="_blank"
         rel="noopener"
         class="flex items-center gap-1.5 rounded-md border border-slate-800 bg-slate-900/60 px-2 py-1.5 text-xs text-slate-300 hover:bg-slate-800/60"

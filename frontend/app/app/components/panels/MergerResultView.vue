@@ -18,11 +18,9 @@ const agents = useAgentsStore()
 const { t, n } = useI18n()
 
 // Shared seam contract (open/blockId/close). No loader: the verdict is read straight off
-// the execution step. `manageEscape: false` — `ResultWindowShell` owns Escape (and focus
-// trap + scroll lock + stacking) via the shared overlay behaviour.
-const { open, blockId, instanceId, stepIndex, close } = useResultView('merger', {
-  manageEscape: false,
-})
+// the execution step. `ResultWindowShell` owns Escape (and focus trap + scroll lock +
+// stacking) via the shared overlay behaviour.
+const { open, blockId, instanceId, stepIndex, close } = useResultView('merger')
 const block = computed(() => (blockId.value ? board.getBlock(blockId.value) : undefined))
 
 const instance = computed(() =>
