@@ -89,6 +89,8 @@ export const usePipelinesStore = defineStore('pipelines', () => {
    */
   const draftPurpose = ref<PipelinePurpose | null>(null)
   const draftName = ref('New pipeline')
+  /** Prose description for the pipeline being assembled/edited (shown in the pickers). */
+  const draftDescription = ref('')
   /** The id of the pipeline being edited, or null when assembling a brand-new one. */
   const editingId = ref<string | null>(null)
 
@@ -330,6 +332,7 @@ export const usePipelinesStore = defineStore('pipelines', () => {
     draftLabels.value = []
     draftPurpose.value = null
     draftName.value = 'New pipeline'
+    draftDescription.value = ''
     editingId.value = null
   }
 
@@ -349,6 +352,7 @@ export const usePipelinesStore = defineStore('pipelines', () => {
     draftLabels.value = [...(pipeline.labels ?? [])]
     draftPurpose.value = pipeline.purpose ?? null
     draftName.value = pipeline.name
+    draftDescription.value = pipeline.description ?? ''
     editingId.value = pipeline.id
   }
 
@@ -356,6 +360,10 @@ export const usePipelinesStore = defineStore('pipelines', () => {
   function draftPayload() {
     return {
       name: draftName.value.trim() || 'Untitled pipeline',
+      // ALWAYS send description (like stepOptions) so an update can CLEAR it — an omitted field
+      // reads as "keep existing", so toggling the last of the text away must send the empty string.
+      // The backend trims + drops a blank one, so this is a no-op on create / an empty description.
+      description: draftDescription.value.trim(),
       agentKinds: [...draft.value],
       // Only send gates when at least one step is gated.
       ...(draftGates.value.some(Boolean) ? { gates: [...draftGates.value] } : {}),
@@ -466,6 +474,7 @@ export const usePipelinesStore = defineStore('pipelines', () => {
     draftLabels,
     draftPurpose,
     draftName,
+    draftDescription,
     editingId,
     units,
     hydrate,

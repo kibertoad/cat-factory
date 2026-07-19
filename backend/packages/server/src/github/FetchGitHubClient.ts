@@ -37,6 +37,14 @@ import {
 import { githubProjection as gp } from '@cat-factory/integrations'
 import type { CommitFilesInput } from '@cat-factory/contracts'
 import type { AppTokenSource } from './GitHubAppRegistry.js'
+import {
+  decodeBase64Utf8,
+  numHeader,
+  parseGitHubTime,
+  parseIssueHtmlUrl,
+  parseLastPage,
+  parseNextLink,
+} from './githubHttpHelpers.js'
 
 // Thin `fetch`-based GitHubClient: the only place that talks to the GitHub REST
 // API. It authenticates via the App (installation tokens for repo calls, the app
@@ -382,6 +390,7 @@ export class FetchGitHubClient implements GitHubClient {
     if (!res.ok) {
       const text = await res.text().catch(() => '')
       const resetSec = numHeader(res, 'x-ratelimit-reset')
+      const rateLimited = numHeader(res, 'x-ratelimit-remaining') === 0
       throw new GitHubApiError(
         res.status,
         describeVcsApiError({
@@ -390,9 +399,10 @@ export class FetchGitHubClient implements GitHubClient {
           method: 'GET',
           url,
           body: text.slice(0, 300),
-          rateLimited: numHeader(res, 'x-ratelimit-remaining') === 0,
+          rateLimited,
           resetAt: resetSec === null ? null : resetSec * 1000,
         }),
+        rateLimited,
       )
     }
     const json = res.status === 204 ? null : await res.json().catch(() => null)
@@ -535,6 +545,42 @@ export class FetchGitHubClient implements GitHubClient {
       sha: e.sha ?? '',
       ...(typeof e.size === 'number' ? { size: e.size } : {}),
     }))
+  }
+
+  async listTree(
+    installationId: number,
+    ref: GitHubRepoRef,
+    gitRef?: string,
+  ): Promise<RepoContentEntry[]> {
+    // One recursive git-trees read returns the whole tree, so file search never walks the
+    // contents API directory-by-directory. `HEAD` resolves to the repo's default branch.
+    const treeRef = encodeURIComponent(gitRef && gitRef !== 'HEAD' ? gitRef : 'HEAD')
+    let json: unknown
+    try {
+      ;({ json } = await this.request(
+        `/repos/${ref.owner}/${ref.repo}/git/trees/${treeRef}?recursive=1`,
+        { installationId },
+      ))
+    } catch (err) {
+      // Empty repo / unknown ref → no entries (mirrors listDirectory).
+      if (err instanceof GitHubApiError && err.status === 404) return []
+      throw err
+    }
+    const body = json as {
+      tree?: Array<{ path?: string; type?: string; sha?: string; size?: number }>
+    }
+    const entries = Array.isArray(body.tree) ? body.tree : []
+    // GitHub git-tree `type` is `blob` | `tree` | `commit` (submodule); normalise to the
+    // neutral file/dir vocabulary and drop submodules (they have no browsable content here).
+    return entries
+      .filter((e) => e.type === 'blob' || e.type === 'tree')
+      .map((e) => ({
+        path: e.path ?? '',
+        name: (e.path ?? '').split('/').pop() ?? '',
+        type: e.type === 'tree' ? 'dir' : 'file',
+        sha: e.sha ?? '',
+        ...(typeof e.size === 'number' ? { size: e.size } : {}),
+      }))
   }
 
   async getFileContent(
@@ -1410,6 +1456,7 @@ export class FetchGitHubClient implements GitHubClient {
     if (!res.ok) {
       const text = await res.text().catch(() => '')
       const resetSec = numHeader(res, 'x-ratelimit-reset')
+      const rateLimited = numHeader(res, 'x-ratelimit-remaining') === 0
       throw new GitHubApiError(
         res.status,
         describeVcsApiError({
@@ -1418,9 +1465,10 @@ export class FetchGitHubClient implements GitHubClient {
           method: opts.method ?? 'GET',
           url,
           body: text.slice(0, 300),
-          rateLimited: numHeader(res, 'x-ratelimit-remaining') === 0,
+          rateLimited,
           resetAt: resetSec === null ? null : resetSec * 1000,
         }),
+        rateLimited,
       )
     }
     const json = res.status === 204 ? null : await res.json().catch(() => null)
@@ -1456,67 +1504,16 @@ export class GitHubApiError extends Error {
   constructor(
     readonly status: number,
     message: string,
+    /**
+     * Whether the response was rate-limited (`x-ratelimit-remaining: 0`). GitHub reports a
+     * PRIMARY rate-limit exhaustion as a 403 (only secondary limits are 429), so status alone
+     * cannot tell a rate-limit apart from a permission denial — a consumer reads this flag to
+     * classify the two differently. Retained here so the signal is available structurally
+     * instead of only baked into the human message.
+     */
+    readonly rateLimited = false,
   ) {
     super(message)
     this.name = 'GitHubApiError'
   }
-}
-
-/** Derive `{owner, repo, number}` from an issue's `html_url`, or null if it doesn't match. */
-function parseIssueHtmlUrl(url: string): { owner: string; repo: string; number: number } | null {
-  const m = url.match(/github\.com\/([^/]+)\/([^/]+)\/issues\/(\d+)/)
-  if (!m) return null
-  return { owner: m[1]!, repo: m[2]!, number: Number(m[3]) }
-}
-
-/** Decode the contents API's base64 (whitespace-laden) payload to a UTF-8 string. */
-function decodeBase64Utf8(value: string): string {
-  const binary = atob(value.replace(/\s+/g, ''))
-  const bytes = new Uint8Array(binary.length)
-  for (let i = 0; i < binary.length; i++) bytes[i] = binary.charCodeAt(i)
-  return new TextDecoder().decode(bytes)
-}
-
-/** Parse a GitHub ISO-8601 timestamp to epoch ms, or 0 when absent/unparseable. */
-function parseGitHubTime(value: string | null | undefined): number {
-  if (!value) return 0
-  const ms = Date.parse(value)
-  return Number.isFinite(ms) ? ms : 0
-}
-
-function numHeader(res: Response, name: string): number | null {
-  const raw = res.headers.get(name)
-  if (raw === null) return null
-  const n = Number(raw)
-  return Number.isFinite(n) ? n : null
-}
-
-function parseNextLink(link: string | null): string | undefined {
-  if (!link) return undefined
-  for (const part of link.split(',')) {
-    const match = part.match(/<([^>]+)>\s*;\s*rel="next"/)
-    if (match) return match[1]
-  }
-  return undefined
-}
-
-/**
- * The page number from a `Link` header's `rel="last"` entry (GitHub advertises it alongside
- * `next` for offset-paginated collections like `/user/repos`), so a caller can fetch the
- * remaining pages CONCURRENTLY instead of walking `next` one blocking request at a time.
- * Undefined when the header omits `last` (single page, or a cursor-paginated endpoint).
- */
-function parseLastPage(link: string | null): number | undefined {
-  if (!link) return undefined
-  for (const part of link.split(',')) {
-    const match = part.match(/<([^>]+)>\s*;\s*rel="last"/)
-    if (!match) continue
-    try {
-      const page = Number(new URL(match[1]!).searchParams.get('page'))
-      return Number.isFinite(page) && page > 0 ? page : undefined
-    } catch {
-      return undefined
-    }
-  }
-  return undefined
 }

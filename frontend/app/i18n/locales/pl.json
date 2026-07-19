@@ -49,6 +49,7 @@
       "reconfigureHint": "Możesz skonfigurować to ponownie później."
     },
     "copied": "Skopiowano do schowka",
+    "copyDetails": "Kopiuj szczegóły",
     "reveal": "Pokaż",
     "hide": "Ukryj",
     "disconnect": "Rozłącz",
@@ -3202,6 +3203,17 @@
       "emptySearchable": "Wyszukaj według tytułu lub wybierz zaimportowany dokument.",
       "emptyRefOnly": "Wklej adres URL lub identyfikator strony, aby ją dołączyć."
     },
+    "repoPicker": {
+      "searchRepoPlaceholder": "Szukaj repozytoriów…",
+      "clearRepo": "Wyczyść repozytorium",
+      "searchTab": "Szukaj plików",
+      "browseTab": "Przeglądaj",
+      "searchFilesPlaceholder": "Szukaj plików według ścieżki…",
+      "searchFilesHint": "Wpisz, aby wyszukać pliki w tym repozytorium.",
+      "noFileMatches": "Brak pasujących plików.",
+      "filesFailed": "Nie udało się wczytać plików: {error}",
+      "moreFiles": "Wyświetlono pierwsze {count} wyników — zawęź wyszukiwanie."
+    },
     "import": {
       "title": "Importuj ze źródła dokumentów",
       "connectFirst": "Najpierw połącz źródło dokumentów.",
@@ -3350,6 +3362,13 @@
       "proceed": "Kontynuuj mimo to",
       "stopReset": "Zatrzymaj i zresetuj zadanie"
     },
+    "preview": {
+      "stepCount": "{count} krok | {count} kroki | {count} kroków",
+      "gated": "Ręczne zatwierdzenie po tym kroku"
+    },
+    "picker": {
+      "noneHint": "Brak domyślnego pipeline'u. Wybierzesz go podczas uruchamiania zadania."
+    },
     "builder": {
       "title": "Kreator pipeline'ów",
       "agentPalette": "Paleta agentów",
@@ -3358,6 +3377,7 @@
       "configureModels": "Skonfiguruj modele",
       "configureModelsTooltip": "Zarządzaj presetami modeli (jaki model uruchamia każdy agent)",
       "namePlaceholder": "Nazwa pipeline'u",
+      "descriptionPlaceholder": "Opis (widoczny przy wyborze tego pipeline'u)",
       "labelPlaceholder": "+ etykieta",
       "gatingNeedsEstimator": "Krok z bramką wymaga wcześniejszego Task Estimatora. Dodaj go albo pipeline się nie zapisze.",
       "emptyDraft": "Kliknij agentów po lewej, aby zbudować liniowy pipeline.",
@@ -3451,7 +3471,8 @@
       "skillPlaceholder": "Wybierz umiejętność",
       "skillNoneAvailable": "Brak dostępnych umiejętności. Połącz źródło umiejętności w ustawieniach konta.",
       "skillMissing": "Tej umiejętności nie ma już w katalogu; wybierz inną.",
-      "skillNeedsPick": "Krok Skill wymaga wybranej umiejętności, zanim będzie można zapisać."
+      "skillNeedsPick": "Krok Skill wymaga wybranej umiejętności, zanim będzie można zapisać.",
+      "purposeStepsConflict": "To przeznaczenie nie tworzy kodu ani nie uruchamia testów, ale potok nadal zawiera kroki programowania lub testowania. Usuń je lub zmień przeznaczenie na Programowanie."
     },
     "progress": {
       "status": {

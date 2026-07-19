@@ -1,11 +1,10 @@
 import type { AgentKindRegistry } from '@cat-factory/agents'
-import type { GateRegistry } from '@cat-factory/kernel'
+import type { GateRegistry, PipelineRegistry } from '@cat-factory/kernel'
 import {
   CI_FIXER_AGENT_KIND,
   CONFLICT_RESOLVER_AGENT_KIND,
   FIXER_AGENT_KIND,
   ON_CALL_AGENT_KIND,
-  registeredPipelines,
   stubGateContext,
 } from '@cat-factory/kernel'
 import { isValidResultViewId, RESULT_VIEW_ID_SET } from '@cat-factory/contracts'
@@ -55,6 +54,14 @@ export interface ValidateRegistrationsOptions {
    * cross-checks read the registered gates from it rather than a module global.
    */
   gateRegistry: GateRegistry
+  /**
+   * The app-owned pipeline registry to validate (the facade's injected instance — the SAME one it
+   * threads through `CoreDependencies.pipelineRegistry`). Optional: when omitted, no
+   * deployment-registered pipelines are cross-checked (the pipeline-kind check still needs
+   * `knownAgentKinds`). A facade that registers custom pipelines passes it so a pipeline naming a
+   * nonexistent kind fails at boot rather than mid-run.
+   */
+  pipelineRegistry?: PipelineRegistry
   /** Override the canonical result-view id set (defaults to contracts' {@link RESULT_VIEW_ID_SET}). */
   knownResultViewIds?: ReadonlySet<string>
   /** Built-in helper kinds a gate may escalate to (defaults to ci-fixer/conflict-resolver/on-call). */
@@ -159,7 +166,7 @@ export function collectRegistrationProblems(
   // 4. Pipeline kinds (only when a built-in catalog is supplied — see option doc).
   if (opts.knownAgentKinds) {
     const known = opts.knownAgentKinds
-    for (const pipeline of registeredPipelines()) {
+    for (const pipeline of opts.pipelineRegistry?.registered() ?? []) {
       for (const agentKind of pipeline.agentKinds) {
         const ok =
           known.has(agentKind) ||

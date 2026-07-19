@@ -7,12 +7,13 @@
 // via `v-model`. The component owns its own navigation/loading state so callers
 // just bind a repo id + mode; it self-loads on mount and when those change.
 //
-// `dir` mode additionally supports `multiple`: instead of the single `v-model`
+// Both modes additionally support `multiple`: instead of the single `v-model`
 // path, the caller passes the current `selectedPaths` (a cart) + `addedPaths`
-// (directories already on the board, shown disabled) and handles the `toggle`
-// event to add/remove a directory. This lets one browse session accumulate
-// several services from ANY parent folder (the monorepo add flow) — navigating
-// away never drops earlier picks.
+// (paths already chosen elsewhere, shown disabled) and handles the `toggle`
+// event to add/remove a path. In `dir` mode this accumulates service directories
+// from ANY parent folder (the monorepo add flow); in `file` mode it accumulates
+// context-document files from anywhere in the tree — navigating away never drops
+// earlier picks.
 import type { RepoTreeEntry } from '~/types/domain'
 
 const props = withDefaults(
@@ -23,11 +24,11 @@ const props = withDefaults(
     modelValue?: string
     /** Directory to open at (e.g. a monorepo service's subdirectory). */
     startPath?: string
-    /** `dir` mode: accumulate a set of picks (via `selectedPaths`/`toggle`) instead of one. */
+    /** Accumulate a set of picks (via `selectedPaths`/`toggle`) instead of one. Either mode. */
     multiple?: boolean
-    /** `dir` + `multiple`: the current cart of picked directories (repo-root-relative). */
+    /** `multiple`: the current cart of picked paths (repo-root-relative). */
     selectedPaths?: string[]
-    /** `dir` + `multiple`: directories already on the board — listed but not selectable. */
+    /** `multiple`: paths already chosen elsewhere — listed but not selectable. */
     addedPaths?: string[]
   }>(),
   { mode: 'dir', startPath: '', multiple: false, selectedPaths: () => [], addedPaths: () => [] },
@@ -182,14 +183,22 @@ watch(
             <button
               type="button"
               class="flex items-center gap-2 truncate text-sm hover:text-primary-400"
-              :class="modelValue === entry.path ? 'text-primary-400' : 'text-slate-300'"
+              :class="isPicked(entry.path) ? 'text-primary-400' : 'text-slate-300'"
+              :disabled="isAdded(entry.path)"
               @click="pick(entry.path)"
             >
               <UIcon name="i-lucide-file" class="h-4 w-4 shrink-0 text-slate-400" />
               <span class="truncate">{{ entry.name }}</span>
             </button>
+            <span
+              v-if="isAdded(entry.path)"
+              class="flex shrink-0 items-center gap-1 text-xs text-slate-500"
+            >
+              <UIcon name="i-lucide-check" class="h-3.5 w-3.5" />
+              {{ t('github.repoTree.added') }}
+            </span>
             <UIcon
-              v-if="modelValue === entry.path"
+              v-else-if="isPicked(entry.path)"
               name="i-lucide-check"
               class="h-4 w-4 shrink-0 text-primary-400"
             />

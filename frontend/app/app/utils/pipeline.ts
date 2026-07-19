@@ -3,7 +3,31 @@ import {
   pipelineAllowedForTaskType,
   pipelineHasVisualStep,
 } from '@cat-factory/contracts'
-import type { Block, Pipeline } from '~/types/domain'
+import type { AgentKind, Block, Pipeline } from '~/types/domain'
+
+/** One agent step of a pipeline as shown in a preview: its kind + whether it's a human-gated step. */
+export interface PipelineDisplayStep {
+  kind: AgentKind
+  /** A human approval gate pauses the run after this step (`gates[i]`). */
+  gated: boolean
+}
+
+/**
+ * The steps a pipeline preview should render: the ENABLED steps in order (a step disabled by
+ * default — `enabled[i] === false` — is skipped at run, so it would misrepresent the pipeline to
+ * list it), each flagged when it carries a human approval gate. Companions are included as their
+ * own chips, mirroring how the run timeline lists every step.
+ */
+export function pipelineDisplaySteps(pipeline: Pipeline): PipelineDisplayStep[] {
+  return pipeline.agentKinds
+    .map((kind, i) => ({
+      kind,
+      enabled: pipeline.enabled?.[i] !== false,
+      gated: pipeline.gates?.[i] === true,
+    }))
+    .filter((s) => s.enabled)
+    .map(({ kind, gated }) => ({ kind, gated }))
+}
 
 // Re-exported so a picker can import the task-type gate from the same module as the
 // launch/frame gates it composes with (the classifier itself lives in `@cat-factory/contracts`).

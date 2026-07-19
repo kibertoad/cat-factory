@@ -2936,6 +2936,17 @@
       "emptySearchable": "Cerca per titolo, oppure scegli un documento importato.",
       "emptyRefOnly": "Incolla l'URL o l'ID di una pagina per allegarla."
     },
+    "repoPicker": {
+      "searchRepoPlaceholder": "Cerca repository…",
+      "clearRepo": "Rimuovi repository",
+      "searchTab": "Cerca file",
+      "browseTab": "Esplora",
+      "searchFilesPlaceholder": "Cerca file per percorso…",
+      "searchFilesHint": "Digita per cercare file in questo repository.",
+      "noFileMatches": "Nessun file corrispondente.",
+      "filesFailed": "Impossibile caricare i file: {error}",
+      "moreFiles": "Vengono mostrati i primi {count} risultati: affina la ricerca per restringerla."
+    },
     "import": {
       "title": "Importa da una sorgente di documenti",
       "connectFirst": "Collega prima una sorgente di documenti.",
@@ -3084,6 +3095,13 @@
       "proceed": "Procedi comunque",
       "stopReset": "Interrompi e reimposta l'attivita"
     },
+    "preview": {
+      "stepCount": "{count} step | {count} step",
+      "gated": "Approvazione umana dopo questo step"
+    },
+    "picker": {
+      "noneHint": "Nessuna pipeline predefinita. Ne scegli una quando esegui l'attivita."
+    },
     "builder": {
       "title": "Costruttore di pipeline",
       "agentPalette": "Palette degli agenti",
@@ -3092,6 +3110,7 @@
       "configureModels": "Configura modelli",
       "configureModelsTooltip": "Gestisci i preset dei modelli (su quale modello viene eseguito ciascun agente)",
       "namePlaceholder": "Nome della pipeline",
+      "descriptionPlaceholder": "Descrizione (mostrata quando scegli questa pipeline)",
       "labelPlaceholder": "+ etichetta",
       "gatingNeedsEstimator": "Uno step con gate richiede un Task Estimator prima di se. Aggiungine uno, altrimenti la pipeline non verra salvata.",
       "emptyDraft": "Fai clic sugli agenti a sinistra per assemblare una pipeline lineare.",
@@ -3185,7 +3204,8 @@
       "skillPlaceholder": "Seleziona una competenza",
       "skillNoneAvailable": "Nessuna competenza disponibile. Collega una fonte di competenze nelle impostazioni dell'account.",
       "skillMissing": "Questa competenza non è più nel catalogo; scegline un'altra.",
-      "skillNeedsPick": "Un passo Skill richiede una competenza selezionata prima di poter salvare."
+      "skillNeedsPick": "Un passo Skill richiede una competenza selezionata prima di poter salvare.",
+      "purposeStepsConflict": "Questo scopo non scrive codice né esegue test, ma la pipeline contiene ancora passaggi di implementazione o di test. Rimuovili o imposta lo scopo su Sviluppo."
     },
     "progress": {
       "status": {
@@ -3901,6 +3921,7 @@
     "retry": "Riprova",
     "copy": "Copia",
     "copied": "Copiato negli appunti",
+    "copyDetails": "Copia dettagli",
     "reveal": "Mostra",
     "hide": "Nascondi",
     "delete": "Elimina",

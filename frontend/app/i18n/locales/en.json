@@ -30,6 +30,7 @@
     "retry": "Retry",
     "copy": "Copy",
     "copied": "Copied to clipboard",
+    "copyDetails": "Copy details",
     "reveal": "Reveal",
     "hide": "Hide",
     "delete": "Delete",
@@ -3298,6 +3299,17 @@
       "emptySearchable": "Search by title, or pick an imported document.",
       "emptyRefOnly": "Paste a page URL or ID to attach it."
     },
+    "repoPicker": {
+      "searchRepoPlaceholder": "Search repositories…",
+      "clearRepo": "Clear repository",
+      "searchTab": "Search files",
+      "browseTab": "Browse",
+      "searchFilesPlaceholder": "Search files by path…",
+      "searchFilesHint": "Type to search files in this repository.",
+      "noFileMatches": "No matching files.",
+      "filesFailed": "Couldn't load files: {error}",
+      "moreFiles": "Showing the first {count} matches — refine your search to narrow it down."
+    },
     "import": {
       "title": "Import from a document source",
       "connectFirst": "Connect a document source first.",
@@ -3449,6 +3461,13 @@
       "proceed": "Proceed anyway",
       "stopReset": "Stop & reset task"
     },
+    "preview": {
+      "stepCount": "{count} step | {count} steps",
+      "gated": "Human approval gate after this step"
+    },
+    "picker": {
+      "noneHint": "No default pipeline. You choose one when you run the task."
+    },
     "builder": {
       "title": "Pipeline builder",
       "agentPalette": "Agent palette",
@@ -3457,6 +3476,7 @@
       "configureModels": "Configure models",
       "configureModelsTooltip": "Manage model presets (which model each agent runs on)",
       "namePlaceholder": "Pipeline name",
+      "descriptionPlaceholder": "Description (shown when picking this pipeline)",
       "labelPlaceholder": "+ label",
       "gatingNeedsEstimator": "A gated step needs a Task Estimator before it. Add one or the pipeline won't save.",
       "emptyDraft": "Click agents on the left to assemble a linear pipeline.",
@@ -3550,7 +3570,8 @@
       "skillPlaceholder": "Select a skill",
       "skillNoneAvailable": "No skills available. Link a skill source in account settings.",
       "skillMissing": "This skill is no longer in the catalog; pick another.",
-      "skillNeedsPick": "A Skill step needs a skill selected before you can save."
+      "skillNeedsPick": "A Skill step needs a skill selected before you can save.",
+      "purposeStepsConflict": "This purpose writes no code and runs no tests, but the pipeline still has implementation or testing steps. Remove them or switch the purpose to Build."
     },
     "progress": {
       "status": {

@@ -6,6 +6,7 @@ import type {
   ResolveRunRepoContext,
   UserRepoAccessRepository,
   VcsIdentityRegistry,
+  VcsProviderRegistry,
   VcsWebhookSink,
   WorkspacePermission,
   WorkspaceRole,
@@ -232,6 +233,14 @@ export interface ServerContainer extends Core {
    * (projection into provider-aware persistence is the follow-up to the GitHub-keyed tables).
    */
   vcsWebhookSink?: VcsWebhookSink
+  /**
+   * The app-owned VCS provider registry (the neutral webhook receiver resolves a provider
+   * bundle through it). Built by the facade via `defaultVcsRegistry()` and pre-loaded with the
+   * providers its config enables (e.g. `@cat-factory/gitlab`'s `registerGitLab`). Always
+   * present — the facade attaches it alongside `config`/`gateways`; a provider a deployment did
+   * not enable simply isn't registered, so the neutral route 503s for it exactly as before.
+   */
+  vcsRegistry: VcsProviderRegistry
   /**
    * Source-control PAT-login resolvers, keyed by provider. Present only on the local-mode
    * facade (a developer logs in as the account a GitHub/GitLab PAT belongs to); hosted

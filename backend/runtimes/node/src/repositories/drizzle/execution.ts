@@ -80,6 +80,7 @@ export class DrizzlePipelineRepository implements PipelineRepository {
       workspace_id: workspaceId,
       id: pipeline.id,
       name: pipeline.name,
+      description: pipeline.description ?? null,
       agent_kinds: JSON.stringify(pipeline.agentKinds),
       gates: pipeline.gates ? JSON.stringify(pipeline.gates) : null,
       thresholds: pipeline.thresholds ? JSON.stringify(pipeline.thresholds) : null,
@@ -107,6 +108,7 @@ export class DrizzlePipelineRepository implements PipelineRepository {
       .update(pipelines)
       .set({
         name: pipeline.name,
+        description: pipeline.description ?? null,
         agent_kinds: JSON.stringify(pipeline.agentKinds),
         gates: pipeline.gates ? JSON.stringify(pipeline.gates) : null,
         thresholds: pipeline.thresholds ? JSON.stringify(pipeline.thresholds) : null,

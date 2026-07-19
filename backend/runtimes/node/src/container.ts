@@ -87,6 +87,8 @@ import {
   DEFAULT_MODEL_PRESET_ID,
   SUBSCRIPTION_VENDORS,
   composeTraceSinks,
+  defaultProviderRegistry,
+  defaultVcsRegistry,
   isAmbientNativeVendor,
 } from '@cat-factory/kernel'
 import {
@@ -167,7 +169,6 @@ import {
 import {
   type GateProviderOverrides,
   applyGateProviders,
-  clearGateProviders,
   gateRegistryWithBuiltins,
   wireCiStatusProvider,
   wireMergeabilityProvider,
@@ -186,9 +187,12 @@ import {
 import type {
   AppCaches,
   InitiativePresetRegistry,
+  PipelineRegistry,
   PreviewTransport,
+  ProviderRegistry,
   TestSecretEntry,
   VcsIdentityRegistry,
+  VcsProviderRegistry,
 } from '@cat-factory/kernel'
 import type { PgBoss } from 'pg-boss'
 import { loadNodeConfig } from './config.js'
@@ -762,10 +766,10 @@ export interface NodeContainerOptions {
    */
   cloudflareModelsEnabled?: boolean
   /**
-   * Explicit built-in gate providers, re-wired AFTER the build's `clearGateProviders()`
-   * reset. The cross-runtime conformance suite uses this to drive the externalized
-   * `@cat-factory/gates` CI gate over a faked verdict; production leaves it undefined and
-   * the config branches below wire the real providers.
+   * Explicit built-in gate providers, wired onto the build's `providerRegistry` AFTER the config
+   * branches wire the real ones (so a test override wins). The cross-runtime conformance suite uses
+   * this to drive the externalized `@cat-factory/gates` CI gate over a faked verdict; production
+   * leaves it undefined and the config branches below wire the real providers.
    */
   gateProviders?: GateProviderOverrides
   /**
@@ -832,6 +836,27 @@ export interface NodeContainerOptions {
    * ServerContainer; the conformance suite injects a pre-loaded one to assert the seam is symmetric.
    */
   initiativePresetRegistry?: InitiativePresetRegistry
+  /**
+   * The app-owned VCS provider registry (the neutral webhook receiver resolves a provider bundle
+   * through it). Rides its own option like `agentKindRegistry`; defaults to `defaultVcsRegistry()`.
+   * The GitLab provider is registered onto it when `GITLAB_TOKEN` is configured; surfaced on the
+   * ServerContainer. The conformance suite injects a pre-loaded one to assert the seam is symmetric.
+   */
+  vcsRegistry?: VcsProviderRegistry
+  /**
+   * The app-owned provider registry the built-in gates probe (gate data sources keyed by
+   * {@link ProviderToken}). Rides its own option like `gateRegistry`; defaults to
+   * `defaultProviderRegistry()`. The facade wires its configured gate providers onto it and
+   * injects the SAME instance into `createCore`. The conformance suite injects a pre-loaded one.
+   */
+  providerRegistry?: ProviderRegistry
+  /**
+   * The app-owned pipeline registry (deployment-registered extra pipelines). Rides its own option
+   * like `gateRegistry`; defaults (inside `createCore`) to `defaultPipelineRegistry()`. A deployment
+   * registers its pipelines on it so they seed into every new workspace; the conformance suite can
+   * inject a pre-loaded one.
+   */
+  pipelineRegistry?: PipelineRegistry
   /**
    * Skip wrapping the resolved transport with the provisioning-log decorator. A sibling
    * facade that pre-wraps each transport branch with its OWN subsystem tag (local mode
@@ -1453,25 +1478,29 @@ export function buildNodeContainer(options: NodeContainerOptions): ServerContain
     }
   }
 
-  // The built-in gates' providers are deployment-global module handles (in `@cat-factory/gates`),
-  // not per-container DI. Reset them up-front so each build re-wires from a clean slate and only
-  // the gates this deployment actually configures stay wired: the GitHub + release-health wiring
-  // below runs only inside its `enabled`/`githubClient` branches and never clears, so without this
-  // reset a provider wired by an earlier (configured) build in the same process would leak into a
-  // later (unconfigured) build and make its gate probe a stale handle instead of passing through.
-  // Mirrors the Worker facade (keep the runtimes symmetric). Any test-injected gate providers
-  // (`options.gateProviders`) are applied at the END of this build so they OVERRIDE the config
-  // wiring below (local mode wires a PAT-backed CI provider here that would otherwise clobber a
-  // faked one) — gates read their provider lazily at probe time, so the last write wins.
-  clearGateProviders()
+  // The built-in gates' providers are wired onto the app-owned `providerRegistry` (news'd below,
+  // fresh unless injected via `options`). The GitHub + release-health wiring runs only inside its
+  // `enabled`/`githubClient` branches; a fresh registry starts empty, so an unconfigured gate just
+  // stays unwired (pass-through) — no reset needed (the former `clearGateProviders()` guarded a
+  // module-global that no longer exists). Mirrors the Worker facade (keep the runtimes symmetric).
+  // Any test-injected gate providers (`options.gateProviders`) are applied at the END of this build
+  // so they OVERRIDE the config wiring (local mode wires a PAT-backed CI provider here that would
+  // otherwise clobber a faked one) — gates read their provider lazily at probe time, last write wins.
 
-  // Opt-in GitLab VCS provider (single-token model, mirroring local-mode's PAT). Registered
-  // in the process-wide VCS registry so the neutral webhook route + any VcsConnectionRef
-  // holder resolves it. A no-op unless GITLAB_TOKEN is set; symmetric with the Worker facade
-  // (and inherited by local) per "keep the runtimes symmetric".
+  // Opt-in GitLab VCS provider (single-token model, mirroring local-mode's PAT). Registered on
+  // the app-owned `vcsRegistry` so the neutral webhook route + any VcsConnectionRef holder
+  // resolves it. A no-op unless GITLAB_TOKEN is set; symmetric with the Worker facade (and
+  // inherited by local) per "keep the runtimes symmetric".
+  const vcsRegistry = options.vcsRegistry ?? defaultVcsRegistry()
+  // The app-owned provider registry the built-in gates probe through. A single-process facade, so
+  // one instance for the process (the injected one via `options`, else a fresh empty one). The
+  // GitHub CI/mergeability/review/doc-quality + release-health + incident providers are wired onto
+  // it below when configured; injected into `createCore` so the gate machine reads the SAME
+  // instance. A fresh instance starts empty, so the former `clearGateProviders()` reset is gone.
+  const providerRegistry = options.providerRegistry ?? defaultProviderRegistry()
   let gitlabEngineClient: GitHubClient | undefined
   if (config.gitlab?.enabled && env.GITLAB_TOKEN) {
-    registerGitLab({
+    registerGitLab(vcsRegistry, {
       tokenSource: new StaticGitLabTokenSource(env.GITLAB_TOKEN, config.gitlab.apiBase),
       clock,
       webhookSecret: config.gitlab.webhookSecret || undefined,
@@ -2029,6 +2058,7 @@ export function buildNodeContainer(options: NodeContainerOptions): ServerContain
     // These read through `engineVcsClient` (GitHub App or the GitLab fallback), so a GitLab-only
     // deployment gates + merges for real too.
     wireCiStatusProvider(
+      providerRegistry,
       new GitHubCiStatusProvider({
         githubClient: engineVcsClient,
         resolveRepoTarget,
@@ -2036,6 +2066,7 @@ export function buildNodeContainer(options: NodeContainerOptions): ServerContain
       }),
     )
     wireMergeabilityProvider(
+      providerRegistry,
       new GitHubMergeabilityProvider({
         githubClient: engineVcsClient,
         resolveRepoTarget,
@@ -2043,6 +2074,7 @@ export function buildNodeContainer(options: NodeContainerOptions): ServerContain
       }),
     )
     wirePullRequestReviewProvider(
+      providerRegistry,
       new GitHubPullRequestReviewProvider({
         githubClient: engineVcsClient,
         resolveRepoTarget,
@@ -2050,6 +2082,7 @@ export function buildNodeContainer(options: NodeContainerOptions): ServerContain
       }),
     )
     wireDocQualityProvider(
+      providerRegistry,
       new GitHubDocQualityProvider({
         githubClient: engineVcsClient,
         resolveRepoTarget,
@@ -2203,7 +2236,7 @@ export function buildNodeContainer(options: NodeContainerOptions): ServerContain
   // consensus-enabled steps through a multi-model process, persisting + pushing the
   // transcript (same hub as run/board events).
   const agentExecutor = isTruthy(env.CONSENSUS_ENABLED)
-    ? (registerConsensusTraits(),
+    ? (registerConsensusTraits(agentKindRegistry),
       new ConsensusAgentExecutor({
         standard: standardAgentExecutor,
         modelProviderResolver,
@@ -2247,6 +2280,7 @@ export function buildNodeContainer(options: NodeContainerOptions): ServerContain
     // their providers into the gate suite. The observability repos/cipher above stay on
     // CoreDependencies — they power the management API (ReleaseHealthService), not the gate.
     wireReleaseHealthProvider(
+      providerRegistry,
       new RegistryReleaseHealthProvider({
         observabilityConnectionRepository: repos.observabilityConnectionRepository,
         releaseHealthConfigRepository: repos.releaseHealthConfigRepository,
@@ -2282,6 +2316,7 @@ export function buildNodeContainer(options: NodeContainerOptions): ServerContain
     // workspace-backed provider into the gate suite. The connection repo + cipher above
     // stay on CoreDependencies to power the management API.
     wireIncidentEnrichment(
+      providerRegistry,
       new WorkspaceIncidentEnrichmentProvider({
         incidentEnrichmentConnectionRepository: repos.incidentEnrichmentConnectionRepository,
         secretCipher: incidentEnrichmentSecretCipher,
@@ -2330,10 +2365,10 @@ export function buildNodeContainer(options: NodeContainerOptions): ServerContain
   // cross-runtime conformance suite drives the externalized CI gate over a faked verdict; in
   // local mode a PAT-backed CI provider is wired above and would otherwise win). Production
   // leaves `gateProviders` undefined, so this is a no-op outside tests.
-  applyGateProviders(options.gateProviders)
+  applyGateProviders(providerRegistry, options.gateProviders)
   // Surface any gate left as a silent pass-through (no provider wired) so a misconfigured
   // deployment is visible in the logs instead of quietly auto-merging without checking CI.
-  warnUnwiredGates(logger)
+  warnUnwiredGates(providerRegistry, logger)
 
   // pg-boss-backed async GitHub ingest (webhook/resync/backfill) when the durable engine is
   // wired; inline fallback with no boss. Built once so the engine's skill-freshness fan-out
@@ -2357,6 +2392,12 @@ export function buildNodeContainer(options: NodeContainerOptions): ServerContain
     // read them, and the gate registry is re-exposed on Core for the boot-time validation.
     gateRegistry,
     stepResolverRegistry,
+    // The app-owned provider registry the gate providers were wired onto above; the engine's gate
+    // machine reads the SAME instance through its GateContext.
+    providerRegistry,
+    // The app-owned pipeline registry (deployment-registered extra pipelines); createCore threads
+    // it into the workspace + pipeline services and re-exposes it on Core for boot-time validation.
+    pipelineRegistry: options.pipelineRegistry,
     // The app-owned initiative-preset registry; the initiative services read it and it is
     // re-exposed on Core for the snapshot descriptors + preset probe.
     initiativePresetRegistry,
@@ -2881,6 +2922,8 @@ export function buildNodeContainer(options: NodeContainerOptions): ServerContain
     // `/auth/pat`, held to the server's login/org/domain allowlist. Local mode overrides this
     // (via its container spread) with a configured-token, allowlist-exempt registry.
     vcsIdentity: buildNodeVcsIdentityRegistry(config),
+    // The app-owned VCS provider registry the neutral webhook route resolves a provider from.
+    vcsRegistry,
     // The sensitive per-service test-credential store the shared test-secrets controller reads;
     // present when the shared ENCRYPTION_KEY is configured.
     ...(testSecretsService ? { testSecrets: testSecretsService } : {}),
@@ -2991,7 +3034,7 @@ function selectNodeDocumentsDeps(
   if (config.documents.sources.includes('zeplin')) providers.push(new ZeplinProvider())
   if (config.documents.sources.includes('linear')) providers.push(new LinearDocumentProvider())
   if (config.documents.sources.includes('github') && githubClient) {
-    providers.push(new GitHubDocsProvider({ githubClient, installations }))
+    providers.push(new GitHubDocsProvider({ githubClient, installations, logger }))
   }
   if (providers.length === 0) return {}
   return {

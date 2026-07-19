@@ -1,5 +1,35 @@
 # @cat-factory/conformance
 
+## 0.11.25
+
+### Patch Changes
+
+- 0abcf31: Add an authored `description` to pipelines and preview a pipeline's steps + description when
+  selecting one.
+
+  Pipelines now carry an optional prose `description` (seeded for every built-in, editable on custom
+  pipelines in the builder), persisted alongside the step list on both runtimes (D1 + Postgres). The
+  pipeline pickers — in the add-task modal and the inspector run settings — are replaced with a rich
+  master–detail picker: hovering an option reveals that pipeline's description and its ordered agent
+  steps (with human-gated steps flagged), so you can see exactly what a pipeline does before choosing
+  it.
+
+  Every built-in pipeline's catalog `version` is bumped by one so existing workspaces are offered a
+  reseed that adopts the new descriptions (fresh workspaces get them on seed).
+
+- Updated dependencies [009bc97]
+- Updated dependencies [0abcf31]
+- Updated dependencies [6709dc4]
+- Updated dependencies [a53bbf7]
+  - @cat-factory/integrations@0.88.0
+  - @cat-factory/server@0.138.0
+  - @cat-factory/contracts@0.149.0
+  - @cat-factory/kernel@0.143.0
+  - @cat-factory/orchestration@0.125.0
+  - @cat-factory/agents@0.65.0
+  - @cat-factory/gates@0.7.0
+  - @cat-factory/prompt-fragments@0.13.40
+
 ## 0.11.24
 
 ### Patch Changes

@@ -1,5 +1,104 @@
 # @cat-factory/app
 
+## 0.140.0
+
+### Minor Changes
+
+- 0abcf31: Add an authored `description` to pipelines and preview a pipeline's steps + description when
+  selecting one.
+
+  Pipelines now carry an optional prose `description` (seeded for every built-in, editable on custom
+  pipelines in the builder), persisted alongside the step list on both runtimes (D1 + Postgres). The
+  pipeline pickers — in the add-task modal and the inspector run settings — are replaced with a rich
+  master–detail picker: hovering an option reveals that pipeline's description and its ordered agent
+  steps (with human-gated steps flagged), so you can see exactly what a pipeline does before choosing
+  it.
+
+  Every built-in pipeline's catalog `version` is bumped by one so existing workspaces are offered a
+  reseed that adopts the new descriptions (fresh workspaces get them on seed).
+
+- a53bbf7: Attach repo files as task context via a repository picker. When a repo-backed
+  document source (GitHub / GitLab) is selected in the context-document picker, the
+  user now searches for a repository (reusing the shared server-side repo search),
+  then picks one or more files from it — either by searching the whole tree by path
+  or by browsing it with the monorepo directory browser, which now supports
+  multi-pick in file mode. Backed by a new recursive repo-tree read (`listTree` on
+  the VCS/GitHub client ports, `GET /github/repos/:id/files`) so file search is a
+  single cached call per repo instead of walking the tree level-by-level.
+
+### Patch Changes
+
+- 009bc97: Surface the real cause when a task attachment can't be linked, instead of a bare
+  "1 attachment could not be linked".
+
+  - The context-linking path no longer swallows the error: `linkPending` now returns
+    each failure with the server's own message, HTTP status, backend code, and the backend
+    `details` bag, and the add-task toast shows the specific reason (e.g. a GitHub
+    permission/visibility error) with a one-click "Copy details" button that puts a full
+    diagnostic report on the clipboard (including the upstream GitHub status, kept distinct
+    from the mapped HTTP status).
+  - `GitHubDocsProvider` classifies a failed doc read (403 no-access, primary/secondary
+    rate-limit, 404/not-found, other) into a specific, actionable domain error carrying the
+    repo coordinates + HTTP status, and logs it with full context — so a permission problem
+    is no longer masked as an opaque 500 and is diagnosable server-side.
+  - `GitHubApiError` now retains the `rateLimited` (`x-ratelimit-remaining: 0`) signal
+    structurally, so a GitHub PRIMARY rate-limit (reported as a 403, not a 429) is
+    classified as a rate-limit rather than a spurious "missing read access" permission error.
+  - Added a reusable `copyAction` toast-action helper on `useCopyToClipboard`.
+
+- Updated dependencies [0abcf31]
+- Updated dependencies [a53bbf7]
+  - @cat-factory/contracts@0.149.0
+
+## 0.139.0
+
+### Minor Changes
+
+- 5ba84dc: Complete modular-vue slice 5 (agent-run window chrome → `ResultWindowShell`): convert
+  the final nine result windows behind the shared shell and remove the last of the
+  per-window modal chrome. `PrReviewWindow`, `ClarityReviewWindow`, `BrainstormWindow`,
+  `RequirementsReviewWindow`, `InitiativeTrackerWindow`, `InitiativePlanningWindow`,
+  `ServiceSpecWindow`, `ConsensusSessionWindow`, and `DocInterviewWindow` are now
+  body-only markup wrapped in `ResultWindowShell`, so all 18 windows share one dialog
+  shell (chrome + the upstream `useModalBehavior` shared overlay stack).
+
+  Each window's specific header content moves to the shell's `#header-extras` slot —
+  iteration badges (clarity / brainstorm / requirements), status badges (initiative
+  planning / consensus / doc interview), the initiative tracker's progress bar + status
+  pair, the PR-review "Open PR" link, and the service-spec structured/Gherkin view
+  toggle. Preserved `data-testid`s (`pr-review-window`, `initiative-tracker-window`,
+  `initiative-planning-window`, `doc-interview-window`) move from the old backdrop to the
+  shell dialog, so existing e2e selectors are unaffected. `RequirementsReviewWindow` (the
+  only genuine step-result window in the batch) surfaces the shared restart control via
+  the shell's `stepRef`; the block-keyed windows omit it, exactly as `ForkDecisionWindow`
+  did. `ConsensusSessionWindow`'s structured header becomes two computed strings feeding
+  the shell's `title`/`subtitle`. The pick-one selection stays the slice-2
+  `resolveComponentRegistry` in `StepResultViewHost`, so there are no host or registry
+  changes.
+
+  Final cleanup (now that every window is on the shell): `useResultView` no longer
+  registers a per-window global Escape listener, and its `manageEscape` option is
+  removed — the shell owns Escape for all windows via `useModalBehavior`, so a second
+  listener would double-fire close. Every caller drops `manageEscape: false`.
+
+  e2e: the `initiative-checkpoint` spec now asserts the block-keyed
+  `initiative-tracker-window` renders in the shell (its `#header-extras` progress chip)
+  and closes on the shell-owned Escape then reopens — covering the shell chrome for a
+  block-keyed window after `useResultView`'s listener was removed.
+
+  Progress + per-window outcomes tracked in
+  `docs/initiatives/modular-vue-slice5-progress.md`.
+
+## 0.138.1
+
+### Patch Changes
+
+- 1b730c6: Show the full URL of a task's attached context document on hover. In
+  `TaskContextDocs.vue` each linked document row now carries a native `title`
+  tooltip (`:title="doc.url"`, the app's established `title`-based tooltip pattern —
+  there is no `UTooltip`), so hovering a document reveals its canonical URL. Clicking
+  continues to open that URL in a new tab (`target="_blank"`).
+
 ## 0.138.0
 
 ### Minor Changes

@@ -1,4 +1,4 @@
-import { registerVcsProvider, type Clock, type GitHubClient } from '@cat-factory/kernel'
+import type { Clock, GitHubClient, VcsProviderRegistry } from '@cat-factory/kernel'
 import { FetchGitLabClient } from './FetchGitLabClient.js'
 import { GitLabProvisioningClient } from './provisioning.js'
 import { StaticGitLabTokenSource } from './tokenSource.js'
@@ -8,10 +8,10 @@ import type { GitLabTokenSource } from './tokenSource.js'
 
 // ---------------------------------------------------------------------------
 // The GitLab VCS provider, authored entirely through the public VCS-registry seam
-// (`registerVcsProvider`) — depending only on @cat-factory/kernel + @cat-factory/contracts,
+// (`VcsProviderRegistry`) — depending only on @cat-factory/kernel + @cat-factory/contracts,
 // never on the engine or a runtime facade. A deployment that wants GitLab support calls
-// `registerGitLab(...)` once at startup; any caller holding a `gitlab` VcsConnectionRef then
-// resolves this bundle via `resolveVcsProvider(ref)`.
+// `registerGitLab(registry, ...)` once at startup against the registry the facade owns; any
+// caller holding a `gitlab` VcsConnectionRef then resolves this bundle via `registry.resolve(ref)`.
 // ---------------------------------------------------------------------------
 
 export { FetchGitLabClient, GitLabApiError } from './FetchGitLabClient.js'
@@ -43,13 +43,16 @@ export interface RegisterGitLabOptions {
 }
 
 /**
- * Register the GitLab provider bundle (client + webhook verifier/mapper + provisioning)
- * in the process-wide VCS registry. Call once at startup. Idempotent — a later call
- * replaces the earlier registration.
+ * Register the GitLab provider bundle (client + webhook verifier/mapper + provisioning) on the
+ * app-owned VCS registry the facade threads through its container. Call once at startup.
+ * Idempotent — a later call replaces the earlier registration.
  */
-export function registerGitLab(options: RegisterGitLabOptions): void {
+export function registerGitLab(
+  registry: VcsProviderRegistry,
+  options: RegisterGitLabOptions,
+): void {
   const { tokenSource, clock, webhookSecret, fetchImpl, logger } = options
-  registerVcsProvider({
+  registry.register({
     provider: 'gitlab',
     client: new FetchGitLabClient({ tokenSource, clock, fetchImpl, logger }),
     webhookMapper: new GitLabWebhookMapper(clock),

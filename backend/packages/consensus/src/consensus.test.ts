@@ -7,6 +7,7 @@ import type {
   ModelRef,
   TaskEstimate,
 } from '@cat-factory/kernel'
+import { defaultAgentKindRegistry } from '@cat-factory/agents'
 import { decideConsensusMode } from './gating.js'
 import { parseScoreMap } from './strategies/rankedVoting.js'
 import { ConsensusAgentExecutor } from './ConsensusAgentExecutor.js'
@@ -112,12 +113,17 @@ const fakeGenerate: GenerateFn = async ({ system, prompt }) => {
   }
 }
 
+// One shared agent-kind registry the executor + the consensus-trait registration share, so the
+// assignments land on the same instance the executor's eligibility check reads.
+const agentKindRegistry = defaultAgentKindRegistry()
+
 const baseDeps = {
   standard,
   modelProvider: fakeProvider,
   agentRouting,
   now: () => 0,
   generate: fakeGenerate,
+  agentKindRegistry,
 }
 
 const twoParticipants = [
@@ -130,7 +136,7 @@ describe('ConsensusAgentExecutor', () => {
   // (the runtime backstop for the builder's eligibility UI). `architect` is in the
   // default-eligible set, so register the traits before exercising the run path.
   beforeAll(() => {
-    registerConsensusTraits()
+    registerConsensusTraits(agentKindRegistry)
   })
 
   it('delegates to the standard executor when no consensus config', async () => {

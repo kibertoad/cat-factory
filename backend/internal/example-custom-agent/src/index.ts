@@ -5,6 +5,8 @@ import type {
   GateRegistry,
   InitiativePresetRegistration,
   InitiativePresetRegistry,
+  PipelineRegistry,
+  ProviderRegistry,
   RepoOp,
   StepCompletionResolver,
   StepResolverRegistry,
@@ -13,9 +15,6 @@ import {
   INITIATIVE_ANALYST_AGENT_KIND,
   INITIATIVE_PLANNER_AGENT_KIND,
   defineProviderToken,
-  isProviderWired,
-  registerPipeline,
-  wireProvider,
 } from '@cat-factory/kernel'
 import * as v from 'valibot'
 
@@ -24,7 +23,7 @@ import * as v from 'valibot'
 //
 // This is what a proprietary "org agents" package looks like: it teaches the platform
 // two brand-new agent kinds and a pipeline that chains them — purely through the public
-// extension seams (the app-owned `AgentKindRegistry` + `registerPipeline`) — and ships its
+// extension seams (the app-owned `AgentKindRegistry` + `PipelineRegistry`) — and ships its
 // mechanical work as ordinary backend TypeScript. Crucially it requires ZERO changes to the
 // executor-harness image: the container runs the generic LLM-over-a-checkout `agent` kind,
 // and the deterministic "render a report file + commit it" step is a backend POST-OP over
@@ -404,9 +403,12 @@ export interface LicenseProvider {
 // the old `let provider; getProvider()!` pattern (and its unsafe non-null assertion) is gone.
 export const LICENSE_PROVIDER = defineProviderToken<LicenseProvider>('license')
 
-/** Wire (or clear) the license checker the {@link LICENSE_CHECK_KIND} gate probes. */
-export function wireLicenseProvider(provider: LicenseProvider | undefined): void {
-  wireProvider(LICENSE_PROVIDER, provider)
+/** Wire (or clear) the license checker the {@link LICENSE_CHECK_KIND} gate probes, on the app-owned registry. */
+export function wireLicenseProvider(
+  registry: ProviderRegistry,
+  provider: LicenseProvider | undefined,
+): void {
+  registry.wire(LICENSE_PROVIDER, provider)
 }
 
 /**
@@ -753,19 +755,20 @@ export function registerOrgResearchPreset(
  * {@link InitiativePresetRegistry}, plus the pipelines that chain the kinds (`pl_org_audit`,
  * `pl_org_research`, `pl_org_apply`) + the example `license-check` gate + the auditor-summary /
  * research-verdict step resolvers on the app-owned {@link GateRegistry} /
- * {@link StepResolverRegistry} the composition root injects (the PIPELINE registry is still
- * module-global — it has not migrated to app-owned DI yet). Idempotent (registries replace by
- * id/kind). Called explicitly from a facade/test — there is no module-load side effect any more,
- * since the agent-kind / preset / gate / step-resolver registries are app-owned instances.
+ * {@link StepResolverRegistry} + the app-owned {@link PipelineRegistry} the composition root
+ * injects. Idempotent (registries replace by id/kind). Called explicitly from a facade/test —
+ * there is no module-load side effect any more, since the agent-kind / preset / gate /
+ * step-resolver / pipeline registries are all app-owned instances.
  */
 export function registerExampleCustomAgents(
   registry: AgentKindRegistry,
   initiativePresetRegistry: InitiativePresetRegistry,
   gateRegistry: GateRegistry,
   stepResolverRegistry: StepResolverRegistry,
+  pipelineRegistry: PipelineRegistry,
 ): void {
   registry.registerAll(EXAMPLE_AGENT_KINDS)
-  registerPipeline({
+  pipelineRegistry.register({
     id: ORG_AUDIT_PIPELINE_ID,
     name: 'Org compliance audit',
     agentKinds: [ORG_REVIEWER_KIND, SECURITY_AUDITOR_KIND],
@@ -774,12 +777,12 @@ export function registerExampleCustomAgents(
   // `conflicts → ci → merger` merge tail so the committed report (and the follow-on change) land on
   // the default branch a later phase clones. The merge tail is what makes the research artifact a
   // cross-phase artifact (see `ORG_RESEARCH_PRESET`).
-  registerPipeline({
+  pipelineRegistry.register({
     id: ORG_RESEARCH_PIPELINE_ID,
     name: 'Org feasibility research',
     agentKinds: [ORG_RESEARCH_KIND, 'conflicts', 'ci', 'merger'],
   })
-  registerPipeline({
+  pipelineRegistry.register({
     id: ORG_APPLY_PIPELINE_ID,
     name: 'Org apply',
     agentKinds: ['coder', 'conflicts', 'ci', 'merger'],
@@ -790,7 +793,7 @@ export function registerExampleCustomAgents(
   gateRegistry.register(LICENSE_CHECK_KIND, (ctx) => ({
     kind: LICENSE_CHECK_KIND,
     helperKind: LICENSE_FIXER_KIND,
-    wired: () => isProviderWired(LICENSE_PROVIDER),
+    wired: () => ctx.isProviderWired(LICENSE_PROVIDER),
     unwiredOutput: 'License gate skipped (no license provider configured).',
     probe: async (workspaceId, blockId): Promise<GateProbe> => {
       // requireProvider is safe here: the engine only probes a gate whose wired() is true.

@@ -5,11 +5,15 @@ import type {
   RaiseNotificationInput,
   ReviewThread,
 } from '@cat-factory/kernel'
-import { stubGateContext } from '@cat-factory/kernel'
-import { afterEach, describe, expect, it } from 'vitest'
+import {
+  defaultProviderRegistry,
+  stubGateContext,
+  type ProviderRegistry,
+} from '@cat-factory/kernel'
+import { beforeEach, describe, expect, it } from 'vitest'
 import { classifyHumanReview, isApproved, outstandingThreads } from './review.logic.js'
 import { humanReviewGate } from './gates.js'
-import { clearGateProviders, wirePullRequestReviewProvider } from './providers.js'
+import { wirePullRequestReviewProvider } from './providers.js'
 
 const NOW = 1_000_000_000
 const MIN = 60_000
@@ -139,14 +143,19 @@ describe('classifyHumanReview', () => {
 })
 
 describe('humanReviewGate', () => {
-  afterEach(() => clearGateProviders())
+  // A fresh provider registry per test (no module global to clear); the gate reads it through
+  // `stubGateContext(overrides, providerRegistry)`.
+  let providerRegistry: ProviderRegistry
+  beforeEach(() => {
+    providerRegistry = defaultProviderRegistry()
+  })
 
   it('is a pass-through until a provider is wired', () => {
-    expect(humanReviewGate(stubGateContext()).wired()).toBe(false)
+    expect(humanReviewGate(stubGateContext({}, providerRegistry)).wired()).toBe(false)
   })
 
   it('maps dispatch to a fail probe and stashes the threads to resolve', async () => {
-    wirePullRequestReviewProvider({
+    wirePullRequestReviewProvider(providerRegistry, {
       getReview: async () =>
         snapshot({
           approvals: 1,
@@ -154,7 +163,7 @@ describe('humanReviewGate', () => {
         }),
       resolveThreads: async () => {},
     })
-    const gate = humanReviewGate(stubGateContext({ clock: { now: () => NOW } }))
+    const gate = humanReviewGate(stubGateContext({ clock: { now: () => NOW } }, providerRegistry))
     expect(gate.wired()).toBe(true)
     const gs = { phase: 'checking', attempts: 0, maxAttempts: 1 } as GateStepState
     const probe = await gate.probe('ws', 'b', gs)
@@ -166,13 +175,13 @@ describe('humanReviewGate', () => {
     // The fixer advanced the PR head (sha-old → sha-new), so its handed threads are genuinely
     // addressed: resolve them and clear the stash.
     const resolved: string[] = []
-    wirePullRequestReviewProvider({
+    wirePullRequestReviewProvider(providerRegistry, {
       getReview: async () => snapshot({ headSha: 'sha-new' }),
       resolveThreads: async (_ws, _b, ids) => {
         resolved.push(...ids)
       },
     })
-    const gate = humanReviewGate(stubGateContext())
+    const gate = humanReviewGate(stubGateContext({}, providerRegistry))
     const step = {
       agentKind: 'human-review',
       gate: {
@@ -200,13 +209,13 @@ describe('humanReviewGate', () => {
     // reviewer's feedback unaddressed — so leave them open and drop the stash (the next probe's
     // backoff surfaces the stall card).
     const resolved: string[] = []
-    wirePullRequestReviewProvider({
+    wirePullRequestReviewProvider(providerRegistry, {
       getReview: async () => snapshot({ headSha: 'sha1' }),
       resolveThreads: async (_ws, _b, ids) => {
         resolved.push(...ids)
       },
     })
-    const gate = humanReviewGate(stubGateContext())
+    const gate = humanReviewGate(stubGateContext({}, providerRegistry))
     const step = {
       agentKind: 'human-review',
       gate: {
@@ -232,13 +241,13 @@ describe('humanReviewGate', () => {
     // The fixer pushed (head advanced) but the GitHub-side resolve threw transiently. Retain the
     // handed ids so the probe's reconcile retries exactly those (resolve-only) — rather than
     // clearing the stash and re-dispatching a whole fixer round for an already-fixed thread.
-    wirePullRequestReviewProvider({
+    wirePullRequestReviewProvider(providerRegistry, {
       getReview: async () => snapshot({ headSha: 'sha-new' }),
       resolveThreads: async () => {
         throw new Error('502 from GitHub')
       },
     })
-    const gate = humanReviewGate(stubGateContext())
+    const gate = humanReviewGate(stubGateContext({}, providerRegistry))
     const step = {
       agentKind: 'human-review',
       gate: {
@@ -265,7 +274,7 @@ describe('humanReviewGate', () => {
     // (resolve only, no duplicate comment), keyed STRICTLY on the handed ids — and retain it
     // while still open so the next poll retries.
     const calls: { ids: string[]; reply: string }[] = []
-    wirePullRequestReviewProvider({
+    wirePullRequestReviewProvider(providerRegistry, {
       getReview: async () =>
         snapshot({
           approvals: 1,
@@ -275,7 +284,7 @@ describe('humanReviewGate', () => {
         calls.push({ ids, reply })
       },
     })
-    const gate = humanReviewGate(stubGateContext({ clock: { now: () => NOW } }))
+    const gate = humanReviewGate(stubGateContext({ clock: { now: () => NOW } }, providerRegistry))
     const gs = {
       phase: 'checking',
       attempts: 0,
@@ -297,7 +306,7 @@ describe('humanReviewGate', () => {
     // bot's open thread would hide its feedback. (It's excluded from the HUMAN outstanding set,
     // so an approved PR still advances.)
     const calls: { ids: string[]; reply: string }[] = []
-    wirePullRequestReviewProvider({
+    wirePullRequestReviewProvider(providerRegistry, {
       getReview: async () =>
         snapshot({
           approvals: 1,
@@ -314,7 +323,7 @@ describe('humanReviewGate', () => {
         calls.push({ ids, reply })
       },
     })
-    const gate = humanReviewGate(stubGateContext({ clock: { now: () => NOW } }))
+    const gate = humanReviewGate(stubGateContext({ clock: { now: () => NOW } }, providerRegistry))
     const gs = { phase: 'checking', attempts: 0, maxAttempts: 1 } as GateStepState
     const probe = await gate.probe('ws', 'b', gs)
     expect(probe.status).toBe('pass')
@@ -323,13 +332,13 @@ describe('humanReviewGate', () => {
 
   it('keeps waiting (never fails the run) when the provider read throws', async () => {
     // A transient GitHub error on a poll must not fail the indefinitely-waiting gate.
-    wirePullRequestReviewProvider({
+    wirePullRequestReviewProvider(providerRegistry, {
       getReview: async () => {
         throw new Error('502 from GitHub')
       },
       resolveThreads: async () => {},
     })
-    const gate = humanReviewGate(stubGateContext({ clock: { now: () => NOW } }))
+    const gate = humanReviewGate(stubGateContext({ clock: { now: () => NOW } }, providerRegistry))
     const gs = { phase: 'checking', attempts: 0, maxAttempts: 1, headSha: 'sha1' } as GateStepState
     const probe = await gate.probe('ws', 'b', gs)
     expect(probe.status).toBe('pending')
@@ -339,18 +348,21 @@ describe('humanReviewGate', () => {
   it('raises the awaiting-approval card with the run executionId so the inbox can deep-link', async () => {
     // The card promises "request a fix here"; the inbox needs `executionId` to open the gate
     // window. The probe has no instance, but the block carries the parked run's id.
-    wirePullRequestReviewProvider({
+    wirePullRequestReviewProvider(providerRegistry, {
       getReview: async () => snapshot({ approvals: 0 }), // assigned reviewer, not approved → awaiting
       resolveThreads: async () => {},
     })
     const raised: RaiseNotificationInput[] = []
     const gate = humanReviewGate(
-      stubGateContext({
-        clock: { now: () => NOW },
-        getBlock: async () =>
-          ({ id: 'b', title: 'Login', executionId: 'ex-1' }) as unknown as Block,
-        raiseNotification: async (_ws, input) => void raised.push(input),
-      }),
+      stubGateContext(
+        {
+          clock: { now: () => NOW },
+          getBlock: async () =>
+            ({ id: 'b', title: 'Login', executionId: 'ex-1' }) as unknown as Block,
+          raiseNotification: async (_ws, input) => void raised.push(input),
+        },
+        providerRegistry,
+      ),
     )
     const gs = { phase: 'checking', attempts: 0, maxAttempts: 1 } as GateStepState
     const probe = await gate.probe('ws', 'b', gs)
@@ -363,19 +375,22 @@ describe('humanReviewGate', () => {
     // Outstanding feedback + a prior attempt at the same head sha = the fixer made no progress.
     // The gate backs off (pending) so it does not hot-loop — but it MUST raise a card so the
     // stalled loop is visible to the human instead of waiting forever in silence.
-    wirePullRequestReviewProvider({
+    wirePullRequestReviewProvider(providerRegistry, {
       getReview: async () =>
         snapshot({ approvals: 1, unresolvedThreads: [thread({ threadId: 'T1' })] }),
       resolveThreads: async () => {},
     })
     const raised: RaiseNotificationInput[] = []
     const gate = humanReviewGate(
-      stubGateContext({
-        clock: { now: () => NOW },
-        getBlock: async () =>
-          ({ id: 'b', title: 'Login', executionId: 'ex-1' }) as unknown as Block,
-        raiseNotification: async (_ws, input) => void raised.push(input),
-      }),
+      stubGateContext(
+        {
+          clock: { now: () => NOW },
+          getBlock: async () =>
+            ({ id: 'b', title: 'Login', executionId: 'ex-1' }) as unknown as Block,
+          raiseNotification: async (_ws, input) => void raised.push(input),
+        },
+        providerRegistry,
+      ),
     )
     const gs = {
       phase: 'checking',
@@ -394,14 +409,14 @@ describe('humanReviewGate', () => {
     // The gate caches the required-approving count and passes it back so the provider can skip
     // re-reading branch protection on every poll of an indefinite wait.
     const seen: (number | null | undefined)[] = []
-    wirePullRequestReviewProvider({
+    wirePullRequestReviewProvider(providerRegistry, {
       getReview: async (_ws, _b, cached) => {
         seen.push(cached)
         return snapshot({ approvals: 0, requiredApprovingReviewCount: 2 })
       },
       resolveThreads: async () => {},
     })
-    const gate = humanReviewGate(stubGateContext({ clock: { now: () => NOW } }))
+    const gate = humanReviewGate(stubGateContext({ clock: { now: () => NOW } }, providerRegistry))
     const gs = { phase: 'checking', attempts: 0, maxAttempts: 1 } as GateStepState
     await gate.probe('ws', 'b', gs)
     expect(gs.requiredApprovingReviewCount).toBe(2) // cached after the first probe

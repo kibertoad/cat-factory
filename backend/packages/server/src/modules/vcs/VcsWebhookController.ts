@@ -1,5 +1,5 @@
 import { Hono } from 'hono'
-import { getVcsProvider, isVcsProvider } from '@cat-factory/kernel'
+import { isVcsProvider } from '@cat-factory/kernel'
 import type { VcsConnectionRef } from '@cat-factory/kernel'
 import type { AppConfig } from '../../config/types.js'
 import type { AppEnv } from '../../http/env.js'
@@ -26,7 +26,7 @@ export function vcsWebhookController(): Hono<AppEnv> {
     if (!isVcsProvider(providerParam)) {
       return c.json({ error: { code: 'validation', message: 'Unknown VCS provider' } }, 404)
     }
-    const bundle = getVcsProvider(providerParam)
+    const bundle = c.get('container').vcsRegistry.get(providerParam)
     if (!bundle) {
       return c.json(
         { error: { code: 'unavailable', message: `${providerParam} is not configured` } },

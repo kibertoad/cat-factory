@@ -18,11 +18,9 @@ const agents = useAgentsStore()
 const { t } = useI18n()
 
 // Shared seam contract (open/blockId/close). No `onOpen` loader: this window reads its data
-// straight off the execution step, so there's nothing to fetch on open. `manageEscape: false`
-// — `ResultWindowShell` owns Escape (and focus trap + scroll lock + stacking).
-const { open, blockId, instanceId, stepIndex, close } = useResultView('generic-structured', {
-  manageEscape: false,
-})
+// straight off the execution step, so there's nothing to fetch on open. `ResultWindowShell`
+// owns Escape (and focus trap + scroll lock + stacking).
+const { open, blockId, instanceId, stepIndex, close } = useResultView('generic-structured')
 const block = computed(() => (blockId.value ? board.getBlock(blockId.value) : undefined))
 
 const instance = computed(() =>

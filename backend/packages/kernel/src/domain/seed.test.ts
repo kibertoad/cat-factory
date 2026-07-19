@@ -48,7 +48,6 @@ describe('seedPipelines — named-gate lowering', () => {
 
   it('lowers pl_full: human gates + opt-in brainstorms land on the named steps', () => {
     const full = byId().get('pl_full')!
-    expect(full.version).toBe(3)
     expect(full.agentKinds).toEqual([
       'requirements-brainstorm',
       'requirements-review',

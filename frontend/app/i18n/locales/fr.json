@@ -49,6 +49,7 @@
       "reconfigureHint": "Vous pourrez le reconfigurer plus tard."
     },
     "copied": "Copié dans le presse-papiers",
+    "copyDetails": "Copier les détails",
     "reveal": "Afficher",
     "hide": "Masquer",
     "disconnect": "Déconnecter",
@@ -3202,6 +3203,17 @@
       "emptySearchable": "Recherchez par titre ou choisissez un document importé.",
       "emptyRefOnly": "Collez l'URL ou l'ID d'une page pour la joindre."
     },
+    "repoPicker": {
+      "searchRepoPlaceholder": "Rechercher des dépôts…",
+      "clearRepo": "Effacer le dépôt",
+      "searchTab": "Rechercher des fichiers",
+      "browseTab": "Parcourir",
+      "searchFilesPlaceholder": "Rechercher des fichiers par chemin…",
+      "searchFilesHint": "Saisissez du texte pour rechercher des fichiers dans ce dépôt.",
+      "noFileMatches": "Aucun fichier correspondant.",
+      "filesFailed": "Impossible de charger les fichiers : {error}",
+      "moreFiles": "Affichage des {count} premiers résultats ; affinez votre recherche pour la restreindre."
+    },
     "import": {
       "title": "Importer depuis une source de documents",
       "connectFirst": "Connectez d'abord une source de documents.",
@@ -3350,6 +3362,13 @@
       "proceed": "Continuer quand même",
       "stopReset": "Arrêter et réinitialiser la tâche"
     },
+    "preview": {
+      "stepCount": "{count} étape | {count} étapes",
+      "gated": "Validation humaine après cette étape"
+    },
+    "picker": {
+      "noneHint": "Aucun pipeline par défaut. Vous en choisissez un au lancement de la tâche."
+    },
     "builder": {
       "title": "Constructeur de pipelines",
       "agentPalette": "Palette d'agents",
@@ -3358,6 +3377,7 @@
       "configureModels": "Configurer les modèles",
       "configureModelsTooltip": "Gérer les préréglages de modèles (quel modèle exécute chaque agent)",
       "namePlaceholder": "Nom du pipeline",
+      "descriptionPlaceholder": "Description (affichée lors du choix de ce pipeline)",
       "labelPlaceholder": "+ étiquette",
       "gatingNeedsEstimator": "Une étape sous condition nécessite un Task Estimator avant elle. Ajoutez-en un, sinon le pipeline ne sera pas enregistré.",
       "emptyDraft": "Cliquez sur les agents à gauche pour assembler un pipeline linéaire.",
@@ -3451,7 +3471,8 @@
       "skillPlaceholder": "Sélectionner une compétence",
       "skillNoneAvailable": "Aucune compétence disponible. Reliez une source de compétences dans les paramètres du compte.",
       "skillMissing": "Cette compétence n'est plus dans le catalogue ; choisissez-en une autre.",
-      "skillNeedsPick": "Une étape Skill a besoin d'une compétence sélectionnée avant de pouvoir enregistrer."
+      "skillNeedsPick": "Une étape Skill a besoin d'une compétence sélectionnée avant de pouvoir enregistrer.",
+      "purposeStepsConflict": "Cet objectif n'écrit aucun code et n'exécute aucun test, mais le pipeline contient encore des étapes d'implémentation ou de test. Supprimez-les ou définissez l'objectif sur Développement."
     },
     "progress": {
       "status": {

@@ -26,7 +26,6 @@ import {
   headFields,
   HUMAN_REVIEW_AGENT_KIND,
   isCiGreen,
-  isProviderWired,
   listFailingChecksAcrossRepos,
   ON_CALL_AGENT_KIND,
   POST_RELEASE_HEALTH_AGENT_KIND,
@@ -78,7 +77,7 @@ function pct(score: number): string {
 export const ciGate = (ctx: GateContext): GateDefinition => ({
   kind: CI_AGENT_KIND,
   helperKind: CI_FIXER_AGENT_KIND,
-  wired: () => isProviderWired(CI_STATUS_PROVIDER),
+  wired: () => ctx.isProviderWired(CI_STATUS_PROVIDER),
   unwiredOutput: 'CI gate skipped (no CI status provider configured).',
   probe: async (workspaceId, blockId): Promise<GateProbe> => {
     // Aggregate across EVERY PR the task opened (own-service + peer-service repos on a
@@ -139,7 +138,7 @@ export const ciGate = (ctx: GateContext): GateDefinition => ({
 export const conflictsGate = (ctx: GateContext): GateDefinition => ({
   kind: CONFLICTS_AGENT_KIND,
   helperKind: CONFLICT_RESOLVER_AGENT_KIND,
-  wired: () => isProviderWired(MERGEABILITY_PROVIDER),
+  wired: () => ctx.isProviderWired(MERGEABILITY_PROVIDER),
   unwiredOutput: 'Conflict gate skipped (no mergeability provider configured).',
   attemptBudget: () => CONFLICT_RESOLVER_MAX_ATTEMPTS,
   probe: async (workspaceId, blockId): Promise<GateProbe> => {
@@ -225,7 +224,7 @@ function renderDocQualityFindings(report: DocQualityReport): string {
 export const docQualityGate = (ctx: GateContext): GateDefinition => ({
   kind: DOC_QUALITY_AGENT_KIND,
   helperKind: DOC_FIXER_AGENT_KIND,
-  wired: () => isProviderWired(DOC_QUALITY_PROVIDER),
+  wired: () => ctx.isProviderWired(DOC_QUALITY_PROVIDER),
   unwiredOutput: 'Document-quality gate skipped (no document-quality provider configured).',
   attemptBudget: () => DOC_FIXER_MAX_ATTEMPTS,
   probe: async (workspaceId, blockId): Promise<GateProbe> => {
@@ -343,7 +342,7 @@ async function enrichIncident(
 export const postReleaseHealthGate = (ctx: GateContext): GateDefinition => ({
   kind: POST_RELEASE_HEALTH_AGENT_KIND,
   helperKind: ON_CALL_AGENT_KIND,
-  wired: () => isProviderWired(RELEASE_HEALTH_PROVIDER),
+  wired: () => ctx.isProviderWired(RELEASE_HEALTH_PROVIDER),
   unwiredOutput: 'Post-release health gate skipped (no release-health provider configured).',
   attemptBudget: (preset) => preset.releaseMaxAttempts,
   // Running out of poll budget while still watching means the window outlasted the driver's
@@ -520,7 +519,7 @@ async function tryResolveThreads(
 export const humanReviewGate = (ctx: GateContext): GateDefinition => ({
   kind: HUMAN_REVIEW_AGENT_KIND,
   helperKind: FIXER_AGENT_KIND,
-  wired: () => isProviderWired(PULL_REQUEST_REVIEW_PROVIDER),
+  wired: () => ctx.isProviderWired(PULL_REQUEST_REVIEW_PROVIDER),
   unwiredOutput: 'Human review gate skipped (no PR-review provider configured).',
   // A human review is unbounded: never time out the wait, and never give up on rounds.
   pollExhaustion: 'rearm',

@@ -265,9 +265,17 @@ import {
 import type {
   GateRegistry,
   InitiativePresetRegistry,
+  PipelineRegistry,
+  ProviderRegistry,
   StepResolverRegistry,
+  VcsProviderRegistry,
 } from '@cat-factory/kernel'
-import { defaultGateRegistry, defaultStepResolverRegistry } from '@cat-factory/kernel'
+import {
+  defaultGateRegistry,
+  defaultPipelineRegistry,
+  defaultProviderRegistry,
+  defaultStepResolverRegistry,
+} from '@cat-factory/kernel'
 
 // Composition root for the domain layer. The worker's infrastructure builds the
 // concrete ports (D1 repositories, crypto id/rng, the AI agent executor) and
@@ -353,6 +361,24 @@ export interface CoreDependencies {
    */
   stepResolverRegistry?: StepResolverRegistry
   /**
+   * The app-owned provider registry (the deployment-supplied data sources a gate probes, keyed
+   * by {@link ProviderToken}). Optional + defaulted to `defaultProviderRegistry()`. The engine's
+   * gate machine reads it through the {@link GateContext} it builds (`RunDispatcher.makeGateContext`);
+   * each facade news ONE instance, wires its configured gate providers on it (the
+   * `@cat-factory/gates` `wireX` handles), and injects the SAME instance here. Existing
+   * construction sites (tests / harnesses) that omit it get a fresh empty registry, so every gate
+   * passes through.
+   */
+  providerRegistry?: ProviderRegistry
+  /**
+   * The app-owned pipeline registry (deployment-registered extra pipelines). Optional + defaulted
+   * to `defaultPipelineRegistry()` (empty). Threaded into the workspace + pipeline services so a
+   * deployment's custom pipelines are seeded into every new workspace and resolvable by id; a
+   * facade injects the SAME instance it registers custom pipelines on. Existing construction sites
+   * (tests / harnesses) that omit it get an empty registry (built-in catalog only).
+   */
+  pipelineRegistry?: PipelineRegistry
+  /**
    * The app-owned initiative-preset registry (built-in generic / docs-refresh / tech-migration
    * plus any a deployment registered by reference). Optional + defaulted to
    * `defaultInitiativePresetRegistry()` so existing construction sites (tests, harnesses) don't
@@ -362,6 +388,15 @@ export interface CoreDependencies {
    * preset probe.
    */
   initiativePresetRegistry?: InitiativePresetRegistry
+  /**
+   * The app-owned VCS provider registry (the neutral webhook receiver resolves a provider
+   * bundle through it). Optional + defaulted to `defaultVcsRegistry()`. NOT read by the engine
+   * (like `userSecretKindRegistry`): it rides `CoreDependencies` purely so each facade reads the
+   * SAME instance off `overrides` (the conformance-injection seam) and surfaces it on the
+   * `ServerContainer` for the neutral webhook controller. A facade news one, registers the
+   * providers its config enables on it, and threads that instance here.
+   */
+  vcsRegistry?: VcsProviderRegistry
   /**
    * Optional: resolve a block's run repo (installation + repo + default branch) bound to
    * a checkout-free {@link RepoFiles}, so a registered custom kind's pre/post-op hooks
@@ -1274,6 +1309,12 @@ export interface CoreSpine {
    */
   gateRegistry: GateRegistry
   /**
+   * The app-owned pipeline registry the engine resolved (the facade's injected instance, else the
+   * empty default). Re-exposed so the facade passes the SAME instance to `validateRegistrations` at
+   * boot (a registered pipeline naming a nonexistent kind fails fast).
+   */
+  pipelineRegistry: PipelineRegistry
+  /**
    * The app-owned initiative-preset registry the engine resolved (the facade's injected instance,
    * else the built-ins-only default). Re-exposed so the HTTP layer's workspace-snapshot descriptors
    * + the preset probe read the SAME instance the initiative services use.
@@ -1414,6 +1455,13 @@ export function createCore(dependencies: CoreDependencies): Core {
   // visible), else fresh empty registries so gate steps pass through in bare test builds.
   const gateRegistry = dependencies.gateRegistry ?? defaultGateRegistry()
   const stepResolverRegistry = dependencies.stepResolverRegistry ?? defaultStepResolverRegistry()
+  // The app-owned provider registry the gate machine reads through its GateContext. Resolved ONCE
+  // and threaded into the execution service alongside the gate registry (same instance the facade
+  // wired its gate providers on).
+  const providerRegistry = dependencies.providerRegistry ?? defaultProviderRegistry()
+  // The app-owned pipeline registry (deployment-registered extra pipelines). Resolved ONCE and
+  // threaded into the workspace + pipeline services so seeding + reseed see the same extras.
+  const pipelineRegistry = dependencies.pipelineRegistry ?? defaultPipelineRegistry()
   // Resolve the app-owned initiative-preset registry ONCE (same reasoning as the agent-kind one):
   // the facade's injected instance, else a fresh registry preloaded with the built-in presets.
   const initiativePresetRegistry =
@@ -1446,6 +1494,10 @@ export function createCore(dependencies: CoreDependencies): Core {
   })
   const workspaceService = new WorkspaceService({
     ...dependencies,
+    // The resolved (defaulted) pipeline registry, so a new workspace is seeded with the built-in
+    // catalog + any deployment-registered pipelines (the raw `dependencies.pipelineRegistry` may be
+    // undefined; this is the same instance the pipeline service reseeds from).
+    pipelineRegistry,
     // A board delete drops its cached access decisions (workspace-rbac).
     workspaceAccessCache: caches.workspaceAccess,
   })
@@ -1526,7 +1578,7 @@ export function createCore(dependencies: CoreDependencies): Core {
         })
       : undefined,
   )
-  const pipelineService = new PipelineService(dependencies)
+  const pipelineService = new PipelineService({ ...dependencies, pipelineRegistry })
   const spendService = new SpendService({
     tokenUsageRepository: dependencies.tokenUsageRepository,
     idGenerator: dependencies.idGenerator,
@@ -1735,6 +1787,7 @@ export function createCore(dependencies: CoreDependencies): Core {
     agentKindRegistry,
     gateRegistry,
     stepResolverRegistry,
+    providerRegistry,
     initiativePresetRegistry,
     workRunner,
     executionEventPublisher,
@@ -1873,6 +1926,7 @@ export function createCore(dependencies: CoreDependencies): Core {
     spendService,
     agentKindRegistry,
     gateRegistry,
+    pipelineRegistry,
     initiativePresetRegistry,
     executionEventPublisher,
     ...modules.assemble(),

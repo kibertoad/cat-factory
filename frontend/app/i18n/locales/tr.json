@@ -49,6 +49,7 @@
       "reconfigureHint": "Bunu daha sonra yeniden yapılandırabilirsiniz."
     },
     "copied": "Panoya kopyalandı",
+    "copyDetails": "Ayrıntıları kopyala",
     "reveal": "Göster",
     "hide": "Gizle",
     "disconnect": "Bağlantıyı kes",
@@ -3214,6 +3215,17 @@
       "emptySearchable": "Başlığa göre ara veya içe aktarılmış bir belge seç.",
       "emptyRefOnly": "Eklemek için bir sayfa URL'si veya ID'si yapıştır."
     },
+    "repoPicker": {
+      "searchRepoPlaceholder": "Depolarda ara…",
+      "clearRepo": "Depoyu temizle",
+      "searchTab": "Dosya ara",
+      "browseTab": "Gözat",
+      "searchFilesPlaceholder": "Dosyaları yola göre ara…",
+      "searchFilesHint": "Bu depodaki dosyaları aramak için yazın.",
+      "noFileMatches": "Eşleşen dosya yok.",
+      "filesFailed": "Dosyalar yüklenemedi: {error}",
+      "moreFiles": "İlk {count} eşleşme gösteriliyor — daraltmak için aramanızı iyileştirin."
+    },
     "import": {
       "title": "Bir belge kaynağından içe aktar",
       "connectFirst": "Önce bir belge kaynağı bağla.",
@@ -3362,6 +3374,13 @@
       "proceed": "Yine de devam et",
       "stopReset": "Durdur ve görevi sıfırla"
     },
+    "preview": {
+      "stepCount": "{count} adım | {count} adım",
+      "gated": "Bu adımdan sonra insan onayı"
+    },
+    "picker": {
+      "noneHint": "Varsayılan pipeline yok. Görevi çalıştırırken birini seçersin."
+    },
     "builder": {
       "title": "Pipeline oluşturucu",
       "agentPalette": "Ajan paleti",
@@ -3370,6 +3389,7 @@
       "configureModels": "Modelleri yapılandır",
       "configureModelsTooltip": "Model ön ayarlarını yönet (her ajanın hangi modelde çalışacağı)",
       "namePlaceholder": "Pipeline adı",
+      "descriptionPlaceholder": "Açıklama (bu pipeline seçilirken gösterilir)",
       "labelPlaceholder": "+ etiket",
       "gatingNeedsEstimator": "Geçitli bir adımın öncesinde bir Görev Tahmincisi gerekir. Bir tane ekleyin yoksa pipeline kaydedilmez.",
       "emptyDraft": "Doğrusal bir pipeline oluşturmak için soldaki ajanlara tıklayın.",
@@ -3463,7 +3483,8 @@
       "skillPlaceholder": "Bir beceri seçin",
       "skillNoneAvailable": "Kullanılabilir beceri yok. Hesap ayarlarında bir beceri kaynağı bağlayın.",
       "skillMissing": "Bu beceri artık katalogda yok; başka birini seçin.",
-      "skillNeedsPick": "Bir Skill adımı, kaydedebilmeniz için seçilmiş bir beceri gerektirir."
+      "skillNeedsPick": "Bir Skill adımı, kaydedebilmeniz için seçilmiş bir beceri gerektirir.",
+      "purposeStepsConflict": "Bu amaç kod yazmaz ve test çalıştırmaz, ancak işlem hattında hâlâ uygulama veya test adımları var. Bunları kaldırın veya amacı Geliştirme olarak değiştirin."
     },
     "progress": {
       "status": {

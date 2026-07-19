@@ -1,5 +1,6 @@
 <script setup lang="ts">
 import { computed, ref, watch } from 'vue'
+import { purposeAllowsAgentCategory } from '@cat-factory/contracts'
 import type { AgentKind, Pipeline, PipelinePurpose } from '~/types/domain'
 import AgentPalette from '~/components/palettes/AgentPalette.vue'
 import AgentKindIcon from '~/components/pipeline/AgentKindIcon.vue'
@@ -66,6 +67,19 @@ const skillStepNeedsPick = computed(() =>
   pipelines.draft.some(
     (k, i) => k === 'skill' && pipelines.draftEnabled[i] !== false && !pipelines.draftSkillId(i),
   ),
+)
+
+// Steps whose agent category the chosen purpose forbids (a non-`build` purpose writes no code and
+// runs no tests, so the Implementation/Testing categories are disallowed — see
+// `purposeAllowsAgentCategory`). The palette hides those kinds, so this is only reachable by
+// switching an existing draft to a non-`build` purpose AFTER such steps were added. The backend has
+// no kind→category map to gate on, so the builder is the enforcement point: save is blocked until
+// the offending steps are removed (or the purpose set back to Build).
+const stepsDisallowedByPurpose = computed(() =>
+  pipelines.draft.filter((kind) => {
+    const category = agentKindMeta(kind).category
+    return !!category && !purposeAllowsAgentCategory(pipelines.draftPurpose, category)
+  }),
 )
 
 // A step's picked skill id is no longer in the account catalog (the source dir was renamed or
@@ -340,6 +354,16 @@ async function clone(p: Pipeline) {
             />
           </div>
 
+          <!-- Description: the prose summary shown next to the step list in the pipeline pickers. -->
+          <UTextarea
+            v-model="pipelines.draftDescription"
+            :placeholder="t('pipeline.builder.descriptionPlaceholder')"
+            :rows="2"
+            autoresize
+            size="sm"
+            class="mb-2 w-full"
+          />
+
           <!-- Labels: organize the pipeline in the library (filter/search). -->
           <div class="mb-3 flex flex-wrap items-center gap-1.5">
             <UBadge
@@ -378,6 +402,14 @@ async function clone(p: Pipeline) {
           >
             <UIcon name="i-lucide-alert-triangle" class="h-3.5 w-3.5 shrink-0" />
             {{ t('pipeline.builder.skillNeedsPick') }}
+          </p>
+
+          <p
+            v-if="stepsDisallowedByPurpose.length"
+            class="mb-2 flex items-center gap-1.5 rounded-md border border-amber-800/50 bg-amber-950/30 px-2 py-1 text-[11px] text-amber-300"
+          >
+            <UIcon name="i-lucide-alert-triangle" class="h-3.5 w-3.5 shrink-0" />
+            {{ t('pipeline.builder.purposeStepsConflict') }}
           </p>
 
           <div
@@ -1035,7 +1067,7 @@ async function clone(p: Pipeline) {
           color="primary"
           icon="i-lucide-save"
           size="sm"
-          :disabled="pipelines.draft.length === 0"
+          :disabled="pipelines.draft.length === 0 || stepsDisallowedByPurpose.length > 0"
           @click="save"
         >
           {{ pipelines.editingId ? t('pipeline.builder.update') : t('pipeline.builder.save') }}

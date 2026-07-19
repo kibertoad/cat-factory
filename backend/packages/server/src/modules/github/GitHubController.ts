@@ -13,6 +13,7 @@ import {
   listGitHubIssuesContract,
   listGitHubPullsContract,
   listGitHubReposContract,
+  listGitHubRepoFilesContract,
   listGitHubRepoTreeContract,
   mergeGitHubPullRequestContract,
   openGitHubPullRequestContract,
@@ -152,6 +153,20 @@ export function githubController(): Hono<AppEnv> {
         param(c, 'workspaceId'),
         Number(c.req.valid('param').repoGithubId),
         c.req.valid('query').path ?? '',
+      ),
+      200,
+    )
+  })
+
+  // List every file in a repo (its whole tree, one recursive read) so the doc-context
+  // picker can search files by path without walking the tree level-by-level.
+  buildHonoRoute(app, listGitHubRepoFilesContract, async (c) => {
+    const github = requireGitHub(c)
+    if (!github) return unavailable(c)
+    return c.json(
+      await github.syncService.listRepoFiles(
+        param(c, 'workspaceId'),
+        Number(c.req.valid('param').repoGithubId),
       ),
       200,
     )

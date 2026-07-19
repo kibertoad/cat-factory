@@ -1,5 +1,55 @@
 # @cat-factory/gitlab
 
+## 0.11.0
+
+### Minor Changes
+
+- 6709dc4: Migrate the last module-global plugin registries to app-owned DI (the registry-DI initiative):
+  pipelines, VCS providers, provider tokens, and agent traits now ride the composition root's
+  injected instances instead of a process-wide `Map`, removing the `clear*()` test cruft and the
+  phantom-`Map` hazard for separately-published adapter packages (e.g. `@cat-factory/gitlab`).
+
+  **Breaking (pre-1.0, no back-compat):** the following free functions are removed in favour of the
+  app-owned registry instances a facade injects:
+
+  - **Pipelines** (`@cat-factory/kernel`): `registerPipeline` / `registerPipelines` /
+    `registeredPipelines` / `clearRegisteredPipelines` / `mergeRegisteredPipelines` →
+    `PipelineRegistry` (`register` / `registerMany` / `registered` / `merge`) + `defaultPipelineRegistry()`.
+    `seedPipelines(registry?)` now takes the registry (the no-arg form returns the built-in catalog).
+  - **VCS providers** (`@cat-factory/kernel`): `registerVcsProvider` / `getVcsProvider` /
+    `resolveVcsProvider` / `requireVcsProvider` / `isVcsProviderRegistered` / `registeredVcsProviders` /
+    `clearVcsProviders` → `VcsProviderRegistry` + `defaultVcsRegistry()` (a required `ServerContainer`
+    field, so facade parity is type-enforced). `@cat-factory/gitlab`'s `registerGitLab` now takes the
+    registry as its first argument.
+  - **Provider tokens** (`@cat-factory/kernel`): `wireProvider` / `getProvider` / `isProviderWired` /
+    `requireProvider` / `clearProviders` → `ProviderRegistry` + `defaultProviderRegistry()`, read by the
+    gate machine's `GateContext` (which gains `isProviderWired`). The `@cat-factory/gates` `wireX` /
+    `applyGateProviders` / `warnUnwiredGates` handles take the registry as their first argument;
+    `clearGateProviders` is no longer needed by a facade (a fresh registry per build starts empty).
+  - **Agent traits** (`@cat-factory/agents`): `registerAgentTrait` / `registerAgentTraits` /
+    `registeredAgentTrait` / `clearRegisteredAgentTraits` / `assignAgentTraits` /
+    `clearAssignedAgentTraits` are folded onto the app-owned `AgentKindRegistry`
+    (`registerTrait` / `registerTraits` / `traitDefinition` / `assignTraits` / `assignedTraitsFor`);
+    `traitsFor` / `hasTrait` / `traitGuidanceFor` keep their signatures. `@cat-factory/consensus`'s
+    `registerConsensusTraits` now takes the registry as its first argument.
+
+- a53bbf7: Attach repo files as task context via a repository picker. When a repo-backed
+  document source (GitHub / GitLab) is selected in the context-document picker, the
+  user now searches for a repository (reusing the shared server-side repo search),
+  then picks one or more files from it — either by searching the whole tree by path
+  or by browsing it with the monorepo directory browser, which now supports
+  multi-pick in file mode. Backed by a new recursive repo-tree read (`listTree` on
+  the VCS/GitHub client ports, `GET /github/repos/:id/files`) so file search is a
+  single cached call per repo instead of walking the tree level-by-level.
+
+### Patch Changes
+
+- Updated dependencies [0abcf31]
+- Updated dependencies [6709dc4]
+- Updated dependencies [a53bbf7]
+  - @cat-factory/contracts@0.149.0
+  - @cat-factory/kernel@0.143.0
+
 ## 0.10.22
 
 ### Patch Changes

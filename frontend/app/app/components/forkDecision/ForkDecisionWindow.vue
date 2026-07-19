@@ -24,11 +24,9 @@ const access = useWorkspaceAccess()
 const { t } = useI18n()
 
 // Hybrid: state rides the coder step (like follow-ups), but warm it from the GET on open too.
-// `manageEscape: false` — `ResultWindowShell` owns Escape (and focus trap + scroll lock +
-// stacking). No `stepRef`: this is a pre-run decision, so there's no "restart from here".
+// No `stepRef`: this is a pre-run decision, so there's no "restart from here".
 const { open, blockId, instanceId, stepIndex, close } = useResultView('fork-decision', {
   onOpen: (id) => void forkDecision.load(id),
-  manageEscape: false,
 })
 
 const block = computed(() => (blockId.value ? board.getBlock(blockId.value) : undefined))

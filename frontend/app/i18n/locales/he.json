@@ -49,6 +49,7 @@
       "reconfigureHint": "אפשר להגדיר זאת שוב מאוחר יותר."
     },
     "copied": "הועתק ללוח",
+    "copyDetails": "העתקת פרטים",
     "reveal": "הצג",
     "hide": "הסתר",
     "disconnect": "נתק",
@@ -3213,6 +3214,17 @@
       "emptySearchable": "חפש לפי כותרת, או בחר מסמך שיובא.",
       "emptyRefOnly": "הדבק כתובת URL או מזהה של דף כדי לצרף אותו."
     },
+    "repoPicker": {
+      "searchRepoPlaceholder": "חיפוש מאגרים…",
+      "clearRepo": "ניקוי מאגר",
+      "searchTab": "חיפוש קבצים",
+      "browseTab": "עיון",
+      "searchFilesPlaceholder": "חיפוש קבצים לפי נתיב…",
+      "searchFilesHint": "הקלד כדי לחפש קבצים במאגר זה.",
+      "noFileMatches": "אין קבצים תואמים.",
+      "filesFailed": "לא ניתן היה לטעון את הקבצים: {error}",
+      "moreFiles": "מוצגות {count} התוצאות הראשונות — צמצם את החיפוש כדי למקד אותו."
+    },
     "import": {
       "title": "ייבא ממקור מסמכים",
       "connectFirst": "חבר תחילה מקור מסמכים.",
@@ -3361,6 +3373,13 @@
       "proceed": "המשך בכל זאת",
       "stopReset": "עצור ואפס את המשימה"
     },
+    "preview": {
+      "stepCount": "שלב {count} | {count} שלבים",
+      "gated": "אישור אנושי אחרי שלב זה"
+    },
+    "picker": {
+      "noneHint": "אין צינור ברירת מחדל. בוחרים אחד כשמריצים את המשימה."
+    },
     "builder": {
       "title": "בונה הצינור",
       "agentPalette": "פלטת הסוכנים",
@@ -3369,6 +3388,7 @@
       "configureModels": "הגדר מודלים",
       "configureModelsTooltip": "ניהול תצורות מודלים (על איזה מודל כל סוכן רץ)",
       "namePlaceholder": "שם הצינור",
+      "descriptionPlaceholder": "תיאור (מוצג בעת בחירת הצינור)",
       "labelPlaceholder": "+ תווית",
       "gatingNeedsEstimator": "שלב עם שער דורש מעריך משימות לפניו. הוסף אחד אחרת הצינור לא יישמר.",
       "emptyDraft": "לחץ על סוכנים בצד שמאל כדי להרכיב צינור ליניארי.",
@@ -3462,7 +3482,8 @@
       "skillPlaceholder": "בחר כישור",
       "skillNoneAvailable": "אין כישורים זמינים. קישר מקור כישורים בהגדרות החשבון.",
       "skillMissing": "כישור זה כבר אינו בקטלוג; בחר אחר.",
-      "skillNeedsPick": "שלב Skill דורש כישור נבחר לפני שתוכל לשמור."
+      "skillNeedsPick": "שלב Skill דורש כישור נבחר לפני שתוכל לשמור.",
+      "purposeStepsConflict": "מטרה זו אינה כותבת קוד ואינה מריצה בדיקות, אך הצינור עדיין כולל שלבי פיתוח או בדיקה. הסירו אותם או שנו את המטרה לפיתוח."
     },
     "progress": {
       "status": {

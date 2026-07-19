@@ -8,9 +8,8 @@
 // document — not the original description + linked docs/tasks — is what every downstream
 // agent step and the spec-writer consume.
 import { parseOutputOutline } from '~/utils/agentOutput'
-import StepRestartControl from '~/components/panels/StepRestartControl.vue'
 import IterationCapPrompt from '~/components/pipeline/IterationCapPrompt.vue'
-import IconButton from '~/components/common/IconButton.vue'
+import ResultWindowShell from '~/components/panels/ResultWindowShell.vue'
 import type {
   RequirementRecommendation,
   RequirementReview,
@@ -556,624 +555,580 @@ async function resolveExceeded(choice: 'extra-round' | 'proceed' | 'stop-reset')
 </script>
 
 <template>
-  <Teleport to="body">
-    <div
-      v-if="open"
-      class="fixed inset-0 z-50 flex max-h-[100dvh] items-center justify-center bg-slate-950/70 p-4 backdrop-blur-sm"
-      @click.self="close"
-    >
-      <div
-        class="flex max-h-[90dvh] w-full max-w-5xl flex-col overflow-hidden rounded-2xl border border-slate-800 bg-slate-900 shadow-2xl"
-        role="dialog"
-        aria-modal="true"
-      >
-        <!-- header -->
-        <header class="flex items-center gap-3 border-b border-slate-800 px-6 py-4">
-          <div
-            class="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg bg-indigo-500/15"
+  <ResultWindowShell
+    :open="open"
+    icon="i-lucide-clipboard-check"
+    icon-class="bg-indigo-500/15 text-indigo-300"
+    :title="t('requirements.title')"
+    :subtitle="block?.title"
+    :step-ref="{ instanceId, stepIndex }"
+    variant="centered"
+    width="5xl"
+    @close="close"
+  >
+    <template v-if="review" #header-extras>
+      <UBadge color="neutral" variant="subtle" size="sm">
+        {{ t('requirements.iteration', { current: iteration, max: maxIterations }) }}
+      </UBadge>
+    </template>
+
+    <div class="flex min-h-0 flex-1 flex-col lg:flex-row">
+      <!-- main column -->
+      <div class="min-w-0 flex-1 overflow-y-auto px-6 py-5">
+        <i18n-t
+          keypath="requirements.intro"
+          tag="p"
+          class="mb-4 text-sm text-slate-400"
+          scope="global"
+        >
+          <template #level>{{ block?.level ?? t('requirements.levelFallback') }}</template>
+          <template #answer
+            ><span class="text-slate-300">{{ t('requirements.answerVerb') }}</span></template
           >
-            <UIcon name="i-lucide-clipboard-check" class="h-5 w-5 text-indigo-300" />
-          </div>
-          <div class="min-w-0">
-            <h1 class="truncate text-base font-semibold text-white">
-              {{ t('requirements.title') }}
-            </h1>
-            <p v-if="block" class="truncate text-xs text-slate-500">{{ block.title }}</p>
-          </div>
-          <div class="ms-auto flex items-center gap-1.5">
-            <UBadge v-if="review" color="neutral" variant="subtle" size="sm">
-              {{ t('requirements.iteration', { current: iteration, max: maxIterations }) }}
-            </UBadge>
-            <StepRestartControl
-              :instance-id="instanceId"
-              :step-index="stepIndex"
-              @restarted="close"
-            />
-            <IconButton
-              icon="i-lucide-x"
-              color="neutral"
-              variant="ghost"
-              size="sm"
-              :label="t('common.close')"
-              @click="close"
-            />
-          </div>
-        </header>
+          <template #dismiss
+            ><span class="text-slate-300">{{ t('requirements.dismissVerb') }}</span></template
+          >
+        </i18n-t>
 
-        <div class="flex min-h-0 flex-1 flex-col lg:flex-row">
-          <!-- main column -->
-          <div class="min-w-0 flex-1 overflow-y-auto px-6 py-5">
-            <i18n-t
-              keypath="requirements.intro"
-              tag="p"
-              class="mb-4 text-sm text-slate-400"
-              scope="global"
-            >
-              <template #level>{{ block?.level ?? t('requirements.levelFallback') }}</template>
-              <template #answer
-                ><span class="text-slate-300">{{ t('requirements.answerVerb') }}</span></template
-              >
-              <template #dismiss
-                ><span class="text-slate-300">{{ t('requirements.dismissVerb') }}</span></template
-              >
-            </i18n-t>
-
-            <!-- empty state — the reviewer runs automatically as the first pipeline
+        <!-- empty state — the reviewer runs automatically as the first pipeline
                  gate step, so there's nothing to do here until then -->
-            <div
-              v-if="!review && !busy && !loading"
-              class="rounded-lg border border-dashed border-slate-700 p-8 text-center text-sm text-slate-500"
-            >
-              {{ t('requirements.empty') }}
-            </div>
+        <div
+          v-if="!review && !busy && !loading"
+          class="rounded-lg border border-dashed border-slate-700 p-8 text-center text-sm text-slate-500"
+        >
+          {{ t('requirements.empty') }}
+        </div>
 
-            <!-- working state (initial fetch on open, or a reviewer pass running) -->
-            <div
-              v-else-if="(busy || loading) && !review"
-              class="flex items-center justify-center gap-2 p-8 text-sm text-slate-400"
-            >
-              <UIcon name="i-lucide-loader-circle" class="h-4 w-4 animate-spin" />
-              {{ loading && !busy ? t('requirements.loadingReview') : t('requirements.reviewing') }}
-            </div>
+        <!-- working state (initial fetch on open, or a reviewer pass running) -->
+        <div
+          v-else-if="(busy || loading) && !review"
+          class="flex items-center justify-center gap-2 p-8 text-sm text-slate-400"
+        >
+          <UIcon name="i-lucide-loader-circle" class="h-4 w-4 animate-spin" />
+          {{ loading && !busy ? t('requirements.loadingReview') : t('requirements.reviewing') }}
+        </div>
 
-            <template v-else-if="review">
-              <!-- converged: reviewer satisfied -->
-              <div
-                v-if="incorporated"
-                class="mb-4 flex items-center gap-2 rounded-lg border border-emerald-900/60 bg-emerald-950/30 p-4 text-sm text-emerald-300"
-              >
-                <UIcon name="i-lucide-circle-check" class="h-5 w-5 shrink-0" />
-                {{ t('requirements.settled') }}
-              </div>
+        <template v-else-if="review">
+          <!-- converged: reviewer satisfied -->
+          <div
+            v-if="incorporated"
+            class="mb-4 flex items-center gap-2 rounded-lg border border-emerald-900/60 bg-emerald-950/30 p-4 text-sm text-emerald-300"
+          >
+            <UIcon name="i-lucide-circle-check" class="h-5 w-5 shrink-0" />
+            {{ t('requirements.settled') }}
+          </div>
 
-              <!-- iteration cap hit -->
-              <IterationCapPrompt
-                v-else-if="exceeded"
-                class="mb-4"
-                :heading="t('requirements.exceeded.heading', { max: maxIterations })"
-                :detail="t('requirements.exceeded.detail')"
-                :loading="acting"
-                @resolve="resolveExceeded"
-              />
+          <!-- iteration cap hit -->
+          <IterationCapPrompt
+            v-else-if="exceeded"
+            class="mb-4"
+            :heading="t('requirements.exceeded.heading', { max: maxIterations })"
+            :detail="t('requirements.exceeded.detail')"
+            :loading="acting"
+            @resolve="resolveExceeded"
+          />
 
-              <!-- working: the async cycle is running in the driver. Two distinct stages so
+          <!-- working: the async cycle is running in the driver. Two distinct stages so
                    the human can see which of the two LLM calls is currently in progress. -->
-              <div
-                v-else-if="working"
-                class="mb-4 flex items-center gap-2 rounded-lg border border-indigo-900/60 bg-indigo-950/30 p-4 text-sm text-indigo-200"
-              >
-                <UIcon name="i-lucide-loader-circle" class="h-5 w-5 shrink-0 animate-spin" />
-                <span v-if="incorporating">
-                  {{ t('requirements.working.incorporating') }}
-                </span>
-                <span v-else>
-                  {{ t('requirements.working.reReviewing') }}
-                </span>
-              </div>
+          <div
+            v-else-if="working"
+            class="mb-4 flex items-center gap-2 rounded-lg border border-indigo-900/60 bg-indigo-950/30 p-4 text-sm text-indigo-200"
+          >
+            <UIcon name="i-lucide-loader-circle" class="h-5 w-5 shrink-0 animate-spin" />
+            <span v-if="incorporating">
+              {{ t('requirements.working.incorporating') }}
+            </span>
+            <span v-else>
+              {{ t('requirements.working.reReviewing') }}
+            </span>
+          </div>
 
-              <!-- findings to react to -->
-              <div v-if="review.items.length" class="flex flex-col gap-3">
-                <div
-                  v-for="item in sortedItems"
-                  :key="item.id"
-                  class="rounded-lg border border-slate-800 bg-slate-900/60 p-3"
-                  :class="{ 'opacity-60': item.status === 'dismissed' }"
-                >
-                  <div class="flex items-start gap-2">
-                    <UIcon
-                      :name="CATEGORY_ICON[item.category]"
-                      class="mt-0.5 h-4 w-4 shrink-0 text-slate-400"
-                    />
-                    <div class="min-w-0 flex-1">
-                      <div class="flex flex-wrap items-center gap-1.5">
-                        <span class="text-sm font-medium text-white">{{ item.title }}</span>
-                        <UBadge size="xs" variant="subtle" :color="SEVERITY_COLOR[item.severity]">
-                          {{ SEVERITY_LABELS[item.severity] }}
-                        </UBadge>
-                        <UBadge size="xs" variant="outline" color="neutral">
-                          {{ CATEGORY_LABELS[item.category] }}
-                        </UBadge>
-                        <!-- Once the automation has pre-answered some findings, flag the ones it
+          <!-- findings to react to -->
+          <div v-if="review.items.length" class="flex flex-col gap-3">
+            <div
+              v-for="item in sortedItems"
+              :key="item.id"
+              class="rounded-lg border border-slate-800 bg-slate-900/60 p-3"
+              :class="{ 'opacity-60': item.status === 'dismissed' }"
+            >
+              <div class="flex items-start gap-2">
+                <UIcon
+                  :name="CATEGORY_ICON[item.category]"
+                  class="mt-0.5 h-4 w-4 shrink-0 text-slate-400"
+                />
+                <div class="min-w-0 flex-1">
+                  <div class="flex flex-wrap items-center gap-1.5">
+                    <span class="text-sm font-medium text-white">{{ item.title }}</span>
+                    <UBadge size="xs" variant="subtle" :color="SEVERITY_COLOR[item.severity]">
+                      {{ SEVERITY_LABELS[item.severity] }}
+                    </UBadge>
+                    <UBadge size="xs" variant="outline" color="neutral">
+                      {{ CATEGORY_LABELS[item.category] }}
+                    </UBadge>
+                    <!-- Once the automation has pre-answered some findings, flag the ones it
                              left open as the genuine business decisions that need the human. -->
-                        <UBadge
-                          v-if="
-                            hasAutoDefaults &&
-                            item.status === 'open' &&
-                            item.autoAnswerable === false
-                          "
-                          size="xs"
-                          variant="subtle"
-                          color="warning"
-                        >
-                          {{ t('requirements.needsYourInput') }}
-                        </UBadge>
-                        <UBadge
-                          size="xs"
-                          variant="soft"
-                          :color="STATUS_COLOR[item.status]"
-                          class="ms-auto"
-                        >
-                          {{ STATUS_LABELS[item.status] }}
-                        </UBadge>
-                      </div>
-                      <p class="mt-1 whitespace-pre-line text-sm text-slate-400">
-                        {{ item.detail }}
-                      </p>
+                    <UBadge
+                      v-if="
+                        hasAutoDefaults && item.status === 'open' && item.autoAnswerable === false
+                      "
+                      size="xs"
+                      variant="subtle"
+                      color="warning"
+                    >
+                      {{ t('requirements.needsYourInput') }}
+                    </UBadge>
+                    <UBadge
+                      size="xs"
+                      variant="soft"
+                      :color="STATUS_COLOR[item.status]"
+                      class="ms-auto"
+                    >
+                      {{ STATUS_LABELS[item.status] }}
+                    </UBadge>
+                  </div>
+                  <p class="mt-1 whitespace-pre-line text-sm text-slate-400">
+                    {{ item.detail }}
+                  </p>
 
-                      <!-- recorded answer (only for non-editable findings — for editable
+                  <!-- recorded answer (only for non-editable findings — for editable
                            ones the answer lives in the textarea below, seeded from the reply) -->
-                      <div
-                        v-if="item.reply && item.status !== 'open' && item.status !== 'answered'"
-                        class="mt-2 rounded-md border-s-2 border-slate-700 bg-slate-950/40 px-3 py-1.5 text-sm text-slate-300"
-                      >
-                        <span class="text-[10px] uppercase tracking-wide text-slate-500">
-                          {{ t('requirements.answerLabel') }}
-                        </span>
-                        <p class="whitespace-pre-line">{{ item.reply }}</p>
-                      </div>
+                  <div
+                    v-if="item.reply && item.status !== 'open' && item.status !== 'answered'"
+                    class="mt-2 rounded-md border-s-2 border-slate-700 bg-slate-950/40 px-3 py-1.5 text-sm text-slate-300"
+                  >
+                    <span class="text-[10px] uppercase tracking-wide text-slate-500">
+                      {{ t('requirements.answerLabel') }}
+                    </span>
+                    <p class="whitespace-pre-line">{{ item.reply }}</p>
+                  </div>
 
-                      <!-- per-finding 3-way selector: Answer (write it) / Dismiss (irrelevant) /
+                  <!-- per-finding 3-way selector: Answer (write it) / Dismiss (irrelevant) /
                            Recommend (let the Requirement Writer suggest one). The active mode
                            drives the content below, IN PLACE — no separate section. Disabled once
                            the requirements are settled / a cycle is running; hidden for a
                            `resolved` finding (its recorded answer shows above). -->
-                      <template v-if="item.status !== 'resolved'">
-                        <div class="mt-2 flex flex-wrap items-center gap-1">
-                          <UButton
-                            v-for="opt in FINDING_MODES"
-                            :key="opt.mode"
-                            :color="modeFor(item) === opt.mode ? 'primary' : 'neutral'"
-                            :variant="modeFor(item) === opt.mode ? 'soft' : 'ghost'"
-                            size="xs"
-                            :icon="opt.icon"
-                            :disabled="frozen"
-                            @click="setMode(item, opt.mode)"
-                          >
-                            {{ t(opt.labelKey) }}
-                            <UIcon
-                              v-if="opt.mode === 'answer' && isUserAnswered(item)"
-                              name="i-lucide-check"
-                              class="h-3.5 w-3.5 text-emerald-400"
-                            />
-                          </UButton>
-                        </div>
+                  <template v-if="item.status !== 'resolved'">
+                    <div class="mt-2 flex flex-wrap items-center gap-1">
+                      <UButton
+                        v-for="opt in FINDING_MODES"
+                        :key="opt.mode"
+                        :color="modeFor(item) === opt.mode ? 'primary' : 'neutral'"
+                        :variant="modeFor(item) === opt.mode ? 'soft' : 'ghost'"
+                        size="xs"
+                        :icon="opt.icon"
+                        :disabled="frozen"
+                        @click="setMode(item, opt.mode)"
+                      >
+                        {{ t(opt.labelKey) }}
+                        <UIcon
+                          v-if="opt.mode === 'answer' && isUserAnswered(item)"
+                          name="i-lucide-check"
+                          class="h-3.5 w-3.5 text-emerald-400"
+                        />
+                      </UButton>
+                    </div>
 
-                        <!-- ANSWER: type the answer directly (auto-saves on blur) -->
-                        <template v-if="modeFor(item) === 'answer'">
-                          <!-- Auto-generated recommended default: the automation pre-filled this
+                    <!-- ANSWER: type the answer directly (auto-saves on blur) -->
+                    <template v-if="modeFor(item) === 'answer'">
+                      <!-- Auto-generated recommended default: the automation pre-filled this
                                answer; the human can keep it, edit it, or switch modes. -->
-                          <div
-                            v-if="autoDefaults.get(item.id)"
-                            class="mt-2 flex flex-wrap items-center gap-1.5 text-xs text-indigo-300"
-                          >
-                            <UIcon name="i-lucide-sparkles" class="h-3.5 w-3.5 shrink-0" />
-                            <span>{{ t('requirements.recommendedDefault') }}</span>
-                            <UBadge
-                              v-if="autoDefaults.get(item.id)!.groundedInFragment"
-                              size="xs"
-                              variant="subtle"
-                              color="primary"
-                            >
-                              {{
-                                t('requirements.currentStandard', {
-                                  title: autoDefaults.get(item.id)!.groundedInFragment!.title,
-                                })
-                              }}
-                            </UBadge>
-                          </div>
-                          <UTextarea
-                            v-model="drafts[item.id]"
-                            :rows="2"
-                            autoresize
-                            size="sm"
-                            class="mt-2 w-full"
-                            :placeholder="t('requirements.answerPlaceholder')"
-                            :disabled="frozen"
-                            @blur="persistDraft(item)"
-                          />
-                          <p
-                            v-if="isUserAnswered(item)"
-                            class="mt-1 flex items-center gap-1 text-[11px] text-emerald-400"
-                          >
-                            <UIcon name="i-lucide-check" class="h-3 w-3 shrink-0" />
-                            {{ t('requirements.userAnswered') }}
-                          </p>
-                        </template>
+                      <div
+                        v-if="autoDefaults.get(item.id)"
+                        class="mt-2 flex flex-wrap items-center gap-1.5 text-xs text-indigo-300"
+                      >
+                        <UIcon name="i-lucide-sparkles" class="h-3.5 w-3.5 shrink-0" />
+                        <span>{{ t('requirements.recommendedDefault') }}</span>
+                        <UBadge
+                          v-if="autoDefaults.get(item.id)!.groundedInFragment"
+                          size="xs"
+                          variant="subtle"
+                          color="primary"
+                        >
+                          {{
+                            t('requirements.currentStandard', {
+                              title: autoDefaults.get(item.id)!.groundedInFragment!.title,
+                            })
+                          }}
+                        </UBadge>
+                      </div>
+                      <UTextarea
+                        v-model="drafts[item.id]"
+                        :rows="2"
+                        autoresize
+                        size="sm"
+                        class="mt-2 w-full"
+                        :placeholder="t('requirements.answerPlaceholder')"
+                        :disabled="frozen"
+                        @blur="persistDraft(item)"
+                      />
+                      <p
+                        v-if="isUserAnswered(item)"
+                        class="mt-1 flex items-center gap-1 text-[11px] text-emerald-400"
+                      >
+                        <UIcon name="i-lucide-check" class="h-3 w-3 shrink-0" />
+                        {{ t('requirements.userAnswered') }}
+                      </p>
+                    </template>
 
-                        <!-- RECOMMEND: generating / the ready suggestion / a guidance box, all
+                    <!-- RECOMMEND: generating / the ready suggestion / a guidance box, all
                              rendered inline where the question was asked. -->
-                        <template v-else-if="modeFor(item) === 'recommend'">
-                          <div
-                            v-if="pendingRecFor(item)"
-                            class="mt-2 flex items-center gap-1.5 text-xs text-indigo-300"
+                    <template v-else-if="modeFor(item) === 'recommend'">
+                      <div
+                        v-if="pendingRecFor(item)"
+                        class="mt-2 flex items-center gap-1.5 text-xs text-indigo-300"
+                      >
+                        <UIcon name="i-lucide-loader-circle" class="h-3.5 w-3.5 animate-spin" />
+                        {{ t('requirements.generatingSuggestion') }}
+                      </div>
+                      <template v-else-if="readyRecFor(item)">
+                        <div
+                          v-for="rec in [readyRecFor(item)!]"
+                          :key="rec.id"
+                          class="mt-2 rounded-lg border border-indigo-900/50 bg-indigo-950/20 p-3"
+                        >
+                          <UBadge
+                            v-if="rec.groundedInFragment"
+                            size="xs"
+                            variant="subtle"
+                            color="success"
+                            icon="i-lucide-badge-check"
                           >
-                            <UIcon name="i-lucide-loader-circle" class="h-3.5 w-3.5 animate-spin" />
-                            {{ t('requirements.generatingSuggestion') }}
-                          </div>
-                          <template v-else-if="readyRecFor(item)">
-                            <div
-                              v-for="rec in [readyRecFor(item)!]"
-                              :key="rec.id"
-                              class="mt-2 rounded-lg border border-indigo-900/50 bg-indigo-950/20 p-3"
+                            {{
+                              t('requirements.currentStandard', {
+                                title: rec.groundedInFragment.title,
+                              })
+                            }}
+                          </UBadge>
+                          <p class="mt-1 whitespace-pre-line text-sm text-slate-300">
+                            {{ rec.recommendedText }}
+                          </p>
+                          <div class="mt-2 flex flex-wrap items-center gap-2">
+                            <UButton
+                              color="primary"
+                              variant="soft"
+                              size="xs"
+                              icon="i-lucide-check"
+                              :disabled="frozen || !access.canExecuteRuns.value"
+                              :title="
+                                access.canExecuteRuns.value ? undefined : t('access.noRunExecute')
+                              "
+                              @click="acceptRecommendation(rec)"
                             >
-                              <UBadge
-                                v-if="rec.groundedInFragment"
-                                size="xs"
-                                variant="subtle"
-                                color="success"
-                                icon="i-lucide-badge-check"
-                              >
-                                {{
-                                  t('requirements.currentStandard', {
-                                    title: rec.groundedInFragment.title,
-                                  })
-                                }}
-                              </UBadge>
-                              <p class="mt-1 whitespace-pre-line text-sm text-slate-300">
-                                {{ rec.recommendedText }}
-                              </p>
-                              <div class="mt-2 flex flex-wrap items-center gap-2">
-                                <UButton
-                                  color="primary"
-                                  variant="soft"
-                                  size="xs"
-                                  icon="i-lucide-check"
-                                  :disabled="frozen || !access.canExecuteRuns.value"
-                                  :title="
-                                    access.canExecuteRuns.value
-                                      ? undefined
-                                      : t('access.noRunExecute')
-                                  "
-                                  @click="acceptRecommendation(rec)"
-                                >
-                                  {{ t('requirements.accept') }}
-                                </UButton>
-                                <UButton
-                                  color="neutral"
-                                  variant="ghost"
-                                  size="xs"
-                                  icon="i-lucide-x"
-                                  :disabled="frozen || !access.canExecuteRuns.value"
-                                  :title="
-                                    access.canExecuteRuns.value
-                                      ? undefined
-                                      : t('access.noRunExecute')
-                                  "
-                                  @click="rejectRecommendation(rec)"
-                                >
-                                  {{ t('requirements.reject') }}
-                                </UButton>
-                              </div>
-                              <div class="mt-2 flex items-start gap-2">
-                                <UTextarea
-                                  v-model="reRequestNotes[rec.id]"
-                                  :rows="1"
-                                  autoresize
-                                  size="sm"
-                                  class="flex-1"
-                                  :placeholder="t('requirements.reRequestPlaceholder')"
-                                  :disabled="frozen || recommending"
-                                />
-                                <UButton
-                                  color="neutral"
-                                  variant="soft"
-                                  size="xs"
-                                  icon="i-lucide-rotate-cw"
-                                  :loading="recommending"
-                                  :disabled="
-                                    !(reRequestNotes[rec.id] ?? '').trim() ||
-                                    frozen ||
-                                    !access.canExecuteRuns.value
-                                  "
-                                  :title="
-                                    access.canExecuteRuns.value
-                                      ? undefined
-                                      : t('access.noRunExecute')
-                                  "
-                                  @click="reRequestRecommendation(rec)"
-                                >
-                                  {{ t('requirements.reRequest') }}
-                                </UButton>
-                              </div>
-                            </div>
-                          </template>
-                          <template v-else>
+                              {{ t('requirements.accept') }}
+                            </UButton>
+                            <UButton
+                              color="neutral"
+                              variant="ghost"
+                              size="xs"
+                              icon="i-lucide-x"
+                              :disabled="frozen || !access.canExecuteRuns.value"
+                              :title="
+                                access.canExecuteRuns.value ? undefined : t('access.noRunExecute')
+                              "
+                              @click="rejectRecommendation(rec)"
+                            >
+                              {{ t('requirements.reject') }}
+                            </UButton>
+                          </div>
+                          <div class="mt-2 flex items-start gap-2">
                             <UTextarea
-                              v-model="guidanceDrafts[item.id]"
-                              :rows="2"
+                              v-model="reRequestNotes[rec.id]"
+                              :rows="1"
                               autoresize
                               size="sm"
-                              class="mt-2 w-full"
-                              :placeholder="t('requirements.guidancePlaceholder')"
-                              :disabled="frozen"
+                              class="flex-1"
+                              :placeholder="t('requirements.reRequestPlaceholder')"
+                              :disabled="frozen || recommending"
                             />
-                            <p class="mt-1 flex items-center gap-1 text-[11px] text-indigo-300/80">
-                              <UIcon name="i-lucide-wand-2" class="h-3 w-3 shrink-0" />
-                              {{ t('requirements.guidanceHint') }}
-                            </p>
-                          </template>
-                        </template>
-
-                        <!-- DISMISS: nothing to fill in — a short note explains the effect -->
-                        <p v-else class="mt-2 text-[11px] text-slate-500">
-                          {{ t('requirements.dismissedHint') }}
+                            <UButton
+                              color="neutral"
+                              variant="soft"
+                              size="xs"
+                              icon="i-lucide-rotate-cw"
+                              :loading="recommending"
+                              :disabled="
+                                !(reRequestNotes[rec.id] ?? '').trim() ||
+                                frozen ||
+                                !access.canExecuteRuns.value
+                              "
+                              :title="
+                                access.canExecuteRuns.value ? undefined : t('access.noRunExecute')
+                              "
+                              @click="reRequestRecommendation(rec)"
+                            >
+                              {{ t('requirements.reRequest') }}
+                            </UButton>
+                          </div>
+                        </div>
+                      </template>
+                      <template v-else>
+                        <UTextarea
+                          v-model="guidanceDrafts[item.id]"
+                          :rows="2"
+                          autoresize
+                          size="sm"
+                          class="mt-2 w-full"
+                          :placeholder="t('requirements.guidancePlaceholder')"
+                          :disabled="frozen"
+                        />
+                        <p class="mt-1 flex items-center gap-1 text-[11px] text-indigo-300/80">
+                          <UIcon name="i-lucide-wand-2" class="h-3 w-3 shrink-0" />
+                          {{ t('requirements.guidanceHint') }}
                         </p>
                       </template>
-                    </div>
-                  </div>
+                    </template>
+
+                    <!-- DISMISS: nothing to fill in — a short note explains the effect -->
+                    <p v-else class="mt-2 text-[11px] text-slate-500">
+                      {{ t('requirements.dismissedHint') }}
+                    </p>
+                  </template>
                 </div>
               </div>
+            </div>
+          </div>
 
-              <!-- incorporated document: the standard-format requirements. The whole section
+          <!-- incorporated document: the standard-format requirements. The whole section
                    collapses as a unit (a long doc otherwise pushes the findings/recommendations
                    off-screen); the per-heading toggles below still work when it's expanded. -->
-              <section v-if="outline" class="mt-6 border-t border-slate-800 pt-5">
+          <section v-if="outline" class="mt-6 border-t border-slate-800 pt-5">
+            <button
+              class="mb-3 flex w-full items-center gap-1.5 text-[11px] text-emerald-400"
+              @click="toggleDoc"
+            >
+              <UIcon
+                name="i-lucide-chevron-right"
+                class="h-3.5 w-3.5 shrink-0 transition-transform"
+                :class="docCollapsed ? '' : 'rotate-90'"
+              />
+              <UIcon name="i-lucide-file-check-2" class="h-3.5 w-3.5" />
+              <span class="font-semibold uppercase tracking-wide">
+                {{
+                  incorporated
+                    ? t('requirements.finalRequirements')
+                    : t('requirements.incorporatedDraft')
+                }}
+              </span>
+            </button>
+            <div v-show="!docCollapsed">
+              <div v-for="s in outline.sections" :key="s.id" class="mb-2">
                 <button
-                  class="mb-3 flex w-full items-center gap-1.5 text-[11px] text-emerald-400"
-                  @click="toggleDoc"
+                  v-if="s.title"
+                  class="group flex w-full items-center gap-2 text-start"
+                  @click="toggle(s.id)"
                 >
                   <UIcon
                     name="i-lucide-chevron-right"
-                    class="h-3.5 w-3.5 shrink-0 transition-transform"
-                    :class="docCollapsed ? '' : 'rotate-90'"
+                    class="h-3.5 w-3.5 shrink-0 text-slate-500 transition-transform"
+                    :class="collapsed[s.id] ? '' : 'rotate-90'"
                   />
-                  <UIcon name="i-lucide-file-check-2" class="h-3.5 w-3.5" />
-                  <span class="font-semibold uppercase tracking-wide">
-                    {{
-                      incorporated
-                        ? t('requirements.finalRequirements')
-                        : t('requirements.incorporatedDraft')
-                    }}
-                  </span>
+                  <span
+                    class="font-semibold text-white"
+                    :class="s.depth <= 1 ? 'text-base' : s.depth === 2 ? 'text-sm' : 'text-xs'"
+                    v-html="s.titleHtml"
+                  />
                 </button>
-                <div v-show="!docCollapsed">
-                  <div v-for="s in outline.sections" :key="s.id" class="mb-2">
-                    <button
-                      v-if="s.title"
-                      class="group flex w-full items-center gap-2 text-start"
-                      @click="toggle(s.id)"
-                    >
-                      <UIcon
-                        name="i-lucide-chevron-right"
-                        class="h-3.5 w-3.5 shrink-0 text-slate-500 transition-transform"
-                        :class="collapsed[s.id] ? '' : 'rotate-90'"
-                      />
-                      <span
-                        class="font-semibold text-white"
-                        :class="s.depth <= 1 ? 'text-base' : s.depth === 2 ? 'text-sm' : 'text-xs'"
-                        v-html="s.titleHtml"
-                      />
-                    </button>
-                    <div
-                      v-show="!s.title || !collapsed[s.id]"
-                      class="reader-prose mt-1 ps-5.5 text-[13px] leading-relaxed text-slate-300"
-                      v-html="s.bodyHtml"
-                    />
-                  </div>
-                </div>
-              </section>
-            </template>
-          </div>
+                <div
+                  v-show="!s.title || !collapsed[s.id]"
+                  class="reader-prose mt-1 ps-5.5 text-[13px] leading-relaxed text-slate-300"
+                  v-html="s.bodyHtml"
+                />
+              </div>
+            </div>
+          </section>
+        </template>
+      </div>
 
-          <!-- action rail: a right-hand column on wide screens, a bottom action bar below `lg`
+      <!-- action rail: a right-hand column on wide screens, a bottom action bar below `lg`
                (never hidden — the gate is otherwise unadvanceable on a laptop split-screen /
                tablet, UX-32). The informational stats collapse away below `lg` to keep the
                bottom bar compact; the actions themselves always show. -->
-          <aside
-            class="flex w-full shrink-0 flex-col border-t border-slate-800 lg:w-72 lg:border-s lg:border-t-0"
-          >
-            <div class="flex flex-col gap-4 px-4 py-5">
-              <div v-if="review" class="hidden space-y-2 text-xs text-slate-400 lg:block">
-                <div class="flex items-center justify-between">
-                  <span>{{ t('requirements.stats.findings') }}</span>
-                  <span class="text-slate-300">{{ review.items.length }}</span>
-                </div>
-                <div class="flex items-center justify-between">
-                  <span>{{ t('requirements.stats.open') }}</span>
-                  <span class="text-slate-300">{{ openCount }}</span>
-                </div>
-                <div class="flex items-center justify-between">
-                  <span>{{ t('requirements.stats.answered') }}</span>
-                  <span class="text-slate-300">{{ answeredCount }}</span>
-                </div>
-                <!-- awaited recommendations — kept here (always visible) so the human can see what
+      <aside
+        class="flex w-full shrink-0 flex-col border-t border-slate-800 lg:w-72 lg:border-s lg:border-t-0"
+      >
+        <div class="flex flex-col gap-4 px-4 py-5">
+          <div v-if="review" class="hidden space-y-2 text-xs text-slate-400 lg:block">
+            <div class="flex items-center justify-between">
+              <span>{{ t('requirements.stats.findings') }}</span>
+              <span class="text-slate-300">{{ review.items.length }}</span>
+            </div>
+            <div class="flex items-center justify-between">
+              <span>{{ t('requirements.stats.open') }}</span>
+              <span class="text-slate-300">{{ openCount }}</span>
+            </div>
+            <div class="flex items-center justify-between">
+              <span>{{ t('requirements.stats.answered') }}</span>
+              <span class="text-slate-300">{{ answeredCount }}</span>
+            </div>
+            <!-- awaited recommendations — kept here (always visible) so the human can see what
                      the Writer is still producing / what's waiting on them even while reading the
                      incorporated document or acting elsewhere in the window. -->
-                <template v-if="generatingRecommendations.length || readyRecommendations.length">
-                  <div
-                    class="flex items-center gap-1.5 border-t border-slate-800/60 pt-2 text-indigo-300"
-                  >
-                    <UIcon name="i-lucide-wand-2" class="h-3 w-3" />
-                    <span class="font-medium">{{ t('requirements.stats.recommendations') }}</span>
-                  </div>
-                  <div
-                    v-if="generatingRecommendations.length"
-                    class="flex items-center justify-between"
-                  >
-                    <span>{{ t('requirements.stats.recsGenerating') }}</span>
-                    <span class="text-indigo-300">{{ generatingRecommendations.length }}</span>
-                  </div>
-                  <div v-if="readyRecommendations.length" class="flex items-center justify-between">
-                    <span>{{ t('requirements.stats.recsToReview') }}</span>
-                    <span class="text-indigo-300">{{ readyRecommendations.length }}</span>
-                  </div>
-                </template>
-                <div v-if="review.model" class="flex items-center justify-between">
-                  <span>{{ t('requirements.stats.model') }}</span>
-                  <span class="truncate ps-2 text-slate-500">{{
-                    models.labelForRef(review.model) ?? review.model
-                  }}</span>
-                </div>
+            <template v-if="generatingRecommendations.length || readyRecommendations.length">
+              <div
+                class="flex items-center gap-1.5 border-t border-slate-800/60 pt-2 text-indigo-300"
+              >
+                <UIcon name="i-lucide-wand-2" class="h-3 w-3" />
+                <span class="font-medium">{{ t('requirements.stats.recommendations') }}</span>
               </div>
+              <div
+                v-if="generatingRecommendations.length"
+                class="flex items-center justify-between"
+              >
+                <span>{{ t('requirements.stats.recsGenerating') }}</span>
+                <span class="text-indigo-300">{{ generatingRecommendations.length }}</span>
+              </div>
+              <div v-if="readyRecommendations.length" class="flex items-center justify-between">
+                <span>{{ t('requirements.stats.recsToReview') }}</span>
+                <span class="text-indigo-300">{{ readyRecommendations.length }}</span>
+              </div>
+            </template>
+            <div v-if="review.model" class="flex items-center justify-between">
+              <span>{{ t('requirements.stats.model') }}</span>
+              <span class="truncate ps-2 text-slate-500">{{
+                models.labelForRef(review.model) ?? review.model
+              }}</span>
+            </div>
+          </div>
 
-              <!-- Request the Requirement Writer for the marked findings. Kept OUT of the
+          <!-- Request the Requirement Writer for the marked findings. Kept OUT of the
                    status-scoped blocks below so it's available whenever the review is still
                    editable — the `ready` first pass AND a `merged` review being reworked — not
                    only when status is exactly `ready`. Scoped to exactly those two states (NOT a
                    bare `!frozen`, which would also expose it in `exceeded`, where the run is parked
                    on the cap decision and a fresh recommendation batch has no path to settle). -->
-              <div
-                v-if="
-                  review && pendingRecommendRequests.length > 0 && (status === 'ready' || merged)
-                "
-                class="border-t border-slate-800 pt-4"
-              >
-                <UButton
-                  color="primary"
-                  variant="soft"
-                  size="sm"
-                  block
-                  icon="i-lucide-wand-2"
-                  :loading="recommending"
-                  :disabled="!access.canExecuteRuns.value"
-                  :title="access.canExecuteRuns.value ? undefined : t('access.noRunExecute')"
-                  @click="requestRecommendations"
-                >
-                  {{
-                    t(
-                      'requirements.actions.requestRecommendations',
-                      { count: pendingRecommendRequests.length },
-                      pendingRecommendRequests.length,
-                    )
-                  }}
-                </UButton>
-              </div>
+          <div
+            v-if="review && pendingRecommendRequests.length > 0 && (status === 'ready' || merged)"
+            class="border-t border-slate-800 pt-4"
+          >
+            <UButton
+              color="primary"
+              variant="soft"
+              size="sm"
+              block
+              icon="i-lucide-wand-2"
+              :loading="recommending"
+              :disabled="!access.canExecuteRuns.value"
+              :title="access.canExecuteRuns.value ? undefined : t('access.noRunExecute')"
+              @click="requestRecommendations"
+            >
+              {{
+                t(
+                  'requirements.actions.requestRecommendations',
+                  { count: pendingRecommendRequests.length },
+                  pendingRecommendRequests.length,
+                )
+              }}
+            </UButton>
+          </div>
 
-              <!-- action: ready (answer → incorporate / proceed) -->
-              <div
-                v-if="review && status === 'ready'"
-                class="space-y-2 border-t border-slate-800 pt-4"
-              >
-                <UButton
-                  v-if="canProceed"
-                  color="primary"
-                  size="sm"
-                  block
-                  icon="i-lucide-arrow-right"
-                  :ui="{ leadingIcon: 'rtl:-scale-x-100', trailingIcon: 'rtl:-scale-x-100' }"
-                  :loading="acting"
-                  :disabled="!access.canExecuteRuns.value"
-                  :title="access.canExecuteRuns.value ? undefined : t('access.noRunExecute')"
-                  @click="proceed"
-                >
-                  {{ t('requirements.actions.proceedNothing') }}
-                </UButton>
-                <UButton
-                  v-else
-                  color="primary"
-                  size="sm"
-                  block
-                  icon="i-lucide-wand-sparkles"
-                  :loading="reworking"
-                  :disabled="!canIncorporate || !access.canExecuteRuns.value"
-                  :title="access.canExecuteRuns.value ? undefined : t('access.noRunExecute')"
-                  @click="incorporate()"
-                >
-                  {{ t('requirements.actions.incorporateAnswers') }}
-                </UButton>
-                <p class="text-[11px] leading-relaxed text-slate-500">
-                  <template v-if="canProceed">
-                    {{ t('requirements.help.canProceed') }}
-                  </template>
-                  <template v-else-if="canIncorporate">
-                    {{ t('requirements.help.canIncorporate') }}
-                  </template>
-                  <template v-else> {{ t('requirements.help.answerAll') }} </template>
-                </p>
-              </div>
+          <!-- action: ready (answer → incorporate / proceed) -->
+          <div v-if="review && status === 'ready'" class="space-y-2 border-t border-slate-800 pt-4">
+            <UButton
+              v-if="canProceed"
+              color="primary"
+              size="sm"
+              block
+              icon="i-lucide-arrow-right"
+              :ui="{ leadingIcon: 'rtl:-scale-x-100', trailingIcon: 'rtl:-scale-x-100' }"
+              :loading="acting"
+              :disabled="!access.canExecuteRuns.value"
+              :title="access.canExecuteRuns.value ? undefined : t('access.noRunExecute')"
+              @click="proceed"
+            >
+              {{ t('requirements.actions.proceedNothing') }}
+            </UButton>
+            <UButton
+              v-else
+              color="primary"
+              size="sm"
+              block
+              icon="i-lucide-wand-sparkles"
+              :loading="reworking"
+              :disabled="!canIncorporate || !access.canExecuteRuns.value"
+              :title="access.canExecuteRuns.value ? undefined : t('access.noRunExecute')"
+              @click="incorporate()"
+            >
+              {{ t('requirements.actions.incorporateAnswers') }}
+            </UButton>
+            <p class="text-[11px] leading-relaxed text-slate-500">
+              <template v-if="canProceed">
+                {{ t('requirements.help.canProceed') }}
+              </template>
+              <template v-else-if="canIncorporate">
+                {{ t('requirements.help.canIncorporate') }}
+              </template>
+              <template v-else> {{ t('requirements.help.answerAll') }} </template>
+            </p>
+          </div>
 
-              <!-- action: merged (inspect → re-review / redo) -->
-              <div v-if="review && merged" class="space-y-2 border-t border-slate-800 pt-4">
-                <UButton
-                  color="primary"
-                  size="sm"
-                  block
-                  icon="i-lucide-sparkles"
-                  :loading="busy"
-                  :disabled="!access.canExecuteRuns.value"
-                  :title="access.canExecuteRuns.value ? undefined : t('access.noRunExecute')"
-                  @click="reReview"
-                >
-                  {{
-                    busy
-                      ? t('requirements.actions.reReviewing')
-                      : t('requirements.actions.reReview')
-                  }}
-                </UButton>
-                <UButton
-                  color="neutral"
-                  variant="soft"
-                  size="sm"
-                  block
-                  icon="i-lucide-pencil"
-                  @click="
-                    () => {
-                      showRedo = !showRedo
-                    }
-                  "
-                >
-                  {{ t('requirements.actions.redoIncorporation') }}
-                </UButton>
-                <div v-if="showRedo" class="space-y-2">
-                  <UTextarea
-                    v-model="redoComment"
-                    :rows="3"
-                    autoresize
-                    size="sm"
-                    class="w-full"
-                    :placeholder="t('requirements.redoPlaceholder')"
-                  />
-                  <UButton
-                    color="primary"
-                    variant="soft"
-                    size="xs"
-                    block
-                    icon="i-lucide-wand-sparkles"
-                    :loading="reworking"
-                    :disabled="!redoComment.trim() || !access.canExecuteRuns.value"
-                    :title="access.canExecuteRuns.value ? undefined : t('access.noRunExecute')"
-                    @click="incorporate(redoComment.trim())"
-                  >
-                    {{ t('requirements.actions.redoWithDirection') }}
-                  </UButton>
-                </div>
-                <p class="text-[11px] leading-relaxed text-slate-500">
-                  {{ t('requirements.help.merged') }}
-                </p>
-              </div>
-
-              <div
-                v-if="review && incorporated"
-                class="border-t border-slate-800 pt-4 text-[11px] leading-relaxed text-slate-500"
+          <!-- action: merged (inspect → re-review / redo) -->
+          <div v-if="review && merged" class="space-y-2 border-t border-slate-800 pt-4">
+            <UButton
+              color="primary"
+              size="sm"
+              block
+              icon="i-lucide-sparkles"
+              :loading="busy"
+              :disabled="!access.canExecuteRuns.value"
+              :title="access.canExecuteRuns.value ? undefined : t('access.noRunExecute')"
+              @click="reReview"
+            >
+              {{
+                busy ? t('requirements.actions.reReviewing') : t('requirements.actions.reReview')
+              }}
+            </UButton>
+            <UButton
+              color="neutral"
+              variant="soft"
+              size="sm"
+              block
+              icon="i-lucide-pencil"
+              @click="
+                () => {
+                  showRedo = !showRedo
+                }
+              "
+            >
+              {{ t('requirements.actions.redoIncorporation') }}
+            </UButton>
+            <div v-if="showRedo" class="space-y-2">
+              <UTextarea
+                v-model="redoComment"
+                :rows="3"
+                autoresize
+                size="sm"
+                class="w-full"
+                :placeholder="t('requirements.redoPlaceholder')"
+              />
+              <UButton
+                color="primary"
+                variant="soft"
+                size="xs"
+                block
+                icon="i-lucide-wand-sparkles"
+                :loading="reworking"
+                :disabled="!redoComment.trim() || !access.canExecuteRuns.value"
+                :title="access.canExecuteRuns.value ? undefined : t('access.noRunExecute')"
+                @click="incorporate(redoComment.trim())"
               >
-                {{ t('requirements.settledFooter') }}
-              </div>
+                {{ t('requirements.actions.redoWithDirection') }}
+              </UButton>
             </div>
-          </aside>
+            <p class="text-[11px] leading-relaxed text-slate-500">
+              {{ t('requirements.help.merged') }}
+            </p>
+          </div>
+
+          <div
+            v-if="review && incorporated"
+            class="border-t border-slate-800 pt-4 text-[11px] leading-relaxed text-slate-500"
+          >
+            {{ t('requirements.settledFooter') }}
+          </div>
         </div>
-      </div>
+      </aside>
     </div>
-  </Teleport>
+  </ResultWindowShell>
 </template>
 
 <style scoped>

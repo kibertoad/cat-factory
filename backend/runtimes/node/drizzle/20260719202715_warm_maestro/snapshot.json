@@ -1,10 +1,10 @@
 {
-  "version": "8",
   "dialect": "postgres",
-  "id": "6474e98d-6777-4df3-9727-c40f82241f7b",
+  "id": "c3b6f03f-9c09-484b-9e51-80bb2f1f8d68",
   "prevIds": [
-    "eeae4560-00f4-4801-b426-261fe2c517b4"
+    "18236a51-efa3-4687-ab3b-e9b620f2ee8e"
   ],
+  "version": "8",
   "ddl": [
     {
       "name": "provisioning",
@@ -7445,6 +7445,19 @@
       "generated": null,
       "identity": null,
       "name": "name",
+      "entityType": "columns",
+      "schema": "public",
+      "table": "pipelines"
+    },
+    {
+      "type": "text",
+      "typeSchema": null,
+      "notNull": false,
+      "dimensions": 0,
+      "default": null,
+      "generated": null,
+      "identity": null,
+      "name": "description",
       "entityType": "columns",
       "schema": "public",
       "table": "pipelines"

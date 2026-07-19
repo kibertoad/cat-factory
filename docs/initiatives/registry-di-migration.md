@@ -1,6 +1,7 @@
 # Initiative: registry DI migration (app-owned registries)
 
-**Status:** in progress (pilot landed) · **Owner:** core · **Started:** 2026-06-30
+**Status:** nearly complete (every module-global registry migrated; only the observability-adapter
+record-shape cleanup remains) · **Owner:** core · **Started:** 2026-06-30
 
 > This is the durable source of truth for a multi-PR initiative. Read it first before
 > picking up the next slice; update the checklist at the end of each PR.
@@ -49,21 +50,21 @@ The pilot — the environment-backend + runner-backend registries — is the tem
 
 ## Per-registry checklist
 
-| Registry               | Owning package                | File                                           | Status                                                                                                                                                           | PR      |
-| ---------------------- | ----------------------------- | ---------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------- | ------- |
-| Environment backends   | integrations                  | `modules/environments/environment-backends.ts` | ✅ done                                                                                                                                                          | (pilot) |
-| Runner backends        | integrations                  | `modules/runners/runner-backends.ts`           | ✅ done                                                                                                                                                          | (pilot) |
-| User-secret kinds      | integrations                  | `modules/providers/userSecretKinds.ts`         | ✅ done                                                                                                                                                          |         |
-| Observability adapters | integrations                  | `modules/observability/registry.ts`            | ⚠️ partial (already injected into `RegistryReleaseHealthProvider`; uses a record, not a module Map)                                                              |         |
-| Gates                  | kernel + `@cat-factory/gates` | `kernel/domain/gate-registry.ts`               | ✅ done (`GateRegistry` + `defaultGateRegistry()`; `registerBuiltinGates(registry)` — the module-load side-effect + `registerBuiltinGates()` band-aid are gone)  | #1222   |
-| Provider tokens        | kernel                        | `domain/provider-registry.ts`                  | ⬜ todo (still module-global; the built-in gates' `wired()`/`ctx.getProvider` + `wireX`/`applyGateProviders` read it — the natural next slice, pairs with Gates) |         |
-| Step resolvers         | kernel                        | `domain/step-resolver-registry.ts`             | ✅ done (`StepResolverRegistry` + `defaultStepResolverRegistry()`; read via `CoreDependencies.stepResolverRegistry`)                                             | #1222   |
-| Pipelines              | kernel                        | `domain/pipeline-registry.ts`                  | ⬜ todo                                                                                                                                                          |         |
-| VCS providers          | kernel                        | `domain/vcs-registry.ts`                       | ⬜ todo                                                                                                                                                          |         |
-| Agent kinds            | agents                        | `agents/kinds/registry.ts`                     | ✅ done (spec: [`agent-kind-registry-di.md`](./agent-kind-registry-di.md))                                                                                       |         |
-| Initiative presets     | kernel + agents               | `kernel/domain/initiative-preset-registry.ts`  | ✅ done (as part of [`custom-initiative-definitions.md`](./custom-initiative-definitions.md) slice 5)                                                            |         |
-| Agent traits           | agents                        | `agents/kinds/traits.ts`                       | ⬜ todo                                                                                                                                                          |         |
-| Model providers        | agents                        | `providers/registry.ts`                        | ✅ already instance-based (`CompositeModelProvider`)                                                                                                             |         |
+| Registry               | Owning package                | File                                           | Status                                                                                                                                                                                      | PR      |
+| ---------------------- | ----------------------------- | ---------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ------- |
+| Environment backends   | integrations                  | `modules/environments/environment-backends.ts` | ✅ done                                                                                                                                                                                     | (pilot) |
+| Runner backends        | integrations                  | `modules/runners/runner-backends.ts`           | ✅ done                                                                                                                                                                                     | (pilot) |
+| User-secret kinds      | integrations                  | `modules/providers/userSecretKinds.ts`         | ✅ done                                                                                                                                                                                     |         |
+| Observability adapters | integrations                  | `modules/observability/registry.ts`            | ⚠️ partial (already injected into `RegistryReleaseHealthProvider`; uses a record, not a module Map)                                                                                         |         |
+| Gates                  | kernel + `@cat-factory/gates` | `kernel/domain/gate-registry.ts`               | ✅ done (`GateRegistry` + `defaultGateRegistry()`; `registerBuiltinGates(registry)` — the module-load side-effect + `registerBuiltinGates()` band-aid are gone)                             | #1222   |
+| Provider tokens        | kernel                        | `domain/provider-registry.ts`                  | ✅ done (`ProviderRegistry` + `defaultProviderRegistry()`; read via `CoreDependencies.providerRegistry` → `GateContext`; `wireX`/`applyGateProviders`/`warnUnwiredGates` take the registry) |         |
+| Step resolvers         | kernel                        | `domain/step-resolver-registry.ts`             | ✅ done (`StepResolverRegistry` + `defaultStepResolverRegistry()`; read via `CoreDependencies.stepResolverRegistry`)                                                                        | #1222   |
+| Pipelines              | kernel                        | `domain/pipeline-registry.ts`                  | ✅ done (`PipelineRegistry` + `defaultPipelineRegistry()`; `seedPipelines(registry?)` threads it into the workspace + pipeline services; re-exposed on `Core`)                              |         |
+| VCS providers          | kernel                        | `domain/vcs-registry.ts`                       | ✅ done (`VcsProviderRegistry` + `defaultVcsRegistry()`; a REQUIRED `ServerContainer` field so facade parity is type-enforced; `registerGitLab(registry, …)`)                               |         |
+| Agent kinds            | agents                        | `agents/kinds/registry.ts`                     | ✅ done (spec: [`agent-kind-registry-di.md`](./agent-kind-registry-di.md))                                                                                                                  |         |
+| Initiative presets     | kernel + agents               | `kernel/domain/initiative-preset-registry.ts`  | ✅ done (as part of [`custom-initiative-definitions.md`](./custom-initiative-definitions.md) slice 5)                                                                                       |         |
+| Agent traits           | agents                        | `agents/kinds/traits.ts`                       | ✅ done (trait DEFINITIONS + ASSIGNMENTS folded onto the app-owned `AgentKindRegistry` — `registry.registerTrait`/`assignTraits`; `traitsFor`/`hasTrait` signatures unchanged)              |         |
+| Model providers        | agents                        | `providers/registry.ts`                        | ✅ already instance-based (`CompositeModelProvider`)                                                                                                                                        |         |
 
 ## Conventions / gotchas carried between iterations
 
@@ -121,10 +122,49 @@ Landed together (they are the two registries the engine's `RunDispatcher` reads)
   registry) and each facade passes the SAME instance it threads into `createCore`; the gate
   registry is re-exposed on `Core` so the Node/local `start()` path reaches it.
 
-## Out of scope for this slice
+## Provider-token + pipeline + VCS + agent-trait slice — carried gotchas
 
-The remaining `todo` registries above (provider tokens, pipelines, VCS, agent traits).
-`@cat-factory/example-custom-agent` now registers its gate + step resolvers by reference on
-the injected instances (`registerExampleCustomAgents(registry, presets, gateRegistry,
-stepResolverRegistry)`); its **pipeline** registration still rides the module-global
-`registerPipeline` until the pipeline registry migrates.
+Landed together (the four registries the checklist above flipped to ✅). Notes for a future reader:
+
+- **Provider tokens are a GATE concern only.** The kernel `ProviderRegistry` is read solely by the
+  gate machine's `GateContext` (`ctx.getProvider`/`requireProvider`/**`isProviderWired`**, the last one
+  newly added so a gate's `wired()` reads the injected instance instead of the module global) — the
+  integrations document/task services use their OWN `DocumentSourceRegistry`/task registry, not this
+  one. `RunDispatcher.makeGateContext` reads `this.providerRegistry` (threaded via
+  `ExecutionService` from `CoreDependencies`). The `@cat-factory/gates` `wireX` handles +
+  `applyGateProviders`/`warnUnwiredGates` now take the registry as their first arg; **`clearGateProviders`
+  is no longer needed by a facade** — a fresh registry per build starts empty, so the per-build reset
+  (and its "a prior build's wiring leaks" comment) is gone. Each facade news ONE `providerRegistry`,
+  wires its config providers onto it, and injects the SAME instance into `createCore`.
+- **Agent traits fold into the `AgentKindRegistry`, not a separate registry.** Traits are capabilities
+  OF agent kinds and `traitsFor(kind, registry)` already read `registry.get(kind)?.traits`, so the
+  former module-global trait DEFINITIONS + ASSIGNMENTS moved onto that same instance
+  (`registry.registerTrait` / `registry.assignTraits` / `registry.traitDefinition` /
+  `registry.assignedTraitsFor`; standard trait defs pre-loaded in the constructor). Consequence: the
+  free functions `traitsFor`/`hasTrait`/`traitGuidanceFor` keep their EXACT signatures — **zero engine
+  call-site churn**. Only registration moved (`@cat-factory/consensus`'s `registerConsensusTraits(registry, …)`).
+- **VCS parity is TYPE-ENFORCED, not conformance-asserted.** `vcsRegistry` is a REQUIRED field on
+  `ServerContainer`, so `tsc` forces both facade construction sites to attach it — stronger than a
+  runtime test. The resolution path is 100% shared server code (`VcsWebhookController`, unit-tested),
+  with no runtime-divergent branch, so no separate cross-runtime assertion was added (matches "match
+  the conformance to the blast radius"). `registerGitLab(registry, options)` registers onto the
+  facade's instance; the `@cat-factory/gitlab` phantom-`Map` hazard — the initiative's flagship
+  rationale — is gone.
+- **Pipelines: `seedPipelines(registry?)` keeps the no-arg form.** Callers that only resolve a
+  BUILT-IN pipeline's id (`plan-helpers.mergeGateOverride`, the conformance snapshot baseline) call
+  `seedPipelines()` (built-in catalog only); the workspace + pipeline services thread the app-owned
+  instance so a deployment's custom pipelines seed into every new workspace. `validateRegistrations`
+  takes the registry (like it takes the gate registry) so a registered pipeline naming a nonexistent
+  kind fails at boot. Re-exposed on `Core` so `start()` passes the same instance to
+  `validateRegistrationsOnce`.
+
+## Out of scope
+
+`@cat-factory/example-custom-agent` now registers **all** of its extensions by reference on the
+injected instances — `registerExampleCustomAgents(registry, presets, gateRegistry,
+stepResolverRegistry, pipelineRegistry)` — with no module-global left. The only remaining item is the
+**observability-adapter** registry (`integrations/modules/observability/registry.ts`), which is
+already app-owned in spirit (a record injected into `RegistryReleaseHealthProvider`, not a module
+`Map`); normalising it to the same `*Registry` class shape as the others is a cosmetic follow-up, not
+a module-global hazard. When it lands, convert this tracker into an ADR per the repo's
+tracker→ADR rule.

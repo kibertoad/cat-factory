@@ -81,6 +81,14 @@ plaintext and re-encrypted on the next write.
   via `getByWorkspace` and require the doc's `owner` to match the workspace's own
   installation account, so a crafted `owner/repo:path` id can't reach another tenant's
   repo through a different workspace's installation token (the same scoping `search` uses).
+  In the UI the GitHub (and, via the VCS adapter, GitLab) source doesn't use the generic
+  free-text search box — instead the context-document picker offers a **repository
+  picker**: search for a repo (reusing the shared server-side repo search), then pick one
+  or more **files** from it by searching the whole tree by path or browsing it with the
+  same tree browser the monorepo add-service flow uses (now multi-pick in file mode). The
+  file search is backed by a single recursive tree read per repo — `listRepoFiles`
+  (`GET /github/repos/:repoGithubId/files`) over the `listTree` client port — so the
+  picker filters files client-side without walking the contents API level-by-level.
 
 ## HTTP API
 

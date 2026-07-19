@@ -63,7 +63,10 @@ export {
 // option — replacing the old module-global `registerInitiativePreset` side effect.
 export { defaultInitiativePresetRegistry } from '@cat-factory/agents'
 export { InitiativePresetRegistry, type InitiativePresetRegistration } from '@cat-factory/kernel'
-export { registerPipeline, registerPipelines, clearRegisteredPipelines } from '@cat-factory/kernel'
+// Installation-level extension point for predefined pipelines (the same DI seam as agent kinds):
+// a deployment news a `defaultPipelineRegistry()`, registers its pipelines on it, and passes it to
+// `startLocal()` via the `pipelineRegistry` container option — replacing the old `registerPipeline`.
+export { PipelineRegistry, defaultPipelineRegistry } from '@cat-factory/kernel'
 // The built-in model-preset ids + the catalog fallback default, re-exported so a local deploy-app
 // wrapper can name a preset when passing `startLocal({ defaultModelPresetId })` without a direct
 // `@cat-factory/kernel` import (parity with the Node facade).

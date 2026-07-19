@@ -43,14 +43,17 @@ so the Worker's lack of a filesystem never matters.
 
 ## The seams
 
-A deployment registers a kind once at startup (an import side effect), mirroring the
-model-provider registry seam (`@cat-factory/provider-bedrock`):
+A deployment registers a kind by reference on the facade's app-owned registries at startup
+(the same app-owned-DI seam as the model-provider `CompositeModelProvider`) — a deployment
+news the registries, registers its extensions on them, and injects the SAME instances into
+`buildContainer`/`createApp`/`start()`:
 
 ```ts
-import { registerAgentKind } from '@cat-factory/agents'
-import { registerPipeline } from '@cat-factory/kernel'
+import type { AgentKindRegistry } from '@cat-factory/agents'
+import type { PipelineRegistry } from '@cat-factory/kernel'
 
-registerAgentKind({
+// The `agentKindRegistry` / `pipelineRegistry` here are the instances the facade injects.
+agentKindRegistry.register({
   kind: 'security-auditor',
   systemPrompt: 'You are a security auditor. … Return ONLY a JSON object { … }.',
   // The optional LLM step's surface + output/clone spec.
@@ -74,7 +77,7 @@ registerAgentKind({
   },
 })
 
-registerPipeline({
+pipelineRegistry.register({
   id: 'pl_org_audit',
   name: 'Org compliance audit',
   agentKinds: ['org-reviewer', 'security-auditor'],

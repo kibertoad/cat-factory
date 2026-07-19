@@ -26,11 +26,9 @@ const access = useWorkspaceAccess()
 const blobs = useArtifactBlobs()
 onUnmounted(() => blobs.revokeAll())
 
-// `manageEscape: false` — `ResultWindowShell` owns Escape (and the focus trap + scroll lock +
-// stacking); the nested lightbox layers above it on the same shared overlay stack.
-const { open, blockId, instanceId, stepIndex, close } = useResultView('visual-confirm', {
-  manageEscape: false,
-})
+// `ResultWindowShell` owns Escape (and the focus trap + scroll lock + stacking); the nested
+// lightbox layers above it on the same shared overlay stack.
+const { open, blockId, instanceId, stepIndex, close } = useResultView('visual-confirm')
 const block = computed(() => (blockId.value ? board.getBlock(blockId.value) : undefined))
 const headerTitle = computed(() =>
   block.value

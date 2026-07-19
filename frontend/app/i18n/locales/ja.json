@@ -49,6 +49,7 @@
       "reconfigureHint": "後で再設定できます。"
     },
     "copied": "クリップボードにコピーしました",
+    "copyDetails": "詳細をコピー",
     "reveal": "表示",
     "hide": "非表示",
     "disconnect": "切断",
@@ -3214,6 +3215,17 @@
       "emptySearchable": "タイトルで検索するか、インポート済みドキュメントを選択してください。",
       "emptyRefOnly": "ページの URL または ID を貼り付けて添付します。"
     },
+    "repoPicker": {
+      "searchRepoPlaceholder": "リポジトリを検索…",
+      "clearRepo": "リポジトリをクリア",
+      "searchTab": "ファイルを検索",
+      "browseTab": "参照",
+      "searchFilesPlaceholder": "パスでファイルを検索…",
+      "searchFilesHint": "このリポジトリ内のファイルを検索するには入力してください。",
+      "noFileMatches": "一致するファイルがありません。",
+      "filesFailed": "ファイルを読み込めませんでした: {error}",
+      "moreFiles": "最初の{count}件の一致を表示しています。検索条件を絞り込んでください。"
+    },
     "import": {
       "title": "ドキュメントソースからインポート",
       "connectFirst": "先にドキュメントソースを接続してください。",
@@ -3362,6 +3374,13 @@
       "proceed": "そのまま続行",
       "stopReset": "停止してタスクをリセット"
     },
+    "preview": {
+      "stepCount": "{count}ステップ | {count}ステップ",
+      "gated": "このステップの後に人による承認"
+    },
+    "picker": {
+      "noneHint": "デフォルトのパイプラインはありません。タスクの実行時に選択します。"
+    },
     "builder": {
       "title": "パイプラインビルダー",
       "agentPalette": "エージェントパレット",
@@ -3370,6 +3389,7 @@
       "configureModels": "モデルを設定",
       "configureModelsTooltip": "モデルプリセットを管理(各エージェントが実行するモデル)",
       "namePlaceholder": "パイプライン名",
+      "descriptionPlaceholder": "説明（このパイプラインを選択するときに表示されます）",
       "labelPlaceholder": "+ ラベル",
       "gatingNeedsEstimator": "ゲート付きステップの前にはTask Estimatorが必要です。追加しないとパイプラインは保存できません。",
       "emptyDraft": "左側のエージェントをクリックして、線形パイプラインを組み立てます。",
@@ -3463,7 +3483,8 @@
       "skillPlaceholder": "スキルを選択",
       "skillNoneAvailable": "利用できるスキルがありません。アカウント設定でスキルソースをリンクしてください。",
       "skillMissing": "このスキルはカタログに存在しません。別のスキルを選んでください。",
-      "skillNeedsPick": "Skill ステップを保存するにはスキルの選択が必要です。"
+      "skillNeedsPick": "Skill ステップを保存するにはスキルの選択が必要です。",
+      "purposeStepsConflict": "この目的はコードを書かず、テストも実行しませんが、パイプラインには実装またはテストのステップが残っています。それらを削除するか、目的を「開発」に切り替えてください。"
     },
     "progress": {
       "status": {

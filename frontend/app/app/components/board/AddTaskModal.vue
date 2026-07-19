@@ -35,7 +35,7 @@ const agentConfig = useAgentConfigStore()
 const toast = useToast()
 const { t } = useI18n()
 
-const { linkPending } = useContextLinking()
+const { linkPending, presentLinkFailures } = useContextLinking()
 
 const open = computed({
   get: () => ui.addTaskContainerId !== null,
@@ -296,31 +296,17 @@ const selectablePipelines = computed(() =>
     pipelineAllowedForManualStart(p, frame.value, board.blocks, taskType.value),
   ),
 )
-const pipelineMenu = computed(() => [
-  [
-    {
-      label: t('board.addTask.chooseAtRunTime'),
-      icon: 'i-lucide-rotate-ccw',
-      onSelect: () => (pipelineId.value = ''),
-    },
-    ...selectablePipelines.value.map((p) => ({
-      label: p.name,
-      icon: 'i-lucide-workflow',
-      onSelect: () => (pipelineId.value = p.id),
-    })),
-  ],
-])
-const selectedPipelineLabel = computed(
-  () => pipelines.getPipeline(pipelineId.value)?.name ?? t('board.addTask.chooseAtRunTime'),
-)
-
-// Some task types are meaningless without their type-default pipeline selected up front, so
-// picking the type auto-selects it (the user can still change it among the still-offered
-// pipelines): the Ralph loop needs its preset (the per-task validation command + iteration
-// budget the `ralph` agent contributes surface immediately — "choose at run time" would be a
-// dead end), and a `document` task defaults to the document-writing pipeline `pl_document` (its
-// picker only offers document pipelines, so leaving it unset would be an odd empty default). The
-// ids mirror the backend `defaultPipelineIdForTaskType`. Other types keep "choose at run time".
+// Some task types want their type-default pipeline surfaced in the modal up front, so picking the
+// type auto-selects it (the user can still change it among the still-offered pipelines). This is a
+// DELIBERATE SUBSET of the backend `defaultPipelineIdForTaskType` — only the types whose default
+// must appear in the form BEFORE creation:
+//   - `ralph` needs its preset so the per-task validation command + iteration budget the `ralph`
+//     agent contributes surface for editing ("choose at run time" would be a dead end);
+//   - a `document` task defaults to `pl_document` so its document-only picker (the `purpose` gate
+//     hides every non-document pipeline) is never rendered empty.
+// The other typed defaults (spike/review) carry no up-front config and don't narrow their picker,
+// so the modal leaves `pipelineId` unset and `BoardService` applies the backend type-default at
+// creation. Keep these ids in step with the backend helper.
 const DEFAULT_PIPELINE_FOR_TYPE: Partial<Record<TaskTypeChoice, string>> = {
   ralph: 'pl_ralph',
   document: 'pl_document',
@@ -594,14 +580,10 @@ async function add() {
       ...(technical.value ? { technical: true } : {}),
     })
     if (block) {
-      const failed = await linkPending(block.id, pendingContext.value)
-      if (failed > 0) {
-        toast.add({
-          title: t('board.addTask.linkFailed', { count: failed }, failed),
-          icon: 'i-lucide-triangle-alert',
-          color: 'warning',
-        })
-      }
+      // Surface the SPECIFIC cause of any attachment that couldn't be linked (a GitHub
+      // permission/visibility error, a not-found doc, …) instead of a bare count, plus a
+      // one-click "Copy details" for a bug report.
+      presentLinkFailures(await linkPending(block.id, pendingContext.value), block.id)
     }
     ui.closeAddTask()
   } catch (e) {
@@ -911,18 +893,13 @@ async function add() {
 
           <div class="grid grid-cols-2 gap-3">
             <UFormField :label="t('board.addTask.pipeline')">
-              <UDropdownMenu :items="pipelineMenu" class="w-full">
-                <UButton
-                  color="neutral"
-                  variant="subtle"
-                  size="sm"
-                  icon="i-lucide-workflow"
-                  trailing-icon="i-lucide-chevron-down"
-                  class="w-full justify-between"
-                >
-                  {{ selectedPipelineLabel }}
-                </UButton>
-              </UDropdownMenu>
+              <PipelinePicker
+                :model-value="pipelineId"
+                :options="selectablePipelines"
+                :none-label="t('board.addTask.chooseAtRunTime')"
+                trigger-class="w-full justify-between"
+                @update:model-value="pipelineId = $event"
+              />
             </UFormField>
 
             <UFormField :label="t('board.addTask.mergePolicy')">

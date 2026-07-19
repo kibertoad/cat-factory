@@ -11,6 +11,7 @@ import type {
   StepOptions,
   TesterQualityConfig,
 } from '@cat-factory/kernel'
+import type { PipelineRegistry } from '@cat-factory/kernel'
 import { assertFound, ConflictError, seedPipelines, ValidationError } from '@cat-factory/kernel'
 import type {
   ObservabilityConnectionRepository,
@@ -38,6 +39,12 @@ export interface PipelineServiceDependencies {
   pipelineRepository: PipelineRepository
   idGenerator: IdGenerator
   /**
+   * The app-owned pipeline registry (deployment-registered extra pipelines). When wired, a
+   * reseed resolves a deployment-registered built-in pipeline too. Optional — absent (tests) ⇒
+   * the built-in catalog only.
+   */
+  pipelineRegistry?: PipelineRegistry
+  /**
    * Resolves whether the workspace has any observability integration enabled (today: a
    * Datadog connection). When absent (no observability persistence wired at all), the
    * observability-gated step can never be added.
@@ -59,6 +66,7 @@ export class PipelineService {
   private readonly idGenerator: IdGenerator
   private readonly observabilityConnectionRepository?: ObservabilityConnectionRepository
   private readonly pipelineScheduleRepository?: PipelineScheduleRepository
+  private readonly pipelineRegistry?: PipelineRegistry
 
   constructor({
     workspaceRepository,
@@ -66,12 +74,14 @@ export class PipelineService {
     idGenerator,
     observabilityConnectionRepository,
     pipelineScheduleRepository,
+    pipelineRegistry,
   }: PipelineServiceDependencies) {
     this.workspaceRepository = workspaceRepository
     this.pipelineRepository = pipelineRepository
     this.idGenerator = idGenerator
     this.observabilityConnectionRepository = observabilityConnectionRepository
     this.pipelineScheduleRepository = pipelineScheduleRepository
+    this.pipelineRegistry = pipelineRegistry
   }
 
   /**
@@ -124,6 +134,7 @@ export class PipelineService {
     const pipeline: Pipeline = {
       id: this.idGenerator.next('pl'),
       name: input.name.trim() || 'Untitled pipeline',
+      ...normalizedDescription(input.description),
       agentKinds: [...input.agentKinds],
       ...alignedGates(input.agentKinds, input.gates),
       ...alignedThresholds(input.agentKinds, input.thresholds),
@@ -170,6 +181,8 @@ export class PipelineService {
     const pipeline: Pipeline = {
       id: this.idGenerator.next('pl'),
       name: input.name?.trim() || `${source.name} (copy)`,
+      // Carry the source's description onto the copy (the built-in's summary is a useful start).
+      ...normalizedDescription(source.description),
       agentKinds: [...source.agentKinds],
       ...(source.gates ? { gates: [...source.gates] } : {}),
       ...(source.thresholds ? { thresholds: [...source.thresholds] } : {}),
@@ -218,6 +231,9 @@ export class PipelineService {
     const labels = input.labels ?? existing.labels
     const availability = input.availability ?? existing.availability
     const purpose = input.purpose ?? existing.purpose
+    // Explicit-undefined (not `??`): the builder sends the full description (possibly blank) so a
+    // blank string CLEARS it, while omitting the field preserves the existing one.
+    const description = input.description !== undefined ? input.description : existing.description
     assertSomeEnabled(agentKinds, enabled)
     // Re-validate the shape against the EFFECTIVE (enabled) chain — disabling a producer
     // while leaving its companion on would orphan the companion, and adding gating (step or
@@ -273,6 +289,7 @@ export class PipelineService {
     const pipeline: Pipeline = {
       id: existing.id,
       name: input.name?.trim() || existing.name,
+      ...normalizedDescription(description),
       agentKinds: [...agentKinds],
       ...alignedGates(agentKinds, gates),
       ...alignedThresholds(agentKinds, thresholds),
@@ -308,7 +325,7 @@ export class PipelineService {
         'Only built-in pipelines can be reseeded. Delete a custom pipeline instead.',
       )
     }
-    const seed = seedPipelines().find((p) => p.id === id)
+    const seed = seedPipelines(this.pipelineRegistry).find((p) => p.id === id)
     if (!seed) {
       throw new ValidationError(
         `Pipeline '${id}' is no longer in the built-in catalog, so it cannot be reseeded. Delete it instead.`,
@@ -455,6 +472,12 @@ function cleanLabels(labels: string[] | undefined): string[] | undefined {
 function normalizedLabels(labels: string[] | undefined): Pick<Pipeline, 'labels'> {
   const cleaned = cleanLabels(labels)
   return cleaned ? { labels: cleaned } : {}
+}
+
+// Trim the description; a blank/absent one stays absent (so an empty string clears it on update).
+function normalizedDescription(description: string | undefined): Pick<Pipeline, 'description'> {
+  const trimmed = description?.trim()
+  return trimmed ? { description: trimmed } : {}
 }
 
 /** A pipeline with every step disabled would have nothing to run. */

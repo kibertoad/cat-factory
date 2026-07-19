@@ -13,6 +13,7 @@ import {
   listGitHubIssuesContract,
   listGitHubPullsContract,
   listGitHubReposContract,
+  listGitHubRepoFilesContract,
   listGitHubRepoTreeContract,
   mergeGitHubPullRequestContract,
   openGitHubPullRequestContract,
@@ -90,6 +91,13 @@ export function githubApi({ send, ws }: ApiContext) {
         pathPrefix: ws(workspaceId),
         pathParams: { repoGithubId: String(repoGithubId) },
         queryParams: { path },
+      }),
+
+    // List every file in a repo (whole tree, one recursive read) for file-path search.
+    listGitHubRepoFiles: (workspaceId: string, repoGithubId: number) =>
+      send(listGitHubRepoFilesContract, {
+        pathPrefix: ws(workspaceId),
+        pathParams: { repoGithubId: String(repoGithubId) },
       }),
 
     listGitHubBranches: (workspaceId: string, repoGithubId: number) =>

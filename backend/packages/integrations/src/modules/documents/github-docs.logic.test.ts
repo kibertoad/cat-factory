@@ -1,9 +1,12 @@
 import { describe, expect, it } from 'vitest'
 import {
   buildGitHubCodeSearchQuery,
+  describeGitHubDocFetchFailure,
   githubDocExternalId,
   githubDocTitle,
   githubDocUrl,
+  githubErrorRateLimited,
+  githubErrorStatus,
   parseGitHubDocExternalId,
   parseGitHubDocRef,
 } from './github-docs.logic.js'
@@ -85,6 +88,77 @@ describe('githubDocExternalId / githubDocUrl / githubDocTitle', () => {
   it('derives the file base name as the title', () => {
     expect(githubDocTitle('docs/a/architecture.md')).toBe('architecture.md')
     expect(githubDocTitle('README.md')).toBe('README.md')
+  })
+})
+
+describe('githubErrorStatus', () => {
+  it('reads a numeric status off an error-shaped value', () => {
+    expect(githubErrorStatus({ status: 403 })).toBe(403)
+    expect(githubErrorStatus(Object.assign(new Error('nope'), { status: 404 }))).toBe(404)
+  })
+
+  it('returns undefined when there is no numeric status (network fault / bare error)', () => {
+    expect(githubErrorStatus(new Error('fetch failed'))).toBeUndefined()
+    expect(githubErrorStatus({ status: 'oops' })).toBeUndefined()
+    expect(githubErrorStatus(null)).toBeUndefined()
+    expect(githubErrorStatus(undefined)).toBeUndefined()
+  })
+})
+
+describe('githubErrorRateLimited', () => {
+  it('reads the structural rateLimited flag off a GitHubApiError-shaped value', () => {
+    expect(githubErrorRateLimited(Object.assign(new Error('nope'), { rateLimited: true }))).toBe(
+      true,
+    )
+    expect(githubErrorRateLimited({ status: 403, rateLimited: true })).toBe(true)
+  })
+
+  it('is false when the flag is absent or not the boolean true (bare/fetch error)', () => {
+    expect(githubErrorRateLimited({ status: 403 })).toBe(false)
+    expect(githubErrorRateLimited({ rateLimited: 'yes' })).toBe(false)
+    expect(githubErrorRateLimited(new Error('fetch failed'))).toBe(false)
+    expect(githubErrorRateLimited(null)).toBe(false)
+    expect(githubErrorRateLimited(undefined)).toBe(false)
+  })
+})
+
+describe('describeGitHubDocFetchFailure', () => {
+  const id = { owner: 'acme', repo: 'repo', path: 'docs/x.md' }
+
+  it('names a permission problem for 401/403 (when not rate-limited)', () => {
+    for (const status of [401, 403] as const) {
+      const msg = describeGitHubDocFetchFailure(id, { status })
+      expect(msg).toContain('docs/x.md')
+      expect(msg).toContain('acme/repo')
+      expect(msg).toContain(`HTTP ${status}`)
+      expect(msg.toLowerCase()).toContain('read access')
+    }
+  })
+
+  it('names a rate limit (not a permission problem) for a rate-limited 403', () => {
+    // GitHub reports a PRIMARY rate-limit as a 403, so the flag must win over the status.
+    const msg = describeGitHubDocFetchFailure(id, { status: 403, rateLimited: true })
+    expect(msg).toContain('rate-limited')
+    expect(msg).toContain('HTTP 403')
+    expect(msg.toLowerCase()).not.toContain('read access')
+  })
+
+  it('explains the default-branch/visibility cause for a not-found read', () => {
+    const msg = describeGitHubDocFetchFailure(id, { notFound: true })
+    expect(msg).toContain('default branch')
+    expect(msg).toContain('acme/repo')
+    // A 404 status is treated the same as an explicit notFound.
+    expect(describeGitHubDocFetchFailure(id, { status: 404 })).toContain('default branch')
+  })
+
+  it('names a rate limit for 429', () => {
+    expect(describeGitHubDocFetchFailure(id, { status: 429 })).toContain('rate-limited')
+  })
+
+  it('falls back to the underlying message + status for an unclassified failure', () => {
+    const msg = describeGitHubDocFetchFailure(id, { status: 502, underlying: 'bad gateway' })
+    expect(msg).toContain('HTTP 502')
+    expect(msg).toContain('bad gateway')
   })
 })
 

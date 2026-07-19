@@ -18,6 +18,7 @@ import {
   blockStatusSchema,
   executionStatusSchema,
   issueIntakeConfigSchema,
+  pipelinePurposeSchema,
   priorStepOutputSchema,
   resolvedFrontendBindingSchema,
   runDiagnosticsSchema,
@@ -366,6 +367,19 @@ function readOptScalar(prop: string, column = toSnake(prop)): RowReader {
   }
 }
 
+/**
+ * An optional enum column surfaced only when the stored value is a valid member of `schema`,
+ * else left absent — a corrupt or pre-classifier legacy value reads as unset (e.g. an
+ * unclassified `purpose`) rather than leaking an invalid enum onto the wire. Lenient by design:
+ * an unrecognized value is a valid "absent" state here, so it is dropped, not thrown on.
+ */
+function readOptEnum(prop: string, schema: GenericSchema, column = toSnake(prop)): RowReader {
+  return (row, out) => {
+    const value = row[column]
+    if (value != null && value !== '' && is(schema, value)) out[prop] = value
+  }
+}
+
 /** Fold a list of {@link RowReader}s into a `rowTo*` reader (the read-only analogue of {@link makeEntityMapper}). */
 function makeRowReader<Row, Domain>(readers: RowReader[]): (row: Row) => Domain {
   return (row) => {
@@ -664,6 +678,8 @@ export function blockPatchToColumns(patch: BlockPatch): Record<string, unknown> 
 export interface PipelineRow {
   id: string
   name: string
+  /** Nullable prose description shown next to the step list in the pickers/builder. */
+  description?: string | null
   agent_kinds: string
   /** Nullable JSON array of per-step approval gates (migration 0022). */
   gates: string | null
@@ -702,7 +718,7 @@ export interface PipelineRow {
   availability?: string | null
   /**
    * The pipeline's use-case classifier: `'build'` / `'document'` / `'review'` / `'research'` /
-   * `'planning'` (migration 0055_pipeline_purpose). NULL/absent ⇒ unclassified.
+   * `'planning'` (migration 0056_pipeline_purpose). NULL/absent ⇒ unclassified.
    */
   purpose?: string | null
 }
@@ -713,6 +729,7 @@ export interface PipelineRow {
 const pipelineReader = makeRowReader<PipelineRow, Pipeline>([
   readScalar('id'),
   readScalar('name'),
+  readOptScalar('description'),
   readJson('agentKinds'),
   readOptJson('gates'),
   readOptJson('thresholds'),
@@ -728,7 +745,7 @@ const pipelineReader = makeRowReader<PipelineRow, Pipeline>([
   readOptScalar('version'),
   readFlag('public'),
   readOptScalar('availability'),
-  readOptScalar('purpose'),
+  readOptEnum('purpose', pipelinePurposeSchema),
 ])
 
 export function rowToPipeline(row: PipelineRow): Pipeline {

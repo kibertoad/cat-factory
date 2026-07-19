@@ -11,8 +11,8 @@ import type { RaiseNotificationInput } from '../ports/notification-channel.js'
 import type { Clock } from '../ports/runtime.js'
 import type { RunInitiatorScope } from '../ports/user-secret-repositories.js'
 import {
-  getProvider as registryGetProvider,
-  requireProvider as registryRequireProvider,
+  defaultProviderRegistry,
+  type ProviderRegistry,
   type ProviderToken,
 } from './provider-registry.js'
 
@@ -30,8 +30,8 @@ import {
 //
 // This abstraction lives in kernel (alongside the pipeline registry) so a deployment
 // package can register its OWN gate as a startup import side effect (see
-// {@link registerGate}) without depending on the heavy orchestration package — exactly
-// the way `registerAgentKind` / `registerPipeline` already work.
+// registering it on the app-owned {@link GateRegistry}) without depending on the heavy
+// orchestration package — the same app-owned-registry seam as agent kinds and pipelines.
 
 /** The outcome of a single gate precheck against its provider. */
 export interface GateProbe {
@@ -256,9 +256,14 @@ export interface GateContext {
   /**
    * The wired impl for a provider token, or throw. SAFE inside `probe()` — the engine only
    * probes a gate whose `wired()` returned true, and a gate's `wired()` should be
-   * `isProviderWired(token)` — so this replaces the old `getFoo()!` assertion with a guard.
+   * `ctx.isProviderWired(token)` — so this replaces the old `getFoo()!` assertion with a guard.
    */
   requireProvider<T>(token: ProviderToken<T>): T
+  /**
+   * Whether an impl is wired for a provider token — the canonical source for a gate's `wired()`
+   * (reads the app-owned {@link ProviderRegistry} the engine threads in, not a module global).
+   */
+  isProviderWired<T>(token: ProviderToken<T>): boolean
 }
 
 /**
@@ -316,19 +321,25 @@ export function defaultGateRegistry(): GateRegistry {
 /**
  * A minimal {@link GateContext} for tests that invoke a gate factory in isolation (the
  * real one is built by `ExecutionService.makeGateContext`). Defaults to harmless no-ops;
- * pass `overrides` to assert against a specific seam. Centralised here so a new required
- * `GateContext` field is filled in ONE place instead of every gate test.
+ * pass `providerRegistry` to have the provider seams read a specific registry (a gate test
+ * wires its provider on it), and `overrides` to assert against a specific seam. Centralised
+ * here so a new required `GateContext` field is filled in ONE place instead of every gate test.
  */
-export function stubGateContext(overrides: Partial<GateContext> = {}): GateContext {
+export function stubGateContext(
+  overrides: Partial<GateContext> = {},
+  providerRegistry: ProviderRegistry = defaultProviderRegistry(),
+): GateContext {
   return {
     clock: { now: () => 0 },
     getBlock: async () => null,
     runInitiatorScope: (_initiatedBy, fn) => fn(),
     raiseNotification: async () => {},
-    // Default to the real process-wide registry so a gate test that wires a provider sees
-    // it, and `requireProvider` on an unwired token throws exactly as it would in prod.
-    getProvider: registryGetProvider,
-    requireProvider: registryRequireProvider,
+    // Read the provider seams off the given registry (a fresh empty one by default), so a gate
+    // test that wires a provider on it sees it and `requireProvider` on an unwired token throws
+    // exactly as it would in prod.
+    getProvider: (token) => providerRegistry.get(token),
+    requireProvider: (token) => providerRegistry.require(token),
+    isProviderWired: (token) => providerRegistry.isWired(token),
     ...overrides,
   }
 }

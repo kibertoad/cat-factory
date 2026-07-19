@@ -1,6 +1,6 @@
-import { afterEach, describe, expect, it } from 'vitest'
+import { describe, expect, it } from 'vitest'
 import { defaultAgentKindRegistry } from '@cat-factory/agents'
-import { clearGateProviders, gateRegistryWithBuiltins } from '@cat-factory/gates'
+import { gateRegistryWithBuiltins } from '@cat-factory/gates'
 import {
   type CiStatusProvider,
   type GateProbe,
@@ -185,7 +185,6 @@ export function defineAgentGateConformance(harness: ConformanceHarness): void {
     // CiStatusProvider proves the externalized built-in still passes-through on green CI and
     // escalates to `ci-fixer` on red, identically on every runtime: if the gate package, the
     // wire-handle, or a facade's import drifted, this fails instead of shipping.
-    afterEach(() => clearGateProviders())
 
     // The single-repo fake CI provider (`makeFakeCi`, imported from `./fakeGateProviders`)
     // supplies its check verdict per-probe (a queue; the last entry repeats), so a test can
@@ -397,7 +396,6 @@ export function defineAgentGateConformance(harness: ConformanceHarness): void {
     // gate + its wire-handle behave identically on every runtime — and, for the multi-repo
     // (service-connections phase 4) case, that a conflicted PEER PR now ESCALATES the resolver
     // (tagged with the peer as its target) instead of fast-failing to a manual give-up.
-    afterEach(() => clearGateProviders())
 
     // A multi-repo fake mergeability provider: an own-service PR plus one peer PR, each verdict
     // supplied per-probe (a queue; last entry repeats), so a test can drive "peer conflicted →
@@ -473,7 +471,6 @@ export function defineAgentGateConformance(harness: ConformanceHarness): void {
     // helper on a red verdict. Driving it over a faked DocQualityProvider proves the externalized
     // gate + its wire-handle + each facade's import + the doc-fixer registered helper behave
     // identically on every runtime — a drift fails here instead of shipping.
-    afterEach(() => clearGateProviders())
 
     // The fake doc-quality provider (`makeFakeDocQuality`, imported from
     // `./fakeGateProviders`) supplies its verdict per-probe (a queue; last repeats).
@@ -540,7 +537,6 @@ export function defineAgentGateConformance(harness: ConformanceHarness): void {
     // every runtime; a facade that wired the release-health path into only one runtime fails here
     // instead of shipping. The gate only watches a release that actually shipped, so the merger
     // auto-merges first (`confidence: 1` → block `done`); a `regressed` probe then escalates.
-    afterEach(() => clearGateProviders())
 
     it('escalates on-call on a regressed release and raises a release_regression notification', async () => {
       const app = harness.makeApp(
@@ -600,7 +596,6 @@ export function defineAgentGateConformance(harness: ConformanceHarness): void {
     // over a faked PullRequestReviewProvider proves the externalized gate + its wire-handle +
     // each facade's import behave identically: the gate dispatches the fixer, resolves the
     // handed thread on the helper's completion, then advances — or a drift fails here.
-    afterEach(() => clearGateProviders())
 
     const APPROVED_CLEAN: PullRequestReviewSnapshot = {
       headSha: 'sha',

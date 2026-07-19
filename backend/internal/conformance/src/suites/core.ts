@@ -1265,6 +1265,9 @@ export function defineCoreConformance(harness: ConformanceHarness): void {
 
         const created = await call<Pipeline>('POST', `/workspaces/${wsId}/pipelines`, {
           name: 'Toggles',
+          // The prose description rides the same symmetric-persistence contract (its own
+          // `description` column on both stores) and must round-trip identically.
+          description: 'A custom pipeline for the toggles test.',
           agentKinds: ['task-estimator', 'coder', 'tester-api'],
           // Coder opts out of the Follow-up companion; the Tester's QC companion is gated on the
           // task estimate (an estimator runs earlier, so the gate is valid).
@@ -1279,6 +1282,7 @@ export function defineCoreConformance(harness: ConformanceHarness): void {
           stepOptions: [null, { autoRecommend: false }, null],
         })
         expect(created.status).toBe(201)
+        expect(created.body.description).toBe('A custom pipeline for the toggles test.')
         expect(created.body.followUps?.[1]).toBe(false)
         expect(created.body.testerQuality?.[2]).toEqual({
           enabled: true,
@@ -1289,6 +1293,7 @@ export function defineCoreConformance(harness: ConformanceHarness): void {
         // A fresh snapshot read re-hydrates every column from the store, identically on D1 ⇄ Postgres.
         const snapshot = await call<WorkspaceSnapshot>('GET', `/workspaces/${wsId}`)
         const stored = snapshot.body.pipelines.find((p) => p.id === created.body.id)!
+        expect(stored.description).toBe('A custom pipeline for the toggles test.')
         expect(stored.followUps?.[1]).toBe(false)
         expect(stored.testerQuality?.[2]).toEqual({
           enabled: true,

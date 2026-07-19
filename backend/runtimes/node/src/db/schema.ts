@@ -419,6 +419,9 @@ export const pipelines = pgTable(
     workspace_id: text('workspace_id').notNull(),
     id: text('id').notNull(),
     name: text('name').notNull(),
+    // Optional prose description shown next to the step list in the pickers/builder (mirror of D1
+    // migration 0055_pipeline_description); NULL ⇒ no description.
+    description: text('description'),
     agent_kinds: text('agent_kinds').notNull().default('[]'),
     gates: text('gates'),
     thresholds: text('thresholds'),
@@ -458,7 +461,7 @@ export const pipelines = pgTable(
     // migration 0037); NULL/absent ⇒ unrestricted (`'both'`).
     availability: text('availability'),
     // The pipeline's use-case classifier: `'build'` / `'document'` / `'review'` / `'research'` /
-    // `'planning'` (mirror of D1 migration 0055_pipeline_purpose). NULL/absent ⇒ unclassified.
+    // `'planning'` (mirror of D1 migration 0056_pipeline_purpose). NULL/absent ⇒ unclassified.
     // Drives the task pickers (a `document` task offers only `'document'`) and the builder palette.
     purpose: text('purpose'),
     // Monotonic insert sequence (Postgres has no SQLite rowid): a workspace's pipelines

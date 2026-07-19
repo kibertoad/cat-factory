@@ -2936,6 +2936,17 @@
       "emptySearchable": "Nach Titel suchen oder ein importiertes Dokument auswählen.",
       "emptyRefOnly": "Fügen Sie eine Seiten-URL oder -ID ein, um sie anzuhängen."
     },
+    "repoPicker": {
+      "searchRepoPlaceholder": "Repositorys suchen…",
+      "clearRepo": "Repository entfernen",
+      "searchTab": "Dateien suchen",
+      "browseTab": "Durchsuchen",
+      "searchFilesPlaceholder": "Dateien nach Pfad suchen…",
+      "searchFilesHint": "Tippen, um Dateien in diesem Repository zu suchen.",
+      "noFileMatches": "Keine passenden Dateien.",
+      "filesFailed": "Dateien konnten nicht geladen werden: {error}",
+      "moreFiles": "Es werden die ersten {count} Treffer angezeigt – grenzen Sie Ihre Suche ein."
+    },
     "import": {
       "title": "Aus einer Dokumentquelle importieren",
       "connectFirst": "Verbinden Sie zuerst eine Dokumentquelle.",
@@ -3084,6 +3095,13 @@
       "proceed": "Trotzdem fortfahren",
       "stopReset": "Aufgabe stoppen & zurücksetzen"
     },
+    "preview": {
+      "stepCount": "{count} Schritt | {count} Schritte",
+      "gated": "Manuelle Freigabe nach diesem Schritt"
+    },
+    "picker": {
+      "noneHint": "Keine Standard-Pipeline. Du wählst beim Ausführen der Aufgabe eine aus."
+    },
     "builder": {
       "title": "Pipeline-Builder",
       "agentPalette": "Agenten-Palette",
@@ -3092,6 +3110,7 @@
       "configureModels": "Modelle konfigurieren",
       "configureModelsTooltip": "Modell-Presets verwalten (auf welchem Modell jeder Agent läuft)",
       "namePlaceholder": "Pipeline-Name",
+      "descriptionPlaceholder": "Beschreibung (wird bei der Pipeline-Auswahl angezeigt)",
       "labelPlaceholder": "+ Label",
       "gatingNeedsEstimator": "Ein Gated-Schritt benötigt davor einen Task Estimator. Fügen Sie einen hinzu, sonst wird die Pipeline nicht gespeichert.",
       "emptyDraft": "Klicken Sie links auf Agenten, um eine lineare Pipeline zusammenzustellen.",
@@ -3185,7 +3204,8 @@
       "skillPlaceholder": "Skill auswählen",
       "skillNoneAvailable": "Keine Skills verfügbar. Verknüpfe eine Skill-Quelle in den Kontoeinstellungen.",
       "skillMissing": "Dieser Skill ist nicht mehr im Katalog; wähle einen anderen.",
-      "skillNeedsPick": "Ein Skill-Schritt braucht einen ausgewählten Skill, bevor du speichern kannst."
+      "skillNeedsPick": "Ein Skill-Schritt braucht einen ausgewählten Skill, bevor du speichern kannst.",
+      "purposeStepsConflict": "Dieser Zweck schreibt keinen Code und führt keine Tests aus, doch die Pipeline enthält noch Implementierungs- oder Testschritte. Entfernen Sie diese oder setzen Sie den Zweck auf Entwicklung."
     },
     "progress": {
       "status": {
@@ -3901,6 +3921,7 @@
     "retry": "Erneut versuchen",
     "copy": "Kopieren",
     "copied": "In die Zwischenablage kopiert",
+    "copyDetails": "Details kopieren",
     "reveal": "Anzeigen",
     "hide": "Verbergen",
     "delete": "Löschen",
