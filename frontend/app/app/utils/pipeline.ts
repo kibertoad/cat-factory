@@ -1,4 +1,8 @@
-import { frameAllowsVisualPipeline, pipelineHasVisualStep } from '@cat-factory/contracts'
+import {
+  frameAllowsVisualPipeline,
+  pipelineAllowedForTaskType,
+  pipelineHasVisualStep,
+} from '@cat-factory/contracts'
 import type { AgentKind, Block, Pipeline } from '~/types/domain'
 
 /** One agent step of a pipeline as shown in a preview: its kind + whether it's a human-gated step. */
@@ -24,6 +28,10 @@ export function pipelineDisplaySteps(pipeline: Pipeline): PipelineDisplayStep[] 
     .filter((s) => s.enabled)
     .map(({ kind, gated }) => ({ kind, gated }))
 }
+
+// Re-exported so a picker can import the task-type gate from the same module as the
+// launch/frame gates it composes with (the classifier itself lives in `@cat-factory/contracts`).
+export { pipelineAllowedForTaskType }
 
 // Surface counterpart to the backend's slice-4c run-start gate: a pipeline with a visual step
 // (`tester-ui` / `visual-confirmation`) may run only on a frame with a UI to exercise — a
@@ -53,14 +61,21 @@ export function pipelineAllowedForFrame(
 /**
  * Whether `pipeline` may be started as a MANUAL one-off task run (the board/inspector Run menus,
  * the add-task modal, the task run-settings default). Excludes `'recurring'`-only pipelines the
- * backend would refuse.
+ * backend would refuse, visual pipelines on a frame with no UI, and — when a `taskType` is given —
+ * pipelines whose `purpose` doesn't fit that task type (a `document` task offers only document
+ * pipelines). `taskType` omitted ⇒ no task-type restriction (an un-typed context shows all).
  */
 export function pipelineAllowedForManualStart(
   pipeline: Pipeline,
   frame: Block | undefined,
   blocks: readonly Block[],
+  taskType?: Block['taskType'],
 ): boolean {
-  return pipeline.availability !== 'recurring' && pipelineAllowedForFrame(pipeline, frame, blocks)
+  return (
+    pipeline.availability !== 'recurring' &&
+    pipelineAllowedForFrame(pipeline, frame, blocks) &&
+    pipelineAllowedForTaskType(pipeline, taskType)
+  )
 }
 
 /**

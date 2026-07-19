@@ -3421,6 +3421,15 @@
       "impactThreshold": "影響度 ≥",
       "strategy": "戦略",
       "rounds": "ラウンド",
+      "purposeLabel": "目的",
+      "purposePlaceholder": "目的を選択",
+      "purposeOption": {
+        "build": "開発",
+        "document": "ドキュメント",
+        "review": "レビュー",
+        "research": "調査",
+        "planning": "計画"
+      },
       "strategyOption": {
         "specialist-panel": "専門家パネル",
         "debate": "ディベート",
@@ -3474,7 +3483,8 @@
       "skillPlaceholder": "スキルを選択",
       "skillNoneAvailable": "利用できるスキルがありません。アカウント設定でスキルソースをリンクしてください。",
       "skillMissing": "このスキルはカタログに存在しません。別のスキルを選んでください。",
-      "skillNeedsPick": "Skill ステップを保存するにはスキルの選択が必要です。"
+      "skillNeedsPick": "Skill ステップを保存するにはスキルの選択が必要です。",
+      "purposeStepsConflict": "この目的はコードを書かず、テストも実行しませんが、パイプラインには実装またはテストのステップが残っています。それらを削除するか、目的を「開発」に切り替えてください。"
     },
     "progress": {
       "status": {

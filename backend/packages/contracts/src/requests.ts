@@ -8,6 +8,7 @@ import {
   testerQualityConfigSchema,
   writebackOverrideSchema,
 } from './entities.js'
+import { pipelinePurposeSchema } from './pipeline-purpose.js'
 import { serviceProvisioningSchema } from './environments.js'
 import { frontendConfigSchema } from './frontend.js'
 import { cloudProviderSchema, instanceSizeSchema } from './compute-provisioning.js'
@@ -286,6 +287,11 @@ export const createPipelineSchema = v.object({
   availability: v.optional(
     v.union([v.literal('one-off'), v.literal('recurring'), v.literal('both')]),
   ),
+  /**
+   * The pipeline's use-case classifier (`build` / `document` / `review` / `research` /
+   * `planning`). Omitted ⇒ unclassified. Drives the task pickers + the builder palette gate.
+   */
+  purpose: v.optional(pipelinePurposeSchema),
 })
 export type CreatePipelineInput = v.InferOutput<typeof createPipelineSchema>
 
@@ -315,6 +321,8 @@ export const updatePipelineSchema = v.object({
   availability: v.optional(
     v.union([v.literal('one-off'), v.literal('recurring'), v.literal('both')]),
   ),
+  /** Change the pipeline's use-case classifier (see {@link createPipelineSchema}). Optional. */
+  purpose: v.optional(pipelinePurposeSchema),
 })
 export type UpdatePipelineInput = v.InferOutput<typeof updatePipelineSchema>
 

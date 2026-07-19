@@ -288,17 +288,34 @@ const selectedModelPresetLabel = computed(() => {
 
 // Hide UI-testing pipelines (`tester-ui` / `visual-confirmation`) when the target frame has no
 // UI to exercise — they'd be refused server-side (see utils/pipeline + the backend gate). Also
-// hide `'recurring'`-only pipelines: a one-off task start of one is refused at run start.
+// hide `'recurring'`-only pipelines (a one-off task start of one is refused at run start) and,
+// for a `document` task, every non-document pipeline (it authors a doc — only document pipelines
+// are relevant, per the `purpose` classifier). Re-filters as the chosen task type changes.
 const selectablePipelines = computed(() =>
-  pipelines.pipelines.filter((p) => pipelineAllowedForManualStart(p, frame.value, board.blocks)),
+  pipelines.pipelines.filter((p) =>
+    pipelineAllowedForManualStart(p, frame.value, board.blocks, taskType.value),
+  ),
 )
-// Picking the Ralph loop task type auto-selects its pipeline, so the per-task validation
-// command + iteration budget (contributed by the `ralph` agent) surface immediately — the
-// loop is meaningless without them, so "choose at run time" would be a dead end here.
+// Some task types want their type-default pipeline surfaced in the modal up front, so picking the
+// type auto-selects it (the user can still change it among the still-offered pipelines). This is a
+// DELIBERATE SUBSET of the backend `defaultPipelineIdForTaskType` — only the types whose default
+// must appear in the form BEFORE creation:
+//   - `ralph` needs its preset so the per-task validation command + iteration budget the `ralph`
+//     agent contributes surface for editing ("choose at run time" would be a dead end);
+//   - a `document` task defaults to `pl_document` so its document-only picker (the `purpose` gate
+//     hides every non-document pipeline) is never rendered empty.
+// The other typed defaults (spike/review) carry no up-front config and don't narrow their picker,
+// so the modal leaves `pipelineId` unset and `BoardService` applies the backend type-default at
+// creation. Keep these ids in step with the backend helper.
+const DEFAULT_PIPELINE_FOR_TYPE: Partial<Record<TaskTypeChoice, string>> = {
+  ralph: 'pl_ralph',
+  document: 'pl_document',
+}
 watch(taskType, (next) => {
-  if (next !== 'ralph') return
-  const ralph = pipelines.pipelines.find((p) => p.id === 'pl_ralph')
-  if (ralph) pipelineId.value = ralph.id
+  const preset = DEFAULT_PIPELINE_FOR_TYPE[next]
+  if (!preset) return
+  const match = pipelines.pipelines.find((p) => p.id === preset)
+  if (match) pipelineId.value = match.id
 })
 
 // Task-level agent config contributed by the selected pipeline's agents (e.g. the
@@ -455,7 +472,10 @@ watch(open, (isOpen) => {
     delete docKindFieldValues[key]
   riskPolicyId.value = ''
   modelPresetId.value = ''
-  pipelineId.value = ''
+  // Seed the pipeline from the (possibly doc-repo-forced) task type's default, so a document
+  // repo opens with `pl_document` pre-selected rather than empty. This runs AFTER the `taskType`
+  // watcher fired during this reset, so it is the authoritative default (see DEFAULT_PIPELINE_FOR_TYPE).
+  pipelineId.value = DEFAULT_PIPELINE_FOR_TYPE[taskType.value] ?? ''
   agentConfigValues.value = {}
   pendingContext.value = []
   showDocPicker.value = false

@@ -3420,6 +3420,15 @@
       "impactThreshold": "השפעה ≥",
       "strategy": "אסטרטגיה",
       "rounds": "סבבים",
+      "purposeLabel": "מטרה",
+      "purposePlaceholder": "בחר מטרה",
+      "purposeOption": {
+        "build": "פיתוח",
+        "document": "תיעוד",
+        "review": "סקירה",
+        "research": "מחקר",
+        "planning": "תכנון"
+      },
       "strategyOption": {
         "specialist-panel": "פאנל מומחים",
         "debate": "דיון",
@@ -3473,7 +3482,8 @@
       "skillPlaceholder": "בחר כישור",
       "skillNoneAvailable": "אין כישורים זמינים. קישר מקור כישורים בהגדרות החשבון.",
       "skillMissing": "כישור זה כבר אינו בקטלוג; בחר אחר.",
-      "skillNeedsPick": "שלב Skill דורש כישור נבחר לפני שתוכל לשמור."
+      "skillNeedsPick": "שלב Skill דורש כישור נבחר לפני שתוכל לשמור.",
+      "purposeStepsConflict": "מטרה זו אינה כותבת קוד ואינה מריצה בדיקות, אך הצינור עדיין כולל שלבי פיתוח או בדיקה. הסירו אותם או שנו את המטרה לפיתוח."
     },
     "progress": {
       "status": {

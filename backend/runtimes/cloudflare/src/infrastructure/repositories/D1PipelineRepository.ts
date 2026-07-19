@@ -33,7 +33,7 @@ export class D1PipelineRepository implements PipelineRepository {
   async insert(workspaceId: string, pipeline: Pipeline): Promise<void> {
     await this.db
       .prepare(
-        'INSERT INTO pipelines (workspace_id, id, name, description, agent_kinds, gates, thresholds, enabled, consensus, gating, follow_ups, tester_quality, step_options, labels, archived, builtin, version, public, availability) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)',
+        'INSERT INTO pipelines (workspace_id, id, name, description, agent_kinds, gates, thresholds, enabled, consensus, gating, follow_ups, tester_quality, step_options, labels, archived, builtin, version, public, availability, purpose) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)',
       )
       .bind(
         workspaceId,
@@ -55,6 +55,7 @@ export class D1PipelineRepository implements PipelineRepository {
         pipeline.version ?? null,
         pipeline.public ? 1 : null,
         pipeline.availability ?? null,
+        pipeline.purpose ?? null,
       )
       .run()
   }
@@ -65,7 +66,7 @@ export class D1PipelineRepository implements PipelineRepository {
     // `version` IS rewritten so a reseed bumps the stored copy to the current catalog version.
     await this.db
       .prepare(
-        'UPDATE pipelines SET name = ?, description = ?, agent_kinds = ?, gates = ?, thresholds = ?, enabled = ?, consensus = ?, gating = ?, follow_ups = ?, tester_quality = ?, step_options = ?, labels = ?, archived = ?, version = ?, public = ?, availability = ? WHERE workspace_id = ? AND id = ?',
+        'UPDATE pipelines SET name = ?, description = ?, agent_kinds = ?, gates = ?, thresholds = ?, enabled = ?, consensus = ?, gating = ?, follow_ups = ?, tester_quality = ?, step_options = ?, labels = ?, archived = ?, version = ?, public = ?, availability = ?, purpose = ? WHERE workspace_id = ? AND id = ?',
       )
       .bind(
         pipeline.name,
@@ -84,6 +85,7 @@ export class D1PipelineRepository implements PipelineRepository {
         pipeline.version ?? null,
         pipeline.public ? 1 : null,
         pipeline.availability ?? null,
+        pipeline.purpose ?? null,
         workspaceId,
         pipeline.id,
       )

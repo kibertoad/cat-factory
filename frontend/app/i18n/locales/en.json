@@ -3508,6 +3508,15 @@
       "impactThreshold": "impact ≥",
       "strategy": "Strategy",
       "rounds": "Rounds",
+      "purposeLabel": "Purpose",
+      "purposePlaceholder": "Select a purpose",
+      "purposeOption": {
+        "build": "Build",
+        "document": "Documentation",
+        "review": "Review",
+        "research": "Research",
+        "planning": "Planning"
+      },
       "strategyOption": {
         "specialist-panel": "Specialist panel",
         "debate": "Debate",
@@ -3561,7 +3570,8 @@
       "skillPlaceholder": "Select a skill",
       "skillNoneAvailable": "No skills available. Link a skill source in account settings.",
       "skillMissing": "This skill is no longer in the catalog; pick another.",
-      "skillNeedsPick": "A Skill step needs a skill selected before you can save."
+      "skillNeedsPick": "A Skill step needs a skill selected before you can save.",
+      "purposeStepsConflict": "This purpose writes no code and runs no tests, but the pipeline still has implementation or testing steps. Remove them or switch the purpose to Build."
     },
     "progress": {
       "status": {

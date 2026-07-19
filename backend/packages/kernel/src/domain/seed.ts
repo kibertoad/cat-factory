@@ -141,6 +141,7 @@ function definePipeline(spec: {
   id: string
   name: string
   description?: string
+  purpose?: Pipeline['purpose']
   steps: readonly SeedStep[]
   availability?: Pipeline['availability']
   labels?: string[]
@@ -158,6 +159,7 @@ function definePipeline(spec: {
     ...(gates.some(Boolean) ? { gates } : {}),
     ...(enabled.some((e) => !e) ? { enabled } : {}),
     ...(spec.availability ? { availability: spec.availability } : {}),
+    ...(spec.purpose ? { purpose: spec.purpose } : {}),
     ...(spec.labels ? { labels: spec.labels } : {}),
     ...(spec.version !== undefined ? { version: spec.version } : {}),
     ...(spec.public ? { public: spec.public } : {}),
@@ -185,14 +187,15 @@ export function seedPipelines(registry?: PipelineRegistry): Pipeline[] {
     definePipeline({
       id: 'pl_full',
       name: 'Full build',
+      purpose: 'build',
       description:
         'The standard end-to-end build: review the requirements, write the spec, design the solution, implement and review it, refresh the service map, test, then gate on conflicts + CI and merge the PR.',
       // `code-commenter` runs after the reviewer clears the implementation: it amends the coder's
       // PR in place with comment-only edits (WHY-not-what, fixes drifted comments, drops noise), so
       // basic comment hygiene is business-as-usual on every task. `ci` re-runs to prove the
       // comment-only diff is behaviour-neutral. Version bumped for the code-commenter reseed,
-      // then again for the pipeline-description reseed.
-      version: 4,
+      // then again for the pipeline-description reseed, then again for the purpose classifier reseed.
+      version: 5,
       steps: [
         // Opt-in structured-dialogue option exploration before the requirements review.
         { kind: 'requirements-brainstorm', gate: true, enabled: false },
@@ -247,14 +250,15 @@ export function seedPipelines(registry?: PipelineRegistry): Pipeline[] {
       //   conflicts → ci → merger → the same mergeability / CI / merge tail as Full build
       id: 'pl_fullstack',
       name: 'Complex fullstack feature',
+      purpose: 'build',
       description:
         'The most thorough preset — engages every valuable agent (research, spec, design, mocks, end-to-end tests and docs) for a complex, full-stack feature, then gates and ships the PR.',
       // A `deployer` runs before the tester (k8s/custom only; a no-op otherwise). Human gates: the
       // two opt-in brainstorm dialogues, the requirements review, and — after its companion clears
       // the quality bar — the architecture (on `architect-companion`). A `code-commenter` runs after
       // the reviewer to keep in-source comments up to standard on the same PR. Version bumped for
-      // the code-commenter reseed, then again for the pipeline-description reseed.
-      version: 4,
+      // the code-commenter reseed, then again for the pipeline-description reseed, then again for the purpose classifier reseed.
+      version: 5,
       steps: [
         // Opt-in structured-dialogue option exploration.
         { kind: 'requirements-brainstorm', gate: true, enabled: false },
@@ -289,7 +293,8 @@ export function seedPipelines(registry?: PipelineRegistry): Pipeline[] {
     definePipeline({
       id: 'pl_bugfix',
       name: 'Triage & fix bug',
-      version: 2,
+      purpose: 'build',
+      version: 3,
       description:
         'Investigate a bug report against the codebase, triage it for fixability with you, then fix, review, and ship the PR.',
       steps: [
@@ -307,13 +312,14 @@ export function seedPipelines(registry?: PipelineRegistry): Pipeline[] {
     {
       id: 'pl_quick',
       name: 'Quick implement',
+      purpose: 'build',
       description:
         'A fast build with no design or spec phase: implement, refresh the map, mock and test, then gate on conflicts + CI and merge.',
       // A `deployer` runs before the tester so a kubernetes/custom service gets its ephemeral env
       // stood up (a no-op for docker-compose/infraless/frontend); bump the version for the reseed
       // offer. Same pattern across every tester/human-test built-in below. Bumped again for the
-      // pipeline-description reseed.
-      version: 3,
+      // pipeline-description reseed, then again for the purpose classifier reseed.
+      version: 4,
       agentKinds: [
         'coder',
         'blueprints',
@@ -334,9 +340,10 @@ export function seedPipelines(registry?: PipelineRegistry): Pipeline[] {
     {
       id: 'pl_simple',
       name: 'Simple',
+      purpose: 'build',
       description:
         'The leanest build: implement and review, run the tests, then gate on conflicts + CI and merge — no design, spec, or docs.',
-      version: 3,
+      version: 4,
       agentKinds: [
         'coder',
         'reviewer',
@@ -359,7 +366,8 @@ export function seedPipelines(registry?: PipelineRegistry): Pipeline[] {
     {
       id: 'pl_ralph',
       name: 'Ralph loop',
-      version: 2,
+      purpose: 'build',
+      version: 3,
       description:
         'A single persistent coding step that retries against your validation command until it passes, then gates and ships the PR.',
       agentKinds: ['ralph', 'conflicts', 'ci', 'merger'],
@@ -367,9 +375,10 @@ export function seedPipelines(registry?: PipelineRegistry): Pipeline[] {
     {
       id: 'pl_integrate',
       name: 'Integrate & ship',
+      purpose: 'build',
       description:
         'Wire an existing change into the surrounding system, mock and test it, then document it.',
-      version: 3,
+      version: 4,
       agentKinds: ['integrator', 'mocker', 'deployer', 'tester-api', 'documenter'],
     },
     // A human-in-the-loop build: implement → review, then a `human-test` gate that spins up an
@@ -381,12 +390,13 @@ export function seedPipelines(registry?: PipelineRegistry): Pipeline[] {
     {
       id: 'pl_human_review',
       name: 'Build & human-test',
+      purpose: 'build',
       description:
         'Implement and review, then pause on a live ephemeral environment for a person to validate the change before gating on conflicts + CI and merging.',
       // The `deployer` stands the ephemeral env up before the human-test gate reads it (the gate no
       // longer provisions its own — the deployer is the single provisioner; the gate loops back here
-      // to rebuild on a fix/recreate). Bumped again for the pipeline-description reseed.
-      version: 3,
+      // to rebuild on a fix/recreate). Bumped again for the pipeline-description reseed, then again for the purpose classifier reseed.
+      version: 4,
       agentKinds: ['coder', 'reviewer', 'deployer', 'human-test', 'conflicts', 'ci', 'merger'],
     },
     // A human-code-review build: the full implement → review → map → test tail, then a
@@ -399,9 +409,10 @@ export function seedPipelines(registry?: PipelineRegistry): Pipeline[] {
     {
       id: 'pl_pr_review',
       name: 'Build & PR review',
+      purpose: 'build',
       description:
         'The full implement → review → test build, then wait for a human code review on the PR — looping a fixer on comments — before merging.',
-      version: 3,
+      version: 4,
       agentKinds: [
         'coder',
         'reviewer',
@@ -433,10 +444,11 @@ export function seedPipelines(registry?: PipelineRegistry): Pipeline[] {
     {
       id: 'pl_visual',
       name: 'Build & visual confirmation',
+      purpose: 'build',
       description:
         'Implement and UI-test, then pause for a person to compare the captured screenshots against the reference designs before gating and merging.',
       labels: ['experimental'],
-      version: 3,
+      version: 4,
       agentKinds: [
         'coder',
         'reviewer',
@@ -472,10 +484,11 @@ export function seedPipelines(registry?: PipelineRegistry): Pipeline[] {
     {
       id: 'pl_frontend',
       name: 'Frontend build & UI test',
+      purpose: 'build',
       description:
         'A self-contained frontend build that drives a real browser against the app the platform stands up, then gates on conflicts + CI and ships the PR.',
       labels: ['experimental'],
-      version: 3,
+      version: 4,
       agentKinds: [
         'coder',
         'reviewer',
@@ -495,9 +508,10 @@ export function seedPipelines(registry?: PipelineRegistry): Pipeline[] {
     {
       id: 'pl_dep_update',
       name: 'Dependency updates',
+      purpose: 'build',
       description:
         'A recurring implement → review → test → merge run for keeping a repository up to date on its dependencies.',
-      version: 3,
+      version: 4,
       agentKinds: [
         'coder',
         'reviewer',
@@ -513,9 +527,10 @@ export function seedPipelines(registry?: PipelineRegistry): Pipeline[] {
     {
       id: 'pl_tech_debt',
       name: 'Tech debt',
+      purpose: 'build',
       description:
         'Audit the repository, file a tracker ticket from the findings, then implement, test, and ship the fix.',
-      version: 3,
+      version: 4,
       agentKinds: [
         'analysis',
         'tracker',
@@ -554,13 +569,14 @@ export function seedPipelines(registry?: PipelineRegistry): Pipeline[] {
       // investigator auto-advances and the conflicts/ci/merger tail self-drives.
       id: 'pl_bug_triage',
       name: 'Bug triage (recurring)',
+      purpose: 'build',
       description:
         'A recurring run that pulls one open issue from your tracker board, investigates and clarifies it, then fixes, tests, and ships the PR.',
       availability: 'recurring',
       // A `deployer` runs before the tester (k8s/custom only; a no-op otherwise). Only
       // `clarity-review` is a human gate; version bumped for the reseed offer, then again for the
-      // pipeline-description reseed.
-      version: 3,
+      // pipeline-description reseed, then again for the purpose classifier reseed.
+      version: 4,
       steps: [
         'bug-intake',
         'bug-investigator',
@@ -581,7 +597,8 @@ export function seedPipelines(registry?: PipelineRegistry): Pipeline[] {
     {
       id: 'pl_blueprint',
       name: 'Map service',
-      version: 2,
+      purpose: 'build',
+      version: 3,
       description:
         'Map the repository into the service → modules blueprint and populate the board (run after a bootstrap).',
       agentKinds: ['blueprints'],
@@ -594,7 +611,8 @@ export function seedPipelines(registry?: PipelineRegistry): Pipeline[] {
     {
       id: 'pl_review',
       name: 'Review a pull request',
-      version: 2,
+      purpose: 'review',
+      version: 3,
       description:
         'A read-only deep review of an open pull request that returns prioritized findings — no code is written and no PR is opened.',
       agentKinds: ['pr-reviewer'],
@@ -612,13 +630,14 @@ export function seedPipelines(registry?: PipelineRegistry): Pipeline[] {
       // `docs/initiatives/<slug>/`) and arms the execution loop.
       id: 'pl_initiative',
       name: 'Plan initiative',
+      purpose: 'planning',
       description:
         'Interview you on the initiative, analyze the codebase, and draft a multi-phase plan for approval before committing it.',
       // Slice 2 added the interviewer + analyst in front of the planner; version bumped for the
       // reseed offer. The interviewer parks via its own controller (not a `gate`); the only human
       // gate is on the planner's output, before the committer persists it. Bumped again for the
-      // pipeline-description reseed.
-      version: 3,
+      // pipeline-description reseed, then again for the purpose classifier reseed.
+      version: 4,
       steps: [
         'initiative-interviewer',
         'initiative-analyst',
@@ -636,7 +655,8 @@ export function seedPipelines(registry?: PipelineRegistry): Pipeline[] {
     {
       id: 'pl_initiative_docs',
       name: 'Plan documentation refresh',
-      version: 2,
+      purpose: 'planning',
+      version: 3,
       description:
         'Audit the codebase for documentation gaps and draft a phased documentation-refresh plan — no interview, runs unattended.',
       agentKinds: ['initiative-analyst', 'initiative-planner', 'initiative-committer'],
@@ -646,7 +666,8 @@ export function seedPipelines(registry?: PipelineRegistry): Pipeline[] {
     {
       id: 'pl_spec',
       name: 'Write spec',
-      version: 2,
+      purpose: 'build',
+      version: 3,
       description:
         '(Re)generate the unified in-repo specification for a service and its Gherkin acceptance scenarios, independently.',
       agentKinds: ['spec-writer'],
@@ -667,7 +688,8 @@ export function seedPipelines(registry?: PipelineRegistry): Pipeline[] {
       // no-PR path on an unprotected repo.
       id: 'pl_spike',
       name: 'Run a spike',
-      version: 2,
+      purpose: 'research',
+      version: 3,
       description:
         'A timeboxed read-only investigation that answers a research question and delivers a findings document as a pull request.',
       steps: [
@@ -688,7 +710,8 @@ export function seedPipelines(registry?: PipelineRegistry): Pipeline[] {
       // / throwaway research where the PR round-trip of `pl_spike` isn't wanted.
       id: 'pl_spike_direct',
       name: 'Run a spike (direct commit)',
-      version: 2,
+      purpose: 'research',
+      version: 3,
       description:
         'A timeboxed read-only investigation that commits its findings document straight to the base branch — no PR or review tail.',
       steps: [{ kind: 'requirements-review', gate: true, enabled: false }, 'spike'],
@@ -701,7 +724,8 @@ export function seedPipelines(registry?: PipelineRegistry): Pipeline[] {
     {
       id: 'pl_environment_analysis',
       name: 'Analyze environment',
-      version: 2,
+      purpose: 'research',
+      version: 3,
       description:
         'Read the service repository and draft a non-binding Docker Compose stack-recipe recommendation for the setup wizard.',
       agentKinds: ['environment-analyst'],
@@ -714,7 +738,8 @@ export function seedPipelines(registry?: PipelineRegistry): Pipeline[] {
     {
       id: 'pl_initiative_breakdown',
       name: 'Break down initiative',
-      version: 2,
+      purpose: 'planning',
+      version: 3,
       description:
         'Decompose an initiative brief into a structured plan headlessly (inline, no repo) — the first pipeline exposed to the public API.',
       agentKinds: ['initiative-breakdown'],
@@ -746,14 +771,15 @@ export function seedPipelines(registry?: PipelineRegistry): Pipeline[] {
       //   conflicts → ci → merger → the same mergeability / CI / merge tail as a code pipeline
       id: 'pl_document',
       name: 'Author a document',
+      purpose: 'document',
       description:
         'Turn a brief and its linked context into a polished in-repo Markdown document — research, outline, interview, write, review, then gate and ship the PR.',
       // Slice WS5 inserted the interactive `doc-interviewer` after the outliner and replaced the
       // outline's binary human gate with its iterative loop; version bumped for the reseed offer. The
       // interviewer parks via its OWN controller (not a `gate`), `doc-quality` is a polling gate
       // (auto), so the only human `gate` is the converged review (`doc-reviewer`, after its loop).
-      // Bumped again for the pipeline-description reseed.
-      version: 4,
+      // Bumped again for the pipeline-description reseed, then again for the purpose classifier reseed.
+      version: 5,
       steps: [
         'doc-researcher',
         'doc-outliner',
@@ -774,9 +800,10 @@ export function seedPipelines(registry?: PipelineRegistry): Pipeline[] {
       // just without the research / outline / finalize stages and their human gates.
       id: 'pl_document_quick',
       name: 'Quick document',
+      purpose: 'document',
       description:
         'A lean document build for a small or low-stakes doc: draft, auto-review, the structural quality gate, then gate on conflicts + CI and merge.',
-      version: 3,
+      version: 4,
       agentKinds: ['doc-writer', 'doc-reviewer', 'doc-quality', 'conflicts', 'ci', 'merger'],
     },
     // The Documentation-refresh pilot's two lean spawn pipelines (initiative-presets slice 7).
@@ -791,7 +818,8 @@ export function seedPipelines(registry?: PipelineRegistry): Pipeline[] {
       // load-bearing here — it proves the diff is behaviour-neutral before `merger` ships it.
       id: 'pl_code_comments',
       name: 'Improve code comments',
-      version: 2,
+      purpose: 'build',
+      version: 3,
       description:
         'Add or clarify why-not-what in-source comments with no behaviour change, prove the diff is behaviour-neutral on CI, then merge.',
       agentKinds: ['code-commenter', 'conflicts', 'ci', 'merger'],
@@ -803,7 +831,8 @@ export function seedPipelines(registry?: PipelineRegistry): Pipeline[] {
       // documenter into a full build pipeline when only the domain-rules docs are wanted.
       id: 'pl_business_docs',
       name: 'Document business rules',
-      version: 2,
+      purpose: 'document',
+      version: 3,
       description:
         'Read the implementation and capture the service business rules / domain constraints as in-repo docs, then gate on conflicts + CI and ship the PR.',
       agentKinds: ['business-documenter', 'conflicts', 'ci', 'merger'],

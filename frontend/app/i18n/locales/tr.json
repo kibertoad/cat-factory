@@ -3421,6 +3421,15 @@
       "impactThreshold": "etki ≥",
       "strategy": "Strateji",
       "rounds": "Tur",
+      "purposeLabel": "Amaç",
+      "purposePlaceholder": "Bir amaç seçin",
+      "purposeOption": {
+        "build": "Geliştirme",
+        "document": "Dokümantasyon",
+        "review": "İnceleme",
+        "research": "Araştırma",
+        "planning": "Planlama"
+      },
       "strategyOption": {
         "specialist-panel": "Uzman paneli",
         "debate": "Tartışma",
@@ -3474,7 +3483,8 @@
       "skillPlaceholder": "Bir beceri seçin",
       "skillNoneAvailable": "Kullanılabilir beceri yok. Hesap ayarlarında bir beceri kaynağı bağlayın.",
       "skillMissing": "Bu beceri artık katalogda yok; başka birini seçin.",
-      "skillNeedsPick": "Bir Skill adımı, kaydedebilmeniz için seçilmiş bir beceri gerektirir."
+      "skillNeedsPick": "Bir Skill adımı, kaydedebilmeniz için seçilmiş bir beceri gerektirir.",
+      "purposeStepsConflict": "Bu amaç kod yazmaz ve test çalıştırmaz, ancak işlem hattında hâlâ uygulama veya test adımları var. Bunları kaldırın veya amacı Geliştirme olarak değiştirin."
     },
     "progress": {
       "status": {

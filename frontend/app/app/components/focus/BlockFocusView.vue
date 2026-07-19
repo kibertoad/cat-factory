@@ -28,12 +28,13 @@ const deps = computed(() =>
   (block.value?.dependsOn ?? []).map((id) => board.getBlock(id)).filter((b): b is Block => !!b),
 )
 
-// Hide UI-testing pipelines when this block's frame has no UI to exercise, and `'recurring'`-only
-// pipelines (a manual run of one is refused server-side) — see the backend gate.
+// Hide UI-testing pipelines when this block's frame has no UI to exercise, `'recurring'`-only
+// pipelines (a manual run of one is refused server-side), and — for a `document` task — every
+// non-document pipeline (per the `purpose` classifier) — see the backend gate.
 const runMenu = computed(() => {
   const frame = block.value ? board.serviceOf(block.value) : undefined
   return pipelines.pipelines
-    .filter((p) => pipelineAllowedForManualStart(p, frame, board.blocks))
+    .filter((p) => pipelineAllowedForManualStart(p, frame, board.blocks, block.value?.taskType))
     .map((p) => ({
       label: p.name,
       icon: 'i-lucide-play',

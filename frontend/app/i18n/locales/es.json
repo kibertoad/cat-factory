@@ -3409,6 +3409,15 @@
       "impactThreshold": "impacto ≥",
       "strategy": "Estrategia",
       "rounds": "Rondas",
+      "purposeLabel": "Propósito",
+      "purposePlaceholder": "Seleccionar un propósito",
+      "purposeOption": {
+        "build": "Desarrollo",
+        "document": "Documentación",
+        "review": "Revisión",
+        "research": "Investigación",
+        "planning": "Planificación"
+      },
       "strategyOption": {
         "specialist-panel": "Panel de especialistas",
         "debate": "Debate",
@@ -3462,7 +3471,8 @@
       "skillPlaceholder": "Selecciona una habilidad",
       "skillNoneAvailable": "No hay habilidades disponibles. Vincula una fuente de habilidades en la configuración de la cuenta.",
       "skillMissing": "Esta habilidad ya no está en el catálogo; elige otra.",
-      "skillNeedsPick": "Un paso Skill necesita una habilidad seleccionada antes de poder guardar."
+      "skillNeedsPick": "Un paso Skill necesita una habilidad seleccionada antes de poder guardar.",
+      "purposeStepsConflict": "Este propósito no escribe código ni ejecuta pruebas, pero la canalización todavía tiene pasos de implementación o de prueba. Quítalos o cambia el propósito a Desarrollo."
     },
     "progress": {
       "status": {
