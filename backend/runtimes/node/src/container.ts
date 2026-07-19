@@ -3,7 +3,6 @@ import {
   type AgentKindRegistry,
   defaultAgentKindRegistry,
   defaultInitiativePresetRegistry,
-  LlmFragmentSelector,
   inlineWebSearchOptionsFromEnv,
   resolveAgentConfig,
   isProxyableProvider,
@@ -62,7 +61,6 @@ import {
   type AgentExecutor,
   type Clock,
   type DocumentSourceProvider,
-  type FragmentOwnerKind,
   type EmailSender,
   type DeployCloneTarget,
   type GitHubClient,
@@ -96,6 +94,10 @@ import {
   SearchQueryObservabilityService,
   type CoreDependencies,
   createCore,
+  defaultGateRegistry,
+  defaultStepResolverRegistry,
+  type GateRegistry,
+  type StepResolverRegistry,
   PACKAGE_REGISTRY_CIPHER_INFO,
   resolvePackageRegistriesForDispatch,
   type HarnessCallsRecordInput,
@@ -160,12 +162,14 @@ import {
   resolveWorkspaceCapabilities,
   wrapResolverWithLimiter,
 } from '@cat-factory/server'
-// The built-in polling-gate suite (ci / conflicts / post-release-health + on-call). Importing
-// it registers the gates via the public seam; the facade wires each gate's provider below.
+// The built-in polling-gate suite (ci / conflicts / post-release-health + on-call). The facade
+// installs it into an app-owned `GateRegistry` via `registerBuiltinGates(...)` below, then wires
+// each gate's provider.
 import {
   type GateProviderOverrides,
   applyGateProviders,
   clearGateProviders,
+  registerBuiltinGates,
   wireCiStatusProvider,
   wireMergeabilityProvider,
   wireReleaseHealthProvider,
@@ -238,15 +242,11 @@ import {
   DrizzleEnvironmentRegistryRepository,
 } from './repositories/environments.js'
 import { DrizzleCustomManifestTypeRepository } from './repositories/customManifestType.js'
-import {
-  DrizzleFragmentSourceRepository,
-  DrizzlePromptFragmentRepository,
-} from './repositories/fragments.js'
-import {
-  DrizzleAccountSkillRepository,
-  DrizzleSkillSourceRepository,
-} from './repositories/skills.js'
 import { DrizzleNotificationRepository } from './repositories/notifications.js'
+import {
+  selectNodeFragmentLibraryDeps,
+  selectNodeSkillLibraryDeps,
+} from './container-content-library-deps.js'
 import {
   DrizzleSlackConnectionRepository,
   DrizzleSlackMemberMappingRepository,
@@ -812,6 +812,20 @@ export interface NodeContainerOptions {
    * the conformance suite injects a pre-loaded one to assert the seam is symmetric.
    */
   agentKindRegistry?: AgentKindRegistry
+  /**
+   * The app-owned polling-gate registry. Rides its own option like `agentKindRegistry`; defaults
+   * to a fresh registry with the built-in `@cat-factory/gates` suite installed. Threaded into
+   * `createCore` + re-exposed on Core (so `start()` passes it to `validateRegistrations`); the
+   * conformance suite injects a pre-loaded one (built-ins + a fake custom gate) to assert the seam
+   * is symmetric.
+   */
+  gateRegistry?: GateRegistry
+  /**
+   * The app-owned step-completion-resolver registry (deployment-registered resolvers). Rides its
+   * own option; defaults to an empty registry. Threaded into `createCore`; the conformance suite
+   * injects a pre-loaded one to assert the seam is symmetric.
+   */
+  stepResolverRegistry?: StepResolverRegistry
   /**
    * The app-owned initiative-preset registry (built-in generic / docs-refresh / tech-migration +
    * any a deployment registered by reference). Rides its own option like `agentKindRegistry`;
@@ -1380,6 +1394,14 @@ export function buildNodeContainer(options: NodeContainerOptions): ServerContain
   // are visible) else the built-ins-only default. The SAME instance flows to the executors,
   // createCore and the ServerContainer snapshot projection.
   const agentKindRegistry = options.agentKindRegistry ?? defaultAgentKindRegistry()
+  // The app-owned gate registry: the injected instance (conformance / a deployment pre-loads it),
+  // else a fresh one with the built-in `@cat-factory/gates` suite installed. Flows into createCore
+  // (the engine's gate machine) and is re-exposed on Core so `start()` validates the SAME instance.
+  const gateRegistry = options.gateRegistry ?? defaultGateRegistry()
+  if (!options.gateRegistry) registerBuiltinGates(gateRegistry)
+  // The app-owned step-resolver registry: the injected instance else an empty default (the
+  // built-in `merger` resolver is a privileged engine built-in, not a registry entry).
+  const stepResolverRegistry = options.stepResolverRegistry ?? defaultStepResolverRegistry()
   // The app-owned initiative-preset registry: the injected instance else the built-ins-only
   // default (generic / docs-refresh / tech-migration). Flows into createCore (initiative services
   // + spawned-run preset context) and the ServerContainer snapshot descriptors + preset probe.
@@ -2332,6 +2354,10 @@ export function buildNodeContainer(options: NodeContainerOptions): ServerContain
     // The app-owned agent-kind registry (built-ins + any deployment-registered kinds); the
     // engine reads it (traits / inline-surface / pre-post-op hooks) and re-exposes it on Core.
     agentKindRegistry,
+    // The app-owned gate + step-resolver registries; the engine's gate machine + completion hub
+    // read them, and the gate registry is re-exposed on Core for the boot-time validation.
+    gateRegistry,
+    stepResolverRegistry,
     // The app-owned initiative-preset registry; the initiative services read it and it is
     // re-exposed on Core for the snapshot descriptors + preset probe.
     initiativePresetRegistry,
@@ -3013,78 +3039,5 @@ function selectNodeEnvironmentsDeps(config: AppConfig, db: DrizzleDb): Partial<C
     ...(config.environments.detectionConventions
       ? { detectionConventions: config.environments.detectionConventions }
       : {}),
-  }
-}
-
-/**
- * Wire the prompt-fragment library (ADR 0006) for the Node facade when opted in,
- * mirroring the Worker's `selectFragmentLibraryDeps`: the two Drizzle repositories,
- * the installation resolver repo-source sync uses to read guideline repos through the
- * tier's GitHub installation, and — in `llm` selector mode — the shared
- * `LlmFragmentSelector` over the Node model provider (else the core deterministic
- * matcher, via `fragmentSelector: undefined`). Disabled → `{}` and the module stays
- * unassembled (the engine falls back to the static built-in catalog).
- */
-function selectNodeFragmentLibraryDeps(
-  config: AppConfig,
-  env: NodeJS.ProcessEnv,
-  db: DrizzleDb,
-  githubClient: GitHubClient | undefined,
-  installations: GitHubInstallationRepository,
-  modelProviderResolver: ModelProviderResolver,
-): Partial<CoreDependencies> {
-  if (!config.fragmentLibrary.enabled) return {}
-  const resolveFragmentInstallationId = async (
-    ownerKind: FragmentOwnerKind,
-    ownerId: string,
-  ): Promise<number | null> => {
-    if (ownerKind === 'workspace') {
-      return (await installations.getByWorkspace(ownerId))?.installationId ?? null
-    }
-    const active = await installations.listActive()
-    return active.find((i) => i.accountId === ownerId)?.installationId ?? null
-  }
-  return {
-    promptFragmentRepository: new DrizzlePromptFragmentRepository(db),
-    fragmentSourceRepository: new DrizzleFragmentSourceRepository(db),
-    // Repo-sourced fragments read guideline files through the workspace's App
-    // installation; only wired when a real GitHub client is available (parity with
-    // the Worker — hand-authored fragments work without it).
-    ...(githubClient ? { githubClient, resolveFragmentInstallationId } : {}),
-    ...(config.fragmentLibrary.selector === 'llm'
-      ? {
-          fragmentSelector: new LlmFragmentSelector({
-            modelProviderResolver,
-            modelRef: config.agents.routing.default.ref,
-          }),
-        }
-      : {}),
-  }
-}
-
-/**
- * Wire the repo-sourced Claude Skills library (docs/initiatives/repo-skills.md) for
- * the Node facade when opted in, mirroring the Worker's `selectSkillLibraryDeps`: the
- * two Drizzle repositories and the account-only installation resolver the repo-source
- * sync uses. Gated on the same `fragmentLibrary.enabled` flag (both are the repo-sourced
- * prompt library). Disabled → `{}` and the module stays unassembled.
- */
-function selectNodeSkillLibraryDeps(
-  config: AppConfig,
-  db: DrizzleDb,
-  githubClient: GitHubClient | undefined,
-  installations: GitHubInstallationRepository,
-): Partial<CoreDependencies> {
-  if (!config.fragmentLibrary.enabled) return {}
-  const resolveSkillInstallationId = async (accountId: string): Promise<number | null> => {
-    const active = await installations.listActive()
-    return active.find((i) => i.accountId === accountId)?.installationId ?? null
-  }
-  return {
-    accountSkillRepository: new DrizzleAccountSkillRepository(db),
-    skillSourceRepository: new DrizzleSkillSourceRepository(db),
-    // Repo-sourced skills read through the account's App installation; the source sync
-    // is only wired when a real GitHub client is available (parity with the Worker).
-    ...(githubClient ? { githubClient, resolveSkillInstallationId } : {}),
   }
 }

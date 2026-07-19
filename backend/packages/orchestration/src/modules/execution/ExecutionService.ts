@@ -31,7 +31,12 @@ import {
   isCompanionKind,
 } from '@cat-factory/agents'
 import type { AgentKindRegistry } from '@cat-factory/agents'
-import type { InitiativePresetRegistry, RunInitiatorScope } from '@cat-factory/kernel'
+import type {
+  GateRegistry,
+  InitiativePresetRegistry,
+  RunInitiatorScope,
+  StepResolverRegistry,
+} from '@cat-factory/kernel'
 import { assertPipelineLaunchable, type RunOrigin } from '../pipelines/pipelineShape.js'
 import { shouldRunGatedStep } from './stepGating.logic.js'
 import {
@@ -173,6 +178,17 @@ export interface ExecutionServiceDependencies {
    * `defaultAgentKindRegistry()` when a facade doesn't inject the shared instance.
    */
   agentKindRegistry: AgentKindRegistry
+  /**
+   * The app-owned polling-gate registry (the built-in `@cat-factory/gates` suite installed by
+   * the facade + any deployment-registered gates), threaded to the dispatcher's gate machine.
+   * `createCore` defaults it to `defaultGateRegistry()` (empty) when a facade doesn't inject one.
+   */
+  gateRegistry: GateRegistry
+  /**
+   * The app-owned step-completion-resolver registry (deployment-registered resolvers),
+   * threaded to the dispatcher. `createCore` defaults it to `defaultStepResolverRegistry()`.
+   */
+  stepResolverRegistry: StepResolverRegistry
   /**
    * The app-owned initiative-preset registry, threaded into the context builder so a spawned /
    * planning run resolves its preset steering. `createCore` defaults it to
@@ -653,6 +669,8 @@ export class ExecutionService {
     runInitiatorScope,
     pokeInitiativeLoop,
     agentKindRegistry,
+    gateRegistry,
+    stepResolverRegistry,
     initiativePresetRegistry,
   }: ExecutionServiceDependencies) {
     // Forward-only: the run-initiator scope is consumed solely by RunDispatcher (below), so it
@@ -918,6 +936,8 @@ export class ExecutionService {
       executionRepository,
       agentExecutor,
       agentKindRegistry,
+      gateRegistry,
+      stepResolverRegistry,
       workRunner,
       events: executionEventPublisher,
       idGenerator,

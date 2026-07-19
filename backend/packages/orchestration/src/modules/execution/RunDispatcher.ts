@@ -24,6 +24,8 @@ import type {
   ResolvePrReviewInput,
   GateContext,
   GateDefinition,
+  GateRegistry,
+  StepResolverRegistry,
   GateHelperJobResult,
   IdGenerator,
   IssueWritebackProvider,
@@ -56,8 +58,6 @@ import {
   NotFoundError,
   parseLocalModelId,
   recordGateAttempt,
-  registeredGateFactories,
-  registeredStepResolverFactories,
   requireProvider,
   RunContendedError,
   sameSubtasks,
@@ -211,6 +211,10 @@ export interface RunDispatcherDeps {
   agentExecutor: AgentExecutor
   /** App-owned agent-kind registry: a registered kind's step spec + pre/post-op hooks. */
   agentKindRegistry: AgentKindRegistry
+  /** App-owned polling-gate registry (built-ins installed by the facade via `registerBuiltinGates`). */
+  gateRegistry: GateRegistry
+  /** App-owned step-completion-resolver registry (deployment-registered resolvers). */
+  stepResolverRegistry: StepResolverRegistry
   workRunner: WorkRunner
   events: ExecutionEventPublisher
   idGenerator: IdGenerator
@@ -280,6 +284,8 @@ export class RunDispatcher {
   private readonly executionRepository: ExecutionRepository
   private readonly agentExecutor: AgentExecutor
   private readonly agentKindRegistry: AgentKindRegistry
+  private readonly gateRegistry: GateRegistry
+  private readonly stepResolverRegistry: StepResolverRegistry
   private readonly workRunner: WorkRunner
   private readonly events: ExecutionEventPublisher
   private readonly idGenerator: IdGenerator
@@ -352,6 +358,8 @@ export class RunDispatcher {
     this.executionRepository = deps.executionRepository
     this.agentExecutor = deps.agentExecutor
     this.agentKindRegistry = deps.agentKindRegistry
+    this.gateRegistry = deps.gateRegistry
+    this.stepResolverRegistry = deps.stepResolverRegistry
     this.workRunner = deps.workRunner
     this.events = deps.events
     this.idGenerator = deps.idGenerator
@@ -2545,8 +2553,11 @@ export class RunDispatcher {
     const map = new Map(resolvers.map((r) => [r.kind, r]))
     // Merge deployment-registered resolvers, mirroring the gate registry below. A
     // registered resolver of the same kind replaces the built-in (last registration wins).
+    // The registry is the app-owned instance injected through `CoreDependencies`, not a
+    // module global.
     const ctx = this.makeResolverContext()
-    for (const { kind, factory } of registeredStepResolverFactories()) map.set(kind, factory(ctx))
+    for (const { kind, factory } of this.stepResolverRegistry.factories())
+      map.set(kind, factory(ctx))
     return map
   }
 
@@ -2557,14 +2568,14 @@ export class RunDispatcher {
 
   private buildGateRegistry(): Map<string, GateDefinition> {
     // The built-in gate suite (ci / conflicts / post-release-health) is no longer inline:
-    // it ships as `@cat-factory/gates`, registered through the SAME public `registerGate`
-    // seam any deployment uses (the dogfood — if the platform's own gates can be authored
-    // as an external package, so can anyone's). The engine merely builds whatever gates were
-    // registered at startup. A facade that forgot to `import '@cat-factory/gates'` then has
-    // no gates and those steps fail — which the cross-runtime conformance suite catches.
+    // it ships as `@cat-factory/gates`, installed into the app-owned `GateRegistry` the
+    // facade threads through `CoreDependencies` (the dogfood — the platform's own gates
+    // register through the SAME public seam as anyone's). The engine merely builds whatever
+    // gates the facade registered. A facade that forgot to call `registerBuiltinGates(...)`
+    // then has no gates and those steps fail — which the cross-runtime conformance suite catches.
     const map = new Map<string, GateDefinition>()
     const ctx = this.makeGateContext()
-    for (const { kind, factory } of registeredGateFactories()) map.set(kind, factory(ctx))
+    for (const { kind, factory } of this.gateRegistry.factories()) map.set(kind, factory(ctx))
     return map
   }
 

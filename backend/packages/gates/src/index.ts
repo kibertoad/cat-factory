@@ -2,9 +2,9 @@ import {
   CI_AGENT_KIND,
   CONFLICTS_AGENT_KIND,
   DOC_QUALITY_AGENT_KIND,
+  type GateRegistry,
   HUMAN_REVIEW_AGENT_KIND,
   POST_RELEASE_HEALTH_AGENT_KIND,
-  registerGate,
 } from '@cat-factory/kernel'
 import {
   ciGate,
@@ -22,16 +22,20 @@ import {
 // deployment's. The engine no longer hard-codes them; it merges whatever gates are
 // registered when its ExecutionService first builds its gate registry.
 //
-// A deployment opts in by importing this package once for its side effect, then wiring each
-// gate's provider at startup:
+// A deployment opts in by installing the built-in gates into its app-owned gate registry,
+// then wiring each gate's provider at startup:
 //
-//   import '@cat-factory/gates'
+//   const gates = defaultGateRegistry()
+//   registerBuiltinGates(gates)                  // installs ci / conflicts / … into the instance
 //   wireCiStatusProvider(new GitHubCiStatusProvider(...))
 //   wireMergeabilityProvider(new GitHubMergeabilityProvider(...))
 //   wireReleaseHealthProvider(new RegistryReleaseHealthProvider(...))
 //   wireIncidentEnrichment(new CompositeIncidentEnrichmentProvider(...))
+//   // …then thread `gates` through `CoreDependencies.gateRegistry`.
 //
-// Until a gate's provider is wired it is a harmless pass-through, so a bare import is safe.
+// Until a gate's provider is wired it is a harmless pass-through. The registry is an
+// app-owned INSTANCE (`GateRegistry`), not a module global — so registering the built-ins is
+// an explicit call the composition root makes, not an import side effect.
 // ---------------------------------------------------------------------------
 
 export {
@@ -71,17 +75,15 @@ export {
 } from './review.logic.js'
 
 /**
- * Register the built-in gate suite. Idempotent (the registry replaces by kind), so importing
- * the package and calling this explicitly are safe to combine. Called automatically as an
- * import side effect below.
+ * Install the built-in gate suite into an app-owned {@link GateRegistry}. The composition
+ * root calls this once with the instance it threads through `CoreDependencies.gateRegistry`.
+ * Idempotent (the registry replaces by kind), so a deployment can call it then override a
+ * built-in by re-registering the same kind.
  */
-export function registerBuiltinGates(): void {
-  registerGate(CI_AGENT_KIND, ciGate)
-  registerGate(CONFLICTS_AGENT_KIND, conflictsGate)
-  registerGate(POST_RELEASE_HEALTH_AGENT_KIND, postReleaseHealthGate)
-  registerGate(HUMAN_REVIEW_AGENT_KIND, humanReviewGate)
-  registerGate(DOC_QUALITY_AGENT_KIND, docQualityGate)
+export function registerBuiltinGates(registry: GateRegistry): void {
+  registry.register(CI_AGENT_KIND, ciGate)
+  registry.register(CONFLICTS_AGENT_KIND, conflictsGate)
+  registry.register(POST_RELEASE_HEALTH_AGENT_KIND, postReleaseHealthGate)
+  registry.register(HUMAN_REVIEW_AGENT_KIND, humanReviewGate)
+  registry.register(DOC_QUALITY_AGENT_KIND, docQualityGate)
 }
-
-// Side-effect registration: `import '@cat-factory/gates'` is enough.
-registerBuiltinGates()

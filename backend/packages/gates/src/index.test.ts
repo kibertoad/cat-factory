@@ -1,8 +1,7 @@
 import {
-  clearRegisteredGates,
+  defaultGateRegistry,
   defineProviderToken,
   isProviderWired,
-  registeredGateFactories,
   requireProvider,
   stubGateContext,
   wireProvider,
@@ -68,10 +67,11 @@ describe('typed provider registry (the gate wiring seam)', () => {
 })
 
 describe('@cat-factory/gates registration', () => {
-  it('registers ci / conflicts / doc-quality / post-release-health / human-review through the public registry', () => {
-    clearRegisteredGates()
-    registerBuiltinGates()
-    const kinds = registeredGateFactories()
+  it('installs ci / conflicts / doc-quality / post-release-health / human-review into an app-owned registry', () => {
+    const registry = defaultGateRegistry()
+    registerBuiltinGates(registry)
+    const kinds = registry
+      .factories()
       .map((g) => g.kind)
       .sort()
     expect(kinds).toEqual(['ci', 'conflicts', 'doc-quality', 'human-review', 'post-release-health'])

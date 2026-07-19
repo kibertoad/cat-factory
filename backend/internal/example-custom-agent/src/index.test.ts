@@ -1,13 +1,17 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { type AgentKindRegistry, defaultAgentKindRegistry } from '@cat-factory/agents'
-import type { CommitFilesInput, GateStepState, RepoFiles } from '@cat-factory/kernel'
+import type {
+  CommitFilesInput,
+  GateRegistry,
+  GateStepState,
+  RepoFiles,
+  StepResolverRegistry,
+} from '@cat-factory/kernel'
 import {
   InitiativePresetRegistry,
-  clearRegisteredGates,
   clearRegisteredPipelines,
-  clearRegisteredStepResolvers,
-  registeredGateFactories,
-  registeredStepResolverFactories,
+  defaultGateRegistry,
+  defaultStepResolverRegistry,
   seedPipelines,
   stubGateContext,
   stubResolverContext,
@@ -32,23 +36,28 @@ import {
   wireLicenseProvider,
 } from './index.js'
 
-// Agent kinds + initiative presets live on app-owned registries (a fresh instance per test — no
-// global to clear). The pipeline/gate/step-resolver registries are still module-global, so clear
-// those for isolation and re-register before each test.
+// Agent kinds + initiative presets + gates + step resolvers live on app-owned registries (a fresh
+// instance per test — no global to clear). The PIPELINE registry is still module-global, so clear
+// it for isolation and re-register before each test.
 let registry: AgentKindRegistry
 let initiativePresetRegistry: InitiativePresetRegistry
+let gateRegistry: GateRegistry
+let stepResolverRegistry: StepResolverRegistry
 beforeEach(() => {
   clearRegisteredPipelines()
-  clearRegisteredGates()
-  clearRegisteredStepResolvers()
   registry = defaultAgentKindRegistry()
   initiativePresetRegistry = new InitiativePresetRegistry()
-  registerExampleCustomAgents(registry, initiativePresetRegistry)
+  gateRegistry = defaultGateRegistry()
+  stepResolverRegistry = defaultStepResolverRegistry()
+  registerExampleCustomAgents(
+    registry,
+    initiativePresetRegistry,
+    gateRegistry,
+    stepResolverRegistry,
+  )
 })
 afterEach(() => {
   clearRegisteredPipelines()
-  clearRegisteredGates()
-  clearRegisteredStepResolvers()
   // The license provider is a module-level handle; clear it so a wired test can't leak.
   wireLicenseProvider(undefined)
 })
@@ -80,7 +89,7 @@ describe('example custom agents', () => {
   })
 
   it('registers the license-check gate, escalating to the license-fixer helper kind', () => {
-    const registered = registeredGateFactories()
+    const registered = gateRegistry.factories()
     expect(registered.map((g) => g.kind)).toContain(LICENSE_CHECK_KIND)
     // The helper is itself a registered agent kind (a container-coding fixer).
     expect(registry.agentStep(LICENSE_FIXER_KIND)?.surface).toBe('container-coding')
@@ -98,7 +107,8 @@ describe('example custom agents', () => {
     // is the only coverage of the seam a deployment actually copies.
     const check = vi.fn(async () => ({ clean: true, headSha: 'sha-1', summary: 'all good' }))
     wireLicenseProvider({ check })
-    const gate = registeredGateFactories()
+    const gate = gateRegistry
+      .factories()
       .find((g) => g.kind === LICENSE_CHECK_KIND)!
       .factory(stubGateContext())
 
@@ -118,7 +128,7 @@ describe('example custom agents', () => {
   })
 
   it('registers a step resolver that summarises the security auditor’s output', async () => {
-    const registered = registeredStepResolverFactories()
+    const registered = stepResolverRegistry.factories()
     expect(registered.map((r) => r.kind)).toContain(SECURITY_AUDITOR_KIND)
     const resolver = registered
       .find((r) => r.kind === SECURITY_AUDITOR_KIND)!
@@ -306,7 +316,8 @@ describe('example org research-and-apply preset', () => {
   })
 
   it('registers a verdict resolver that folds the verdict into the step output', async () => {
-    const resolver = registeredStepResolverFactories()
+    const resolver = stepResolverRegistry
+      .factories()
       .find((r) => r.kind === ORG_RESEARCH_KIND)!
       .factory(stubResolverContext())
     const resolution = await resolver.resolve({

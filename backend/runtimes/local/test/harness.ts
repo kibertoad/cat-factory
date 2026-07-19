@@ -171,6 +171,8 @@ export function makeConformanceApp(
     resolveDeployCloneTarget?: CoreDependencies['resolveDeployCloneTarget']
     backendRegistries?: BackendRegistries
     agentKindRegistry?: AgentKindRegistry
+    gateRegistry?: CoreDependencies['gateRegistry']
+    stepResolverRegistry?: CoreDependencies['stepResolverRegistry']
     initiativePresetRegistry?: CoreDependencies['initiativePresetRegistry']
     testerQualityReviewer?: CoreDependencies['testerQualityReviewer']
     taskSourceProviders?: CoreDependencies['taskSourceProviders']
@@ -279,6 +281,8 @@ export function makeConformanceApp(
     // suite) so buildLocalContainer forwards it into buildNodeContainer — the SAME instance the
     // fake executor above got.
     ...(opts?.agentKindRegistry ? { agentKindRegistry: opts.agentKindRegistry } : {}),
+    ...(opts?.gateRegistry ? { gateRegistry: opts.gateRegistry } : {}),
+    ...(opts?.stepResolverRegistry ? { stepResolverRegistry: opts.stepResolverRegistry } : {}),
     // Inject the app-owned initiative-preset registry (pre-loaded with a custom preset in the
     // custom-preset suite) so buildLocalContainer forwards it into buildNodeContainer.
     ...(opts?.initiativePresetRegistry

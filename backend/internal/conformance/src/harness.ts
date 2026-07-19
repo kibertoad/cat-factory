@@ -16,7 +16,9 @@ import type {
   ExecutionEventPublisher,
   ExecutionInstance,
   ExecutionRepository,
+  GateRegistry,
   InitiativePresetRegistry,
+  StepResolverRegistry,
   InitiativeRepository,
   LlmCallActivity,
   NotificationRepository,
@@ -472,6 +474,21 @@ export interface ConformanceAppOptions {
    * {@link FakeAgentExecutor}. Absent → the facade's default built-ins-only registry.
    */
   agentKindRegistry?: AgentKindRegistry
+  /**
+   * Inject the app-owned polling-gate registry, pre-loaded (built-in `@cat-factory/gates` suite +
+   * a CUSTOM `license-check` gate), so the suite can assert a deployment-registered gate resolves +
+   * drives identically on EVERY runtime — replacing the old module-global `registerGate`. Each
+   * facade harness threads the SAME instance into its container build. Absent → the facade's default
+   * (built-ins-only) gate registry.
+   */
+  gateRegistry?: GateRegistry
+  /**
+   * Inject the app-owned step-completion-resolver registry, pre-loaded with a CUSTOM resolver, so
+   * the suite can assert a deployment-registered resolver runs identically on EVERY runtime —
+   * replacing the old module-global `registerStepResolver`. Each facade harness threads the SAME
+   * instance into its container build. Absent → the facade's default (empty) resolver registry.
+   */
+  stepResolverRegistry?: StepResolverRegistry
   /**
    * Inject the app-owned initiative-preset registry, pre-loaded with a CUSTOM preset, so the suite
    * can assert a deployment-registered preset resolves identically on EVERY runtime (its snapshot

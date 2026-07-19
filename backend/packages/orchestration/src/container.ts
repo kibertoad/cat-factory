@@ -237,7 +237,16 @@ import {
   SkillRunResolver,
   type ResolveSkillInstallationId,
 } from '@cat-factory/agents'
-import type { InitiativePresetRegistry } from '@cat-factory/kernel'
+import {
+  createFragmentLibraryModule,
+  createSkillLibraryModule,
+} from './container-content-libraries.js'
+import type {
+  GateRegistry,
+  InitiativePresetRegistry,
+  StepResolverRegistry,
+} from '@cat-factory/kernel'
+import { defaultGateRegistry, defaultStepResolverRegistry } from '@cat-factory/kernel'
 
 // Composition root for the domain layer. The worker's infrastructure builds the
 // concrete ports (D1 repositories, crypto id/rng, the AI agent executor) and
@@ -305,6 +314,23 @@ export interface CoreDependencies {
    * re-exposed on {@link Core} for the HTTP layer's snapshot projection.
    */
   agentKindRegistry?: AgentKindRegistry
+  /**
+   * The app-owned polling-gate registry. Optional + defaulted to `defaultGateRegistry()`
+   * (EMPTY — the built-in `@cat-factory/gates` suite lives in that package, so the facade
+   * installs it via `registerBuiltinGates(gateRegistry)` before injecting the SAME instance
+   * here). A deployment registers custom gates by reference on that instance. Read by the
+   * engine's gate machine (see {@link ExecutionService}); a facade that injects it also passes
+   * the same instance to `validateRegistrations`. Existing construction sites (tests /
+   * harnesses) that omit it get a bare registry, so gate steps pass through.
+   */
+  gateRegistry?: GateRegistry
+  /**
+   * The app-owned step-completion-resolver registry (deployment-registered resolvers).
+   * Optional + defaulted to `defaultStepResolverRegistry()` (EMPTY — the built-in `merger`
+   * resolver is a privileged engine built-in, not a registry entry). Each facade injects the
+   * SAME instance it registers custom resolvers on. Read by the engine's completion hub.
+   */
+  stepResolverRegistry?: StepResolverRegistry
   /**
    * The app-owned initiative-preset registry (built-in generic / docs-refresh / tech-migration
    * plus any a deployment registered by reference). Optional + defaulted to
@@ -1225,6 +1251,12 @@ export interface Core {
    * projection reads the SAME instance the engine + executors use.
    */
   agentKindRegistry: AgentKindRegistry
+  /**
+   * The app-owned polling-gate registry the engine resolved (the facade's injected instance,
+   * with the built-in `@cat-factory/gates` suite installed, else the empty default). Re-exposed
+   * so the facade passes the SAME instance to `validateRegistrations` at boot.
+   */
+  gateRegistry: GateRegistry
   /**
    * The app-owned initiative-preset registry the engine resolved (the facade's injected instance,
    * else the built-ins-only default). Re-exposed so the HTTP layer's workspace-snapshot descriptors
@@ -2183,108 +2215,6 @@ function createClarityModule(
 }
 
 /**
- * Assemble the prompt-fragment library when its fragment repository is present.
- * The library service (CRUD + the per-run catalog resolver) always assembles;
- * the repo-source service additionally needs the GitHub client, the source
- * repository and an installation resolver. The selector is optional — absent it
- * falls back to deterministic matching. Returns undefined so the feature stays
- * cleanly opt-in (the engine then uses the block's manual fragmentIds).
- */
-function createFragmentLibraryModule(
-  deps: CoreDependencies,
-  documentContentResolver: DocumentContentResolver | undefined,
-  caches: AppCaches,
-): FragmentLibraryModule | undefined {
-  const { promptFragmentRepository } = deps
-  if (!promptFragmentRepository) return undefined
-
-  const libraryService = new FragmentLibraryService({
-    promptFragmentRepository,
-    workspaceRepository: deps.workspaceRepository,
-    clock: deps.clock,
-    selector: deps.fragmentSelector,
-    // An explicitly-injected resolver (tests/conformance) wins; otherwise use the
-    // one the document-source module built from this deployment's providers.
-    documentContentResolver: deps.documentContentResolver ?? documentContentResolver,
-    catalogCache: caches.fragmentCatalog,
-    documentBodyCache: caches.fragmentDocumentBody,
-  })
-
-  const sourceService =
-    deps.fragmentSourceRepository && deps.githubClient && deps.resolveFragmentInstallationId
-      ? new FragmentSourceService({
-          fragmentSourceRepository: deps.fragmentSourceRepository,
-          promptFragmentRepository,
-          githubClient: deps.githubClient,
-          resolveInstallationId: deps.resolveFragmentInstallationId,
-          idGenerator: deps.idGenerator,
-          clock: deps.clock,
-          // A sync/unlink mutates the same catalog the library caches — route its
-          // invalidation through the library so the eviction policy stays in one place.
-          invalidateCatalog: (ownerKind, ownerId) =>
-            libraryService.invalidateCatalogTier(ownerKind, ownerId),
-        })
-      : undefined
-
-  return { libraryService, sourceService }
-}
-
-/**
- * Assemble the repo-sourced Claude Skills library when its skill repository is
- * present (docs/initiatives/repo-skills.md). The catalog read always assembles; the
- * repo-source sync additionally needs the GitHub client, the source repository and an
- * installation resolver. Returns undefined so the feature stays cleanly opt-in.
- */
-function createSkillLibraryModule(
-  deps: CoreDependencies,
-  caches: AppCaches,
-): SkillLibraryModule | undefined {
-  const { accountSkillRepository } = deps
-  if (!accountSkillRepository) return undefined
-
-  const catalogService = new SkillCatalogService({
-    accountSkillRepository,
-    catalogCache: caches.skillCatalog,
-  })
-
-  const sourceService =
-    deps.skillSourceRepository && deps.githubClient && deps.resolveSkillInstallationId
-      ? new SkillSourceService({
-          skillSourceRepository: deps.skillSourceRepository,
-          accountSkillRepository,
-          githubClient: deps.githubClient,
-          resolveInstallationId: deps.resolveSkillInstallationId,
-          idGenerator: deps.idGenerator,
-          clock: deps.clock,
-          // A sync/unlink mutates the same catalog the read caches — route its
-          // invalidation through the catalog service so the eviction policy stays in one place.
-          invalidateCatalog: (accountId) => catalogService.invalidate(accountId),
-        })
-      : undefined
-
-  // The run-path resolver needs the source repo (for the resource repo owner/name) + the GitHub
-  // client + an installation resolver to fetch resource bodies at the pinned commit — the same
-  // prerequisites as the sync service, so it assembles under the same guard. It also drives the
-  // dispatch-time freshness probe (slice 4) through the sync service, which is built under the
-  // identical guard, so it's always present here.
-  const runResolver =
-    deps.skillSourceRepository && deps.githubClient && deps.resolveSkillInstallationId
-      ? new SkillRunResolver({
-          workspaceRepository: deps.workspaceRepository,
-          catalogService,
-          skillSourceRepository: deps.skillSourceRepository,
-          githubClient: deps.githubClient,
-          resolveInstallationId: deps.resolveSkillInstallationId,
-          syncSource: sourceService
-            ? (accountId, sourceId) => sourceService.sync(accountId, sourceId)
-            : undefined,
-        })
-      : undefined
-
-  return { catalogService, sourceService, runResolver }
-}
-
-/**
  * Assemble the notifications module when its repository is present (the worker
  * wires it unconditionally). The delivery channel is optional within the module —
  * without it the rows still persist (the inbox + snapshot work) but nothing is
@@ -2627,6 +2557,11 @@ export function createCore(dependencies: CoreDependencies): Core {
   // deployment's custom kinds are visible) else a fresh built-ins-only registry. The SAME
   // instance is threaded into the engine and re-exposed on `Core` for the HTTP snapshot.
   const agentKindRegistry = dependencies.agentKindRegistry ?? defaultAgentKindRegistry()
+  // Resolve the app-owned gate + step-resolver registries ONCE (same reasoning): the facade's
+  // injected instances (so the built-in gates + a deployment's custom gates/resolvers are
+  // visible), else fresh empty registries so gate steps pass through in bare test builds.
+  const gateRegistry = dependencies.gateRegistry ?? defaultGateRegistry()
+  const stepResolverRegistry = dependencies.stepResolverRegistry ?? defaultStepResolverRegistry()
   // Resolve the app-owned initiative-preset registry ONCE (same reasoning as the agent-kind one):
   // the facade's injected instance, else a fresh registry preloaded with the built-in presets.
   const initiativePresetRegistry =
@@ -2908,6 +2843,8 @@ export function createCore(dependencies: CoreDependencies): Core {
   const executionService = new ExecutionService({
     ...dependencies,
     agentKindRegistry,
+    gateRegistry,
+    stepResolverRegistry,
     initiativePresetRegistry,
     workRunner,
     executionEventPublisher,
@@ -3032,6 +2969,7 @@ export function createCore(dependencies: CoreDependencies): Core {
     executionService,
     spendService,
     agentKindRegistry,
+    gateRegistry,
     initiativePresetRegistry,
     executionEventPublisher,
     ...(llmObservability ? { llmObservability } : {}),
