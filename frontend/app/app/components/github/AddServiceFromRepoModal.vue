@@ -505,7 +505,11 @@ function done() {
               <UIcon name="i-lucide-check" class="h-3.5 w-3.5" />
               {{ t('github.addService.addedConfigure', { title: configuredBlock.title }) }}
             </div>
+            <!-- Test infrastructure only applies to a runnable frame — a `document`
+                 repo stands up no test environment, so skip it (parity with the
+                 inspector, which hides the same panel for a document frame). -->
             <ServiceTestConfig
+              v-if="configuredBlock.type !== 'document'"
               :block="configuredBlock"
               :repo="{ githubId: selectedRepoId! }"
               default-open

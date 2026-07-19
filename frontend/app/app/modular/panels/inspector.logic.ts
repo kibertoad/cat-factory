@@ -75,6 +75,14 @@ const isTask = (b: Block) => b.level === 'task'
 const isFrame = (b: Block) => b.level === 'frame'
 /** frame OR module — the "container" panels. */
 const isContainer = (b: Block) => b.level === 'frame' || b.level === 'module'
+/**
+ * A frame that gets built, tested and deployed as a running thing — i.e. every frame
+ * EXCEPT a `document` repo. A document repo (`FrameRepoType` `document`) only runs
+ * doc/spike tasks + doc pipelines: it stands up no test environment, holds no test
+ * credentials and never ships a release to watch, so the test-infrastructure /
+ * test-credentials / post-release-health panels don't apply to it and are hidden.
+ */
+const isDeployableFrame = (b: Block) => isFrame(b) && b.type !== 'document'
 
 /**
  * The built-in panel specs. The `when` predicates and orders reproduce
@@ -83,7 +91,9 @@ const isContainer = (b: Block) => b.level === 'frame' || b.level === 'module'
  *  - task body: context docs/issues, then schedule → execution → estimate →
  *    dependencies → run-settings → agent-config → structure.
  *  - service/module body: container summary (frame|module), then the frame-only
- *    panels, with frontend-config / service-connections further gated on `type`.
+ *    panels, with frontend-config / service-connections further gated on `type`,
+ *    and the test-infrastructure / test-credentials / post-release-health panels
+ *    hidden for a `document` frame (a doc repo has no test env / release to config).
  *  - epic / initiative bodies: their single inspector.
  *
  * The frame-only "view requirements" button and the cross-cutting run banners
@@ -104,10 +114,10 @@ export const INSPECTOR_PANEL_SPECS: readonly InspectorPanelSpec[] = [
   { id: 'container-summary', order: 110, when: isContainer },
   { id: 'frontend-config', order: 120, when: (b) => isFrame(b) && b.type === 'frontend' },
   { id: 'service-connections', order: 130, when: (b) => isFrame(b) && b.type === 'service' },
-  { id: 'service-test-config', order: 140, when: isFrame },
-  { id: 'service-test-secrets', order: 150, when: isFrame },
+  { id: 'service-test-config', order: 140, when: isDeployableFrame },
+  { id: 'service-test-secrets', order: 150, when: isDeployableFrame },
   { id: 'service-fragments', order: 160, when: isFrame },
-  { id: 'service-release-health', order: 170, when: isFrame },
+  { id: 'service-release-health', order: 170, when: isDeployableFrame },
   { id: 'epic-children', order: 200, when: (b) => b.level === 'epic' },
   { id: 'initiative-inspector', order: 210, when: (b) => b.level === 'initiative' },
 ]
