@@ -42,17 +42,19 @@ test.describe('result-window shell (merger)', () => {
     // The run drives through the merger and settles at `pr_ready` (pushed live).
     await expect(card).toHaveAttribute('data-status', 'pr_ready', { timeout: RUN_TERMINAL_TIMEOUT })
 
-    // Open the task inspector and locate the completed merger step in its run panel.
+    // Clicking the task card opens the full-screen focus view (`ui.focus`), which lists the
+    // run's steps (`PipelineProgress`). Clicking the completed merger step there routes to its
+    // dedicated result window (`dispatchStepView`) — rendered in the shell, teleported above
+    // the focus view.
     await card.click()
-    const mergerStep = page.locator('[data-testid="run-step"][data-step-kind="merger"]')
+    const mergerStep = page.locator('[data-testid="pipeline-step"][data-step-kind="merger"]')
     await expect(mergerStep).toBeVisible({ timeout: LIVE_TIMEOUT })
 
     const dialog = page.getByTestId('result-window')
     const backdrop = page.getByTestId('result-window-backdrop')
 
-    // Clicking the merger step routes to its dedicated result window — rendered in the shell.
     async function openWindow(): Promise<void> {
-      await mergerStep.locator('button').first().click()
+      await mergerStep.click()
       await expect(dialog).toBeVisible()
       // The shell hosts the merger verdict body (the decision banner) — proves the window's
       // own content renders inside the shared chrome, not just an empty shell.
@@ -64,15 +66,16 @@ test.describe('result-window shell (merger)', () => {
     await dialog.getByTestId('result-window-close').click()
     await expect(dialog).toBeHidden()
 
-    // 2) Escape — now owned by the shell's `useModalBehavior` (the shared overlay stack), not
-    //    the window's old per-window listener. This is the behaviour slice 5 centralised.
-    await openWindow()
-    await page.keyboard.press('Escape')
-    await expect(dialog).toBeHidden()
-
-    // 3) A click on the backdrop itself (top-left corner, outside the centered panel).
+    // 2) A click on the backdrop itself (top-left corner, outside the centered panel).
     await openWindow()
     await backdrop.click({ position: { x: 5, y: 5 } })
+    await expect(dialog).toBeHidden()
+
+    // 3) Escape — now owned by the shell's `useModalBehavior` (the shared overlay stack), not
+    //    the window's old per-window listener. This is the behaviour slice 5 centralised. Done
+    //    LAST: the focus view underneath also closes on Escape, so this can't strand a reopen.
+    await openWindow()
+    await page.keyboard.press('Escape')
     await expect(dialog).toBeHidden()
   })
 })
