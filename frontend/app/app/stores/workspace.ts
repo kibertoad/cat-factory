@@ -35,6 +35,7 @@ import { useGitHubStore } from '~/stores/github'
 import { useFragmentsStore } from '~/stores/fragments'
 import { useProviderConnectionsStore } from '~/stores/providerConnections'
 import { markBoot } from '~/utils/bootMarks'
+import { retryWhileBackendUnreachable } from '~/utils/backendReady'
 
 /**
  * Owns the active workspace and bootstraps the app against the backend. On load
@@ -207,7 +208,10 @@ export const useWorkspaceStore = defineStore(
           useAccountsStore()
             .load()
             .catch(() => {}),
-          api.listWorkspaces(),
+          // Retry a not-listening-yet backend (cold-start race) before surfacing the
+          // unreachable screen. This gates the rest of init, so once it resolves the
+          // backend is up and the speculative/follow-up snapshot fetches succeed too.
+          retryWhileBackendUnreachable(() => api.listWorkspaces()),
         ])
         markBoot('workspaces-listed')
         workspaces.value = workspaceList

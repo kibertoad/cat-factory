@@ -300,6 +300,8 @@ const ITEM_ICON: Record<string, string> = {
         >
           <div
             class="group flex cursor-pointer items-center gap-2"
+            data-testid="pipeline-step"
+            :data-step-kind="s.agentKind"
             :title="
               s.output
                 ? t('pipeline.progress.viewDetailsOutput')
