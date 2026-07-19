@@ -32,7 +32,7 @@
   },
   "dependencies": {
     "@cat-factory/contracts": "workspace:*",
-    "ai": "^6.0.224"
+    "ai": "^6.0.230"
   },
   "devDependencies": {
     "@vitest/coverage-v8": "^4.1.10",
