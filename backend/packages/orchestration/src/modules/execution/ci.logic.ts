@@ -59,21 +59,11 @@ export const BUG_INVESTIGATOR_AGENT_KIND = 'bug-investigator'
  */
 export const REPRO_TEST_AGENT_KIND = 'repro-test'
 
-/**
- * The agent kind of the container agent that writes the service's unified, in-repo
- * specification (`spec.json`). It runs BEFORE the coder and aggregates the collected
- * requirements of every task under the service frame — including their acceptance
- * scenarios — onto the implementation branch.
- */
-export const SPEC_WRITER_AGENT_KIND = 'spec-writer'
-
-/**
- * The agent kind of the container agent that maps a repository into the canonical
- * service → modules blueprint and (re)generates the in-repo `blueprints/` artifact. It
- * runs as a read-only `container-explore` structured agent; the deterministic render +
- * commit of the artifact is a BACKEND post-op (`blueprintPostOp`), not harness code.
- */
-export const BLUEPRINTS_AGENT_KIND = 'blueprints'
+// The `spec-writer` + `blueprints` container kinds are now real `registerAgentKind` entries in
+// `@cat-factory/agents` (`agents/kinds/spec-blueprints.ts`, refactoring-candidates.md #5), so
+// their ids are DEFINED there — next to the definition — and re-exported here for the engine's
+// existing internal call sites, exactly as the gate/helper + inline-reviewer kinds are.
+export { BLUEPRINTS_AGENT_KIND, SPEC_WRITER_AGENT_KIND } from '@cat-factory/agents'
 
 /** The agent kind of the container agent that scores a PR for the merge decision. */
 export const MERGER_AGENT_KIND = 'merger'

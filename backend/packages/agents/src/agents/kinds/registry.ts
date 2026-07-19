@@ -17,6 +17,7 @@ import { registerRalphAgent } from './ralph.js'
 import { registerDocumentAgents } from './document.js'
 import { registerCodeCommenterAgent } from './code-commenter.js'
 import { registerInitiativeAgents } from './initiative.js'
+import { registerSpecBlueprintAgents } from './spec-blueprints.js'
 import { registerEnvironmentAnalystAgent } from './environment-analyst.js'
 import { registerSpikeAgent } from './spike.js'
 import { registerSkillAgent } from './skill.js'
@@ -153,8 +154,8 @@ function withDerivedOutput(definition: AgentKindDefinition): AgentKindDefinition
  * `Map`, no `clear*()` test cruft, and no external-adapter module-identity gotcha: a
  * deployment registers extra kinds by reference (`registry.register(def)`) on the instance the
  * facade injects. The built-in kinds (`bug-investigator` / `repro-test` / `environment-analyst`
- * / `code-commenter` / the document + initiative kinds) are pre-loaded by the factory, not by an
- * import side effect.
+ * / `code-commenter` / `blueprints` / `spec-writer` / the document + initiative kinds) are
+ * pre-loaded by the factory, not by an import side effect.
  */
 export class AgentKindRegistry {
   private readonly registry = new Map<string, AgentKindDefinition>()
@@ -276,6 +277,7 @@ export function defaultAgentKindRegistry(): AgentKindRegistry {
   registerDocumentAgents(registry)
   registerCodeCommenterAgent(registry)
   registerInitiativeAgents(registry)
+  registerSpecBlueprintAgents(registry)
   registerEnvironmentAnalystAgent(registry)
   registerSpikeAgent(registry)
   registerSkillAgent(registry)

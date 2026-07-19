@@ -229,6 +229,7 @@ export {
   initiativePlannerUserPrompt,
   registerInitiativeAgents,
 } from './agents/kinds/initiative.js'
+export { BLUEPRINTS_AGENT_KIND, SPEC_WRITER_AGENT_KIND } from './agents/kinds/spec-blueprints.js'
 export {
   READ_ONLY_AGENT_KINDS,
   READ_ONLY_GUARDRAIL,

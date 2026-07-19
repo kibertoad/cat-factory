@@ -13,10 +13,22 @@ import type {
 import type { AgentExecutor } from '@cat-factory/kernel'
 import {
   type AgentKindRegistry,
+  BLUEPRINTS_AGENT_KIND,
   defaultAgentKindRegistry,
   isCompanionKind,
   RALPH_AGENT_KIND,
+  SPEC_WRITER_AGENT_KIND,
 } from '@cat-factory/agents'
+
+// Migrated built-in structured kinds that have a DEDICATED id-keyed channel in this fake
+// (`blueprints` → `blueprintService`, `spec-writer` → `spec`). They are now real registrations
+// declaring a structured `agent` output, so the generic "structured kind → `custom`" branch must
+// NOT capture them when their configured option is unset — their id channel wins when set, and
+// the plain block-echo default (the pre-migration behaviour) applies otherwise.
+const MIGRATED_BUILTIN_STRUCTURED_KINDS = new Set<string>([
+  BLUEPRINTS_AGENT_KIND,
+  SPEC_WRITER_AGENT_KIND,
+])
 
 export interface FakeAgentOptions {
   /** Confidence reported on the final step (drives auto-merge vs PR). Default 1. */
@@ -418,7 +430,18 @@ export class FakeAgentExecutor implements AgentExecutor {
     // parsed JSON as `custom` — exactly what the generic manifest-driven `agent` dispatch
     // surfaces — so the engine's registered post-op (render + commit via RepoFiles) runs
     // without a container. Detected from the registry, so the shared fake needs no per-kind id.
-    if (this.agentKindRegistry.agentStep(context.agentKind)?.output?.kind === 'structured') {
+    //
+    // The migrated built-ins with a DEDICATED channel above (`blueprints`/`spec-writer`) are
+    // excluded: they are now real registrations declaring `output.kind === 'structured'`, so
+    // this generic branch would otherwise capture them when their configured option is unset and
+    // return a plain `custom` result — where a test drives the step purely to check requirement
+    // preservation and expects the ordinary block-echo output (the pre-migration behaviour). Their
+    // own id-keyed channels above win when their option IS set, mirroring `toRunResult`, which
+    // coerces their `custom` into `blueprintService`/`spec` by id BEFORE the default passthrough.
+    if (
+      !MIGRATED_BUILTIN_STRUCTURED_KINDS.has(context.agentKind) &&
+      this.agentKindRegistry.agentStep(context.agentKind)?.output?.kind === 'structured'
+    ) {
       return {
         output: `[${context.agentKind}] produced structured output for "${context.block.title}"`,
         model: 'fake',

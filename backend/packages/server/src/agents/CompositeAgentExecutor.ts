@@ -47,13 +47,6 @@ const CONTAINER_KINDS = new Set([
   'mocker',
   'playwright',
   'business-documenter',
-  // The Blueprinter step clones the repo, regenerates the in-repo `blueprints/`
-  // folder and commits it — a real-checkout operation, so it runs in a container.
-  'blueprints',
-  // The spec-writer clones (or creates) the implementation branch and commits the
-  // in-repo `spec/` folder onto it — a real-checkout operation, so it runs in a
-  // container. Like the blueprinter it returns a structured doc.
-  'spec-writer',
   // The architect explores the repository (read-only) before proposing a design, so
   // it needs a real checkout. Like `analysis` it makes no edits — the harness produces
   // no commit and opens no PR — and returns its proposal as prose `output`.
@@ -92,11 +85,12 @@ const CONTAINER_KINDS = new Set([
   // like `ci` it is a non-agent engine gate that *dispatches* an `on-call` job; only
   // the on-call agent reaches this executor.)
   'on-call',
-  // NOTE: `initiative-analyst` and `initiative-planner` are NOT listed here — they are
-  // registered agent kinds (`@cat-factory/agents`) whose `container-explore` surface makes
-  // `registry.requiresContainer()` return true, so `pick()` routes them to the container
-  // executor without a hard-coded entry. (The `initiative-interviewer` / `initiative-committer`
-  // steps are neither: they are non-container engine gates handled entirely in the engine.)
+  // NOTE: `blueprints`, `spec-writer`, `initiative-analyst` and `initiative-planner` are NOT
+  // listed here — they are registered agent kinds (`@cat-factory/agents`) whose
+  // `container-explore` surface makes `registry.requiresContainer()` return true, so `pick()`
+  // routes them to the container executor without a hard-coded entry. (The
+  // `initiative-interviewer` / `initiative-committer` steps are neither: they are non-container
+  // engine gates handled entirely in the engine.)
 ])
 
 export class CompositeAgentExecutor implements AsyncAgentExecutor {
