@@ -85,7 +85,16 @@ export function mountAuthGate<E extends AppEnv>(app: Hono<E>): void {
     if (!user) return next()
     const match = /^\/workspaces\/([^/]+)(?:\/.*)?$/.exec(c.req.path)
     if (!match) return next()
-    const workspaceId = decodeURIComponent(match[1]!)
+    // A malformed percent-encoding in the id segment (e.g. `/workspaces/%zz/...`) makes
+    // `decodeURIComponent` throw a `URIError`. That is not a valid workspace, so treat it as a
+    // missing board (404) rather than letting the error surface as an opaque 500 — it fails closed
+    // either way, but 404 is the correct not-found shape and matches how the gate hides a board.
+    let workspaceId: string
+    try {
+      workspaceId = decodeURIComponent(match[1]!)
+    } catch {
+      return c.json({ error: { code: 'not_found', message: 'Workspace not found' } }, 404)
+    }
     const container = c.get('container')
 
     // Resolve the caller's effective workspace-RBAC role once (the single decision point).

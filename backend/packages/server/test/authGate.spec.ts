@@ -171,6 +171,15 @@ describe('mountAuthGate — workspace-RBAC resolution', () => {
     expect(await roleOf(res)).toBe('admin')
   })
 
+  it('malformed percent-encoding in the id segment 404s (fails closed, not a 500)', async () => {
+    // `decodeURIComponent('%zz')` throws a URIError; the gate must map that to the not-found
+    // shape rather than letting it surface as an opaque 500 (SEC-RBAC-5).
+    const call = makeApp({ accessRowOf: async () => scoped('account'), rolesFor: async () => [] })
+    const res = await call('GET', '/workspaces/%zz/blocks', await sessionToken('usr_1'))
+    expect(res.status).toBe(404)
+    expect(((await res.json()) as { error: { code: string } }).error.code).toBe('not_found')
+  })
+
   it('restricted board: the member row is the sole grant; no row ⇒ 404', async () => {
     const denied = makeApp({
       accessRowOf: async () => scoped('restricted'),

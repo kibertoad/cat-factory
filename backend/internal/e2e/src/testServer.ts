@@ -224,6 +224,13 @@ const fail = (res: ServerResponse, status: number, err: unknown): void => {
 }
 
 const controlServer = createServer((req, res) => {
+  // Close the TCP connection after every control response instead of keeping it alive. Playwright's
+  // Node request context pools keep-alive sockets, and Node's default 5s `keepAliveTimeout` reaps an
+  // idle one server-side; if the client dispatches the next seed onto that socket in the reap window
+  // it gets `socket hang up` (a non-idempotent POST is not auto-retried), which surfaced as a flaky
+  // `github-seed` failure. This control channel handles only a few sequential seeds per spec, so a
+  // fresh connection per request costs nothing and removes the reuse race at its source.
+  res.setHeader('Connection', 'close')
   if (req.method === 'POST' && req.url === '/fake-profile') {
     void readBody(req)
       .then((raw) => {
