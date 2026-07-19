@@ -23,9 +23,25 @@ Journey state is persisted through the new `journeyPersistence` Pinia store
 (`createPiniaJourneyPersistence`, keyed by the target frame), so closing and
 reopening the wizard for the same frame RESUMES at the step it was left on and a
 completed flow clears its blob — a resume the reset-on-every-open store couldn't
-offer (session-scoped; a full reload starts fresh).
+offer (session-scoped; a full reload starts fresh). Every data step
+(review/preflight/save) re-binds its target frame into the store on entry (via
+`useEnvironmentWizardTarget`), so a resume — or an interleaved open of a different
+frame — can never leave a step rendering or saving another frame's recipe.
+
+The upstream binding improvements identified while building this slice landed and
+are re-adopted: `@modular-vue/nuxt@0.3.0` now flows the registry's plugin-extension
+type through `installModularApp`, so the modular plugin drops its
+`as JourneyRuntime` / `as AppSlots` casts — the manifest annotation now names the
+real `{ journeys: JourneyRuntime }` extension and TS verifies the `journeysPlugin`
+resolved it (`@modular-vue/runtime@1.2.0 → 1.3.0` rides along). `@modular-vue/journeys`
+stays at `1.1.0` — its `1.2.0` depends on the not-yet-released
+`@modular-frontend/journeys-engine@1.8.0`.
 
 Dependency bumps ride along: Nuxt `4.4.8 → 4.5.0` (which pulls `vue-router@^5.2.0`,
 pinned to a single version by a `vue-router: 5.2.0` pnpm override so it doesn't
 duplicate against `@nuxtjs/i18n`), and Pinia `3 → 4` (`@pinia/nuxt@1.0.1`).
-`vue` / `vue-router` / `pinia` each resolve to a single version.
+`vue` / `vue-router` / `pinia` each resolve to a single version. The Nuxt 4.5 bump
+also pulls Vite 7→8; the Cloudflare Workers vitest pool doesn't honour the `require`
+export condition for a dual-published dep under Vite 8, so the worker test config
+aliases `toad-cache` to its CJS build (test-pool-only; see
+`backend/runtimes/cloudflare/vitest.config.ts`).
