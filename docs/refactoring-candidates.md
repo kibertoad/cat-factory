@@ -247,3 +247,27 @@ run/step lifecycle reference (and the recorded decision not to adopt XState) liv
 > which is now the largest engine file. It is not yet a headline candidate — it is a clean,
 > freshly-extracted seam — but if it keeps accreting per-kind polling logic it is the next
 > place to apply the same handler-registry treatment.
+
+### Engine god-file split, round 2 (+ the re-accretion guard) ✅
+
+The watch item above came true — by the July 2026 quality review
+([`code-quality-observability-extensibility-review-2026-07.md`](./code-quality-observability-extensibility-review-2026-07.md)
+§4/#5) `RunDispatcher.ts` had regrown to **4,217** lines and `ExecutionService.ts` to
+**3,707**. The split was resumed along the review's prescription, pure code movement with no
+behaviour change (verified by the full orchestration suite + cross-runtime conformance):
+
+- `ExecutionService.ts` → **~2,775 lines**: the start/retry/restart `assert*` admission
+  family (frame type, tester infra, deployer config/ordering, binary storage, provider/preset
+  satisfiability, budget, task limit, dependencies) moved to **`RunAdmission.ts`**, and the
+  requirements/clarity/brainstorm `ReviewKind` builders + the clarity investigation helpers
+  moved to **`review-kinds.ts`** (plain factories over a shared deps closure).
+- `RunDispatcher.ts` → **~3,135 lines**: the deterministic deployer family (the multi-frame
+  provision fan-out, the async deploy-job poll, the environment projection) moved to
+  **`DeployerStepController.ts`**, and the follow-up companion gate + its human-action API
+  (file / queue / answer / dismiss) moved to **`FollowUpGateController.ts`** — both wired as
+  controller collaborators exactly like the existing gate controllers, with the completion
+  hub + shared poll folds injected back as callbacks so the paths can't drift.
+- **Re-accretion now fails CI instead of an audit**: `scripts/check-file-size.mjs` (run in
+  the `repo-guards` job) enforces a soft 1,500-line budget on non-test source files, with
+  shrink-only ratcheted allowances for the remaining legacy oversized files (the DI roots,
+  `entities.ts`, `suite.ts`, …). Lower a file's allowance in the PR that shrinks it.

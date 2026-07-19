@@ -20,7 +20,7 @@
   "devDependencies": {
     "@playwright/test": "^1.61.1",
     "@types/node": "^26.1.1",
-    "ai": "^6.0.224",
+    "ai": "^6.0.230",
     "typescript": "7.0.2"
   }
 }

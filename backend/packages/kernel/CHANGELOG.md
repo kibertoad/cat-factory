@@ -1,5 +1,56 @@
 # @cat-factory/kernel
 
+## 0.140.0
+
+### Minor Changes
+
+- 9b3b85e: Secret-scrub agent-context snapshots before they are persisted to telemetry.
+
+  `AgentContextObservabilityService.record` now runs every stored body — the composed
+  system/user prompts, the folded-in fragment bodies, and every injected context-file
+  content — through `redactSecrets`, deep-scrubs the free-text values in the `extras` bag
+  (the run's decisions and revision feedback), and drops the whole body of a context file
+  whose name marks it as a raw credential store (`.env`, `*.pem`, an SSH key, `.npmrc`,
+  `.git-credentials`, …). Previously only the dispatch-site allow-list guarded these bodies,
+  so a token embedded in a task description, a decision note, a linked doc, or an injected
+  `.env`-shaped file was stored verbatim when `storeAgentContext` was on. Scrubbing happens
+  before the size budget so truncation can never split a secret across the cap.
+
+  `redactSecrets` additionally matches PEM-armored private keys by their armor header, so a
+  key pasted into any prompt or ordinarily-named file is dropped regardless of filename.
+
+  Adds `isSecretShapedFilename` and `redactSecretsDeep` to `@cat-factory/kernel` (alongside
+  `redactSecrets`) and the first unit coverage for the previously-untested `redactSecrets`
+  scrubber.
+
+### Patch Changes
+
+- Updated dependencies [9b3b85e]
+  - @cat-factory/contracts@0.148.1
+
+## 0.139.3
+
+### Patch Changes
+
+- efa3345: chore(deps): in-range dependency sweep + transitive upgrade and dedupe
+
+  Update all dependencies within their existing semver ranges across the
+  workspace (including the harness packages), run a transitive upgrade and
+  `pnpm dedupe`, and re-adopt `@modular-vue/journeys@1.2.0` now that its neutral
+  engine (`@modular-frontend/journeys-engine@1.8.0`) is published.
+
+  - The Vercel AI SDK stays on `ai@6` / `@ai-sdk/*@3`: the newest
+    `workers-ai-provider` (3.3.1) still peer-requires `ai@^6`, so a v7 bump
+    remains blocked (moves within the pinned majors only).
+  - `@modular-frontend/core` is pinned to a single `0.3.0` via a pnpm override:
+    the 1.8.0 journeys engine hard-depends on `0.3.0` while the sibling
+    `@modular-vue/*` bindings still range `^0.2.0`, which otherwise bundles two
+    copies and splits the `JourneyRuntime` type. 0.3.0 is a strict superset
+    (adds `discard`). Drop the override once the bindings widen their peer range.
+  - `@cat-factory/executor-harness` runtime deps (`hono`, `@hono/node-server`)
+    moved within range, so the runner-image tag is bumped and the three pins are
+    re-synced (image publish/deploy is a maintainer follow-up).
+
 ## 0.139.2
 
 ### Patch Changes

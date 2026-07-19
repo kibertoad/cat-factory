@@ -27,6 +27,37 @@ export const CONTROL_URL =
  */
 export type { FakeProfile }
 
+/**
+ * A restricted-board RBAC scenario seeded over the control channel (see `testServer.ts`
+ * `seedRbacScenario`): an org owned by an admin, a developer scoped to the board as a
+ * `viewer`, and the board flipped to `restricted`. Carries a signed Bearer token + user id
+ * per principal so the spec can drive the SPA as an authenticated viewer vs admin.
+ */
+export interface RbacScenario {
+  workspaceId: string
+  accountId: string
+  adminToken: string
+  adminUserId: string
+  viewerToken: string
+  viewerUserId: string
+}
+
+/**
+ * Seed a restricted-board RBAC scenario and return the principals' sessions. `tag` makes the
+ * seeded users/board unique per test (so parallel/retry runs never collide). The shared e2e
+ * backend runs auth-enabled-for-signed-tokens (anonymous stays dev-open), so injecting one of
+ * the returned tokens into the SPA (see {@link pinAuthedWorkspace}) drives the board AS that
+ * user with the workspace-RBAC gate enforcing.
+ */
+export async function seedRbacScenario(
+  request: APIRequestContext,
+  tag: string,
+): Promise<RbacScenario> {
+  const res = await request.post(`${CONTROL_URL}/rbac-seed`, { data: { tag } })
+  if (!res.ok()) throw new Error(`rbac-seed control ${res.status()}: ${await res.text()}`)
+  return (await res.json()) as RbacScenario
+}
+
 /** Register a fake behaviour profile for `workspaceId`. Call BEFORE starting the run. */
 export async function setFakeProfile(
   request: APIRequestContext,
@@ -431,6 +462,49 @@ export async function pinWorkspace(page: Page, workspaceId: string): Promise<voi
       dismissKey: INFRA_SETUP_DISMISSED_STORAGE_KEY,
       areas: [...INFRA_SETUP_AREAS],
     },
+  )
+}
+
+/**
+ * Like {@link pinWorkspace}, but ALSO seed a signed session so the SPA boots authenticated as a
+ * specific user, pinned to a specific board (the workspace-RBAC spec).
+ *
+ * The persisted pinia stores (`auth.token`, `workspace.workspaceId`, `accounts.activeAccountId`)
+ * are backed by COOKIES — `pinia-plugin-persistedstate/nuxt` defaults to cookie storage, NOT
+ * localStorage — so restoring a session + pinning a specific board means seeding those cookies.
+ * (Existing dev-open specs get away with the localStorage `pinWorkspace` no-op only because their
+ * freshly-seeded board is the newest in the unfiltered list; an authed caller's list is
+ * account-filtered, so the pin must actually restore.) Cookie values are URL-encoded JSON — the
+ * shape each store persists (`auth` → `useApi`'s `Authorization: Bearer`; `workspace` → the opened
+ * board; `accounts` → keep that board in the active-account scope). The infra-setup banner reads
+ * its dismissals from localStorage keyed by the signed-in user id, so seed that too, or the
+ * advisory banner overlays the board chrome the spec drives. Must run BEFORE `page.goto`.
+ */
+export async function pinAuthedWorkspace(
+  page: Page,
+  workspaceId: string,
+  token: string,
+  userId: string,
+  accountId: string,
+): Promise<void> {
+  const frontendUrl = `http://localhost:${process.env.E2E_FRONTEND_PORT ?? '3000'}`
+  const cookie = (name: string, value: unknown) => ({
+    name,
+    value: encodeURIComponent(JSON.stringify(value)),
+    url: frontendUrl,
+  })
+  await page
+    .context()
+    .addCookies([
+      cookie('auth', { token, autoLoginProvider: null }),
+      cookie('workspace', { workspaceId }),
+      cookie('accounts', { activeAccountId: accountId }),
+    ])
+  await page.addInitScript(
+    ({ uid, dismissKey, areas }) => {
+      window.localStorage.setItem(dismissKey, JSON.stringify({ local: areas, [uid]: areas }))
+    },
+    { uid: userId, dismissKey: INFRA_SETUP_DISMISSED_STORAGE_KEY, areas: [...INFRA_SETUP_AREAS] },
   )
 }
 

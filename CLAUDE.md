@@ -809,6 +809,11 @@ run the guards your change class can trip:**
 
 - `node scripts/check-package-catalog.mjs` — every workspace package must have a row in
   README.md's repository-layout tables.
+- `node scripts/check-file-size.mjs` — soft max-lines budget (default 1,500) for non-test
+  source files, with ratcheted allowances for the legacy oversized files (the engine
+  god-file re-accretion guard). Grew a file past its budget ⇒ split it along a cohesive
+  seam (the `RunDispatcher` controller extractions are the model), or deliberately adjust
+  the allowance in the same PR.
 - `pnpm exec changeset status --since=origin/main` — every changed versioned package needs
   a changeset (run after committing locally; it diffs git refs).
 - `pnpm lint:knip` — unused files/deps/exports (run after `pnpm build`); remember
@@ -1320,7 +1325,16 @@ sweep.
   Recorded best-effort by `ContainerAgentExecutor.startJob` (after dispatch) via
   `AgentContextObservabilityService` (orchestration), built per-facade and injected into both
   the executor (write) and `createCore` (read). The snapshot is a **redacted allow-list**
-  projection of the dispatched job — NEVER a token or credential-bearing URL.
+  projection of the dispatched job — NEVER a token or credential-bearing URL. As a
+  defence-in-depth second layer, `AgentContextObservabilityService.record` also runs every
+  stored body (both prompts, each fragment body, each injected file's content) through
+  `redactSecrets` BEFORE the size budget, deep-scrubs the `extras` bag (`redactSecretsDeep`
+  — its decisions/revision-feedback values are free-text prose that can embed a token), and
+  drops the whole body of a context file whose name marks it as a raw credential store
+  (`isSecretShapedFilename` — `.env`/`*.pem`/SSH key/`.npmrc`/…), so a token embedded in a
+  task description, a decision note, or an injected secret-shaped file never lands verbatim
+  in the telemetry store. `redactSecrets` also catches PEM-armored private keys by their
+  header, so a pasted key is scrubbed regardless of the enclosing filename.
 - **Gating**: storing requires BOTH the deployment prompt-recording switch
   (`LLM_RECORD_PROMPTS`) AND the per-workspace `storeAgentContext` setting (on by default; a
   toggle in `WorkspaceSettingsPanel.vue`).
@@ -1770,9 +1784,9 @@ rather than adding more raw text.
 
 ## Workspace RBAC enforcement (one gate, one floor, one middleware per admin group)
 
-Per-workspace authorization (the `workspace-rbac` initiative — tracker
-[`docs/initiatives/workspace-rbac.md`](./docs/initiatives/workspace-rbac.md)) is enforced in
-exactly three shared places, never re-derived per controller:
+Per-workspace authorization (the `workspace-rbac` initiative — ADR
+[`backend/docs/adr/0025-workspace-rbac.md`](./backend/docs/adr/0025-workspace-rbac.md)) is enforced
+in exactly three shared places, never re-derived per controller:
 
 1. **Resolution + the 404 hide** — `mountAuthGate` (`server/src/http/authGate.ts`) calls the
    single `loadWorkspaceAccess` (through the `workspaceAccess` AppCaches slice) on every

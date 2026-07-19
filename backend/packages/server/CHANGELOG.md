@@ -1,5 +1,65 @@
 # @cat-factory/server
 
+## 0.137.4
+
+### Patch Changes
+
+- d675cc5: Workspace-RBAC security follow-ups (SEC-RBAC-0, SEC-RBAC-5):
+
+  - SEC-RBAC-0 (High): the account-tier document-fragment routes now re-authorize the
+    body/query-supplied `viaWorkspaceId` before fetching through that workspace's stored
+    document-source credentials — it must belong to the addressed account AND be accessible to the
+    caller, else 404. Closes a cross-tenant confused-deputy that let an account member drive another
+    workspace's stored Confluence/Notion/GitHub secret as a fetch oracle.
+  - SEC-RBAC-5 (Low): the auth gate returns a 404 (not an opaque 500) when the `:workspaceId` path
+    segment is malformed percent-encoding.
+
+- Updated dependencies [edfd2f8]
+  - @cat-factory/orchestration@0.123.5
+
+## 0.137.3
+
+### Patch Changes
+
+- Updated dependencies [9b3b85e]
+  - @cat-factory/kernel@0.140.0
+  - @cat-factory/orchestration@0.123.4
+  - @cat-factory/contracts@0.148.1
+  - @cat-factory/agents@0.62.12
+  - @cat-factory/integrations@0.86.4
+  - @cat-factory/spend@0.12.53
+  - @cat-factory/prompt-fragments@0.13.39
+
+## 0.137.2
+
+### Patch Changes
+
+- efa3345: chore(deps): in-range dependency sweep + transitive upgrade and dedupe
+
+  Update all dependencies within their existing semver ranges across the
+  workspace (including the harness packages), run a transitive upgrade and
+  `pnpm dedupe`, and re-adopt `@modular-vue/journeys@1.2.0` now that its neutral
+  engine (`@modular-frontend/journeys-engine@1.8.0`) is published.
+
+  - The Vercel AI SDK stays on `ai@6` / `@ai-sdk/*@3`: the newest
+    `workers-ai-provider` (3.3.1) still peer-requires `ai@^6`, so a v7 bump
+    remains blocked (moves within the pinned majors only).
+  - `@modular-frontend/core` is pinned to a single `0.3.0` via a pnpm override:
+    the 1.8.0 journeys engine hard-depends on `0.3.0` while the sibling
+    `@modular-vue/*` bindings still range `^0.2.0`, which otherwise bundles two
+    copies and splits the `JourneyRuntime` type. 0.3.0 is a strict superset
+    (adds `discard`). Drop the override once the bindings widen their peer range.
+  - `@cat-factory/executor-harness` runtime deps (`hono`, `@hono/node-server`)
+    moved within range, so the runner-image tag is bumped and the three pins are
+    re-synced (image publish/deploy is a maintainer follow-up).
+
+- Updated dependencies [efa3345]
+  - @cat-factory/agents@0.62.11
+  - @cat-factory/integrations@0.86.3
+  - @cat-factory/kernel@0.139.3
+  - @cat-factory/orchestration@0.123.3
+  - @cat-factory/spend@0.12.52
+
 ## 0.137.1
 
 ### Patch Changes

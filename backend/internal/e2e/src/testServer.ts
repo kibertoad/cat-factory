@@ -21,7 +21,7 @@
 // Run directly via Node type stripping: `node src/testServer.ts` (Playwright's webServer
 // boots it). Reads `DATABASE_URL` (required) and a couple of optional knobs (below).
 import { createServer, type IncomingMessage, type ServerResponse } from 'node:http'
-import { AsyncFakeAgentExecutor } from '@cat-factory/conformance'
+import { AsyncFakeAgentExecutor, makeOnboardingProbe, mintSession } from '@cat-factory/conformance'
 import {
   buildNodeContainer,
   DrizzleBranchProjectionRepository,
@@ -32,6 +32,8 @@ import {
   DrizzleIssueProjectionRepository,
   DrizzlePullRequestProjectionRepository,
   DrizzleRepoProjectionRepository,
+  DrizzleWorkspaceMemberRepository,
+  DrizzleWorkspaceRepository,
   start,
 } from '@cat-factory/node-server'
 import { createE2eGitHubClient, type GitHubSeed, seedGitHubForWorkspace } from './fakeGitHub.ts'
@@ -125,6 +127,81 @@ const gateProviders = new E2eGateProviders(profiles)
 const githubClient = createE2eGitHubClient()
 let seedDb: DrizzleDb | null = null
 
+// Auth-enabled seam for the workspace-RBAC e2e (rbac.spec.ts). The shared backend keeps
+// TESTING_NO_AUTH on — so an ANONYMOUS request stays dev-open and every existing spec is
+// byte-identical — while ALSO configuring a session secret. A request bearing a signed
+// session token then resolves to its user and the workspace-RBAC gate enforces per-user
+// access (the gate keys on the SECRET's presence, not `config.auth.enabled`, which stays
+// false because no OAuth/password provider is configured). The RBAC spec mints tokens over
+// the `/rbac-seed` control route below and injects them into the SPA's persisted `auth`
+// store, exactly as `pinWorkspace` injects the picked workspace id.
+const AUTH_SESSION_SECRET =
+  process.env.AUTH_SESSION_SECRET ?? 'e2e-workspace-rbac-session-secret-0123456789'
+// The built container, captured for the `/rbac-seed` control route (which needs the real
+// user / account / workspace services). Only read AFTER boot, so it is set by the time a
+// spec calls the route.
+let rbacContainer: ReturnType<typeof buildNodeContainer> | null = null
+
+/**
+ * Seed a restricted-board RBAC scenario and mint signed sessions for it, over the control
+ * channel (there is no anonymous REST path to create users / account members). Mirrors the
+ * cross-runtime `defineWorkspaceRbacSuite` fixture: an org owned by admin A, a developer B
+ * enrolled in the account and scoped to the board as a `viewer`, and the board flipped to
+ * `restricted`. The board is created with a NULL owner (no creator auto-enroll), so A's full
+ * access comes purely from the account-admin escape hatch. Returns the board id + a Bearer
+ * token and user id for each principal, which the spec injects into the SPA.
+ */
+async function seedRbacScenario(
+  container: NonNullable<typeof rbacContainer>,
+  db: DrizzleDb,
+  tag: string,
+): Promise<{
+  workspaceId: string
+  accountId: string
+  adminToken: string
+  adminUserId: string
+  viewerToken: string
+  viewerUserId: string
+}> {
+  const probe = makeOnboardingProbe(container)
+  const { accountId, ownerUserId: adminUserId } = await probe.makeOrgOwner(`rbac-${tag}`)
+  const viewer = await probe.users.findOrCreateByIdentity('github', `rbac-viewer-${tag}`, {
+    name: 'RBAC Viewer',
+    email: `rbac-viewer-${tag}@example.com`,
+    emailVerified: true,
+  })
+  await probe.addAccountMember(accountId, adminUserId, viewer.id, ['developer'])
+  // Seed the sample architecture (so the board carries the runnable `task_login` the SPA
+  // readiness gate asserts on); null owner ⇒ no creator admin row.
+  const snapshot = await container.workspaceService.create(
+    { name: 'RBAC board', seed: true },
+    null,
+    accountId,
+  )
+  const workspaceId = snapshot.workspace.id
+  // Connect the (faked) GitHub App for the board, or the SPA sits on the onboarding gate.
+  await seedGitHubForWorkspace(db, workspaceId, {})
+  // Scope B as a viewer and restrict the board (raw repos — the seed predates any request,
+  // so nothing is cached to invalidate).
+  await new DrizzleWorkspaceMemberRepository(db).upsert({
+    workspaceId,
+    userId: viewer.id,
+    role: 'viewer',
+    createdAt: Date.now(),
+    addedByUserId: adminUserId,
+  })
+  await new DrizzleWorkspaceRepository(db).setAccessMode(workspaceId, 'restricted')
+  const [adminToken, viewerToken] = await Promise.all([
+    mintSession(AUTH_SESSION_SECRET, { id: adminUserId, login: `rbac-${tag}`, name: 'RBAC Admin' }),
+    mintSession(AUTH_SESSION_SECRET, {
+      id: viewer.id,
+      login: `rbac-viewer-${tag}`,
+      name: viewer.name,
+    }),
+  ])
+  return { workspaceId, accountId, adminToken, adminUserId, viewerToken, viewerUserId: viewer.id }
+}
+
 // A tiny, test-ONLY HTTP control channel (a separate listener, so it never couples to the
 // shared Hono app or its CORS/auth). A spec `POST`s `{ workspaceId, profile }` from Node
 // (Playwright's request context — not the browser), keyed to its own freshly-seeded
@@ -147,6 +224,13 @@ const fail = (res: ServerResponse, status: number, err: unknown): void => {
 }
 
 const controlServer = createServer((req, res) => {
+  // Close the TCP connection after every control response instead of keeping it alive. Playwright's
+  // Node request context pools keep-alive sockets, and Node's default 5s `keepAliveTimeout` reaps an
+  // idle one server-side; if the client dispatches the next seed onto that socket in the reap window
+  // it gets `socket hang up` (a non-idempotent POST is not auto-retried), which surfaced as a flaky
+  // `github-seed` failure. This control channel handles only a few sequential seeds per spec, so a
+  // fresh connection per request costs nothing and removes the reuse race at its source.
+  res.setHeader('Connection', 'close')
   if (req.method === 'POST' && req.url === '/fake-profile') {
     void readBody(req)
       .then((raw) => {
@@ -170,6 +254,23 @@ const controlServer = createServer((req, res) => {
         const body = JSON.parse(raw) as { workspaceId: string; seed?: GitHubSeed }
         await seedGitHubForWorkspace(seedDb, body.workspaceId, body.seed ?? {})
         res.writeHead(204).end()
+      })
+      .catch((err) => fail(res, 400, err))
+    return
+  }
+  // Seed a restricted-board RBAC scenario + mint the principals' sessions (see
+  // `seedRbacScenario`). Returns the board id + a Bearer token per principal, which the RBAC
+  // spec injects into the SPA to drive the board as an authenticated viewer vs admin.
+  if (req.method === 'POST' && req.url === '/rbac-seed') {
+    void readBody(req)
+      .then(async (raw) => {
+        if (!rbacContainer || !seedDb) {
+          res.writeHead(503).end('rbac seed: container not ready')
+          return
+        }
+        const body = JSON.parse(raw) as { tag: string }
+        const result = await seedRbacScenario(rbacContainer, seedDb, body.tag)
+        res.writeHead(200, { 'content-type': 'application/json' }).end(JSON.stringify(result))
       })
       .catch((err) => fail(res, 400, err))
     return
@@ -198,6 +299,12 @@ const env: NodeJS.ProcessEnv = {
   // screen (a remote facade otherwise has no anonymous tier). Pin a non-production
   // ENVIRONMENT so the flag is honoured. Mirrors the conformance test env.
   TESTING_NO_AUTH: 'true',
+  // Configure a session secret WITHOUT enabling any auth provider: anonymous requests stay
+  // dev-open (existing specs unchanged), but a signed session token still resolves to its
+  // user so the workspace-RBAC gate enforces per-user access for the RBAC spec (see the
+  // `AUTH_SESSION_SECRET` note above). `config.auth.enabled` stays false (no provider), so
+  // the SPA still renders anonymously by default under TESTING_NO_AUTH.
+  AUTH_SESSION_SECRET: process.env.AUTH_SESSION_SECRET ?? AUTH_SESSION_SECRET,
   ENVIRONMENT: 'test',
   // Poll durable async work every second instead of the 15s/30s production cadence: an async
   // agent kind's `awaiting_job` loop, a gate, AND the bootstrap drive (which polls at
@@ -249,7 +356,7 @@ await start({
     const db = opts.db
     if (!db) throw new Error('[e2e] expected start() to supply a Drizzle db')
     seedDb = db
-    return buildNodeContainer({
+    const container = buildNodeContainer({
       ...opts,
       overrides: {
         agentExecutor,
@@ -284,5 +391,9 @@ await start({
         releaseHealth: gateProviders.releaseHealth,
       },
     })
+    // Capture the built container for the `/rbac-seed` control route (real user / account /
+    // workspace services). Read only after boot, when a spec fires the route.
+    rbacContainer = container
+    return container
   },
 })

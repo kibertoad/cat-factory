@@ -1,5 +1,77 @@
 # @cat-factory/orchestration
 
+## 0.123.5
+
+### Patch Changes
+
+- edfd2f8: Split the two engine god-files along cohesive seams (no behaviour change): `ExecutionService`'s start/retry/restart `assert*` admission family moved to `RunAdmission`, its requirements/clarity/brainstorm `ReviewKind` builders to `review-kinds.ts`; `RunDispatcher`'s deterministic deployer family (provision fan-out, deploy-job poll, environment projection) moved to `DeployerStepController` and the follow-up companion gate + its human-action API to `FollowUpGateController`. Adds `scripts/check-file-size.mjs`, a CI-enforced soft max-lines budget with ratcheted allowances, so the god files can't silently regrow.
+
+## 0.123.4
+
+### Patch Changes
+
+- 9b3b85e: Secret-scrub agent-context snapshots before they are persisted to telemetry.
+
+  `AgentContextObservabilityService.record` now runs every stored body — the composed
+  system/user prompts, the folded-in fragment bodies, and every injected context-file
+  content — through `redactSecrets`, deep-scrubs the free-text values in the `extras` bag
+  (the run's decisions and revision feedback), and drops the whole body of a context file
+  whose name marks it as a raw credential store (`.env`, `*.pem`, an SSH key, `.npmrc`,
+  `.git-credentials`, …). Previously only the dispatch-site allow-list guarded these bodies,
+  so a token embedded in a task description, a decision note, a linked doc, or an injected
+  `.env`-shaped file was stored verbatim when `storeAgentContext` was on. Scrubbing happens
+  before the size budget so truncation can never split a secret across the cap.
+
+  `redactSecrets` additionally matches PEM-armored private keys by their armor header, so a
+  key pasted into any prompt or ordinarily-named file is dropped regardless of filename.
+
+  Adds `isSecretShapedFilename` and `redactSecretsDeep` to `@cat-factory/kernel` (alongside
+  `redactSecrets`) and the first unit coverage for the previously-untested `redactSecrets`
+  scrubber.
+
+- Updated dependencies [9b3b85e]
+  - @cat-factory/kernel@0.140.0
+  - @cat-factory/contracts@0.148.1
+  - @cat-factory/agents@0.62.12
+  - @cat-factory/caching@0.10.9
+  - @cat-factory/integrations@0.86.4
+  - @cat-factory/sandbox@0.9.103
+  - @cat-factory/spend@0.12.53
+  - @cat-factory/workspaces@0.16.6
+  - @cat-factory/prompt-fragments@0.13.39
+
+## 0.123.3
+
+### Patch Changes
+
+- efa3345: chore(deps): in-range dependency sweep + transitive upgrade and dedupe
+
+  Update all dependencies within their existing semver ranges across the
+  workspace (including the harness packages), run a transitive upgrade and
+  `pnpm dedupe`, and re-adopt `@modular-vue/journeys@1.2.0` now that its neutral
+  engine (`@modular-frontend/journeys-engine@1.8.0`) is published.
+
+  - The Vercel AI SDK stays on `ai@6` / `@ai-sdk/*@3`: the newest
+    `workers-ai-provider` (3.3.1) still peer-requires `ai@^6`, so a v7 bump
+    remains blocked (moves within the pinned majors only).
+  - `@modular-frontend/core` is pinned to a single `0.3.0` via a pnpm override:
+    the 1.8.0 journeys engine hard-depends on `0.3.0` while the sibling
+    `@modular-vue/*` bindings still range `^0.2.0`, which otherwise bundles two
+    copies and splits the `JourneyRuntime` type. 0.3.0 is a strict superset
+    (adds `discard`). Drop the override once the bindings widen their peer range.
+  - `@cat-factory/executor-harness` runtime deps (`hono`, `@hono/node-server`)
+    moved within range, so the runner-image tag is bumped and the three pins are
+    re-synced (image publish/deploy is a maintainer follow-up).
+
+- Updated dependencies [efa3345]
+  - @cat-factory/agents@0.62.11
+  - @cat-factory/integrations@0.86.3
+  - @cat-factory/kernel@0.139.3
+  - @cat-factory/sandbox@0.9.102
+  - @cat-factory/caching@0.10.8
+  - @cat-factory/spend@0.12.52
+  - @cat-factory/workspaces@0.16.5
+
 ## 0.123.2
 
 ### Patch Changes
