@@ -20,6 +20,7 @@ import type {
   BlockRepository,
   ExecutionRepository,
   GroupCacheHandle,
+  PipelineRegistry,
   PipelineRepository,
   ResolveBinaryArtifactStore,
   ServiceRehome,
@@ -57,6 +58,12 @@ export interface WorkspaceServiceDependencies {
    */
   workspaceMemberRepository?: WorkspaceMemberRepository
   /**
+   * The app-owned pipeline registry (deployment-registered extra pipelines). When wired, a new
+   * workspace is seeded with the built-in catalog PLUS those extras (and the reseed-version map
+   * accounts for them). Optional — absent (tests) ⇒ the built-in catalog only.
+   */
+  pipelineRegistry?: PipelineRegistry
+  /**
    * The `workspaceAccess` cache slice (workspace-rbac initiative). When wired, a board delete
    * drops the deleted board's whole access GROUP so no stale (grant/denial) entry outlives it —
    * hygiene, since the board id is never reused. Optional — absent (tests / no cache) ⇒ the delete
@@ -88,6 +95,7 @@ export class WorkspaceService {
   private readonly serviceRepository?: ServiceRepository
   private readonly workspaceMountRepository?: WorkspaceMountRepository
   private readonly workspaceMemberRepository?: WorkspaceMemberRepository
+  private readonly pipelineRegistry?: PipelineRegistry
   private readonly workspaceAccessCache?: GroupCacheHandle<WorkspaceAccessCacheValue>
   private readonly resolveBinaryArtifactStore?: ResolveBinaryArtifactStore
   private readonly logger?: { info(obj: Record<string, unknown>, msg?: string): void }
@@ -102,6 +110,7 @@ export class WorkspaceService {
     serviceRepository,
     workspaceMountRepository,
     workspaceMemberRepository,
+    pipelineRegistry,
     workspaceAccessCache,
     resolveBinaryArtifactStore,
     logger,
@@ -114,6 +123,7 @@ export class WorkspaceService {
     this.clock = clock
     this.serviceRepository = serviceRepository
     this.workspaceMountRepository = workspaceMountRepository
+    this.pipelineRegistry = pipelineRegistry
     this.workspaceMemberRepository = workspaceMemberRepository
     this.workspaceAccessCache = workspaceAccessCache
     this.resolveBinaryArtifactStore = resolveBinaryArtifactStore
@@ -205,7 +215,7 @@ export class WorkspaceService {
 
     // The built-in pipeline catalog is product configuration, not sample data, so
     // every board gets it — including the empty boards real users start with.
-    for (const pipeline of seedPipelines()) {
+    for (const pipeline of seedPipelines(this.pipelineRegistry)) {
       await this.pipelineRepository.insert(workspace.id, pipeline)
     }
     // The sample architecture blocks are opt-in (demo boards + the test fixtures);
@@ -332,7 +342,7 @@ export class WorkspaceService {
     // The current built-in catalog versions, so the SPA can flag a workspace's stale
     // built-in copies and offer a reseed (see WorkspaceSnapshot.pipelineCatalogVersions).
     const pipelineCatalogVersions = Object.fromEntries(
-      seedPipelines().map((p) => [p.id, p.version ?? 0]),
+      seedPipelines(this.pipelineRegistry).map((p) => [p.id, p.version ?? 0]),
     )
     // The current built-in merge-preset catalog versions, so the SPA can flag a workspace's
     // stale built-in copies AND surface a brand-new built-in it doesn't have yet (see

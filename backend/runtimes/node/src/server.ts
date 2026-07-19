@@ -398,6 +398,7 @@ async function bootServer(
   validateRegistrationsOnce({
     agentKindRegistry: container.agentKindRegistry,
     gateRegistry: container.gateRegistry,
+    pipelineRegistry: container.pipelineRegistry,
     onWarn: (problem) => logger.warn({ code: problem.code }, problem.message),
   })
 

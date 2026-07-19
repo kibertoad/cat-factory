@@ -18,7 +18,8 @@ favor of the design a future maintainer would thank you for.
   swallow, a defensive `if`, or a magic constant. A local workaround that leaves the
   underlying flaw in place is a failed fix, not a completed one.
 - **Respect the existing seams.** Extend behaviour through the established ports, registries,
-  and public seams (`registerAgentKind`, `registerGate`, `registerPipeline`, the kernel
+  and public seams (the app-owned registries — `AgentKindRegistry`, `GateRegistry`,
+  `PipelineRegistry`, `VcsProviderRegistry`, … — a deployment registers on by reference, the kernel
   ports, the runtime `gateways`) instead of reaching around them or bolting on a parallel
   path. Copy the shape of the nearest good citizen rather than inventing a one-off.
 - **No shortcuts that create debt.** Do not hard-code what should be configured, duplicate
@@ -544,9 +545,9 @@ facade so the runtimes can't drift (see "Cross-runtime conformance" below).
     runs and reconciles them, gated by a task-estimate. Wired only when enabled.
   - `backend/packages/gitlab` — `@cat-factory/gitlab`, the opt-in **GitLab VCS provider**:
     implements the provider-neutral `VcsClient`/webhook/provisioning ports against the
-    GitLab REST v4 API (`FetchGitLabClient`) and self-registers via
-    `registerVcsProvider('gitlab')`. Kernel + contracts only; the GitHub analogue lives in
-    `@cat-factory/server`/`integrations`.
+    GitLab REST v4 API (`FetchGitLabClient`) and registers via `registerGitLab(vcsRegistry, …)`
+    onto the facade's app-owned `VcsProviderRegistry`. Kernel + contracts only; the GitHub
+    analogue lives in `@cat-factory/server`/`integrations`.
   - `backend/packages/observability-langfuse` — `@cat-factory/observability-langfuse`,
     an opt-in **Langfuse trace sink**: a fetch-based `LlmTraceSink` that streams LLM
     generations + container tool spans to Langfuse, running unchanged on both the Worker
@@ -659,8 +660,9 @@ facade so the runtimes can't drift (see "Cross-runtime conformance" below).
   - a container `security-auditor` (`container-explore` structured, a post-op rendering
     `compliance/REPORT.md` via `RepoFiles.commitFiles`, presented through
     `generic-structured`) + the `pl_org_audit` pipeline, registered purely via the public
-    seams (`registerAgentKind` + `registerPipeline`) and imported for side effect. Proves a
-    brand-new repo-writing agent ships with ZERO harness changes. See **Custom agents** below.
+    app-owned registries (`registerExampleCustomAgents(agentKindRegistry, presets, gateRegistry,
+    stepResolverRegistry, pipelineRegistry)` — by reference, no module-global side effect). Proves
+    a brand-new repo-writing agent ships with ZERO harness changes. See **Custom agents** below.
 - `deploy/backend` — example Worker deployment: a one-line `src/index.ts`
   re-exporting `@cat-factory/worker` + the full production `wrangler.toml`
   (`[vars]`, the GHCR runner `image`, `migrations_dir` →
@@ -1258,9 +1260,9 @@ mechanical/deterministic work is backend TypeScript. Full model + worked example
   [prose or structured JSON → `result.custom`] / `container-coding`) → `postOps`
   (deterministic backend TS: parse `result.custom`, render artifact files, commit via
   `RepoFiles`). `preOps`/`postOps` are plain `RepoOp` functions.
-- **Registration** (an import side effect, mirroring the model-provider seam):
-  `registerAgentKind({ kind, systemPrompt, agent, preOps, postOps, presentation })`
-  (`@cat-factory/agents`) + `registerPipeline(...)` (`@cat-factory/kernel`). A
+- **Registration** (by reference on the facade's app-owned registries, NOT a module-global side
+  effect): `agentKindRegistry.register({ kind, systemPrompt, agent, preOps, postOps, presentation })`
+  (`@cat-factory/agents`) + `pipelineRegistry.register(...)` (`@cat-factory/kernel`). A
   `container-*` surface implies the container requirement.
 - **Live execution wiring**: `ExecutionService` runs a registered kind's `preOps` before
   dispatch and `postOps` after `recordStepResult`, over a per-run `RepoFiles` bound to the

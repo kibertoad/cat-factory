@@ -262,13 +262,16 @@ What remains:
 
 **Gaps:**
 
-- **Four registries remain module-global** (pipeline, VCS, provider-token, traits), each
-  still carrying `clear*()` test cruft and the phantom-`Map` hazard for external adapters that
-  ADR 0018 documents. ~~Six registries...~~ — the **gate** and **step-resolver** registries are
-  now app-owned instances threaded through `CoreDependencies` (see
-  `initiatives/registry-di-migration.md`), and the `registerBuiltinGates()` band-aid (which
-  re-registered built-ins after a `clear()`) is **gone** — `registerBuiltinGates(gateRegistry)`
-  now installs into the injected instance.
+- ~~**Four registries remain module-global** (pipeline, VCS, provider-token, traits)~~ —
+  **addressed**: all four have migrated to app-owned instances threaded through
+  `CoreDependencies` (`PipelineRegistry`, `VcsProviderRegistry`, `ProviderRegistry`, and — for
+  traits — the trait definitions/assignments folded onto the existing `AgentKindRegistry`). The
+  `clear*()` test cruft and the phantom-`Map` hazard for external adapters (ADR 0018) are gone;
+  see `initiatives/registry-di-migration.md`. The **gate** and **step-resolver** registries
+  migrated earlier (the `registerBuiltinGates()` band-aid that re-registered built-ins after a
+  `clear()` is gone — `registerBuiltinGates(gateRegistry)` installs into the injected instance).
+  The only registry not yet a `*Registry` class is the observability-adapter record (already
+  app-owned in shape — a record injected into `RegistryReleaseHealthProvider`, not a module `Map`).
 - **Built-in agents bypass their own seams**: core kinds (coder, blueprints, spec-writer,
   merger, tester, requirements/clarity review) live in a static `ROLES` map rather than
   `AgentKindDefinition`s; the merger resolver is built inline rather than via
@@ -340,7 +343,7 @@ candidate entry — the recommendation is to prioritize them, not to re-plan the
 | 3   | Testing         | Enable vitest coverage reporting in the CI test lanes and ratchet-floor the high-value packages (`orchestration`, `server`, `contracts`, `spend`); add tests for `contracts` (zero today).                                                                                                                                                                                                                                                        | High   | Low–Med |
 | 4   | Observability   | Add an operational metrics surface: pg-boss queue depth + job latency, `AppCaches` hit/miss counters, HTTP request rate/latency, and a counter for dropped telemetry/notification batches. Either a `/metrics` scrape endpoint or documented OTLP-only.                                                                                                                                                                                           | High   | Medium  |
 | 5   | Complexity ↗    | ✅ **Done** — the engine split resumed: `ExecutionService` 3,707 → ~2,775 (the `assert*` admission family → `RunAdmission`, the review-kind builders → `review-kinds.ts`) and `RunDispatcher` 4,217 → ~3,135 (the deployer fan-out → `DeployerStepController`, the follow-up gate → `FollowUpGateController`); `scripts/check-file-size.mjs` (CI `repo-guards`) now ratchets every oversized file so re-accretion fails a PR instead of an audit. | High   | Medium  |
-| 6   | Extensibility ↗ | **In progress** — the **gate** + **step-resolver** registries are migrated to app-owned DI (`registerBuiltinGates(gateRegistry)`; the module-global `registerBuiltinGates()` band-aid + the gate/resolver `clear*()` are gone). Remaining: pipelines, VCS, provider tokens, traits.                                                                                                                                                               | High   | Medium  |
+| 6   | Extensibility ↗ | ✅ **Done** — every module-global registry is now app-owned DI: gate + step-resolver (earlier), then pipelines (`PipelineRegistry`), VCS (`VcsProviderRegistry`, a required `ServerContainer` field), provider tokens (`ProviderRegistry` → `GateContext`), and traits (folded onto `AgentKindRegistry`). Only the observability-adapter record (already non-`Map`) is unnormalised; see `initiatives/registry-di-migration.md`.                     | High   | Medium  |
 | 7   | Code quality    | ✅ **Done** — `TaskRepository.listByRefs` (a chunked-`IN`-per-source batch read, D1 ⇄ Drizzle + a conformance assertion) replaces the `taskRepo.get`-in-`Promise.all` N+1 in `AgentContextBuilder`; the `'jira'`/`'github'` source literals are de-hardcoded into `extractReferences`' typed `taskRefs`.                                                                                                                                          | Medium | Low     |
 | 8   | Observability   | Distributed tracing: HTTP server spans on the shared Hono app + `traceparent` propagation into the container job body so harness tool spans nest under the run's trace instead of being siblings.                                                                                                                                                                                                                                                 | Medium | Medium  |
 | 9   | Frontend        | Add a global Nuxt error handler reporting client exceptions to a backend sink; surface WebSocket disconnects as a degraded-state indicator instead of a silent close.                                                                                                                                                                                                                                                                             | Medium | Low     |

@@ -13,8 +13,11 @@ import type { AgentKindRegistry } from './registry.js'
 // kind's system prompt (e.g. `spec-aware` explains the in-repo `spec/` artifact).
 //
 // Built-in kinds get their traits from STANDARD_AGENT_TRAITS below; custom kinds declare
-// theirs via `registerAgentKind({ traits })`. Custom traits (with their own guidance) are
-// registered with `registerAgentTrait`, mirroring the custom-agent / model-provider seams.
+// theirs via `registerAgentKind({ traits })`. Custom trait DEFINITIONS (with their own
+// guidance) and extra trait ASSIGNMENTS to existing kinds now live on the app-owned
+// {@link AgentKindRegistry} instance (`registry.registerTrait` / `registry.assignTraits`),
+// NOT a module-global `Map` — so module identity stops mattering for a separately-published
+// extension package, and a test builds a fresh registry instead of calling a `clear*()`.
 
 /** A trait id. Free-form so deployments can define their own beyond the standard two. */
 export type AgentTrait = string
@@ -133,60 +136,28 @@ export interface AgentTraitDefinition {
   guidance?: string | ((kind: AgentKind) => string)
 }
 
-// Process-wide trait registry, mirroring the agent-kind / model-provider registries.
-const traitRegistry = new Map<AgentTrait, AgentTraitDefinition>()
-
-// Extra trait ASSIGNMENTS registered by a deployment/plugin at startup — e.g. the
-// optional `@cat-factory/consensus` package marking which built-in kinds are eligible
-// for a consensus strategy (`specialist-panel-capable`, …). Distinct from a kind's
-// built-in STANDARD_AGENT_TRAITS and from a registered custom kind's own `traits`:
-// this seam adds traits to an EXISTING kind without redefining its prompt. Unioned in
-// {@link traitsFor}. Mirrors the registry seams above.
-const assignedTraits = new Map<AgentKind, Set<AgentTrait>>()
-
-/** Assign extra capability traits to an (existing) agent kind. Additive; idempotent per trait. */
-export function assignAgentTraits(kind: AgentKind, traits: Iterable<AgentTrait>): void {
-  const set = assignedTraits.get(kind) ?? new Set<AgentTrait>()
-  for (const trait of traits) set.add(trait)
-  assignedTraits.set(kind, set)
-}
-
-/** Drop all extra trait assignments. Intended for tests that exercise assignment. */
-export function clearAssignedAgentTraits(): void {
-  assignedTraits.clear()
-}
-
-/** Register a custom trait definition. A later registration of the same id replaces it. */
-export function registerAgentTrait(definition: AgentTraitDefinition): void {
-  traitRegistry.set(definition.id, definition)
-}
-
-/** Register several custom trait definitions at once. */
-export function registerAgentTraits(definitions: Iterable<AgentTraitDefinition>): void {
-  for (const definition of definitions) registerAgentTrait(definition)
-}
-
-/** The definition for a trait id, or undefined when it is a pure marker / unregistered. */
-export function registeredAgentTrait(id: AgentTrait): AgentTraitDefinition | undefined {
-  return traitRegistry.get(id)
-}
-
-/** Drop all registered (custom) traits. Intended for tests; standard traits re-register below. */
-export function clearRegisteredAgentTraits(): void {
-  traitRegistry.clear()
-  registerStandardTraits()
-}
+/**
+ * The standard trait DEFINITIONS, pre-loaded onto every {@link AgentKindRegistry} instance
+ * (its constructor installs them) — the analogue of `STANDARD_AGENT_TRAITS`, but for the
+ * per-trait guidance. Only `spec-aware` carries guidance; the rest are pure markers whose
+ * whole effect lives in the engine (the fragment fold / the interview-gate handling).
+ */
+export const STANDARD_TRAIT_DEFINITIONS: readonly AgentTraitDefinition[] = [
+  { id: CODE_AWARE_TRAIT },
+  { id: DOC_AWARE_TRAIT },
+  { id: SPEC_AWARE_TRAIT, guidance: SPEC_AWARE_GUIDANCE },
+  { id: INTERVIEW_GATE_TRAIT },
+]
 
 /**
- * The traits a kind carries: its built-in set unioned with a registered kind's own `traits`
- * (read off the app-owned {@link AgentKindRegistry}) and any extra assignments. The trait
- * definition + assignment registries remain module-global (the separate "Agent traits" slice);
- * only the agent-kind lookup rides the injected registry.
+ * The traits a kind carries: its built-in set ({@link STANDARD_AGENT_TRAITS}) unioned with a
+ * registered kind's own `traits` and any extra assignments — both read off the app-owned
+ * {@link AgentKindRegistry} instance, so there is no module-global state.
  */
 export function traitsFor(kind: AgentKind, registry: AgentKindRegistry): Set<AgentTrait> {
   const traits = new Set<AgentTrait>(STANDARD_AGENT_TRAITS[kind] ?? [])
   for (const trait of registry.get(kind)?.traits ?? []) traits.add(trait)
-  for (const trait of assignedTraits.get(kind) ?? []) traits.add(trait)
+  for (const trait of registry.assignedTraitsFor(kind)) traits.add(trait)
   return traits
 }
 
@@ -198,26 +169,14 @@ export function hasTrait(kind: AgentKind, trait: AgentTrait, registry: AgentKind
 /**
  * The guidance lines contributed by the traits a kind carries, in trait order. Folded
  * into the kind's system prompt by `systemPromptFor`. Marker traits (no guidance, e.g.
- * `code-aware`) contribute nothing here.
+ * `code-aware`) contribute nothing here. Trait definitions are read off the injected registry.
  */
 export function traitGuidanceFor(kind: AgentKind, registry: AgentKindRegistry): string[] {
   const lines: string[] = []
   for (const trait of traitsFor(kind, registry)) {
-    const guidance = traitRegistry.get(trait)?.guidance
+    const guidance = registry.traitDefinition(trait)?.guidance
     if (!guidance) continue
     lines.push(typeof guidance === 'function' ? guidance(kind) : guidance)
   }
   return lines
 }
-
-/** Register the standard traits' definitions (only spec-aware carries guidance). */
-function registerStandardTraits(): void {
-  registerAgentTrait({ id: CODE_AWARE_TRAIT })
-  // A pure marker, like `code-aware`: its whole effect is the engine's fragment fold.
-  registerAgentTrait({ id: DOC_AWARE_TRAIT })
-  registerAgentTrait({ id: SPEC_AWARE_TRAIT, guidance: SPEC_AWARE_GUIDANCE })
-  // A pure marker, like `code-aware`: its whole effect is the engine's interview-gate handling.
-  registerAgentTrait({ id: INTERVIEW_GATE_TRAIT })
-}
-
-registerStandardTraits()

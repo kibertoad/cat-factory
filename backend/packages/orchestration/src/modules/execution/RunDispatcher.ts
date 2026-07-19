@@ -26,6 +26,7 @@ import type {
   GateDefinition,
   GateRegistry,
   StepResolverRegistry,
+  ProviderRegistry,
   GateHelperJobResult,
   IdGenerator,
   IssueWritebackProvider,
@@ -50,7 +51,6 @@ import {
   failureKindFromHarnessCause,
   FIXER_AGENT_KIND,
   getErrorMessage,
-  getProvider,
   INITIATIVE_ANALYST_AGENT_KIND,
   INITIATIVE_COMMITTER_AGENT_KIND,
   INITIATIVE_PLANNER_AGENT_KIND,
@@ -58,7 +58,6 @@ import {
   NotFoundError,
   parseLocalModelId,
   recordGateAttempt,
-  requireProvider,
   RunContendedError,
   sameSubtasks,
 } from '@cat-factory/kernel'
@@ -215,6 +214,8 @@ export interface RunDispatcherDeps {
   gateRegistry: GateRegistry
   /** App-owned step-completion-resolver registry (deployment-registered resolvers). */
   stepResolverRegistry: StepResolverRegistry
+  /** App-owned provider registry the gate machine's {@link GateContext} reads (gate data sources). */
+  providerRegistry: ProviderRegistry
   workRunner: WorkRunner
   events: ExecutionEventPublisher
   idGenerator: IdGenerator
@@ -286,6 +287,7 @@ export class RunDispatcher {
   private readonly agentKindRegistry: AgentKindRegistry
   private readonly gateRegistry: GateRegistry
   private readonly stepResolverRegistry: StepResolverRegistry
+  private readonly providerRegistry: ProviderRegistry
   private readonly workRunner: WorkRunner
   private readonly events: ExecutionEventPublisher
   private readonly idGenerator: IdGenerator
@@ -360,6 +362,7 @@ export class RunDispatcher {
     this.agentKindRegistry = deps.agentKindRegistry
     this.gateRegistry = deps.gateRegistry
     this.stepResolverRegistry = deps.stepResolverRegistry
+    this.providerRegistry = deps.providerRegistry
     this.workRunner = deps.workRunner
     this.events = deps.events
     this.idGenerator = deps.idGenerator
@@ -2588,10 +2591,11 @@ export class RunDispatcher {
       raiseNotification: async (workspaceId, input) => {
         await this.notificationService?.raise(workspaceId, input)
       },
-      // A gate reaches its deployment-wired provider through the typed registry rather than
-      // closing over a hand-authored module global; the engine just forwards to it.
-      getProvider,
-      requireProvider,
+      // A gate reaches its deployment-wired provider through the app-owned provider registry the
+      // facade injected — not a module global; the engine just forwards to that instance.
+      getProvider: (token) => this.providerRegistry.get(token),
+      requireProvider: (token) => this.providerRegistry.require(token),
+      isProviderWired: (token) => this.providerRegistry.isWired(token),
     }
   }
 

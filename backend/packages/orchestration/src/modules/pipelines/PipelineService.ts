@@ -11,6 +11,7 @@ import type {
   StepOptions,
   TesterQualityConfig,
 } from '@cat-factory/kernel'
+import type { PipelineRegistry } from '@cat-factory/kernel'
 import { assertFound, ConflictError, seedPipelines, ValidationError } from '@cat-factory/kernel'
 import type {
   ObservabilityConnectionRepository,
@@ -38,6 +39,12 @@ export interface PipelineServiceDependencies {
   pipelineRepository: PipelineRepository
   idGenerator: IdGenerator
   /**
+   * The app-owned pipeline registry (deployment-registered extra pipelines). When wired, a
+   * reseed resolves a deployment-registered built-in pipeline too. Optional — absent (tests) ⇒
+   * the built-in catalog only.
+   */
+  pipelineRegistry?: PipelineRegistry
+  /**
    * Resolves whether the workspace has any observability integration enabled (today: a
    * Datadog connection). When absent (no observability persistence wired at all), the
    * observability-gated step can never be added.
@@ -59,6 +66,7 @@ export class PipelineService {
   private readonly idGenerator: IdGenerator
   private readonly observabilityConnectionRepository?: ObservabilityConnectionRepository
   private readonly pipelineScheduleRepository?: PipelineScheduleRepository
+  private readonly pipelineRegistry?: PipelineRegistry
 
   constructor({
     workspaceRepository,
@@ -66,12 +74,14 @@ export class PipelineService {
     idGenerator,
     observabilityConnectionRepository,
     pipelineScheduleRepository,
+    pipelineRegistry,
   }: PipelineServiceDependencies) {
     this.workspaceRepository = workspaceRepository
     this.pipelineRepository = pipelineRepository
     this.idGenerator = idGenerator
     this.observabilityConnectionRepository = observabilityConnectionRepository
     this.pipelineScheduleRepository = pipelineScheduleRepository
+    this.pipelineRegistry = pipelineRegistry
   }
 
   /**
@@ -302,7 +312,7 @@ export class PipelineService {
         'Only built-in pipelines can be reseeded. Delete a custom pipeline instead.',
       )
     }
-    const seed = seedPipelines().find((p) => p.id === id)
+    const seed = seedPipelines(this.pipelineRegistry).find((p) => p.id === id)
     if (!seed) {
       throw new ValidationError(
         `Pipeline '${id}' is no longer in the built-in catalog, so it cannot be reseeded. Delete it instead.`,
