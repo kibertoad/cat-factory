@@ -4561,7 +4561,9 @@
       "refPlaceholder": "Page id or URL (e.g. a Confluence/Notion page or GitHub file URL)",
       "tagsPlaceholder": "Tags, comma-separated (optional)",
       "link": "Link as living fragment",
-      "githubBrowseHint": "Browse the repo and pick the file to link."
+      "githubBrowseHint": "Browse the repo and pick one or more files to link.",
+      "selectedFiles": "Selected files ({count})",
+      "removeFile": "Remove file"
     },
     "sources": {
       "metaSynced": "synced · ref {ref}",
@@ -4595,7 +4597,8 @@
       "upToDate": "Up to date",
       "checkSourceFailed": "Could not check source",
       "sourceUnlinked": "Source unlinked",
-      "unlinkSourceFailed": "Could not unlink source"
+      "unlinkSourceFailed": "Could not unlink source",
+      "documentsLinked": "Linked {count} documents as living fragments"
     },
     "confirmRemove": {
       "title": "Delete this fragment?",

@@ -81,7 +81,7 @@ export class GitHubDocsProvider implements DocumentSourceProvider {
     if (!id) {
       throw new ValidationError(`"${externalId}" is not a valid GitHub doc reference`)
     }
-    const installationId = await this.resolveInstallationId(workspaceId, id.owner)
+    const installationId = await this.resolveInstallationId(workspaceId)
     const ref = { owner: id.owner, repo: id.repo }
     // Read the file's head commit sha FIRST (the version token), then read the body
     // pinned to that exact sha, so the (body, version) pair is consistent: two unpinned
@@ -135,7 +135,7 @@ export class GitHubDocsProvider implements DocumentSourceProvider {
     if (!id) {
       throw new ValidationError(`"${externalId}" is not a valid GitHub doc reference`)
     }
-    const installationId = await this.resolveInstallationId(workspaceId, id.owner)
+    const installationId = await this.resolveInstallationId(workspaceId)
     const commitSha = await this.deps.githubClient.latestCommitSha(
       installationId,
       { owner: id.owner, repo: id.repo },
@@ -185,24 +185,23 @@ export class GitHubDocsProvider implements DocumentSourceProvider {
   }
 
   /**
-   * Resolve the installation to read `owner`'s repo with, scoped to THIS workspace.
-   * A workspace owns exactly one installation, and every repo it can reach lives
-   * under that installation's account — so the doc's `owner` must match the
-   * workspace's own installation account. Resolving via `getByWorkspace` (not a
-   * deployment-wide `listActive` scan by owner) is what stops a crafted `externalId`
-   * from reaching another tenant's repo through some other workspace's installation
-   * token — the same tenant-isolation `search` already enforces.
+   * Resolve the installation whose token this workspace reads GitHub docs with, scoped to
+   * THIS workspace via `getByWorkspace` (never a deployment-wide `listActive` scan). That
+   * scoping is what enforces tenant isolation: a crafted `externalId` can only ever ride
+   * the caller's OWN installation token, which GitHub limits to what it may read — its
+   * account's granted repos plus public repos. So a foreign OR crafted `owner/repo:path`
+   * for another tenant's PRIVATE repo simply 404s at the read (classified by
+   * {@link fetchFailure}); there is no need to precheck the owner against the installation
+   * account. Dropping that precheck is deliberate — it used to reject a repo the token can
+   * genuinely reach (a PAT that spans accounts in local mode, or a PUBLIC guidelines repo
+   * owned by someone else that a hosted App can still read), which is a legitimate thing to
+   * link. Reachability is decided by the token, not by matching the owner string.
    */
-  private async resolveInstallationId(workspaceId: string, owner: string): Promise<number> {
+  private async resolveInstallationId(workspaceId: string): Promise<number> {
     const installation = await this.deps.installations.getByWorkspace(workspaceId)
     if (!installation) {
       throw new ConflictError(
         `Workspace '${workspaceId}' has no GitHub installation. Install the GitHub App (or set a PAT in local mode) to link its docs.`,
-      )
-    }
-    if (installation.accountLogin.toLowerCase() !== owner.toLowerCase()) {
-      throw new ConflictError(
-        `GitHub doc "${owner}" is outside this workspace's installation (${installation.accountLogin}).`,
       )
     }
     return installation.installationId

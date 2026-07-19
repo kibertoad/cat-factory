@@ -181,61 +181,104 @@ async function removeFragment(id: string) {
 // Link a Confluence/Notion page or GitHub file as a fragment that is re-resolved
 // from the source at run time (a living source of truth, not a frozen snapshot).
 const docDraft = ref({ source: '' as DocumentSourceKind | '', ref: '', tags: '' })
-const docDraftValid = computed(
-  () => !docLinkDisabled.value && docDraft.value.source && docDraft.value.ref.trim(),
-)
+const docDraftValid = computed(() => {
+  if (docLinkDisabled.value || !docDraft.value.source) return false
+  // The GitHub picker validates on staged files; every other path on the free-text ref.
+  return usingDocPicker.value ? docFilePaths.value.length > 0 : !!docDraft.value.ref.trim()
+})
 
 // ---- GitHub file picker (documents tab) -----------------------------------
-// For a GitHub source, let the user search a repo + browse to the file instead of
-// hand-typing a `owner/repo:path` ref. Picking a file fills `docDraft.ref` (still
-// editable, so pasting a URL/shorthand keeps working). Only offered when the App is
-// connected; other sources (Confluence/Notion) keep the free-text ref field.
+// For a GitHub source, let the user search a repo + browse to one or MORE files
+// instead of hand-typing a `owner/repo:path` ref. Files are staged into a cart that
+// spans folders (browsing away never drops earlier picks), and every staged file is
+// linked as its own living fragment on submit. Only offered when the App/PAT is
+// connected; other sources (Confluence/Notion) keep the single free-text ref field.
 const isGithubDoc = computed(() => docDraft.value.source === 'github')
 const showGithubDocPicker = computed(() => isGithubDoc.value && githubReady.value)
 const docRepoId = ref<number | undefined>(undefined)
 const docRepo = ref<GitHubAvailableRepo | undefined>(undefined)
-const docFilePath = ref<string | undefined>(undefined)
+// The staged files (repo-root-relative paths) for the selected repo. Multi-select so
+// any number of files from any nesting level can be linked in one action.
+const docFilePaths = ref<string[]>([])
 
-// Reset the picker (and the derived ref) whenever the selected source changes.
+// Reset the picker (and the manual ref) whenever the selected source changes.
 watch(
   () => docDraft.value.source,
   () => {
     docRepoId.value = undefined
     docRepo.value = undefined
-    docFilePath.value = undefined
+    docFilePaths.value = []
     docDraft.value.ref = ''
   },
 )
 
-// A new repo selection clears the previously-browsed file.
+// A new repo selection clears the previously-staged files (they were repo-scoped).
 watch(docRepoId, () => {
-  docFilePath.value = undefined
-})
-
-// Derive the canonical `owner/repo:path` ref the GitHub docs provider expects.
-watch([docRepo, docFilePath], () => {
-  if (docRepo.value && docFilePath.value) {
-    docDraft.value.ref = `${docRepo.value.owner}/${docRepo.value.name}:${docFilePath.value}`
-  }
+  docFilePaths.value = []
 })
 
 /** This tier's existing document-backed fragments. */
 const documentFragments = computed(() => library.fragments.filter((f) => f.documentRef))
 
+/** Add/remove a browsed file to/from the staged cart (the tree emits `toggle`). */
+function toggleDocFile(path: string) {
+  const clean = normalizeRepoPath(path)
+  const i = docFilePaths.value.indexOf(clean)
+  if (i >= 0) docFilePaths.value.splice(i, 1)
+  else docFilePaths.value.push(clean)
+}
+
+/** Files of the selected repo already linked as fragments — shown "added"/not re-pickable. */
+const docAddedPaths = computed<string[]>(() => {
+  const repo = docRepo.value
+  if (!repo) return []
+  const prefix = `${repo.owner}/${repo.name}:`
+  return documentFragments.value
+    .filter(
+      (f) => f.documentRef?.source === 'github' && f.documentRef.externalId.startsWith(prefix),
+    )
+    .map((f) => f.documentRef!.externalId.slice(prefix.length))
+})
+
+/** The canonical `owner/repo:path` refs for the staged files. */
+const stagedDocRefs = computed(() =>
+  docRepo.value
+    ? docFilePaths.value.map((path) => ({
+        path,
+        ref: `${docRepo.value!.owner}/${docRepo.value!.name}:${path}`,
+      }))
+    : [],
+)
+
+/** When the rich picker drives the ref(s); otherwise the free-text field does. */
+const usingDocPicker = computed(() => showGithubDocPicker.value)
+
 async function linkDocumentFragment() {
   if (!docDraftValid.value) return
   linkingDoc.value = true
   try {
-    await library.createDocumentFragment({
-      source: docDraft.value.source as DocumentSourceKind,
-      ref: docDraft.value.ref.trim(),
-      tags: docDraft.value.tags
-        .split(',')
-        .map((t) => t.trim())
-        .filter(Boolean),
-    })
+    const source = docDraft.value.source as DocumentSourceKind
+    const tags = docDraft.value.tags
+      .split(',')
+      .map((t) => t.trim())
+      .filter(Boolean)
+    // The picker stages many files (one fragment each); the free-text field is a single ref.
+    const refs = usingDocPicker.value
+      ? stagedDocRefs.value.map((s) => s.ref)
+      : [docDraft.value.ref.trim()]
+    // Sequential on purpose: each link fetches its document from the source, and a serial
+    // walk keeps a bad ref from being masked by a burst of parallel failures.
+    for (const ref of refs) {
+      await library.createDocumentFragment({ source, ref, tags })
+    }
     docDraft.value = { source: '', ref: '', tags: '' }
-    toast.add({ title: t('fragments.toast.documentLinked'), icon: 'i-lucide-link' })
+    toast.add({
+      title:
+        refs.length > 1
+          ? t('fragments.toast.documentsLinked', { count: refs.length })
+          : t('fragments.toast.documentLinked'),
+      icon: 'i-lucide-link',
+    })
   } catch (e) {
     notifyError(t('fragments.toast.linkDocumentFailed'), e)
   } finally {
@@ -584,7 +627,7 @@ async function unlinkSource(id: string) {
               </UButton>
             </div>
 
-            <!-- GitHub: search a repo + browse to the file instead of typing the ref -->
+            <!-- GitHub: search a repo + browse to one or more files instead of typing the ref -->
             <template v-if="showGithubDocPicker">
               <GitHubRepoSearchSelect v-model="docRepoId" @update:repo="docRepo = $event" />
               <div
@@ -594,11 +637,47 @@ async function unlinkSource(id: string) {
                 <p class="mb-2 text-xs text-slate-400">
                   {{ t('fragments.documents.githubBrowseHint') }}
                 </p>
-                <RepoTreeBrowser v-model="docFilePath" :repo-github-id="docRepoId" mode="file" />
+                <RepoTreeBrowser
+                  :repo-github-id="docRepoId"
+                  mode="file"
+                  multiple
+                  :selected-paths="docFilePaths"
+                  :added-paths="docAddedPaths"
+                  @toggle="toggleDocFile"
+                />
+                <div v-if="stagedDocRefs.length" class="mt-2 space-y-1">
+                  <p class="text-xs font-medium text-slate-400">
+                    {{ t('fragments.documents.selectedFiles', { count: stagedDocRefs.length }) }}
+                  </p>
+                  <div
+                    v-for="staged in stagedDocRefs"
+                    :key="staged.path"
+                    class="flex items-center gap-1.5 rounded bg-slate-800/60 px-2 py-1 text-xs text-slate-300"
+                  >
+                    <UIcon
+                      name="i-lucide-file-code-2"
+                      class="h-3.5 w-3.5 shrink-0 text-indigo-400"
+                    />
+                    <span class="truncate">{{ staged.path }}</span>
+                    <UButton
+                      class="ms-auto"
+                      color="neutral"
+                      variant="ghost"
+                      size="xs"
+                      icon="i-lucide-x"
+                      :aria-label="t('fragments.documents.removeFile')"
+                      @click="toggleDocFile(staged.path)"
+                    />
+                  </div>
+                </div>
               </div>
             </template>
 
-            <UInput v-model="docDraft.ref" :placeholder="t('fragments.documents.refPlaceholder')" />
+            <UInput
+              v-if="!usingDocPicker"
+              v-model="docDraft.ref"
+              :placeholder="t('fragments.documents.refPlaceholder')"
+            />
             <UInput
               v-model="docDraft.tags"
               :placeholder="t('fragments.documents.tagsPlaceholder')"

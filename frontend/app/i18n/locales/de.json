@@ -3561,7 +3561,9 @@
       "refPlaceholder": "Seiten-ID oder URL (z. B. eine Confluence-/Notion-Seite oder GitHub-Datei-URL)",
       "tagsPlaceholder": "Tags, kommagetrennt (optional)",
       "link": "Als lebendes Fragment verknüpfen",
-      "githubBrowseHint": "Durchsuchen Sie das Repo und wählen Sie die zu verknüpfende Datei."
+      "githubBrowseHint": "Durchsuchen Sie das Repo und wählen Sie eine oder mehrere zu verknüpfende Dateien.",
+      "selectedFiles": "Ausgewählte Dateien ({count})",
+      "removeFile": "Datei entfernen"
     },
     "sources": {
       "metaSynced": "synchronisiert · ref {ref}",
@@ -3595,7 +3597,8 @@
       "upToDate": "Aktuell",
       "checkSourceFailed": "Quelle konnte nicht geprüft werden",
       "sourceUnlinked": "Quelle-Verknüpfung aufgehoben",
-      "unlinkSourceFailed": "Quelle-Verknüpfung konnte nicht aufgehoben werden"
+      "unlinkSourceFailed": "Quelle-Verknüpfung konnte nicht aufgehoben werden",
+      "documentsLinked": "{count} Dokumente als lebende Fragmente verknüpft"
     },
     "confirmRemove": {
       "title": "Dieses Fragment löschen?",

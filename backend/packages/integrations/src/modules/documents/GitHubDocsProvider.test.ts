@@ -9,10 +9,12 @@ import { GitHubDocsProvider } from './GitHubDocsProvider.js'
 
 // GitHubDocsProvider rides the workspace's installed GitHub App/PAT — it stores no
 // per-workspace credential. The security-critical property is that a read is scoped to
-// the workspace's OWN installation: a crafted `owner/repo:path` external id must never
-// reach another tenant's repo through some other workspace's installation token. These
-// tests pin that scoping (resolution via getByWorkspace + an owner-match guard), plus the
-// implicit-connection availability signal.
+// the workspace's OWN installation: a crafted `owner/repo:path` external id can only ever
+// ride THIS workspace's installation token (resolution via getByWorkspace, never a
+// deployment-wide scan), and GitHub limits that token to what it may read — so another
+// tenant's PRIVATE repo 404s at the read. A repo the token CAN reach (a public guidelines
+// repo owned by someone else, or a cross-account PAT in local mode) links fine — there is
+// no owner-string precheck. These tests pin that scoping plus the availability signal.
 
 function installation(overrides: Partial<GitHubInstallation> = {}): GitHubInstallation {
   return {
@@ -81,12 +83,28 @@ describe('GitHubDocsProvider workspace-scoped reads', () => {
     expect(calls).toEqual([{ installationId: 100, path: 'docs/x.md' }])
   })
 
-  it('fetchDocument rejects a doc whose owner is NOT the workspace installation account', async () => {
-    const { provider } = makeProvider({ installationForWorkspace: installation() })
+  it('reads a repo owned by another account when the token can see it, via the workspace installation', async () => {
+    // acme is this workspace's installation; `other-owner` is a different account. A public
+    // guidelines repo (or, in local mode, a PAT that spans accounts) is genuinely readable —
+    // the workspace's own installation token is the boundary, not an owner-string match — so
+    // the link goes through, still on THIS workspace's installation id.
+    const { provider, calls } = makeProvider({ installationForWorkspace: installation() })
 
-    // acme is this workspace's installation; other-tenant is a different account. Even if
-    // other-tenant has the App installed elsewhere in the deployment, this workspace must
-    // not be able to read it.
+    const doc = await provider.fetchDocument({}, 'other-owner/guidelines:docs/x.md', 'ws_1')
+
+    expect(doc.body).toBe('# Doc')
+    expect(calls).toEqual([{ installationId: 100, path: 'docs/x.md' }])
+  })
+
+  it('a foreign private repo the token cannot read fails at the fetch (isolation enforced by the token)', async () => {
+    // The real tenant-isolation boundary: another tenant's PRIVATE repo is unreadable with
+    // THIS workspace's installation token, so GitHub 403/404s it — surfaced as a ConflictError
+    // naming the access remediation, not a silent success.
+    const { provider } = makeProvider({
+      installationForWorkspace: installation(),
+      fileError: Object.assign(new Error('Not Found'), { status: 404 }),
+    })
+
     await expect(
       provider.fetchDocument({}, 'other-tenant/repo:secret.md', 'ws_1'),
     ).rejects.toBeInstanceOf(ConflictError)
@@ -153,9 +171,16 @@ describe('GitHubDocsProvider workspace-scoped reads', () => {
     const matching = makeProvider({ installationForWorkspace: installation(), commitSha: 'sha-9' })
     expect(await matching.provider.probeVersion({}, 'acme/repo:docs/x.md', 'ws_1')).toBe('sha-9')
 
-    const crossTenant = makeProvider({ installationForWorkspace: installation() })
+    // A different owner probes through the same workspace installation token (no owner-string
+    // precheck) — reachability is the token's job, just like fetchDocument.
+    const foreign = makeProvider({ installationForWorkspace: installation(), commitSha: 'sha-3' })
+    expect(
+      await foreign.provider.probeVersion({}, 'other-owner/guidelines:docs/x.md', 'ws_1'),
+    ).toBe('sha-3')
+
+    const noInstall = makeProvider({ installationForWorkspace: null })
     await expect(
-      crossTenant.provider.probeVersion({}, 'other-tenant/repo:secret.md', 'ws_1'),
+      noInstall.provider.probeVersion({}, 'acme/repo:docs/x.md', 'ws_1'),
     ).rejects.toBeInstanceOf(ConflictError)
   })
 

@@ -4385,7 +4385,9 @@
       "refPlaceholder": "Id або URL сторінки (напр. сторінка Confluence/Notion чи URL файлу GitHub)",
       "tagsPlaceholder": "Теги, розділені комами (необов'язково)",
       "link": "Прив'язати як живий фрагмент",
-      "githubBrowseHint": "Перегляньте репозиторій і виберіть файл для зв’язування."
+      "githubBrowseHint": "Перегляньте репозиторій і виберіть один або кілька файлів для зв’язування.",
+      "selectedFiles": "Вибрані файли ({count})",
+      "removeFile": "Видалити файл"
     },
     "sources": {
       "metaSynced": "синхронізовано · ref {ref}",
@@ -4419,7 +4421,8 @@
       "upToDate": "Актуально",
       "checkSourceFailed": "Не вдалося перевірити джерело",
       "sourceUnlinked": "Джерело відв'язано",
-      "unlinkSourceFailed": "Не вдалося відв'язати джерело"
+      "unlinkSourceFailed": "Не вдалося відв'язати джерело",
+      "documentsLinked": "Прив’язано {count} документів як живі фрагменти"
     },
     "confirmRemove": {
       "title": "Видалити цей фрагмент?",

@@ -4385,7 +4385,9 @@
       "refPlaceholder": "Id o URL de página (p. ej., una página de Confluence/Notion o la URL de un archivo de GitHub)",
       "tagsPlaceholder": "Etiquetas, separadas por comas (opcional)",
       "link": "Vincular como fragmento vivo",
-      "githubBrowseHint": "Explora el repositorio y elige el archivo a enlazar."
+      "githubBrowseHint": "Explora el repositorio y elige uno o más archivos a enlazar.",
+      "selectedFiles": "Archivos seleccionados ({count})",
+      "removeFile": "Quitar archivo"
     },
     "sources": {
       "metaSynced": "sincronizado · ref {ref}",
@@ -4419,7 +4421,8 @@
       "upToDate": "Al día",
       "checkSourceFailed": "No se pudo comprobar el origen",
       "sourceUnlinked": "Origen desvinculado",
-      "unlinkSourceFailed": "No se pudo desvincular el origen"
+      "unlinkSourceFailed": "No se pudo desvincular el origen",
+      "documentsLinked": "{count} documentos vinculados como fragmentos vivos"
     },
     "confirmRemove": {
       "title": "¿Eliminar este fragmento?",

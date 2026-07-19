@@ -4397,7 +4397,9 @@
       "refPlaceholder": "ページ id または URL (例: Confluence/Notion ページや GitHub ファイル URL)",
       "tagsPlaceholder": "タグ、カンマ区切り (任意)",
       "link": "リビングフラグメントとしてリンク",
-      "githubBrowseHint": "リポジトリを参照してリンクするファイルを選択します。"
+      "githubBrowseHint": "リポジトリを参照してリンクするファイルを1つ以上選択します。",
+      "selectedFiles": "選択したファイル ({count})",
+      "removeFile": "ファイルを削除"
     },
     "sources": {
       "metaSynced": "同期済み · ref {ref}",
@@ -4431,7 +4433,8 @@
       "upToDate": "最新です",
       "checkSourceFailed": "ソースを確認できませんでした",
       "sourceUnlinked": "ソースのリンクを解除しました",
-      "unlinkSourceFailed": "ソースのリンクを解除できませんでした"
+      "unlinkSourceFailed": "ソースのリンクを解除できませんでした",
+      "documentsLinked": "{count}件のドキュメントをリビングフラグメントとしてリンクしました"
     },
     "confirmRemove": {
       "title": "このフラグメントを削除しますか？",
