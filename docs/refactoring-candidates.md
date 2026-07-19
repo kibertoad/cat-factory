@@ -9,12 +9,12 @@ disruption to existing code, not just effort. That ordering doubles as a recomme
 sequence: land the contained, low-risk wins first and work down toward the structural
 ones.
 
-| #   | Candidate                                       | Area           | Impact    | Effort |
-| --- | ----------------------------------------------- | -------------- | --------- | ------ |
-| 5   | Finish the manifest-driven agent-kind registry  | Backend engine | High      | Medium |
-| 6   | Module registry for the orchestration container | Backend DI     | High      | High   |
-| 7   | Shared base repositories (D1 ⇄ Drizzle)         | Cross-runtime  | High      | High   |
-| 8   | Shared container builder (Node ⇄ Cloudflare)    | Cross-runtime  | Very high | High   |
+| #   | Candidate                                       | Area           | Impact    | Effort | Status                                     |
+| --- | ----------------------------------------------- | -------------- | --------- | ------ | ------------------------------------------ |
+| 5   | Finish the manifest-driven agent-kind registry  | Backend engine | High      | Medium | in progress                                |
+| 6   | Module registry for the orchestration container | Backend DI     | High      | High   | registry + split landed; DI-graph deferred |
+| 7   | Shared base repositories (D1 ⇄ Drizzle)         | Cross-runtime  | High      | High   | todo                                       |
+| 8   | Shared container builder (Node ⇄ Cloudflare)    | Cross-runtime  | Very high | High   | todo                                       |
 
 See [Recently landed](#recently-landed) at the bottom for candidates that have since
 shipped and were removed from the active list.
@@ -110,27 +110,41 @@ only `AgentRunContext`), and folding the `toRunResult` coercion chain onto the d
 planner's + blueprints'/spec-writer's coercions still key off their ids in
 `containerAgentResult.ts`).
 
-## 6. Module registry for the orchestration container
+## 6. Module registry for the orchestration container — **landed (registry + split); DI-graph deferred**
 
-**File:** `backend/packages/orchestration/src/container.ts` — **2,146 lines**, ~17
-module-creation functions, **~58 conditional spreads** (`...(x ? { x } : {})`) in the
-`createCore()` return.
+**File:** `backend/packages/orchestration/src/container.ts` (was **3,019 lines**), now split
+into `container.ts` (~1,890 lines — the `CoreDependencies`/`Core` contract + the spine
+assembly), `container/modules.ts` (the ~30 optional-module factory functions), and
+`container/module-registry.ts` (the `ModuleRegistry`).
 
-**Problem.** A monolithic composition root: all optional modules (GitHub, documents,
-tasks, environments, runners, bootstrap, requirements, brainstorm, clarity, notifications,
-slack, merge-presets, sandbox, settings, release-health, …) are wired linearly with
-implicit ordering and dozens of conditional spreads (up from ~38 when this was first
-written — the footgun is growing). Adding an optional module touches the creation function,
-the conditional wire-up, the return spread, and the `Core` interface.
+**Problem (as landed).** A monolithic composition root: all optional modules (GitHub,
+documents, tasks, environments, runners, bootstrap, requirements, brainstorm, clarity,
+notifications, slack, merge-presets, sandbox, settings, release-health, …) were wired
+linearly, each as a `const x = createX(...)` local **plus** a matching
+`...(x ? { x } : {})` conditional spread in the `createCore()` return — ~40 of each, up from
+~38 when this was first written (the footgun was growing). Adding an optional module touched
+the creation function, the conditional wire-up, the return spread, and the `Core` interface —
+a four-site edit.
 
-**Approach.** A lightweight module-registry pattern: each module self-declares its
-dependencies and a `create` factory; `createCore` resolves them in dependency order and
-only instantiates modules whose prerequisites are configured (lazy/optional init). Order
-becomes declared, not positional.
+**What landed.** The optional set is now DECLARED through a typed `ModuleRegistry`
+(`container/module-registry.ts`): each module is `build(key, factory)`-declared once,
+instantiated only when its factory yields a value (prerequisites configured), read back by
+later modules through `get(key)`, and emitted in ONE place via `...modules.assemble()` at the
+return — so the ~40 conditional return-spreads are gone and adding a module is a `build(...)`
+call plus its `OptionalCoreModules` field (down from four sites to two). `Core` is split into
+`CoreSpine` (always-present) + `OptionalCoreModules` (the registry-assembled optionals), and
+the ~30 `createXModule` factories moved to `container/modules.ts`, cutting the god-file from
+3,019 to ~1,890 lines. Behaviour is unchanged — the registration order below IS the old
+positional order — verified by the orchestration suite (824 tests) + cross-runtime
+conformance, with a dedicated `module-registry.spec.ts` pinning the registry's contract.
 
-**Why high-impact.** Cuts the per-module change surface, makes optional wiring explicit and
-testable, and removes the implicit-ordering footgun. Intrusive because it reshapes the
-single composition root every module flows through. Pairs naturally with #8.
+**Deferred (intentionally).** The registry is a sequential builder, NOT a topological DI
+graph: the core spine keeps genuine circular late-bindings (account ⇄ spend, engine ⇄
+initiative loop) that a declarative dependency resolver can't express cleanly, so the spine
+stays explicit and only the acyclic optional modules flow through the registry. Promoting the
+registry to a full declared-dependency graph (each module naming its prerequisites, resolved
+in dependency order) is the remaining slice — but the change-surface + footgun win is realized
+now. Pairs naturally with #8 (the shared container builder consumes this registry).
 
 ## 7. Shared base repositories (D1 ⇄ Drizzle)
 
