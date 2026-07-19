@@ -135,6 +135,7 @@ export class PipelineService {
       ...alignedStepOptions(input.agentKinds, input.stepOptions),
       ...normalizedLabels(input.labels),
       ...(input.availability ? { availability: input.availability } : {}),
+      ...(input.purpose ? { purpose: input.purpose } : {}),
     }
     await this.pipelineRepository.insert(workspaceId, pipeline)
     return pipeline
@@ -183,6 +184,9 @@ export class PipelineService {
       // copy recurring-only (else a manual start of the copy — bug-intake step and all — would slip
       // the gate). A `'both'`/unset source clones to unrestricted.
       ...(source.availability ? { availability: source.availability } : {}),
+      // The use-case classifier is a property of the pipeline's shape, so a clone inherits it
+      // (a cloned document pipeline stays a document pipeline).
+      ...(source.purpose ? { purpose: source.purpose } : {}),
       // A clone is a fresh, active, editable copy — never `builtin`, never `archived`.
     }
     await this.pipelineRepository.insert(workspaceId, pipeline)
@@ -213,6 +217,7 @@ export class PipelineService {
     const stepOptions = input.stepOptions ?? existing.stepOptions
     const labels = input.labels ?? existing.labels
     const availability = input.availability ?? existing.availability
+    const purpose = input.purpose ?? existing.purpose
     assertSomeEnabled(agentKinds, enabled)
     // Re-validate the shape against the EFFECTIVE (enabled) chain — disabling a producer
     // while leaving its companion on would orphan the companion, and adding gating (step or
@@ -279,6 +284,7 @@ export class PipelineService {
       ...alignedStepOptions(agentKinds, stepOptions),
       ...normalizedLabels(labels),
       ...(availability ? { availability } : {}),
+      ...(purpose ? { purpose } : {}),
       // `archived` is organization-only state, mutated via `organize` — preserved here.
       ...(existing.archived ? { archived: true } : {}),
     }

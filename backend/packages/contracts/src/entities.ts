@@ -1,4 +1,7 @@
 import * as v from 'valibot'
+// Purpose vocabulary + predicates own their module; it type-imports `Pipeline` (erased), so
+// this value import is not a runtime cycle.
+import { pipelinePurposeSchema } from './pipeline-purpose.js'
 import { workspaceAccessModeSchema } from './workspace-members.js'
 import { subscriptionVendorSchema } from './vendor-credentials.js'
 import { agentConfigValuesSchema } from './agent-config.js'
@@ -816,6 +819,9 @@ export const pipelineSchema = v.object({
   availability: v.optional(
     v.union([v.literal('one-off'), v.literal('recurring'), v.literal('both')]),
   ),
+  // The use-case classifier ({@link PIPELINE_PURPOSES}) the task pickers + builder palette filter
+  // on. Absent ⇒ unclassified (pre-1.0, no back-fill): unrestricted, but hidden from a document task.
+  purpose: v.optional(pipelinePurposeSchema),
 })
 export type Pipeline = v.InferOutput<typeof pipelineSchema>
 export type PipelineAvailability = NonNullable<Pipeline['availability']>

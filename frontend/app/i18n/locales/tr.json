@@ -3401,6 +3401,15 @@
       "impactThreshold": "etki ≥",
       "strategy": "Strateji",
       "rounds": "Tur",
+      "purposeLabel": "Amaç",
+      "purposePlaceholder": "Bir amaç seçin",
+      "purposeOption": {
+        "build": "Geliştirme",
+        "document": "Dokümantasyon",
+        "review": "İnceleme",
+        "research": "Araştırma",
+        "planning": "Planlama"
+      },
       "strategyOption": {
         "specialist-panel": "Uzman paneli",
         "debate": "Tartışma",

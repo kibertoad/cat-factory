@@ -3389,6 +3389,15 @@
       "impactThreshold": "вплив ≥",
       "strategy": "Стратегія",
       "rounds": "Раунди",
+      "purposeLabel": "Призначення",
+      "purposePlaceholder": "Виберіть призначення",
+      "purposeOption": {
+        "build": "Розробка",
+        "document": "Документація",
+        "review": "Рецензування",
+        "research": "Дослідження",
+        "planning": "Планування"
+      },
       "strategyOption": {
         "specialist-panel": "Панель фахівців",
         "debate": "Дебати",

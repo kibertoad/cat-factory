@@ -3123,6 +3123,15 @@
       "impactThreshold": "Auswirkung ≥",
       "strategy": "Strategie",
       "rounds": "Runden",
+      "purposeLabel": "Zweck",
+      "purposePlaceholder": "Zweck auswählen",
+      "purposeOption": {
+        "build": "Entwicklung",
+        "document": "Dokumentation",
+        "review": "Review",
+        "research": "Recherche",
+        "planning": "Planung"
+      },
       "strategyOption": {
         "specialist-panel": "Spezialisten-Panel",
         "debate": "Debatte",

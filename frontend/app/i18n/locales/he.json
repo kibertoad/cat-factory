@@ -3400,6 +3400,15 @@
       "impactThreshold": "השפעה ≥",
       "strategy": "אסטרטגיה",
       "rounds": "סבבים",
+      "purposeLabel": "מטרה",
+      "purposePlaceholder": "בחר מטרה",
+      "purposeOption": {
+        "build": "פיתוח",
+        "document": "תיעוד",
+        "review": "סקירה",
+        "research": "מחקר",
+        "planning": "תכנון"
+      },
       "strategyOption": {
         "specialist-panel": "פאנל מומחים",
         "debate": "דיון",

@@ -133,13 +133,14 @@ function setModelPreset(id: string) {
 const selectedPipeline = computed(() =>
   props.block.pipelineId ? pipelines.getPipeline(props.block.pipelineId) : undefined,
 )
-// Hide UI-testing pipelines when this task's frame has no UI to exercise, and `'recurring'`-only
-// pipelines (the task's manual Run control can't start one) — they'd be refused at run start
-// (see utils/pipeline + the backend gate).
+// Hide UI-testing pipelines when this task's frame has no UI to exercise, `'recurring'`-only
+// pipelines (the task's manual Run control can't start one), and — for a `document` task — every
+// non-document pipeline (it authors a doc, so a build/test pipeline makes no sense). All would be
+// refused / wrong at run start (see utils/pipeline + the backend gate + the purpose classifier).
 const taskFrame = computed(() => board.serviceOf(props.block))
 const selectablePipelines = computed(() =>
   pipelines.pipelines.filter((p) =>
-    pipelineAllowedForManualStart(p, taskFrame.value, board.blocks),
+    pipelineAllowedForManualStart(p, taskFrame.value, board.blocks, props.block.taskType),
   ),
 )
 const pipelineMenu = computed(() => [

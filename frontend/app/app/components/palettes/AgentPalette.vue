@@ -1,21 +1,29 @@
 <script setup lang="ts">
 import { computed } from 'vue'
 import { useLocalStorage } from '@vueuse/core'
-import type { AgentKind } from '~/types/domain'
+import { purposeAllowsAgentCategory } from '@cat-factory/contracts'
+import type { AgentKind, PipelinePurpose } from '~/types/domain'
 import { AGENT_CATEGORIES, OBSERVABILITY_GATE_ARCHETYPE } from '~/utils/catalog'
 
 const { t } = useI18n()
 const agents = useAgentsStore()
 const releaseHealth = useReleaseHealthStore()
 defineEmits<{ (e: 'add', kind: AgentKind): void }>()
+// The purpose of the pipeline being built. When set to a non-`build` classifier, the
+// Implementation (`build`) and Testing (`test`) categories are hidden — such a pipeline writes
+// no product code and runs no tests (see `purposeAllowsAgentCategory`). `null`/`build` shows all.
+const props = defineProps<{ purpose?: PipelinePurpose | null }>()
 
 // The post-release-health gate is only meaningful — and only accepted by the backend —
 // with an observability integration connected, so it appears in the palette ONLY then.
-const palette = computed(() =>
-  releaseHealth.connection.connected
+const palette = computed(() => {
+  const all = releaseHealth.connection.connected
     ? [...agents.archetypes, OBSERVABILITY_GATE_ARCHETYPE]
-    : agents.archetypes,
-)
+    : agents.archetypes
+  // Hide the categories the pipeline's purpose doesn't build from (an uncategorized custom kind
+  // has no category to gate, so it always shows).
+  return all.filter((a) => !a.category || purposeAllowsAgentCategory(props.purpose, a.category))
+})
 
 // Group the palette into the ordered catalog categories, plus a trailing "Custom" bucket
 // for runtime-added agents that carry no category. Empty groups are dropped.

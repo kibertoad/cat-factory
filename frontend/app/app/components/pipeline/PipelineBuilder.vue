@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import { computed, ref, watch } from 'vue'
-import type { AgentKind, Pipeline } from '~/types/domain'
+import type { AgentKind, Pipeline, PipelinePurpose } from '~/types/domain'
 import AgentPalette from '~/components/palettes/AgentPalette.vue'
 import AgentKindIcon from '~/components/pipeline/AgentKindIcon.vue'
 import {
@@ -20,6 +20,18 @@ const CONSENSUS_STRATEGIES = computed<{ value: ConsensusStrategy; label: string 
   { value: 'specialist-panel', label: t('pipeline.builder.strategyOption.specialist-panel') },
   { value: 'debate', label: t('pipeline.builder.strategyOption.debate') },
   { value: 'ranked-voting', label: t('pipeline.builder.strategyOption.ranked-voting') },
+])
+
+// The use-case classifier options for the pipeline (its `purpose`). Static literal `t()` keys, one
+// per `PIPELINE_PURPOSES` member, so the typed-message-keys check sees them (a runtime-built key
+// wouldn't be checkable). A non-`build` purpose hides the Implementation/Testing agent kinds in
+// the palette below (see `AgentPalette`), and drives which task pickers offer the saved pipeline.
+const PURPOSE_OPTIONS = computed<{ value: PipelinePurpose; label: string }[]>(() => [
+  { value: 'build', label: t('pipeline.builder.purposeOption.build') },
+  { value: 'document', label: t('pipeline.builder.purposeOption.document') },
+  { value: 'review', label: t('pipeline.builder.purposeOption.review') },
+  { value: 'research', label: t('pipeline.builder.purposeOption.research') },
+  { value: 'planning', label: t('pipeline.builder.purposeOption.planning') },
 ])
 
 /** Add a blank participant to the draft step's consensus config. */
@@ -282,7 +294,7 @@ async function clone(p: Pipeline) {
             </UButton>
           </div>
           <div class="flex-1 pe-1 lg:min-h-0 lg:overflow-y-auto">
-            <AgentPalette @add="add" />
+            <AgentPalette :purpose="pipelines.draftPurpose" @add="add" />
           </div>
         </div>
 
@@ -309,6 +321,24 @@ async function clone(p: Pipeline) {
             size="sm"
             class="mb-2"
           />
+
+          <!-- Purpose: the pipeline's use-case classifier. Drives which task pickers offer it (a
+               document task offers only `document` pipelines) and narrows the palette below (a
+               non-build purpose hides the Implementation/Testing kinds). -->
+          <div class="mb-2 flex items-center gap-2">
+            <label class="shrink-0 text-[11px] font-medium text-slate-400">
+              {{ t('pipeline.builder.purposeLabel') }}
+            </label>
+            <USelect
+              :model-value="pipelines.draftPurpose ?? undefined"
+              :items="PURPOSE_OPTIONS"
+              value-key="value"
+              size="sm"
+              class="min-w-40"
+              :placeholder="t('pipeline.builder.purposePlaceholder')"
+              @update:model-value="pipelines.draftPurpose = $event"
+            />
+          </div>
 
           <!-- Labels: organize the pipeline in the library (filter/search). -->
           <div class="mb-3 flex flex-wrap items-center gap-1.5">

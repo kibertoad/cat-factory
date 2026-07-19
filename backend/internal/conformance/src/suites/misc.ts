@@ -540,6 +540,30 @@ export function defineMiscConformance(harness: ConformanceHarness): void {
       })
     })
 
+    describe('pipeline purpose classifier', () => {
+      it('persists a custom pipeline’s purpose and seeds the built-ins with theirs', async () => {
+        const app = harness.makeApp()
+        const { workspace } = await app.createWorkspace()
+        const wsId = workspace.id
+
+        // A custom pipeline created WITH a purpose round-trips through the store on every runtime
+        // (the new `purpose` column, mirrored D1 ⇄ Drizzle) — read back via the list endpoint.
+        const created = await app.call<Pipeline>('POST', `/workspaces/${wsId}/pipelines`, {
+          name: 'Doc authoring',
+          agentKinds: ['doc-writer'],
+          purpose: 'document',
+        })
+        expect(created.body.purpose).toBe('document')
+
+        const listed = await app.call<Pipeline[]>('GET', `/workspaces/${wsId}/pipelines`)
+        expect(listed.body.find((p) => p.id === created.body.id)?.purpose).toBe('document')
+        // The seeded built-ins carry the purpose stamped in `seedPipelines()`: the document
+        // pipeline is `document`, a full build is `build` — so the pickers can filter on it.
+        expect(listed.body.find((p) => p.id === 'pl_document')?.purpose).toBe('document')
+        expect(listed.body.find((p) => p.id === 'pl_full')?.purpose).toBe('build')
+      })
+    })
+
     // The `bug-investigator` is a structured `container-explore` kind whose `clarity`/`questions`
     // drive the downstream `clarity-review` gate (phase F): `clear` auto-passes with no human
     // park; `needs_clarification` seeds one finding per question and parks the run for a human.
