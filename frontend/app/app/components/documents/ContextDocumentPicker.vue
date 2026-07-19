@@ -10,6 +10,12 @@
 // it's fetched + persisted before linking. Mirrors ContextIssuePicker.
 import type { DocumentSearchResult, DocumentSourceKind } from '~/types/domain'
 import EmptyState from '~/components/common/EmptyState.vue'
+import RepoContextDocPicker from '~/components/documents/RepoContextDocPicker.vue'
+
+// Repo-backed document sources pick a FILE out of a repository (repo search → file
+// search / tree browse) instead of the generic free-text catalogue search. Today only
+// `github` (which transparently covers GitLab via the VCS adapter) is repo-backed.
+const REPO_SOURCES = new Set<DocumentSourceKind>(['github'])
 
 const props = defineProps<{
   /** contextKeys already staged by the caller, so they're filtered out / not re-offered. */
@@ -32,6 +38,8 @@ const descriptor = computed(() =>
   source.value ? documents.descriptorFor(source.value) : undefined,
 )
 const searchable = computed(() => descriptor.value?.searchable ?? false)
+// A repo-backed source swaps the whole free-text search body for the repo→file picker.
+const isRepoSource = computed(() => !!source.value && REPO_SOURCES.has(source.value))
 
 const query = ref('')
 const results = ref<DocumentSearchResult[]>([])
@@ -176,81 +184,92 @@ onMounted(() => {
       class="w-full"
     />
 
-    <UInput
-      v-model="query"
-      :icon="searching ? 'i-lucide-loader-circle' : 'i-lucide-search'"
-      :ui="{ leadingIcon: searching ? 'animate-spin' : '' }"
-      size="sm"
-      class="w-full"
-      :placeholder="
-        searchable
-          ? t('documents.picker.searchPlaceholder')
-          : (descriptor?.refPlaceholder ?? t('documents.picker.refPlaceholder'))
-      "
-      @keydown.enter="refRow && pickRef(refRow)"
+    <!-- Repo-backed source (GitHub / GitLab): pick a repository, then a file. -->
+    <RepoContextDocPicker
+      v-if="isRepoSource && source"
+      :source="source!"
+      :icon="icon"
+      :chosen-keys="chosenKeys"
+      @pick="(item: PendingContext) => emit('pick', item)"
     />
 
-    <p v-if="searchError" class="px-1 text-[11px] text-amber-400">
-      {{ t('documents.picker.searchFailed', { error: searchError }) }}
-    </p>
-
-    <div class="max-h-56 space-y-0.5 overflow-y-auto">
-      <!-- Already-imported documents (linked directly, no re-fetch). -->
-      <button
-        v-for="d in importedRows"
-        :key="`imp:${d.externalId}`"
-        type="button"
-        class="flex w-full items-center gap-1.5 rounded-md px-2 py-1.5 text-start text-xs text-slate-300 hover:bg-slate-800/70"
-        @click="pickImported(d.externalId, d.title, d.excerpt)"
-      >
-        <UIcon :name="icon" class="h-3.5 w-3.5 shrink-0 text-indigo-400" />
-        <span class="truncate">{{ d.title }}</span>
-        <UBadge color="neutral" variant="soft" size="xs" class="ms-auto shrink-0">{{
-          t('documents.picker.importedBadge')
-        }}</UBadge>
-      </button>
-
-      <!-- Source search hits (imported on add). -->
-      <button
-        v-for="r in searchRows"
-        :key="`hit:${r.externalId}`"
-        type="button"
-        class="flex w-full items-center gap-1.5 rounded-md px-2 py-1.5 text-start text-xs text-slate-300 hover:bg-slate-800/70"
-        @click="pickSearch(r)"
-      >
-        <UIcon :name="icon" class="h-3.5 w-3.5 shrink-0 text-slate-400" />
-        <span class="truncate">{{ r.title }}</span>
-      </button>
-
-      <!-- Explicit URL/ID reference (imported on add). -->
-      <button
-        v-if="refRow"
-        type="button"
-        class="flex w-full items-center gap-1.5 rounded-md px-2 py-1.5 text-start text-xs text-slate-300 hover:bg-slate-800/70"
-        @click="pickRef(refRow)"
-      >
-        <UIcon name="i-lucide-link" class="h-3.5 w-3.5 shrink-0 text-slate-400" />
-        <span class="truncate">
-          <i18n-t keypath="documents.picker.attachByReference" scope="global">
-            <template #ref>
-              <span class="text-slate-200">{{ refRow }}</span>
-            </template>
-          </i18n-t>
-        </span>
-      </button>
-
-      <EmptyState
-        v-if="empty"
-        compact
-        icon="i-lucide-file-search"
-        :title="
-          query.trim()
-            ? t('documents.picker.noMatches')
-            : searchable
-              ? t('documents.picker.emptySearchable')
-              : t('documents.picker.emptyRefOnly')
+    <template v-else>
+      <UInput
+        v-model="query"
+        :icon="searching ? 'i-lucide-loader-circle' : 'i-lucide-search'"
+        :ui="{ leadingIcon: searching ? 'animate-spin' : '' }"
+        size="sm"
+        class="w-full"
+        :placeholder="
+          searchable
+            ? t('documents.picker.searchPlaceholder')
+            : (descriptor?.refPlaceholder ?? t('documents.picker.refPlaceholder'))
         "
+        @keydown.enter="refRow && pickRef(refRow)"
       />
-    </div>
+
+      <p v-if="searchError" class="px-1 text-[11px] text-amber-400">
+        {{ t('documents.picker.searchFailed', { error: searchError }) }}
+      </p>
+
+      <div class="max-h-56 space-y-0.5 overflow-y-auto">
+        <!-- Already-imported documents (linked directly, no re-fetch). -->
+        <button
+          v-for="d in importedRows"
+          :key="`imp:${d.externalId}`"
+          type="button"
+          class="flex w-full items-center gap-1.5 rounded-md px-2 py-1.5 text-start text-xs text-slate-300 hover:bg-slate-800/70"
+          @click="pickImported(d.externalId, d.title, d.excerpt)"
+        >
+          <UIcon :name="icon" class="h-3.5 w-3.5 shrink-0 text-indigo-400" />
+          <span class="truncate">{{ d.title }}</span>
+          <UBadge color="neutral" variant="soft" size="xs" class="ms-auto shrink-0">{{
+            t('documents.picker.importedBadge')
+          }}</UBadge>
+        </button>
+
+        <!-- Source search hits (imported on add). -->
+        <button
+          v-for="r in searchRows"
+          :key="`hit:${r.externalId}`"
+          type="button"
+          class="flex w-full items-center gap-1.5 rounded-md px-2 py-1.5 text-start text-xs text-slate-300 hover:bg-slate-800/70"
+          @click="pickSearch(r)"
+        >
+          <UIcon :name="icon" class="h-3.5 w-3.5 shrink-0 text-slate-400" />
+          <span class="truncate">{{ r.title }}</span>
+        </button>
+
+        <!-- Explicit URL/ID reference (imported on add). -->
+        <button
+          v-if="refRow"
+          type="button"
+          class="flex w-full items-center gap-1.5 rounded-md px-2 py-1.5 text-start text-xs text-slate-300 hover:bg-slate-800/70"
+          @click="pickRef(refRow)"
+        >
+          <UIcon name="i-lucide-link" class="h-3.5 w-3.5 shrink-0 text-slate-400" />
+          <span class="truncate">
+            <i18n-t keypath="documents.picker.attachByReference" scope="global">
+              <template #ref>
+                <span class="text-slate-200">{{ refRow }}</span>
+              </template>
+            </i18n-t>
+          </span>
+        </button>
+
+        <EmptyState
+          v-if="empty"
+          compact
+          icon="i-lucide-file-search"
+          :title="
+            query.trim()
+              ? t('documents.picker.noMatches')
+              : searchable
+                ? t('documents.picker.emptySearchable')
+                : t('documents.picker.emptyRefOnly')
+          "
+        />
+      </div>
+    </template>
   </div>
 </template>

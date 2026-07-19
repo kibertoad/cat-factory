@@ -139,6 +139,20 @@ export class FakeGitHubClient implements GitHubClient {
       }))
   }
 
+  async listTree(
+    _installationId: number,
+    _ref: GitHubRepoRef,
+    _gitRef?: string,
+  ): Promise<RepoContentEntry[]> {
+    // The canned `files` map is already the full recursive tree (paths keyed flat).
+    return Object.entries(this.files).map(([p, f]) => ({
+      path: p,
+      name: p.split('/').pop() ?? p,
+      type: 'file',
+      sha: f.sha,
+    }))
+  }
+
   async getFileContent(
     _installationId: number,
     _ref: GitHubRepoRef,

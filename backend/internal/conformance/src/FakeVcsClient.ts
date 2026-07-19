@@ -234,6 +234,9 @@ export class FakeVcsClient implements VcsClient {
   async listDirectory(): Promise<RepoContentEntry[]> {
     return []
   }
+  async listTree(): Promise<RepoContentEntry[]> {
+    return []
+  }
   async getFileContent(): Promise<RepoFileContent | null> {
     return null
   }

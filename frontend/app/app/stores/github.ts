@@ -11,6 +11,7 @@ import type {
   GitHubRepo,
   MergePullRequestInput,
   OpenPullRequestInput,
+  RepoTreeEntry,
   ResyncRequest,
 } from '~/types/domain'
 import { useSingleFlightProbe } from '~/composables/useSingleFlightProbe'
@@ -215,6 +216,26 @@ export const useGitHubStore = defineStore('github', () => {
     return api.listGitHubRepoTree(workspace.requireId(), repoGithubId, path)
   }
 
+  /** Full file listing per repo (recursive tree), cached by GitHub numeric id. */
+  const repoFiles = ref<Record<number, RepoTreeEntry[]>>({})
+
+  /**
+   * Load (and cache) EVERY file in a repo — the whole tree in one recursive read — so a
+   * picker can search files by path entirely client-side (no per-keystroke server call).
+   * Cached by repo id so re-opening the picker for the same repo is instant; force a
+   * refetch with `{ reload: true }`. Mirrors the branches cache.
+   */
+  async function loadRepoFiles(
+    repoGithubId: number,
+    opts: { reload?: boolean } = {},
+  ): Promise<RepoTreeEntry[]> {
+    const cached = repoFiles.value[repoGithubId]
+    if (cached && !opts.reload) return cached
+    const files = await api.listGitHubRepoFiles(workspace.requireId(), repoGithubId)
+    repoFiles.value = { ...repoFiles.value, [repoGithubId]: files }
+    return files
+  }
+
   /** The URL a workspace owner visits to install the App against this workspace. */
   function getInstallUrl(): Promise<string> {
     return api.getGitHubInstallUrl(workspace.requireId()).then((r) => r.url)
@@ -313,6 +334,7 @@ export const useGitHubStore = defineStore('github', () => {
     pulls.value = []
     issues.value = []
     branches.value = {}
+    repoFiles.value = {}
   }
 
   return {
@@ -347,6 +369,8 @@ export const useGitHubStore = defineStore('github', () => {
     searchAvailableRepos,
     setLinkedRepos,
     loadRepoTree,
+    repoFiles,
+    loadRepoFiles,
     loadBranches,
     getInstallUrl,
     loadInstallations,

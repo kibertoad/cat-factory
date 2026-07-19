@@ -3214,6 +3214,17 @@
       "emptySearchable": "חפש לפי כותרת, או בחר מסמך שיובא.",
       "emptyRefOnly": "הדבק כתובת URL או מזהה של דף כדי לצרף אותו."
     },
+    "repoPicker": {
+      "searchRepoPlaceholder": "חיפוש מאגרים…",
+      "clearRepo": "ניקוי מאגר",
+      "searchTab": "חיפוש קבצים",
+      "browseTab": "עיון",
+      "searchFilesPlaceholder": "חיפוש קבצים לפי נתיב…",
+      "searchFilesHint": "הקלד כדי לחפש קבצים במאגר זה.",
+      "noFileMatches": "אין קבצים תואמים.",
+      "filesFailed": "לא ניתן היה לטעון את הקבצים: {error}",
+      "moreFiles": "מוצגות {count} התוצאות הראשונות — צמצם את החיפוש כדי למקד אותו."
+    },
     "import": {
       "title": "ייבא ממקור מסמכים",
       "connectFirst": "חבר תחילה מקור מסמכים.",

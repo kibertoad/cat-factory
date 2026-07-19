@@ -94,6 +94,17 @@ export interface VcsClient {
     path: string,
     gitRef?: string,
   ): Promise<RepoContentEntry[]>
+  /**
+   * List a repository's ENTIRE tree on a ref recursively (in as few calls as the
+   * provider allows), so a caller can search files by path without an N+1 walk. Every
+   * entry carries its full, repo-root-relative `path` and `type`. `[]` for an empty
+   * repo / unknown ref; a very large tree may be truncated (best-effort).
+   */
+  listTree(
+    connection: VcsConnectionRef,
+    ref: VcsRepoRef,
+    gitRef?: string,
+  ): Promise<RepoContentEntry[]>
   /** Read a file's decoded UTF-8 content + blob sha on a ref, or null if absent. */
   getFileContent(
     connection: VcsConnectionRef,

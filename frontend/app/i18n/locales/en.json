@@ -3299,6 +3299,17 @@
       "emptySearchable": "Search by title, or pick an imported document.",
       "emptyRefOnly": "Paste a page URL or ID to attach it."
     },
+    "repoPicker": {
+      "searchRepoPlaceholder": "Search repositories…",
+      "clearRepo": "Clear repository",
+      "searchTab": "Search files",
+      "browseTab": "Browse",
+      "searchFilesPlaceholder": "Search files by path…",
+      "searchFilesHint": "Type to search files in this repository.",
+      "noFileMatches": "No matching files.",
+      "filesFailed": "Couldn't load files: {error}",
+      "moreFiles": "Showing the first {count} matches — refine your search to narrow it down."
+    },
     "import": {
       "title": "Import from a document source",
       "connectFirst": "Connect a document source first.",
