@@ -11,8 +11,8 @@ import { LIVE_TIMEOUT, openBoard, pinAuthedWorkspace, seedRbacScenario, taskCard
 //
 // The shared e2e backend runs auth-enabled-for-signed-tokens (an anonymous request stays
 // dev-open, so every other spec is unchanged), and `seedRbacScenario` mints a real session
-// per principal. `pinAuthedWorkspace` injects one into the SPA's persisted `auth` store, so
-// the board boots AS that user with the workspace-RBAC gate enforcing.
+// per principal. `pinAuthedWorkspace` seeds it into the SPA's persisted (cookie-backed) auth
+// store, so the board boots AS that user with the workspace-RBAC gate enforcing.
 test.describe('workspace RBAC — viewer read-only vs admin escape hatch', () => {
   test('a viewer opens a restricted board read-only (no authoring, run locked)', async ({
     page,
@@ -28,6 +28,7 @@ test.describe('workspace RBAC — viewer read-only vs admin escape hatch', () =>
       scenario.workspaceId,
       scenario.viewerToken,
       scenario.viewerUserId,
+      scenario.accountId,
     )
     await openBoard(page)
 
@@ -58,7 +59,13 @@ test.describe('workspace RBAC — viewer read-only vs admin escape hatch', () =>
     // Boot AS the account admin, who holds NO workspace_members row on this board — their
     // full access comes purely from the account-admin escape hatch (account admin ⇒ workspace
     // admin), the mirror of the viewer case above on an identically-restricted board.
-    await pinAuthedWorkspace(page, scenario.workspaceId, scenario.adminToken, scenario.adminUserId)
+    await pinAuthedWorkspace(
+      page,
+      scenario.workspaceId,
+      scenario.adminToken,
+      scenario.adminUserId,
+      scenario.accountId,
+    )
     await openBoard(page)
 
     // Board-authoring + admin-tier affordances are present for an admin (the same ids the

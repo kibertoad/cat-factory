@@ -157,6 +157,7 @@ async function seedRbacScenario(
   tag: string,
 ): Promise<{
   workspaceId: string
+  accountId: string
   adminToken: string
   adminUserId: string
   viewerToken: string
@@ -198,7 +199,7 @@ async function seedRbacScenario(
       name: viewer.name,
     }),
   ])
-  return { workspaceId, adminToken, adminUserId, viewerToken, viewerUserId: viewer.id }
+  return { workspaceId, accountId, adminToken, adminUserId, viewerToken, viewerUserId: viewer.id }
 }
 
 // A tiny, test-ONLY HTTP control channel (a separate listener, so it never couples to the

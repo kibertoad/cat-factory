@@ -70,8 +70,9 @@ request bearing a **signed** session token resolves to its user and the workspac
 that user's access. `seedRbacScenario` (control route `/rbac-seed`, backed by `testServer.ts`) seeds
 a restricted board with an admin + a scoped `viewer` — mirroring the cross-runtime
 `defineWorkspaceRbacSuite` fixture — and mints a real Bearer token per principal; `pinAuthedWorkspace`
-injects one into the SPA's persisted `auth` store (the same way `pinWorkspace` injects the picked
-board), so the board boots as that authenticated user.
+seeds it (plus the pinned board + active account) into the SPA's persisted pinia stores, which are
+**cookie-backed** (`pinia-plugin-persistedstate/nuxt` defaults to cookies, not localStorage), so the
+board boots as that authenticated user on that specific restricted board.
 
 ### Per-run fake behaviour (the `setFakeProfile` seam)
 

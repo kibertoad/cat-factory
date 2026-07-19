@@ -35,6 +35,7 @@ export type { FakeProfile }
  */
 export interface RbacScenario {
   workspaceId: string
+  accountId: string
   adminToken: string
   adminUserId: string
   viewerToken: string
@@ -465,36 +466,45 @@ export async function pinWorkspace(page: Page, workspaceId: string): Promise<voi
 }
 
 /**
- * Like {@link pinWorkspace}, but ALSO seed a signed session so the SPA boots authenticated
- * as a specific user (the workspace-RBAC spec). Injects the token into the persisted `auth`
- * store (`{ token }`), the exact key + shape the app's `useAuthStore` persists and the
- * `useApi` client reads for its `Authorization: Bearer` header. The infra-setup dismissal is
- * keyed by the SIGNED-IN user id (not the `local` bucket dev-open uses), so seed it under
- * `userId` too — otherwise the advisory banner overlays the board chrome the spec drives.
- * Must be called BEFORE `page.goto`.
+ * Like {@link pinWorkspace}, but ALSO seed a signed session so the SPA boots authenticated as a
+ * specific user, pinned to a specific board (the workspace-RBAC spec).
+ *
+ * The persisted pinia stores (`auth.token`, `workspace.workspaceId`, `accounts.activeAccountId`)
+ * are backed by COOKIES — `pinia-plugin-persistedstate/nuxt` defaults to cookie storage, NOT
+ * localStorage — so restoring a session + pinning a specific board means seeding those cookies.
+ * (Existing dev-open specs get away with the localStorage `pinWorkspace` no-op only because their
+ * freshly-seeded board is the newest in the unfiltered list; an authed caller's list is
+ * account-filtered, so the pin must actually restore.) Cookie values are URL-encoded JSON — the
+ * shape each store persists (`auth` → `useApi`'s `Authorization: Bearer`; `workspace` → the opened
+ * board; `accounts` → keep that board in the active-account scope). The infra-setup banner reads
+ * its dismissals from localStorage keyed by the signed-in user id, so seed that too, or the
+ * advisory banner overlays the board chrome the spec drives. Must run BEFORE `page.goto`.
  */
 export async function pinAuthedWorkspace(
   page: Page,
   workspaceId: string,
   token: string,
   userId: string,
+  accountId: string,
 ): Promise<void> {
+  const frontendUrl = `http://localhost:${process.env.E2E_FRONTEND_PORT ?? '3000'}`
+  const cookie = (name: string, value: unknown) => ({
+    name,
+    value: encodeURIComponent(JSON.stringify(value)),
+    url: frontendUrl,
+  })
+  await page
+    .context()
+    .addCookies([
+      cookie('auth', { token, autoLoginProvider: null }),
+      cookie('workspace', { workspaceId }),
+      cookie('accounts', { activeAccountId: accountId }),
+    ])
   await page.addInitScript(
-    ({ id, sessionToken, uid, dismissKey, areas }) => {
-      window.localStorage.setItem('workspace', JSON.stringify({ workspaceId: id }))
-      window.localStorage.setItem(
-        'auth',
-        JSON.stringify({ token: sessionToken, autoLoginProvider: null }),
-      )
+    ({ uid, dismissKey, areas }) => {
       window.localStorage.setItem(dismissKey, JSON.stringify({ local: areas, [uid]: areas }))
     },
-    {
-      id: workspaceId,
-      sessionToken: token,
-      uid: userId,
-      dismissKey: INFRA_SETUP_DISMISSED_STORAGE_KEY,
-      areas: [...INFRA_SETUP_AREAS],
-    },
+    { uid: userId, dismissKey: INFRA_SETUP_DISMISSED_STORAGE_KEY, areas: [...INFRA_SETUP_AREAS] },
   )
 }
 
