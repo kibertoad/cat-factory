@@ -1770,9 +1770,9 @@ rather than adding more raw text.
 
 ## Workspace RBAC enforcement (one gate, one floor, one middleware per admin group)
 
-Per-workspace authorization (the `workspace-rbac` initiative — tracker
-[`docs/initiatives/workspace-rbac.md`](./docs/initiatives/workspace-rbac.md)) is enforced in
-exactly three shared places, never re-derived per controller:
+Per-workspace authorization (the `workspace-rbac` initiative — ADR
+[`backend/docs/adr/0025-workspace-rbac.md`](./backend/docs/adr/0025-workspace-rbac.md)) is enforced
+in exactly three shared places, never re-derived per controller:
 
 1. **Resolution + the 404 hide** — `mountAuthGate` (`server/src/http/authGate.ts`) calls the
    single `loadWorkspaceAccess` (through the `workspaceAccess` AppCaches slice) on every
