@@ -128,8 +128,9 @@ a four-site edit.
 
 **What landed.** The optional set is now DECLARED through a typed `ModuleRegistry`
 (`container/module-registry.ts`): each module is `build(key, factory)`-declared once,
-instantiated only when its factory yields a value (prerequisites configured), read back by
-later modules through `get(key)`, and emitted in ONE place via `...modules.assemble()` at the
+instantiated only when its factory yields a value (prerequisites configured), kept in the local
+`build` returns so a downstream factory can thread it in (`get(key)` reads any built module for a
+reader that holds no local), and emitted in ONE place via `...modules.assemble()` at the
 return — so the ~40 conditional return-spreads are gone and adding a module is a `build(...)`
 call plus its `OptionalCoreModules` field (down from four sites to two). `Core` is split into
 `CoreSpine` (always-present) + `OptionalCoreModules` (the registry-assembled optionals), and

@@ -1429,8 +1429,10 @@ export function createCore(dependencies: CoreDependencies): Core {
   // The optional-module registry: every feature that is wired only when its prerequisites are
   // configured is `build`-declared through this, instead of a scattered `const x = createX(...)`
   // + a matching `...(x ? { x } : {})` return spread. Registration order below IS dependency
-  // order (a module reads earlier ones via `modules.get(...)`), and the whole set is emitted in
-  // one place via `...modules.assemble()` at the return. The core spine (below) stays explicit —
+  // order: `build` returns the value, so a module consumed downstream is kept in a local and
+  // threaded into the later factories that need it (`modules.get(...)` is there for a reader that
+  // holds no local). The whole set is emitted in one place via `...modules.assemble()` at the
+  // return. The core spine (below) stays explicit —
   // it carries the genuine circular late-bindings (account ⇄ spend, engine ⇄ initiative loop).
   const modules = new ModuleRegistry()
   // Pass the resolved publisher so board mutations push a coarse `boardChanged` to every

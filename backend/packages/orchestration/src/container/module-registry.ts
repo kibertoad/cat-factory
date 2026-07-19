@@ -13,12 +13,14 @@ export type OptionalModuleKey = keyof OptionalCoreModules
  *   2. the ~40 hand-written `...(x ? { x } : {})` conditional spreads in the return object.
  *
  * Instead each module is DECLARED once through {@link build} (key + factory), instantiated
- * ONLY when its factory yields a value (prerequisites configured), and read back by other
- * modules through {@link get}. The whole set is emitted in ONE place via {@link assemble} —
- * so adding a module is a single `build(...)` call plus its `OptionalCoreModules` field, not
- * a four-site edit. Registration order IS dependency order (a module reads only modules built
- * before it via {@link get}), so ordering is explicit and local rather than positional across
- * a giant function.
+ * ONLY when its factory yields a value (prerequisites configured). The whole set is emitted in
+ * ONE place via {@link assemble} — so adding a module is a single `build(...)` call plus its
+ * `OptionalCoreModules` field, not a four-site edit. Registration order IS dependency order:
+ * `build` RETURNS the freshly-built value, so a module consumed downstream is kept in a local
+ * and passed into the later factories that need it (exactly where the old
+ * `const x = createX(...)` local sat). {@link get} additionally exposes any already-built module
+ * by key for a reader that holds no local. Either way a factory only ever reaches modules built
+ * before it, so ordering is explicit and local rather than positional across a giant function.
  *
  * The registry is deliberately a plain sequential builder, NOT a topological resolver: the
  * composition root has genuine circular late-bindings in its core spine (account ⇄ spend,
@@ -30,9 +32,14 @@ export class ModuleRegistry {
 
   /**
    * Declare an optional module: run its `factory`, store the result under `key` when it is
-   * defined (its prerequisites were configured), and return it so a heavily-consumed module
-   * can also be kept in a local. A factory returning `undefined` is a clean no-op — the key is
+   * defined (its prerequisites were configured), and return it so a downstream factory can keep
+   * it in a local and thread it in. A factory returning `undefined` is a clean no-op — the key is
    * simply absent from the assembled set, exactly like the old conditional spread.
+   *
+   * Presence is keyed on `!== undefined`, NOT truthiness: every module factory returns an object
+   * or `undefined`, so this matches the removed `...(x ? { x } : {})` spread. A factory that
+   * yielded a defined-but-falsy value (`null` / `0` / `''`) would be KEPT here where the old
+   * spread dropped it — none does, so return `undefined` (never `null`) to mean "absent".
    */
   build<K extends OptionalModuleKey>(
     key: K,
@@ -51,6 +58,11 @@ export class ModuleRegistry {
   /**
    * The assembled optional modules, with unwired keys absent — spread into the `Core` return
    * alongside the always-present spine. This is the SINGLE site the optional set is emitted from.
+   *
+   * Returning the `Partial<OptionalCoreModules>` backing store AS `OptionalCoreModules` is sound
+   * ONLY because every field of `OptionalCoreModules` is optional, so the two types coincide.
+   * Keep it that way: a NON-optional field would make this a lie — the return type would promise
+   * a key the registry can legitimately omit. A new always-present service belongs on `CoreSpine`.
    */
   assemble(): OptionalCoreModules {
     return this.built

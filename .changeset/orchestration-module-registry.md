@@ -8,6 +8,5 @@ through `ModuleRegistry` and emitted in one place via `...modules.assemble()`, r
 `const x = createX(...)` locals + matching `...(x ? { x } : {})` return spreads. `Core` splits into
 `CoreSpine` (always present) + `OptionalCoreModules` (registry-assembled), and the ~30
 `createXModule` factories moved to `container/modules.ts`, cutting `container.ts` from ~3,019 to
-~1,890 lines. Behaviour is unchanged (same wiring, same order); verified by the orchestration suite
-
-- cross-runtime conformance.
+~1,890 lines. Behaviour is unchanged (same wiring, same order); verified by the orchestration
+suite plus cross-runtime conformance.
