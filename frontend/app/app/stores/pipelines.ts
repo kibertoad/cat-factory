@@ -2,7 +2,7 @@ import { defineStore } from 'pinia'
 import { computed, ref } from 'vue'
 import type { AgentKind, Pipeline } from '~/types/domain'
 import type { ConsensusStepConfig, StepGating } from '~/types/consensus'
-import type { StepOptions, TesterQualityConfig } from '@cat-factory/contracts'
+import type { PipelinePurpose, StepOptions, TesterQualityConfig } from '@cat-factory/contracts'
 import { companionForProducer, uid } from '~/utils/catalog'
 import { useUpsertList } from '~/composables/useUpsertList'
 import { useWorkspaceStore } from '~/stores/workspace'
@@ -81,6 +81,13 @@ export const usePipelinesStore = defineStore('pipelines', () => {
   const draftStepOptions = ref<(StepOptions | null)[]>([])
   /** Organizational labels for the pipeline being assembled/edited. */
   const draftLabels = ref<string[]>([])
+  /**
+   * The use-case classifier of the pipeline being assembled/edited (`build` / `document` /
+   * `review` / `research` / `planning`), or null when unclassified. Drives which task pickers
+   * offer the saved pipeline and which agent kinds the builder palette shows (a non-`build`
+   * purpose hides the Implementation/Testing kinds).
+   */
+  const draftPurpose = ref<PipelinePurpose | null>(null)
   const draftName = ref('New pipeline')
   /** Prose description for the pipeline being assembled/edited (shown in the pickers). */
   const draftDescription = ref('')
@@ -323,6 +330,7 @@ export const usePipelinesStore = defineStore('pipelines', () => {
     draftTesterQuality.value = []
     draftStepOptions.value = []
     draftLabels.value = []
+    draftPurpose.value = null
     draftName.value = 'New pipeline'
     draftDescription.value = ''
     editingId.value = null
@@ -342,6 +350,7 @@ export const usePipelinesStore = defineStore('pipelines', () => {
     )
     draftStepOptions.value = pipeline.agentKinds.map((_, i) => pipeline.stepOptions?.[i] ?? null)
     draftLabels.value = [...(pipeline.labels ?? [])]
+    draftPurpose.value = pipeline.purpose ?? null
     draftName.value = pipeline.name
     draftDescription.value = pipeline.description ?? ''
     editingId.value = pipeline.id
@@ -389,6 +398,10 @@ export const usePipelinesStore = defineStore('pipelines', () => {
       stepOptions: draftStepOptions.value.map((o) => o ?? null),
       // Only send labels when there are any.
       ...(draftLabels.value.length ? { labels: [...draftLabels.value] } : {}),
+      // Only send purpose when the pipeline is classified (null ⇒ leave unclassified). Like the
+      // legacy per-step arrays, an omitted `purpose` on update reads as "keep existing"; clearing
+      // a classification back to unclassified is not a supported edit (every built-in ships one).
+      ...(draftPurpose.value ? { purpose: draftPurpose.value } : {}),
     }
   }
 
@@ -459,6 +472,7 @@ export const usePipelinesStore = defineStore('pipelines', () => {
     draftTesterQuality,
     draftStepOptions,
     draftLabels,
+    draftPurpose,
     draftName,
     draftDescription,
     editingId,

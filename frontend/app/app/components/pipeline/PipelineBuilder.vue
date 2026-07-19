@@ -1,6 +1,7 @@
 <script setup lang="ts">
 import { computed, ref, watch } from 'vue'
-import type { AgentKind, Pipeline } from '~/types/domain'
+import { purposeAllowsAgentCategory } from '@cat-factory/contracts'
+import type { AgentKind, Pipeline, PipelinePurpose } from '~/types/domain'
 import AgentPalette from '~/components/palettes/AgentPalette.vue'
 import AgentKindIcon from '~/components/pipeline/AgentKindIcon.vue'
 import {
@@ -20,6 +21,18 @@ const CONSENSUS_STRATEGIES = computed<{ value: ConsensusStrategy; label: string 
   { value: 'specialist-panel', label: t('pipeline.builder.strategyOption.specialist-panel') },
   { value: 'debate', label: t('pipeline.builder.strategyOption.debate') },
   { value: 'ranked-voting', label: t('pipeline.builder.strategyOption.ranked-voting') },
+])
+
+// The use-case classifier options for the pipeline (its `purpose`). Static literal `t()` keys, one
+// per `PIPELINE_PURPOSES` member, so the typed-message-keys check sees them (a runtime-built key
+// wouldn't be checkable). A non-`build` purpose hides the Implementation/Testing agent kinds in
+// the palette below (see `AgentPalette`), and drives which task pickers offer the saved pipeline.
+const PURPOSE_OPTIONS = computed<{ value: PipelinePurpose; label: string }[]>(() => [
+  { value: 'build', label: t('pipeline.builder.purposeOption.build') },
+  { value: 'document', label: t('pipeline.builder.purposeOption.document') },
+  { value: 'review', label: t('pipeline.builder.purposeOption.review') },
+  { value: 'research', label: t('pipeline.builder.purposeOption.research') },
+  { value: 'planning', label: t('pipeline.builder.purposeOption.planning') },
 ])
 
 /** Add a blank participant to the draft step's consensus config. */
@@ -54,6 +67,19 @@ const skillStepNeedsPick = computed(() =>
   pipelines.draft.some(
     (k, i) => k === 'skill' && pipelines.draftEnabled[i] !== false && !pipelines.draftSkillId(i),
   ),
+)
+
+// Steps whose agent category the chosen purpose forbids (a non-`build` purpose writes no code and
+// runs no tests, so the Implementation/Testing categories are disallowed — see
+// `purposeAllowsAgentCategory`). The palette hides those kinds, so this is only reachable by
+// switching an existing draft to a non-`build` purpose AFTER such steps were added. The backend has
+// no kind→category map to gate on, so the builder is the enforcement point: save is blocked until
+// the offending steps are removed (or the purpose set back to Build).
+const stepsDisallowedByPurpose = computed(() =>
+  pipelines.draft.filter((kind) => {
+    const category = agentKindMeta(kind).category
+    return !!category && !purposeAllowsAgentCategory(pipelines.draftPurpose, category)
+  }),
 )
 
 // A step's picked skill id is no longer in the account catalog (the source dir was renamed or
@@ -282,7 +308,7 @@ async function clone(p: Pipeline) {
             </UButton>
           </div>
           <div class="flex-1 pe-1 lg:min-h-0 lg:overflow-y-auto">
-            <AgentPalette @add="add" />
+            <AgentPalette :purpose="pipelines.draftPurpose" @add="add" />
           </div>
         </div>
 
@@ -309,6 +335,24 @@ async function clone(p: Pipeline) {
             size="sm"
             class="mb-2"
           />
+
+          <!-- Purpose: the pipeline's use-case classifier. Drives which task pickers offer it (a
+               document task offers only `document` pipelines) and narrows the palette below (a
+               non-build purpose hides the Implementation/Testing kinds). -->
+          <div class="mb-2 flex items-center gap-2">
+            <label class="shrink-0 text-[11px] font-medium text-slate-400">
+              {{ t('pipeline.builder.purposeLabel') }}
+            </label>
+            <USelect
+              :model-value="pipelines.draftPurpose ?? undefined"
+              :items="PURPOSE_OPTIONS"
+              value-key="value"
+              size="sm"
+              class="min-w-40"
+              :placeholder="t('pipeline.builder.purposePlaceholder')"
+              @update:model-value="pipelines.draftPurpose = $event"
+            />
+          </div>
 
           <!-- Description: the prose summary shown next to the step list in the pipeline pickers. -->
           <UTextarea
@@ -358,6 +402,14 @@ async function clone(p: Pipeline) {
           >
             <UIcon name="i-lucide-alert-triangle" class="h-3.5 w-3.5 shrink-0" />
             {{ t('pipeline.builder.skillNeedsPick') }}
+          </p>
+
+          <p
+            v-if="stepsDisallowedByPurpose.length"
+            class="mb-2 flex items-center gap-1.5 rounded-md border border-amber-800/50 bg-amber-950/30 px-2 py-1 text-[11px] text-amber-300"
+          >
+            <UIcon name="i-lucide-alert-triangle" class="h-3.5 w-3.5 shrink-0" />
+            {{ t('pipeline.builder.purposeStepsConflict') }}
           </p>
 
           <div
@@ -1015,7 +1067,7 @@ async function clone(p: Pipeline) {
           color="primary"
           icon="i-lucide-save"
           size="sm"
-          :disabled="pipelines.draft.length === 0"
+          :disabled="pipelines.draft.length === 0 || stepsDisallowedByPurpose.length > 0"
           @click="save"
         >
           {{ pipelines.editingId ? t('pipeline.builder.update') : t('pipeline.builder.save') }}

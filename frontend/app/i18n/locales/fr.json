@@ -3409,6 +3409,15 @@
       "impactThreshold": "impact ≥",
       "strategy": "Stratégie",
       "rounds": "Tours",
+      "purposeLabel": "Objectif",
+      "purposePlaceholder": "Sélectionner un objectif",
+      "purposeOption": {
+        "build": "Développement",
+        "document": "Documentation",
+        "review": "Revue",
+        "research": "Recherche",
+        "planning": "Planification"
+      },
       "strategyOption": {
         "specialist-panel": "Panel de spécialistes",
         "debate": "Débat",
@@ -3462,7 +3471,8 @@
       "skillPlaceholder": "Sélectionner une compétence",
       "skillNoneAvailable": "Aucune compétence disponible. Reliez une source de compétences dans les paramètres du compte.",
       "skillMissing": "Cette compétence n'est plus dans le catalogue ; choisissez-en une autre.",
-      "skillNeedsPick": "Une étape Skill a besoin d'une compétence sélectionnée avant de pouvoir enregistrer."
+      "skillNeedsPick": "Une étape Skill a besoin d'une compétence sélectionnée avant de pouvoir enregistrer.",
+      "purposeStepsConflict": "Cet objectif n'écrit aucun code et n'exécute aucun test, mais le pipeline contient encore des étapes d'implémentation ou de test. Supprimez-les ou définissez l'objectif sur Développement."
     },
     "progress": {
       "status": {

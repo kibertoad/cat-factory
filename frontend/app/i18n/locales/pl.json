@@ -3409,6 +3409,15 @@
       "impactThreshold": "wpływ ≥",
       "strategy": "Strategia",
       "rounds": "Rundy",
+      "purposeLabel": "Cel",
+      "purposePlaceholder": "Wybierz cel",
+      "purposeOption": {
+        "build": "Programowanie",
+        "document": "Dokumentacja",
+        "review": "Przegląd",
+        "research": "Badania",
+        "planning": "Planowanie"
+      },
       "strategyOption": {
         "specialist-panel": "Panel specjalistów",
         "debate": "Debata",
@@ -3462,7 +3471,8 @@
       "skillPlaceholder": "Wybierz umiejętność",
       "skillNoneAvailable": "Brak dostępnych umiejętności. Połącz źródło umiejętności w ustawieniach konta.",
       "skillMissing": "Tej umiejętności nie ma już w katalogu; wybierz inną.",
-      "skillNeedsPick": "Krok Skill wymaga wybranej umiejętności, zanim będzie można zapisać."
+      "skillNeedsPick": "Krok Skill wymaga wybranej umiejętności, zanim będzie można zapisać.",
+      "purposeStepsConflict": "To przeznaczenie nie tworzy kodu ani nie uruchamia testów, ale potok nadal zawiera kroki programowania lub testowania. Usuń je lub zmień przeznaczenie na Programowanie."
     },
     "progress": {
       "status": {

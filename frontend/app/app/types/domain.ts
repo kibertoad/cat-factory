@@ -60,6 +60,7 @@ export type {
   AgentCategory,
   CustomAgentKind,
   Pipeline,
+  PipelinePurpose,
   SpendStatus,
   BudgetCaps,
   Workspace,
