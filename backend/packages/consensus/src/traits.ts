@@ -1,6 +1,6 @@
 import type { AgentKind, ConsensusStrategy } from '@cat-factory/kernel'
 import type { AgentKindRegistry } from '@cat-factory/agents'
-import { assignAgentTraits, registerAgentTrait, traitsFor } from '@cat-factory/agents'
+import { traitsFor } from '@cat-factory/agents'
 import { TASK_ESTIMATOR_AGENT_KIND } from '@cat-factory/agents'
 
 // The group of consensus CAPABILITY traits an agent kind can carry. Each marks the
@@ -29,7 +29,7 @@ export const CONSENSUS_TRAITS = [
 
 /**
  * The default-eligible kinds, each carrying all three consensus traits. A deployment
- * can extend this with {@link assignAgentTraits}. NOTE: `architect` and `analysis` run
+ * can extend this by assigning them to more kinds. NOTE: `architect` and `analysis` run
  * in a container against a real checkout in their standard mode; in CONSENSUS mode they
  * reason inline over the provided context (spec + requirements + prior outputs) rather
  * than exploring the checkout — a deliberate trade made worthwhile by the gating, which
@@ -48,17 +48,20 @@ export const DEFAULT_CONSENSUS_ELIGIBLE_KINDS: AgentKind[] = [
 ]
 
 /**
- * Register the consensus capability traits and assign them to the default-eligible
- * kinds. A startup import side-effect each facade calls when consensus is enabled,
- * mirroring the custom-agent / model-provider registry seams. Idempotent.
+ * Register the consensus capability traits and assign them to the default-eligible kinds on the
+ * app-owned {@link AgentKindRegistry} instance the facade threads through its container. A
+ * startup wiring step each facade calls when consensus is enabled, mirroring the custom-agent /
+ * model-provider registry seams. Idempotent.
  *
+ * @param registry the app-owned agent-kind registry to register the traits/assignments on.
  * @param kinds override the default-eligible set (e.g. a deployment's own kinds).
  */
 export function registerConsensusTraits(
+  registry: AgentKindRegistry,
   kinds: AgentKind[] = DEFAULT_CONSENSUS_ELIGIBLE_KINDS,
 ): void {
-  for (const trait of CONSENSUS_TRAITS) registerAgentTrait({ id: trait })
-  for (const kind of kinds) assignAgentTraits(kind, CONSENSUS_TRAITS)
+  for (const trait of CONSENSUS_TRAITS) registry.registerTrait({ id: trait })
+  for (const kind of kinds) registry.assignTraits(kind, CONSENSUS_TRAITS)
 }
 
 /** The consensus strategies a kind is eligible for, derived from its traits. */

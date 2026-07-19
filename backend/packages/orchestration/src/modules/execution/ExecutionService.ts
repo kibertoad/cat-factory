@@ -34,6 +34,7 @@ import type { AgentKindRegistry } from '@cat-factory/agents'
 import type {
   GateRegistry,
   InitiativePresetRegistry,
+  ProviderRegistry,
   RunInitiatorScope,
   StepResolverRegistry,
 } from '@cat-factory/kernel'
@@ -189,6 +190,12 @@ export interface ExecutionServiceDependencies {
    * threaded to the dispatcher. `createCore` defaults it to `defaultStepResolverRegistry()`.
    */
   stepResolverRegistry: StepResolverRegistry
+  /**
+   * The app-owned provider registry (gate data sources keyed by {@link ProviderToken}), threaded
+   * to the dispatcher's gate machine so its {@link GateContext} reads the wired providers.
+   * `createCore` defaults it to `defaultProviderRegistry()` (empty ⇒ every gate passes through).
+   */
+  providerRegistry: ProviderRegistry
   /**
    * The app-owned initiative-preset registry, threaded into the context builder so a spawned /
    * planning run resolves its preset steering. `createCore` defaults it to
@@ -671,6 +678,7 @@ export class ExecutionService {
     agentKindRegistry,
     gateRegistry,
     stepResolverRegistry,
+    providerRegistry,
     initiativePresetRegistry,
   }: ExecutionServiceDependencies) {
     // Forward-only: the run-initiator scope is consumed solely by RunDispatcher (below), so it
@@ -938,6 +946,7 @@ export class ExecutionService {
       agentKindRegistry,
       gateRegistry,
       stepResolverRegistry,
+      providerRegistry,
       workRunner,
       events: executionEventPublisher,
       idGenerator,

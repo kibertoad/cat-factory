@@ -47,7 +47,7 @@ const LEGACY_ALLOWANCES = new Map([
   ['backend/internal/conformance/src/suites/agents.ts', 1150],
   // The engine files the 2026-07 review names (post-split sizes; keep ratcheting DOWN).
   ['backend/packages/orchestration/src/modules/execution/RunDispatcher.ts', 3150],
-  ['backend/packages/orchestration/src/modules/execution/ExecutionService.ts', 2800],
+  ['backend/packages/orchestration/src/modules/execution/ExecutionService.ts', 2820],
   // The three DI composition roots (refactoring-candidates.md #6/#8 own the structural fix).
   // The orchestration root's optional-module factories now live in `container/modules.ts` and its
   // optional wiring flows through `container/module-registry.ts` (refactoring-candidates.md #6), so
@@ -55,7 +55,7 @@ const LEGACY_ALLOWANCES = new Map([
   ['backend/runtimes/node/src/container.ts', 3100],
   ['backend/packages/orchestration/src/container.ts', 1950],
   ['backend/packages/orchestration/src/container/modules.ts', 1350],
-  ['backend/runtimes/cloudflare/src/infrastructure/container.ts', 2700],
+  ['backend/runtimes/cloudflare/src/infrastructure/container.ts', 2720],
   // Wide-but-flat declaration files (schemas / wire contracts), not control flow.
   ['backend/packages/contracts/src/entities.ts', 2300],
   ['backend/runtimes/node/src/db/schema.ts', 2300],

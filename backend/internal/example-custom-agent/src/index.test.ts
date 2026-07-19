@@ -1,16 +1,19 @@
-import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
+import { beforeEach, describe, expect, it, vi } from 'vitest'
 import { type AgentKindRegistry, defaultAgentKindRegistry } from '@cat-factory/agents'
 import type {
   CommitFilesInput,
   GateRegistry,
   GateStepState,
+  PipelineRegistry,
+  ProviderRegistry,
   RepoFiles,
   StepResolverRegistry,
 } from '@cat-factory/kernel'
 import {
   InitiativePresetRegistry,
-  clearRegisteredPipelines,
   defaultGateRegistry,
+  defaultPipelineRegistry,
+  defaultProviderRegistry,
   defaultStepResolverRegistry,
   seedPipelines,
   stubGateContext,
@@ -36,30 +39,28 @@ import {
   wireLicenseProvider,
 } from './index.js'
 
-// Agent kinds + initiative presets + gates + step resolvers live on app-owned registries (a fresh
-// instance per test — no global to clear). The PIPELINE registry is still module-global, so clear
-// it for isolation and re-register before each test.
+// Agent kinds + initiative presets + gates + step resolvers + pipelines live on app-owned
+// registries — a fresh instance per test, no module global to clear.
 let registry: AgentKindRegistry
 let initiativePresetRegistry: InitiativePresetRegistry
 let gateRegistry: GateRegistry
 let stepResolverRegistry: StepResolverRegistry
+let providerRegistry: ProviderRegistry
+let pipelineRegistry: PipelineRegistry
 beforeEach(() => {
-  clearRegisteredPipelines()
   registry = defaultAgentKindRegistry()
   initiativePresetRegistry = new InitiativePresetRegistry()
   gateRegistry = defaultGateRegistry()
   stepResolverRegistry = defaultStepResolverRegistry()
+  providerRegistry = defaultProviderRegistry()
+  pipelineRegistry = defaultPipelineRegistry()
   registerExampleCustomAgents(
     registry,
     initiativePresetRegistry,
     gateRegistry,
     stepResolverRegistry,
+    pipelineRegistry,
   )
-})
-afterEach(() => {
-  clearRegisteredPipelines()
-  // The license provider is a module-level handle; clear it so a wired test can't leak.
-  wireLicenseProvider(undefined)
 })
 
 describe('example custom agents', () => {
@@ -106,11 +107,11 @@ describe('example custom agents', () => {
     // engine-drive conformance tests inject verdicts through a test-local factory, so this
     // is the only coverage of the seam a deployment actually copies.
     const check = vi.fn(async () => ({ clean: true, headSha: 'sha-1', summary: 'all good' }))
-    wireLicenseProvider({ check })
+    wireLicenseProvider(providerRegistry, { check })
     const gate = gateRegistry
       .factories()
       .find((g) => g.kind === LICENSE_CHECK_KIND)!
-      .factory(stubGateContext())
+      .factory(stubGateContext({}, providerRegistry))
 
     // Wired now ⇒ the gate runs its probe instead of passing through.
     const stubState: GateStepState = { phase: 'checking', attempts: 0, maxAttempts: 10 }
@@ -145,7 +146,7 @@ describe('example custom agents', () => {
   })
 
   it('appends the pl_org_audit pipeline chaining the two kinds', () => {
-    const pipeline = seedPipelines().find((p) => p.id === ORG_AUDIT_PIPELINE_ID)
+    const pipeline = seedPipelines(pipelineRegistry).find((p) => p.id === ORG_AUDIT_PIPELINE_ID)
     expect(pipeline?.agentKinds).toEqual([ORG_REVIEWER_KIND, SECURITY_AUDITOR_KIND])
   })
 
@@ -251,7 +252,9 @@ describe('example org-audit initiative preset', () => {
     expect(descriptor?.interview).toBe('full')
     // The planning binding must resolve to a real pipeline (else create/start would 404 the run).
     expect(descriptor?.planningPipelineId).toBe('pl_initiative')
-    expect(seedPipelines().some((p) => p.id === descriptor?.planningPipelineId)).toBe(true)
+    expect(
+      seedPipelines(pipelineRegistry).some((p) => p.id === descriptor?.planningPipelineId),
+    ).toBe(true)
   })
 
   it('declares a single required org-audit phase (shape is the template’s job)', () => {
@@ -415,9 +418,9 @@ describe('example org research-and-apply preset', () => {
   })
 
   it('registers both merging pipelines chaining the kinds + the merge tail', () => {
-    const research = seedPipelines().find((p) => p.id === ORG_RESEARCH_PIPELINE_ID)
+    const research = seedPipelines(pipelineRegistry).find((p) => p.id === ORG_RESEARCH_PIPELINE_ID)
     expect(research?.agentKinds).toEqual([ORG_RESEARCH_KIND, 'conflicts', 'ci', 'merger'])
-    const apply = seedPipelines().find((p) => p.id === ORG_APPLY_PIPELINE_ID)
+    const apply = seedPipelines(pipelineRegistry).find((p) => p.id === ORG_APPLY_PIPELINE_ID)
     expect(apply?.agentKinds).toEqual(['coder', 'conflicts', 'ci', 'merger'])
   })
 
@@ -440,7 +443,9 @@ describe('example org research-and-apply preset', () => {
     expect(descriptor?.probe).toBe(false)
     expect(descriptor?.interview).toBe('full')
     expect(descriptor?.planningPipelineId).toBe('pl_initiative')
-    expect(seedPipelines().some((p) => p.id === descriptor?.planningPipelineId)).toBe(true)
+    expect(
+      seedPipelines(pipelineRegistry).some((p) => p.id === descriptor?.planningPipelineId),
+    ).toBe(true)
   })
 
   it('steers the spawned coder + custom research kind via promptAdditions (slice 1 reach)', () => {

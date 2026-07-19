@@ -26,7 +26,10 @@ import {
   type VcsIdentityRegistry,
   type WebSearchAvailability,
   type WorkRunner,
+  type ProviderRegistry,
+  defaultProviderRegistry,
   defaultStepResolverRegistry,
+  defaultVcsRegistry,
 } from '@cat-factory/kernel'
 import {
   AiAgentExecutor,
@@ -249,7 +252,6 @@ import { D1ServiceFragmentDefaultsRepository } from './repositories/D1ServiceFra
 import {
   type GateProviderOverrides,
   applyGateProviders,
-  clearGateProviders,
   gateRegistryWithBuiltins,
   wireCiStatusProvider,
   wireMergeabilityProvider,
@@ -464,7 +466,7 @@ function maybeWrapConsensus(
   agentKindRegistry: AgentKindRegistry,
 ): AgentExecutor {
   if (!isTruthy(env.CONSENSUS_ENABLED)) return standard
-  registerConsensusTraits()
+  registerConsensusTraits(agentKindRegistry)
   return new ConsensusAgentExecutor({
     standard,
     modelProviderResolver: buildModelProviderResolver(env, db),
@@ -714,6 +716,7 @@ function selectMergeLifecycleDeps(
   db: D1Database,
   clock: Clock,
   idGenerator: IdGenerator,
+  providerRegistry: ProviderRegistry,
 ): Partial<CoreDependencies> {
   const deps: Partial<CoreDependencies> = {
     notificationRepository: new D1NotificationRepository({ db }),
@@ -752,15 +755,19 @@ function selectMergeLifecycleDeps(
     // The `ci` / `conflicts` gates now live in `@cat-factory/gates`; wire their providers into
     // the gate suite (deployment-global handles) instead of onto the engine's CoreDependencies.
     wireCiStatusProvider(
+      providerRegistry,
       new GitHubCiStatusProvider({ githubClient, resolveRepoTarget, blockRepository }),
     )
     wireMergeabilityProvider(
+      providerRegistry,
       new GitHubMergeabilityProvider({ githubClient, resolveRepoTarget, blockRepository }),
     )
     wirePullRequestReviewProvider(
+      providerRegistry,
       new GitHubPullRequestReviewProvider({ githubClient, resolveRepoTarget, blockRepository }),
     )
     wireDocQualityProvider(
+      providerRegistry,
       new GitHubDocQualityProvider({
         githubClient,
         resolveRepoTarget,
@@ -795,6 +802,7 @@ function selectReleaseHealthDeps(
   env: Env,
   config: AppConfig,
   db: D1Database,
+  providerRegistry: ProviderRegistry,
 ): Partial<CoreDependencies> {
   if (!config.releaseHealth.enabled || !config.releaseHealth.encryptionKey) return {}
   const observabilityConnectionRepository = new D1ObservabilityConnectionRepository({ db })
@@ -808,6 +816,7 @@ function selectReleaseHealthDeps(
   // connection/config repos + cipher stay on CoreDependencies — they power the management API
   // (ReleaseHealthService), not the gate.
   wireReleaseHealthProvider(
+    providerRegistry,
     new RegistryReleaseHealthProvider({
       observabilityConnectionRepository,
       releaseHealthConfigRepository,
@@ -895,7 +904,11 @@ function buildTestSecretsService(
  * workspace-backed provider is wired into the gate suite via `wireIncidentEnrichment`;
  * the connection repo + cipher stay on CoreDependencies to power the management API.
  */
-function selectIncidentEnrichmentDeps(env: Env, db: D1Database): Partial<CoreDependencies> {
+function selectIncidentEnrichmentDeps(
+  env: Env,
+  db: D1Database,
+  providerRegistry: ProviderRegistry,
+): Partial<CoreDependencies> {
   const encryptionKey = env.ENCRYPTION_KEY?.trim()
   if (!encryptionKey) return {}
   const incidentEnrichmentConnectionRepository = new D1IncidentEnrichmentConnectionRepository({
@@ -906,6 +919,7 @@ function selectIncidentEnrichmentDeps(env: Env, db: D1Database): Partial<CoreDep
     info: INCIDENT_ENRICHMENT_CIPHER_INFO,
   })
   wireIncidentEnrichment(
+    providerRegistry,
     new WorkspaceIncidentEnrichmentProvider({
       incidentEnrichmentConnectionRepository,
       secretCipher: incidentEnrichmentSecretCipher,
@@ -2150,6 +2164,18 @@ export function buildContainer(
   // + preset probe; the conformance suite injects a pre-loaded one via `overrides`.
   const initiativePresetRegistry =
     overrides.initiativePresetRegistry ?? defaultInitiativePresetRegistry()
+  // The app-owned VCS provider registry: a fresh instance per build (the injected one via
+  // `overrides`, else empty). The GitLab provider is registered onto it below when configured;
+  // surfaced on the ServerContainer for the neutral webhook route. Unlike the gate providers, a
+  // fresh instance per build means there is no module-global to reset — the phantom-`Map` hazard
+  // for the separately-published `@cat-factory/gitlab` adapter is gone.
+  const vcsRegistry = overrides.vcsRegistry ?? defaultVcsRegistry()
+  // The app-owned provider registry the built-in gates probe through: a fresh instance per build
+  // (the injected one via `overrides`, else empty). The GitHub CI/mergeability/review/doc-quality
+  // + release-health + incident providers are wired onto it below when configured; injected into
+  // `createCore` so the engine's gate machine reads the SAME instance. Fresh-per-build means the
+  // former `clearGateProviders()` reset is unnecessary — nothing leaks from a prior build.
+  const providerRegistry = overrides.providerRegistry ?? defaultProviderRegistry()
 
   // Register the opt-in AWS EKS backends by reference (symmetric with the Node facade; a
   // pass-through until a workspace connects an `eks` backend). `register` is idempotent (keyed
@@ -2166,25 +2192,21 @@ export function buildContainer(
   const { capability: contentStorageCapability, buildBlobBackend: buildCfBlobBackend } =
     cloudflareContentStorage(env)
 
-  // The built-in gates' providers are deployment-global module handles (in `@cat-factory/gates`),
-  // not per-container DI. Reset them up-front so each build re-wires from a clean slate and only
-  // the gates this env actually configures stay wired: `selectMergeLifecycleDeps` /
-  // `selectReleaseHealthDeps` wire their providers only inside their `enabled` branches and never
-  // clear, so without this reset a provider wired by an earlier (configured) build would leak into
-  // a later (unconfigured) build and make its gate probe a stale handle instead of passing through.
-  // Any test-injected gate providers (`opts.gateProviders`) are applied at the END of this build
-  // (after the config wiring below) so they OVERRIDE it — the only way an externally-supplied
-  // provider survives the per-request rebuild, and so a deployment that ALSO wires a real provider
-  // can't clobber the test's. Gates read their provider lazily at probe time, so the last write wins.
-  clearGateProviders()
+  // The built-in gates' providers are wired onto the app-owned `providerRegistry` (news'd above,
+  // fresh per build unless injected via `overrides`). `selectMergeLifecycleDeps` /
+  // `selectReleaseHealthDeps` / `selectIncidentEnrichmentDeps` wire theirs only inside their
+  // `enabled` branches; a fresh registry starts empty, so an unconfigured gate simply stays
+  // unwired (pass-through) — no reset needed (the former `clearGateProviders()` guarded a
+  // module-global that no longer exists). Any test-injected gate providers (`opts.gateProviders`)
+  // are applied at the END of this build (after the config wiring) so they OVERRIDE it, and — when
+  // the test injects its own `providerRegistry` via `overrides` — survive the per-request rebuild.
 
-  // Opt-in GitLab VCS provider (single-token model, mirroring local-mode's PAT). Registered
-  // in the process-wide VCS registry — like a gate provider, a deployment-global handle reset
-  // each build — so the neutral webhook route + any VcsConnectionRef holder resolves it. A
-  // no-op unless GITLAB_TOKEN is set; symmetric with the Node facade (local inherits it) per
-  // "keep the runtimes symmetric".
+  // Opt-in GitLab VCS provider (single-token model, mirroring local-mode's PAT). Registered on
+  // the app-owned `vcsRegistry` above so the neutral webhook route + any VcsConnectionRef holder
+  // resolves it. A no-op unless GITLAB_TOKEN is set; symmetric with the Node facade (local
+  // inherits it) per "keep the runtimes symmetric".
   if (config.gitlab?.enabled && env.GITLAB_TOKEN) {
-    registerGitLab({
+    registerGitLab(vcsRegistry, {
       tokenSource: new StaticGitLabTokenSource(env.GITLAB_TOKEN, config.gitlab.apiBase),
       clock,
       webhookSecret: config.gitlab.webhookSecret || undefined,
@@ -2407,6 +2429,9 @@ export function buildContainer(
     // read them, and the gate registry is re-exposed on Core for the boot-time validation.
     gateRegistry,
     stepResolverRegistry,
+    // The app-owned provider registry the gate providers were wired onto above; the engine's gate
+    // machine reads the SAME instance through its GateContext.
+    providerRegistry,
     initiativePresetRegistry,
     workRunner: selectWorkRunner(env),
     executionEventPublisher: eventPublisher,
@@ -2444,7 +2469,7 @@ export function buildContainer(
       ? new WorkflowsEnvironmentTestRunner(env.ENV_TEST_WORKFLOW)
       : undefined,
     ...selectGitHubDeps(env, config, db, clock, idGenerator, caches.repoFiles),
-    ...selectMergeLifecycleDeps(env, config, db, clock, idGenerator),
+    ...selectMergeLifecycleDeps(env, config, db, clock, idGenerator, providerRegistry),
     // A fresh workspace's model-preset library is seeded with Kimi K2.7 as the default
     // (Cloudflare-runnable on the bare AI binding). A deployment overrides the out-of-the-box
     // default by passing `defaultModelPresetId` through `createApp`'s / `buildContainer`'s
@@ -2452,7 +2477,7 @@ export function buildContainer(
     // relying on the trailing `...overrides` spread — so the seam stays legible and robust to a
     // future reorder. Applied only at first seed, so a user's later manual default choice wins.
     defaultModelPresetId: overrides.defaultModelPresetId ?? DEFAULT_MODEL_PRESET_ID,
-    ...selectReleaseHealthDeps(env, config, db),
+    ...selectReleaseHealthDeps(env, config, db, providerRegistry),
     // Fold the service frame's SENSITIVE test-credential refs (key + description, never values)
     // into the tester prompt; present only when ENCRYPTION_KEY is set.
     ...(testSecretsService
@@ -2461,7 +2486,7 @@ export function buildContainer(
             testSecretsService.resolveRefsForBlock(workspaceId, blockId),
         }
       : {}),
-    ...selectIncidentEnrichmentDeps(env, db),
+    ...selectIncidentEnrichmentDeps(env, db, providerRegistry),
     ...selectPackageRegistryDeps(env, db),
     ...(accountSettings ? { accountSettings } : {}),
     ...selectSlackDeps(config, db),
@@ -2535,10 +2560,10 @@ export function buildContainer(
   // Apply any test-injected gate providers LAST, so they override the config wiring done by the
   // `select*Deps` spreads above (the conformance suite drives the externalized CI gate over a
   // faked verdict). Production leaves `gateProviders` undefined, so this is a no-op outside tests.
-  applyGateProviders(opts.gateProviders)
+  applyGateProviders(providerRegistry, opts.gateProviders)
   // Surface any gate left as a silent pass-through (no provider wired) so a misconfigured
   // deployment is visible in the logs instead of quietly auto-merging without checking CI.
-  warnUnwiredGates(logger)
+  warnUnwiredGates(providerRegistry, logger)
 
   // The unified `agent_runs` reader (kind-spanning) — surfaced on the container for
   // `AgentRunController` AND folded into the mothership `repositories` registry below (it is the
@@ -2559,6 +2584,8 @@ export function buildContainer(
     // deployment lets a GitLab user sign in (previously the Worker wired none, leaving it
     // OAuth-only / GitHub-only for sign-in even though the engine gated/merged on GitLab).
     vcsIdentity: buildWorkerVcsIdentityRegistry(config),
+    // The app-owned VCS provider registry the neutral webhook route resolves a provider from.
+    vcsRegistry,
     // The same checkout-free repo resolver the engine binds pre/post-ops with, surfaced so
     // the shared service-spec read controller can read the `spec/` artifact off main.
     resolveRunRepoContext: dependencies.resolveRunRepoContext,

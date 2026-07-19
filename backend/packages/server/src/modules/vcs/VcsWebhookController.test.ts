@@ -1,22 +1,25 @@
 import { Hono } from 'hono'
-import { afterEach, beforeEach, describe, expect, it } from 'vitest'
-import { clearVcsProviders, registerVcsProvider } from '@cat-factory/kernel'
+import { beforeEach, describe, expect, it } from 'vitest'
+import { defaultVcsRegistry, VcsProviderRegistry } from '@cat-factory/kernel'
 import type { VcsConnectionRef, VcsWebhookEvent } from '@cat-factory/kernel'
 import { vcsWebhookController } from './VcsWebhookController.js'
 import type { AppEnv, ServerContainer } from '../../http/env.js'
 
 // Exercises the neutral ingest route's behaviour (resolve provider → verify → map → sink)
-// against a FAKE provider bundle — the concrete GitLab adapter is covered in @cat-factory/gitlab.
+// against a FAKE provider bundle registered on an injected `vcsRegistry` — the concrete GitLab
+// adapter is covered in @cat-factory/gitlab.
 
 function appWith(container: Partial<ServerContainer>) {
   const app = new Hono<AppEnv>()
   app.use('*', async (c, next) => {
-    c.set('container', container as ServerContainer)
+    c.set('container', { vcsRegistry, ...container } as ServerContainer)
     await next()
   })
   app.route('/vcs', vcsWebhookController())
   return app
 }
+
+let vcsRegistry: VcsProviderRegistry
 
 const gitlabConfig = {
   enabled: true,
@@ -28,9 +31,9 @@ const gitlabConfig = {
 let mapped: VcsConnectionRef | null
 
 beforeEach(() => {
-  clearVcsProviders()
+  vcsRegistry = defaultVcsRegistry()
   mapped = null
-  registerVcsProvider({
+  vcsRegistry.register({
     provider: 'gitlab',
     client: {} as never,
     webhookVerifier: { verify: async (_raw, sig) => sig === 'secret' },
@@ -61,8 +64,6 @@ beforeEach(() => {
     },
   })
 })
-
-afterEach(() => clearVcsProviders())
 
 describe('vcsWebhookController', () => {
   it('rejects an invalid signature with 401', async () => {
@@ -118,10 +119,14 @@ describe('vcsWebhookController', () => {
     expect(
       (await app.request('/vcs/bitbucket/webhooks', { method: 'POST', body: '{}' })).status,
     ).toBe(404)
-    clearVcsProviders()
+    // An empty registry (the provider was never registered) 503s the neutral route.
+    const emptyApp = appWith({
+      config: { gitlab: gitlabConfig } as never,
+      vcsRegistry: defaultVcsRegistry(),
+    })
     expect(
       (
-        await app.request('/vcs/gitlab/webhooks', {
+        await emptyApp.request('/vcs/gitlab/webhooks', {
           method: 'POST',
           headers: { 'x-gitlab-token': 'secret' },
           body: '{}',

@@ -31,27 +31,33 @@ A provider is identified by a typed `ProviderToken<T>` defined once and exported
 interface. The deployment wires an impl at startup; the gate reads it back through its
 `GateContext` — no module global, and `requireProvider` is a real guard, not a `!`.
 
+The provider registry is the app-owned kernel `ProviderRegistry` the facade injects (via
+`CoreDependencies.providerRegistry` → the gate machine's `GateContext`). A deployment's `wireX`
+handle takes that instance; the gate reads it back through `ctx` (`getProvider` / `requireProvider` /
+`isProviderWired`).
+
 ```ts
-// kernel: defineProviderToken / wireProvider / getProvider / requireProvider / isProviderWired
+// kernel: defineProviderToken + the app-owned ProviderRegistry (wire/get/isWired/require methods)
 export const LICENSE_PROVIDER = defineProviderToken<LicenseProvider>('license')
-export function wireLicenseProvider(p: LicenseProvider | undefined) {
-  wireProvider(LICENSE_PROVIDER, p)
+export function wireLicenseProvider(registry: ProviderRegistry, p: LicenseProvider | undefined) {
+  registry.wire(LICENSE_PROVIDER, p)
 }
 
-registerGate(LICENSE_CHECK_KIND, (ctx) => ({
+gateRegistry.register(LICENSE_CHECK_KIND, (ctx) => ({
   kind: LICENSE_CHECK_KIND,
   helperKind: LICENSE_FIXER_KIND,
-  wired: () => isProviderWired(LICENSE_PROVIDER),
+  wired: () => ctx.isProviderWired(LICENSE_PROVIDER),
   // SAFE: the engine only probes a gate whose wired() is true.
   probe: async (ws, blk) => mapReport(await ctx.requireProvider(LICENSE_PROVIDER).check(ws, blk)),
   // …
 }))
 ```
 
-`requireProvider` throwing inside `probe` is sound because `wired()` (= `isProviderWired(token)`)
+`requireProvider` throwing inside `probe` is sound because `wired()` (= `ctx.isProviderWired(token)`)
 gates whether the engine probes at all — the "checked `wired`, then asserted `!`" race is gone.
-The built-in `@cat-factory/gates` suite dogfoods this (its `wireCiStatusProvider` etc. keep their
-public signatures, now delegating to `wireProvider`), so facade wiring is unchanged.
+The built-in `@cat-factory/gates` suite dogfoods this (its `wireCiStatusProvider` etc. take the
+registry as their first arg and wire onto that instance), so a fresh registry per build starts
+empty and nothing leaks between builds.
 
 ## Schema-driven structured output
 
@@ -133,10 +139,10 @@ The gates package depends only on kernel + contracts, never on orchestration.
 ## Authoring checklist
 
 1. Define a valibot schema → `defineStructuredOutput` for any structured kind.
-2. `registerAgentKind({ kind, systemPrompt, agent: { surface }, structuredOutput?, preOps?, postOps?, presentation? })`
+2. `agentKindRegistry.register({ kind, systemPrompt, agent: { surface }, structuredOutput?, preOps?, postOps?, presentation? })`
    — the surface drives the prompt directives and the container requirement; `presentation.resultView`
    (if set) must be a `RESULT_VIEW_IDS` id.
-3. For a gate: `defineProviderToken` + a one-line `wireX`; `registerGate(kind, ctx => ({ wired: () => isProviderWired(token), probe: () => …ctx.requireProvider(token)…, helperKind, onExhausted }))`.
+3. For a gate: `defineProviderToken` + a one-line `wireX(registry, impl)`; `gateRegistry.register(kind, ctx => ({ wired: () => ctx.isProviderWired(token), probe: () => …ctx.requireProvider(token)…, helperKind, onExhausted }))`.
    The `helperKind` must be a registered container kind (or a built-in helper).
-4. `registerPipeline(...)` to chain the kinds.
-5. The facade wires the provider impl at startup and (already) calls `validateRegistrationsOnce()`.
+4. `pipelineRegistry.register(...)` to chain the kinds.
+5. The facade wires the provider impl onto its `providerRegistry` at startup and (already) calls `validateRegistrationsOnce()`.

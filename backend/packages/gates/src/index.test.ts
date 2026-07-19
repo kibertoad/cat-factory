@@ -1,11 +1,10 @@
 import {
   defaultGateRegistry,
+  defaultProviderRegistry,
   defineProviderToken,
-  isProviderWired,
-  requireProvider,
   stubGateContext,
-  wireProvider,
   type GateHelperJobResult,
+  type ProviderRegistry,
 } from '@cat-factory/kernel'
 import type {
   Block,
@@ -13,10 +12,9 @@ import type {
   PipelineStep,
   RaiseNotificationInput,
 } from '@cat-factory/kernel'
-import { afterEach, describe, expect, it } from 'vitest'
+import { beforeEach, describe, expect, it } from 'vitest'
 import { ciGate, conflictsGate, docQualityGate, postReleaseHealthGate } from './gates.js'
 import {
-  clearGateProviders,
   wireCiStatusProvider,
   wireDocQualityProvider,
   wireMergeabilityProvider,
@@ -27,27 +25,33 @@ import { gateRegistryWithBuiltins, registerBuiltinGates } from './index.js'
 // The built-in gate suite ships as an external package authored through the public seam. These
 // tests exercise the wire-handles a deployment copies + the real wired()/probe() paths, plus
 // the on-call helper-completion hook — the seam a facade depends on, so a drift fails here.
-
-afterEach(() => clearGateProviders())
+//
+// A fresh provider registry per test (no module global to clear); each gate factory reads it
+// through the `stubGateContext(overrides, providerRegistry)` seam, exactly as the engine's
+// GateContext reads the injected instance.
+let providerRegistry: ProviderRegistry
+beforeEach(() => {
+  providerRegistry = defaultProviderRegistry()
+})
 
 describe('typed provider registry (the gate wiring seam)', () => {
-  it('wires/clears an impl and flips isProviderWired', () => {
+  it('wires/clears an impl and flips isWired', () => {
     const token = defineProviderToken<{ ping: () => string }>('test-provider')
-    expect(isProviderWired(token)).toBe(false)
-    wireProvider(token, { ping: () => 'pong' })
-    expect(isProviderWired(token)).toBe(true)
-    expect(requireProvider(token).ping()).toBe('pong')
-    wireProvider(token, undefined)
-    expect(isProviderWired(token)).toBe(false)
+    expect(providerRegistry.isWired(token)).toBe(false)
+    providerRegistry.wire(token, { ping: () => 'pong' })
+    expect(providerRegistry.isWired(token)).toBe(true)
+    expect(providerRegistry.require(token).ping()).toBe('pong')
+    providerRegistry.wire(token, undefined)
+    expect(providerRegistry.isWired(token)).toBe(false)
   })
 
-  it('requireProvider throws on an unwired token (the guard replacing the old `!`)', () => {
+  it('require throws on an unwired token (the guard replacing the old `!`)', () => {
     const token = defineProviderToken<unknown>('never-wired')
-    expect(() => requireProvider(token)).toThrow(/not wired/)
+    expect(() => providerRegistry.require(token)).toThrow(/not wired/)
   })
 
   it('a gate reads its provider through ctx.requireProvider, not a module global', async () => {
-    wireCiStatusProvider({
+    wireCiStatusProvider(providerRegistry, {
       getStatus: async () => ({
         repos: [
           {
@@ -58,9 +62,9 @@ describe('typed provider registry (the gate wiring seam)', () => {
         ],
       }),
     })
-    // The stub context delegates getProvider/requireProvider to the real registry, so the
-    // gate resolves the impl the wireX handle stored — exactly as the engine's GateContext does.
-    const gate = ciGate(stubGateContext())
+    // The stub context delegates getProvider/requireProvider/isProviderWired to the given registry,
+    // so the gate resolves the impl the wireX handle stored — exactly as the engine's GateContext does.
+    const gate = ciGate(stubGateContext({}, providerRegistry))
     expect(gate.wired()).toBe(true)
     expect((await gate.probe('ws', 'b', {} as PipelineStep['gate'] & {})).status).toBe('pass')
   })
@@ -91,12 +95,12 @@ describe('@cat-factory/gates registration', () => {
 
 describe('ci gate', () => {
   it('is a pass-through until a provider is wired', () => {
-    expect(ciGate(stubGateContext()).wired()).toBe(false)
+    expect(ciGate(stubGateContext({}, providerRegistry)).wired()).toBe(false)
   })
 
   it('passes on green CI and fails on red', async () => {
     let green = true
-    wireCiStatusProvider({
+    wireCiStatusProvider(providerRegistry, {
       getStatus: async () => ({
         repos: [
           {
@@ -114,7 +118,7 @@ describe('ci gate', () => {
         ],
       }),
     })
-    const gate = ciGate(stubGateContext())
+    const gate = ciGate(stubGateContext({}, providerRegistry))
     expect(gate.wired()).toBe(true)
     expect((await gate.probe('ws', 'b', {} as PipelineStep['gate'] & {})).status).toBe('pass')
     green = false
@@ -127,10 +131,10 @@ describe('ci gate', () => {
 describe('conflicts gate', () => {
   it('passes on a mergeable PR and fails on a conflict', async () => {
     let verdict: 'mergeable' | 'conflicted' = 'mergeable'
-    wireMergeabilityProvider({
+    wireMergeabilityProvider(providerRegistry, {
       getMergeability: async () => ({ repos: [{ repo: 'o/r', headSha: 'sha', verdict }] }),
     })
-    const gate = conflictsGate(stubGateContext())
+    const gate = conflictsGate(stubGateContext({}, providerRegistry))
     expect((await gate.probe('ws', 'b', {} as PipelineStep['gate'] & {})).status).toBe('pass')
     verdict = 'conflicted'
     const failed = await gate.probe('ws', 'b', {} as PipelineStep['gate'] & {})
@@ -146,7 +150,7 @@ describe('conflicts gate', () => {
     // is now dispatched AT the conflicted peer repo (the executor swaps its repo target from
     // `conflictTarget`), so the peer conflict escalates like an own-repo one — the gate records
     // the peer as the conflict target and does NOT decline escalation.
-    wireMergeabilityProvider({
+    wireMergeabilityProvider(providerRegistry, {
       getMergeability: async () => ({
         repos: [
           { repo: 'o/own', headSha: 'ownsha', verdict: 'mergeable' },
@@ -154,7 +158,7 @@ describe('conflicts gate', () => {
         ],
       }),
     })
-    const gate = conflictsGate(stubGateContext())
+    const gate = conflictsGate(stubGateContext({}, providerRegistry))
     const probe = await gate.probe('ws', 'b', {} as PipelineStep['gate'] & {})
     expect(probe.status).toBe('fail')
     // No longer declined: a peer conflict escalates to the resolver targeting that peer.
@@ -165,7 +169,7 @@ describe('conflicts gate', () => {
   })
 
   it('escalates a conflict on the OWN repo of a multi-repo task', async () => {
-    wireMergeabilityProvider({
+    wireMergeabilityProvider(providerRegistry, {
       getMergeability: async () => ({
         repos: [
           { repo: 'o/own', headSha: 'ownsha', verdict: 'conflicted' },
@@ -173,7 +177,7 @@ describe('conflicts gate', () => {
         ],
       }),
     })
-    const gate = conflictsGate(stubGateContext())
+    const gate = conflictsGate(stubGateContext({}, providerRegistry))
     const probe = await gate.probe('ws', 'b', {} as PipelineStep['gate'] & {})
     expect(probe.status).toBe('fail')
     // The own repo IS resolvable by the single-repo resolver → escalate as normal.
@@ -184,12 +188,12 @@ describe('conflicts gate', () => {
 
 describe('doc-quality gate', () => {
   it('is a pass-through until a provider is wired', () => {
-    expect(docQualityGate(stubGateContext()).wired()).toBe(false)
+    expect(docQualityGate(stubGateContext({}, providerRegistry)).wired()).toBe(false)
   })
 
   it('passes on a clean document and fails with the findings on a malformed one', async () => {
     let ok = true
-    wireDocQualityProvider({
+    wireDocQualityProvider(providerRegistry, {
       check: async () =>
         ok
           ? { ok: true, headSha: 'sha', path: 'docs/prd/x.md', findings: [] }
@@ -200,7 +204,7 @@ describe('doc-quality gate', () => {
               findings: ['Missing required section: "Success Metrics".'],
             },
     })
-    const gate = docQualityGate(stubGateContext())
+    const gate = docQualityGate(stubGateContext({}, providerRegistry))
     expect(gate.wired()).toBe(true)
     const passed = await gate.probe('ws', 'b', {} as PipelineStep['gate'] & {})
     expect(passed.status).toBe('pass')
@@ -216,13 +220,16 @@ describe('doc-quality gate', () => {
 
 describe('post-release-health gate on-call completion', () => {
   it('raises a release_regression notification and finishes the gate step', async () => {
-    wireReleaseHealthProvider({
+    wireReleaseHealthProvider(providerRegistry, {
       probe: async () => ({ status: 'healthy', signals: [] }),
       gatherEvidence: async () => ({ regressedSignals: [], errors: [], notes: '' }),
     })
     const raised: RaiseNotificationInput[] = []
     const gate = postReleaseHealthGate(
-      stubGateContext({ raiseNotification: async (_ws, input) => void raised.push(input) }),
+      stubGateContext(
+        { raiseNotification: async (_ws, input) => void raised.push(input) },
+        providerRegistry,
+      ),
     )
     const result: GateHelperJobResult = {
       state: 'done',

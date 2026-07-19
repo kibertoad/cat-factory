@@ -1,4 +1,4 @@
-import { mergeRegisteredPipelines } from './pipeline-registry.js'
+import type { PipelineRegistry } from './pipeline-registry.js'
 import type { Block, Pipeline } from './types.js'
 
 // Sample architecture used to populate a workspace on creation. Mirrors the
@@ -163,11 +163,14 @@ function definePipeline(spec: {
 }
 
 /**
- * Reusable pipelines shown in the pipeline palette on first load: the built-in catalog
- * plus any pipelines a deployment registered via `registerPipeline` (e.g. a proprietary
- * org package), merged by id.
+ * Reusable pipelines shown in the pipeline palette on first load: the built-in catalog plus any
+ * pipelines a deployment registered on the app-owned {@link PipelineRegistry} (e.g. a proprietary
+ * org package), merged by id. Omit `registry` (or pass a fresh one) for the built-in catalog only —
+ * the shape a caller that only resolves a BUILT-IN pipeline's id needs (e.g. plan-helpers, the
+ * cross-runtime conformance baseline). The workspace + pipeline services thread the app-owned
+ * instance so a deployment's custom pipelines are seeded into every new workspace.
  */
-export function seedPipelines(): Pipeline[] {
+export function seedPipelines(registry?: PipelineRegistry): Pipeline[] {
   const builtins: Pipeline[] = [
     // `requirements` runs first and reviews the collected requirements; the spec-writer then
     // applies them as an increment onto the in-repo spec baseline, and only THEN does the architect
@@ -724,11 +727,11 @@ export function seedPipelines(): Pipeline[] {
   // version of a built-in, bump that pipeline's own `version` here (an explicit `version: N`
   // on the object overrides this default) — that increment is the signal the app's reseed
   // prompt keys off. The default is applied to EVERY built-in in the merged catalog — including
-  // ones contributed by `registerPipeline` — so a registered built-in is version-tracked +
+  // ones contributed via the pipeline registry — so a registered built-in is version-tracked +
   // reseedable too, while custom (non-built-in) registered pipelines stay versionless.
-  return mergeRegisteredPipelines(builtins.map((p) => ({ ...p, builtin: true }))).map((p) =>
-    p.builtin ? { ...p, version: p.version ?? 1 } : p,
-  )
+  const tagged = builtins.map((p) => ({ ...p, builtin: true }))
+  const merged = registry ? registry.merge(tagged) : tagged
+  return merged.map((p) => (p.builtin ? { ...p, version: p.version ?? 1 } : p))
 }
 
 /** Pipeline id of the blueprint-only run kicked off after a successful bootstrap. */

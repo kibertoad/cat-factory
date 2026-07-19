@@ -6,7 +6,8 @@ import type {
   RepoOp,
 } from '@cat-factory/kernel'
 import type { AgentPresentation } from '@cat-factory/contracts'
-import type { AgentTrait } from './traits.js'
+import type { AgentTrait, AgentTraitDefinition } from './traits.js'
+import { STANDARD_TRAIT_DEFINITIONS } from './traits.js'
 import type { AgentTuning } from './tuning.js'
 import type { StructuredOutput } from './structured-output.js'
 import { registerBugInvestigatorAgent } from './bug-investigator.js'
@@ -84,7 +85,7 @@ export interface AgentKindDefinition {
    * Capability traits this kind carries (see ./traits). `code-aware` makes the engine
    * fold the running service's selected best-practice fragments into the agent's prompt;
    * `spec-aware` appends the in-repo-spec reading guidance. Deployments can also assign
-   * their own traits registered via `registerAgentTrait`. Omitted ⇒ no traits.
+   * their own traits registered via `registry.registerTrait`. Omitted ⇒ no traits.
    */
   traits?: AgentTrait[]
   /**
@@ -159,6 +160,22 @@ function withDerivedOutput(definition: AgentKindDefinition): AgentKindDefinition
  */
 export class AgentKindRegistry {
   private readonly registry = new Map<string, AgentKindDefinition>()
+  // Custom trait DEFINITIONS (id → guidance), pre-loaded with the standard trait set below.
+  // The former module-global `traitRegistry` — now owned by this instance (traits are
+  // capabilities OF agent kinds, so they live with the kind registry rather than a parallel
+  // module `Map`, which keeps the whole trait vocabulary on one injectable seam).
+  private readonly traitDefinitions = new Map<AgentTrait, AgentTraitDefinition>()
+  // Extra trait ASSIGNMENTS to EXISTING kinds (the former module-global `assignedTraits`) —
+  // e.g. `@cat-factory/consensus` marking built-in kinds eligible for a consensus strategy.
+  // Distinct from a kind's STANDARD_AGENT_TRAITS and a registered kind's own `traits`: this
+  // seam adds traits to a kind WITHOUT redefining its prompt. Unioned in `traitsFor`.
+  private readonly assignedTraits = new Map<AgentKind, Set<AgentTrait>>()
+
+  constructor() {
+    for (const definition of STANDARD_TRAIT_DEFINITIONS) {
+      this.traitDefinitions.set(definition.id, definition)
+    }
+  }
 
   /** Register a custom agent kind. A later registration of the same id replaces the earlier one. */
   register(definition: AgentKindDefinition): void {
@@ -259,7 +276,45 @@ export class AgentKindRegistry {
   structuredOutput(kind: AgentKind): StructuredOutput<unknown> | undefined {
     return this.registry.get(kind)?.structuredOutput
   }
+
+  /**
+   * Register a custom trait definition (id + optional prompt guidance). A later registration of
+   * the same id replaces the earlier one. Standard traits are pre-loaded in the constructor.
+   * Read back via {@link traitDefinition} — the `traitGuidanceFor` helper uses it.
+   */
+  registerTrait(definition: AgentTraitDefinition): void {
+    this.traitDefinitions.set(definition.id, definition)
+  }
+
+  /** Register several custom trait definitions at once. */
+  registerTraits(definitions: Iterable<AgentTraitDefinition>): void {
+    for (const definition of definitions) this.registerTrait(definition)
+  }
+
+  /** The definition for a trait id, or undefined when it is a pure marker / unregistered. */
+  traitDefinition(id: AgentTrait): AgentTraitDefinition | undefined {
+    return this.traitDefinitions.get(id)
+  }
+
+  /**
+   * Assign extra capability traits to an (existing) agent kind — additive, idempotent per trait.
+   * Used by an opt-in package (e.g. `@cat-factory/consensus`) to mark built-in kinds eligible for
+   * a strategy without redefining their prompt. Read back via {@link assignedTraitsFor}.
+   */
+  assignTraits(kind: AgentKind, traits: Iterable<AgentTrait>): void {
+    const set = this.assignedTraits.get(kind) ?? new Set<AgentTrait>()
+    for (const trait of traits) set.add(trait)
+    this.assignedTraits.set(kind, set)
+  }
+
+  /** The extra traits assigned to a kind (empty when none). Unioned into `traitsFor`. */
+  assignedTraitsFor(kind: AgentKind): ReadonlySet<AgentTrait> {
+    return this.assignedTraits.get(kind) ?? EMPTY_TRAIT_SET
+  }
 }
+
+/** Shared empty set so `assignedTraitsFor` allocates nothing on the common no-assignment path. */
+const EMPTY_TRAIT_SET: ReadonlySet<AgentTrait> = new Set<AgentTrait>()
 
 /**
  * A fresh registry pre-loaded with the built-in agent kinds. This is the single place the

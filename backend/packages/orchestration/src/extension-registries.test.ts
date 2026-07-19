@@ -1,4 +1,4 @@
-import { afterEach, beforeEach, describe, expect, it } from 'vitest'
+import { beforeEach, describe, expect, it } from 'vitest'
 import {
   AgentKindRegistry,
   defaultAgentKindRegistry,
@@ -11,10 +11,9 @@ import {
 } from './validation/validateRegistrations.js'
 import type { AgentRunContext, GateRegistry } from '@cat-factory/kernel'
 import {
-  clearRegisteredPipelines,
   defaultGateRegistry,
+  defaultPipelineRegistry,
   defaultStepResolverRegistry,
-  registerPipeline,
   seedPipelines,
   stubGateContext,
   stubResolverContext,
@@ -135,11 +134,10 @@ describe('agent-kind registry', () => {
 })
 
 describe('pipeline registry', () => {
-  afterEach(() => clearRegisteredPipelines())
-
-  // These assert the registry BEHAVIOUR (append / replace-in-place) against a
-  // baseline captured at runtime, not a hardcoded list of built-in ids — so adding
-  // or removing a seeded pipeline never churns this file.
+  // App-owned DI: each test news a fresh (empty) registry — no module global to clear.
+  // These assert the registry BEHAVIOUR (append / replace-in-place) against a baseline captured
+  // at runtime, not a hardcoded list of built-in ids — so adding or removing a seeded pipeline
+  // never churns this file.
 
   it('seeds the built-in pipelines with unique ids', () => {
     const ids = seedPipelines().map((p) => p.id)
@@ -150,8 +148,9 @@ describe('pipeline registry', () => {
 
   it('appends a registered (new-id) pipeline after the built-ins', () => {
     const builtins = seedPipelines().map((p) => p.id)
-    registerPipeline({ id: 'pl_org_audit', name: 'Audit & ship', agentKinds: ['org-auditor'] })
-    const pipelines = seedPipelines()
+    const registry = defaultPipelineRegistry()
+    registry.register({ id: 'pl_org_audit', name: 'Audit & ship', agentKinds: ['org-auditor'] })
+    const pipelines = seedPipelines(registry)
     expect(pipelines.map((p) => p.id)).toEqual([...builtins, 'pl_org_audit'])
     expect(pipelines.at(-1)).toEqual({
       id: 'pl_org_audit',
@@ -163,8 +162,9 @@ describe('pipeline registry', () => {
   it('replaces a built-in pipeline in place when ids collide', () => {
     const builtins = seedPipelines().map((p) => p.id)
     expect(builtins).toContain('pl_quick') // precondition: overriding an existing built-in
-    registerPipeline({ id: 'pl_quick', name: 'Org quick', agentKinds: ['coder', 'merger'] })
-    const pipelines = seedPipelines()
+    const registry = defaultPipelineRegistry()
+    registry.register({ id: 'pl_quick', name: 'Org quick', agentKinds: ['coder', 'merger'] })
+    const pipelines = seedPipelines(registry)
     // Same ids in the same order — replaced in place, not appended.
     expect(pipelines.map((p) => p.id)).toEqual(builtins)
     expect(pipelines.find((p) => p.id === 'pl_quick')?.name).toBe('Org quick')
@@ -230,9 +230,6 @@ describe('validateRegistrations', () => {
   beforeEach(() => {
     registry = new AgentKindRegistry()
     gates = defaultGateRegistry()
-  })
-  afterEach(() => {
-    clearRegisteredPipelines()
   })
 
   const goodGate = (helperKind: string) => () => ({

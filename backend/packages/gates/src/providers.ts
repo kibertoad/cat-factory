@@ -1,28 +1,27 @@
 import {
   defineProviderToken,
-  isProviderWired,
-  wireProvider,
   type CiStatusProvider,
   type DocQualityProvider,
   type IncidentEnrichmentProvider,
+  type ProviderRegistry,
   type ProviderToken,
   type PullRequestMergeabilityProvider,
   type PullRequestReviewProvider,
   type ReleaseHealthProvider,
 } from '@cat-factory/kernel'
 
-// The data sources the built-in gates probe are wired into the typed kernel provider
-// registry at startup (exactly like a custom gate wires its own provider — see
+// The data sources the built-in gates probe are wired onto the app-owned kernel provider
+// registry the facade owns (exactly like a custom gate wires its own provider — see
 // `@cat-factory/example-custom-agent`'s `LICENSE_PROVIDER`). The gates read them back through
-// their `GateContext` (`ctx.getProvider`/`ctx.requireProvider`); until a provider is wired its
-// gate is a harmless pass-through (`wired()` returns false), so a bare `import
-// '@cat-factory/gates'` is always safe.
+// their `GateContext` (`ctx.getProvider`/`ctx.requireProvider`/`ctx.isProviderWired`); until a
+// provider is wired its gate is a harmless pass-through (`wired()` returns false), so a bare
+// `import '@cat-factory/gates'` is always safe.
 //
-// This is the whole point of the externalization: the engine no longer holds these
-// providers. A facade constructs its impl (GitHubCiStatusProvider, RegistryReleaseHealth…)
-// and hands it here, instead of threading it through the engine's constructor. The
-// `wireX`/`clearGateProviders`/`applyGateProviders` public surface is unchanged — only the
-// storage moved from four module-level `let`s to the shared token registry.
+// This is the whole point of the externalization: the engine no longer holds these providers.
+// A facade constructs its impl (GitHubCiStatusProvider, RegistryReleaseHealth…), news ONE
+// `ProviderRegistry`, wires each impl onto it, and injects the SAME instance into the engine —
+// instead of threading providers through the engine's constructor. Each `wireX` now takes the
+// registry, so a fresh instance per container build starts empty (no cross-build leak).
 
 /** Token for the CI check-runs source the `ci` gate probes. */
 export const CI_STATUS_PROVIDER = defineProviderToken<CiStatusProvider>('ci-status')
@@ -41,41 +40,59 @@ export const PULL_REQUEST_REVIEW_PROVIDER =
 export const DOC_QUALITY_PROVIDER = defineProviderToken<DocQualityProvider>('doc-quality')
 
 /** Wire (or clear, with `undefined`) the CI check-runs source the `ci` gate probes. */
-export function wireCiStatusProvider(provider: CiStatusProvider | undefined): void {
-  wireProvider(CI_STATUS_PROVIDER, provider)
+export function wireCiStatusProvider(
+  registry: ProviderRegistry,
+  provider: CiStatusProvider | undefined,
+): void {
+  registry.wire(CI_STATUS_PROVIDER, provider)
 }
 
 /** Wire (or clear) the PR-mergeability source the `conflicts` gate probes. */
 export function wireMergeabilityProvider(
+  registry: ProviderRegistry,
   provider: PullRequestMergeabilityProvider | undefined,
 ): void {
-  wireProvider(MERGEABILITY_PROVIDER, provider)
+  registry.wire(MERGEABILITY_PROVIDER, provider)
 }
 
 /** Wire (or clear) the release-health source the `post-release-health` gate probes. */
-export function wireReleaseHealthProvider(provider: ReleaseHealthProvider | undefined): void {
-  wireProvider(RELEASE_HEALTH_PROVIDER, provider)
+export function wireReleaseHealthProvider(
+  registry: ProviderRegistry,
+  provider: ReleaseHealthProvider | undefined,
+): void {
+  registry.wire(RELEASE_HEALTH_PROVIDER, provider)
 }
 
 /** Wire (or clear) the incident-enrichment source the on-call escalation annotates. */
-export function wireIncidentEnrichment(provider: IncidentEnrichmentProvider | undefined): void {
-  wireProvider(INCIDENT_ENRICHMENT_PROVIDER, provider)
+export function wireIncidentEnrichment(
+  registry: ProviderRegistry,
+  provider: IncidentEnrichmentProvider | undefined,
+): void {
+  registry.wire(INCIDENT_ENRICHMENT_PROVIDER, provider)
 }
 
 /** Wire (or clear) the PR-review source the `human-review` gate probes. */
 export function wirePullRequestReviewProvider(
+  registry: ProviderRegistry,
   provider: PullRequestReviewProvider | undefined,
 ): void {
-  wireProvider(PULL_REQUEST_REVIEW_PROVIDER, provider)
+  registry.wire(PULL_REQUEST_REVIEW_PROVIDER, provider)
 }
 
 /** Wire (or clear) the document structural-check source the `doc-quality` gate probes. */
-export function wireDocQualityProvider(provider: DocQualityProvider | undefined): void {
-  wireProvider(DOC_QUALITY_PROVIDER, provider)
+export function wireDocQualityProvider(
+  registry: ProviderRegistry,
+  provider: DocQualityProvider | undefined,
+): void {
+  registry.wire(DOC_QUALITY_PROVIDER, provider)
 }
 
-/** Clear every built-in gate provider. Intended for tests. */
-export function clearGateProviders(): void {
+/**
+ * Clear every built-in gate provider on the given registry. A fresh registry per container build
+ * already starts empty, so a facade never needs this — it's a convenience for tests that reuse
+ * one registry across cases.
+ */
+export function clearGateProviders(registry: ProviderRegistry): void {
   for (const token of [
     CI_STATUS_PROVIDER,
     MERGEABILITY_PROVIDER,
@@ -84,7 +101,7 @@ export function clearGateProviders(): void {
     PULL_REQUEST_REVIEW_PROVIDER,
     DOC_QUALITY_PROVIDER,
   ] as ProviderToken<unknown>[]) {
-    wireProvider(token, undefined)
+    registry.wire(token, undefined)
   }
 }
 
@@ -139,9 +156,9 @@ const warnedGates = new Set<string>()
  * per process. Pass-through stays the behaviour — this only makes the misconfiguration
  * visible.
  */
-export function warnUnwiredGates(log: GateWiringLogger): void {
+export function warnUnwiredGates(registry: ProviderRegistry, log: GateWiringLogger): void {
   for (const { gate, token, effect } of PASS_THROUGH_GATES) {
-    if (isProviderWired(token) || warnedGates.has(gate)) continue
+    if (registry.isWired(token) || warnedGates.has(gate)) continue
     warnedGates.add(gate)
     log.warn(
       { gate, effect, passThrough: true },
@@ -161,18 +178,22 @@ export interface GateProviderOverrides {
 }
 
 /**
- * Wire any provided gate providers (leaving the rest untouched). A facade build runs
- * `clearGateProviders()` then re-wires from its config; this is the seam by which a test
- * (or an embedder) injects fake/explicit providers through that same per-build wiring, so
- * they survive a per-request container rebuild instead of being cleared. Only keys present
- * are wired — absent keys are left as the build's config wired them.
+ * Wire any provided gate providers onto the registry (leaving the rest untouched). A facade
+ * build wires its config providers first; this is the seam by which a test (or an embedder)
+ * injects fake/explicit providers AFTER that config wiring so they override it (the registry is
+ * per-build, injected via the container's `providerRegistry`, so an injected provider survives a
+ * per-request container rebuild). Only keys present are wired — absent keys are left as the
+ * build's config wired them.
  */
-export function applyGateProviders(overrides: GateProviderOverrides | undefined): void {
+export function applyGateProviders(
+  registry: ProviderRegistry,
+  overrides: GateProviderOverrides | undefined,
+): void {
   if (!overrides) return
-  if (overrides.ciStatus) wireCiStatusProvider(overrides.ciStatus)
-  if (overrides.mergeability) wireMergeabilityProvider(overrides.mergeability)
-  if (overrides.releaseHealth) wireReleaseHealthProvider(overrides.releaseHealth)
-  if (overrides.incidentEnrichment) wireIncidentEnrichment(overrides.incidentEnrichment)
-  if (overrides.prReview) wirePullRequestReviewProvider(overrides.prReview)
-  if (overrides.docQuality) wireDocQualityProvider(overrides.docQuality)
+  if (overrides.ciStatus) wireCiStatusProvider(registry, overrides.ciStatus)
+  if (overrides.mergeability) wireMergeabilityProvider(registry, overrides.mergeability)
+  if (overrides.releaseHealth) wireReleaseHealthProvider(registry, overrides.releaseHealth)
+  if (overrides.incidentEnrichment) wireIncidentEnrichment(registry, overrides.incidentEnrichment)
+  if (overrides.prReview) wirePullRequestReviewProvider(registry, overrides.prReview)
+  if (overrides.docQuality) wireDocQualityProvider(registry, overrides.docQuality)
 }

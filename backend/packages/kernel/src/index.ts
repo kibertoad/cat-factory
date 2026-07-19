@@ -116,14 +116,9 @@ export { DOC_INTERVIEWER_AGENT_KIND } from './domain/doc-interview-logic.js'
 // context builder and the test-secrets store).
 export { resolveServiceFrameBlock } from './domain/block-tree.js'
 // Installation-level extension point for predefined pipelines (mirrors the custom
-// agent-kind / model-provider registry seams): a deployment registers extra pipelines at
-// startup and `seedPipelines()` seeds them into every new workspace.
-export {
-  registerPipeline,
-  registerPipelines,
-  registeredPipelines,
-  clearRegisteredPipelines,
-} from './domain/pipeline-registry.js'
+// agent-kind / gate registry seams): a deployment registers extra pipelines on the app-owned
+// `PipelineRegistry` at startup and `seedPipelines(registry)` seeds them into every new workspace.
+export { PipelineRegistry, defaultPipelineRegistry } from './domain/pipeline-registry.js'
 
 // Installation-level extension point for initiative PRESETS (mirrors the pipeline / gate
 // registry seams): a preset bundles a create-time form descriptor + planning-pipeline binding
@@ -169,12 +164,9 @@ export {
 // module-global wire/get boilerplate. See `domain/provider-registry.ts`.
 export {
   type ProviderToken,
+  ProviderRegistry,
   defineProviderToken,
-  wireProvider,
-  getProvider,
-  isProviderWired,
-  requireProvider,
-  clearProviders,
+  defaultProviderRegistry,
 } from './domain/provider-registry.js'
 
 // Provider-neutral VCS identity vocabulary + the per-provider adapter registry. The
@@ -192,13 +184,8 @@ export {
 } from './domain/vcs-types.js'
 export {
   type VcsProviderBundle,
-  registerVcsProvider,
-  getVcsProvider,
-  isVcsProviderRegistered,
-  requireVcsProvider,
-  resolveVcsProvider,
-  registeredVcsProviders,
-  clearVcsProviders,
+  VcsProviderRegistry,
+  defaultVcsRegistry,
 } from './domain/vcs-registry.js'
 export {
   type VcsHttpErrorContext,

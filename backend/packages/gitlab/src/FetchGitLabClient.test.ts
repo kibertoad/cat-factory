@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest'
 import type { VcsConnectionRef, VcsRepoRef } from '@cat-factory/kernel'
-import { clearVcsProviders, resolveVcsProvider } from '@cat-factory/kernel'
+import { defaultVcsRegistry } from '@cat-factory/kernel'
 import { FetchGitLabClient } from './FetchGitLabClient.js'
 import { StaticGitLabTokenSource } from './tokenSource.js'
 import { registerGitLab } from './index.js'
@@ -545,14 +545,17 @@ describe('GitLab webhook', () => {
 
 describe('registerGitLab', () => {
   it('registers a resolvable gitlab provider bundle', () => {
-    clearVcsProviders()
-    registerGitLab({ tokenSource: new StaticGitLabTokenSource('tok'), clock, webhookSecret: 's' })
-    const bundle = resolveVcsProvider(connection)
+    const registry = defaultVcsRegistry()
+    registerGitLab(registry, {
+      tokenSource: new StaticGitLabTokenSource('tok'),
+      clock,
+      webhookSecret: 's',
+    })
+    const bundle = registry.resolve(connection)
     expect(bundle.provider).toBe('gitlab')
     expect(bundle.client).toBeInstanceOf(FetchGitLabClient)
     expect(bundle.webhookMapper).toBeInstanceOf(GitLabWebhookMapper)
     expect(bundle.webhookVerifier).toBeInstanceOf(GitLabWebhookVerifier)
     expect(bundle.provisioning).toBeDefined()
-    clearVcsProviders()
   })
 })
