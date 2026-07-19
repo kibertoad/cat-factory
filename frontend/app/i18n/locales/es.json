@@ -273,6 +273,8 @@
       "contextDocuments": "Documentos de contexto",
       "contextIssues": "Incidencias de contexto",
       "attach": "Adjuntar",
+      "connectSource": "Conectar una fuente",
+      "connectSourceNamed": "Conectar {source}",
       "done": "Hecho",
       "attachDocDisabledConnect": "Conecta primero una fuente de documentos (Integraciones)",
       "attachDocDisabledEnable": "Activa primero la integración de documentos",

@@ -70,6 +70,7 @@ export class ZeplinProvider implements DocumentSourceProvider {
   async fetchDocument(
     credentials: DocumentCredentials,
     externalId: string,
+    _workspaceId: string,
   ): Promise<DocumentContent> {
     const { projectId, screenId } = splitZeplinExternalId(externalId)
     if (!projectId) {
@@ -130,7 +131,11 @@ export class ZeplinProvider implements DocumentSourceProvider {
    * timestamp, skipping the screens + components + design-token reads that make up
    * the bulk of a full fetch.
    */
-  async probeVersion(credentials: DocumentCredentials, externalId: string): Promise<string> {
+  async probeVersion(
+    credentials: DocumentCredentials,
+    externalId: string,
+    _workspaceId: string,
+  ): Promise<string> {
     const { projectId } = splitZeplinExternalId(externalId)
     if (!projectId) {
       throw new ZeplinApiError(400, `Zeplin ref is missing a project id: ${externalId}`)

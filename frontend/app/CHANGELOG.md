@@ -1,5 +1,71 @@
 # @cat-factory/app
 
+## 0.137.1
+
+### Patch Changes
+
+- 5771e05: Make GitHub available as a document source automatically once the GitHub App (or PAT) is
+  installed, and let a task be authored with no source connected yet without losing entered
+  data.
+
+  - **GitHub docs are now implicitly connected.** A new optional
+    `DocumentSourceProvider.resolveImplicitConnection(workspaceId)` port method lets a source
+    that rides an out-of-band credential report itself connected without a stored marker row.
+    `GitHubDocsProvider` implements it against the workspace's installed App (present ⇒
+    connected), and `DocumentConnectionService.listConnections` / `getConnection` /
+    `requireConnection` honour it (a stored credentialed connection still wins and is never
+    duplicated). This mirrors how the GitHub-issues task source is already available the moment
+    the App is installed, so GitHub docs no longer need a separate "connect" step and can be
+    searched / imported / linked as task context right away.
+
+  - **Document reads are now tenant-scoped.** `DocumentSourceProvider.fetchDocument` /
+    `probeVersion` take the `workspaceId` (like `search` already did), and `GitHubDocsProvider`
+    resolves the installation to read with via `getByWorkspace` — requiring the doc's owner to
+    match the workspace's own installation account — instead of a deployment-wide scan by owner.
+    A crafted `owner/repo:path` external id can therefore no longer reach another tenant's repo
+    through a different workspace's installation token.
+
+  - **Connect a source inline from the new-task form.** In the add-task modal the "Context
+    documents" / "Context issues" sections previously showed a disabled Attach button when no
+    source was connected. They now offer a "Connect a source" action that opens the source's
+    connect modal over the task form — both are root-mounted with independent open flags — so
+    the user's in-progress title/description/context is preserved instead of being lost to a
+    navigation away.
+
+## 0.137.0
+
+### Minor Changes
+
+- 1fe25bc: Adopt modular-vue in the Nuxt layer (slice 5: agent-run window chrome →
+  `ResultWindowShell`), pilot conversion. The upstream overlay-host primitive
+  shipped (`@modular-frontend/core@0.5.0`: `defineOverlayHost` / `resolveOverlay` /
+  `OverlayEntry` / `OverlayStack`; `@modular-vue/{core,vue}@1.4.x`: `OverlayOutlet` /
+  `useOverlay` / `useOverlaySubject` / `useModalBehavior`), and the ~18 result
+  windows that each hand-rolled the same modal chrome start converting behind one
+  shared shell.
+
+  `app/components/panels/ResultWindowShell.vue` centralises the chrome
+  (`<Teleport>` + backdrop + bordered card + header with icon/title/subtitle/
+  `#header-extras` slot/opt-in `StepRestartControl`/close) and delegates the modal
+  _behaviour_ to the upstream `useModalBehavior`: focus-trap + focus-return,
+  body-scroll lock, and a shared overlay stack so the top overlay closes first on
+  Escape — replacing the per-window duplication where only 2 of 18 windows trapped
+  focus and each registered its own global Escape listener. Windows convert one at a
+  time: the pick-one selection stays the slice-2 `resolveComponentRegistry` in
+  `StepResultViewHost`, so the shell needs no host or registry changes. The pilot is
+  `MergerResultView`; the remaining windows are tracked in
+  `docs/initiatives/modular-vue-slice5-progress.md`.
+
+  `useResultView` gains a `manageEscape` option (default `true`); a shell-hosted
+  window passes `false` so the shell owns Escape (a second listener would
+  double-fire `close`). The option is removed once every window is converted.
+
+  Deps: bumped `@modular-frontend/core` `^0.4.0 → ^0.5.0`, `@modular-vue/core` /
+  `@modular-vue/vue` `^1.3.0 → ^1.4.0` (for the overlay API), and the pnpm
+  `@modular-frontend/core` override `0.4.0 → 0.5.0` (0.5.0 is an additive superset;
+  still needed because `@modular-vue/journeys@1.3.0` pins
+  `@modular-frontend/journeys-engine@1.8.0`, which deps core `0.3.0`).
+
 ## 0.136.1
 
 ### Patch Changes

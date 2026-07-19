@@ -97,6 +97,7 @@ export class FigmaProvider implements DocumentSourceProvider {
   async fetchDocument(
     credentials: DocumentCredentials,
     externalId: string,
+    _workspaceId: string,
   ): Promise<DocumentContent> {
     const { fileKey, nodeId } = figmaLogic.splitFigmaExternalId(externalId)
     if (!fileKey) {
@@ -138,7 +139,11 @@ export class FigmaProvider implements DocumentSourceProvider {
    * for its `version` / `lastModified`, skipping the deep node fetch + variables +
    * preview render a full document fetch performs.
    */
-  async probeVersion(credentials: DocumentCredentials, externalId: string): Promise<string> {
+  async probeVersion(
+    credentials: DocumentCredentials,
+    externalId: string,
+    _workspaceId: string,
+  ): Promise<string> {
     const { fileKey } = figmaLogic.splitFigmaExternalId(externalId)
     if (!fileKey) {
       throw new FigmaApiError(400, `Figma ref is missing a file key: ${externalId}`)

@@ -273,6 +273,8 @@
       "contextDocuments": "コンテキストドキュメント",
       "contextIssues": "コンテキスト issue",
       "attach": "添付",
+      "connectSource": "ソースを接続",
+      "connectSourceNamed": "{source} を接続",
       "done": "完了",
       "attachDocDisabledConnect": "まずドキュメントソースを接続してください（連携）",
       "attachDocDisabledEnable": "まずドキュメント連携を有効にしてください",

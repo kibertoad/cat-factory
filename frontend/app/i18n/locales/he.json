@@ -273,6 +273,8 @@
       "contextDocuments": "מסמכי הקשר",
       "contextIssues": "אישיו הקשר",
       "attach": "צרף",
+      "connectSource": "חבר מקור",
+      "connectSourceNamed": "חבר את {source}",
       "done": "סיום",
       "attachDocDisabledConnect": "חבר תחילה מקור מסמכים (אינטגרציות)",
       "attachDocDisabledEnable": "הפעל תחילה את אינטגרציית המסמכים",

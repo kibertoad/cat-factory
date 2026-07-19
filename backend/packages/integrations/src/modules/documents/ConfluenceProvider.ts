@@ -143,6 +143,7 @@ export class ConfluenceProvider implements DocumentSourceProvider {
   async fetchDocument(
     credentials: DocumentCredentials,
     externalId: string,
+    _workspaceId: string,
   ): Promise<DocumentContent> {
     const base = credentials.baseUrl!.replace(/\/+$/, '')
     // Expand the body AND the version so the fetched content carries its version token.
@@ -164,7 +165,11 @@ export class ConfluenceProvider implements DocumentSourceProvider {
    * page's XHTML is neither transferred nor converted — the staleness check costs
    * a metadata read, not a full fetch.
    */
-  async probeVersion(credentials: DocumentCredentials, externalId: string): Promise<string> {
+  async probeVersion(
+    credentials: DocumentCredentials,
+    externalId: string,
+    _workspaceId: string,
+  ): Promise<string> {
     return versionToken(await this.getContent(credentials, externalId, 'version'))
   }
 

@@ -337,9 +337,37 @@ const pendingContext = ref<PendingContext[]>([])
 
 // The Context documents / Context issues sections mirror the task inspector but are
 // always shown (ungated): when the relevant integration isn't connected the Attach
-// button is disabled with a tooltip rather than the section being hidden.
+// button becomes a "Connect a source" action instead. Connecting opens the source's
+// connect modal OVER this one (both are root-mounted with independent open flags), so
+// the user's in-progress task data is preserved rather than lost to a navigation away.
 const docsConnected = computed(() => documents.available && documents.anyConnected)
 const issuesConnected = computed(() => tasks.available && tasks.anyOffered)
+
+// Sources the user could connect right now to unlock the picker, when none is connected
+// yet: for documents, every configured source without a live connection (GitHub docs are
+// already implicitly connected via the App, so they never appear here); for issues, every
+// configured tracker not yet available (a connected credentialed source, or the installed
+// GitHub App). The connect modals are the same ones the Integrations hub opens.
+const connectableDocSources = computed(() =>
+  documents.available ? documents.sources.filter((s) => !documents.isConnected(s.source)) : [],
+)
+const connectableIssueSources = computed(() =>
+  tasks.available ? tasks.sources.filter((s) => !s.available) : [],
+)
+const connectDocMenu = computed(() => [
+  connectableDocSources.value.map((s) => ({
+    label: s.label,
+    icon: s.icon,
+    onSelect: () => ui.openDocumentConnect(s.source),
+  })),
+])
+const connectIssueMenu = computed(() => [
+  connectableIssueSources.value.map((s) => ({
+    label: s.label,
+    icon: s.icon,
+    onSelect: () => ui.openTaskConnect(s.source),
+  })),
+])
 const pendingDocs = computed(() => pendingContext.value.filter((c) => c.kind === 'document'))
 const pendingIssues = computed(() => pendingContext.value.filter((c) => c.kind === 'task'))
 
@@ -963,6 +991,27 @@ async function add() {
               >
                 {{ showDocPicker ? t('board.addTask.done') : t('board.addTask.attach') }}
               </UButton>
+              <UDropdownMenu
+                v-else-if="connectableDocSources.length > 1"
+                :items="connectDocMenu"
+                :content="{ side: 'bottom', align: 'end' }"
+              >
+                <UButton color="neutral" variant="soft" size="xs" icon="i-lucide-plug">
+                  {{ t('board.addTask.connectSource') }}
+                </UButton>
+              </UDropdownMenu>
+              <UButton
+                v-else-if="connectableDocSources.length === 1"
+                color="neutral"
+                variant="soft"
+                size="xs"
+                icon="i-lucide-plug"
+                @click="ui.openDocumentConnect(connectableDocSources[0]!.source)"
+              >
+                {{
+                  t('board.addTask.connectSourceNamed', { source: connectableDocSources[0]!.label })
+                }}
+              </UButton>
               <UButton
                 v-else
                 color="neutral"
@@ -1037,6 +1086,29 @@ async function add() {
                 "
               >
                 {{ showIssuePicker ? t('board.addTask.done') : t('board.addTask.attach') }}
+              </UButton>
+              <UDropdownMenu
+                v-else-if="connectableIssueSources.length > 1"
+                :items="connectIssueMenu"
+                :content="{ side: 'bottom', align: 'end' }"
+              >
+                <UButton color="neutral" variant="soft" size="xs" icon="i-lucide-plug">
+                  {{ t('board.addTask.connectSource') }}
+                </UButton>
+              </UDropdownMenu>
+              <UButton
+                v-else-if="connectableIssueSources.length === 1"
+                color="neutral"
+                variant="soft"
+                size="xs"
+                icon="i-lucide-plug"
+                @click="ui.openTaskConnect(connectableIssueSources[0]!.source)"
+              >
+                {{
+                  t('board.addTask.connectSourceNamed', {
+                    source: connectableIssueSources[0]!.label,
+                  })
+                }}
               </UButton>
               <UButton
                 v-else
