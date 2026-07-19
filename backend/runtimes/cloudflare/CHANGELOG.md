@@ -1,5 +1,39 @@
 # @cat-factory/worker
 
+## 0.94.7
+
+### Patch Changes
+
+- 6ad20d0: Fix the N+1 in linked-context resolution: `AgentContextBuilder` batch-resolves the tracker
+  issues a task's description names explicitly via a new `TaskRepository.listByRefs` port
+  method (one chunked-`IN` read per source, keyed by `(source, externalId)` refs) instead of a
+  `taskRepo.get` point-read per reference inside `Promise.all`. Implemented on both facades (D1
+  `D1TaskRepository` ⇄ Drizzle `DrizzleTaskRepository`) with a cross-runtime conformance
+  assertion. The `'jira'`/`'github'` source literals are de-hardcoded out of the engine into
+  `extractReferences`' typed `taskRefs`, the single place a reference shape binds to a task
+  source.
+
+  The new port method is also added to the mothership persistence-RPC allow-list
+  (`@cat-factory/server`), since `AgentContextBuilder` invokes `listByRefs` on every
+  container-agent dispatch — without the entry a no-Postgres mothership node fails every run
+  with `unknown_method`.
+
+- Updated dependencies [6ad20d0]
+  - @cat-factory/kernel@0.140.1
+  - @cat-factory/integrations@0.86.5
+  - @cat-factory/orchestration@0.123.6
+  - @cat-factory/server@0.137.5
+  - @cat-factory/agents@0.62.13
+  - @cat-factory/caching@0.10.10
+  - @cat-factory/consensus@0.10.74
+  - @cat-factory/eks@0.1.101
+  - @cat-factory/gates@0.5.58
+  - @cat-factory/gitlab@0.10.20
+  - @cat-factory/observability-langfuse@0.7.228
+  - @cat-factory/observability-otel@0.2.10
+  - @cat-factory/provider-cloudflare@0.7.245
+  - @cat-factory/spend@0.12.54
+
 ## 0.94.6
 
 ### Patch Changes
