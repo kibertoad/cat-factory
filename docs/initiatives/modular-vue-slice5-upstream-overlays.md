@@ -21,21 +21,28 @@ A "result window" is a full-screen modal that opens when a human inspects a pipe
 - **Every window is a `ComponentEntry` in the `resultViews` slot**, and a single host — `StepResultViewHost.vue` — reads the merged slot via `useReactiveSlots`, indexes it with the slice-2 `resolveComponentRegistry`, and mounts `registry.get(ui.resultView.view)` as `<component :is="active" />`. **The pick-one selection is solved. The host mounts exactly one window.**
 - **Each window resolves the same shared open/close contract** via a `useResultView(viewId, { onOpen?, onClose? })` composable: `open` (is this the active view), `blockId`/`instanceId`/`stepIndex`, `close()`, load-on-open, and a **global `window` keydown Escape listener registered per window**.
 
-### What is NOT solved — the duplicated modal *behaviour + chrome*
+### What is NOT solved — the duplicated modal _behaviour + chrome_
 
 The **selection** is a registry; the **hosting** is not. Each of the ~18 windows still owns, and copy-pastes, its own dialog chrome and modal behaviour. The wrapper is near-identical 18 times:
 
 ```html
 <Teleport to="body">
-  <div v-if="open"
-       class="fixed inset-0 z-50 flex … bg-slate-950/70 backdrop-blur-sm"
-       @click.self="close">
-    <div class="… w-full max-w-3xl … rounded-2xl border bg-slate-900 shadow-2xl"
-         role="dialog" aria-modal="true" data-testid="…-window">
+  <div
+    v-if="open"
+    class="fixed inset-0 z-50 flex … bg-slate-950/70 backdrop-blur-sm"
+    @click.self="close"
+  >
+    <div
+      class="… w-full max-w-3xl … rounded-2xl border bg-slate-900 shadow-2xl"
+      role="dialog"
+      aria-modal="true"
+      data-testid="…-window"
+    >
       <header class="flex items-center gap-3 border-b … px-5 py-3">
         <span class="… icon badge …"><UIcon :name="meta.icon" /></span>
         <div class="min-w-0 flex-1">
-          <h2>{{ title }}</h2><p>{{ subtitle }}</p>
+          <h2>{{ title }}</h2>
+          <p>{{ subtitle }}</p>
         </div>
         <!-- optional: <StepRestartControl>, a status <UBadge> -->
         <button @click="close"><UIcon name="i-lucide-x" /></button>
@@ -50,14 +57,14 @@ Two variants differ only in a handful of classes (variant A "stretch": `items-st
 
 The problem is not only the ~18× duplication — it is that the **modal behaviour is re-implemented per window and is inconsistent**, which no amount of copy-paste discipline fixes:
 
-| Behaviour | State across the ~18 windows |
-| --- | --- |
-| **Focus trap / focus return** | Implemented in **only 2 of 18** (`TestReportWindow`, `VisualConfirmationWindow`, via a local `useFocusTrap`). The other 16 do not trap focus — a real a11y defect. |
-| **Escape to close** | Every window registers its **own global `window` keydown** listener in `useResultView`. Correct today (single-active), but N listeners for one modal surface, and no stack awareness for a window that opens a sub-dialog. |
-| **z-index / stacking** | Every window hard-codes `z-50`. A window that opens a nested overlay (the lightbox, a confirm) has no managed stack context — nesting relies on luck. |
-| **Backdrop click** | `@click.self="close"` — identical everywhere (the one thing that is consistent). |
-| **`role`/`aria-modal`/labelling** | Mostly present, but `MergerResultView` omits `role="dialog"`; `aria-labelledby` is wired nowhere. |
-| **`data-testid`** | On the backdrop in 2 windows, on the dialog root in 5, absent in ~10, never on the close button — the e2e suite can't rely on a stable modal selector. |
+| Behaviour                         | State across the ~18 windows                                                                                                                                                                                               |
+| --------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| **Focus trap / focus return**     | Implemented in **only 2 of 18** (`TestReportWindow`, `VisualConfirmationWindow`, via a local `useFocusTrap`). The other 16 do not trap focus — a real a11y defect.                                                         |
+| **Escape to close**               | Every window registers its **own global `window` keydown** listener in `useResultView`. Correct today (single-active), but N listeners for one modal surface, and no stack awareness for a window that opens a sub-dialog. |
+| **z-index / stacking**            | Every window hard-codes `z-50`. A window that opens a nested overlay (the lightbox, a confirm) has no managed stack context — nesting relies on luck.                                                                      |
+| **Backdrop click**                | `@click.self="close"` — identical everywhere (the one thing that is consistent).                                                                                                                                           |
+| **`role`/`aria-modal`/labelling** | Mostly present, but `MergerResultView` omits `role="dialog"`; `aria-labelledby` is wired nowhere.                                                                                                                          |
+| **`data-testid`**                 | On the backdrop in 2 windows, on the dialog root in 5, absent in ~10, never on the close button — the e2e suite can't rely on a stable modal selector.                                                                     |
 
 This is the "hand-rolled structure in a standardization target" the initiative exists to kill (tracker Problem 2, "Agent-run details … each duplicates its dialog chrome"). And it is the **extensibility ceiling** (tracker Problem 1): a **consumer deployment** that ships a custom agent kind with its own result window (the backend already supports custom kinds end-to-end) must re-derive all of this chrome + behaviour by hand, or fork/import an app-internal shell — there is no framework surface that gives a contributed window correct, consistent modal behaviour for free, the way slice 1 gives it a nav slot and slice 4 gives it an inspector panel.
 
@@ -65,33 +72,33 @@ This is the "hand-rolled structure in a standardization target" the initiative e
 
 The slice-4 spec (§5.6) anticipated slice 5 would "reuse the render-all panels primitive keyed by the selected step." The survey shows that is only a **secondary** fit and the primary need is different:
 
-- The windows are **pick-one** (one open at a time), not **render-all** — the panels primitive renders *every* matching entry, which is the wrong reduction for selecting one active window.
+- The windows are **pick-one** (one open at a time), not **render-all** — the panels primitive renders _every_ matching entry, which is the wrong reduction for selecting one active window.
 - The subject is **not uniformly the step**: 11 windows key on the step (`instanceId`+`stepIndex`), but **7 key on the block** (`blockId` only). "Keyed by the selected step" doesn't hold for a third of the surface.
 
-So the primary primitive slice 5 needs is a **pick-one overlay HOST that manages modal behaviour**, keyed by whatever app state names the active window — a distinct primitive from render-all panels. The slice-4 panels primitive is still reused, but only as a **secondary** application: the cross-cutting header/meta regions that recur across windows (`StepRestartControl` appears in 7, `StepRunMeta` in 7) become a render-all panel group keyed by the step, hosted *inside* the shell. That reuse needs no new upstream — it is exactly `PanelsOutlet` from slice 4.
+So the primary primitive slice 5 needs is a **pick-one overlay HOST that manages modal behaviour**, keyed by whatever app state names the active window — a distinct primitive from render-all panels. The slice-4 panels primitive is still reused, but only as a **secondary** application: the cross-cutting header/meta regions that recur across windows (`StepRestartControl` appears in 7, `StepRunMeta` in 7) become a render-all panel group keyed by the step, hosted _inside_ the shell. That reuse needs no new upstream — it is exactly `PanelsOutlet` from slice 4.
 
 ## 2. What exists today, and exactly where it stops short
 
 Current published versions (all installed in cat-factory):
 
-| Package | Version | Role |
-| --- | --- | --- |
-| `@modular-frontend/core` | `0.4.0` | Neutral engine: modules, slots, navigation, DI, remote manifests, `resolveComponentRegistry`/`pairById` (slice-2 pairing), `definePanelGroup`/`resolvePanels`/`PanelEntry` (slice-4 panels). |
-| `@modular-vue/core` `/vue` | `1.3.0` | Vue bindings: modules, slots (`useReactiveSlots`), nav, DI, pairing re-exports, `PanelsOutlet`/`usePanels`/`usePanelSubject`. |
-| `@modular-vue/runtime` | `1.4.1` | Registry runtime (`createRegistry`, reactive slots resolution). |
-| `@modular-vue/journeys` | `1.3.0` | Vue journeys binding (slice 3). |
-| `@modular-vue/nuxt` | `0.4.0` | Nuxt install — `installModularApp` (modules + slots + nav + DI + journeys + panels). |
-| **overlay / dialog host** | **— (none)** | **Does not exist.** No package exposes a module-contributed, app-state-keyed, framework-managed modal host. |
+| Package                    | Version      | Role                                                                                                                                                                                         |
+| -------------------------- | ------------ | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `@modular-frontend/core`   | `0.4.0`      | Neutral engine: modules, slots, navigation, DI, remote manifests, `resolveComponentRegistry`/`pairById` (slice-2 pairing), `definePanelGroup`/`resolvePanels`/`PanelEntry` (slice-4 panels). |
+| `@modular-vue/core` `/vue` | `1.3.0`      | Vue bindings: modules, slots (`useReactiveSlots`), nav, DI, pairing re-exports, `PanelsOutlet`/`usePanels`/`usePanelSubject`.                                                                |
+| `@modular-vue/runtime`     | `1.4.1`      | Registry runtime (`createRegistry`, reactive slots resolution).                                                                                                                              |
+| `@modular-vue/journeys`    | `1.3.0`      | Vue journeys binding (slice 3).                                                                                                                                                              |
+| `@modular-vue/nuxt`        | `0.4.0`      | Nuxt install — `installModularApp` (modules + slots + nav + DI + journeys + panels).                                                                                                         |
+| **overlay / dialog host**  | **— (none)** | **Does not exist.** No package exposes a module-contributed, app-state-keyed, framework-managed modal host.                                                                                  |
 
-The four primitives that *look* adjacent each stop short in a specific, load-bearing way:
+The four primitives that _look_ adjacent each stop short in a specific, load-bearing way:
 
 ### Gap A — pick-one **selection** exists, pick-one **hosting with managed chrome** does not
 
-Slice 2's `resolveComponentRegistry`/`pairById` **selects** one component by id — that is done, and slice 5 keeps using it. What is missing is the **host**: a component that takes the selected window and renders it inside a **managed modal shell** — Teleport target, backdrop, `@click.self` close, Escape (one stack-aware listener, not one per window), focus-trap + focus-return, scroll-lock, z-index/stack context, `role`/`aria-modal`/`aria-labelledby`. Today each window re-implements that shell inline, inconsistently (§1). Pairing is a *lookup*; an overlay host is a *managed mount*. Different primitive.
+Slice 2's `resolveComponentRegistry`/`pairById` **selects** one component by id — that is done, and slice 5 keeps using it. What is missing is the **host**: a component that takes the selected window and renders it inside a **managed modal shell** — Teleport target, backdrop, `@click.self` close, Escape (one stack-aware listener, not one per window), focus-trap + focus-return, scroll-lock, z-index/stack context, `role`/`aria-modal`/`aria-labelledby`. Today each window re-implements that shell inline, inconsistently (§1). Pairing is a _lookup_; an overlay host is a _managed mount_. Different primitive.
 
 ### Gap B — **panels** are render-all + inline; an overlay is pick-one + Teleported + modal
 
-Slice 4's `PanelsOutlet` renders *every* contribution whose `when(subject)` passes, **inline** in the document flow, with no modal semantics. An overlay is the opposite reduction on two axes: it renders **one** active entry (pick-one, not render-all) and it renders it **as a modal** (Teleported, focus-trapped, scroll-locked, stacked). `PanelsOutlet` can't be bent into this without re-writing exactly the shell behaviour that is missing. It is a deliberately different primitive — the pick-one, modal sibling of the render-all, inline panels.
+Slice 4's `PanelsOutlet` renders _every_ contribution whose `when(subject)` passes, **inline** in the document flow, with no modal semantics. An overlay is the opposite reduction on two axes: it renders **one** active entry (pick-one, not render-all) and it renders it **as a modal** (Teleported, focus-trapped, scroll-locked, stacked). `PanelsOutlet` can't be bent into this without re-writing exactly the shell behaviour that is missing. It is a deliberately different primitive — the pick-one, modal sibling of the render-all, inline panels.
 
 ### Gap C — no styling-agnostic modal shell a **module-contributed** window composes
 
@@ -191,7 +198,7 @@ export function useModalBehaviour(opts: {
 
 Semantics that must hold (the load-bearing ones cat-factory relies on):
 
-- **Pick-one, not render-all.** `OverlayOutlet` mounts *the one* entry whose id equals `activeId`; `null` renders `#empty` (nothing). (Contrast `PanelsOutlet`, which renders every matching entry.)
+- **Pick-one, not render-all.** `OverlayOutlet` mounts _the one_ entry whose id equals `activeId`; `null` renders `#empty` (nothing). (Contrast `PanelsOutlet`, which renders every matching entry.)
 - **Managed modal behaviour, uniform.** Focus-trap + focus-return, scroll-lock, one stack-aware Escape listener, a z-index stack context, and a11y wiring are provided by the host — a contributed window inherits all of it and cannot forget it (fixing the 2/18-trap-focus defect structurally).
 - **Styling-agnostic.** The host renders no opinionated CSS; the app supplies the backdrop/panel/header look via slots or class props. cat-factory's `ResultWindowShell` is thin styling over this.
 - **Subject-reactive + injected two ways.** Changing `subject` re-renders and re-keys; the body reads it as a prop AND via `useOverlaySubject` (no prop-drilling), keyed per subject so no state bleeds across opens — the `usePanelSubject` guarantee, for a pick-one modal.
@@ -259,7 +266,7 @@ A purely-local shell would collapse the 18× duplication — but it would **not*
 - **Pick-one, not render-all**: two entries registered, one active id → exactly one renders; verified distinct from `PanelsOutlet`'s render-all.
 - **Managed behaviour is uniform + structural**: a contributed window inherits focus-trap/focus-return/scroll-lock/escape/stacking without opting in; a nested overlay layers above and closes first on Escape. Test-covered.
 - **Subject-reactive + injected**: changing `subject` re-renders and re-keys; `useOverlaySubject` reads it; a `null` subject is handled. Test-covered.
-- **Module-contributed + consumer-extensible**: a window registered by a *consumer* module through the registry hosts with correct chrome and no host edit. Test-covered.
+- **Module-contributed + consumer-extensible**: a window registered by a _consumer_ module through the registry hosts with correct chrome and no host edit. Test-covered.
 - A headless testing entry resolves `(entries, activeId) → selected entry` for unit tests.
 - `installModularApp` optionally provides the resolved overlay manifest so `<OverlayOutlet>` resolves from context in a Nuxt layer; an app with no overlays registered is unchanged; the extension type flows through (typed `manifest.overlays`, no cast).
 - `@modular-frontend/core@^0.4.0` peer/dep alignment; `@modular-vue/{vue,runtime,nuxt}` peer-ranges include `^0.4.0`; `@modular-frontend/journeys-engine` deps `^0.4.0`; `pnpm peers check` is clean (both residuals closed).

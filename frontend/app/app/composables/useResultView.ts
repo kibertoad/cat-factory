@@ -18,10 +18,18 @@
  * review windows) can flush it in one place instead of every caller having to remember to.
  * It runs synchronously; if it kicks off async work it must capture whatever it needs first,
  * because `blockId`/the derived state go null the moment the view closes.
+ *
+ * `manageEscape` (default `true`) owns the global Escape-to-close listener. A window that
+ * renders through `ResultWindowShell` (slice 5 of the modular-vue adoption) passes `false`:
+ * the shell's `useModalBehavior` owns Escape via the shared overlay stack (so the top
+ * overlay closes first, and focus/scroll are managed too), and a second listener here would
+ * double-fire `close`. Un-converted windows keep the default so they still close on Escape.
+ * Remove this option once every result window is on the shell (the listener moves out
+ * entirely).
  */
 export function useResultView(
   viewId: string,
-  opts?: { onOpen?: (blockId: string) => void; onClose?: () => void },
+  opts?: { onOpen?: (blockId: string) => void; onClose?: () => void; manageEscape?: boolean },
 ) {
   const ui = useUiStore()
 
@@ -42,8 +50,10 @@ export function useResultView(
   function onKey(e: KeyboardEvent) {
     if (e.key === 'Escape' && open.value) close()
   }
-  onMounted(() => window.addEventListener('keydown', onKey))
-  onBeforeUnmount(() => window.removeEventListener('keydown', onKey))
+  if (opts?.manageEscape !== false) {
+    onMounted(() => window.addEventListener('keydown', onKey))
+    onBeforeUnmount(() => window.removeEventListener('keydown', onKey))
+  }
 
   // The load-on-open contract: fire immediately on mount and on any later block switch.
   if (opts?.onOpen) {
