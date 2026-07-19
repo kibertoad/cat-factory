@@ -436,6 +436,13 @@ export const REMOTE_PERSISTENCE_METHODS: PersistenceMethodTable = {
     // Same as `documentRepository.getByUrl`: a URL in the description resolves against the
     // imported issue corpus by a point lookup on the run path.
     getByUrl: { scope: { kind: 'workspace', arg: 0 } },
+    // The batched counterpart to `get`: `AgentContextBuilder.resolveLinkedContext` resolves the
+    // tracker issues a block's description names (Jira keys, `owner/repo#N` refs) in ONE
+    // chunked-`IN` read. It is invoked UNCONDITIONALLY on every container-agent dispatch (the
+    // call isn't guarded on there being any refs), so it is on the run path exactly like `get`
+    // — omit it and EVERY such build fails the run with `unknown_method`. arg0 is the
+    // workspaceId → the `workspace` rule.
+    listByRefs: { scope: { kind: 'workspace', arg: 0 } },
   },
   // The agent context also resolves the block's provisioned environment per step
   // (`resolveForBlock`/`get`, both workspace-keyed). Reads only — the connect/provision surface
