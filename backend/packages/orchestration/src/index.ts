@@ -269,6 +269,8 @@ export * as brainstormLogic from './modules/brainstorm/brainstorm.logic.js'
 
 export {
   type Core,
+  type CoreSpine,
+  type OptionalCoreModules,
   type CoreDependencies,
   type GitHubModule,
   type DocumentsModule,

@@ -1,8 +1,12 @@
 # `@cat-factory/orchestration` — delivery-workflow engine + domain composition root
 
 **Entry:** `src/index.ts`; `src/container.ts` — `createCore()`, the domain composition root
-that assembles the module services (~2.1k lines; a monolith flagged in
-`docs/refactoring-candidates.md` #6).
+(the `CoreDependencies`/`Core` contract + the always-present spine assembly). The ~30
+optional-module factory functions live in `src/container/modules.ts`, and their optional
+wiring flows through the typed `ModuleRegistry` in `src/container/module-registry.ts` (each
+optional module is `build(key, factory)`-declared once and emitted via `...modules.assemble()`
+— see `docs/refactoring-candidates.md` #6). `Core` = `CoreSpine` (always present) +
+`OptionalCoreModules` (registry-assembled).
 
 **Where things live** (`src/modules/*`, one dir per concern):
 
