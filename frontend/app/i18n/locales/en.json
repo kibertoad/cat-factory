@@ -294,6 +294,8 @@
       "contextDocuments": "Context documents",
       "contextIssues": "Context issues",
       "attach": "Attach",
+      "connectSource": "Connect a source",
+      "connectSourceNamed": "Connect {source}",
       "done": "Done",
       "attachDocDisabledConnect": "Connect a document source first (Integrations)",
       "attachDocDisabledEnable": "Enable the documents integration first",

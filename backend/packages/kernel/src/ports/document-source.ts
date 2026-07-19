@@ -56,6 +56,18 @@ export interface DocumentSourceProvider {
    * display label. Throws a ValidationError on anything missing/unsafe.
    */
   normalizeConnection(input: DocumentCredentials): NormalizedConnection
+  /**
+   * For a source that rides an OUT-OF-BAND credential (e.g. the workspace's installed
+   * GitHub App) rather than a per-workspace stored connection, resolve whether the
+   * workspace is implicitly connected right now — and the marker to present — WITHOUT
+   * a stored connection row. Returns null when the source isn't implicitly connected
+   * for this workspace (so an explicit connect is still required). Optional: a source
+   * that authenticates with its own per-workspace credentials omits it. Today only the
+   * GitHub-docs provider implements it (it rides the workspace's App installation),
+   * mirroring how the GitHub-issues task source is available as soon as the App is
+   * installed with no separate "connect" step.
+   */
+  resolveImplicitConnection?(workspaceId: string): Promise<NormalizedConnection | null>
   /** Resolve a stable page id from raw user input (a bare id or a page URL); null if unparseable. */
   parseRef(input: string): string | null
   /** Fetch a single page by its id using the connection credentials. */

@@ -44,6 +44,18 @@ export class GitHubDocsProvider implements DocumentSourceProvider {
     return { credentials: {}, label: 'GitHub' }
   }
 
+  /**
+   * GitHub docs ride the workspace's installed GitHub App, so the workspace is
+   * connected to this source as soon as the App is installed — no separate connect
+   * step or stored marker row. Resolve the workspace's installation to decide; absent
+   * ⇒ null (the App isn't installed, so GitHub docs aren't reachable yet). Mirrors the
+   * GitHub-issues task source's App-presence availability check.
+   */
+  async resolveImplicitConnection(workspaceId: string): Promise<NormalizedConnection | null> {
+    const installation = await this.deps.installations.getByWorkspace(workspaceId)
+    return installation ? { credentials: {}, label: 'GitHub' } : null
+  }
+
   parseRef(input: string): string | null {
     return githubDocsLogic.parseGitHubDocRef(input)
   }

@@ -69,6 +69,14 @@ plaintext and re-encrypted on the next write.
 - **Notion**: create an **internal integration**
   (`notion.so/my-integrations`), share each page with it, and paste the token.
   The API host is fixed (`api.notion.com`), so there is no SSRF surface.
+- **GitHub** (repo docs — READMEs / RFCs / notes under `docs/`): rides the
+  workspace's installed GitHub App (or PAT in local mode), so it stores **no
+  per-workspace credential and needs no separate connect step**. It is reported as a
+  live connection as soon as the App is installed — the provider's
+  `resolveImplicitConnection` resolves the workspace's installation, and
+  `DocumentConnectionService` surfaces it in `listConnections` / `requireConnection`
+  without a stored marker row (an explicit stored connection, if one exists, still
+  wins). This mirrors the GitHub-issues **task** source's App-presence availability.
 
 ## HTTP API
 

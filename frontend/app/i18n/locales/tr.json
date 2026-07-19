@@ -273,6 +273,8 @@
       "contextDocuments": "Bağlam belgeleri",
       "contextIssues": "Bağlam sorunları",
       "attach": "Ekle",
+      "connectSource": "Bir kaynak bağla",
+      "connectSourceNamed": "{source} bağla",
       "done": "Tamam",
       "attachDocDisabledConnect": "Önce bir belge kaynağı bağlayın (Entegrasyonlar)",
       "attachDocDisabledEnable": "Önce belge entegrasyonunu etkinleştirin",
