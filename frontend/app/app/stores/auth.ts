@@ -184,7 +184,10 @@ export const useAuthStore = defineStore(
       // which must be exchanged — not stored as a local token by `consumeRedirectToken`).
       if (!(await maybeConnectMothership())) consumeRedirectToken()
       try {
-        const config = await api.getAuthConfig()
+        // Tolerate a cold-start race: when the SPA and backend boot together, this first call
+        // can beat the backend's listener by a second or two. Retry a not-listening-yet socket
+        // (the gate keeps showing its spinner) instead of degrading to the unreachable screen.
+        const config = await retryWhileBackendUnreachable(() => api.getAuthConfig())
         required.value = config.enabled
         if (config.providers) providers.value = config.providers
         patProviders.value = config.patLogin?.providers ?? []
