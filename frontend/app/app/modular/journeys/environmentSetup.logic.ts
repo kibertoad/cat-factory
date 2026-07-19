@@ -46,11 +46,6 @@ export interface EnvSetupInput {
   frameId: string | null
 }
 
-/** A `StepSpec`-shaped reference to one of this journey's step entries. */
-export function envStep(entry: EnvStep): { module: typeof ENV_MODULE_ID; entry: EnvStep } {
-  return { module: ENV_MODULE_ID, entry }
-}
-
 /** Seed the journey state from the launch input. */
 export function envInitialState(input: EnvSetupInput): EnvSetupState {
   return { frameId: input.frameId }
@@ -64,9 +59,19 @@ export function envStartStep(_state: EnvSetupState, input: EnvSetupInput): EnvSt
 /**
  * The step reached by advancing from `from` via its forward exit, or `'done'`
  * when the flow completes. The pick step advances via `select` (a distinct
- * exit); the rest via `advance`. Pure and total over `EnvStep`, so the spec pins
- * the whole graph.
+ * exit); the rest via `advance`. Pure and total over `EnvStep`.
+ *
+ * This is the SINGLE SOURCE OF TRUTH for the linear forward chain: the journey
+ * definition (`environmentSetup.ts`) derives its `advance` transitions' target
+ * entries from it, so pinning this function in `environmentSetup.logic.spec.ts`
+ * genuinely guards the wired graph against a silent reorder/drop. The overloads
+ * narrow the return to a concrete entry (or `'done'`) so a transition handler can
+ * feed the result straight into a `StepSpec` without a widened `EnvStep | 'done'`.
  */
+export function envNextAfter(from: 'pick'): 'review'
+export function envNextAfter(from: 'review'): 'preflight'
+export function envNextAfter(from: 'preflight'): 'save'
+export function envNextAfter(from: 'save'): 'done'
 export function envNextAfter(from: EnvStep): EnvStep | 'done' {
   switch (from) {
     case 'pick':

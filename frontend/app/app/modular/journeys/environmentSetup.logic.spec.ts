@@ -1,17 +1,15 @@
 import { describe, expect, it } from 'vitest'
 import {
-  ENV_MODULE_ID,
   ENV_STEP_ORDER,
   envInitialState,
   envNextAfter,
   envStartStep,
-  envStep,
 } from './environmentSetup.logic'
 
-// Pure navigation graph for the environment-setup journey (slice 3). Pinning the
-// order, start branch, and forward edges here means a wiring regression in
-// `environmentSetup.ts` (which feeds these into `defineJourney`) can't silently
-// reorder or drop a step.
+// Pure navigation graph for the environment-setup journey (slice 3). `envNextAfter`
+// is the source of truth the journey's `advance` transitions derive their target
+// entries from (see `environmentSetup.ts`), so pinning the order, start branch, and
+// forward edges here means a wiring regression can't silently reorder or drop a step.
 describe('environment-setup journey logic', () => {
   it('orders the steps pick → review → preflight → save', () => {
     expect(ENV_STEP_ORDER).toEqual(['pick', 'review', 'preflight', 'save'])
@@ -32,9 +30,5 @@ describe('environment-setup journey logic', () => {
     expect(envNextAfter('review')).toBe('preflight')
     expect(envNextAfter('preflight')).toBe('save')
     expect(envNextAfter('save')).toBe('done')
-  })
-
-  it('builds a step-spec ref under the single module id', () => {
-    expect(envStep('preflight')).toEqual({ module: ENV_MODULE_ID, entry: 'preflight' })
   })
 })

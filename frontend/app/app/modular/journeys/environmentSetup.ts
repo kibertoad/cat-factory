@@ -14,6 +14,7 @@ import {
   type EnvSetupInput,
   type EnvSetupState,
   envInitialState,
+  envNextAfter,
   envStartStep,
 } from '~/modular/journeys/environmentSetup.logic'
 
@@ -106,7 +107,7 @@ export const environmentSetupJourney = defineJourney<EnvModules, EnvSetupState>(
         [ENV_ADVANCE_EXIT]: (ctx) => ({
           next: {
             module: ENV_MODULE_ID,
-            entry: 'preflight',
+            entry: envNextAfter('review'),
             input: { frameId: ctx.state.frameId },
           } as const,
         }),
@@ -115,11 +116,12 @@ export const environmentSetupJourney = defineJourney<EnvModules, EnvSetupState>(
         [ENV_ADVANCE_EXIT]: (ctx) => ({
           next: {
             module: ENV_MODULE_ID,
-            entry: 'save',
+            entry: envNextAfter('preflight'),
             input: { frameId: ctx.state.frameId },
           } as const,
         }),
       },
+      // `save` advances to `envNextAfter('save') === 'done'`, i.e. journey completion.
       save: {
         [ENV_ADVANCE_EXIT]: () => ({ complete: undefined }),
       },

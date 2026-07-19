@@ -5,7 +5,7 @@
 // analyst-augmented `docker-compose` recipe for the operator to confirm/edit.
 // Firing the journey's `advance` exit (gated until a recommendation + exposed
 // service exist) advances to the preflight step.
-import { computed, ref, watch } from 'vue'
+import { computed, ref } from 'vue'
 import type {
   MergeableRecipeField,
   ProvisioningComposeFileCandidate,
@@ -13,6 +13,7 @@ import type {
   ProvisioningSeedDumpCandidate,
 } from '@cat-factory/contracts'
 import JourneyStepNav from '~/components/environments/steps/JourneyStepNav.vue'
+import { useEnvironmentWizardTarget } from '~/modular/journeys/environmentSetup.frame'
 
 const props = defineProps<{
   input: { frameId: string | null }
@@ -23,13 +24,9 @@ const props = defineProps<{
 const store = useEnvironmentWizardStore()
 const { t } = useI18n()
 
-// Bridge the journey's target frame into the data store. Idempotent per frame
-// (see `beginForFrame`), so re-entry / back-nav / resume keeps in-progress edits.
-watch(
-  () => props.input.frameId,
-  (id) => store.beginForFrame(id),
-  { immediate: true },
-)
+// Bridge the journey's target frame into the data store (idempotent per frame,
+// so re-entry / back-nav / resume keeps in-progress edits). See the composable.
+useEnvironmentWizardTarget(() => props.input.frameId)
 
 // ---- Provenance -------------------------------------------------------------
 const FIELD_LABEL = computed<Record<MergeableRecipeField, string>>(() => ({

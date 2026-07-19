@@ -5,12 +5,22 @@
 // allowed — preflights are advisory, not a hard gate.
 import { computed } from 'vue'
 import JourneyStepNav from '~/components/environments/steps/JourneyStepNav.vue'
+import { useEnvironmentWizardTarget } from '~/modular/journeys/environmentSetup.frame'
 
-defineProps<{ exit: (name: 'advance') => void; goBack?: () => void }>()
+const props = defineProps<{
+  input: { frameId: string | null }
+  exit: (name: 'advance') => void
+  goBack?: () => void
+}>()
 
 const store = useEnvironmentWizardStore()
 const preflights = usePreflightsStore()
 const { t } = useI18n()
+
+// Keep the data store pointed at THIS step's frame — a resume that lands here
+// (or a prior open of a different frame) must not leave preflight reading another
+// frame's recipe. Idempotent per frame; see the composable.
+useEnvironmentWizardTarget(() => props.input.frameId)
 
 // The host-probe runtime isn't wired (a non-local facade 503'd) — the checklist degrades to a note.
 const preflightsUnavailable = computed(() => preflights.available === false)

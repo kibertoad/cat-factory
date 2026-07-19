@@ -6,11 +6,20 @@
 // — the host closes the modal on finish.
 import ProvisioningLogsDrawer from '~/components/provisioning/ProvisioningLogsDrawer.vue'
 import JourneyStepNav from '~/components/environments/steps/JourneyStepNav.vue'
+import { useEnvironmentWizardTarget } from '~/modular/journeys/environmentSetup.frame'
 
-defineProps<{ exit: (name: 'advance') => void; goBack?: () => void }>()
+const props = defineProps<{
+  input: { frameId: string | null }
+  exit: (name: 'advance') => void
+  goBack?: () => void
+}>()
 
 const store = useEnvironmentWizardStore()
 const { t } = useI18n()
+
+// Keep the data store pointed at THIS step's frame, so `save()` persists the
+// frame the journey is actually on (not a stale one). Idempotent; see composable.
+useEnvironmentWizardTarget(() => props.input.frameId)
 </script>
 
 <template>
