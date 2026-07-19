@@ -5,6 +5,7 @@ import {
   githubDocExternalId,
   githubDocTitle,
   githubDocUrl,
+  githubErrorRateLimited,
   githubErrorStatus,
   parseGitHubDocExternalId,
   parseGitHubDocRef,
@@ -104,10 +105,27 @@ describe('githubErrorStatus', () => {
   })
 })
 
+describe('githubErrorRateLimited', () => {
+  it('reads the structural rateLimited flag off a GitHubApiError-shaped value', () => {
+    expect(githubErrorRateLimited(Object.assign(new Error('nope'), { rateLimited: true }))).toBe(
+      true,
+    )
+    expect(githubErrorRateLimited({ status: 403, rateLimited: true })).toBe(true)
+  })
+
+  it('is false when the flag is absent or not the boolean true (bare/fetch error)', () => {
+    expect(githubErrorRateLimited({ status: 403 })).toBe(false)
+    expect(githubErrorRateLimited({ rateLimited: 'yes' })).toBe(false)
+    expect(githubErrorRateLimited(new Error('fetch failed'))).toBe(false)
+    expect(githubErrorRateLimited(null)).toBe(false)
+    expect(githubErrorRateLimited(undefined)).toBe(false)
+  })
+})
+
 describe('describeGitHubDocFetchFailure', () => {
   const id = { owner: 'acme', repo: 'repo', path: 'docs/x.md' }
 
-  it('names a permission problem for 401/403', () => {
+  it('names a permission problem for 401/403 (when not rate-limited)', () => {
     for (const status of [401, 403] as const) {
       const msg = describeGitHubDocFetchFailure(id, { status })
       expect(msg).toContain('docs/x.md')
@@ -115,6 +133,14 @@ describe('describeGitHubDocFetchFailure', () => {
       expect(msg).toContain(`HTTP ${status}`)
       expect(msg.toLowerCase()).toContain('read access')
     }
+  })
+
+  it('names a rate limit (not a permission problem) for a rate-limited 403', () => {
+    // GitHub reports a PRIMARY rate-limit as a 403, so the flag must win over the status.
+    const msg = describeGitHubDocFetchFailure(id, { status: 403, rateLimited: true })
+    expect(msg).toContain('rate-limited')
+    expect(msg).toContain('HTTP 403')
+    expect(msg.toLowerCase()).not.toContain('read access')
   })
 
   it('explains the default-branch/visibility cause for a not-found read', () => {

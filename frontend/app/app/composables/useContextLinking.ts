@@ -47,6 +47,13 @@ export interface LinkFailure {
   status?: number
   /** Backend error code (`conflict` / `validation` / …), when present. */
   code?: string
+  /**
+   * The backend error envelope's `details` bag, when present — for a GitHub doc read
+   * this carries the repo coordinates + the UPSTREAM GitHub status (e.g. `status: 403`),
+   * which differs from the HTTP `status` above (the mapped response code, e.g. 409). Kept
+   * so the diagnostic report shows the real GitHub status, not just the mapped one.
+   */
+  details?: Record<string, unknown>
 }
 
 /** Stable key for a pending item, used for dedupe + selection toggles. */
@@ -57,9 +64,9 @@ export function contextKey(c: Pick<PendingContext, 'kind' | 'source' | 'external
 /**
  * Render a batch of {@link LinkFailure}s into a single plain-text diagnostic block
  * for the clipboard — the exact context a bug report needs (the item coordinates,
- * the HTTP status + backend code, and the server's message) so the user does not
- * have to retype any of it. Deliberately English/technical (a log dump, not UI
- * prose), mirroring how format/code examples stay out of the i18n catalog.
+ * the HTTP status + backend code, the backend `details` bag, and the server's message)
+ * so the user does not have to retype any of it. Deliberately English/technical (a log
+ * dump, not UI prose), mirroring how format/code examples stay out of the i18n catalog.
  */
 export function buildLinkFailureReport(
   failures: LinkFailure[],
@@ -76,9 +83,27 @@ export function buildLinkFailureReport(
     lines.push(`  title: ${f.item.title}`)
     if (f.status !== undefined) lines.push(`  status: ${f.status}`)
     if (f.code) lines.push(`  code: ${f.code}`)
+    // Dump the backend `details` (repo coordinates + upstream status), each key namespaced
+    // so its `status` reads clearly as the GitHub status, distinct from the HTTP `status`.
+    for (const [key, value] of Object.entries(f.details ?? {})) {
+      lines.push(`  details.${key}: ${formatDetailValue(value)}`)
+    }
     lines.push(`  error: ${f.message}`)
   }
   return lines.join('\n')
+}
+
+/** One-line rendering of a `details` value for the diagnostic dump (objects → JSON). */
+function formatDetailValue(value: unknown): string {
+  if (value === null || value === undefined) return String(value)
+  if (typeof value === 'object') {
+    try {
+      return JSON.stringify(value)
+    } catch {
+      return String(value)
+    }
+  }
+  return String(value)
 }
 
 export function useContextLinking() {
@@ -112,13 +137,19 @@ export function useContextLinking() {
           await tasks.linkToBlock(blockId, source, externalId)
         }
       } catch (e) {
-        // Never swallow the cause: capture the server's own message + status/code so the
-        // toast can name the specific reason and the copy affordance can carry the context.
+        // Never swallow the cause: capture the server's own message + status/code/details
+        // so the toast can name the specific reason and the copy affordance can carry the
+        // full context (incl. the upstream GitHub status the backend puts on `details`).
+        const envelope = apiErrorEnvelope(e)
         failures.push({
           item,
           message: e instanceof Error ? e.message : String(e),
           status: apiErrorStatus(e),
-          code: apiErrorEnvelope(e)?.code,
+          code: envelope?.code,
+          details:
+            envelope?.details && typeof envelope.details === 'object'
+              ? (envelope.details as Record<string, unknown>)
+              : undefined,
         })
       }
     }

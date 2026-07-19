@@ -221,6 +221,7 @@ export class GitHubDocsProvider implements DocumentSourceProvider {
     notFound = false,
   ): ConflictError {
     const status = err !== null ? githubDocsLogic.githubErrorStatus(err) : undefined
+    const rateLimited = err !== null ? githubDocsLogic.githubErrorRateLimited(err) : false
     const underlying =
       err instanceof Error
         ? err.message
@@ -230,6 +231,7 @@ export class GitHubDocsProvider implements DocumentSourceProvider {
     const message = githubDocsLogic.describeGitHubDocFetchFailure(id, {
       status,
       notFound,
+      rateLimited,
       underlying,
     })
     this.deps.logger?.warn(
@@ -241,6 +243,7 @@ export class GitHubDocsProvider implements DocumentSourceProvider {
         path: id.path,
         status,
         notFound,
+        rateLimited,
         err: underlying,
       },
       'github doc fetch failed',

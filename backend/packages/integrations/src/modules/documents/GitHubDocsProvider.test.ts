@@ -116,6 +116,25 @@ describe('GitHubDocsProvider workspace-scoped reads', () => {
     expect(warnings[0]!.obj).toMatchObject({ workspaceId: 'ws_1', path: 'docs/x.md', status: 403 })
   })
 
+  it('classifies a rate-limited 403 as a rate-limit (not a permission denial) and logs the flag', async () => {
+    // GitHub reports a PRIMARY rate-limit as a 403 carrying `rateLimited`, so the message must
+    // name the rate limit — not tell the user to grant read access they already have.
+    const { provider, warnings } = makeProvider({
+      installationForWorkspace: installation(),
+      fileError: Object.assign(new Error('rate limit exceeded'), {
+        status: 403,
+        rateLimited: true,
+      }),
+    })
+
+    await expect(provider.fetchDocument({}, 'acme/repo:docs/x.md', 'ws_1')).rejects.toMatchObject({
+      code: 'conflict',
+      message: expect.stringContaining('rate-limited'),
+      details: { owner: 'acme', repo: 'repo', path: 'docs/x.md', status: 403 },
+    })
+    expect(warnings[0]!.obj).toMatchObject({ status: 403, rateLimited: true })
+  })
+
   it('reports a not-found file with the default-branch hint (and logs it)', async () => {
     const { provider, warnings } = makeProvider({
       installationForWorkspace: installation(),

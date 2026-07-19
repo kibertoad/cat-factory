@@ -382,6 +382,7 @@ export class FetchGitHubClient implements GitHubClient {
     if (!res.ok) {
       const text = await res.text().catch(() => '')
       const resetSec = numHeader(res, 'x-ratelimit-reset')
+      const rateLimited = numHeader(res, 'x-ratelimit-remaining') === 0
       throw new GitHubApiError(
         res.status,
         describeVcsApiError({
@@ -390,9 +391,10 @@ export class FetchGitHubClient implements GitHubClient {
           method: 'GET',
           url,
           body: text.slice(0, 300),
-          rateLimited: numHeader(res, 'x-ratelimit-remaining') === 0,
+          rateLimited,
           resetAt: resetSec === null ? null : resetSec * 1000,
         }),
+        rateLimited,
       )
     }
     const json = res.status === 204 ? null : await res.json().catch(() => null)
@@ -1410,6 +1412,7 @@ export class FetchGitHubClient implements GitHubClient {
     if (!res.ok) {
       const text = await res.text().catch(() => '')
       const resetSec = numHeader(res, 'x-ratelimit-reset')
+      const rateLimited = numHeader(res, 'x-ratelimit-remaining') === 0
       throw new GitHubApiError(
         res.status,
         describeVcsApiError({
@@ -1418,9 +1421,10 @@ export class FetchGitHubClient implements GitHubClient {
           method: opts.method ?? 'GET',
           url,
           body: text.slice(0, 300),
-          rateLimited: numHeader(res, 'x-ratelimit-remaining') === 0,
+          rateLimited,
           resetAt: resetSec === null ? null : resetSec * 1000,
         }),
+        rateLimited,
       )
     }
     const json = res.status === 204 ? null : await res.json().catch(() => null)
@@ -1456,6 +1460,14 @@ export class GitHubApiError extends Error {
   constructor(
     readonly status: number,
     message: string,
+    /**
+     * Whether the response was rate-limited (`x-ratelimit-remaining: 0`). GitHub reports a
+     * PRIMARY rate-limit exhaustion as a 403 (only secondary limits are 429), so status alone
+     * cannot tell a rate-limit apart from a permission denial — a consumer reads this flag to
+     * classify the two differently. Retained here so the signal is available structurally
+     * instead of only baked into the human message.
+     */
+    readonly rateLimited = false,
   ) {
     super(message)
     this.name = 'GitHubApiError'
