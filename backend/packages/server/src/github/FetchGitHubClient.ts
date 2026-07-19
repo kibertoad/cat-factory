@@ -537,6 +537,42 @@ export class FetchGitHubClient implements GitHubClient {
     }))
   }
 
+  async listTree(
+    installationId: number,
+    ref: GitHubRepoRef,
+    gitRef?: string,
+  ): Promise<RepoContentEntry[]> {
+    // One recursive git-trees read returns the whole tree, so file search never walks the
+    // contents API directory-by-directory. `HEAD` resolves to the repo's default branch.
+    const treeRef = encodeURIComponent(gitRef && gitRef !== 'HEAD' ? gitRef : 'HEAD')
+    let json: unknown
+    try {
+      ;({ json } = await this.request(
+        `/repos/${ref.owner}/${ref.repo}/git/trees/${treeRef}?recursive=1`,
+        { installationId },
+      ))
+    } catch (err) {
+      // Empty repo / unknown ref → no entries (mirrors listDirectory).
+      if (err instanceof GitHubApiError && err.status === 404) return []
+      throw err
+    }
+    const body = json as {
+      tree?: Array<{ path?: string; type?: string; sha?: string; size?: number }>
+    }
+    const entries = Array.isArray(body.tree) ? body.tree : []
+    // GitHub git-tree `type` is `blob` | `tree` | `commit` (submodule); normalise to the
+    // neutral file/dir vocabulary and drop submodules (they have no browsable content here).
+    return entries
+      .filter((e) => e.type === 'blob' || e.type === 'tree')
+      .map((e) => ({
+        path: e.path ?? '',
+        name: (e.path ?? '').split('/').pop() ?? '',
+        type: e.type === 'tree' ? 'dir' : 'file',
+        sha: e.sha ?? '',
+        ...(typeof e.size === 'number' ? { size: e.size } : {}),
+      }))
+  }
+
   async getFileContent(
     installationId: number,
     ref: GitHubRepoRef,

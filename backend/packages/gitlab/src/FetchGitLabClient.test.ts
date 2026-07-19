@@ -462,6 +462,32 @@ describe('FetchGitLabClient', () => {
     })
     expect(await c.getRequiredApprovingReviewCount(connection, ref, 'main', 3)).toBe(1)
   })
+
+  it('listTree reads the whole tree recursively and normalises tree/blob to dir/file', async () => {
+    const { c, calls } = client({
+      'GET /projects/7/repository/tree?per_page=100&recursive=true&ref=main': {
+        body: [
+          { path: 'README.md', name: 'README.md', type: 'blob', id: 'a' },
+          { path: 'docs', name: 'docs', type: 'tree', id: 'b' },
+          { path: 'docs/architecture.md', name: 'architecture.md', type: 'blob', id: 'c' },
+        ],
+      },
+    })
+    const entries = await c.listTree(connection, ref, 'main')
+    expect(calls[0]!.url).toBe('/projects/7/repository/tree?per_page=100&recursive=true&ref=main')
+    expect(entries).toEqual([
+      { path: 'README.md', name: 'README.md', type: 'file', sha: 'a' },
+      { path: 'docs', name: 'docs', type: 'dir', sha: 'b' },
+      { path: 'docs/architecture.md', name: 'architecture.md', type: 'file', sha: 'c' },
+    ])
+  })
+
+  it('listTree returns [] for an unknown ref / empty repo (404)', async () => {
+    const { c } = client({
+      'GET /projects/7/repository/tree?per_page=100&recursive=true&ref=nope': { status: 404 },
+    })
+    expect(await c.listTree(connection, ref, 'nope')).toEqual([])
+  })
 })
 
 describe('GitLab webhook', () => {

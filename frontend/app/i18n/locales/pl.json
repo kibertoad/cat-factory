@@ -3202,6 +3202,17 @@
       "emptySearchable": "Wyszukaj według tytułu lub wybierz zaimportowany dokument.",
       "emptyRefOnly": "Wklej adres URL lub identyfikator strony, aby ją dołączyć."
     },
+    "repoPicker": {
+      "searchRepoPlaceholder": "Szukaj repozytoriów…",
+      "clearRepo": "Wyczyść repozytorium",
+      "searchTab": "Szukaj plików",
+      "browseTab": "Przeglądaj",
+      "searchFilesPlaceholder": "Szukaj plików według ścieżki…",
+      "searchFilesHint": "Wpisz, aby wyszukać pliki w tym repozytorium.",
+      "noFileMatches": "Brak pasujących plików.",
+      "filesFailed": "Nie udało się wczytać plików: {error}",
+      "moreFiles": "Wyświetlono pierwsze {count} wyników — zawęź wyszukiwanie."
+    },
     "import": {
       "title": "Importuj ze źródła dokumentów",
       "connectFirst": "Najpierw połącz źródło dokumentów.",

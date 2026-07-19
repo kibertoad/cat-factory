@@ -3214,6 +3214,17 @@
       "emptySearchable": "Başlığa göre ara veya içe aktarılmış bir belge seç.",
       "emptyRefOnly": "Eklemek için bir sayfa URL'si veya ID'si yapıştır."
     },
+    "repoPicker": {
+      "searchRepoPlaceholder": "Depolarda ara…",
+      "clearRepo": "Depoyu temizle",
+      "searchTab": "Dosya ara",
+      "browseTab": "Gözat",
+      "searchFilesPlaceholder": "Dosyaları yola göre ara…",
+      "searchFilesHint": "Bu depodaki dosyaları aramak için yazın.",
+      "noFileMatches": "Eşleşen dosya yok.",
+      "filesFailed": "Dosyalar yüklenemedi: {error}",
+      "moreFiles": "İlk {count} eşleşme gösteriliyor — daraltmak için aramanızı iyileştirin."
+    },
     "import": {
       "title": "Bir belge kaynağından içe aktar",
       "connectFirst": "Önce bir belge kaynağı bağla.",

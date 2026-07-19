@@ -2936,6 +2936,17 @@
       "emptySearchable": "Cerca per titolo, oppure scegli un documento importato.",
       "emptyRefOnly": "Incolla l'URL o l'ID di una pagina per allegarla."
     },
+    "repoPicker": {
+      "searchRepoPlaceholder": "Cerca repository…",
+      "clearRepo": "Rimuovi repository",
+      "searchTab": "Cerca file",
+      "browseTab": "Esplora",
+      "searchFilesPlaceholder": "Cerca file per percorso…",
+      "searchFilesHint": "Digita per cercare file in questo repository.",
+      "noFileMatches": "Nessun file corrispondente.",
+      "filesFailed": "Impossibile caricare i file: {error}",
+      "moreFiles": "Vengono mostrati i primi {count} risultati: affina la ricerca per restringerla."
+    },
     "import": {
       "title": "Importa da una sorgente di documenti",
       "connectFirst": "Collega prima una sorgente di documenti.",

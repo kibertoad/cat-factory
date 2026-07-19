@@ -398,6 +398,15 @@ export interface GitHubClient {
     path: string,
     gitRef?: string,
   ): Promise<RepoContentEntry[]>
+  /**
+   * List a repository's ENTIRE tree on a ref in as few calls as possible (the git
+   * trees API, recursive), so a caller can search files by path without walking the
+   * tree directory-by-directory (an N+1 of contents reads). Returns every entry with
+   * its full, repo-root-relative `path` and `type` (`file`/`dir`). `[]` for an empty
+   * repo / unknown ref. A very large tree may be truncated by the provider — the
+   * listing is best-effort, so a caller must not treat it as exhaustive.
+   */
+  listTree(installationId: number, ref: GitHubRepoRef, gitRef?: string): Promise<RepoContentEntry[]>
   /** Read a file's decoded UTF-8 content + blob sha on a ref, or null if absent. */
   getFileContent(
     installationId: number,

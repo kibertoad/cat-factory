@@ -307,6 +307,33 @@ export class GitHubSyncService {
   }
 
   /**
+   * List every FILE in a tracked repo (its whole tree on the default branch, in one
+   * recursive read), so a picker can search files by path without walking the tree
+   * directory-by-directory. Directories are dropped — only file leaves are useful as a
+   * context-document reference. Sorted by path; the listing is best-effort (a very large
+   * tree may be truncated by the provider).
+   */
+  async listRepoFiles(workspaceId: string, repoGithubId: number): Promise<RepoTreeEntry[]> {
+    const installation = await this.deps.githubInstallationRepository.getByWorkspace(workspaceId)
+    if (!installation || installation.deletedAt) return []
+    // Lazily link the repo if the workspace doesn't track it yet (parity with listRepoDirectory —
+    // the doc-context picker browses the tree before the repo is added to the board).
+    const repo = await this.linkRepo(workspaceId, repoGithubId)
+    if (!repo) {
+      throw new Error(`Repo ${repoGithubId} is not accessible to workspace '${workspaceId}'`)
+    }
+    const entries = await this.deps.githubClient.listTree(
+      installation.installationId,
+      { owner: repo.owner, repo: repo.name },
+      repo.defaultBranch ?? undefined,
+    )
+    return entries
+      .filter((e) => e.type === 'file')
+      .map((e) => ({ path: e.path, name: e.name, type: e.type }))
+      .sort((a, b) => a.path.localeCompare(b.path))
+  }
+
+  /**
    * Link a single repo into this workspace without disturbing the rest (unlike
    * {@link setLinkedRepos}, which sets the exact set and tombstones the others).
    * Projects + deep-syncs the repo the first time it's seen, and is a no-op that

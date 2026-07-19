@@ -3202,6 +3202,17 @@
       "emptySearchable": "Busca por título o elige un documento importado.",
       "emptyRefOnly": "Pega la URL o el ID de una página para adjuntarla."
     },
+    "repoPicker": {
+      "searchRepoPlaceholder": "Buscar repositorios…",
+      "clearRepo": "Quitar repositorio",
+      "searchTab": "Buscar archivos",
+      "browseTab": "Explorar",
+      "searchFilesPlaceholder": "Buscar archivos por ruta…",
+      "searchFilesHint": "Escribe para buscar archivos en este repositorio.",
+      "noFileMatches": "No hay archivos coincidentes.",
+      "filesFailed": "No se pudieron cargar los archivos: {error}",
+      "moreFiles": "Mostrando las primeras {count} coincidencias; refina tu búsqueda para acotarla."
+    },
     "import": {
       "title": "Importar desde una fuente de documentos",
       "connectFirst": "Conecta primero una fuente de documentos.",

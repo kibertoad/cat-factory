@@ -117,6 +117,13 @@ export const listGitHubRepoTreeContract = defineApiContract({
   responsesByStatusCode: { 200: repoTreeViewSchema, ...errorResponses },
 })
 
+export const listGitHubRepoFilesContract = defineApiContract({
+  method: 'get',
+  requestPathParamsSchema: repoGithubIdParams,
+  pathResolver: ({ repoGithubId }) => `/github/repos/${repoGithubId}/files`,
+  responsesByStatusCode: { 200: repoTreeViewSchema, ...errorResponses },
+})
+
 export const disconnectGitHubContract = defineApiContract({
   method: 'delete',
   pathResolver: () => '/github/connection',

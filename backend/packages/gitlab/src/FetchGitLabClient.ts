@@ -235,6 +235,41 @@ export class FetchGitLabClient implements VcsClient {
     }))
   }
 
+  async listTree(
+    connection: VcsConnectionRef,
+    ref: VcsRepoRef,
+    gitRef?: string,
+  ): Promise<RepoContentEntry[]> {
+    // GitLab's tree endpoint lists recursively in one paginated sweep, so file search
+    // never walks the tree directory-by-directory. Bounded by MAX_PAGES like every other
+    // listing (a huge tree is truncated best-effort).
+    const params = new URLSearchParams({ per_page: String(PER_PAGE), recursive: 'true' })
+    if (gitRef) params.set('ref', gitRef)
+    try {
+      return await this.paginate(
+        `/projects/${projectPath(ref)}/repository/tree?${params.toString()}`,
+        { connection },
+        (json) => {
+          const entries = (Array.isArray(json) ? json : []) as Array<{
+            path?: string
+            name?: string
+            type?: string
+            id?: string
+          }>
+          return entries.map((e) => ({
+            path: e.path ?? e.name ?? '',
+            name: e.name ?? (e.path ?? '').split('/').pop() ?? '',
+            type: e.type === 'tree' ? 'dir' : 'file',
+            sha: e.id ?? '',
+          }))
+        },
+      )
+    } catch (err) {
+      if (err instanceof GitLabApiError && err.status === 404) return []
+      throw err
+    }
+  }
+
   async getFileContent(
     connection: VcsConnectionRef,
     ref: VcsRepoRef,
