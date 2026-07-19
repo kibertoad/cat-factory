@@ -149,9 +149,8 @@ export {
   type GateContext,
   type GateFactory,
   recordGateAttempt,
-  registerGate,
-  registeredGateFactories,
-  clearRegisteredGates,
+  GateRegistry,
+  defaultGateRegistry,
   stubGateContext,
 } from './domain/gate-registry.js'
 export {
@@ -160,9 +159,8 @@ export {
   type StepCompletionResolver,
   type ResolverContext,
   type StepResolverFactory,
-  registerStepResolver,
-  registeredStepResolverFactories,
-  clearRegisteredStepResolvers,
+  StepResolverRegistry,
+  defaultStepResolverRegistry,
   stubResolverContext,
 } from './domain/step-resolver-registry.js'
 

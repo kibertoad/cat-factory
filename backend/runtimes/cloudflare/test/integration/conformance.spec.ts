@@ -114,6 +114,8 @@ const harness: ConformanceHarness = {
         // custom-kind suite) via the CoreDependencies overrides the Worker build reads, so the
         // container resolves it by reference — the SAME instance the fake executor above got.
         ...(opts?.agentKindRegistry ? { agentKindRegistry: opts.agentKindRegistry } : {}),
+        ...(opts?.gateRegistry ? { gateRegistry: opts.gateRegistry } : {}),
+        ...(opts?.stepResolverRegistry ? { stepResolverRegistry: opts.stepResolverRegistry } : {}),
         // Inject the app-owned initiative-preset registry (pre-loaded with a custom preset in the
         // custom-preset suite) via the CoreDependencies overrides the Worker build reads.
         ...(opts?.initiativePresetRegistry

@@ -26,6 +26,7 @@ import {
   type VcsIdentityRegistry,
   type WebSearchAvailability,
   type WorkRunner,
+  defaultStepResolverRegistry,
 } from '@cat-factory/kernel'
 import {
   AiAgentExecutor,
@@ -242,12 +243,14 @@ import { D1PipelineScheduleRepository } from './repositories/D1PipelineScheduleR
 import { D1TrackerSettingsRepository } from './repositories/D1TrackerSettingsRepository'
 import { D1ModelPresetRepository } from './repositories/D1ModelPresetRepository'
 import { D1ServiceFragmentDefaultsRepository } from './repositories/D1ServiceFragmentDefaultsRepository'
-// The built-in polling-gate suite (ci / conflicts / post-release-health + on-call). Importing
-// it registers the gates via the public seam; the facade wires each gate's provider below.
+// The built-in polling-gate suite (ci / conflicts / post-release-health + on-call). The facade
+// builds an app-owned `GateRegistry` pre-loaded with the suite via `gateRegistryWithBuiltins()`,
+// then wires each gate's provider below.
 import {
   type GateProviderOverrides,
   applyGateProviders,
   clearGateProviders,
+  gateRegistryWithBuiltins,
   wireCiStatusProvider,
   wireMergeabilityProvider,
   wireReleaseHealthProvider,
@@ -2130,6 +2133,16 @@ export function buildContainer(
   // `validateRegistrationsOnce`, and the ServerContainer's snapshot projection; the conformance
   // suite injects a pre-loaded one via `overrides`. Defaults to the built-ins-only registry.
   const agentKindRegistry = overrides.agentKindRegistry ?? defaultAgentKindRegistry()
+  // The app-owned gate registry: the injected instance (the module-scope one in `index.ts`, or
+  // the conformance suite's pre-loaded one via `overrides`), else a fresh one with the built-in
+  // `@cat-factory/gates` suite installed via `gateRegistryWithBuiltins()` — so a container built
+  // directly for a scheduled/cron sweep (no overrides) still has the gates its re-driven runs
+  // need. Threaded into createCore (the engine's gate machine) and re-exposed on Core for the
+  // boot-time validation.
+  const gateRegistry = overrides.gateRegistry ?? gateRegistryWithBuiltins()
+  // The app-owned step-resolver registry: the injected instance else an empty default (the
+  // built-in `merger` resolver is a privileged engine built-in, not a registry entry).
+  const stepResolverRegistry = overrides.stepResolverRegistry ?? defaultStepResolverRegistry()
   // The app-owned initiative-preset registry (built-in generic / docs-refresh / tech-migration +
   // any a deployment registered by reference). Threaded into createCore (initiative services +
   // spawned-run preset context) and re-exposed on the ServerContainer for the snapshot descriptors
@@ -2389,6 +2402,10 @@ export function buildContainer(
         agentKindRegistry,
       ),
     agentKindRegistry,
+    // The app-owned gate + step-resolver registries; the engine's gate machine + completion hub
+    // read them, and the gate registry is re-exposed on Core for the boot-time validation.
+    gateRegistry,
+    stepResolverRegistry,
     initiativePresetRegistry,
     workRunner: selectWorkRunner(env),
     executionEventPublisher: eventPublisher,

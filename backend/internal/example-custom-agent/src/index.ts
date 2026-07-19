@@ -2,19 +2,19 @@ import type { AgentKindDefinition, AgentKindRegistry } from '@cat-factory/agents
 import { defineStructuredOutput } from '@cat-factory/agents'
 import type {
   GateProbe,
+  GateRegistry,
   InitiativePresetRegistration,
   InitiativePresetRegistry,
   RepoOp,
   StepCompletionResolver,
+  StepResolverRegistry,
 } from '@cat-factory/kernel'
 import {
   INITIATIVE_ANALYST_AGENT_KIND,
   INITIATIVE_PLANNER_AGENT_KIND,
   defineProviderToken,
   isProviderWired,
-  registerGate,
   registerPipeline,
-  registerStepResolver,
   wireProvider,
 } from '@cat-factory/kernel'
 import * as v from 'valibot'
@@ -752,14 +752,17 @@ export function registerOrgResearchPreset(
  * injects, and the `preset_org_audit` + `preset_org_research` initiative presets on the app-owned
  * {@link InitiativePresetRegistry}, plus the pipelines that chain the kinds (`pl_org_audit`,
  * `pl_org_research`, `pl_org_apply`) + the example `license-check` gate + the auditor-summary /
- * research-verdict step resolvers (the pipeline/gate/step-resolver registries are still
- * module-global — those have not migrated to app-owned DI yet). Idempotent (registries replace by
+ * research-verdict step resolvers on the app-owned {@link GateRegistry} /
+ * {@link StepResolverRegistry} the composition root injects (the PIPELINE registry is still
+ * module-global — it has not migrated to app-owned DI yet). Idempotent (registries replace by
  * id/kind). Called explicitly from a facade/test — there is no module-load side effect any more,
- * since the agent-kind + preset registries are app-owned instances, not globals.
+ * since the agent-kind / preset / gate / step-resolver registries are app-owned instances.
  */
 export function registerExampleCustomAgents(
   registry: AgentKindRegistry,
   initiativePresetRegistry: InitiativePresetRegistry,
+  gateRegistry: GateRegistry,
+  stepResolverRegistry: StepResolverRegistry,
 ): void {
   registry.registerAll(EXAMPLE_AGENT_KINDS)
   registerPipeline({
@@ -784,7 +787,7 @@ export function registerExampleCustomAgents(
   registerOrgAuditPreset(initiativePresetRegistry)
   registerOrgResearchPreset(initiativePresetRegistry)
   // The custom polling gate — a deterministic precheck that escalates to `license-fixer`.
-  registerGate(LICENSE_CHECK_KIND, (ctx) => ({
+  gateRegistry.register(LICENSE_CHECK_KIND, (ctx) => ({
     kind: LICENSE_CHECK_KIND,
     helperKind: LICENSE_FIXER_KIND,
     wired: () => isProviderWired(LICENSE_PROVIDER),
@@ -824,6 +827,6 @@ export function registerExampleCustomAgents(
       }
     },
   }))
-  registerStepResolver(auditorSummaryResolver.kind, () => auditorSummaryResolver)
-  registerStepResolver(researchVerdictResolver.kind, () => researchVerdictResolver)
+  stepResolverRegistry.register(auditorSummaryResolver.kind, () => auditorSummaryResolver)
+  stepResolverRegistry.register(researchVerdictResolver.kind, () => researchVerdictResolver)
 }

@@ -397,6 +397,7 @@ async function bootServer(
   // resultView fails loudly here instead of mid-run. Mirrors the Worker's first-request guard.
   validateRegistrationsOnce({
     agentKindRegistry: container.agentKindRegistry,
+    gateRegistry: container.gateRegistry,
     onWarn: (problem) => logger.warn({ code: problem.code }, problem.message),
   })
 
