@@ -290,7 +290,11 @@ export {
   isCloudMetadataHost,
   isBlockedPrivateHost,
 } from './shared/ip-host.logic.js'
-export { redactSecrets } from './shared/redact-secrets.logic.js'
+export {
+  isSecretShapedFilename,
+  redactSecrets,
+  redactSecretsDeep,
+} from './shared/redact-secrets.logic.js'
 export {
   type RepoScanEntry,
   type CheckoutFreeRepoReader,
