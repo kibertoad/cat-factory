@@ -1,4 +1,4 @@
--- Workspace-level RBAC & membership (see docs/initiatives/workspace-rbac.md). The tier BELOW
+-- Workspace-level RBAC & membership (see backend/docs/adr/0025-workspace-rbac.md). The tier BELOW
 -- account tenancy: an account admin can restrict a board to an explicit member roster with
 -- per-member workspace roles. Mirrors the Node/Drizzle `workspace_members` table + the
 -- `workspaces.access_mode` column (migration 20260716150654_fast_dracula) — keep the runtimes
