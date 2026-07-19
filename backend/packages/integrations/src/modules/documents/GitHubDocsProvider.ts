@@ -23,10 +23,22 @@ import * as githubDocsLogic from './github-docs.logic.js'
 // round-tripping) lives in `@cat-factory/integrations`; this class is the thin
 // `GitHubClient` shell.
 
+/** Minimal structured logger (pino-shaped) for best-effort fetch diagnostics. */
+export interface GitHubDocsLogger {
+  warn(obj: Record<string, unknown>, msg?: string): void
+}
+
 export interface GitHubDocsProviderDependencies {
   githubClient: GitHubClient
   /** Resolves which installation owns a given repo owner (by account login). */
   installations: GitHubInstallationRepository
+  /**
+   * Optional structured logger. A failed doc read is logged with full coordinates
+   * (workspace / owner / repo / path / HTTP status) so a "could not be linked"
+   * report is diagnosable server-side — a domain error (409/422) is NOT otherwise
+   * logged by the HTTP error handler (only unexpected 500s are).
+   */
+  logger?: GitHubDocsLogger
 }
 
 export class GitHubDocsProvider implements DocumentSourceProvider {
@@ -81,14 +93,24 @@ export class GitHubDocsProvider implements DocumentSourceProvider {
     const commitSha = await this.deps.githubClient
       .latestCommitSha(installationId, ref, id.path)
       .catch(() => null)
-    const file = await this.deps.githubClient.getFileContent(
-      installationId,
-      ref,
-      id.path,
-      commitSha ?? undefined,
-    )
+    let file: Awaited<ReturnType<GitHubClient['getFileContent']>>
+    try {
+      file = await this.deps.githubClient.getFileContent(
+        installationId,
+        ref,
+        id.path,
+        commitSha ?? undefined,
+      )
+    } catch (err) {
+      // A raw GitHub API error (403 no-access, 429 rate-limit, 5xx) would otherwise
+      // bubble up as an opaque 500 with the cause discarded. Classify it into a specific,
+      // logged domain error so the failure names its remediation and carries context.
+      throw this.fetchFailure(workspaceId, id, err)
+    }
     if (!file) {
-      throw new ConflictError(`GitHub file "${id.path}" was not found in ${id.owner}/${id.repo}`)
+      // The read resolved to no file (the client maps a 404 to null): the doc is missing
+      // on the default branch, or the installation/PAT can't see the repo at all.
+      throw this.fetchFailure(workspaceId, id, null, true)
     }
     return {
       externalId: githubDocsLogic.githubDocExternalId(id),
@@ -184,5 +206,50 @@ export class GitHubDocsProvider implements DocumentSourceProvider {
       )
     }
     return installation.installationId
+  }
+
+  /**
+   * Turn a failed file read into a specific, logged {@link ConflictError}. Reads the GitHub
+   * HTTP status structurally (no dependency on the concrete client error class), picks a
+   * remediation-naming message, logs the full coordinates for server-side debugging, and
+   * carries the coordinates + status on `details` so the client can surface/copy them.
+   */
+  private fetchFailure(
+    workspaceId: string,
+    id: githubDocsLogic.GitHubDocExternalId,
+    err: unknown,
+    notFound = false,
+  ): ConflictError {
+    const status = err !== null ? githubDocsLogic.githubErrorStatus(err) : undefined
+    const underlying =
+      err instanceof Error
+        ? err.message
+        : err !== null && err !== undefined
+          ? String(err)
+          : undefined
+    const message = githubDocsLogic.describeGitHubDocFetchFailure(id, {
+      status,
+      notFound,
+      underlying,
+    })
+    this.deps.logger?.warn(
+      {
+        source: 'github',
+        workspaceId,
+        owner: id.owner,
+        repo: id.repo,
+        path: id.path,
+        status,
+        notFound,
+        err: underlying,
+      },
+      'github doc fetch failed',
+    )
+    return new ConflictError(message, undefined, {
+      owner: id.owner,
+      repo: id.repo,
+      path: id.path,
+      ...(status !== undefined ? { status } : {}),
+    })
   }
 }

@@ -1,9 +1,11 @@
 import { describe, expect, it } from 'vitest'
 import {
   buildGitHubCodeSearchQuery,
+  describeGitHubDocFetchFailure,
   githubDocExternalId,
   githubDocTitle,
   githubDocUrl,
+  githubErrorStatus,
   parseGitHubDocExternalId,
   parseGitHubDocRef,
 } from './github-docs.logic.js'
@@ -85,6 +87,52 @@ describe('githubDocExternalId / githubDocUrl / githubDocTitle', () => {
   it('derives the file base name as the title', () => {
     expect(githubDocTitle('docs/a/architecture.md')).toBe('architecture.md')
     expect(githubDocTitle('README.md')).toBe('README.md')
+  })
+})
+
+describe('githubErrorStatus', () => {
+  it('reads a numeric status off an error-shaped value', () => {
+    expect(githubErrorStatus({ status: 403 })).toBe(403)
+    expect(githubErrorStatus(Object.assign(new Error('nope'), { status: 404 }))).toBe(404)
+  })
+
+  it('returns undefined when there is no numeric status (network fault / bare error)', () => {
+    expect(githubErrorStatus(new Error('fetch failed'))).toBeUndefined()
+    expect(githubErrorStatus({ status: 'oops' })).toBeUndefined()
+    expect(githubErrorStatus(null)).toBeUndefined()
+    expect(githubErrorStatus(undefined)).toBeUndefined()
+  })
+})
+
+describe('describeGitHubDocFetchFailure', () => {
+  const id = { owner: 'acme', repo: 'repo', path: 'docs/x.md' }
+
+  it('names a permission problem for 401/403', () => {
+    for (const status of [401, 403] as const) {
+      const msg = describeGitHubDocFetchFailure(id, { status })
+      expect(msg).toContain('docs/x.md')
+      expect(msg).toContain('acme/repo')
+      expect(msg).toContain(`HTTP ${status}`)
+      expect(msg.toLowerCase()).toContain('read access')
+    }
+  })
+
+  it('explains the default-branch/visibility cause for a not-found read', () => {
+    const msg = describeGitHubDocFetchFailure(id, { notFound: true })
+    expect(msg).toContain('default branch')
+    expect(msg).toContain('acme/repo')
+    // A 404 status is treated the same as an explicit notFound.
+    expect(describeGitHubDocFetchFailure(id, { status: 404 })).toContain('default branch')
+  })
+
+  it('names a rate limit for 429', () => {
+    expect(describeGitHubDocFetchFailure(id, { status: 429 })).toContain('rate-limited')
+  })
+
+  it('falls back to the underlying message + status for an unclassified failure', () => {
+    const msg = describeGitHubDocFetchFailure(id, { status: 502, underlying: 'bad gateway' })
+    expect(msg).toContain('HTTP 502')
+    expect(msg).toContain('bad gateway')
   })
 })
 

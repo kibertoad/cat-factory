@@ -35,8 +35,11 @@ function makeProvider(opts: {
   installationForWorkspace: GitHubInstallation | null
   commitSha?: string | null
   fileContent?: string | null
+  /** When set, `getFileContent` rejects with this — the raw GitHub API failure path. */
+  fileError?: unknown
 }) {
   const calls: { installationId: number; path: string }[] = []
+  const warnings: { obj: Record<string, unknown>; msg?: string }[] = []
   const installations: Partial<GitHubInstallationRepository> = {
     getByWorkspace: async (workspaceId) =>
       workspaceId === 'ws_1' ? opts.installationForWorkspace : null,
@@ -51,16 +54,19 @@ function makeProvider(opts: {
       calls.push({ installationId, path })
       return opts.commitSha ?? 'sha-1'
     },
-    getFileContent: async () =>
-      opts.fileContent === null
+    getFileContent: async () => {
+      if (opts.fileError !== undefined) throw opts.fileError
+      return opts.fileContent === null
         ? null
-        : { content: opts.fileContent ?? '# Doc', sha: 'blob-1', path: 'docs/x.md' },
+        : { content: opts.fileContent ?? '# Doc', sha: 'blob-1', path: 'docs/x.md' }
+    },
   }
   const provider = new GitHubDocsProvider({
     githubClient: githubClient as GitHubClient,
     installations: installations as GitHubInstallationRepository,
+    logger: { warn: (obj, msg) => warnings.push({ obj, msg }) },
   })
-  return { provider, calls }
+  return { provider, calls, warnings }
 }
 
 describe('GitHubDocsProvider workspace-scoped reads', () => {
@@ -92,6 +98,36 @@ describe('GitHubDocsProvider workspace-scoped reads', () => {
     await expect(provider.fetchDocument({}, 'acme/repo:docs/x.md', 'ws_1')).rejects.toBeInstanceOf(
       ConflictError,
     )
+  })
+
+  it('classifies a 403 file read as an access-denied conflict (not an opaque 500) and logs it', async () => {
+    const { provider, warnings } = makeProvider({
+      installationForWorkspace: installation(),
+      fileError: Object.assign(new Error('Forbidden'), { status: 403 }),
+    })
+
+    await expect(provider.fetchDocument({}, 'acme/repo:docs/x.md', 'ws_1')).rejects.toMatchObject({
+      code: 'conflict',
+      message: expect.stringContaining('HTTP 403'),
+      details: { owner: 'acme', repo: 'repo', path: 'docs/x.md', status: 403 },
+    })
+    // The failure is logged with full coordinates so it's diagnosable server-side.
+    expect(warnings).toHaveLength(1)
+    expect(warnings[0]!.obj).toMatchObject({ workspaceId: 'ws_1', path: 'docs/x.md', status: 403 })
+  })
+
+  it('reports a not-found file with the default-branch hint (and logs it)', async () => {
+    const { provider, warnings } = makeProvider({
+      installationForWorkspace: installation(),
+      fileContent: null,
+    })
+
+    await expect(provider.fetchDocument({}, 'acme/repo:docs/x.md', 'ws_1')).rejects.toMatchObject({
+      code: 'conflict',
+      message: expect.stringContaining('default branch'),
+      details: { owner: 'acme', repo: 'repo', path: 'docs/x.md' },
+    })
+    expect(warnings[0]!.obj).toMatchObject({ notFound: true })
   })
 
   it('probeVersion is scoped to the workspace installation the same way', async () => {

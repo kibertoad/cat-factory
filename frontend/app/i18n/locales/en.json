@@ -30,6 +30,7 @@
     "retry": "Retry",
     "copy": "Copy",
     "copied": "Copied to clipboard",
+    "copyDetails": "Copy details",
     "reveal": "Reveal",
     "hide": "Hide",
     "delete": "Delete",

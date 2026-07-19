@@ -2991,7 +2991,7 @@ function selectNodeDocumentsDeps(
   if (config.documents.sources.includes('zeplin')) providers.push(new ZeplinProvider())
   if (config.documents.sources.includes('linear')) providers.push(new LinearDocumentProvider())
   if (config.documents.sources.includes('github') && githubClient) {
-    providers.push(new GitHubDocsProvider({ githubClient, installations }))
+    providers.push(new GitHubDocsProvider({ githubClient, installations, logger }))
   }
   if (providers.length === 0) return {}
   return {
