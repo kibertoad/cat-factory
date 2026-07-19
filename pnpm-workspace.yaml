@@ -31,6 +31,17 @@ overrides:
   '@vue/runtime-dom': 3.5.40
   '@vue/server-renderer': 3.5.40
   '@vue/shared': 3.5.40
+  # Pin the neutral journeys engine's `@modular-frontend/core` to one version.
+  # `@modular-frontend/journeys-engine@1.8.0` (pulled by `@modular-vue/journeys@1.2.0`)
+  # hard-depends on `@modular-frontend/core@0.3.0`, while the sibling `@modular-vue/*`
+  # bindings still range it at `^0.1.0 || ^0.2.0` — a release-train lag that otherwise
+  # bundles TWO copies of core, so the journey `JourneyRuntime` type (0.3.0 adds
+  # `discard`) is seen as two unrelated types and `provideJourneyRuntime` fails to
+  # typecheck. 0.3.0 is a strict superset of 0.2.0 (only the `discard` member added),
+  # so one version = one `JourneyRuntime` singleton. Drop this once the `@modular-vue/*`
+  # bindings widen their `@modular-frontend/core` peer range to include `^0.3.0`
+  # (the co-evolution follow-up tracked in docs/initiatives/modular-vue-adoption.md).
+  '@modular-frontend/core': 0.3.0
 packages:
   - 'backend/packages/*'
   - 'backend/runtimes/*'

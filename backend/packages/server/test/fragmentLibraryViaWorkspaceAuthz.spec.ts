@@ -29,7 +29,7 @@ interface Scenario {
 
 const CALLER = 'usr_1'
 
-function mountAccountLibrary(scenario: Scenario) {
+function mountAccountLibrary(scenario: Scenario, opts: { anonymous?: boolean } = {}) {
   const createFromDocument = vi.fn(
     async (_ownerKind: string, _ownerId: string, _input: unknown, _viaWorkspaceId: string) => ({
       id: 'frag',
@@ -40,14 +40,16 @@ function mountAccountLibrary(scenario: Scenario) {
       body: 'b',
     }),
   )
-  const refresh = vi.fn(async () => ({
-    id: 'frag',
-    version: '1.0.0',
-    title: 'T',
-    category: '',
-    summary: 's',
-    body: 'b',
-  }))
+  const refresh = vi.fn(
+    async (_ownerKind: string, _ownerId: string, _fragmentId: string, _viaWorkspaceId: string) => ({
+      id: 'frag',
+      version: '1.0.0',
+      title: 'T',
+      category: '',
+      summary: 's',
+      body: 'b',
+    }),
+  )
 
   const container = {
     fragmentLibrary: { libraryService: { createFromDocument, refresh } },
@@ -81,7 +83,9 @@ function mountAccountLibrary(scenario: Scenario) {
   app.onError(handleError)
   app.use('*', async (c, next) => {
     c.set('container', container)
-    c.set('user', { id: CALLER } as never)
+    // `opts.anonymous` mimics dev-open with no session: the account routes must still refuse it at
+    // `accountGuard` (401), so the re-authorization helper never runs without a signed-in caller.
+    if (!opts.anonymous) c.set('user', { id: CALLER } as never)
     await next()
   })
   app.route('/accounts/:accountId', fragmentLibraryController('account'))
@@ -152,7 +156,7 @@ describe('fragment library — account-tier viaWorkspaceId re-authorization (SEC
     expect(createFromDocument).not.toHaveBeenCalled()
   })
 
-  it('applies the same re-authorization to the account-tier refresh (query viaWorkspaceId)', async () => {
+  it('rejects a cross-account refresh (query viaWorkspaceId) the same way (404)', async () => {
     const { call, refresh } = mountAccountLibrary({
       accountRoles: { acc_A: ['developer'], acc_B: ['developer'] },
       workspaces: { ws_B: { accountId: 'acc_B', accessMode: 'account' } },
@@ -163,5 +167,36 @@ describe('fragment library — account-tier viaWorkspaceId re-authorization (SEC
     )
     expect(res.status).toBe(404)
     expect(refresh).not.toHaveBeenCalled()
+  })
+
+  it('allows a same-account, accessible refresh through to the service (200)', async () => {
+    // The happy path for the refresh route: an account-mode board in the path account is accessible
+    // to the caller, so the re-authorization passes and the live re-resolve runs through it.
+    const { call, refresh } = mountAccountLibrary({
+      accountRoles: { acc_A: ['developer'] },
+      workspaces: { ws_ok: { accountId: 'acc_A', accessMode: 'account' } },
+    })
+    const res = await call(
+      'POST',
+      '/accounts/acc_A/prompt-fragments/some-frag/refresh?viaWorkspaceId=ws_ok',
+    )
+    expect(res.status).toBe(200)
+    expect(refresh).toHaveBeenCalledOnce()
+    expect(refresh.mock.calls[0]?.[3]).toBe('ws_ok') // re-authorized workspace id forwarded
+  })
+
+  it('never reaches the re-authorization anonymously — accountGuard 401s a session-less request', async () => {
+    // Account-tier routes require a real sign-in even under dev-open, so `requireViaWorkspaceAccess`
+    // is never invoked without a user (its fail-closed no-user branch is defence-in-depth only).
+    const { call, createFromDocument } = mountAccountLibrary(
+      {
+        accountRoles: { acc_A: ['developer'] },
+        workspaces: { ws_ok: { accountId: 'acc_A', accessMode: 'account' } },
+      },
+      { anonymous: true },
+    )
+    const res = await call('POST', '/accounts/acc_A/document-fragments', docBody('ws_ok'))
+    expect(res.status).toBe(401)
+    expect(createFromDocument).not.toHaveBeenCalled()
   })
 })

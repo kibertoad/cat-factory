@@ -255,9 +255,11 @@ export function fragmentLibraryController(scope: Scope): Hono<AppEnv> {
  * document B's token can read into A's own library. Fails closed with the existence-hiding 404 the
  * workspace gate uses (never revealing whether the workspace exists / is in another account).
  *
- * Dev-open (auth disabled) resolves no signed-in user and no access object, so — mirroring
- * `requirePermission` — the check allows everything; a real deployment always has a user here (the
- * account guard already required sign-in).
+ * `accountGuard` is the sign-in floor for EVERY account-tier route (it 401s a request with no
+ * user), so a signed-in caller is always present here — including under dev-open, where the
+ * account routes still require a real session (unlike the workspace gate, this tier never passes
+ * through anonymously). A missing user is therefore a hard denial, never an allow-all: rejecting it
+ * up front keeps the check fail-closed even if this helper is ever reused off an unguarded mount.
  */
 async function requireViaWorkspaceAccess(
   container: ServerContainer,
@@ -265,7 +267,7 @@ async function requireViaWorkspaceAccess(
   accountId: string,
   viaWorkspaceId: string,
 ): Promise<void> {
-  if (!userId) return // dev-open: no signed-in user ⇒ allow all (mirrors requirePermission)
+  if (!userId) throw new NotFoundError('Workspace', viaWorkspaceId) // fail closed: no session ⇒ deny
   const account = await container.workspaceService.accountOf(viaWorkspaceId)
   // Not in the addressed account (or nonexistent) ⇒ 404, exactly as the gate hides a foreign board.
   if (account !== accountId) throw new NotFoundError('Workspace', viaWorkspaceId)

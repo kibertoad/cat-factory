@@ -1,6 +1,6 @@
 {
   "name": "@cat-factory/integrations",
-  "version": "0.86.2",
+  "version": "0.86.3",
   "description": "External-system integration domain logic for the Agent Architecture Board (GitHub, documents, tasks, environments, runners).",
   "repository": {
     "type": "git",
@@ -35,7 +35,7 @@
   "dependencies": {
     "@cat-factory/contracts": "workspace:*",
     "@cat-factory/kernel": "workspace:*",
-    "ai": "^6.0.224",
+    "ai": "^6.0.230",
     "p-map": "^7.0.5",
     "yaml": "^2.9.0"
   },
