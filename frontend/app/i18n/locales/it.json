@@ -4445,7 +4445,6 @@
     "footer": "Gli scenari sono le aree che il Tester ha scelto di verificare (i suoi scenari di accettazione della specifica). Esiti e rilievi sono raggruppati sotto di essi per nome."
   },
   "visualConfirm": {
-    "ariaLabel": "Conferma visiva",
     "title": "Conferma visiva",
     "titleWithBlock": "Conferma visiva — {title}",
     "subtitle": "Confronta l'interfaccia con i design di riferimento",

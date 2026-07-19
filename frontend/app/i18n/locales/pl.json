@@ -4111,7 +4111,6 @@
     }
   },
   "visualConfirm": {
-    "ariaLabel": "Potwierdzenie wizualne",
     "title": "Potwierdzenie wizualne",
     "titleWithBlock": "Potwierdzenie wizualne — {title}",
     "subtitle": "Porównaj interfejs z projektami referencyjnymi",

@@ -719,6 +719,7 @@ const GROUP_STATUS_META: Record<ScenarioGroup['status'], { icon: string; text: s
                   <button
                     v-for="(s, si) in g.screenshots"
                     :key="`shot${si}`"
+                    data-testid="tester-screenshot"
                     class="group relative h-20 w-28 shrink-0 overflow-hidden rounded border border-slate-800 bg-slate-950/60 hover:border-slate-600"
                     :title="s.view"
                     @click="openShot(s.artifactId)"

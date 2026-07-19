@@ -163,6 +163,7 @@ onBeforeUnmount(() => window.removeEventListener('keydown', onKey, true))
       class="fixed inset-0 z-[60] flex flex-col bg-slate-950/95 backdrop-blur-sm focus:outline-none"
       role="dialog"
       aria-modal="true"
+      data-testid="artifact-lightbox"
       :aria-label="
         current
           ? t('media.lightbox.ariaLabel', { label: current.label })

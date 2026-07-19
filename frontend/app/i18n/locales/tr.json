@@ -4123,7 +4123,6 @@
     "footer": "Senaryolar, Tester'ın test etmek için seçtiği alanlardır (spesifikasyon kabul senaryoları). Sonuçlar ve endişeler ada göre bunların altında gruplanır."
   },
   "visualConfirm": {
-    "ariaLabel": "Görsel doğrulama",
     "title": "Görsel doğrulama",
     "titleWithBlock": "Görsel doğrulama — {title}",
     "subtitle": "Arayüzü referans tasarımlarla karşılaştırarak inceleyin",

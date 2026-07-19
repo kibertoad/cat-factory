@@ -172,4 +172,8 @@ per-window row got right, and what bent against the actual template:
   `useModalBehavior` (was local `useFocusTrap`), so it layers above an owning window.
 - `app/composables/useFocusTrap.ts` — **deleted** (no remaining callers).
 - `backend/internal/e2e/tests/result-window-shell.spec.ts` — the shell e2e; a second test now
-  covers the CI `gate` window (header-extras + Escape handoff).
+  covers the CI `gate` window (header-extras + Escape handoff), and a third covers the
+  **nested-lightbox reconciliation** on the tester window: open `ArtifactLightbox` from a
+  screenshot thumbnail, then assert stacked-Escape ordering (lightbox closes first, the owning
+  window survives, a second Escape closes the re-topped window). Behaviour-neutral testids added
+  for it: `artifact-lightbox` (lightbox root) + `tester-screenshot` (thumbnail button).

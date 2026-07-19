@@ -4281,7 +4281,6 @@
     }
   },
   "visualConfirm": {
-    "ariaLabel": "Visual confirmation",
     "title": "Visual confirmation",
     "titleWithBlock": "Visual confirmation — {title}",
     "subtitle": "Review the UI against the reference designs",

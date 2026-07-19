@@ -4111,7 +4111,6 @@
     }
   },
   "visualConfirm": {
-    "ariaLabel": "Confirmation visuelle",
     "title": "Confirmation visuelle",
     "titleWithBlock": "Confirmation visuelle — {title}",
     "subtitle": "Comparez l'interface aux maquettes de référence",

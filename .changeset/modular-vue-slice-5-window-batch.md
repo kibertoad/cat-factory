@@ -26,5 +26,12 @@ Escape. The now-unused `useFocusTrap` composable is deleted.
 result-window-shell e2e can assert the header-extras slot renders for a non-pilot
 window. `ForkDecisionWindow`'s `fork-decision-window` testid moves from the backdrop
 to the shell dialog (still an ancestor of the elements its e2e selects).
+`ArtifactLightbox` (its root) and the tester report's screenshot thumbnail gain
+behaviour-neutral `data-testid="artifact-lightbox"` / `data-testid="tester-screenshot"`
+so the e2e can drive the nested-overlay reconciliation end-to-end.
+
+`VisualConfirmationWindow`'s dedicated `visualConfirm.ariaLabel` message is removed
+(from every locale): under the shell the dialog's accessible name is the visible
+title, and that key duplicated `visualConfirm.title` verbatim, so it was orphaned.
 
 Progress tracked in `docs/initiatives/modular-vue-slice5-progress.md`.

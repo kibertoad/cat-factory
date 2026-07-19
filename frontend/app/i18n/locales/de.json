@@ -4445,7 +4445,6 @@
     "footer": "Szenarien sind die Bereiche, die der Tester zum Prüfen gewählt hat (seine Akzeptanzszenarien aus der Spezifikation). Ergebnisse und Bedenken werden nach Name darunter gruppiert."
   },
   "visualConfirm": {
-    "ariaLabel": "Visuelle Bestätigung",
     "title": "Visuelle Bestätigung",
     "titleWithBlock": "Visuelle Bestätigung — {title}",
     "subtitle": "Die UI mit den Referenzdesigns vergleichen",
