@@ -1,5 +1,67 @@
 # @cat-factory/orchestration
 
+## 0.125.0
+
+### Minor Changes
+
+- 0abcf31: Add an authored `description` to pipelines and preview a pipeline's steps + description when
+  selecting one.
+
+  Pipelines now carry an optional prose `description` (seeded for every built-in, editable on custom
+  pipelines in the builder), persisted alongside the step list on both runtimes (D1 + Postgres). The
+  pipeline pickers — in the add-task modal and the inspector run settings — are replaced with a rich
+  master–detail picker: hovering an option reveals that pipeline's description and its ordered agent
+  steps (with human-gated steps flagged), so you can see exactly what a pipeline does before choosing
+  it.
+
+  Every built-in pipeline's catalog `version` is bumped by one so existing workspaces are offered a
+  reseed that adopts the new descriptions (fresh workspaces get them on seed).
+
+- 6709dc4: Migrate the last module-global plugin registries to app-owned DI (the registry-DI initiative):
+  pipelines, VCS providers, provider tokens, and agent traits now ride the composition root's
+  injected instances instead of a process-wide `Map`, removing the `clear*()` test cruft and the
+  phantom-`Map` hazard for separately-published adapter packages (e.g. `@cat-factory/gitlab`).
+
+  **Breaking (pre-1.0, no back-compat):** the following free functions are removed in favour of the
+  app-owned registry instances a facade injects:
+
+  - **Pipelines** (`@cat-factory/kernel`): `registerPipeline` / `registerPipelines` /
+    `registeredPipelines` / `clearRegisteredPipelines` / `mergeRegisteredPipelines` →
+    `PipelineRegistry` (`register` / `registerMany` / `registered` / `merge`) + `defaultPipelineRegistry()`.
+    `seedPipelines(registry?)` now takes the registry (the no-arg form returns the built-in catalog).
+  - **VCS providers** (`@cat-factory/kernel`): `registerVcsProvider` / `getVcsProvider` /
+    `resolveVcsProvider` / `requireVcsProvider` / `isVcsProviderRegistered` / `registeredVcsProviders` /
+    `clearVcsProviders` → `VcsProviderRegistry` + `defaultVcsRegistry()` (a required `ServerContainer`
+    field, so facade parity is type-enforced). `@cat-factory/gitlab`'s `registerGitLab` now takes the
+    registry as its first argument.
+  - **Provider tokens** (`@cat-factory/kernel`): `wireProvider` / `getProvider` / `isProviderWired` /
+    `requireProvider` / `clearProviders` → `ProviderRegistry` + `defaultProviderRegistry()`, read by the
+    gate machine's `GateContext` (which gains `isProviderWired`). The `@cat-factory/gates` `wireX` /
+    `applyGateProviders` / `warnUnwiredGates` handles take the registry as their first argument;
+    `clearGateProviders` is no longer needed by a facade (a fresh registry per build starts empty).
+  - **Agent traits** (`@cat-factory/agents`): `registerAgentTrait` / `registerAgentTraits` /
+    `registeredAgentTrait` / `clearRegisteredAgentTraits` / `assignAgentTraits` /
+    `clearAssignedAgentTraits` are folded onto the app-owned `AgentKindRegistry`
+    (`registerTrait` / `registerTraits` / `traitDefinition` / `assignTraits` / `assignedTraitsFor`);
+    `traitsFor` / `hasTrait` / `traitGuidanceFor` keep their signatures. `@cat-factory/consensus`'s
+    `registerConsensusTraits` now takes the registry as its first argument.
+
+### Patch Changes
+
+- Updated dependencies [009bc97]
+- Updated dependencies [0abcf31]
+- Updated dependencies [6709dc4]
+- Updated dependencies [a53bbf7]
+  - @cat-factory/integrations@0.88.0
+  - @cat-factory/contracts@0.149.0
+  - @cat-factory/kernel@0.143.0
+  - @cat-factory/agents@0.65.0
+  - @cat-factory/workspaces@0.17.0
+  - @cat-factory/prompt-fragments@0.13.40
+  - @cat-factory/sandbox@0.9.109
+  - @cat-factory/spend@0.12.57
+  - @cat-factory/caching@0.10.13
+
 ## 0.124.2
 
 ### Patch Changes
