@@ -10,6 +10,7 @@
 import { computed, reactive, watch } from 'vue'
 import ClarificationItem from '~/components/common/ClarificationItem.vue'
 import { INITIATIVE_STATUS_LABEL_KEYS } from '~/utils/initiative'
+import ResultWindowShell from '~/components/panels/ResultWindowShell.vue'
 
 const board = useBoardStore()
 const initiatives = useInitiativesStore()
@@ -103,122 +104,98 @@ const onProceed = () => flushThen((id) => initiatives.proceedPlanning(id))
 </script>
 
 <template>
-  <Teleport to="body">
-    <div
-      v-if="open"
-      class="fixed inset-0 z-50 flex max-h-[100dvh] items-stretch justify-center bg-slate-950/70 backdrop-blur-sm"
-      @click.self="close"
-    >
+  <ResultWindowShell
+    :open="open"
+    icon="i-lucide-messages-square"
+    icon-class="bg-indigo-500/15 text-indigo-300"
+    :title="initiative?.title ?? block?.title ?? t('initiative.planning.title')"
+    :subtitle="t('initiative.planning.subtitle')"
+    width="3xl"
+    testid="initiative-planning-window"
+    @close="close"
+  >
+    <template v-if="initiative" #header-extras>
+      <UBadge color="primary" variant="subtle" size="sm">
+        {{ t(INITIATIVE_STATUS_LABEL_KEYS[initiative.status]) }}
+      </UBadge>
+    </template>
+
+    <div class="min-h-0 flex-1 overflow-y-auto px-5 py-4">
+      <!-- No entity yet -->
       <div
-        class="m-4 flex w-full max-w-3xl flex-col overflow-hidden rounded-2xl border border-slate-800 bg-slate-900 shadow-2xl"
-        role="dialog"
-        aria-modal="true"
-        data-testid="initiative-planning-window"
+        v-if="!initiative"
+        class="flex h-full flex-col items-center justify-center gap-2 text-center text-slate-400"
       >
-        <!-- Header -->
-        <header class="flex items-center gap-3 border-b border-slate-800 px-5 py-3">
-          <span
-            class="flex h-8 w-8 items-center justify-center rounded-lg bg-indigo-500/15 text-indigo-300"
-          >
-            <UIcon name="i-lucide-messages-square" class="h-4 w-4" />
-          </span>
-          <div class="min-w-0 flex-1">
-            <h2 class="truncate text-sm font-semibold text-slate-100">
-              {{ initiative?.title ?? block?.title ?? t('initiative.planning.title') }}
-            </h2>
-            <p class="truncate text-[11px] text-slate-400">
-              {{ t('initiative.planning.subtitle') }}
-            </p>
-          </div>
-          <UBadge v-if="initiative" color="primary" variant="subtle" size="sm">
-            {{ t(INITIATIVE_STATUS_LABEL_KEYS[initiative.status]) }}
-          </UBadge>
-          <button
-            class="rounded-md p-1.5 text-slate-400 hover:bg-slate-800 hover:text-slate-200"
-            @click="close"
-          >
-            <UIcon name="i-lucide-x" class="h-4 w-4" />
-          </button>
-        </header>
+        <UIcon name="i-lucide-messages-square" class="h-8 w-8 opacity-40" />
+        <p class="text-sm">{{ t('initiative.planning.empty') }}</p>
+      </div>
 
-        <div class="min-h-0 flex-1 overflow-y-auto px-5 py-4">
-          <!-- No entity yet -->
-          <div
-            v-if="!initiative"
-            class="flex h-full flex-col items-center justify-center gap-2 text-center text-slate-400"
-          >
-            <UIcon name="i-lucide-messages-square" class="h-8 w-8 opacity-40" />
-            <p class="text-sm">{{ t('initiative.planning.empty') }}</p>
-          </div>
+      <template v-else>
+        <p class="mb-4 text-[13px] leading-relaxed text-slate-300">
+          {{ t('initiative.planning.intro') }}
+        </p>
 
-          <template v-else>
-            <p class="mb-4 text-[13px] leading-relaxed text-slate-300">
-              {{ t('initiative.planning.intro') }}
-            </p>
-
-            <!-- Converged / no pending questions -->
-            <div
-              v-if="converged || questions.length === 0"
-              class="rounded-lg border border-slate-800 bg-slate-950/40 p-4 text-center text-[13px] text-slate-400"
-              data-testid="initiative-planning-converged"
-            >
-              {{ t('initiative.planning.converged') }}
-            </div>
-
-            <!-- Interview questions — the shared clarification surface (answer / not-relevant /
-                 recommend), reused with the requirements-review window. -->
-            <ul v-else class="space-y-4">
-              <li v-for="q in questions" :key="q.key" data-testid="initiative-planning-question">
-                <ClarificationItem
-                  v-model:answer="drafts[q.key]"
-                  :prompt="q.question"
-                  :dismissed="q.status === 'dismissed'"
-                  :recommendation="q.recommendation"
-                  :recommending="!!q.id && initiatives.recommending.has(q.id)"
-                  :answer-placeholder="t('initiative.planning.answerPlaceholder')"
-                  @persist="persist(q)"
-                  @dismiss="setStatus(q, 'dismissed')"
-                  @reopen="setStatus(q, 'open')"
-                  @recommend="recommend(q)"
-                  @use-recommendation="useRecommendation(q)"
-                />
-              </li>
-            </ul>
-          </template>
+        <!-- Converged / no pending questions -->
+        <div
+          v-if="converged || questions.length === 0"
+          class="rounded-lg border border-slate-800 bg-slate-950/40 p-4 text-center text-[13px] text-slate-400"
+          data-testid="initiative-planning-converged"
+        >
+          {{ t('initiative.planning.converged') }}
         </div>
 
-        <!-- Action rail -->
-        <footer
-          v-if="initiative && !converged && questions.length > 0"
-          class="flex items-center justify-between gap-3 border-t border-slate-800 px-5 py-3"
-        >
-          <p class="text-[11px] text-slate-500">
-            {{ t('initiative.planning.hint') }}
-          </p>
-          <div class="flex items-center gap-2">
-            <UButton
-              color="neutral"
-              variant="ghost"
-              size="sm"
-              :loading="resuming"
-              data-testid="initiative-planning-proceed"
-              @click="onProceed"
-            >
-              {{ t('initiative.planning.proceed') }}
-            </UButton>
-            <UButton
-              color="primary"
-              size="sm"
-              :loading="resuming"
-              :disabled="!allAnswered"
-              data-testid="initiative-planning-continue"
-              @click="onContinue"
-            >
-              {{ t('initiative.planning.continue') }}
-            </UButton>
-          </div>
-        </footer>
-      </div>
+        <!-- Interview questions — the shared clarification surface (answer / not-relevant /
+                 recommend), reused with the requirements-review window. -->
+        <ul v-else class="space-y-4">
+          <li v-for="q in questions" :key="q.key" data-testid="initiative-planning-question">
+            <ClarificationItem
+              v-model:answer="drafts[q.key]"
+              :prompt="q.question"
+              :dismissed="q.status === 'dismissed'"
+              :recommendation="q.recommendation"
+              :recommending="!!q.id && initiatives.recommending.has(q.id)"
+              :answer-placeholder="t('initiative.planning.answerPlaceholder')"
+              @persist="persist(q)"
+              @dismiss="setStatus(q, 'dismissed')"
+              @reopen="setStatus(q, 'open')"
+              @recommend="recommend(q)"
+              @use-recommendation="useRecommendation(q)"
+            />
+          </li>
+        </ul>
+      </template>
     </div>
-  </Teleport>
+
+    <!-- Action rail -->
+    <footer
+      v-if="initiative && !converged && questions.length > 0"
+      class="flex items-center justify-between gap-3 border-t border-slate-800 px-5 py-3"
+    >
+      <p class="text-[11px] text-slate-500">
+        {{ t('initiative.planning.hint') }}
+      </p>
+      <div class="flex items-center gap-2">
+        <UButton
+          color="neutral"
+          variant="ghost"
+          size="sm"
+          :loading="resuming"
+          data-testid="initiative-planning-proceed"
+          @click="onProceed"
+        >
+          {{ t('initiative.planning.proceed') }}
+        </UButton>
+        <UButton
+          color="primary"
+          size="sm"
+          :loading="resuming"
+          :disabled="!allAnswered"
+          data-testid="initiative-planning-continue"
+          @click="onContinue"
+        >
+          {{ t('initiative.planning.continue') }}
+        </UButton>
+      </div>
+    </footer>
+  </ResultWindowShell>
 </template>
