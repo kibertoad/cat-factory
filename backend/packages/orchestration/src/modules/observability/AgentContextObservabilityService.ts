@@ -7,7 +7,12 @@ import type {
   RecordAgentContextInput,
   WorkspaceSettingsRepository,
 } from '@cat-factory/kernel'
-import { DEFAULT_WORKSPACE_SETTINGS } from '@cat-factory/kernel'
+import {
+  DEFAULT_WORKSPACE_SETTINGS,
+  isSecretShapedFilename,
+  redactSecrets,
+  redactSecretsDeep,
+} from '@cat-factory/kernel'
 
 /**
  * Defensive upper bound (characters) on any single stored body — a prompt or one
@@ -32,6 +37,15 @@ function clamp(text: string): string {
   if (text.length <= MAX_AGENT_CONTEXT_CHARS) return text
   return `${text.slice(0, MAX_AGENT_CONTEXT_CHARS)}\n…[truncated ${text.length - MAX_AGENT_CONTEXT_CHARS} chars]`
 }
+
+/**
+ * Stored in place of a secret-bearing file's body. A file whose NAME marks it as a raw
+ * credential store (`.env`, `*.pem`, an SSH key, `.npmrc`, …) has no field-name/URL
+ * scaffolding for {@link redactSecrets}'s pattern rules to latch onto — a bare PEM block or
+ * a `KEY=value` dump would pass through the shape scrub verbatim — so its whole body is
+ * dropped rather than persisted.
+ */
+export const SECRET_FILE_PLACEHOLDER = '[REDACTED: secret-shaped file omitted from snapshot]'
 
 /**
  * A shared character budget for one snapshot. Each call first applies the per-body cap,
@@ -106,8 +120,22 @@ export class AgentContextObservabilityService implements AgentContextRecorder {
   /**
    * Persist one dispatch's context, assigning its id + timestamp. Returns without
    * storing when prompt recording is disabled deployment-wide or the workspace has
-   * turned `storeAgentContext` off. Bodies are clamped so an oversized prompt/file
-   * never drops the whole snapshot.
+   * turned `storeAgentContext` off.
+   *
+   * Every stored body is a defence-in-depth SECRET SCRUB before it lands in the telemetry
+   * store: prompts, fragment bodies and injected file contents run through
+   * {@link redactSecrets} (a value the dispatch site's allow-list can't fully guarantee is
+   * clean — a task description, a linked doc, or an injected file may embed a token), and a
+   * file whose NAME marks it as a raw credential store ({@link isSecretShapedFilename}) has
+   * its whole body dropped ({@link SECRET_FILE_PLACEHOLDER}), since a bare PEM/`.env` body
+   * has no scaffolding for the shape rules to catch. Scrub happens BEFORE the size budget so
+   * truncation can never split a secret across the cap and defeat the pattern match. Bodies
+   * are then clamped so an oversized prompt/file never drops the whole snapshot.
+   *
+   * The `extras` bag is deep-scrubbed too ({@link redactSecretsDeep}): several of its values
+   * are human-authored free text (the run's decisions, revision feedback) — the SAME token-
+   * in-prose risk as a task description — so every string it carries at any depth is scrubbed
+   * rather than trusting the dispatch-site allow-list to have kept it clean.
    */
   async record(input: RecordAgentContextInput): Promise<void> {
     if (!this.recordPrompts) return
@@ -115,14 +143,24 @@ export class AgentContextObservabilityService implements AgentContextRecorder {
     // One shared budget per snapshot, consumed prompts-first so the most useful context
     // survives if a dispatch injects an unusual amount of file content.
     const budget = makeBudget()
+    // Scrub credentials, THEN clamp — a truncated body must never hide a half-cut secret.
+    const scrub = (text: string): string => budget(redactSecrets(text) ?? '')
     const snapshot: AgentContextSnapshot = {
       ...input,
       id: this.idGenerator.next('ctx'),
       createdAt: this.clock.now(),
-      systemPrompt: budget(input.systemPrompt),
-      userPrompt: budget(input.userPrompt),
-      fragments: input.fragments.map((f) => ({ id: f.id, body: budget(f.body) })),
-      contextFiles: input.contextFiles.map((f) => ({ ...f, content: budget(f.content) })),
+      systemPrompt: scrub(input.systemPrompt),
+      userPrompt: scrub(input.userPrompt),
+      fragments: input.fragments.map((f) => ({ id: f.id, body: scrub(f.body) })),
+      contextFiles: input.contextFiles.map((f) => ({
+        ...f,
+        content: isSecretShapedFilename(f.path)
+          ? budget(SECRET_FILE_PLACEHOLDER)
+          : scrub(f.content),
+      })),
+      // Structural bits, but some values (decisions, revision feedback) are free-text prose
+      // that can embed a token — scrub every string in the bag, not just the known bodies.
+      extras: redactSecretsDeep(input.extras),
     }
     await this.repository.record(snapshot)
   }
