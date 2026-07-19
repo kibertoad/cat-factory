@@ -3350,6 +3350,13 @@
       "proceed": "Kontynuuj mimo to",
       "stopReset": "Zatrzymaj i zresetuj zadanie"
     },
+    "preview": {
+      "stepCount": "{count} krok | {count} kroki | {count} kroków",
+      "gated": "Ręczne zatwierdzenie po tym kroku"
+    },
+    "picker": {
+      "noneHint": "Brak domyślnego pipeline'u. Wybierzesz go podczas uruchamiania zadania."
+    },
     "builder": {
       "title": "Kreator pipeline'ów",
       "agentPalette": "Paleta agentów",
@@ -3358,6 +3365,7 @@
       "configureModels": "Skonfiguruj modele",
       "configureModelsTooltip": "Zarządzaj presetami modeli (jaki model uruchamia każdy agent)",
       "namePlaceholder": "Nazwa pipeline'u",
+      "descriptionPlaceholder": "Opis (widoczny przy wyborze tego pipeline'u)",
       "labelPlaceholder": "+ etykieta",
       "gatingNeedsEstimator": "Krok z bramką wymaga wcześniejszego Task Estimatora. Dodaj go albo pipeline się nie zapisze.",
       "emptyDraft": "Kliknij agentów po lewej, aby zbudować liniowy pipeline.",

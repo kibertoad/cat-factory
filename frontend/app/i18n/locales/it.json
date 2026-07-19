@@ -3084,6 +3084,13 @@
       "proceed": "Procedi comunque",
       "stopReset": "Interrompi e reimposta l'attivita"
     },
+    "preview": {
+      "stepCount": "{count} step | {count} step",
+      "gated": "Approvazione umana dopo questo step"
+    },
+    "picker": {
+      "noneHint": "Nessuna pipeline predefinita. Ne scegli una quando esegui l'attivita."
+    },
     "builder": {
       "title": "Costruttore di pipeline",
       "agentPalette": "Palette degli agenti",
@@ -3092,6 +3099,7 @@
       "configureModels": "Configura modelli",
       "configureModelsTooltip": "Gestisci i preset dei modelli (su quale modello viene eseguito ciascun agente)",
       "namePlaceholder": "Nome della pipeline",
+      "descriptionPlaceholder": "Descrizione (mostrata quando scegli questa pipeline)",
       "labelPlaceholder": "+ etichetta",
       "gatingNeedsEstimator": "Uno step con gate richiede un Task Estimator prima di se. Aggiungine uno, altrimenti la pipeline non verra salvata.",
       "emptyDraft": "Fai clic sugli agenti a sinistra per assemblare una pipeline lineare.",

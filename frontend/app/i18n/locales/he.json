@@ -3361,6 +3361,13 @@
       "proceed": "המשך בכל זאת",
       "stopReset": "עצור ואפס את המשימה"
     },
+    "preview": {
+      "stepCount": "שלב {count} | {count} שלבים",
+      "gated": "אישור אנושי אחרי שלב זה"
+    },
+    "picker": {
+      "noneHint": "אין צינור ברירת מחדל. בוחרים אחד כשמריצים את המשימה."
+    },
     "builder": {
       "title": "בונה הצינור",
       "agentPalette": "פלטת הסוכנים",
@@ -3369,6 +3376,7 @@
       "configureModels": "הגדר מודלים",
       "configureModelsTooltip": "ניהול תצורות מודלים (על איזה מודל כל סוכן רץ)",
       "namePlaceholder": "שם הצינור",
+      "descriptionPlaceholder": "תיאור (מוצג בעת בחירת הצינור)",
       "labelPlaceholder": "+ תווית",
       "gatingNeedsEstimator": "שלב עם שער דורש מעריך משימות לפניו. הוסף אחד אחרת הצינור לא יישמר.",
       "emptyDraft": "לחץ על סוכנים בצד שמאל כדי להרכיב צינור ליניארי.",

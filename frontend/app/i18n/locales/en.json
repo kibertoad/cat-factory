@@ -3449,6 +3449,13 @@
       "proceed": "Proceed anyway",
       "stopReset": "Stop & reset task"
     },
+    "preview": {
+      "stepCount": "{count} step | {count} steps",
+      "gated": "Human approval gate after this step"
+    },
+    "picker": {
+      "noneHint": "No default pipeline. You choose one when you run the task."
+    },
     "builder": {
       "title": "Pipeline builder",
       "agentPalette": "Agent palette",
@@ -3457,6 +3464,7 @@
       "configureModels": "Configure models",
       "configureModelsTooltip": "Manage model presets (which model each agent runs on)",
       "namePlaceholder": "Pipeline name",
+      "descriptionPlaceholder": "Description (shown when picking this pipeline)",
       "labelPlaceholder": "+ label",
       "gatingNeedsEstimator": "A gated step needs a Task Estimator before it. Add one or the pipeline won't save.",
       "emptyDraft": "Click agents on the left to assemble a linear pipeline.",

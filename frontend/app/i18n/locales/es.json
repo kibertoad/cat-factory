@@ -3350,6 +3350,13 @@
       "proceed": "Continuar de todos modos",
       "stopReset": "Detener y reiniciar la tarea"
     },
+    "preview": {
+      "stepCount": "{count} paso | {count} pasos",
+      "gated": "Aprobación humana después de este paso"
+    },
+    "picker": {
+      "noneHint": "Sin pipeline predeterminado. Eliges uno al ejecutar la tarea."
+    },
     "builder": {
       "title": "Constructor de pipelines",
       "agentPalette": "Paleta de agentes",
@@ -3358,6 +3365,7 @@
       "configureModels": "Configurar modelos",
       "configureModelsTooltip": "Gestionar los preajustes de modelos (qué modelo ejecuta cada agente)",
       "namePlaceholder": "Nombre del pipeline",
+      "descriptionPlaceholder": "Descripción (se muestra al elegir este pipeline)",
       "labelPlaceholder": "+ etiqueta",
       "gatingNeedsEstimator": "Un paso con compuerta necesita un Task Estimator antes. Añade uno o el pipeline no se guardará.",
       "emptyDraft": "Haz clic en los agentes de la izquierda para montar un pipeline lineal.",

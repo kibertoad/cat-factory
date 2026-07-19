@@ -124,6 +124,7 @@ export class PipelineService {
     const pipeline: Pipeline = {
       id: this.idGenerator.next('pl'),
       name: input.name.trim() || 'Untitled pipeline',
+      ...normalizedDescription(input.description),
       agentKinds: [...input.agentKinds],
       ...alignedGates(input.agentKinds, input.gates),
       ...alignedThresholds(input.agentKinds, input.thresholds),
@@ -169,6 +170,8 @@ export class PipelineService {
     const pipeline: Pipeline = {
       id: this.idGenerator.next('pl'),
       name: input.name?.trim() || `${source.name} (copy)`,
+      // Carry the source's description onto the copy (the built-in's summary is a useful start).
+      ...normalizedDescription(source.description),
       agentKinds: [...source.agentKinds],
       ...(source.gates ? { gates: [...source.gates] } : {}),
       ...(source.thresholds ? { thresholds: [...source.thresholds] } : {}),
@@ -213,6 +216,9 @@ export class PipelineService {
     const stepOptions = input.stepOptions ?? existing.stepOptions
     const labels = input.labels ?? existing.labels
     const availability = input.availability ?? existing.availability
+    // Explicit-undefined (not `??`): the builder sends the full description (possibly blank) so a
+    // blank string CLEARS it, while omitting the field preserves the existing one.
+    const description = input.description !== undefined ? input.description : existing.description
     assertSomeEnabled(agentKinds, enabled)
     // Re-validate the shape against the EFFECTIVE (enabled) chain — disabling a producer
     // while leaving its companion on would orphan the companion, and adding gating (step or
@@ -268,6 +274,7 @@ export class PipelineService {
     const pipeline: Pipeline = {
       id: existing.id,
       name: input.name?.trim() || existing.name,
+      ...normalizedDescription(description),
       agentKinds: [...agentKinds],
       ...alignedGates(agentKinds, gates),
       ...alignedThresholds(agentKinds, thresholds),
@@ -449,6 +456,12 @@ function cleanLabels(labels: string[] | undefined): string[] | undefined {
 function normalizedLabels(labels: string[] | undefined): Pick<Pipeline, 'labels'> {
   const cleaned = cleanLabels(labels)
   return cleaned ? { labels: cleaned } : {}
+}
+
+// Trim the description; a blank/absent one stays absent (so an empty string clears it on update).
+function normalizedDescription(description: string | undefined): Pick<Pipeline, 'description'> {
+  const trimmed = description?.trim()
+  return trimmed ? { description: trimmed } : {}
 }
 
 /** A pipeline with every step disabled would have nothing to run. */

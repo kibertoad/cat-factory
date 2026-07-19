@@ -3362,6 +3362,13 @@
       "proceed": "そのまま続行",
       "stopReset": "停止してタスクをリセット"
     },
+    "preview": {
+      "stepCount": "{count}ステップ | {count}ステップ",
+      "gated": "このステップの後に人による承認"
+    },
+    "picker": {
+      "noneHint": "デフォルトのパイプラインはありません。タスクの実行時に選択します。"
+    },
     "builder": {
       "title": "パイプラインビルダー",
       "agentPalette": "エージェントパレット",
@@ -3370,6 +3377,7 @@
       "configureModels": "モデルを設定",
       "configureModelsTooltip": "モデルプリセットを管理(各エージェントが実行するモデル)",
       "namePlaceholder": "パイプライン名",
+      "descriptionPlaceholder": "説明（このパイプラインを選択するときに表示されます）",
       "labelPlaceholder": "+ ラベル",
       "gatingNeedsEstimator": "ゲート付きステップの前にはTask Estimatorが必要です。追加しないとパイプラインは保存できません。",
       "emptyDraft": "左側のエージェントをクリックして、線形パイプラインを組み立てます。",
