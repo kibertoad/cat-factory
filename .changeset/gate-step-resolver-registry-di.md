@@ -20,8 +20,11 @@ longer module-global `Map`s populated by import side effect.
   the app-owned instance the composition root injects.
 - **`@cat-factory/gates`** — `registerBuiltinGates(registry)` now takes the app-owned
   `GateRegistry` and the **module-load side-effect registration is gone** (the
-  `registerBuiltinGates()` band-aid the registry-DI initiative called out). A facade installs
-  the built-ins explicitly and threads the instance through `CoreDependencies`.
+  `registerBuiltinGates()` band-aid the registry-DI initiative called out). A new
+  `gateRegistryWithBuiltins()` factory returns a fresh registry pre-loaded with the suite in one
+  call — the seam a facade uses (`overrides.gateRegistry ?? gateRegistryWithBuiltins()`) so the
+  empty-default hazard is unrepresentable; `registerBuiltinGates` stays for installing into an
+  already-held instance.
 - **orchestration** threads `gateRegistry` + `stepResolverRegistry` through
   `CoreDependencies` → `ExecutionService` → `RunDispatcher` (defaulted so existing
   construction sites don't break), re-exposes `gateRegistry` on `Core`, and

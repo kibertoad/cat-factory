@@ -94,7 +94,6 @@ import {
   SearchQueryObservabilityService,
   type CoreDependencies,
   createCore,
-  defaultGateRegistry,
   defaultStepResolverRegistry,
   type GateRegistry,
   type StepResolverRegistry,
@@ -163,13 +162,13 @@ import {
   wrapResolverWithLimiter,
 } from '@cat-factory/server'
 // The built-in polling-gate suite (ci / conflicts / post-release-health + on-call). The facade
-// installs it into an app-owned `GateRegistry` via `registerBuiltinGates(...)` below, then wires
-// each gate's provider.
+// builds an app-owned `GateRegistry` pre-loaded with the suite via `gateRegistryWithBuiltins()`
+// below, then wires each gate's provider.
 import {
   type GateProviderOverrides,
   applyGateProviders,
   clearGateProviders,
-  registerBuiltinGates,
+  gateRegistryWithBuiltins,
   wireCiStatusProvider,
   wireMergeabilityProvider,
   wireReleaseHealthProvider,
@@ -1395,10 +1394,10 @@ export function buildNodeContainer(options: NodeContainerOptions): ServerContain
   // createCore and the ServerContainer snapshot projection.
   const agentKindRegistry = options.agentKindRegistry ?? defaultAgentKindRegistry()
   // The app-owned gate registry: the injected instance (conformance / a deployment pre-loads it),
-  // else a fresh one with the built-in `@cat-factory/gates` suite installed. Flows into createCore
-  // (the engine's gate machine) and is re-exposed on Core so `start()` validates the SAME instance.
-  const gateRegistry = options.gateRegistry ?? defaultGateRegistry()
-  if (!options.gateRegistry) registerBuiltinGates(gateRegistry)
+  // else a fresh one with the built-in `@cat-factory/gates` suite installed via
+  // `gateRegistryWithBuiltins()`. Flows into createCore (the engine's gate machine) and is
+  // re-exposed on Core so `start()` validates the SAME instance.
+  const gateRegistry = options.gateRegistry ?? gateRegistryWithBuiltins()
   // The app-owned step-resolver registry: the injected instance else an empty default (the
   // built-in `merger` resolver is a privileged engine built-in, not a registry entry).
   const stepResolverRegistry = options.stepResolverRegistry ?? defaultStepResolverRegistry()

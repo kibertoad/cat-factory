@@ -1,6 +1,6 @@
 import { afterEach, describe, expect, it } from 'vitest'
 import { defaultAgentKindRegistry } from '@cat-factory/agents'
-import { clearGateProviders, registerBuiltinGates } from '@cat-factory/gates'
+import { clearGateProviders, gateRegistryWithBuiltins } from '@cat-factory/gates'
 import {
   type CiStatusProvider,
   type GateProbe,
@@ -10,7 +10,6 @@ import {
   type PullRequestMergeabilityProvider,
   type PullRequestReviewProvider,
   type PullRequestReviewSnapshot,
-  defaultGateRegistry,
   defaultStepResolverRegistry,
 } from '@cat-factory/kernel'
 import { makeFakeCi, makeFakeDocQuality, makeFakeReleaseHealth } from '../fakeGateProviders.js'
@@ -26,12 +25,10 @@ export function defineAgentGateConformance(harness: ConformanceHarness): void {
     // The gate + step-resolver registries are now app-owned (per-test instances injected via
     // `makeApp({ gateRegistry, stepResolverRegistry })`), so there is nothing global to clear.
     // A fresh gate registry with the built-in `@cat-factory/gates` suite installed, into which
-    // a test then registers its custom `license-check` gate — exactly what a facade builds.
-    const makeGateRegistry = (): GateRegistry => {
-      const registry = defaultGateRegistry()
-      registerBuiltinGates(registry)
-      return registry
-    }
+    // a test then registers its custom `license-check` gate — exactly what a facade builds via
+    // the shared `gateRegistryWithBuiltins()` helper (so this also covers that helper on every
+    // runtime).
+    const makeGateRegistry = (): GateRegistry => gateRegistryWithBuiltins()
 
     // A deployment-registered polling gate is the OTHER half of the extension story
     // (alongside custom agent kinds): a deterministic precheck that passes through when

@@ -5,6 +5,7 @@ import {
   type GateRegistry,
   HUMAN_REVIEW_AGENT_KIND,
   POST_RELEASE_HEALTH_AGENT_KIND,
+  defaultGateRegistry,
 } from '@cat-factory/kernel'
 import {
   ciGate,
@@ -86,4 +87,19 @@ export function registerBuiltinGates(registry: GateRegistry): void {
   registry.register(POST_RELEASE_HEALTH_AGENT_KIND, postReleaseHealthGate)
   registry.register(HUMAN_REVIEW_AGENT_KIND, humanReviewGate)
   registry.register(DOC_QUALITY_AGENT_KIND, docQualityGate)
+}
+
+/**
+ * A fresh app-owned {@link GateRegistry} pre-loaded with the built-in gate suite — the single
+ * named factory a composition root reaches for when it is NOT handed an injected registry.
+ * Prefer this over the `defaultGateRegistry()` + `registerBuiltinGates()` two-step at every
+ * construction site: kernel's `defaultGateRegistry()` is empty by design (it cannot depend on
+ * this package), so a site that forgets the second step silently drops the platform's own
+ * CI / conflicts / merge gates. Collapsing the pair into one call makes that hazard
+ * unrepresentable — the obvious "I need the built-in gates" helper installs them.
+ */
+export function gateRegistryWithBuiltins(): GateRegistry {
+  const registry = defaultGateRegistry()
+  registerBuiltinGates(registry)
+  return registry
 }

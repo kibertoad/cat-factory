@@ -22,7 +22,7 @@ import {
   wireMergeabilityProvider,
   wireReleaseHealthProvider,
 } from './providers.js'
-import { registerBuiltinGates } from './index.js'
+import { gateRegistryWithBuiltins, registerBuiltinGates } from './index.js'
 
 // The built-in gate suite ships as an external package authored through the public seam. These
 // tests exercise the wire-handles a deployment copies + the real wired()/probe() paths, plus
@@ -75,6 +75,17 @@ describe('@cat-factory/gates registration', () => {
       .map((g) => g.kind)
       .sort()
     expect(kinds).toEqual(['ci', 'conflicts', 'doc-quality', 'human-review', 'post-release-health'])
+  })
+
+  it('gateRegistryWithBuiltins() returns a fresh registry pre-loaded with the built-in suite', () => {
+    const registry = gateRegistryWithBuiltins()
+    const kinds = registry
+      .factories()
+      .map((g) => g.kind)
+      .sort()
+    expect(kinds).toEqual(['ci', 'conflicts', 'doc-quality', 'human-review', 'post-release-health'])
+    // Fresh instance each call — no shared module state.
+    expect(gateRegistryWithBuiltins()).not.toBe(registry)
   })
 })
 

@@ -104,12 +104,14 @@ Landed together (they are the two registries the engine's `RunDispatcher` reads)
 
 - **`defaultGateRegistry()` is EMPTY, unlike `defaultAgentKindRegistry()`.** The built-in
   gates live in `@cat-factory/gates` (which depends on kernel, not the reverse), so kernel's
-  default can't pre-load them. A facade must call `registerBuiltinGates(gateRegistry)` on the
-  instance itself. Consequence: any construction site that builds a container WITHOUT injecting
-  a gate registry (e.g. the Worker's scheduled/cron `buildContainer(env)` with no overrides)
-  must install the built-ins there — so `buildContainer` does
-  `if (!overrides.gateRegistry) registerBuiltinGates(gateRegistry)`. Missing this silently
-  drops CI/conflicts gates from a re-driven run.
+  default can't pre-load them. Consequence: any construction site that builds a container WITHOUT
+  an injected gate registry (e.g. the Worker's scheduled/cron `buildContainer(env)` with no
+  overrides) must supply the built-ins itself, else it silently drops CI/conflicts gates from a
+  re-driven run. To make that hazard unrepresentable, the gate package exposes a single named
+  factory — **`gateRegistryWithBuiltins()`** (a fresh `GateRegistry` pre-loaded with the suite) —
+  and every facade uses it: `const gateRegistry = overrides.gateRegistry ?? gateRegistryWithBuiltins()`.
+  Prefer it over the `defaultGateRegistry()` + `registerBuiltinGates()` two-step; the lower-level
+  `registerBuiltinGates(registry)` stays available for installing into an already-held instance.
 - **Providers stay module-global (deliberately).** A built-in gate's `wired()` /
   `ctx.getProvider` and the `wireX` / `applyGateProviders` handles still read the module-global
   provider registry. Migrating gates did NOT require touching them, which keeps this slice small
