@@ -661,7 +661,7 @@ facade so the runtimes can't drift (see "Cross-runtime conformance" below).
     `compliance/REPORT.md` via `RepoFiles.commitFiles`, presented through
     `generic-structured`) + the `pl_org_audit` pipeline, registered purely via the public
     app-owned registries (`registerExampleCustomAgents(agentKindRegistry, presets, gateRegistry,
-    stepResolverRegistry, pipelineRegistry)` — by reference, no module-global side effect). Proves
+stepResolverRegistry, pipelineRegistry)` — by reference, no module-global side effect). Proves
     a brand-new repo-writing agent ships with ZERO harness changes. See **Custom agents** below.
 - `deploy/backend` — example Worker deployment: a one-line `src/index.ts`
   re-exporting `@cat-factory/worker` + the full production `wrangler.toml`

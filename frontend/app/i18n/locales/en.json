@@ -3355,10 +3355,10 @@
       "heading": "Context documents",
       "hint": "Documents attached to this task as context. Their content is given to the agents that work on the task.",
       "attach": "Attach",
-      "importPage": "Import a page…",
+      "connectSource": "Connect a source",
+      "connectSourceNamed": "Connect {source}",
       "empty": "Attach a requirement, RFC or PRD so agents see it while implementing this task.",
-      "attached": "Document attached",
-      "attachFailed": "Could not attach"
+      "attached": "Document attached"
     },
     "templates": {
       "title": "Document templates & examples",
@@ -3396,9 +3396,9 @@
       "title": "Context issues",
       "hint": "Tracker issues attached to this task as context. Their content is given to the agents that work on the task.",
       "attach": "Attach",
+      "connectSource": "Connect a source",
+      "connectSourceNamed": "Connect {source}",
       "attached": "Issue attached",
-      "attachFailed": "Could not attach",
-      "importIssue": "Import an issue…",
       "emptyHint": "Attach a Jira issue so agents see its description and comments while implementing this task."
     },
     "import": {

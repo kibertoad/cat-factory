@@ -3271,10 +3271,10 @@
       "heading": "コンテキストドキュメント",
       "hint": "このタスクにコンテキストとして添付されたドキュメント。その内容はタスクに取り組むエージェントに渡されます。",
       "attach": "添付",
-      "importPage": "ページをインポート…",
+      "connectSource": "ソースを接続",
+      "connectSourceNamed": "{source} を接続",
       "empty": "要件、RFC、PRD を添付すると、このタスクの実装中にエージェントが参照できます。",
-      "attached": "ドキュメントを添付しました",
-      "attachFailed": "添付できませんでした"
+      "attached": "ドキュメントを添付しました"
     },
     "templates": {
       "title": "ドキュメントのテンプレートと例",
@@ -3312,9 +3312,9 @@
       "title": "コンテキスト課題",
       "hint": "このタスクにコンテキストとして添付されたトラッカーの課題。その内容はタスクに取り組むエージェントに渡されます。",
       "attach": "添付",
+      "connectSource": "ソースを接続",
+      "connectSourceNamed": "{source} を接続",
       "attached": "課題を添付しました",
-      "attachFailed": "添付できませんでした",
-      "importIssue": "課題をインポート…",
       "emptyHint": "Jira 課題を添付すると、このタスクの実装中にエージェントがその説明とコメントを参照できます。"
     },
     "import": {

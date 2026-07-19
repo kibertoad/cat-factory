@@ -2992,10 +2992,10 @@
       "heading": "Documenti di contesto",
       "hint": "Documenti allegati a questa attività come contesto. Il loro contenuto viene fornito agli agenti che lavorano sull'attività.",
       "attach": "Allega",
-      "importPage": "Importa una pagina…",
+      "connectSource": "Collega una fonte",
+      "connectSourceNamed": "Collega {source}",
       "empty": "Allega un requisito, un RFC o un PRD così gli agenti lo vedono durante l'implementazione di questa attività.",
-      "attached": "Documento allegato",
-      "attachFailed": "Impossibile allegare"
+      "attached": "Documento allegato"
     },
     "templates": {
       "title": "Modelli ed esempi di documenti",
@@ -3033,9 +3033,9 @@
       "title": "Issue di contesto",
       "hint": "Issue del tracker allegate a questa attività come contesto. Il loro contenuto viene fornito agli agenti che lavorano sull'attività.",
       "attach": "Allega",
+      "connectSource": "Collega una fonte",
+      "connectSourceNamed": "Collega {source}",
       "attached": "Issue allegata",
-      "attachFailed": "Impossibile allegare",
-      "importIssue": "Importa una issue…",
       "emptyHint": "Allega una issue Jira così gli agenti vedono la sua descrizione e i commenti durante l'implementazione di questa attività."
     },
     "import": {

@@ -3259,10 +3259,10 @@
       "heading": "Dokumenty kontekstowe",
       "hint": "Dokumenty dołączone do tego zadania jako kontekst. Ich treść trafia do agentów pracujących nad zadaniem.",
       "attach": "Dołącz",
-      "importPage": "Importuj stronę…",
+      "connectSource": "Połącz źródło",
+      "connectSourceNamed": "Połącz {source}",
       "empty": "Dołącz wymaganie, dokument RFC lub PRD, aby agenci widzieli je podczas realizacji tego zadania.",
-      "attached": "Dokument dołączony",
-      "attachFailed": "Nie udało się dołączyć"
+      "attached": "Dokument dołączony"
     },
     "templates": {
       "title": "Szablony i przykłady dokumentów",
@@ -3300,9 +3300,9 @@
       "title": "Zgłoszenia kontekstowe",
       "hint": "Zgłoszenia z trackera dołączone do tego zadania jako kontekst. Ich treść trafia do agentów pracujących nad zadaniem.",
       "attach": "Dołącz",
+      "connectSource": "Połącz źródło",
+      "connectSourceNamed": "Połącz {source}",
       "attached": "Dołączono zgłoszenie",
-      "attachFailed": "Nie można dołączyć",
-      "importIssue": "Importuj zgłoszenie…",
       "emptyHint": "Dołącz zgłoszenie Jira, aby agenci widzieli jego opis i komentarze podczas realizacji tego zadania."
     },
     "import": {

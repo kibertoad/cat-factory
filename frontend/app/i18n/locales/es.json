@@ -3259,10 +3259,10 @@
       "heading": "Documentos de contexto",
       "hint": "Documentos adjuntos a esta tarea como contexto. Su contenido se entrega a los agentes que trabajan en la tarea.",
       "attach": "Adjuntar",
-      "importPage": "Importar una página…",
+      "connectSource": "Conectar una fuente",
+      "connectSourceNamed": "Conectar {source}",
       "empty": "Adjunta un requisito, RFC o PRD para que los agentes lo vean mientras implementan esta tarea.",
-      "attached": "Documento adjuntado",
-      "attachFailed": "No se pudo adjuntar"
+      "attached": "Documento adjuntado"
     },
     "templates": {
       "title": "Plantillas y ejemplos de documentos",
@@ -3300,9 +3300,9 @@
       "title": "Incidencias de contexto",
       "hint": "Incidencias del tracker adjuntas a esta tarea como contexto. Su contenido se entrega a los agentes que trabajan en la tarea.",
       "attach": "Adjuntar",
+      "connectSource": "Conectar una fuente",
+      "connectSourceNamed": "Conectar {source}",
       "attached": "Incidencia adjuntada",
-      "attachFailed": "No se pudo adjuntar",
-      "importIssue": "Importar una incidencia…",
       "emptyHint": "Adjunta una incidencia de Jira para que los agentes vean su descripción y comentarios al implementar esta tarea."
     },
     "import": {

@@ -3259,10 +3259,10 @@
       "heading": "Documents de contexte",
       "hint": "Documents joints à cette tâche comme contexte. Leur contenu est fourni aux agents qui travaillent sur la tâche.",
       "attach": "Joindre",
-      "importPage": "Importer une page…",
+      "connectSource": "Connecter une source",
+      "connectSourceNamed": "Connecter {source}",
       "empty": "Joignez une exigence, un RFC ou un PRD pour que les agents le voient pendant l'implémentation de cette tâche.",
-      "attached": "Document joint",
-      "attachFailed": "Impossible de joindre"
+      "attached": "Document joint"
     },
     "templates": {
       "title": "Modèles et exemples de documents",
@@ -3300,9 +3300,9 @@
       "title": "Tickets de contexte",
       "hint": "Tickets du tracker joints à cette tâche comme contexte. Leur contenu est fourni aux agents qui travaillent sur la tâche.",
       "attach": "Joindre",
+      "connectSource": "Connecter une source",
+      "connectSourceNamed": "Connecter {source}",
       "attached": "Ticket joint",
-      "attachFailed": "Impossible de joindre",
-      "importIssue": "Importer un ticket…",
       "emptyHint": "Joignez un ticket Jira pour que les agents voient sa description et ses commentaires lors de l'implémentation de cette tâche."
     },
     "import": {

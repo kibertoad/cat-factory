@@ -3271,10 +3271,10 @@
       "heading": "Bağlam belgeleri",
       "hint": "Bu göreve bağlam olarak eklenen belgeler. İçerikleri görev üzerinde çalışan ajanlara iletilir.",
       "attach": "Ekle",
-      "importPage": "Bir sayfa içe aktar…",
+      "connectSource": "Bir kaynak bağla",
+      "connectSourceNamed": "{source} bağla",
       "empty": "Agentların bu görevi uygularken görebilmesi için bir gereksinim, RFC veya PRD ekle.",
-      "attached": "Belge eklendi",
-      "attachFailed": "Eklenemedi"
+      "attached": "Belge eklendi"
     },
     "templates": {
       "title": "Belge şablonları ve örnekleri",
@@ -3312,9 +3312,9 @@
       "title": "Bağlam sorunları",
       "hint": "Bu göreve bağlam olarak eklenen tracker sorunları. İçerikleri görev üzerinde çalışan ajanlara iletilir.",
       "attach": "Ekle",
+      "connectSource": "Bir kaynak bağla",
+      "connectSourceNamed": "{source} bağla",
       "attached": "Sorun eklendi",
-      "attachFailed": "Eklenemedi",
-      "importIssue": "Bir sorun içe aktar…",
       "emptyHint": "Agentların bu görevi uygularken açıklamasını ve yorumlarını görebilmesi için bir Jira sorunu ekle."
     },
     "import": {
