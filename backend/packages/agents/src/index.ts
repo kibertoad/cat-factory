@@ -225,6 +225,8 @@ export {
 export {
   INITIATIVE_BREAKDOWN_KIND,
   INITIATIVE_AGENT_KINDS,
+  initiativeAnalystUserPrompt,
+  initiativePlannerUserPrompt,
   registerInitiativeAgents,
 } from './agents/kinds/initiative.js'
 export {

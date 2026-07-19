@@ -1,15 +1,9 @@
 import type { AgentRunContext } from '@cat-factory/kernel'
-import {
-  type AgentKindRegistry,
-  FINAL_ANSWER_IN_REPLY,
-  initiativePresetSection,
-  userPromptFor,
-} from '@cat-factory/agents'
+import { type AgentKindRegistry, FINAL_ANSWER_IN_REPLY, userPromptFor } from '@cat-factory/agents'
 import {
   frameProfile,
   FRONTEND_WIREMOCK_PORT,
   resolveFrontendServePort,
-  type InitiativePresetPhaseTemplate,
 } from '@cat-factory/contracts'
 import type { RepoTarget } from './ContainerAgentExecutor.js'
 
@@ -126,43 +120,6 @@ export const SPEC_SHAPE_HINT =
   'technical task with no business requirements, the document is instead just ' +
   '{"noBusinessSpecs": true}.'
 
-/** Role prompt the initiative-planner step's agent runs under (returns the plan as JSON). */
-export const INITIATIVE_PLANNER_SYSTEM_PROMPT =
-  'You are a staff engineer planning a LONG-RUNNING INITIATIVE — a body of work too ' +
-  'large for one task (a cross-cutting refactor, a migration, a strangler conversion). ' +
-  'Explore the repository first and ground every part of the plan in the actual code. ' +
-  'Decompose the initiative into SEQUENTIAL PHASES, each holding concrete work ITEMS: ' +
-  'an item must be a self-sufficient task one coding agent can complete in a single PR, ' +
-  'with a description that stands alone (name the files/modules it touches). Give every ' +
-  'item an estimate — complexity, risk and impact, each 0..1 — and declare `dependsOn` ' +
-  '(item ids) only where an item genuinely needs another item merged first; independent ' +
-  'items in a phase may run in parallel. Choose an execution policy: `maxConcurrent` ' +
-  '(how many items may run at once — 1 for delicate serialized work) and ordered ' +
-  '`rules` mapping estimates to pipelines (an item matches a rule when ANY axis meets ' +
-  'its `min*` threshold; first match wins; no match falls back to `defaultPipelineId`). ' +
-  'Available pipelines: `pl_quick` (small, low-risk change), `pl_simple` (standard ' +
-  'change, lighter review), `pl_full` (full spec/review/test rigor), `pl_bugfix` (bug ' +
-  'remediation). Record the decisions you made and any known caveats. ' +
-  'Respond with ONLY a JSON object of shape {"goal","constraints":[],"nonGoals":[],' +
-  '"analysisSummary","phases":[{"id","title","goal","maxConcurrent"?}],' +
-  '"items":[{"id","phaseId","title","description","dependsOn":[],' +
-  '"estimate":{"complexity","risk","impact","rationale"},"pipelineId"?}],' +
-  '"policy":{"maxConcurrent","rules":[{"pipelineId","minComplexity"?,"minRisk"?,' +
-  '"minImpact"?}],"defaultPipelineId"},"decisions":[{"title","detail"}],"caveats":[]} ' +
-  '— no prose, no code fences. ' +
-  FINAL_ANSWER_IN_REPLY
-
-/** Compact shape hint fed to the structured-output repair call for the initiative plan. */
-export const INITIATIVE_PLAN_SHAPE_HINT =
-  'Expected an initiative plan: {"goal": string, "constraints": string[], "nonGoals": ' +
-  'string[], "analysisSummary": string, "phases": [{"id": string, "title": string, ' +
-  '"goal": string}], "items": [{"id": string, "phaseId": string, "title": string, ' +
-  '"description": string, "dependsOn": string[], "estimate": {"complexity": number 0..1, ' +
-  '"risk": number 0..1, "impact": number 0..1, "rationale": string}}], "policy": ' +
-  '{"maxConcurrent": number, "rules": [{"pipelineId": string, "minComplexity"?: number, ' +
-  '"minRisk"?: number, "minImpact"?: number}], "defaultPipelineId": string}, ' +
-  '"decisions": [{"title": string, "detail": string}], "caveats": string[]}.'
-
 /** Compact shape hint fed to the structured-output repair call for the merger assessment. */
 export const MERGE_ASSESSMENT_SHAPE_HINT =
   'Expected a merge assessment: {"complexity": number 0..1, "risk": number 0..1, ' +
@@ -214,159 +171,6 @@ export function blueprintUserPrompt(): string {
       'scratch. Return the COMPLETE tree (not a diff).',
     '',
     'Respond with ONLY the JSON object for the service tree — no prose, no code fences.',
-  ].join('\n')
-}
-
-/**
- * Render the generic "required plan shape" section a preset's declarative {@link
- * InitiativePresetPhaseTemplate} dictates (slice T1): the phase ids VERBATIM, titles, goals and
- * order, plus whether the planner may add extra phases. Pure + generic — it never branches on a
- * preset id, so a preset with no template contributes nothing and the free-form planner prompt is
- * byte-for-byte unchanged. Folded into the PLANNER prompt only (the planner authors the phases;
- * the ingest normalizer then enforces this shape).
- */
-function planShapeLines(template: InitiativePresetPhaseTemplate): string[] {
-  const lines = [
-    '',
-    '## Required plan shape',
-    '',
-    'This preset runs a fixed multi-phase methodology. Build the plan around these phases, in ' +
-      'this order, using each phase `id` VERBATIM:',
-    '',
-  ]
-  let hasOptional = false
-  template.phases.forEach((phase, i) => {
-    const isOptional = phase.required !== true
-    if (isOptional) hasOptional = true
-    lines.push(`${i + 1}. \`${phase.id}\` — ${phase.title}${isOptional ? ' (optional)' : ''}`)
-    if (phase.goal?.trim()) lines.push(`   ${phase.goal.trim()}`)
-  })
-  lines.push('')
-  // Fidelity of whatever phases you DO include is non-negotiable, independent of the extra-phase
-  // policy below.
-  lines.push(
-    'For every phase you include, use its `id` VERBATIM and keep this order — do NOT rename, ' +
-      'reorder or merge phases.',
-  )
-  // Presence: required phases are mandatory; optional ones may be omitted. Only draw the
-  // distinction when the template actually has an optional phase, so an all-required template
-  // reads as a flat "every phase must be present" with no confusing "(optional)" carve-out.
-  lines.push(
-    hasOptional
-      ? 'Every phase NOT marked (optional) must be present; you may omit an (optional) phase when ' +
-          'the work does not need it.'
-      : 'Every phase above must be present.',
-  )
-  // Extra-phase policy — the ONE knob `allowAdditionalPhases` governs.
-  lines.push(
-    template.allowAdditionalPhases
-      ? 'You MAY append further phases after these when the work needs them.'
-      : 'Do NOT introduce any phase beyond this set — it is otherwise exhaustive.',
-  )
-  return lines
-}
-
-/**
- * Render the planning context an initiative-level run carries (slice 2): the interviewer's
- * synthesized goal / constraints / non-goals + the Q&A digest, and the analyst's codebase
- * analysis. Folded into the analyst and planner prompts so each is grounded in the human's
- * intent and the prior step's findings. Returns [] when no initiative context is present
- * (e.g. the interviewer/analyst passed through with no model wired).
- */
-function initiativeContextLines(
-  context: AgentRunContext,
-  opts: { includeAnalysis: boolean; includePlanShape: boolean },
-): string[] {
-  const init = context.initiative
-  if (!init) return []
-  const lines: string[] = []
-  // Preset steering FIRST — it frames the step's role for this initiative kind (e.g. "you are a
-  // documentation gap-auditor"). The builder only sets `preset` when this kind has a (trimmed,
-  // non-empty) `promptAddition` or a `phaseTemplate`; the generic preset has neither, so the
-  // generic prompt is unchanged. The section text is the SHARED `initiativePresetSection` (D1),
-  // so the planning prompts and the spawned-run prompts render identical preset steering.
-  const presetSection = initiativePresetSection(context)
-  if (presetSection) lines.push(presetSection)
-  // The required plan shape (planner only): a preset's declarative phase template, rendered so the
-  // planner emits exactly the mandated phases. No template ⇒ nothing added.
-  if (opts.includePlanShape && init.preset?.phaseTemplate) {
-    lines.push(...planShapeLines(init.preset.phaseTemplate))
-  }
-  if (init.goal?.trim()) lines.push('', '## Agreed goal', '', init.goal.trim())
-  if (init.constraints?.length) {
-    lines.push('', '## Constraints', '', ...init.constraints.map((c) => `- ${c}`))
-  }
-  if (init.nonGoals?.length) {
-    lines.push('', '## Non-goals', '', ...init.nonGoals.map((c) => `- ${c}`))
-  }
-  const qa = (init.qa ?? []).filter((q) => q.answer?.trim())
-  if (qa.length) {
-    lines.push('', '## Planning interview', '')
-    for (const { question, answer } of qa) lines.push(`- Q: ${question}`, `  A: ${answer}`)
-  }
-  if (opts.includeAnalysis && init.analysisSummary?.trim()) {
-    lines.push('', '## Codebase analysis', '', init.analysisSummary.trim())
-  }
-  return lines
-}
-
-/** Role prompt the initiative-analyst step runs under (returns a prose codebase analysis). */
-export const INITIATIVE_ANALYST_SYSTEM_PROMPT =
-  'You are a staff engineer performing a CODEBASE ANALYSIS to ground the planning of a ' +
-  'long-running initiative (a cross-cutting refactor, a migration, a strangler conversion). ' +
-  'Explore the repository and produce a concise, concrete analysis a planner will use to ' +
-  'decompose the work: the relevant architecture and module boundaries, the files/areas the ' +
-  'initiative will most likely touch, existing patterns to follow, cross-cutting concerns, ' +
-  'risks and likely sequencing constraints. Ground every claim in real file/directory ' +
-  'references; do NOT propose the plan itself (no phases/items) and do NOT modify anything. ' +
-  'Respond with a clear Markdown analysis. ' +
-  FINAL_ANSWER_IN_REPLY
-
-/**
- * The initiative-analyst's task prompt: the agreed goal / constraints from the interview
- * plus the instruction to analyse the repo. The backend's analyst post-completion resolver
- * folds the returned prose onto the `initiatives` entity (`analysisSummary`), which the
- * planner then consumes.
- */
-export function initiativeAnalystUserPrompt(context: AgentRunContext): string {
-  const block = context.block
-  const description = block.description?.trim()
-  return [
-    `Analyse this codebase to ground planning of the initiative: ${
-      block.title || '(untitled initiative)'
-    }`,
-    ...(description ? ['', description] : []),
-    ...initiativeContextLines(context, { includeAnalysis: false, includePlanShape: false }),
-    '',
-    'Explore the repository and produce the analysis described in your instructions — ' +
-      'architecture, likely touch points, patterns to follow, risks and sequencing. ' +
-      'Respond with a clear Markdown analysis.',
-  ].join('\n')
-}
-
-/**
- * The initiative-planner's task prompt: the human's rough goal statement (the
- * initiative block's title + description), the interview + codebase-analysis context the
- * interviewer/analyst steps produced (slice 2), plus the exploration/plan instructions.
- * The agent reads the codebase from its own read-only checkout; the backend ingests the
- * returned plan into the `initiatives` entity, and the committer step renders + commits the
- * in-repo tracker after the human approves the plan.
- */
-export function initiativePlannerUserPrompt(context: AgentRunContext): string {
-  const block = context.block
-  const description = block.description?.trim()
-  return [
-    `Plan the initiative: ${block.title || '(untitled initiative)'}`,
-    ...(description ? ['', description] : []),
-    ...initiativeContextLines(context, { includeAnalysis: true, includePlanShape: true }),
-    '',
-    'Explore this repository to ground the plan in the real code (building on the codebase ' +
-      'analysis above), honour the agreed goal / constraints / non-goals, then produce the ' +
-      'complete multi-phase plan: sequential phases, self-sufficient items with ' +
-      'estimates and dependencies, and the execution policy (concurrency + ' +
-      'estimate→pipeline rules).',
-    '',
-    'Respond with ONLY the JSON object for the plan — no prose, no code fences.',
   ].join('\n')
 }
 

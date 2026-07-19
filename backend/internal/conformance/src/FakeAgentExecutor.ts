@@ -394,6 +394,26 @@ export class FakeAgentExecutor implements AgentExecutor {
       return { output: JSON.stringify(estimate), model: 'fake' }
     }
 
+    // The initiative PLANNER returns the multi-phase plan the engine ingests
+    // (`InitiativeService.ingestPlan` → the preset's phase-template normalizer + `seedPlan`),
+    // then the loop spawns the decorated tasks. Without this channel the planner's
+    // post-completion resolver faults the run (an absent plan is a hard error), so a test that
+    // drives create-with-preset → auto-plan → spawn supplies the draft via `initiativePlan`.
+    //
+    // This MUST precede the generic structured-output branch below: the planner is now a
+    // registered kind whose `agent` spec declares `output.kind === 'structured'`, so the generic
+    // branch would otherwise capture it and return a plain `custom` result. That mirrors the real
+    // executor, where `toRunResult` coerces the planner's `custom` into `initiativePlan` by id
+    // (see `containerAgentResult.ts`) BEFORE the default `custom` passthrough — the id-keyed
+    // channel wins over the generic one on both paths.
+    if (context.agentKind === 'initiative-planner' && this.options.initiativePlan !== undefined) {
+      return {
+        output: `[initiative-planner] planned "${context.block.title}"`,
+        model: 'fake',
+        initiativePlan: this.options.initiativePlan,
+      }
+    }
+
     // A registered CUSTOM kind whose agent step declares a structured output returns its
     // parsed JSON as `custom` — exactly what the generic manifest-driven `agent` dispatch
     // surfaces — so the engine's registered post-op (render + commit via RepoFiles) runs
@@ -403,19 +423,6 @@ export class FakeAgentExecutor implements AgentExecutor {
         output: `[${context.agentKind}] produced structured output for "${context.block.title}"`,
         model: 'fake',
         custom: this.options.customResult ?? { ok: true },
-      }
-    }
-
-    // The initiative PLANNER returns the multi-phase plan the engine ingests
-    // (`InitiativeService.ingestPlan` → the preset's phase-template normalizer + `seedPlan`),
-    // then the loop spawns the decorated tasks. Without this channel the planner's
-    // post-completion resolver faults the run (an absent plan is a hard error), so a test that
-    // drives create-with-preset → auto-plan → spawn supplies the draft via `initiativePlan`.
-    if (context.agentKind === 'initiative-planner' && this.options.initiativePlan !== undefined) {
-      return {
-        output: `[initiative-planner] planned "${context.block.title}"`,
-        model: 'fake',
-        initiativePlan: this.options.initiativePlan,
       }
     }
 

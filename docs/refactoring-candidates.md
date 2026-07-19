@@ -70,6 +70,25 @@ two thin _backend_ switches: `buildMigratedBuiltInBody` (built-in kind → its s
   `buildJobBody` + `toRunResult`), so the switches collapse and a deployment can override a
   built-in's prompt through the public seam.
 
+**Slice landed — the initiative planning kinds are now real registrations.** The first two
+built-ins whose ids live in `@cat-factory/kernel` (`initiative-analyst` / `initiative-planner`)
+are migrated onto the public `registerAgentKind` seam: their role/user prompts moved from
+`@cat-factory/server`'s `prompts.ts` down into `@cat-factory/agents`
+(`agents/kinds/initiative.ts`), and each is registered with an `agent` `AgentStepSpec`
+(`container-explore`, base-branch clone; the planner structured). The generic
+`registry.agentStep(...)` path in `buildKindBody` now renders their job body — so **both cases
+were deleted from `buildMigratedBuiltInBody`**, and the pair were removed from
+`CompositeAgentExecutor`'s hard-coded `CONTAINER_KINDS` set (container routing now follows from
+`registry.requiresContainer()`). Their `systemPrompt`/`userPrompt` resolve through
+`systemPromptFor`/`userPromptFor` like any registered kind, so the surface directives
+(READ_ONLY_GUARDRAIL / FINAL_ANSWER_IN_REPLY) are applied centrally instead of hand-embedded.
+This is the reference shape for the remaining kernel-id built-ins. Still to do: the
+orchestration-id built-ins (`blueprints`/`spec-writer`/`ci-fixer`/`fixer`/`conflict-resolver`/
+`merger`/`on-call`/`tester`/`ui-tester`), whose prompts also need repo/`parts` context the
+registry `userPrompt(context)` seam does not yet carry, and folding the `toRunResult` coercion
+chain onto the definitions (the planner's coercion still keys off its id in
+`containerAgentResult.ts`).
+
 ## 6. Module registry for the orchestration container
 
 **File:** `backend/packages/orchestration/src/container.ts` — **2,146 lines**, ~17

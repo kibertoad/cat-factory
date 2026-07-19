@@ -20,16 +20,10 @@ import {
   TESTER_AGENT_KIND,
   UI_TESTER_AGENT_KIND,
 } from '@cat-factory/orchestration'
-import { INITIATIVE_ANALYST_AGENT_KIND, INITIATIVE_PLANNER_AGENT_KIND } from '@cat-factory/kernel'
 import {
   BLUEPRINT_SHAPE_HINT,
   BLUEPRINT_SYSTEM_PROMPT,
   blueprintUserPrompt,
-  INITIATIVE_ANALYST_SYSTEM_PROMPT,
-  initiativeAnalystUserPrompt,
-  INITIATIVE_PLAN_SHAPE_HINT,
-  INITIATIVE_PLANNER_SYSTEM_PROMPT,
-  initiativePlannerUserPrompt,
   MERGE_ASSESSMENT_SHAPE_HINT,
   MERGER_SYSTEM_PROMPT,
   mergerMultiRepoUserPrompt,
@@ -766,46 +760,6 @@ function buildMigratedBuiltInBody(
         SPEC_WRITER_SYSTEM_PROMPT,
         registry,
         specWriterUserPrompt(context),
-      )
-    // The initiative analyst explores the repository (read-only, base branch — an
-    // initiative block has no PR) and returns a PROSE codebase-analysis report grounding
-    // the plan (structure, hot spots, risks, likely touch points). Its output is folded
-    // onto the `initiatives` entity by the engine's analyst post-completion resolver and
-    // then into the planner's prompt. No structured output — it makes no commit and opens
-    // no PR (an edit-free run is the expected outcome, exactly like the architect/analysis).
-    case INITIATIVE_ANALYST_AGENT_KIND:
-      return buildRegisteredAgentBody(
-        context,
-        parts,
-        { surface: 'container-explore', clone: { branch: 'base' } },
-        INITIATIVE_ANALYST_SYSTEM_PROMPT,
-        registry,
-        initiativeAnalystUserPrompt(context),
-      )
-    // The initiative planner explores the repository (read-only, base branch — an
-    // initiative block has no PR) to ground its multi-phase plan in the actual code,
-    // returning ONLY the plan as JSON. `toRunResult` coerces it into `initiativePlan`
-    // for the engine's ingest (into the `initiatives` entity); the in-repo tracker is
-    // committed later by the `initiative-committer` step, AFTER the human approves the
-    // plan at the pipeline gate. `failOnUnusableFinal` because the plan is handed
-    // onward — a truncated final answer must fail loudly, not be laundered into a
-    // half-baked plan by the structured repair.
-    case INITIATIVE_PLANNER_AGENT_KIND:
-      return buildRegisteredAgentBody(
-        context,
-        parts,
-        {
-          surface: 'container-explore',
-          clone: { branch: 'base' },
-          output: {
-            kind: 'structured',
-            shapeHint: INITIATIVE_PLAN_SHAPE_HINT,
-            failOnUnusableFinal: true,
-          },
-        },
-        INITIATIVE_PLANNER_SYSTEM_PROMPT,
-        registry,
-        initiativePlannerUserPrompt(context),
       )
     // In-place fixers: clone the PR head branch, push fixes back onto it (no new PR);
     // a no-op run is a clean non-event (the gate/loop re-checks the real signal).
