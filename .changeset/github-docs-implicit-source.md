@@ -18,6 +18,13 @@ data.
   the App is installed, so GitHub docs no longer need a separate "connect" step and can be
   searched / imported / linked as task context right away.
 
+- **Document reads are now tenant-scoped.** `DocumentSourceProvider.fetchDocument` /
+  `probeVersion` take the `workspaceId` (like `search` already did), and `GitHubDocsProvider`
+  resolves the installation to read with via `getByWorkspace` — requiring the doc's owner to
+  match the workspace's own installation account — instead of a deployment-wide scan by owner.
+  A crafted `owner/repo:path` external id can therefore no longer reach another tenant's repo
+  through a different workspace's installation token.
+
 - **Connect a source inline from the new-task form.** In the add-task modal the "Context
   documents" / "Context issues" sections previously showed a disabled Attach button when no
   source was connected. They now offer a "Connect a source" action that opens the source's

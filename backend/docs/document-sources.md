@@ -77,6 +77,10 @@ plaintext and re-encrypted on the next write.
   `DocumentConnectionService` surfaces it in `listConnections` / `requireConnection`
   without a stored marker row (an explicit stored connection, if one exists, still
   wins). This mirrors the GitHub-issues **task** source's App-presence availability.
+  Reads are **tenant-scoped**: `fetchDocument` / `probeVersion` resolve the installation
+  via `getByWorkspace` and require the doc's `owner` to match the workspace's own
+  installation account, so a crafted `owner/repo:path` id can't reach another tenant's
+  repo through a different workspace's installation token (the same scoping `search` uses).
 
 ## HTTP API
 

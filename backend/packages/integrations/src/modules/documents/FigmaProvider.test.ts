@@ -65,7 +65,7 @@ describe('FigmaProvider.fetchDocument', () => {
       }),
     )
 
-    const doc = await new FigmaProvider().fetchDocument(TOKEN, 'KEY:1:2')
+    const doc = await new FigmaProvider().fetchDocument(TOKEN, 'KEY:1:2', 'ws_1')
     expect(doc.body).toContain('## Card')
     expect(doc.body).toContain('Hi')
     expect(doc.body).toContain('Rendered preview: https://figma-cdn.example/x.png')
@@ -90,7 +90,7 @@ describe('FigmaProvider.fetchDocument', () => {
       }),
     )
 
-    const doc = await new FigmaProvider().fetchDocument(TOKEN, 'KEY:1:2')
+    const doc = await new FigmaProvider().fetchDocument(TOKEN, 'KEY:1:2', 'ws_1')
     expect(doc.body).toContain('## Card')
     expect(doc.body).not.toContain('Design tokens')
   })
@@ -103,9 +103,9 @@ describe('FigmaProvider.fetchDocument', () => {
           new Response(null, { status: 302, headers: { location: 'https://169.254.169.254/' } }),
       ),
     )
-    await expect(new FigmaProvider().fetchDocument(TOKEN, 'KEY:1:2')).rejects.toBeInstanceOf(
-      FigmaApiError,
-    )
+    await expect(
+      new FigmaProvider().fetchDocument(TOKEN, 'KEY:1:2', 'ws_1'),
+    ).rejects.toBeInstanceOf(FigmaApiError)
   })
 })
 
@@ -122,7 +122,7 @@ describe('FigmaProvider.probeVersion', () => {
         throw new Error(`unexpected ${url}`)
       }),
     )
-    const version = await new FigmaProvider().probeVersion(TOKEN, 'KEY:1:2')
+    const version = await new FigmaProvider().probeVersion(TOKEN, 'KEY:1:2', 'ws_1')
     expect(version).toBe('file-v7')
     // A single metadata read — no node tree, variables or preview render.
     expect(seen).toHaveLength(1)
@@ -134,6 +134,8 @@ describe('FigmaProvider.probeVersion', () => {
       'fetch',
       vi.fn(async () => jsonResponse({ name: 'F', lastModified: '2026-07-04T00:00:00Z' })),
     )
-    expect(await new FigmaProvider().probeVersion(TOKEN, 'KEY')).toBe('2026-07-04T00:00:00Z')
+    expect(await new FigmaProvider().probeVersion(TOKEN, 'KEY', 'ws_1')).toBe(
+      '2026-07-04T00:00:00Z',
+    )
   })
 })

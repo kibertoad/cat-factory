@@ -70,16 +70,31 @@ export interface DocumentSourceProvider {
   resolveImplicitConnection?(workspaceId: string): Promise<NormalizedConnection | null>
   /** Resolve a stable page id from raw user input (a bare id or a page URL); null if unparseable. */
   parseRef(input: string): string | null
-  /** Fetch a single page by its id using the connection credentials. */
-  fetchDocument(credentials: DocumentCredentials, externalId: string): Promise<DocumentContent>
+  /**
+   * Fetch a single page by its id using the connection credentials. `workspaceId` is
+   * the workspace on whose behalf the read happens: a provider that authenticates
+   * per-workspace out-of-band (e.g. the GitHub App/PAT, which ignores `credentials`)
+   * MUST scope the read to that workspace's own installation so a crafted `externalId`
+   * can't reach another tenant's repo — the same tenant-scoping `search` performs.
+   */
+  fetchDocument(
+    credentials: DocumentCredentials,
+    externalId: string,
+    workspaceId: string,
+  ): Promise<DocumentContent>
   /**
    * Cheaply read the page's current version token — the {@link DocumentContent.version}
    * value {@link fetchDocument} would return, fetched with metadata only (no body
    * download or Markdown conversion). MUST be strictly cheaper than `fetchDocument`,
    * so the caching seam can bump a cached body's TTL when the token is unchanged
-   * instead of re-fetching. Returns `''` when the source exposes no version.
+   * instead of re-fetching. Returns `''` when the source exposes no version. Scoped to
+   * `workspaceId` for the same tenant-isolation reason as {@link fetchDocument}.
    */
-  probeVersion(credentials: DocumentCredentials, externalId: string): Promise<string>
+  probeVersion(
+    credentials: DocumentCredentials,
+    externalId: string,
+    workspaceId: string,
+  ): Promise<string>
   /**
    * Search the source's catalogue by free text and return lean hits (no body).
    * Optional: a provider that only supports paste-a-URL import omits it (and its

@@ -1401,6 +1401,17 @@ export function defineIntegrationConformance(harness: ConformanceHarness): void 
     })
 
     describe('document sources', () => {
+      // GitHub docs are an IMPLICIT connection: they ride the workspace's installed GitHub
+      // App/PAT, so a facade that carries an installation (local mode always does, via its
+      // GITHUB_PAT) surfaces `github` in every workspace's connection list with no stored
+      // row — while a facade with no installation (Node/Worker here) does not. These
+      // credentialed-source lifecycle assertions are orthogonal to that, so compare on the
+      // EXPLICITLY-connected (non-github) sources to stay correct on both kinds of facade.
+      // The implicit path itself is covered by the DocumentConnectionService /
+      // GitHubDocsProvider unit tests.
+      const explicit = (connections: { source: string }[]) =>
+        connections.map((c) => c.source).filter((s) => s !== 'github')
+
       it('connects, lists (secret-free), and disconnects a document source', async () => {
         const { call, createWorkspace } = harness.makeApp()
         const { workspace } = await createWorkspace()
@@ -1413,7 +1424,7 @@ export function defineIntegrationConformance(harness: ConformanceHarness): void 
           `${base}/connections`,
         )
         expect(initial.status).toBe(200)
-        expect(initial.body.connections).toEqual([])
+        expect(explicit(initial.body.connections)).toEqual([])
 
         // Connect Notion (a single internal-integration token; normalizeConnection is
         // pure, so no network). The credential is encrypted at rest and never echoed.
@@ -1431,14 +1442,17 @@ export function defineIntegrationConformance(harness: ConformanceHarness): void 
           'GET',
           `${base}/connections`,
         )
-        expect(listed.body.connections.map((c) => c.source)).toEqual(['notion'])
+        expect(explicit(listed.body.connections)).toEqual(['notion'])
         expect(JSON.stringify(listed.body)).not.toContain('secret-notion-token')
 
         // Disconnect tombstones it; the list goes empty again.
         const del = await call('DELETE', `${base}/notion/connection`)
         expect(del.status).toBe(204)
-        const afterDelete = await call<{ connections: unknown[] }>('GET', `${base}/connections`)
-        expect(afterDelete.body.connections).toEqual([])
+        const afterDelete = await call<{ connections: { source: string }[] }>(
+          'GET',
+          `${base}/connections`,
+        )
+        expect(explicit(afterDelete.body.connections)).toEqual([])
       })
 
       it('connects, lists (secret-free), and disconnects Figma (per-workspace PAT)', async () => {
@@ -1461,13 +1475,16 @@ export function defineIntegrationConformance(harness: ConformanceHarness): void 
           'GET',
           `${base}/connections`,
         )
-        expect(listed.body.connections.map((c) => c.source)).toEqual(['figma'])
+        expect(explicit(listed.body.connections)).toEqual(['figma'])
         expect(JSON.stringify(listed.body)).not.toContain('secret-figma-token')
 
         const del = await call('DELETE', `${base}/figma/connection`)
         expect(del.status).toBe(204)
-        const afterDelete = await call<{ connections: unknown[] }>('GET', `${base}/connections`)
-        expect(afterDelete.body.connections).toEqual([])
+        const afterDelete = await call<{ connections: { source: string }[] }>(
+          'GET',
+          `${base}/connections`,
+        )
+        expect(explicit(afterDelete.body.connections)).toEqual([])
       })
 
       it('wires Linear as a document source on every facade (connect, list, disconnect)', async () => {
@@ -1489,13 +1506,16 @@ export function defineIntegrationConformance(harness: ConformanceHarness): void 
           'GET',
           `${base}/connections`,
         )
-        expect(listed.body.connections.map((c) => c.source)).toEqual(['linear'])
+        expect(explicit(listed.body.connections)).toEqual(['linear'])
         expect(JSON.stringify(listed.body)).not.toContain('lin_api_secret_key_123')
 
         const del = await call('DELETE', `${base}/linear/connection`)
         expect(del.status).toBe(204)
-        const afterDelete = await call<{ connections: unknown[] }>('GET', `${base}/connections`)
-        expect(afterDelete.body.connections).toEqual([])
+        const afterDelete = await call<{ connections: { source: string }[] }>(
+          'GET',
+          `${base}/connections`,
+        )
+        expect(explicit(afterDelete.body.connections)).toEqual([])
       })
 
       it('connects, lists (secret-free), and disconnects Zeplin (per-workspace PAT)', async () => {
@@ -1519,13 +1539,16 @@ export function defineIntegrationConformance(harness: ConformanceHarness): void 
           'GET',
           `${base}/connections`,
         )
-        expect(listed.body.connections.map((c) => c.source)).toEqual(['zeplin'])
+        expect(explicit(listed.body.connections)).toEqual(['zeplin'])
         expect(JSON.stringify(listed.body)).not.toContain('secret-zeplin-token')
 
         const del = await call('DELETE', `${base}/zeplin/connection`)
         expect(del.status).toBe(204)
-        const afterDelete = await call<{ connections: unknown[] }>('GET', `${base}/connections`)
-        expect(afterDelete.body.connections).toEqual([])
+        const afterDelete = await call<{ connections: { source: string }[] }>(
+          'GET',
+          `${base}/connections`,
+        )
+        expect(explicit(afterDelete.body.connections)).toEqual([])
       })
 
       it('persists workspace+DocKind template (singular) and exemplar (multi) role links', async () => {

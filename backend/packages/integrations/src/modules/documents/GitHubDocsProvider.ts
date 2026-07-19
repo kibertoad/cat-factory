@@ -63,12 +63,13 @@ export class GitHubDocsProvider implements DocumentSourceProvider {
   async fetchDocument(
     _credentials: DocumentCredentials,
     externalId: string,
+    workspaceId: string,
   ): Promise<DocumentContent> {
     const id = githubDocsLogic.parseGitHubDocExternalId(externalId)
     if (!id) {
       throw new ValidationError(`"${externalId}" is not a valid GitHub doc reference`)
     }
-    const installationId = await this.resolveInstallationId(id.owner)
+    const installationId = await this.resolveInstallationId(workspaceId, id.owner)
     const ref = { owner: id.owner, repo: id.repo }
     // Read the file's head commit sha FIRST (the version token), then read the body
     // pinned to that exact sha, so the (body, version) pair is consistent: two unpinned
@@ -103,12 +104,16 @@ export class GitHubDocsProvider implements DocumentSourceProvider {
    * commit-list read, no file body. Any commit to the file advances it, so an
    * unchanged sha means the doc body is still current.
    */
-  async probeVersion(_credentials: DocumentCredentials, externalId: string): Promise<string> {
+  async probeVersion(
+    _credentials: DocumentCredentials,
+    externalId: string,
+    workspaceId: string,
+  ): Promise<string> {
     const id = githubDocsLogic.parseGitHubDocExternalId(externalId)
     if (!id) {
       throw new ValidationError(`"${externalId}" is not a valid GitHub doc reference`)
     }
-    const installationId = await this.resolveInstallationId(id.owner)
+    const installationId = await this.resolveInstallationId(workspaceId, id.owner)
     const commitSha = await this.deps.githubClient.latestCommitSha(
       installationId,
       { owner: id.owner, repo: id.repo },
@@ -158,18 +163,26 @@ export class GitHubDocsProvider implements DocumentSourceProvider {
   }
 
   /**
-   * Find the GitHub App installation whose account owns `owner`. The
-   * installation token for that account is what can read the repo's contents,
-   * regardless of which workspace triggered the import.
+   * Resolve the installation to read `owner`'s repo with, scoped to THIS workspace.
+   * A workspace owns exactly one installation, and every repo it can reach lives
+   * under that installation's account — so the doc's `owner` must match the
+   * workspace's own installation account. Resolving via `getByWorkspace` (not a
+   * deployment-wide `listActive` scan by owner) is what stops a crafted `externalId`
+   * from reaching another tenant's repo through some other workspace's installation
+   * token — the same tenant-isolation `search` already enforces.
    */
-  private async resolveInstallationId(owner: string): Promise<number> {
-    const active = await this.deps.installations.listActive()
-    const match = active.find((i) => i.accountLogin.toLowerCase() === owner.toLowerCase())
-    if (!match) {
+  private async resolveInstallationId(workspaceId: string, owner: string): Promise<number> {
+    const installation = await this.deps.installations.getByWorkspace(workspaceId)
+    if (!installation) {
       throw new ConflictError(
-        `No GitHub App installation found for "${owner}". Install the GitHub App on that account to link its docs.`,
+        `Workspace '${workspaceId}' has no GitHub installation. Install the GitHub App (or set a PAT in local mode) to link its docs.`,
       )
     }
-    return match.installationId
+    if (installation.accountLogin.toLowerCase() !== owner.toLowerCase()) {
+      throw new ConflictError(
+        `GitHub doc "${owner}" is outside this workspace's installation (${installation.accountLogin}).`,
+      )
+    }
+    return installation.installationId
   }
 }
