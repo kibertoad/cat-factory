@@ -1,5 +1,16 @@
 # @cat-factory/local-server
 
+## 0.69.16
+
+### Patch Changes
+
+- Updated dependencies [ea64461]
+  - @cat-factory/agents@0.63.0
+  - @cat-factory/server@0.137.6
+  - @cat-factory/orchestration@0.123.7
+  - @cat-factory/node-server@0.106.7
+  - @cat-factory/executor-harness@1.48.1
+
 ## 0.69.15
 
 ### Patch Changes
