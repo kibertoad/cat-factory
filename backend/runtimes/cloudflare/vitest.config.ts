@@ -1,3 +1,4 @@
+import { createRequire } from 'node:module'
 import { cloudflareTest, readD1Migrations } from '@cloudflare/vitest-pool-workers'
 import { defineConfig } from 'vitest/config'
 
@@ -100,6 +101,30 @@ export default defineConfig(async () => {
       // enough to absorb CI variance without letting a real stall sit for long.
       testTimeout: 10_000,
       hookTimeout: 10_000,
+    },
+    resolve: {
+      // Pin `toad-cache` to its CommonJS build inside the Workers test pool.
+      //
+      // `toad-cache` is dual-published (`"type": "module"` with `require` →
+      // `.cjs`, `import` → `.mjs`), and `layered-loader` (our AppCaches backend)
+      // consumes it from compiled CJS via `require("toad-cache")`. The
+      // `@cloudflare/vitest-pool-workers` module-fallback resolves a `require()`
+      // by asking Vite for the `require` export condition (it threads
+      // `custom["node-resolve"].isRequire` into `resolveId`), then shims the CJS
+      // module's named exports via `cjs-module-lexer`. Under Vite 8 that
+      // `isRequire` hint is no longer honoured for a dual package, so the pool
+      // resolves `toad-cache` to its ESM `.mjs`; `cjs-module-lexer` can't parse
+      // ESM, the shim produces no exports, and `require("toad-cache")` comes back
+      // `undefined` — so every `new InMemoryGroupCache()` throws
+      // `Cannot read properties of undefined (reading 'LruObject')` and the whole
+      // request path 500s (this is what reddened the worker suite on the Nuxt 4.5
+      // / Vite 7→8 bump). Aliasing straight to the resolved `.cjs` file bypasses
+      // the exports-condition ambiguity and restores the Vite-7 behaviour. This
+      // is test-pool-only (the production Worker bundle is built by wrangler/
+      // esbuild, unaffected); drop it once the pool honours `isRequire` on Vite 8.
+      alias: {
+        'toad-cache': createRequire(import.meta.url).resolve('toad-cache'),
+      },
     },
   }
 })
