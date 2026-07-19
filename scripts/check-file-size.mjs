@@ -37,8 +37,13 @@ const DEFAULT_MAX_LINES = 1500
  * without a deliberate, reviewed reason.
  */
 const LEGACY_ALLOWANCES = new Map([
-  // Test infrastructure, but a maintenance load of its own (review §4).
-  ['backend/internal/conformance/src/suite.ts', 11200],
+  // The cross-runtime conformance suite (review §4), split from one 11.2k-line `suite.ts`
+  // into per-group modules under `suites/`. `suite.ts` is now a thin aggregator; each group
+  // is ratcheted at its post-split size and keeps ratcheting DOWN as groups sub-split.
+  ['backend/internal/conformance/src/suites/execution.ts', 3150],
+  ['backend/internal/conformance/src/suites/integration.ts', 2800],
+  ['backend/internal/conformance/src/suites/core.ts', 2500],
+  ['backend/internal/conformance/src/suites/agents.ts', 1800],
   // The engine files the 2026-07 review names (post-split sizes; keep ratcheting DOWN).
   ['backend/packages/orchestration/src/modules/execution/RunDispatcher.ts', 3150],
   ['backend/packages/orchestration/src/modules/execution/ExecutionService.ts', 2800],
