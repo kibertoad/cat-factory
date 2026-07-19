@@ -79,3 +79,51 @@ test.describe('result-window shell (merger)', () => {
     await expect(dialog).toBeHidden()
   })
 })
+
+// A SECOND converted window — the CI `gate` (docs/initiatives/modular-vue-slice5-progress.md,
+// window #4) — through the same shared shell, so the coverage isn't pilot-only. Unlike the
+// merger, the gate contributes a status badge to the shell's `#header-extras` slot and passes
+// `manageEscape: false`, so this proves both the extras slot and the Escape handoff generalise
+// to a non-pilot window. Drive a real ci-fixer loop to a finished, green gate (as `ci-gate.spec`
+// does), then open its window from the run's step list and close it on Escape.
+test.describe('result-window shell (gate)', () => {
+  test.slow()
+
+  test('opens the ci gate window in the shared shell with its header-extras badge; closes on Escape', async ({
+    page,
+    request,
+    seededBoard,
+  }) => {
+    const { workspaceId } = seededBoard
+    await setFakeProfile(request, workspaceId, {
+      decisionOnSteps: [],
+      asyncKinds: ['coder', 'ci-fixer'],
+      pooledContainer: true,
+      ciStatus: [false, true],
+      pullRequest: { url: 'https://github.com/o/r/pull/1', number: 1, branch: 'feat/login' },
+    })
+    const pipeline = await createSimplePipeline(request, workspaceId, ['coder', 'ci'])
+
+    const card = taskCard(page, 'task_login')
+    await startRun(request, workspaceId, 'task_login', pipeline.id)
+
+    // The gate probes red → runs the fixer → re-probes green → the ci step reaches `done` live.
+    await expect(card).toHaveAttribute('data-status', 'pr_ready', { timeout: RUN_TERMINAL_TIMEOUT })
+
+    // Open the run's step list (the focus view) and route to the finished ci gate's window.
+    await card.click()
+    const ciStep = page.locator('[data-testid="pipeline-step"][data-step-kind="ci"]')
+    await expect(ciStep).toBeVisible({ timeout: LIVE_TIMEOUT })
+
+    const dialog = page.getByTestId('result-window')
+    await ciStep.click()
+    await expect(dialog).toBeVisible()
+    // The gate contributes its status badge to the shell's `#header-extras` slot.
+    await expect(dialog.getByTestId('gate-status')).toBeVisible()
+
+    // Escape is owned by the shell's `useModalBehavior`, not a per-window listener — the
+    // `manageEscape: false` handoff the conversion relies on.
+    await page.keyboard.press('Escape')
+    await expect(dialog).toBeHidden()
+  })
+})

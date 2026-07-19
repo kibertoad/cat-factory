@@ -8,7 +8,7 @@
 import { computed, ref } from 'vue'
 import { agentKindMeta } from '~/utils/catalog'
 import type { GateAttempt, GateStepState } from '~/types/execution'
-import StepRestartControl from '~/components/panels/StepRestartControl.vue'
+import ResultWindowShell from '~/components/panels/ResultWindowShell.vue'
 import StepRunMeta from '~/components/panels/StepRunMeta.vue'
 import AttemptEntryHeader from '~/components/panels/AttemptEntryHeader.vue'
 import GateFailingCheckList from '~/components/gates/GateFailingCheckList.vue'
@@ -20,10 +20,16 @@ const { t } = useI18n()
 const access = useWorkspaceAccess()
 
 // Synchronous window: it reads its state straight off the execution step, so there's
-// nothing to fetch on open (no `onOpen` loader).
-const { open, blockId, instanceId, stepIndex, close } = useResultView('gate')
+// nothing to fetch on open (no `onOpen` loader). `manageEscape: false` — `ResultWindowShell`
+// owns Escape (and focus trap + scroll lock + stacking).
+const { open, blockId, instanceId, stepIndex, close } = useResultView('gate', {
+  manageEscape: false,
+})
 const block = computed(() => (blockId.value ? board.getBlock(blockId.value) : undefined))
 const prUrl = computed(() => block.value?.pullRequest?.url ?? null)
+const headerTitle = computed(
+  () => `${meta.value.label}${block.value ? ` — ${block.value.title}` : ''}`,
+)
 
 const instance = computed(() =>
   instanceId.value === null ? null : (execution.getInstance(instanceId.value) ?? null),
@@ -171,363 +177,333 @@ const conflictVerdict = computed(() => {
 </script>
 
 <template>
-  <Teleport to="body">
-    <div
-      v-if="open"
-      class="fixed inset-0 z-50 flex max-h-[100dvh] items-stretch justify-center bg-slate-950/70 backdrop-blur-sm"
-      @click.self="close"
-    >
-      <div
-        class="m-4 flex w-full max-w-3xl flex-col overflow-hidden rounded-2xl border border-slate-800 bg-slate-900 shadow-2xl"
-        role="dialog"
-        aria-modal="true"
+  <ResultWindowShell
+    :open="open"
+    :icon="meta.icon"
+    icon-class="bg-sky-500/15 text-sky-300"
+    :title="headerTitle"
+    :subtitle="subtitle"
+    :step-ref="{ instanceId, stepIndex }"
+    width="3xl"
+    @close="close"
+  >
+    <template #header-extras>
+      <UBadge
+        :color="STATUS_META[status].badge"
+        variant="subtle"
+        size="sm"
+        data-testid="gate-status"
       >
-        <!-- Header -->
-        <header class="flex items-center gap-3 border-b border-slate-800 px-5 py-3">
-          <span
-            class="flex h-8 w-8 items-center justify-center rounded-lg bg-sky-500/15 text-sky-300"
-          >
-            <UIcon :name="meta.icon" class="h-4 w-4" />
-          </span>
-          <div class="min-w-0 flex-1">
-            <h2 class="truncate text-sm font-semibold text-slate-100">
-              {{ meta.label }}{{ block ? ` — ${block.title}` : '' }}
-            </h2>
-            <p class="truncate text-[11px] text-slate-400">{{ subtitle }}</p>
-          </div>
-          <UBadge :color="STATUS_META[status].badge" variant="subtle" size="sm">
-            {{ STATUS_META[status].label }}
-          </UBadge>
-          <StepRestartControl
-            :instance-id="instanceId"
-            :step-index="stepIndex"
-            @restarted="close"
-          />
-          <button
-            class="rounded-md p-1.5 text-slate-400 hover:bg-slate-800 hover:text-slate-200"
-            @click="close"
-          >
-            <UIcon name="i-lucide-x" class="h-4 w-4" />
-          </button>
-        </header>
+        {{ STATUS_META[status].label }}
+      </UBadge>
+    </template>
 
-        <div class="flex min-h-0 flex-1">
-          <!-- Main: the conclusion -->
-          <div class="min-w-0 flex-1 overflow-y-auto px-5 py-4">
+    <div class="flex min-h-0 flex-1">
+      <!-- Main: the conclusion -->
+      <div class="min-w-0 flex-1 overflow-y-auto px-5 py-4">
+        <div
+          v-if="!gate"
+          class="flex h-full flex-col items-center justify-center gap-2 text-center text-slate-400"
+        >
+          <UIcon :name="meta.icon" class="h-8 w-8 opacity-40" />
+          <p class="text-sm">{{ t('gates.noActivity') }}</p>
+          <p class="max-w-sm text-[11px] text-slate-500">
+            {{ t('gates.noActivityHint') }}
+          </p>
+        </div>
+
+        <template v-else>
+          <!-- Passed -->
+          <div
+            v-if="status === 'passed'"
+            class="flex items-start gap-2 rounded-lg border border-emerald-500/30 bg-emerald-500/10 px-3 py-2.5"
+          >
+            <UIcon name="i-lucide-circle-check" class="mt-0.5 h-4 w-4 shrink-0 text-emerald-400" />
+            <p class="text-[13px] leading-relaxed text-emerald-200">
+              {{ step?.output || (isCi ? t('gates.passedCi') : t('gates.passedConflicts')) }}
+            </p>
+          </div>
+
+          <!-- Human review: approval progress, the feedback being fixed, freeform fix box -->
+          <template v-else-if="isHumanReview">
             <div
-              v-if="!gate"
-              class="flex h-full flex-col items-center justify-center gap-2 text-center text-slate-400"
+              class="flex items-center gap-2 rounded-md border border-slate-800 bg-slate-950/40 px-3 py-2"
             >
-              <UIcon :name="meta.icon" class="h-8 w-8 opacity-40" />
-              <p class="text-sm">{{ t('gates.noActivity') }}</p>
-              <p class="max-w-sm text-[11px] text-slate-500">
-                {{ t('gates.noActivityHint') }}
+              <UIcon name="i-lucide-users" class="h-4 w-4 shrink-0 text-violet-300" />
+              <span class="text-[13px] text-slate-200">
+                {{
+                  t(
+                    'gates.humanReview.approvals',
+                    { approved: gate.lastApprovals ?? 0, required: requiredApprovals },
+                    requiredApprovals,
+                  )
+                }}
+                <template v-if="status === 'fixing'">
+                  {{ t('gates.humanReview.suffixFixing') }}</template
+                >
+                <template v-else-if="status === 'failing'">
+                  {{ t('gates.humanReview.suffixFailing') }}</template
+                >
+                <template v-else> {{ t('gates.humanReview.suffixAwaiting') }}</template>
+              </span>
+            </div>
+            <div
+              v-if="gate.lastFailureSummary"
+              class="relative mt-2 rounded-md border border-slate-800 bg-slate-950/40 px-3 py-2"
+            >
+              <CopyButton :text="gate.lastFailureSummary" class="absolute end-1 top-1" />
+              <p class="whitespace-pre-wrap pe-8 text-[12px] leading-relaxed text-slate-300">
+                {{ gate.lastFailureSummary }}
               </p>
             </div>
+            <a
+              v-if="prUrl"
+              :href="prUrl"
+              target="_blank"
+              rel="noopener"
+              class="mt-2 inline-flex items-center gap-1 text-[12px] text-sky-300 hover:text-sky-200 hover:underline"
+            >
+              {{ t('gates.humanReview.reviewPr') }}
+              <UIcon name="i-lucide-external-link" class="h-3 w-3" />
+            </a>
 
-            <template v-else>
-              <!-- Passed -->
-              <div
-                v-if="status === 'passed'"
-                class="flex items-start gap-2 rounded-lg border border-emerald-500/30 bg-emerald-500/10 px-3 py-2.5"
-              >
-                <UIcon
-                  name="i-lucide-circle-check"
-                  class="mt-0.5 h-4 w-4 shrink-0 text-emerald-400"
-                />
-                <p class="text-[13px] leading-relaxed text-emerald-200">
-                  {{ step?.output || (isCi ? t('gates.passedCi') : t('gates.passedConflicts')) }}
-                </p>
+            <!-- Freeform fix request: dispatch the fixer now with these instructions. -->
+            <section v-if="status !== 'gave-up'" class="mt-4">
+              <h3 class="mb-1.5 text-[11px] font-semibold uppercase tracking-wide text-slate-500">
+                {{ t('gates.humanReview.requestFixHeading') }}
+              </h3>
+              <p class="mb-2 text-[11px] leading-relaxed text-slate-500">
+                {{ t('gates.humanReview.requestFixDescription') }}
+              </p>
+              <textarea
+                v-model="fixInstructions"
+                rows="3"
+                :disabled="fixBusy"
+                :placeholder="t('gates.humanReview.requestFixPlaceholder')"
+                class="w-full resize-y rounded-md border border-slate-800 bg-slate-950/60 px-3 py-2 text-[13px] text-slate-200 placeholder:text-slate-600 focus:border-violet-500/60 focus:outline-none focus-visible:ring-2 focus-visible:ring-violet-500/60"
+              />
+              <div class="mt-2 flex justify-end">
+                <UButton
+                  size="sm"
+                  color="primary"
+                  icon="i-lucide-wrench"
+                  :loading="fixBusy"
+                  :disabled="
+                    fixBusy || fixInstructions.trim().length === 0 || !access.canExecuteRuns.value
+                  "
+                  :title="access.canExecuteRuns.value ? undefined : t('access.noRunExecute')"
+                  @click="submitFix"
+                >
+                  {{ t('gates.humanReview.requestFix') }}
+                </UButton>
               </div>
+            </section>
+          </template>
 
-              <!-- Human review: approval progress, the feedback being fixed, freeform fix box -->
-              <template v-else-if="isHumanReview">
-                <div
-                  class="flex items-center gap-2 rounded-md border border-slate-800 bg-slate-950/40 px-3 py-2"
-                >
-                  <UIcon name="i-lucide-users" class="h-4 w-4 shrink-0 text-violet-300" />
-                  <span class="text-[13px] text-slate-200">
-                    {{
-                      t(
-                        'gates.humanReview.approvals',
-                        { approved: gate.lastApprovals ?? 0, required: requiredApprovals },
-                        requiredApprovals,
-                      )
-                    }}
-                    <template v-if="status === 'fixing'">
-                      {{ t('gates.humanReview.suffixFixing') }}</template
-                    >
-                    <template v-else-if="status === 'failing'">
-                      {{ t('gates.humanReview.suffixFailing') }}</template
-                    >
-                    <template v-else> {{ t('gates.humanReview.suffixAwaiting') }}</template>
-                  </span>
-                </div>
-                <div
-                  v-if="gate.lastFailureSummary"
-                  class="relative mt-2 rounded-md border border-slate-800 bg-slate-950/40 px-3 py-2"
-                >
-                  <CopyButton :text="gate.lastFailureSummary" class="absolute end-1 top-1" />
-                  <p class="whitespace-pre-wrap pe-8 text-[12px] leading-relaxed text-slate-300">
-                    {{ gate.lastFailureSummary }}
-                  </p>
-                </div>
-                <a
-                  v-if="prUrl"
-                  :href="prUrl"
-                  target="_blank"
-                  rel="noopener"
-                  class="mt-2 inline-flex items-center gap-1 text-[12px] text-sky-300 hover:text-sky-200 hover:underline"
-                >
-                  {{ t('gates.humanReview.reviewPr') }}
-                  <UIcon name="i-lucide-external-link" class="h-3 w-3" />
-                </a>
+          <!-- CI: failing checks -->
+          <template v-else-if="isCi">
+            <h3 class="mb-2 text-[11px] font-semibold uppercase tracking-wide text-slate-500">
+              {{ t('gates.ci.failingChecks') }}
+            </h3>
+            <GateFailingCheckList v-if="failingChecks.length" :checks="failingChecks" />
+            <p v-else class="text-[13px] leading-relaxed text-slate-300">
+              {{ gate.lastFailureSummary || t('gates.ci.failureFallback') }}
+            </p>
+          </template>
 
-                <!-- Freeform fix request: dispatch the fixer now with these instructions. -->
-                <section v-if="status !== 'gave-up'" class="mt-4">
-                  <h3
-                    class="mb-1.5 text-[11px] font-semibold uppercase tracking-wide text-slate-500"
-                  >
-                    {{ t('gates.humanReview.requestFixHeading') }}
-                  </h3>
-                  <p class="mb-2 text-[11px] leading-relaxed text-slate-500">
-                    {{ t('gates.humanReview.requestFixDescription') }}
-                  </p>
-                  <textarea
-                    v-model="fixInstructions"
-                    rows="3"
-                    :disabled="fixBusy"
-                    :placeholder="t('gates.humanReview.requestFixPlaceholder')"
-                    class="w-full resize-y rounded-md border border-slate-800 bg-slate-950/60 px-3 py-2 text-[13px] text-slate-200 placeholder:text-slate-600 focus:border-violet-500/60 focus:outline-none focus-visible:ring-2 focus-visible:ring-violet-500/60"
-                  />
-                  <div class="mt-2 flex justify-end">
-                    <UButton
-                      size="sm"
-                      color="primary"
-                      icon="i-lucide-wrench"
-                      :loading="fixBusy"
-                      :disabled="
-                        fixBusy ||
-                        fixInstructions.trim().length === 0 ||
-                        !access.canExecuteRuns.value
-                      "
-                      :title="access.canExecuteRuns.value ? undefined : t('access.noRunExecute')"
-                      @click="submitFix"
-                    >
-                      {{ t('gates.humanReview.requestFix') }}
-                    </UButton>
-                  </div>
-                </section>
-              </template>
+          <!-- Doc quality: the deterministic structural findings the gate raised -->
+          <template v-else-if="isDocQuality">
+            <h3 class="mb-2 text-[11px] font-semibold uppercase tracking-wide text-slate-500">
+              {{ t('gates.docQuality.findings') }}
+            </h3>
+            <div
+              v-if="gate.lastFailureSummary"
+              class="relative rounded-md border border-slate-800 bg-slate-950/40 px-3 py-2"
+            >
+              <CopyButton :text="gate.lastFailureSummary" class="absolute end-1 top-1" />
+              <p class="whitespace-pre-wrap pe-8 text-[12px] leading-relaxed text-slate-300">
+                {{ gate.lastFailureSummary }}
+              </p>
+            </div>
+            <p v-else class="text-[13px] leading-relaxed text-slate-300">
+              {{ t('gates.docQuality.findingsFallback') }}
+            </p>
+            <a
+              v-if="prUrl"
+              :href="prUrl"
+              target="_blank"
+              rel="noopener"
+              class="mt-2 inline-flex items-center gap-1 text-[12px] text-sky-300 hover:text-sky-200 hover:underline"
+            >
+              {{ t('gates.docQuality.viewPr') }}
+              <UIcon name="i-lucide-external-link" class="h-3 w-3" />
+            </a>
+          </template>
 
-              <!-- CI: failing checks -->
-              <template v-else-if="isCi">
-                <h3 class="mb-2 text-[11px] font-semibold uppercase tracking-wide text-slate-500">
-                  {{ t('gates.ci.failingChecks') }}
-                </h3>
-                <GateFailingCheckList v-if="failingChecks.length" :checks="failingChecks" />
-                <p v-else class="text-[13px] leading-relaxed text-slate-300">
-                  {{ gate.lastFailureSummary || t('gates.ci.failureFallback') }}
-                </p>
-              </template>
-
-              <!-- Doc quality: the deterministic structural findings the gate raised -->
-              <template v-else-if="isDocQuality">
-                <h3 class="mb-2 text-[11px] font-semibold uppercase tracking-wide text-slate-500">
-                  {{ t('gates.docQuality.findings') }}
-                </h3>
-                <div
-                  v-if="gate.lastFailureSummary"
-                  class="relative rounded-md border border-slate-800 bg-slate-950/40 px-3 py-2"
-                >
-                  <CopyButton :text="gate.lastFailureSummary" class="absolute end-1 top-1" />
-                  <p class="whitespace-pre-wrap pe-8 text-[12px] leading-relaxed text-slate-300">
-                    {{ gate.lastFailureSummary }}
-                  </p>
-                </div>
-                <p v-else class="text-[13px] leading-relaxed text-slate-300">
-                  {{ t('gates.docQuality.findingsFallback') }}
-                </p>
-                <a
-                  v-if="prUrl"
-                  :href="prUrl"
-                  target="_blank"
-                  rel="noopener"
-                  class="mt-2 inline-flex items-center gap-1 text-[12px] text-sky-300 hover:text-sky-200 hover:underline"
-                >
-                  {{ t('gates.docQuality.viewPr') }}
-                  <UIcon name="i-lucide-external-link" class="h-3 w-3" />
-                </a>
-              </template>
-
-              <!-- Conflicts: verdict + the resolver's account of what it left -->
-              <template v-else>
-                <h3 class="mb-2 text-[11px] font-semibold uppercase tracking-wide text-slate-500">
-                  {{ t('gates.conflicts.mergeability') }}
-                </h3>
-                <div
-                  class="flex items-center gap-2 rounded-md border border-slate-800 bg-slate-950/40 px-3 py-2"
-                >
-                  <UIcon
-                    :name="STATUS_META[status].icon"
-                    class="h-4 w-4 shrink-0"
-                    :class="STATUS_META[status].text"
-                  />
-                  <span class="text-[13px] text-slate-200">{{ conflictVerdict }}</span>
-                </div>
-                <!-- GitHub's API reports mergeability as a single bit (no file list), but the
+          <!-- Conflicts: verdict + the resolver's account of what it left -->
+          <template v-else>
+            <h3 class="mb-2 text-[11px] font-semibold uppercase tracking-wide text-slate-500">
+              {{ t('gates.conflicts.mergeability') }}
+            </h3>
+            <div
+              class="flex items-center gap-2 rounded-md border border-slate-800 bg-slate-950/40 px-3 py-2"
+            >
+              <UIcon
+                :name="STATUS_META[status].icon"
+                class="h-4 w-4 shrink-0"
+                :class="STATUS_META[status].text"
+              />
+              <span class="text-[13px] text-slate-200">{{ conflictVerdict }}</span>
+            </div>
+            <!-- GitHub's API reports mergeability as a single bit (no file list), but the
                      conflict resolver discovers the conflicting files in the container and
                      reports them back — surface that account here. -->
-                <div
-                  v-if="gate.lastFailureSummary"
-                  class="relative mt-2 rounded-md border border-slate-800 bg-slate-950/40 px-3 py-2"
-                >
-                  <CopyButton :text="gate.lastFailureSummary" class="absolute end-1 top-1" />
-                  <p class="whitespace-pre-wrap pe-8 text-[12px] leading-relaxed text-slate-300">
-                    {{ gate.lastFailureSummary }}
-                  </p>
-                </div>
-                <a
-                  v-if="prUrl"
-                  :href="prUrl"
-                  target="_blank"
-                  rel="noopener"
-                  class="mt-2 inline-flex items-center gap-1 text-[12px] text-sky-300 hover:text-sky-200 hover:underline"
-                >
-                  {{ t('gates.conflicts.viewPr') }}
-                  <UIcon name="i-lucide-external-link" class="h-3 w-3" />
-                </a>
-              </template>
-
-              <!-- Attempt history (both gates): what each helper run did and how it ended. -->
-              <section v-if="attempts.length" class="mt-5">
-                <h3 class="mb-2 text-[11px] font-semibold uppercase tracking-wide text-slate-500">
-                  {{ t('gates.attemptsHeading', { helper: helperMeta.label }) }}
-                </h3>
-                <ol class="space-y-2">
-                  <li
-                    v-for="a in attempts"
-                    :key="a.attempt"
-                    class="rounded-md border border-slate-800 bg-slate-950/40 px-3 py-2"
-                  >
-                    <AttemptEntryHeader
-                      :label="t('gates.attempt', { number: a.attempt })"
-                      :outcome="a.outcome"
-                      :outcome-label="OUTCOME_LABELS[a.outcome]"
-                      :at="a.at"
-                      date-format="long"
-                    />
-                    <!-- What this round was asked to fix: the instructions the gate handed the
-                         helper (the failing-check summary / conflict reason / review comments),
-                         plus the structured red checks for the CI gate. -->
-                    <div
-                      v-if="a.instructions || (a.failingChecks && a.failingChecks.length)"
-                      class="mt-1.5"
-                    >
-                      <p class="text-[11px] text-slate-500">
-                        {{ t('gates.attemptInstructions', { helper: helperMeta.label }) }}
-                      </p>
-                      <GateFailingCheckList
-                        v-if="a.failingChecks && a.failingChecks.length"
-                        class="mt-1"
-                        :checks="a.failingChecks"
-                        dense
-                      />
-                      <p
-                        v-else-if="a.instructions"
-                        class="mt-1 whitespace-pre-wrap text-[12px] leading-relaxed text-slate-300"
-                      >
-                        {{ a.instructions }}
-                      </p>
-                    </div>
-                    <!-- The helper's own report of what it did / what remains. -->
-                    <template v-if="a.summary">
-                      <p class="mt-1.5 text-[11px] text-slate-500">
-                        {{ t('gates.attemptReport', { helper: helperMeta.label }) }}
-                      </p>
-                      <p
-                        class="mt-1 whitespace-pre-wrap text-[12px] leading-relaxed text-slate-400"
-                      >
-                        {{ a.summary }}
-                      </p>
-                    </template>
-                  </li>
-                </ol>
-              </section>
-            </template>
-          </div>
-
-          <!-- Sidebar: gate state -->
-          <aside
-            class="hidden w-60 shrink-0 flex-col gap-4 border-s border-slate-800 bg-slate-900/50 px-4 py-4 lg:flex"
-          >
-            <div v-if="gate">
-              <h4 class="mb-2 text-[11px] font-semibold uppercase tracking-wide text-slate-500">
-                {{ t('gates.sidebar.state') }}
-              </h4>
-              <div class="flex items-center gap-2 text-[13px]">
-                <UIcon
-                  :name="STATUS_META[status].icon"
-                  class="h-4 w-4"
-                  :class="STATUS_META[status].text"
-                />
-                <span :class="STATUS_META[status].text">{{ STATUS_META[status].label }}</span>
-              </div>
-            </div>
-
-            <div v-if="gate">
-              <h4 class="mb-1 text-[11px] font-semibold uppercase tracking-wide text-slate-500">
-                {{ helperMeta.label }}
-              </h4>
-              <p class="text-[12px] text-slate-300">
-                <!-- The human-review gate's budget is effectively unbounded (it waits for a human
-                     indefinitely), so render a plain round count rather than "0/9007199254740991". -->
-                <template v-if="isHumanReview">
-                  {{ t('gates.sidebar.fixRounds', { count: gate.attempts }, gate.attempts) }}
-                </template>
-                <template v-else>
-                  {{
-                    t(
-                      'gates.sidebar.attempts',
-                      { attempts: gate.attempts, max: gate.maxAttempts },
-                      gate.maxAttempts,
-                    )
-                  }}
-                </template>
-                <template v-if="gate.phase === 'working'">
-                  {{ t('gates.sidebar.suffixRunning') }}</template
-                >
-                <template v-else-if="gate.attempts === 0">
-                  {{ t('gates.sidebar.suffixNotNeeded') }}</template
-                >
+            <div
+              v-if="gate.lastFailureSummary"
+              class="relative mt-2 rounded-md border border-slate-800 bg-slate-950/40 px-3 py-2"
+            >
+              <CopyButton :text="gate.lastFailureSummary" class="absolute end-1 top-1" />
+              <p class="whitespace-pre-wrap pe-8 text-[12px] leading-relaxed text-slate-300">
+                {{ gate.lastFailureSummary }}
               </p>
             </div>
+            <a
+              v-if="prUrl"
+              :href="prUrl"
+              target="_blank"
+              rel="noopener"
+              class="mt-2 inline-flex items-center gap-1 text-[12px] text-sky-300 hover:text-sky-200 hover:underline"
+            >
+              {{ t('gates.conflicts.viewPr') }}
+              <UIcon name="i-lucide-external-link" class="h-3 w-3" />
+            </a>
+          </template>
 
-            <div v-if="shortSha">
-              <h4 class="mb-1 text-[11px] font-semibold uppercase tracking-wide text-slate-500">
-                {{ t('gates.sidebar.gatedCommit') }}
-              </h4>
-              <p class="font-mono text-[12px] text-slate-300">{{ shortSha }}</p>
-            </div>
-
-            <!-- Shared run metadata + embedded observability (model, run id, timing,
-                 model-activity rollup) — identical to the agent step detail. -->
-            <StepRunMeta
-              v-if="step"
-              :step="step"
-              :instance-id="instanceId ?? undefined"
-              :step-number="stepIndex === null ? undefined : stepIndex + 1"
-              :total-steps="instance?.steps.length"
-              :run-failed="instance?.status === 'failed'"
-              :failure-at="instance?.failure?.occurredAt"
-            />
-
-            <p class="mt-auto text-[10px] leading-relaxed text-slate-600">
-              {{ t('gates.sidebar.footer', { helper: helperMeta.label }) }}
-            </p>
-          </aside>
-        </div>
+          <!-- Attempt history (both gates): what each helper run did and how it ended. -->
+          <section v-if="attempts.length" class="mt-5">
+            <h3 class="mb-2 text-[11px] font-semibold uppercase tracking-wide text-slate-500">
+              {{ t('gates.attemptsHeading', { helper: helperMeta.label }) }}
+            </h3>
+            <ol class="space-y-2">
+              <li
+                v-for="a in attempts"
+                :key="a.attempt"
+                class="rounded-md border border-slate-800 bg-slate-950/40 px-3 py-2"
+              >
+                <AttemptEntryHeader
+                  :label="t('gates.attempt', { number: a.attempt })"
+                  :outcome="a.outcome"
+                  :outcome-label="OUTCOME_LABELS[a.outcome]"
+                  :at="a.at"
+                  date-format="long"
+                />
+                <!-- What this round was asked to fix: the instructions the gate handed the
+                         helper (the failing-check summary / conflict reason / review comments),
+                         plus the structured red checks for the CI gate. -->
+                <div
+                  v-if="a.instructions || (a.failingChecks && a.failingChecks.length)"
+                  class="mt-1.5"
+                >
+                  <p class="text-[11px] text-slate-500">
+                    {{ t('gates.attemptInstructions', { helper: helperMeta.label }) }}
+                  </p>
+                  <GateFailingCheckList
+                    v-if="a.failingChecks && a.failingChecks.length"
+                    class="mt-1"
+                    :checks="a.failingChecks"
+                    dense
+                  />
+                  <p
+                    v-else-if="a.instructions"
+                    class="mt-1 whitespace-pre-wrap text-[12px] leading-relaxed text-slate-300"
+                  >
+                    {{ a.instructions }}
+                  </p>
+                </div>
+                <!-- The helper's own report of what it did / what remains. -->
+                <template v-if="a.summary">
+                  <p class="mt-1.5 text-[11px] text-slate-500">
+                    {{ t('gates.attemptReport', { helper: helperMeta.label }) }}
+                  </p>
+                  <p class="mt-1 whitespace-pre-wrap text-[12px] leading-relaxed text-slate-400">
+                    {{ a.summary }}
+                  </p>
+                </template>
+              </li>
+            </ol>
+          </section>
+        </template>
       </div>
+
+      <!-- Sidebar: gate state -->
+      <aside
+        class="hidden w-60 shrink-0 flex-col gap-4 border-s border-slate-800 bg-slate-900/50 px-4 py-4 lg:flex"
+      >
+        <div v-if="gate">
+          <h4 class="mb-2 text-[11px] font-semibold uppercase tracking-wide text-slate-500">
+            {{ t('gates.sidebar.state') }}
+          </h4>
+          <div class="flex items-center gap-2 text-[13px]">
+            <UIcon
+              :name="STATUS_META[status].icon"
+              class="h-4 w-4"
+              :class="STATUS_META[status].text"
+            />
+            <span :class="STATUS_META[status].text">{{ STATUS_META[status].label }}</span>
+          </div>
+        </div>
+
+        <div v-if="gate">
+          <h4 class="mb-1 text-[11px] font-semibold uppercase tracking-wide text-slate-500">
+            {{ helperMeta.label }}
+          </h4>
+          <p class="text-[12px] text-slate-300">
+            <!-- The human-review gate's budget is effectively unbounded (it waits for a human
+                     indefinitely), so render a plain round count rather than "0/9007199254740991". -->
+            <template v-if="isHumanReview">
+              {{ t('gates.sidebar.fixRounds', { count: gate.attempts }, gate.attempts) }}
+            </template>
+            <template v-else>
+              {{
+                t(
+                  'gates.sidebar.attempts',
+                  { attempts: gate.attempts, max: gate.maxAttempts },
+                  gate.maxAttempts,
+                )
+              }}
+            </template>
+            <template v-if="gate.phase === 'working'">
+              {{ t('gates.sidebar.suffixRunning') }}</template
+            >
+            <template v-else-if="gate.attempts === 0">
+              {{ t('gates.sidebar.suffixNotNeeded') }}</template
+            >
+          </p>
+        </div>
+
+        <div v-if="shortSha">
+          <h4 class="mb-1 text-[11px] font-semibold uppercase tracking-wide text-slate-500">
+            {{ t('gates.sidebar.gatedCommit') }}
+          </h4>
+          <p class="font-mono text-[12px] text-slate-300">{{ shortSha }}</p>
+        </div>
+
+        <!-- Shared run metadata + embedded observability (model, run id, timing,
+                 model-activity rollup) — identical to the agent step detail. -->
+        <StepRunMeta
+          v-if="step"
+          :step="step"
+          :instance-id="instanceId ?? undefined"
+          :step-number="stepIndex === null ? undefined : stepIndex + 1"
+          :total-steps="instance?.steps.length"
+          :run-failed="instance?.status === 'failed'"
+          :failure-at="instance?.failure?.occurredAt"
+        />
+
+        <p class="mt-auto text-[10px] leading-relaxed text-slate-600">
+          {{ t('gates.sidebar.footer', { helper: helperMeta.label }) }}
+        </p>
+      </aside>
     </div>
-  </Teleport>
+  </ResultWindowShell>
 </template>

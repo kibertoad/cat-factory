@@ -13,9 +13,8 @@
 import { computed, onUnmounted, ref, watch } from 'vue'
 import type { TestConcern, TestOutcome, TestReport, TestScreenshot } from '~/types/domain'
 import { useArtifactBlobs } from '~/composables/useArtifactBlobs'
-import { useFocusTrap } from '~/composables/useFocusTrap'
 import ArtifactLightbox from '~/components/media/ArtifactLightbox.vue'
-import StepRestartControl from '~/components/panels/StepRestartControl.vue'
+import ResultWindowShell from '~/components/panels/ResultWindowShell.vue'
 import StepRunMeta from '~/components/panels/StepRunMeta.vue'
 import StepContainerStatus from '~/components/panels/StepContainerStatus.vue'
 import AttemptEntryHeader from '~/components/panels/AttemptEntryHeader.vue'
@@ -30,10 +29,17 @@ const { t, d, n } = useI18n()
 const blobs = useArtifactBlobs()
 onUnmounted(() => blobs.revokeAll())
 
-// Shared seam contract (open/blockId/close + Escape). No `onOpen` loader: this window reads
-// its report straight off the execution step, so there's nothing to fetch on open.
-const { open, blockId, instanceId, stepIndex, close } = useResultView('tester')
+// Shared seam contract (open/blockId/close). No `onOpen` loader: this window reads its report
+// straight off the execution step, so there's nothing to fetch on open. `manageEscape: false`
+// — `ResultWindowShell` owns Escape (and the focus trap + scroll lock + stacking) via the
+// shared overlay behaviour; the nested lightbox layers above it on the same stack.
+const { open, blockId, instanceId, stepIndex, close } = useResultView('tester', {
+  manageEscape: false,
+})
 const block = computed(() => (blockId.value ? board.getBlock(blockId.value) : undefined))
+const headerTitle = computed(
+  () => `${t('testing.title')}${block.value ? ` — ${block.value.title}` : ''}`,
+)
 
 const instance = computed(() =>
   instanceId.value === null ? null : (execution.getInstance(instanceId.value) ?? null),
@@ -262,13 +268,6 @@ function openShot(artifactId: string) {
   lightboxOpen.value = true
 }
 
-// Focus management for the modal panel; hands the Tab trap off to the lightbox while it's open.
-const dialogRoot = ref<HTMLElement | null>(null)
-useFocusTrap(
-  dialogRoot,
-  computed(() => open.value && !lightboxOpen.value),
-)
-
 const sortedConcerns = computed<TestConcern[]>(() => {
   const r = report.value
   if (!r) return []
@@ -309,508 +308,418 @@ const GROUP_STATUS_META: Record<ScenarioGroup['status'], { icon: string; text: s
 </script>
 
 <template>
-  <Teleport to="body">
-    <div
-      v-if="open"
-      class="fixed inset-0 z-50 flex max-h-[100dvh] items-stretch justify-center bg-slate-950/70 backdrop-blur-sm"
-      @click.self="close"
-    >
-      <div
-        ref="dialogRoot"
-        tabindex="-1"
-        role="dialog"
-        aria-modal="true"
-        data-testid="tester-report-window"
-        :aria-label="t('testing.title')"
-        class="m-4 flex w-full max-w-5xl flex-col overflow-hidden rounded-2xl border border-slate-800 bg-slate-900 shadow-2xl focus:outline-none"
+  <ResultWindowShell
+    :open="open"
+    icon="i-lucide-flask-conical"
+    icon-class="bg-amber-500/15 text-amber-300"
+    :title="headerTitle"
+    :subtitle="t('testing.subtitle')"
+    :step-ref="{ instanceId, stepIndex }"
+    width="5xl"
+    testid="tester-report-window"
+    @close="close"
+  >
+    <template #header-extras>
+      <UBadge
+        v-if="report"
+        :color="report.greenlight ? 'success' : 'warning'"
+        variant="subtle"
+        size="sm"
       >
-        <!-- Header -->
-        <header class="flex items-center gap-3 border-b border-slate-800 px-5 py-3">
-          <span
-            class="flex h-8 w-8 items-center justify-center rounded-lg bg-amber-500/15 text-amber-300"
-          >
-            <UIcon name="i-lucide-flask-conical" class="h-4 w-4" />
-          </span>
-          <div class="min-w-0 flex-1">
-            <h2 class="truncate text-sm font-semibold text-slate-100">
-              {{ t('testing.title') }}{{ block ? ` — ${block.title}` : '' }}
-            </h2>
-            <p class="truncate text-[11px] text-slate-400">
-              {{ t('testing.subtitle') }}
-            </p>
-          </div>
-          <UBadge
-            v-if="report"
-            :color="report.greenlight ? 'success' : 'warning'"
-            variant="subtle"
-            size="sm"
-          >
-            {{ report.greenlight ? t('testing.badge.greenlit') : t('testing.badge.needsFixes') }}
-          </UBadge>
-          <span
-            v-if="testState && testState.attempts > 0"
-            class="text-[11px] text-slate-400"
-            :title="t('testing.fixerAttempts')"
-          >
-            {{
-              t('testing.fixCount', { attempts: testState.attempts, max: testState.maxAttempts })
-            }}
-            <template v-if="testState.phase === 'fixing'">
-              {{ t('testing.fixingSuffix') }}</template
-            >
-          </span>
-          <StepRestartControl
-            :instance-id="instanceId"
-            :step-index="stepIndex"
-            @restarted="close"
-          />
-          <button
-            class="rounded-md p-1.5 text-slate-400 hover:bg-slate-800 hover:text-slate-200"
-            @click="close"
-          >
-            <UIcon name="i-lucide-x" class="h-4 w-4" />
-          </button>
-        </header>
+        {{ report.greenlight ? t('testing.badge.greenlit') : t('testing.badge.needsFixes') }}
+      </UBadge>
+      <span
+        v-if="testState && testState.attempts > 0"
+        class="text-[11px] text-slate-400"
+        :title="t('testing.fixerAttempts')"
+      >
+        {{ t('testing.fixCount', { attempts: testState.attempts, max: testState.maxAttempts }) }}
+        <template v-if="testState.phase === 'fixing'"> {{ t('testing.fixingSuffix') }}</template>
+      </span>
+    </template>
 
-        <div class="flex min-h-0 flex-1">
-          <!-- Main: infrastructure observability + scenarios → outcomes → concerns tree -->
-          <div class="min-w-0 flex-1 space-y-4 overflow-y-auto px-5 py-4">
-            <!-- Infrastructure: container lifecycle (where + what it's doing), the
+    <div class="flex min-h-0 flex-1">
+      <!-- Main: infrastructure observability + scenarios → outcomes → concerns tree -->
+      <div class="min-w-0 flex-1 space-y-4 overflow-y-auto px-5 py-4">
+        <!-- Infrastructure: container lifecycle (where + what it's doing), the
                  ephemeral environment, and the run's infra attempts + logs — parity with
                  the Coder's step detail. Shown even before a report lands, so the infra
                  spin-up is visible WHILE the Tester is still standing it up. -->
-            <!-- Only when there's genuine infrastructure to show — a container or an ephemeral
+        <!-- Only when there's genuine infrastructure to show — a container or an ephemeral
                  environment. A no-infra tester (no container, no env) has no infra attempts
                  either, so we don't render an empty header + a log toggle over nothing. -->
-            <section
-              v-if="step && (step.container || stepEnvironment || infraSetup)"
-              data-testid="tester-infrastructure"
-              class="space-y-3"
-            >
-              <h3 class="text-[11px] font-semibold uppercase tracking-wide text-slate-500">
-                {{ t('testing.infrastructure') }}
-              </h3>
-              <StepContainerStatus :step="step" :run-failed="runFailed" />
-              <EnvironmentStatusPanel v-if="stepEnvironment" :environment="stepEnvironment" />
+        <section
+          v-if="step && (step.container || stepEnvironment || infraSetup)"
+          data-testid="tester-infrastructure"
+          class="space-y-3"
+        >
+          <h3 class="text-[11px] font-semibold uppercase tracking-wide text-slate-500">
+            {{ t('testing.infrastructure') }}
+          </h3>
+          <StepContainerStatus :step="step" :run-failed="runFailed" />
+          <EnvironmentStatusPanel v-if="stepEnvironment" :environment="stepEnvironment" />
 
-              <!-- In-container docker-compose dependency stand-up (local-infra tester): the
+          <!-- In-container docker-compose dependency stand-up (local-infra tester): the
                    outcome + the captured `docker compose up` logs. This is the stand-up that
                    runs INSIDE the container, so its output isn't in the provisioning drawer
                    below — it's the highest-signal artifact when local infra fails to start. -->
-              <div
-                v-if="infraSetup"
-                data-testid="tester-infra-setup"
-                class="rounded-lg border px-3 py-2"
-                :class="
-                  infraSetup.started
-                    ? 'border-slate-800 bg-slate-900/60'
-                    : 'border-rose-500/40 bg-rose-500/10'
+          <div
+            v-if="infraSetup"
+            data-testid="tester-infra-setup"
+            class="rounded-lg border px-3 py-2"
+            :class="
+              infraSetup.started
+                ? 'border-slate-800 bg-slate-900/60'
+                : 'border-rose-500/40 bg-rose-500/10'
+            "
+          >
+            <div class="flex items-center gap-2">
+              <UIcon
+                :name="infraSetup.started ? 'i-lucide-container' : 'i-lucide-circle-x'"
+                class="h-3.5 w-3.5 shrink-0"
+                :class="infraSetup.started ? 'text-emerald-400' : 'text-rose-400'"
+              />
+              <span class="text-[13px] font-medium text-slate-200">
+                {{ infraSetup.started ? t('testing.standup.up') : t('testing.standup.failed') }}
+              </span>
+              <span v-if="infraSetup.durationMs != null" class="ms-auto text-[11px] text-slate-500">
+                {{
+                  t('testing.standup.took', {
+                    seconds: n(infraSetup.durationMs / 1000, 'decimal'),
+                  })
+                }}
+              </span>
+            </div>
+            <p v-if="infraSetup.composePath" class="mt-1 font-mono text-[11px] text-slate-500">
+              {{ infraSetup.composePath }}
+            </p>
+            <p
+              v-if="infraSetup.error"
+              class="mt-1 text-[12px] leading-snug text-rose-300"
+              data-testid="tester-infra-setup-error"
+            >
+              {{ infraSetup.error }}
+            </p>
+            <template v-if="infraSetup.logs">
+              <UButton
+                :icon="showInfraSetupLogs ? 'i-lucide-chevron-up' : 'i-lucide-scroll-text'"
+                variant="ghost"
+                size="xs"
+                class="mt-1.5"
+                data-testid="tester-infra-setup-logs-toggle"
+                @click="
+                  () => {
+                    showInfraSetupLogs = !showInfraSetupLogs
+                  }
                 "
               >
-                <div class="flex items-center gap-2">
-                  <UIcon
-                    :name="infraSetup.started ? 'i-lucide-container' : 'i-lucide-circle-x'"
-                    class="h-3.5 w-3.5 shrink-0"
-                    :class="infraSetup.started ? 'text-emerald-400' : 'text-rose-400'"
-                  />
-                  <span class="text-[13px] font-medium text-slate-200">
-                    {{ infraSetup.started ? t('testing.standup.up') : t('testing.standup.failed') }}
-                  </span>
-                  <span
-                    v-if="infraSetup.durationMs != null"
-                    class="ms-auto text-[11px] text-slate-500"
-                  >
-                    {{
-                      t('testing.standup.took', {
-                        seconds: n(infraSetup.durationMs / 1000, 'decimal'),
-                      })
-                    }}
-                  </span>
-                </div>
-                <p v-if="infraSetup.composePath" class="mt-1 font-mono text-[11px] text-slate-500">
-                  {{ infraSetup.composePath }}
-                </p>
-                <p
-                  v-if="infraSetup.error"
-                  class="mt-1 text-[12px] leading-snug text-rose-300"
-                  data-testid="tester-infra-setup-error"
-                >
-                  {{ infraSetup.error }}
-                </p>
-                <template v-if="infraSetup.logs">
-                  <UButton
-                    :icon="showInfraSetupLogs ? 'i-lucide-chevron-up' : 'i-lucide-scroll-text'"
-                    variant="ghost"
-                    size="xs"
-                    class="mt-1.5"
-                    data-testid="tester-infra-setup-logs-toggle"
-                    @click="
-                      () => {
-                        showInfraSetupLogs = !showInfraSetupLogs
-                      }
-                    "
-                  >
-                    {{
-                      showInfraSetupLogs
-                        ? t('testing.standup.hideLogs')
-                        : t('testing.standup.showLogs')
-                    }}
-                  </UButton>
-                  <pre
-                    v-if="showInfraSetupLogs"
-                    data-testid="tester-infra-setup-logs"
-                    class="mt-2 max-h-64 overflow-auto rounded bg-slate-950/70 p-2 font-mono text-[11px] leading-relaxed text-slate-300"
-                    >{{ infraSetup.logs }}</pre
-                  >
-                </template>
-              </div>
+                {{
+                  showInfraSetupLogs ? t('testing.standup.hideLogs') : t('testing.standup.showLogs')
+                }}
+              </UButton>
+              <pre
+                v-if="showInfraSetupLogs"
+                data-testid="tester-infra-setup-logs"
+                class="mt-2 max-h-64 overflow-auto rounded bg-slate-950/70 p-2 font-mono text-[11px] leading-relaxed text-slate-300"
+                >{{ infraSetup.logs }}</pre
+              >
+            </template>
+          </div>
 
-              <!-- Explicit confirmation that every piece of the tester's infrastructure is up
+          <!-- Explicit confirmation that every piece of the tester's infrastructure is up
                    (container running, the ephemeral environment ready, any in-container
                    dependency stand-up done) and the agent is now starting its work — so the
                    details don't jump silently from "provisioning" into a blank working state. -->
-              <div
-                v-if="infraReady"
-                data-testid="tester-env-ready"
-                class="flex items-center gap-2 rounded-lg border border-emerald-500/30 bg-emerald-500/10 px-3 py-2 text-[13px] text-emerald-200"
-              >
-                <UIcon name="i-lucide-rocket" class="h-4 w-4 shrink-0 text-emerald-400" />
-                <span>{{ t('testing.readyBanner') }}</span>
-              </div>
+          <div
+            v-if="infraReady"
+            data-testid="tester-env-ready"
+            class="flex items-center gap-2 rounded-lg border border-emerald-500/30 bg-emerald-500/10 px-3 py-2 text-[13px] text-emerald-200"
+          >
+            <UIcon name="i-lucide-rocket" class="h-4 w-4 shrink-0 text-emerald-400" />
+            <span>{{ t('testing.readyBanner') }}</span>
+          </div>
 
-              <div v-if="executionId">
-                <UButton
-                  :icon="showProvisioning ? 'i-lucide-chevron-up' : 'i-lucide-scroll-text'"
-                  variant="ghost"
-                  size="xs"
-                  data-testid="tester-infra-attempts-toggle"
-                  @click="
-                    () => {
-                      showProvisioning = !showProvisioning
-                    }
-                  "
-                >
-                  {{
-                    showProvisioning
-                      ? t('panels.stepDetail.hideInfraAttempts')
-                      : t('panels.stepDetail.infraAttempts')
-                  }}
-                </UButton>
-                <ProvisioningLogsDrawer
-                  v-if="showProvisioning"
-                  class="mt-2"
-                  :execution-id="executionId"
-                  :live="runLive"
-                />
-              </div>
-            </section>
+          <div v-if="executionId">
+            <UButton
+              :icon="showProvisioning ? 'i-lucide-chevron-up' : 'i-lucide-scroll-text'"
+              variant="ghost"
+              size="xs"
+              data-testid="tester-infra-attempts-toggle"
+              @click="
+                () => {
+                  showProvisioning = !showProvisioning
+                }
+              "
+            >
+              {{
+                showProvisioning
+                  ? t('panels.stepDetail.hideInfraAttempts')
+                  : t('panels.stepDetail.infraAttempts')
+              }}
+            </UButton>
+            <ProvisioningLogsDrawer
+              v-if="showProvisioning"
+              class="mt-2"
+              :execution-id="executionId"
+              :live="runLive"
+            />
+          </div>
+        </section>
 
-            <!-- Fixer timeline: one inspectable entry per fixer round (what it was handed and
+        <!-- Fixer timeline: one inspectable entry per fixer round (what it was handed and
                  how it ended), so the otherwise-opaque fixer sub-jobs have a surface — the
                  analogue of the polling gate's attempt history. -->
-            <section
-              v-if="fixerAttempts.length"
-              data-testid="tester-fixer-attempts"
-              class="space-y-2"
+        <section v-if="fixerAttempts.length" data-testid="tester-fixer-attempts" class="space-y-2">
+          <h3 class="text-[11px] font-semibold uppercase tracking-wide text-slate-500">
+            {{ t('testing.fixerAttempts') }}
+          </h3>
+          <ol class="space-y-2">
+            <li
+              v-for="a in fixerAttempts"
+              :key="a.attempt"
+              data-testid="tester-fixer-attempt"
+              class="rounded-lg border border-slate-800 bg-slate-900/60 px-3 py-2"
             >
-              <h3 class="text-[11px] font-semibold uppercase tracking-wide text-slate-500">
-                {{ t('testing.fixerAttempts') }}
-              </h3>
-              <ol class="space-y-2">
-                <li
-                  v-for="a in fixerAttempts"
-                  :key="a.attempt"
-                  data-testid="tester-fixer-attempt"
-                  class="rounded-lg border border-slate-800 bg-slate-900/60 px-3 py-2"
-                >
-                  <AttemptEntryHeader
-                    :label="t('testing.fixerTimeline.attempt', { n: a.attempt })"
-                    :outcome="a.outcome"
-                    :outcome-label="
-                      a.outcome === 'completed'
-                        ? t('testing.fixerTimeline.completed')
-                        : t('testing.fixerTimeline.failed')
-                    "
-                    :at="a.at"
-                    :icon="a.outcome === 'completed' ? 'i-lucide-wrench' : 'i-lucide-circle-x'"
-                    :icon-class="a.outcome === 'completed' ? 'text-amber-300' : 'text-rose-400'"
-                  />
-                  <p v-if="a.summary" class="mt-1 text-[12px] leading-snug text-slate-400">
-                    {{ a.summary }}
-                  </p>
-                  <div v-if="a.concerns && a.concerns.length" class="mt-1.5">
-                    <p class="text-[11px] text-slate-500">
-                      {{ t('testing.fixerTimeline.addressed') }}
-                    </p>
-                    <ul class="mt-1 space-y-0.5">
-                      <li
-                        v-for="(c, ci) in a.concerns"
-                        :key="`fa${a.attempt}-c${ci}`"
-                        class="flex items-center gap-1.5 text-[12px] text-slate-300"
-                      >
-                        <span
-                          class="rounded px-1 text-[10px] uppercase"
-                          :class="SEVERITY_META[c.severity].chip"
-                          >{{ SEVERITY_LABELS[c.severity] }}</span
-                        >
-                        <span class="truncate">{{ c.title }}</span>
-                      </li>
-                    </ul>
-                  </div>
-                </li>
-              </ol>
-            </section>
+              <AttemptEntryHeader
+                :label="t('testing.fixerTimeline.attempt', { n: a.attempt })"
+                :outcome="a.outcome"
+                :outcome-label="
+                  a.outcome === 'completed'
+                    ? t('testing.fixerTimeline.completed')
+                    : t('testing.fixerTimeline.failed')
+                "
+                :at="a.at"
+                :icon="a.outcome === 'completed' ? 'i-lucide-wrench' : 'i-lucide-circle-x'"
+                :icon-class="a.outcome === 'completed' ? 'text-amber-300' : 'text-rose-400'"
+              />
+              <p v-if="a.summary" class="mt-1 text-[12px] leading-snug text-slate-400">
+                {{ a.summary }}
+              </p>
+              <div v-if="a.concerns && a.concerns.length" class="mt-1.5">
+                <p class="text-[11px] text-slate-500">
+                  {{ t('testing.fixerTimeline.addressed') }}
+                </p>
+                <ul class="mt-1 space-y-0.5">
+                  <li
+                    v-for="(c, ci) in a.concerns"
+                    :key="`fa${a.attempt}-c${ci}`"
+                    class="flex items-center gap-1.5 text-[12px] text-slate-300"
+                  >
+                    <span
+                      class="rounded px-1 text-[10px] uppercase"
+                      :class="SEVERITY_META[c.severity].chip"
+                      >{{ SEVERITY_LABELS[c.severity] }}</span
+                    >
+                    <span class="truncate">{{ c.title }}</span>
+                  </li>
+                </ul>
+              </div>
+            </li>
+          </ol>
+        </section>
 
-            <!-- Test quality-control companion: the coverage audit(s) the QC reviewer ran on
+        <!-- Test quality-control companion: the coverage audit(s) the QC reviewer ran on
                  the report before the greenlight/fixer decision. Each verdict says whether the
                  report adequately covered what the task needed tested, with the gaps that
                  looped the Tester for a focused additional pass. -->
-            <section
-              v-if="quality && qualityVerdicts.length"
-              data-testid="tester-quality"
-              class="space-y-2"
+        <section
+          v-if="quality && qualityVerdicts.length"
+          data-testid="tester-quality"
+          class="space-y-2"
+        >
+          <div class="flex items-center gap-2">
+            <h3 class="text-[11px] font-semibold uppercase tracking-wide text-slate-500">
+              {{ t('testing.quality.heading') }}
+            </h3>
+            <span
+              v-if="quality.attempts"
+              class="text-[11px] text-slate-400"
+              :title="t('testing.quality.reruns')"
+            >
+              {{
+                t('testing.quality.rerunCount', {
+                  attempts: quality.attempts,
+                  max: quality.maxAttempts,
+                })
+              }}
+            </span>
+            <UBadge
+              v-if="quality.exceeded"
+              color="warning"
+              variant="subtle"
+              size="sm"
+              data-testid="tester-quality-exceeded"
+            >
+              {{ t('testing.quality.exceeded') }}
+            </UBadge>
+          </div>
+          <ol class="space-y-2">
+            <li
+              v-for="(vd, vi) in qualityVerdicts"
+              :key="`qc${vi}`"
+              data-testid="tester-quality-verdict"
+              class="rounded-lg border border-slate-800 bg-slate-900/60 px-3 py-2"
             >
               <div class="flex items-center gap-2">
-                <h3 class="text-[11px] font-semibold uppercase tracking-wide text-slate-500">
-                  {{ t('testing.quality.heading') }}
-                </h3>
-                <span
-                  v-if="quality.attempts"
-                  class="text-[11px] text-slate-400"
-                  :title="t('testing.quality.reruns')"
-                >
+                <UIcon
+                  :name="vd.adequate ? 'i-lucide-shield-check' : 'i-lucide-shield-alert'"
+                  class="h-3.5 w-3.5 shrink-0"
+                  :class="vd.adequate ? 'text-emerald-400' : 'text-amber-300'"
+                />
+                <span class="text-[13px] font-medium text-slate-200">
                   {{
-                    t('testing.quality.rerunCount', {
-                      attempts: quality.attempts,
-                      max: quality.maxAttempts,
-                    })
+                    vd.adequate ? t('testing.quality.adequate') : t('testing.quality.inadequate')
                   }}
                 </span>
-                <UBadge
-                  v-if="quality.exceeded"
-                  color="warning"
-                  variant="subtle"
-                  size="sm"
-                  data-testid="tester-quality-exceeded"
-                >
-                  {{ t('testing.quality.exceeded') }}
-                </UBadge>
+                <span v-if="vd.model" class="ms-auto font-mono text-[10px] text-slate-500">{{
+                  vd.model
+                }}</span>
+                <span class="text-[11px] text-slate-500" :class="{ 'ms-auto': !vd.model }">{{
+                  d(new Date(vd.at), 'short')
+                }}</span>
               </div>
-              <ol class="space-y-2">
-                <li
-                  v-for="(vd, vi) in qualityVerdicts"
-                  :key="`qc${vi}`"
-                  data-testid="tester-quality-verdict"
-                  class="rounded-lg border border-slate-800 bg-slate-900/60 px-3 py-2"
-                >
-                  <div class="flex items-center gap-2">
-                    <UIcon
-                      :name="vd.adequate ? 'i-lucide-shield-check' : 'i-lucide-shield-alert'"
-                      class="h-3.5 w-3.5 shrink-0"
-                      :class="vd.adequate ? 'text-emerald-400' : 'text-amber-300'"
-                    />
-                    <span class="text-[13px] font-medium text-slate-200">
-                      {{
-                        vd.adequate
-                          ? t('testing.quality.adequate')
-                          : t('testing.quality.inadequate')
-                      }}
-                    </span>
-                    <span v-if="vd.model" class="ms-auto font-mono text-[10px] text-slate-500">{{
-                      vd.model
-                    }}</span>
-                    <span class="text-[11px] text-slate-500" :class="{ 'ms-auto': !vd.model }">{{
-                      d(new Date(vd.at), 'short')
-                    }}</span>
-                  </div>
-                  <p v-if="vd.feedback" class="mt-1 text-[12px] leading-snug text-slate-400">
-                    {{ vd.feedback }}
-                  </p>
-                  <div v-if="vd.gaps.length" class="mt-1.5">
-                    <p class="text-[11px] text-slate-500">{{ t('testing.quality.gaps') }}</p>
-                    <ul class="mt-1 space-y-0.5">
-                      <li
-                        v-for="(gap, gi) in vd.gaps"
-                        :key="`qc${vi}-g${gi}`"
-                        class="flex items-start gap-1.5 text-[12px] text-slate-300"
-                      >
-                        <UIcon
-                          name="i-lucide-dot"
-                          class="mt-0.5 h-3.5 w-3.5 shrink-0 text-amber-400"
-                        />
-                        <span>{{ gap }}</span>
-                      </li>
-                    </ul>
-                  </div>
-                </li>
-              </ol>
-            </section>
-
-            <div
-              v-if="!report"
-              class="flex flex-col items-center justify-center gap-2 py-12 text-center text-slate-400"
-            >
-              <UIcon name="i-lucide-flask-conical" class="h-8 w-8 opacity-40" />
-              <p class="text-sm">{{ t('testing.empty.title') }}</p>
-              <p class="max-w-sm text-[11px] text-slate-500">
-                {{ t('testing.empty.hint') }}
+              <p v-if="vd.feedback" class="mt-1 text-[12px] leading-snug text-slate-400">
+                {{ vd.feedback }}
               </p>
-            </div>
-
-            <template v-else>
-              <!-- Summary -->
-              <p v-if="report.summary" class="mb-4 text-[13px] leading-relaxed text-slate-300">
-                {{ report.summary }}
-              </p>
-
-              <h3 class="mb-2 text-[11px] font-semibold uppercase tracking-wide text-slate-500">
-                {{ t('testing.scenariosOutcomes') }}
-              </h3>
-              <ul class="space-y-2">
-                <li
-                  v-for="g in groups"
-                  :key="g.key"
-                  class="overflow-hidden rounded-lg border border-slate-800 bg-slate-900/60"
-                >
-                  <button
-                    class="flex w-full items-center gap-2 px-3 py-2 text-start hover:bg-slate-800/40"
-                    @click="toggle(g.key)"
+              <div v-if="vd.gaps.length" class="mt-1.5">
+                <p class="text-[11px] text-slate-500">{{ t('testing.quality.gaps') }}</p>
+                <ul class="mt-1 space-y-0.5">
+                  <li
+                    v-for="(gap, gi) in vd.gaps"
+                    :key="`qc${vi}-g${gi}`"
+                    class="flex items-start gap-1.5 text-[12px] text-slate-300"
                   >
-                    <UIcon
-                      :name="
-                        collapsed.has(g.key) ? 'i-lucide-chevron-right' : 'i-lucide-chevron-down'
-                      "
-                      class="h-3.5 w-3.5 shrink-0 text-slate-500"
-                    />
-                    <UIcon
-                      :name="GROUP_STATUS_META[g.status].icon"
-                      class="h-4 w-4 shrink-0"
-                      :class="GROUP_STATUS_META[g.status].text"
-                    />
-                    <span
-                      class="min-w-0 flex-1 truncate text-[13px]"
-                      :class="g.other ? 'text-slate-400' : 'font-medium text-slate-200'"
-                    >
-                      {{ g.title }}
-                    </span>
-                    <UIcon
-                      v-if="g.screenshots.length"
-                      name="i-lucide-camera"
-                      class="h-3.5 w-3.5 shrink-0 text-slate-500"
-                      :title="
-                        t(
-                          'testing.screenshotCount',
-                          { count: g.screenshots.length },
-                          g.screenshots.length,
-                        )
-                      "
-                    />
-                    <span class="shrink-0 text-[11px] text-slate-500">
-                      {{ t('testing.checkCount', { count: g.outcomes.length }, g.outcomes.length) }}
-                      <template v-if="g.concerns.length">
-                        ·
-                        {{
-                          t('testing.concernCount', { count: g.concerns.length }, g.concerns.length)
-                        }}
-                      </template>
-                    </span>
-                  </button>
+                    <UIcon name="i-lucide-dot" class="mt-0.5 h-3.5 w-3.5 shrink-0 text-amber-400" />
+                    <span>{{ gap }}</span>
+                  </li>
+                </ul>
+              </div>
+            </li>
+          </ol>
+        </section>
 
-                  <div v-if="!collapsed.has(g.key)" class="space-y-1 px-3 pb-3 ps-9">
-                    <!-- Outcomes -->
-                    <div
-                      v-for="(o, oi) in g.outcomes"
-                      :key="`o${oi}`"
-                      class="flex items-start gap-2 py-0.5"
-                    >
-                      <UIcon
-                        :name="STATUS_META[o.status].icon"
-                        class="mt-0.5 h-3.5 w-3.5 shrink-0"
-                        :class="STATUS_META[o.status].text"
-                      />
-                      <div class="min-w-0">
-                        <span class="text-[13px] text-slate-200">{{ o.name }}</span>
-                        <p v-if="o.detail" class="text-[12px] leading-snug text-slate-400">
-                          {{ o.detail }}
-                        </p>
-                      </div>
-                    </div>
-                    <p v-if="!g.outcomes.length" class="py-0.5 text-[12px] italic text-slate-500">
-                      {{ t('testing.noDiscreteCheck') }}
+        <div
+          v-if="!report"
+          class="flex flex-col items-center justify-center gap-2 py-12 text-center text-slate-400"
+        >
+          <UIcon name="i-lucide-flask-conical" class="h-8 w-8 opacity-40" />
+          <p class="text-sm">{{ t('testing.empty.title') }}</p>
+          <p class="max-w-sm text-[11px] text-slate-500">
+            {{ t('testing.empty.hint') }}
+          </p>
+        </div>
+
+        <template v-else>
+          <!-- Summary -->
+          <p v-if="report.summary" class="mb-4 text-[13px] leading-relaxed text-slate-300">
+            {{ report.summary }}
+          </p>
+
+          <h3 class="mb-2 text-[11px] font-semibold uppercase tracking-wide text-slate-500">
+            {{ t('testing.scenariosOutcomes') }}
+          </h3>
+          <ul class="space-y-2">
+            <li
+              v-for="g in groups"
+              :key="g.key"
+              class="overflow-hidden rounded-lg border border-slate-800 bg-slate-900/60"
+            >
+              <button
+                class="flex w-full items-center gap-2 px-3 py-2 text-start hover:bg-slate-800/40"
+                @click="toggle(g.key)"
+              >
+                <UIcon
+                  :name="collapsed.has(g.key) ? 'i-lucide-chevron-right' : 'i-lucide-chevron-down'"
+                  class="h-3.5 w-3.5 shrink-0 text-slate-500"
+                />
+                <UIcon
+                  :name="GROUP_STATUS_META[g.status].icon"
+                  class="h-4 w-4 shrink-0"
+                  :class="GROUP_STATUS_META[g.status].text"
+                />
+                <span
+                  class="min-w-0 flex-1 truncate text-[13px]"
+                  :class="g.other ? 'text-slate-400' : 'font-medium text-slate-200'"
+                >
+                  {{ g.title }}
+                </span>
+                <UIcon
+                  v-if="g.screenshots.length"
+                  name="i-lucide-camera"
+                  class="h-3.5 w-3.5 shrink-0 text-slate-500"
+                  :title="
+                    t(
+                      'testing.screenshotCount',
+                      { count: g.screenshots.length },
+                      g.screenshots.length,
+                    )
+                  "
+                />
+                <span class="shrink-0 text-[11px] text-slate-500">
+                  {{ t('testing.checkCount', { count: g.outcomes.length }, g.outcomes.length) }}
+                  <template v-if="g.concerns.length">
+                    ·
+                    {{ t('testing.concernCount', { count: g.concerns.length }, g.concerns.length) }}
+                  </template>
+                </span>
+              </button>
+
+              <div v-if="!collapsed.has(g.key)" class="space-y-1 px-3 pb-3 ps-9">
+                <!-- Outcomes -->
+                <div
+                  v-for="(o, oi) in g.outcomes"
+                  :key="`o${oi}`"
+                  class="flex items-start gap-2 py-0.5"
+                >
+                  <UIcon
+                    :name="STATUS_META[o.status].icon"
+                    class="mt-0.5 h-3.5 w-3.5 shrink-0"
+                    :class="STATUS_META[o.status].text"
+                  />
+                  <div class="min-w-0">
+                    <span class="text-[13px] text-slate-200">{{ o.name }}</span>
+                    <p v-if="o.detail" class="text-[12px] leading-snug text-slate-400">
+                      {{ o.detail }}
                     </p>
-
-                    <!-- Concerns linked to this scenario -->
-                    <div
-                      v-for="(c, ci) in g.concerns"
-                      :key="`c${ci}`"
-                      class="mt-1 flex items-start gap-2 rounded-md border border-slate-800 bg-slate-950/40 px-2 py-1.5"
-                    >
-                      <UIcon
-                        name="i-lucide-alert-triangle"
-                        class="mt-0.5 h-3.5 w-3.5 shrink-0"
-                        :class="SEVERITY_META[c.severity].text"
-                      />
-                      <div class="min-w-0">
-                        <div class="flex items-center gap-1.5">
-                          <span class="text-[12px] font-medium text-slate-200">{{ c.title }}</span>
-                          <span
-                            class="rounded px-1 text-[10px] uppercase"
-                            :class="SEVERITY_META[c.severity].chip"
-                          >
-                            {{ SEVERITY_LABELS[c.severity] }}
-                          </span>
-                        </div>
-                        <p v-if="c.detail" class="text-[12px] leading-snug text-slate-400">
-                          {{ c.detail }}
-                        </p>
-                      </div>
-                    </div>
-
-                    <!-- Screenshots captured for this scenario -->
-                    <div v-if="g.screenshots.length" class="mt-2 flex flex-wrap gap-2">
-                      <button
-                        v-for="(s, si) in g.screenshots"
-                        :key="`shot${si}`"
-                        class="group relative h-20 w-28 shrink-0 overflow-hidden rounded border border-slate-800 bg-slate-950/60 hover:border-slate-600"
-                        :title="s.view"
-                        @click="openShot(s.artifactId)"
-                      >
-                        <img
-                          v-if="blobs.urlFor(s.artifactId)"
-                          :src="blobs.urlFor(s.artifactId)"
-                          :alt="t('testing.screenshotAlt', { view: s.view })"
-                          class="h-full w-full object-cover object-top"
-                        />
-                        <span
-                          v-else
-                          class="flex h-full w-full items-center justify-center text-[10px] text-slate-600"
-                        >
-                          {{
-                            blobs.statusFor(s.artifactId) === 'error'
-                              ? t('testing.shot.failed')
-                              : t('testing.shot.loading')
-                          }}
-                        </span>
-                        <span
-                          class="absolute inset-x-0 bottom-0 truncate bg-slate-950/80 px-1 py-0.5 text-[9px] text-slate-300"
-                          >{{ s.view }}</span
-                        >
-                      </button>
-                    </div>
                   </div>
-                </li>
-              </ul>
+                </div>
+                <p v-if="!g.outcomes.length" class="py-0.5 text-[12px] italic text-slate-500">
+                  {{ t('testing.noDiscreteCheck') }}
+                </p>
 
-              <!-- Standalone gallery: any captures not mapped to a scenario above -->
-              <section v-if="ungroupedScreenshots.length" class="mt-5">
-                <h3 class="mb-2 text-[11px] font-semibold uppercase tracking-wide text-slate-500">
-                  {{ t('testing.screenshots') }}
-                </h3>
-                <div class="grid grid-cols-2 gap-3 sm:grid-cols-3">
+                <!-- Concerns linked to this scenario -->
+                <div
+                  v-for="(c, ci) in g.concerns"
+                  :key="`c${ci}`"
+                  class="mt-1 flex items-start gap-2 rounded-md border border-slate-800 bg-slate-950/40 px-2 py-1.5"
+                >
+                  <UIcon
+                    name="i-lucide-alert-triangle"
+                    class="mt-0.5 h-3.5 w-3.5 shrink-0"
+                    :class="SEVERITY_META[c.severity].text"
+                  />
+                  <div class="min-w-0">
+                    <div class="flex items-center gap-1.5">
+                      <span class="text-[12px] font-medium text-slate-200">{{ c.title }}</span>
+                      <span
+                        class="rounded px-1 text-[10px] uppercase"
+                        :class="SEVERITY_META[c.severity].chip"
+                      >
+                        {{ SEVERITY_LABELS[c.severity] }}
+                      </span>
+                    </div>
+                    <p v-if="c.detail" class="text-[12px] leading-snug text-slate-400">
+                      {{ c.detail }}
+                    </p>
+                  </div>
+                </div>
+
+                <!-- Screenshots captured for this scenario -->
+                <div v-if="g.screenshots.length" class="mt-2 flex flex-wrap gap-2">
                   <button
-                    v-for="(s, si) in ungroupedScreenshots"
-                    :key="`gal${si}`"
-                    class="group relative aspect-video overflow-hidden rounded-lg border border-slate-800 bg-slate-950/60 hover:border-slate-600"
+                    v-for="(s, si) in g.screenshots"
+                    :key="`shot${si}`"
+                    class="group relative h-20 w-28 shrink-0 overflow-hidden rounded border border-slate-800 bg-slate-950/60 hover:border-slate-600"
                     :title="s.view"
                     @click="openShot(s.artifactId)"
                   >
@@ -822,110 +731,146 @@ const GROUP_STATUS_META: Record<ScenarioGroup['status'], { icon: string; text: s
                     />
                     <span
                       v-else
-                      class="flex h-full w-full items-center justify-center text-[11px] text-slate-600"
+                      class="flex h-full w-full items-center justify-center text-[10px] text-slate-600"
                     >
                       {{
                         blobs.statusFor(s.artifactId) === 'error'
-                          ? t('testing.shot.failedToLoad')
+                          ? t('testing.shot.failed')
                           : t('testing.shot.loading')
                       }}
                     </span>
                     <span
-                      class="absolute inset-x-0 bottom-0 truncate bg-slate-950/80 px-1.5 py-0.5 text-[10px] text-slate-300"
+                      class="absolute inset-x-0 bottom-0 truncate bg-slate-950/80 px-1 py-0.5 text-[9px] text-slate-300"
                       >{{ s.view }}</span
                     >
                   </button>
                 </div>
-              </section>
-            </template>
-          </div>
+              </div>
+            </li>
+          </ul>
 
-          <!-- Sidebar: metadata -->
-          <aside
-            class="hidden w-60 shrink-0 flex-col gap-4 border-s border-slate-800 bg-slate-900/50 px-4 py-4 lg:flex"
-          >
-            <div v-if="report">
-              <h4 class="mb-2 text-[11px] font-semibold uppercase tracking-wide text-slate-500">
-                {{ t('testing.verdict.heading') }}
-              </h4>
-              <div class="flex items-center gap-2 text-[13px]">
-                <UIcon
-                  :name="report.greenlight ? 'i-lucide-circle-check' : 'i-lucide-circle-x'"
-                  class="h-4 w-4"
-                  :class="report.greenlight ? 'text-emerald-400' : 'text-rose-400'"
+          <!-- Standalone gallery: any captures not mapped to a scenario above -->
+          <section v-if="ungroupedScreenshots.length" class="mt-5">
+            <h3 class="mb-2 text-[11px] font-semibold uppercase tracking-wide text-slate-500">
+              {{ t('testing.screenshots') }}
+            </h3>
+            <div class="grid grid-cols-2 gap-3 sm:grid-cols-3">
+              <button
+                v-for="(s, si) in ungroupedScreenshots"
+                :key="`gal${si}`"
+                class="group relative aspect-video overflow-hidden rounded-lg border border-slate-800 bg-slate-950/60 hover:border-slate-600"
+                :title="s.view"
+                @click="openShot(s.artifactId)"
+              >
+                <img
+                  v-if="blobs.urlFor(s.artifactId)"
+                  :src="blobs.urlFor(s.artifactId)"
+                  :alt="t('testing.screenshotAlt', { view: s.view })"
+                  class="h-full w-full object-cover object-top"
                 />
-                <span :class="report.greenlight ? 'text-emerald-300' : 'text-rose-300'">
+                <span
+                  v-else
+                  class="flex h-full w-full items-center justify-center text-[11px] text-slate-600"
+                >
                   {{
-                    report.greenlight ? t('testing.verdict.safe') : t('testing.verdict.withheld')
+                    blobs.statusFor(s.artifactId) === 'error'
+                      ? t('testing.shot.failedToLoad')
+                      : t('testing.shot.loading')
                   }}
                 </span>
-              </div>
+                <span
+                  class="absolute inset-x-0 bottom-0 truncate bg-slate-950/80 px-1.5 py-0.5 text-[10px] text-slate-300"
+                  >{{ s.view }}</span
+                >
+              </button>
             </div>
-
-            <div v-if="report">
-              <h4 class="mb-2 text-[11px] font-semibold uppercase tracking-wide text-slate-500">
-                {{ t('testing.outcomes.heading') }}
-              </h4>
-              <dl class="space-y-1 text-[12px]">
-                <div class="flex items-center justify-between">
-                  <dt class="text-slate-400">{{ t('testing.outcomes.passed') }}</dt>
-                  <dd class="text-emerald-300">{{ counts.passed }}</dd>
-                </div>
-                <div class="flex items-center justify-between">
-                  <dt class="text-slate-400">{{ t('testing.outcomes.failed') }}</dt>
-                  <dd class="text-rose-300">{{ counts.failed }}</dd>
-                </div>
-                <div class="flex items-center justify-between">
-                  <dt class="text-slate-400">{{ t('testing.outcomes.skipped') }}</dt>
-                  <dd class="text-slate-300">{{ counts.skipped }}</dd>
-                </div>
-                <div class="flex items-center justify-between border-t border-slate-800 pt-1">
-                  <dt class="text-slate-400">{{ t('testing.outcomes.concerns') }}</dt>
-                  <dd class="text-amber-300">
-                    {{ counts.concerns
-                    }}<template v-if="counts.blocking">
-                      {{
-                        t('testing.outcomes.blocking', { count: counts.blocking }, counts.blocking)
-                      }}</template
-                    >
-                  </dd>
-                </div>
-              </dl>
-            </div>
-
-            <div v-if="report?.environment">
-              <h4 class="mb-1 text-[11px] font-semibold uppercase tracking-wide text-slate-500">
-                {{ t('testing.environment') }}
-              </h4>
-              <p class="text-[12px] capitalize text-slate-300">{{ report.environment }}</p>
-            </div>
-
-            <!-- Shared run metadata + embedded observability (model, run id, timing,
-                 model-activity rollup) — identical to the gate and agent step detail. -->
-            <StepRunMeta
-              v-if="step"
-              :step="step"
-              :instance-id="instanceId ?? undefined"
-              :step-number="stepIndex === null ? undefined : stepIndex + 1"
-              :total-steps="instance?.steps.length"
-              :run-failed="instance?.status === 'failed'"
-              :failure-at="instance?.failure?.occurredAt"
-            />
-
-            <p class="mt-auto text-[10px] leading-relaxed text-slate-600">
-              {{ t('testing.footer') }}
-            </p>
-          </aside>
-        </div>
+          </section>
+        </template>
       </div>
-    </div>
 
-    <!-- Shared zoom/pan viewer for the captured screenshots. -->
-    <ArtifactLightbox
-      v-model:open="lightboxOpen"
-      v-model:index="lightboxIndex"
-      :items="lightboxItems"
-      :blobs="blobs"
-    />
-  </Teleport>
+      <!-- Sidebar: metadata -->
+      <aside
+        class="hidden w-60 shrink-0 flex-col gap-4 border-s border-slate-800 bg-slate-900/50 px-4 py-4 lg:flex"
+      >
+        <div v-if="report">
+          <h4 class="mb-2 text-[11px] font-semibold uppercase tracking-wide text-slate-500">
+            {{ t('testing.verdict.heading') }}
+          </h4>
+          <div class="flex items-center gap-2 text-[13px]">
+            <UIcon
+              :name="report.greenlight ? 'i-lucide-circle-check' : 'i-lucide-circle-x'"
+              class="h-4 w-4"
+              :class="report.greenlight ? 'text-emerald-400' : 'text-rose-400'"
+            />
+            <span :class="report.greenlight ? 'text-emerald-300' : 'text-rose-300'">
+              {{ report.greenlight ? t('testing.verdict.safe') : t('testing.verdict.withheld') }}
+            </span>
+          </div>
+        </div>
+
+        <div v-if="report">
+          <h4 class="mb-2 text-[11px] font-semibold uppercase tracking-wide text-slate-500">
+            {{ t('testing.outcomes.heading') }}
+          </h4>
+          <dl class="space-y-1 text-[12px]">
+            <div class="flex items-center justify-between">
+              <dt class="text-slate-400">{{ t('testing.outcomes.passed') }}</dt>
+              <dd class="text-emerald-300">{{ counts.passed }}</dd>
+            </div>
+            <div class="flex items-center justify-between">
+              <dt class="text-slate-400">{{ t('testing.outcomes.failed') }}</dt>
+              <dd class="text-rose-300">{{ counts.failed }}</dd>
+            </div>
+            <div class="flex items-center justify-between">
+              <dt class="text-slate-400">{{ t('testing.outcomes.skipped') }}</dt>
+              <dd class="text-slate-300">{{ counts.skipped }}</dd>
+            </div>
+            <div class="flex items-center justify-between border-t border-slate-800 pt-1">
+              <dt class="text-slate-400">{{ t('testing.outcomes.concerns') }}</dt>
+              <dd class="text-amber-300">
+                {{ counts.concerns
+                }}<template v-if="counts.blocking">
+                  {{
+                    t('testing.outcomes.blocking', { count: counts.blocking }, counts.blocking)
+                  }}</template
+                >
+              </dd>
+            </div>
+          </dl>
+        </div>
+
+        <div v-if="report?.environment">
+          <h4 class="mb-1 text-[11px] font-semibold uppercase tracking-wide text-slate-500">
+            {{ t('testing.environment') }}
+          </h4>
+          <p class="text-[12px] capitalize text-slate-300">{{ report.environment }}</p>
+        </div>
+
+        <!-- Shared run metadata + embedded observability (model, run id, timing,
+                 model-activity rollup) — identical to the gate and agent step detail. -->
+        <StepRunMeta
+          v-if="step"
+          :step="step"
+          :instance-id="instanceId ?? undefined"
+          :step-number="stepIndex === null ? undefined : stepIndex + 1"
+          :total-steps="instance?.steps.length"
+          :run-failed="instance?.status === 'failed'"
+          :failure-at="instance?.failure?.occurredAt"
+        />
+
+        <p class="mt-auto text-[10px] leading-relaxed text-slate-600">
+          {{ t('testing.footer') }}
+        </p>
+      </aside>
+    </div>
+  </ResultWindowShell>
+
+  <!-- Shared zoom/pan viewer for the captured screenshots — a sibling overlay that layers
+       above this window on the shared modal stack while open. -->
+  <ArtifactLightbox
+    v-model:open="lightboxOpen"
+    v-model:index="lightboxIndex"
+    :items="lightboxItems"
+    :blobs="blobs"
+  />
 </template>

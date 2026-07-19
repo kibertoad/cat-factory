@@ -8,7 +8,7 @@
 // the same seam the requirements / tester windows use.
 import { computed } from 'vue'
 import StepRunMeta from '~/components/panels/StepRunMeta.vue'
-import StepRestartControl from '~/components/panels/StepRestartControl.vue'
+import ResultWindowShell from '~/components/panels/ResultWindowShell.vue'
 import MarkdownProse from '~/components/common/MarkdownProse.vue'
 import CopyButton from '~/components/common/CopyButton.vue'
 
@@ -17,9 +17,12 @@ const execution = useExecutionStore()
 const agents = useAgentsStore()
 const { t } = useI18n()
 
-// Shared seam contract (open/blockId/close + Escape). No `onOpen` loader: this window reads
-// its data straight off the execution step, so there's nothing to fetch on open.
-const { open, blockId, instanceId, stepIndex, close } = useResultView('generic-structured')
+// Shared seam contract (open/blockId/close). No `onOpen` loader: this window reads its data
+// straight off the execution step, so there's nothing to fetch on open. `manageEscape: false`
+// — `ResultWindowShell` owns Escape (and focus trap + scroll lock + stacking).
+const { open, blockId, instanceId, stepIndex, close } = useResultView('generic-structured', {
+  manageEscape: false,
+})
 const block = computed(() => (blockId.value ? board.getBlock(blockId.value) : undefined))
 
 const instance = computed(() =>
@@ -54,94 +57,63 @@ const customJson = computed<string | null>(() => {
 </script>
 
 <template>
-  <Teleport to="body">
-    <div
-      v-if="open"
-      class="fixed inset-0 z-50 flex max-h-[100dvh] items-stretch justify-center bg-slate-950/70 backdrop-blur-sm"
-      @click.self="close"
-    >
-      <div
-        class="m-4 flex w-full max-w-4xl flex-col overflow-hidden rounded-2xl border border-slate-800 bg-slate-900 shadow-2xl"
-        role="dialog"
-        aria-modal="true"
-      >
-        <!-- Header -->
-        <header class="flex items-center gap-3 border-b border-slate-800 px-5 py-3">
-          <span
-            class="flex h-8 w-8 items-center justify-center rounded-lg bg-cyan-500/15 text-cyan-300"
-          >
-            <UIcon :name="meta?.icon ?? 'i-lucide-braces'" class="h-4 w-4" />
-          </span>
-          <div class="min-w-0 flex-1">
-            <h2 class="truncate text-sm font-semibold text-slate-100">
-              {{ headerTitle }}
-            </h2>
-            <p class="truncate text-[11px] text-slate-400">
-              {{ meta?.description ?? t('panels.structuredResult.fallbackDescription') }}
-            </p>
+  <ResultWindowShell
+    :open="open"
+    :icon="meta?.icon ?? 'i-lucide-braces'"
+    icon-class="bg-cyan-500/15 text-cyan-300"
+    :title="headerTitle"
+    :subtitle="meta?.description ?? t('panels.structuredResult.fallbackDescription')"
+    :step-ref="{ instanceId, stepIndex }"
+    width="4xl"
+    @close="close"
+  >
+    <div class="flex min-h-0 flex-1">
+      <!-- Main: prose summary + structured JSON -->
+      <div class="min-w-0 flex-1 overflow-y-auto px-5 py-4">
+        <MarkdownProse
+          v-if="step?.output"
+          :text="step.output"
+          class="mb-4 text-[13px] leading-relaxed text-slate-300"
+        />
+
+        <template v-if="customJson">
+          <div class="mb-2 flex items-center gap-2">
+            <h3 class="text-[11px] font-semibold uppercase tracking-wide text-slate-500">
+              {{ t('panels.structuredResult.structuredOutput') }}
+            </h3>
+            <CopyButton :text="customJson" class="-my-1" />
           </div>
-          <StepRestartControl
-            :instance-id="instanceId"
-            :step-index="stepIndex"
-            @restarted="close"
-          />
-          <button
-            class="rounded-md p-1.5 text-slate-400 hover:bg-slate-800 hover:text-slate-200"
-            @click="close"
-          >
-            <UIcon name="i-lucide-x" class="h-4 w-4" />
-          </button>
-        </header>
+          <pre
+            class="overflow-x-auto rounded-lg border border-slate-800 bg-slate-950/60 p-3 text-[12px] leading-relaxed text-slate-200"
+          ><code>{{ customJson }}</code></pre>
+        </template>
 
-        <div class="flex min-h-0 flex-1">
-          <!-- Main: prose summary + structured JSON -->
-          <div class="min-w-0 flex-1 overflow-y-auto px-5 py-4">
-            <MarkdownProse
-              v-if="step?.output"
-              :text="step.output"
-              class="mb-4 text-[13px] leading-relaxed text-slate-300"
-            />
-
-            <template v-if="customJson">
-              <div class="mb-2 flex items-center gap-2">
-                <h3 class="text-[11px] font-semibold uppercase tracking-wide text-slate-500">
-                  {{ t('panels.structuredResult.structuredOutput') }}
-                </h3>
-                <CopyButton :text="customJson" class="-my-1" />
-              </div>
-              <pre
-                class="overflow-x-auto rounded-lg border border-slate-800 bg-slate-950/60 p-3 text-[12px] leading-relaxed text-slate-200"
-              ><code>{{ customJson }}</code></pre>
-            </template>
-
-            <div
-              v-else-if="!step?.output"
-              class="flex h-full flex-col items-center justify-center gap-2 text-center text-slate-400"
-            >
-              <UIcon name="i-lucide-braces" class="h-8 w-8 opacity-40" />
-              <p class="text-sm">{{ t('panels.structuredResult.noResult') }}</p>
-              <p class="max-w-sm text-[11px] text-slate-500">
-                {{ t('panels.structuredResult.noResultHint') }}
-              </p>
-            </div>
-          </div>
-
-          <!-- Sidebar: shared run metadata + observability rollup -->
-          <aside
-            class="hidden w-60 shrink-0 flex-col gap-4 border-s border-slate-800 bg-slate-900/50 px-4 py-4 lg:flex"
-          >
-            <StepRunMeta
-              v-if="step"
-              :step="step"
-              :instance-id="instanceId ?? undefined"
-              :step-number="stepIndex === null ? undefined : stepIndex + 1"
-              :total-steps="instance?.steps.length"
-              :run-failed="instance?.status === 'failed'"
-              :failure-at="instance?.failure?.occurredAt"
-            />
-          </aside>
+        <div
+          v-else-if="!step?.output"
+          class="flex h-full flex-col items-center justify-center gap-2 text-center text-slate-400"
+        >
+          <UIcon name="i-lucide-braces" class="h-8 w-8 opacity-40" />
+          <p class="text-sm">{{ t('panels.structuredResult.noResult') }}</p>
+          <p class="max-w-sm text-[11px] text-slate-500">
+            {{ t('panels.structuredResult.noResultHint') }}
+          </p>
         </div>
       </div>
+
+      <!-- Sidebar: shared run metadata + observability rollup -->
+      <aside
+        class="hidden w-60 shrink-0 flex-col gap-4 border-s border-slate-800 bg-slate-900/50 px-4 py-4 lg:flex"
+      >
+        <StepRunMeta
+          v-if="step"
+          :step="step"
+          :instance-id="instanceId ?? undefined"
+          :step-number="stepIndex === null ? undefined : stepIndex + 1"
+          :total-steps="instance?.steps.length"
+          :run-failed="instance?.status === 'failed'"
+          :failure-at="instance?.failure?.occurredAt"
+        />
+      </aside>
     </div>
-  </Teleport>
+  </ResultWindowShell>
 </template>
