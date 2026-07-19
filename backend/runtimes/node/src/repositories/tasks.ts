@@ -4,6 +4,7 @@ import type {
   TaskConnectionRecord,
   TaskConnectionRepository,
   TaskRecord,
+  TaskRef,
   TaskRepository,
   TaskSourceKind,
   TaskSourceSettingsRecord,
@@ -267,6 +268,35 @@ export class DrizzleTaskRepository implements TaskRepository {
         ),
       )
     return row ? rowToTask(row) : null
+  }
+
+  async listByRefs(workspaceId: string, refs: readonly TaskRef[]): Promise<TaskRecord[]> {
+    if (refs.length === 0) return []
+    // Group the external ids by source so each source is ONE `IN` read (never a point-read
+    // per ref). Postgres has no D1-style bound-parameter ceiling, so the id list needs no
+    // chunking — mirroring the unchunked `getByUrl` above.
+    const idsBySource = new Map<TaskSourceKind, string[]>()
+    for (const ref of refs) {
+      const ids = idsBySource.get(ref.source)
+      if (ids) ids.push(ref.externalId)
+      else idsBySource.set(ref.source, [ref.externalId])
+    }
+    const out: TaskRecord[] = []
+    for (const [source, externalIds] of idsBySource) {
+      const rows = await this.db
+        .select()
+        .from(tasks)
+        .where(
+          and(
+            eq(tasks.workspace_id, workspaceId),
+            eq(tasks.source, source),
+            inArray(tasks.external_id, externalIds),
+            isNull(tasks.deleted_at),
+          ),
+        )
+      for (const row of rows) out.push(rowToTask(row))
+    }
+    return out
   }
 
   async listByWorkspace(workspaceId: string): Promise<TaskRecord[]> {

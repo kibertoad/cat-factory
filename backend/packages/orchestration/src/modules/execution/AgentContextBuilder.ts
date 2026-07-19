@@ -1038,18 +1038,18 @@ export class AgentContextBuilder {
       for (const t of linkedTasks) addTask(t)
     }
 
-    // Resolve explicitly-named references against the imported corpus by a POINT LOOKUP
-    // per reference — never a full-corpus scan. Only items that actually exist are added
-    // (a `UTF-8` that happens to match the Jira-key shape just resolves to nothing);
-    // nothing is fetched live. The lookups are independent point reads on the per-step
-    // dispatch path, so they run concurrently; results are folded in in reference order
-    // so the dedupe (and the resulting context ordering) stays deterministic.
+    // Resolve explicitly-named references against the imported corpus — never a full-corpus
+    // scan. Only items that actually exist are added (a `UTF-8` that happens to match the
+    // Jira-key shape just resolves to nothing); nothing is fetched live. The keyed jira/github
+    // refs are BATCH-resolved in one chunked-`IN` read per source (`listByRefs`, never a
+    // point-read per reference — an N+1); the URL lookups stay per-URL point reads. Both run
+    // concurrently, and results are folded in in reference order so the dedupe (and the
+    // resulting context ordering) stays deterministic.
     const refs = extractReferences(description ?? '')
     const documents = this.deps.documents
     const taskRepo = this.deps.tasks
-    const [keyTasks, refTasks, urlItems] = await Promise.all([
-      Promise.all(refs.jiraKeys.map((key) => taskRepo?.get(workspaceId, 'jira', key) ?? null)),
-      Promise.all(refs.githubRefs.map((ref) => taskRepo?.get(workspaceId, 'github', ref) ?? null)),
+    const [keyedTasks, urlItems] = await Promise.all([
+      taskRepo?.listByRefs(workspaceId, refs.taskRefs) ?? [],
       Promise.all(
         refs.urls.map(async (url) => {
           const [doc, task] = await Promise.all([
@@ -1071,8 +1071,11 @@ export class AgentContextBuilder {
         }),
       ),
     ])
-    for (const t of keyTasks) addTask(t)
-    for (const t of refTasks) addTask(t)
+    // Fold the batch result in in reference order (listByRefs makes no ordering guarantee),
+    // so the dedupe and context ordering match the by-reference sequence deterministically.
+    const keyedByRef = new Map(keyedTasks.map((t) => [taskKey(t), t] as const))
+    for (const ref of refs.taskRefs)
+      addTask(keyedByRef.get(`${ref.source}:${ref.externalId}`) ?? null)
     for (const { doc, task } of urlItems) {
       addDoc(doc)
       addTask(task)

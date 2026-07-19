@@ -249,6 +249,7 @@ export type {
   TaskSourceSettingsRecord,
   TaskSourceSettingsRepository,
   TaskRecord,
+  TaskRef,
   TaskRepository,
 } from './task-repositories.js'
 export type {

@@ -285,7 +285,9 @@ Do this instead:
   count, sum, or reduce them in JS.
 
 Copy the existing good citizens: `WorkspaceMountRepository.countByServiceIds`,
-`ServiceRepository.listByIds` / `listByFrameBlocks`, `AccountRepository.listByIds`, and
+`ServiceRepository.listByIds` / `listByFrameBlocks`, `AccountRepository.listByIds`,
+`TaskRepository.listByRefs` (a chunked-`IN`-per-source batch keyed by `(source, externalId)`
+refs, replacing a `get`-per-reference loop in `AgentContextBuilder`), and
 `BoardService.removeBlock`'s batched `removeByServices` / `deleteMany`. If you find yourself
 writing `await this.someRepository.getX(item)` inside a loop, STOP and batch it.
 

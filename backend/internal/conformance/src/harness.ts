@@ -24,6 +24,7 @@ import type {
   ResolveRunRepoContext,
   RunRepoContext,
   Service,
+  TaskRepository,
   TaskSourceProvider,
   WorkspaceMemberRepository,
   WorkspaceRepository,
@@ -243,6 +244,15 @@ export interface ConformanceApp {
    * source); like the other probes, the persistence is exercised through the repository directly.
    */
   documentRepository(): DocumentRepository
+  /**
+   * The facade's imported-issue (task) repository over its real store, so the suite can assert
+   * the batched `listByRefs` read (one chunked-`IN` per source, the N+1-free counterpart to
+   * `get`) resolves a mixed set of (source, externalId) refs — matching, missing, wrong-source —
+   * identically on D1 and Postgres. The import WRITE path needs a live source the dev-open HTTP
+   * `call` path can't reach, so — like the document role-link probe — the persistence is
+   * exercised through the repository directly.
+   */
+  taskRepository(): TaskRepository
   /**
    * The facade's interactive document-interview session repository over its real store, so the
    * suite can assert the WS5 session persistence (upsert / getByBlock-newest-wins / get /
