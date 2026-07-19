@@ -37,6 +37,11 @@ resolved it (`@modular-vue/runtime@1.2.0 → 1.3.0` rides along). `@modular-vue/
 stays at `1.1.0` — its `1.2.0` depends on the not-yet-released
 `@modular-frontend/journeys-engine@1.8.0`.
 
+The Nuxt 4.5 bump also required `@nuxt/ui@4.9.0 → 4.10.0`: 4.9.0's colour-injection
+plugin calls `useNuxtApp().hooks.hookOnce(...)`, which throws under Nuxt 4.5 and 500s
+every route in the browser (caught only by the e2e suite, which is the only thing that
+boots the assembled SPA). 4.10.0 fixes the Nuxt 4.5 hooks usage.
+
 Dependency bumps ride along: Nuxt `4.4.8 → 4.5.0` (which pulls `vue-router@^5.2.0`,
 pinned to a single version by a `vue-router: 5.2.0` pnpm override so it doesn't
 duplicate against `@nuxtjs/i18n`), and Pinia `3 → 4` (`@pinia/nuxt@1.0.1`).
