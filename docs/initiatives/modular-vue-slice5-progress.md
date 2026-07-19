@@ -52,29 +52,67 @@ Copy this shape for every window. The pilot commit is the worked example.
 Attributes from the whole-surface survey (parent tracker's slice-5 row). "Keyed" = the
 window's subject; "extras" = header content beyond the standard row.
 
-| #   | Window                        | view id               | keyed               | variant / width | stepRef          | loader (`onOpen`) | draft (`onClose`) | header extras       | preserve testid                                       | status                                                                               |
-| --- | ----------------------------- | --------------------- | ------------------- | --------------- | ---------------- | ----------------- | ----------------- | ------------------- | ----------------------------------------------------- | ------------------------------------------------------------------------------------ |
-| —   | **`MergerResultView`**        | `merger`              | step                | stretch / 3xl   | yes              | no                | no                | —                   | —                                                     | ✅ **done (pilot)**                                                                  |
-| 1   | `RalphLoopResultView`         | `ralph-loop`          | step                | stretch / 3xl   | yes              | no                | no                | —                   | `ralph-loop-window`                                   | todo                                                                                 |
-| 2   | `GenericStructuredResultView` | `generic-structured`  | step                | stretch / 4xl   | yes              | no                | no                | —                   | —                                                     | todo                                                                                 |
-| 3   | `TestReportWindow`            | `tester`              | step                | stretch / 5xl   | yes              | no                | no                | —                   | `tester-report-window`                                | todo (has own `useFocusTrap` + lightbox — drop it, defer to shell; gate on lightbox) |
-| 4   | `GateResultView`              | `gate`                | step                | stretch / 3xl   | yes              | no                | no                | status badge        | —                                                     | todo                                                                                 |
-| 5   | `FollowUpWindow`              | `follow-ups`          | step                | stretch / 3xl   | no               | no                | no                | pending-count badge | —                                                     | todo                                                                                 |
-| 6   | `HumanTestWindow`             | `human-test`          | step                | stretch / —     | no               | no                | no                | —                   | —                                                     | todo                                                                                 |
-| 7   | `VisualConfirmationWindow`    | `visual-confirm`      | step                | stretch / —     | no               | no                | no                | —                   | —                                                     | todo (own `useFocusTrap` + lightbox — as TestReport)                                 |
-| 8   | `ForkDecisionWindow`          | `fork-decision`       | step                | stretch / —     | yes-load         | no                | —                 | —                   | `fork-decision-window` (on backdrop → moves to shell) | todo                                                                                 |
-| 9   | `PrReviewWindow`              | `pr-review`           | step/instanceId     | stretch / —     | load(instanceId) | no                | —                 | —                   | `pr-review-window` (on backdrop → moves to shell)     | todo                                                                                 |
-| 10  | `ClarityReviewWindow`         | `clarity-review`      | block               | centered / —    | —                | yes               | yes (reset)       | —                   | —                                                     | todo                                                                                 |
-| 11  | `BrainstormWindow`            | `brainstorm`          | block + stage       | centered / —    | —                | yes               | yes               | —                   | —                                                     | todo (two stages share one view; `stage`)                                            |
-| 12  | `RequirementsReviewWindow`    | `requirements-review` | step; data by block | centered / 5xl  | yes              | yes (reset+load)  | yes (reset)       | —                   | —                                                     | todo (biggest; `StepRestartControl` + `onClose`)                                     |
-| 13  | `InitiativeTrackerWindow`     | `initiative-tracker`  | block               | stretch / —     | yes              | —                 | —                 | —                   | `initiative-tracker-window`                           | todo                                                                                 |
-| 14  | `InitiativePlanningWindow`    | `initiative-planning` | block               | stretch / —     | yes              | —                 | —                 | —                   | `initiative-planning-window`                          | todo                                                                                 |
-| 15  | `ServiceSpecWindow`           | `service-spec`        | block (frame)       | centered / —    | yes              | —                 | —                 | —                   | —                                                     | todo                                                                                 |
-| 16  | `ConsensusSessionWindow`      | `consensus-session`   | block               | centered / —    | yes              | —                 | —                 | —                   | —                                                     | todo                                                                                 |
-| 17  | `DocInterviewWindow`          | `doc-interview`       | block               | stretch / —     | yes              | —                 | —                 | —                   | `doc-interview-window`                                | todo                                                                                 |
+| #   | Window                        | view id               | keyed               | variant / width | stepRef          | loader (`onOpen`) | draft (`onClose`) | header extras       | preserve testid                                      | status                                                          |
+| --- | ----------------------------- | --------------------- | ------------------- | --------------- | ---------------- | ----------------- | ----------------- | ------------------- | ---------------------------------------------------- | --------------------------------------------------------------- |
+| —   | **`MergerResultView`**        | `merger`              | step                | stretch / 3xl   | yes              | no                | no                | —                   | —                                                    | ✅ **done (pilot)**                                             |
+| 1   | `RalphLoopResultView`         | `ralph-loop`          | step                | stretch / 3xl   | yes              | no                | no                | status badge        | `ralph-loop-window`                                  | ✅ done                                                         |
+| 2   | `GenericStructuredResultView` | `generic-structured`  | step                | stretch / 4xl   | yes              | no                | no                | —                   | —                                                    | ✅ done                                                         |
+| 3   | `TestReportWindow`            | `tester`              | step                | stretch / 5xl   | yes              | no                | no                | greenlight + fix ct | `tester-report-window`                               | ✅ done (lightbox reconciled onto the shared stack — see below) |
+| 4   | `GateResultView`              | `gate`                | step                | stretch / 3xl   | yes              | no                | no                | status badge        | —                                                    | ✅ done (`gate-status` testid added for the shell e2e)          |
+| 5   | `FollowUpWindow`              | `follow-ups`          | step                | stretch / 3xl   | no               | no                | no                | pending-count badge | —                                                    | ✅ done                                                         |
+| 6   | `HumanTestWindow`             | `human-test`          | step                | stretch / 3xl   | no               | no                | no                | —                   | —                                                    | ✅ done                                                         |
+| 7   | `VisualConfirmationWindow`    | `visual-confirm`      | step                | stretch / 5xl   | no               | no                | no                | —                   | —                                                    | ✅ done (lightbox reconciled onto the shared stack — see below) |
+| 8   | `ForkDecisionWindow`          | `fork-decision`       | step                | stretch / 3xl   | no (pre-run)     | yes (load)        | —                 | —                   | `fork-decision-window` (was on backdrop → now shell) | ✅ done                                                         |
+| 9   | `PrReviewWindow`              | `pr-review`           | step/instanceId     | stretch / —     | load(instanceId) | no                | —                 | —                   | `pr-review-window` (on backdrop → moves to shell)    | todo                                                            |
+| 10  | `ClarityReviewWindow`         | `clarity-review`      | block               | centered / —    | —                | yes               | yes (reset)       | —                   | —                                                    | todo                                                            |
+| 11  | `BrainstormWindow`            | `brainstorm`          | block + stage       | centered / —    | —                | yes               | yes               | —                   | —                                                    | todo (two stages share one view; `stage`)                       |
+| 12  | `RequirementsReviewWindow`    | `requirements-review` | step; data by block | centered / 5xl  | yes              | yes (reset+load)  | yes (reset)       | —                   | —                                                    | todo (biggest; `StepRestartControl` + `onClose`)                |
+| 13  | `InitiativeTrackerWindow`     | `initiative-tracker`  | block               | stretch / —     | yes              | —                 | —                 | —                   | `initiative-tracker-window`                          | todo                                                            |
+| 14  | `InitiativePlanningWindow`    | `initiative-planning` | block               | stretch / —     | yes              | —                 | —                 | —                   | `initiative-planning-window`                         | todo                                                            |
+| 15  | `ServiceSpecWindow`           | `service-spec`        | block (frame)       | centered / —    | yes              | —                 | —                 | —                   | —                                                    | todo                                                            |
+| 16  | `ConsensusSessionWindow`      | `consensus-session`   | block               | centered / —    | yes              | —                 | —                 | —                   | —                                                    | todo                                                            |
+| 17  | `DocInterviewWindow`          | `doc-interview`       | block               | stretch / —     | yes              | —                 | —                 | —                   | `doc-interview-window`                               | todo                                                            |
 
 _(Confirm each window's exact `variant`/`width`/`icon`/extras against its current template
 when converting — the table is the survey's read, not a substitute for the diff.)_
+
+## Conversion batch outcomes (windows 1–8)
+
+Windows 1–8 landed together behind the pilot's `ResultWindowShell`, each as body-only markup
+wrapped in the shell with `useResultView(..., { manageEscape: false })`. What the survey's
+per-window row got right, and what bent against the actual template:
+
+- **The nested lightbox is reconciled onto the shared overlay stack, not guarded off.** The two
+  windows with a screenshot lightbox (`TestReportWindow`, `VisualConfirmationWindow`) used to run
+  their OWN `useFocusTrap` gated `active: open && !lightboxOpen` so the two Tab traps never fought,
+  and the lightbox owned Escape via a capture-phase `stopPropagation`. With the shell owning the
+  window's trap via `useModalBehavior` (active whenever the window is open, it can't know about the
+  lightbox), that guard has nowhere to live. The fix is the one the parent tracker's gotcha called
+  for: **`ArtifactLightbox` now uses `useModalBehavior` itself**, so it PUSHES onto the shared stack
+  while open and becomes the top overlay. `useModalBehavior` gates BOTH its Escape and its Tab-trap
+  on `isTop()` (verified in the released `@modular-vue/vue@1.4.1` build), so the window's trap goes
+  inert while the lightbox is up and the stack orders Escape (lightbox first) — no fight, no
+  double-close, no bespoke `stopPropagation`. The lightbox keeps only its own arrow/zoom keys,
+  now `isTop`-gated too. This fixed BOTH windows at the shared component, and it deleted the local
+  `useFocusTrap` composable (its only three callers — the two windows + the lightbox — are gone).
+- **`useFocusTrap` is deleted.** With the lightbox on `useModalBehavior` and the windows on the
+  shell, nothing imported it; leaving it would fail `knip` as an unused auto-import. Removed in the
+  same change per "prefer deleting to accreting."
+- **Header extras are the `#header-extras` slot, verbatim from each template.** `RalphLoopResultView`
+  (status badge — the survey row said "—"; the template has one), `GateResultView` (status badge),
+  `FollowUpWindow` (pending-count badge), and `TestReportWindow` (greenlight badge + fix-count span)
+  keep their window-specific header content in the slot; the shell owns only the standard row.
+- **`ForkDecisionWindow`: no `stepRef`, and its testid moved from backdrop to the shell dialog.** The
+  survey row read "stepRef yes-load", but the actual template has NO `StepRestartControl` (it is a
+  PRE-RUN decision — nothing to "restart from here"), so `stepRef` is omitted to preserve behaviour;
+  it keeps its `onOpen` loader. Its `fork-decision-window` testid was on the backdrop `<div>`; passing
+  it as the shell's `testid` puts it on the dialog panel, which is still an ancestor of every
+  `fork-option-card` / `fork-chat-*` the `fork-decision.spec` selects through it, so the e2e is
+  unaffected.
+- **Selection + registry unchanged.** No `StepResultViewHost` / `result-views.ts` edits — the shell is
+  per-window chrome, exactly as the pilot established. `GateResultView` gained one behaviour-neutral
+  `data-testid="gate-status"` (mirroring `ralph-status`) so the new shell e2e can assert the
+  header-extras slot renders for a non-pilot window.
 
 ## Planned refinements (tracked, not yet done)
 
@@ -124,3 +162,18 @@ when converting — the table is the survey's read, not a substitute for the dif
 - `app/components/panels/MergerResultView.vue` — the pilot conversion (reference).
 - `app/modular/result-views.ts` — the (unchanged) slice-2 `resultViews` registry the host
   still selects from; windows stay registered here.
+- Converted windows (batch 1–8): `app/components/ralph/RalphLoopResultView.vue`,
+  `app/components/panels/GenericStructuredResultView.vue`,
+  `app/components/testing/TestReportWindow.vue`, `app/components/gates/GateResultView.vue`,
+  `app/components/followUp/FollowUpWindow.vue`, `app/components/humanTest/HumanTestWindow.vue`,
+  `app/components/visualConfirm/VisualConfirmationWindow.vue`,
+  `app/components/forkDecision/ForkDecisionWindow.vue`.
+- `app/components/media/ArtifactLightbox.vue` — reconciled onto the shared overlay stack via
+  `useModalBehavior` (was local `useFocusTrap`), so it layers above an owning window.
+- `app/composables/useFocusTrap.ts` — **deleted** (no remaining callers).
+- `backend/internal/e2e/tests/result-window-shell.spec.ts` — the shell e2e; a second test now
+  covers the CI `gate` window (header-extras + Escape handoff), and a third covers the
+  **nested-lightbox reconciliation** on the tester window: open `ArtifactLightbox` from a
+  screenshot thumbnail, then assert stacked-Escape ordering (lightbox closes first, the owning
+  window survives, a second Escape closes the re-topped window). Behaviour-neutral testids added
+  for it: `artifact-lightbox` (lightbox root) + `tester-screenshot` (thumbnail button).

@@ -7,8 +7,8 @@
 // Zoom is pure CSS `transform` (GPU, no canvas), so even large PNGs stay smooth. Keyboard:
 // Esc close · ←/→ prev/next · +/- zoom · 0 reset · double-click toggle fit↔2×.
 import { computed, ref, watch } from 'vue'
+import { useModalBehavior } from '@modular-vue/core'
 import type { ArtifactBlobs } from '~/composables/useArtifactBlobs'
-import { useFocusTrap } from '~/composables/useFocusTrap'
 
 interface LightboxItem {
   artifactId: string
@@ -36,13 +36,19 @@ const scale = ref(1)
 const tx = ref(0)
 const ty = ref(0)
 
-// Move focus into the lightbox on open + trap Tab within it (and restore focus on close).
-// It's the topmost surface, so its trap stays live even over an owning review window.
-const dialogRoot = ref<HTMLElement | null>(null)
-useFocusTrap(
-  dialogRoot,
-  computed(() => props.open),
-)
+// Modal behaviour via the shared overlay stack (`@modular-vue/core`, the slice-5 release):
+// focus-trap + return, body-scroll lock, and — because it pushes onto the shared stack while
+// open — it becomes the TOP overlay over an owning review window (`ResultWindowShell`), so
+// Escape closes the lightbox first and the owner's trap goes inert until it closes. This is
+// the reconciliation that replaces the old `active: open && !lightboxOpen` guard the windows
+// used to fight over Tab.
+function close() {
+  emit('update:open', false)
+}
+const { dialogRef, isTop } = useModalBehavior({
+  active: () => props.open,
+  onClose: close,
+})
 
 const current = computed(() => props.items[props.index] ?? null)
 const total = computed(() => props.items.length)
@@ -74,9 +80,6 @@ watch(
   { immediate: true },
 )
 
-function close() {
-  emit('update:open', false)
-}
 function go(delta: number) {
   if (!total.value) return
   const next = (props.index + delta + total.value) % total.value
@@ -122,13 +125,12 @@ function onPointerUp() {
   dragging.value = false
 }
 
+// Escape / Tab / focus are owned by `useModalBehavior` (the shared stack). This handler owns
+// only the lightbox-specific navigation + zoom keys, gated on being the top overlay so it
+// stays inert if another overlay ever layers above it.
 function onKey(e: KeyboardEvent) {
-  if (!props.open) return
+  if (!props.open || !isTop.value) return
   switch (e.key) {
-    case 'Escape':
-      e.stopPropagation()
-      close()
-      break
     case 'ArrowLeft':
       go(-1)
       break
@@ -148,8 +150,6 @@ function onKey(e: KeyboardEvent) {
       break
   }
 }
-// Capture-phase so Esc closes the lightbox BEFORE the underlying window's own Esc handler
-// (both use window keydown; the lightbox is the topmost surface so it wins).
 onMounted(() => window.addEventListener('keydown', onKey, true))
 onBeforeUnmount(() => window.removeEventListener('keydown', onKey, true))
 </script>
@@ -158,11 +158,12 @@ onBeforeUnmount(() => window.removeEventListener('keydown', onKey, true))
   <Teleport to="body">
     <div
       v-if="open"
-      ref="dialogRoot"
+      ref="dialogRef"
       tabindex="-1"
       class="fixed inset-0 z-[60] flex flex-col bg-slate-950/95 backdrop-blur-sm focus:outline-none"
       role="dialog"
       aria-modal="true"
+      data-testid="artifact-lightbox"
       :aria-label="
         current
           ? t('media.lightbox.ariaLabel', { label: current.label })
