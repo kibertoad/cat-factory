@@ -92,16 +92,11 @@ const CONTAINER_KINDS = new Set([
   // like `ci` it is a non-agent engine gate that *dispatches* an `on-call` job; only
   // the on-call agent reaches this executor.)
   'on-call',
-  // The initiative analyst explores the repository (read-only) and returns a prose
-  // codebase analysis grounding the plan — a real checkout, no edits. (The
-  // `initiative-interviewer` is NOT here: it is an inline LLM engine gate, not a
-  // container agent.)
-  'initiative-analyst',
-  // The initiative planner explores the repository (read-only) to ground its
-  // multi-phase plan in the actual codebase, so it needs a real checkout. It makes
-  // no edits and returns the plan as structured JSON. (The `initiative-committer`
-  // step is NOT here: it is a non-LLM engine step handled entirely in the engine.)
-  'initiative-planner',
+  // NOTE: `initiative-analyst` and `initiative-planner` are NOT listed here — they are
+  // registered agent kinds (`@cat-factory/agents`) whose `container-explore` surface makes
+  // `registry.requiresContainer()` return true, so `pick()` routes them to the container
+  // executor without a hard-coded entry. (The `initiative-interviewer` / `initiative-committer`
+  // steps are neither: they are non-container engine gates handled entirely in the engine.)
 ])
 
 export class CompositeAgentExecutor implements AsyncAgentExecutor {

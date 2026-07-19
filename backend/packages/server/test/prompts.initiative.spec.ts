@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest'
 import type { AgentRunContext } from '@cat-factory/kernel'
 import type { InitiativePresetPhaseTemplate } from '@cat-factory/contracts'
-import { initiativeAnalystUserPrompt, initiativePlannerUserPrompt } from '../src/agents/prompts.js'
+import { initiativeAnalystUserPrompt, initiativePlannerUserPrompt } from '@cat-factory/agents'
 
 // The generic planner prompt fold (slice T1): a preset's declarative phase template renders a
 // "Required plan shape" section into the PLANNER prompt only, verbatim phase ids in order. No
