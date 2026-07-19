@@ -22,6 +22,14 @@
 overrides:
   vue: 3.5.40
   vue-router: 5.2.0
+  # Single neutral engine: @modular-vue/* (bindings) pull @modular-frontend/core@0.4.0
+  # (the subject-keyed panels — slice 4), but @modular-frontend/journeys-engine@1.8.0
+  # still deps 0.3.0, which would drag a SECOND copy of the core into the tree. 0.4.0 is
+  # an additive superset of 0.3.0 (it only adds definePanelGroup/resolvePanels/PanelEntry/
+  # PanelGroupHandle — nothing removed), so pinning one 0.4.0 keeps the panels types a
+  # single identity everywhere. Prune once the engine's core dep is bumped to ^0.4.0
+  # upstream (the peer-range residual noted in the slice-4 tracker row).
+  '@modular-frontend/core': 0.4.0
   '@vue/compiler-core': 3.5.40
   '@vue/compiler-dom': 3.5.40
   '@vue/compiler-sfc': 3.5.40
@@ -31,17 +39,6 @@ overrides:
   '@vue/runtime-dom': 3.5.40
   '@vue/server-renderer': 3.5.40
   '@vue/shared': 3.5.40
-  # Pin the neutral journeys engine's `@modular-frontend/core` to one version.
-  # `@modular-frontend/journeys-engine@1.8.0` (pulled by `@modular-vue/journeys@1.2.0`)
-  # hard-depends on `@modular-frontend/core@0.3.0`, while the sibling `@modular-vue/*`
-  # bindings still range it at `^0.1.0 || ^0.2.0` — a release-train lag that otherwise
-  # bundles TWO copies of core, so the journey `JourneyRuntime` type (0.3.0 adds
-  # `discard`) is seen as two unrelated types and `provideJourneyRuntime` fails to
-  # typecheck. 0.3.0 is a strict superset of 0.2.0 (only the `discard` member added),
-  # so one version = one `JourneyRuntime` singleton. Drop this once the `@modular-vue/*`
-  # bindings widen their `@modular-frontend/core` peer range to include `^0.3.0`
-  # (the co-evolution follow-up tracked in docs/initiatives/modular-vue-adoption.md).
-  '@modular-frontend/core': 0.3.0
 packages:
   - 'backend/packages/*'
   - 'backend/runtimes/*'

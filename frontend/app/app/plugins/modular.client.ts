@@ -1,20 +1,22 @@
 import { installModularApp } from '@modular-vue/nuxt/runtime'
 import type { ApplicationManifest } from '@modular-vue/runtime'
 import type { NavigationItem } from '@modular-frontend/core'
-import { resolveComponentRegistry } from '@modular-vue/core'
+import { resolveComponentRegistry, resolvePanels } from '@modular-vue/core'
+import type { PanelEntry } from '@modular-vue/core'
 import { provideJourneyRuntime } from '@modular-vue/journeys'
 import type { JourneyRuntime } from '@modular-vue/journeys'
 import { createAppRegistry } from '~/modular/registry'
 import { navSlotFilter } from '~/modular/nav-contributions'
 import { createNavGates } from '~/modular/nav-gates'
 import { resultViewsModule } from '~/modular/result-views'
+import { inspectorPanelsModule } from '~/modular/panels/inspector'
 import {
   environmentSetupJourney,
   environmentSetupModule,
   environmentSetupPersistence,
 } from '~/modular/journeys/environmentSetup'
 import type { AppSlots, ResultViewContribution } from '~/modular/slots'
-import type { CustomAgentKind } from '~/types/domain'
+import type { Block, CustomAgentKind } from '~/types/domain'
 
 /**
  * Wire the modular-vue registry into the Nuxt app (slice 0 of the modular-vue
@@ -58,6 +60,7 @@ export default defineNuxtPlugin({
     // resolves (inside `installModularApp`).
     const registry = createAppRegistry({ gates: createNavGates() }, [
       resultViewsModule,
+      inspectorPanelsModule,
       environmentSetupModule,
     ])
     registry.registerJourney(environmentSetupJourney, {
@@ -88,6 +91,13 @@ export default defineNuxtPlugin({
     // clear stack. The slot is static after this resolve, so `StepResultViewHost`'s own
     // reactive re-resolve is a cheap memoized read that this has already validated.
     resolveComponentRegistry((slots.resultViews ?? []) as ResultViewContribution[])
+    // Same fail-fast for the inspector panel group (slice 4): resolve the merged
+    // `inspectorPanels` slot once with a null subject so a duplicate panel id across
+    // the first-party + consumer modules throws at BOOT (`resolvePanels` dedupes/
+    // throws before the null-subject guard) rather than the first time a block is
+    // selected. `<PanelsOutlet>` re-resolves reactively per subject; this only
+    // validates the wiring.
+    resolvePanels((slots.inspectorPanels ?? []) as PanelEntry<Block>[], null)
     // Consumer agent kinds contributed as CODE to the static `agentKinds` slot
     // (module slots resolve once, so the static base is the full set).
     useAgentsStore().registerConsumerKinds((slots.agentKinds ?? []) as CustomAgentKind[])
