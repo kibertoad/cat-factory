@@ -6,6 +6,7 @@ import type {
 import { defineStore } from 'pinia'
 import { computed, ref } from 'vue'
 import type { AuthUser } from '~/types/domain'
+import { retryWhileBackendUnreachable } from '~/utils/backendReady'
 
 /**
  * "Login with GitHub" session state. The backend mints a signed session token

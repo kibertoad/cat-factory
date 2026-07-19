@@ -1,3 +1,4 @@
+import { SchemaValidationError } from '@toad-contracts/core'
 import { afterEach, describe, expect, it, vi } from 'vitest'
 import { ApiError } from '~/composables/api/errors'
 import { isBackendUnreachable, retryWhileBackendUnreachable } from '~/utils/backendReady'
@@ -14,6 +15,12 @@ describe('isBackendUnreachable', () => {
   it('is false for an HTTP error response (the backend answered)', () => {
     expect(isBackendUnreachable(new ApiError(500, {}))).toBe(false)
     expect(isBackendUnreachable({ status: 503 })).toBe(false)
+  })
+
+  it('is false for a schema-validation failure (a deterministic answer, not a dead socket)', () => {
+    // The backend answered but its body (or our request) didn't match the contract — retrying
+    // can never clear it, so it must surface at once rather than wait out the deadline.
+    expect(isBackendUnreachable(new SchemaValidationError([]))).toBe(false)
   })
 })
 

@@ -1,12 +1,19 @@
+import { SchemaValidationError } from '@toad-contracts/core'
 import { apiErrorStatus } from '~/composables/api/errors'
 
 /**
- * A thrown API error with NO HTTP status is a connection-level fault — the backend isn't
- * listening yet (connection refused / reset / DNS), NOT an HTTP error RESPONSE (which means
- * the backend is up and answered, so `apiErrorStatus` returns its status). Only the former
- * is worth waiting out.
+ * True only for a not-listening-yet backend — a connection-level fault (connection refused /
+ * reset / DNS) that throws before any HTTP round-trip completes, so it carries neither an HTTP
+ * status nor schema issues. Everything else is a real, deterministic answer that retrying can
+ * never clear, so it must surface at once, not loop:
+ *
+ * - An HTTP RESPONSE arrived — a declared non-2xx (`ApiError`) or an undeclared status
+ *   (`UnexpectedResponseError`); both carry a `statusCode`, so `apiErrorStatus` returns it.
+ * - A `SchemaValidationError` — the backend answered but its body (or our own request) didn't
+ *   match the contract, i.e. a version skew / client bug, NOT a dead socket.
  */
 export function isBackendUnreachable(error: unknown): boolean {
+  if (error instanceof SchemaValidationError) return false
   return apiErrorStatus(error) === undefined
 }
 

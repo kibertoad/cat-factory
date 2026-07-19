@@ -35,6 +35,7 @@ import { useGitHubStore } from '~/stores/github'
 import { useFragmentsStore } from '~/stores/fragments'
 import { useProviderConnectionsStore } from '~/stores/providerConnections'
 import { markBoot } from '~/utils/bootMarks'
+import { retryWhileBackendUnreachable } from '~/utils/backendReady'
 
 /**
  * Owns the active workspace and bootstraps the app against the backend. On load
