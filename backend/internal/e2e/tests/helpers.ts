@@ -27,6 +27,36 @@ export const CONTROL_URL =
  */
 export type { FakeProfile }
 
+/**
+ * A restricted-board RBAC scenario seeded over the control channel (see `testServer.ts`
+ * `seedRbacScenario`): an org owned by an admin, a developer scoped to the board as a
+ * `viewer`, and the board flipped to `restricted`. Carries a signed Bearer token + user id
+ * per principal so the spec can drive the SPA as an authenticated viewer vs admin.
+ */
+export interface RbacScenario {
+  workspaceId: string
+  adminToken: string
+  adminUserId: string
+  viewerToken: string
+  viewerUserId: string
+}
+
+/**
+ * Seed a restricted-board RBAC scenario and return the principals' sessions. `tag` makes the
+ * seeded users/board unique per test (so parallel/retry runs never collide). The shared e2e
+ * backend runs auth-enabled-for-signed-tokens (anonymous stays dev-open), so injecting one of
+ * the returned tokens into the SPA (see {@link pinAuthedWorkspace}) drives the board AS that
+ * user with the workspace-RBAC gate enforcing.
+ */
+export async function seedRbacScenario(
+  request: APIRequestContext,
+  tag: string,
+): Promise<RbacScenario> {
+  const res = await request.post(`${CONTROL_URL}/rbac-seed`, { data: { tag } })
+  if (!res.ok()) throw new Error(`rbac-seed control ${res.status()}: ${await res.text()}`)
+  return (await res.json()) as RbacScenario
+}
+
 /** Register a fake behaviour profile for `workspaceId`. Call BEFORE starting the run. */
 export async function setFakeProfile(
   request: APIRequestContext,
@@ -428,6 +458,40 @@ export async function pinWorkspace(page: Page, workspaceId: string): Promise<voi
     },
     {
       id: workspaceId,
+      dismissKey: INFRA_SETUP_DISMISSED_STORAGE_KEY,
+      areas: [...INFRA_SETUP_AREAS],
+    },
+  )
+}
+
+/**
+ * Like {@link pinWorkspace}, but ALSO seed a signed session so the SPA boots authenticated
+ * as a specific user (the workspace-RBAC spec). Injects the token into the persisted `auth`
+ * store (`{ token }`), the exact key + shape the app's `useAuthStore` persists and the
+ * `useApi` client reads for its `Authorization: Bearer` header. The infra-setup dismissal is
+ * keyed by the SIGNED-IN user id (not the `local` bucket dev-open uses), so seed it under
+ * `userId` too — otherwise the advisory banner overlays the board chrome the spec drives.
+ * Must be called BEFORE `page.goto`.
+ */
+export async function pinAuthedWorkspace(
+  page: Page,
+  workspaceId: string,
+  token: string,
+  userId: string,
+): Promise<void> {
+  await page.addInitScript(
+    ({ id, sessionToken, uid, dismissKey, areas }) => {
+      window.localStorage.setItem('workspace', JSON.stringify({ workspaceId: id }))
+      window.localStorage.setItem(
+        'auth',
+        JSON.stringify({ token: sessionToken, autoLoginProvider: null }),
+      )
+      window.localStorage.setItem(dismissKey, JSON.stringify({ local: areas, [uid]: areas }))
+    },
+    {
+      id: workspaceId,
+      sessionToken: token,
+      uid: userId,
       dismissKey: INFRA_SETUP_DISMISSED_STORAGE_KEY,
       areas: [...INFRA_SETUP_AREAS],
     },
