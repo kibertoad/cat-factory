@@ -95,31 +95,41 @@ export interface ResolverContext {
  */
 export type StepResolverFactory = (ctx: ResolverContext) => StepCompletionResolver
 
-// Process-wide registry, mirroring the gate / agent-kind / pipeline registry seams.
-// Registration is a startup import side effect, read once when an ExecutionService lazily
-// builds its resolver registry — register at startup, before serving.
-const registry = new Map<string, StepResolverFactory>()
+/**
+ * App-owned registry of step-completion resolvers, mirroring the gate registry
+ * ({@link GateRegistry}) and the agent-kind registry. The composition root news ONE
+ * instance (`defaultStepResolverRegistry()`), threads it through `CoreDependencies`, and the
+ * engine reads it from there when it lazily builds its per-kind resolver map — so there is no
+ * module-global `Map`, no `clear*()` test cruft, and no external-adapter module-identity
+ * gotcha: a deployment registers extra resolvers by reference
+ * (`registry.register(kind, factory)`) on the instance the facade injects. Empty by default
+ * (the built-in `merger` resolver is a privileged engine-internal built-in, not a registry
+ * entry — see the step taxonomy in `CLAUDE.md`).
+ */
+export class StepResolverRegistry {
+  private readonly registry = new Map<string, StepResolverFactory>()
+
+  /**
+   * Register a step-completion resolver, keyed by the step `agentKind` whose completion it
+   * resolves. A later registration of the same kind replaces the earlier one (so a
+   * deployment can override an earlier registration).
+   */
+  register(kind: string, factory: StepResolverFactory): void {
+    this.registry.set(kind, factory)
+  }
+
+  /** The registered step resolvers (registration order). */
+  factories(): { kind: string; factory: StepResolverFactory }[] {
+    return [...this.registry].map(([kind, factory]) => ({ kind, factory }))
+  }
+}
 
 /**
- * Register a custom step-completion resolver, keyed by the step `agentKind` whose
- * completion it resolves. A later registration of the same kind replaces the earlier one,
- * and a registered resolver replaces a built-in of the same kind.
+ * A fresh, empty step-resolver registry. A deployment registers its own resolvers by
+ * reference on the instance the composition root injects.
  */
-export function registerStepResolver(kind: string, factory: StepResolverFactory): void {
-  registry.set(kind, factory)
-}
-
-/** The registered custom step resolvers (registration order). */
-export function registeredStepResolverFactories(): {
-  kind: string
-  factory: StepResolverFactory
-}[] {
-  return [...registry].map(([kind, factory]) => ({ kind, factory }))
-}
-
-/** Drop all registered step resolvers. Intended for tests that exercise registration. */
-export function clearRegisteredStepResolvers(): void {
-  registry.clear()
+export function defaultStepResolverRegistry(): StepResolverRegistry {
+  return new StepResolverRegistry()
 }
 
 /**

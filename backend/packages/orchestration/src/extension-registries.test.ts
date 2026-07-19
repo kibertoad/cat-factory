@@ -9,16 +9,12 @@ import {
   collectRegistrationProblems,
   validateRegistrations,
 } from './validation/validateRegistrations.js'
-import type { AgentRunContext } from '@cat-factory/kernel'
+import type { AgentRunContext, GateRegistry } from '@cat-factory/kernel'
 import {
-  clearRegisteredGates,
   clearRegisteredPipelines,
-  clearRegisteredStepResolvers,
-  registerGate,
-  registeredGateFactories,
+  defaultGateRegistry,
+  defaultStepResolverRegistry,
   registerPipeline,
-  registerStepResolver,
-  registeredStepResolverFactories,
   seedPipelines,
   stubGateContext,
   stubResolverContext,
@@ -178,11 +174,11 @@ describe('pipeline registry', () => {
 // A throwaway context for invoking a factory in isolation (the ExecutionService builds the
 // real one). The pure-registry tests don't call the seams, so the shared kernel stubs suffice.
 describe('gate registry', () => {
-  afterEach(() => clearRegisteredGates())
-
+  // App-owned DI: each test news a fresh (empty) registry — no module global to clear.
   it('exposes a registered gate factory, invokable to a GateDefinition of that kind', () => {
-    expect(registeredGateFactories()).toHaveLength(0)
-    registerGate('license-check', (ctx) => ({
+    const registry = defaultGateRegistry()
+    expect(registry.factories()).toHaveLength(0)
+    registry.register('license-check', (ctx) => ({
       kind: 'license-check',
       helperKind: 'license-fixer',
       wired: () => true,
@@ -199,7 +195,7 @@ describe('gate registry', () => {
         return { error: 'spent' }
       },
     }))
-    const registered = registeredGateFactories()
+    const registered = registry.factories()
     expect(registered.map((g) => g.kind)).toEqual(['license-check'])
     const def = registered[0]!.factory(stubGateContext())
     expect(def.kind).toBe('license-check')
@@ -207,17 +203,19 @@ describe('gate registry', () => {
   })
 
   it('replaces an earlier registration of the same kind (last wins)', () => {
-    const make = (helperKind: string) => (): ReturnType<Parameters<typeof registerGate>[1]> => ({
-      kind: 'license-check',
-      helperKind,
-      wired: () => true,
-      unwiredOutput: 'skipped',
-      probe: async () => ({ status: 'pass', headSha: null }),
-      onExhausted: async () => ({ error: 'spent' }),
-    })
-    registerGate('license-check', make('fixer-a'))
-    registerGate('license-check', make('fixer-b'))
-    const registered = registeredGateFactories()
+    const registry = defaultGateRegistry()
+    const make =
+      (helperKind: string) => (): ReturnType<Parameters<typeof registry.register>[1]> => ({
+        kind: 'license-check',
+        helperKind,
+        wired: () => true,
+        unwiredOutput: 'skipped',
+        probe: async () => ({ status: 'pass', headSha: null }),
+        onExhausted: async () => ({ error: 'spent' }),
+      })
+    registry.register('license-check', make('fixer-a'))
+    registry.register('license-check', make('fixer-b'))
+    const registered = registry.factories()
     expect(registered).toHaveLength(1)
     expect(registered[0]!.factory(stubGateContext()).helperKind).toBe('fixer-b')
   })
@@ -226,12 +224,14 @@ describe('gate registry', () => {
 describe('validateRegistrations', () => {
   // A fresh, EMPTY registry per test (the built-ins would trip the "postOps without structured
   // output" heuristic etc.), injected into the validator via its `agentKindRegistry` option.
+  // The gate registry is likewise a fresh app-owned instance per test.
   let registry: AgentKindRegistry
+  let gates: GateRegistry
   beforeEach(() => {
     registry = new AgentKindRegistry()
+    gates = defaultGateRegistry()
   })
   afterEach(() => {
-    clearRegisteredGates()
     clearRegisteredPipelines()
   })
 
@@ -250,34 +250,41 @@ describe('validateRegistrations', () => {
       systemPrompt: 'fix',
       agent: { surface: 'container-coding', clone: { branch: 'pr' } },
     })
-    registerGate('license-check', goodGate('license-fixer'))
-    expect(collectRegistrationProblems({ agentKindRegistry: registry })).toEqual([])
-    expect(() => validateRegistrations({ agentKindRegistry: registry })).not.toThrow()
+    gates.register('license-check', goodGate('license-fixer'))
+    expect(
+      collectRegistrationProblems({ agentKindRegistry: registry, gateRegistry: gates }),
+    ).toEqual([])
+    expect(() =>
+      validateRegistrations({ agentKindRegistry: registry, gateRegistry: gates }),
+    ).not.toThrow()
   })
 
   it('accepts a built-in helper kind (ci-fixer) without a registered kind', () => {
-    registerGate('license-check', goodGate('ci-fixer'))
+    gates.register('license-check', goodGate('ci-fixer'))
     expect(
-      collectRegistrationProblems({ agentKindRegistry: registry }).filter(
+      collectRegistrationProblems({ agentKindRegistry: registry, gateRegistry: gates }).filter(
         (p) => p.severity === 'error',
       ),
     ).toEqual([])
   })
 
   it('throws when a gate helperKind resolves to nothing', () => {
-    registerGate('license-check', goodGate('does-not-exist'))
-    const problems = collectRegistrationProblems({ agentKindRegistry: registry })
+    gates.register('license-check', goodGate('does-not-exist'))
+    const problems = collectRegistrationProblems({
+      agentKindRegistry: registry,
+      gateRegistry: gates,
+    })
     expect(problems.some((p) => p.code === 'gate_helper_unresolved')).toBe(true)
-    expect(() => validateRegistrations({ agentKindRegistry: registry })).toThrow(
-      /gate_helper_unresolved/,
-    )
+    expect(() =>
+      validateRegistrations({ agentKindRegistry: registry, gateRegistry: gates }),
+    ).toThrow(/gate_helper_unresolved/)
   })
 
   it('rejects a helper that is registered but not container-capable', () => {
     registry.register({ kind: 'inline-helper', systemPrompt: 'x', agent: { surface: 'inline' } })
-    registerGate('license-check', goodGate('inline-helper'))
+    gates.register('license-check', goodGate('inline-helper'))
     expect(
-      collectRegistrationProblems({ agentKindRegistry: registry }).some(
+      collectRegistrationProblems({ agentKindRegistry: registry, gateRegistry: gates }).some(
         (p) => p.code === 'gate_helper_unresolved',
       ),
     ).toBe(true)
@@ -298,7 +305,7 @@ describe('validateRegistrations', () => {
       },
     })
     expect(
-      collectRegistrationProblems({ agentKindRegistry: registry }).some(
+      collectRegistrationProblems({ agentKindRegistry: registry, gateRegistry: gates }).some(
         (p) => p.code === 'unknown_result_view',
       ),
     ).toBe(true)
@@ -318,7 +325,7 @@ describe('validateRegistrations', () => {
       },
     })
     expect(
-      collectRegistrationProblems({ agentKindRegistry: registry }).some(
+      collectRegistrationProblems({ agentKindRegistry: registry, gateRegistry: gates }).some(
         (p) => p.code === 'unknown_result_view',
       ),
     ).toBe(false)
@@ -331,29 +338,35 @@ describe('validateRegistrations', () => {
       agent: { surface: 'container-explore', clone: { branch: 'pr' } },
       postOps: [async () => {}],
     })
-    const problems = collectRegistrationProblems({ agentKindRegistry: registry })
+    const problems = collectRegistrationProblems({
+      agentKindRegistry: registry,
+      gateRegistry: gates,
+    })
     expect(problems.some((p) => p.code === 'postops_without_structured_output')).toBe(true)
-    expect(() => validateRegistrations({ agentKindRegistry: registry })).not.toThrow()
+    expect(() =>
+      validateRegistrations({ agentKindRegistry: registry, gateRegistry: gates }),
+    ).not.toThrow()
   })
 })
 
 describe('step-resolver registry', () => {
-  afterEach(() => clearRegisteredStepResolvers())
-
+  // App-owned DI: each test news a fresh (empty) registry — no module global to clear.
   it('exposes a registered resolver factory, invokable to a resolver of that kind', () => {
-    expect(registeredStepResolverFactories()).toHaveLength(0)
-    registerStepResolver('security-auditor', () => ({
+    const registry = defaultStepResolverRegistry()
+    expect(registry.factories()).toHaveLength(0)
+    registry.register('security-auditor', () => ({
       kind: 'security-auditor',
       resolve: async () => ({ output: 'done' }),
     }))
-    const registered = registeredStepResolverFactories()
+    const registered = registry.factories()
     expect(registered.map((r) => r.kind)).toEqual(['security-auditor'])
     expect(registered[0]!.factory(stubResolverContext()).kind).toBe('security-auditor')
   })
 
   it('replaces an earlier registration of the same kind (last wins)', () => {
-    registerStepResolver('x', () => ({ kind: 'x', resolve: async () => ({ output: 'a' }) }))
-    registerStepResolver('x', () => ({ kind: 'x', resolve: async () => ({ output: 'b' }) }))
-    expect(registeredStepResolverFactories()).toHaveLength(1)
+    const registry = defaultStepResolverRegistry()
+    registry.register('x', () => ({ kind: 'x', resolve: async () => ({ output: 'a' }) }))
+    registry.register('x', () => ({ kind: 'x', resolve: async () => ({ output: 'b' }) }))
+    expect(registry.factories()).toHaveLength(1)
   })
 })

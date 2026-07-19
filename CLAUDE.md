@@ -1201,15 +1201,22 @@ keys off which bucket, so know them before adding a step:
   `step.agentKind`, not stored twice. **Adding a gate is a new registry entry, not a new copy
   of the machinery** — do not hand-roll another `evaluateX`/`pollX`/`awaiting_x` triple.
   - **The built-in gates are NOT inline in the engine** — they ship as the
-    **`@cat-factory/gates`** package, registered through the SAME public `registerGate` seam
-    a deployment uses (the dogfood: the platform's own gates ARE an external package). The
-    engine builds its gate registry purely from `registeredGateFactories()`; a facade
-    `import`s `@cat-factory/gates` and wires each gate's provider via the package's
-    `wireCiStatusProvider` / `wireMergeabilityProvider` / `wireReleaseHealthProvider` /
-    `wireIncidentEnrichment` handles (deployment-global, set in `buildContainer` /
-    `buildNodeContainer`). A gate is a pass-through until its provider is wired. The pure gate
-    logic + the gate/helper agent-kind constants live in kernel (`domain/gate-logic.ts`) so a
-    gate package never depends on orchestration.
+    **`@cat-factory/gates`** package and register through the SAME public seam a deployment
+    uses (the dogfood: the platform's own gates ARE an external package). The gate registry is
+    an **app-owned `GateRegistry` instance** (`kernel/domain/gate-registry.ts`,
+    `defaultGateRegistry()`), NOT a module-global `Map`: each facade builds one, installs the
+    built-ins via `registerBuiltinGates(gateRegistry)` (the module-load side-effect is gone),
+    and threads it through `CoreDependencies.gateRegistry` → the engine builds its per-kind gate
+    map from `this.gateRegistry.factories()`. `defaultGateRegistry()` is EMPTY (the built-ins
+    live in the gate package), so a container built with no injected registry — e.g. the Worker's
+    scheduled `buildContainer(env)` — installs them itself. A deployment adds a gate with
+    `gateRegistry.register(kind, factory)` on the injected instance. Each gate's provider is still
+    wired deployment-global via the package's `wireCiStatusProvider` /
+    `wireMergeabilityProvider` / `wireReleaseHealthProvider` / `wireIncidentEnrichment` handles
+    (the provider-token registry has not migrated to DI yet). A gate is a pass-through until its
+    provider is wired. The pure gate logic + the gate/helper agent-kind constants live in kernel
+    (`domain/gate-logic.ts`) so a gate package never depends on orchestration. **Step-completion
+    resolvers ride the analogous `StepResolverRegistry` on `CoreDependencies`.**
   - **`resolveHelperCompletion`** is the gate seam for an INVESTIGATE-don't-fix helper: most
     helpers FIX the gated condition so the engine re-probes after they finish, but `on-call`
     only investigates (it never reverts), so the `post-release-health` gate supplies this hook

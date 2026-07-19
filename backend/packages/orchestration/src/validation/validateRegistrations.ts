@@ -1,10 +1,10 @@
 import type { AgentKindRegistry } from '@cat-factory/agents'
+import type { GateRegistry } from '@cat-factory/kernel'
 import {
   CI_FIXER_AGENT_KIND,
   CONFLICT_RESOLVER_AGENT_KIND,
   FIXER_AGENT_KIND,
   ON_CALL_AGENT_KIND,
-  registeredGateFactories,
   registeredPipelines,
   stubGateContext,
 } from '@cat-factory/kernel'
@@ -49,6 +49,12 @@ export interface ValidateRegistrationsOptions {
    * without it there are no registered kinds to cross-check the gates/pipelines against.
    */
   agentKindRegistry: AgentKindRegistry
+  /**
+   * The app-owned gate registry to validate (the facade's injected instance — the SAME one it
+   * threads through `CoreDependencies.gateRegistry`). Required: the gate-helper + pipeline-kind
+   * cross-checks read the registered gates from it rather than a module global.
+   */
+  gateRegistry: GateRegistry
   /** Override the canonical result-view id set (defaults to contracts' {@link RESULT_VIEW_ID_SET}). */
   knownResultViewIds?: ReadonlySet<string>
   /** Built-in helper kinds a gate may escalate to (defaults to ci-fixer/conflict-resolver/on-call). */
@@ -82,12 +88,13 @@ export function collectRegistrationProblems(
 
   const agentKinds = registry.all()
   const registeredKindIds = new Set(agentKinds.map((d) => d.kind))
-  const gateKinds = new Set(registeredGateFactories().map((g) => g.kind))
+  const gateFactories = opts.gateRegistry.factories()
+  const gateKinds = new Set(gateFactories.map((g) => g.kind))
 
   // 1. Every gate's helperKind must resolve to a registered container-capable kind or a
   //    built-in helper. The factory is a pure constructor, so we build it with a stub context
   //    just to read its declared helperKind.
-  for (const { kind, factory } of registeredGateFactories()) {
+  for (const { kind, factory } of gateFactories) {
     let helperKind: string
     try {
       helperKind = factory(stubGateContext()).helperKind
