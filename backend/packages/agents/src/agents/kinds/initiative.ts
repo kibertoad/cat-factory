@@ -1,7 +1,6 @@
 import type { AgentRunContext } from '@cat-factory/kernel'
 import { INITIATIVE_ANALYST_AGENT_KIND, INITIATIVE_PLANNER_AGENT_KIND } from '@cat-factory/kernel'
 import type { InitiativePresetPhaseTemplate } from '@cat-factory/contracts'
-import { initiativePresetSection } from '../prompts/standard.js'
 import type { AgentKindDefinition, AgentKindRegistry } from './registry.js'
 
 // ---------------------------------------------------------------------------
@@ -166,13 +165,12 @@ function initiativeContextLines(
   const init = context.initiative
   if (!init) return []
   const lines: string[] = []
-  // Preset steering FIRST — it frames the step's role for this initiative kind (e.g. "you are a
-  // documentation gap-auditor"). The builder only sets `preset` when this kind has a (trimmed,
-  // non-empty) `promptAddition` or a `phaseTemplate`; the generic preset has neither, so the
-  // generic prompt is unchanged. The section text is the SHARED `initiativePresetSection` (D1),
-  // so the planning prompts and the spawned-run prompts render identical preset steering.
-  const presetSection = initiativePresetSection(context)
-  if (presetSection) lines.push(presetSection)
+  // NOTE: preset steering (the `initiativePresetSection` `promptAddition`) is deliberately NOT
+  // rendered here. These builders now resolve through `userPromptFor` → `buildBaseUserPrompt`
+  // (catalog.ts), which prepends `initiativePresetSection` to EVERY registered kind's own prompt —
+  // so rendering it here too would emit the section twice. The generic prepend is the single owner
+  // of preset steering (it frames the step's role FIRST, for a custom kind and these built-ins
+  // alike); this function contributes only the initiative-specific context below.
   // The required plan shape (planner only): a preset's declarative phase template, rendered so the
   // planner emits exactly the mandated phases. No template ⇒ nothing added.
   if (opts.includePlanShape && init.preset?.phaseTemplate) {

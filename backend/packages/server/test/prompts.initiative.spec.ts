@@ -1,7 +1,12 @@
 import { describe, expect, it } from 'vitest'
-import type { AgentRunContext } from '@cat-factory/kernel'
+import type { AgentKind, AgentRunContext } from '@cat-factory/kernel'
 import type { InitiativePresetPhaseTemplate } from '@cat-factory/contracts'
-import { initiativeAnalystUserPrompt, initiativePlannerUserPrompt } from '@cat-factory/agents'
+import {
+  defaultAgentKindRegistry,
+  initiativeAnalystUserPrompt,
+  initiativePlannerUserPrompt,
+  userPromptFor,
+} from '@cat-factory/agents'
 
 // The generic planner prompt fold (slice T1): a preset's declarative phase template renders a
 // "Required plan shape" section into the PLANNER prompt only, verbatim phase ids in order. No
@@ -21,9 +26,12 @@ const TEMPLATE: InitiativePresetPhaseTemplate = {
   allowAdditionalPhases: false,
 }
 
-function context(over: NonNullable<AgentRunContext['initiative']> = {}): AgentRunContext {
+function context(
+  over: NonNullable<AgentRunContext['initiative']> = {},
+  agentKind: AgentKind = 'initiative-planner',
+): AgentRunContext {
   return {
-    agentKind: 'initiative-planner',
+    agentKind,
     block: {
       id: 'init_1',
       title: 'MSSQL → PostgreSQL',
@@ -96,15 +104,6 @@ describe('initiative planner prompt fold — phaseTemplate', () => {
     expect(prompt).not.toContain('you may omit')
   })
 
-  it('renders the promptAddition heading independently of the template', () => {
-    const prompt = initiativePlannerUserPrompt(
-      context({ preset: { label: 'Technological migration', promptAddition: 'Be careful.' } }),
-    )
-    expect(prompt).toContain('## Initiative preset: Technological migration')
-    expect(prompt).toContain('Be careful.')
-    expect(prompt).not.toContain('## Required plan shape')
-  })
-
   it('keeps the free-form planner prompt byte-for-byte when no preset is present', () => {
     const withPreset = initiativePlannerUserPrompt(
       context({ preset: { label: 'X', phaseTemplate: TEMPLATE } }),
@@ -126,20 +125,64 @@ describe('initiative planner prompt fold — phaseTemplate', () => {
   })
 })
 
+// Preset steering (a preset's `promptAddition`) is NOT rendered by the initiative prompt builders
+// themselves — it is applied CENTRALLY by `userPromptFor` → `buildBaseUserPrompt`, which prepends
+// `initiativePresetSection` to every registered kind's own prompt. These tests exercise that real
+// resolution path (the one the engine dispatches through) and guard against the section being
+// emitted twice — the regression from lifting the builders onto the `registerAgentKind` seam.
+describe('initiative preset steering — resolved through userPromptFor', () => {
+  const registry = defaultAgentKindRegistry()
+  // Count non-overlapping occurrences of a literal substring.
+  const occurrences = (haystack: string, needle: string): number =>
+    haystack.split(needle).length - 1
+
+  it('renders the planner promptAddition heading exactly once, above the task', () => {
+    const ctx = context({
+      preset: { label: 'Technological migration', promptAddition: 'Be careful.' },
+    })
+    const prompt = userPromptFor(ctx, registry, { materialized: true })
+    expect(occurrences(prompt, '## Initiative preset: Technological migration')).toBe(1)
+    expect(prompt).toContain('Be careful.')
+    // A promptAddition-only preset carries no phase template ⇒ no plan-shape section.
+    expect(prompt).not.toContain('## Required plan shape')
+    // The preset steering frames the role FIRST — before the "Plan the initiative:" task line.
+    expect(prompt.indexOf('## Initiative preset')).toBeLessThan(
+      prompt.indexOf('Plan the initiative'),
+    )
+  })
+
+  it('renders the analyst promptAddition heading exactly once', () => {
+    const ctx = context(
+      { preset: { label: 'Migration', promptAddition: 'Chase transitive callers.' } },
+      'initiative-analyst',
+    )
+    const prompt = userPromptFor(ctx, registry, { materialized: true })
+    expect(occurrences(prompt, '## Initiative preset: Migration')).toBe(1)
+    expect(prompt).toContain('Chase transitive callers.')
+  })
+
+  it('does not duplicate the preset section when a preset carries BOTH an addition and a phase template', () => {
+    const ctx = context({
+      preset: {
+        label: 'Technological migration',
+        promptAddition: 'Be careful.',
+        phaseTemplate: TEMPLATE,
+      },
+    })
+    const prompt = userPromptFor(ctx, registry, { materialized: true })
+    // The preset heading (from the central prepend) and the plan shape (from the builder) each
+    // appear exactly once — no double-render from the builder self-rendering preset steering.
+    expect(occurrences(prompt, '## Initiative preset: Technological migration')).toBe(1)
+    expect(occurrences(prompt, '## Required plan shape')).toBe(1)
+  })
+})
+
 describe('initiative analyst prompt fold — phaseTemplate', () => {
   it('does NOT render the plan shape for the analyst (a prose step authors no phases)', () => {
     const analyst = initiativeAnalystUserPrompt(
-      context({ preset: { label: 'X', phaseTemplate: TEMPLATE } }),
+      context({ preset: { label: 'X', phaseTemplate: TEMPLATE } }, 'initiative-analyst'),
     )
     expect(analyst).not.toContain('## Required plan shape')
     expect(analyst).not.toContain('migration-blast-zone')
-  })
-
-  it('still renders the analyst promptAddition when present', () => {
-    const analyst = initiativeAnalystUserPrompt(
-      context({ preset: { label: 'Migration', promptAddition: 'Chase transitive callers.' } }),
-    )
-    expect(analyst).toContain('## Initiative preset: Migration')
-    expect(analyst).toContain('Chase transitive callers.')
   })
 })
