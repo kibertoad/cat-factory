@@ -1621,6 +1621,7 @@ function selectDocumentsDeps(
           apiBase: config.github.apiBase,
         }),
         installations: new D1GitHubInstallationRepository({ db }),
+        logger,
       }),
     )
   }

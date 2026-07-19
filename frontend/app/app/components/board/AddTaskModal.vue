@@ -35,7 +35,7 @@ const agentConfig = useAgentConfigStore()
 const toast = useToast()
 const { t } = useI18n()
 
-const { linkPending } = useContextLinking()
+const { linkPending, presentLinkFailures } = useContextLinking()
 
 const open = computed({
   get: () => ui.addTaskContainerId !== null,
@@ -578,14 +578,10 @@ async function add() {
       ...(technical.value ? { technical: true } : {}),
     })
     if (block) {
-      const failed = await linkPending(block.id, pendingContext.value)
-      if (failed > 0) {
-        toast.add({
-          title: t('board.addTask.linkFailed', { count: failed }, failed),
-          icon: 'i-lucide-triangle-alert',
-          color: 'warning',
-        })
-      }
+      // Surface the SPECIFIC cause of any attachment that couldn't be linked (a GitHub
+      // permission/visibility error, a not-found doc, …) instead of a bare count, plus a
+      // one-click "Copy details" for a bug report.
+      presentLinkFailures(await linkPending(block.id, pendingContext.value), block.id)
     }
     ui.closeAddTask()
   } catch (e) {

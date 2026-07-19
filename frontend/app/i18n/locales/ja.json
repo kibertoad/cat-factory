@@ -49,6 +49,7 @@
       "reconfigureHint": "後で再設定できます。"
     },
     "copied": "クリップボードにコピーしました",
+    "copyDetails": "詳細をコピー",
     "reveal": "表示",
     "hide": "非表示",
     "disconnect": "切断",

@@ -25,5 +25,21 @@ export function useCopyToClipboard() {
     }
   }
 
-  return { copy, isSupported }
+  /**
+   * A ready-made toast action that copies `text` (through {@link copy}, so it shows the
+   * same "Copied" / "Copy failed" feedback). Drop it into a toast's `actions` so any
+   * error/warning toast can offer a one-click "Copy details" — the message + context the
+   * user would otherwise have to retype into a bug report.
+   */
+  function copyAction(text: string, label?: string) {
+    return {
+      label: label ?? t('common.copyDetails'),
+      icon: 'i-lucide-clipboard',
+      onClick: () => {
+        void copy(text)
+      },
+    }
+  }
+
+  return { copy, copyAction, isSupported }
 }
