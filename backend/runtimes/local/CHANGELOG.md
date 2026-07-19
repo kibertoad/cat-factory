@@ -1,5 +1,51 @@
 # @cat-factory/local-server
 
+## 0.69.18
+
+### Patch Changes
+
+- f34ddf1: Move the **gate** and **step-resolver** registries onto the app-owned DI seam
+  (`docs/initiatives/registry-di-migration.md`), the same pattern as the agent-kind /
+  backend registries. The two engine-extension registries the `RunDispatcher` reads are no
+  longer module-global `Map`s populated by import side effect.
+
+  - **kernel** now exposes `GateRegistry` / `defaultGateRegistry()` and `StepResolverRegistry`
+    / `defaultStepResolverRegistry()` classes. The free functions `registerGate` /
+    `registeredGateFactories` / `clearRegisteredGates` and `registerStepResolver` /
+    `registeredStepResolverFactories` / `clearRegisteredStepResolvers` are **removed**
+    (breaking — pre-1.0, no shim). Registration is now `registry.register(kind, factory)` on
+    the app-owned instance the composition root injects.
+  - **`@cat-factory/gates`** — `registerBuiltinGates(registry)` now takes the app-owned
+    `GateRegistry` and the **module-load side-effect registration is gone** (the
+    `registerBuiltinGates()` band-aid the registry-DI initiative called out). A new
+    `gateRegistryWithBuiltins()` factory returns a fresh registry pre-loaded with the suite in one
+    call — the seam a facade uses (`overrides.gateRegistry ?? gateRegistryWithBuiltins()`) so the
+    empty-default hazard is unrepresentable; `registerBuiltinGates` stays for installing into an
+    already-held instance.
+  - **orchestration** threads `gateRegistry` + `stepResolverRegistry` through
+    `CoreDependencies` → `ExecutionService` → `RunDispatcher` (defaulted so existing
+    construction sites don't break), re-exposes `gateRegistry` on `Core`, and
+    `validateRegistrations` now takes the gate registry to cross-check.
+  - The three **facades** build the registries, install the built-in gates, and inject the
+    same instance into `createCore` + the boot-time validation — kept symmetric and covered by
+    the cross-runtime conformance suite (the custom-gate + step-resolver assertions now inject
+    the registries via `makeApp`).
+
+  Provider tokens and the pipeline registry remain module-global (the next slices of the
+  initiative). Deployment packages that registered gates/resolvers via the free functions must
+  switch to registering by reference on the injected instances (see
+  `@cat-factory/example-custom-agent`'s `registerExampleCustomAgents`).
+
+- Updated dependencies [f34ddf1]
+  - @cat-factory/kernel@0.141.0
+  - @cat-factory/orchestration@0.124.0
+  - @cat-factory/node-server@0.106.9
+  - @cat-factory/agents@0.64.1
+  - @cat-factory/gitlab@0.10.21
+  - @cat-factory/integrations@0.86.6
+  - @cat-factory/server@0.137.8
+  - @cat-factory/executor-harness@1.48.1
+
 ## 0.69.17
 
 ### Patch Changes
