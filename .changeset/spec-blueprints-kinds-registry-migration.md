@@ -32,5 +32,7 @@ rather than being bypassed by the old bespoke constant: the observable prompt ch
 both kinds now carry the standard read-only guardrail (matching every other
 `container-explore` kind), `blueprints` now also carries its declared `spec-aware` guidance,
 and both fold in the block's selected best-practice fragments — the enrichment every other
-kind already received. The final-answer directive is applied once (removed from the hand-written
-constants).
+kind already received. Both the final-answer directive AND the read-only guardrail are now
+applied once from the surface (removed from the hand-written constants): `SPEC_WRITER_SYSTEM_PROMPT`
+no longer restates the write-prohibition the central `READ_ONLY_GUARDRAIL` owns, matching
+`BLUEPRINT_SYSTEM_PROMPT` (which never hand-embedded one) so read-only has a single source of truth.

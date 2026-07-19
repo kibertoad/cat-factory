@@ -72,13 +72,17 @@ describe('registered blueprints + spec-writer kinds', () => {
     expect(registry.presentation(SPEC_WRITER_AGENT_KIND)).toBeUndefined()
   })
 
-  it('applies the surface directives centrally (read-only guardrail + final-answer-in-reply)', () => {
-    // The constants no longer restate the final-answer directive; `systemPromptFor` appends
-    // it (and the read-only guardrail) exactly once for a registered container-explore kind.
+  it('applies the surface directives centrally, exactly once each (no hand-restated directive)', () => {
+    // The constants no longer restate the read-only guardrail or the final-answer directive;
+    // `systemPromptFor` appends each exactly once for a registered container-explore kind. The
+    // single-occurrence checks guard against a constant re-embedding a directive the surface
+    // already supplies (the finding that `SPEC_WRITER_SYSTEM_PROMPT` used to restate the
+    // write-prohibition the guardrail now owns).
     for (const kind of [BLUEPRINTS_AGENT_KIND, SPEC_WRITER_AGENT_KIND]) {
       const prompt = systemPromptFor(kind, registry)
       expect(prompt).toContain(READ_ONLY_GUARDRAIL)
       expect(prompt).toContain(FINAL_ANSWER_IN_REPLY)
+      expect(prompt.split(READ_ONLY_GUARDRAIL)).toHaveLength(2)
       expect(prompt.split(FINAL_ANSWER_IN_REPLY)).toHaveLength(2)
     }
   })

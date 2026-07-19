@@ -19,7 +19,8 @@ import type { AgentKindDefinition, AgentKindRegistry } from './registry.js'
 // inline reviewer/brainstorm ids use (agents can't import orchestration, so the definition owns
 // the id). `systemPromptFor` supplies the role prompt + the surface-driven directives
 // (READ_ONLY_GUARDRAIL / FINAL_ANSWER_IN_REPLY), so the constants below deliberately do NOT
-// restate the final-answer directive. Post-ops stay in the engine's built-in map (their commit
+// restate the read-only guardrail or the final-answer directive — the single source of truth
+// for both is the surface. Post-ops stay in the engine's built-in map (their commit
 // branch is resolved specially — see `RunDispatcher.builtInRepoOpBranch`), so these definitions
 // carry no `postOps` and no `presentation` (they are pipeline-internal, not palette kinds).
 // ---------------------------------------------------------------------------
@@ -92,8 +93,7 @@ const SPEC_WRITER_SYSTEM_PROMPT =
   'imply — since the Gherkin `.feature` files and the runnable tests are derived ' +
   'mechanically from them. Preserve the baseline’s existing `sourceBlockIds`; tag the ' +
   'requirements this task adds or changes with this task’s block id. Return the ' +
-  'COMPLETE updated specification (baseline plus this increment), not a diff. You have ' +
-  'NO repository write access and MUST NOT write, edit, or commit any file: the platform ' +
+  'COMPLETE updated specification (baseline plus this increment), not a diff. The platform ' +
   'persists the specification you return, so returning it IS the whole job. Respond ' +
   'with ONLY a JSON object of ' +
   'shape {"service","summary","modules":[{"name","summary","groups":[{"name","summary",' +
