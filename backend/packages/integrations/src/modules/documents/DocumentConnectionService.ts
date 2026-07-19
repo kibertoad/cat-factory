@@ -79,13 +79,33 @@ export class DocumentConnectionService {
     source: DocumentSourceKind,
   ): Promise<DocumentConnection | null> {
     const record = await this.deps.documentConnectionRepository.getByWorkspace(workspaceId, source)
-    return record ? toConnection(record) : null
+    if (record) return toConnection(record)
+    const implicit = await this.resolveImplicit(workspaceId, source)
+    return implicit ? toConnection(implicit) : null
   }
 
-  /** Every live connection the workspace holds, across sources. */
+  /**
+   * Every live connection the workspace holds, across sources — the stored
+   * (credentialed) connections PLUS any source that is implicitly connected via an
+   * out-of-band credential (GitHub docs on the workspace's installed App). A stored
+   * row always wins, so an explicitly-connected source is never duplicated.
+   */
   async listConnections(workspaceId: string): Promise<DocumentConnection[]> {
     const records = await this.deps.documentConnectionRepository.listByWorkspace(workspaceId)
-    return records.map(toConnection)
+    const connectedSources = new Set(records.map((r) => r.source))
+    const connections = records.map(toConnection)
+    for (const provider of this.deps.registry.list()) {
+      if (connectedSources.has(provider.kind) || !provider.resolveImplicitConnection) continue
+      const implicit = await provider.resolveImplicitConnection(workspaceId)
+      if (implicit) {
+        connections.push({
+          source: provider.kind,
+          label: implicit.label,
+          connectedAt: this.deps.clock.now(),
+        })
+      }
+    }
+    return connections
   }
 
   /** Resolve the live connection (with credentials), or throw if not connected. */
@@ -94,10 +114,34 @@ export class DocumentConnectionService {
     source: DocumentSourceKind,
   ): Promise<DocumentConnectionRecord> {
     const record = await this.deps.documentConnectionRepository.getByWorkspace(workspaceId, source)
-    if (!record) {
-      throw new ConflictError(`Workspace '${workspaceId}' is not connected to ${source}`)
+    if (record) return record
+    const implicit = await this.resolveImplicit(workspaceId, source)
+    if (implicit) return implicit
+    throw new ConflictError(`Workspace '${workspaceId}' is not connected to ${source}`)
+  }
+
+  /**
+   * Build a synthetic connection record for a source that is implicitly connected
+   * via an out-of-band credential (the GitHub App), or null when it is not. Lets the
+   * import / search / content-resolver paths treat an App-backed source as connected
+   * without a stored marker row — the provider owns the credential resolution.
+   */
+  private async resolveImplicit(
+    workspaceId: string,
+    source: DocumentSourceKind,
+  ): Promise<DocumentConnectionRecord | null> {
+    const provider = this.deps.registry.get(source)
+    if (!provider?.resolveImplicitConnection) return null
+    const normalized = await provider.resolveImplicitConnection(workspaceId)
+    if (!normalized) return null
+    return {
+      workspaceId,
+      source,
+      credentials: normalized.credentials,
+      label: normalized.label,
+      createdAt: this.deps.clock.now(),
+      deletedAt: null,
     }
-    return record
   }
 
   /** Disconnect a source (tombstones the binding). */

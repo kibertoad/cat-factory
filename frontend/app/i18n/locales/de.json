@@ -2176,6 +2176,8 @@
       "contextDocuments": "Kontextdokumente",
       "contextIssues": "Kontext-Issues",
       "attach": "Anhängen",
+      "connectSource": "Quelle verbinden",
+      "connectSourceNamed": "{source} verbinden",
       "done": "Fertig",
       "attachDocDisabledConnect": "Verbinden Sie zuerst eine Dokumentquelle (Integrationen)",
       "attachDocDisabledEnable": "Aktivieren Sie zuerst die Dokumente-Integration",

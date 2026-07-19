@@ -56,18 +56,45 @@ export interface DocumentSourceProvider {
    * display label. Throws a ValidationError on anything missing/unsafe.
    */
   normalizeConnection(input: DocumentCredentials): NormalizedConnection
+  /**
+   * For a source that rides an OUT-OF-BAND credential (e.g. the workspace's installed
+   * GitHub App) rather than a per-workspace stored connection, resolve whether the
+   * workspace is implicitly connected right now — and the marker to present — WITHOUT
+   * a stored connection row. Returns null when the source isn't implicitly connected
+   * for this workspace (so an explicit connect is still required). Optional: a source
+   * that authenticates with its own per-workspace credentials omits it. Today only the
+   * GitHub-docs provider implements it (it rides the workspace's App installation),
+   * mirroring how the GitHub-issues task source is available as soon as the App is
+   * installed with no separate "connect" step.
+   */
+  resolveImplicitConnection?(workspaceId: string): Promise<NormalizedConnection | null>
   /** Resolve a stable page id from raw user input (a bare id or a page URL); null if unparseable. */
   parseRef(input: string): string | null
-  /** Fetch a single page by its id using the connection credentials. */
-  fetchDocument(credentials: DocumentCredentials, externalId: string): Promise<DocumentContent>
+  /**
+   * Fetch a single page by its id using the connection credentials. `workspaceId` is
+   * the workspace on whose behalf the read happens: a provider that authenticates
+   * per-workspace out-of-band (e.g. the GitHub App/PAT, which ignores `credentials`)
+   * MUST scope the read to that workspace's own installation so a crafted `externalId`
+   * can't reach another tenant's repo — the same tenant-scoping `search` performs.
+   */
+  fetchDocument(
+    credentials: DocumentCredentials,
+    externalId: string,
+    workspaceId: string,
+  ): Promise<DocumentContent>
   /**
    * Cheaply read the page's current version token — the {@link DocumentContent.version}
    * value {@link fetchDocument} would return, fetched with metadata only (no body
    * download or Markdown conversion). MUST be strictly cheaper than `fetchDocument`,
    * so the caching seam can bump a cached body's TTL when the token is unchanged
-   * instead of re-fetching. Returns `''` when the source exposes no version.
+   * instead of re-fetching. Returns `''` when the source exposes no version. Scoped to
+   * `workspaceId` for the same tenant-isolation reason as {@link fetchDocument}.
    */
-  probeVersion(credentials: DocumentCredentials, externalId: string): Promise<string>
+  probeVersion(
+    credentials: DocumentCredentials,
+    externalId: string,
+    workspaceId: string,
+  ): Promise<string>
   /**
    * Search the source's catalogue by free text and return lean hits (no body).
    * Optional: a provider that only supports paste-a-URL import omits it (and its

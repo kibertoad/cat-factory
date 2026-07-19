@@ -75,6 +75,7 @@ export class FakeDocumentSourceProvider implements DocumentSourceProvider {
   async fetchDocument(
     credentials: DocumentCredentials,
     externalId: string,
+    _workspaceId?: string,
   ): Promise<DocumentContent> {
     this.calls.push({ credentials, externalId })
     const page = this.pages.get(externalId)
@@ -91,8 +92,14 @@ export class FakeDocumentSourceProvider implements DocumentSourceProvider {
   }
 
   /** The canned page's current version token (fetching it first so it exists). */
-  async probeVersion(credentials: DocumentCredentials, externalId: string): Promise<string> {
-    const page = this.pages.get(externalId) ?? (await this.fetchDocument(credentials, externalId))
+  async probeVersion(
+    credentials: DocumentCredentials,
+    externalId: string,
+    workspaceId?: string,
+  ): Promise<string> {
+    const page =
+      this.pages.get(externalId) ??
+      (await this.fetchDocument(credentials, externalId, workspaceId ?? 'ws_fake'))
     return page.version
   }
 

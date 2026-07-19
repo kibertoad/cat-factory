@@ -48,6 +48,7 @@ export class LinearDocumentProvider implements DocumentSourceProvider {
   async fetchDocument(
     credentials: DocumentCredentials,
     externalId: string,
+    _workspaceId: string,
   ): Promise<DocumentContent> {
     const client = new LinearGraphqlClient(linearAuthFromCredentials(credentials))
     const data = await client.query<{
@@ -60,7 +61,11 @@ export class LinearDocumentProvider implements DocumentSourceProvider {
    * The cheap version probe: query only the document's `updatedAt`, skipping the
    * (potentially large) `content` field a full fetch downloads.
    */
-  async probeVersion(credentials: DocumentCredentials, externalId: string): Promise<string> {
+  async probeVersion(
+    credentials: DocumentCredentials,
+    externalId: string,
+    _workspaceId: string,
+  ): Promise<string> {
     const client = new LinearGraphqlClient(linearAuthFromCredentials(credentials))
     const data = await client.query<{ document?: { updatedAt?: string | null } | null }>(
       LINEAR_DOCUMENT_VERSION_QUERY,

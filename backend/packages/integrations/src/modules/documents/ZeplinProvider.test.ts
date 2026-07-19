@@ -50,7 +50,7 @@ describe('ZeplinProvider.fetchDocument', () => {
       }),
     )
 
-    const doc = await new ZeplinProvider().fetchDocument(TOKEN, 'p1:s1')
+    const doc = await new ZeplinProvider().fetchDocument(TOKEN, 'p1:s1', 'ws_1')
     expect(doc.title).toBe('Acme — Home')
     expect(doc.url).toBe('https://app.zeplin.io/project/p1/screen/s1')
     expect(doc.body).toContain('## Home')
@@ -67,7 +67,7 @@ describe('ZeplinProvider.fetchDocument', () => {
         return jsonResponse([])
       }),
     )
-    const doc = await new ZeplinProvider().fetchDocument(TOKEN, 'p1')
+    const doc = await new ZeplinProvider().fetchDocument(TOKEN, 'p1', 'ws_1')
     expect(doc.version).toBe('1751600000')
   })
 })
@@ -83,7 +83,7 @@ describe('ZeplinProvider.probeVersion', () => {
         throw new Error(`unexpected ${url}`)
       }),
     )
-    const version = await new ZeplinProvider().probeVersion(TOKEN, 'p1:s1')
+    const version = await new ZeplinProvider().probeVersion(TOKEN, 'p1:s1', 'ws_1')
     expect(version).toBe('1751600000')
     // The probe is a single project read — it never touches the screen/component reads.
     expect(seen).toHaveLength(1)
@@ -101,7 +101,7 @@ describe('ZeplinProvider.probeVersion', () => {
         return new Response('nope', { status: 500 })
       }),
     )
-    const doc = await new ZeplinProvider().fetchDocument(TOKEN, 'p1')
+    const doc = await new ZeplinProvider().fetchDocument(TOKEN, 'p1', 'ws_1')
     expect(doc.title).toBe('Acme')
     expect(doc.body).toContain('### Components')
     expect(doc.body).not.toContain('### Design tokens')
@@ -119,7 +119,7 @@ describe('ZeplinProvider.probeVersion', () => {
         return jsonResponse([])
       }),
     )
-    await expect(new ZeplinProvider().fetchDocument(TOKEN, 'p1')).rejects.toBeInstanceOf(
+    await expect(new ZeplinProvider().fetchDocument(TOKEN, 'p1', 'ws_1')).rejects.toBeInstanceOf(
       ZeplinApiError,
     )
   })
@@ -133,7 +133,7 @@ describe('ZeplinProvider.probeVersion', () => {
         return jsonResponse([])
       }),
     )
-    await expect(new ZeplinProvider().fetchDocument(TOKEN, 'p1')).rejects.toBeInstanceOf(
+    await expect(new ZeplinProvider().fetchDocument(TOKEN, 'p1', 'ws_1')).rejects.toBeInstanceOf(
       ZeplinApiError,
     )
   })
@@ -147,7 +147,7 @@ describe('ZeplinProvider.probeVersion', () => {
         return jsonResponse([])
       }),
     )
-    const doc = await new ZeplinProvider().fetchDocument(TOKEN, 'p1:s1')
+    const doc = await new ZeplinProvider().fetchDocument(TOKEN, 'p1:s1', 'ws_1')
     expect(doc.title).toBe('Acme — Home')
     expect(doc.body).toContain('## Home')
   })
@@ -157,7 +157,7 @@ describe('ZeplinProvider.probeVersion', () => {
       'fetch',
       vi.fn(async () => new Response('unauthorized', { status: 401 })),
     )
-    await expect(new ZeplinProvider().fetchDocument(TOKEN, 'p1')).rejects.toBeInstanceOf(
+    await expect(new ZeplinProvider().fetchDocument(TOKEN, 'p1', 'ws_1')).rejects.toBeInstanceOf(
       ZeplinApiError,
     )
   })
@@ -170,7 +170,7 @@ describe('ZeplinProvider.probeVersion', () => {
           new Response(null, { status: 302, headers: { location: 'https://169.254.169.254/' } }),
       ),
     )
-    await expect(new ZeplinProvider().fetchDocument(TOKEN, 'p1')).rejects.toBeInstanceOf(
+    await expect(new ZeplinProvider().fetchDocument(TOKEN, 'p1', 'ws_1')).rejects.toBeInstanceOf(
       ZeplinApiError,
     )
   })

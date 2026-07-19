@@ -62,7 +62,7 @@ export class DocumentImportService {
       throw new ValidationError(`Could not resolve a ${source} page id from '${ref}'`)
     }
     const connection = await this.deps.connectionService.requireConnection(workspaceId, source)
-    const content = await provider.fetchDocument(connection.credentials, externalId)
+    const content = await provider.fetchDocument(connection.credentials, externalId, workspaceId)
 
     // Preserve any existing block link across a re-import.
     const existing = await this.deps.documentRepository.get(workspaceId, source, content.externalId)

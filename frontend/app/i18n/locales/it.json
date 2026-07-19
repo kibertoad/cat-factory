@@ -2176,6 +2176,8 @@
       "contextDocuments": "Documenti di contesto",
       "contextIssues": "Issue di contesto",
       "attach": "Allega",
+      "connectSource": "Collega una fonte",
+      "connectSourceNamed": "Collega {source}",
       "done": "Fatto",
       "attachDocDisabledConnect": "Connetti prima una sorgente di documenti (Integrazioni)",
       "attachDocDisabledEnable": "Abilita prima l'integrazione dei documenti",
