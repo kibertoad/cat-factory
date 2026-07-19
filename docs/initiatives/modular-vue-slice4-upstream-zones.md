@@ -2,8 +2,19 @@
 
 **For:** the modular-react maintainers (`@modular-frontend/*` engine + `@modular-vue/*` bindings + `docs/`).
 **From:** the cat-factory frontend team, driving [modular-vue adoption slice 4 ("Inspector panels")](./modular-vue-adoption.md).
-**Type:** **new binding package** `@modular-vue/zones` (the Vue analogue of the React zones surface), made **subject-keyed and route-free**, plus the small carry-over peer-range widen tracked since slice 2. Additive; no breaking changes to existing packages.
-**Status:** ⛔ **REQUESTED — BLOCKING slice 4.** modular-vue ships module hosting, slots, navigation, DI, remote manifests, journeys (slice 3), and the pick-one component registry (slice 2) — but its **zones surface is route-driven** (a zone's contributions are selected by the active route), and cat-factory is a single-route board app whose detail panels vary by **application state**, not by URL. There is no primitive that renders _all_ the panels matching a runtime **subject** (the selected board block), gated by per-panel predicates over that subject, ordered, and contributable by first-party AND consumer modules. Hand-rolling it in cat-factory is precisely the "local shim that outlives its slice" the initiative forbids. This document is the co-evolution artifact for slice 4: the upstream half, written before the cat-factory half so the two land as a matched set.
+**Type:** a **subject-keyed panels** primitive (the Vue analogue of the React zones/detail surface), made **subject-keyed and route-free**, plus the carry-over peer-range widen tracked since slice 2. Additive; no breaking changes to existing packages.
+**Status:** ✅ **RELEASED + RE-ADOPTED.** Shipped essentially as specced, but as a **subject-keyed _panels_ primitive** rather than a new `@modular-vue/zones` package (the route-driven "zones" surface stays as-is; this is a distinct, sibling primitive): `@modular-frontend/core@0.4.0` adds `PanelEntry<TSubject>` / `PanelGroupHandle<TSubject>` / `definePanelGroup<TSubject>(slotKey)` / `resolvePanels(entries, subject, opts?)`, and `@modular-vue/vue@1.3.0` (re-exported from `@modular-vue/core@1.3.0`) adds `PanelsOutlet` / `usePanels` / `usePanelSubject` / `panelSubjectKey`. cat-factory bumped the pins and landed the consuming slice (§5) with **no shim**. Two deltas from the spec below and two residuals, all recorded in the [tracker](./modular-vue-adoption.md)'s slice-4 outcomes:
+
+- **Naming:** `definePanelGroup` / `PanelEntry` / `PanelsOutlet` / `usePanels` / `usePanelSubject` (not the `defineZone` / `ZoneContribution` / `ZoneOutlet` / `useZone` / `useZoneSubject` names proposed below). Same semantics.
+- **No `section` field (§4C).** A panel group is backed by ONE slot key (`definePanelGroup(slotKey)`), so multiple regions = multiple groups rather than one group with sections. cat-factory needed only one group (`inspectorPanels`) — the shell keeps its other regions — so this cost nothing.
+- **Residual 1 — peer range not widened (Gap D / §4D):** the `@modular-vue/*` bindings re-export the panels from `@modular-frontend/core@0.4.0` but still peer-range it at `^0.1.0 || ^0.2.0 || ^0.3.0`, so installing the required `0.4.0` emits a benign unmet-peer warning (non-fatal; the repo has no `strict-peer-dependencies`). Widen the bindings' peer to include `^0.4.0` upstream (same shape as slice 0's vue-router and slice 2's core widen).
+- **Residual 2 — engine still deps the old core:** `@modular-frontend/journeys-engine@1.8.0` (pulled transitively by `@modular-vue/journeys`) deps `@modular-frontend/core@0.3.0`, which would drag a SECOND copy of the neutral core in beside `0.4.0` (exactly the §4D hazard). cat-factory pins one core via a `@modular-frontend/core: 0.4.0` pnpm override (0.4.0 is an additive superset of 0.3.0); bump the engine's core dep to `^0.4.0` upstream to drop the override.
+
+The spec below is retained as the design record.
+
+---
+
+**(Original request, as filed before the release.)** modular-vue ships module hosting, slots, navigation, DI, remote manifests, journeys (slice 3), and the pick-one component registry (slice 2) — but its **zones surface is route-driven** (a zone's contributions are selected by the active route), and cat-factory is a single-route board app whose detail panels vary by **application state**, not by URL. There is no primitive that renders _all_ the panels matching a runtime **subject** (the selected board block), gated by per-panel predicates over that subject, ordered, and contributable by first-party AND consumer modules. Hand-rolling it in cat-factory is precisely the "local shim that outlives its slice" the initiative forbids. This document is the co-evolution artifact for slice 4: the upstream half, written before the cat-factory half so the two land as a matched set.
 
 > Self-contained by design — read it without cat-factory context. The initiative tracker's slice-4 row ("Expected upstream workstream: A zones-without-routes story: zone contributions keyed by app state instead of the active route") points here. It mirrors the slice-2 spec ([`modular-vue-slice2-upstream-pairing.md`](./modular-vue-slice2-upstream-pairing.md)) and slice-3 spec ([`modular-vue-slice3-upstream-journeys.md`](./modular-vue-slice3-upstream-journeys.md)), both of which shipped essentially as written.
 
@@ -24,19 +35,19 @@ The target is one 631-line monolith, `InspectorPanel.vue`:
 
 Concretely, ~19 sub-panels are gated like this today (all in `frontend/app/app/components/panels/inspector/` unless noted):
 
-| Panel                                                     | Renders when (predicate over the selected block)         |
-| --------------------------------------------------------- | -------------------------------------------------------- |
-| `ContainerSummary`                                        | `level ∈ {frame, module}`                                |
-| `FrontendConfig`                                          | `level === frame && type === frontend`                   |
-| `ServiceConnections`                                      | `level === frame && type === service`                    |
-| `ServiceTestConfig` / `ServiceTestSecrets`                | `level === frame`                                        |
-| `ServiceFragments` / `ServiceReleaseHealthConfig`         | `level === frame`                                        |
-| `TaskContextDocs`, `TaskContextIssues`                    | `level === task`                                         |
-| `RecurringScheduleSettings`, `TaskExecution`, `TaskEstimateBadge`, `TaskDependencies`, `TaskRunSettings`, `TaskAgentConfig`, `TaskStructure` | `level === task` (a fixed render order)                  |
-| `EpicChildren`                                            | `level === epic`                                         |
-| `InitiativeInspector`                                     | `level === initiative`                                   |
-| `AgentFailureCard` (board/)                               | the block's current run `status === failed` (any level)  |
-| `AgentStopButton` (board/)                                | a running bootstrap on a container (any level)           |
+| Panel                                                                                                                                        | Renders when (predicate over the selected block)        |
+| -------------------------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------- |
+| `ContainerSummary`                                                                                                                           | `level ∈ {frame, module}`                               |
+| `FrontendConfig`                                                                                                                             | `level === frame && type === frontend`                  |
+| `ServiceConnections`                                                                                                                         | `level === frame && type === service`                   |
+| `ServiceTestConfig` / `ServiceTestSecrets`                                                                                                   | `level === frame`                                       |
+| `ServiceFragments` / `ServiceReleaseHealthConfig`                                                                                            | `level === frame`                                       |
+| `TaskContextDocs`, `TaskContextIssues`                                                                                                       | `level === task`                                        |
+| `RecurringScheduleSettings`, `TaskExecution`, `TaskEstimateBadge`, `TaskDependencies`, `TaskRunSettings`, `TaskAgentConfig`, `TaskStructure` | `level === task` (a fixed render order)                 |
+| `EpicChildren`                                                                                                                               | `level === epic`                                        |
+| `InitiativeInspector`                                                                                                                        | `level === initiative`                                  |
+| `AgentFailureCard` (board/)                                                                                                                  | the block's current run `status === failed` (any level) |
+| `AgentStopButton` (board/)                                                                                                                   | a running bootstrap on a container (any level)          |
 
 Two properties matter and drive the named sub-requests below:
 
@@ -49,13 +60,13 @@ The extensibility payoff (slice 4's whole point, and the reason a registry beats
 
 Current published versions (all installable):
 
-| Package                                     | Version | Role                                                                                                                          |
-| ------------------------------------------- | ------- | --------------------------------------------------------------------------------------------------------------------------- |
-| `@modular-frontend/core`                    | `0.2.0` | Neutral engine: modules, slots, navigation, DI, remote manifests, `resolveComponentRegistry`/`pairById` (slice-2 pairing).   |
-| `@modular-vue/core` `/vue` `/runtime`       | `1.2.0`/`1.3.0` | Vue bindings for modules, slots (`useReactiveSlots`), navigation, DI, the pairing re-exports.                        |
-| `@modular-vue/journeys`                      | `1.1.0`+ | Vue journeys binding (slice 3): host/outlet/provider/sync + Pinia persistence.                                             |
-| `@modular-vue/nuxt`                         | `0.3.0` | Nuxt install — `installModularApp` (modules + slots + nav + DI + journeys extension).                                        |
-| **`@modular-vue/zones`**                    | **— (404)** | **Does not exist.** (`@modular-vue/vue` exposes no state-keyed zone surface.)                                            |
+| Package                               | Version         | Role                                                                                                                       |
+| ------------------------------------- | --------------- | -------------------------------------------------------------------------------------------------------------------------- |
+| `@modular-frontend/core`              | `0.2.0`         | Neutral engine: modules, slots, navigation, DI, remote manifests, `resolveComponentRegistry`/`pairById` (slice-2 pairing). |
+| `@modular-vue/core` `/vue` `/runtime` | `1.2.0`/`1.3.0` | Vue bindings for modules, slots (`useReactiveSlots`), navigation, DI, the pairing re-exports.                              |
+| `@modular-vue/journeys`               | `1.1.0`+        | Vue journeys binding (slice 3): host/outlet/provider/sync + Pinia persistence.                                             |
+| `@modular-vue/nuxt`                   | `0.3.0`         | Nuxt install — `installModularApp` (modules + slots + nav + DI + journeys extension).                                      |
+| **`@modular-vue/zones`**              | **— (404)**     | **Does not exist.** (`@modular-vue/vue` exposes no state-keyed zone surface.)                                              |
 
 The three primitives that _look_ adjacent each stop short in a specific, load-bearing way:
 

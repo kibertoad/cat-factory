@@ -1830,6 +1830,17 @@ auth-enabled or it passes vacuously.
   `AGENT_BY_KIND` const is frozen (never mutated), and `agentKindMeta` resolves custom kinds
   through a slot-sourced reactive projection.
   `requirements-review` is the first consumer (the review window).
+- **Inspector panel seam (frontend):** the block inspector's body is a **subject-keyed panel
+  group** (slice 4 of the modular-vue adoption), not a `v-if` monolith. Each body sub-panel is a
+  `PanelEntry<Block>` (`{ id, component, when(block), order }`) contributed to the `inspectorPanels`
+  slot (`app/modular/panels/inspector.{logic.,}ts`, the group handle is `definePanelGroup<Block>`);
+  `InspectorPanel.vue` renders them via `<PanelsOutlet :group="inspectorPanels" :subject="block">`,
+  which shows every panel whose `when(block)` matches, ordered, with the selected block injected as
+  the subject (each panel's wrapper reads it via `usePanelSubject`). Add a BUILT-IN inspector panel
+  by adding a spec (id/order/`when`) + its component; a CONSUMER contributes its own inspector panels
+  (e.g. for a custom block type) to the SAME slot via `registerAppModule` — no `InspectorPanel.vue`
+  edits. The shell (identity/title/description, run banners, actions row, the frame "view
+  requirements" button) is NOT part of the group.
 - **Frontend module registry seam (`registerAppModule`, `@cat-factory/app`):** the frontend
   analogue of the backend registries (`registerAgentKind`/`registerGate`). The layer owns a
   [modular-vue](https://github.com/kibertoad/modular-react) registry (`app/modular/registry.ts`,

@@ -1,6 +1,6 @@
 import type { Component } from 'vue'
-import type { ComponentEntry } from '@modular-vue/core'
-import type { CustomAgentKind } from '~/types/domain'
+import type { ComponentEntry, PanelEntry } from '@modular-vue/core'
+import type { Block, CustomAgentKind } from '~/types/domain'
 import type { NavContribution } from './nav-contributions'
 
 /**
@@ -17,6 +17,12 @@ import type { NavContribution } from './nav-contributions'
  *    contributes (the palette/catalog data half). BACKEND-registered kinds
  *    arrive separately as a {@link RemoteModuleManifest} read in the agents
  *    store — see `stores/agents.ts`.
+ *  - `inspectorPanels` (slice 4) — the subject-keyed detail panels of the block
+ *    inspector ({@link PanelEntry} over a `Block`), rendered all-matching + ordered
+ *    by `<PanelsOutlet>` and gated per-block by each entry's `when(block)`
+ *    predicate. Replaces `InspectorPanel.vue`'s level/type `v-if` fan; a consumer
+ *    contributes its own panels to the SAME slot via `registerAppModule`. This is
+ *    the slot key `definePanelGroup<Block>('inspectorPanels')` names.
  *
  * The index signature is mutable (`unknown[]`) to satisfy the runtime's
  * `SlotMap` constraint while `unknown[]` still meets `useReactiveSlots`'
@@ -26,6 +32,7 @@ export interface AppSlots {
   nav: NavContribution[]
   resultViews: ResultViewContribution[]
   agentKinds: CustomAgentKind[]
+  inspectorPanels: PanelEntry<Block>[]
   [key: string]: unknown[]
 }
 

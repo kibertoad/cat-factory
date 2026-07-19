@@ -1,26 +1,10 @@
 <script setup lang="ts">
+import { PanelsOutlet } from '@modular-vue/core'
 import type { Block, BlockStatus } from '~/types/domain'
 import { blockTypeMeta, STATUS_META } from '~/utils/catalog'
 import { pipelineAllowedForManualStart } from '~/utils/pipeline'
-import TaskContextDocs from '~/components/documents/TaskContextDocs.vue'
-import TaskContextIssues from '~/components/tasks/TaskContextIssues.vue'
-import TaskAgentConfig from '~/components/panels/inspector/TaskAgentConfig.vue'
-import ServiceTestConfig from '~/components/panels/inspector/ServiceTestConfig.vue'
-import ServiceFragments from '~/components/panels/inspector/ServiceFragments.vue'
-import ServiceReleaseHealthConfig from '~/components/panels/inspector/ServiceReleaseHealthConfig.vue'
-import ServiceTestSecrets from '~/components/panels/inspector/ServiceTestSecrets.vue'
-import FrontendConfig from '~/components/panels/inspector/FrontendConfig.vue'
-import ServiceConnections from '~/components/panels/inspector/ServiceConnections.vue'
-import ContainerSummary from '~/components/panels/inspector/ContainerSummary.vue'
-import TaskDependencies from '~/components/panels/inspector/TaskDependencies.vue'
-import TaskStructure from '~/components/panels/inspector/TaskStructure.vue'
-import TaskRunSettings from '~/components/panels/inspector/TaskRunSettings.vue'
-import TaskExecution from '~/components/panels/inspector/TaskExecution.vue'
-import TaskEstimateBadge from '~/components/panels/inspector/TaskEstimateBadge.vue'
-import EpicChildren from '~/components/panels/inspector/EpicChildren.vue'
-import InitiativeInspector from '~/components/panels/inspector/InitiativeInspector.vue'
+import { inspectorPanels } from '~/modular/panels/inspector.logic'
 import IconButton from '~/components/common/IconButton.vue'
-import RecurringScheduleSettings from '~/components/panels/inspector/RecurringScheduleSettings.vue'
 import AgentFailureCard from '~/components/board/AgentFailureCard.vue'
 import AgentStopButton from '~/components/board/AgentStopButton.vue'
 
@@ -76,8 +60,6 @@ watch(
 )
 const isContainer = computed(() => level.value === 'frame' || level.value === 'module')
 const isTask = computed(() => level.value === 'task')
-const isEpic = computed(() => level.value === 'epic')
-const isInitiative = computed(() => level.value === 'initiative')
 
 const instance = computed(() => execution.getInstance(block.value?.executionId))
 const typeMeta = computed(() => (block.value ? blockTypeMeta(block.value.type) : null))
@@ -481,14 +463,9 @@ const showOriginalDescription = ref(false)
         </UButton>
       </div>
 
-      <!-- task: context documents -->
-      <TaskContextDocs v-if="isTask" :key="`context-docs-${block.id}`" :block="block" />
-
-      <!-- task: context issues (tracker) -->
-      <TaskContextIssues v-if="isTask" :key="`context-issues-${block.id}`" :block="block" />
-
       <!-- service (frame): navigate the prescriptive spec tree (+ Gherkin scenarios when
-           the spec is on the repo's default branch) -->
+           the spec is on the repo's default branch). A shell affordance, not a
+           level-keyed body panel, so it stays here above the panel outlet. -->
       <UButton
         v-if="isFrame"
         block
@@ -501,59 +478,19 @@ const showOriginalDescription = ref(false)
         {{ t('panels.inspector.viewRequirements') }}
       </UButton>
 
-      <!-- service / module: tasks summary -->
-      <ContainerSummary v-if="isContainer" :key="`container-${block.id}`" :block="block" />
-      <!-- frontend (frame): build/serve/mock config + backend bindings (board links) -->
-      <FrontendConfig
-        v-if="isFrame && block.type === 'frontend'"
-        :key="`frontend-${block.id}`"
-        :block="block"
+      <!-- The level/type-keyed inspector body: the `inspectorPanels` panel group
+           (slice 4 of the modular-vue adoption). `<PanelsOutlet>` renders every
+           panel whose `when(block)` matches, ordered, with the selected block
+           injected as the subject (read via `usePanelSubject` in each panel's
+           wrapper). Replaces the pre-slice-4 `v-if` fan; `subject-key` is the block
+           id, so switching selections remounts panel content (matching the old
+           per-panel `:key`). A consumer contributes its own panels to the SAME
+           group via `registerAppModule`. -->
+      <PanelsOutlet
+        :group="inspectorPanels"
+        :subject="(block ?? null) as any"
+        :subject-key="block?.id ?? ''"
       />
-
-      <!-- service (frame): directed connections to the other services it uses (board links) -->
-      <ServiceConnections
-        v-if="isFrame && block.type === 'service'"
-        :key="`connections-${block.id}`"
-        :block="block"
-      />
-
-      <!-- service (frame): test infra + provisioning configuration -->
-      <ServiceTestConfig v-if="isFrame" :key="`test-config-${block.id}`" :block="block" />
-
-      <!-- service (frame): SENSITIVE test credentials (sealed, injected out of band) -->
-      <ServiceTestSecrets v-if="isFrame" :key="`test-secrets-${block.id}`" :block="block" />
-
-      <!-- service (frame): best-practice fragments for code-aware agents -->
-      <ServiceFragments v-if="isFrame" :key="`fragments-${block.id}`" :block="block" />
-
-      <!-- service (frame): post-release-health monitor/SLO mapping -->
-      <ServiceReleaseHealthConfig
-        v-if="isFrame"
-        :key="`release-health-${block.id}`"
-        :block="block"
-      />
-
-      <!-- task: the live execution surface first (open by default), then the estimate,
-           then the collapsed configuration sections (dependencies, run settings, agent
-           config, structure) so a running task reads top-down without scrolling. -->
-      <!-- Keyed by block id so a manual collapse/expand doesn't leak across task
-           selections: switching tasks re-mounts each section back to its default state
-           (e.g. the live Execution section is open again for the newly selected task). -->
-      <template v-else-if="isTask">
-        <RecurringScheduleSettings :key="`schedule-${block.id}`" :block="block" />
-        <TaskExecution :key="`execution-${block.id}`" :block="block" />
-        <TaskEstimateBadge :key="`estimate-${block.id}`" :block="block" />
-        <TaskDependencies :key="`deps-${block.id}`" :block="block" />
-        <TaskRunSettings :key="`run-settings-${block.id}`" :block="block" />
-        <TaskAgentConfig :key="`agent-config-${block.id}`" :block="block" />
-        <TaskStructure :key="`structure-${block.id}`" :block="block" />
-      </template>
-
-      <!-- epic: the full tree of member tasks, grouped by service → module -->
-      <EpicChildren v-else-if="isEpic" :key="`epic-${block.id}`" :block="block" />
-
-      <!-- initiative: status + goal, run-planning + tracker controls -->
-      <InitiativeInspector v-else-if="isInitiative" :block="block" />
 
       <!-- Locked-run explanation: a disabled task Run button reads as a dead lock unless
            it says what's holding it. Named here (and on the button title) so the blocking

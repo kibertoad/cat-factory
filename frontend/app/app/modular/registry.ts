@@ -101,7 +101,7 @@ export function createAppRegistry(
   // are registered from the client plugin via `extraModules` + `registerJourney`.
   const registry = createRegistry<AppDeps, AppSlots>({
     services: { gates: deps.gates },
-    slots: { nav: [], resultViews: [], agentKinds: [] },
+    slots: { nav: [], resultViews: [], agentKinds: [], inspectorPanels: [] },
   }).use(journeysPlugin())
   for (const mod of [...FIRST_PARTY_MODULES, ...extraModules, ...consumerModules]) {
     registry.register(mod)
