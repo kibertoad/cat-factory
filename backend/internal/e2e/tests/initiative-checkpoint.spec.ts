@@ -131,11 +131,23 @@ test.describe('initiative phase checkpoint', () => {
     // Open the tracker: the checkpoint pause banner explains the wait, and the phase-one header shows
     // the "awaiting review" checkpoint badge — the review surface the human acts from.
     await card.getByTestId('initiative-open-tracker').click()
-    await expect(page.getByTestId('initiative-tracker-window')).toBeVisible({
-      timeout: LIVE_TIMEOUT,
-    })
+    const trackerDialog = page.getByTestId('initiative-tracker-window')
+    await expect(trackerDialog).toBeVisible({ timeout: LIVE_TIMEOUT })
     await expect(page.getByTestId('initiative-checkpoint-pause')).toBeVisible()
     await expect(page.getByTestId('initiative-phase-checkpoint-phase-one')).toBeVisible()
+
+    // Slice 5 of the modular-vue adoption: the (block-keyed) tracker now renders in the shared
+    // `ResultWindowShell`. Its progress/status chips land in the shell's `#header-extras` slot,
+    // and it closes on the shell-owned Escape — the behaviour that had to keep working once
+    // `useResultView` stopped registering its own per-window Escape listener (the slice-5 final
+    // cleanup). Prove the header-extras render, Escape-close the window, and reopen it, then act
+    // on the still-live checkpoint.
+    await expect(trackerDialog.getByTestId('initiative-progress')).toBeVisible()
+    await page.keyboard.press('Escape')
+    await expect(trackerDialog).toBeHidden()
+    await card.getByTestId('initiative-open-tracker').click()
+    await expect(trackerDialog).toBeVisible({ timeout: LIVE_TIMEOUT })
+    await expect(page.getByTestId('initiative-checkpoint-pause')).toBeVisible()
 
     // Resume (GO) from the banner. The loop clears the checkpoint and advances to phase two.
     await page.getByTestId('initiative-checkpoint-resume').click()

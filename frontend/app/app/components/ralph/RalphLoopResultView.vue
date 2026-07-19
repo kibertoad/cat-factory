@@ -15,11 +15,9 @@ const board = useBoardStore()
 const execution = useExecutionStore()
 const { t, d } = useI18n()
 
-// `manageEscape: false` — `ResultWindowShell` owns Escape (and focus trap + scroll lock +
-// stacking) via the shared overlay behaviour.
-const { open, blockId, instanceId, stepIndex, close } = useResultView('ralph-loop', {
-  manageEscape: false,
-})
+// `ResultWindowShell` owns Escape (and focus trap + scroll lock + stacking) via the shared
+// overlay behaviour.
+const { open, blockId, instanceId, stepIndex, close } = useResultView('ralph-loop')
 const block = computed(() => (blockId.value ? board.getBlock(blockId.value) : undefined))
 const headerTitle = computed(
   () => `${meta.value.label}${block.value ? ` — ${block.value.title}` : ''}`,

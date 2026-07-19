@@ -25,11 +25,9 @@ const access = useWorkspaceAccess()
 const { confirmAction, toastDone } = useConfirmAction()
 
 // Shared seam contract (open/blockId/close). No `onOpen` loader: the gate state rides on the
-// execution step, pushed over the stream. `manageEscape: false` — `ResultWindowShell` owns
-// Escape (and focus trap + scroll lock + stacking).
-const { open, blockId, instanceId, stepIndex, close } = useResultView('human-test', {
-  manageEscape: false,
-})
+// execution step, pushed over the stream. `ResultWindowShell` owns Escape (and focus trap +
+// scroll lock + stacking).
+const { open, blockId, instanceId, stepIndex, close } = useResultView('human-test')
 const block = computed(() => (blockId.value ? board.getBlock(blockId.value) : undefined))
 const headerTitle = computed(() =>
   block.value ? t('humanTest.titleWithBlock', { title: block.value.title }) : t('humanTest.title'),
