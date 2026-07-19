@@ -4385,7 +4385,9 @@
       "refPlaceholder": "Id lub URL strony (np. strona Confluence/Notion lub URL pliku GitHub)",
       "tagsPlaceholder": "Tagi, oddzielone przecinkami (opcjonalnie)",
       "link": "Połącz jako żywy fragment",
-      "githubBrowseHint": "Przeglądaj repozytorium i wybierz plik do połączenia."
+      "githubBrowseHint": "Przeglądaj repozytorium i wybierz jeden lub więcej plików do połączenia.",
+      "selectedFiles": "Wybrane pliki ({count})",
+      "removeFile": "Usuń plik"
     },
     "sources": {
       "metaSynced": "zsynchronizowano · ref {ref}",
@@ -4419,7 +4421,8 @@
       "upToDate": "Aktualne",
       "checkSourceFailed": "Nie udało się sprawdzić źródła",
       "sourceUnlinked": "Odłączono źródło",
-      "unlinkSourceFailed": "Nie udało się odłączyć źródła"
+      "unlinkSourceFailed": "Nie udało się odłączyć źródła",
+      "documentsLinked": "Połączono {count} dokument jako żywy fragment | Połączono {count} dokumenty jako żywe fragmenty | Połączono {count} dokumentów jako żywe fragmenty"
     },
     "confirmRemove": {
       "title": "Usunąć ten fragment?",

@@ -4385,7 +4385,9 @@
       "refPlaceholder": "Id ou URL de page (par ex. une page Confluence/Notion ou l'URL d'un fichier GitHub)",
       "tagsPlaceholder": "Étiquettes, séparées par des virgules (facultatif)",
       "link": "Lier comme fragment vivant",
-      "githubBrowseHint": "Parcourez le dépôt et choisissez le fichier à lier."
+      "githubBrowseHint": "Parcourez le dépôt et choisissez un ou plusieurs fichiers à lier.",
+      "selectedFiles": "Fichiers sélectionnés ({count})",
+      "removeFile": "Retirer le fichier"
     },
     "sources": {
       "metaSynced": "synchronisé · ref {ref}",
@@ -4419,7 +4421,8 @@
       "upToDate": "À jour",
       "checkSourceFailed": "Impossible de vérifier la source",
       "sourceUnlinked": "Source dissociée",
-      "unlinkSourceFailed": "Impossible de dissocier la source"
+      "unlinkSourceFailed": "Impossible de dissocier la source",
+      "documentsLinked": "{count} document lié comme fragment vivant | {count} documents liés comme fragments vivants"
     },
     "confirmRemove": {
       "title": "Supprimer ce fragment ?",

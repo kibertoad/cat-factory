@@ -4396,7 +4396,9 @@
       "refPlaceholder": "מזהה עמוד או כתובת (למשל עמוד Confluence/Notion או כתובת קובץ GitHub)",
       "tagsPlaceholder": "תגיות, מופרדות בפסיקים (אופציונלי)",
       "link": "קשר כמקטע חי",
-      "githubBrowseHint": "עיין במאגר ובחר את הקובץ לקישור."
+      "githubBrowseHint": "עיין במאגר ובחר קובץ אחד או יותר לקישור.",
+      "selectedFiles": "קבצים שנבחרו ({count})",
+      "removeFile": "הסר קובץ"
     },
     "sources": {
       "metaSynced": "סונכרן · ref {ref}",
@@ -4430,7 +4432,8 @@
       "upToDate": "מעודכן",
       "checkSourceFailed": "לא ניתן היה לבדוק את המקור",
       "sourceUnlinked": "קישור המקור בוטל",
-      "unlinkSourceFailed": "לא ניתן היה לבטל את קישור המקור"
+      "unlinkSourceFailed": "לא ניתן היה לבטל את קישור המקור",
+      "documentsLinked": "{count} מסמך קושר כמקטע חי | {count} מסמכים קושרו כמקטעים חיים"
     },
     "confirmRemove": {
       "title": "למחוק את המקטע הזה?",

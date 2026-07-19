@@ -51,8 +51,12 @@ const selectedRepoId = ref<number | undefined>(undefined)
 const selectedRepo = ref<GitHubAvailableRepo | undefined>(undefined)
 
 function toRepoItem(r: GitHubAvailableRepo) {
-  const suffix = r.private ? t('github.addService.repoLabel.private') : ''
-  return { label: `${r.owner}/${r.name}${suffix}`, value: r.githubId }
+  const priv = r.private ? t('github.addService.repoLabel.private') : ''
+  // Badge a repo reachable only via the user's own PAT: a context doc from it resolves through
+  // the workspace App at run time, so on hosted a personal-only repo fails the link with a clear
+  // error. The badge flags that before the pick.
+  const personal = r.personal ? t('github.addService.repoLabel.personal') : ''
+  return { label: `${r.owner}/${r.name}${priv}${personal}`, value: r.githubId }
 }
 const queryMatches = computed(() => (belowMinChars.value ? [] : repoResults.value.map(toRepoItem)))
 const repoMenuItems = computed(() => {

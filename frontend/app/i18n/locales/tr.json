@@ -4397,7 +4397,9 @@
       "refPlaceholder": "Sayfa kimliği veya URL (örn. bir Confluence/Notion sayfası veya GitHub dosya URL'si)",
       "tagsPlaceholder": "Etiketler, virgülle ayrılmış (isteğe bağlı)",
       "link": "Canlı parça olarak bağla",
-      "githubBrowseHint": "Depoya göz atın ve bağlanacak dosyayı seçin."
+      "githubBrowseHint": "Depoya göz atın ve bağlanacak bir veya daha fazla dosya seçin.",
+      "selectedFiles": "Seçilen dosyalar ({count})",
+      "removeFile": "Dosyayı kaldır"
     },
     "sources": {
       "metaSynced": "eşitlendi · ref {ref}",
@@ -4431,7 +4433,8 @@
       "upToDate": "Güncel",
       "checkSourceFailed": "Kaynak denetlenemedi",
       "sourceUnlinked": "Kaynak bağlantısı kaldırıldı",
-      "unlinkSourceFailed": "Kaynak bağlantısı kaldırılamadı"
+      "unlinkSourceFailed": "Kaynak bağlantısı kaldırılamadı",
+      "documentsLinked": "{count} belge canlı parça olarak bağlandı | {count} belge canlı parça olarak bağlandı"
     },
     "confirmRemove": {
       "title": "Bu parça silinsin mi?",

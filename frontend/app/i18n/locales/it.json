@@ -3561,7 +3561,9 @@
       "refPlaceholder": "Id o URL della pagina (es. una pagina Confluence/Notion o l'URL di un file GitHub)",
       "tagsPlaceholder": "Tag, separati da virgola (opzionale)",
       "link": "Collega come frammento vivente",
-      "githubBrowseHint": "Sfoglia il repository e scegli il file da collegare."
+      "githubBrowseHint": "Sfoglia il repository e scegli uno o più file da collegare.",
+      "selectedFiles": "File selezionati ({count})",
+      "removeFile": "Rimuovi file"
     },
     "sources": {
       "metaSynced": "sincronizzato · ref {ref}",
@@ -3595,7 +3597,8 @@
       "upToDate": "Aggiornato",
       "checkSourceFailed": "Impossibile controllare la sorgente",
       "sourceUnlinked": "Sorgente scollegata",
-      "unlinkSourceFailed": "Impossibile scollegare la sorgente"
+      "unlinkSourceFailed": "Impossibile scollegare la sorgente",
+      "documentsLinked": "{count} documento collegato come frammento vivente | {count} documenti collegati come frammenti viventi"
     },
     "confirmRemove": {
       "title": "Eliminare questo frammento?",
