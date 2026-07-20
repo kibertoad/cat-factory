@@ -21,6 +21,14 @@ import {
 const fileMap = (files: { path: string; content: string }[]): Record<string, string> =>
   Object.fromEntries(files.map((f) => [f.path, f.content]))
 
+// Every requirement + acceptance id in a coerced doc, in module→group→requirement order.
+const collectSpecIds = (doc: SpecDoc): string[] =>
+  doc.modules!.flatMap((m) =>
+    m.groups!.flatMap((g) =>
+      g.requirements!.flatMap((r) => [r.id, ...(r.acceptance ?? []).map((a) => a.id)]),
+    ),
+  )
+
 describe('blueprint rendering', () => {
   const service = coerceBlueprintService(
     {
@@ -259,11 +267,7 @@ describe('spec rendering', () => {
       },
       'fallback',
     )!
-    const ids = collide.modules!.flatMap((m) =>
-      m.groups!.flatMap((g) =>
-        g.requirements!.flatMap((r) => [r.id, ...(r.acceptance ?? []).map((a) => a.id)]),
-      ),
-    )
+    const ids = collectSpecIds(collide)
     // Second "Login" requirement and its acceptance are suffixed; no duplicates remain.
     expect(ids).toEqual(['req-login', 'req-login-ac-1', 'req-login-2', 'req-login-ac-1-2'])
     expect(new Set(ids).size).toBe(ids.length)

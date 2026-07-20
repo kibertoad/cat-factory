@@ -377,43 +377,16 @@ export class RequirementReviewService extends IterativeReviewService<
           reviewId,
         )
         const now = this.deps.clock.now()
-        for (const { ph, finding } of targets) {
-          const rec = review.recommendations.find((r) => r.id === ph.id)
-          if (!rec || rec.status !== 'pending') continue
-          const suggestion = finding ? suggestions.get(finding.id) : undefined
-          if (suggestion) {
-            const standard = suggestion.fromStandard
-              ? fragmentById.get(suggestion.fromStandard)
-              : undefined
-            rec.recommendedText = suggestion.recommendation
-            rec.groundedInFragment = standard ? { id: standard.id, title: standard.title } : null
-            rec.updatedAt = now
-            if (rec.auto) {
-              // Auto-recommendation: accept it immediately as the finding's default answer, so
-              // the human sees it pre-filled (editable / dismissable) rather than a card to act
-              // on. Mirrors `acceptRecommendation`, matching the finding against the fresh read.
-              rec.status = 'accepted'
-              const item = findSourceItem(review.items, ph.sourceFinding)
-              if (item) {
-                item.reply = suggestion.recommendation
-                item.status = 'answered'
-                item.updatedAt = now
-              }
-            } else {
-              rec.status = 'ready'
-              readyForReview += 1
-            }
-            produced += 1
-          } else {
-            // The Writer failed for (or no longer matches) this finding: drop the dead placeholder
-            // and reopen its finding so the human can answer it by hand.
-            review.recommendations = review.recommendations.filter((r) => r.id !== ph.id)
-            const item = findSourceItem(review.items, ph.sourceFinding)
-            if (item && item.status === 'recommend_requested') {
-              item.status = 'open'
-              item.updatedAt = now
-            }
-          }
+        for (const target of targets) {
+          const outcome = this.applyRecommendationToTarget(
+            target,
+            review,
+            suggestions,
+            fragmentById,
+            now,
+          )
+          if (outcome.produced) produced += 1
+          if (outcome.readyForReview) readyForReview += 1
         }
         review.updatedAt = now
         await this.repository.upsert(workspaceId, review)
@@ -423,6 +396,55 @@ export class RequirementReviewService extends IterativeReviewService<
     if (readyForReview > 0)
       await this.notifyRecommendationsReady(workspaceId, block, readyForReview)
     return { produced }
+  }
+
+  /**
+   * Apply one Writer suggestion to its live placeholder against a fresh read, mutating `review` in
+   * place. Extracted from the chunk-application loop so that loop stays within the max-depth ceiling
+   * (the auto-accept/answered branch nested three levels below the loop). Returns whether the target
+   * produced a recommendation and whether it became a `ready` card the human must review.
+   */
+  private applyRecommendationToTarget(
+    target: { ph: RequirementRecommendation; finding: RequirementReviewItem | undefined },
+    review: RequirementReview,
+    suggestions: Map<string, { recommendation: string; fromStandard: string | null }>,
+    fragmentById: Map<string, GroundingFragment>,
+    now: number,
+  ): { produced: boolean; readyForReview: boolean } {
+    const { ph, finding } = target
+    const rec = review.recommendations.find((r) => r.id === ph.id)
+    if (!rec || rec.status !== 'pending') return { produced: false, readyForReview: false }
+    const suggestion = finding ? suggestions.get(finding.id) : undefined
+    if (!suggestion) {
+      // The Writer failed for (or no longer matches) this finding: drop the dead placeholder
+      // and reopen its finding so the human can answer it by hand.
+      review.recommendations = review.recommendations.filter((r) => r.id !== ph.id)
+      const item = findSourceItem(review.items, ph.sourceFinding)
+      if (item && item.status === 'recommend_requested') {
+        item.status = 'open'
+        item.updatedAt = now
+      }
+      return { produced: false, readyForReview: false }
+    }
+    const standard = suggestion.fromStandard ? fragmentById.get(suggestion.fromStandard) : undefined
+    rec.recommendedText = suggestion.recommendation
+    rec.groundedInFragment = standard ? { id: standard.id, title: standard.title } : null
+    rec.updatedAt = now
+    if (!rec.auto) {
+      rec.status = 'ready'
+      return { produced: true, readyForReview: true }
+    }
+    // Auto-recommendation: accept it immediately as the finding's default answer, so the human
+    // sees it pre-filled (editable / dismissable) rather than a card to act on. Mirrors
+    // `acceptRecommendation`, matching the finding against the fresh read.
+    rec.status = 'accepted'
+    const item = findSourceItem(review.items, ph.sourceFinding)
+    if (item) {
+      item.reply = suggestion.recommendation
+      item.status = 'answered'
+      item.updatedAt = now
+    }
+    return { produced: true, readyForReview: false }
   }
 
   /**

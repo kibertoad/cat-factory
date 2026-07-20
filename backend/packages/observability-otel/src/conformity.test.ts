@@ -87,6 +87,25 @@ function attrs(kvs: KV[]): Record<string, unknown> {
   return out
 }
 
+// Fold one OTLP metric into the running token-usage / duration totals. Pulled out of the
+// quadruple-nested resourceMetrics→scopeMetrics→metrics walk so that walk stays within the
+// max-depth ceiling (the branching on metric name lived at the bottom of the nest).
+function accumulateMetric(
+  m: Record<string, unknown>,
+  tokenUsage: Record<string, number>,
+  duration: { count: number; sum: number },
+): void {
+  if (m.name === 'gen_ai.client.token.usage') {
+    for (const p of (m.sum as { dataPoints: Record<string, unknown>[] }).dataPoints) {
+      tokenUsage[String(attrs(p.attributes as KV[])['gen_ai.token.type'])] = Number(p.asInt)
+    }
+  } else if (m.name === 'gen_ai.client.operation.duration') {
+    const p = (m.histogram as { dataPoints: Record<string, unknown>[] }).dataPoints[0]!
+    duration.count += Number(p.count)
+    duration.sum += Number(p.sum)
+  }
+}
+
 // OTLP status: UNSET(0)/ERROR(2). The SDK maps the same, so normalise both to those codes.
 async function collectFetch(): Promise<NormalizedTelemetry> {
   const traceBodies: Record<string, unknown>[] = []
@@ -130,17 +149,7 @@ async function collectFetch(): Promise<NormalizedTelemetry> {
       for (const rm of body.resourceMetrics as Record<string, unknown>[]) {
         for (const sm of rm.scopeMetrics as Record<string, unknown>[]) {
           for (const m of sm.metrics as Record<string, unknown>[]) {
-            if (m.name === 'gen_ai.client.token.usage') {
-              for (const p of (m.sum as { dataPoints: Record<string, unknown>[] }).dataPoints) {
-                tokenUsage[String(attrs(p.attributes as KV[])['gen_ai.token.type'])] = Number(
-                  p.asInt,
-                )
-              }
-            } else if (m.name === 'gen_ai.client.operation.duration') {
-              const p = (m.histogram as { dataPoints: Record<string, unknown>[] }).dataPoints[0]!
-              duration.count += Number(p.count)
-              duration.sum += Number(p.sum)
-            }
+            accumulateMetric(m, tokenUsage, duration)
           }
         }
       }

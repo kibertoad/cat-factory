@@ -6,12 +6,12 @@
   },
   "rules": {
     "complexity": ["error", { "max": 141 }],
-    "max-depth": ["error", { "max": 6 }],
-    "max-nested-callbacks": ["error", { "max": 6 }],
+    "max-depth": ["error", { "max": 5 }],
+    "max-nested-callbacks": ["error", { "max": 4 }],
     "max-params": ["error", { "max": 20 }],
     "max-statements": ["error", { "max": 157 }],
-    "max-lines": ["error", { "max": 3119 }],
-    "max-lines-per-function": ["error", { "max": 3103 }]
+    "max-lines": ["error", { "max": 2802 }],
+    "max-lines-per-function": ["error", { "max": 2453 }]
   },
   "ignorePatterns": ["**/*.generated.ts"],
   "env": {
