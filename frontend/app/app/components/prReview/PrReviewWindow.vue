@@ -46,6 +46,10 @@ const step = computed(() => {
 const state = computed<PrReviewStepState | null>(() => step.value?.prReview ?? null)
 const status = computed(() => state.value?.status ?? null)
 const awaiting = computed(() => status.value === 'awaiting_selection')
+// A finding is being re-examined by the Challenge Investigator (the whole review is `challenging`
+// while it runs). The findings stay visible — the challenged one shows a spinner — but the
+// selection controls + per-finding actions are disabled until the verdict lands and it re-parks.
+const challenging = computed(() => status.value === 'challenging')
 // The reviewer's live todo list while it works, streamed onto the step. Its entries are the
 // cohesive slices/chunks the agent grouped the diff into (plus a final "aggregate" step), so it
 // surfaces slices-reviewed-so-far progress during the `reviewing` phase — richer than a spinner.
@@ -101,6 +105,27 @@ const groups = computed(() => {
   return out
 })
 
+/** A finding the Challenge Investigator RETRACTED — it can no longer be acted on (auto-deselected). */
+function isRetracted(f: PrReviewFinding): boolean {
+  return f.challenge?.status === 'retracted'
+}
+/** A finding currently being re-examined by the Challenge Investigator. */
+function isInvestigating(f: PrReviewFinding): boolean {
+  return f.challenge?.status === 'investigating'
+}
+/** A finding the investigator UPHELD + strengthened after a challenge (its body actually changed). */
+function isAmended(f: PrReviewFinding): boolean {
+  return f.challenge?.status === 'amended'
+}
+/** A finding the investigator UPHELD as written after a challenge (kept, no revision). */
+function isUpheld(f: PrReviewFinding): boolean {
+  return f.challenge?.status === 'upheld'
+}
+/** A finding whose challenge investigation FAILED — the finding is kept as-is; re-challenge allowed. */
+function isChallengeFailed(f: PrReviewFinding): boolean {
+  return f.challenge?.status === 'failed'
+}
+
 // The human's selection — a set of finding ids. Defaults to every finding (the human deselects
 // the noise), so "Finish" without touching anything keeps all. Re-seeded ONLY when the set of
 // finding IDS actually changes — NOT on every execution-stream re-emit (which hands us a fresh
@@ -111,9 +136,15 @@ const selected = ref<Set<string>>(new Set())
 watch(
   findingIdKey,
   () => {
-    selected.value = new Set(findings.value.map((f) => f.id))
+    selected.value = new Set(findings.value.filter((f) => !isRetracted(f)).map((f) => f.id))
   },
   { immediate: true },
+)
+
+// The effective selection: checked AND not retracted. A retracted finding is never acted on even
+// if its box was checked before the investigator dropped it (it's disabled + unchecked visually).
+const activeSelectedIds = computed(() =>
+  findings.value.filter((f) => selected.value.has(f.id) && !isRetracted(f)).map((f) => f.id),
 )
 
 function toggle(id: string): void {
@@ -123,7 +154,7 @@ function toggle(id: string): void {
   selected.value = next
 }
 function selectAll(): void {
-  selected.value = new Set(findings.value.map((f) => f.id))
+  selected.value = new Set(findings.value.filter((f) => !isRetracted(f)).map((f) => f.id))
 }
 function clearAll(): void {
   selected.value = new Set()
@@ -132,13 +163,40 @@ function clearAll(): void {
 const canResolve = computed(() => awaiting.value && !prReview.resolving)
 // Fix / Post act on the selection, so they need at least one selected finding; Finish always
 // works (it just records the — possibly empty — curated selection and completes the review).
-const hasSelection = computed(() => selected.value.size > 0)
+const hasSelection = computed(() => activeSelectedIds.value.length > 0)
 
 async function onResolve(action: PrReviewResolution): Promise<void> {
   const id = instanceId.value
   if (!id || !canResolve.value) return
   if ((action === 'fix' || action === 'post') && !hasSelection.value) return
-  await prReview.resolve(id, [...selected.value], action).catch(() => {})
+  await prReview.resolve(id, activeSelectedIds.value, action).catch(() => {})
+}
+
+// Per-finding CHALLENGE: the open finding's id (its inline concern box is showing) + the drafted
+// concern text. Dispatching moves the whole review to `challenging` until the verdict lands.
+const challengeForId = ref<string | null>(null)
+const challengeText = ref('')
+function openChallenge(id: string): void {
+  challengeForId.value = id
+  challengeText.value = ''
+}
+function cancelChallenge(): void {
+  challengeForId.value = null
+  challengeText.value = ''
+}
+async function submitChallenge(id: string): Promise<void> {
+  const inst = instanceId.value
+  if (!inst || !canResolve.value) return
+  const question = challengeText.value.trim()
+  challengeForId.value = null
+  challengeText.value = ''
+  await prReview.challenge(inst, id, question || undefined).catch(() => {})
+}
+async function onDismiss(id: string): Promise<void> {
+  const inst = instanceId.value
+  if (!inst || !canResolve.value) return
+  if (challengeForId.value === id) cancelChallenge()
+  await prReview.dismiss(inst, id).catch(() => {})
 }
 </script>
 
@@ -335,10 +393,20 @@ async function onResolve(action: PrReviewResolution): Promise<void> {
         </div>
 
         <template v-else>
+          <!-- A challenge is in flight: the Challenge Investigator is re-examining a finding. -->
+          <div
+            v-if="challenging"
+            data-testid="pr-review-challenging"
+            class="mb-3 flex items-center gap-2 rounded-md border border-indigo-500/40 bg-indigo-500/10 px-3 py-2 text-[12px] text-indigo-200"
+          >
+            <UIcon name="i-lucide-loader-circle" class="h-4 w-4 shrink-0 animate-spin" />
+            <span>{{ t('prReview.challenge.investigatingBanner') }}</span>
+          </div>
+
           <!-- Selection toolbar -->
           <div v-if="awaiting" class="mb-2 flex items-center gap-3 text-[11px] text-slate-400">
             <span data-testid="pr-review-selected-count">
-              {{ t('prReview.selectedCount', { count: selected.size }) }}
+              {{ t('prReview.selectedCount', { count: activeSelectedIds.length }) }}
             </span>
             <button class="text-indigo-300 hover:underline" @click="selectAll">
               {{ t('prReview.selectAll') }}
@@ -361,19 +429,21 @@ async function onResolve(action: PrReviewResolution): Promise<void> {
               :key="f.id"
               data-testid="pr-review-finding"
               class="mb-1.5 rounded-xl border px-3 py-2 transition"
-              :class="
-                awaiting && selected.has(f.id)
+              :class="[
+                awaiting && selected.has(f.id) && !isRetracted(f)
                   ? 'border-indigo-500/60 bg-indigo-500/5'
-                  : 'border-slate-800 bg-slate-900/60'
-              "
+                  : 'border-slate-800 bg-slate-900/60',
+                isRetracted(f) ? 'opacity-60' : '',
+              ]"
             >
               <div class="flex items-start gap-2">
                 <input
-                  v-if="awaiting"
+                  v-if="awaiting || challenging"
                   type="checkbox"
                   class="mt-1 accent-indigo-500"
                   data-testid="pr-review-finding-toggle"
-                  :checked="selected.has(f.id)"
+                  :checked="selected.has(f.id) && !isRetracted(f)"
+                  :disabled="!awaiting || isRetracted(f)"
                   @change="toggle(f.id)"
                 />
                 <div class="min-w-0 flex-1">
@@ -394,7 +464,47 @@ async function onResolve(action: PrReviewResolution): Promise<void> {
                     >
                       {{ t('prReview.postReport.postedBadge') }}
                     </span>
-                    <h4 class="min-w-0 flex-1 text-[13px] font-medium text-slate-100">
+                    <!-- Challenge outcome badges -->
+                    <span
+                      v-if="isRetracted(f)"
+                      data-testid="pr-review-finding-retracted"
+                      class="rounded bg-rose-500/15 px-1.5 py-0.5 text-[10px] font-semibold uppercase text-rose-300 ring-1 ring-rose-500/30"
+                    >
+                      {{ t('prReview.challenge.retractedBadge') }}
+                    </span>
+                    <span
+                      v-else-if="isAmended(f)"
+                      data-testid="pr-review-finding-amended"
+                      class="rounded bg-sky-500/15 px-1.5 py-0.5 text-[10px] font-semibold uppercase text-sky-300 ring-1 ring-sky-500/30"
+                    >
+                      {{ t('prReview.challenge.strengthenedBadge') }}
+                    </span>
+                    <span
+                      v-else-if="isUpheld(f)"
+                      data-testid="pr-review-finding-upheld"
+                      class="rounded bg-emerald-500/15 px-1.5 py-0.5 text-[10px] font-semibold uppercase text-emerald-300 ring-1 ring-emerald-500/30"
+                    >
+                      {{ t('prReview.challenge.upheldBadge') }}
+                    </span>
+                    <span
+                      v-else-if="isChallengeFailed(f)"
+                      data-testid="pr-review-finding-challenge-failed"
+                      class="rounded bg-amber-500/15 px-1.5 py-0.5 text-[10px] font-semibold uppercase text-amber-300 ring-1 ring-amber-500/30"
+                    >
+                      {{ t('prReview.challenge.failedBadge') }}
+                    </span>
+                    <span
+                      v-else-if="isInvestigating(f)"
+                      data-testid="pr-review-finding-investigating"
+                      class="flex items-center gap-1 rounded bg-indigo-500/15 px-1.5 py-0.5 text-[10px] font-semibold uppercase text-indigo-300 ring-1 ring-indigo-500/30"
+                    >
+                      <UIcon name="i-lucide-loader-circle" class="h-3 w-3 animate-spin" />
+                      {{ t('prReview.challenge.investigatingBadge') }}
+                    </span>
+                    <h4
+                      class="min-w-0 flex-1 text-[13px] font-medium text-slate-100"
+                      :class="isRetracted(f) ? 'line-through' : ''"
+                    >
                       {{ f.title }}
                     </h4>
                   </div>
@@ -404,7 +514,10 @@ async function onResolve(action: PrReviewResolution): Promise<void> {
                       · {{ t('prReview.line', { line: f.line }) }}</template
                     >
                   </p>
-                  <p class="mt-1 whitespace-pre-wrap text-[12px] text-slate-300">
+                  <p
+                    class="mt-1 whitespace-pre-wrap text-[12px] text-slate-300"
+                    :class="isRetracted(f) ? 'line-through' : ''"
+                  >
                     {{ f.detail }}
                   </p>
                   <p
@@ -414,6 +527,92 @@ async function onResolve(action: PrReviewResolution): Promise<void> {
                     <span class="text-slate-500">{{ t('prReview.suggestedFix') }}</span>
                     {{ f.suggestedFix }}
                   </p>
+
+                  <!-- The investigator's justification (why the finding holds up / was retracted),
+                       or the reason the challenge investigation failed. -->
+                  <p
+                    v-if="f.challenge?.justification"
+                    data-testid="pr-review-finding-justification"
+                    class="mt-1.5 whitespace-pre-wrap rounded-md px-2 py-1 text-[11px]"
+                    :class="
+                      isRetracted(f)
+                        ? 'bg-rose-500/10 text-rose-200'
+                        : isChallengeFailed(f)
+                          ? 'bg-amber-500/10 text-amber-200'
+                          : 'bg-sky-500/10 text-sky-200'
+                    "
+                  >
+                    <span class="font-medium">{{
+                      isChallengeFailed(f)
+                        ? t('prReview.challenge.failedLabel')
+                        : t('prReview.challenge.verdictLabel')
+                    }}</span>
+                    {{ f.challenge.justification }}
+                  </p>
+
+                  <!-- Per-finding actions: Challenge + Dismiss (only while awaiting a selection). -->
+                  <div
+                    v-if="awaiting && !isInvestigating(f)"
+                    class="mt-1.5 flex items-center gap-3 text-[11px]"
+                  >
+                    <button
+                      v-if="!isRetracted(f)"
+                      data-testid="pr-review-finding-challenge"
+                      class="flex items-center gap-1 text-indigo-300 hover:underline disabled:opacity-50"
+                      :disabled="!canResolve || !access.canExecuteRuns.value"
+                      @click="openChallenge(f.id)"
+                    >
+                      <UIcon name="i-lucide-gavel" class="h-3.5 w-3.5" />
+                      {{
+                        f.challenge
+                          ? t('prReview.challenge.reChallenge')
+                          : t('prReview.challenge.action')
+                      }}
+                    </button>
+                    <button
+                      data-testid="pr-review-finding-dismiss"
+                      class="flex items-center gap-1 text-slate-400 hover:text-rose-300 hover:underline disabled:opacity-50"
+                      :disabled="!canResolve || !access.canExecuteRuns.value"
+                      @click="onDismiss(f.id)"
+                    >
+                      <UIcon name="i-lucide-trash-2" class="h-3.5 w-3.5" />
+                      {{ t('prReview.challenge.dismiss') }}
+                    </button>
+                  </div>
+
+                  <!-- The inline challenge box: an OPTIONAL specific concern for the investigator. -->
+                  <div
+                    v-if="challengeForId === f.id"
+                    data-testid="pr-review-challenge-box"
+                    class="mt-2 rounded-md border border-indigo-500/40 bg-slate-900/80 p-2"
+                  >
+                    <textarea
+                      v-model="challengeText"
+                      data-testid="pr-review-challenge-input"
+                      rows="2"
+                      :placeholder="t('prReview.challenge.placeholder')"
+                      class="w-full resize-y rounded border border-slate-700 bg-slate-950/60 px-2 py-1 text-[12px] text-slate-200 outline-none focus:border-indigo-500"
+                    />
+                    <p class="mt-1 text-[10px] text-slate-500">
+                      {{ t('prReview.challenge.hint') }}
+                    </p>
+                    <div class="mt-1.5 flex justify-end gap-2">
+                      <button
+                        class="rounded px-2 py-1 text-[11px] text-slate-400 hover:text-slate-200"
+                        @click="cancelChallenge"
+                      >
+                        {{ t('common.cancel') }}
+                      </button>
+                      <button
+                        data-testid="pr-review-challenge-submit"
+                        class="rounded bg-indigo-500/80 px-2 py-1 text-[11px] font-medium text-white hover:bg-indigo-500 disabled:opacity-50"
+                        :disabled="!canResolve"
+                        @click="submitChallenge(f.id)"
+                      >
+                        {{ t('prReview.challenge.submit') }}
+                      </button>
+                    </div>
+                  </div>
                 </div>
               </div>
             </article>

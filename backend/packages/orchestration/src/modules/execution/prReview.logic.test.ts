@@ -1,13 +1,19 @@
 import { describe, expect, it } from 'vitest'
 import type { PrReviewAgentOutput, PrReviewFinding } from '@cat-factory/kernel'
 import type { CreateReviewResult, GitHubChangedFile } from '@cat-factory/kernel'
+import type { PrReviewStepState } from '@cat-factory/kernel'
 import {
+  applyChallengeVerdict,
   buildPrReviewPost,
   buildPrReviewPostReport,
   coercePrReview,
   computeCommentableLines,
+  dismissFinding,
+  failChallenge,
+  GENERIC_CHALLENGE_PROMPT,
   initialPrReviewState,
   isPrReviewPostComplete,
+  renderChallengeInvestigatorFeedback,
   renderPrReviewFixerFeedback,
   severityRank,
 } from './prReview.logic.js'
@@ -351,5 +357,149 @@ describe('buildPrReviewPostReport', () => {
     expect(report.posted).toBe(1)
     expect(report.failures).toEqual([])
     expect(isPrReviewPostComplete(report)).toBe(true)
+  })
+})
+
+// A parked awaiting-selection state carrying the two findings above, for the dismiss/challenge helpers.
+const parkedState = (findings: PrReviewFinding[]): PrReviewStepState => ({
+  status: 'awaiting_selection',
+  summary: 'ok',
+  slices: [],
+  findings,
+  selectedFindingIds: findings.map((f) => f.id),
+  resolution: null,
+  prUrl: 'https://github.com/o/r/pull/42',
+  model: 'fake',
+  postReport: null,
+  postedFindingIds: [],
+  postedBody: false,
+})
+
+describe('dismissFinding', () => {
+  it('removes the finding from the findings + every id list, leaving the rest', () => {
+    const a = finding({ id: 'prf_a' })
+    const b = finding({ id: 'prf_b' })
+    const state = { ...parkedState([a, b]), postedFindingIds: ['prf_a'] }
+    const next = dismissFinding(state, 'prf_a')
+    expect(next.findings?.map((f) => f.id)).toEqual(['prf_b'])
+    expect(next.selectedFindingIds).toEqual(['prf_b'])
+    expect(next.postedFindingIds).toEqual([])
+  })
+
+  it('is a no-op for an unknown id', () => {
+    const a = finding({ id: 'prf_a' })
+    expect(dismissFinding(parkedState([a]), 'prf_missing').findings).toHaveLength(1)
+  })
+})
+
+describe('renderChallengeInvestigatorFeedback', () => {
+  it("includes the finding + the human's concern when given", () => {
+    const f = finding({ id: 'prf_a', path: 'a.ts', line: 12, title: 'Null guard', detail: 'x' })
+    const out = renderChallengeInvestigatorFeedback(f, 'Is this reachable?', 'overall ok')
+    expect(out).toContain('a.ts:12 — Null guard')
+    expect(out).toContain('Is this reachable?')
+    expect(out).toContain('overall ok')
+  })
+
+  it('falls back to the generic prompt when no concern is given', () => {
+    const out = renderChallengeInvestigatorFeedback(finding({}), null, null)
+    expect(out).toContain(GENERIC_CHALLENGE_PROMPT)
+  })
+})
+
+describe('applyChallengeVerdict', () => {
+  it('retracts a finding: records the justification + auto-deselects it, staying parked', () => {
+    const a = finding({ id: 'prf_a' })
+    const b = finding({ id: 'prf_b' })
+    const next = applyChallengeVerdict(parkedState([a, b]), 'prf_a', 'why?', {
+      verdict: 'retracted',
+      justification: 'Already handled upstream.',
+    })
+    const retracted = next.findings?.find((f) => f.id === 'prf_a')
+    expect(retracted?.challenge).toEqual({
+      status: 'retracted',
+      question: 'why?',
+      justification: 'Already handled upstream.',
+    })
+    expect(next.selectedFindingIds).toEqual(['prf_b'])
+    expect(next.status).toBe('awaiting_selection')
+  })
+
+  it('amends a finding when a revised field actually changes it, keeping it selected', () => {
+    const a = finding({ id: 'prf_a', title: 'old', detail: 'old detail', severity: 'low' })
+    const next = applyChallengeVerdict(parkedState([a]), 'prf_a', null, {
+      verdict: 'upheld',
+      justification: 'Confirmed.',
+      revisedTitle: 'new',
+      revisedDetail: 'new detail',
+      revisedSeverity: 'high',
+    })
+    const upheld = next.findings?.find((f) => f.id === 'prf_a')
+    expect(upheld?.title).toBe('new')
+    expect(upheld?.detail).toBe('new detail')
+    expect(upheld?.severity).toBe('high')
+    expect(upheld?.challenge?.status).toBe('amended')
+    expect(next.selectedFindingIds).toEqual(['prf_a'])
+  })
+
+  it('marks an upheld-but-unchanged finding `upheld`, NOT `amended` (no false "strengthened")', () => {
+    const a = finding({ id: 'prf_a', title: 'keep', detail: 'keep detail', severity: 'high' })
+    const next = applyChallengeVerdict(parkedState([a]), 'prf_a', 'why?', {
+      verdict: 'upheld',
+      justification: 'It holds — the guard really is missing.',
+    })
+    const upheld = next.findings?.find((f) => f.id === 'prf_a')
+    expect(upheld?.title).toBe('keep')
+    expect(upheld?.detail).toBe('keep detail')
+    expect(upheld?.challenge).toEqual({
+      status: 'upheld',
+      question: 'why?',
+      justification: 'It holds — the guard really is missing.',
+    })
+    expect(next.selectedFindingIds).toEqual(['prf_a'])
+  })
+
+  it('degrades a missing/degenerate verdict to `upheld` with no changes (keeps the finding)', () => {
+    const a = finding({ id: 'prf_a', title: 'keep', detail: 'keep detail' })
+    const next = applyChallengeVerdict(parkedState([a]), 'prf_a', null, undefined)
+    const kept = next.findings?.find((f) => f.id === 'prf_a')
+    expect(kept?.title).toBe('keep')
+    expect(kept?.detail).toBe('keep detail')
+    // Nothing changed and no verdict was parsed — `upheld`, never a false `amended`.
+    expect(kept?.challenge?.status).toBe('upheld')
+    expect(kept?.challenge?.justification).toBeNull()
+    expect(next.selectedFindingIds).toEqual(['prf_a'])
+  })
+})
+
+describe('failChallenge', () => {
+  it('marks the finding `failed` with the reason, keeps its body, and re-parks selectable', () => {
+    const a = finding({ id: 'prf_a', title: 'keep', detail: 'keep detail' })
+    const b = finding({ id: 'prf_b' })
+    const next = failChallenge(
+      { ...parkedState([a, b]), status: 'challenging' },
+      'prf_a',
+      'is this real?',
+      'The investigator container crashed.',
+    )
+    const failed = next.findings?.find((f) => f.id === 'prf_a')
+    expect(failed?.title).toBe('keep')
+    expect(failed?.detail).toBe('keep detail')
+    expect(failed?.challenge).toEqual({
+      status: 'failed',
+      question: 'is this real?',
+      justification: 'The investigator container crashed.',
+    })
+    // Not retracted, so it stays selected + actionable; the review re-parks.
+    expect(next.selectedFindingIds).toEqual(['prf_a', 'prf_b'])
+    expect(next.status).toBe('awaiting_selection')
+    expect(next.resolution).toBeNull()
+  })
+
+  it('is total for an unknown finding — just re-parks', () => {
+    const a = finding({ id: 'prf_a' })
+    const next = failChallenge({ ...parkedState([a]), status: 'challenging' }, 'prf_x', null, null)
+    expect(next.status).toBe('awaiting_selection')
+    expect(next.findings?.[0]?.challenge).toBeUndefined()
   })
 })

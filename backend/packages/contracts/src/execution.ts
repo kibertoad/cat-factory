@@ -1052,6 +1052,16 @@ export const pipelineStepSchema = v.object({
    */
   pendingPrReviewPost: v.optional(v.nullable(v.boolean())),
   /**
+   * The transient driver marker for a PR-review "challenge": set when a human challenges a
+   * finding, naming the finding + their optional specific concern, so the durable driver — on
+   * re-entry, off the HTTP request — dispatches the read-only Challenge Investigator against that
+   * finding exactly once. Consumed when the investigator's verdict is applied (the finding is
+   * strengthened or retracted) and the review re-parks. Absent when no challenge is in flight.
+   */
+  pendingChallenge: v.optional(
+    v.nullable(v.object({ findingId: v.string(), question: v.optional(v.nullable(v.string())) })),
+  ),
+  /**
    * Transient rework feedback carried on a PRODUCER step while it is being re-run by
    * a downstream companion (the analogue of an approval's `changes_requested`
    * feedback for the automatic path). Folded into the agent's revision context on the

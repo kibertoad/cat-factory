@@ -649,7 +649,9 @@
       "serviceHint": "תקני תכנות לכל השירות. התוכן של כל פרגמנט שנבחר מתווסף לפרומפט של כל סוכן מודע-קוד שעובד על משימות תחת שירות זה.",
       "serviceEmpty": "אין. סוכנים מודעי-קוד בשירות זה פועלים לפי ההנחיות המוגדרות כברירת מחדל.",
       "manageBoard": "נהל את ספריית הקטעים של לוח זה…",
-      "manageAccount": "נהל קטעי חשבון…"
+      "manageAccount": "נהל קטעי חשבון…",
+      "done": "סיום",
+      "pickerEmpty": "אין קטעים זמינים."
     },
     "frontendConfig": {
       "title": "Frontend",
@@ -4944,6 +4946,22 @@
       "hint": "מחלק את ההבדלים לקטעים לכידים ובודק כל אחד.",
       "chunks": "{completed} מתוך {total} מקטעים נבדקו",
       "inProgress": "{count} בתהליך"
+    },
+    "challenge": {
+      "action": "ערער",
+      "reChallenge": "ערער שוב",
+      "dismiss": "התעלם",
+      "submit": "חקור",
+      "placeholder": "רשות: מה בדיוק שגוי או לא משכנע בממצא הזה?",
+      "hint": "השאירו ריק כדי שהחוקר יעמיק, ינמק את הממצא ויוודא שהוא מדויק ורלוונטי.",
+      "investigatingBanner": "חוקר הערעורים בוחן מחדש ממצא מול קוד המקור…",
+      "investigatingBadge": "בחקירה",
+      "strengthenedBadge": "חוזק",
+      "upheldBadge": "אושר",
+      "retractedBadge": "בוטל",
+      "verdictLabel": "חוקר:",
+      "failedBadge": "הערעור נכשל",
+      "failedLabel": "הערעור נכשל:"
     },
     "fixing": {
       "title": "מתקן את הממצאים שנבחרו…",

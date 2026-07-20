@@ -10,6 +10,7 @@ import type {
   ForkChatRequestInput,
   PrReviewStepState,
   ResolvePrReviewInput,
+  ChallengePrReviewFindingInput,
   RiskPolicyRepository,
   PipelineStep,
   PullRequestMerger,
@@ -1580,6 +1581,25 @@ export class ExecutionService {
     input: ResolvePrReviewInput,
   ): Promise<PrReviewStepState> {
     return this.runDispatcher.resolvePrReview(workspaceId, executionId, input)
+  }
+
+  /** @see RunDispatcher.dismissPrReviewFinding */
+  dismissPrReviewFinding(
+    workspaceId: string,
+    executionId: string,
+    findingId: string,
+  ): Promise<PrReviewStepState> {
+    return this.runDispatcher.dismissPrReviewFinding(workspaceId, executionId, findingId)
+  }
+
+  /** @see RunDispatcher.challengePrReviewFinding */
+  challengePrReviewFinding(
+    workspaceId: string,
+    executionId: string,
+    findingId: string,
+    input: ChallengePrReviewFindingInput,
+  ): Promise<PrReviewStepState> {
+    return this.runDispatcher.challengePrReviewFinding(workspaceId, executionId, findingId, input)
   }
 
   /** @see RunDispatcher.fileFollowUp */

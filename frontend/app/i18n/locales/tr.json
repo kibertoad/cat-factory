@@ -649,7 +649,9 @@
       "serviceHint": "Tüm servis için programlama standartları. Seçilen her parçanın içeriği, bu servisin görevlerinde çalışan kod farkında her ajanın prompt'una eklenir.",
       "serviceEmpty": "Yok. Bu servisteki kod farkında ajanlar varsayılan yönergelerini izler.",
       "manageBoard": "Bu pano'nun fragman kütüphanesini yönet…",
-      "manageAccount": "Hesap fragmanlarını yönet…"
+      "manageAccount": "Hesap fragmanlarını yönet…",
+      "done": "Tamam",
+      "pickerEmpty": "Kullanılabilir parça yok."
     },
     "frontendConfig": {
       "title": "Frontend",
@@ -4945,6 +4947,22 @@
       "hint": "Fark tutarlı parçalara bölünüp her biri inceleniyor.",
       "chunks": "{total} bölümden {completed} tanesi incelendi",
       "inProgress": "{count} devam ediyor"
+    },
+    "challenge": {
+      "action": "İtiraz et",
+      "reChallenge": "Tekrar itiraz et",
+      "dismiss": "Yoksay",
+      "submit": "İncele",
+      "placeholder": "İsteğe bağlı: Bu bulguda tam olarak yanlış veya ikna edici olmayan nedir?",
+      "hint": "Araştırmacının daha derine inmesi, bulguyu gerekçelendirmesi ve doğru ve ilgili olduğunu doğrulaması için boş bırakın.",
+      "investigatingBanner": "İtiraz Araştırmacısı bir bulguyu kaynak koda göre yeniden inceliyor…",
+      "investigatingBadge": "İnceleniyor",
+      "strengthenedBadge": "Güçlendirildi",
+      "upheldBadge": "Onaylandı",
+      "retractedBadge": "Geri çekildi",
+      "verdictLabel": "Araştırmacı:",
+      "failedBadge": "İtiraz başarısız oldu",
+      "failedLabel": "İtiraz başarısız oldu:"
     },
     "fixing": {
       "title": "Seçili bulgular düzeltiliyor…",

@@ -10,6 +10,7 @@ import type {
   GateDefinition,
   PipelineStep,
   PrReviewAgentOutput,
+  PrReviewChallengeOutput,
   RequirementReview,
   ResolverContext,
   RunInitiatorScope,
@@ -22,6 +23,7 @@ import {
   INITIATIVE_PLANNER_AGENT_KIND,
 } from '@cat-factory/kernel'
 import {
+  CHALLENGE_INVESTIGATOR_KIND,
   FORK_PROPOSER_KIND,
   PR_REVIEWER_KIND,
   hasTrait,
@@ -353,18 +355,21 @@ export function buildStepHandlerRegistry(d: DispatcherRegistryDeps): StepHandler
         forkPhasePending(step, resolveForkTriState(block.agentConfig)),
       handle: (ctx) => d.handleForkDecisionPhase(ctx),
     },
-    // The PR deep-review RESOLUTION phase (PR 3): after the human resolved a parked review with
-    // `fix` / `post`, `PrReviewController.resolve` re-armed this `pr-reviewer` step and woke the
-    // driver. Claim it by the re-armed status so it re-dispatches as the Fixer (`fixing`) or
-    // posts the selected findings as inline PR comments (`posting`) — never the generic
-    // pr-reviewer clone the fallthrough would run. A `reviewing`/`awaiting_selection`/resolved
-    // step falls through (this handler doesn't claim it). See {@link handlePrReviewResolution}.
+    // The PR deep-review RESOLUTION / CHALLENGE phase: after the human resolved a parked review
+    // with `fix` / `post`, or CHALLENGED a finding, `PrReviewController` re-armed this
+    // `pr-reviewer` step and woke the driver. Claim it by the re-armed status so it re-dispatches
+    // as the Fixer (`fixing`), posts the selected findings as inline PR comments (`posting`), or
+    // dispatches the Challenge Investigator against the challenged finding (`challenging`) — never
+    // the generic pr-reviewer clone the fallthrough would run. A `reviewing`/`awaiting_selection`/
+    // resolved step falls through (this handler doesn't claim it). See {@link handlePrReviewResolution}.
     {
       kind: 'pr-review-resolution',
       order: 175,
       canHandle: ({ step }) =>
         step.agentKind === PR_REVIEW_STEP_KIND &&
-        (step.prReview?.status === 'fixing' || step.prReview?.status === 'posting'),
+        (step.prReview?.status === 'fixing' ||
+          step.prReview?.status === 'posting' ||
+          step.prReview?.status === 'challenging'),
       handle: (ctx) => d.handlePrReviewResolution(ctx),
     },
     // The generic container/inline-agent step — claims every step no more-specific handler
@@ -432,6 +437,25 @@ export function buildStepCompletionInterceptors(
           proposal,
           step.model,
         )
+      },
+    },
+    // A Challenge Investigator helper (dispatched off a parked `pr-reviewer` step when the human
+    // challenged a finding) just finished. Its structured `result.custom` is the uphold/retract
+    // verdict; apply it to the challenged finding and RE-PARK the review — never the normal
+    // completion, nor the `pr-review` interceptor below (which would mis-parse the verdict as
+    // findings). Keyed on the `pr-reviewer` step carrying `prReview.status === 'challenging'`, so
+    // it wins over `pr-review` (higher order) only during a challenge; a replay after the marker
+    // cleared returns null and falls through to `pr-review`'s idempotent re-park.
+    {
+      kind: 'pr-review-challenge',
+      order: 104,
+      canIntercept: ({ step }) =>
+        step.agentKind === PR_REVIEW_STEP_KIND && step.prReview?.status === 'challenging',
+      intercept: ({ workspaceId, instance, step, result }) => {
+        const output = d.agentKindRegistry
+          .structuredOutput(CHALLENGE_INVESTIGATOR_KIND)
+          ?.safeParse(result.custom) as PrReviewChallengeOutput | undefined
+        return d.prReviewController.recordChallengeResult(workspaceId, instance, step, output)
       },
     },
     // The read-only `pr-reviewer` deep-review job just finished on a review task's step. Its

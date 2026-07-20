@@ -1,4 +1,9 @@
-import { getPrReviewContract, resolvePrReviewContract } from '@cat-factory/contracts'
+import {
+  challengePrReviewFindingContract,
+  dismissPrReviewFindingContract,
+  getPrReviewContract,
+  resolvePrReviewContract,
+} from '@cat-factory/contracts'
 import type { ApiContext } from './context'
 
 /**
@@ -24,6 +29,26 @@ export function prReviewApi({ send, ws }: ApiContext) {
       send(resolvePrReviewContract, {
         pathPrefix: ws(workspaceId),
         pathParams: { executionId },
+        body,
+      }),
+
+    // Dismiss a parked finding entirely (drops it + prunes it from the selection).
+    dismissPrReviewFinding: (workspaceId: string, executionId: string, findingId: string) =>
+      send(dismissPrReviewFindingContract, {
+        pathPrefix: ws(workspaceId),
+        pathParams: { executionId, findingId },
+      }),
+
+    // Challenge a parked finding — dispatch the Challenge Investigator (optional specific concern).
+    challengePrReviewFinding: (
+      workspaceId: string,
+      executionId: string,
+      findingId: string,
+      body: { question?: string },
+    ) =>
+      send(challengePrReviewFindingContract, {
+        pathPrefix: ws(workspaceId),
+        pathParams: { executionId, findingId },
         body,
       }),
   }

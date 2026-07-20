@@ -649,7 +649,9 @@
       "serviceHint": "Normes de programmation pour tout le service. Le contenu de chaque fragment sélectionné est ajouté au prompt de chaque agent conscient du code travaillant sur les tâches de ce service.",
       "serviceEmpty": "Aucune. Les agents conscients du code sur ce service suivent leurs consignes par défaut.",
       "manageBoard": "Gérer la bibliothèque de fragments de ce tableau…",
-      "manageAccount": "Gérer les fragments du compte…"
+      "manageAccount": "Gérer les fragments du compte…",
+      "done": "Terminé",
+      "pickerEmpty": "Aucun fragment disponible."
     },
     "frontendConfig": {
       "title": "Frontend",
@@ -4933,6 +4935,22 @@
       "hint": "Découpage du diff en blocs cohérents et revue de chacun.",
       "chunks": "{completed} sur {total} sections examinées",
       "inProgress": "{count} en cours"
+    },
+    "challenge": {
+      "action": "Contester",
+      "reChallenge": "Contester à nouveau",
+      "dismiss": "Écarter",
+      "submit": "Enquêter",
+      "placeholder": "Facultatif : qu'y a-t-il précisément d'incorrect ou de peu convaincant dans ce constat ?",
+      "hint": "Laissez vide pour que l'enquêteur approfondisse, justifie le constat et vérifie qu'il est exact et pertinent.",
+      "investigatingBanner": "L'enquêteur de contestation réexamine un constat par rapport au code source…",
+      "investigatingBadge": "Enquête en cours",
+      "strengthenedBadge": "Renforcé",
+      "upheldBadge": "Confirmé",
+      "retractedBadge": "Retiré",
+      "verdictLabel": "Enquêteur :",
+      "failedBadge": "Échec de la contestation",
+      "failedLabel": "Échec de la contestation :"
     },
     "fixing": {
       "title": "Correction des points sélectionnés…",

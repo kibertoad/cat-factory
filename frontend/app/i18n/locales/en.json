@@ -706,7 +706,9 @@
       "serviceHint": "Programming standards for the whole service. The content of each selected fragment is added to the prompt of every code-aware agent working on tasks under this service.",
       "serviceEmpty": "None. Code-aware agents on this service follow their default guidance.",
       "manageBoard": "Manage this board's fragment library…",
-      "manageAccount": "Manage account fragments…"
+      "manageAccount": "Manage account fragments…",
+      "done": "Done",
+      "pickerEmpty": "No fragments available."
     },
     "frontendConfig": {
       "title": "Frontend",
@@ -5074,6 +5076,22 @@
       "hint": "Slicing the diff into cohesive chunks and reviewing each one.",
       "chunks": "{completed} of {total} chunks reviewed",
       "inProgress": "{count} in progress"
+    },
+    "challenge": {
+      "action": "Challenge",
+      "reChallenge": "Challenge again",
+      "dismiss": "Dismiss",
+      "submit": "Investigate",
+      "placeholder": "Optional: what specifically is wrong or unconvincing about this finding?",
+      "hint": "Leave blank to have the investigator dig deeper, justify the finding, and check it's accurate and relevant.",
+      "investigatingBanner": "The Challenge Investigator is re-examining a finding against the source…",
+      "investigatingBadge": "Investigating",
+      "strengthenedBadge": "Strengthened",
+      "upheldBadge": "Upheld",
+      "retractedBadge": "Retracted",
+      "verdictLabel": "Investigator:",
+      "failedBadge": "Challenge failed",
+      "failedLabel": "Challenge failed:"
     },
     "fixing": {
       "title": "Fixing the selected findings…",

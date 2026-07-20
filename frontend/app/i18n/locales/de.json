@@ -931,7 +931,9 @@
       "serviceHint": "Programmierstandards für den gesamten Service. Der Inhalt jedes ausgewählten Fragments wird dem Prompt jedes code-bewussten Agents hinzugefügt, der an Aufgaben unter diesem Service arbeitet.",
       "serviceEmpty": "Keine. Code-bewusste Agents dieses Service folgen ihren Standardvorgaben.",
       "manageBoard": "Fragment-Bibliothek dieses Boards verwalten…",
-      "manageAccount": "Konto-Fragmente verwalten…"
+      "manageAccount": "Konto-Fragmente verwalten…",
+      "done": "Fertig",
+      "pickerEmpty": "Keine Fragmente verfügbar."
     },
     "frontendConfig": {
       "title": "Frontend",
@@ -4945,6 +4947,22 @@
       "hint": "Der Diff wird in zusammenhängende Teile zerlegt und einzeln geprüft.",
       "chunks": "{completed} von {total} Abschnitten geprüft",
       "inProgress": "{count} in Bearbeitung"
+    },
+    "challenge": {
+      "action": "Anfechten",
+      "reChallenge": "Erneut anfechten",
+      "dismiss": "Verwerfen",
+      "submit": "Untersuchen",
+      "placeholder": "Optional: Was genau ist an diesem Befund falsch oder nicht überzeugend?",
+      "hint": "Leer lassen, damit der Prüfer tiefer gräbt, den Befund begründet und prüft, ob er zutreffend und relevant ist.",
+      "investigatingBanner": "Der Challenge-Investigator prüft einen Befund erneut anhand des Quellcodes…",
+      "investigatingBadge": "Wird untersucht",
+      "strengthenedBadge": "Bestärkt",
+      "upheldBadge": "Bestätigt",
+      "retractedBadge": "Zurückgezogen",
+      "verdictLabel": "Prüfer:",
+      "failedBadge": "Anfechtung fehlgeschlagen",
+      "failedLabel": "Anfechtung fehlgeschlagen:"
     },
     "fixing": {
       "title": "Ausgewählte Befunde werden behoben…",

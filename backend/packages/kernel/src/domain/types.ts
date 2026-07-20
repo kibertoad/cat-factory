@@ -283,13 +283,16 @@ export type {
   PrReviewCategory,
   PrReviewSlice,
   PrReviewFinding,
+  PrReviewFindingChallenge,
   PrReviewStatus,
   PrReviewResolution,
   PrReviewStepState,
   PrReviewPostReport,
   PrReviewPostFailure,
   PrReviewAgentOutput,
+  PrReviewChallengeOutput,
   ResolvePrReviewInput,
+  ChallengePrReviewFindingInput,
   // Clarity-review (bug-report triage reviewer agent) shapes — reuse the requirements
   // review item/status shapes, differ only in subject + the persisted document field.
   ClarityReviewItem,

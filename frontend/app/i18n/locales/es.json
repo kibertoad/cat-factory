@@ -649,7 +649,9 @@
       "serviceHint": "Estándares de programación para todo el servicio. El contenido de cada fragmento seleccionado se añade al prompt de cada agente que conoce el código y trabaja en tareas de este servicio.",
       "serviceEmpty": "Ninguna. Los agentes que conocen el código en este servicio siguen su guía predeterminada.",
       "manageBoard": "Gestionar la biblioteca de fragmentos de este tablero…",
-      "manageAccount": "Gestionar los fragmentos de la cuenta…"
+      "manageAccount": "Gestionar los fragmentos de la cuenta…",
+      "done": "Listo",
+      "pickerEmpty": "No hay fragmentos disponibles."
     },
     "frontendConfig": {
       "title": "Frontend",
@@ -4933,6 +4935,22 @@
       "hint": "Dividiendo el diff en bloques coherentes y revisando cada uno.",
       "chunks": "{completed} de {total} fragmentos revisados",
       "inProgress": "{count} en curso"
+    },
+    "challenge": {
+      "action": "Cuestionar",
+      "reChallenge": "Cuestionar de nuevo",
+      "dismiss": "Descartar",
+      "submit": "Investigar",
+      "placeholder": "Opcional: ¿qué es exactamente lo incorrecto o poco convincente de este hallazgo?",
+      "hint": "Déjalo en blanco para que el investigador profundice, justifique el hallazgo y compruebe que es preciso y relevante.",
+      "investigatingBanner": "El Investigador de Objeciones está reexaminando un hallazgo frente al código fuente…",
+      "investigatingBadge": "Investigando",
+      "strengthenedBadge": "Reforzado",
+      "upheldBadge": "Confirmado",
+      "retractedBadge": "Retirado",
+      "verdictLabel": "Investigador:",
+      "failedBadge": "Cuestionamiento fallido",
+      "failedLabel": "Cuestionamiento fallido:"
     },
     "fixing": {
       "title": "Corrigiendo los hallazgos seleccionados…",
