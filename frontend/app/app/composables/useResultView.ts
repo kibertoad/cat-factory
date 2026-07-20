@@ -24,9 +24,24 @@
  * overlay stack (top overlay closes first, focus/scroll managed too). A listener here would
  * double-fire `close`, so it was removed once the last window converted onto the shell.
  */
+/**
+ * The fully-resolved view context handed to `onOpen`. Every field is already initialised by
+ * the time `onOpen` fires, so a loader takes exactly what it needs from here and never reaches
+ * back into the store or the composable's own return refs. That matters because `onOpen` fires
+ * synchronously from the `immediate` watch below — DURING the caller's `setup`, before the
+ * `const { … } = useResultView(…)` destructure has been assigned — so any callback that closed
+ * over those refs would hit their temporal dead zone and throw on every open.
+ */
+export interface OpenResultView {
+  blockId: string
+  instanceId: string | null
+  stepIndex: number | null
+  stage: 'requirements' | 'architecture' | null
+}
+
 export function useResultView(
   viewId: string,
-  opts?: { onOpen?: (blockId: string) => void; onClose?: () => void },
+  opts?: { onOpen?: (view: OpenResultView) => void; onClose?: () => void },
 ) {
   const ui = useUiStore()
 
@@ -44,12 +59,20 @@ export function useResultView(
     ui.closeResultView()
   }
 
-  // The load-on-open contract: fire immediately on mount and on any later block switch.
+  // The load-on-open contract: fire immediately on mount and on any later block switch. The
+  // callback receives the fully-resolved context (see OpenResultView) rather than the return
+  // refs, which aren't assigned yet at the initial synchronous fire.
   if (opts?.onOpen) {
     watch(
       blockId,
       (id) => {
-        if (id) opts.onOpen!(id)
+        if (id)
+          opts.onOpen!({
+            blockId: id,
+            instanceId: instanceId.value,
+            stepIndex: stepIndex.value,
+            stage: stage.value,
+          })
       },
       { immediate: true },
     )

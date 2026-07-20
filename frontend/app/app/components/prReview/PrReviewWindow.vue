@@ -30,8 +30,8 @@ const access = useWorkspaceAccess()
 const { t } = useI18n()
 
 const { open, blockId, instanceId, stepIndex, close } = useResultView('pr-review', {
-  onOpen: (_id) => {
-    if (instanceId.value) void prReview.load(instanceId.value)
+  onOpen: ({ instanceId }) => {
+    if (instanceId) void prReview.load(instanceId)
   },
 })
 

@@ -26,7 +26,7 @@ const { t } = useI18n()
 // Hybrid: state rides the coder step (like follow-ups), but warm it from the GET on open too.
 // No `stepRef`: this is a pre-run decision, so there's no "restart from here".
 const { open, blockId, instanceId, stepIndex, close } = useResultView('fork-decision', {
-  onOpen: (id) => void forkDecision.load(id),
+  onOpen: ({ blockId }) => void forkDecision.load(blockId),
 })
 
 const block = computed(() => (blockId.value ? board.getBlock(blockId.value) : undefined))
