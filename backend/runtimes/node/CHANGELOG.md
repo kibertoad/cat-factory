@@ -1,5 +1,41 @@
 # @cat-factory/node-server
 
+## 0.107.10
+
+### Patch Changes
+
+- 492d0a2: Lint ratchet: complete `max-depth` (5 → 4, its final target; no behavioural change).
+
+  Refactored the 18 depth-5 sites down to ≤ 4 by hoisting the innermost loop bodies into
+  helpers along cohesive seams:
+
+  - Extract a shared `parseSubtasks` into `@cat-factory/kernel` (`domain/subtasks.logic.ts`)
+    and replace the four duplicated row→domain copies in the D1 and Drizzle bootstrap /
+    env-config-repair repositories (removing the 4× duplication as well as the depth).
+  - Split the two Worker `ExecutionWorkflow` poll loops (`drivePollLoop` / `driveGatePollLoop`
+    - a shared `pollOnce`), the benchmark harness's per-task fixture dispatch, the seed-dump
+      child scan and the env-config bootstrap commit/PR path in `@cat-factory/integrations`, the
+      Workers-AI assistant tool-call conversion, and the OTEL conformity metric fold into helpers.
+  - Lower `max-depth` to `4` in `.oxlintrc.json`.
+
+- Updated dependencies [492d0a2]
+  - @cat-factory/kernel@0.147.1
+  - @cat-factory/integrations@0.88.7
+  - @cat-factory/observability-otel@0.2.20
+  - @cat-factory/agents@0.66.2
+  - @cat-factory/caching@0.10.19
+  - @cat-factory/consensus@0.11.8
+  - @cat-factory/eks@0.1.111
+  - @cat-factory/gates@0.7.6
+  - @cat-factory/gitlab@0.11.6
+  - @cat-factory/observability-langfuse@0.7.237
+  - @cat-factory/orchestration@0.129.5
+  - @cat-factory/provider-bedrock@0.7.257
+  - @cat-factory/provider-cloudflare@0.7.258
+  - @cat-factory/provider-s3@0.2.187
+  - @cat-factory/server@0.138.10
+  - @cat-factory/spend@0.12.63
+
 ## 0.107.9
 
 ### Patch Changes
