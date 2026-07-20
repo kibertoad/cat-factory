@@ -4925,7 +4925,9 @@
     "line": "línea {line}",
     "reviewing": {
       "title": "Revisando el pull request…",
-      "hint": "Dividiendo el diff en bloques coherentes y revisando cada uno."
+      "hint": "Dividiendo el diff en bloques coherentes y revisando cada uno.",
+      "chunks": "{completed} de {total} fragmentos revisados",
+      "inProgress": "{count} en curso"
     },
     "fixing": {
       "title": "Corrigiendo los hallazgos seleccionados…",

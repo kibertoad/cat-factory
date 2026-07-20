@@ -17,7 +17,9 @@ import type {
   PrReviewResolution,
   PrReviewSeverity,
   PrReviewStepState,
+  StepSubtasks,
 } from '~/types/execution'
+import { subtaskIconClass } from '~/utils/pipelineRender'
 import ResultWindowShell from '~/components/panels/ResultWindowShell.vue'
 
 const execution = useExecutionStore()
@@ -44,6 +46,18 @@ const step = computed(() => {
 const state = computed<PrReviewStepState | null>(() => step.value?.prReview ?? null)
 const status = computed(() => state.value?.status ?? null)
 const awaiting = computed(() => status.value === 'awaiting_selection')
+// The reviewer's live todo list while it works, streamed onto the step. Its entries are the
+// cohesive slices/chunks the agent grouped the diff into (plus a final "aggregate" step), so it
+// surfaces slices-reviewed-so-far progress during the `reviewing` phase — richer than a spinner.
+const subtasks = computed<StepSubtasks | null>(() => step.value?.subtasks ?? null)
+const hasProgress = computed(() => (subtasks.value?.total ?? 0) > 0)
+
+/** Icon per todo-item status (matches the pipeline timeline's live subtask breakdown). */
+const ITEM_ICON: Record<string, string> = {
+  completed: 'i-lucide-check-circle-2',
+  in_progress: 'i-lucide-loader-circle',
+  pending: 'i-lucide-circle',
+}
 // A resolution is executing (the Fixer is committing, or comments are being posted) — show a
 // working state between the human's choice and the run advancing/the stream echoing `done`.
 const working = computed(() => status.value === 'fixing' || status.value === 'posting')
@@ -145,14 +159,82 @@ async function onResolve(action: PrReviewResolution): Promise<void> {
     </template>
 
     <div class="min-h-0 flex-1 overflow-y-auto px-5 py-4">
-      <!-- Reviewing: the read-only reviewer is still working. -->
+      <!-- Reviewing: the read-only reviewer is still working. Once it starts maintaining its
+           per-slice todo list, surface the live chunk progress (slices reviewed / total + the
+           breakdown) instead of a bare spinner. -->
       <div
         v-if="status === 'reviewing'"
-        class="flex h-full flex-col items-center justify-center gap-2 py-10 text-center text-slate-400"
+        data-testid="pr-review-reviewing"
+        class="flex h-full flex-col"
       >
-        <UIcon name="i-lucide-loader-circle" class="h-8 w-8 animate-spin opacity-60" />
-        <p class="text-sm">{{ t('prReview.reviewing.title') }}</p>
-        <p class="max-w-sm text-[11px] text-slate-500">{{ t('prReview.reviewing.hint') }}</p>
+        <!-- Live chunk progress once the reviewer has planned its slices. -->
+        <div v-if="hasProgress" class="py-2">
+          <div class="mb-1 flex items-center gap-2 text-sm text-slate-200">
+            <UIcon
+              name="i-lucide-loader-circle"
+              class="h-4 w-4 shrink-0 animate-spin text-indigo-300"
+            />
+            <span>{{ t('prReview.reviewing.title') }}</span>
+          </div>
+          <p class="mb-3 text-[11px] text-slate-500">{{ t('prReview.reviewing.hint') }}</p>
+
+          <div class="flex items-center justify-between text-[11px] text-slate-400">
+            <span data-testid="pr-review-chunk-count">
+              {{
+                t('prReview.reviewing.chunks', {
+                  completed: subtasks!.completed,
+                  total: subtasks!.total,
+                })
+              }}
+            </span>
+            <span v-if="subtasks!.inProgress > 0" class="text-indigo-300">
+              {{ t('prReview.reviewing.inProgress', { count: subtasks!.inProgress }) }}
+            </span>
+          </div>
+          <div class="mt-1 h-1.5 overflow-hidden rounded-full bg-slate-700/60">
+            <div
+              class="h-full rounded-full bg-indigo-400 transition-all duration-500"
+              :style="{ width: `${(subtasks!.completed / subtasks!.total) * 100}%` }"
+            />
+          </div>
+
+          <!-- The slice/todo breakdown the agent is working through. -->
+          <ul
+            v-if="subtasks!.items?.length"
+            class="mt-3 space-y-1.5"
+            data-testid="pr-review-chunks"
+          >
+            <li
+              v-for="(item, i) in subtasks!.items"
+              :key="i"
+              class="flex items-start gap-1.5 text-[12px]"
+              :class="
+                item.status === 'completed'
+                  ? 'text-slate-500 line-through'
+                  : item.status === 'in_progress'
+                    ? 'text-slate-100'
+                    : 'text-slate-400'
+              "
+            >
+              <UIcon
+                :name="ITEM_ICON[item.status]"
+                class="mt-0.5 h-3.5 w-3.5 shrink-0"
+                :class="subtaskIconClass(item.status, false)"
+              />
+              <span>{{ item.label }}</span>
+            </li>
+          </ul>
+        </div>
+
+        <!-- Before the reviewer has planned its slices: the cold-start spinner. -->
+        <div
+          v-else
+          class="flex h-full flex-col items-center justify-center gap-2 py-10 text-center text-slate-400"
+        >
+          <UIcon name="i-lucide-loader-circle" class="h-8 w-8 animate-spin opacity-60" />
+          <p class="text-sm">{{ t('prReview.reviewing.title') }}</p>
+          <p class="max-w-sm text-[11px] text-slate-500">{{ t('prReview.reviewing.hint') }}</p>
+        </div>
       </div>
 
       <!-- A resolution is executing: the Fixer is committing / comments are being posted. -->

@@ -90,6 +90,13 @@ need (`getPullRequestHeadRef`, `createReview`) are new **optional** methods on t
 
 - A read-only pipeline (`pl_review`) finishes `done` with no PR-assuming card — the no-PR terminal
   path in `RunStateMachine.finalizeBlock` handles it.
+- **The `reviewing` status is seeded at dispatch, not just on completion.** The engine seeds
+  `step.prReview = { status: 'reviewing', prUrl, model, … }` (`initialPrReviewState`) the moment the
+  reviewer's container job dispatches — the `recordFindings` interceptor already treated `reviewing`
+  as "not yet recorded" and coerces over it — so the deep-review window renders a real in-flight
+  phase instead of an empty panel. The reviewer's prompt maintains a per-slice todo list, which
+  surfaces as the step's live `subtasks`; the window renders that as slices-reviewed / total during
+  `reviewing`, so a running deep review shows its chunk progress rather than a bare "agent running".
 - **Same-repo, non-fork PRs only.** The reviewer clones the service's linked repo and fetches the
   PR head by number, and the Fixer pushes to that head branch — so the `fix` resolution requires a
   PR on the service's own repo the platform can push to. A cross-repo `prUrl` (a PR on a different

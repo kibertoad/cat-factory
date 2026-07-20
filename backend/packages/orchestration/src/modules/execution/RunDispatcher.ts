@@ -123,7 +123,11 @@ import { MergeResolver } from './MergeResolver.js'
 import { ReviewGateController, type ReviewKind } from './ReviewGateController.js'
 import { ForkDecisionController } from './ForkDecisionController.js'
 import { PrReviewController, PR_REVIEW_STEP_KIND } from './PrReviewController.js'
-import { buildPrReviewPost, renderPrReviewFixerFeedback } from './prReview.logic.js'
+import {
+  buildPrReviewPost,
+  initialPrReviewState,
+  renderPrReviewFixerFeedback,
+} from './prReview.logic.js'
 import {
   DEFAULT_FORK_MAX_CHAT_TURNS,
   forkPhasePending,
@@ -504,6 +508,16 @@ export class RunDispatcher {
         // `starting` now lets the details show the boot (and then the live phase + the
         // container id/url) instead of a blank "working" state.
         step.container = { status: 'starting' }
+        // Seed the in-flight PR-review state so a `pr-reviewer` run surfaces a real `reviewing`
+        // phase in the deep-review window (the reviewed PR + the live slices-reviewed progress
+        // off the step's todo subtasks) instead of an empty panel until the findings land. Only
+        // on the reviewer's OWN first dispatch: a `fix`/`post` re-dispatch reuses this step under
+        // an overriding kind and already carries `prReview` (`fixing`/`posting`), which must not
+        // be reset back to `reviewing`.
+        if (step.agentKind === PR_REVIEWER_KIND && !step.prReview) {
+          const prUrl = block?.taskTypeFields?.prUrl?.trim() || null
+          step.prReview = initialPrReviewState(prUrl, step.model ?? null)
+        }
         // Surface the block's ephemeral environment (if any) alongside the cold-boot
         // phase, so a run's details show the env spinning up next to the container.
         await this.deployer.attachEnvironmentProjection(workspaceId, instance.blockId, step)
