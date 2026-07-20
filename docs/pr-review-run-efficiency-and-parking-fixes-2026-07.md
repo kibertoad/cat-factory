@@ -5,9 +5,12 @@ plus a fix plan for the two defects it surfaced.
 
 > **Status:** the concrete fixes below have since landed — the parked PR-review approve routing
 > (§2), the container `spend.record` model threading + fresh-vs-cached token surfacing (§1's two
-> data-quality gaps), and 3-day session-transcript retention (§3). The larger, speculative
-> turn-count reduction floated in §1 ("hand the pr-reviewer the diff up front") is a design
-> direction, not part of that change.
+> data-quality gaps), and 3-day session-transcript retention (§3). The turn-count reduction floated
+> in §1 ("hand the pr-reviewer the diff up front") is now implemented as Slice 1 of
+> [`docs/initiatives/pr-review-turn-reduction.md`](./initiatives/pr-review-turn-reduction.md): a
+> `pr-reviewer` preOp injects the PR diff as `.cat-context/pr-diff.md` so the agent skips the
+> reconstruct-the-diff turns. The honest fresh-vs-cache token accounting it also motivated is
+> tracked in [`docs/initiatives/token-telemetry-per-class-and-cost.md`](./initiatives/token-telemetry-per-class-and-cost.md).
 
 The run under investigation:
 

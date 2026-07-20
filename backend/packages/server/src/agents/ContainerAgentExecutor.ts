@@ -1258,6 +1258,17 @@ export class ContainerAgentExecutor implements AsyncAgentExecutor {
       contextDocs: keptDocs,
       contextTasks: keptTasks,
     } = buildContextFiles(context)
+    // Files a registered kind's preOp prepared for the agent to read up front (e.g. the
+    // `pr-reviewer` diff) — materialised into `.cat-context/` alongside the linked-doc files.
+    // The preOp already bounded their size; the agent's own prompt names the paths, so they need
+    // no linked-doc index entry (which is why they aren't fed through `buildContextFiles`).
+    for (const injected of context.injectedContextFiles ?? [])
+      contextFiles.push({
+        path: injected.path,
+        title: injected.path,
+        url: '',
+        content: injected.content,
+      })
     // A `skill` step's resolved skill, rendered harness-aware (repo-skills slice 2): the payload
     // travels as the top-level `skill` job-body field (the harness materialises it — natively for
     // claude-code, under `.cat-context/skill/` for Pi/codex), and `skillSection` primes the prompt.

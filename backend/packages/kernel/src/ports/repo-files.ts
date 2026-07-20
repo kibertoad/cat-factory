@@ -2,6 +2,7 @@ import type { CommitFilesInput, OpenedPullRequest, OpenPullRequestInput } from '
 import type {
   CommitFilesResult,
   CreateReviewInput,
+  GitHubChangedFile,
   GitHubRepoRef,
   RepoContentEntry,
   RepoFileContent,
@@ -79,6 +80,15 @@ export interface RepoFiles {
    * unsupported rather than silently dropping the findings.
    */
   createReview?(number: number, input: CreateReviewInput): Promise<void>
+  /**
+   * List the files a pull request changed (path, status, additions/deletions, and the per-file
+   * `patch`). The `pr-reviewer` preOp reads this to hand the reviewer the diff + changed-file
+   * list UP FRONT (as an injected `.cat-context/` file), so the container agent skips the early
+   * `git fetch`/`git diff`/scratch-file reconstruction turns that dominate a long review's token
+   * burn. Optional: a bound client that can't enumerate a PR's files omits it, so the preOp
+   * passes through and the agent falls back to reconstructing the diff itself.
+   */
+  listChangedFiles?(number: number): Promise<GitHubChangedFile[]>
 }
 
 /**

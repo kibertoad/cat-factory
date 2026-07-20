@@ -481,3 +481,17 @@ export type {
   SlackOAuthSecret,
   WebSearchSecret,
 } from '@cat-factory/contracts'
+
+/**
+ * A backend-prepared file to inject into a container agent's `.cat-context/` directory before
+ * it runs — the deterministic analogue of the linked-doc context the executor already
+ * materialises. A preOp returns these on {@link RepoOpResult.contextFiles}; the engine surfaces
+ * them on {@link AgentRunContext.injectedContextFiles} and the executor folds them into the
+ * dispatched job's context files. `path` is the file name under `.cat-context/`; `content` is
+ * its full UTF-8 text. Kept in the shared domain vocabulary so both the port (`agent-definition`)
+ * and the run context (`agent-executor`) reference one shape without a circular import.
+ */
+export interface InjectedContextFile {
+  path: string
+  content: string
+}

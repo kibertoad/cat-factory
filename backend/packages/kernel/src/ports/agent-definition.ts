@@ -1,4 +1,4 @@
-import type { PullRequestRef } from '../domain/types.js'
+import type { InjectedContextFile, PullRequestRef } from '../domain/types.js'
 import type { AgentRunContext, AgentRunResult } from './agent-executor.js'
 import type { RepoFiles } from './repo-files.js'
 
@@ -131,6 +131,13 @@ export interface RepoOpContext {
 export interface RepoOpResult {
   /** A pull request the op opened, for the engine to record as the block's `pullRequest`. */
   pullRequest?: PullRequestRef
+  /**
+   * Files a preOp prepared for the agent to read UP FRONT — the engine materialises them into
+   * the container's `.cat-context/` (the same seam linked docs use) before dispatch, so the
+   * agent needn't reconstruct them itself. The `pr-reviewer` preOp returns the PR diff +
+   * changed-file list this way. Ignored for postOps (the agent has already run).
+   */
+  contextFiles?: InjectedContextFile[]
 }
 
 /**

@@ -61,7 +61,10 @@ need (`getPullRequestHeadRef`, `createReview`) are new **optional** methods on t
   only unique win (a provably-linear token ceiling) wasn't worth the review-quality loss. It may
   return as an opt-in pre-slicer for pathological PRs; if so it must receive the manifest only
   (never full patches), with a mechanical directory-grouping fallback. `listChangedFiles` was
-  landed as its data source and remains available.
+  landed as its data source and is now also consumed by the `pr-reviewer` preOp, which injects the
+  changed-file list + patches as `.cat-context/pr-diff.md` so the container agent skips the
+  reconstruct-the-diff turns (see `docs/initiatives/pr-review-turn-reduction.md`) — an accelerant
+  layered ON the full-clone container review, not the dropped patch-only inline design.
 - **State-on-step + park/resolve mirror the fork-decision flow.** The `fix` resolution reuses the
   proven `choose`-style re-arm (`resetStepForRerun` + `startStep` + `signalDecision`), and `prReview`
   survives `resetStepForRerun` exactly like `forkDecision`. This kept the whole feature free of a
