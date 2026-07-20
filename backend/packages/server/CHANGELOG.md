@@ -1,5 +1,28 @@
 # @cat-factory/server
 
+## 0.139.0
+
+### Minor Changes
+
+- 8053837: PR deep-review `post`: guard against comment position drift when the PR branch is updated
+  after a review starts. The reviewer's dispatch now captures the PR head sha
+  (`reviewedHeadSha`), and the `post` resolution re-reads the current head before publishing:
+  if the branch moved, every finding is folded into the summary comment instead of being
+  anchored to a line number that may have shifted, so comments can't land on the wrong code.
+  Adds an optional `pullRequestHeadSha` read to the `GitHubClient`/`VcsClient`/`RepoFiles`
+  ports (best-effort; the check is inert where a provider can't read it).
+
+### Patch Changes
+
+- Updated dependencies [8053837]
+  - @cat-factory/orchestration@0.130.0
+  - @cat-factory/contracts@0.153.0
+  - @cat-factory/kernel@0.148.0
+  - @cat-factory/agents@0.66.7
+  - @cat-factory/integrations@0.88.12
+  - @cat-factory/prompt-fragments@0.13.46
+  - @cat-factory/spend@0.12.66
+
 ## 0.138.16
 
 ### Patch Changes
