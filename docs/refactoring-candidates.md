@@ -178,8 +178,8 @@ behind the cross-runtime conformance suite. Compose with the now-landed Drizzle 
 
 ## 8. Shared container builder (Node ⇄ Cloudflare)
 
-**Files:** `backend/runtimes/node/src/container.ts` (**2,453 lines**) and
-`backend/runtimes/cloudflare/src/infrastructure/container.ts` (**2,258 lines**).
+**Files:** `backend/runtimes/node/src/container.ts` (**3,085 lines**) and
+`backend/runtimes/cloudflare/src/infrastructure/container.ts` (**2,710 lines**).
 
 **Problem.** The two facade composition roots are near-identical: same repository wiring,
 same service instantiation, same gateway composition — differing essentially only in which
@@ -192,7 +192,7 @@ the proof-of-shape for doing the same to the rest of the container.)
 
 **Approach.** Extract a `buildSharedContainer(config, repoFactory, gateways)` into
 `@cat-factory/server` that holds the common wiring. Each facade supplies only a thin
-`repoFactory` (D1 vs Drizzle constructors) and its gateways. The two ~2,300–2,450-line files
+`repoFactory` (D1 vs Drizzle constructors) and its gateways. The two ~2,700–3,100-line files
 drop to a few hundred lines each, and parity becomes structural: there is one wiring list,
 not two. Compose with #6 (so the shared builder consumes the module registry) and #7 (so the
 `repoFactory` hands over deduped base repositories).
