@@ -182,7 +182,6 @@
       "recurringNoFrame": "Zadanie cykliczne musi należeć do usługi. Dodaj je z ramki usługi (lub modułu w jej obrębie).",
       "titleField": "Tytuł",
       "titlePlaceholder": "Co trzeba zrobić?",
-      "titlePlaceholderReview": "Opcjonalnie — tworzony na podstawie pull requesta",
       "issueIncluded": "{title} (ze zgłoszenia, dołączone)",
       "loadingIssue": "Wczytywanie opisu powiązanego zgłoszenia…",
       "additionalNotes": "Dodatkowe uwagi",

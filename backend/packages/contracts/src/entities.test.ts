@@ -70,9 +70,7 @@ describe('aprioriWorkingBranch', () => {
   })
 
   it('returns the single working branch name', () => {
-    expect(
-      aprioriWorkingBranch([branch('ref', 'reference'), branch('wip', 'working')]),
-    ).toBe('wip')
+    expect(aprioriWorkingBranch([branch('ref', 'reference'), branch('wip', 'working')])).toBe('wip')
   })
 })
 

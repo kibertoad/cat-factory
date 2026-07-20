@@ -203,7 +203,6 @@
       "recurringNoFrame": "A recurring task must live on a service. Add it from a service frame (or a module inside one).",
       "titleField": "Title",
       "titlePlaceholder": "What needs to be done?",
-      "titlePlaceholderReview": "Optional — derived from the pull request",
       "issueIncluded": "{title} (from issue, included)",
       "loadingIssue": "Loading the linked issue's description…",
       "additionalNotes": "Additional notes",

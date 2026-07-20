@@ -1,9 +1,10 @@
 <script setup lang="ts">
 // Create a new task on the board. The user names the task and writes its
-// description themselves (a REVIEW task is the one exception — its title is optional
-// and derived from the target PR when left blank, since the PR is the subject). The
-// task lands in `planned` state; it is never launched here. The user starts a
-// pipeline on it explicitly (and can keep editing it until they do).
+// description themselves (a REVIEW task is the one exception — it shows neither Title
+// nor Description: the target PR IS the subject, so the title is derived from the PR
+// reference and any notes go in the dedicated "Review focus" field). The task lands in
+// `planned` state; it is never launched here. The user starts a pipeline on it
+// explicitly (and can keep editing it until they do).
 //
 // The form also shows ungated "Context documents" / "Context issues" sections
 // (mirroring the task inspector): an inline search picker (ContextDocumentPicker /
@@ -732,65 +733,62 @@ async function add() {
         </div>
 
         <template v-if="!isRecurring">
-          <UFormField
-            :label="t('board.addTask.titleField')"
-            :required="!isReview"
-            :hint="isReview ? t('board.addTask.optional') : undefined"
-          >
+          <!-- A review task shows neither Title nor Description: the target PR is the
+               subject (the title is derived from the PR reference), and any notes go in
+               the dedicated "Review focus" field below. -->
+          <UFormField v-if="!isReview" :label="t('board.addTask.titleField')" required>
             <UInput
               v-model="title"
               data-testid="add-task-title"
-              :placeholder="
-                isReview
-                  ? t('board.addTask.titlePlaceholderReview')
-                  : t('board.addTask.titlePlaceholder')
-              "
+              :placeholder="t('board.addTask.titlePlaceholder')"
               autofocus
               class="w-full"
               @keydown.enter="add"
             />
           </UFormField>
 
-          <!-- Linked issue description(s), read-only: shown so the user sees the original
-               issue description is included in the task. It's folded into the saved
-               description (before their notes) on add. -->
-          <UFormField
-            v-for="issue in linkedIssueBodies"
-            :key="issue.key"
-            :label="t('board.addTask.issueIncluded', { title: issue.title })"
-          >
-            <UTextarea
-              :model-value="issue.body"
-              :rows="4"
-              autoresize
-              readonly
-              class="w-full"
-              :ui="{ base: 'cursor-default text-slate-300' }"
-            />
-          </UFormField>
-          <p v-if="resolvingIssueBodies" class="text-[11px] text-slate-500">
-            {{ t('board.addTask.loadingIssue') }}
-          </p>
+          <template v-if="!isReview">
+            <!-- Linked issue description(s), read-only: shown so the user sees the original
+                 issue description is included in the task. It's folded into the saved
+                 description (before their notes) on add. -->
+            <UFormField
+              v-for="issue in linkedIssueBodies"
+              :key="issue.key"
+              :label="t('board.addTask.issueIncluded', { title: issue.title })"
+            >
+              <UTextarea
+                :model-value="issue.body"
+                :rows="4"
+                autoresize
+                readonly
+                class="w-full"
+                :ui="{ base: 'cursor-default text-slate-300' }"
+              />
+            </UFormField>
+            <p v-if="resolvingIssueBodies" class="text-[11px] text-slate-500">
+              {{ t('board.addTask.loadingIssue') }}
+            </p>
 
-          <UFormField
-            :label="
-              hasLinkedIssueBody
-                ? t('board.addTask.additionalNotes')
-                : t('board.addTask.description')
-            "
-          >
-            <UTextarea
-              v-model="description"
-              :rows="4"
-              autoresize
-              :placeholder="
+            <UFormField
+              :label="
                 hasLinkedIssueBody
-                  ? t('board.addTask.notesPlaceholder')
-                  : t('board.addTask.descriptionPlaceholder')
+                  ? t('board.addTask.additionalNotes')
+                  : t('board.addTask.description')
               "
-              class="w-full"
-            />
-          </UFormField>
+            >
+              <UTextarea
+                v-model="description"
+                :rows="4"
+                autoresize
+                :placeholder="
+                  hasLinkedIssueBody
+                    ? t('board.addTask.notesPlaceholder')
+                    : t('board.addTask.descriptionPlaceholder')
+                "
+                class="w-full"
+              />
+            </UFormField>
+          </template>
 
           <UCheckbox v-model="technical" name="technical">
             <template #label>
