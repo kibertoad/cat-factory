@@ -112,10 +112,11 @@ function attributeCumulativeUsage(
  * never argv), `onActivity` on every chunk, abort kills the child, and the close
  * handler resolves/rejects. The caller's `onEvent` accumulates the outcome.
  *
- * `prompt` is fed over stdin: for Claude Code that is just the task prompt (the
- * system prompt rides `--append-system-prompt`); for Codex — which has no
- * system-prompt flag — the caller prepends the composed system prompt to it so
- * the role + best-practice context is not lost.
+ * `prompt` is fed over stdin: for Claude Code that is normally just the task prompt (the
+ * system prompt rides `--append-system-prompt`), unless the system prompt is too large for
+ * argv, in which case it is folded into `prompt` (see `carryClaudeSystemPrompt`); for Codex
+ * — which has no system-prompt flag — the caller always prepends the composed system prompt
+ * so the role + best-practice context is not lost.
  */
 function streamCli(
   cli: { command: string; args: string[] },
@@ -210,6 +211,46 @@ function streamCli(
   })
 }
 
+/**
+ * Fold a composed system prompt into the task prompt so the role + best-practice context
+ * rides stdin as a single user turn. Used by the Codex runner (no system-prompt flag) and
+ * by the Claude runner's argv-overflow fallback. Empty system prompt ⇒ the task prompt is
+ * returned unchanged.
+ */
+function foldSystemPrompt(systemPrompt: string, userPrompt: string): string {
+  return systemPrompt ? `${systemPrompt}\n\n---\n\n${userPrompt}` : userPrompt
+}
+
+/**
+ * Linux caps a SINGLE argv string at MAX_ARG_STRLEN (32 pages = 128 KiB) — a per-string limit,
+ * distinct from (and reached long before) the far larger total ARG_MAX for argv + env combined. A
+ * system prompt with best-practice fragments folded in can exceed that per-string cap, and `execve`
+ * then fails the whole spawn with `E2BIG` before the agent runs at all — the failure mode seen on
+ * the `pr-reviewer` step (a ~150 KiB composed prompt). The binding constraint is that per-string
+ * cap; 96 KiB stays comfortably under 128 KiB so the system-prompt argv can never approach it.
+ */
+const MAX_ARGV_STRING_BYTES = 96 * 1024
+
+/**
+ * Decide how the Claude Code runner carries the composed system prompt. Small prompts ride
+ * `--append-system-prompt` (a real system turn, cacheable) as before; a prompt too large for a
+ * single argv string is instead folded into the stdin task prompt (like the Codex runner), which
+ * has no size ceiling. Pure so the branch is unit-testable without spawning the CLI.
+ */
+export function carryClaudeSystemPrompt(
+  systemPrompt: string,
+  userPrompt: string,
+): { appendArgs: string[]; prompt: string; folded: boolean } {
+  if (Buffer.byteLength(systemPrompt, 'utf8') <= MAX_ARGV_STRING_BYTES) {
+    return {
+      appendArgs: ['--append-system-prompt', systemPrompt],
+      prompt: userPrompt,
+      folded: false,
+    }
+  }
+  return { appendArgs: [], prompt: foldSystemPrompt(systemPrompt, userPrompt), folded: true }
+}
+
 // ---------------------------------------------------------------------------
 // Claude Code
 // ---------------------------------------------------------------------------
@@ -255,18 +296,33 @@ export async function runClaudeCode(opts: SubscriptionRunOptions): Promise<PiRun
   let summary = ''
   let usage: { inputTokens: number; outputTokens: number } | undefined
 
+  // Decide how the composed system prompt is carried up front, so the telemetry seed below
+  // reflects what actually reaches the model: a small prompt rides `--append-system-prompt`
+  // (a real system turn), while an argv-overflowing prompt is folded into the first user turn
+  // — in which case NO system turn of ours is sent (the `E2BIG` fallback).
+  const { appendArgs, prompt, folded } = carryClaudeSystemPrompt(opts.systemPrompt, opts.userPrompt)
+  if (folded) {
+    opts.log?.warn('system prompt exceeds argv limit; folding into the task prompt', {
+      bytes: Buffer.byteLength(opts.systemPrompt, 'utf8'),
+    })
+  }
+
   // Reconstruct the full per-call request/response bodies for telemetry from the
   // stream. `--output-format stream-json --verbose` emits each turn as a near-verbatim
   // Anthropic Messages envelope, so `assistant` events carry the complete response
   // (text + tool_use blocks + usage), and `user` events carry the tool_result blocks
-  // fed back — together the growing prompt transcript. We seed it with the two inputs
-  // the harness supplies (they never appear in the stream): the system + first user
-  // message. Bodies are credential-scrubbed (they can echo the leased token).
+  // fed back — together the growing prompt transcript. We seed it with the inputs the
+  // harness supplies (they never appear in the stream): the system + first user message
+  // when the prompt rides argv, or a single folded user turn when it doesn't — so the
+  // reconstruction never shows a system turn that was never sent. Bodies are
+  // credential-scrubbed (they can echo the leased token).
   const secrets = opts.subscriptionToken ? secretsToRedact(opts.subscriptionToken) : []
-  const messages: Array<{ role: string; content: unknown }> = [
-    { role: 'system', content: opts.systemPrompt },
-    { role: 'user', content: opts.userPrompt },
-  ]
+  const messages: Array<{ role: string; content: unknown }> = folded
+    ? [{ role: 'user', content: prompt }]
+    : [
+        { role: 'system', content: opts.systemPrompt },
+        { role: 'user', content: opts.userPrompt },
+      ]
   const calls: HarnessCallMetric[] = []
 
   const onEvent = (event: Record<string, unknown>): void => {
@@ -389,11 +445,10 @@ export async function runClaudeCode(opts: SubscriptionRunOptions): Promise<PiRun
           'bypassPermissions',
           '--model',
           opts.model,
-          '--append-system-prompt',
-          opts.systemPrompt,
+          ...appendArgs,
         ],
       },
-      opts.userPrompt,
+      prompt,
       opts,
       env,
       opts.subscriptionToken ? secretsToRedact(opts.subscriptionToken) : [],
@@ -539,10 +594,9 @@ export async function runCodex(opts: SubscriptionRunOptions): Promise<PiRunOutco
   }
 
   // Codex has no system-prompt flag, so fold the composed role + best-practice
-  // context into the prompt itself (Claude Code instead rides --append-system-prompt).
-  const prompt = opts.systemPrompt
-    ? `${opts.systemPrompt}\n\n---\n\n${opts.userPrompt}`
-    : opts.userPrompt
+  // context into the prompt itself (Claude Code instead rides --append-system-prompt,
+  // falling back to this same fold when the prompt overflows argv).
+  const prompt = foldSystemPrompt(opts.systemPrompt, opts.userPrompt)
 
   // Codex's `exec --json` is far thinner than Claude Code's stream: it surfaces only
   // flat assistant text and (on `token_count` events) the per-turn `last_token_usage`
