@@ -644,6 +644,57 @@ export interface NodeContainerOptions {
  * App, `PUBLIC_URL`, `AUTH_SESSION_SECRET`, `ENCRYPTION_KEY`) are absent the
  * composite still serves inline kinds but fails container kinds loudly.
  */
+/**
+ * Resolve every app-owned registry the container wires: the backend-kind registries (env + runner
+ * + custom-manifest + user-secret), the agent-kind / gate / step-resolver / initiative-preset /
+ * VCS-provider / gate-provider registries. Each is the injected instance when `options` supplies it
+ * (a deployment's custom entries, or the conformance harness's pre-loaded instance) else the
+ * built-ins-only default, and the opt-in AWS EKS backends are registered by reference. Extracted
+ * from {@link buildNodeContainer} to keep it under the complexity ceiling.
+ */
+function resolveNodeAppRegistries(options: NodeContainerOptions) {
+  const {
+    environmentBackendRegistry,
+    runnerBackendRegistry,
+    customManifestTypeRegistry,
+    userSecretKindRegistry,
+  } = options.backendRegistries ?? createBackendRegistries()
+
+  // Register the opt-in AWS EKS backends by reference (the default registries stay AWS-free).
+  // Reuses the native Kubernetes transport/provider behind a minted IAM apiserver token; a
+  // pass-through until a workspace connects an `eks` backend. Registered on BOTH facades (the
+  // Worker registers the same pair in its container build) so the runtimes stay symmetric with
+  // the native `kubernetes` backend these extend — a real EKS cluster's private-CA apiserver is
+  // only reachable from a runtime that can pin a custom CA (Node/local), the same constraint a
+  // private-CA `kubernetes` connection already carries.
+  runnerBackendRegistry.register(eksRunnerBackend)
+  environmentBackendRegistry.register(eksEnvironmentBackend)
+
+  return {
+    environmentBackendRegistry,
+    runnerBackendRegistry,
+    customManifestTypeRegistry,
+    userSecretKindRegistry,
+    // The app-owned agent-kind registry: the injected instance (so a deployment's custom kinds
+    // are visible) else the built-ins-only default.
+    agentKindRegistry: options.agentKindRegistry ?? defaultAgentKindRegistry(),
+    // The app-owned gate registry: the injected instance (conformance / a deployment pre-loads it),
+    // else a fresh one with the built-in `@cat-factory/gates` suite installed.
+    gateRegistry: options.gateRegistry ?? gateRegistryWithBuiltins(),
+    // The app-owned step-resolver registry: the injected instance else an empty default (the
+    // built-in `merger` resolver is a privileged engine built-in, not a registry entry).
+    stepResolverRegistry: options.stepResolverRegistry ?? defaultStepResolverRegistry(),
+    // The app-owned initiative-preset registry: the injected instance else the built-ins-only
+    // default (generic / docs-refresh / tech-migration).
+    initiativePresetRegistry: options.initiativePresetRegistry ?? defaultInitiativePresetRegistry(),
+    // Opt-in GitLab VCS provider registry (a no-op unless GITLAB_TOKEN is set; the wiring lives in
+    // the caller, symmetric with the Worker facade per "keep the runtimes symmetric").
+    vcsRegistry: options.vcsRegistry ?? defaultVcsRegistry(),
+    // The app-owned provider registry the built-in gates probe through (fresh empty unless injected).
+    providerRegistry: options.providerRegistry ?? defaultProviderRegistry(),
+  }
+}
+
 export function buildNodeContainer(options: NodeContainerOptions): ServerContainer {
   const env = options.env ?? process.env
   const config = options.config ?? loadNodeConfig(env)
@@ -702,64 +753,31 @@ export function buildNodeContainer(options: NodeContainerOptions): ServerContain
   const sourced = <T>(name: string, build: (d: DrizzleDb) => T): T =>
     pickRepoSource(remoteRepos, name, () => build(db))
 
-  // The app-owned backend registries (env + runner kind → provider), built once here and
-  // injected into the engine + surfaced on the container for the snapshot's backend-kind
-  // selectors. A deployment registers a custom backend by reference; the conformance suite
-  // injects a pre-loaded registry. Defaults to just the built-in `manifest`/`kubernetes` kinds.
+  // The app-owned registries (backend kinds, agent kinds, gates, step resolvers, initiative
+  // presets, VCS providers, gate-provider registry) — injected instances when supplied (a
+  // deployment's custom entries / the conformance harness) else the built-ins-only defaults.
+  // The SAME instances flow to the executors, createCore, and the ServerContainer projection.
   const {
     environmentBackendRegistry,
     runnerBackendRegistry,
     customManifestTypeRegistry,
     userSecretKindRegistry,
-  } = options.backendRegistries ?? createBackendRegistries()
-  // The app-owned agent-kind registry: the injected instance (so a deployment's custom kinds
-  // are visible) else the built-ins-only default. The SAME instance flows to the executors,
-  // createCore and the ServerContainer snapshot projection.
-  const agentKindRegistry = options.agentKindRegistry ?? defaultAgentKindRegistry()
-  // The app-owned gate registry: the injected instance (conformance / a deployment pre-loads it),
-  // else a fresh one with the built-in `@cat-factory/gates` suite installed via
-  // `gateRegistryWithBuiltins()`. Flows into createCore (the engine's gate machine) and is
-  // re-exposed on Core so `start()` validates the SAME instance.
-  const gateRegistry = options.gateRegistry ?? gateRegistryWithBuiltins()
-  // The app-owned step-resolver registry: the injected instance else an empty default (the
-  // built-in `merger` resolver is a privileged engine built-in, not a registry entry).
-  const stepResolverRegistry = options.stepResolverRegistry ?? defaultStepResolverRegistry()
-  // The app-owned initiative-preset registry: the injected instance else the built-ins-only
-  // default (generic / docs-refresh / tech-migration). Flows into createCore (initiative services
-  // + spawned-run preset context) and the ServerContainer snapshot descriptors + preset probe.
-  const initiativePresetRegistry =
-    options.initiativePresetRegistry ?? defaultInitiativePresetRegistry()
+    agentKindRegistry,
+    gateRegistry,
+    stepResolverRegistry,
+    initiativePresetRegistry,
+    vcsRegistry,
+    providerRegistry,
+  } = resolveNodeAppRegistries(options)
 
-  // Register the opt-in AWS EKS backends by reference (the default registries stay AWS-free).
-  // Reuses the native Kubernetes transport/provider behind a minted IAM apiserver token; a
-  // pass-through until a workspace connects an `eks` backend. Registered on BOTH facades (the
-  // Worker registers the same pair in its container build) so the runtimes stay symmetric with
-  // the native `kubernetes` backend these extend — a real EKS cluster's private-CA apiserver is
-  // only reachable from a runtime that can pin a custom CA (Node/local), the same constraint a
-  // private-CA `kubernetes` connection already carries.
-  runnerBackendRegistry.register(eksRunnerBackend)
-  environmentBackendRegistry.register(eksEnvironmentBackend)
-
-  // The built-in gates' providers are wired onto the app-owned `providerRegistry` (news'd below,
-  // fresh unless injected via `options`). The GitHub + release-health wiring runs only inside its
+  // The built-in gates' providers are wired onto the app-owned `providerRegistry` (fresh unless
+  // injected via `options`). The GitHub + release-health wiring runs only inside its
   // `enabled`/`githubClient` branches; a fresh registry starts empty, so an unconfigured gate just
   // stays unwired (pass-through) — no reset needed (the former `clearGateProviders()` guarded a
   // module-global that no longer exists). Mirrors the Worker facade (keep the runtimes symmetric).
   // Any test-injected gate providers (`options.gateProviders`) are applied at the END of this build
   // so they OVERRIDE the config wiring (local mode wires a PAT-backed CI provider here that would
   // otherwise clobber a faked one) — gates read their provider lazily at probe time, last write wins.
-
-  // Opt-in GitLab VCS provider (single-token model, mirroring local-mode's PAT). Registered on
-  // the app-owned `vcsRegistry` so the neutral webhook route + any VcsConnectionRef holder
-  // resolves it. A no-op unless GITLAB_TOKEN is set; symmetric with the Worker facade (and
-  // inherited by local) per "keep the runtimes symmetric".
-  const vcsRegistry = options.vcsRegistry ?? defaultVcsRegistry()
-  // The app-owned provider registry the built-in gates probe through. A single-process facade, so
-  // one instance for the process (the injected one via `options`, else a fresh empty one). The
-  // GitHub CI/mergeability/review/doc-quality + release-health + incident providers are wired onto
-  // it below when configured; injected into `createCore` so the gate machine reads the SAME
-  // instance. A fresh instance starts empty, so the former `clearGateProviders()` reset is gone.
-  const providerRegistry = options.providerRegistry ?? defaultProviderRegistry()
   let gitlabEngineClient: GitHubClient | undefined
   if (config.gitlab?.enabled && env.GITLAB_TOKEN) {
     registerGitLab(vcsRegistry, {

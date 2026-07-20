@@ -1,6 +1,7 @@
 import type {
   AgentExecutor,
   AgentJobHandle,
+  AgentJobUpdate,
   AgentRunContext,
   AgentRunResult,
   Block,
@@ -751,41 +752,23 @@ export class RunDispatcher {
       // (e.g. 3/8 todos done) without advancing the step. Only persist + emit when something
       // actually changed so an idle poll doesn't churn storage or the event stream.
       //
-      // Fold the poll's delta onto a target instance, returning whether anything changed. The
-      // captured `update` is the source, so re-applying on a freshly-reloaded instance is
-      // idempotent for the set-to-latest folds AND correct for the APPEND fold: the harness
-      // follow-up buffer is drain-on-read (`runner.ts`), so those streamed items exist ONLY on
-      // this `update` — abort-and-redrive would lose them, whereas re-applying under
-      // `mutateInstance` (which reloads a clean base each attempt) preserves them.
-      const applyRunningFold = async (target: ExecutionInstance): Promise<boolean> => {
-        const s = target.steps[target.currentStep]
-        // The step advanced (or the job was superseded) under a concurrent write — nothing to fold.
-        if (!s || s.jobId !== step.jobId) return false
-        let changed = false
-        if (this.applyContainerRunning(s, update)) changed = true
-        if (this.applySubtaskProgress(s, update.subtasks)) changed = true
-        // The transport reports WHICH backend served the job on the first poll (native host
-        // process vs. sandboxed container) — record it in the run diagnostics.
-        if (this.recordBackendDiagnostics(target, update.backend)) changed = true
-        // Append any forward-looking items the Coder streamed since the last poll so the
-        // Follow-up companion lights up + accrues items LIVE while the container still runs.
-        if (this.followUpGate.appendStreamedFollowUps(s, update.followUps)) changed = true
-        // Refresh the env projection so its status transitions (provisioning→ready→
-        // expired/torn_down) and any error stay live in the run details during the run.
-        if (await this.deployer.attachEnvironmentProjection(workspaceId, target.blockId, s))
-          changed = true
-        return changed
-      }
+      // Fold the poll's delta onto a target instance via {@link applyRunningFold}. The captured
+      // `update` is the source, so re-applying on a freshly-reloaded instance is idempotent for
+      // the set-to-latest folds AND correct for the APPEND fold: the harness follow-up buffer is
+      // drain-on-read (`runner.ts`), so those streamed items exist ONLY on this `update` — abort-
+      // and-redrive would lose them, whereas re-applying under `mutateInstance` (which reloads a
+      // clean base each attempt) preserves them.
+      const foldCtx = { jobId: step.jobId, update, workspaceId }
       // Cheap pre-check against the loaded snapshot: skip the write entirely on an idle poll
       // (the common case). The mutation is discarded — the authoritative write re-applies the
       // same fold on fresh state under CAS below.
-      if (await applyRunningFold(instance)) {
+      if (await this.applyRunningFold(instance, foldCtx)) {
         try {
           const persisted = await this.runStateMachine.mutateInstance(
             workspaceId,
             executionId,
             async (fresh) => {
-              await applyRunningFold(fresh)
+              await this.applyRunningFold(fresh, foldCtx)
             },
           )
           // Progress-only fold (subtask ticks / streamed follow-ups): skip the per-run
@@ -851,56 +834,7 @@ export class RunDispatcher {
     // negative, so the next check re-dispatches (until the attempt budget is spent).
     const reprobeGate = this.gateFor(step.agentKind)
     if (reprobeGate) {
-      // A gate may need deterministic GitHub-side bookkeeping to land BEFORE the re-probe
-      // reads it (the human-review gate replies to + RESOLVES the threads it handed the
-      // fixer, so the next probe counts them addressed). Run that side-effect hook first;
-      // it does NOT replace the re-probe (unlike resolveHelperCompletion).
-      if (reprobeGate.onHelperComplete && step.gate) {
-        const block = await this.blockRepository.get(workspaceId, instance.blockId)
-        if (block) {
-          const jobResult: GateHelperJobResult =
-            update.state === 'done'
-              ? { state: 'done', result: update.result }
-              : { state: 'failed', error: update.error ?? null }
-          await this.runInitiatorScope(instance.initiatedBy, () =>
-            reprobeGate.onHelperComplete!({
-              workspaceId,
-              instance,
-              block,
-              step,
-              result: jobResult,
-            }),
-          )
-        }
-      }
-      // Record the just-finished helper attempt before re-probing. The gate's next
-      // precheck stays the source of truth for pass/fail, but the helper's own account
-      // (what it did, and for the conflict-resolver which files it left conflicting) is
-      // otherwise discarded here — leaving the gate window with only a bare attempt
-      // count. Capture it so the UI can show what each attempt tried.
-      if (step.gate) {
-        const attempt = recordGateAttempt(
-          step.gate,
-          update.state === 'done'
-            ? { state: 'done', output: update.result.output ?? null }
-            : { state: 'failed', error: update.error ?? null },
-          this.clock.now(),
-        )
-        step.gate.attemptLog = [...(step.gate.attemptLog ?? []), attempt]
-        // The conflicts gate's precheck carries no failure detail of its own (GitHub
-        // reports mergeability as a single bit), so surface the resolver's account as
-        // the gate's last failure summary. CI's probe already sets a richer summary
-        // (the red checks) — don't clobber it with the fixer's push note.
-        if (step.agentKind === CONFLICTS_AGENT_KIND && attempt.summary) {
-          step.gate.lastFailureSummary = attempt.summary
-        }
-      }
-      step.jobId = undefined
-      step.subtasks = undefined
-      if (step.gate) step.gate.phase = 'checking'
-      await this.runStateMachine.casPersist(workspaceId, instance)
-      await this.runStateMachine.emitInstance(workspaceId, instance)
-      return { kind: 'awaiting_gate', stepIndex: instance.currentStep }
+      return this.reprobeGateAfterHelper(reprobeGate, { workspaceId, instance, step, update })
     }
 
     // A `tester` step in its `fixing` phase has a Fixer job in flight, NOT the
@@ -1017,6 +951,113 @@ export class RunDispatcher {
    * so the caller only persists + emits on a real transition (an idle poll is a no-op).
    * Prior id/url/phase are preserved when a poll omits them (drain-on-read semantics).
    */
+  /**
+   * Fold a running poll's live delta (container status/phase, subtask counts, backend, streamed
+   * follow-ups, env projection) onto `target`, returning whether anything changed. Idempotent for
+   * the set-to-latest folds and correct under CAS retry for the drain-on-read follow-up append —
+   * see the call site in {@link pollAgentJobInner}. A concurrent write that advanced the step (or
+   * superseded the job) makes it a no-op.
+   */
+  private async applyRunningFold(
+    target: ExecutionInstance,
+    ctx: {
+      jobId: string
+      update: Extract<AgentJobUpdate, { state: 'running' }>
+      workspaceId: string
+    },
+  ): Promise<boolean> {
+    const { jobId, update, workspaceId } = ctx
+    const s = target.steps[target.currentStep]
+    // The step advanced (or the job was superseded) under a concurrent write — nothing to fold.
+    if (!s || s.jobId !== jobId) return false
+    let changed = false
+    if (this.applyContainerRunning(s, update)) changed = true
+    if (this.applySubtaskProgress(s, update.subtasks)) changed = true
+    // The transport reports WHICH backend served the job on the first poll (native host
+    // process vs. sandboxed container) — record it in the run diagnostics.
+    if (this.recordBackendDiagnostics(target, update.backend)) changed = true
+    // Append any forward-looking items the Coder streamed since the last poll so the
+    // Follow-up companion lights up + accrues items LIVE while the container still runs.
+    if (this.followUpGate.appendStreamedFollowUps(s, update.followUps)) changed = true
+    // Refresh the env projection so its status transitions (provisioning→ready→
+    // expired/torn_down) and any error stay live in the run details during the run.
+    if (await this.deployer.attachEnvironmentProjection(workspaceId, target.blockId, s)) {
+      changed = true
+    }
+    return changed
+  }
+
+  /**
+   * A polling gate step's in-flight job is its helper agent (ci-fixer / conflict-resolver / the
+   * human-review fixer), NOT the step's own work: when it finishes (or fails) we don't record a
+   * result or advance — we run any deterministic post-helper bookkeeping hook, record the attempt,
+   * drop the handle, return the gate to `checking`, and re-run the precheck (the helper's push
+   * triggers a fresh CI run / updates mergeability). A helper that failed without pushing leaves the
+   * precheck negative, so the next check re-dispatches (until the attempt budget is spent). Split
+   * from {@link pollAgentJobInner} to keep it under the complexity ceiling.
+   */
+  private async reprobeGateAfterHelper(
+    gate: GateDefinition,
+    ctx: {
+      workspaceId: string
+      instance: ExecutionInstance
+      step: PipelineStep
+      update: Extract<AgentJobUpdate, { state: 'done' } | { state: 'failed' }>
+    },
+  ): Promise<AdvanceResult> {
+    const { workspaceId, instance, step, update } = ctx
+    // A gate may need deterministic GitHub-side bookkeeping to land BEFORE the re-probe
+    // reads it (the human-review gate replies to + RESOLVES the threads it handed the
+    // fixer, so the next probe counts them addressed). Run that side-effect hook first;
+    // it does NOT replace the re-probe (unlike resolveHelperCompletion).
+    if (gate.onHelperComplete && step.gate) {
+      const block = await this.blockRepository.get(workspaceId, instance.blockId)
+      if (block) {
+        const jobResult: GateHelperJobResult =
+          update.state === 'done'
+            ? { state: 'done', result: update.result }
+            : { state: 'failed', error: update.error ?? null }
+        await this.runInitiatorScope(instance.initiatedBy, () =>
+          gate.onHelperComplete!({
+            workspaceId,
+            instance,
+            block,
+            step,
+            result: jobResult,
+          }),
+        )
+      }
+    }
+    // Record the just-finished helper attempt before re-probing. The gate's next
+    // precheck stays the source of truth for pass/fail, but the helper's own account
+    // (what it did, and for the conflict-resolver which files it left conflicting) is
+    // otherwise discarded here — leaving the gate window with only a bare attempt
+    // count. Capture it so the UI can show what each attempt tried.
+    if (step.gate) {
+      const attempt = recordGateAttempt(
+        step.gate,
+        update.state === 'done'
+          ? { state: 'done', output: update.result.output ?? null }
+          : { state: 'failed', error: update.error ?? null },
+        this.clock.now(),
+      )
+      step.gate.attemptLog = [...(step.gate.attemptLog ?? []), attempt]
+      // The conflicts gate's precheck carries no failure detail of its own (GitHub
+      // reports mergeability as a single bit), so surface the resolver's account as
+      // the gate's last failure summary. CI's probe already sets a richer summary
+      // (the red checks) — don't clobber it with the fixer's push note.
+      if (step.agentKind === CONFLICTS_AGENT_KIND && attempt.summary) {
+        step.gate.lastFailureSummary = attempt.summary
+      }
+    }
+    step.jobId = undefined
+    step.subtasks = undefined
+    if (step.gate) step.gate.phase = 'checking'
+    await this.runStateMachine.casPersist(workspaceId, instance)
+    await this.runStateMachine.emitInstance(workspaceId, instance)
+    return { kind: 'awaiting_gate', stepIndex: instance.currentStep }
+  }
+
   private applyContainerRunning(
     step: PipelineStep,
     update: { phase?: string; container?: { id?: string; url?: string } },

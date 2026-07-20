@@ -1110,8 +1110,50 @@ export async function dispatchPersistenceCall(
   }
 
   // Bind the call to an account and reject anything outside the token scope (404).
+  const scopeDenial = await checkCallScope(spec.scope, args, opts, { inScope, visibleUserIds })
+  if (scopeDenial) return scopeDenial
+
+  try {
+    const value = await fn.apply(repo, args)
+    const body: PersistenceRpcResponse = {
+      ok: true,
+      value: value === undefined ? null : value,
+      ...(value === undefined ? { undef: true } : {}),
+    }
+    if (spec.revWriteBack !== undefined) {
+      const mutated = args[spec.revWriteBack] as { rev?: unknown } | undefined
+      if (mutated && typeof mutated.rev === 'number') {
+        body.mutated = { arg: spec.revWriteBack, rev: mutated.rev }
+      }
+    }
+    return { status: 200, body }
+  } catch (err) {
+    if (err instanceof DomainError) {
+      return fail(err.code, err.message, err.details)
+    }
+    // Opaque 500 — never leak an internal error's message over the machine API.
+    return fail('internal', 'Internal error')
+  }
+}
+
+/**
+ * Enforce a call's scope rule: bind it to an account and reject anything outside the token scope.
+ * Returns a `DispatchResult` (always a 404 `denied` — the existence-non-leak policy) when the call
+ * is out of scope, or `undefined` when it passes and the method may run. The `visibility` kind
+ * additionally narrows `args[rule.arg]` in place (the array is shared with the caller). Pure except
+ * for the injected `opts` resolver IO + the two closures (`inScope` / lazy `visibleUserIds`).
+ */
+async function checkCallScope(
+  rule: ScopeRule,
+  args: unknown[],
+  opts: DispatchOptions,
+  helpers: {
+    inScope: (accountId: string | null | undefined) => boolean
+    visibleUserIds: () => Promise<Set<string>>
+  },
+): Promise<DispatchResult | undefined> {
+  const { inScope } = helpers
   const denied = fail('not_found', 'Not found')
-  const rule = spec.scope
   switch (rule.kind) {
     case 'workspace': {
       // Bind via the workspace's owning account. A workspace that does not exist (or whose
@@ -1166,6 +1208,65 @@ export async function dispatchPersistenceCall(
       if (args[rule.arg] !== opts.scope.userId) return denied
       break
     }
+    case 'visibility': {
+      // Never let a node widen its visibility: intersect the requested accountIds with the
+      // token scope, and pin the owner to the token user. A `null` (auth-disabled) scope is
+      // refused — mothership mode is always scoped.
+      const requested = args[rule.arg] as VisibilityScope | null
+      if (!requested || typeof requested !== 'object') return denied
+      const accountIds = (requested.accountIds ?? []).filter((id) => inScope(id))
+      const adminAccountIds = (requested.adminAccountIds ?? []).filter((id) => inScope(id))
+      args[rule.arg] = {
+        accountIds,
+        adminAccountIds,
+        ownerUserId: opts.scope.userId,
+        userId: opts.scope.userId,
+      } satisfies VisibilityScope
+      break
+    }
+    default:
+      // The entity-resolver kinds (user/block/service/owner families) bind via a server-side
+      // account resolver; they are split out to keep each function under the complexity ceiling.
+      return checkEntityCallScope(rule, args, opts, helpers)
+  }
+
+  // In scope: let the method run.
+  return undefined
+}
+
+/**
+ * The entity-resolver half of {@link checkCallScope}: the scope kinds that bind a call via a
+ * server-side account resolver (co-membership for users, block/service ownership, tenant-library
+ * owner pairs). Same contract — a `DispatchResult` (404 `denied`) when out of scope, `undefined`
+ * when it passes. Split from the core kinds purely to keep each function under the complexity
+ * ceiling; the `never` default keeps the two switches jointly exhaustive over `ScopeRule`.
+ */
+async function checkEntityCallScope(
+  rule: Extract<
+    ScopeRule,
+    {
+      kind:
+        | 'user'
+        | 'userList'
+        | 'block'
+        | 'blockList'
+        | 'service'
+        | 'serviceList'
+        | 'serviceMount'
+        | 'owner'
+        | 'ownerField'
+    }
+  >,
+  args: unknown[],
+  opts: DispatchOptions,
+  helpers: {
+    inScope: (accountId: string | null | undefined) => boolean
+    visibleUserIds: () => Promise<Set<string>>
+  },
+): Promise<DispatchResult | undefined> {
+  const { inScope, visibleUserIds } = helpers
+  const denied = fail('not_found', 'Not found')
+  switch (rule.kind) {
     case 'user': {
       // Bind via co-membership: the target user's DISPLAY record is readable iff they are a member
       // of one of the token's in-scope accounts. No resolver wired ⇒ fail closed (404), like the
@@ -1273,16 +1374,14 @@ export async function dispatchPersistenceCall(
       //   - 'workspace' → the ownerId is a workspaceId; resolve its owning account (like `workspace`).
       //   - 'account'   → the ownerId IS an accountId (like `account`).
       // Any other kind, a non-string ownerId, or an unresolvable/out-of-scope owner fails closed.
-      const ownerKind = args[rule.kindArg]
-      const ownerId = args[rule.idArg]
-      if (typeof ownerId !== 'string') return denied
-      if (ownerKind === 'workspace') {
-        if (!inScope(await opts.resolveAccountId(ownerId))) return denied
-      } else if (ownerKind === 'account') {
-        if (!inScope(ownerId)) return denied
-      } else {
-        return denied
-      }
+      const denialForOwner = await checkOwnerPairScope(
+        args[rule.kindArg],
+        args[rule.idArg],
+        opts,
+        inScope,
+        denied,
+      )
+      if (denialForOwner) return denialForOwner
       break
     }
     case 'ownerField': {
@@ -1291,69 +1390,52 @@ export async function dispatchPersistenceCall(
       // a missing/non-string field, or an unresolvable/out-of-scope owner is refused as 404, so the
       // row can only ever be persisted under the caller's own in-scope owner.
       const record = args[rule.arg]
-      const ownerKind =
-        record && typeof record === 'object'
-          ? (record as { ownerKind?: unknown }).ownerKind
-          : undefined
-      const ownerId =
-        record && typeof record === 'object' ? (record as { ownerId?: unknown }).ownerId : undefined
-      if (typeof ownerId !== 'string') return denied
-      if (ownerKind === 'workspace') {
-        if (!inScope(await opts.resolveAccountId(ownerId))) return denied
-      } else if (ownerKind === 'account') {
-        if (!inScope(ownerId)) return denied
-      } else {
-        return denied
-      }
-      break
-    }
-    case 'visibility': {
-      // Never let a node widen its visibility: intersect the requested accountIds with the
-      // token scope, and pin the owner to the token user. A `null` (auth-disabled) scope is
-      // refused — mothership mode is always scoped.
-      const requested = args[rule.arg] as VisibilityScope | null
-      if (!requested || typeof requested !== 'object') return denied
-      const accountIds = (requested.accountIds ?? []).filter((id) => inScope(id))
-      const adminAccountIds = (requested.adminAccountIds ?? []).filter((id) => inScope(id))
-      args[rule.arg] = {
-        accountIds,
-        adminAccountIds,
-        ownerUserId: opts.scope.userId,
-        userId: opts.scope.userId,
-      } satisfies VisibilityScope
+      const isObj = record && typeof record === 'object'
+      const denialForOwnerField = await checkOwnerPairScope(
+        isObj ? (record as { ownerKind?: unknown }).ownerKind : undefined,
+        isObj ? (record as { ownerId?: unknown }).ownerId : undefined,
+        opts,
+        inScope,
+        denied,
+      )
+      if (denialForOwnerField) return denialForOwnerField
       break
     }
     default: {
-      // Fail closed: a `ScopeRule` kind with no case above must NEVER reach the method
-      // unscoped. The `never` binding makes adding a kind without a case a compile error,
-      // and the `return denied` is the runtime backstop if one slips through anyway.
+      // Fail closed: a `ScopeRule` kind with no case in EITHER switch must NEVER reach the method
+      // unscoped. The `never` binding makes adding a kind without a case a compile error.
       const _exhaustive: never = rule
       void _exhaustive
       return denied
     }
   }
 
-  try {
-    const value = await fn.apply(repo, args)
-    const body: PersistenceRpcResponse = {
-      ok: true,
-      value: value === undefined ? null : value,
-      ...(value === undefined ? { undef: true } : {}),
-    }
-    if (spec.revWriteBack !== undefined) {
-      const mutated = args[spec.revWriteBack] as { rev?: unknown } | undefined
-      if (mutated && typeof mutated.rev === 'number') {
-        body.mutated = { arg: spec.revWriteBack, rev: mutated.rev }
-      }
-    }
-    return { status: 200, body }
-  } catch (err) {
-    if (err instanceof DomainError) {
-      return fail(err.code, err.message, err.details)
-    }
-    // Opaque 500 — never leak an internal error's message over the machine API.
-    return fail('internal', 'Internal error')
+  // In scope: let the method run.
+  return undefined
+}
+
+/**
+ * Resolve a tenant-library owner PAIR (ownerKind, ownerId) to an account and enforce token scope,
+ * shared by the `owner` (positional) and `ownerField` (record-field) kinds. Returns `denied` when
+ * the pair is malformed or out of scope, else `undefined`. A `workspace` owner resolves through the
+ * workspace's owning account; an `account` owner IS the account; any other kind fails closed.
+ */
+async function checkOwnerPairScope(
+  ownerKind: unknown,
+  ownerId: unknown,
+  opts: DispatchOptions,
+  inScope: (accountId: string | null | undefined) => boolean,
+  denied: DispatchResult,
+): Promise<DispatchResult | undefined> {
+  if (typeof ownerId !== 'string') return denied
+  if (ownerKind === 'workspace') {
+    if (!inScope(await opts.resolveAccountId(ownerId))) return denied
+  } else if (ownerKind === 'account') {
+    if (!inScope(ownerId)) return denied
+  } else {
+    return denied
   }
+  return undefined
 }
 
 /** Reconstruct the thrown error from an error envelope (client side). */

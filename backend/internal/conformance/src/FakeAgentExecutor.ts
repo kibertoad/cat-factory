@@ -283,7 +283,12 @@ export class FakeAgentExecutor implements AgentExecutor {
     }
   }
 
-  async run(context: AgentRunContext): Promise<AgentRunResult> {
+  /**
+   * The producer/companion half of {@link run}: the decision park, the blueprints/spec-writer
+   * structured producers, and the companion grade. Returns the mimicked result, or `undefined`
+   * when `context.agentKind` isn't one of these so {@link run} continues to the remaining kinds.
+   */
+  private runProducerKinds(context: AgentRunContext): AgentRunResult | undefined {
     const raisesDecision =
       this.options.decisionOnSteps?.includes(context.stepIndex) && !context.resolvedDecision
     if (raisesDecision) {
@@ -368,6 +373,16 @@ export class FakeAgentExecutor implements AgentExecutor {
         ...this.usageFields(),
       }
     }
+
+    return undefined
+  }
+
+  async run(context: AgentRunContext): Promise<AgentRunResult> {
+    // The producer/companion cluster (decision park, blueprints, spec-writer, companion grade)
+    // is split into its own dispatcher to keep `run` under the complexity ceiling; it returns
+    // `undefined` when the kind isn't one of those, so control falls through to the rest.
+    const produced = this.runProducerKinds(context)
+    if (produced) return produced
 
     // The `tester` step returns a structured report. A `testReports` sequence walks
     // one report per Tester call (last repeats) so a test can drive a withheld

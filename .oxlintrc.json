@@ -5,7 +5,7 @@
     "correctness": "error"
   },
   "rules": {
-    "complexity": ["error", { "max": 141 }],
+    "complexity": ["error", { "max": 60 }],
     "max-depth": ["error", { "max": 4 }],
     "max-nested-callbacks": ["error", { "max": 4 }],
     "max-params": ["error", { "max": 6 }],

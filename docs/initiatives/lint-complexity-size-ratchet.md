@@ -1,10 +1,10 @@
 # Initiative: ratchet down oxlint complexity & size ceilings
 
 **Status:** in progress — `max-nested-callbacks`, `max-depth`, AND `max-params` at their final
-targets (4 / 4 / **6**); `max-lines-per-function` at **step 1 (1000)** for product code (test
-suites carved off into an `overrides` ratchet at 2453); `max-lines` at its free floor. `complexity` /
-`max-statements` / `max-lines` still need the remaining DI-builder / god-file refactors to move ·
-**Owner:** core · **Started:** 2026-07-20
+targets (4 / 4 / **6**); `complexity` at **step 1 (60)**; `max-lines-per-function` at **step 1
+(1000)** for product code (test suites carved off into an `overrides` ratchet at 2453); `max-lines`
+at its free floor. `max-statements` / `max-lines` still need the remaining god-file refactors to
+move · **Owner:** core · **Started:** 2026-07-20
 
 > This is the durable source of truth for a multi-PR initiative. Read it first before
 > picking up the next slice; update the checklist at the end of each PR.
@@ -80,7 +80,7 @@ worst offender. These are the starting ceilings, not the goal.
 
 | Rule                     | Ceiling now | Reasonable target | Worst offender today                                                                             |
 | ------------------------ | ----------: | ----------------: | ------------------------------------------------------------------------------------------------ |
-| `complexity`             |         141 |            **20** | `runtimes/node/src/config.ts` (`loadNodeConfig`, 141)                                            |
+| `complexity`             |      **60** |            **20** | at step 1 — floor 57 (`server/persistence/rpc.ts` `checkCallScope`)                              |
 | `max-statements`         |         157 |            **30** | `frontend/app/app/stores/ui/modals.ts` (157)                                                     |
 | `max-lines-per-function` |    **1000** |           **150** | product: `runtimes/node/src/container.ts` (`buildNodeContainer`, 991); tests: 2453 (`overrides`) |
 | `max-lines`              |    **2802** |          **1500** | `orchestration/src/modules/execution/ExecutionService.ts` (2802)                                 |
@@ -104,6 +104,22 @@ worst offender. These are the starting ceilings, not the goal.
 > `EnvironmentConnectionService`'s bootstrap commit/PR path, `WorkersAiLlmUpstream`'s assistant
 > tool-call conversion, and the OTEL conformity metric fold. The size/complexity rules are still
 > pinned at their ceilings pending the DI-builder / god-file refactors.
+>
+> **Fifth pass (landed):** `complexity` reached **step 1 (141 → 60)** by splitting the seven
+> functions above 60 along cohesive seams — all behaviour-neutral extractions (server +
+> orchestration unit suites, node/local config tests, and the cross-runtime conformance suites cover
+> them). `loadNodeConfig` (141) decomposes into per-section `AppConfig` builders
+> (`resolveProviderCaps` / `buildAgentRouting` / `buildGithubConfig` / `buildAuthConfig` /
+> `buildEmailConfig` / `buildEnvironmentsConfig` / `buildRunnersConfig` / `buildRetentionConfig` /
+> `buildLangfuseConfig` / `buildOtelConfig` / `buildExecutionConfig`); `dispatchPersistenceCall`
+> (101) lifts its scope-rule switch into `checkCallScope`, split again into `checkEntityCallScope` +
+> `checkOwnerPairScope` (the two switches stay jointly exhaustive over `ScopeRule`); `buildJobBody`
+> (75) extracts the multi-repo/reference resolution into `resolveAuxiliaryRepos`;
+> `FakeAgentExecutor.run` (68) moves the producer/companion cluster into `runProducerKinds`;
+> `buildNodeContainer` (64) extracts `resolveNodeAppRegistries`; `buildLocalContainer` (66) extracts
+> `resolveLocalVcs`; and `pollAgentJobInner` (61) extracts `applyRunningFold` +
+> `reprobeGateAfterHelper`. The floor dropped to **57** (`rpc.ts` `checkCallScope`), so 60 lands with
+> margin. `max-statements` is still pinned (its top offender `ui/modals.ts` at 157 is untouched here).
 >
 > **Fourth pass (landed):** `max-lines-per-function` reached **step 1 (2453 → 1000)** by (a) carving
 > the table-driven **test suites** off into an `overrides` entry (globs `**/*.test.ts`,
@@ -146,7 +162,7 @@ Update the `Status` cell + the live `max` in `.oxlintrc.json` at the end of each
 | Step      | `max` | Offenders to split first                                                                                                                                     | Status    |
 | --------- | ----: | ------------------------------------------------------------------------------------------------------------------------------------------------------------ | --------- |
 | baseline  |   141 | —                                                                                                                                                            | ✅ landed |
-| 1         |    60 | (7) `buildNodeContainer` 139, `dispatchPersistenceCall` 101, `buildJobBody` 75, `FakeAgentExecutor.run` 68, `buildLocalContainer` 66, `pollAgentJobInner` 61 | ☐ todo    |
+| 1         |    60 | (7) `loadNodeConfig` 141, `dispatchPersistenceCall` 101, `buildJobBody` 75, `FakeAgentExecutor.run` 68, `buildLocalContainer` 66, `buildNodeContainer` 64, `pollAgentJobInner` 61 — see fifth pass | ✅ landed |
 | 2         |    30 | (46) — `RunDispatcher` methods, `toRunResult`, `buildRegisteredAgentBody`, …                                                                                 | ☐ todo    |
 | 3 (final) |    20 | (99) — ESLint's default; the long tail                                                                                                                       | ☐ todo    |
 

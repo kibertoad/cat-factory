@@ -1200,6 +1200,89 @@ export class ContainerAgentExecutor implements AsyncAgentExecutor {
       ...(search.available ? { webSearch: true } : {}),
     }
 
+    // The auxiliary checkouts + their prompt sections: the multi-repo fan-out (coder/ci-fixer),
+    // the conflict-resolver's peer targeting, the merger's combined-diff siblings, and the
+    // read-only reference repos/branches. Extracted to keep `buildJobBody` under the complexity
+    // ceiling; it returns the per-kind repo target + `common` override and every section.
+    const {
+      peerRepos,
+      multiRepoSection,
+      commonForKind,
+      repoForKind,
+      referenceRepos,
+      referenceReposSection,
+      referenceBranches,
+      referenceBranchesSection,
+    } = await this.resolveAuxiliaryRepos(context, {
+      workspaceId,
+      blockId,
+      repo,
+      common,
+      workBranch,
+    })
+
+    const { body, kind } = buildKindBody(
+      promptContext,
+      {
+        common: commonForKind,
+        webTools,
+        repo: repoForKind,
+        workBranch,
+        workBranchReady,
+        ...(testSecretEnv.length ? { testSecretEnv } : {}),
+        ...(peerRepos ? { peerRepos } : {}),
+        ...(multiRepoSection ? { multiRepoSection } : {}),
+        ...(referenceRepos ? { referenceRepos } : {}),
+        ...(referenceReposSection ? { referenceReposSection } : {}),
+        ...(referenceBranches ? { referenceBranches } : {}),
+        ...(referenceBranchesSection ? { referenceBranchesSection } : {}),
+        ...(skillRender.section ? { skillSection: skillRender.section } : {}),
+      },
+      this.agentKindRegistry,
+    )
+    return {
+      subscriptionTokenId,
+      body,
+      model: `${ref.provider}:${ref.model}`,
+      provider: ref.provider,
+      kind,
+      search,
+      repoSummary: {
+        owner: repo.owner,
+        name: repo.name,
+        ...(repo.baseBranch ? { baseBranch: repo.baseBranch } : {}),
+        provider: origin.provider,
+      },
+    }
+  }
+
+  /**
+   * Resolve the auxiliary checkouts + their prompt sections for a job: the multi-repo fan-out
+   * (coder / ci-fixer over connected involved services), the conflict-resolver's PEER targeting,
+   * the merger's combined-diff sibling checkouts, and the read-only reference repos + branches.
+   * Returns the per-kind repo target + `common` override (root-cwd / peer-repo swaps) alongside
+   * every resolved section. Extracted from `buildJobBody` to keep it under the complexity ceiling.
+   */
+  private async resolveAuxiliaryRepos(
+    context: AgentRunContext,
+    deps: {
+      workspaceId: string
+      blockId: string
+      repo: RepoTarget
+      common: Record<string, unknown>
+      workBranch: string
+    },
+  ): Promise<{
+    peerRepos?: { repo: Record<string, unknown>; frameId?: string; cloneBranch?: string }[]
+    multiRepoSection?: string
+    commonForKind: Record<string, unknown>
+    repoForKind: RepoTarget
+    referenceRepos?: { repo: Record<string, unknown> }[]
+    referenceReposSection?: string
+    referenceBranches?: string[]
+    referenceBranchesSection?: string
+  }> {
+    const { workspaceId, blockId, repo, common, workBranch } = deps
     // Multi-repo coding (service-connections phases 3–4): when the implementer OR the ci-fixer
     // runs on a task with connected involved services, resolve every involved repo and fan the
     // work out — peer repos as sibling checkouts plus a prompt section naming the layout. The
@@ -1432,38 +1515,15 @@ export class ContainerAgentExecutor implements AsyncAgentExecutor {
       }
     }
 
-    const { body, kind } = buildKindBody(
-      promptContext,
-      {
-        common: commonForKind,
-        webTools,
-        repo: repoForKind,
-        workBranch,
-        workBranchReady,
-        ...(testSecretEnv.length ? { testSecretEnv } : {}),
-        ...(peerRepos ? { peerRepos } : {}),
-        ...(multiRepoSection ? { multiRepoSection } : {}),
-        ...(referenceRepos ? { referenceRepos } : {}),
-        ...(referenceReposSection ? { referenceReposSection } : {}),
-        ...(referenceBranches ? { referenceBranches } : {}),
-        ...(referenceBranchesSection ? { referenceBranchesSection } : {}),
-        ...(skillRender.section ? { skillSection: skillRender.section } : {}),
-      },
-      this.agentKindRegistry,
-    )
     return {
-      subscriptionTokenId,
-      body,
-      model: `${ref.provider}:${ref.model}`,
-      provider: ref.provider,
-      kind,
-      search,
-      repoSummary: {
-        owner: repo.owner,
-        name: repo.name,
-        ...(repo.baseBranch ? { baseBranch: repo.baseBranch } : {}),
-        provider: origin.provider,
-      },
+      ...(peerRepos ? { peerRepos } : {}),
+      ...(multiRepoSection ? { multiRepoSection } : {}),
+      commonForKind,
+      repoForKind,
+      ...(referenceRepos ? { referenceRepos } : {}),
+      ...(referenceReposSection ? { referenceReposSection } : {}),
+      ...(referenceBranches ? { referenceBranches } : {}),
+      ...(referenceBranchesSection ? { referenceBranchesSection } : {}),
     }
   }
 
