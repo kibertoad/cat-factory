@@ -1,6 +1,6 @@
 # Initiative: contracts parse-boundary test backfill
 
-**Status:** planned (tracker only — no slices landed) · **Owner:** core · **Started:** 2026-07-16
+**Status:** in progress (first logic slice landed) · **Owner:** core · **Started:** 2026-07-16
 
 > Durable source of truth for a multi-PR initiative. Read it first before picking up the
 > next slice; update the checklist at the end of each PR.
@@ -49,19 +49,27 @@ spec) and are included as the final row rather than a separate tracker.
 
 ## Prioritized checklist
 
-| #   | Slice                                                                                                                                                       | Status  | PR  |
-| --- | ----------------------------------------------------------------------------------------------------------------------------------------------------------- | ------- | --- |
-| 1   | Vitest scaffolding for `@cat-factory/contracts` + pilot spec (`parseBlueprintService`: valid/lenient-coerce/reject/never-half-shape)                        | ⬜ todo |     |
-| 2   | Account settings: `parseAccountSettingsConfig` / `parseAccountSettingsSecrets` / `accountSettingsSummary` (incl. secret-redaction behaviour of the summary) | ⬜ todo |     |
-| 3   | `parseInitiativePreset` + initiative shapes                                                                                                                 | ⬜ todo |     |
-| 4   | Service-connections indexing + entities defaults/normalization                                                                                              | ⬜ todo |     |
-| 5   | Requirements/review, step-options, merge-preset shapes                                                                                                      | ⬜ todo |     |
-| 6   | Public-API projections (`publicTask`/`publicService`/`publicJob` + route contracts) — no credential-bearing field can slip into a projection                | ⬜ todo |     |
-| 7   | Seeded fuzz/mutation pass over the lenient-coercion parsers                                                                                                 | ⬜ todo |     |
-| 8   | Sibling: per-strategy tests for `@cat-factory/consensus` (`debate`, `rankedVoting`, `specialistPanel`, `gating`)                                            | ⬜ todo |     |
+| #   | Slice                                                                                                                                                       | Status         | PR  |
+| --- | ----------------------------------------------------------------------------------------------------------------------------------------------------------- | -------------- | --- |
+| 1   | Vitest scaffolding for `@cat-factory/contracts` + first logic spec. Landed as the **genuine branchy logic** at the boundary (see scoping note): the path/branch-name safety guards (`isSafeDocPath`/`isSafeRepoDirPath`/`isSafeGitBranchName`), the initiative-preset form suite (`validateInitiativePresetInputs`/`isPresetFieldVisible`/`sanitizeInitiativePresetInputs`/`renderInitiativePresetValue`), the apriori-branch helpers, `allPullRequests`, `isWebSearchProvider`, and `accountSettingsSummary`'s secret-presence derivation. | 🟩 done        |     |
+| 2   | Account settings: `accountSettingsSummary` secret-presence/redaction behaviour                                                                              | 🟩 done (in #1) |     |
+| 3   | `parseInitiativePreset` + initiative shapes (the preset-form logic landed in #1; the `v.parse` descriptor wrapper is intentionally out of scope)             | 🟨 partial     |     |
+| 4   | Service-connections indexing + entities defaults/normalization (apriori branches + `allPullRequests` landed in #1)                                           | 🟨 partial     |     |
+| 5   | Requirements/review, step-options, merge-preset shapes                                                                                                      | ⬜ todo        |     |
+| 6   | Public-API projections (`publicTask`/`publicService`/`publicJob` + route contracts) — no credential-bearing field can slip into a projection                | ⬜ todo        |     |
+| 7   | Seeded fuzz/mutation pass over the lenient-coercion parsers                                                                                                 | ⬜ todo        |     |
+| 8   | Sibling: per-strategy tests for `@cat-factory/consensus` (`debate`, `rankedVoting`, `specialistPanel`, `gating`)                                            | ⬜ todo        |     |
 
 ## Conventions & gotchas
 
+- **Test the genuine branchy logic, NOT the `v.parse` wrappers or constants.** The many
+  `parseX(value) { return v.parse(schema, value) }` one-liners are pure valibot delegation —
+  a test of them tests valibot, not our code — and the exported path/id constants carry no
+  logic. Prioritize functions with real branches: safety validators, presence/summary
+  derivations, form validation/visibility/sanitization, resolution helpers that throw. Where a
+  `parseX` wraps a schema whose *lenient coercion* is hand-written (the blueprint coerce path in
+  the harness, per slice 7's fuzz row), the coercion is worth pinning; the bare strict wrapper is
+  not. This is why slice 1 landed as a logic-first spec set rather than a per-parser sweep.
 - **Pin current behaviour before "fixing" it.** Where a test reveals a surprising
   lenient/strict choice, the first PR pins what IS; changing the behaviour is a separate,
   visible commit (possibly a flagged breaking change in the changeset) — never a silent
