@@ -38,7 +38,11 @@ function ids(prefix: string): () => string {
 
 describe('initialPrReviewState', () => {
   it('seeds an empty `reviewing` state carrying the PR + model, so the window shows a real phase', () => {
-    const state = initialPrReviewState('https://github.com/o/r/pull/42', 'anthropic:claude')
+    const state = initialPrReviewState(
+      'https://github.com/o/r/pull/42',
+      'anthropic:claude',
+      'head-sha-123',
+    )
     expect(state).toEqual({
       status: 'reviewing',
       summary: null,
@@ -48,6 +52,7 @@ describe('initialPrReviewState', () => {
       resolution: null,
       prUrl: 'https://github.com/o/r/pull/42',
       model: 'anthropic:claude',
+      reviewedHeadSha: 'head-sha-123',
       postReport: null,
       postedFindingIds: [],
       postedBody: false,
@@ -246,6 +251,55 @@ describe('buildPrReviewPost', () => {
     expect(input.comments).toHaveLength(2)
     expect(input.body).toBeTruthy()
     expect(input.body).toContain('2 inline findings')
+  })
+
+  it('folds ALL line-carrying findings into the summary when staleHead (branch moved since review)', () => {
+    // Even a line that IS in the diff is folded, because the branch moved and the number may have
+    // drifted — nothing is anchored inline.
+    const commentable = computeCommentableLines([
+      {
+        path: 'src/a.ts',
+        previousPath: null,
+        status: 'modified',
+        additions: 1,
+        deletions: 0,
+        patch: '@@ -1,1 +1,2 @@\n ctx\n+added',
+      },
+    ])
+    const { input, commentFindingIds, foldedFindingIds } = buildPrReviewPost(
+      [
+        finding({ id: 'prf_a', path: 'src/a.ts', line: 2, title: 'In diff', detail: 'x' }),
+        finding({ id: 'prf_b', path: 'src/a.ts', line: 1, title: 'Also in diff', detail: 'y' }),
+      ],
+      'Summary.',
+      commentable,
+      { staleHead: true },
+    )
+    expect(input.comments).toHaveLength(0)
+    expect(commentFindingIds).toEqual([])
+    expect(foldedFindingIds).toEqual(['prf_a', 'prf_b'])
+    expect(input.body).toContain('branch was updated')
+    expect(input.body).toContain('In diff')
+    expect(input.body).toContain('Also in diff')
+  })
+
+  it('drops the summary prose but keeps the folded findings when summaryAlreadyPosted (stale retry)', () => {
+    // A stale-head RETRY: the summary already landed on the first attempt, but a finding that
+    // failed to post inline then drifted must still be delivered. The body carries the finding
+    // WITHOUT re-posting the summary prose, so the review isn't lost and isn't duplicated.
+    const { input, foldedFindingIds } = buildPrReviewPost(
+      [finding({ id: 'prf_a', path: 'src/a.ts', line: 2, title: 'Drifted finding', detail: 'x' })],
+      'Summary prose that already landed.',
+      undefined,
+      { staleHead: true, summaryAlreadyPosted: true },
+    )
+    expect(input.comments).toHaveLength(0)
+    expect(foldedFindingIds).toEqual(['prf_a'])
+    // The drifted finding is delivered...
+    expect(input.body).toContain('branch was updated')
+    expect(input.body).toContain('Drifted finding')
+    // ...but the already-posted summary prose is NOT repeated.
+    expect(input.body).not.toContain('Summary prose that already landed.')
   })
 })
 

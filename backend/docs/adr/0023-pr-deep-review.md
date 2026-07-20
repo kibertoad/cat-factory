@@ -44,7 +44,11 @@ result-view window. The human then resolves the parked review one of three ways
   selected findings on the PR via `RepoFiles.createReview`, which posts each inline comment
   INDIVIDUALLY (not one atomic batched review) plus the summary as a general comment. Before
   posting, `computeCommentableLines` parses the PR diff so a finding anchored to a line OUTSIDE the
-  diff is folded into the summary (the root-cause fix for GitHub's "Line could not be resolved" 422) rather than sent as a comment GitHub rejects. The per-comment outcome is reduced to a
+  diff is folded into the summary (the root-cause fix for GitHub's "Line could not be resolved" 422) rather than sent as a comment GitHub rejects. And before that, a **branch-drift** check: the PR
+  head sha captured when the reviewer was dispatched (`reviewedHeadSha`) is compared to the PR's
+  CURRENT head; if the branch moved since the review started, EVERY finding is folded into the
+  summary (its frozen line number may now point at shifted code) instead of anchored inline. The
+  per-comment outcome is reduced to a
   `step.prReview.postReport` (how many of how many posted, per-finding failures, folded count) the
   window renders. A FULLY successful post finishes the step `done`; ANY partial/failed post
   RE-PARKS the run at `awaiting_selection` carrying the report, so the human sees what happened and
@@ -112,11 +116,28 @@ need (`getPullRequestHeadRef`, `createReview`) are new **optional** methods on t
   into the summary comment instead of sending an inline comment GitHub would reject. The per-comment
   posting is then the safety net for anything the pre-filter can't catch (a null-patch/too-large
   file, an API edge).
-- **At-most-once, and retry just the posting.** `post` runs in the durable driver with the
+- **Guard against position drift when the branch moves.** The per-line diff filter above catches a
+  finding whose line fell OUT of the current diff, but not one whose line number is still a valid
+  diff line yet now points at DIFFERENT code after a push. So the reviewer's first dispatch captures
+  the PR head sha (`reviewedHeadSha`, a best-effort one-call `pullRequestHeadSha` read — skipped when
+  the VCS client can't read it, leaving the check inert), and `post` re-reads the current head: on a
+  mismatch it treats every finding as unanchorable (`buildPrReviewPost({ staleHead: true })`) and
+  folds them all into the summary comment, so a moved branch can't scatter comments onto shifted
+  lines. Unknown-sha on either side (older run, read blip) degrades to the pre-existing behaviour.
+  The `pr-reviewer` is always a container (async) kind, so the capture rides the async dispatch
+  path; the same review-start head is resolved through the SHARED `resolvePrNumber` the reviewer
+  agent uses, so dispatch and `post` can never disagree on which PR is under review.
+- **At-most-once summary, but never lose a finding.** `post` runs in the durable driver with the
   `pendingPrReviewPost` marker consumed (cleared + persisted) before the side-effecting post, so a
   Workflows retry/replay can't re-run it; findings already in `postedFindingIds` are skipped; and the
   summary/body comment is suppressed once `postedBody` is set, so a human RE-`post` (the retry path)
-  never double-posts an inline comment OR the summary that already landed. A partial/failed post
+  never double-posts an inline comment OR the summary that already landed. The one subtlety the
+  drift guard adds: a finding that first FAILED to post inline and then drifted is now folded into
+  the body — which would be lost if the body were blanked because the summary already landed. So the
+  suppression is scoped: on a stale-head retry the body is still posted (carrying only the newly
+  folded findings, `buildPrReviewPost({ summaryAlreadyPosted: true })` dropping the already-landed
+  summary prose to avoid a duplicate). The at-most-once-summary and always-deliver-the-findings
+  guarantees are thus kept independent. A partial/failed post
   RE-PARKS at `awaiting_selection` carrying the `postReport` (never a `job_failed`), so the failure
   is legible and retryable in place — the human doesn't re-run the whole review. To keep GitHub from
   rejecting a blank-body comment, `buildPrReviewPost` always emits a non-empty `body` (falling back
@@ -176,6 +197,7 @@ so a human curates the findings themselves — not just which to act on:
   target is effectively "a PR on this service's repo" (URL or `#number`), and `post` is the
   fallback when a PR can't be pushed to. Resolving `prUrl` → owner/repo/number server-side is a
   future follow-up.
-- GitLab omits `getPullRequestHeadRef`/`createReview` (optional methods), so the `fix`/`post`
-  resolutions report the operation unresolvable/unsupported on a GitLab deployment rather than
-  acting on the wrong repo — consistent with `listChangedFiles`.
+- GitLab omits `getPullRequestHeadRef`/`getPullRequestHeadSha`/`createReview` (optional methods), so
+  the `fix`/`post` resolutions report the operation unresolvable/unsupported on a GitLab deployment
+  rather than acting on the wrong repo — consistent with `listChangedFiles`. Where the head-sha read
+  is absent the drift check is simply inert (posting keeps the per-line diff filtering).

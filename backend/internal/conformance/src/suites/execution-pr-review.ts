@@ -246,6 +246,8 @@ export function definePrReviewSuite(harness: ConformanceHarness): void {
         posted?: { number: number; input: CreateReviewInput }[]
         /** Comment paths to REJECT (simulating GitHub's "Line could not be resolved" 422). */
         failPaths?: string[]
+        /** The PR head sha the fake reports; mutate between drives to simulate a branch update. */
+        headSha?: string | null
       },
       headRef: string | null = 'feature/pr-42',
     ): RepoFiles => ({
@@ -262,6 +264,7 @@ export function definePrReviewSuite(harness: ConformanceHarness): void {
         recorder.headRefFor = number
         return headRef
       },
+      pullRequestHeadSha: async () => recorder.headSha ?? null,
       createReview: async (number, input) => {
         ;(recorder.posted ??= []).push({ number, input })
         const fail = new Set(recorder.failPaths ?? [])
@@ -431,6 +434,52 @@ export function definePrReviewSuite(harness: ConformanceHarness): void {
       // suppressed it (its body was empty) so the PR conversation isn't spammed with duplicates.
       const bodiesPosted = (recorder.posted ?? []).filter((p) => p.input.body).length
       expect(bodiesPosted).toBe(1)
+    })
+
+    it('folds every finding into the summary when the PR branch moved after the review started', async () => {
+      // The reviewer anchored a finding to src/auth.ts:12, but the PR branch is force-pushed
+      // AFTER the review parked. Posting that finding inline would stamp it onto a line that may
+      // now be different code, so the `post` resolution detects the head drift and folds the
+      // finding into the summary comment instead of anchoring it — the review still lands.
+      const recorder: {
+        posted?: { number: number; input: CreateReviewInput }[]
+        headSha?: string | null
+      } = { headSha: 'sha-at-review-start' }
+      // Drive the reviewer as the CONTAINER (async) kind it is in production: the review-start
+      // head-sha capture rides the async dispatch path, so a synchronous reviewer would never
+      // stamp `reviewedHeadSha` and the drift guard would be untested. Polling once is enough.
+      const { call, createWorkspace, drive } = harness.makeApp(
+        { customResult: reviewerOutput, asyncKinds: ['pr-reviewer'], asyncPolls: 1 },
+        {
+          resolveRunRepoContext: async () => ({
+            repo: makeReviewRepo(recorder),
+            baseBranch: 'main',
+          }),
+        },
+      )
+      const { workspace } = await createWorkspace({ seed: true })
+      const wsId = workspace.id
+      // Dispatching the reviewer captured the review-start head sha ('sha-at-review-start').
+      const { taskId, executionId, findings } = await seedReviewTask(call, drive, wsId)
+
+      // The PR head moves (a push) while the review sits parked awaiting selection.
+      recorder.headSha = 'sha-after-push'
+
+      // Post the anchored (line 12) finding — the drift must fold it rather than anchor it.
+      await call('POST', `/workspaces/${wsId}/executions/${executionId}/pr-review/resolve`, {
+        action: 'post',
+        findingIds: [findings[0]!.id],
+      })
+      const done = (await drive(wsId)).find((e) => e.blockId === taskId)!
+      expect(done.status).toBe('done')
+      const step = done.steps.find((s) => s.agentKind === 'pr-reviewer')!
+      expect(step.prReview?.status).toBe('done')
+      // Nothing anchored inline; the finding was folded into the summary (reported as `folded`).
+      expect(step.prReview?.postReport?.posted).toBe(0)
+      expect(step.prReview?.postReport?.folded).toBe(1)
+      expect(recorder.posted).toHaveLength(1)
+      expect(recorder.posted![0]!.input.comments).toHaveLength(0)
+      expect(recorder.posted![0]!.input.body).toContain('branch was updated')
     })
   })
 }

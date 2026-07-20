@@ -53,7 +53,12 @@ import {
   sameSubtasks,
 } from '@cat-factory/kernel'
 import { parseBlueprintService, parseSpecDoc } from '@cat-factory/contracts'
-import { commitInitiativeTracker, FORK_PROPOSER_KIND, PR_REVIEWER_KIND } from '@cat-factory/agents'
+import {
+  commitInitiativeTracker,
+  FORK_PROPOSER_KIND,
+  PR_REVIEWER_KIND,
+  resolvePrNumber,
+} from '@cat-factory/agents'
 import type { AgentKindRegistry } from '@cat-factory/agents'
 import { isDeployStep } from '@cat-factory/integrations'
 import type {
@@ -510,7 +515,10 @@ export class RunDispatcher {
         // be reset back to `reviewing`.
         if (step.agentKind === PR_REVIEWER_KIND && !step.prReview) {
           const prUrl = block?.taskTypeFields?.prUrl?.trim() || null
-          step.prReview = initialPrReviewState(prUrl, step.model ?? null)
+          // Capture the PR head sha NOW (review start), so the `post` resolution can detect a
+          // branch update between here and posting and fold drifted findings into the summary.
+          const reviewedHeadSha = await this.resolveReviewedHeadSha(workspaceId, instance, block)
+          step.prReview = initialPrReviewState(prUrl, step.model ?? null, reviewedHeadSha)
         }
         // Surface the block's ephemeral environment (if any) alongside the cold-boot
         // phase, so a run's details show the env spinning up next to the container.
@@ -690,6 +698,31 @@ export class RunDispatcher {
       return false
     } catch {
       return false
+    }
+  }
+
+  /**
+   * Resolve the reviewed PR's head sha at review-START, stamped onto `step.prReview` when the
+   * `pr-reviewer` first dispatches. The `post` resolution later re-reads the PR head and folds
+   * every finding into the summary when it moved (the frozen line numbers may have drifted). Best
+   * effort: null on any failure, no PR number, or a client without the `pullRequestHeadSha`
+   * capability — the drift check then simply doesn't run (posting falls back to per-line filtering).
+   */
+  private async resolveReviewedHeadSha(
+    workspaceId: string,
+    instance: ExecutionInstance,
+    block: Block | null | undefined,
+  ): Promise<string | null> {
+    if (!block) return null
+    const prNumber = resolvePrNumber(block.taskTypeFields ?? undefined)
+    if (prNumber == null) return null
+    try {
+      const runRepo = await this.resolveRunRepoContext?.(workspaceId, block.id)
+      const headSha = runRepo?.repo.pullRequestHeadSha
+      if (!headSha) return null
+      return await this.runInitiatorScope(instance.initiatedBy, () => headSha(prNumber))
+    } catch {
+      return null
     }
   }
 

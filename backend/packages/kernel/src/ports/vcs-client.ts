@@ -213,6 +213,15 @@ export interface VcsClient {
     ref: VcsRepoRef,
     number: number,
   ): Promise<string | null>
+  /**
+   * The head commit SHA of a PR, or null when the PR can't be read. The PR-deep-review captures
+   * it at review start and re-reads it at `post` time to detect a branch update (drift). Optional.
+   */
+  getPullRequestHeadSha?(
+    connection: VcsConnectionRef,
+    ref: VcsRepoRef,
+    number: number,
+  ): Promise<string | null>
   /** List the files a PR changed (path + stats + patch), for PR-deep-review slicing. Optional. */
   listChangedFiles?(
     connection: VcsConnectionRef,

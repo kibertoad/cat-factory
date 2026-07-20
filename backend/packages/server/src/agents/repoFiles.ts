@@ -84,6 +84,14 @@ export function makeRepoFiles(
             client.getPullRequestHeadRef!(installationId, ref, number),
         }
       : {}),
+    // The deep-review drift check reads the PR head sha at review-start + at post time; present
+    // only when the wired client can read it (else the check is skipped).
+    ...(client.getPullRequestHeadSha
+      ? {
+          pullRequestHeadSha: (number: number) =>
+            client.getPullRequestHeadSha!(installationId, ref, number),
+        }
+      : {}),
     ...(client.createReview
       ? {
           createReview: (number: number, input) =>

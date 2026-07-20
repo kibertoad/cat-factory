@@ -76,6 +76,15 @@ export interface RepoFiles {
    */
   pullRequestHeadRef?(number: number): Promise<string | null>
   /**
+   * The head commit sha of a pull request by number, or null when the PR can't be read. The
+   * PR-deep-review captures this when the reviewer is dispatched (the review's "head at start")
+   * and re-reads it at `post` time: a change means the PR branch moved since the review, so the
+   * findings' frozen line numbers may have drifted and are folded into the summary rather than
+   * anchored inline. Optional: a bound client that can't read a PR head sha omits it, so the
+   * drift check is skipped (posting falls back to the per-line diff filtering).
+   */
+  pullRequestHeadSha?(number: number): Promise<string | null>
+  /**
    * Publish a pull-request review's findings as individual inline comments + a summary comment
    * (the deep-review "post" resolution), returning a per-comment {@link CreateReviewResult} so a
    * partial post is reported rather than failing the whole set. Optional: a bound client that
