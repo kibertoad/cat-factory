@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { ValidationError } from '@cat-factory/kernel'
+import { REVIEW_PIPELINE_ID, seedPipelines, ValidationError } from '@cat-factory/kernel'
 import type {
   ObservabilityConnectionRecord,
   ObservabilityConnectionRepository,
@@ -288,5 +288,58 @@ describe('PipelineService — estimate gating, companion placement, labels & arc
     const cleared = await service.organize(WS, created.id, { labels: [], archived: false })
     expect(cleared.labels).toBeUndefined()
     expect(cleared.archived).toBeUndefined()
+  })
+})
+
+describe('PipelineService — reseed', () => {
+  function svc(store = new Map<string, Pipeline>()) {
+    return new PipelineService({
+      workspaceRepository: workspaceRepo(),
+      pipelineRepository: pipelineRepo(store),
+      idGenerator,
+    })
+  }
+
+  it('materialises a brand-new built-in the workspace does not have yet (insert, not update)', async () => {
+    // A board seeded before a built-in shipped has an empty store here; reseeding the
+    // catalog id must CREATE it (the "I don't see the review pipeline" fix) rather than 404.
+    const store = new Map<string, Pipeline>()
+    const seeded = seedPipelines().find((p) => p.id === REVIEW_PIPELINE_ID)!
+    const reseeded = await svc(store).reseed(WS, REVIEW_PIPELINE_ID)
+    expect(reseeded.id).toBe(REVIEW_PIPELINE_ID)
+    expect(reseeded.builtin).toBe(true)
+    expect(reseeded.purpose).toBe('review')
+    expect(reseeded.agentKinds).toEqual(seeded.agentKinds)
+    expect(reseeded.version).toBe(seeded.version)
+    // It is now persisted, so a subsequent list surfaces it.
+    expect(store.get(REVIEW_PIPELINE_ID)?.id).toBe(REVIEW_PIPELINE_ID)
+  })
+
+  it('reseeds an existing built-in in place, preserving its labels + archive state', async () => {
+    const store = new Map<string, Pipeline>()
+    const service = svc(store)
+    // Seed the built-in, then organize it (user-owned metadata reseed must keep).
+    await service.reseed(WS, REVIEW_PIPELINE_ID)
+    await service.organize(WS, REVIEW_PIPELINE_ID, { labels: ['mine'], archived: true })
+    const reseeded = await service.reseed(WS, REVIEW_PIPELINE_ID)
+    expect(reseeded.labels).toEqual(['mine'])
+    expect(reseeded.archived).toBe(true)
+    expect(reseeded.builtin).toBe(true)
+  })
+
+  it('rejects reseeding an id absent from the catalog', async () => {
+    await expect(svc().reseed(WS, 'pl_does_not_exist')).rejects.toBeInstanceOf(ValidationError)
+  })
+
+  it('rejects reseeding a stored custom pipeline (delete it instead)', async () => {
+    const store = new Map<string, Pipeline>()
+    // A custom pipeline that happens to collide with a catalog id (impossible via `create`,
+    // which mints `pl_<n>` ids, but pinned here to lock the "only built-ins reseed" guard).
+    store.set(REVIEW_PIPELINE_ID, {
+      id: REVIEW_PIPELINE_ID,
+      name: 'Custom clash',
+      agentKinds: ['coder'],
+    } as Pipeline)
+    await expect(svc(store).reseed(WS, REVIEW_PIPELINE_ID)).rejects.toBeInstanceOf(ValidationError)
   })
 })

@@ -310,34 +310,42 @@ export class PipelineService {
   }
 
   /**
-   * Restore a built-in pipeline to its current catalog definition (`seedPipelines()`).
-   * Used to adopt an improved built-in or to repair a built-in whose persisted copy has
-   * drifted invalid. The canonical steps / gates / `version` overwrite the stored row, but
-   * the user's organizational metadata (labels / archive state, owned by `organize`) is
-   * preserved. Rejects a custom pipeline (delete it instead) and a built-in id no longer in
-   * the catalog (nothing to reseed from — also delete it instead).
+   * Restore a built-in pipeline to its current catalog definition (`seedPipelines()`). Used to
+   * adopt an improved built-in, repair a built-in whose persisted copy drifted invalid, or
+   * materialise a NEW built-in that appeared in the catalog after this workspace was seeded (so it
+   * has the old pipelines but not the new one — e.g. `pl_review` on a board created before it
+   * shipped). The canonical steps / gates / `version` overwrite (or create) the stored row; an
+   * existing copy's organizational metadata (labels / archive state, owned by `organize`) is
+   * preserved. Keyed off the CATALOG (not the stored row) so a missing built-in can be added:
+   * resolve the seed first, and reject only a custom id (a stored non-builtin — delete it instead)
+   * or an id absent from the catalog (nothing to reseed from). Mirrors `RiskPolicyService.reseed` /
+   * `ModelPresetService.reseed`, which surface + add brand-new built-in presets the same way.
    */
   async reseed(workspaceId: string, id: string): Promise<Pipeline> {
     await this.requireWorkspace(workspaceId)
-    const existing = assertFound(await this.pipelineRepository.get(workspaceId, id), 'Pipeline', id)
-    if (!existing.builtin) {
+    const seed = seedPipelines(this.pipelineRegistry).find((p) => p.id === id)
+    if (!seed) {
+      throw new ValidationError(
+        `Pipeline '${id}' is not a built-in (or is no longer in the catalog), so it cannot be reseeded. Delete it instead.`,
+      )
+    }
+    // A stored copy exists ⇒ it must be the built-in (a custom pipeline sharing a catalog id is
+    // impossible — ids are minted `pl_<n>`), and its labels/archive state carry across. Absent ⇒
+    // we're materialising the new built-in, so it starts with the seed's own metadata.
+    const existing = await this.pipelineRepository.get(workspaceId, id)
+    if (existing && !existing.builtin) {
       throw new ValidationError(
         'Only built-in pipelines can be reseeded. Delete a custom pipeline instead.',
       )
     }
-    const seed = seedPipelines(this.pipelineRegistry).find((p) => p.id === id)
-    if (!seed) {
-      throw new ValidationError(
-        `Pipeline '${id}' is no longer in the built-in catalog, so it cannot be reseeded. Delete it instead.`,
-      )
-    }
-    const labels = existing.labels ?? seed.labels
+    const labels = existing?.labels ?? seed.labels
     const pipeline: Pipeline = {
       ...seed,
       ...(labels && labels.length ? { labels } : { labels: undefined }),
-      ...(existing.archived ? { archived: true } : { archived: undefined }),
+      ...(existing?.archived ? { archived: true } : { archived: undefined }),
     }
-    await this.pipelineRepository.update(workspaceId, pipeline)
+    if (existing) await this.pipelineRepository.update(workspaceId, pipeline)
+    else await this.pipelineRepository.insert(workspaceId, pipeline)
     return pipeline
   }
 
