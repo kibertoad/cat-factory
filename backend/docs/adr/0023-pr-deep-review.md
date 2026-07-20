@@ -96,8 +96,9 @@ need (`getPullRequestHeadRef`, `createReview`) are new **optional** methods on t
   file, an API edge).
 - **At-most-once, and retry just the posting.** `post` runs in the durable driver with the
   `pendingPrReviewPost` marker consumed (cleared + persisted) before the side-effecting post, so a
-  Workflows retry/replay can't re-run it; and findings already in `postedFindingIds` are skipped, so
-  a human RE-`post` (the retry path) never double-posts what already landed. A partial/failed post
+  Workflows retry/replay can't re-run it; findings already in `postedFindingIds` are skipped; and the
+  summary/body comment is suppressed once `postedBody` is set, so a human RE-`post` (the retry path)
+  never double-posts an inline comment OR the summary that already landed. A partial/failed post
   RE-PARKS at `awaiting_selection` carrying the `postReport` (never a `job_failed`), so the failure
   is legible and retryable in place — the human doesn't re-run the whole review. To keep GitHub from
   rejecting a blank-body comment, `buildPrReviewPost` always emits a non-empty `body` (falling back

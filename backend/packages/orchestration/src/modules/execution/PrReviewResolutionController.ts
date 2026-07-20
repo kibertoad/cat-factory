@@ -138,8 +138,10 @@ export class PrReviewResolutionController {
    * via the checkout-free `RepoFiles.createReview`, which posts each inline comment INDIVIDUALLY
    * (not one atomic review) so one un-anchorable line can't reject the rest. At-most-once: the
    * `pendingPrReviewPost` marker is consumed (cleared + persisted) BEFORE the side-effecting post
-   * so a Workflows retry can't re-run it; and findings that already posted on a prior attempt
-   * (`postedFindingIds`) are skipped, so a human RE-`post` (the retry path) never double-posts.
+   * so a Workflows retry can't re-run it; findings that already posted on a prior attempt
+   * (`postedFindingIds`) are skipped; and the summary/body comment is suppressed once it has
+   * landed (`postedBody`), so a human RE-`post` (the retry path) never double-posts an inline
+   * comment OR the summary that already landed.
    *
    * Observability + resilience (the point of this handler):
    * - The 422 ROOT CAUSE — a finding anchored to a line outside the PR diff — is pre-empted by
@@ -201,10 +203,16 @@ export class PrReviewResolutionController {
     }
 
     const built = buildPrReviewPost(selected, review.summary, commentable)
+    // The summary/body comment is posted AT MOST ONCE. If it already landed on a prior attempt,
+    // suppress it here so retrying the un-anchored inline comments doesn't duplicate the summary
+    // conversation comment (the body's analogue of `postedFindingIds`). A body that FAILED before
+    // keeps `postedBody` false, so it is still retried.
+    const bodyAlreadyPosted = review.postedBody === true
+    const input = bodyAlreadyPosted ? { ...built.input, body: '' } : built.input
     let result: CreateReviewResult
     try {
       result = await this.deps.runInitiatorScope(instance.initiatedBy, () =>
-        repo.createReview!(prNumber, built.input),
+        repo.createReview!(prNumber, input),
       )
     } catch (error) {
       // createReview reports per-comment failures rather than throwing; an actual throw means it
@@ -212,15 +220,17 @@ export class PrReviewResolutionController {
       // retryable) instead of failing the whole run.
       const reason = getErrorMessage(error)
       result = {
-        comments: built.input.comments.map(() => ({ posted: false, error: reason })),
-        bodyPosted: built.input.body ? false : null,
-        bodyError: built.input.body ? reason : undefined,
+        comments: input.comments.map(() => ({ posted: false, error: reason })),
+        bodyPosted: input.body ? false : null,
+        bodyError: input.body ? reason : undefined,
       }
     }
 
     const { report, newlyPostedFindingIds } = buildPrReviewPostReport(built, selected, result)
     const postedFindingIds = [...alreadyPosted, ...newlyPostedFindingIds]
-    step.prReview = { ...review, postReport: report, postedFindingIds }
+    // Sticky: once the summary lands it stays posted, so a further retry keeps suppressing it.
+    const postedBody = bodyAlreadyPosted || result.bodyPosted === true
+    step.prReview = { ...review, postReport: report, postedFindingIds, postedBody }
 
     if (isPrReviewPostComplete(report)) {
       step.prReview = { ...step.prReview, status: 'done' }

@@ -142,9 +142,11 @@ export const prReviewPostReportSchema = v.object({
   /** How many of those posted successfully. */
   posted: v.number(),
   /**
-   * Findings folded into the summary comment because they have no line, or their line falls
-   * outside the PR diff (so GitHub can't anchor an inline comment there). These are surfaced,
-   * not dropped — this is how the 422 is avoided at the source.
+   * Findings that HAD a line but were folded into the summary comment because that line falls
+   * outside the PR diff (so GitHub can't anchor an inline comment there) — this is how the 422
+   * is avoided at the source. A truly line-less finding is summarised too but is NOT counted
+   * here (it never could be an inline comment): `attempted` + `folded` therefore counts only the
+   * findings that carried a line, not every selected finding.
    */
   folded: v.optional(v.number(), 0),
   /** Whether the summary/body comment posted; null when there was no body to post. */
@@ -191,6 +193,14 @@ export const prReviewStepStateSchema = v.object({
    * (at-most-once per finding).
    */
   postedFindingIds: v.optional(v.array(v.string()), []),
+  /**
+   * Whether the summary/body comment already posted successfully on a prior attempt. Sticky once
+   * true — a re-`post` then suppresses the body so retrying after a partial failure never
+   * double-posts the summary comment (the body's at-most-once guard, the analogue of
+   * {@link postedFindingIds} for the single summary comment). Stays false until the body lands, so
+   * a body that FAILED is retried.
+   */
+  postedBody: v.optional(v.boolean(), false),
 })
 export type PrReviewStepState = v.InferOutput<typeof prReviewStepStateSchema>
 

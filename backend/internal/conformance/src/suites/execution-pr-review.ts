@@ -274,6 +274,9 @@ export function definePrReviewSuite(harness: ConformanceHarness): void {
       expect(step.prReview?.postReport?.posted).toBe(0)
       expect(step.prReview?.postReport?.failures?.[0]?.reason).toMatch(/Line could not be resolved/)
       expect(step.prReview?.postedFindingIds ?? []).toHaveLength(0)
+      // The inline comment failed but the summary/body comment DID land — so it is marked posted,
+      // which suppresses re-posting it on the retry below (the body's at-most-once guard).
+      expect(step.prReview?.postedBody).toBe(true)
 
       // Retry (the SAME `post`) after GitHub now accepts the comment — only the un-posted finding
       // is re-attempted, and the run completes without re-running the reviewer.
@@ -287,6 +290,10 @@ export function definePrReviewSuite(harness: ConformanceHarness): void {
       const finalStep = done.steps.find((s) => s.agentKind === 'pr-reviewer')!
       expect(finalStep.prReview?.status).toBe('done')
       expect(finalStep.prReview?.postedFindingIds).toContain(findings[0]!.id)
+      // The summary/body comment was published exactly ONCE across both attempts — the retry
+      // suppressed it (its body was empty) so the PR conversation isn't spammed with duplicates.
+      const bodiesPosted = (recorder.posted ?? []).filter((p) => p.input.body).length
+      expect(bodiesPosted).toBe(1)
     })
   })
 }

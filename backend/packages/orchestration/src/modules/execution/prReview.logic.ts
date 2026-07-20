@@ -62,6 +62,7 @@ export function initialPrReviewState(
     model,
     postReport: null,
     postedFindingIds: [],
+    postedBody: false,
   }
 }
 

@@ -45,6 +45,7 @@ describe('initialPrReviewState', () => {
       model: 'anthropic:claude',
       postReport: null,
       postedFindingIds: [],
+      postedBody: false,
     })
   })
 
