@@ -6,6 +6,7 @@ import type {
 } from '@cat-factory/kernel'
 import { describe, expect, it } from 'vitest'
 import { defaultAgentKindRegistry } from './registry.js'
+import { CODE_AWARE_TRAIT, hasTrait } from './traits.js'
 import {
   PR_DIFF_CONTEXT_FILE,
   PR_REVIEWER_KIND,
@@ -145,5 +146,11 @@ describe('pr-reviewer kind registration', () => {
   it('registers the diff preOp on the built-in kind', () => {
     const ops = defaultAgentKindRegistry().preOps(PR_REVIEWER_KIND)
     expect(ops).toContain(prReviewerDiffPreOp)
+  })
+
+  it('is code-aware so the review task’s selected best-practice fragments are folded', () => {
+    // Without this trait `AgentContextBuilder.resolveFragments` drops the task's fragmentIds,
+    // so the reviewer receives none and the "Provided context" snapshot records 0 fragments.
+    expect(hasTrait(PR_REVIEWER_KIND, CODE_AWARE_TRAIT, defaultAgentKindRegistry())).toBe(true)
   })
 })

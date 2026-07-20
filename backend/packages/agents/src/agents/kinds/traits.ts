@@ -99,7 +99,7 @@ export const STANDARD_AGENT_TRAITS: Partial<Record<AgentKind, AgentTrait[]>> = {
   reviewer: [CODE_AWARE_TRAIT, SPEC_AWARE_TRAIT],
   'ci-fixer': [CODE_AWARE_TRAIT, SPEC_AWARE_TRAIT],
   fixer: [CODE_AWARE_TRAIT, SPEC_AWARE_TRAIT],
-  'conflict-resolver': [SPEC_AWARE_TRAIT],
+  'conflict-resolver': [CODE_AWARE_TRAIT, SPEC_AWARE_TRAIT],
   'tester-api': [SPEC_AWARE_TRAIT],
   // The UI Tester captures screenshots and uploads them to the binary-artifact store
   // (the visual-confirmation gate reads them back), so it needs storage configured.

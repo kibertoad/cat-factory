@@ -2,6 +2,7 @@ import type { AgentRunContext } from '@cat-factory/kernel'
 import { INITIATIVE_ANALYST_AGENT_KIND, INITIATIVE_PLANNER_AGENT_KIND } from '@cat-factory/kernel'
 import type { InitiativePresetPhaseTemplate } from '@cat-factory/contracts'
 import type { AgentKindDefinition, AgentKindRegistry } from './registry.js'
+import { CODE_AWARE_TRAIT } from './traits.js'
 
 // ---------------------------------------------------------------------------
 // The `initiative-breakdown` agent kind — the first agent reachable from the PUBLIC API.
@@ -268,6 +269,9 @@ export const INITIATIVE_AGENT_KINDS: AgentKindDefinition[] = [
     systemPrompt: INITIATIVE_ANALYST_SYSTEM_PROMPT,
     userPrompt: initiativeAnalystUserPrompt,
     agent: { surface: 'container-explore', clone: { branch: 'base' } },
+    // Reads the code to produce a codebase-analysis report (architect-like), so the engine folds
+    // the service's best-practice fragments into its prompt.
+    traits: [CODE_AWARE_TRAIT],
   },
   // The initiative-planner reads the repository (read-only, base branch) to ground its multi-phase
   // plan in the actual code, returning ONLY the plan as JSON. `toRunResult` coerces it into
@@ -279,6 +283,9 @@ export const INITIATIVE_AGENT_KINDS: AgentKindDefinition[] = [
     kind: INITIATIVE_PLANNER_AGENT_KIND,
     systemPrompt: INITIATIVE_PLANNER_SYSTEM_PROMPT,
     userPrompt: initiativePlannerUserPrompt,
+    // Reads the code to ground its multi-phase plan (architect-like), so the engine folds the
+    // service's best-practice fragments into its prompt.
+    traits: [CODE_AWARE_TRAIT],
     agent: {
       surface: 'container-explore',
       clone: { branch: 'base' },
