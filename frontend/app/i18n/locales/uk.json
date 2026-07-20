@@ -4944,8 +4944,11 @@
       "investigatingBanner": "Дослідник оскаржень повторно перевіряє зауваження за вихідним кодом…",
       "investigatingBadge": "Дослідження",
       "strengthenedBadge": "Посилено",
+      "upheldBadge": "Підтверджено",
       "retractedBadge": "Відкликано",
-      "verdictLabel": "Дослідник:"
+      "verdictLabel": "Дослідник:",
+      "failedBadge": "Оскарження не вдалося",
+      "failedLabel": "Оскарження не вдалося:"
     },
     "fixing": {
       "title": "Виправлення вибраних зауважень…",

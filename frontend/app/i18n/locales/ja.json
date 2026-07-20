@@ -4956,8 +4956,11 @@
       "investigatingBanner": "異議調査担当がソースコードに照らして指摘を再検証しています…",
       "investigatingBadge": "調査中",
       "strengthenedBadge": "強化済み",
+      "upheldBadge": "支持",
       "retractedBadge": "撤回済み",
-      "verdictLabel": "調査担当:"
+      "verdictLabel": "調査担当:",
+      "failedBadge": "異議調査に失敗",
+      "failedLabel": "異議調査に失敗:"
     },
     "fixing": {
       "title": "選択した指摘を修正中…",

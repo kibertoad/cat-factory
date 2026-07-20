@@ -445,11 +445,12 @@ export function renderChallengeInvestigatorFeedback(
 
 /**
  * Apply the Challenge Investigator's verdict to the challenged finding and return the review to
- * `awaiting_selection`. An `upheld` verdict KEEPS the finding, folding in any `revised*` field
- * (title / detail / severity / suggested fix) and recording the justification as an `amended`
- * challenge; a `retracted` verdict records a `retracted` challenge with its justification AND
- * auto-deselects the finding (a retracted finding must never be acted on). A missing/degenerate
- * output degrades to `upheld` with no changes (the finding stands) rather than dropping it. Total.
+ * `awaiting_selection`. A `retracted` verdict records the justification AND auto-deselects the
+ * finding (a retracted finding must never be acted on). Otherwise the finding is KEPT, folding in
+ * any `revised*` field (title / detail / severity / suggested fix) — and the challenge is recorded
+ * as `amended` ONLY when a field actually changed, else `upheld` (held as written). A
+ * missing/degenerate output degrades to `upheld` with no changes (the finding stands) rather than
+ * being mislabelled "strengthened" or dropped. Total.
  */
 export function applyChallengeVerdict(
   state: PrReviewStepState,
@@ -464,14 +465,33 @@ export function applyChallengeVerdict(
     if (verdict === 'retracted') {
       return { ...f, challenge: { status: 'retracted' as const, question, justification } }
     }
+    const revisedTitle = output?.revisedTitle?.trim()
+    const revisedDetail = output?.revisedDetail?.trim()
+    const revisedSeverity = output?.revisedSeverity
     const revisedFix = output?.revisedSuggestedFix?.trim()
+    const title = revisedTitle || f.title
+    const detail = revisedDetail || f.detail
+    const severity = revisedSeverity ?? f.severity
+    const suggestedFix = revisedFix ? revisedFix : f.suggestedFix
+    // `amended` only when the investigation actually changed the finding — otherwise it merely
+    // UPHELD it as written, so the window shows a neutral "Upheld" badge rather than falsely
+    // claiming it was strengthened.
+    const changed =
+      title !== f.title ||
+      detail !== f.detail ||
+      severity !== f.severity ||
+      suggestedFix !== f.suggestedFix
     return {
       ...f,
-      title: output?.revisedTitle?.trim() || f.title,
-      detail: output?.revisedDetail?.trim() || f.detail,
-      severity: output?.revisedSeverity ?? f.severity,
-      suggestedFix: revisedFix ? revisedFix : f.suggestedFix,
-      challenge: { status: 'amended' as const, question, justification },
+      title,
+      detail,
+      severity,
+      suggestedFix,
+      challenge: {
+        status: changed ? ('amended' as const) : ('upheld' as const),
+        question,
+        justification,
+      },
     }
   })
   const selectedFindingIds =
@@ -479,4 +499,26 @@ export function applyChallengeVerdict(
       ? (state.selectedFindingIds ?? []).filter((id) => id !== findingId)
       : (state.selectedFindingIds ?? [])
   return { ...state, findings, selectedFindingIds, status: 'awaiting_selection', resolution: null }
+}
+
+/**
+ * Settle a CHALLENGE whose investigator job FAILED (crashed / non-transient error, after any
+ * eviction-retry budget is spent) WITHOUT dropping the finding or failing the parked review: mark
+ * the finding's challenge `failed` (carrying the reason), leave its body untouched, and return the
+ * review to `awaiting_selection` so the human can re-challenge, act on it, or move on. Total — an
+ * unknown/absent finding just re-parks. A challenge is a non-critical second opinion, so a crash on
+ * ONE finding must never nuke the human's in-flight curation.
+ */
+export function failChallenge(
+  state: PrReviewStepState,
+  findingId: string,
+  question: string | null,
+  reason: string | null,
+): PrReviewStepState {
+  const findings = (state.findings ?? []).map((f) =>
+    f.id === findingId
+      ? { ...f, challenge: { status: 'failed' as const, question, justification: reason } }
+      : f,
+  )
+  return { ...state, findings, status: 'awaiting_selection', resolution: null }
 }

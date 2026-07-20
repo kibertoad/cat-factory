@@ -14,8 +14,9 @@ import { CODE_AWARE_TRAIT } from './traits.js'
 // challenged finding. It digs into the FULL source (the finding's file, its call sites, its tests,
 // and the PR diff prepared in `.cat-context/pr-diff.md`) and returns a verdict: UPHOLD the finding
 // (optionally strengthening / clarifying its body) or RETRACT it (with a justification). The engine
-// applies that verdict to the finding in place and re-parks the review — an upheld finding's body is
-// amended, a retracted finding is auto-deselected and shown struck-through beside the justification.
+// applies that verdict to the finding in place and re-parks the review — an upheld finding is kept
+// (its body amended only when the investigator actually revised it, else held as written), a
+// retracted finding is auto-deselected and shown struck-through beside the justification.
 //
 // It is configured SEPARATELY from the reviewer: because it is its own agent kind, a workspace can
 // point it at a different (stronger) model via a per-kind model-preset override — model routing keys

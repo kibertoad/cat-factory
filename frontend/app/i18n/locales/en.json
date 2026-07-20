@@ -5085,8 +5085,11 @@
       "investigatingBanner": "The Challenge Investigator is re-examining a finding against the source…",
       "investigatingBadge": "Investigating",
       "strengthenedBadge": "Strengthened",
+      "upheldBadge": "Upheld",
       "retractedBadge": "Retracted",
-      "verdictLabel": "Investigator:"
+      "verdictLabel": "Investigator:",
+      "failedBadge": "Challenge failed",
+      "failedLabel": "Challenge failed:"
     },
     "fixing": {
       "title": "Fixing the selected findings…",

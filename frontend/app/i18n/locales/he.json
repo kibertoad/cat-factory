@@ -4955,8 +4955,11 @@
       "investigatingBanner": "חוקר הערעורים בוחן מחדש ממצא מול קוד המקור…",
       "investigatingBadge": "בחקירה",
       "strengthenedBadge": "חוזק",
+      "upheldBadge": "אושר",
       "retractedBadge": "בוטל",
-      "verdictLabel": "חוקר:"
+      "verdictLabel": "חוקר:",
+      "failedBadge": "הערעור נכשל",
+      "failedLabel": "הערעור נכשל:"
     },
     "fixing": {
       "title": "מתקן את הממצאים שנבחרו…",

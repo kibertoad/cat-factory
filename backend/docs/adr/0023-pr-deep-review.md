@@ -166,14 +166,22 @@ so a human curates the findings themselves — not just which to act on:
     prior output. The investigator returns `prReviewChallengeOutputSchema` (a lenient uphold/retract
     verdict + optional `revised*` fields), which a dedicated `pr-review-challenge` completion
     interceptor (ordered BEFORE `pr-review` so it wins during a challenge) applies to the finding via
-    `applyChallengeVerdict`: `upheld` strengthens the finding's body + records an `amended` challenge;
-    `retracted` records a `retracted` challenge with its justification AND auto-deselects the finding
-    (it can never be fixed/posted/finished — `resolve`'s selectable set excludes retracted findings).
-    The review then re-parks at `awaiting_selection`. A finding carries its challenge lifecycle on
-    `PrReviewFinding.challenge` (`investigating` → `amended` | `retracted`), rendered in the window
-    (a spinner while investigating, a badge + the investigator's justification once settled). All of
-    this rides `step.prReview` / `step.pendingChallenge` — still NO side table, so it stays
-    runtime-symmetric, asserted by the conformance suite (dismiss, challenge-retract, challenge-uphold).
+    `applyChallengeVerdict`: a kept finding records `amended` ONLY when a `revised*` field actually
+    changed its body, else `upheld` (held as written — so the window never falsely shows
+    "Strengthened"); `retracted` records a `retracted` challenge with its justification AND
+    auto-deselects the finding (it can never be fixed/posted/finished — `resolve`'s selectable set
+    excludes retracted findings, and a retracted finding can't be re-challenged either). The review
+    then re-parks at `awaiting_selection`. If the investigator's job FAILS (a genuine crash, after any
+    container-eviction retry budget), the driver's failed-job path settles the challenge `failed` via
+    `PrReviewController.recordChallengeFailure` (the analogue of the human-test / visual-confirmation
+    helper-failure branch) — the finding is left untouched and the review re-parks, so a non-critical
+    second opinion crashing on ONE finding never fails the human's in-flight curation. A finding carries
+    its challenge lifecycle on `PrReviewFinding.challenge` (`investigating` → `upheld` | `amended` |
+    `retracted` | `failed`), rendered in the window (a spinner while investigating, a badge + the
+    investigator's justification once settled). All of this rides `step.prReview` /
+    `step.pendingChallenge` — still NO side table, so it stays runtime-symmetric, asserted by the
+    conformance suite (dismiss, challenge-retract, challenge-uphold-strengthen, challenge-uphold-as-is,
+    and challenge-investigator-failure).
 - **Separately-configurable model.** Because the investigator dispatches under its OWN agent kind
   (`challenge-investigator`, via the `handleAgentStep` dispatch-kind override), model routing keys
   off it — so a workspace can point it at a different (stronger) model than the reviewer through a

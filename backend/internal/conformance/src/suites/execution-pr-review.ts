@@ -191,6 +191,14 @@ export function definePrReviewSuite(harness: ConformanceHarness): void {
         { action: 'fix', findingIds: [findings[0]!.id] },
       )
       expect(rejected.status).toBe(409)
+
+      // ...nor can it be re-challenged (the same invariant, enforced at the challenge endpoint).
+      const reChallenge = await call(
+        'POST',
+        `/workspaces/${wsId}/executions/${reparked.id}/pr-review/findings/${findings[0]!.id}/challenge`,
+        {},
+      )
+      expect(reChallenge.status).toBe(409)
     })
 
     it('challenges a finding — the investigator UPHOLDS + strengthens it', async () => {
@@ -236,6 +244,96 @@ export function definePrReviewSuite(harness: ConformanceHarness): void {
       // The revised body + severity replaced the originals; the finding is still selectable.
       expect(upheld?.detail).toMatch(/dereferenced at :14/)
       expect(upheld?.severity).toBe('blocker')
+    })
+
+    it('challenges a finding — the investigator UPHOLDS it unchanged (`upheld`, not amended)', async () => {
+      const { call, createWorkspace, drive } = harness.makeApp({
+        customResultByKind: {
+          'pr-reviewer': reviewerOutput,
+          // Upheld with a justification but NO `revised*` fields — the finding holds as written, so
+          // it must settle `upheld`, never a false `amended` ("Strengthened").
+          'challenge-investigator': {
+            verdict: 'upheld',
+            justification: 'It holds — the guard really is missing on the error path.',
+          },
+        },
+      })
+      const { workspace } = await createWorkspace({ seed: true })
+      const wsId = workspace.id
+
+      const task = await call<Block>('POST', `/workspaces/${wsId}/blocks/blk_auth/tasks`, {
+        title: 'Review PR #42',
+        taskType: 'review',
+        taskTypeFields: { prNumber: 42, prUrl: 'https://github.com/o/r/pull/42' },
+      })
+      await call('POST', `/workspaces/${wsId}/blocks/${task.body.id}/executions`, {
+        pipelineId: 'pl_review',
+      })
+      const parked = (await drive(wsId)).find((e) => e.blockId === task.body.id)!
+      const findings =
+        parked.steps.find((s) => s.agentKind === 'pr-reviewer')!.prReview?.findings ?? []
+      const original = findings[0]!
+
+      await call(
+        'POST',
+        `/workspaces/${wsId}/executions/${parked.id}/pr-review/findings/${original.id}/challenge`,
+        {},
+      )
+      const reparked = (await drive(wsId)).find((e) => e.blockId === task.body.id)!
+      const upheld = reparked.steps
+        .find((s) => s.agentKind === 'pr-reviewer')!
+        .prReview?.findings?.find((f) => f.id === original.id)
+      expect(upheld?.challenge?.status).toBe('upheld')
+      // Body untouched; still selectable.
+      expect(upheld?.title).toBe(original.title)
+      expect(upheld?.detail).toBe(original.detail)
+    })
+
+    it('challenges a finding — a FAILED investigator settles `failed` + re-parks (never fails the run)', async () => {
+      const { call, createWorkspace, drive } = harness.makeApp({
+        customResultByKind: { 'pr-reviewer': reviewerOutput },
+        // Drive the investigator as an async job that FAILS on poll — the run must NOT fail; the
+        // challenge settles `failed` and the review re-parks with the finding kept + actionable.
+        asyncKinds: ['challenge-investigator'],
+        pollFailKinds: ['challenge-investigator'],
+      })
+      const { workspace } = await createWorkspace({ seed: true })
+      const wsId = workspace.id
+
+      const task = await call<Block>('POST', `/workspaces/${wsId}/blocks/blk_auth/tasks`, {
+        title: 'Review PR #42',
+        taskType: 'review',
+        taskTypeFields: { prNumber: 42, prUrl: 'https://github.com/o/r/pull/42' },
+      })
+      await call('POST', `/workspaces/${wsId}/blocks/${task.body.id}/executions`, {
+        pipelineId: 'pl_review',
+      })
+      const parked = (await drive(wsId)).find((e) => e.blockId === task.body.id)!
+      const findings =
+        parked.steps.find((s) => s.agentKind === 'pr-reviewer')!.prReview?.findings ?? []
+      const original = findings[0]!
+
+      await call(
+        'POST',
+        `/workspaces/${wsId}/executions/${parked.id}/pr-review/findings/${original.id}/challenge`,
+        { question: 'is this real?' },
+      )
+      const reparked = (await drive(wsId)).find((e) => e.blockId === task.body.id)!
+      // The run stays parked (blocked), NOT failed.
+      expect(reparked.status).toBe('blocked')
+      const reStep = reparked.steps.find((s) => s.agentKind === 'pr-reviewer')!
+      expect(reStep.prReview?.status).toBe('awaiting_selection')
+      const failed = reStep.prReview?.findings?.find((f) => f.id === original.id)
+      expect(failed?.challenge?.status).toBe('failed')
+      expect(failed?.challenge?.question).toBe('is this real?')
+      // The finding is kept and still actionable (unlike a retraction): resolving `fix` on it works.
+      expect(failed?.title).toBe(original.title)
+      const resolved = await call(
+        'POST',
+        `/workspaces/${wsId}/executions/${reparked.id}/pr-review/resolve`,
+        { action: 'finish', findingIds: [original.id] },
+      )
+      expect(resolved.status).toBe(200)
     })
 
     // A checkout-free RepoFiles capturing the deep-review resolutions' VCS writes/reads (the

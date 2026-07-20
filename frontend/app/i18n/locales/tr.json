@@ -4956,8 +4956,11 @@
       "investigatingBanner": "İtiraz Araştırmacısı bir bulguyu kaynak koda göre yeniden inceliyor…",
       "investigatingBadge": "İnceleniyor",
       "strengthenedBadge": "Güçlendirildi",
+      "upheldBadge": "Onaylandı",
       "retractedBadge": "Geri çekildi",
-      "verdictLabel": "Araştırmacı:"
+      "verdictLabel": "Araştırmacı:",
+      "failedBadge": "İtiraz başarısız oldu",
+      "failedLabel": "İtiraz başarısız oldu:"
     },
     "fixing": {
       "title": "Seçili bulgular düzeltiliyor…",

@@ -91,8 +91,18 @@ export class PrReviewResolutionController {
     const review = step.prReview!
     const pending = step.pendingChallenge
     const finding = review.findings?.find((f) => f.id === pending?.findingId)
+    // The challenged finding is resolved from the marker `challengeFinding` set, and nothing can
+    // remove it while the review is parked in `challenging` (dismiss requires `awaiting_selection`).
+    // If it's somehow gone, fail loudly rather than dispatch a context-less investigator that would
+    // return a groundless verdict — mirrors `dispatchFixer`'s preflight guard.
+    if (!finding) {
+      return Promise.resolve({
+        kind: 'job_failed',
+        failureKind: 'preflight',
+        error: 'The challenged finding is no longer part of the review.',
+      })
+    }
     return this.deps.handleAgentStep(ctx, CHALLENGE_INVESTIGATOR_KIND, (context) => {
-      if (!finding) return
       context.priorOutputs = [
         ...context.priorOutputs,
         {

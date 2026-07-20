@@ -4944,8 +4944,11 @@
       "investigatingBanner": "Badacz zastrzeżeń ponownie analizuje ustalenie w oparciu o kod źródłowy…",
       "investigatingBadge": "Badanie",
       "strengthenedBadge": "Wzmocnione",
+      "upheldBadge": "Podtrzymane",
       "retractedBadge": "Wycofane",
-      "verdictLabel": "Badacz:"
+      "verdictLabel": "Badacz:",
+      "failedBadge": "Zakwestionowanie nie powiodło się",
+      "failedLabel": "Zakwestionowanie nie powiodło się:"
     },
     "fixing": {
       "title": "Naprawianie wybranych uwag…",

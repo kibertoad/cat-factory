@@ -16,7 +16,12 @@ import { ConflictError } from '@cat-factory/kernel'
 import { PR_REVIEWER_KIND } from '@cat-factory/agents'
 import type { NotificationService } from '../notifications/NotificationService.js'
 import type { AdvanceResult } from './advance.js'
-import { applyChallengeVerdict, coercePrReview, dismissFinding } from './prReview.logic.js'
+import {
+  applyChallengeVerdict,
+  coercePrReview,
+  dismissFinding,
+  failChallenge,
+} from './prReview.logic.js'
 import type { RunStateMachine } from './RunStateMachine.js'
 import type { StepGraph } from './StepGraph.js'
 
@@ -277,8 +282,14 @@ export class PrReviewController {
       (inst) => {
         const { step } = this.findParkedReview(inst)
         const review = step.prReview!
-        if (!review.findings?.some((f) => f.id === findingId)) {
+        const target = review.findings?.find((f) => f.id === findingId)
+        if (!target) {
           throw new ConflictError('That finding is no longer part of the review.')
+        }
+        // A retracted finding can never be acted on (it's auto-deselected + struck through), so it
+        // can't be re-challenged either — the same invariant `resolve` enforces on the selection.
+        if (target.challenge?.status === 'retracted') {
+          throw new ConflictError('A retracted finding can no longer be challenged.')
         }
         approvalId = step.approval!.id
         const findings = review.findings.map((f) =>
@@ -328,6 +339,34 @@ export class PrReviewController {
       pending.findingId,
       pending.question ?? null,
       output,
+    )
+    return this.deps.stateMachine.parkStepOnDecision(workspaceId, instance, step)
+  }
+
+  /**
+   * Settle a CHALLENGE whose read-only investigator job FAILED (a genuine crash / non-transient
+   * error, after any container-eviction retry budget is spent), RE-PARKING the review instead of
+   * failing the whole run. Run from the driver's failed-job path (the analogue of the human-test /
+   * visual-confirmation `onHelperComplete` failure branch): mark the challenged finding `failed`
+   * (carrying the reason), leave its body untouched, and re-park at `awaiting_selection` so the
+   * human can re-challenge or act on it — a non-critical second opinion crashing on ONE finding
+   * must never nuke the human's in-flight curation. Idempotent: a step no longer `challenging`
+   * (verdict already applied) returns null and falls through to the normal spine.
+   */
+  async recordChallengeFailure(
+    workspaceId: string,
+    instance: ExecutionInstance,
+    step: PipelineStep,
+    reason: string | null,
+  ): Promise<AdvanceResult | null> {
+    const pending = step.pendingChallenge
+    if (!step.prReview || step.prReview.status !== 'challenging' || !pending) return null
+    step.pendingChallenge = null
+    step.prReview = failChallenge(
+      step.prReview,
+      pending.findingId,
+      pending.question ?? null,
+      reason,
     )
     return this.deps.stateMachine.parkStepOnDecision(workspaceId, instance, step)
   }

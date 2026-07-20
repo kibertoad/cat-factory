@@ -875,6 +875,19 @@ export class RunDispatcher {
         update.evicted,
       )
       if (recovered) return recovered
+      // A read-only Challenge Investigator (dispatched off a parked `pr-reviewer` step when the
+      // human challenged ONE finding) failed for real: settle the challenge as `failed` and RE-PARK
+      // the review — a non-critical second opinion crashing must not fail the human's in-flight
+      // curation. Mirrors the human-test / visual-confirmation helper-failure branches above.
+      if (step.agentKind === PR_REVIEWER_KIND && step.prReview?.status === 'challenging') {
+        const settled = await this.prReviewController.recordChallengeFailure(
+          workspaceId,
+          instance,
+          step,
+          update.error,
+        )
+        if (settled) return settled
+      }
       // Not an eviction: a genuine agent/job failure. Prefer the harness's STRUCTURED cause
       // to classify it (→ AgentFailureKind), falling back to the error-string regex when an
       // older image (or a pool transport that doesn't forward the cause) reported none — the

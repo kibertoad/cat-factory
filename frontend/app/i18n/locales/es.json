@@ -4944,8 +4944,11 @@
       "investigatingBanner": "El Investigador de Objeciones está reexaminando un hallazgo frente al código fuente…",
       "investigatingBadge": "Investigando",
       "strengthenedBadge": "Reforzado",
+      "upheldBadge": "Confirmado",
       "retractedBadge": "Retirado",
-      "verdictLabel": "Investigador:"
+      "verdictLabel": "Investigador:",
+      "failedBadge": "Cuestionamiento fallido",
+      "failedLabel": "Cuestionamiento fallido:"
     },
     "fixing": {
       "title": "Corrigiendo los hallazgos seleccionados…",

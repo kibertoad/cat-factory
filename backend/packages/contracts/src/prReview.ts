@@ -56,23 +56,33 @@ export type PrReviewSlice = v.InferOutput<typeof prReviewSliceSchema>
 /**
  * A finding's CHALLENGE lifecycle. A human can challenge a finding — optionally with a specific
  * question / concern — which dispatches the read-only **Challenge Investigator** container agent
- * to dig into the finding against the FULL source. The investigator either UPHELD the finding
- * (strengthening or clarifying its body — `status: 'amended'`) or RETRACTED it (`status:
- * 'retracted'`, at which point the finding is auto-deselected and rendered struck-through beside
- * its retraction justification). While the investigator runs the finding carries
- * `status: 'investigating'`.
+ * to dig into the finding against the FULL source. Terminal verdicts:
+ * - `upheld` — the finding holds up AS WRITTEN (the investigator kept it, adding a justification
+ *   but no revision to its body).
+ * - `amended` — the finding holds up AND the investigator strengthened/clarified it (some field —
+ *   title / detail / severity / suggested fix — actually changed).
+ * - `retracted` — the finding does NOT hold up; it is auto-deselected and rendered struck-through
+ *   beside its retraction justification.
+ *
+ * While the investigator runs the finding carries `investigating`. If its container job FAILS
+ * (crash / non-transient error) the challenge settles as `failed` — the finding is left exactly as
+ * it was (never dropped) and the review re-parks so the human can re-challenge or proceed, rather
+ * than the whole parked review failing over a non-critical second opinion.
  */
 export const prReviewFindingChallengeSchema = v.object({
-  /** Lifecycle: `investigating` (agent in flight) → `amended` (upheld + clarified) | `retracted`. */
-  status: v.picklist(['investigating', 'amended', 'retracted']),
+  /**
+   * Lifecycle: `investigating` (agent in flight) → `upheld` (holds as-is) | `amended` (upheld +
+   * strengthened) | `retracted` (dropped) | `failed` (the investigation couldn't complete).
+   */
+  status: v.picklist(['investigating', 'upheld', 'amended', 'retracted', 'failed']),
   /**
    * The human's specific challenge / question / concern, or null when they challenged with no
    * text (the generic "dig deeper, justify the grounding, validate accuracy + relevance" prompt).
    */
   question: v.optional(v.nullable(v.string())),
   /**
-   * The investigator's justification — why it strengthened the finding (`amended`) or why the
-   * finding does not hold up (`retracted`). Null while `investigating`.
+   * The investigator's justification — why the finding holds up (`upheld`/`amended`) or why it does
+   * not (`retracted`). For `failed` it carries the failure reason. Null while `investigating`.
    */
   justification: v.optional(v.nullable(v.string())),
 })

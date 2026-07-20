@@ -4944,8 +4944,11 @@
       "investigatingBanner": "L'enquêteur de contestation réexamine un constat par rapport au code source…",
       "investigatingBadge": "Enquête en cours",
       "strengthenedBadge": "Renforcé",
+      "upheldBadge": "Confirmé",
       "retractedBadge": "Retiré",
-      "verdictLabel": "Enquêteur :"
+      "verdictLabel": "Enquêteur :",
+      "failedBadge": "Échec de la contestation",
+      "failedLabel": "Échec de la contestation :"
     },
     "fixing": {
       "title": "Correction des points sélectionnés…",

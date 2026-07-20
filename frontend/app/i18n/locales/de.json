@@ -4956,8 +4956,11 @@
       "investigatingBanner": "Der Challenge-Investigator prüft einen Befund erneut anhand des Quellcodes…",
       "investigatingBadge": "Wird untersucht",
       "strengthenedBadge": "Bestärkt",
+      "upheldBadge": "Bestätigt",
       "retractedBadge": "Zurückgezogen",
-      "verdictLabel": "Prüfer:"
+      "verdictLabel": "Prüfer:",
+      "failedBadge": "Anfechtung fehlgeschlagen",
+      "failedLabel": "Anfechtung fehlgeschlagen:"
     },
     "fixing": {
       "title": "Ausgewählte Befunde werden behoben…",

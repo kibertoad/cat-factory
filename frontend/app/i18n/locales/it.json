@@ -4956,8 +4956,11 @@
       "investigatingBanner": "L'investigatore delle contestazioni sta riesaminando un rilievo rispetto al codice sorgente…",
       "investigatingBadge": "In esame",
       "strengthenedBadge": "Rafforzato",
+      "upheldBadge": "Confermato",
       "retractedBadge": "Ritirato",
-      "verdictLabel": "Investigatore:"
+      "verdictLabel": "Investigatore:",
+      "failedBadge": "Contestazione non riuscita",
+      "failedLabel": "Contestazione non riuscita:"
     },
     "fixing": {
       "title": "Correzione dei rilievi selezionati…",

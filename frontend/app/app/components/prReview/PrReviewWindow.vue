@@ -113,9 +113,17 @@ function isRetracted(f: PrReviewFinding): boolean {
 function isInvestigating(f: PrReviewFinding): boolean {
   return f.challenge?.status === 'investigating'
 }
-/** A finding the investigator UPHELD + strengthened after a challenge. */
+/** A finding the investigator UPHELD + strengthened after a challenge (its body actually changed). */
 function isAmended(f: PrReviewFinding): boolean {
   return f.challenge?.status === 'amended'
+}
+/** A finding the investigator UPHELD as written after a challenge (kept, no revision). */
+function isUpheld(f: PrReviewFinding): boolean {
+  return f.challenge?.status === 'upheld'
+}
+/** A finding whose challenge investigation FAILED — the finding is kept as-is; re-challenge allowed. */
+function isChallengeFailed(f: PrReviewFinding): boolean {
+  return f.challenge?.status === 'failed'
 }
 
 // The human's selection — a set of finding ids. Defaults to every finding (the human deselects
@@ -472,6 +480,20 @@ async function onDismiss(id: string): Promise<void> {
                       {{ t('prReview.challenge.strengthenedBadge') }}
                     </span>
                     <span
+                      v-else-if="isUpheld(f)"
+                      data-testid="pr-review-finding-upheld"
+                      class="rounded bg-emerald-500/15 px-1.5 py-0.5 text-[10px] font-semibold uppercase text-emerald-300 ring-1 ring-emerald-500/30"
+                    >
+                      {{ t('prReview.challenge.upheldBadge') }}
+                    </span>
+                    <span
+                      v-else-if="isChallengeFailed(f)"
+                      data-testid="pr-review-finding-challenge-failed"
+                      class="rounded bg-amber-500/15 px-1.5 py-0.5 text-[10px] font-semibold uppercase text-amber-300 ring-1 ring-amber-500/30"
+                    >
+                      {{ t('prReview.challenge.failedBadge') }}
+                    </span>
+                    <span
                       v-else-if="isInvestigating(f)"
                       data-testid="pr-review-finding-investigating"
                       class="flex items-center gap-1 rounded bg-indigo-500/15 px-1.5 py-0.5 text-[10px] font-semibold uppercase text-indigo-300 ring-1 ring-indigo-500/30"
@@ -506,16 +528,25 @@ async function onDismiss(id: string): Promise<void> {
                     {{ f.suggestedFix }}
                   </p>
 
-                  <!-- The investigator's justification (why the finding holds up, or was retracted). -->
+                  <!-- The investigator's justification (why the finding holds up / was retracted),
+                       or the reason the challenge investigation failed. -->
                   <p
                     v-if="f.challenge?.justification"
                     data-testid="pr-review-finding-justification"
                     class="mt-1.5 whitespace-pre-wrap rounded-md px-2 py-1 text-[11px]"
                     :class="
-                      isRetracted(f) ? 'bg-rose-500/10 text-rose-200' : 'bg-sky-500/10 text-sky-200'
+                      isRetracted(f)
+                        ? 'bg-rose-500/10 text-rose-200'
+                        : isChallengeFailed(f)
+                          ? 'bg-amber-500/10 text-amber-200'
+                          : 'bg-sky-500/10 text-sky-200'
                     "
                   >
-                    <span class="font-medium">{{ t('prReview.challenge.verdictLabel') }}</span>
+                    <span class="font-medium">{{
+                      isChallengeFailed(f)
+                        ? t('prReview.challenge.failedLabel')
+                        : t('prReview.challenge.verdictLabel')
+                    }}</span>
                     {{ f.challenge.justification }}
                   </p>
 
