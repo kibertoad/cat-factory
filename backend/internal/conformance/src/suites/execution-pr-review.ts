@@ -308,8 +308,11 @@ export function definePrReviewSuite(harness: ConformanceHarness): void {
         posted?: { number: number; input: CreateReviewInput }[]
         headSha?: string | null
       } = { headSha: 'sha-at-review-start' }
+      // Drive the reviewer as the CONTAINER (async) kind it is in production: the review-start
+      // head-sha capture rides the async dispatch path, so a synchronous reviewer would never
+      // stamp `reviewedHeadSha` and the drift guard would be untested. Polling once is enough.
       const { call, createWorkspace, drive } = harness.makeApp(
-        { customResult: reviewerOutput },
+        { customResult: reviewerOutput, asyncKinds: ['pr-reviewer'], asyncPolls: 1 },
         {
           resolveRunRepoContext: async () => ({
             repo: makeReviewRepo(recorder),

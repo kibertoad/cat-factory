@@ -255,6 +255,12 @@ export interface BuiltPrReviewPost {
  * summary comment) rather than stamping comments onto possibly-drifted lines. Overrides
  * `commentable`.
  *
+ * `options.summaryAlreadyPosted` — set when the reviewer's `summary` prose already landed on a
+ * PRIOR post attempt (`postedBody`). The summary is then dropped from the body so a retry that
+ * must still deliver folded findings (the stale-head case, where a previously-inline finding is
+ * now folded) carries ONLY those findings, not a duplicate summary. The at-most-once summary and
+ * the always-deliver-the-findings guarantees are thus kept independent.
+ *
  * The review always carries a non-empty `body` (GitHub rejects a blank-body comment): when
  * neither a summary nor any folded/unanchored finding supplies one, we fall back to a one-line
  * count of the inline comments.
@@ -263,9 +269,10 @@ export function buildPrReviewPost(
   findings: PrReviewFinding[],
   summary: string | null | undefined,
   commentable?: Map<string, CommentableLines>,
-  options?: { staleHead?: boolean },
+  options?: { staleHead?: boolean; summaryAlreadyPosted?: boolean },
 ): BuiltPrReviewPost {
   const staleHead = options?.staleHead === true
+  const summaryAlreadyPosted = options?.summaryAlreadyPosted === true
   const comments: CreateReviewComment[] = []
   const commentFindingIds: string[] = []
   const foldedFindingIds: string[] = []
@@ -296,7 +303,7 @@ export function buildPrReviewPost(
     }
   }
   const bodyParts: string[] = []
-  if (summary?.trim()) bodyParts.push(summary.trim())
+  if (!summaryAlreadyPosted && summary?.trim()) bodyParts.push(summary.trim())
   if (unanchored.length > 0) {
     bodyParts.push(
       staleHead

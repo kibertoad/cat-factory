@@ -9,6 +9,7 @@ import type {
   RunInitiatorScope,
 } from '@cat-factory/kernel'
 import { FIXER_AGENT_KIND, getErrorMessage } from '@cat-factory/kernel'
+import { resolvePrNumber } from '@cat-factory/agents'
 import type { AdvanceResult } from './advance.js'
 import {
   buildPrReviewPost,
@@ -21,16 +22,13 @@ import type { RunStateMachine } from './RunStateMachine.js'
 import type { StepHandlerContext } from './step-handler-registry.js'
 
 /**
- * Resolve a review `Block`'s PR number: an explicit `taskTypeFields.prNumber`, else parsed from
- * the `prUrl` (`…/pull/42` on GitHub, `…/merge_requests/42` on GitLab). Undefined when neither
- * yields one — the PR-review `fix`/`post` resolutions then report the PR unresolvable.
+ * Resolve a review `Block`'s PR number via the shared {@link resolvePrNumber} (an explicit
+ * `taskTypeFields.prNumber`, else parsed from the `prUrl`) — the SAME parser the reviewer agent
+ * and the review-start head-sha capture use, so the `fix`/`post` resolutions can't disagree with
+ * dispatch on which PR is under review. Null when neither yields one.
  */
-function reviewPrNumber(block: Block | null | undefined): number | undefined {
-  const fields = block?.taskTypeFields
-  if (typeof fields?.prNumber === 'number') return fields.prNumber
-  const url = fields?.prUrl?.trim()
-  const match = url?.match(/\/(?:pull|merge_requests)\/(\d+)/)
-  return match ? Number(match[1]) : undefined
+function reviewPrNumber(block: Block | null | undefined): number | null {
+  return resolvePrNumber(block?.taskTypeFields ?? undefined)
 }
 
 /** The dispatcher hooks the PR-review resolution driver needs (mirrors {@link DeployerStepController}'s seam). */
@@ -90,7 +88,7 @@ export class PrReviewResolutionController {
       review.selectedFindingIds?.includes(f.id),
     )
     let headRef: string | null = null
-    let prNumber: number | undefined
+    let prNumber: number | null = null
     if (!step.jobId) {
       prNumber = reviewPrNumber(block)
       const runRepo =
@@ -224,13 +222,23 @@ export class PrReviewResolutionController {
       }
     }
 
-    const built = buildPrReviewPost(selected, review.summary, commentable, { staleHead })
-    // The summary/body comment is posted AT MOST ONCE. If it already landed on a prior attempt,
-    // suppress it here so retrying the un-anchored inline comments doesn't duplicate the summary
-    // conversation comment (the body's analogue of `postedFindingIds`). A body that FAILED before
-    // keeps `postedBody` false, so it is still retried.
     const bodyAlreadyPosted = review.postedBody === true
-    const input = bodyAlreadyPosted ? { ...built.input, body: '' } : built.input
+    const built = buildPrReviewPost(selected, review.summary, commentable, {
+      staleHead,
+      // Drop the summary prose from the body once it has landed (below), so a stale-head retry
+      // that must re-post the body to deliver newly-folded findings doesn't duplicate the summary.
+      summaryAlreadyPosted: bodyAlreadyPosted,
+    })
+    // The summary/body comment is posted AT MOST ONCE. Once it has landed we normally suppress it
+    // so retrying the un-anchored inline comments doesn't duplicate the summary conversation
+    // comment (the body's analogue of `postedFindingIds`). EXCEPTION: under a stale head every
+    // finding is folded into the body, and a retry can carry findings that were NOT in the prior
+    // body (e.g. one that first failed to post inline, then drifted) — so we still post the body
+    // (findings only, summary prose already dropped above), or those findings would be silently
+    // lost. A body that FAILED before keeps `postedBody` false, so it is still retried.
+    const deliversNewlyFolded = staleHead && built.foldedFindingIds.length > 0
+    const suppressBody = bodyAlreadyPosted && !deliversNewlyFolded
+    const input = suppressBody ? { ...built.input, body: '' } : built.input
     let result: CreateReviewResult
     try {
       result = await this.deps.runInitiatorScope(instance.initiatedBy, () =>

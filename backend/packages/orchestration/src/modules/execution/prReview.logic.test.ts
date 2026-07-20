@@ -277,6 +277,25 @@ describe('buildPrReviewPost', () => {
     expect(input.body).toContain('In diff')
     expect(input.body).toContain('Also in diff')
   })
+
+  it('drops the summary prose but keeps the folded findings when summaryAlreadyPosted (stale retry)', () => {
+    // A stale-head RETRY: the summary already landed on the first attempt, but a finding that
+    // failed to post inline then drifted must still be delivered. The body carries the finding
+    // WITHOUT re-posting the summary prose, so the review isn't lost and isn't duplicated.
+    const { input, foldedFindingIds } = buildPrReviewPost(
+      [finding({ id: 'prf_a', path: 'src/a.ts', line: 2, title: 'Drifted finding', detail: 'x' })],
+      'Summary prose that already landed.',
+      undefined,
+      { staleHead: true, summaryAlreadyPosted: true },
+    )
+    expect(input.comments).toHaveLength(0)
+    expect(foldedFindingIds).toEqual(['prf_a'])
+    // The drifted finding is delivered...
+    expect(input.body).toContain('branch was updated')
+    expect(input.body).toContain('Drifted finding')
+    // ...but the already-posted summary prose is NOT repeated.
+    expect(input.body).not.toContain('Summary prose that already landed.')
+  })
 })
 
 describe('computeCommentableLines', () => {

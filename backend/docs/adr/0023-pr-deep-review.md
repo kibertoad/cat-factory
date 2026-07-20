@@ -124,11 +124,20 @@ need (`getPullRequestHeadRef`, `createReview`) are new **optional** methods on t
   mismatch it treats every finding as unanchorable (`buildPrReviewPost({ staleHead: true })`) and
   folds them all into the summary comment, so a moved branch can't scatter comments onto shifted
   lines. Unknown-sha on either side (older run, read blip) degrades to the pre-existing behaviour.
-- **At-most-once, and retry just the posting.** `post` runs in the durable driver with the
+  The `pr-reviewer` is always a container (async) kind, so the capture rides the async dispatch
+  path; the same review-start head is resolved through the SHARED `resolvePrNumber` the reviewer
+  agent uses, so dispatch and `post` can never disagree on which PR is under review.
+- **At-most-once summary, but never lose a finding.** `post` runs in the durable driver with the
   `pendingPrReviewPost` marker consumed (cleared + persisted) before the side-effecting post, so a
   Workflows retry/replay can't re-run it; findings already in `postedFindingIds` are skipped; and the
   summary/body comment is suppressed once `postedBody` is set, so a human RE-`post` (the retry path)
-  never double-posts an inline comment OR the summary that already landed. A partial/failed post
+  never double-posts an inline comment OR the summary that already landed. The one subtlety the
+  drift guard adds: a finding that first FAILED to post inline and then drifted is now folded into
+  the body — which would be lost if the body were blanked because the summary already landed. So the
+  suppression is scoped: on a stale-head retry the body is still posted (carrying only the newly
+  folded findings, `buildPrReviewPost({ summaryAlreadyPosted: true })` dropping the already-landed
+  summary prose to avoid a duplicate). The at-most-once-summary and always-deliver-the-findings
+  guarantees are thus kept independent. A partial/failed post
   RE-PARKS at `awaiting_selection` carrying the `postReport` (never a `job_failed`), so the failure
   is legible and retryable in place — the human doesn't re-run the whole review. To keep GitHub from
   rejecting a blank-body comment, `buildPrReviewPost` always emits a non-empty `body` (falling back
