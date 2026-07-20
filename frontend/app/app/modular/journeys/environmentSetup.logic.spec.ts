@@ -6,6 +6,16 @@ import {
   envInitialState,
   envStartStep,
 } from './environmentSetup.logic'
+import en from '../../../i18n/locales/en.json'
+
+/** Dot-path lookup into the real `en.json`, mirroring which keys actually ship. */
+function hasKey(path: string): boolean {
+  return (
+    path.split('.').reduce<unknown>((node, seg) => {
+      return node && typeof node === 'object' ? (node as Record<string, unknown>)[seg] : undefined
+    }, en) !== undefined
+  )
+}
 
 // Pure navigation graph for the environment-setup journey (slice 3). The step
 // order is derived from the annotated transition graph (production-feedback item
@@ -38,5 +48,18 @@ describe('environment-setup journey logic', () => {
   it('starts the derived sequence at review when a frame is preselected', () => {
     const steps = resolveStepSequence(environmentSetupJourney, { input: { frameId: 'blk_1' } })
     expect(steps.map((s) => s.entry)).toEqual(['review', 'preflight', 'save'])
+  })
+
+  // The stepper resolves each label through a VARIABLE key (`t(step.progressLabel)`), so
+  // the tier-1 typed-message-keys check + `vue-i18n-extract` can no longer see these keys
+  // as used and can't catch a typo or a dropped key. Pin the missing-key guard here instead:
+  // every `progressLabel` the real definition emits must resolve to a shipping `en.json` key.
+  it('carries a shipping en.json label key for every derived step', () => {
+    const steps = resolveStepSequence(environmentSetupJourney, { input: { frameId: null } })
+    for (const step of steps) {
+      const key = step.progressLabel
+      expect(key, `missing i18n key for step "${step.entry}"`).toBeTruthy()
+      expect(hasKey(key ?? ''), `key "${key}" not in en.json`).toBe(true)
+    }
   })
 })
