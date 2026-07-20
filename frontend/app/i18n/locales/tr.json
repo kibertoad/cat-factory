@@ -4953,6 +4953,15 @@
       "title": "İnceleme yorumları gönderiliyor…",
       "hint": "Seçili bulgular pull request üzerinde satır içi yorum olarak yayımlanıyor."
     },
+    "postReport": {
+      "heading": "Gönderim sonucu",
+      "posted": "{attempted} yorumdan {posted} tanesi gönderildi",
+      "folded": "Özete eklendi (diff'te tutturulacak satır yok): {count}",
+      "failuresHeading": "Bu yorumlar gönderilemedi:",
+      "bodyError": "Özet yorumu gönderilemedi: {error}",
+      "postedBadge": "Gönderildi",
+      "retry": "Gönderimi yeniden dene"
+    },
     "severity": {
       "blocker": "Engelleyici",
       "high": "Yüksek",

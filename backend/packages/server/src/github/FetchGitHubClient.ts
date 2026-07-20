@@ -2,6 +2,7 @@ import {
   type Clock,
   type CommitFilesResult,
   type CreateReviewInput,
+  type CreateReviewResult,
   type GitHubBranch,
   type GitHubChangedFile,
   type GitHubCheckRun,
@@ -37,6 +38,7 @@ import {
 import { githubProjection as gp } from '@cat-factory/integrations'
 import type { CommitFilesInput } from '@cat-factory/contracts'
 import type { AppTokenSource } from './GitHubAppRegistry.js'
+import { postPrReview } from './reviewPosting.js'
 import {
   decodeBase64Utf8,
   numHeader,
@@ -1059,30 +1061,21 @@ export class FetchGitHubClient implements GitHubClient {
     await this.graphql(installationId, mutation, { threadId })
   }
 
-  async createReview(
+  createReview(
     installationId: number,
     ref: GitHubRepoRef,
     number: number,
     input: CreateReviewInput,
-  ): Promise<void> {
-    // GitHub's inline-review comments carry `path`/`line`/`side`/`body`; `side` defaults to
-    // RIGHT (the head) when omitted. A review with no inline comments is still valid — it posts
-    // a body-only advisory. The event is COMMENT for the deep-review flow (neither approves nor
-    // blocks the PR).
-    await this.request(`/repos/${ref.owner}/${ref.repo}/pulls/${number}/reviews`, {
+  ): Promise<CreateReviewResult> {
+    // The per-comment posting + partial-success reporting lives in `reviewPosting.ts`; this stays
+    // a thin transport delegate (see the deep-review "post" resolution).
+    return postPrReview(
+      (path, opts) => this.request(path, opts),
       installationId,
-      method: 'POST',
-      body: {
-        event: input.event,
-        ...(input.body ? { body: input.body } : {}),
-        comments: input.comments.map((c) => ({
-          path: c.path,
-          line: c.line,
-          side: c.side ?? 'RIGHT',
-          body: c.body,
-        })),
-      },
-    })
+      ref,
+      number,
+      input,
+    )
   }
 
   // ---- writes -------------------------------------------------------------

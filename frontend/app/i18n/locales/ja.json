@@ -4953,6 +4953,15 @@
       "title": "レビューコメントを投稿中…",
       "hint": "選択した指摘をプルリクエストのインラインコメントとして公開しています。"
     },
+    "postReport": {
+      "heading": "投稿結果",
+      "posted": "{attempted} 件中 {posted} 件のコメントを投稿しました",
+      "folded": "差分に対応する行がないため要約に追加: {count}",
+      "failuresHeading": "次のコメントを投稿できませんでした:",
+      "bodyError": "要約コメントを投稿できませんでした: {error}",
+      "postedBadge": "投稿済み",
+      "retry": "投稿を再試行"
+    },
     "severity": {
       "blocker": "ブロッカー",
       "high": "高",

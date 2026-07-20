@@ -4941,6 +4941,15 @@
       "title": "Publicando comentarios de revisión…",
       "hint": "Publicando los hallazgos seleccionados como comentarios en línea en el pull request."
     },
+    "postReport": {
+      "heading": "Resultado de la publicación",
+      "posted": "{posted} de {attempted} comentarios publicados",
+      "folded": "Añadidos al resumen (sin línea en el diff donde anclar): {count}",
+      "failuresHeading": "No se pudieron publicar estos comentarios:",
+      "bodyError": "No se pudo publicar el comentario de resumen: {error}",
+      "postedBadge": "Publicado",
+      "retry": "Reintentar publicación"
+    },
     "severity": {
       "blocker": "Bloqueante",
       "high": "Alta",

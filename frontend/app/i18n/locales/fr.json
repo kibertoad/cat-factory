@@ -4941,6 +4941,15 @@
       "title": "Publication des commentaires de revue…",
       "hint": "Publication des points sélectionnés en commentaires en ligne sur la pull request."
     },
+    "postReport": {
+      "heading": "Résultat de la publication",
+      "posted": "{posted} commentaires sur {attempted} publiés",
+      "folded": "Ajoutés au résumé (aucune ligne du diff où les ancrer) : {count}",
+      "failuresHeading": "Impossible de publier ces commentaires :",
+      "bodyError": "Le commentaire de synthèse n'a pas pu être publié : {error}",
+      "postedBadge": "Publié",
+      "retry": "Réessayer la publication"
+    },
     "severity": {
       "blocker": "Bloquant",
       "high": "Élevée",

@@ -161,10 +161,11 @@ export interface CreateReviewComment {
 }
 
 /**
- * A pull-request review to submit via {@link GitHubClient.createReview}
- * (`POST /repos/{o}/{r}/pulls/{n}/reviews`). The PR-deep-review "post" resolution always
- * submits a plain `COMMENT` review (it neither approves nor blocks the PR), carrying the
- * human-selected findings as inline `comments` and summarising any unanchored ones in `body`.
+ * A pull-request review to submit via {@link GitHubClient.createReview}. The PR-deep-review
+ * "post" resolution carries the human-selected findings as inline `comments` and summarises any
+ * unanchored ones in `body`. Each inline comment is posted INDIVIDUALLY (not as one atomic
+ * batched review) so one un-anchorable comment can't reject the whole set — the implementation
+ * reports per-comment success/failure in {@link CreateReviewResult}.
  */
 export interface CreateReviewInput {
   /** Overall review body (Markdown): the summary + any findings that couldn't be anchored inline. */
@@ -173,6 +174,31 @@ export interface CreateReviewInput {
   event: 'COMMENT' | 'APPROVE' | 'REQUEST_CHANGES'
   /** Inline comments anchored to a path+line on the PR diff. May be empty (a body-only review). */
   comments: CreateReviewComment[]
+}
+
+/** Outcome of posting ONE inline review comment (index-aligned with {@link CreateReviewInput.comments}). */
+export interface ReviewCommentOutcome {
+  /** Whether the comment posted. */
+  posted: boolean
+  /** The failure reason when `posted` is false (the VCS error message). */
+  error?: string
+}
+
+/**
+ * The result of {@link GitHubClient.createReview}: per-inline-comment outcomes plus whether the
+ * summary/body comment posted. Because comments are posted individually, a partial success is a
+ * normal, reportable outcome — the caller records which findings landed and surfaces the rest for
+ * a retry, rather than treating the whole post as all-or-nothing. The client does NOT throw for
+ * an individual comment/body failure; it records it here. It throws only when it can't even begin
+ * (e.g. the PR head can't be resolved), which the caller reports as an all-failed attempt.
+ */
+export interface CreateReviewResult {
+  /** Per inline comment, index-aligned with {@link CreateReviewInput.comments}. */
+  comments: ReviewCommentOutcome[]
+  /** Whether the body/summary comment posted; null when {@link CreateReviewInput.body} was empty. */
+  bodyPosted: boolean | null
+  /** The error posting the body/summary comment, when it failed. */
+  bodyError?: string
 }
 
 /**
@@ -603,10 +629,10 @@ export interface GitHubClient {
    */
   resolveReviewThread?(installationId: number, ref: GitHubRepoRef, threadId: string): Promise<void>
   /**
-   * Submit a pull-request review (`POST /repos/{o}/{r}/pulls/{n}/reviews`) with inline
-   * comments. Used by the PR-deep-review "post" resolution to publish the human-selected
-   * findings as a single advisory (`COMMENT`) review on the reviewed PR. Optional (see
-   * {@link listRequestedReviewers}); a provider that can't post a batched inline review omits
+   * Publish the PR-deep-review "post" resolution's human-selected findings on the reviewed PR:
+   * each inline comment INDIVIDUALLY (so one un-anchorable line can't reject the rest) plus the
+   * summary as a general comment, returning a per-comment {@link CreateReviewResult}. Optional
+   * (see {@link listRequestedReviewers}); a provider that can't post inline review comments omits
    * it and the "post" resolution reports it unsupported instead of silently dropping findings.
    */
   createReview?(
@@ -614,7 +640,7 @@ export interface GitHubClient {
     ref: GitHubRepoRef,
     number: number,
     input: CreateReviewInput,
-  ): Promise<void>
+  ): Promise<CreateReviewResult>
 
   // ---- writes -------------------------------------------------------------
   createBranch(

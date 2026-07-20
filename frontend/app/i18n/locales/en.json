@@ -5082,6 +5082,15 @@
       "title": "Posting review comments…",
       "hint": "Publishing the selected findings as inline comments on the pull request."
     },
+    "postReport": {
+      "heading": "Posting result",
+      "posted": "{posted} of {attempted} comments posted",
+      "folded": "Added to the summary (no in-diff line to anchor to): {count}",
+      "failuresHeading": "Could not post these comments:",
+      "bodyError": "The summary comment failed to post: {error}",
+      "postedBadge": "Posted",
+      "retry": "Retry posting"
+    },
     "severity": {
       "blocker": "Blocker",
       "high": "High",

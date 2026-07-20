@@ -1,8 +1,11 @@
 import type {
   CreateReviewComment,
   CreateReviewInput,
+  CreateReviewResult,
+  GitHubChangedFile,
   PrReviewAgentOutput,
   PrReviewFinding,
+  PrReviewPostReport,
   PrReviewSeverity,
   PrReviewSlice,
   PrReviewStepState,
@@ -57,6 +60,8 @@ export function initialPrReviewState(
     resolution: null,
     prUrl,
     model,
+    postReport: null,
+    postedFindingIds: [],
   }
 }
 
@@ -167,53 +172,192 @@ export function renderPrReviewFixerFeedback(findings: PrReviewFinding[]): string
   return lines.join('\n')
 }
 
+/** The set of lines a PR comment can anchor to, per side of the diff, for one file. */
+export interface CommentableLines {
+  /** New-file line numbers on the head side (added + context lines). */
+  right: Set<number>
+  /** Old-file line numbers on the base side (removed + context lines). */
+  left: Set<number>
+}
+
+const HUNK_HEADER = /^@@ -(\d+)(?:,\d+)? \+(\d+)(?:,\d+)? @@/
+
 /**
- * Turn the human-selected findings into a single advisory PR review to submit via
- * `RepoFiles.createReview`. A finding with a resolvable `line` becomes an inline comment
- * anchored to its `path`/`line`/`side` (default `RIGHT`); a finding with no line is summarised
- * in the review `body` alongside the reviewer's overall `summary`. The event is always
- * `COMMENT` (the deep review neither approves nor blocks the PR). Deterministic + total.
+ * Compute, per changed file, the exact lines an inline PR comment can anchor to — the ROOT-CAUSE
+ * guard against GitHub's "Line could not be resolved" 422. GitHub only accepts an inline comment
+ * on a line that is part of the diff: on the RIGHT (head) side, an added (`+`) or context (` `)
+ * line; on the LEFT (base) side, a removed (`-`) or context line. A finding the reviewer anchored
+ * to any other line (very common — the model cites a line elsewhere in the file) can't be posted
+ * inline, so {@link buildPrReviewPost} folds it into the summary instead of letting the whole post
+ * 422. Parses each file's unified-diff `patch`; a file with a null patch (binary / too-large diff)
+ * is omitted, so its findings fall back to being posted directly (and reported if they fail).
+ */
+export function computeCommentableLines(files: GitHubChangedFile[]): Map<string, CommentableLines> {
+  const out = new Map<string, CommentableLines>()
+  for (const file of files) {
+    if (!file.patch || !file.path) continue
+    const lines: CommentableLines = { right: new Set(), left: new Set() }
+    let oldLine = 0
+    let newLine = 0
+    for (const raw of file.patch.split('\n')) {
+      const header = HUNK_HEADER.exec(raw)
+      if (header) {
+        oldLine = Number(header[1])
+        newLine = Number(header[2])
+        continue
+      }
+      const marker = raw[0]
+      if (marker === '+') {
+        lines.right.add(newLine)
+        newLine++
+      } else if (marker === '-') {
+        lines.left.add(oldLine)
+        oldLine++
+      } else if (marker === '\\') {
+        // "\ No newline at end of file" — advances neither side.
+      } else {
+        // A context line (leading space, or the diff's trailing blank line) is commentable on both.
+        lines.right.add(newLine)
+        lines.left.add(oldLine)
+        newLine++
+        oldLine++
+      }
+    }
+    out.set(file.path, lines)
+  }
+  return out
+}
+
+/** A built PR-review post plus the finding→comment mapping the outcome report is keyed on. */
+export interface BuiltPrReviewPost {
+  input: CreateReviewInput
+  /** Finding id for each `input.comments[i]`, so a per-comment outcome maps back to its finding. */
+  commentFindingIds: string[]
+  /** Findings that HAD a line but were folded into the summary (line outside the diff). */
+  foldedFindingIds: string[]
+}
+
+/**
+ * Turn the human-selected findings into a PR review to publish via `RepoFiles.createReview`.
+ * A finding whose `path`/`line`/`side` anchors to an actual diff line becomes an inline comment;
+ * a finding with no line — OR a line outside the diff (when `commentable` is supplied) — is folded
+ * into the review `body` alongside the reviewer's `summary`, so it is surfaced rather than
+ * rejected. When `commentable` is omitted (no diff available) every line-carrying finding is
+ * attempted inline and any residual failure is reported per-comment. Deterministic + total.
  *
- * The review always carries a non-empty `body`: GitHub can reject a `COMMENT`/`REQUEST_CHANGES`
- * review with a blank body, so when neither a summary nor any unanchored findings supply one we
- * fall back to a one-line count of the inline comments rather than submitting a bodyless review.
+ * The review always carries a non-empty `body` (GitHub rejects a blank-body comment): when
+ * neither a summary nor any folded/unanchored finding supplies one, we fall back to a one-line
+ * count of the inline comments.
  */
 export function buildPrReviewPost(
   findings: PrReviewFinding[],
   summary: string | null | undefined,
-): CreateReviewInput {
+  commentable?: Map<string, CommentableLines>,
+): BuiltPrReviewPost {
   const comments: CreateReviewComment[] = []
+  const commentFindingIds: string[] = []
+  const foldedFindingIds: string[] = []
   const unanchored: PrReviewFinding[] = []
   for (const finding of findings) {
-    if (finding.line != null && finding.path) {
+    const side = finding.side ?? 'RIGHT'
+    const anchorable =
+      finding.line != null &&
+      finding.path.length > 0 &&
+      (commentable === undefined ||
+        (side === 'LEFT'
+          ? commentable.get(finding.path)?.left.has(finding.line)
+          : commentable.get(finding.path)?.right.has(finding.line)) === true)
+    if (anchorable) {
       comments.push({
         path: finding.path,
-        line: finding.line,
-        side: finding.side ?? 'RIGHT',
+        line: finding.line!,
+        side,
         body: renderFindingBody(finding),
       })
+      commentFindingIds.push(finding.id)
     } else {
       unanchored.push(finding)
+      // A line-carrying finding we couldn't anchor was FOLDED to dodge the 422; a truly line-less
+      // one is just naturally summarised. Only the former is reported as `folded`.
+      if (finding.line != null && finding.path.length > 0) foldedFindingIds.push(finding.id)
     }
   }
   const bodyParts: string[] = []
   if (summary?.trim()) bodyParts.push(summary.trim())
   if (unanchored.length > 0) {
     bodyParts.push(
-      'Additional findings (no specific line):',
-      unanchored.map((f) => `- ${renderFindingBody(f)}`).join('\n\n'),
+      'Additional findings (no in-diff line to anchor to):',
+      unanchored
+        .map((f) => {
+          const loc = f.line != null ? `${f.path}:${f.line}` : f.path
+          return `- ${loc ? `\`${loc}\` — ` : ''}${renderFindingBody(f)}`
+        })
+        .join('\n\n'),
     )
   }
-  // Never submit a bodyless review — fall back to a count of the inline comments when nothing
-  // else supplied a body (a summary-less review whose findings are all line-anchored).
   if (bodyParts.length === 0) {
     bodyParts.push(
       `Deep review: ${comments.length} inline finding${comments.length === 1 ? '' : 's'}.`,
     )
   }
   return {
-    event: 'COMMENT',
-    body: bodyParts.join('\n\n'),
-    comments,
+    input: { event: 'COMMENT', body: bodyParts.join('\n\n'), comments },
+    commentFindingIds,
+    foldedFindingIds,
   }
+}
+
+/** A post attempt reduced to the persisted report + the finding ids that newly posted. */
+export interface PrReviewPostSummary {
+  report: PrReviewPostReport
+  /** Finding ids whose inline comment posted THIS attempt (to add to `postedFindingIds`). */
+  newlyPostedFindingIds: string[]
+}
+
+/**
+ * Reduce a `createReview` result into the persisted {@link PrReviewPostReport} + the finding ids
+ * that newly posted, so the engine can record what landed, surface the failures, and skip the
+ * already-posted findings on a retry. Pure + total. `built` supplies the finding→comment mapping;
+ * `selected` resolves each failing finding's path/line for the report. `result` may be null when
+ * no VCS write ran (nothing to post) — reported as an all-folded/no-op attempt.
+ */
+export function buildPrReviewPostReport(
+  built: BuiltPrReviewPost,
+  selected: PrReviewFinding[],
+  result: CreateReviewResult | null,
+): PrReviewPostSummary {
+  const byId = new Map(selected.map((f) => [f.id, f]))
+  const failures: PrReviewPostReport['failures'] = []
+  const newlyPostedFindingIds: string[] = []
+  const outcomes = result?.comments ?? []
+  built.commentFindingIds.forEach((findingId, i) => {
+    const outcome = outcomes[i]
+    if (outcome?.posted) {
+      newlyPostedFindingIds.push(findingId)
+    } else {
+      const finding = byId.get(findingId)
+      failures.push({
+        findingId,
+        path: finding?.path ?? '',
+        line: finding?.line ?? null,
+        reason: outcome?.error ?? 'The comment was not posted.',
+      })
+    }
+  })
+  return {
+    report: {
+      attempted: built.commentFindingIds.length,
+      posted: newlyPostedFindingIds.length,
+      folded: built.foldedFindingIds.length,
+      bodyPosted: result?.bodyPosted ?? null,
+      bodyError: result?.bodyError ?? null,
+      failures,
+    },
+    newlyPostedFindingIds,
+  }
+}
+
+/** Whether a post attempt fully succeeded — every inline comment landed and the body (if any) posted. */
+export function isPrReviewPostComplete(report: PrReviewPostReport): boolean {
+  return report.failures.length === 0 && report.bodyPosted !== false
 }
