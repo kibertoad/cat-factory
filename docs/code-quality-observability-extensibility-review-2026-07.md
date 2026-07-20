@@ -4,7 +4,18 @@ A deep-dive assessment of the cat-factory codebase across ten axes, run as four 
 evidence-gathering sweeps: backend code quality (`backend/packages/*`, `backend/runtimes/*`,
 `backend/internal/*`), the observability stack, the extensibility seams, and testing/CI +
 the frontend. Every claim below was verified in the source at the time of this audit
-(commit `efa3345`); file:line references are current as of that commit.
+(original sweep at commit `efa3345`).
+
+> **Revised 2026-07-20 (HEAD `c220e87`).** The original audit surfaced improvements that have
+> since landed; this revision re-verifies the affected axes against the current tree and
+> revises the ratings accordingly. The material movers since the sweep: the domain
+> composition root split via a `ModuleRegistry` (candidate #6), the 11k-line conformance
+> monolith split into parallel group files, the built-in-agent registry strangler resuming
+> (initiative / blueprints / spec-writer kinds migrated onto `registerAgentKind`), and
+> modular-vue slices 3–5 landing (inspector panels → subject-keyed panel group, all 18 result
+> windows → one `ResultWindowShell`). Two axes are raised: **Complexity 2.5 → 3.5** and
+> **Extensibility 4 → 4.5**. Sections and file:line references touched by the revision are
+> current as of `c220e87`; untouched references remain as of `efa3345`.
 
 Companion documents this review builds on (rather than re-deriving):
 [`refactoring-candidates.md`](./refactoring-candidates.md) (the god-file backlog),
@@ -15,7 +26,7 @@ and [`initiatives/system-audit-improvements.md`](./initiatives/system-audit-impr
 
 **Repo size at audit time:** ~361,600 lines of TypeScript + ~49,500 lines of Vue across 23
 backend packages, 3 runtime facades, 7 internal packages, and the Nuxt layer; ~730 spec
-files (~4,470 backend + ~290 frontend test cases); 24 ADRs; 43 initiative trackers.
+files (~4,470 backend + ~290 frontend test cases); 25 ADRs; 46 initiative trackers.
 
 ---
 
@@ -28,19 +39,24 @@ Scale: 5 = exemplary, 4 = strong, 3 = adequate, 2 = weak, 1 = poor.
 | 1   | Architecture & layering         | **5**   | Textbook-clean hexagonal boundaries; zero runtime-specific imports leak into shared packages                               |
 | 2   | Language & typing discipline    | **5**   | Universal strict mode; effectively zero `any`/`@ts-ignore` in production code                                              |
 | 3   | Error handling                  | **4.5** | Typed domain-error hierarchy, single mapping layer, disciplined best-effort swallows                                       |
-| 4   | Complexity & code-size hygiene  | **2.5** | The one real soft spot: 4,200/3,700-line engine god-classes and three ~3,000-line DI roots                                 |
+| 4   | Complexity & code-size hygiene  | **3.5** | Still the softest axis, but materially improved: engine + composition-root + conformance splits landed and a CI file-size ratchet now blocks re-accretion |
 | 5   | Testing                         | **4**   | Outstanding cross-runtime conformance suite on real infra; but near-zero coverage measurement                              |
 | 6   | CI & repo guardrails            | **4**   | Rich bespoke drift guards and supply-chain gating; no dependency/SAST scanning, no coverage gate                           |
 | 7   | Observability                   | **3.5** | Excellent single-run drill-down and redacted telemetry; weak platform tracing and metrics surface                          |
-| 8   | Extensibility                   | **4**   | Genuine plugin-registry culture and thin deployments; six registries still module-global, built-ins bypass their own seams |
+| 8   | Extensibility                   | **4.5** | Genuine plugin-registry culture and thin deployments; every registry is now app-owned DI and the built-in-agent strangler is actively landing; a GitHub-shaped god-interface and unwired email channel remain |
 | 9   | Frontend quality                | **3.5** | Shared wire contracts, guarded stores, ~95% i18n adoption; four god-components, thin a11y, no error reporting              |
 | 10  | Documentation & self-governance | **4.5** | Exceptional self-awareness (ADRs, trackers, self-audits); a few materially stale claims                                    |
 
 **Overall: a high-quality, unusually principled codebase.** It largely lives up to its own
 written rules — the strongest signal being that most weaknesses found here are _already
-documented by the project itself_ in trackers and candidate lists. The genuine gaps are
-concentrated in three places: engine-file complexity, platform-level (as opposed to
-per-run) observability, and verification tooling (coverage, security scanning).
+documented by the project itself_ in trackers and candidate lists, and that the ones the
+original sweep named have been steadily closed (the two axes raised in this revision are both
+"the project fixed what it already knew about"). The genuine gaps now cluster in two places:
+platform-level (as opposed to per-run) observability, and verification tooling (coverage,
+security scanning). Engine-file complexity — the original sweep's headline soft spot — is no
+longer a runaway: the biggest god-files have been split and a CI ratchet now caps the
+remainder, leaving RunDispatcher and the two DI roots as bounded, known follow-ons rather than
+an unguarded regression surface.
 
 ---
 
@@ -93,39 +109,46 @@ The hexagonal architecture is not aspirational; it holds under grep.
 - Nice touch: `RunContendedError` is deliberately _not_ a `DomainError` so an
   optimistic-concurrency retry signal can never be serialized to a status code.
 
-## 4. Complexity & code-size hygiene — 2.5/5
+## 4. Complexity & code-size hygiene — 3.5/5 (was 2.5)
 
-The weakest axis, and the project knows it (`refactoring-candidates.md` tracks most of it).
-Largest non-test source files at audit time:
+Still the softest axis, but no longer the "one real soft spot" the original sweep called it:
+the largest god-files have been split, the composition root de-monolithed, and a CI ratchet
+now caps re-accretion. Largest non-test source files as of `c220e87` (the sweep's counts in
+parentheses where they moved):
 
-| Lines  | File                                                      | Note                                                                        |
-| ------ | --------------------------------------------------------- | --------------------------------------------------------------------------- |
-| 11,167 | `backend/internal/conformance/src/suite.ts`               | test infra, but a maintenance load itself                                   |
-| 4,217  | `orchestration/src/modules/execution/RunDispatcher.ts`    | **83 methods**; grew past the 2,779 recorded in `refactoring-candidates.md` |
-| 3,707  | `orchestration/src/modules/execution/ExecutionService.ts` | ~60 methods, ≥6 distinct responsibilities; regrew from the recorded ~2,549  |
-| 3,090  | `runtimes/node/src/container.ts`                          | DI root                                                                     |
-| 3,081  | `orchestration/src/container.ts`                          | DI root                                                                     |
-| 2,665  | `runtimes/cloudflare/src/infrastructure/container.ts`     | DI root                                                                     |
-| 2,293  | `contracts/src/entities.ts`                               |                                                                             |
-| 1,687  | `server/src/agents/ContainerAgentExecutor.ts`             |                                                                             |
+| Lines | File                                                      | Note                                                                                     |
+| ----- | --------------------------------------------------------- | ---------------------------------------------------------------------------------------- |
+| 3,147 | `orchestration/src/modules/execution/RunDispatcher.ts`    | still the biggest domain file, but down from 4,217; the engine split (#5) landed          |
+| 3,119 | `conformance/src/suites/execution.ts`                     | the largest slice of the split conformance suite (was one 11,167-line `suite.ts`)         |
+| 3,085 | `runtimes/node/src/container.ts`                          | DI root — unchanged (~3,090); candidate #8 (shared container builder) still open          |
+| 2,802 | `orchestration/src/modules/execution/ExecutionService.ts` | down from 3,707 (`RunAdmission` + `review-kinds.ts` extracted)                            |
+| 2,710 | `runtimes/cloudflare/src/infrastructure/container.ts`     | DI root — ~unchanged (2,665)                                                              |
+| 2,471 | `conformance/src/suites/core.ts`                          | second-largest conformance slice                                                         |
+| 2,306 | `contracts/src/entities.ts`                               | ~unchanged                                                                                |
+| 1,934 | `orchestration/src/container.ts`                          | **down from 3,081** — split via a typed `ModuleRegistry` (candidate #6; #1230)            |
+| 1,687 | `server/src/agents/ContainerAgentExecutor.ts`             | unchanged                                                                                 |
 
-- `ExecutionService` mixes admission preflights (`assert*` family), run lifecycle,
-  fork/follow-up handling, review-kind builders, merge finalization, and decision
-  resolution. `RunDispatcher` — flagged as a "follow-on watch item" when it was 2,779
-  lines — has since accreted ~1,400 more lines, confirming that watch item's fear.
-- The three ~3,000-line container roots are wiring (less alarming per line), but they are
-  the enforcement surface of the "keep the runtimes symmetric" rule and are hard to diff —
-  `refactoring-candidates.md` #8 (shared container builder) remains the highest-impact
-  structural fix in the repo.
-- ~~Nothing currently stops re-accretion: there is no `max-lines` /
-  `max-lines-per-function` lint budget, and the recorded line counts in
-  `refactoring-candidates.md` have already drifted stale
-  (`system-audit-improvements.md` item 17 notes the same).~~ — **addressed** (priorities
-  item #5): the engine split resumed (`ExecutionService` → `RunAdmission` +
-  `review-kinds.ts`; `RunDispatcher` → `DeployerStepController` +
-  `FollowUpGateController`), and `scripts/check-file-size.mjs` now enforces a soft
-  max-lines budget (default 1,500) with ratcheted allowances for the remaining legacy
-  oversized files, wired into CI's `repo-guards` job.
+- **The 11,167-line conformance monolith is gone.** `suite.ts` is now a 45-line aggregator
+  re-exporting five `defineXConformance` groups under `suites/` (core / agents / integration /
+  execution / misc), one file each, so the Postgres runtimes parallelise each group as its own
+  spec file. The maintenance load is spread, not concentrated (see §5).
+- **The domain composition root split** (candidate #6, #1230): `orchestration/src/container.ts`
+  routes every optional module through a typed `ModuleRegistry` and dropped 3,081 → 1,934, with
+  the ~30 `createXModule` factories moved to `container/modules.ts` (1,304 lines). `Core` split
+  into an always-present `CoreSpine` + registry-assembled `OptionalCoreModules`.
+- `ExecutionService` (3,707 → 2,802) shed its `assert*` admission family to `RunAdmission` and
+  its review-kind builders to `review-kinds.ts`; `RunDispatcher` (4,217 → 3,147) shed the
+  deployer fan-out to `DeployerStepController` and the follow-up gate to `FollowUpGateController`
+  (priorities item #5). Both remain large and mix responsibilities, but the trend has reversed
+  from accretion to reduction.
+- The two remaining ~3,000-line container roots (node + cloudflare — the orchestration root is
+  no longer one) are wiring (less alarming per line), but they are the enforcement surface of
+  the "keep the runtimes symmetric" rule and are hard to diff — `refactoring-candidates.md` #8
+  (shared container builder) remains the highest-impact open structural fix in the repo.
+- **Re-accretion is now guarded.** `scripts/check-file-size.mjs` enforces a soft max-lines
+  budget (default 1,500) with ratcheted allowances for the remaining legacy oversized files,
+  wired into CI's `repo-guards` job — so a file that regrows past its recorded allowance fails a
+  PR instead of an audit. This is the specific mechanism that keeps the score from sliding back.
 
 **Counterweight:** TODO debt is near-zero — only 7 TODO/FIXME markers in non-test source,
 all of them _content_ (prompt strings, marker-detection patterns), none deferred work. Dead
@@ -136,11 +159,15 @@ code is a small, documented knip baseline (~8 post-extraction files in
 
 **Strengths — the conformance suite is the repo's standout asset:**
 
-- `backend/internal/conformance/src/suite.ts` (11,167 lines, 239 `it()` blocks in five
-  aggregated sub-suites) plus ~40 focused sibling suites (~380 additional assertions) run
-  **identically against all three facades** on real infrastructure: real D1 inside workerd
-  (Cloudflare), real Postgres (Node and local). This is the mechanism that makes runtime
-  symmetry testable rather than aspirational.
+- The cross-runtime conformance suite — now split from one 11,167-line `suite.ts` into five
+  `defineXConformance` groups under `suites/` (core / agents / integration / execution / misc;
+  ~11,300 lines total, 239 `it()` blocks) plus ~40 focused sibling suites (~380 additional
+  assertions) — runs **identically against all three facades** on real infrastructure: real D1
+  inside workerd (Cloudflare), real Postgres (Node and local). The Worker runs the aggregate as
+  one file (one D1); the Postgres runtimes call the group functions from separate spec files so
+  vitest parallelises them across workers. This is the mechanism that makes runtime symmetry
+  testable rather than aspirational — and the split removed the "one file is itself a maintenance
+  load" caveat the original sweep flagged.
 - One canonical deterministic `FakeAgentExecutor` (671 lines) is shared by conformance and
   e2e — no per-suite fake drift.
 - The Playwright e2e suite (24 specs) covers the assembled product against a real Node
@@ -243,7 +270,7 @@ What remains:
 - **Frontend**: no client-side error reporting whatsoever — no global Nuxt error handler,
   no Sentry-style sink; client JS exceptions are invisible to operators.
 
-## 8. Extensibility — 4/5
+## 8. Extensibility — 4.5/5 (was 4)
 
 **Strong:**
 
@@ -272,12 +299,21 @@ What remains:
   `clear()` is gone — `registerBuiltinGates(gateRegistry)` installs into the injected instance).
   The only registry not yet a `*Registry` class is the observability-adapter record (already
   app-owned in shape — a record injected into `RegistryReleaseHealthProvider`, not a module `Map`).
-- **Built-in agents bypass their own seams**: core kinds (coder, blueprints, spec-writer,
-  merger, tester, requirements/clarity review) live in a static `ROLES` map rather than
-  `AgentKindDefinition`s; the merger resolver is built inline rather than via
-  `registerStepResolver`; built-in structured output renders in the harness
-  (`structured-output.ts`) instead of backend `postOps`. Two parallel prompt/result
-  mechanisms coexist (matches `refactoring-candidates.md` #5).
+- **The built-in-agent strangler is resuming** (was "built-ins bypass their own seams"; the
+  score bump is partly this): `initiative-analyst`/`initiative-planner` (#1218) and
+  `blueprints`/`spec-writer` (#1220) have migrated off the static `ROLES` map + the hard-coded
+  `buildMigratedBuiltInBody` switch onto the public `registerAgentKind` seam — registered as
+  `AgentStepSpec` container-explore kinds whose bodies render through the generic
+  `registry.agentStep(...)` path, with prompts resolving through `systemPromptFor`/`userPromptFor`
+  so the surface directives apply centrally. What still bypasses: the seven remaining
+  orchestration-id built-ins in `buildMigratedBuiltInBody`'s switch
+  (`ci-fixer`/`fixer`/`conflict-resolver`/`merger`/`on-call`/`tester`/`ui-tester`) plus the
+  `toRunResult` coercion chain in `containerAgentResult.ts`; the merger resolver is still built
+  inline rather than via `registerStepResolver`. Two parallel prompt/result mechanisms still
+  coexist (matches `refactoring-candidates.md` #5), but the migration is now landing
+  kind-by-kind rather than stalled. (Note: the bespoke _harness_ handlers are already gone —
+  every built-in synthesizes an `AgentStepSpec` through the one generic body path; the remaining
+  work is folding those two backend switches into registry lookups.)
 - **`github-client.ts` is a 724-line god-interface** that every VCS provider is adapted
   _into_ (GitLab implements the neutral `VcsClient` and is then re-shaped through
   `vcsBackedGitHubClient`). A third provider inherits the GitHub-shaped impedance mismatch;
@@ -285,10 +321,15 @@ What remains:
 - **Email is still a seam, not a channel**: `EmailSender` + SendGrid/Resend adapters exist
   and serve invitations/password reset, but no `EmailNotificationChannel` rides the
   composite (tracker exists, zero slices landed).
-- **Frontend modularity is mid-strangler** (slices 0–2 of modular-vue landed): consumers
-  can contribute nav items and result views, but `InspectorPanel.vue` (631-line
-  level-switched monolith), the ~50 hand-mounted modals in `pages/index.vue`, and the
-  duplicated result-window chrome are still hardcoded.
+- **Frontend modularity has advanced from mid- to late-strangler** (slices 0–5 of modular-vue
+  have now landed, up from 0–2): consumers can contribute nav items, result views, wizard
+  journeys, **and inspector panels**. `InspectorPanel.vue`'s level/type `v-if` fan is now a
+  subject-keyed panel group (slice 4, #1205 — the file dropped 631 → 576 lines and each body
+  sub-panel is a `PanelEntry<Block>`), and all 18 agent-run result windows converted onto one
+  shared `ResultWindowShell` (slice 5, #1229/#1237), collapsing the duplicated window chrome.
+  `pages/index.vue` is down to 441 lines. What remains: the overlay/modal host itself (the
+  slice-5 upstream "overlay host" spec is filed but not the modal registry), and consumer-owned
+  modal contribution — the last hardcoded surface.
 
 ## 9. Frontend quality — 3.5/5
 
@@ -301,9 +342,11 @@ What remains:
 - **i18n is much further along than CLAUDE.md claims**: 176/186 components reference
   `useI18n` (~95% by file, vs. the doc's "most components still hold inline strings"),
   10 locales, a 5,100-line `en.json`, and four tiers of drift guards wired into blocking CI.
-- **God-components**: four components exceed 1,000 lines (`RequirementsReviewWindow.vue`
-  1,220; `AddTaskModal.vue` 1,123; `PipelineBuilder.vue` 1,088; `ServiceTestConfig.vue`
-  1,079) despite 86 composables existing to extract into.
+- **God-components**: four components still exceed 1,000 lines (`AddTaskModal.vue` 1,191;
+  `RequirementsReviewWindow.vue` 1,175; `PipelineBuilder.vue` 1,150; `ServiceTestConfig.vue`
+  1,079) despite 86 composables existing to extract into. (`InspectorPanel.vue`, flagged as a
+  monolith in §8's original sweep, has since fallen to 576 lines via the slice-4 panel-group
+  conversion — the pattern the remaining four should follow.)
 - **Accessibility is thin**: ~36% of components carry any aria/role/keyboard handling;
   only 13 `@keydown` handlers across a canvas-heavy UI; `aria-live` ×3,
   `aria-expanded` ×1; no axe/a11y assertions in the e2e suite.
@@ -313,7 +356,7 @@ What remains:
 
 This repo's most unusual trait: it audits itself, and honestly.
 
-- 24 ADRs, 43 initiative trackers with per-slice checklists, per-package `AGENTS.md`
+- 25 ADRs, 46 initiative trackers with per-slice checklists, per-package `AGENTS.md`
   orientation maps, a glossary, an execution-state-machine reference, prior race-condition
   and system audits with confirmed/addressed statuses, and a candid
   `refactoring-candidates.md`. Most findings in this review were _already known_ to the
@@ -324,10 +367,13 @@ This repo's most unusual trait: it audits itself, and honestly.
     and overstates the harness gap (the per-kind harness handlers are already gone).
   - `CLAUDE.md`'s i18n claim ("most components still hold inline strings") materially
     understates reality (~95% adoption).
-  - `refactoring-candidates.md`'s line counts have drifted (RunDispatcher 2,779 → 4,217;
-    ExecutionService ~2,549 → 3,707) — the drift itself is evidence for that doc's thesis.
-  - 43 open initiative trackers is a lot of in-flight state; several may be finished
-    enough to convert to ADRs per the repo's own tracker→ADR rule.
+  - `refactoring-candidates.md`'s line counts still drift against the tree (they lag the
+    post-split reductions this revision records in §4) — the drift itself is evidence for that
+    doc's thesis, and item #15 already asks for the refresh.
+  - 46 open initiative trackers is a lot of in-flight state (up from 43 at the sweep); several
+    are now finished enough to convert to ADRs per the repo's own tracker→ADR rule — the
+    modular-vue adoption tracker (slices 0–5 all landed) and the registry-DI migration (every
+    registry migrated) are the two most conversion-ready.
 
 ---
 
@@ -342,16 +388,16 @@ candidate entry — the recommendation is to prioritize them, not to re-plan the
 | 2   | Observability   | ✅ **Done** — `AgentContextObservabilityService.record` runs `redactSecrets` over both prompts + `fragments[].body` + `contextFiles[].content`, and drops secret-shaped file bodies (`isSecretShapedFilename`: `.env`, `*.pem`, SSH keys, `.npmrc`, …).                                                                                                                                                                                           | High   | Low     |
 | 3   | Testing         | Enable vitest coverage reporting in the CI test lanes and ratchet-floor the high-value packages (`orchestration`, `server`, `contracts`, `spend`); add tests for `contracts` (zero today).                                                                                                                                                                                                                                                        | High   | Low–Med |
 | 4   | Observability   | Add an operational metrics surface: pg-boss queue depth + job latency, `AppCaches` hit/miss counters, HTTP request rate/latency, and a counter for dropped telemetry/notification batches. Either a `/metrics` scrape endpoint or documented OTLP-only.                                                                                                                                                                                           | High   | Medium  |
-| 5   | Complexity ↗    | ✅ **Done** — the engine split resumed: `ExecutionService` 3,707 → ~2,775 (the `assert*` admission family → `RunAdmission`, the review-kind builders → `review-kinds.ts`) and `RunDispatcher` 4,217 → ~3,135 (the deployer fan-out → `DeployerStepController`, the follow-up gate → `FollowUpGateController`); `scripts/check-file-size.mjs` (CI `repo-guards`) now ratchets every oversized file so re-accretion fails a PR instead of an audit. | High   | Medium  |
+| 5   | Complexity ↗    | ✅ **Done** — the engine split resumed: `ExecutionService` 3,707 → 2,802 (`RunAdmission` + `review-kinds.ts`) and `RunDispatcher` 4,217 → 3,147 (`DeployerStepController` + `FollowUpGateController`); **plus** the composition root `orchestration/src/container.ts` 3,081 → 1,934 via a typed `ModuleRegistry` (candidate #6, #1230) and the 11,167-line conformance `suite.ts` split into five parallel `suites/` groups. `scripts/check-file-size.mjs` (CI `repo-guards`) now ratchets every oversized file so re-accretion fails a PR instead of an audit. Remaining open: candidate #8 (shared container builder for the node + cloudflare DI roots). | High   | Medium  |
 | 6   | Extensibility ↗ | ✅ **Done** — every module-global registry is now app-owned DI: gate + step-resolver (earlier), then pipelines (`PipelineRegistry`), VCS (`VcsProviderRegistry`, a required `ServerContainer` field), provider tokens (`ProviderRegistry` → `GateContext`), and traits (folded onto `AgentKindRegistry`). Only the observability-adapter record (already non-`Map`) is unnormalised; see `initiatives/registry-di-migration.md`.                  | High   | Medium  |
 | 7   | Code quality    | ✅ **Done** — `TaskRepository.listByRefs` (a chunked-`IN`-per-source batch read, D1 ⇄ Drizzle + a conformance assertion) replaces the `taskRepo.get`-in-`Promise.all` N+1 in `AgentContextBuilder`; the `'jira'`/`'github'` source literals are de-hardcoded into `extractReferences`' typed `taskRefs`.                                                                                                                                          | Medium | Low     |
 | 8   | Observability   | Distributed tracing: HTTP server spans on the shared Hono app + `traceparent` propagation into the container job body so harness tool spans nest under the run's trace instead of being siblings.                                                                                                                                                                                                                                                 | Medium | Medium  |
 | 9   | Frontend        | Add a global Nuxt error handler reporting client exceptions to a backend sink; surface WebSocket disconnects as a degraded-state indicator instead of a silent close.                                                                                                                                                                                                                                                                             | Medium | Low     |
-| 10  | Extensibility ↗ | Migrate built-in agents onto their own custom-agent model (`ROLES` → `AgentKindDefinition`s, merger resolver → `registerStepResolver`, harness `structured-output.ts` → backend `postOps`) — `refactoring-candidates.md` #5.                                                                                                                                                                                                                      | Medium | Medium  |
+| 10  | Extensibility ↗ | 🟡 **In progress** — migrate built-in agents onto their own custom-agent model (`ROLES` → `AgentKindDefinition`s, merger resolver → `registerStepResolver`, harness `structured-output.ts` → backend `postOps`), `refactoring-candidates.md` #5. Landed kind-by-kind: `initiative-analyst`/`initiative-planner` (#1218), `blueprints`/`spec-writer` (#1220). Still to go: the seven `buildMigratedBuiltInBody` switch cases (`ci-fixer`/`fixer`/`conflict-resolver`/`merger`/`on-call`/`tester`/`ui-tester`), folding the `toRunResult` coercion chain onto the definitions, and the inline merger resolver. Some need a `userPrompt(context)` seam extension to carry repo/`parts` context first.                                | Medium | Medium  |
 | 11  | Extensibility   | Split the 724-line `github-client.ts` god-interface into cohesive sub-ports (repos, PRs, issues, CI, git-data) so VCS providers implement neutral slices instead of adapting into the GitHub shape.                                                                                                                                                                                                                                               | Medium | High    |
 | 12  | Lint            | Enable oxlint `suspicious` (and selectively `restriction`: `no-explicit-any`, `no-non-null-assertion`) at least as warn — lock in the currently convention-only discipline; replace the 4 stale `eslint-disable` comments.                                                                                                                                                                                                                        | Medium | Low     |
 | 13  | Testing         | Exercise the real Redis path for `RedisWebSocketPropagator` (a Redis service container in the `test-db` lane); promote e2e into `test-gate.needs` once flake-trust is earned.                                                                                                                                                                                                                                                                     | Medium | Low–Med |
-| 14  | Frontend        | Decompose the four >1,000-line components; systematize a11y (axe checks in a couple of e2e specs, a keyboard-nav pass on board/modals).                                                                                                                                                                                                                                                                                                           | Medium | Medium  |
+| 14  | Frontend        | Decompose the four remaining >1,000-line components (`AddTaskModal`, `RequirementsReviewWindow`, `PipelineBuilder`, `ServiceTestConfig`) — following the slice-4 `InspectorPanel` panel-group precedent (631 → 576); systematize a11y (axe checks in a couple of e2e specs, a keyboard-nav pass on board/modals).                                                                                                                                    | Medium | Medium  |
 | 15  | Docs            | Staleness sweep: fix the non-compiling `custom-agents.md` registration sample, update its Status section, refresh the i18n claim in `CLAUDE.md`, refresh `refactoring-candidates.md` line counts, and convert finished initiative trackers to ADRs.                                                                                                                                                                                               | Low    | Low     |
 | 16  | Extensibility ↗ | Land the `EmailNotificationChannel` (port + adapters + composite already exist; only the glue and per-user prefs are missing).                                                                                                                                                                                                                                                                                                                    | Low    | Low     |
 
