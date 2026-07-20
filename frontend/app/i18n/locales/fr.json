@@ -4931,10 +4931,23 @@
     "suggestedFix": "Correction suggérée :",
     "line": "ligne {line}",
     "reviewing": {
-      "title": "Revue de la pull request…",
-      "hint": "Découpage du diff en blocs cohérents et revue de chacun.",
+      "slicing": {
+        "title": "Découpage du diff en sections…",
+        "hint": "Regroupement des fichiers modifiés en sections cohérentes afin de pouvoir examiner chacune séparément. La liste des sections apparaîtra ici une fois le découpage terminé."
+      },
+      "reviewingChunks": {
+        "title": "Revue des sections…",
+        "hint": "Le découpage est terminé. Chaque section est examinée l'une après l'autre et les remarques sont rassemblées."
+      },
       "chunks": "{completed} sur {total} sections examinées",
-      "inProgress": "{count} en cours"
+      "inProgress": "{count} en cours",
+      "activeHeading": "Revue en cours",
+      "chunksHeading": "Sections",
+      "chunkStatus": {
+        "completed": "Examinée",
+        "in_progress": "En cours d'examen…",
+        "pending": "En attente"
+      }
     },
     "challenge": {
       "action": "Contester",

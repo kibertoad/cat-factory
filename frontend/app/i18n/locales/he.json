@@ -4942,10 +4942,23 @@
     "suggestedFix": "תיקון מוצע:",
     "line": "שורה {line}",
     "reviewing": {
-      "title": "בודק את בקשת המשיכה…",
-      "hint": "מחלק את ההבדלים לקטעים לכידים ובודק כל אחד.",
+      "slicing": {
+        "title": "מחלק את ההבדלים למקטעים…",
+        "hint": "מקבץ את הקבצים שהשתנו למקטעים לכידים כדי לבדוק כל אחד בנפרד. רשימת המקטעים תופיע כאן לאחר סיום החלוקה."
+      },
+      "reviewingChunks": {
+        "title": "בודק את המקטעים…",
+        "hint": "החלוקה הסתיימה. בודק כל מקטע בנפרד ואוסף את הממצאים."
+      },
       "chunks": "{completed} מתוך {total} מקטעים נבדקו",
-      "inProgress": "{count} בתהליך"
+      "inProgress": "{count} בתהליך",
+      "activeHeading": "נבדק כעת",
+      "chunksHeading": "מקטעים",
+      "chunkStatus": {
+        "completed": "נבדק",
+        "in_progress": "בבדיקה…",
+        "pending": "בתור"
+      }
     },
     "challenge": {
       "action": "ערער",

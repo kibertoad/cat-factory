@@ -4943,10 +4943,23 @@
     "suggestedFix": "Lösungsvorschlag:",
     "line": "Zeile {line}",
     "reviewing": {
-      "title": "Pull Request wird geprüft…",
-      "hint": "Der Diff wird in zusammenhängende Teile zerlegt und einzeln geprüft.",
+      "slicing": {
+        "title": "Diff wird in Abschnitte zerlegt…",
+        "hint": "Die geänderten Dateien werden in zusammenhängende Abschnitte gruppiert, damit jeder einzeln geprüft werden kann. Die Abschnittsliste erscheint hier, sobald die Zerlegung abgeschlossen ist."
+      },
+      "reviewingChunks": {
+        "title": "Abschnitte werden geprüft…",
+        "hint": "Die Zerlegung ist abgeschlossen. Jeder Abschnitt wird nacheinander geprüft und die Ergebnisse werden gesammelt."
+      },
       "chunks": "{completed} von {total} Abschnitten geprüft",
-      "inProgress": "{count} in Bearbeitung"
+      "inProgress": "{count} in Bearbeitung",
+      "activeHeading": "Wird jetzt geprüft",
+      "chunksHeading": "Abschnitte",
+      "chunkStatus": {
+        "completed": "Geprüft",
+        "in_progress": "Wird geprüft…",
+        "pending": "In Warteschlange"
+      }
     },
     "challenge": {
       "action": "Anfechten",

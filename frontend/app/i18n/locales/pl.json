@@ -4931,10 +4931,23 @@
     "suggestedFix": "Sugerowana poprawka:",
     "line": "wiersz {line}",
     "reviewing": {
-      "title": "Przeglądanie pull requesta…",
-      "hint": "Dzielenie zmian na spójne części i przeglądanie każdej z nich.",
+      "slicing": {
+        "title": "Dzielenie zmian na fragmenty…",
+        "hint": "Grupowanie zmienionych plików w spójne fragmenty, aby każdy można było przejrzeć osobno. Lista fragmentów pojawi się tutaj po zakończeniu podziału."
+      },
+      "reviewingChunks": {
+        "title": "Przeglądanie fragmentów…",
+        "hint": "Podział zakończony. Przeglądanie każdego fragmentu po kolei i zbieranie uwag."
+      },
       "chunks": "Sprawdzono {completed} z {total} fragmentów",
-      "inProgress": "{count} w toku"
+      "inProgress": "{count} w toku",
+      "activeHeading": "Przeglądane teraz",
+      "chunksHeading": "Fragmenty",
+      "chunkStatus": {
+        "completed": "Sprawdzony",
+        "in_progress": "Przeglądanie…",
+        "pending": "W kolejce"
+      }
     },
     "challenge": {
       "action": "Zakwestionuj",

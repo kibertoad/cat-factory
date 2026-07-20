@@ -4931,10 +4931,23 @@
     "suggestedFix": "Corrección sugerida:",
     "line": "línea {line}",
     "reviewing": {
-      "title": "Revisando el pull request…",
-      "hint": "Dividiendo el diff en bloques coherentes y revisando cada uno.",
+      "slicing": {
+        "title": "Dividiendo el diff en fragmentos…",
+        "hint": "Agrupando los archivos modificados en fragmentos coherentes para revisar cada uno por separado. La lista de fragmentos aparecerá aquí cuando termine la división."
+      },
+      "reviewingChunks": {
+        "title": "Revisando los fragmentos…",
+        "hint": "La división ha terminado. Revisando cada fragmento de uno en uno y recopilando los hallazgos."
+      },
       "chunks": "{completed} de {total} fragmentos revisados",
-      "inProgress": "{count} en curso"
+      "inProgress": "{count} en curso",
+      "activeHeading": "Revisando ahora",
+      "chunksHeading": "Fragmentos",
+      "chunkStatus": {
+        "completed": "Revisado",
+        "in_progress": "Revisando…",
+        "pending": "En cola"
+      }
     },
     "challenge": {
       "action": "Cuestionar",

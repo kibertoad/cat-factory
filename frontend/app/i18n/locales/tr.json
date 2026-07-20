@@ -4943,10 +4943,23 @@
     "suggestedFix": "Önerilen düzeltme:",
     "line": "satır {line}",
     "reviewing": {
-      "title": "Pull request inceleniyor…",
-      "hint": "Fark tutarlı parçalara bölünüp her biri inceleniyor.",
+      "slicing": {
+        "title": "Fark parçalara bölünüyor…",
+        "hint": "Değiştirilen dosyalar, her biri ayrı ayrı incelenebilsin diye tutarlı parçalara gruplanıyor. Bölme tamamlandığında parça listesi burada görünecek."
+      },
+      "reviewingChunks": {
+        "title": "Parçalar inceleniyor…",
+        "hint": "Bölme tamamlandı. Her parça tek tek inceleniyor ve bulgular toplanıyor."
+      },
       "chunks": "{total} bölümden {completed} tanesi incelendi",
-      "inProgress": "{count} devam ediyor"
+      "inProgress": "{count} devam ediyor",
+      "activeHeading": "Şimdi inceleniyor",
+      "chunksHeading": "Parçalar",
+      "chunkStatus": {
+        "completed": "İncelendi",
+        "in_progress": "İnceleniyor…",
+        "pending": "Sırada"
+      }
     },
     "challenge": {
       "action": "İtiraz et",

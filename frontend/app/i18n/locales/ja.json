@@ -4943,10 +4943,23 @@
     "suggestedFix": "修正案:",
     "line": "{line}行目",
     "reviewing": {
-      "title": "プルリクエストをレビュー中…",
-      "hint": "差分をまとまりのある単位に分割し、各単位をレビューしています。",
+      "slicing": {
+        "title": "差分をチャンクに分割中…",
+        "hint": "変更されたファイルをまとまりのあるチャンクにグループ化し、各チャンクを個別にレビューできるようにしています。分割が完了すると、ここにチャンク一覧が表示されます。"
+      },
+      "reviewingChunks": {
+        "title": "チャンクをレビュー中…",
+        "hint": "分割は完了しました。各チャンクを一つずつレビューし、指摘事項を収集しています。"
+      },
       "chunks": "{total} 個中 {completed} 個のチャンクをレビュー済み",
-      "inProgress": "{count} 件処理中"
+      "inProgress": "{count} 件処理中",
+      "activeHeading": "レビュー中",
+      "chunksHeading": "チャンク",
+      "chunkStatus": {
+        "completed": "レビュー済み",
+        "in_progress": "レビュー中…",
+        "pending": "待機中"
+      }
     },
     "challenge": {
       "action": "異議を唱える",
