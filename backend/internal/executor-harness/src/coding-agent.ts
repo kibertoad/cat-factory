@@ -179,107 +179,9 @@ export async function runCodingAgent(
   return acquireRepoCheckout(
     { persistent: spec.persistentCheckout === true, prefix: spec.kind, repo: spec.repo },
     async (dir) => {
-      // Resume an evicted earlier run when its work branch already exists on the
-      // remote: clone THAT branch and continue on its commits, rather than branching
-      // off base and redoing everything. Only the impl path (which creates a fresh
-      // `newBranch`) can resume; the ci-fix/conflict paths already clone the PR branch.
-      //
-      // Resume safety relies on two invariants the dispatcher (worker) upholds, since
-      // the harness can't see run/PR state from inside the container:
-      //  - At most ONE active run per block at a time. The work branch is deterministic
-      //    per block (`cat-factory/<blockId>`), so two concurrent runs would target the
-      //    same branch; their pushes race. A plain (non-forced) push fails safely on a
-      //    non-fast-forward rather than clobbering the other run's commits, so the worst
-      //    case is one run failing — never lost work — but the dispatcher should not
-      //    knowingly run two at once.
-      //  - Re-dispatch only NON-terminal runs (failed / evicted / stale-running), whose
-      //    branch is by definition unmerged. Resuming a branch whose PR already merged
-      //    could re-introduce merged work; that is avoided two ways: the platform deletes
-      //    the work branch when its PR merges (GitHubPullRequestMerger), so a re-run finds
-      //    no branch and starts fresh, and a `done` block is never re-dispatched anyway.
-      const resumed =
-        spec.newBranch != null &&
-        (await remoteBranchExists(spec.repo.cloneUrl, spec.newBranch, spec.ghToken, signal))
-      opts.onPhase?.('clone')
-      if (spec.persistentCheckout) {
-        // Reused checkout: clean-sweep + fetch + switch branch in place. A resumed branch
-        // (or a run without `newBranch`, working directly on `cloneBranch`) already exists
-        // on the remote, so check it out directly; otherwise (re)create `newBranch` off the
-        // base tip — the same resume-vs-fresh decision the clone paths below make.
-        const targetBranch = spec.newBranch ?? spec.cloneBranch
-        logger.info('coding-agent: preparing reused checkout', { branch: targetBranch, resumed })
-        await prepareExistingCheckout({
-          dir,
-          repo: spec.repo,
-          ghToken: spec.ghToken,
-          branch: targetBranch,
-          baseBranch: spec.cloneBranch,
-          existing: resumed || spec.newBranch == null,
-          signal,
-        })
-      } else if (resumed) {
-        logger.info('coding-agent: resuming existing branch', { branch: spec.newBranch })
-        await cloneExistingBranch({
-          cloneUrl: spec.repo.cloneUrl,
-          branch: spec.newBranch!,
-          ghToken: spec.ghToken,
-          dir,
-          signal,
-        })
-      } else {
-        logger.info('coding-agent: cloning', { cloneBranch: spec.cloneBranch })
-        await cloneRepo({
-          repo: { ...spec.repo, baseBranch: spec.cloneBranch },
-          ghToken: spec.ghToken,
-          dir,
-          signal,
-        })
-        if (spec.newBranch) await createBranch(dir, spec.newBranch, signal)
-      }
-
-      // Fetch any read-only reference branches into their `origin/<b>` refs so the agent can
-      // inspect them (log/diff/show) without git network credentials of its own. Best-effort per
-      // branch: a vanished branch is warned + skipped, never fatal. The work branch above is the
-      // agent's HEAD; these are only readable siblings it never commits to.
-      if (spec.referenceBranches?.length) {
-        const fetched = await fetchReferenceBranches({
-          dir,
-          branches: spec.referenceBranches,
-          ghToken: spec.ghToken,
-          signal,
-          onSkip: (branch, reason) =>
-            logger.warn('coding-agent: reference branch fetch skipped', { branch, reason }),
-        })
-        logger.info('coding-agent: fetched reference branches', {
-          requested: spec.referenceBranches.length,
-          fetched: fetched.length,
-        })
-      }
-
-      // The branch tip before the agent runs this time. A FRESH run produced work iff
-      // the branch advances past it; a RESUMED run already carries prior work, so it is
-      // never a no-op regardless of what this pass adds. Captured BEFORE the resume base
-      // refresh below so that refresh's merge commit counts as advancement and is pushed.
-      const baseSha = await headCommit(dir, signal)
-
-      // A resumed branch was cut from an OLDER base; merge the latest base in when the
-      // two merge cleanly, so the agent works against current base and the PR stays
-      // current. On a conflict this is a no-op (the run continues on the stale base — the
-      // merge gate handles a conflicting PR downstream, as before), so it never blocks a
-      // resume. Best-effort: any error is treated as "continue without refreshing".
-      if (resumed) {
-        const refreshed = await refreshFromBaseIfClean(
-          dir,
-          spec.cloneBranch,
-          spec.ghToken,
-          signal,
-        ).catch(() => false)
-        if (!refreshed) {
-          logger.info('coding-agent: resume base refresh skipped (conflict or error)', {
-            base: spec.cloneBranch,
-          })
-        }
-      }
+      // Clone (or resume) the checkout, fetch any read-only reference branches, and capture the
+      // pre-run branch tip. See {@link prepareCodingCheckout} for the resume-safety invariants.
+      const { resumed, baseSha } = await prepareCodingCheckout(dir, spec, logger, opts)
 
       // Serialize all pushes to the work branch through a single in-flight promise.
       // A checkpoint tick and the final push (or two slow checkpoint ticks) must never
@@ -361,7 +263,7 @@ export async function runCodingAgent(
       try {
         opts.onPhase?.('agent')
         logger.info('coding-agent: running agent', { serviceDirectory })
-        const { summary, stats, stderrTail, usage, callMetrics } = await runAgentInWorkspace(
+        const agentRun = await runAgentInWorkspace(
           {
             dir: workDir,
             systemPrompt: spec.systemPrompt,
@@ -381,86 +283,21 @@ export async function runCodingAgent(
           },
           opts,
         )
-
-        // Stop tailing the follow-up sentinel and flush any items written after the last
-        // tick, so a fast final burst still reaches the job view before the run is recorded.
-        if (followUpTick) clearInterval(followUpTick)
-        if (followUpTailer) await followUpTailer.poll().catch(() => {})
-
-        // Safety net for forgotten edits: commit changes to TRACKED files only (never
-        // untracked scratch files/artifacts — the agent owns committing new files).
-        await commitTrackedEdits(dir, spec.commitMessage, signal)
-
-        // Stop periodic checkpoints and let any in-flight one settle BEFORE the final
-        // push, so the two never run a concurrent `git push` to the same branch (the
-        // final push below is then a fresh attempt whose failure is the real signal).
-        clearInterval(checkpoint)
-        const inflight = inFlightPush()
-        if (inflight) await inflight.catch(() => {})
-
-        // Surface (don't fail on) untracked, non-ignored files the agent left behind:
-        // `commitTrackedEdits` only captures edits to ALREADY tracked files, so a NEW
-        // file the agent created but forgot to commit is silently dropped. Logging it
-        // makes that loss observable when a PR turns out to be missing a file.
-        const leftover = await listUntrackedFiles(dir, signal)
-        if (leftover.length > 0) {
-          logger.warn('coding-agent: uncommitted new files left behind (not pushed)', {
-            count: leftover.length,
-            files: leftover.slice(0, 20),
-          })
-        }
-
-        // A fresh run produced work iff the branch advanced past its pre-run tip. A RESUMED
-        // run already carries prior work — UNLESS that branch turns out to have nothing ahead
-        // of the PR base (e.g. its earlier PR was merged with a merge commit, leaving the
-        // branch reachable from base and its best-effort delete skipped). Opening a PR for such
-        // a branch fails with GitHub's opaque 422 "No commits between ...", so a CONFIRMED-empty
-        // resumed branch is a no-op, not work. `undefined` (couldn't determine) keeps the prior
-        // resume-is-work behaviour; the PR-open path then no-ops on the 422 as a backstop.
-        const advancedThisPass = await branchHasCommitsSince(dir, baseSha, signal)
-        let hasWork = advancedThisPass || resumed
-        if (resumed && !advancedThisPass) {
-          const ahead = await branchAheadOfBase(dir, spec.repo.baseBranch, spec.ghToken, signal)
-          if (ahead === false) {
-            logger.info('coding-agent: resumed branch has no commits ahead of base — no-op', {
-              base: spec.repo.baseBranch,
-            })
-            hasWork = false
-          }
-        }
-        if (!hasWork) {
-          logger.info('coding-agent: no changes produced', { ...stats })
-          outcome = {
-            pushed: false,
-            resumed,
-            summary,
-            stats,
-            ...(stderrTail ? { stderrTail } : {}),
-            ...(usage ? { usage } : {}),
-            ...(callMetrics ? { callMetrics } : {}),
-          }
-        } else {
-          opts.onPhase?.('push')
-          logger.info('coding-agent: pushing', { resumed, ...stats })
-          await pushWorkOnce()
-          outcome = {
-            pushed: true,
-            resumed,
-            summary,
-            stats,
-            ...(stderrTail ? { stderrTail } : {}),
-            ...(usage ? { usage } : {}),
-            ...(callMetrics ? { callMetrics } : {}),
-          }
-        }
-
-        // Ralph loop: run the programmatic completion command against the pushed/committed
-        // state and attach its verdict (exit code = the loop's authoritative done signal).
-        // Runs regardless of whether this pass pushed — a no-op iteration must still be able
-        // to report that the criterion is (already) met. The harness runs it, never the model.
-        if (spec.validation) {
-          outcome.validation = await runRalphValidation(workDir, spec.validation, logger, opts)
-        }
+        outcome = await finalizeCodingRun({
+          dir,
+          spec,
+          logger,
+          opts,
+          baseSha,
+          resumed,
+          workDir,
+          checkpoint,
+          followUpTick,
+          followUpTailer,
+          pushWorkOnce,
+          inFlightPush,
+          agentRun,
+        })
       } finally {
         // Safety net for the throw path (the happy path already cleared these above).
         clearInterval(checkpoint)
@@ -469,6 +306,245 @@ export async function runCodingAgent(
       return outcome
     },
   )
+}
+
+/**
+ * Clone (or RESUME an existing branch) into `dir`, fetch any read-only reference branches, and
+ * capture the pre-run branch tip. Extracted from {@link runCodingAgent} so its body stays small;
+ * returns `{ resumed, baseSha }` for the run to judge no-op vs work against.
+ *
+ * Resume an evicted earlier run when its work branch already exists on the remote: clone THAT
+ * branch and continue on its commits, rather than branching off base and redoing everything. Only
+ * the impl path (which creates a fresh `newBranch`) can resume; the ci-fix/conflict paths already
+ * clone the PR branch.
+ *
+ * Resume safety relies on two invariants the dispatcher (worker) upholds, since the harness can't
+ * see run/PR state from inside the container:
+ *  - At most ONE active run per block at a time. The work branch is deterministic per block
+ *    (`cat-factory/<blockId>`), so two concurrent runs would target the same branch; their pushes
+ *    race. A plain (non-forced) push fails safely on a non-fast-forward rather than clobbering the
+ *    other run's commits, so the worst case is one run failing — never lost work — but the
+ *    dispatcher should not knowingly run two at once.
+ *  - Re-dispatch only NON-terminal runs (failed / evicted / stale-running), whose branch is by
+ *    definition unmerged. Resuming a branch whose PR already merged could re-introduce merged work;
+ *    that is avoided two ways: the platform deletes the work branch when its PR merges
+ *    (GitHubPullRequestMerger), so a re-run finds no branch and starts fresh, and a `done` block is
+ *    never re-dispatched anyway.
+ */
+async function prepareCodingCheckout(
+  dir: string,
+  spec: CodingAgentSpec,
+  logger: Logger,
+  opts: RunOptions,
+): Promise<{ resumed: boolean; baseSha: string }> {
+  const { signal } = opts
+  const resumed =
+    spec.newBranch != null &&
+    (await remoteBranchExists(spec.repo.cloneUrl, spec.newBranch, spec.ghToken, signal))
+  opts.onPhase?.('clone')
+  if (spec.persistentCheckout) {
+    // Reused checkout: clean-sweep + fetch + switch branch in place. A resumed branch
+    // (or a run without `newBranch`, working directly on `cloneBranch`) already exists
+    // on the remote, so check it out directly; otherwise (re)create `newBranch` off the
+    // base tip — the same resume-vs-fresh decision the clone paths below make.
+    const targetBranch = spec.newBranch ?? spec.cloneBranch
+    logger.info('coding-agent: preparing reused checkout', { branch: targetBranch, resumed })
+    await prepareExistingCheckout({
+      dir,
+      repo: spec.repo,
+      ghToken: spec.ghToken,
+      branch: targetBranch,
+      baseBranch: spec.cloneBranch,
+      existing: resumed || spec.newBranch == null,
+      signal,
+    })
+  } else if (resumed) {
+    logger.info('coding-agent: resuming existing branch', { branch: spec.newBranch })
+    await cloneExistingBranch({
+      cloneUrl: spec.repo.cloneUrl,
+      branch: spec.newBranch!,
+      ghToken: spec.ghToken,
+      dir,
+      signal,
+    })
+  } else {
+    logger.info('coding-agent: cloning', { cloneBranch: spec.cloneBranch })
+    await cloneRepo({
+      repo: { ...spec.repo, baseBranch: spec.cloneBranch },
+      ghToken: spec.ghToken,
+      dir,
+      signal,
+    })
+    if (spec.newBranch) await createBranch(dir, spec.newBranch, signal)
+  }
+
+  // Fetch any read-only reference branches into their `origin/<b>` refs so the agent can
+  // inspect them (log/diff/show) without git network credentials of its own. Best-effort per
+  // branch: a vanished branch is warned + skipped, never fatal. The work branch above is the
+  // agent's HEAD; these are only readable siblings it never commits to.
+  if (spec.referenceBranches?.length) {
+    const fetched = await fetchReferenceBranches({
+      dir,
+      branches: spec.referenceBranches,
+      ghToken: spec.ghToken,
+      signal,
+      onSkip: (branch, reason) =>
+        logger.warn('coding-agent: reference branch fetch skipped', { branch, reason }),
+    })
+    logger.info('coding-agent: fetched reference branches', {
+      requested: spec.referenceBranches.length,
+      fetched: fetched.length,
+    })
+  }
+
+  // The branch tip before the agent runs this time. A FRESH run produced work iff
+  // the branch advances past it; a RESUMED run already carries prior work, so it is
+  // never a no-op regardless of what this pass adds. Captured BEFORE the resume base
+  // refresh below so that refresh's merge commit counts as advancement and is pushed.
+  const baseSha = await headCommit(dir, signal)
+
+  // A resumed branch was cut from an OLDER base; merge the latest base in when the
+  // two merge cleanly, so the agent works against current base and the PR stays
+  // current. On a conflict this is a no-op (the run continues on the stale base — the
+  // merge gate handles a conflicting PR downstream, as before), so it never blocks a
+  // resume. Best-effort: any error is treated as "continue without refreshing".
+  if (resumed) {
+    const refreshed = await refreshFromBaseIfClean(
+      dir,
+      spec.cloneBranch,
+      spec.ghToken,
+      signal,
+    ).catch(() => false)
+    if (!refreshed) {
+      logger.info('coding-agent: resume base refresh skipped (conflict or error)', {
+        base: spec.cloneBranch,
+      })
+    }
+  }
+
+  return { resumed, baseSha }
+}
+
+/**
+ * Finalize a coding run after the agent has finished: flush the follow-up tailer, safety-net commit
+ * forgotten tracked edits, settle any in-flight checkpoint push, decide whether the branch carries
+ * work, push it iff so, and (for a Ralph run) attach the validation verdict. Extracted from
+ * {@link runCodingAgent} so its body stays small; returns the built {@link CodingAgentOutcome}.
+ */
+async function finalizeCodingRun(args: {
+  dir: string
+  spec: CodingAgentSpec
+  logger: Logger
+  opts: RunOptions
+  baseSha: string
+  resumed: boolean
+  workDir: string
+  checkpoint: ReturnType<typeof setInterval>
+  followUpTick: ReturnType<typeof setInterval> | undefined
+  followUpTailer: FollowUpTailer | undefined
+  pushWorkOnce: () => Promise<void>
+  inFlightPush: () => Promise<void> | null
+  agentRun: Awaited<ReturnType<typeof runAgentInWorkspace>>
+}): Promise<CodingAgentOutcome> {
+  const {
+    dir,
+    spec,
+    logger,
+    opts,
+    baseSha,
+    resumed,
+    workDir,
+    checkpoint,
+    followUpTick,
+    followUpTailer,
+    pushWorkOnce,
+    inFlightPush,
+    agentRun,
+  } = args
+  const { signal } = opts
+  const { summary, stats, stderrTail, usage, callMetrics } = agentRun
+  let outcome: CodingAgentOutcome
+
+  // Stop tailing the follow-up sentinel and flush any items written after the last
+  // tick, so a fast final burst still reaches the job view before the run is recorded.
+  if (followUpTick) clearInterval(followUpTick)
+  if (followUpTailer) await followUpTailer.poll().catch(() => {})
+
+  // Safety net for forgotten edits: commit changes to TRACKED files only (never
+  // untracked scratch files/artifacts — the agent owns committing new files).
+  await commitTrackedEdits(dir, spec.commitMessage, signal)
+
+  // Stop periodic checkpoints and let any in-flight one settle BEFORE the final
+  // push, so the two never run a concurrent `git push` to the same branch (the
+  // final push below is then a fresh attempt whose failure is the real signal).
+  clearInterval(checkpoint)
+  const inflight = inFlightPush()
+  if (inflight) await inflight.catch(() => {})
+
+  // Surface (don't fail on) untracked, non-ignored files the agent left behind:
+  // `commitTrackedEdits` only captures edits to ALREADY tracked files, so a NEW
+  // file the agent created but forgot to commit is silently dropped. Logging it
+  // makes that loss observable when a PR turns out to be missing a file.
+  const leftover = await listUntrackedFiles(dir, signal)
+  if (leftover.length > 0) {
+    logger.warn('coding-agent: uncommitted new files left behind (not pushed)', {
+      count: leftover.length,
+      files: leftover.slice(0, 20),
+    })
+  }
+
+  // A fresh run produced work iff the branch advanced past its pre-run tip. A RESUMED
+  // run already carries prior work — UNLESS that branch turns out to have nothing ahead
+  // of the PR base (e.g. its earlier PR was merged with a merge commit, leaving the
+  // branch reachable from base and its best-effort delete skipped). Opening a PR for such
+  // a branch fails with GitHub's opaque 422 "No commits between ...", so a CONFIRMED-empty
+  // resumed branch is a no-op, not work. `undefined` (couldn't determine) keeps the prior
+  // resume-is-work behaviour; the PR-open path then no-ops on the 422 as a backstop.
+  const advancedThisPass = await branchHasCommitsSince(dir, baseSha, signal)
+  let hasWork = advancedThisPass || resumed
+  if (resumed && !advancedThisPass) {
+    const ahead = await branchAheadOfBase(dir, spec.repo.baseBranch, spec.ghToken, signal)
+    if (ahead === false) {
+      logger.info('coding-agent: resumed branch has no commits ahead of base — no-op', {
+        base: spec.repo.baseBranch,
+      })
+      hasWork = false
+    }
+  }
+  if (!hasWork) {
+    logger.info('coding-agent: no changes produced', { ...stats })
+    outcome = {
+      pushed: false,
+      resumed,
+      summary,
+      stats,
+      ...(stderrTail ? { stderrTail } : {}),
+      ...(usage ? { usage } : {}),
+      ...(callMetrics ? { callMetrics } : {}),
+    }
+  } else {
+    opts.onPhase?.('push')
+    logger.info('coding-agent: pushing', { resumed, ...stats })
+    await pushWorkOnce()
+    outcome = {
+      pushed: true,
+      resumed,
+      summary,
+      stats,
+      ...(stderrTail ? { stderrTail } : {}),
+      ...(usage ? { usage } : {}),
+      ...(callMetrics ? { callMetrics } : {}),
+    }
+  }
+
+  // Ralph loop: run the programmatic completion command against the pushed/committed
+  // state and attach its verdict (exit code = the loop's authoritative done signal).
+  // Runs regardless of whether this pass pushed — a no-op iteration must still be able
+  // to report that the criterion is (already) met. The harness runs it, never the model.
+  if (spec.validation) {
+    outcome.validation = await runRalphValidation(workDir, spec.validation, logger, opts)
+  }
+  return outcome
 }
 
 /**
@@ -622,7 +698,6 @@ export async function runMultiRepoCoding(
   job: AgentJob,
   opts: RunOptions = {},
 ): Promise<AgentResult> {
-  const { signal } = opts
   const logger = (opts.log ?? log).child({ kind: 'multi-repo', jobId: job.jobId })
   const peers: PeerRepoSpec[] = job.peerRepos ?? []
   const references: ReferenceRepoSpec[] = job.referenceRepos ?? []
@@ -681,98 +756,9 @@ export async function runMultiRepoCoding(
   ]
 
   return withWorkspace('multi', async (root) => {
-    // Clone phase: every repo into its sibling dir under the workspace root. Resume an
-    // existing remote work branch (an evicted retry) rather than branching off base again.
-    opts.onPhase?.('clone')
-    for (const leg of legs) {
-      const dir = join(root, leg.dirName)
-      await mkdir(dir, { recursive: true })
-      // A read-only reference leg: clone its base branch for the agent to read, and stop there —
-      // no work branch, no resume, no base-refresh. It is skipped in the push phase, so it can
-      // never be written to. (Kept in the loop so it lands in the same workspace root as siblings.)
-      if (leg.readOnly) {
-        logger.info('multi-repo: cloning read-only reference', {
-          repo: leg.dirName,
-          cloneBranch: leg.cloneBranch,
-        })
-        await cloneRepo({
-          repo: { ...leg.repo, baseBranch: leg.cloneBranch },
-          ghToken: leg.ghToken,
-          dir,
-          signal,
-        })
-        leg.dir = dir
-        continue
-      }
-      leg.resumed = await remoteBranchExists(leg.repo.cloneUrl, leg.workBranch, leg.ghToken, signal)
-      if (leg.resumed) {
-        logger.info('multi-repo: resuming existing branch', {
-          repo: leg.dirName,
-          branch: leg.workBranch,
-        })
-        await cloneExistingBranch({
-          cloneUrl: leg.repo.cloneUrl,
-          branch: leg.workBranch,
-          ghToken: leg.ghToken,
-          dir,
-          signal,
-        })
-      } else {
-        logger.info('multi-repo: cloning', { repo: leg.dirName, cloneBranch: leg.cloneBranch })
-        await cloneRepo({
-          repo: { ...leg.repo, baseBranch: leg.cloneBranch },
-          ghToken: leg.ghToken,
-          dir,
-          signal,
-        })
-        await createBranch(dir, leg.workBranch, signal)
-      }
-      leg.dir = dir
-      // The branch tip before the agent runs. Captured BEFORE the resume base refresh below so
-      // that refresh's merge commit counts as advancement and is pushed (as in the single-repo
-      // path). A fresh leg produced work iff its branch advances past this; a resumed leg already
-      // carries prior work.
-      leg.baseSha = await headCommit(dir, signal)
-      // A resumed branch was cut from an OLDER base; merge the latest base in when the two merge
-      // cleanly so the agent works against current base and the peer/own PRs stay current. On a
-      // conflict this is a best-effort no-op (the merge gate handles a conflicting PR downstream),
-      // mirroring the single-repo {@link runCodingAgent} resume refresh.
-      if (leg.resumed) {
-        const refreshed = await refreshFromBaseIfClean(
-          dir,
-          leg.cloneBranch,
-          leg.ghToken,
-          signal,
-        ).catch(() => false)
-        if (!refreshed) {
-          logger.info('multi-repo: resume base refresh skipped (conflict or error)', {
-            repo: leg.dirName,
-            base: leg.cloneBranch,
-          })
-        }
-      }
-    }
-
-    // Reference branches attach to the PRIMARY repo, so fetch them into the primary sibling
-    // checkout's `origin/<b>` refs (best-effort per branch). The backend's reference-branches
-    // prompt section names the primary repo's directory to run the read commands in.
-    if (job.referenceBranches?.length) {
-      const primaryLeg = legs.find((l) => l.primary)
-      if (primaryLeg?.dir) {
-        const fetched = await fetchReferenceBranches({
-          dir: primaryLeg.dir,
-          branches: job.referenceBranches,
-          ghToken: primaryLeg.ghToken,
-          signal,
-          onSkip: (branch, reason) =>
-            logger.warn('multi-repo: reference branch fetch skipped', { branch, reason }),
-        })
-        logger.info('multi-repo: fetched reference branches', {
-          requested: job.referenceBranches.length,
-          fetched: fetched.length,
-        })
-      }
-    }
+    // Clone (or resume) every sibling checkout under the workspace root and fetch the primary's
+    // reference branches. Mutates each leg's `dir`/`resumed`/`baseSha` in place.
+    await prepareMultiRepoCheckouts(root, legs, job, logger, opts)
 
     // Run the agent ONCE with its cwd at the workspace root, so it sees every sibling checkout
     // and can change them coherently. No monorepo/service-directory scoping — the multi-repo
@@ -800,67 +786,13 @@ export async function runMultiRepoCoding(
       opts,
     )
 
-    // Push phase: commit forgotten tracked edits, then push + open a PR for each repo the run
-    // actually changed. A repo the agent left untouched is skipped (no branch, no PR).
-    opts.onPhase?.('push')
-    let primaryPushed = false
-    let primaryPrUrl: string | undefined
-    const peerPullRequests: NonNullable<AgentResult['peerPullRequests']> = []
-    for (const leg of legs) {
-      // A read-only reference leg is never committed or pushed — the third layer of the read-only
-      // guarantee (the spec carries no branch/PR, and the clone phase gave it no work branch).
-      if (leg.readOnly) continue
-      await commitTrackedEdits(
-        leg.dir,
-        job.commitMessage ?? leg.pr?.title ?? 'Agent changes',
-        signal,
-      )
-      const advanced = await branchHasCommitsSince(leg.dir, leg.baseSha, signal)
-      let hasWork = advanced || leg.resumed
-      if (leg.resumed && !advanced) {
-        const ahead = await branchAheadOfBase(leg.dir, leg.repo.baseBranch, leg.ghToken, signal)
-        if (ahead === false) hasWork = false
-      }
-      const leftover = await listUntrackedFiles(leg.dir, signal)
-      if (leftover.length > 0) {
-        logger.warn('multi-repo: uncommitted new files left behind (not pushed)', {
-          repo: leg.dirName,
-          count: leftover.length,
-          files: leftover.slice(0, 20),
-        })
-      }
-      if (!hasWork) {
-        logger.info('multi-repo: no changes for repo', { repo: leg.dirName })
-        continue
-      }
-      await pushBranch(leg.dir, leg.workBranch, leg.ghToken, signal)
-      let prUrl: string | null = null
-      if (leg.pr) {
-        prUrl = await openPullRequest({
-          owner: leg.repo.owner,
-          name: leg.repo.name,
-          ghToken: leg.ghToken,
-          head: leg.workBranch,
-          base: leg.repo.baseBranch,
-          pr: leg.pr,
-          apiBase: job.githubApiBase,
-          cloneUrl: leg.repo.cloneUrl,
-          ...(leg.repo.provider ? { provider: leg.repo.provider } : {}),
-          signal,
-        })
-      }
-      if (leg.primary) {
-        primaryPushed = true
-        if (prUrl) primaryPrUrl = prUrl
-      } else if (prUrl) {
-        peerPullRequests.push({
-          repo: `${leg.repo.owner}/${leg.repo.name}`,
-          ...(leg.frameId ? { frameId: leg.frameId } : {}),
-          prUrl,
-          branch: leg.workBranch,
-        })
-      }
-    }
+    // Commit forgotten tracked edits, then push + open a PR for each repo the run actually changed.
+    const { primaryPushed, primaryPrUrl, peerPullRequests } = await pushMultiRepoLegs(
+      legs,
+      job,
+      logger,
+      opts,
+    )
 
     const anyWork = primaryPushed || peerPullRequests.length > 0
     if (!anyWork) {
@@ -908,6 +840,187 @@ export async function runMultiRepoCoding(
       ...(callMetrics ? { callMetrics } : {}),
     }
   })
+}
+
+/**
+ * Clone phase for {@link runMultiRepoCoding}: every repo into its sibling dir under the workspace
+ * root. Resume an existing remote work branch (an evicted retry) rather than branching off base
+ * again, then fetch the primary repo's reference branches. Mutates each leg's `dir`/`resumed`/
+ * `baseSha` in place. Extracted so the multi-repo body stays small.
+ */
+async function prepareMultiRepoCheckouts(
+  root: string,
+  legs: RepoLeg[],
+  job: AgentJob,
+  logger: Logger,
+  opts: RunOptions,
+): Promise<void> {
+  const { signal } = opts
+  opts.onPhase?.('clone')
+  for (const leg of legs) {
+    const dir = join(root, leg.dirName)
+    await mkdir(dir, { recursive: true })
+    // A read-only reference leg: clone its base branch for the agent to read, and stop there —
+    // no work branch, no resume, no base-refresh. It is skipped in the push phase, so it can
+    // never be written to. (Kept in the loop so it lands in the same workspace root as siblings.)
+    if (leg.readOnly) {
+      logger.info('multi-repo: cloning read-only reference', {
+        repo: leg.dirName,
+        cloneBranch: leg.cloneBranch,
+      })
+      await cloneRepo({
+        repo: { ...leg.repo, baseBranch: leg.cloneBranch },
+        ghToken: leg.ghToken,
+        dir,
+        signal,
+      })
+      leg.dir = dir
+      continue
+    }
+    leg.resumed = await remoteBranchExists(leg.repo.cloneUrl, leg.workBranch, leg.ghToken, signal)
+    if (leg.resumed) {
+      logger.info('multi-repo: resuming existing branch', {
+        repo: leg.dirName,
+        branch: leg.workBranch,
+      })
+      await cloneExistingBranch({
+        cloneUrl: leg.repo.cloneUrl,
+        branch: leg.workBranch,
+        ghToken: leg.ghToken,
+        dir,
+        signal,
+      })
+    } else {
+      logger.info('multi-repo: cloning', { repo: leg.dirName, cloneBranch: leg.cloneBranch })
+      await cloneRepo({
+        repo: { ...leg.repo, baseBranch: leg.cloneBranch },
+        ghToken: leg.ghToken,
+        dir,
+        signal,
+      })
+      await createBranch(dir, leg.workBranch, signal)
+    }
+    leg.dir = dir
+    // The branch tip before the agent runs. Captured BEFORE the resume base refresh below so
+    // that refresh's merge commit counts as advancement and is pushed (as in the single-repo
+    // path). A fresh leg produced work iff its branch advances past this; a resumed leg already
+    // carries prior work.
+    leg.baseSha = await headCommit(dir, signal)
+    // A resumed branch was cut from an OLDER base; merge the latest base in when the two merge
+    // cleanly so the agent works against current base and the peer/own PRs stay current. On a
+    // conflict this is a best-effort no-op (the merge gate handles a conflicting PR downstream),
+    // mirroring the single-repo {@link runCodingAgent} resume refresh.
+    if (leg.resumed) {
+      const refreshed = await refreshFromBaseIfClean(
+        dir,
+        leg.cloneBranch,
+        leg.ghToken,
+        signal,
+      ).catch(() => false)
+      if (!refreshed) {
+        logger.info('multi-repo: resume base refresh skipped (conflict or error)', {
+          repo: leg.dirName,
+          base: leg.cloneBranch,
+        })
+      }
+    }
+  }
+
+  // Reference branches attach to the PRIMARY repo, so fetch them into the primary sibling
+  // checkout's `origin/<b>` refs (best-effort per branch). The backend's reference-branches
+  // prompt section names the primary repo's directory to run the read commands in.
+  if (job.referenceBranches?.length) {
+    const primaryLeg = legs.find((l) => l.primary)
+    if (primaryLeg?.dir) {
+      const fetched = await fetchReferenceBranches({
+        dir: primaryLeg.dir,
+        branches: job.referenceBranches,
+        ghToken: primaryLeg.ghToken,
+        signal,
+        onSkip: (branch, reason) =>
+          logger.warn('multi-repo: reference branch fetch skipped', { branch, reason }),
+      })
+      logger.info('multi-repo: fetched reference branches', {
+        requested: job.referenceBranches.length,
+        fetched: fetched.length,
+      })
+    }
+  }
+}
+
+/**
+ * Push phase for {@link runMultiRepoCoding}: commit forgotten tracked edits, then push + open a PR
+ * for each repo the run actually changed (a repo the agent left untouched is skipped — no branch,
+ * no PR; a read-only reference leg is never committed or pushed). Extracted so the multi-repo body
+ * stays small; returns the primary's push/PR state plus the peer PRs.
+ */
+async function pushMultiRepoLegs(
+  legs: RepoLeg[],
+  job: AgentJob,
+  logger: Logger,
+  opts: RunOptions,
+): Promise<{
+  primaryPushed: boolean
+  primaryPrUrl: string | undefined
+  peerPullRequests: NonNullable<AgentResult['peerPullRequests']>
+}> {
+  const { signal } = opts
+  opts.onPhase?.('push')
+  let primaryPushed = false
+  let primaryPrUrl: string | undefined
+  const peerPullRequests: NonNullable<AgentResult['peerPullRequests']> = []
+  for (const leg of legs) {
+    // A read-only reference leg is never committed or pushed — the third layer of the read-only
+    // guarantee (the spec carries no branch/PR, and the clone phase gave it no work branch).
+    if (leg.readOnly) continue
+    await commitTrackedEdits(leg.dir, job.commitMessage ?? leg.pr?.title ?? 'Agent changes', signal)
+    const advanced = await branchHasCommitsSince(leg.dir, leg.baseSha, signal)
+    let hasWork = advanced || leg.resumed
+    if (leg.resumed && !advanced) {
+      const ahead = await branchAheadOfBase(leg.dir, leg.repo.baseBranch, leg.ghToken, signal)
+      if (ahead === false) hasWork = false
+    }
+    const leftover = await listUntrackedFiles(leg.dir, signal)
+    if (leftover.length > 0) {
+      logger.warn('multi-repo: uncommitted new files left behind (not pushed)', {
+        repo: leg.dirName,
+        count: leftover.length,
+        files: leftover.slice(0, 20),
+      })
+    }
+    if (!hasWork) {
+      logger.info('multi-repo: no changes for repo', { repo: leg.dirName })
+      continue
+    }
+    await pushBranch(leg.dir, leg.workBranch, leg.ghToken, signal)
+    let prUrl: string | null = null
+    if (leg.pr) {
+      prUrl = await openPullRequest({
+        owner: leg.repo.owner,
+        name: leg.repo.name,
+        ghToken: leg.ghToken,
+        head: leg.workBranch,
+        base: leg.repo.baseBranch,
+        pr: leg.pr,
+        apiBase: job.githubApiBase,
+        cloneUrl: leg.repo.cloneUrl,
+        ...(leg.repo.provider ? { provider: leg.repo.provider } : {}),
+        signal,
+      })
+    }
+    if (leg.primary) {
+      primaryPushed = true
+      if (prUrl) primaryPrUrl = prUrl
+    } else if (prUrl) {
+      peerPullRequests.push({
+        repo: `${leg.repo.owner}/${leg.repo.name}`,
+        ...(leg.frameId ? { frameId: leg.frameId } : {}),
+        prUrl,
+        branch: leg.workBranch,
+      })
+    }
+  }
+  return { primaryPushed, primaryPrUrl, peerPullRequests }
 }
 
 /**

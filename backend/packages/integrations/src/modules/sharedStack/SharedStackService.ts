@@ -463,40 +463,15 @@ export class SharedStackService {
     }
 
     // Create the managed networks the stack owns (its consumers attach to these as external).
-    for (const network of stack.managedNetworks) {
-      const started = this.clock.now()
-      const res = (await runtime.ensureNetwork?.(network)) ?? {
-        code: 1,
-        stdout: '',
-        stderr: 'runtime cannot manage networks',
-      }
-      const ok = res.code === 0
-      await this.logStep(record, `network: ${network}`, started, {
-        ok,
-        ...(ok ? {} : { error: tailOutput(res.stderr || res.stdout) || `exit ${res.code}` }),
-      })
-      if (!ok) {
-        return this.persist(workspaceId, stack, {
-          status: 'failed',
-          lastError: `Could not create network '${network}': ${tailOutput(res.stderr || res.stdout)}`,
-        })
-      }
+    const networkIssue = await this.createManagedNetworks(stack, runtime, record)
+    if (networkIssue) {
+      return this.persist(workspaceId, stack, { status: 'failed', lastError: networkIssue })
     }
 
     // Materialize env-file templates BEFORE `up`, each a logged step.
-    for (const envFile of stack.envFiles) {
-      const started = this.clock.now()
-      try {
-        await runtime.copyCheckoutFile(project, envFile.template, envFile.target)
-        await this.logStep(record, `env-file: ${envFile.target}`, started, { ok: true })
-      } catch (err) {
-        const message = `Could not materialize env file '${envFile.target}': ${err instanceof Error ? err.message : String(err)}`
-        await this.logStep(record, `env-file: ${envFile.target}`, started, {
-          ok: false,
-          error: message,
-        })
-        return this.persist(workspaceId, stack, { status: 'failed', lastError: message })
-      }
+    const envFileIssue = await this.materializeEnvFiles(stack, runtime, project, record)
+    if (envFileIssue) {
+      return this.persist(workspaceId, stack, { status: 'failed', lastError: envFileIssue })
     }
 
     // The stack runs its committed compose files AS AUTHORED (host ports kept — it is trusted infra,
@@ -525,31 +500,118 @@ export class SharedStackService {
     }
 
     // Ordered setup steps (users sync, connector registration, seed import, …).
+    const setupIssue = await this.runSetupSteps(stack, runtime, scope, env, project, record)
+    if (setupIssue) {
+      return this.persist(workspaceId, stack, { status: 'failed', lastError: setupIssue })
+    }
+
+    // Terminal health gate.
+    const gateIssue = await this.runTerminalHealthGate(stack, runtime, scope, env, record)
+    if (gateIssue) {
+      return this.persist(workspaceId, stack, { status: 'failed', lastError: gateIssue })
+    }
+
+    return this.persist(workspaceId, stack, { status: 'running', lastError: null })
+  }
+
+  /**
+   * Create the managed networks the stack owns (its consumers attach to these as external),
+   * streaming one provisioning-log step per network. Returns a blocking `lastError` on the first
+   * failure, else null.
+   */
+  private async createManagedNetworks(
+    stack: SharedStack,
+    runtime: ComposeRuntime,
+    record: RecipeStepRecorder | undefined,
+  ): Promise<string | null> {
+    for (const network of stack.managedNetworks) {
+      const started = this.clock.now()
+      const res = (await runtime.ensureNetwork?.(network)) ?? {
+        code: 1,
+        stdout: '',
+        stderr: 'runtime cannot manage networks',
+      }
+      const ok = res.code === 0
+      await this.logStep(record, `network: ${network}`, started, {
+        ok,
+        ...(ok ? {} : { error: tailOutput(res.stderr || res.stdout) || `exit ${res.code}` }),
+      })
+      if (!ok) {
+        return `Could not create network '${network}': ${tailOutput(res.stderr || res.stdout)}`
+      }
+    }
+    return null
+  }
+
+  /**
+   * Materialize the stack's env-file templates BEFORE `up`, each a logged step. Returns a blocking
+   * `lastError` on the first failure, else null.
+   */
+  private async materializeEnvFiles(
+    stack: SharedStack,
+    runtime: ComposeRuntime,
+    project: string,
+    record: RecipeStepRecorder | undefined,
+  ): Promise<string | null> {
+    for (const envFile of stack.envFiles) {
+      const started = this.clock.now()
+      try {
+        await runtime.copyCheckoutFile!(project, envFile.template, envFile.target)
+        await this.logStep(record, `env-file: ${envFile.target}`, started, { ok: true })
+      } catch (err) {
+        const message = `Could not materialize env file '${envFile.target}': ${err instanceof Error ? err.message : String(err)}`
+        await this.logStep(record, `env-file: ${envFile.target}`, started, {
+          ok: false,
+          error: message,
+        })
+        return message
+      }
+    }
+    return null
+  }
+
+  /**
+   * Run the stack's ordered setup steps (users sync, connector registration, seed import, …), each
+   * a logged step. Returns a blocking `lastError` on the first failure, else null.
+   */
+  private async runSetupSteps(
+    stack: SharedStack,
+    runtime: ComposeRuntime,
+    scope: string[],
+    env: Record<string, string>,
+    project: string,
+    record: RecipeStepRecorder | undefined,
+  ): Promise<string | null> {
     for (const step of stack.setupSteps) {
       const started = this.clock.now()
       const result = await runRecipeStep(step, { runtime, scope, env, project })
       await this.logStep(record, step.name, started, result)
       if (!result.ok) {
-        return this.persist(workspaceId, stack, {
-          status: 'failed',
-          lastError: `Setup step '${step.name}' failed: ${result.error}`,
-        })
+        return `Setup step '${step.name}' failed: ${result.error}`
       }
     }
+    return null
+  }
 
-    // Terminal health gate.
+  /**
+   * Run the stack's terminal health gate (its declared gate, else the recipe default), logging the
+   * step. Returns a blocking `lastError` when it doesn't pass, else null.
+   */
+  private async runTerminalHealthGate(
+    stack: SharedStack,
+    runtime: ComposeRuntime,
+    scope: string[],
+    env: Record<string, string>,
+    record: RecipeStepRecorder | undefined,
+  ): Promise<string | null> {
     const gate = stack.healthGate ?? DEFAULT_RECIPE_HEALTH_GATE
     const gateStarted = this.clock.now()
     const gateResult = await runHealthGate(gate, { runtime, scope, env }, SHORT_TIMEOUT_MS)
     await this.logStep(record, `health gate (${gate.kind})`, gateStarted, gateResult)
     if (!gateResult.ok) {
-      return this.persist(workspaceId, stack, {
-        status: 'failed',
-        lastError: `Health gate did not pass: ${gateResult.error}`,
-      })
+      return `Health gate did not pass: ${gateResult.error}`
     }
-
-    return this.persist(workspaceId, stack, { status: 'running', lastError: null })
+    return null
   }
 
   /**

@@ -1235,6 +1235,81 @@ async function checkCallScope(
 }
 
 /**
+ * The batched list half of {@link checkEntityCallScope}: the scope kinds that bind a WHOLE list of
+ * ids (users / blocks / services), each of which must resolve to an in-scope account. Same contract
+ * — a `DispatchResult` (404 `denied`) when out of scope, `undefined` when it passes (an empty list
+ * is a no-op read). Split out purely to keep each function under the complexity ceiling; the `never`
+ * default keeps the switches jointly exhaustive over `ScopeRule`.
+ */
+async function checkEntityListCallScope(
+  rule: Extract<ScopeRule, { kind: 'userList' | 'blockList' | 'serviceList' }>,
+  args: unknown[],
+  opts: DispatchOptions,
+  helpers: {
+    inScope: (accountId: string | null | undefined) => boolean
+    visibleUserIds: () => Promise<Set<string>>
+  },
+): Promise<DispatchResult | undefined> {
+  const { inScope, visibleUserIds } = helpers
+  const denied = fail('not_found', 'Not found')
+  switch (rule.kind) {
+    case 'userList': {
+      // The batched roster enrichment: EVERY requested user must be a co-member of an in-scope
+      // account (the batched form of `user`), so a missing or out-of-scope id fails closed. An
+      // empty list is a no-op read (returns empty), so it needs no roster to scope.
+      const ids = args[rule.arg]
+      if (!Array.isArray(ids) || ids.some((id) => typeof id !== 'string')) return denied
+      if (ids.length === 0) break
+      if (!opts.resolveAccountMemberIds) return denied
+      const visible = await visibleUserIds()
+      for (const id of ids as string[]) {
+        if (!visible.has(id)) return denied
+      }
+      break
+    }
+    case 'blockList': {
+      // Bind via every requested block's owning account (block → home workspace → account),
+      // the batched form of `block`. EVERY id must resolve to an in-scope account; a missing
+      // or out-of-scope block fails closed — the same outcome the per-id `block` rule produced
+      // call by call. An empty list is a no-op read (it returns empty).
+      const ids = args[rule.arg]
+      if (!Array.isArray(ids) || ids.some((id) => typeof id !== 'string')) return denied
+      if (ids.length === 0) break
+      if (!opts.resolveBlockAccountIds) return denied
+      const accounts = await opts.resolveBlockAccountIds(ids as string[])
+      for (const id of ids as string[]) {
+        if (!inScope(accounts.get(id))) return denied
+      }
+      break
+    }
+    case 'serviceList': {
+      // Bind via every requested service's owning account (services are account-owned). EVERY id
+      // must resolve to an in-scope account; a missing or out-of-scope service fails closed. An
+      // empty list is a no-op read (it returns empty), so it needs no service to scope.
+      const ids = args[rule.arg]
+      if (!Array.isArray(ids) || ids.some((id) => typeof id !== 'string')) return denied
+      if (ids.length === 0) break
+      if (!opts.resolveServiceAccountIds) return denied
+      const accounts = await opts.resolveServiceAccountIds(ids as string[])
+      for (const id of ids as string[]) {
+        if (!inScope(accounts.get(id))) return denied
+      }
+      break
+    }
+    default: {
+      // Fail closed: a list kind with no case here must never reach the method unscoped. The
+      // `never` binding makes adding a list kind without a case a compile error.
+      const _exhaustive: never = rule
+      void _exhaustive
+      return denied
+    }
+  }
+
+  // In scope: let the method run.
+  return undefined
+}
+
+/**
  * The entity-resolver half of {@link checkCallScope}: the scope kinds that bind a call via a
  * server-side account resolver (co-membership for users, block/service ownership, tenant-library
  * owner pairs). Same contract — a `DispatchResult` (404 `denied`) when out of scope, `undefined`
@@ -1276,20 +1351,12 @@ async function checkEntityCallScope(
       if (!(await visibleUserIds()).has(userId)) return denied
       break
     }
-    case 'userList': {
-      // The batched roster enrichment: EVERY requested user must be a co-member of an in-scope
-      // account (the batched form of `user`), so a missing or out-of-scope id fails closed. An
-      // empty list is a no-op read (returns empty), so it needs no roster to scope.
-      const ids = args[rule.arg]
-      if (!Array.isArray(ids) || ids.some((id) => typeof id !== 'string')) return denied
-      if (ids.length === 0) break
-      if (!opts.resolveAccountMemberIds) return denied
-      const visible = await visibleUserIds()
-      for (const id of ids as string[]) {
-        if (!visible.has(id)) return denied
-      }
-      break
-    }
+    case 'userList':
+    case 'blockList':
+    case 'serviceList':
+      // The batched list-scope kinds (each id must resolve in scope) are split out to keep this
+      // function under the complexity ceiling; same contract (404 `denied` / `undefined`).
+      return checkEntityListCallScope(rule, args, opts, helpers)
     case 'block': {
       // Bind via the block's home workspace's account, resolved server-side (the block carries
       // no workspace arg). An unresolvable block (missing, or no resolver wired) is refused as
@@ -1297,35 +1364,6 @@ async function checkEntityCallScope(
       const blockId = args[rule.arg]
       if (typeof blockId !== 'string' || !opts.resolveBlockAccountId) return denied
       if (!inScope(await opts.resolveBlockAccountId(blockId))) return denied
-      break
-    }
-    case 'blockList': {
-      // Bind via every requested block's owning account (block → home workspace → account),
-      // the batched form of `block`. EVERY id must resolve to an in-scope account; a missing
-      // or out-of-scope block fails closed — the same outcome the per-id `block` rule produced
-      // call by call. An empty list is a no-op read (it returns empty).
-      const ids = args[rule.arg]
-      if (!Array.isArray(ids) || ids.some((id) => typeof id !== 'string')) return denied
-      if (ids.length === 0) break
-      if (!opts.resolveBlockAccountIds) return denied
-      const accounts = await opts.resolveBlockAccountIds(ids as string[])
-      for (const id of ids as string[]) {
-        if (!inScope(accounts.get(id))) return denied
-      }
-      break
-    }
-    case 'serviceList': {
-      // Bind via every requested service's owning account (services are account-owned). EVERY id
-      // must resolve to an in-scope account; a missing or out-of-scope service fails closed. An
-      // empty list is a no-op read (it returns empty), so it needs no service to scope.
-      const ids = args[rule.arg]
-      if (!Array.isArray(ids) || ids.some((id) => typeof id !== 'string')) return denied
-      if (ids.length === 0) break
-      if (!opts.resolveServiceAccountIds) return denied
-      const accounts = await opts.resolveServiceAccountIds(ids as string[])
-      for (const id of ids as string[]) {
-        if (!inScope(accounts.get(id))) return denied
-      }
       break
     }
     case 'service': {

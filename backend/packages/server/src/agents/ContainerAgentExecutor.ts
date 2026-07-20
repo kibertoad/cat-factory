@@ -1440,80 +1440,18 @@ export class ContainerAgentExecutor implements AsyncAgentExecutor {
       }
     }
 
-    // Read-only reference repos (document-authoring tasks): independent of the fan-out above —
-    // the doc-writer clones each attached repo as a READ-ONLY sibling checkout it may read but
-    // never writes to. The spec carries NO branch/PR fields, so it is structurally unpushable;
-    // the harness clones it at its own default branch and skips it in the push phase. Auth reuses
-    // the run's already-resolved `ghToken` (the run initiator's own token when they have one, per
-    // `mintInstallationToken`), so no extra token mint. A reference repo may be outside the
-    // workspace projection, so its clone identity comes straight from the persisted attachment.
-    // Provider-neutral: the clone URL + provider come from `resolveRepoOrigin` (the same
-    // deployment-level seam the primary rides), so a GitLab deployment clones from GitLab.
-    let referenceRepos: { repo: Record<string, unknown> }[] | undefined
-    let referenceReposSection: string | undefined
-    const attachedReferenceRepos = context.referenceRepos ?? []
-    if (attachedReferenceRepos.length > 0 && REFERENCE_REPO_KINDS.has(context.agentKind)) {
-      const origin = this.deps.resolveRepoOrigin ?? githubRepoOrigin
-      // Dedup against the primary and each other by the harness's sibling-checkout key
-      // (`owner/name`, case-insensitive — it maps to the `owner__name` clone directory): two legs
-      // claiming the same directory would make the second `git clone` fail into a non-empty dir.
-      // A reference pointing at the doc task's OWN repo is therefore dropped (it is already the
-      // primary checkout), and duplicate attachments collapse to one.
-      const siblingKey = (owner: string, name: string) => `${owner}/${name}`.toLowerCase()
-      const seen = new Set<string>([siblingKey(repo.owner, repo.name)])
-      const targets: RepoTarget[] = []
-      for (const r of attachedReferenceRepos) {
-        const key = siblingKey(r.owner, r.name)
-        if (seen.has(key)) continue
-        seen.add(key)
-        targets.push({
-          installationId: r.connectionId ?? repo.installationId,
-          owner: r.owner,
-          name: r.name,
-          baseBranch: r.defaultBranch,
-        })
-      }
-      if (targets.length > 0) {
-        referenceRepos = targets.map((t) => ({ repo: buildRepoSpec(t, origin(t)) }))
-        referenceReposSection = renderReferenceReposSection(repo, targets)
-      }
-    }
-
-    // Read-only apriori REFERENCE branches (the apriori-branches reference mode): existing branches
-    // of the PRIMARY repo the task names as prior-art the agent may READ but never write. Unlike
-    // the reference REPOS above, these are not sibling checkouts — they ride the primary clone as
-    // `origin/<b>` refs the harness fetches before the agent runs (see the harness
-    // `fetchReferenceBranches`). Only the consumer kinds (coder / spec-writer / doc-writer /
-    // architect / analysis) receive them. Each is PROBED at dispatch (create:false) and a missing
-    // branch is DROPPED — asymmetric with a missing WORKING branch (which fails loudly): a
-    // reference is garnish, so a stale/typo'd one is silently omitted rather than failing the run.
-    // When probing isn't wired (tests / no GitHub) every named branch is forwarded and the harness
-    // fetch is best-effort. A run that already carries a PR still reads reference branches (they are
-    // context, independent of the work branch).
-    let referenceBranches: string[] | undefined
-    let referenceBranchesSection: string | undefined
-    if (REFERENCE_BRANCH_KINDS.has(context.agentKind)) {
-      const named = aprioriReferenceBranches(context.aprioriBranches)
-      // Drop any that collide with the resolved work branch (a reference and the working branch are
-      // disjoint by the write boundary, but never fetch/announce the branch the agent builds on).
-      const candidates = named.filter((b) => b !== workBranch)
-      let present: string[]
-      if (this.deps.ensureWorkBranch) {
-        const probe = this.deps.ensureWorkBranch
-        const existence = await Promise.all(
-          candidates.map((b) => probe(repo, b, { create: false })),
-        )
-        present = candidates.filter((_b, i) => existence[i])
-      } else {
-        present = candidates
-      }
-      if (present.length > 0) {
-        referenceBranches = present
-        referenceBranchesSection = renderReferenceBranchesSection(present, {
-          multiRepo: Boolean(multiRepoSection || referenceReposSection),
-        })
-      }
-    }
+    // Read-only reference repos + apriori reference branches: both independent of the fan-out above.
+    // Extracted to keep this method under the complexity ceiling; the branch flag reflects whether
+    // the job is already multi-repo (a fan-out section OR reference-repo section is present).
+    const { referenceRepos, referenceReposSection } = this.resolveReferenceRepos(context, repo)
+    const { referenceBranches, referenceBranchesSection } = await this.resolveReferenceBranches(
+      context,
+      {
+        repo,
+        workBranch,
+        multiRepo: Boolean(multiRepoSection || referenceReposSection),
+      },
+    )
 
     return {
       ...(peerRepos ? { peerRepos } : {}),
@@ -1524,6 +1462,96 @@ export class ContainerAgentExecutor implements AsyncAgentExecutor {
       ...(referenceReposSection ? { referenceReposSection } : {}),
       ...(referenceBranches ? { referenceBranches } : {}),
       ...(referenceBranchesSection ? { referenceBranchesSection } : {}),
+    }
+  }
+
+  /**
+   * Read-only reference repos (document-authoring tasks): the doc-writer clones each attached repo
+   * as a READ-ONLY sibling checkout it may read but never writes to. The spec carries NO branch/PR
+   * fields, so it is structurally unpushable; the harness clones it at its own default branch and
+   * skips it in the push phase. Auth reuses the run's already-resolved `ghToken` (the run
+   * initiator's own token when they have one, per `mintInstallationToken`), so no extra token mint.
+   * A reference repo may be outside the workspace projection, so its clone identity comes straight
+   * from the persisted attachment. Provider-neutral: the clone URL + provider come from
+   * `resolveRepoOrigin` (the same deployment-level seam the primary rides), so a GitLab deployment
+   * clones from GitLab. Extracted from {@link resolveAuxiliaryRepos} to keep it under the ceiling.
+   */
+  private resolveReferenceRepos(
+    context: AgentRunContext,
+    repo: RepoTarget,
+  ): { referenceRepos?: { repo: Record<string, unknown> }[]; referenceReposSection?: string } {
+    const attachedReferenceRepos = context.referenceRepos ?? []
+    if (attachedReferenceRepos.length === 0 || !REFERENCE_REPO_KINDS.has(context.agentKind)) {
+      return {}
+    }
+    const origin = this.deps.resolveRepoOrigin ?? githubRepoOrigin
+    // Dedup against the primary and each other by the harness's sibling-checkout key
+    // (`owner/name`, case-insensitive — it maps to the `owner__name` clone directory): two legs
+    // claiming the same directory would make the second `git clone` fail into a non-empty dir.
+    // A reference pointing at the doc task's OWN repo is therefore dropped (it is already the
+    // primary checkout), and duplicate attachments collapse to one.
+    const siblingKey = (owner: string, name: string) => `${owner}/${name}`.toLowerCase()
+    const seen = new Set<string>([siblingKey(repo.owner, repo.name)])
+    const targets: RepoTarget[] = []
+    for (const r of attachedReferenceRepos) {
+      const key = siblingKey(r.owner, r.name)
+      if (seen.has(key)) continue
+      seen.add(key)
+      targets.push({
+        installationId: r.connectionId ?? repo.installationId,
+        owner: r.owner,
+        name: r.name,
+        baseBranch: r.defaultBranch,
+      })
+    }
+    if (targets.length === 0) {
+      return {}
+    }
+    return {
+      referenceRepos: targets.map((t) => ({ repo: buildRepoSpec(t, origin(t)) })),
+      referenceReposSection: renderReferenceReposSection(repo, targets),
+    }
+  }
+
+  /**
+   * Read-only apriori REFERENCE branches (the apriori-branches reference mode): existing branches
+   * of the PRIMARY repo the task names as prior-art the agent may READ but never write. Unlike the
+   * reference REPOS above, these are not sibling checkouts — they ride the primary clone as
+   * `origin/<b>` refs the harness fetches before the agent runs (see the harness
+   * `fetchReferenceBranches`). Only the consumer kinds (coder / spec-writer / doc-writer /
+   * architect / analysis) receive them. Each is PROBED at dispatch (create:false) and a missing
+   * branch is DROPPED — asymmetric with a missing WORKING branch (which fails loudly): a reference
+   * is garnish, so a stale/typo'd one is silently omitted rather than failing the run. When probing
+   * isn't wired (tests / no GitHub) every named branch is forwarded and the harness fetch is
+   * best-effort. A run that already carries a PR still reads reference branches (they are context,
+   * independent of the work branch). Extracted from {@link resolveAuxiliaryRepos} for the ceiling.
+   */
+  private async resolveReferenceBranches(
+    context: AgentRunContext,
+    args: { repo: RepoTarget; workBranch: string; multiRepo: boolean },
+  ): Promise<{ referenceBranches?: string[]; referenceBranchesSection?: string }> {
+    const { repo, workBranch, multiRepo } = args
+    if (!REFERENCE_BRANCH_KINDS.has(context.agentKind)) {
+      return {}
+    }
+    const named = aprioriReferenceBranches(context.aprioriBranches)
+    // Drop any that collide with the resolved work branch (a reference and the working branch are
+    // disjoint by the write boundary, but never fetch/announce the branch the agent builds on).
+    const candidates = named.filter((b) => b !== workBranch)
+    let present: string[]
+    if (this.deps.ensureWorkBranch) {
+      const probe = this.deps.ensureWorkBranch
+      const existence = await Promise.all(candidates.map((b) => probe(repo, b, { create: false })))
+      present = candidates.filter((_b, i) => existence[i])
+    } else {
+      present = candidates
+    }
+    if (present.length === 0) {
+      return {}
+    }
+    return {
+      referenceBranches: present,
+      referenceBranchesSection: renderReferenceBranchesSection(present, { multiRepo }),
     }
   }
 

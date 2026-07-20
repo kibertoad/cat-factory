@@ -278,6 +278,144 @@ export async function start(
   }
 }
 
+/**
+ * Start every background sweeper (the setInterval-based maintenance timers) after the listener
+ * binds, returning each one's stop fn so {@link bootServer}'s ordered shutdown can halt them.
+ * Extracted from `bootServer` to keep it within the statement budget; the set + order is unchanged.
+ */
+function startBackgroundSweepers(deps: {
+  boss: PgBoss
+  pool: ReturnType<typeof createDbClient>['pool']
+  db: ReturnType<typeof createDbClient>['db']
+  container: ServerContainer
+  repos: ReturnType<typeof createDrizzleRepositories>
+  runtime: ReturnType<typeof executionRuntime>
+  clock: SystemClock
+  env: NodeJS.ProcessEnv
+}) {
+  const { boss, pool, db, container, repos, runtime, clock, env } = deps
+  const stopSweeper = startStaleRunSweeper(
+    boss,
+    pool,
+    container,
+    runtime.sweeper,
+    runtime.queue,
+    logger,
+  )
+  // Env-test self-tests live in their own table (not agent_runs), so the stale-run
+  // sweeper above never sees them — this sibling re-enqueues a drive for any stale run;
+  // the drive's own budget-exhaustion finalize settles one that still can't finish.
+  // Reads the LOCAL store directly (sweeping is deployment-internal, like the other
+  // `listStale` surfaces): on a satellite the local table is empty and this no-ops.
+  const stopEnvTestSweeper = startEnvTestSweeper(
+    new PgBossEnvironmentTestRunner(boss, runtime.queue),
+    new DrizzleEnvironmentTestRunRepository(db),
+    { leaseMs: runtime.sweeper.leaseMs, intervalMs: runtime.sweeper.intervalMs },
+    logger,
+  )
+  // Bound the unbounded tables (`token_usage`, the heavy `llm_call_metrics`): the Worker
+  // prunes these from cron, Node has none, so a timer mirrors it. Without this the
+  // observability sink — full per-call prompt/response — grows forever on Postgres.
+  const stopRetention = startRetentionSweeper(
+    {
+      tokenUsageRepository: repos.tokenUsageRepository,
+      llmCallMetricRepository: repos.llmCallMetricRepository,
+      agentContextSnapshotRepository: repos.agentContextSnapshotRepository,
+      agentSearchQueryRepository: repos.agentSearchQueryRepository,
+      pipelineScheduleRepository: repos.pipelineScheduleRepository,
+      subscriptionActivationRepository: new DrizzleSubscriptionActivationRepository(db),
+      subscriptionQuotaCycleRepository: repos.subscriptionQuotaCycleRepository,
+      provisioningLogRepository: repos.provisioningLogRepository,
+      passwordResetTokenRepository: repos.passwordResetTokenRepository,
+      commitRepository: new DrizzleCommitProjectionRepository(db),
+      notificationRepository: new DrizzleNotificationRepository(db),
+    },
+    container.config.retention,
+    clock,
+    logger,
+  )
+  // Per-workspace binary-artifact (screenshot) retention; only when content storage is wired
+  // (the resolver is present once an encryption key is configured). The sweep resolves each
+  // workspace's per-account store itself.
+  const stopArtifactRetention = container.resolveBinaryArtifactStore
+    ? startArtifactRetentionSweeper(
+        container.resolveBinaryArtifactStore,
+        repos.workspaceRepository,
+        repos.workspaceSettingsRepository,
+        clock,
+        logger,
+      )
+    : () => {}
+  // Fire due recurring pipelines on a one-minute timer (the Worker uses cron).
+  const stopScheduleSweeper = startScheduleSweeper(container, clock, logger)
+  // Tick the initiative execution loop on a one-minute timer (the Worker uses cron); reconciles
+  // + spawns for every executing initiative. Terminal child runs poke the loop directly, so this
+  // is the backstop cadence; no-op unless the initiatives module is wired. Resolve the interval
+  // from the INJECTED `env` (not `process.env`) so an `INITIATIVE_LOOP_INTERVAL_MS` passed through
+  // `start({ env })` is honoured — the e2e backend relies on the fast sweep for its first spawn.
+  const stopInitiativeLoop = startInitiativeLoopSweeper(
+    container,
+    clock,
+    logger,
+    resolveSweepInterval(env),
+  )
+  // Tear down expired ephemeral environments (the Worker uses cron); no-op unless the
+  // environments integration is wired.
+  const stopEnvironmentSweeper = startEnvironmentSweeper(container, clock, logger)
+  // Escalate long-waiting notifications yellow → red (the Worker uses cron); the
+  // overdue-human signal now that runs never time out waiting for input.
+  const stopNotificationEscalation = startNotificationEscalationSweeper(container, clock, logger)
+  // Run pending Kaizen gradings on a one-minute timer (the Worker uses cron); no-op
+  // unless the Kaizen feature is wired.
+  const stopKaizenSweeper = startKaizenSweeper(container, clock, logger)
+  // Re-sync stale GitHub repo projections — the backstop for missed webhooks (the
+  // Worker's `github-reconcile` cron); no-op unless the GitHub App module is wired.
+  const stopGitHubReconcile = container.github
+    ? startGitHubReconcileSweeper(
+        {
+          repoProjectionRepository: new DrizzleRepoProjectionRepository(db),
+          installationRepository: new DrizzleGitHubInstallationRepository(db),
+          syncRepoById: (workspaceId, repoGithubId) =>
+            container.github!.syncService.syncRepoById(workspaceId, repoGithubId),
+        },
+        clock,
+        logger,
+      )
+    : () => {}
+  // Push deployment-level (platform-operator) observability aggregates to the OTLP endpoint
+  // as OpenTelemetry gauge metrics (the Worker uses cron). No-op unless the platform
+  // observability read is wired AND `OTEL_PLATFORM_METRICS` opted in on top of the exporter.
+  const stopPlatformMetrics = container.platformObservability
+    ? startPlatformMetricsSweeper(
+        {
+          otel: container.config.otel,
+          platformObservability: container.platformObservability,
+          workspaceRepository: repos.workspaceRepository,
+        },
+        clock,
+        logger,
+      )
+    : () => {}
+  // Raise/clear `platform_health` notifications when the deployment's own run health crosses a
+  // threshold (the Worker uses cron). No-op unless `PLATFORM_ALERTS` is opted in and the
+  // notifications + platform-observability reads are wired.
+  const stopPlatformHealth = startPlatformHealthSweeper(container, clock, logger)
+  return {
+    stopSweeper,
+    stopEnvTestSweeper,
+    stopRetention,
+    stopArtifactRetention,
+    stopScheduleSweeper,
+    stopInitiativeLoop,
+    stopEnvironmentSweeper,
+    stopNotificationEscalation,
+    stopKaizenSweeper,
+    stopGitHubReconcile,
+    stopPlatformMetrics,
+    stopPlatformHealth,
+  }
+}
+
 /** The real boot sequence, wrapped by {@link start} so a {@link ConfigValidationError} falls back. */
 async function bootServer(
   options: NonNullable<Parameters<typeof start>[0]>,
@@ -461,116 +599,23 @@ async function bootServer(
   const timings = bootClock.summary()
   logger.info(timings, `cat-factory node server ready in ${timings.totalMs} ms`)
 
-  // The background sweepers below only schedule `setInterval`s (no work runs until a
-  // timer fires), so start them AFTER the listener binds — the server accepts requests a
-  // few ms sooner. The pg-boss workers above stay before listen so an enqueued job always
-  // has a consumer.
-  const stopSweeper = startStaleRunSweeper(
-    boss,
-    pool,
-    container,
-    runtime.sweeper,
-    runtime.queue,
-    logger,
-  )
-  // Env-test self-tests live in their own table (not agent_runs), so the stale-run
-  // sweeper above never sees them — this sibling re-enqueues a drive for any stale run;
-  // the drive's own budget-exhaustion finalize settles one that still can't finish.
-  // Reads the LOCAL store directly (sweeping is deployment-internal, like the other
-  // `listStale` surfaces): on a satellite the local table is empty and this no-ops.
-  const stopEnvTestSweeper = startEnvTestSweeper(
-    new PgBossEnvironmentTestRunner(boss, runtime.queue),
-    new DrizzleEnvironmentTestRunRepository(db),
-    { leaseMs: runtime.sweeper.leaseMs, intervalMs: runtime.sweeper.intervalMs },
-    logger,
-  )
-  // Bound the unbounded tables (`token_usage`, the heavy `llm_call_metrics`): the Worker
-  // prunes these from cron, Node has none, so a timer mirrors it. Without this the
-  // observability sink — full per-call prompt/response — grows forever on Postgres.
-  const stopRetention = startRetentionSweeper(
-    {
-      tokenUsageRepository: repos.tokenUsageRepository,
-      llmCallMetricRepository: repos.llmCallMetricRepository,
-      agentContextSnapshotRepository: repos.agentContextSnapshotRepository,
-      agentSearchQueryRepository: repos.agentSearchQueryRepository,
-      pipelineScheduleRepository: repos.pipelineScheduleRepository,
-      subscriptionActivationRepository: new DrizzleSubscriptionActivationRepository(db),
-      subscriptionQuotaCycleRepository: repos.subscriptionQuotaCycleRepository,
-      provisioningLogRepository: repos.provisioningLogRepository,
-      passwordResetTokenRepository: repos.passwordResetTokenRepository,
-      commitRepository: new DrizzleCommitProjectionRepository(db),
-      notificationRepository: new DrizzleNotificationRepository(db),
-    },
-    container.config.retention,
-    clock,
-    logger,
-  )
-  // Per-workspace binary-artifact (screenshot) retention; only when content storage is wired
-  // (the resolver is present once an encryption key is configured). The sweep resolves each
-  // workspace's per-account store itself.
-  const stopArtifactRetention = container.resolveBinaryArtifactStore
-    ? startArtifactRetentionSweeper(
-        container.resolveBinaryArtifactStore,
-        repos.workspaceRepository,
-        repos.workspaceSettingsRepository,
-        clock,
-        logger,
-      )
-    : () => {}
-  // Fire due recurring pipelines on a one-minute timer (the Worker uses cron).
-  const stopScheduleSweeper = startScheduleSweeper(container, clock, logger)
-  // Tick the initiative execution loop on a one-minute timer (the Worker uses cron); reconciles
-  // + spawns for every executing initiative. Terminal child runs poke the loop directly, so this
-  // is the backstop cadence; no-op unless the initiatives module is wired. Resolve the interval
-  // from the INJECTED `env` (not `process.env`) so an `INITIATIVE_LOOP_INTERVAL_MS` passed through
-  // `start({ env })` is honoured — the e2e backend relies on the fast sweep for its first spawn.
-  const stopInitiativeLoop = startInitiativeLoopSweeper(
-    container,
-    clock,
-    logger,
-    resolveSweepInterval(env),
-  )
-  // Tear down expired ephemeral environments (the Worker uses cron); no-op unless the
-  // environments integration is wired.
-  const stopEnvironmentSweeper = startEnvironmentSweeper(container, clock, logger)
-  // Escalate long-waiting notifications yellow → red (the Worker uses cron); the
-  // overdue-human signal now that runs never time out waiting for input.
-  const stopNotificationEscalation = startNotificationEscalationSweeper(container, clock, logger)
-  // Run pending Kaizen gradings on a one-minute timer (the Worker uses cron); no-op
-  // unless the Kaizen feature is wired.
-  const stopKaizenSweeper = startKaizenSweeper(container, clock, logger)
-  // Re-sync stale GitHub repo projections — the backstop for missed webhooks (the
-  // Worker's `github-reconcile` cron); no-op unless the GitHub App module is wired.
-  const stopGitHubReconcile = container.github
-    ? startGitHubReconcileSweeper(
-        {
-          repoProjectionRepository: new DrizzleRepoProjectionRepository(db),
-          installationRepository: new DrizzleGitHubInstallationRepository(db),
-          syncRepoById: (workspaceId, repoGithubId) =>
-            container.github!.syncService.syncRepoById(workspaceId, repoGithubId),
-        },
-        clock,
-        logger,
-      )
-    : () => {}
-  // Push deployment-level (platform-operator) observability aggregates to the OTLP endpoint
-  // as OpenTelemetry gauge metrics (the Worker uses cron). No-op unless the platform
-  // observability read is wired AND `OTEL_PLATFORM_METRICS` opted in on top of the exporter.
-  const stopPlatformMetrics = container.platformObservability
-    ? startPlatformMetricsSweeper(
-        {
-          otel: container.config.otel,
-          platformObservability: container.platformObservability,
-          workspaceRepository: repos.workspaceRepository,
-        },
-        clock,
-        logger,
-      )
-    : () => {}
-  // Raise/clear `platform_health` notifications when the deployment's own run health crosses a
-  // threshold (the Worker uses cron). No-op unless `PLATFORM_ALERTS` is opted in and the
-  // notifications + platform-observability reads are wired.
-  const stopPlatformHealth = startPlatformHealthSweeper(container, clock, logger)
+  // The background sweepers only schedule `setInterval`s (no work runs until a timer fires), so
+  // start them AFTER the listener binds — the server accepts requests a few ms sooner. The pg-boss
+  // workers above stay before listen so an enqueued job always has a consumer.
+  const {
+    stopSweeper,
+    stopEnvTestSweeper,
+    stopRetention,
+    stopArtifactRetention,
+    stopScheduleSweeper,
+    stopInitiativeLoop,
+    stopEnvironmentSweeper,
+    stopNotificationEscalation,
+    stopKaizenSweeper,
+    stopGitHubReconcile,
+    stopPlatformMetrics,
+    stopPlatformHealth,
+  } = startBackgroundSweepers({ boss, pool, db, container, repos, runtime, clock, env })
 
   // Ordered graceful shutdown: stop accepting connections, halt the sweeper + pg-boss
   // worker, release the pool, then exit. Without closing the HTTP server the process

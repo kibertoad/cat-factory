@@ -89,6 +89,17 @@ import { publicApiKeyController } from './modules/publicApi/PublicApiKeyControll
  * `Bindings`; the controllers only touch `Variables` (`container`, `user`).
  */
 export function registerCoreControllers<E extends AppEnv>(app: Hono<E>): void {
+  registerRootControllers(app)
+  registerWorkspaceControllers(app)
+  registerWebhookControllers(app)
+}
+
+/**
+ * The controllers mounted at the app root (`/`): the container-facing harness endpoints, the
+ * mothership-mode machine APIs, the public external API, and the read-only catalogs + account /
+ * user / workspace roots. Mounted before the per-workspace API, so the order here is significant.
+ */
+function registerRootControllers<E extends AppEnv>(app: Hono<E>): void {
   // OpenAI-compatible LLM proxy for implementation containers (authenticated by a
   // signed, model-locked container token; upstream/in-process via the llmUpstream gateway).
   app.route('/', llmProxyController())
@@ -154,6 +165,13 @@ export function registerCoreControllers<E extends AppEnv>(app: Hono<E>): void {
   // gate bypasses only its exact upgrade shape). The upgrade is delegated to the
   // facade's realtime gateway.
   app.route('/', eventsController())
+}
+
+/**
+ * The per-workspace API — every controller mounted under `/workspaces/:workspaceId`. Order is
+ * significant (shared middleware/routing), so it mirrors the historical registration order.
+ */
+function registerWorkspaceControllers<E extends AppEnv>(app: Hono<E>): void {
   // Per-workspace API.
   app.route('/workspaces/:workspaceId', boardController())
   app.route('/workspaces/:workspaceId', pipelineController())
@@ -205,6 +223,13 @@ export function registerCoreControllers<E extends AppEnv>(app: Hono<E>): void {
   app.route('/workspaces/:workspaceId', fragmentLibraryController('workspace'))
   app.route('/workspaces/:workspaceId', githubController())
   app.route('/workspaces/:workspaceId', slackController())
+}
+
+/**
+ * The provider-facing webhook receivers + OAuth redirect callbacks (GitHub / VCS / Slack / Linear);
+ * not workspace-scoped. Mounted last, after the workspace API.
+ */
+function registerWebhookControllers<E extends AppEnv>(app: Hono<E>): void {
   // GitHub-facing (webhooks + setup callback); not workspace-scoped.
   app.route('/github', githubWebhookController())
   // Provider-neutral VCS webhook receiver (GitLab first); not workspace-scoped. GitHub keeps

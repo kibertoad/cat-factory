@@ -298,136 +298,146 @@ export function startStaleRunSweeper(
   // inflates `updated_at`) can't fail an otherwise-recoverable run before recovery is even
   // attempted. Entries are dropped once a run recovers or leaves the stale set.
   const orphanedSince = new Map<string, number>()
+  // Process one tick's stale runs: recover an orphaned advance job, apply the hard-stall backstop,
+  // and re-drive (per kind). Records into `stillOrphaned` which runs are still orphaned this tick
+  // (so the caller can forget the ones that recovered) and pushes execution re-drives into
+  // `advanceReenqueues` for the caller's single batch insert. Extracted from the sweep tick to keep
+  // it under the statement ceiling; the body is unchanged.
+  const reenqueueStaleRuns = async (
+    stale: Awaited<ReturnType<typeof container.agentRunRepository.listStale>>,
+    now: number,
+    stillOrphaned: Set<string>,
+    advanceReenqueues: JobInsert<AdvanceJob>[],
+  ): Promise<void> => {
+    for (const ref of stale) {
+      const queue = queueForKind(ref.kind)
+      if (!queue) continue
+
+      // Distinguish a healthy long drive (heartbeating) from an orphaned job whose worker
+      // died, so we recover the orphan instead of silently no-op re-sending onto it.
+      const { state, jobId } = await classifyAdvanceJob(jobs, queue, ref.id, staleHeartbeatMs, now)
+      if (state === 'live') {
+        orphanedSince.delete(ref.id)
+        continue
+      }
+      // Start (or carry forward) this run's per-process orphaned clock.
+      const firstSeenOrphaned = orphanedSince.get(ref.id) ?? now
+      orphanedSince.set(ref.id, firstSeenOrphaned)
+      stillOrphaned.add(ref.id)
+
+      if (state === 'orphaned' && jobId) {
+        log.warn(
+          { workspaceId: ref.workspaceId, runId: ref.id, kind: ref.kind, jobId },
+          'reclaiming orphaned advance job (dead worker) before re-drive',
+        )
+        await reclaimAdvanceJob(boss, queue, jobId).catch((err) =>
+          log.error(
+            { runId: ref.id, err: err instanceof Error ? err.message : String(err) },
+            'failed to reclaim orphaned advance job',
+          ),
+        )
+      }
+
+      // Hard-stall backstop (execution only): a run this process has been unable to recover
+      // for the whole deadline — re-driven on earlier ticks yet still not live — is failed
+      // rather than left spinning `running`. Gated on the per-process clock (not lease age),
+      // so a run first seen orphaned this tick (e.g. right after a long downtime) is always
+      // re-driven at least once below before it can ever be given up on.
+      if (ref.kind === 'execution' && now - firstSeenOrphaned > cfg.hardStallMs) {
+        const mins = Math.round((now - ref.updatedAt) / 60_000)
+        log.warn(
+          { workspaceId: ref.workspaceId, executionId: ref.id, staleMinutes: mins },
+          'run stalled past hard deadline; recovery could not resume it; failing',
+        )
+        await container.executionService.failRun(
+          ref.workspaceId,
+          ref.id,
+          `Run stalled: no progress for ${mins} minutes and recovery could not resume it.`,
+          'stalled',
+          null,
+        )
+        orphanedSince.delete(ref.id)
+        stillOrphaned.delete(ref.id)
+        continue
+      }
+
+      if (ref.kind === 'bootstrap') {
+        log.warn({ workspaceId: ref.workspaceId, jobId: ref.id }, 're-driving stale bootstrap')
+        await reenqueueStaleBootstrap(boss, ref.workspaceId, ref.id, queueOptions)
+        continue
+      }
+      if (ref.kind === 'env-config-repair') {
+        log.warn(
+          { workspaceId: ref.workspaceId, jobId: ref.id },
+          're-driving stale env-config-repair',
+        )
+        await reenqueueStaleEnvConfigRepair(boss, ref.workspaceId, ref.id, queueOptions)
+        continue
+      }
+      log.warn({ workspaceId: ref.workspaceId, executionId: ref.id }, 're-driving stale run')
+      advanceReenqueues.push(
+        advanceInsert({ workspaceId: ref.workspaceId, executionId: ref.id }, queueOptions),
+      )
+    }
+  }
+
+  // Auto-resume spend-paused runs once the monthly budget frees (parity with the Cloudflare
+  // ExecutionWorkflow, whose parked instance re-checks the budget itself). `listStale` skips
+  // `paused` runs, so re-check them here: re-drive ONLY those whose WORKSPACE and ACCOUNT
+  // tiers are both back under budget — a still-exhausted workspace/account causes no churn.
+  // Both are keyed only by the workspace (a workspace has one owning account), so the check
+  // is cached per distinct workspace, not per run. The USER tier is deliberately NOT checked
+  // here: it needs the run's initiator, which the lightweight paused ref doesn't carry, so a
+  // run paused solely on a user cap is re-driven and the tier-aware step gate in
+  // `ExecutionService.stepInstance` re-pauses it (a bounded, per-sweep one-step blip, not an
+  // un-gated run). So this is a best-effort resume, not a proof the run will advance. Extracted
+  // from the sweep tick to keep it under the statement ceiling; the body is unchanged.
+  const resumePausedRuns = async (advanceReenqueues: JobInsert<AdvanceJob>[]): Promise<void> => {
+    const paused = await container.agentRunRepository.listPausedExecutions()
+    const exhaustedByWorkspace = new Map<string, boolean>()
+    const accountByWorkspace = new Map<string, string | null>()
+    for (const ref of paused) {
+      let exhausted = exhaustedByWorkspace.get(ref.workspaceId)
+      if (exhausted === undefined) {
+        let accountId = accountByWorkspace.get(ref.workspaceId)
+        if (accountId === undefined) {
+          accountId = (await container.workspaceService.accountOf(ref.workspaceId)) ?? null
+          accountByWorkspace.set(ref.workspaceId, accountId)
+        }
+        exhausted = await container.spendService.isOverBudget(ref.workspaceId, { accountId })
+        exhaustedByWorkspace.set(ref.workspaceId, exhausted)
+      }
+      if (exhausted) continue
+      log.info(
+        { workspaceId: ref.workspaceId, executionId: ref.id },
+        're-driving spend-paused run (workspace/account budget free; step gate re-checks the user tier)',
+      )
+      advanceReenqueues.push(
+        advanceInsert({ workspaceId: ref.workspaceId, executionId: ref.id }, queueOptions),
+      )
+    }
+  }
+
   const tick = async () => {
     try {
       const now = Date.now()
       const stale = await container.agentRunRepository.listStale(now - cfg.leaseMs)
       const stillOrphaned = new Set<string>()
-      // Every `execution.advance` re-drive this tick decides on — stale re-drives below AND
-      // spend-paused resumes further down — is gathered here and flushed as ONE batch
-      // `insert` instead of a `send` per run. singletonKeys are distinct across the batch
-      // (a run is either `running`/stale or `paused`, never both in one tick), so no row
-      // conflicts with another in the same insert; each conflicts only with its own already
-      // -live advance job, which the exclusive index no-ops per row. (Bootstrap /
-      // env-config-repair re-drives target other queues via their own helpers and are left
-      // as individual sends — different queue, typically N=1.)
+      // Every `execution.advance` re-drive this tick decides on — stale re-drives AND spend-paused
+      // resumes — is gathered here and flushed as ONE batch `insert` instead of a `send` per run.
+      // singletonKeys are distinct across the batch (a run is either `running`/stale or `paused`,
+      // never both in one tick), so no row conflicts with another in the same insert; each
+      // conflicts only with its own already-live advance job, which the exclusive index no-ops per
+      // row. (Bootstrap / env-config-repair re-drives target other queues via their own helpers and
+      // are left as individual sends — different queue, typically N=1.)
       const advanceReenqueues: JobInsert<AdvanceJob>[] = []
-      for (const ref of stale) {
-        const queue = queueForKind(ref.kind)
-        if (!queue) continue
-
-        // Distinguish a healthy long drive (heartbeating) from an orphaned job whose worker
-        // died, so we recover the orphan instead of silently no-op re-sending onto it.
-        const { state, jobId } = await classifyAdvanceJob(
-          jobs,
-          queue,
-          ref.id,
-          staleHeartbeatMs,
-          now,
-        )
-        if (state === 'live') {
-          orphanedSince.delete(ref.id)
-          continue
-        }
-        // Start (or carry forward) this run's per-process orphaned clock.
-        const firstSeenOrphaned = orphanedSince.get(ref.id) ?? now
-        orphanedSince.set(ref.id, firstSeenOrphaned)
-        stillOrphaned.add(ref.id)
-
-        if (state === 'orphaned' && jobId) {
-          log.warn(
-            { workspaceId: ref.workspaceId, runId: ref.id, kind: ref.kind, jobId },
-            'reclaiming orphaned advance job (dead worker) before re-drive',
-          )
-          await reclaimAdvanceJob(boss, queue, jobId).catch((err) =>
-            log.error(
-              { runId: ref.id, err: err instanceof Error ? err.message : String(err) },
-              'failed to reclaim orphaned advance job',
-            ),
-          )
-        }
-
-        // Hard-stall backstop (execution only): a run this process has been unable to recover
-        // for the whole deadline — re-driven on earlier ticks yet still not live — is failed
-        // rather than left spinning `running`. Gated on the per-process clock (not lease age),
-        // so a run first seen orphaned this tick (e.g. right after a long downtime) is always
-        // re-driven at least once below before it can ever be given up on.
-        if (ref.kind === 'execution' && now - firstSeenOrphaned > cfg.hardStallMs) {
-          const mins = Math.round((now - ref.updatedAt) / 60_000)
-          log.warn(
-            { workspaceId: ref.workspaceId, executionId: ref.id, staleMinutes: mins },
-            'run stalled past hard deadline; recovery could not resume it; failing',
-          )
-          await container.executionService.failRun(
-            ref.workspaceId,
-            ref.id,
-            `Run stalled: no progress for ${mins} minutes and recovery could not resume it.`,
-            'stalled',
-            null,
-          )
-          orphanedSince.delete(ref.id)
-          stillOrphaned.delete(ref.id)
-          continue
-        }
-
-        if (ref.kind === 'bootstrap') {
-          log.warn({ workspaceId: ref.workspaceId, jobId: ref.id }, 're-driving stale bootstrap')
-          await reenqueueStaleBootstrap(boss, ref.workspaceId, ref.id, queueOptions)
-          continue
-        }
-        if (ref.kind === 'env-config-repair') {
-          log.warn(
-            { workspaceId: ref.workspaceId, jobId: ref.id },
-            're-driving stale env-config-repair',
-          )
-          await reenqueueStaleEnvConfigRepair(boss, ref.workspaceId, ref.id, queueOptions)
-          continue
-        }
-        log.warn({ workspaceId: ref.workspaceId, executionId: ref.id }, 're-driving stale run')
-        advanceReenqueues.push(
-          advanceInsert({ workspaceId: ref.workspaceId, executionId: ref.id }, queueOptions),
-        )
-      }
+      await reenqueueStaleRuns(stale, now, stillOrphaned, advanceReenqueues)
       // Forget runs that recovered (bumped their lease → left the stale set) or went terminal,
       // so their per-process orphaned clock restarts if they ever stall again.
       for (const id of orphanedSince.keys()) {
         if (!stillOrphaned.has(id)) orphanedSince.delete(id)
       }
-
-      // Auto-resume spend-paused runs once the monthly budget frees (parity with the Cloudflare
-      // ExecutionWorkflow, whose parked instance re-checks the budget itself). `listStale` skips
-      // `paused` runs, so re-check them here: re-drive ONLY those whose WORKSPACE and ACCOUNT
-      // tiers are both back under budget — a still-exhausted workspace/account causes no churn.
-      // Both are keyed only by the workspace (a workspace has one owning account), so the check
-      // is cached per distinct workspace, not per run. The USER tier is deliberately NOT checked
-      // here: it needs the run's initiator, which the lightweight paused ref doesn't carry, so a
-      // run paused solely on a user cap is re-driven and the tier-aware step gate in
-      // `ExecutionService.stepInstance` re-pauses it (a bounded, per-sweep one-step blip, not an
-      // un-gated run). So this is a best-effort resume, not a proof the run will advance.
-      const paused = await container.agentRunRepository.listPausedExecutions()
-      const exhaustedByWorkspace = new Map<string, boolean>()
-      const accountByWorkspace = new Map<string, string | null>()
-      for (const ref of paused) {
-        let exhausted = exhaustedByWorkspace.get(ref.workspaceId)
-        if (exhausted === undefined) {
-          let accountId = accountByWorkspace.get(ref.workspaceId)
-          if (accountId === undefined) {
-            accountId = (await container.workspaceService.accountOf(ref.workspaceId)) ?? null
-            accountByWorkspace.set(ref.workspaceId, accountId)
-          }
-          exhausted = await container.spendService.isOverBudget(ref.workspaceId, { accountId })
-          exhaustedByWorkspace.set(ref.workspaceId, exhausted)
-        }
-        if (exhausted) continue
-        log.info(
-          { workspaceId: ref.workspaceId, executionId: ref.id },
-          're-driving spend-paused run (workspace/account budget free; step gate re-checks the user tier)',
-        )
-        advanceReenqueues.push(
-          advanceInsert({ workspaceId: ref.workspaceId, executionId: ref.id }, queueOptions),
-        )
-      }
-
+      await resumePausedRuns(advanceReenqueues)
       // One batch insert for every execution.advance re-drive gathered this tick (stale
       // re-drives + spend-paused resumes), replacing N per-run `send` round-trips.
       if (advanceReenqueues.length > 0) await boss.insert(QUEUE, advanceReenqueues)

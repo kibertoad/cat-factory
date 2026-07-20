@@ -1,10 +1,11 @@
 # Initiative: ratchet down oxlint complexity & size ceilings
 
 **Status:** in progress — `max-nested-callbacks`, `max-depth`, AND `max-params` at their final
-targets (4 / 4 / **6**); `complexity` at **step 1 (60)**; `max-lines-per-function` at **step 1
-(1000)** for product code (test suites carved off into an `overrides` ratchet at 2453); `max-lines`
-at its free floor. `max-statements` / `max-lines` still need the remaining god-file refactors to
-move · **Owner:** core · **Started:** 2026-07-20
+targets (4 / 4 / **6**); `complexity` at **step 1 (60)**; `max-statements` at **step 2 (50)**;
+`max-lines-per-function` at **step 1 (1000)** for product code (test suites carved off into an
+`overrides` ratchet at 2453); `max-lines` at its free floor. `complexity` / `max-statements` /
+`max-lines` still need the remaining god-file refactors to reach their final targets ·
+**Owner:** core · **Started:** 2026-07-20
 
 > This is the durable source of truth for a multi-PR initiative. Read it first before
 > picking up the next slice; update the checklist at the end of each PR.
@@ -81,13 +82,31 @@ worst offender. These are the starting ceilings, not the goal.
 | Rule                     | Ceiling now | Reasonable target | Worst offender today                                                                             |
 | ------------------------ | ----------: | ----------------: | ------------------------------------------------------------------------------------------------ |
 | `complexity`             |      **60** |            **20** | at step 1 — floor 57 (`server/persistence/rpc.ts` `checkCallScope`)                              |
-| `max-statements`         |         157 |            **30** | `frontend/app/app/stores/ui/modals.ts` (157)                                                     |
+| `max-statements`         |      **50** |            **30** | at step 2 — floor 50 (`orchestration/container.ts` `createCore`, `RunDispatcher` handlers)       |
 | `max-lines-per-function` |    **1000** |           **150** | product: `runtimes/node/src/container.ts` (`buildNodeContainer`, 991); tests: 2453 (`overrides`) |
 | `max-lines`              |    **2802** |          **1500** | `orchestration/src/modules/execution/ExecutionService.ts` (2802)                                 |
 | `max-params`             |    **6** ✅ |             **6** | at target — 0 offenders above 6                                                                  |
 | `max-depth`              |    **4** ✅ |             **4** | at target — 0 offenders above 4                                                                  |
 | `max-nested-callbacks`   |    **4** ✅ |             **4** | at target — 0 offenders above 4                                                                  |
 
+> **Sixth pass (landed):** `max-statements` went **straight from its pinned baseline (157) to
+> below 60 — step 2 (50)** in one sweep, splitting every one of the 24 functions above 50 along a
+> cohesive seam (all behaviour-neutral; verified by the package unit suites + the cross-runtime
+> conformance suites on real Postgres/workerd in CI). The heaviest: `createUiModals`
+> (`app/stores/ui/modals.ts`, 157) grouped into per-domain sub-factories composed behind the shared
+> hub markers; the LLM proxy handler (108) split into `applyWorkersAiCeiling` / `dispatchInProcess`
+> / `resolveUpstreamTarget` / `relayUpstream` behind a per-call `ProxyCallContext`;
+> `provisionRecipe` (`ComposeEnvironmentProvider`, 94) into six recipe-phase methods;
+> `registerCoreControllers` (`server/app.ts`, 77) into root/workspace/webhook mount groups; plus
+> `resolveAuxiliaryRepos`, `checkEntityCallScope`, the coder container callbacks (harness image
+> bumped), `createCore`, the `RunDispatcher` step handlers, `buildNodeContainer`, `bootServer`,
+> `buildLocalContainer`, and the smoketest `analyzeCase`. The floor dropped to **50**, so the
+> ceiling lands there with zero offenders. Three legacy god-files (`RunDispatcher.ts`,
+> `orchestration/container.ts`, `provision-detect.logic.ts`) grew a few lines from the added helper
+> signatures, so their `check-file-size.mjs` allowances were nudged up in the same PR (they are the
+> `max-lines` ratchet's own split targets). `complexity` is still pinned at step 1 (its top
+> offenders were only partially touched here); `max-lines` unchanged.
+>
 > **First pass (landed):** the god-file split in #1266 dropped the two size-rule floors well
 > below their pinned ceilings, so `max-lines` (3119 → **2802**) and `max-lines-per-function`
 > (3103 → **2453**) tightened for free. `max-nested-callbacks` reached its **final** target
@@ -159,21 +178,20 @@ Update the `Status` cell + the live `max` in `.oxlintrc.json` at the end of each
 
 ### `complexity` — 141 → 20
 
-| Step      | `max` | Offenders to split first                                                                                                                                     | Status    |
-| --------- | ----: | ------------------------------------------------------------------------------------------------------------------------------------------------------------ | --------- |
-| baseline  |   141 | —                                                                                                                                                            | ✅ landed |
+| Step      | `max` | Offenders to split first                                                                                                                                                                           | Status    |
+| --------- | ----: | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | --------- |
+| baseline  |   141 | —                                                                                                                                                                                                  | ✅ landed |
 | 1         |    60 | (7) `loadNodeConfig` 141, `dispatchPersistenceCall` 101, `buildJobBody` 75, `FakeAgentExecutor.run` 68, `buildLocalContainer` 66, `buildNodeContainer` 64, `pollAgentJobInner` 61 — see fifth pass | ✅ landed |
-| 2         |    30 | (46) — `RunDispatcher` methods, `toRunResult`, `buildRegisteredAgentBody`, …                                                                                 | ☐ todo    |
-| 3 (final) |    20 | (99) — ESLint's default; the long tail                                                                                                                       | ☐ todo    |
+| 2         |    30 | (46) — `RunDispatcher` methods, `toRunResult`, `buildRegisteredAgentBody`, …                                                                                                                       | ☐ todo    |
+| 3 (final) |    20 | (99) — ESLint's default; the long tail                                                                                                                                                             | ☐ todo    |
 
 ### `max-statements` — 157 → 30
 
-| Step      | `max` | Offenders to split first                                                                                                                         | Status    |
-| --------- | ----: | ------------------------------------------------------------------------------------------------------------------------------------------------ | --------- |
-| baseline  |   157 | —                                                                                                                                                | ✅ landed |
-| 1         |    80 | (6) `ui/modals.ts` 157, `container.ts` 144, `rpc.ts` 122, `LlmProxyController` 108, `ContainerAgentExecutor` 98, `ComposeEnvironmentProvider` 94 | ☐ todo    |
-| 2         |    50 | (29)                                                                                                                                             | ☐ todo    |
-| 3 (final) |    30 | (105)                                                                                                                                            | ☐ todo    |
+| Step      | `max` | Offenders to split first                                                | Status    |
+| --------- | ----: | ----------------------------------------------------------------------- | --------- |
+| baseline  |   157 | —                                                                       | ✅ landed |
+| 1 + 2     |    50 | (24) — landed in ONE pass straight from 157 to below 60; see sixth pass | ✅ landed |
+| 3 (final) |    30 | (~105) — the long tail                                                  | ☐ todo    |
 
 ### `max-lines-per-function` — 3103 → 150
 

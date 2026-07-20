@@ -1445,35 +1445,56 @@ export interface ServicesModule {
 
 /** Assemble the in-org service-sharing module when its repositories are wired. */
 
+/**
+ * Resolve the app-owned registries + shared runtime singletons ONCE. Each registry uses the
+ * facade's injected instance (so a deployment's custom kinds/gates/resolvers/pipelines/presets
+ * are visible) else a fresh default; the SAME instances are threaded into the engine and
+ * re-exposed on `Core` for the HTTP snapshot. `workRunner`/`executionEventPublisher` fall back
+ * to no-ops, and `caches` (the caching-initiative slice bag) to bare in-memory loaders — so the
+ * cached path, including the services' write-site invalidation, is exercised everywhere. Built
+ * up-front so every service below can be threaded the same instances.
+ */
+function resolveCoreRuntime(dependencies: CoreDependencies) {
+  return {
+    agentKindRegistry: dependencies.agentKindRegistry ?? defaultAgentKindRegistry(),
+    gateRegistry: dependencies.gateRegistry ?? defaultGateRegistry(),
+    stepResolverRegistry: dependencies.stepResolverRegistry ?? defaultStepResolverRegistry(),
+    providerRegistry: dependencies.providerRegistry ?? defaultProviderRegistry(),
+    pipelineRegistry: dependencies.pipelineRegistry ?? defaultPipelineRegistry(),
+    initiativePresetRegistry:
+      dependencies.initiativePresetRegistry ?? defaultInitiativePresetRegistry(),
+    workRunner: dependencies.workRunner ?? new NoopWorkRunner(),
+    executionEventPublisher: dependencies.executionEventPublisher ?? new NoopEventPublisher(),
+    caches: dependencies.caches ?? createAppCaches(),
+  }
+}
+
+/**
+ * Register the optional modules whose only wiring is `dependencies` (no captured local is
+ * consumed downstream). Grouped so the composition root stays under the statement ceiling; the
+ * registration order relative to the surrounding builds is preserved.
+ */
+function registerStandaloneModules(modules: ModuleRegistry, dependencies: CoreDependencies): void {
+  modules.build('releaseHealth', () => createReleaseHealthModule(dependencies))
+  modules.build('packageRegistries', () => createPackageRegistriesModule(dependencies))
+  modules.build('preview', () => createPreviewModule(dependencies))
+  modules.build('incidentEnrichmentSettings', () => createIncidentEnrichmentModule(dependencies))
+  modules.build('modelPresets', () => createModelPresetsModule(dependencies))
+  modules.build('serviceFragmentDefaults', () => createServiceFragmentDefaultsModule(dependencies))
+}
+
 export function createCore(dependencies: CoreDependencies): Core {
-  // Resolve the app-owned agent-kind registry ONCE: the facade's injected instance (so a
-  // deployment's custom kinds are visible) else a fresh built-ins-only registry. The SAME
-  // instance is threaded into the engine and re-exposed on `Core` for the HTTP snapshot.
-  const agentKindRegistry = dependencies.agentKindRegistry ?? defaultAgentKindRegistry()
-  // Resolve the app-owned gate + step-resolver registries ONCE (same reasoning): the facade's
-  // injected instances (so the built-in gates + a deployment's custom gates/resolvers are
-  // visible), else fresh empty registries so gate steps pass through in bare test builds.
-  const gateRegistry = dependencies.gateRegistry ?? defaultGateRegistry()
-  const stepResolverRegistry = dependencies.stepResolverRegistry ?? defaultStepResolverRegistry()
-  // The app-owned provider registry the gate machine reads through its GateContext. Resolved ONCE
-  // and threaded into the execution service alongside the gate registry (same instance the facade
-  // wired its gate providers on).
-  const providerRegistry = dependencies.providerRegistry ?? defaultProviderRegistry()
-  // The app-owned pipeline registry (deployment-registered extra pipelines). Resolved ONCE and
-  // threaded into the workspace + pipeline services so seeding + reseed see the same extras.
-  const pipelineRegistry = dependencies.pipelineRegistry ?? defaultPipelineRegistry()
-  // Resolve the app-owned initiative-preset registry ONCE (same reasoning as the agent-kind one):
-  // the facade's injected instance, else a fresh registry preloaded with the built-in presets.
-  const initiativePresetRegistry =
-    dependencies.initiativePresetRegistry ?? defaultInitiativePresetRegistry()
-  const workRunner = dependencies.workRunner ?? new NoopWorkRunner()
-  const executionEventPublisher = dependencies.executionEventPublisher ?? new NoopEventPublisher()
-  // The cache bag the caching-initiative slices read through. A facade passes its own
-  // (Redis-notified on multi-node Node, isolate-safe on the Worker); tests and harnesses
-  // fall back to bare in-memory loaders, so the cached path — including the services'
-  // write-site invalidation — is exercised everywhere. Built here (before the services that
-  // invalidate through it) so it can be threaded into all of them.
-  const caches = dependencies.caches ?? createAppCaches()
+  const {
+    agentKindRegistry,
+    gateRegistry,
+    stepResolverRegistry,
+    providerRegistry,
+    pipelineRegistry,
+    initiativePresetRegistry,
+    workRunner,
+    executionEventPublisher,
+    caches,
+  } = resolveCoreRuntime(dependencies)
   // The optional-module registry: every feature that is wired only when its prerequisites are
   // configured is `build`-declared through this, instead of a scattered `const x = createX(...)`
   // + a matching `...(x ? { x } : {})` return spread. Registration order below IS dependency
@@ -1703,12 +1724,7 @@ export function createCore(dependencies: CoreDependencies): Core {
   const settings = modules.build('settings', () =>
     createWorkspaceSettingsModule(dependencies, caches.workspaceSettings),
   )
-  modules.build('releaseHealth', () => createReleaseHealthModule(dependencies))
-  modules.build('packageRegistries', () => createPackageRegistriesModule(dependencies))
-  modules.build('preview', () => createPreviewModule(dependencies))
-  modules.build('incidentEnrichmentSettings', () => createIncidentEnrichmentModule(dependencies))
-  modules.build('modelPresets', () => createModelPresetsModule(dependencies))
-  modules.build('serviceFragmentDefaults', () => createServiceFragmentDefaultsModule(dependencies))
+  registerStandaloneModules(modules, dependencies)
   // Built before the execution engine so the planning pipeline's plan ingest + the
   // committer step's tracker mirror can run through it.
   const initiativeService = dependencies.initiativeRepository
@@ -1857,61 +1873,68 @@ export function createCore(dependencies: CoreDependencies): Core {
       : undefined,
   })
 
-  modules.build('github', () => createGitHubModule(dependencies, caches))
-  modules.build('runners', () => createRunnersModule(dependencies))
-  // After a bootstrap succeeds, map the new repo into a blueprint + the board by
-  // starting the blueprint-only pipeline against the service frame.
-  modules.build('bootstrap', () =>
-    createBootstrapModule(dependencies, executionEventPublisher, (ws, blockId) =>
-      executionService.start(ws, blockId, BLUEPRINT_PIPELINE_ID).then(() => undefined),
-    ),
-  )
-  modules.build('tracker', () => createTrackerModule(dependencies))
-  modules.build('recurring', () =>
-    createRecurringModule(
-      dependencies,
-      executionService,
-      executionEventPublisher,
-      tasks?.connectionService,
-    ),
-  )
-  // The env-config-repair module is a sub-module of `environments` — surfaced as its own top-level
-  // `Core.envConfigRepair` key. Registered here (not in the `environments` build above) so it emits
-  // through the same registry rather than a bespoke return spread.
-  modules.build('envConfigRepair', () => environments?.envConfigRepair)
-  // Observability + per-account settings that a facade builds and passes through on the deps bag.
-  modules.build('agentContextObservability', () => dependencies.agentContextObservability)
-  modules.build('searchQueryObservability', () => dependencies.searchQueryObservability)
-  modules.build('accountSettings', () =>
-    dependencies.accountSettings ? { service: dependencies.accountSettings } : undefined,
-  )
-  // The initiative EXECUTION LOOP (slice 3): built after the engine (it drives
-  // `executionService.start` to spawn tasks), then late-bound into the terminal poke above so a
-  // settling child run advances its owning initiative immediately. Present only when initiatives
-  // are wired; the cron/interval sweepers call `loop.runDue`.
-  const initiativeLoop =
-    initiativeService && dependencies.initiativeRepository
-      ? new InitiativeLoopService({
-          initiativeRepository: dependencies.initiativeRepository,
-          initiativeService,
-          blockRepository: dependencies.blockRepository,
-          pipelineRepository: dependencies.pipelineRepository,
-          executionService,
-          events: executionEventPublisher,
-          clock: dependencies.clock,
-          idGenerator: dependencies.idGenerator,
-          notificationService: notifications?.service,
-          resolveRunRepoContext: dependencies.resolveRunRepoContext,
-          serviceRepository: dependencies.serviceRepository,
-        })
-      : undefined
-  initiativeLoopRef = initiativeLoop
-  modules.build('initiatives', () =>
-    initiativeService && initiativeLoop
-      ? { service: initiativeService, loop: initiativeLoop }
-      : undefined,
-  )
-  modules.build('services', () => createServicesModule(dependencies))
+  // Modules that depend on the assembled engine (they drive `executionService`, or feed the
+  // late-bound initiative loop). Grouped into a local closure so the composition root stays under
+  // the statement ceiling; the closure captures every local it needs and preserves the registration
+  // order — the last one it runs late-binds `initiativeLoopRef` for the terminal poke above.
+  const registerEngineDependentModules = (): void => {
+    modules.build('github', () => createGitHubModule(dependencies, caches))
+    modules.build('runners', () => createRunnersModule(dependencies))
+    // After a bootstrap succeeds, map the new repo into a blueprint + the board by
+    // starting the blueprint-only pipeline against the service frame.
+    modules.build('bootstrap', () =>
+      createBootstrapModule(dependencies, executionEventPublisher, (ws, blockId) =>
+        executionService.start(ws, blockId, BLUEPRINT_PIPELINE_ID).then(() => undefined),
+      ),
+    )
+    modules.build('tracker', () => createTrackerModule(dependencies))
+    modules.build('recurring', () =>
+      createRecurringModule(
+        dependencies,
+        executionService,
+        executionEventPublisher,
+        tasks?.connectionService,
+      ),
+    )
+    // The env-config-repair module is a sub-module of `environments` — surfaced as its own top-level
+    // `Core.envConfigRepair` key. Registered here (not in the `environments` build above) so it emits
+    // through the same registry rather than a bespoke return spread.
+    modules.build('envConfigRepair', () => environments?.envConfigRepair)
+    // Observability + per-account settings that a facade builds and passes through on the deps bag.
+    modules.build('agentContextObservability', () => dependencies.agentContextObservability)
+    modules.build('searchQueryObservability', () => dependencies.searchQueryObservability)
+    modules.build('accountSettings', () =>
+      dependencies.accountSettings ? { service: dependencies.accountSettings } : undefined,
+    )
+    // The initiative EXECUTION LOOP (slice 3): built after the engine (it drives
+    // `executionService.start` to spawn tasks), then late-bound into the terminal poke above so a
+    // settling child run advances its owning initiative immediately. Present only when initiatives
+    // are wired; the cron/interval sweepers call `loop.runDue`.
+    const initiativeLoop =
+      initiativeService && dependencies.initiativeRepository
+        ? new InitiativeLoopService({
+            initiativeRepository: dependencies.initiativeRepository,
+            initiativeService,
+            blockRepository: dependencies.blockRepository,
+            pipelineRepository: dependencies.pipelineRepository,
+            executionService,
+            events: executionEventPublisher,
+            clock: dependencies.clock,
+            idGenerator: dependencies.idGenerator,
+            notificationService: notifications?.service,
+            resolveRunRepoContext: dependencies.resolveRunRepoContext,
+            serviceRepository: dependencies.serviceRepository,
+          })
+        : undefined
+    initiativeLoopRef = initiativeLoop
+    modules.build('initiatives', () =>
+      initiativeService && initiativeLoop
+        ? { service: initiativeService, loop: initiativeLoop }
+        : undefined,
+    )
+    modules.build('services', () => createServicesModule(dependencies))
+  }
+  registerEngineDependentModules()
 
   // The always-present spine, plus every optional module the registry assembled in ONE place
   // (unwired keys absent) — replacing the ~40 hand-written `...(x ? { x } : {})` return spreads.

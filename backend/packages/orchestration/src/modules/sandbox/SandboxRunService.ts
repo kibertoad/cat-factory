@@ -161,11 +161,13 @@ export class SandboxRunService {
       // for large matrices and the tracked follow-up.
       const budget = experiment.budgetTokens
       let spent = 0
-      for (const run of runs) {
-        if (budget !== null && spent >= budget) {
-          await this.failRun(workspaceId, run, 'Token budget exhausted before this cell ran.')
-          continue
-        }
+      // Drive one matrix cell: run the candidate (Phase 1), then grade it (Phase 2). Returns the
+      // tokens the cell consumed (folded into the running `spent` budget) and whether it produced a
+      // recorded grade. A candidate failure fails the whole cell; a grading failure keeps the
+      // candidate output inspectable with the error, so the cell is `done` but not counted graded.
+      const runCell = async (
+        run: SandboxRun,
+      ): Promise<{ tokensSpent: number; graded: boolean }> => {
         const prompt = prompts.get(run.promptVersionId)
         const fixture = fixtures.get(run.fixtureId)
         if (!prompt || !fixture) {
@@ -176,9 +178,10 @@ export class SandboxRunService {
               ? `Unknown fixture "${run.fixtureId}"`
               : `Unknown prompt version "${run.promptVersionId}"`,
           )
-          continue
+          return { tokensSpent: 0, graded: false }
         }
         const taskInput = renderFixtureInput(fixture)
+        let cellSpent = 0
 
         // Phase 1 — run the candidate. A failure here means the cell produced nothing,
         // so the whole cell is `failed`.
@@ -202,7 +205,7 @@ export class SandboxRunService {
             inputTokens: candidate.usage.inputTokens ?? 0,
             outputTokens: candidate.usage.outputTokens ?? 0,
           }
-          spent += usage.inputTokens + usage.outputTokens
+          cellSpent += usage.inputTokens + usage.outputTokens
           done = {
             ...run,
             status: 'done',
@@ -215,7 +218,7 @@ export class SandboxRunService {
           await this.deps.sandboxRunRepository.upsert(workspaceId, done)
         } catch (e) {
           await this.failRun(workspaceId, run, e instanceof Error ? e.message : String(e))
-          continue
+          return { tokensSpent: cellSpent, graded: false }
         }
 
         // Phase 2 — grade the cell (rubric + objective). A grading failure must NOT
@@ -236,7 +239,7 @@ export class SandboxRunService {
             maxOutputTokens: 2000,
             providerOptions: catFactoryObservability({ agentKind: 'sandbox:judge', workspaceId }),
           })
-          spent += (judged.usage.inputTokens ?? 0) + (judged.usage.outputTokens ?? 0)
+          cellSpent += (judged.usage.inputTokens ?? 0) + (judged.usage.outputTokens ?? 0)
           // Treat an unparseable / empty / reasoning-only judge reply as a grading
           // FAILURE rather than recording a confident weightedTotal ≈ 1.0: if the judge
           // scored not a single rubric dimension, coerceJudgeScores would silently floor
@@ -259,13 +262,24 @@ export class SandboxRunService {
             createdAt: this.deps.clock.now(),
           }
           await this.deps.sandboxGradeRepository.upsert(workspaceId, grade)
-          graded++
+          return { tokensSpent: cellSpent, graded: true }
         } catch (e) {
           await this.deps.sandboxRunRepository.upsert(workspaceId, {
             ...done,
             error: `Grading failed: ${e instanceof Error ? e.message : String(e)}`,
           })
+          return { tokensSpent: cellSpent, graded: false }
         }
+      }
+
+      for (const run of runs) {
+        if (budget !== null && spent >= budget) {
+          await this.failRun(workspaceId, run, 'Token budget exhausted before this cell ran.')
+          continue
+        }
+        const outcome = await runCell(run)
+        spent += outcome.tokensSpent
+        if (outcome.graded) graded++
       }
     } finally {
       // Settle the terminal status from the outcomes: any cell that was actually graded
