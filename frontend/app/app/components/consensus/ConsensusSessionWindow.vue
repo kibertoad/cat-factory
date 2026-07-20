@@ -20,8 +20,8 @@ const consensus = useConsensusStore()
 const models = useModelsStore()
 
 const { open, blockId, close } = useResultView('consensus-session', {
-  onOpen: (id) => {
-    void consensus.load(id)
+  onOpen: ({ blockId }) => {
+    void consensus.load(blockId)
   },
 })
 

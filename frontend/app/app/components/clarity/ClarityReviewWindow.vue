@@ -43,12 +43,12 @@ const showRedo = ref(false)
 // fresh each open, so a non-immediate per-window watch used to leave it empty for whichever
 // route (a pipeline step / "Review & approve") didn't warm the cache by selecting the block.
 const { open, blockId, close } = useResultView('clarity-review', {
-  onOpen: (id) => {
+  onOpen: ({ blockId }) => {
     drafts.value = {}
     seededReply.value = {}
     redoComment.value = ''
     showRedo.value = false
-    void clarity.load(id)
+    void clarity.load(blockId)
   },
   // Flush any typed-but-unblurred answer before the view tears down (X, backdrop, Escape) so
   // closing the window never silently drops it (UX-33).

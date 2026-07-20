@@ -17,7 +17,7 @@ const initiatives = useInitiativesStore()
 const { t } = useI18n()
 
 const { open, blockId, close } = useResultView('initiative-planning', {
-  onOpen: (id) => void initiatives.load(id),
+  onOpen: ({ blockId }) => void initiatives.load(blockId),
 })
 
 const block = computed(() => (blockId.value ? board.getBlock(blockId.value) : undefined))
