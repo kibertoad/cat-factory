@@ -170,7 +170,16 @@ export class RunRepoOpsController {
       block,
       runRepo,
     )
-    await runRepoOps(ops, { repo: runRepo.repo, context, branch, opensPr: runOpensPr(instance) })
+    const result = await runRepoOps(ops, {
+      repo: runRepo.repo,
+      context,
+      branch,
+      opensPr: runOpensPr(instance),
+    })
+    // Surface any files a preOp prepared onto the SAME context object the executor dispatches
+    // with (the caller passes one `context` to both preOps and `startJob`), so the executor
+    // materialises them into the container's `.cat-context/`. Absent ⇒ nothing injected.
+    if (result.contextFiles?.length) context.injectedContextFiles = result.contextFiles
   }
 
   /**

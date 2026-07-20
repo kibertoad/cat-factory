@@ -90,6 +90,14 @@ export function makeRepoFiles(
             client.createReview!(installationId, ref, number, input),
         }
       : {}),
+    // The pr-reviewer preOp reads the PR's changed files + patches to inject the diff up front;
+    // present only when the wired client can enumerate a PR's files (else the preOp passes through).
+    ...(client.listChangedFiles
+      ? {
+          listChangedFiles: (number: number) =>
+            client.listChangedFiles!(installationId, ref, number),
+        }
+      : {}),
   }
   if (!cache) return base
 

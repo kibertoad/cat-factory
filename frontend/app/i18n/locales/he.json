@@ -953,7 +953,8 @@
         "body": "התחל pipeline כדי לראות כאן את היסטוריית ההרצות."
       },
       "chooseApproach": "בחר גישה",
-      "elapsedTooltip": "הזמן שחלף בשלב זה"
+      "elapsedTooltip": "הזמן שחלף בשלב זה",
+      "reviewFindings": "עיין בממצאים"
     },
     "structure": {
       "title": "מבנה",
@@ -1266,11 +1267,12 @@
       "tokensInOut": "טוקנים (נכנס / יוצא)",
       "transportOverhead": "תקורת תעבורה",
       "modelExecution": "הרצת מודל",
-      "truncated": "{count} נקטע | {count} נקטעו"
+      "truncated": "{count} נקטע | {count} נקטעו",
+      "cached": "{tokens} במטמון"
     },
     "metricsBar": {
       "calls": "{count} קריאה | {count} קריאות",
-      "promptCompletionTokens": "טוקני פרומפט / השלמה",
+      "promptCompletionTokens": "טוקני פרומפט / השלמה חדשים (ללא מטמון)",
       "cachedTokens": "({tokens} במטמון)",
       "cachedTokensHint": "טוקני פרומפט שהוגשו ממטמון הספק",
       "errors": "{count} שגיאה | {count} שגיאות",
@@ -3534,7 +3536,10 @@
         "proposing": "מציע גישות…",
         "choose": "בחר גישה"
       },
-      "elapsedTooltip": "הזמן שחלף בשלב זה"
+      "elapsedTooltip": "הזמן שחלף בשלב זה",
+      "prReview": {
+        "review": "עיין בממצאים"
+      }
     },
     "health": {
       "title": "בריאות הצינור",

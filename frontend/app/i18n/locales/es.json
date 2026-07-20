@@ -953,7 +953,8 @@
         "body": "Inicia un pipeline para ver el historial de ejecución aquí."
       },
       "chooseApproach": "Elegir enfoque",
-      "elapsedTooltip": "Tiempo transcurrido en este paso"
+      "elapsedTooltip": "Tiempo transcurrido en este paso",
+      "reviewFindings": "Revisar hallazgos"
     },
     "structure": {
       "title": "Estructura",
@@ -1266,11 +1267,12 @@
       "tokensInOut": "Tokens (entrada / salida)",
       "transportOverhead": "Sobrecarga de transporte",
       "modelExecution": "Ejecución del modelo",
-      "truncated": "{count} truncada | {count} truncadas"
+      "truncated": "{count} truncada | {count} truncadas",
+      "cached": "{tokens} en caché"
     },
     "metricsBar": {
       "calls": "{count} llamada | {count} llamadas",
-      "promptCompletionTokens": "Tokens de prompt / completado",
+      "promptCompletionTokens": "Tokens frescos (sin caché) de prompt / completado",
       "cachedTokens": "({tokens} en caché)",
       "cachedTokensHint": "Tokens de prompt servidos desde la caché del proveedor",
       "errors": "{count} error | {count} errores",
@@ -3523,7 +3525,10 @@
         "proposing": "Proponiendo enfoques…",
         "choose": "Elegir un enfoque"
       },
-      "elapsedTooltip": "Tiempo transcurrido en este paso"
+      "elapsedTooltip": "Tiempo transcurrido en este paso",
+      "prReview": {
+        "review": "Revisar hallazgos"
+      }
     },
     "health": {
       "title": "Estado de los pipelines",

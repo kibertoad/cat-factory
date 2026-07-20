@@ -32,7 +32,7 @@ workspaces) and run as a pipeline step through **one generic parametrized `skill
   kind with `noChangesTolerated` and a `pr-or-work` clone, selected per step through
   `stepOptions[i].skillId` (the extensible per-step param bag, not a dynamic kind-per-skill). The
   kind's prompt is SKILL-AGNOSTIC; the picked skill is injected around it by
-  `ContainerAgentExecutor.renderSkillForHarness`, harness-aware: the skill payload always travels
+  `renderSkillForHarness` (server `agents/contextFiles.ts`), harness-aware: the skill payload always travels
   as a dedicated top-level `skill` job-body field (never a context file), materialised as
   `CLAUDE_CONFIG_DIR/skills/<name>/SKILL.md` (+ resources) for the claude-code CLI to auto-load,
   or `.cat-context/skill/<relPath>` for Pi/codex (whose prompt carries the full instructions).

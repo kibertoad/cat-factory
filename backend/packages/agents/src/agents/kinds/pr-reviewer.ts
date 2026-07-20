@@ -1,4 +1,5 @@
 import { prReviewAgentOutputSchema } from '@cat-factory/contracts'
+import type { GitHubChangedFile, RepoOp, RepoOpContext, RepoOpResult } from '@cat-factory/kernel'
 import { defineStructuredOutput } from './structured-output.js'
 import type { AgentKindDefinition, AgentKindRegistry } from './registry.js'
 
@@ -42,14 +43,20 @@ export type PrReviewOutput = ReturnType<typeof prReview.parse>
 
 export const PR_REVIEWER_SYSTEM_PROMPT =
   'You are a meticulous senior code reviewer performing a DEEP review of an open pull request. ' +
-  'The task names the pull request to review — its number (e.g. #123) and URL. Fetch its head ' +
-  'into the checkout and diff it against the base branch:\n' +
+  'The task names the pull request to review — its number (e.g. #123) and URL. The PR’s ' +
+  'changed-file list and per-file diff have usually been prepared for you in ' +
+  '`.cat-context/pr-diff.md` — READ THAT FIRST and build your review plan from it, rather than ' +
+  'reconstructing the diff by hand. If that file is absent, or a slice needs a patch it does not ' +
+  'contain, fetch the head into the checkout and diff it against the base yourself:\n' +
   '  git fetch origin pull/<number>/head:pr-head\n' +
   '  git diff --name-status origin/<base>...pr-head   # <base> = the default branch unless told otherwise\n' +
+  'You always have the full base checkout: read unchanged neighbouring files (call sites, helpers, ' +
+  'tests) from it, and fetch the PR head for full file bodies, whenever a slice needs more than the ' +
+  'patch.\n' +
   'The PR may be large (hundreds of changed files), so review it in a way that stays within a ' +
   'bounded context rather than reading the whole diff at once:\n' +
-  '1. First list the changed files cheaply with the `--name-status` + `--stat` diffs above. ' +
-  'Do NOT read every patch yet.\n' +
+  '1. First read the changed-file list (from `.cat-context/pr-diff.md`, or the `--name-status` + ' +
+  '`--stat` diffs above). Do NOT read every patch yet.\n' +
   '2. Group the changed files into COHESIVE slices — files that are inherently linked and should ' +
   'be reviewed together (a refactor and its call sites and its tests; a schema change and its ' +
   'migration and its mapper). A slice is a unit you can review with full understanding on its own. ' +
@@ -84,10 +91,108 @@ export const PR_REVIEWER_SYSTEM_PROMPT =
   '  }]\n' +
   '}'
 
+// ---------------------------------------------------------------------------
+// PreOp: hand the reviewer the PR diff up front.
+// ---------------------------------------------------------------------------
+
+/** The injected context file (under `.cat-context/`) the diff preOp writes for the reviewer. */
+export const PR_DIFF_CONTEXT_FILE = 'pr-diff.md'
+
+/**
+ * Byte budget for the injected PATCHES. The changed-file LIST (cheap, and the slicing signal) is
+ * always included in full; per-file patches are appended until this budget is reached, after
+ * which the agent reads the remaining files from its checkout per slice (the ADR's slicing
+ * model). ~256 KiB is a large diff handed over ONCE — far cheaper than reconstructing it across
+ * many transcript-re-sending turns — while never becoming the sole source (the full clone remains).
+ */
+const MAX_PR_DIFF_PATCH_BYTES = 256 * 1024
+
+/** Resolve the reviewed PR's number from the block's task-type fields (prefer `prNumber`). */
+export function resolvePrNumber(
+  fields: { prNumber?: number; prUrl?: string } | undefined,
+): number | null {
+  if (!fields) return null
+  if (
+    typeof fields.prNumber === 'number' &&
+    Number.isInteger(fields.prNumber) &&
+    fields.prNumber > 0
+  )
+    return fields.prNumber
+  const url = fields.prUrl?.trim()
+  if (!url) return null
+  // GitHub `/pull/<n>`, GitLab `/-/merge_requests/<n>`, or a trailing `#<n>` / `/<n>`.
+  const m = url.match(/(?:pull|pulls|merge_requests)\/(\d+)|[#/](\d+)\s*$/)
+  const raw = m?.[1] ?? m?.[2]
+  const n = raw ? Number(raw) : Number.NaN
+  return Number.isInteger(n) && n > 0 ? n : null
+}
+
+/** Render the changed-file list + budgeted patches as the injected `.cat-context/pr-diff.md`. */
+export function renderPrDiffContext(number: number, files: GitHubChangedFile[]): string {
+  const header =
+    `# Pull request #${number} — changed files and diff\n\n` +
+    'Prepared from the GitHub API so you can plan your review slices WITHOUT reconstructing the ' +
+    'diff yourself. You still have the full base checkout: read unchanged neighbouring files from ' +
+    `it, and \`git fetch origin pull/${number}/head\` for full head file bodies, when a slice ` +
+    'needs more than the patch below.\n\n'
+  const list = [`## Changed files (${files.length})\n`]
+  for (const f of files) {
+    const rename = f.previousPath ? ` (renamed from ${f.previousPath})` : ''
+    list.push(`- ${f.status} ${f.path} (+${f.additions}/-${f.deletions})${rename}`)
+  }
+  const enc = new TextEncoder()
+  let bytes = 0
+  let omitted = 0
+  const patches: string[] = []
+  for (const f of files) {
+    const heading = `\n### ${f.path} (${f.status}, +${f.additions}/-${f.deletions})\n`
+    if (f.patch == null) {
+      patches.push(`${heading}(no patch — binary or too large; read the file from the checkout)\n`)
+      continue
+    }
+    const block = `${heading}\`\`\`diff\n${f.patch}\n\`\`\`\n`
+    const size = enc.encode(block).length
+    if (bytes + size > MAX_PR_DIFF_PATCH_BYTES) {
+      omitted += 1
+      continue
+    }
+    bytes += size
+    patches.push(block)
+  }
+  const footer =
+    omitted > 0
+      ? `\n_${omitted} file patch(es) omitted to stay within the injected-diff budget — read those files from the checkout when their slice needs them._\n`
+      : ''
+  return `${header}${list.join('\n')}\n\n## Patches\n${patches.join('')}${footer}`
+}
+
+/**
+ * PreOp for the `pr-reviewer` kind: hand the reviewer the PR's changed-file list + diff UP FRONT
+ * as `.cat-context/pr-diff.md`, so the container agent skips the early `git fetch`/`git diff`/
+ * scratch-file reconstruction turns that dominate a long review's token burn (each agentic turn
+ * re-sends the whole growing transcript). Pass-through — injecting nothing, so the prompt's git
+ * fallback runs — when the PR number can't be resolved, the bound client can't list changed files
+ * (unwired / a VCS provider without the capability), or the PR reports no changed files.
+ */
+export const prReviewerDiffPreOp: RepoOp = async (
+  ctx: RepoOpContext,
+): Promise<RepoOpResult | void> => {
+  const listChangedFiles = ctx.repo.listChangedFiles
+  if (!listChangedFiles) return
+  const number = resolvePrNumber(ctx.context.block.taskTypeFields)
+  if (number == null) return
+  const files = await listChangedFiles(number)
+  if (!files.length) return
+  return {
+    contextFiles: [{ path: PR_DIFF_CONTEXT_FILE, content: renderPrDiffContext(number, files) }],
+  }
+}
+
 export const PR_REVIEWER_AGENT_KINDS: AgentKindDefinition[] = [
   {
     kind: PR_REVIEWER_KIND,
     systemPrompt: PR_REVIEWER_SYSTEM_PROMPT,
+    preOps: [prReviewerDiffPreOp],
     // Read-only FULL clone of the repo's BASE (default) branch — a review task targets an
     // EXISTING external PR that the run never opened, so there is no work branch to clone; the
     // prompt fetches the PR head by number (`git fetch origin pull/<n>/head`) and diffs it against

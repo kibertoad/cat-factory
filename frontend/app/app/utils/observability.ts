@@ -11,6 +11,34 @@ export function formatTokens(n: number): string {
   return `${(n / 1_000_000).toFixed(1)}M`
 }
 
+/**
+ * FRESH (uncached) prompt tokens: the input tokens actually processed this call/rollup after
+ * excluding the prefix served from the provider's cache. A long agentic run re-sends its whole
+ * growing transcript every turn, so on the "inclusive" shape the raw `promptTokens` sum is
+ * dominated by cache reads (often >99%) — showing THAT as "tokens burned" reads as a blow-up
+ * when almost nothing fresh was processed. This surfaces the fresh figure alongside cached.
+ *
+ * `cachedPromptTokens` has PROVIDER-DEPENDENT semantics (see the field docs on `stepMetricsSchema`
+ * / `llmCallMetricSchema`), so we can't blindly subtract:
+ *  - Inclusive shape (OpenAI/DeepSeek, and the subscription-CLI harness, which folds cache into
+ *    `promptTokens`): cached is a SUBSET of prompt ⇒ fresh = prompt − cached.
+ *  - Separate shape (Anthropic via the LLM proxy): cache reads are reported SEPARATELY and
+ *    `promptTokens` is ALREADY fresh-only, so cached can EXCEED prompt. Subtracting there would
+ *    wrongly collapse a real fresh input to 0 — when cached ≥ prompt, `promptTokens` itself IS
+ *    the fresh figure.
+ *
+ * NOTE: with only these two aggregates we cannot distinguish the separate shape while cached is
+ * still ≤ prompt (there the subtraction under-counts fresh by the cache-read amount). A fully
+ * exact split needs the wire contract to carry cache-read vs cache-write distinctly at the
+ * source; this heuristic fixes the dominant (cached ≫ prompt) case and never returns negative.
+ */
+export function freshPromptTokens(promptTokens: number, cachedPromptTokens: number): number {
+  // Separate shape: promptTokens is already fresh-only (cache reads counted separately).
+  if (cachedPromptTokens > promptTokens) return promptTokens
+  // Inclusive shape: cached is a subset of prompt.
+  return promptTokens - cachedPromptTokens
+}
+
 /** Compact duration: 850 → "850ms", 1500 → "1.5s", 90_000 → "1m 30s". */
 export function formatMs(ms: number): string {
   if (ms < 1000) return `${Math.round(ms)}ms`

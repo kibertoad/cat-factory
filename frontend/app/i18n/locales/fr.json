@@ -953,7 +953,8 @@
         "body": "Lancez un pipeline pour voir l'historique d'exécution ici."
       },
       "chooseApproach": "Choisir l'approche",
-      "elapsedTooltip": "Temps écoulé sur cette étape"
+      "elapsedTooltip": "Temps écoulé sur cette étape",
+      "reviewFindings": "Examiner les remarques"
     },
     "structure": {
       "title": "Structure",
@@ -1266,11 +1267,12 @@
       "tokensInOut": "Tokens (entrée / sortie)",
       "transportOverhead": "Surcoût de transport",
       "modelExecution": "Exécution du modèle",
-      "truncated": "{count} tronqué | {count} tronqués"
+      "truncated": "{count} tronqué | {count} tronqués",
+      "cached": "{tokens} en cache"
     },
     "metricsBar": {
       "calls": "{count} appel | {count} appels",
-      "promptCompletionTokens": "Tokens de prompt / complétion",
+      "promptCompletionTokens": "Tokens frais (non mis en cache) de prompt / complétion",
       "cachedTokens": "({tokens} en cache)",
       "cachedTokensHint": "Tokens de prompt servis depuis le cache du fournisseur",
       "errors": "{count} erreur | {count} erreurs",
@@ -3523,7 +3525,10 @@
         "proposing": "Proposition d'approches…",
         "choose": "Choisir une approche"
       },
-      "elapsedTooltip": "Temps écoulé sur cette étape"
+      "elapsedTooltip": "Temps écoulé sur cette étape",
+      "prReview": {
+        "review": "Examiner les remarques"
+      }
     },
     "health": {
       "title": "État des pipelines",

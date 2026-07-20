@@ -270,6 +270,7 @@ export async function runAgentInWorkspace(
       signal: opts.signal,
       onActivity: opts.onActivity,
       onProgress: opts.onProgress,
+      ...(opts.log ? { log: opts.log } : {}),
     })
   }
   if (!spec.proxyBaseUrl || !spec.sessionToken) {

@@ -75,6 +75,15 @@ function forkPhase(step: PipelineStep): 'proposing' | 'awaiting_choice' | null {
   return status === 'proposing' || status === 'awaiting_choice' ? status : null
 }
 
+/**
+ * Whether a `pr-reviewer` step is parked awaiting a human finding-selection — it carries a
+ * pending approval too, so we render a purpose-built "Review findings" chip (opening the
+ * PR-review window) ahead of the generic approval gate, mirroring the fork-decision chip.
+ */
+function prReviewAwaiting(step: PipelineStep): boolean {
+  return step.prReview?.status === 'awaiting_selection'
+}
+
 // --- restart from a step -----------------------------------------------------
 // Re-run the pipeline from a chosen step onward: the server resets that step +
 // every later step's iteration counters and re-drives a fresh run, keeping the
@@ -607,6 +616,26 @@ const ITEM_ICON: Record<string, string> = {
             </span>
           </button>
 
+          <!-- PR deep-review parked for a human to select which findings matter: a
+               purpose-built chip opening the findings-selection window, ahead of the
+               generic approval gate (mirrors the fork-decision chip above). -->
+          <button
+            v-if="prReviewAwaiting(s)"
+            type="button"
+            data-testid="pr-review-open"
+            class="mt-3 flex w-full items-center gap-2 rounded-lg border border-dashed border-indigo-500/50 bg-indigo-500/10 px-2.5 py-1.5 text-start transition followup-blink hover:border-indigo-400/60"
+            @click="ui.openPrReview(instance.id, i)"
+          >
+            <span
+              class="flex h-6 w-6 shrink-0 items-center justify-center rounded-md border border-indigo-500/40 bg-indigo-500/15"
+            >
+              <UIcon name="i-lucide-clipboard-check" class="h-3 w-3 text-indigo-300" />
+            </span>
+            <span class="min-w-0 flex-1 truncate text-[12px] text-slate-300">
+              {{ t('pipeline.progress.prReview.review') }}
+            </span>
+          </button>
+
           <!-- reviewer gate folding/re-reviewing in the background: a working indicator,
                NOT a "Review & approve" gate (the human is summoned only if needed) -->
           <div
@@ -618,7 +647,10 @@ const ITEM_ICON: Record<string, string> = {
           </div>
 
           <!-- approval gate: review (and edit) the proposal before continuing -->
-          <div v-else-if="s.approval && s.approval.status === 'pending'" class="mt-3">
+          <div
+            v-else-if="s.approval && s.approval.status === 'pending' && !prReviewAwaiting(s)"
+            class="mt-3"
+          >
             <UButton
               color="warning"
               variant="soft"

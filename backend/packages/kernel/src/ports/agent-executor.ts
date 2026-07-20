@@ -7,6 +7,7 @@ import type {
   EnvironmentAccessHandle,
   EnvironmentStatus,
   FrontendConfig,
+  InjectedContextFile,
   InstanceSize,
   PullRequestRef,
   PeerPullRequest,
@@ -279,6 +280,15 @@ export interface AgentRunContext {
   priorOutputs: { agentKind: AgentKind; output: string }[]
   /** Decisions resolved earlier in this run, for context. */
   decisions: { question: string; chosen: string }[]
+  /**
+   * Files a registered kind's preOp prepared for the agent to read up front — the engine
+   * materialises them into the container's `.cat-context/` alongside the linked-doc context
+   * (see {@link InjectedContextFile}). Set by the engine from the preOp's
+   * {@link RepoOpResult.contextFiles}; the `pr-reviewer` preOp uses it to hand the reviewer the
+   * PR diff + changed-file list so it skips the reconstruct-the-diff exploration turns. Absent
+   * when no preOp injected anything.
+   */
+  injectedContextFiles?: InjectedContextFile[]
   /**
    * A live ephemeral environment a deployer step provisioned earlier in this run
    * (resolved from the run's block). Present only when the environment

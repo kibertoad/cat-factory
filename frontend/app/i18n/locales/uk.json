@@ -953,7 +953,8 @@
         "body": "Запустіть pipeline, щоб побачити тут історію запусків."
       },
       "chooseApproach": "Обрати підхід",
-      "elapsedTooltip": "Час, що минув на цьому кроці"
+      "elapsedTooltip": "Час, що минув на цьому кроці",
+      "reviewFindings": "Переглянути зауваження"
     },
     "structure": {
       "title": "Структура",
@@ -1266,11 +1267,12 @@
       "tokensInOut": "Токени (вхід / вихід)",
       "transportOverhead": "Накладні витрати транспорту",
       "modelExecution": "Виконання моделі",
-      "truncated": "{count} обрізаний | {count} обрізані | {count} обрізаних"
+      "truncated": "{count} обрізаний | {count} обрізані | {count} обрізаних",
+      "cached": "{tokens} з кешу"
     },
     "metricsBar": {
       "calls": "{count} виклик | {count} виклики | {count} викликів",
-      "promptCompletionTokens": "Токени запиту / завершення",
+      "promptCompletionTokens": "Нові (некешовані) токени запиту / завершення",
       "cachedTokens": "({tokens} з кешу)",
       "cachedTokensHint": "Токени запиту, надані з кешу провайдера",
       "errors": "{count} помилка | {count} помилки | {count} помилок",
@@ -3523,7 +3525,10 @@
         "proposing": "Пропонування підходів…",
         "choose": "Оберіть підхід"
       },
-      "elapsedTooltip": "Час, що минув на цьому кроці"
+      "elapsedTooltip": "Час, що минув на цьому кроці",
+      "prReview": {
+        "review": "Переглянути зауваження"
+      }
     },
     "health": {
       "title": "Стан пайплайнів",

@@ -2,9 +2,11 @@ import { spawn } from 'node:child_process'
 import { mkdir, mkdtemp, rm, writeFile } from 'node:fs/promises'
 import { homedir, tmpdir } from 'node:os'
 import { dirname, join } from 'node:path'
+import type { Logger } from './logger.js'
 import type { HarnessCallMetric, PiRunOutcome, PiRunStats, TodoProgress } from './pi.js'
 import { killChildProcess, spawnDetached } from './process.js'
 import { redact, secretsToRedact } from './redact.js'
+import { retainSessionTranscripts } from './transcript-retention.js'
 
 // The alternate (subscription) harness runners. The Pi harness reaches models
 // through the LLM proxy with a model-locked session token; the Claude Code and
@@ -70,6 +72,11 @@ export interface SubscriptionRunOptions {
   onActivity?: () => void
   /** Called with the latest subtask counts each time the CLI updates its todo/plan list. */
   onProgress?: (progress: TodoProgress) => void
+  /**
+   * The per-job child logger (jobId/repo/branch correlation). Threaded so the retained
+   * session-transcript path is logged for the run when the isolated config home is torn down.
+   */
+  log?: Logger
 }
 
 function isObject(value: unknown): value is Record<string, unknown> {
@@ -400,8 +407,17 @@ export async function runClaudeCode(opts: SubscriptionRunOptions): Promise<PiRun
       ...(calls.length ? { callMetrics: calls } : {}),
     }
   } finally {
-    // Never leave the config dir (and any cached credential) on disk past the run.
-    if (configHome) await rm(configHome, { recursive: true, force: true }).catch(() => {})
+    if (configHome) {
+      // Lift the CLI session transcripts (`projects/`) out for short-lived retention BEFORE the
+      // home is deleted — the credential lives at the home root, never in `projects/`, so this
+      // keeps the debugging artifact without leaking the token. Best-effort; never throws.
+      await retainSessionTranscripts(configHome, ['projects'], {
+        label: 'claude-code',
+        ...(opts.log ? { log: opts.log } : {}),
+      })
+      // Never leave the config dir (and any cached credential) on disk past the run.
+      await rm(configHome, { recursive: true, force: true }).catch(() => {})
+    }
   }
 }
 
@@ -620,8 +636,17 @@ export async function runCodex(opts: SubscriptionRunOptions): Promise<PiRunOutco
       ...(calls.length ? { callMetrics: calls } : {}),
     }
   } finally {
-    // Never leave the decrypted credential on disk past the run.
-    if (codexHome) await rm(codexHome, { recursive: true, force: true }).catch(() => {})
+    if (codexHome) {
+      // Lift the CLI session transcripts (`sessions/`) out for short-lived retention BEFORE the
+      // home is deleted — the credential (`auth.json`) lives at the home root, never in
+      // `sessions/`, so this keeps the debugging artifact without leaking it. Best-effort.
+      await retainSessionTranscripts(codexHome, ['sessions'], {
+        label: 'codex',
+        ...(opts.log ? { log: opts.log } : {}),
+      })
+      // Never leave the decrypted credential on disk past the run.
+      await rm(codexHome, { recursive: true, force: true }).catch(() => {})
+    }
   }
 }
 

@@ -8,7 +8,7 @@ import type {
   WebSearchProvider,
 } from '~/types/execution'
 import { agentKindMeta } from '~/utils/catalog'
-import { formatMs, formatTokens, pct } from '~/utils/observability'
+import { formatMs, formatTokens, freshPromptTokens, pct } from '~/utils/observability'
 
 // Drill-down overlay for a run's LLM activity. Opened via
 // `ui.openObservability(instanceId)` from a step surface; loads the full per-call
@@ -126,9 +126,15 @@ const totals = computed(() => {
   const upstreamMs = sum(c, (x) => x.upstreamMs)
   const overheadMs = sum(c, (x) => x.overheadMs)
   const total = upstreamMs + overheadMs
+  const promptTokens = sum(c, (x) => x.promptTokens)
+  const cachedPromptTokens = sum(c, (x) => x.cachedPromptTokens)
   return {
     calls: c.length,
-    promptTokens: sum(c, (x) => x.promptTokens),
+    promptTokens,
+    cachedPromptTokens,
+    // Fresh (uncached) input — the raw prompt-token sum is dominated by per-turn cache reads
+    // on a long agentic run, so surface fresh vs cached rather than the misleading raw total.
+    freshPromptTokens: freshPromptTokens(promptTokens, cachedPromptTokens),
     completionTokens: sum(c, (x) => x.completionTokens),
     upstreamMs,
     overheadMs,
@@ -284,8 +290,19 @@ function exportJson() {
                     {{ t('observability.summary.tokensInOut') }}
                   </dt>
                   <dd class="mt-0.5 tabular-nums text-slate-200">
-                    {{ formatTokens(totals.promptTokens) }} /
+                    {{ formatTokens(totals.freshPromptTokens) }} /
                     {{ formatTokens(totals.completionTokens) }}
+                    <span
+                      v-if="totals.cachedPromptTokens > 0"
+                      class="ms-1 text-[11px] text-emerald-400/80"
+                    >
+                      ·
+                      {{
+                        t('observability.summary.cached', {
+                          tokens: formatTokens(totals.cachedPromptTokens),
+                        })
+                      }}
+                    </span>
                   </dd>
                 </div>
                 <div>

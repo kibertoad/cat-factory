@@ -953,7 +953,8 @@
         "body": "パイプラインを開始すると、ここに実行履歴が表示されます。"
       },
       "chooseApproach": "アプローチを選択",
-      "elapsedTooltip": "このステップの経過時間"
+      "elapsedTooltip": "このステップの経過時間",
+      "reviewFindings": "指摘を確認"
     },
     "structure": {
       "title": "構造",
@@ -1266,11 +1267,12 @@
       "tokensInOut": "トークン (入力 / 出力)",
       "transportOverhead": "転送オーバーヘッド",
       "modelExecution": "モデル実行",
-      "truncated": "{count} 件が切り詰め | {count} 件が切り詰め"
+      "truncated": "{count} 件が切り詰め | {count} 件が切り詰め",
+      "cached": "{tokens} キャッシュ済み"
     },
     "metricsBar": {
       "calls": "{count} 件の呼び出し | {count} 件の呼び出し",
-      "promptCompletionTokens": "プロンプト / 完了トークン",
+      "promptCompletionTokens": "新規（キャッシュ外）のプロンプト / 完了トークン",
       "cachedTokens": "({tokens} 件キャッシュ済み)",
       "cachedTokensHint": "プロバイダーのキャッシュから提供されたプロンプトトークン",
       "errors": "{count} 件のエラー | {count} 件のエラー",
@@ -3535,7 +3537,10 @@
         "proposing": "アプローチを提案中…",
         "choose": "アプローチを選択"
       },
-      "elapsedTooltip": "このステップの経過時間"
+      "elapsedTooltip": "このステップの経過時間",
+      "prReview": {
+        "review": "指摘を確認"
+      }
     },
     "health": {
       "title": "パイプラインの状態",

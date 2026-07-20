@@ -1010,7 +1010,8 @@
       "open": "Open",
       "mergePr": "Merge PR",
       "chooseApproach": "Choose approach",
-      "elapsedTooltip": "Elapsed time on this step"
+      "elapsedTooltip": "Elapsed time on this step",
+      "reviewFindings": "Review findings"
     },
     "structure": {
       "title": "Structure",
@@ -1326,11 +1327,12 @@
       "tokensInOut": "Tokens (in / out)",
       "transportOverhead": "Transport overhead",
       "modelExecution": "Model execution",
-      "truncated": "{count} truncated | {count} truncated"
+      "truncated": "{count} truncated | {count} truncated",
+      "cached": "{tokens} cached"
     },
     "metricsBar": {
       "calls": "{count} call | {count} calls",
-      "promptCompletionTokens": "Prompt / completion tokens",
+      "promptCompletionTokens": "Fresh (uncached) prompt / completion tokens",
       "cachedTokens": "({tokens} cached)",
       "cachedTokensHint": "Prompt tokens served from the provider's cache",
       "errors": "{count} error | {count} errors",
@@ -3622,7 +3624,10 @@
         "proposing": "Proposing approaches…",
         "choose": "Choose an approach"
       },
-      "elapsedTooltip": "Elapsed time on this step"
+      "elapsedTooltip": "Elapsed time on this step",
+      "prReview": {
+        "review": "Review findings"
+      }
     },
     "health": {
       "title": "Pipeline health",
