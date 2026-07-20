@@ -113,6 +113,52 @@ export const prReviewResolutionSchema = v.picklist(['finish', 'fix', 'post'])
 export type PrReviewResolution = v.InferOutput<typeof prReviewResolutionSchema>
 
 /**
+ * One selected finding whose inline comment could NOT be posted, with the reason. Surfaced in
+ * the window so a partial post is legible rather than a silent drop. `line` is the anchor that
+ * was rejected (e.g. a line outside the PR diff → GitHub's "Line could not be resolved").
+ */
+export const prReviewPostFailureSchema = v.object({
+  /** The finding whose comment failed (`prf_*`). */
+  findingId: v.string(),
+  /** The path the comment anchored to. */
+  path: v.string(),
+  /** The line the comment anchored to, when it had one. */
+  line: v.optional(v.nullable(v.number())),
+  /** Human-readable reason the post failed (the VCS error message). */
+  reason: v.string(),
+})
+export type PrReviewPostFailure = v.InferOutput<typeof prReviewPostFailureSchema>
+
+/**
+ * The outcome of the most recent `post` resolution: how many of the selected findings' inline
+ * comments were published, which failed and why, and how many findings were folded into the
+ * summary comment because their line isn't part of the PR diff (so they can't be anchored
+ * inline — the root cause of GitHub's "Line could not be resolved" 422). The window renders
+ * this so a partial/failed post is visible AND retryable, instead of the run failing opaquely.
+ */
+export const prReviewPostReportSchema = v.object({
+  /** Inline comments attempted (the selected, diff-anchorable findings). */
+  attempted: v.number(),
+  /** How many of those posted successfully. */
+  posted: v.number(),
+  /**
+   * Findings that HAD a line but were folded into the summary comment because that line falls
+   * outside the PR diff (so GitHub can't anchor an inline comment there) — this is how the 422
+   * is avoided at the source. A truly line-less finding is summarised too but is NOT counted
+   * here (it never could be an inline comment): `attempted` + `folded` therefore counts only the
+   * findings that carried a line, not every selected finding.
+   */
+  folded: v.optional(v.number(), 0),
+  /** Whether the summary/body comment posted; null when there was no body to post. */
+  bodyPosted: v.optional(v.nullable(v.boolean())),
+  /** The error posting the summary/body comment, when it failed. */
+  bodyError: v.optional(v.nullable(v.string())),
+  /** Per-finding inline-comment failures, in the order attempted. */
+  failures: v.optional(v.array(prReviewPostFailureSchema), []),
+})
+export type PrReviewPostReport = v.InferOutput<typeof prReviewPostReportSchema>
+
+/**
  * Live PR-review state carried on the run's `pr-reviewer` step. Recorded by the engine when
  * the reviewer container job completes (the sliced, severity-ordered findings), then mutated
  * by the human's selection + resolution. `prUrl` is the reviewed PR (for the window header);
@@ -134,6 +180,27 @@ export const prReviewStepStateSchema = v.object({
   prUrl: v.optional(v.nullable(v.string())),
   /** Identifier of the model that produced the review, for transparency. */
   model: v.optional(v.nullable(v.string())),
+  /**
+   * The outcome of the most recent `post` attempt (null until one runs). A partial or failed
+   * post keeps the review parked at `awaiting_selection` carrying this report, so the window
+   * shows what posted / what failed and the human can retry ONLY the posting (re-`post`) rather
+   * than re-running the whole review.
+   */
+  postReport: v.optional(v.nullable(prReviewPostReportSchema)),
+  /**
+   * Finding ids whose inline comment already posted successfully. A re-`post` skips these, so
+   * retrying after a partial failure never double-posts the comments that already landed
+   * (at-most-once per finding).
+   */
+  postedFindingIds: v.optional(v.array(v.string()), []),
+  /**
+   * Whether the summary/body comment already posted successfully on a prior attempt. Sticky once
+   * true — a re-`post` then suppresses the body so retrying after a partial failure never
+   * double-posts the summary comment (the body's at-most-once guard, the analogue of
+   * {@link postedFindingIds} for the single summary comment). Stays false until the body lands, so
+   * a body that FAILED is retried.
+   */
+  postedBody: v.optional(v.boolean(), false),
 })
 export type PrReviewStepState = v.InferOutput<typeof prReviewStepStateSchema>
 

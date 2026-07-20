@@ -1,9 +1,13 @@
 import { describe, expect, it } from 'vitest'
 import type { PrReviewAgentOutput, PrReviewFinding } from '@cat-factory/kernel'
+import type { CreateReviewResult, GitHubChangedFile } from '@cat-factory/kernel'
 import {
   buildPrReviewPost,
+  buildPrReviewPostReport,
   coercePrReview,
+  computeCommentableLines,
   initialPrReviewState,
+  isPrReviewPostComplete,
   renderPrReviewFixerFeedback,
   severityRank,
 } from './prReview.logic.js'
@@ -39,6 +43,9 @@ describe('initialPrReviewState', () => {
       resolution: null,
       prUrl: 'https://github.com/o/r/pull/42',
       model: 'anthropic:claude',
+      postReport: null,
+      postedFindingIds: [],
+      postedBody: false,
     })
   })
 
@@ -163,40 +170,132 @@ describe('renderPrReviewFixerFeedback', () => {
 
 describe('buildPrReviewPost', () => {
   it('anchors line-carrying findings as inline COMMENT-review comments', () => {
-    const post = buildPrReviewPost(
-      [finding({ path: 'src/a.ts', line: 5, side: 'RIGHT', title: 'Bug', detail: 'boom' })],
+    const { input, commentFindingIds } = buildPrReviewPost(
+      [
+        finding({
+          id: 'prf_1',
+          path: 'src/a.ts',
+          line: 5,
+          side: 'RIGHT',
+          title: 'Bug',
+          detail: 'boom',
+        }),
+      ],
       'Looks mostly good.',
     )
-    expect(post.event).toBe('COMMENT')
-    expect(post.comments).toHaveLength(1)
-    expect(post.comments[0]).toMatchObject({ path: 'src/a.ts', line: 5, side: 'RIGHT' })
-    expect(post.comments[0]!.body).toContain('Bug')
+    expect(input.event).toBe('COMMENT')
+    expect(input.comments).toHaveLength(1)
+    expect(input.comments[0]).toMatchObject({ path: 'src/a.ts', line: 5, side: 'RIGHT' })
+    expect(input.comments[0]!.body).toContain('Bug')
+    expect(commentFindingIds).toEqual(['prf_1'])
     // The reviewer summary rides the review body.
-    expect(post.body).toContain('Looks mostly good.')
+    expect(input.body).toContain('Looks mostly good.')
   })
 
   it('folds line-less findings into the review body instead of dropping them', () => {
-    const post = buildPrReviewPost(
+    const { input, foldedFindingIds } = buildPrReviewPost(
       [finding({ path: 'docs.md', line: null, title: 'No anchor', detail: 'general note' })],
       null,
     )
-    expect(post.comments).toHaveLength(0)
-    expect(post.body).toContain('No anchor')
-    expect(post.body).toContain('general note')
+    expect(input.comments).toHaveLength(0)
+    expect(input.body).toContain('No anchor')
+    expect(input.body).toContain('general note')
+    // A truly line-less finding is summarised, not counted as "folded" (it never could be inline).
+    expect(foldedFindingIds).toEqual([])
+  })
+
+  it('folds a finding whose line is OUTSIDE the diff into the body (avoids the 422 at the source)', () => {
+    const commentable = computeCommentableLines([
+      {
+        path: 'src/a.ts',
+        previousPath: null,
+        status: 'modified',
+        additions: 1,
+        deletions: 0,
+        patch: '@@ -1,1 +1,2 @@\n ctx\n+added',
+      },
+    ])
+    const { input, commentFindingIds, foldedFindingIds } = buildPrReviewPost(
+      [
+        finding({ id: 'prf_in', path: 'src/a.ts', line: 2, title: 'In diff', detail: 'x' }),
+        finding({ id: 'prf_out', path: 'src/a.ts', line: 999, title: 'Out of diff', detail: 'y' }),
+      ],
+      null,
+      commentable,
+    )
+    // Only the in-diff finding is anchored inline; the out-of-diff one is folded into the body.
+    expect(input.comments).toHaveLength(1)
+    expect(commentFindingIds).toEqual(['prf_in'])
+    expect(foldedFindingIds).toEqual(['prf_out'])
+    expect(input.body).toContain('Out of diff')
   })
 
   it('always emits a non-empty body — falls back to a count when nothing else supplies one', () => {
-    // All findings line-anchored + no summary: GitHub can reject a bodyless COMMENT review, so a
-    // fallback body must be present (a count of the inline comments) rather than omitted.
-    const post = buildPrReviewPost(
+    const { input } = buildPrReviewPost(
       [
         finding({ path: 'src/a.ts', line: 5, title: 'One', detail: 'x' }),
         finding({ path: 'src/b.ts', line: 9, title: 'Two', detail: 'y' }),
       ],
       null,
     )
-    expect(post.comments).toHaveLength(2)
-    expect(post.body).toBeTruthy()
-    expect(post.body).toContain('2 inline findings')
+    expect(input.comments).toHaveLength(2)
+    expect(input.body).toBeTruthy()
+    expect(input.body).toContain('2 inline findings')
+  })
+})
+
+describe('computeCommentableLines', () => {
+  const file = (patch: string | null): GitHubChangedFile => ({
+    path: 'f.ts',
+    previousPath: null,
+    status: 'modified',
+    additions: 0,
+    deletions: 0,
+    patch,
+  })
+
+  it('collects added + context lines on RIGHT and removed + context on LEFT', () => {
+    // @@ -10,3 +10,3 @@ : context 10, remove old 11, add new 11, context (new 12/old 12).
+    const map = computeCommentableLines([file('@@ -10,3 +10,3 @@\n ctx\n-gone\n+added\n tail')])
+    const lines = map.get('f.ts')!
+    expect([...lines.right].sort((a, b) => a - b)).toEqual([10, 11, 12])
+    expect([...lines.left].sort((a, b) => a - b)).toEqual([10, 11, 12])
+  })
+
+  it('omits a file with no patch (binary / too large) so its findings fall back to a direct attempt', () => {
+    expect(computeCommentableLines([file(null)]).has('f.ts')).toBe(false)
+  })
+})
+
+describe('buildPrReviewPostReport', () => {
+  const selected = [
+    finding({ id: 'prf_ok', path: 'a.ts', line: 3, title: 'ok' }),
+    finding({ id: 'prf_bad', path: 'b.ts', line: 9, title: 'bad' }),
+  ]
+
+  it('maps per-comment outcomes to a report + the newly-posted finding ids', () => {
+    const built = buildPrReviewPost(selected, 'sum')
+    const result: CreateReviewResult = {
+      comments: [{ posted: true }, { posted: false, error: 'Line could not be resolved' }],
+      bodyPosted: true,
+    }
+    const { report, newlyPostedFindingIds } = buildPrReviewPostReport(built, selected, result)
+    expect(report.attempted).toBe(2)
+    expect(report.posted).toBe(1)
+    expect(report.bodyPosted).toBe(true)
+    expect(report.failures).toEqual([
+      { findingId: 'prf_bad', path: 'b.ts', line: 9, reason: 'Line could not be resolved' },
+    ])
+    expect(newlyPostedFindingIds).toEqual(['prf_ok'])
+    expect(isPrReviewPostComplete(report)).toBe(false)
+  })
+
+  it('reports a fully-successful attempt as complete', () => {
+    const built = buildPrReviewPost([selected[0]!], null)
+    const result: CreateReviewResult = { comments: [{ posted: true }], bodyPosted: null }
+    const { report } = buildPrReviewPostReport(built, [selected[0]!], result)
+    expect(report.posted).toBe(1)
+    expect(report.failures).toEqual([])
+    expect(isPrReviewPostComplete(report)).toBe(true)
   })
 })

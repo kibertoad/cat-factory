@@ -4954,6 +4954,15 @@
       "title": "Review-Kommentare werden gepostet…",
       "hint": "Die ausgewählten Befunde werden als Inline-Kommentare im Pull Request veröffentlicht."
     },
+    "postReport": {
+      "heading": "Ergebnis der Veröffentlichung",
+      "posted": "{posted} von {attempted} Kommentaren veröffentlicht",
+      "folded": "Zur Zusammenfassung hinzugefügt (keine Zeile im Diff zum Verankern): {count}",
+      "failuresHeading": "Diese Kommentare konnten nicht veröffentlicht werden:",
+      "bodyError": "Der Zusammenfassungskommentar konnte nicht veröffentlicht werden: {error}",
+      "postedBadge": "Veröffentlicht",
+      "retry": "Erneut veröffentlichen"
+    },
     "severity": {
       "blocker": "Blocker",
       "high": "Hoch",

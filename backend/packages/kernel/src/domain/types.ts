@@ -286,6 +286,8 @@ export type {
   PrReviewStatus,
   PrReviewResolution,
   PrReviewStepState,
+  PrReviewPostReport,
+  PrReviewPostFailure,
   PrReviewAgentOutput,
   ResolvePrReviewInput,
   // Clarity-review (bug-report triage reviewer agent) shapes — reuse the requirements

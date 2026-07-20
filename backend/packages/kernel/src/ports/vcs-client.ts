@@ -19,6 +19,7 @@ import type { VcsConnectionRef, VcsRepoRef } from '../domain/vcs-types.js'
 import type {
   CommitFilesResult,
   CreateReviewInput,
+  CreateReviewResult,
   GitHubChangedFile,
   GitHubCodeSearchHit,
   GitHubIssueComment,
@@ -237,13 +238,16 @@ export interface VcsClient {
     ref: VcsRepoRef,
     threadId: string,
   ): Promise<void>
-  /** Submit a PR review with inline comments (the deep-review "post" resolution). Optional. */
+  /**
+   * Publish a PR review's findings as individual inline comments + a summary (the deep-review
+   * "post" resolution), returning a per-comment {@link CreateReviewResult}. Optional.
+   */
   createReview?(
     connection: VcsConnectionRef,
     ref: VcsRepoRef,
     number: number,
     input: CreateReviewInput,
-  ): Promise<void>
+  ): Promise<CreateReviewResult>
 
   // ---- writes -------------------------------------------------------------
   createBranch(

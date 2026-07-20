@@ -138,6 +138,8 @@ export type {
   CommitFilesResult,
   CreateReviewComment,
   CreateReviewInput,
+  CreateReviewResult,
+  ReviewCommentOutcome,
   GitHubChangedFile,
   GitHubClient,
   GitHubCodeSearchHit,

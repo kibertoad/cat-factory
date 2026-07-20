@@ -110,6 +110,9 @@ export class PrReviewController {
         resolution: 'finish',
         prUrl: prUrl ?? null,
         model: model ?? null,
+        postReport: null,
+        postedFindingIds: [],
+        postedBody: false,
       }
       return null
     }
@@ -123,6 +126,9 @@ export class PrReviewController {
       resolution: null,
       prUrl: prUrl ?? null,
       model: model ?? null,
+      postReport: null,
+      postedFindingIds: [],
+      postedBody: false,
     }
     await this.raisePrReviewReady(workspaceId, instance, block, findings.length, slices.length)
     return this.deps.stateMachine.parkStepOnDecision(workspaceId, instance, step)

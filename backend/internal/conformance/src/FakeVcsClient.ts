@@ -1,6 +1,7 @@
 import type {
   CommitFilesResult,
   CreateReviewInput,
+  CreateReviewResult,
   GitHubBranch,
   GitHubChangedFile,
   GitHubCheckRun,
@@ -208,8 +209,14 @@ export class FakeVcsClient implements VcsClient {
     _r: VcsRepoRef,
     number: number,
     input: CreateReviewInput,
-  ): Promise<void> {
+  ): Promise<CreateReviewResult> {
     this.calls.reviewsPosted.push({ number, input })
+    // The fake posts everything successfully — the per-comment failure paths are exercised by
+    // the RunDispatcher / FetchGitHubClient unit + conformance suites with tailored recorders.
+    return {
+      comments: input.comments.map(() => ({ posted: true })),
+      bodyPosted: input.body ? true : null,
+    }
   }
   async comment(_c: VcsConnectionRef, _r: VcsRepoRef, number: number, body: string): Promise<void> {
     this.calls.comments.push({ number, body })

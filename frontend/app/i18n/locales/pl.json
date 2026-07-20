@@ -4942,6 +4942,15 @@
       "title": "Publikowanie komentarzy przeglądu…",
       "hint": "Publikowanie wybranych uwag jako komentarzy w treści pull requesta."
     },
+    "postReport": {
+      "heading": "Wynik publikacji",
+      "posted": "Opublikowano {posted} z {attempted} komentarzy",
+      "folded": "Dodano do podsumowania (brak wiersza w różnicy do zakotwiczenia): {count}",
+      "failuresHeading": "Nie udało się opublikować tych komentarzy:",
+      "bodyError": "Nie udało się opublikować komentarza podsumowującego: {error}",
+      "postedBadge": "Opublikowano",
+      "retry": "Ponów publikację"
+    },
     "severity": {
       "blocker": "Blokujące",
       "high": "Wysokie",

@@ -4954,6 +4954,15 @@
       "title": "Pubblicazione dei commenti di revisione…",
       "hint": "Pubblicazione dei rilievi selezionati come commenti inline sulla pull request."
     },
+    "postReport": {
+      "heading": "Esito della pubblicazione",
+      "posted": "{posted} di {attempted} commenti pubblicati",
+      "folded": "Aggiunti al riepilogo (nessuna riga nel diff a cui ancorarli): {count}",
+      "failuresHeading": "Impossibile pubblicare questi commenti:",
+      "bodyError": "Impossibile pubblicare il commento di riepilogo: {error}",
+      "postedBadge": "Pubblicato",
+      "retry": "Riprova la pubblicazione"
+    },
     "severity": {
       "blocker": "Bloccante",
       "high": "Alta",

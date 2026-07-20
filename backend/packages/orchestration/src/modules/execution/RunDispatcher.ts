@@ -43,7 +43,6 @@ import {
   ConflictError,
   DEFAULT_RISK_POLICY,
   failureKindFromHarnessCause,
-  FIXER_AGENT_KIND,
   getErrorMessage,
   isAsyncAgentExecutor,
   NotFoundError,
@@ -84,11 +83,8 @@ import { MergeResolver } from './MergeResolver.js'
 import { ReviewGateController, type ReviewKind } from './ReviewGateController.js'
 import { ForkDecisionController } from './ForkDecisionController.js'
 import { PrReviewController } from './PrReviewController.js'
-import {
-  buildPrReviewPost,
-  initialPrReviewState,
-  renderPrReviewFixerFeedback,
-} from './prReview.logic.js'
+import { initialPrReviewState } from './prReview.logic.js'
+import { PrReviewResolutionController } from './PrReviewResolutionController.js'
 import {
   DEFAULT_FORK_MAX_CHAT_TURNS,
   resolveForkTriState,
@@ -134,19 +130,6 @@ type ResolvedRiskPolicy = {
   releaseMaxAttempts: number
   humanReviewGraceMinutes: number
   forkDecision?: StepGating | null
-}
-
-/**
- * The PR number a `review` task targets: the explicit `prNumber` field wins, else parse it from
- * the `prUrl` (`…/pull/42` on GitHub, `…/merge_requests/42` on GitLab). Undefined when neither
- * yields one — the PR-review `fix`/`post` resolutions then report the PR unresolvable.
- */
-function reviewPrNumber(block: Block | null | undefined): number | undefined {
-  const fields = block?.taskTypeFields
-  if (typeof fields?.prNumber === 'number') return fields.prNumber
-  const url = fields?.prUrl?.trim()
-  const match = url ? /\/(?:pull|merge_requests)\/(\d+)/.exec(url) : null
-  return match ? Number(match[1]) : undefined
 }
 
 /** Collaborators + leaf dependencies the {@link RunDispatcher} needs. */
@@ -284,6 +267,8 @@ export class RunDispatcher {
    */
   private readonly deployer: DeployerStepController
   private readonly repoOps: RunRepoOpsController
+  /** Driver-side PR deep-review resolution (`fix` / `post`), extracted as a cohesive collaborator. */
+  private readonly prReviewResolution: PrReviewResolutionController
   /**
    * The Follow-up companion gate (the future-looking Coder's streamed items, the
    * park-until-decided gate, and the human-action API), extracted to
@@ -384,6 +369,15 @@ export class RunDispatcher {
       agentKindRegistry: deps.agentKindRegistry,
       resolveRunRepoContext: deps.resolveRunRepoContext,
       issueWriteback: deps.issueWriteback,
+    })
+    this.prReviewResolution = new PrReviewResolutionController({
+      runStateMachine: deps.runStateMachine,
+      resolveRunRepoContext: deps.resolveRunRepoContext,
+      runInitiatorScope: this.runInitiatorScope,
+      recordStepResult: (ws, instance, step, isFinalStep, result) =>
+        this.recordStepResult(ws, instance, step, isFinalStep, result),
+      handleAgentStep: (ctx, dispatchKind, augment) =>
+        this.handleAgentStep(ctx, dispatchKind, augment),
     })
     // Assemble the seam the extracted dispatch-registry builders close over: the collaborators
     // above + bound call-backs into this dispatcher's completion / gate / phase methods, so the
@@ -2235,132 +2229,13 @@ export class RunDispatcher {
   }
 
   /**
-   * Drive a re-armed PR-review step's RESOLUTION (PR 3). The human resolved a parked review with
-   * `fix` or `post`; {@link PrReviewController.resolve} re-armed this step and woke the driver.
-   * - `fixing`: dispatch the Fixer against the reviewed PR's head branch with the selected
-   *   findings folded in (parks on the job; its completion marks the review `done`).
-   * - `posting`: publish the selected findings as inline PR review comments, then finish the step.
+   * Drive a re-armed PR-review step's RESOLUTION. The human resolved a parked review with `fix` or
+   * `post`; {@link PrReviewController.resolve} re-armed this step and woke the driver. Delegated to
+   * {@link PrReviewResolutionController} (the cohesive driver-side seam); see it for the `fix` /
+   * `post` mechanics.
    */
-  private async handlePrReviewResolution(ctx: StepHandlerContext): Promise<AdvanceResult> {
-    const { step } = ctx
-    if (step.prReview?.status === 'posting') return this.postPrReview(ctx)
-    return this.dispatchPrReviewFixer(ctx)
-  }
-
-  /**
-   * Dispatch the Fixer for a PR-review `fix` resolution. A `review` task carries no own work
-   * branch — it reviews an EXISTING PR — so resolve the PR's head branch (via the checkout-free
-   * `RepoFiles`) and point the Fixer's clone/push at it: fold a synthetic `pullRequest` + an
-   * apriori WORKING branch into the dispatch context so the shared `container-coding` +
-   * `clone:{branch:'pr'}` fixer body clones + pushes that branch (no new PR), and hand it the
-   * selected findings as a prior output (the same injection point the gate helpers use). Fails
-   * the run loudly when the PR branch can't be resolved (nothing to push to) rather than pushing
-   * blind. On a replay (jobId already set) it re-attaches without re-resolving.
-   */
-  private async dispatchPrReviewFixer(ctx: StepHandlerContext): Promise<AdvanceResult> {
-    const { workspaceId, instance, step, block } = ctx
-    const review = step.prReview!
-    const selected = (review.findings ?? []).filter((f) =>
-      review.selectedFindingIds?.includes(f.id),
-    )
-    let headRef: string | null = null
-    let prNumber: number | undefined
-    if (!step.jobId) {
-      prNumber = reviewPrNumber(block)
-      const runRepo =
-        prNumber != null ? await this.resolveRunRepoContext?.(workspaceId, block.id) : null
-      const repo = runRepo?.repo
-      headRef =
-        prNumber != null && repo?.pullRequestHeadRef
-          ? await this.runInitiatorScope(instance.initiatedBy, () =>
-              repo.pullRequestHeadRef!(prNumber!),
-            )
-          : null
-      if (prNumber == null || !headRef) {
-        return {
-          kind: 'job_failed',
-          failureKind: 'preflight',
-          error:
-            "Can't resolve the reviewed pull request's head branch to push fixes to. The " +
-            "'fix' resolution needs a same-repo pull request on this service's linked repository " +
-            '(a cross-repo or fork PR is not yet supported — post the findings as comments instead).',
-        }
-      }
-    }
-    const resolvedHeadRef = headRef
-    const resolvedPrNumber = prNumber
-    return this.handleAgentStep(ctx, FIXER_AGENT_KIND, (context) => {
-      if (resolvedHeadRef && resolvedPrNumber != null) {
-        context.block.pullRequest = {
-          number: resolvedPrNumber,
-          branch: resolvedHeadRef,
-          url: review.prUrl ?? '',
-        }
-        // Build inside the PR head branch (probed, never created) so the work-branch machinery
-        // targets it rather than minting a stray `cat-factory/<blockId>` off base.
-        context.aprioriBranches = [{ name: resolvedHeadRef, mode: 'working' }]
-      }
-      context.priorOutputs = [
-        ...context.priorOutputs,
-        { agentKind: FIXER_AGENT_KIND, output: renderPrReviewFixerFeedback(selected) },
-      ]
-    })
-  }
-
-  /**
-   * Post a PR-review `post` resolution: publish the human-selected findings as a single advisory
-   * (`COMMENT`) inline review on the reviewed PR via the checkout-free `RepoFiles.createReview`,
-   * then finish the step. At-most-once: the `pendingPrReviewPost` marker is consumed (cleared +
-   * persisted) BEFORE the (side-effecting) post so a Workflows retry can't submit it twice. When
-   * no VCS review write is wired (tests / no GitHub) the findings are still recorded and the step
-   * finishes — the review pipeline never reaches this without GitHub in practice.
-   *
-   * If `createReview` itself throws (GitHub rejects the batched review — e.g. a finding anchored
-   * to a line outside the PR diff 422s the WHOLE review — or a transient network/5xx error), the
-   * marker is already consumed, so a driver retry would NOT re-post. Rather than silently
-   * completing the step as `done` with nothing actually posted (the human would believe the
-   * comments landed), fail the step LOUDLY so the failure surfaces on the board — mirroring the
-   * `fix` resolution's loud preflight failure. `post` is a fallback resolution, so a hard failure
-   * is visible and the human can re-run or choose `fix`/`finish` instead.
-   */
-  private async postPrReview(ctx: StepHandlerContext): Promise<AdvanceResult> {
-    const { workspaceId, instance, step, block, isFinalStep } = ctx
-    const review = step.prReview!
-    const selected = (review.findings ?? []).filter((f) =>
-      review.selectedFindingIds?.includes(f.id),
-    )
-    let posted = false
-    if (step.pendingPrReviewPost) {
-      step.pendingPrReviewPost = null
-      await this.runStateMachine.casPersist(workspaceId, instance)
-      const prNumber = reviewPrNumber(block)
-      const runRepo =
-        prNumber != null ? await this.resolveRunRepoContext?.(workspaceId, block.id) : null
-      const repo = runRepo?.repo
-      if (prNumber != null && repo?.createReview) {
-        try {
-          await this.runInitiatorScope(instance.initiatedBy, () =>
-            repo.createReview!(prNumber, buildPrReviewPost(selected, review.summary)),
-          )
-        } catch (error) {
-          return {
-            kind: 'job_failed',
-            failureKind: 'agent',
-            error:
-              `Failed to post the ${selected.length} selected finding` +
-              `${selected.length === 1 ? '' : 's'} as a pull-request review: ${getErrorMessage(error)}. ` +
-              'GitHub rejects a review whose inline comment anchors a line outside the PR diff — ' +
-              "try the 'fix' resolution, or re-run to post again.",
-          }
-        }
-        posted = true
-      }
-    }
-    step.prReview = { ...review, status: 'done' }
-    const output = posted
-      ? `Posted ${selected.length} review comment${selected.length === 1 ? '' : 's'} to the pull request.`
-      : `Recorded ${selected.length} selected finding${selected.length === 1 ? '' : 's'}.`
-    return this.recordStepResult(workspaceId, instance, step, isFinalStep, { output })
+  private handlePrReviewResolution(ctx: StepHandlerContext): Promise<AdvanceResult> {
+    return this.prReviewResolution.handle(ctx)
   }
 
   /** Read a run's active implementation-fork decision state, or null. */

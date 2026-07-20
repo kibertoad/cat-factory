@@ -38,6 +38,30 @@ compatibility is NOT a goal** (prefer the clean shape, drop the legacy one), and
 gate is a new registry entry, not a copy of the machinery**. Reach for the durable design
 these encode even in situations they don't name explicitly.
 
+### Size budgets are a split trigger, NEVER a number to raise
+
+The file-size guard (`scripts/check-file-size.mjs`) and oxlint's `max-lines-per-function`
+(the test/conformance allowance in `.oxlintrc.json`) exist to STOP the god-files re-growing.
+Their per-file/per-function numbers are **ratchets — they may only ever go DOWN.** When your
+change pushes a file or function over its budget, the fix is **ALWAYS to split along a cohesive
+seam**, never to edit the guard's number upward. This is absolute:
+
+- **Do NOT raise a `check-file-size.mjs` allowance, and do NOT raise `max-lines-per-function`,
+  to make your change fit** — not "just this once", not "the file was already huge", not "my
+  addition is legitimate". A legitimate addition to an over-budget file is exactly the case the
+  ratchet is defending against; extract instead. Raising the number is a failed task.
+- **Split the way the existing code already does it.** The model is the extraction of a cohesive
+  collaborator that the god-file delegates to: the `RunDispatcher` controller extractions
+  (`DeployerStepController`, `RunRepoOpsController`, `PrReviewResolutionController`) — each takes a
+  small deps object of bound call-backs and the dispatcher keeps a thin delegate method; the
+  `FetchGitHubClient` → `reviewPosting.ts` transport-helper extraction; and splitting a giant
+  conformance `describe` into its own `suites/*.ts` that the parent suite calls (e.g.
+  `execution-pr-review.ts`). Pull out the concern your change touches, not an arbitrary slice.
+- **The ONLY time a budget number changes in your PR is when a split made it SMALLER.** After you
+  extract, re-run the guards and, if a file/function is now comfortably under a stale ratchet,
+  ratchet it DOWN to the new reality (optional, but never the reverse). If you genuinely believe a
+  split is impossible, STOP and say so explicitly rather than bumping the number silently.
+
 ## Fixing an existing PR (review findings AND CI failures) — push to ITS OWN branch
 
 When you are asked to act on an existing PR — whether that's **addressing review
@@ -815,9 +839,9 @@ run the guards your change class can trip:**
   README.md's repository-layout tables.
 - `node scripts/check-file-size.mjs` — soft max-lines budget (default 1,500) for non-test
   source files, with ratcheted allowances for the legacy oversized files (the engine
-  god-file re-accretion guard). Grew a file past its budget ⇒ split it along a cohesive
-  seam (the `RunDispatcher` controller extractions are the model), or deliberately adjust
-  the allowance in the same PR.
+  god-file re-accretion guard). Grew a file past its budget ⇒ **split it along a cohesive
+  seam — do NOT raise the ratchet.** See the file-size / function-size rule below; the same
+  applies to oxlint's `max-lines-per-function` (the test/conformance budget in `.oxlintrc.json`).
 - `pnpm exec changeset status --since=origin/main` — every changed versioned package needs
   a changeset (run after committing locally; it diffs git refs).
 - `pnpm lint:knip` — unused files/deps/exports (run after `pnpm build`); remember

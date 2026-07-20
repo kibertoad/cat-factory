@@ -49,6 +49,8 @@ export type {
   PrReviewSeverity,
   PrReviewCategory,
   PrReviewResolution,
+  PrReviewPostReport,
+  PrReviewPostFailure,
   GateFailingCheck,
   GateAttempt,
   GateStepState,

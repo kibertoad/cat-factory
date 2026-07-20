@@ -2,6 +2,7 @@ import type { CommitFilesInput, OpenedPullRequest, OpenPullRequestInput } from '
 import type {
   CommitFilesResult,
   CreateReviewInput,
+  CreateReviewResult,
   GitHubChangedFile,
   GitHubRepoRef,
   RepoContentEntry,
@@ -74,12 +75,13 @@ export interface RepoFiles {
    */
   pullRequestHeadRef?(number: number): Promise<string | null>
   /**
-   * Submit a pull-request review with inline comments (the deep-review "post" resolution
-   * publishes the human-selected findings as one advisory review). Optional: a bound client
-   * that can't post a batched inline review omits it, so the "post" resolution reports it
-   * unsupported rather than silently dropping the findings.
+   * Publish a pull-request review's findings as individual inline comments + a summary comment
+   * (the deep-review "post" resolution), returning a per-comment {@link CreateReviewResult} so a
+   * partial post is reported rather than failing the whole set. Optional: a bound client that
+   * can't post inline review comments omits it, so the "post" resolution reports it unsupported
+   * rather than silently dropping the findings.
    */
-  createReview?(number: number, input: CreateReviewInput): Promise<void>
+  createReview?(number: number, input: CreateReviewInput): Promise<CreateReviewResult>
   /**
    * List the files a pull request changed (path, status, additions/deletions, and the per-file
    * `patch`). The `pr-reviewer` preOp reads this to hand the reviewer the diff + changed-file

@@ -63,6 +63,12 @@ const ITEM_ICON: Record<string, string> = {
 const working = computed(() => status.value === 'fixing' || status.value === 'posting')
 const findings = computed<PrReviewFinding[]>(() => state.value?.findings ?? [])
 
+// The outcome of the last `post` attempt (null until one runs). A partial/failed post re-parks
+// the review at `awaiting_selection` carrying this, so the human sees what posted / what failed
+// and can retry ONLY the posting rather than re-running the whole review.
+const postReport = computed(() => state.value?.postReport ?? null)
+const postedIds = computed(() => new Set(state.value?.postedFindingIds ?? []))
+
 /** Severity → chip classes (styling, not copy). */
 const SEVERITY_CLASS: Record<PrReviewSeverity, string> = {
   blocker: 'bg-rose-500/15 text-rose-300 ring-rose-500/30',
@@ -260,6 +266,57 @@ async function onResolve(action: PrReviewResolution): Promise<void> {
           {{ prReview.error }}
         </p>
 
+        <!-- The outcome of the most recent `post` attempt: how many of how many comments landed,
+             which failed + why, and how many findings were folded into the summary because their
+             line isn't in the PR diff. Surfaced so a partial/failed post is legible + retryable. -->
+        <div
+          v-if="postReport"
+          data-testid="pr-review-post-report"
+          class="mb-3 rounded-lg border px-3 py-2 text-[12px]"
+          :class="
+            postReport.failures.length > 0 || postReport.bodyPosted === false
+              ? 'border-amber-500/40 bg-amber-500/10 text-amber-200'
+              : 'border-emerald-500/40 bg-emerald-500/10 text-emerald-200'
+          "
+        >
+          <div class="mb-1 flex items-center gap-1.5 font-medium">
+            <UIcon
+              :name="
+                postReport.failures.length > 0 || postReport.bodyPosted === false
+                  ? 'i-lucide-alert-triangle'
+                  : 'i-lucide-check-circle-2'
+              "
+              class="h-4 w-4 shrink-0"
+            />
+            <span>{{ t('prReview.postReport.heading') }}</span>
+          </div>
+          <p data-testid="pr-review-post-count">
+            {{
+              t('prReview.postReport.posted', {
+                posted: postReport.posted,
+                attempted: postReport.attempted,
+              })
+            }}
+          </p>
+          <p v-if="postReport.folded > 0" class="mt-0.5 opacity-90">
+            {{ t('prReview.postReport.folded', { count: postReport.folded }) }}
+          </p>
+          <template v-if="postReport.failures.length > 0">
+            <p class="mt-1.5 font-medium">{{ t('prReview.postReport.failuresHeading') }}</p>
+            <ul class="mt-0.5 space-y-0.5" data-testid="pr-review-post-failures">
+              <li v-for="f in postReport.failures" :key="f.findingId" class="flex gap-1.5">
+                <code class="shrink-0 text-amber-100"
+                  >{{ f.path }}<template v-if="f.line != null">:{{ f.line }}</template></code
+                >
+                <span class="opacity-90">— {{ f.reason }}</span>
+              </li>
+            </ul>
+          </template>
+          <p v-if="postReport.bodyPosted === false && postReport.bodyError" class="mt-1.5">
+            {{ t('prReview.postReport.bodyError', { error: postReport.bodyError }) }}
+          </p>
+        </div>
+
         <!-- The reviewer's overall assessment. -->
         <p
           v-if="state?.summary"
@@ -330,6 +387,13 @@ async function onResolve(action: PrReviewResolution): Promise<void> {
                     <span class="rounded bg-slate-800 px-1.5 py-0.5 text-[10px] text-slate-300">
                       {{ t(`prReview.category.${f.category}`) }}
                     </span>
+                    <span
+                      v-if="postedIds.has(f.id)"
+                      data-testid="pr-review-finding-posted"
+                      class="rounded bg-emerald-500/15 px-1.5 py-0.5 text-[10px] font-semibold uppercase text-emerald-300 ring-1 ring-emerald-500/30"
+                    >
+                      {{ t('prReview.postReport.postedBadge') }}
+                    </span>
                     <h4 class="min-w-0 flex-1 text-[13px] font-medium text-slate-100">
                       {{ f.title }}
                     </h4>
@@ -381,7 +445,7 @@ async function onResolve(action: PrReviewResolution): Promise<void> {
         data-testid="pr-review-post"
         @click="onResolve('post')"
       >
-        {{ t('prReview.post') }}
+        {{ postReport ? t('prReview.postReport.retry') : t('prReview.post') }}
       </UButton>
       <UButton
         color="primary"

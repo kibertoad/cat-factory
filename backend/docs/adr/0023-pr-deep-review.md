@@ -41,9 +41,15 @@ result-view window. The human then resolves the parked review one of three ways
     selected findings rendered into its prompt (`renderPrReviewFixerFeedback`). The Fixer's
     completion marks the review `done`.
 - **`post`** — re-arm with an at-most-once `pendingPrReviewPost` marker so the driver publishes the
-  selected findings as a single advisory (`COMMENT`) inline review via `RepoFiles.createReview`
-  (`buildPrReviewPost` maps line-carrying findings to inline comments and folds line-less ones into
-  the review body), then finishes the step.
+  selected findings on the PR via `RepoFiles.createReview`, which posts each inline comment
+  INDIVIDUALLY (not one atomic batched review) plus the summary as a general comment. Before
+  posting, `computeCommentableLines` parses the PR diff so a finding anchored to a line OUTSIDE the
+  diff is folded into the summary (the root-cause fix for GitHub's "Line could not be resolved" 422) rather than sent as a comment GitHub rejects. The per-comment outcome is reduced to a
+  `step.prReview.postReport` (how many of how many posted, per-finding failures, folded count) the
+  window renders. A FULLY successful post finishes the step `done`; ANY partial/failed post
+  RE-PARKS the run at `awaiting_selection` carrying the report, so the human sees what happened and
+  can retry ONLY the posting (re-`post`, which skips findings already in `postedFindingIds`) or
+  switch to `fix`/`finish` — never a stuck spinner or an opaque whole-run failure.
 
 All review state rides `step.prReview` — **no side table** — so it is runtime-symmetric by
 construction, exactly like `forkDecision`/`followUps`. The two VCS reads/writes the resolutions
@@ -74,17 +80,30 @@ need (`getPullRequestHeadRef`, `createReview`) are new **optional** methods on t
   the work-branch machinery targets it, probed not created — no orphan `cat-factory/<blockId>`
   branch), so the unchanged `container-coding` + `clone:{branch:'pr'}` fixer body clones and pushes
   the reviewed PR's branch.
-- **At-most-once posting.** `post` runs in the durable driver (the `pendingPrReviewPost` marker is
-  consumed — cleared + persisted — before the side-effecting `createReview`), so a Workflows
-  retry/replay can't submit the review twice. Because the marker is consumed first, a retry will
-  NOT re-post, so a `createReview` that actually throws (GitHub 422s the batched review — most
-  commonly a finding anchored to a line outside the PR diff, which rejects the WHOLE review — or a
-  transient network/5xx error) must NOT silently complete the step as `done` with nothing posted.
-  `postPrReview` therefore fails the step LOUDLY on a post error (a `job_failed` surfaced on the
-  board, mirroring the `fix` preflight failure) rather than reporting a misleading success; the
-  human can re-run `post` or switch to `fix`/`finish`. To keep GitHub from rejecting the review for
-  a blank body, `buildPrReviewPost` always emits a non-empty `body` (falling back to a count of the
-  inline comments when neither a summary nor an unanchored finding supplies one).
+- **Per-comment posting for partial success + observability.** The original design submitted one
+  atomic batched `COMMENT` review, which is all-or-nothing: a single finding anchored to a line
+  outside the diff 422s ("Line could not be resolved") and rejects EVERY comment, and the step then
+  failed the whole run with the error only visible after closing the window — a de-facto stuck
+  spinner. `createReview` now posts each inline comment individually (a standalone review comment)
+  and the summary as a general comment, reporting a per-comment `CreateReviewResult`. So the
+  anchorable comments land while the rest are reported, and the deep-review window shows "N of M
+  posted" + the per-finding failures — the observability this resolution needed.
+- **Resolve the 422 at the source.** `computeCommentableLines` parses each changed file's unified
+  diff into the set of lines an inline comment can anchor to (added/context on the RIGHT, removed/
+  context on the LEFT); `buildPrReviewPost` folds any finding whose line falls outside that set
+  into the summary comment instead of sending an inline comment GitHub would reject. The per-comment
+  posting is then the safety net for anything the pre-filter can't catch (a null-patch/too-large
+  file, an API edge).
+- **At-most-once, and retry just the posting.** `post` runs in the durable driver with the
+  `pendingPrReviewPost` marker consumed (cleared + persisted) before the side-effecting post, so a
+  Workflows retry/replay can't re-run it; findings already in `postedFindingIds` are skipped; and the
+  summary/body comment is suppressed once `postedBody` is set, so a human RE-`post` (the retry path)
+  never double-posts an inline comment OR the summary that already landed. A partial/failed post
+  RE-PARKS at `awaiting_selection` carrying the `postReport` (never a `job_failed`), so the failure
+  is legible and retryable in place — the human doesn't re-run the whole review. To keep GitHub from
+  rejecting a blank-body comment, `buildPrReviewPost` always emits a non-empty `body` (falling back
+  to a count of the inline comments when neither a summary nor a folded/unanchored finding supplies
+  one).
 - **Pass-through when unwired.** A clean PR (no findings) records an empty `done` review and lets
   the normal spine finish (no park); an unwired reviewer / no VCS write degrades gracefully. The
   cross-runtime conformance suite asserts the park → select → resolve loop for all three actions.

@@ -161,3 +161,88 @@ describe('FetchGitHubClient PR-review reads', () => {
     await expect(makeClient().listReviewThreads(1, ref, 7)).rejects.toThrow(/boom/)
   })
 })
+
+describe('FetchGitHubClient.createReview (per-comment posting)', () => {
+  const method = (init?: RequestInit) => (init?.method ?? 'GET').toUpperCase()
+
+  it('posts each inline comment individually + the body, reporting every success', async () => {
+    const calls: { url: string; body: unknown }[] = []
+    const fetchMock = vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
+      const url = String(input)
+      if (method(init) === 'GET' && url.endsWith('/pulls/7'))
+        return json({ head: { sha: 'head-sha' } })
+      calls.push({ url, body: init?.body ? JSON.parse(String(init.body)) : undefined })
+      return json({}, 201)
+    })
+    vi.stubGlobal('fetch', fetchMock)
+
+    const result = await makeClient().createReview(1, ref, 7, {
+      event: 'COMMENT',
+      body: 'Overall summary',
+      comments: [
+        { path: 'a.ts', line: 3, body: 'nit', side: 'RIGHT' },
+        { path: 'b.ts', line: 9, body: 'bug' },
+      ],
+    })
+
+    expect(result.comments).toEqual([{ posted: true }, { posted: true }])
+    expect(result.bodyPosted).toBe(true)
+    // Two inline review comments carry the resolved head sha as commit_id; the body is an issue comment.
+    const inline = calls.filter((c) => c.url.includes('/pulls/7/comments'))
+    expect(inline).toHaveLength(2)
+    expect(inline[0]!.body).toMatchObject({
+      commit_id: 'head-sha',
+      path: 'a.ts',
+      line: 3,
+      side: 'RIGHT',
+    })
+    expect(calls.some((c) => c.url.includes('/issues/7/comments'))).toBe(true)
+  })
+
+  it('records a per-comment failure (line outside the diff) without rejecting the others', async () => {
+    const fetchMock = vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
+      const url = String(input)
+      if (method(init) === 'GET' && url.endsWith('/pulls/7'))
+        return json({ head: { sha: 'head-sha' } })
+      if (url.includes('/pulls/7/comments')) {
+        const body = JSON.parse(String(init?.body)) as { path: string }
+        if (body.path === 'bad.ts')
+          return json(
+            { message: 'Unprocessable Entity', errors: ['Line could not be resolved'] },
+            422,
+          )
+        return json({}, 201)
+      }
+      return json({}, 201)
+    })
+    vi.stubGlobal('fetch', fetchMock)
+
+    const result = await makeClient().createReview(1, ref, 7, {
+      event: 'COMMENT',
+      comments: [
+        { path: 'good.ts', line: 3, body: 'ok' },
+        { path: 'bad.ts', line: 999, body: 'nope' },
+      ],
+    })
+
+    expect(result.comments[0]).toEqual({ posted: true })
+    expect(result.comments[1]!.posted).toBe(false)
+    expect(result.comments[1]!.error).toMatch(/Line could not be resolved/)
+    expect(result.bodyPosted).toBeNull()
+  })
+
+  it('reports every comment failed (no throw) when the PR head cannot be resolved', async () => {
+    vi.stubGlobal(
+      'fetch',
+      vi.fn(async () => json({ message: 'Not Found' }, 404)),
+    )
+    const result = await makeClient().createReview(1, ref, 7, {
+      event: 'COMMENT',
+      body: 'summary',
+      comments: [{ path: 'a.ts', line: 1, body: 'x' }],
+    })
+    expect(result.comments[0]!.posted).toBe(false)
+    expect(result.bodyPosted).toBe(false)
+    expect(result.bodyError).toBeTruthy()
+  })
+})
