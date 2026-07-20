@@ -20,12 +20,11 @@ import type {
   TaskTypeFields,
 } from '~/types/domain'
 import { DOC_KINDS, DOC_KIND_FIELDS } from '~/types/domain'
-import type { DropdownMenuItem } from '@nuxt/ui'
 import ContextDocumentPicker from '~/components/documents/ContextDocumentPicker.vue'
 import ContextIssuePicker from '~/components/tasks/ContextIssuePicker.vue'
+import FragmentSelector from '~/components/fragments/FragmentSelector.vue'
 import { riskPolicyOptionLabel, riskPolicySummary } from '~/utils/riskPolicy'
 import { pipelineAllowedForManualStart } from '~/utils/pipeline'
-import { buildFragmentPickerGroups } from '~/utils/fragmentPicker'
 
 const ui = useUiStore()
 const board = useBoardStore()
@@ -36,7 +35,6 @@ const modelPresets = useModelPresetsStore()
 const pipelines = usePipelinesStore()
 const agentConfig = useAgentConfigStore()
 const fragments = useFragmentsStore()
-const accounts = useAccountsStore()
 const toast = useToast()
 const { t } = useI18n()
 
@@ -313,50 +311,10 @@ const selectedModelPresetLabel = computed(() => {
 })
 
 // ---- best-practice prompt fragments (pinned at creation) -------------------
-// The fragments already chosen, resolved against the catalog. An id the catalog no longer
-// resolves still renders (labelled by its raw id) so it stays visible and removable — mirrors
-// the inspector's TaskStructure picker.
-const selectedFragments = computed(() =>
-  fragmentIds.value.map((id) => fragments.getFragment(id) ?? { id, title: id, summary: '' }),
-)
-// A trailing group linking out to the fragment library (board tier always; account tier when
-// enabled) — managing fragments is open to every member, exactly like the inspector picker.
-const fragmentManageItems = computed<DropdownMenuItem[]>(() => {
-  const items: DropdownMenuItem[] = [
-    {
-      label: t('inspector.fragments.manageBoard'),
-      icon: 'i-lucide-book-marked',
-      onSelect: () => ui.openFragmentLibrary(),
-    },
-  ]
-  if (accounts.enabled) {
-    items.push({
-      label: t('inspector.fragments.manageAccount'),
-      icon: 'i-lucide-users',
-      onSelect: () => ui.openAccountSettings('fragments'),
-    })
-  }
-  return items
-})
-// Picker menu: fragments appropriate to the enclosing frame's block type (the "scope"), not
-// already selected, grouped by category, with the management links appended as the final group.
-// Falls back to `service` before a frame resolves so the catalog is still browsable.
-const fragmentMenu = computed<DropdownMenuItem[][]>(() => {
-  const selected = new Set(fragmentIds.value)
-  return [
-    ...buildFragmentPickerGroups(
-      fragments.forBlockType(frame.value?.type ?? 'service'),
-      (id) => selected.has(id),
-      (id) => {
-        if (!fragmentIds.value.includes(id)) fragmentIds.value = [...fragmentIds.value, id]
-      },
-    ),
-    fragmentManageItems.value,
-  ]
-})
-function removeFragment(id: string) {
-  fragmentIds.value = fragmentIds.value.filter((x) => x !== id)
-}
+// The pool the shared <FragmentSelector> offers: fragments appropriate to the enclosing frame's
+// block type (the "scope"). Falls back to `service` before a frame resolves so the catalog is
+// still browsable.
+const fragmentPool = computed(() => fragments.forBlockType(frame.value?.type ?? 'service'))
 
 // Hide UI-testing pipelines (`tester-ui` / `visual-confirmation`) when the target frame has no
 // UI to exercise — they'd be refused server-side (see utils/pipeline + the backend gate). Also
@@ -543,7 +501,11 @@ watch(open, (isOpen) => {
   docOutlineHints.value = ''
   reviewPrRef.value = ''
   reviewFocus.value = ''
-  fragmentIds.value = []
+  // Pre-seed the best-practice fragments from the enclosing service's standards, so a new task
+  // ships with its service's fragments already selected (and freely add/removable here). The task
+  // OWNS this selection from creation — the engine folds exactly these, without re-unioning the
+  // service's set, so removing one here actually drops it for this task.
+  fragmentIds.value = [...(frame.value?.serviceFragmentIds ?? [])]
   for (const key of Object.keys(docKindFieldValues) as DocKindFieldKey[])
     delete docKindFieldValues[key]
   riskPolicyId.value = ''
@@ -663,7 +625,10 @@ async function add() {
       ...(Object.keys(agentConfigValues.value).length
         ? { agentConfig: agentConfigValues.value }
         : {}),
-      ...(fragmentIds.value.length ? { fragmentIds: [...fragmentIds.value] } : {}),
+      // Always send the (service-seeded, then user-edited) selection — including an empty list,
+      // which means "the user cleared the inherited picks" and must be honoured rather than
+      // re-seeded from the service. The task owns its fragments from here.
+      fragmentIds: [...fragmentIds.value],
       ...(technical.value ? { technical: true } : {}),
     })
     if (block) {
@@ -1060,41 +1025,15 @@ async function add() {
             </div>
           </div>
 
-          <!-- Best-practice fragments pinned on the task at creation, scoped to the frame's type. -->
+          <!-- Best-practice fragments pinned on the task at creation, scoped to the frame's type.
+               Pre-seeded from the enclosing service's standards; the task owns them from here. -->
           <div class="space-y-2">
-            <div class="flex items-center justify-between">
-              <span class="text-[11px] font-semibold uppercase tracking-wide text-slate-400">
-                {{ t('board.addTask.bestPractices') }}
-              </span>
-              <UDropdownMenu :items="fragmentMenu">
-                <UButton
-                  color="neutral"
-                  variant="soft"
-                  size="xs"
-                  icon="i-lucide-plus"
-                  trailing-icon="i-lucide-chevron-down"
-                >
-                  {{ t('board.addTask.attach') }}
-                </UButton>
-              </UDropdownMenu>
-            </div>
-            <div v-if="selectedFragments.length" class="flex flex-wrap gap-1">
-              <UBadge
-                v-for="f in selectedFragments"
-                :key="f.id"
-                color="primary"
-                variant="subtle"
-                size="sm"
-                class="cursor-pointer"
-                :title="f.summary"
-                @click="removeFragment(f.id)"
-              >
-                {{ f.title }}<UIcon name="i-lucide-x" class="ms-0.5 h-3 w-3" />
-              </UBadge>
-            </div>
-            <p v-else class="text-[11px] text-slate-500">
-              {{ t('board.addTask.bestPracticesHint') }}
-            </p>
+            <FragmentSelector
+              v-model="fragmentIds"
+              :pool="fragmentPool"
+              :label="t('board.addTask.bestPractices')"
+              :empty-text="t('board.addTask.bestPracticesHint')"
+            />
           </div>
 
           <!-- Context documents (ungated; Attach disabled until a source is connected). -->

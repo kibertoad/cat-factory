@@ -53,6 +53,9 @@ const TASK = {
   description: 'do the thing',
   level: 'task',
   parentId: 'module_1',
+  // A task owns its fragment selection (seeded from the service at creation); the fold reads
+  // these, not the frame's `serviceFragmentIds`.
+  fragmentIds: ['node.best-practices'],
 } as unknown as Block
 
 function makeDeps(over: Partial<AgentContextBuilderDeps> = {}): {
@@ -102,8 +105,7 @@ describe('AgentContextBuilder ancestry-walk reuse', () => {
       TASK,
     )
     expect(blockGets()).toBe(2)
-    // The frame's service fragments still reach a code-aware kind (proves the threaded frame
-    // carries `serviceFragmentIds`, not just its id).
+    // The task's own fragments reach a code-aware kind.
     expect(context.block.resolvedFragments).toEqual([{ id: 'node.best-practices', body: 'BODY' }])
     // The service config resolved off the same frame (its cloud provider).
     expect(context.service?.cloudProvider).toBe('aws')

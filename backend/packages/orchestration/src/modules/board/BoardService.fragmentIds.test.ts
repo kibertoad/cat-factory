@@ -3,13 +3,16 @@ import type { Block } from '@cat-factory/kernel'
 import { DEFAULT_DOCUMENT_STYLE_FRAGMENT_IDS } from '@cat-factory/prompt-fragments'
 import { BoardService, type BoardServiceDependencies } from './BoardService.js'
 
-// A task can pin best-practice prompt fragments at creation (chosen on the create form). These
-// pin how BoardService.addTask persists that selection: honoured as-is for a normal task, and
-// unioned with the writing-style defaults for a document task (so a pick never drops a default).
+// A task OWNS its best-practice prompt fragment selection from creation. These pin how
+// BoardService.addTask derives it: an explicit create-form list is authoritative (honoured as-is,
+// including an empty clear); with no list the task INHERITS the enclosing service's standards
+// (`serviceFragmentIds`); and a document task always additionally carries the writing-style
+// defaults (so a pick/inherit never drops a default). The engine folds exactly this selection —
+// it does NOT re-union the service's fragments at run time (see AgentContextBuilder).
 describe('BoardService fragment pinning at creation', () => {
   const WS = 'ws_1'
 
-  function build() {
+  function build(serviceFragmentIds?: string[]) {
     const frame: Block = {
       id: 'frame_svc',
       title: 'Service',
@@ -22,6 +25,7 @@ describe('BoardService fragment pinning at creation', () => {
       executionId: null,
       level: 'frame',
       parentId: null,
+      ...(serviceFragmentIds ? { serviceFragmentIds } : {}),
     }
     const byId = new Map([[frame.id, frame]])
     const deps = {
@@ -75,5 +79,31 @@ describe('BoardService fragment pinning at creation', () => {
   it('still applies the document defaults when nothing is picked', async () => {
     const task = await build().addTask(WS, 'frame_svc', { title: 'Doc', taskType: 'document' })
     expect(task.fragmentIds).toEqual([...DEFAULT_DOCUMENT_STYLE_FRAGMENT_IDS])
+  })
+
+  it("inherits the service's standards when the form sends no list", async () => {
+    const task = await build(['node.best-practices', 'node.performance']).addTask(WS, 'frame_svc', {
+      title: 'Feature',
+      taskType: 'feature',
+    })
+    expect(task.fragmentIds).toEqual(['node.best-practices', 'node.performance'])
+  })
+
+  it('an explicit list is authoritative over the inherited standards', async () => {
+    const task = await build(['node.best-practices', 'node.performance']).addTask(WS, 'frame_svc', {
+      title: 'Feature',
+      taskType: 'feature',
+      fragmentIds: ['react.hooks'],
+    })
+    expect(task.fragmentIds).toEqual(['react.hooks'])
+  })
+
+  it('an explicit EMPTY list clears the inherited standards (task authoritative)', async () => {
+    const task = await build(['node.best-practices']).addTask(WS, 'frame_svc', {
+      title: 'Feature',
+      taskType: 'feature',
+      fragmentIds: [],
+    })
+    expect(task.fragmentIds).toBeUndefined()
   })
 })

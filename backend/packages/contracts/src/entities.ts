@@ -287,18 +287,23 @@ export const blockSchema = v.object({
    */
   technical: v.optional(v.nullable(v.boolean())),
   /**
-   * Ids of curated best-practice prompt fragments selected for this block. Their
-   * bodies are composed into the agent system prompt at run time. The catalog
-   * itself lives in @cat-factory/prompt-fragments and is served separately.
+   * Ids of curated best-practice prompt fragments selected for this block — the block's OWN,
+   * authoritative selection. On a TASK this is what the engine folds into its `code-aware` /
+   * `doc-aware` steps (the enclosing service's fragments are NOT re-unioned at run time), seeded
+   * from the service at creation and then freely add/removable per task. Their bodies are composed
+   * into the agent system prompt at run time; the catalog itself lives in
+   * @cat-factory/prompt-fragments (+ the tenant library) and is served separately.
    */
   fragmentIds: v.optional(v.array(v.string())),
   /**
-   * Service-level (frame-only): ids of the best-practice / guideline prompt fragments
-   * selected as this service's programming standards (drawn from the universal pool in
-   * @cat-factory/prompt-fragments). At run time the execution engine folds their bodies
-   * into the system prompt of every agent under this service that carries the
-   * `code-aware` trait. Seeded from the workspace default on new services; absent ⇒ no
-   * service-level fragments (only the block's own `fragmentIds` apply).
+   * Service-level (frame-only): ids of the best-practice / guideline prompt fragments selected as
+   * this service's programming standards (drawn from the universal pool in
+   * @cat-factory/prompt-fragments). They serve two roles: (1) they SEED a new task's own
+   * `fragmentIds` at creation (materialised onto the task, which owns its selection from then on —
+   * an existing task is NOT retroactively updated when this list later changes; a new fragment is
+   * picked up by adding it to the task by hand), and (2) at run time the engine folds them into the
+   * frame's OWN `code-aware` runs (e.g. `blueprints`). Seeded from the workspace default on new
+   * services; a task does not re-read them at run time.
    */
   serviceFragmentIds: v.optional(v.array(v.string())),
   /**
