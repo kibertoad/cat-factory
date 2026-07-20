@@ -1,6 +1,7 @@
 import type {
   AgentRunContext,
   GitHubChangedFile,
+  GitHubReviewThread,
   RepoFiles,
   RepoOpContext,
 } from '@cat-factory/kernel'
@@ -9,8 +10,11 @@ import { defaultAgentKindRegistry } from './registry.js'
 import { CODE_AWARE_TRAIT, hasTrait } from './traits.js'
 import {
   PR_DIFF_CONTEXT_FILE,
+  PR_EXISTING_COMMENTS_CONTEXT_FILE,
   PR_REVIEWER_KIND,
   prReviewerDiffPreOp,
+  prReviewerExistingCommentsPreOp,
+  renderExistingReviewComments,
   renderPrDiffContext,
   resolvePrNumber,
 } from './pr-reviewer.js'
@@ -27,6 +31,17 @@ function changedFile(over: Partial<GitHubChangedFile> = {}): GitHubChangedFile {
   }
 }
 
+function reviewThread(over: Partial<GitHubReviewThread> = {}): GitHubReviewThread {
+  return {
+    id: 'T1',
+    isResolved: false,
+    path: 'src/a.ts',
+    line: 42,
+    comments: [{ author: 'octocat', body: 'This looks off.', createdAt: 0 }],
+    ...over,
+  }
+}
+
 /** A RepoOpContext exposing only what the preOp reads: `repo.listChangedFiles` + the PR fields. */
 function ctxWith(
   listChangedFiles: RepoFiles['listChangedFiles'],
@@ -34,6 +49,19 @@ function ctxWith(
 ): RepoOpContext {
   return {
     repo: { listChangedFiles } as unknown as RepoFiles,
+    context: { block: { taskTypeFields } } as unknown as AgentRunContext,
+    branch: 'main',
+    opensPr: false,
+  }
+}
+
+/** A RepoOpContext exposing only `repo.listReviewThreads` + the PR fields (for the comments preOp). */
+function ctxWithThreads(
+  listReviewThreads: RepoFiles['listReviewThreads'],
+  taskTypeFields: { prNumber?: number; prUrl?: string } | undefined,
+): RepoOpContext {
+  return {
+    repo: { listReviewThreads } as unknown as RepoFiles,
     context: { block: { taskTypeFields } } as unknown as AgentRunContext,
     branch: 'main',
     opensPr: false,
@@ -142,10 +170,91 @@ describe('prReviewerDiffPreOp', () => {
   })
 })
 
+describe('renderExistingReviewComments', () => {
+  it('lists each thread with anchor, resolved state and the opening comment', () => {
+    const out = renderExistingReviewComments(9, [
+      reviewThread({ path: 'src/a.ts', line: 10, isResolved: false }),
+      reviewThread({
+        id: 'T2',
+        path: 'src/b.ts',
+        line: 20,
+        isResolved: true,
+        comments: [
+          { author: 'human', body: 'Handle the null case.', createdAt: 0 },
+          { author: 'bot', body: 'Fixed.', createdAt: 1 },
+        ],
+      }),
+    ])
+    expect(out).toContain('# Pull request #9 — existing review comments')
+    expect(out).toContain('## Threads (2)')
+    expect(out).toContain('### src/a.ts:10 — UNRESOLVED')
+    expect(out).toContain('@octocat: This looks off.')
+    expect(out).toContain('### src/b.ts:20 — RESOLVED')
+    expect(out).toContain('@human (+1 reply): Handle the null case.')
+  })
+
+  it('renders a non-diff thread as "general" and a missing body gracefully', () => {
+    const out = renderExistingReviewComments(1, [
+      reviewThread({ path: null, line: null, comments: [] }),
+    ])
+    expect(out).toContain('### general — UNRESOLVED')
+    expect(out).toContain('(no comment body)')
+  })
+})
+
+describe('prReviewerExistingCommentsPreOp', () => {
+  it('injects .cat-context/pr-existing-comments.md when the client lists review threads', async () => {
+    const result = await prReviewerExistingCommentsPreOp(
+      ctxWithThreads(async () => [reviewThread()], { prNumber: 12 }),
+    )
+    expect(result?.contextFiles).toHaveLength(1)
+    expect(result?.contextFiles?.[0]?.path).toBe(PR_EXISTING_COMMENTS_CONTEXT_FILE)
+    expect(result?.contextFiles?.[0]?.content).toContain('# Pull request #12 — existing review')
+  })
+
+  it('resolves the PR number from prUrl when prNumber is absent', async () => {
+    let askedNumber = -1
+    await prReviewerExistingCommentsPreOp(
+      ctxWithThreads(
+        async (n) => {
+          askedNumber = n
+          return [reviewThread()]
+        },
+        { prUrl: 'https://github.com/o/r/pull/321' },
+      ),
+    )
+    expect(askedNumber).toBe(321)
+  })
+
+  it('passes through when the client can not read review threads', async () => {
+    expect(
+      await prReviewerExistingCommentsPreOp(ctxWithThreads(undefined, { prNumber: 12 })),
+    ).toBeUndefined()
+  })
+
+  it('passes through when the PR number can not be resolved', async () => {
+    let called = false
+    await prReviewerExistingCommentsPreOp(
+      ctxWithThreads(async () => {
+        called = true
+        return [reviewThread()]
+      }, {}),
+    )
+    expect(called).toBe(false)
+  })
+
+  it('passes through when the PR has no review threads', async () => {
+    expect(
+      await prReviewerExistingCommentsPreOp(ctxWithThreads(async () => [], { prNumber: 12 })),
+    ).toBeUndefined()
+  })
+})
+
 describe('pr-reviewer kind registration', () => {
-  it('registers the diff preOp on the built-in kind', () => {
+  it('registers the diff + existing-comments preOps on the built-in kind', () => {
     const ops = defaultAgentKindRegistry().preOps(PR_REVIEWER_KIND)
     expect(ops).toContain(prReviewerDiffPreOp)
+    expect(ops).toContain(prReviewerExistingCommentsPreOp)
   })
 
   it('is code-aware so the review task’s selected best-practice fragments are folded', () => {

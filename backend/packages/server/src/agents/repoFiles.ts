@@ -106,6 +106,15 @@ export function makeRepoFiles(
             client.listChangedFiles!(installationId, ref, number),
         }
       : {}),
+    // The pr-reviewer preOp also reads the PR's existing review threads to inject the
+    // already-raised findings up front (so the reviewer skips re-reporting them); present only
+    // when the wired client can read review threads (else the preOp passes through).
+    ...(client.listReviewThreads
+      ? {
+          listReviewThreads: (number: number) =>
+            client.listReviewThreads!(installationId, ref, number),
+        }
+      : {}),
   }
   if (!cache) return base
 
