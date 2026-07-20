@@ -182,7 +182,6 @@
       "recurringNoFrame": "繰り返しタスクはサービス上に配置する必要があります。サービスフレーム（またはその中のモジュール）から追加してください。",
       "titleField": "タイトル",
       "titlePlaceholder": "何を実施する必要がありますか？",
-      "titlePlaceholderReview": "任意 — プルリクエストから生成されます",
       "issueIncluded": "{title}（issue から、含む）",
       "loadingIssue": "リンクされた issue の説明を読み込み中…",
       "additionalNotes": "追加メモ",

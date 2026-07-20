@@ -2084,7 +2084,6 @@
       "recurringNoFrame": "Un'attività ricorrente deve risiedere su un servizio. Aggiungila da un frame di servizio (o da un modulo al suo interno).",
       "titleField": "Titolo",
       "titlePlaceholder": "Cosa bisogna fare?",
-      "titlePlaceholderReview": "Facoltativo — derivato dalla pull request",
       "issueIncluded": "{title} (dall'issue, incluso)",
       "loadingIssue": "Caricamento della descrizione dell'issue collegata…",
       "additionalNotes": "Note aggiuntive",

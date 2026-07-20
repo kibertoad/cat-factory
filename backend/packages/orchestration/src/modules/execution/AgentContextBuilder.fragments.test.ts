@@ -4,12 +4,16 @@ import { InitiativePresetRegistry } from '@cat-factory/kernel'
 import { AgentContextBuilder, type AgentContextBuilderDeps } from './AgentContextBuilder.js'
 import { defaultAgentKindRegistry } from '@cat-factory/agents'
 
-// The best-practice fragment fold is trait-driven: only a `code-aware` kind receives
-// the service's selected fragments. Gate/tester steps dispatch their helpers off the
-// HOSTING step (whose kind is the gate/tester, not the helper), so `buildContext`
-// takes an explicit `agentKind` override — these tests pin that a code-aware helper
-// (`ci-fixer`/`fixer`/`on-call`) actually receives the fragments, and that the
-// recorded `step.selectedFragmentIds` clears when a later round resolves to nothing.
+// The best-practice fragment fold is trait-driven: only a `code-aware`/`doc-aware` kind
+// receives fragments. A TASK owns its selection outright (its inheritance from the service is
+// materialised onto `block.fragmentIds` at creation), so the fold reads the TASK's OWN
+// `fragmentIds` and does NOT re-union the frame's `serviceFragmentIds` — that separation is what
+// lets a per-task removal take effect. Gate/tester steps dispatch their helpers off the HOSTING
+// step (whose kind is the gate/tester, not the helper), so `buildContext` takes an explicit
+// `agentKind` override — these tests pin that a code-aware helper (`ci-fixer`/…) receives the
+// fragments, that a task does NOT inherit the frame's service fragments, that a frame-level run
+// DOES fold in its own service fragments, and that `step.selectedFragmentIds` clears when a later
+// round resolves to nothing.
 
 function step(over: Partial<PipelineStep> = {}): PipelineStep {
   return {
@@ -41,6 +45,8 @@ const FRAME = {
   serviceFragmentIds: ['node.best-practices'],
 } as unknown as Block
 
+// The task carries its OWN fragment selection (seeded from the service at creation, then
+// editable per task). The engine folds THESE, not the frame's `serviceFragmentIds`.
 const TASK = {
   id: 'task_1',
   title: 'Login',
@@ -48,6 +54,7 @@ const TASK = {
   description: '',
   level: 'task',
   parentId: 'frame_1',
+  fragmentIds: ['node.best-practices'],
 } as unknown as Block
 
 function makeBuilder(over: Partial<AgentContextBuilderDeps> = {}): AgentContextBuilder {
@@ -75,9 +82,43 @@ function makeBuilder(over: Partial<AgentContextBuilderDeps> = {}): AgentContextB
 }
 
 describe('AgentContextBuilder fragment resolution', () => {
-  it('attaches the service fragments for a code-aware step kind', async () => {
+  it("attaches the task's own fragments for a code-aware step kind", async () => {
     const s = step({ agentKind: 'coder' })
     const context = await makeBuilder().buildContext('ws1', instance([s]), s, true, TASK)
+    expect(context.block.resolvedFragments).toEqual([
+      { id: 'node.best-practices', body: 'STANDARD-BODY' },
+    ])
+    expect(s.selectedFragmentIds).toEqual(['node.best-practices'])
+  })
+
+  it('does NOT re-union the frame service fragments for a task (task list is authoritative)', async () => {
+    // A task with NO fragments of its own under a frame that DOES select service fragments:
+    // the fold reads only the task's (empty) selection, so the frame's `serviceFragmentIds`
+    // are not resurrected. This is what makes a per-task removal stick.
+    const bareTask = { ...TASK, fragmentIds: undefined } as unknown as Block
+    const blocks = new Map<string, Block>([
+      [FRAME.id, FRAME],
+      [bareTask.id, bareTask],
+    ])
+    const builder = makeBuilder({
+      blockRepository: { get: async (_ws: string, id: string) => blocks.get(id) ?? null } as never,
+    })
+    const s = step({ agentKind: 'coder' })
+    const context = await builder.buildContext('ws1', instance([s]), s, true, bareTask)
+    expect(context.block.resolvedFragments).toBeUndefined()
+    expect(s.selectedFragmentIds).toBeUndefined()
+  })
+
+  it('folds the service fragments into a FRAME-level run (blueprints on the service itself)', async () => {
+    // A frame-level code-aware run (e.g. blueprints) still folds in the service's own
+    // `serviceFragmentIds` — there `serviceFrame === block`, so the service's standards govern
+    // its own agents even though a task no longer re-unions them.
+    const blocks = new Map<string, Block>([[FRAME.id, FRAME]])
+    const builder = makeBuilder({
+      blockRepository: { get: async (_ws: string, id: string) => blocks.get(id) ?? null } as never,
+    })
+    const s = step({ agentKind: 'coder' })
+    const context = await builder.buildContext('ws1', instance([s]), s, true, FRAME)
     expect(context.block.resolvedFragments).toEqual([
       { id: 'node.best-practices', body: 'STANDARD-BODY' },
     ])

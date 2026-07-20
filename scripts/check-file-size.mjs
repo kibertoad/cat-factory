@@ -57,7 +57,8 @@ const LEGACY_ALLOWANCES = new Map([
   ['backend/packages/orchestration/src/container/modules.ts', 1350],
   ['backend/runtimes/cloudflare/src/infrastructure/container.ts', 2720],
   // Wide-but-flat declaration files (schemas / wire contracts), not control flow.
-  ['backend/packages/contracts/src/entities.ts', 2307],
+  // (`entities.ts` was split — the run/execution runtime-state shapes moved to `execution.ts`,
+  // both now under DEFAULT_MAX_LINES — so it no longer needs a ratcheted allowance.)
   ['backend/runtimes/node/src/db/schema.ts', 2300],
   // Remaining oversized service/logic files — split candidates, ratcheted meanwhile.
   ['backend/packages/integrations/src/modules/environments/provision-detect.logic.ts', 2300],

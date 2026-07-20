@@ -2,7 +2,7 @@ import { ContractNoBody, defineApiContract } from '@toad-contracts/valibot'
 import * as v from 'valibot'
 import { bootstrapJobSchema } from '../bootstrap.js'
 import { envConfigRepairJobSchema } from '../env-config-repair.js'
-import { agentRunKindSchema, executionInstanceSchema } from '../entities.js'
+import { agentRunKindSchema, executionInstanceSchema } from '../execution.js'
 import { errorResponses, singleStringParam } from './_shared.js'
 
 // ---------------------------------------------------------------------------

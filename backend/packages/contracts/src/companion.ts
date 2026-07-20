@@ -1,5 +1,5 @@
 import * as v from 'valibot'
-import { stepReviewCommentSchema } from './entities.js'
+import { stepReviewCommentSchema } from './execution.js'
 
 // ---------------------------------------------------------------------------
 // Companion-agent wire contracts. A companion agent reviews the outcome of an

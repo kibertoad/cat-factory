@@ -182,7 +182,6 @@
       "recurringNoFrame": "משימה מחזורית חייבת להתקיים על שירות. הוסף אותה ממסגרת שירות (או ממודול בתוכה).",
       "titleField": "כותרת",
       "titlePlaceholder": "מה צריך לעשות?",
-      "titlePlaceholderReview": "אופציונלי — נגזר מבקשת המשיכה",
       "issueIncluded": "{title} (מהאישיו, כלול)",
       "loadingIssue": "טוען את תיאור האישיו המקושר…",
       "additionalNotes": "הערות נוספות",

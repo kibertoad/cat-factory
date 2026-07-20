@@ -560,16 +560,21 @@ export class BoardService {
         block.description = [preamble, block.description].filter(Boolean).join('\n\n')
       }
     }
-    // Best-practice fragments pinned on the task at creation: the ones the user picked on the
-    // form, plus — for a document task — the universal writing-style defaults (default-on,
-    // user-removable like any block pin), unioned so a picked fragment never drops a default and
-    // vice versa. These fold into the task's code-/doc-aware agents via the engine's fragment
-    // path — the selection default lives here, at task creation, not hard-coded in a prompt.
-    const chosenFragmentIds = input.fragmentIds ?? []
-    const fragmentIds =
-      taskType === 'document'
-        ? [...new Set([...DEFAULT_DOCUMENT_STYLE_FRAGMENT_IDS, ...chosenFragmentIds])]
-        : chosenFragmentIds
+    // Best-practice fragments the task OWNS from creation. A task owns its selection outright —
+    // the engine folds these and does NOT re-union the service's fragments at run time, so a
+    // per-task removal actually takes effect. The SERVICE-inherited set is the create form's
+    // explicit list when provided (the user edited the pre-seeded picker) — including an empty
+    // list, meaning "the user cleared the inherited picks" — else the enclosing service's
+    // `serviceFragmentIds` (so a task created without the form, e.g. via the public API, still
+    // inherits its service's standards). A document task additionally always carries the universal
+    // writing-style defaults (a document-authoring default, not a per-service standard). Deduped.
+    const inheritedFragmentIds = input.fragmentIds ?? service?.serviceFragmentIds ?? []
+    const fragmentIds = [
+      ...new Set([
+        ...inheritedFragmentIds,
+        ...(taskType === 'document' ? DEFAULT_DOCUMENT_STYLE_FRAGMENT_IDS : []),
+      ]),
+    ]
     if (fragmentIds.length) {
       block.fragmentIds = fragmentIds
     }

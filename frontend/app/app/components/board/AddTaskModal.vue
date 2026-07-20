@@ -1,9 +1,10 @@
 <script setup lang="ts">
 // Create a new task on the board. The user names the task and writes its
-// description themselves (a REVIEW task is the one exception — its title is optional
-// and derived from the target PR when left blank, since the PR is the subject). The
-// task lands in `planned` state; it is never launched here. The user starts a
-// pipeline on it explicitly (and can keep editing it until they do).
+// description themselves (a REVIEW task is the one exception — it shows neither Title
+// nor Description: the target PR IS the subject, so the title is derived from the PR
+// reference and any notes go in the dedicated "Review focus" field). The task lands in
+// `planned` state; it is never launched here. The user starts a pipeline on it
+// explicitly (and can keep editing it until they do).
 //
 // The form also shows ungated "Context documents" / "Context issues" sections
 // (mirroring the task inspector): an inline search picker (ContextDocumentPicker /
@@ -20,12 +21,11 @@ import type {
   TaskTypeFields,
 } from '~/types/domain'
 import { DOC_KINDS, DOC_KIND_FIELDS } from '~/types/domain'
-import type { DropdownMenuItem } from '@nuxt/ui'
 import ContextDocumentPicker from '~/components/documents/ContextDocumentPicker.vue'
 import ContextIssuePicker from '~/components/tasks/ContextIssuePicker.vue'
+import FragmentSelector from '~/components/fragments/FragmentSelector.vue'
 import { riskPolicyOptionLabel, riskPolicySummary } from '~/utils/riskPolicy'
 import { pipelineAllowedForManualStart } from '~/utils/pipeline'
-import { buildFragmentPickerGroups } from '~/utils/fragmentPicker'
 
 const ui = useUiStore()
 const board = useBoardStore()
@@ -36,7 +36,6 @@ const modelPresets = useModelPresetsStore()
 const pipelines = usePipelinesStore()
 const agentConfig = useAgentConfigStore()
 const fragments = useFragmentsStore()
-const accounts = useAccountsStore()
 const toast = useToast()
 const { t } = useI18n()
 
@@ -313,50 +312,10 @@ const selectedModelPresetLabel = computed(() => {
 })
 
 // ---- best-practice prompt fragments (pinned at creation) -------------------
-// The fragments already chosen, resolved against the catalog. An id the catalog no longer
-// resolves still renders (labelled by its raw id) so it stays visible and removable — mirrors
-// the inspector's TaskStructure picker.
-const selectedFragments = computed(() =>
-  fragmentIds.value.map((id) => fragments.getFragment(id) ?? { id, title: id, summary: '' }),
-)
-// A trailing group linking out to the fragment library (board tier always; account tier when
-// enabled) — managing fragments is open to every member, exactly like the inspector picker.
-const fragmentManageItems = computed<DropdownMenuItem[]>(() => {
-  const items: DropdownMenuItem[] = [
-    {
-      label: t('inspector.fragments.manageBoard'),
-      icon: 'i-lucide-book-marked',
-      onSelect: () => ui.openFragmentLibrary(),
-    },
-  ]
-  if (accounts.enabled) {
-    items.push({
-      label: t('inspector.fragments.manageAccount'),
-      icon: 'i-lucide-users',
-      onSelect: () => ui.openAccountSettings('fragments'),
-    })
-  }
-  return items
-})
-// Picker menu: fragments appropriate to the enclosing frame's block type (the "scope"), not
-// already selected, grouped by category, with the management links appended as the final group.
-// Falls back to `service` before a frame resolves so the catalog is still browsable.
-const fragmentMenu = computed<DropdownMenuItem[][]>(() => {
-  const selected = new Set(fragmentIds.value)
-  return [
-    ...buildFragmentPickerGroups(
-      fragments.forBlockType(frame.value?.type ?? 'service'),
-      (id) => selected.has(id),
-      (id) => {
-        if (!fragmentIds.value.includes(id)) fragmentIds.value = [...fragmentIds.value, id]
-      },
-    ),
-    fragmentManageItems.value,
-  ]
-})
-function removeFragment(id: string) {
-  fragmentIds.value = fragmentIds.value.filter((x) => x !== id)
-}
+// The pool the shared <FragmentSelector> offers: fragments appropriate to the enclosing frame's
+// block type (the "scope"). Falls back to `service` before a frame resolves so the catalog is
+// still browsable.
+const fragmentPool = computed(() => fragments.forBlockType(frame.value?.type ?? 'service'))
 
 // Hide UI-testing pipelines (`tester-ui` / `visual-confirmation`) when the target frame has no
 // UI to exercise — they'd be refused server-side (see utils/pipeline + the backend gate). Also
@@ -543,7 +502,11 @@ watch(open, (isOpen) => {
   docOutlineHints.value = ''
   reviewPrRef.value = ''
   reviewFocus.value = ''
-  fragmentIds.value = []
+  // Pre-seed the best-practice fragments from the enclosing service's standards, so a new task
+  // ships with its service's fragments already selected (and freely add/removable here). The task
+  // OWNS this selection from creation — the engine folds exactly these, without re-unioning the
+  // service's set, so removing one here actually drops it for this task.
+  fragmentIds.value = [...(frame.value?.serviceFragmentIds ?? [])]
   for (const key of Object.keys(docKindFieldValues) as DocKindFieldKey[])
     delete docKindFieldValues[key]
   riskPolicyId.value = ''
@@ -663,7 +626,10 @@ async function add() {
       ...(Object.keys(agentConfigValues.value).length
         ? { agentConfig: agentConfigValues.value }
         : {}),
-      ...(fragmentIds.value.length ? { fragmentIds: [...fragmentIds.value] } : {}),
+      // Always send the (service-seeded, then user-edited) selection — including an empty list,
+      // which means "the user cleared the inherited picks" and must be honoured rather than
+      // re-seeded from the service. The task owns its fragments from here.
+      fragmentIds: [...fragmentIds.value],
       ...(technical.value ? { technical: true } : {}),
     })
     if (block) {
@@ -732,65 +698,62 @@ async function add() {
         </div>
 
         <template v-if="!isRecurring">
-          <UFormField
-            :label="t('board.addTask.titleField')"
-            :required="!isReview"
-            :hint="isReview ? t('board.addTask.optional') : undefined"
-          >
+          <!-- A review task shows neither Title nor Description: the target PR is the
+               subject (the title is derived from the PR reference), and any notes go in
+               the dedicated "Review focus" field below. -->
+          <UFormField v-if="!isReview" :label="t('board.addTask.titleField')" required>
             <UInput
               v-model="title"
               data-testid="add-task-title"
-              :placeholder="
-                isReview
-                  ? t('board.addTask.titlePlaceholderReview')
-                  : t('board.addTask.titlePlaceholder')
-              "
+              :placeholder="t('board.addTask.titlePlaceholder')"
               autofocus
               class="w-full"
               @keydown.enter="add"
             />
           </UFormField>
 
-          <!-- Linked issue description(s), read-only: shown so the user sees the original
-               issue description is included in the task. It's folded into the saved
-               description (before their notes) on add. -->
-          <UFormField
-            v-for="issue in linkedIssueBodies"
-            :key="issue.key"
-            :label="t('board.addTask.issueIncluded', { title: issue.title })"
-          >
-            <UTextarea
-              :model-value="issue.body"
-              :rows="4"
-              autoresize
-              readonly
-              class="w-full"
-              :ui="{ base: 'cursor-default text-slate-300' }"
-            />
-          </UFormField>
-          <p v-if="resolvingIssueBodies" class="text-[11px] text-slate-500">
-            {{ t('board.addTask.loadingIssue') }}
-          </p>
+          <template v-if="!isReview">
+            <!-- Linked issue description(s), read-only: shown so the user sees the original
+                 issue description is included in the task. It's folded into the saved
+                 description (before their notes) on add. -->
+            <UFormField
+              v-for="issue in linkedIssueBodies"
+              :key="issue.key"
+              :label="t('board.addTask.issueIncluded', { title: issue.title })"
+            >
+              <UTextarea
+                :model-value="issue.body"
+                :rows="4"
+                autoresize
+                readonly
+                class="w-full"
+                :ui="{ base: 'cursor-default text-slate-300' }"
+              />
+            </UFormField>
+            <p v-if="resolvingIssueBodies" class="text-[11px] text-slate-500">
+              {{ t('board.addTask.loadingIssue') }}
+            </p>
 
-          <UFormField
-            :label="
-              hasLinkedIssueBody
-                ? t('board.addTask.additionalNotes')
-                : t('board.addTask.description')
-            "
-          >
-            <UTextarea
-              v-model="description"
-              :rows="4"
-              autoresize
-              :placeholder="
+            <UFormField
+              :label="
                 hasLinkedIssueBody
-                  ? t('board.addTask.notesPlaceholder')
-                  : t('board.addTask.descriptionPlaceholder')
+                  ? t('board.addTask.additionalNotes')
+                  : t('board.addTask.description')
               "
-              class="w-full"
-            />
-          </UFormField>
+            >
+              <UTextarea
+                v-model="description"
+                :rows="4"
+                autoresize
+                :placeholder="
+                  hasLinkedIssueBody
+                    ? t('board.addTask.notesPlaceholder')
+                    : t('board.addTask.descriptionPlaceholder')
+                "
+                class="w-full"
+              />
+            </UFormField>
+          </template>
 
           <UCheckbox v-model="technical" name="technical">
             <template #label>
@@ -1060,41 +1023,15 @@ async function add() {
             </div>
           </div>
 
-          <!-- Best-practice fragments pinned on the task at creation, scoped to the frame's type. -->
+          <!-- Best-practice fragments pinned on the task at creation, scoped to the frame's type.
+               Pre-seeded from the enclosing service's standards; the task owns them from here. -->
           <div class="space-y-2">
-            <div class="flex items-center justify-between">
-              <span class="text-[11px] font-semibold uppercase tracking-wide text-slate-400">
-                {{ t('board.addTask.bestPractices') }}
-              </span>
-              <UDropdownMenu :items="fragmentMenu">
-                <UButton
-                  color="neutral"
-                  variant="soft"
-                  size="xs"
-                  icon="i-lucide-plus"
-                  trailing-icon="i-lucide-chevron-down"
-                >
-                  {{ t('board.addTask.attach') }}
-                </UButton>
-              </UDropdownMenu>
-            </div>
-            <div v-if="selectedFragments.length" class="flex flex-wrap gap-1">
-              <UBadge
-                v-for="f in selectedFragments"
-                :key="f.id"
-                color="primary"
-                variant="subtle"
-                size="sm"
-                class="cursor-pointer"
-                :title="f.summary"
-                @click="removeFragment(f.id)"
-              >
-                {{ f.title }}<UIcon name="i-lucide-x" class="ms-0.5 h-3 w-3" />
-              </UBadge>
-            </div>
-            <p v-else class="text-[11px] text-slate-500">
-              {{ t('board.addTask.bestPracticesHint') }}
-            </p>
+            <FragmentSelector
+              v-model="fragmentIds"
+              :pool="fragmentPool"
+              :label="t('board.addTask.bestPractices')"
+              :empty-text="t('board.addTask.bestPracticesHint')"
+            />
           </div>
 
           <!-- Context documents (ungated; Attach disabled until a source is connected). -->

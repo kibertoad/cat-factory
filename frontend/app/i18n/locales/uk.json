@@ -182,7 +182,6 @@
       "recurringNoFrame": "Періодичне завдання має належати сервісу. Додайте його з рамки сервісу (або модуля всередині неї).",
       "titleField": "Назва",
       "titlePlaceholder": "Що потрібно зробити?",
-      "titlePlaceholderReview": "Необов’язково — формується з pull request",
       "issueIncluded": "{title} (зі звернення, включено)",
       "loadingIssue": "Завантаження опису пов’язаного звернення…",
       "additionalNotes": "Додаткові примітки",

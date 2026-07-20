@@ -1,5 +1,5 @@
 import * as v from 'valibot'
-import { webSearchProviderSchema } from './entities.js'
+import { webSearchProviderSchema } from './execution.js'
 
 // Wire contracts for LLM observability — the per-call detail behind the board's
 // step rollups (see `stepMetricsSchema` in entities). The proxy records one of
