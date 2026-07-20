@@ -46,7 +46,7 @@ const LEGACY_ALLOWANCES = new Map([
   ['backend/internal/conformance/src/suites/core.ts', 2500],
   ['backend/internal/conformance/src/suites/agents.ts', 1150],
   // The engine files the 2026-07 review names (post-split sizes; keep ratcheting DOWN).
-  ['backend/packages/orchestration/src/modules/execution/RunDispatcher.ts', 3150],
+  ['backend/packages/orchestration/src/modules/execution/RunDispatcher.ts', 2900],
   ['backend/packages/orchestration/src/modules/execution/ExecutionService.ts', 2820],
   // The three DI composition roots (refactoring-candidates.md #6/#8 own the structural fix).
   // The orchestration root's optional-module factories now live in `container/modules.ts` and its
