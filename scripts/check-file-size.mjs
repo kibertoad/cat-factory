@@ -41,18 +41,21 @@ const LEGACY_ALLOWANCES = new Map([
   // into per-group modules under `suites/`. `suite.ts` is now a thin aggregator; each group
   // is ratcheted at its post-split size and keeps ratcheting DOWN as groups sub-split.
   // (`integration.ts` has since sub-split into `integration-{credentials,provisioning,
-  // secrets,sources,environments}.ts` — each under DEFAULT_MAX_LINES, so it needs no entry.)
-  ['backend/internal/conformance/src/suites/execution.ts', 3150],
+  // secrets,sources,environments}.ts`, and `execution.ts` into `execution-{tester,review,
+  // gates}.ts` — each under DEFAULT_MAX_LINES, so none needs an entry.)
   ['backend/internal/conformance/src/suites/core.ts', 2500],
   ['backend/internal/conformance/src/suites/agents.ts', 1150],
-  // The engine files the 2026-07 review names (post-split sizes; keep ratcheting DOWN).
-  ['backend/packages/orchestration/src/modules/execution/RunDispatcher.ts', 2900],
+  // The engine files the 2026-07 review names (post-split sizes; keep ratcheting DOWN). The
+  // dispatcher's three built-in registries (step handlers / completion interceptors / resolvers)
+  // now live in `dispatcher-registries.ts`, so `RunDispatcher.ts` ratchets down accordingly.
+  ['backend/packages/orchestration/src/modules/execution/RunDispatcher.ts', 2450],
   ['backend/packages/orchestration/src/modules/execution/ExecutionService.ts', 2820],
   // The three DI composition roots (refactoring-candidates.md #6/#8 own the structural fix).
   // The orchestration root's optional-module factories now live in `container/modules.ts` and its
   // optional wiring flows through `container/module-registry.ts` (refactoring-candidates.md #6), so
-  // `container.ts` holds the `CoreDependencies`/`Core` contract + the spine assembly only.
-  ['backend/runtimes/node/src/container.ts', 3100],
+  // `container.ts` holds the `CoreDependencies`/`Core` contract + the spine assembly only. The Node
+  // root's container-agent-executor wiring now lives in `container-executor-deps.ts`.
+  ['backend/runtimes/node/src/container.ts', 2600],
   ['backend/packages/orchestration/src/container.ts', 1950],
   ['backend/packages/orchestration/src/container/modules.ts', 1350],
   ['backend/runtimes/cloudflare/src/infrastructure/container.ts', 2720],

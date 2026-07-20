@@ -23,6 +23,10 @@ transport, and Node model provisioning.
   "Migration safety").
 - `container.ts` — the DI composition root (`buildNodeContainer`, with injected
   `resolveTransport`/`mintInstallationToken`/`githubClient` seams the local facade overrides).
+  Its container-agent-executor wiring (transport resolver, provisioning-log wrapper, container
+  executor + repo bootstrapper + env-config repairer, GitHub-issue filer, trace-sink builder)
+  lives in the sibling `container-executor-deps.ts`; the public seams stay exported from
+  `container.ts`.
 - `execution/` — pg-boss durable execution (`pgBossRunner`, `drive`).
 - `gateways.ts`, `modelProvider.ts`, `realtime.ts`, `config.ts`, `retention.ts` — Node gateway
   - model + transport wiring and the retention sweep.

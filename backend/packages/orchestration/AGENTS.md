@@ -15,7 +15,10 @@ optional module is `build(key, factory)`-declared once and emitted via `...modul
   start/retry/restart/cancel, decisions/approvals, the merge subgraph) +
   `RunDispatcher.ts` (the per-step dispatch + completion spine and its four registries),
   each ratcheted by `scripts/check-file-size.mjs`. Their extracted collaborators sit
-  beside them: `RunAdmission` (the start/retry/restart `assert*` preflights),
+  beside them: `dispatcher-registries.ts` (the three built-in dispatch registries — step
+  handlers, completion interceptors, post-completion/terminal resolvers — built over the
+  `DispatcherRegistryDeps` seam the dispatcher assembles), `RunAdmission` (the
+  start/retry/restart `assert*` preflights),
   `review-kinds.ts` (the requirements/clarity/brainstorm `ReviewKind` factories),
   `DeployerStepController` (the deployer provision fan-out + env projection),
   `FollowUpGateController` (the follow-up companion gate + its human-action API), plus
