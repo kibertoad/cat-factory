@@ -122,20 +122,18 @@ function resolveLocalPersistence(
   return { mothership, repos }
 }
 
-export function buildLocalContainer(options: NodeContainerOptions): ServerContainer {
-  const env = applyLocalDefaults(options.env ?? process.env)
-  // One shared clock/idGenerator, reused by the per-workspace transport chooser below AND
-  // threaded into `buildNodeContainer` (which would otherwise build its own) so the chooser
-  // reads the same workspace settings the rest of the engine does. Created up front because the
-  // mothership-vs-Postgres persistence decision (which needs the clock) is resolved next.
-  const clock = new SystemClock()
-  const idGenerator = new CryptoIdGenerator()
-  // Mothership mode (docs/initiatives/mothership-mode.md): no local Postgres. Org/durable state
-  // is served remotely (RPC) and credentials stay local (node:sqlite); `repos` is then the
-  // remote (RPC-backed) composite, threaded through the existing NodeContainer seams with `db`
-  // left undefined, and the in-process work runner replaces pg-boss. Off → the standard
-  // siloed-Postgres local mode is unchanged (`repos` is the Drizzle set over the local Postgres).
-  const { mothership, repos } = resolveLocalPersistence(options, env, clock)
+/**
+ * Resolve local mode's provider-agnostic source-control wiring from env + the (optional) mothership
+ * delegation: the git push/clone token, the `VcsClient`→`GitHubClient` the gates/merger/repo-link
+ * read through, the single deployment provider, and the GitLab-aware repo-origin resolver. Prefers a
+ * GitHub PAT, then a GitLab PAT, then mothership-delegated GitHub. Extracted from
+ * {@link buildLocalContainer} to keep it under the complexity ceiling.
+ */
+function resolveLocalVcs(
+  env: NodeJS.ProcessEnv,
+  mothership: ReturnType<typeof resolveLocalPersistence>['mothership'],
+  options: NodeContainerOptions,
+) {
   const pat = env.GITHUB_PAT?.trim()
   const gitlabPat = env.GITLAB_PAT?.trim()
   // The push/clone token and the VCS client are provider-agnostic. Prefer a GitHub PAT, else
@@ -175,6 +173,28 @@ export function buildLocalContainer(options: NodeContainerOptions): ServerContai
         provider: 'gitlab',
       })
     : undefined
+  return { gitToken, delegatedGitHub, vcsClient, deploymentProvider, resolveRepoOrigin }
+}
+
+export function buildLocalContainer(options: NodeContainerOptions): ServerContainer {
+  const env = applyLocalDefaults(options.env ?? process.env)
+  // One shared clock/idGenerator, reused by the per-workspace transport chooser below AND
+  // threaded into `buildNodeContainer` (which would otherwise build its own) so the chooser
+  // reads the same workspace settings the rest of the engine does. Created up front because the
+  // mothership-vs-Postgres persistence decision (which needs the clock) is resolved next.
+  const clock = new SystemClock()
+  const idGenerator = new CryptoIdGenerator()
+  // Mothership mode (docs/initiatives/mothership-mode.md): no local Postgres. Org/durable state
+  // is served remotely (RPC) and credentials stay local (node:sqlite); `repos` is then the
+  // remote (RPC-backed) composite, threaded through the existing NodeContainer seams with `db`
+  // left undefined, and the in-process work runner replaces pg-boss. Off → the standard
+  // siloed-Postgres local mode is unchanged (`repos` is the Drizzle set over the local Postgres).
+  const { mothership, repos } = resolveLocalPersistence(options, env, clock)
+  // The provider-agnostic push/clone token + VCS client + repo-origin resolution (GitHub PAT →
+  // GitLab PAT → mothership-delegated GitHub). Extracted to keep `buildLocalContainer` under the
+  // complexity ceiling.
+  const { gitToken, delegatedGitHub, vcsClient, deploymentProvider, resolveRepoOrigin } =
+    resolveLocalVcs(env, mothership, options)
   const base = options.config ?? loadNodeConfig(env)
   // Tag the config as local mode and, when no PAT is set, carry the (scopes-preselected)
   // creation URL so the SPA can surface it as a dismissible banner — the server-side warn

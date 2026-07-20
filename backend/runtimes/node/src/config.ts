@@ -190,22 +190,16 @@ export function cloudflareCredsHalfSet(
     : { set: 'CLOUDFLARE_API_TOKEN', missing: 'CLOUDFLARE_ACCOUNT_ID' }
 }
 
-export function loadNodeConfig(env: NodeJS.ProcessEnv): AppConfig {
-  // Validate the system encryption key up front: present, valid base64, and decoding to a full
-  // AES-256 key. It is effectively mandatory (the always-on document/task integrations below seal
-  // credentials at rest under it), so a missing/malformed key fails here with an actionable message
-  // rather than lazily inside the first cipher build (a bare "must decode to at least 32 bytes" or
-  // an opaque `atob` error). Mirrors the Worker's `loadConfig` and local mode's secret validation.
-  requireEncryptionKey(env.ENCRYPTION_KEY)
-
-  // Deployment-level capabilities: direct keys are per-workspace (resolved at run time
-  // from the DB pool), so none are known here; Cloudflare Workers AI is opt-in over
-  // REST (account id + API token). The per-workspace `/models` endpoint recomputes
-  // selectability against each workspace's configured keys + subscriptions.
-  // Cloudflare Workers AI over REST needs BOTH the account id and the API token. A
-  // half-set pair silently disables the provider, so a deployment that set only one reads
-  // as "Cloudflare not configured" with no hint the other half is the gap. Name the
-  // missing half at boot (error-message coverage A10).
+/**
+ * Deployment-level model capabilities. Direct keys are per-workspace (resolved at run time
+ * from the DB pool), so none are known here; Cloudflare Workers AI is opt-in over REST
+ * (account id + API token). The per-workspace `/models` endpoint recomputes selectability
+ * against each workspace's configured keys + subscriptions. A half-set Cloudflare pair
+ * silently disables the provider, so a deployment that set only one reads as "Cloudflare not
+ * configured" with no hint the other half is the gap — name the missing half at boot
+ * (error-message coverage A10).
+ */
+function resolveProviderCaps(env: NodeJS.ProcessEnv): ProviderCapabilities {
   const cfAccountId = env.CLOUDFLARE_ACCOUNT_ID?.trim()
   const cfApiToken = env.CLOUDFLARE_API_TOKEN?.trim()
   const cfHalfSet = cloudflareCredsHalfSet(env)
@@ -217,19 +211,26 @@ export function loadNodeConfig(env: NodeJS.ProcessEnv): AppConfig {
         `${cfHalfSet.set}. See ${DOCS.envVars(ENV_VARS_ANCHORS.modelProviders)}.`,
     )
   }
-  const caps: ProviderCapabilities = {
+  return {
     directProviders: new Set(),
     subscriptionVendors: new Set(ALL_SUBSCRIPTION_VENDORS),
     cloudflareEnabled: !!(cfAccountId && cfApiToken),
   }
+}
 
-  // Default unpinned agents to Qwen (the Cloudflare flavour when enabled, upgraded to
-  // direct DashScope per-workspace by the executor when a Qwen key is configured); the
-  // agentic kinds default to GLM-5.2 — mirroring the Worker's routing.
+/**
+ * Agent model routing (default + per-kind overrides + the per-block resolver). Mirrors the
+ * Worker's routing: unpinned agents default to Qwen (the Cloudflare flavour when enabled,
+ * upgraded to direct DashScope per-workspace by the executor when a Qwen key is configured);
+ * the agentic kinds default to GLM-5.2. The two numeric knobs are parsed ONCE (each is read
+ * across every config below, and `parseNumericEnv` warns per call, so hoisting collapses a
+ * single garbage value to one warning per var — A8).
+ */
+function buildAgentRouting(
+  env: NodeJS.ProcessEnv,
+  caps: ProviderCapabilities,
+): AppConfig['agents'] {
   const qwenDefault = resolveModelRef('qwen', caps)
-  // Parse the two shared numeric knobs ONCE: each is read across every model config
-  // below, and `parseNumericEnv` warns per call, so a single garbage value would emit
-  // one warning per site. Hoisting collapses that to one warning per var (A8).
   const envTemperature = num('AGENT_DEFAULT_TEMPERATURE', env.AGENT_DEFAULT_TEMPERATURE)
   const envMaxOutputTokens = num('AGENT_MAX_OUTPUT_TOKENS', env.AGENT_MAX_OUTPUT_TOKENS)
   const defaultConfig: AgentModelConfig = {
@@ -264,21 +265,36 @@ export function loadNodeConfig(env: NodeJS.ProcessEnv): AppConfig {
     temperature: envTemperature ?? 0.3,
     maxOutputTokens: envMaxOutputTokens ?? 5000,
   }
+  return {
+    routing: {
+      default: defaultConfig,
+      byKind: {
+        architect: agenticDefault,
+        coder: agenticDefault,
+        reviewer: companionDefault,
+        'spec-companion': companionDefault,
+        'architect-companion': companionDefault,
+        'conflict-resolver': conflictResolverDefault,
+      },
+    },
+    resolveBlockModel: (modelId) => resolveModelRef(modelId, caps),
+  }
+}
 
-  const sessionSecret = env.AUTH_SESSION_SECRET?.trim() ?? ''
-  // The GitHub App (private key + app id) backs container-agent runs: it mints the
-  // short-lived push token the harness clones/pushes with. Enable the integration
-  // only when both are present (the container executor also requires it — see
-  // container.ts), so a partial config doesn't half-enable repo-operating steps.
+/**
+ * The GitHub App integration config + its boot-time key-shape validation. The App (private key
+ * + app id) backs container-agent runs: it mints the short-lived push token the harness
+ * clones/pushes with, so the integration enables only when both are present (a partial config
+ * doesn't half-enable repo-operating steps). The App key's SHAPE is validated at boot (present
+ * + PKCS#8 PEM + decodable body) whenever the App is configured, so a malformed key fails on the
+ * misconfigured screen with the openssl conversion remedy instead of opaquely at the first
+ * installation-token mint (error-message coverage A3). The privileged tier is validated on the
+ * SAME condition `loadPrivilegedApp` activates it (both id AND key present).
+ */
+function buildGithubConfig(env: NodeJS.ProcessEnv): AppConfig['github'] {
   const githubAppId = env.GITHUB_APP_ID?.trim() ?? ''
   const githubAppConfigured =
     githubAppId !== '' && (env.GITHUB_APP_PRIVATE_KEY?.trim() ?? '') !== ''
-  // Validate the App private key's SHAPE at boot (present + PKCS#8 PEM + decodable body) whenever
-  // the App is configured, so a malformed key fails on the misconfigured screen with the openssl
-  // conversion remedy instead of opaquely at the first installation-token mint (error-message
-  // coverage A3). The privileged tier is validated on the SAME condition `loadPrivilegedApp`
-  // activates it (both id AND key present) — validating a key with no id would fail boot on a
-  // credential the privileged tier never consumes and diverge from the Worker's `loadPrivilegedApp`.
   if (githubAppConfigured) requireGitHubAppPrivateKey(env.GITHUB_APP_PRIVATE_KEY)
   const privilegedAppId = env.GITHUB_PRIVILEGED_APP_ID?.trim() ?? ''
   const privilegedAppKey = env.GITHUB_PRIVILEGED_APP_PRIVATE_KEY?.trim() ?? ''
@@ -288,17 +304,27 @@ export function loadNodeConfig(env: NodeJS.ProcessEnv): AppConfig {
       'GITHUB_PRIVILEGED_APP_PRIVATE_KEY',
     )
   }
-  // Self-hosted runner pools encrypt their scheduler credentials at rest; opt-in via
-  // the enable flag, sealed with the shared ENCRYPTION_KEY (mirroring the Worker).
-  const runnersEncryptionKey = env.ENCRYPTION_KEY?.trim() ?? ''
-  const detectionConventions = parseDetectionConventions(env.ENVIRONMENTS_DETECTION_CONVENTIONS)
-  // Slack notification transport: opt-in (SLACK_ENABLED), the per-account bot token
-  // sealed with the shared ENCRYPTION_KEY. OAuth credentials are optional (manual
-  // bot-token onboarding works without them); when set they enable "Add to Slack".
-  const slackEnabled = env.SLACK_ENABLED?.trim() === 'true'
-  const slackEncryptionKey = env.ENCRYPTION_KEY?.trim() ?? ''
-  // Slack app OAuth credentials moved out of env into per-account settings (sealed),
-  // resolved dynamically at connect time — see AccountSettingsService.
+  return {
+    enabled: githubAppConfigured,
+    appId: env.GITHUB_APP_ID?.trim() ?? '',
+    appSlug: env.GITHUB_APP_SLUG?.trim() ?? '',
+    apiBase: env.GITHUB_API_BASE?.trim() || 'https://api.github.com',
+    setupRedirectUrl: env.GITHUB_SETUP_REDIRECT_URL?.trim() || '/',
+    webhookSecret: env.GITHUB_WEBHOOK_SECRET ?? '',
+    privilegedApp: loadPrivilegedApp(env),
+  }
+}
+
+/**
+ * Auth config: which login providers are enabled, plus the two fail-fast boot guards. Remote
+ * node mode has NO anonymous tier, so a genuinely unconfigured remote deployment refuses to
+ * boot rather than silently 503-ing every protected route. GitHub OAuth set with a missing/too-
+ * short session secret (and no dev-open fallback) is the same silent-brick footgun. Local mode
+ * always enables password login via `applyLocalDefaults`, and the test/CI harnesses opt into
+ * AUTH_DEV_OPEN, so neither trips these guards.
+ */
+function buildAuthConfig(env: NodeJS.ProcessEnv): AppConfig['auth'] {
+  const sessionSecret = env.AUTH_SESSION_SECRET?.trim() ?? ''
   const clientId = env.GITHUB_OAUTH_CLIENT_ID?.trim() ?? ''
   const clientSecret = env.GITHUB_OAUTH_CLIENT_SECRET?.trim() ?? ''
   const googleClientId = env.GOOGLE_OAUTH_CLIENT_ID?.trim() ?? ''
@@ -337,17 +363,196 @@ export function loadNodeConfig(env: NodeJS.ProcessEnv): AppConfig {
     })
   }
 
-  // Remote node mode has NO anonymous tier: a hosted deployment must be able to sign a
-  // user in from the very first request. So refuse to boot when no login provider is
-  // configured AND the dev-open test hatch is off — rather than silently leaving auth
-  // disabled and 503-ing every protected route (a confusing half-brick that reads like a
-  // bug, not a misconfiguration). Local mode always enables password login via
-  // `applyLocalDefaults`, and the test/CI harnesses opt into AUTH_DEV_OPEN, so neither
-  // trips this; only a genuinely unconfigured remote deployment does.
   const authEnabled = githubEnabled || googleEnabled || passwordEnabled
   if (!authEnabled && !devOpen) {
     throw configProblem({ key: 'AUTH_PROVIDER', ...ENV_HELP.AUTH_PROVIDER })
   }
+
+  return {
+    enabled: authEnabled,
+    devOpen,
+    testingNoAuth,
+    githubEnabled,
+    clientId,
+    clientSecret,
+    sessionSecret,
+    apiBase: env.GITHUB_API_BASE?.trim() || 'https://api.github.com',
+    oauthBase: env.GITHUB_OAUTH_BASE?.trim() || 'https://github.com',
+    sessionTtlMs: (ttlHours !== undefined && ttlHours > 0 ? ttlHours : 168) * 60 * 60 * 1000,
+    machineTokenTtlMs: resolveMachineTokenTtlMs(env.AUTH_MACHINE_TOKEN_TTL_MS),
+    successRedirectUrl: env.AUTH_SUCCESS_REDIRECT_URL?.trim() || '',
+    callbackUrl: env.AUTH_CALLBACK_URL?.trim() || '',
+    passwordEnabled,
+    // Open (un-gated) signup is a local-mode convenience; hosted defaults stay
+    // invite/email-domain-gated. `applyLocalDefaults` flips it on for local mode.
+    openSignup: env.AUTH_OPEN_SIGNUP?.trim() === 'true',
+    ...(googleEnabled
+      ? {
+          google: {
+            clientId: googleClientId,
+            clientSecret: googleClientSecret,
+            redirectUrl: env.GOOGLE_OAUTH_REDIRECT_URL?.trim() || '',
+          },
+        }
+      : {}),
+    allowedEmailDomains: csv(env.AUTH_ALLOWED_EMAIL_DOMAINS).map((d) => d.toLowerCase()),
+    allowedLogins: csv(env.AUTH_ALLOWED_LOGINS).map((l) => l.toLowerCase()),
+    allowedOrgs: csv(env.AUTH_ALLOWED_ORGS).map((o) => o.toLowerCase()),
+    allowedRedirectOrigins: csv(env.AUTH_ALLOWED_REDIRECT_ORIGINS).map((o) => {
+      try {
+        return new URL(o).origin
+      } catch {
+        return o
+      }
+    }),
+  }
+}
+
+/**
+ * Auth-email config. Available whenever an encryption key exists — there is no separate opt-in
+ * flag. The per-account provider API key is sealed with that key. The deployment-level `system`
+ * sender (auth emails like password reset) is read entirely from env and is independent of the
+ * per-account connections, so it loads regardless of `enabled`.
+ */
+function buildEmailConfig(env: NodeJS.ProcessEnv): AppConfig['email'] {
+  const appBaseUrl = env.APP_BASE_URL?.trim() || env.AUTH_SUCCESS_REDIRECT_URL?.trim() || ''
+  const system = loadSystemEmailSender(env)
+  const encryptionKey = env.ENCRYPTION_KEY?.trim()
+  return encryptionKey
+    ? { enabled: true, encryptionKey, appBaseUrl, system }
+    : { enabled: false, appBaseUrl, system }
+}
+
+/**
+ * Ephemeral-environment provider integration (a tenant rolls its own environment-management
+ * API): assembles from the shared ENCRYPTION_KEY that seals per-tenant credentials at rest, with
+ * no separate enable flag, mirroring the Worker.
+ */
+function buildEnvironmentsConfig(env: NodeJS.ProcessEnv): AppConfig['environments'] {
+  const detectionConventions = parseDetectionConventions(env.ENVIRONMENTS_DETECTION_CONVENTIONS)
+  return {
+    encryptionKey: env.ENCRYPTION_KEY?.trim(),
+    // Trusted-adapter escape hatch: permit an in-house env platform on an
+    // internal/VPN host (otherwise the strict public-https guard rejects it).
+    allowUrlHosts: csv(env.ENVIRONMENTS_ALLOW_URL_HOSTS),
+    allowHttpUrls: env.ENVIRONMENTS_ALLOW_HTTP_URLS === 'true',
+    // Additive house-convention extensions to provisioning detection (JSON object).
+    ...(detectionConventions ? { detectionConventions } : {}),
+  }
+}
+
+/**
+ * Self-hosted runner pools encrypt their scheduler credentials at rest; opt-in via the presence
+ * of an ENCRYPTION_KEY, sealed with that shared key (mirroring the Worker).
+ */
+function buildRunnersConfig(env: NodeJS.ProcessEnv): AppConfig['runners'] {
+  const runnersEncryptionKey = env.ENCRYPTION_KEY?.trim() ?? ''
+  return runnersEncryptionKey
+    ? {
+        enabled: true,
+        encryptionKey: runnersEncryptionKey,
+        allowUrlHosts: csv(env.RUNNERS_ALLOW_URL_HOSTS),
+        allowHttpUrls: env.RUNNERS_ALLOW_HTTP_URLS === 'true',
+      }
+    : { enabled: false }
+}
+
+/** Retention windows (ms) for the append-heavy telemetry/log tables. */
+function buildRetentionConfig(env: NodeJS.ProcessEnv): AppConfig['retention'] {
+  return {
+    tokenUsageMs: retentionMs('TOKEN_USAGE_RETENTION_DAYS', env.TOKEN_USAGE_RETENTION_DAYS, 395),
+    rateLimitMs: retentionMs(
+      'GITHUB_RATE_LIMIT_RETENTION_DAYS',
+      env.GITHUB_RATE_LIMIT_RETENTION_DAYS,
+      7,
+    ),
+    commitMs: retentionMs('GITHUB_COMMIT_RETENTION_DAYS', env.GITHUB_COMMIT_RETENTION_DAYS, 90),
+    // Heavy full per-call prompt/response; pruned aggressively (default 3 days).
+    llmCallMetricsMs: retentionMs(
+      'LLM_CALL_METRICS_RETENTION_DAYS',
+      env.LLM_CALL_METRICS_RETENTION_DAYS,
+      3,
+    ),
+    // High-churn provisioning event log; pruned aggressively (default 14 days).
+    provisioningLogMs: retentionMs(
+      'PROVISIONING_LOG_RETENTION_DAYS',
+      env.PROVISIONING_LOG_RETENTION_DAYS,
+      14,
+    ),
+    // Resolved (acted/dismissed) notifications; generous default of 90 days. Open
+    // cards (the actionable inbox) are never pruned.
+    notificationsMs: retentionMs(
+      'NOTIFICATION_RETENTION_DAYS',
+      env.NOTIFICATION_RETENTION_DAYS,
+      90,
+    ),
+  }
+}
+
+/**
+ * Optional Langfuse trace sink: off unless `LANGFUSE_ENABLED=true` AND both keys are present (a
+ * half-configured sink silently does nothing). Mirrors the Worker mapping.
+ */
+function buildLangfuseConfig(env: NodeJS.ProcessEnv): AppConfig['langfuse'] {
+  return {
+    enabled:
+      env.LANGFUSE_ENABLED?.trim() === 'true' &&
+      !!env.LANGFUSE_PUBLIC_KEY?.trim() &&
+      !!env.LANGFUSE_SECRET_KEY?.trim(),
+    publicKey: env.LANGFUSE_PUBLIC_KEY?.trim(),
+    secretKey: env.LANGFUSE_SECRET_KEY?.trim(),
+    baseUrl: env.LANGFUSE_BASE_URL?.trim() || undefined,
+  }
+}
+
+/**
+ * Optional OpenTelemetry OTLP exporter: off unless `OTEL_ENABLED=true` AND an endpoint is set (a
+ * half-configured exporter silently does nothing, like every other opt-in integration). On Node
+ * this uses the official @opentelemetry/* SDK (see container.ts).
+ */
+function buildOtelConfig(env: NodeJS.ProcessEnv): AppConfig['otel'] {
+  const otelEnabled =
+    env.OTEL_ENABLED?.trim() === 'true' && !!env.OTEL_EXPORTER_OTLP_ENDPOINT?.trim()
+  return {
+    enabled: otelEnabled,
+    endpoint: env.OTEL_EXPORTER_OTLP_ENDPOINT?.trim() || undefined,
+    headers: parseOtlpHeaders(env.OTEL_EXPORTER_OTLP_HEADERS),
+    serviceName: env.OTEL_SERVICE_NAME?.trim() || undefined,
+    platformMetrics: {
+      // A further opt-in on top of the base exporter (adds recurring DB rollup load).
+      enabled: otelEnabled && env.OTEL_PLATFORM_METRICS?.trim() === 'true',
+      intervalMs: parsePlatformMetricsIntervalMs(env.OTEL_PLATFORM_METRICS_INTERVAL_MS),
+      window: parsePlatformMetricsWindow(env.OTEL_PLATFORM_METRICS_WINDOW),
+    },
+  }
+}
+
+/**
+ * Execution engine timing knobs (durable poll/CI intervals + container max age), each defaulting
+ * to the Worker's values.
+ */
+function buildExecutionConfig(env: NodeJS.ProcessEnv): AppConfig['execution'] {
+  return {
+    decisionTimeout: env.DECISION_TIMEOUT?.trim() || '24 hours',
+    jobPollInterval: env.JOB_POLL_INTERVAL?.trim() || '15 seconds',
+    jobMaxPolls: num('JOB_MAX_POLLS', env.JOB_MAX_POLLS) ?? 280,
+    jobPollFailureTolerance: num('JOB_POLL_FAILURE_TOLERANCE', env.JOB_POLL_FAILURE_TOLERANCE) ?? 6,
+    ciPollInterval: env.CI_POLL_INTERVAL?.trim() || '30 seconds',
+    ciMaxPolls: num('CI_MAX_POLLS', env.CI_MAX_POLLS) ?? 120,
+    containerMaxAgeMs:
+      Math.max(75, num('CONTAINER_MAX_AGE_MINUTES', env.CONTAINER_MAX_AGE_MINUTES) ?? 90) * 60_000,
+  }
+}
+
+export function loadNodeConfig(env: NodeJS.ProcessEnv): AppConfig {
+  // Validate the system encryption key up front: present, valid base64, and decoding to a full
+  // AES-256 key. It is effectively mandatory (the always-on document/task integrations below seal
+  // credentials at rest under it), so a missing/malformed key fails here with an actionable message
+  // rather than lazily inside the first cipher build (a bare "must decode to at least 32 bytes" or
+  // an opaque `atob` error). Mirrors the Worker's `loadConfig` and local mode's secret validation.
+  requireEncryptionKey(env.ENCRYPTION_KEY)
+
+  const caps = resolveProviderCaps(env)
 
   // The deployment-level BASE pricing (built-in table + the fallback currency/monthly-limit
   // a workspace inherits when it sets no budget of its own). The per-workspace budget moved
@@ -362,131 +567,30 @@ export function loadNodeConfig(env: NodeJS.ProcessEnv): AppConfig {
     ),
   }
 
-  // OpenTelemetry OTLP exporter: on only with `OTEL_ENABLED=true` AND an endpoint (a
-  // half-configured exporter silently does nothing, like every other opt-in integration).
-  const otelEnabled =
-    env.OTEL_ENABLED?.trim() === 'true' && !!env.OTEL_EXPORTER_OTLP_ENDPOINT?.trim()
+  const slackEncryptionKey = env.ENCRYPTION_KEY?.trim() ?? ''
+  // Slack notification transport: opt-in (SLACK_ENABLED), the per-account bot token
+  // sealed with the shared ENCRYPTION_KEY. OAuth credentials moved out of env into
+  // per-account settings (sealed), resolved dynamically at connect time.
+  const slackEnabled = env.SLACK_ENABLED?.trim() === 'true'
 
   return {
-    agents: {
-      routing: {
-        default: defaultConfig,
-        byKind: {
-          architect: agenticDefault,
-          coder: agenticDefault,
-          reviewer: companionDefault,
-          'spec-companion': companionDefault,
-          'architect-companion': companionDefault,
-          'conflict-resolver': conflictResolverDefault,
-        },
-      },
-      resolveBlockModel: (modelId) => resolveModelRef(modelId, caps),
-    },
+    agents: buildAgentRouting(env, caps),
     // Surface each model's informational list cost in the picker (from spend pricing).
     models: effectiveCatalog(caps, modelCostResolver(spend)),
-    execution: {
-      decisionTimeout: env.DECISION_TIMEOUT?.trim() || '24 hours',
-      jobPollInterval: env.JOB_POLL_INTERVAL?.trim() || '15 seconds',
-      jobMaxPolls: num('JOB_MAX_POLLS', env.JOB_MAX_POLLS) ?? 280,
-      jobPollFailureTolerance:
-        num('JOB_POLL_FAILURE_TOLERANCE', env.JOB_POLL_FAILURE_TOLERANCE) ?? 6,
-      ciPollInterval: env.CI_POLL_INTERVAL?.trim() || '30 seconds',
-      ciMaxPolls: num('CI_MAX_POLLS', env.CI_MAX_POLLS) ?? 120,
-      containerMaxAgeMs:
-        Math.max(75, num('CONTAINER_MAX_AGE_MINUTES', env.CONTAINER_MAX_AGE_MINUTES) ?? 90) *
-        60_000,
-    },
+    execution: buildExecutionConfig(env),
     spend,
-    github: {
-      enabled: githubAppConfigured,
-      appId: env.GITHUB_APP_ID?.trim() ?? '',
-      appSlug: env.GITHUB_APP_SLUG?.trim() ?? '',
-      apiBase: env.GITHUB_API_BASE?.trim() || 'https://api.github.com',
-      setupRedirectUrl: env.GITHUB_SETUP_REDIRECT_URL?.trim() || '/',
-      webhookSecret: env.GITHUB_WEBHOOK_SECRET ?? '',
-      privilegedApp: loadPrivilegedApp(env),
-    },
+    github: buildGithubConfig(env),
     gitlab: loadGitLabConfig(env),
-    auth: {
-      enabled: authEnabled,
-      devOpen,
-      testingNoAuth,
-      githubEnabled,
-      clientId,
-      clientSecret,
-      sessionSecret,
-      apiBase: env.GITHUB_API_BASE?.trim() || 'https://api.github.com',
-      oauthBase: env.GITHUB_OAUTH_BASE?.trim() || 'https://github.com',
-      sessionTtlMs: (ttlHours !== undefined && ttlHours > 0 ? ttlHours : 168) * 60 * 60 * 1000,
-      machineTokenTtlMs: resolveMachineTokenTtlMs(env.AUTH_MACHINE_TOKEN_TTL_MS),
-      successRedirectUrl: env.AUTH_SUCCESS_REDIRECT_URL?.trim() || '',
-      callbackUrl: env.AUTH_CALLBACK_URL?.trim() || '',
-      passwordEnabled,
-      // Open (un-gated) signup is a local-mode convenience; hosted defaults stay
-      // invite/email-domain-gated. `applyLocalDefaults` flips it on for local mode.
-      openSignup: env.AUTH_OPEN_SIGNUP?.trim() === 'true',
-      ...(googleEnabled
-        ? {
-            google: {
-              clientId: googleClientId,
-              clientSecret: googleClientSecret,
-              redirectUrl: env.GOOGLE_OAUTH_REDIRECT_URL?.trim() || '',
-            },
-          }
-        : {}),
-      allowedEmailDomains: csv(env.AUTH_ALLOWED_EMAIL_DOMAINS).map((d) => d.toLowerCase()),
-      allowedLogins: csv(env.AUTH_ALLOWED_LOGINS).map((l) => l.toLowerCase()),
-      allowedOrgs: csv(env.AUTH_ALLOWED_ORGS).map((o) => o.toLowerCase()),
-      allowedRedirectOrigins: csv(env.AUTH_ALLOWED_REDIRECT_ORIGINS).map((o) => {
-        try {
-          return new URL(o).origin
-        } catch {
-          return o
-        }
-      }),
-    },
-    // Email is available whenever an encryption key exists — there is no separate opt-in
-    // flag. The per-account provider API key is sealed with that key. The deployment-level
-    // `system` sender (auth emails like password reset) is read entirely from env and is
-    // independent of the per-account connections, so it loads regardless of `enabled`.
-    email: env.ENCRYPTION_KEY?.trim()
-      ? {
-          enabled: true,
-          encryptionKey: env.ENCRYPTION_KEY.trim(),
-          appBaseUrl: env.APP_BASE_URL?.trim() || env.AUTH_SUCCESS_REDIRECT_URL?.trim() || '',
-          system: loadSystemEmailSender(env),
-        }
-      : {
-          enabled: false,
-          appBaseUrl: env.APP_BASE_URL?.trim() || env.AUTH_SUCCESS_REDIRECT_URL?.trim() || '',
-          system: loadSystemEmailSender(env),
-        },
+    auth: buildAuthConfig(env),
+    email: buildEmailConfig(env),
     // Document-source integration: the providers (Confluence/Notion/GitHub-docs) are
     // the shared `@cat-factory/integrations` fetch shells, wired in the container
     // exactly like the Worker's `selectDocumentsDeps`. Always on (the shared
     // ENCRYPTION_KEY backs credential encryption at rest).
     documents: loadDocumentsConfig(env),
     tasks: loadTasksConfig(env),
-    // Ephemeral-environment provider integration (a tenant rolls its own
-    // environment-management API): assembles from the shared ENCRYPTION_KEY that seals
-    // per-tenant credentials at rest, with no separate enable flag, mirroring the Worker.
-    environments: {
-      encryptionKey: env.ENCRYPTION_KEY?.trim(),
-      // Trusted-adapter escape hatch: permit an in-house env platform on an
-      // internal/VPN host (otherwise the strict public-https guard rejects it).
-      allowUrlHosts: csv(env.ENVIRONMENTS_ALLOW_URL_HOSTS),
-      allowHttpUrls: env.ENVIRONMENTS_ALLOW_HTTP_URLS === 'true',
-      // Additive house-convention extensions to provisioning detection (JSON object).
-      ...(detectionConventions ? { detectionConventions } : {}),
-    },
-    runners: runnersEncryptionKey
-      ? {
-          enabled: true,
-          encryptionKey: runnersEncryptionKey,
-          allowUrlHosts: csv(env.RUNNERS_ALLOW_URL_HOSTS),
-          allowHttpUrls: env.RUNNERS_ALLOW_HTTP_URLS === 'true',
-        }
-      : { enabled: false },
+    environments: buildEnvironmentsConfig(env),
+    runners: buildRunnersConfig(env),
     slack:
       slackEnabled && slackEncryptionKey
         ? { enabled: true, encryptionKey: slackEncryptionKey }
@@ -499,34 +603,7 @@ export function loadNodeConfig(env: NodeJS.ProcessEnv): AppConfig {
       env.OBSERVABILITY_ENABLED === 'true' && env.ENCRYPTION_KEY?.trim()
         ? { enabled: true, encryptionKey: env.ENCRYPTION_KEY.trim() }
         : { enabled: false },
-    retention: {
-      tokenUsageMs: retentionMs('TOKEN_USAGE_RETENTION_DAYS', env.TOKEN_USAGE_RETENTION_DAYS, 395),
-      rateLimitMs: retentionMs(
-        'GITHUB_RATE_LIMIT_RETENTION_DAYS',
-        env.GITHUB_RATE_LIMIT_RETENTION_DAYS,
-        7,
-      ),
-      commitMs: retentionMs('GITHUB_COMMIT_RETENTION_DAYS', env.GITHUB_COMMIT_RETENTION_DAYS, 90),
-      // Heavy full per-call prompt/response; pruned aggressively (default 3 days).
-      llmCallMetricsMs: retentionMs(
-        'LLM_CALL_METRICS_RETENTION_DAYS',
-        env.LLM_CALL_METRICS_RETENTION_DAYS,
-        3,
-      ),
-      // High-churn provisioning event log; pruned aggressively (default 14 days).
-      provisioningLogMs: retentionMs(
-        'PROVISIONING_LOG_RETENTION_DAYS',
-        env.PROVISIONING_LOG_RETENTION_DAYS,
-        14,
-      ),
-      // Resolved (acted/dismissed) notifications; generous default of 90 days. Open
-      // cards (the actionable inbox) are never pruned.
-      notificationsMs: retentionMs(
-        'NOTIFICATION_RETENTION_DAYS',
-        env.NOTIFICATION_RETENTION_DAYS,
-        90,
-      ),
-    },
+    retention: buildRetentionConfig(env),
     // Prompt-fragment library (ADR 0006): on by default, opt OUT with
     // `PROMPT_LIBRARY_ENABLED=false`. Needs no encryption key (fragments are not
     // secrets) and its tables ship in the base schema. Mirrors the Worker's
@@ -539,31 +616,8 @@ export function loadNodeConfig(env: NodeJS.ProcessEnv): AppConfig {
     // Recording the complete prompts is on by default; opt out with
     // `LLM_RECORD_PROMPTS=false` to keep the numeric telemetry but drop the prompt body.
     observability: { recordPrompts: env.LLM_RECORD_PROMPTS?.trim() !== 'false' },
-    // Optional Langfuse trace sink: off unless `LANGFUSE_ENABLED=true` AND both keys are
-    // present (a half-configured sink silently does nothing). Mirrors the Worker mapping.
-    langfuse: {
-      enabled:
-        env.LANGFUSE_ENABLED?.trim() === 'true' &&
-        !!env.LANGFUSE_PUBLIC_KEY?.trim() &&
-        !!env.LANGFUSE_SECRET_KEY?.trim(),
-      publicKey: env.LANGFUSE_PUBLIC_KEY?.trim(),
-      secretKey: env.LANGFUSE_SECRET_KEY?.trim(),
-      baseUrl: env.LANGFUSE_BASE_URL?.trim() || undefined,
-    },
-    // Optional OpenTelemetry OTLP exporter: off unless `OTEL_ENABLED=true` AND an endpoint
-    // is set. On Node this uses the official @opentelemetry/* SDK (see container.ts).
-    otel: {
-      enabled: otelEnabled,
-      endpoint: env.OTEL_EXPORTER_OTLP_ENDPOINT?.trim() || undefined,
-      headers: parseOtlpHeaders(env.OTEL_EXPORTER_OTLP_HEADERS),
-      serviceName: env.OTEL_SERVICE_NAME?.trim() || undefined,
-      platformMetrics: {
-        // A further opt-in on top of the base exporter (adds recurring DB rollup load).
-        enabled: otelEnabled && env.OTEL_PLATFORM_METRICS?.trim() === 'true',
-        intervalMs: parsePlatformMetricsIntervalMs(env.OTEL_PLATFORM_METRICS_INTERVAL_MS),
-        window: parsePlatformMetricsWindow(env.OTEL_PLATFORM_METRICS_WINDOW),
-      },
-    },
+    langfuse: buildLangfuseConfig(env),
+    otel: buildOtelConfig(env),
     // Platform-health alerting: a periodic sweep raises a `platform_health` notification when
     // the deployment's own run health crosses a threshold. Opt-in (`PLATFORM_ALERTS=true`);
     // independent of the OTel exporter (it fans out through the notification channel seam).
