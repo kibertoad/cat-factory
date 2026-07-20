@@ -282,7 +282,7 @@ async function linkDocumentFragment() {
     // error surfaced) so a retry re-attempts just those, never re-linking what already went in.
     let linked = 0
     let firstError: unknown
-    for (const { path, ref } of [...stagedDocRefs.value]) {
+    for (const { path, ref } of stagedDocRefs.value) {
       try {
         await library.createDocumentFragment({ source, ref, tags })
         const i = docFilePaths.value.indexOf(path)
