@@ -1,20 +1,18 @@
 import { describe, expect, it } from 'vitest'
+import { resolveStepSequence } from '@modular-vue/journeys'
 import {
-  ENV_STEP_ORDER,
+  ENV_MODULE_ID,
+  environmentSetupJourney,
   envInitialState,
-  envNextAfter,
   envStartStep,
 } from './environmentSetup.logic'
 
-// Pure navigation graph for the environment-setup journey (slice 3). `envNextAfter`
-// is the source of truth the journey's `advance` transitions derive their target
-// entries from (see `environmentSetup.ts`), so pinning the order, start branch, and
-// forward edges here means a wiring regression can't silently reorder or drop a step.
+// Pure navigation graph for the environment-setup journey (slice 3). The step
+// order is derived from the annotated transition graph (production-feedback item
+// 4), so `resolveStepSequenceResult` walking the real journey definition is the
+// guard against a silent reorder or dropped step — no hand-maintained order array
+// to pin separately.
 describe('environment-setup journey logic', () => {
-  it('orders the steps pick → review → preflight → save', () => {
-    expect(ENV_STEP_ORDER).toEqual(['pick', 'review', 'preflight', 'save'])
-  })
-
   it('seeds state from the launch input', () => {
     expect(envInitialState({ frameId: 'blk_1' })).toEqual({ frameId: 'blk_1' })
     expect(envInitialState({ frameId: null })).toEqual({ frameId: null })
@@ -25,10 +23,20 @@ describe('environment-setup journey logic', () => {
     expect(envStartStep({ frameId: null }, { frameId: null })).toBe('pick')
   })
 
-  it('advances linearly and terminates after save', () => {
-    expect(envNextAfter('pick')).toBe('review')
-    expect(envNextAfter('review')).toBe('preflight')
-    expect(envNextAfter('preflight')).toBe('save')
-    expect(envNextAfter('save')).toBe('done')
+  it('derives the pick → review → preflight → save order from the transition graph', () => {
+    const steps = resolveStepSequence(environmentSetupJourney, { input: { frameId: null } })
+    expect(steps.map((s) => s.entry)).toEqual(['pick', 'review', 'preflight', 'save'])
+    expect(steps.every((s) => s.module === ENV_MODULE_ID)).toBe(true)
+    expect(steps.map((s) => s.progressLabel)).toEqual([
+      'environmentWizard.steps.pick',
+      'environmentWizard.steps.review',
+      'environmentWizard.steps.preflight',
+      'environmentWizard.steps.save',
+    ])
+  })
+
+  it('starts the derived sequence at review when a frame is preselected', () => {
+    const steps = resolveStepSequence(environmentSetupJourney, { input: { frameId: 'blk_1' } })
+    expect(steps.map((s) => s.entry)).toEqual(['review', 'preflight', 'save'])
   })
 })

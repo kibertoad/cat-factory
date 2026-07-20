@@ -159,12 +159,12 @@ Update the `Status` cell + the live `max` in `.oxlintrc.json` at the end of each
 
 ### `complexity` — 141 → 20
 
-| Step      | `max` | Offenders to split first                                                                                                                                     | Status    |
-| --------- | ----: | ------------------------------------------------------------------------------------------------------------------------------------------------------------ | --------- |
-| baseline  |   141 | —                                                                                                                                                            | ✅ landed |
+| Step      | `max` | Offenders to split first                                                                                                                                                                           | Status    |
+| --------- | ----: | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | --------- |
+| baseline  |   141 | —                                                                                                                                                                                                  | ✅ landed |
 | 1         |    60 | (7) `loadNodeConfig` 141, `dispatchPersistenceCall` 101, `buildJobBody` 75, `FakeAgentExecutor.run` 68, `buildLocalContainer` 66, `buildNodeContainer` 64, `pollAgentJobInner` 61 — see fifth pass | ✅ landed |
-| 2         |    30 | (46) — `RunDispatcher` methods, `toRunResult`, `buildRegisteredAgentBody`, …                                                                                 | ☐ todo    |
-| 3 (final) |    20 | (99) — ESLint's default; the long tail                                                                                                                       | ☐ todo    |
+| 2         |    30 | (46) — `RunDispatcher` methods, `toRunResult`, `buildRegisteredAgentBody`, …                                                                                                                       | ☐ todo    |
+| 3 (final) |    20 | (99) — ESLint's default; the long tail                                                                                                                                                             | ☐ todo    |
 
 ### `max-statements` — 157 → 30
 

@@ -1,6 +1,6 @@
 import { defineModule } from '@modular-vue/core'
 import { defineExit } from '@modular-frontend/core'
-import { defineJourney, defineJourneyHandle } from '@modular-vue/journeys'
+import { defineJourneyHandle } from '@modular-vue/journeys'
 import EnvPickStep from '~/components/environments/steps/EnvPickStep.vue'
 import EnvReviewStep from '~/components/environments/steps/EnvReviewStep.vue'
 import EnvPreflightStep from '~/components/environments/steps/EnvPreflightStep.vue'
@@ -13,9 +13,7 @@ import {
   type EnvSelectOutput,
   type EnvSetupInput,
   type EnvSetupState,
-  envInitialState,
-  envNextAfter,
-  envStartStep,
+  environmentSetupJourney,
 } from '~/modular/journeys/environmentSetup.logic'
 
 /**
@@ -24,6 +22,13 @@ import {
  * `STEP_ORDER` + `step` ref + `goToStep` navigation (in `stores/environmentWizard.ts`)
  * with a typed, back/rewind-capable, resumable journey; the per-step data + async
  * actions stay in that Pinia store, driven by the step components below.
+ *
+ * This file supplies the step MODULE (it imports the step `.vue` components, so —
+ * like `result-views.ts` — it's registered from the client plugin, keeping the
+ * unit-tested `registry.ts` / `*.logic.ts` import graph free of SFCs) and re-exports
+ * the JOURNEY, whose transition graph + step metadata live in the SFC-free
+ * `environmentSetup.logic.ts` (so `resolveStepSequence` / `useJourneyProgress` and
+ * the ordering test have no `.vue` dependency).
  *
  * Authoring notes (co-evolution): `defineModule` comes from the `@modular-vue/core`
  * binding, but the exit helper `defineExit` is only exported from the neutral
@@ -36,10 +41,6 @@ import {
  * pick step and never changes mid-flow, so the snapshot input a transition places is
  * always current — even on `preserve-state` back-navigation — which keeps the module
  * type simple (no `buildInput`-optionality quirk) and the flow fully explicit.
- *
- * This file imports the step `.vue` components, so — like `result-views.ts` — it's
- * registered from the client plugin, keeping the unit-tested `registry.ts` /
- * `*.logic.ts` import graph free of SFCs.
  */
 
 /**
@@ -52,20 +53,20 @@ export const environmentSetupModule = defineModule({
   id: ENV_MODULE_ID,
   version: '1.0.0',
   entryPoints: {
-    pick: { mountKinds: ['journey'] as const, component: EnvPickStep },
+    pick: { mountKinds: ['journey'], component: EnvPickStep },
     review: {
-      mountKinds: ['journey'] as const,
-      allowBack: 'preserve-state' as const,
+      mountKinds: ['journey'],
+      allowBack: 'preserve-state',
       component: EnvReviewStep,
     },
     preflight: {
-      mountKinds: ['journey'] as const,
-      allowBack: 'preserve-state' as const,
+      mountKinds: ['journey'],
+      allowBack: 'preserve-state',
       component: EnvPreflightStep,
     },
     save: {
-      mountKinds: ['journey'] as const,
-      allowBack: 'preserve-state' as const,
+      mountKinds: ['journey'],
+      allowBack: 'preserve-state',
       component: EnvSaveStep,
     },
   },
@@ -75,59 +76,7 @@ export const environmentSetupModule = defineModule({
   },
 })
 
-type EnvModules = { [ENV_MODULE_ID]: typeof environmentSetupModule }
-
-/**
- * The journey definition. `start` skips the picker when a frame was preselected;
- * transitions are the linear pick → review → preflight → save chain, terminating
- * with `complete` off the save step's `advance`. Back-navigation is handled by the
- * entries' `allowBack`, not explicit transitions.
- */
-export const environmentSetupJourney = defineJourney<EnvModules, EnvSetupState>()({
-  id: 'environment-setup',
-  version: '1.0.0',
-  initialState: (input: EnvSetupInput) => envInitialState(input),
-  start: (state, input: EnvSetupInput) =>
-    envStartStep(state, input) === 'review'
-      ? ({ module: ENV_MODULE_ID, entry: 'review', input: { frameId: state.frameId } } as const)
-      : ({ module: ENV_MODULE_ID, entry: 'pick', input: { frameId: state.frameId } } as const),
-  transitions: {
-    [ENV_MODULE_ID]: {
-      pick: {
-        [ENV_SELECT_EXIT]: (ctx) => ({
-          next: {
-            module: ENV_MODULE_ID,
-            entry: 'review',
-            input: { frameId: ctx.output.frameId },
-          } as const,
-          state: { frameId: ctx.output.frameId },
-        }),
-      },
-      review: {
-        [ENV_ADVANCE_EXIT]: (ctx) => ({
-          next: {
-            module: ENV_MODULE_ID,
-            entry: envNextAfter('review'),
-            input: { frameId: ctx.state.frameId },
-          } as const,
-        }),
-      },
-      preflight: {
-        [ENV_ADVANCE_EXIT]: (ctx) => ({
-          next: {
-            module: ENV_MODULE_ID,
-            entry: envNextAfter('preflight'),
-            input: { frameId: ctx.state.frameId },
-          } as const,
-        }),
-      },
-      // `save` advances to `envNextAfter('save') === 'done'`, i.e. journey completion.
-      save: {
-        [ENV_ADVANCE_EXIT]: () => ({ complete: undefined }),
-      },
-    },
-  },
-})
+export { environmentSetupJourney }
 
 /** Typed launch handle — callers `runtime.start(handle, { frameId })`. */
 export const environmentSetupHandle = defineJourneyHandle(environmentSetupJourney)

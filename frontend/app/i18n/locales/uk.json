@@ -4800,6 +4800,7 @@
     }
   },
   "environmentWizard": {
+    "progress": "Крок {index} з {total}",
     "title": "Налаштувати тестове середовище",
     "subtitle": "Виявіть, перегляньте та збережіть рецепт Docker Compose, щоб Deployer його забезпечив.",
     "recommended": "рекомендовано",
