@@ -182,6 +182,7 @@
       "recurringNoFrame": "Yinelenen bir görev bir serviste bulunmalıdır. Bir servis çerçevesinden (veya içindeki bir modülden) ekleyin.",
       "titleField": "Başlık",
       "titlePlaceholder": "Ne yapılması gerekiyor?",
+      "titlePlaceholderReview": "İsteğe bağlı — pull request'ten türetilir",
       "issueIncluded": "{title} (sorundan, dahil edildi)",
       "loadingIssue": "Bağlantılı sorunun açıklaması yükleniyor…",
       "additionalNotes": "Ek notlar",
@@ -270,6 +271,8 @@
       "defaultPreset": "Varsayılan ({name}) — {thresholds}",
       "defaultModelPreset": "Varsayılan ({name})",
       "modelPreset": "Model ön ayarı",
+      "bestPractices": "En iyi uygulamalar",
+      "bestPracticesHint": "Bu görevin ajanlarının hizmet düzeyindeki standartlara ek olarak uygulaması için en iyi uygulama parçacıklarını sabitleyin.",
       "agentConfiguration": "Ajan yapılandırması",
       "contextDocuments": "Bağlam belgeleri",
       "contextIssues": "Bağlam sorunları",
@@ -293,7 +296,9 @@
         "prUrl": "Pull request",
         "prUrlHint": "İncelenecek pull request'in URL'si veya numarası",
         "focus": "İnceleme odağı",
-        "focusPlaceholder": "örn. kimlik doğrulama değişikliklerine ve hata yönetimine odaklan"
+        "focusPlaceholder": "örn. kimlik doğrulama değişikliklerine ve hata yönetimine odaklan",
+        "derivedTitle": "{ref} incele",
+        "derivedTitleFallback": "Pull request'i incele"
       }
     },
     "recurring": {

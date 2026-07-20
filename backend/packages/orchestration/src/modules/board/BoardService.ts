@@ -560,12 +560,18 @@ export class BoardService {
         block.description = [preamble, block.description].filter(Boolean).join('\n\n')
       }
     }
-    // A document task starts with the universal writing-style fragments pre-selected
-    // (default-on, user-removable like any block pin). These fold into the `doc-aware`
-    // authoring/review kinds via the engine's fragment path — the selection default lives
-    // here, at task creation, not hard-coded in a prompt.
-    if (taskType === 'document') {
-      block.fragmentIds = [...DEFAULT_DOCUMENT_STYLE_FRAGMENT_IDS]
+    // Best-practice fragments pinned on the task at creation: the ones the user picked on the
+    // form, plus — for a document task — the universal writing-style defaults (default-on,
+    // user-removable like any block pin), unioned so a picked fragment never drops a default and
+    // vice versa. These fold into the task's code-/doc-aware agents via the engine's fragment
+    // path — the selection default lives here, at task creation, not hard-coded in a prompt.
+    const chosenFragmentIds = input.fragmentIds ?? []
+    const fragmentIds =
+      taskType === 'document'
+        ? [...new Set([...DEFAULT_DOCUMENT_STYLE_FRAGMENT_IDS, ...chosenFragmentIds])]
+        : chosenFragmentIds
+    if (fragmentIds.length) {
+      block.fragmentIds = fragmentIds
     }
     // Optional epic membership at creation (the epic-import spawn path passes this so
     // every child task joins the epic it was imported under).

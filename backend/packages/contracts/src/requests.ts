@@ -133,6 +133,11 @@ export const addTaskSchema = v.object({
   pipelineId: v.optional(v.pipe(v.string(), v.maxLength(120))),
   // Task-level agent-contributed config values (e.g. the Tester's environment).
   agentConfig: v.optional(agentConfigValuesSchema),
+  // Best-practice prompt fragments to pin on the task at creation (folded into its
+  // code-/doc-aware agents on top of the service-level standards). Chosen on the create
+  // form from the resolved catalog; capped like the `updateBlock` `fragmentIds`. Omitted/
+  // empty → no task-level fragments (a document task still gets its writing-style defaults).
+  fragmentIds: v.optional(v.array(v.pipe(v.string(), v.maxLength(120)))),
   // Whether this is a purely TECHNICAL task (creation checkbox). Omitted → not yet
   // determined (the engine may infer it from the spec phase). A set value is authoritative.
   technical: v.optional(v.boolean()),

@@ -227,6 +227,7 @@ export const useBoardStore = defineStore('board', () => {
       modelPresetId?: string
       pipelineId?: string
       agentConfig?: Record<string, string>
+      fragmentIds?: string[]
       technical?: boolean
     },
   ): Promise<Block | undefined> {
@@ -240,6 +241,7 @@ export const useBoardStore = defineStore('board', () => {
       ...(options?.modelPresetId ? { modelPresetId: options.modelPresetId } : {}),
       ...(options?.pipelineId ? { pipelineId: options.pipelineId } : {}),
       ...(options?.agentConfig ? { agentConfig: options.agentConfig } : {}),
+      ...(options?.fragmentIds?.length ? { fragmentIds: options.fragmentIds } : {}),
       ...(options?.technical ? { technical: true } : {}),
     })
     upsert(block)
