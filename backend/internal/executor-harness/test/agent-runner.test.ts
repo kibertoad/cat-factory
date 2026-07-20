@@ -1,8 +1,8 @@
-import { mkdtempSync, rmSync, writeFileSync } from 'node:fs'
+import { mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { afterEach, beforeEach, describe, expect, it } from 'vitest'
-import { runClaudeCode, runCodex } from '../src/agent-runner.js'
+import { carryClaudeSystemPrompt, runClaudeCode, runCodex } from '../src/agent-runner.js'
 
 // These drive the REAL `runClaudeCode` / `runCodex` against a FAKE `claude` / `codex`
 // binary placed on PATH — the whole path (streamCli + the per-call accumulator) runs, so
@@ -22,6 +22,27 @@ function fakeCli(name: string, lines: string[]): void {
   writeFileSync(path, script, { mode: 0o755 })
 }
 
+/**
+ * A fake CLI that records its argv + the stdin it received into `argv.json` / `stdin.txt`
+ * under its cwd, then emits one `result` line. Lets a test assert HOW the harness passed the
+ * system prompt (argv vs folded into stdin) without depending on the real `claude` binary.
+ */
+function recordingCli(name: string): void {
+  const script = `#!/usr/bin/env node
+const fs = require('node:fs')
+const path = require('node:path')
+let input = ''
+process.stdin.on('data', (c) => { input += c })
+process.stdin.on('end', () => {
+  fs.writeFileSync(path.join(process.cwd(), 'argv.json'), JSON.stringify(process.argv.slice(2)))
+  fs.writeFileSync(path.join(process.cwd(), 'stdin.txt'), input)
+  const line = JSON.stringify({ type: 'result', result: 'ok', usage: { input_tokens: 1, output_tokens: 1 } })
+  process.stdout.write(line + '\\n', () => process.exit(0))
+})
+`
+  writeFileSync(join(binDir, name), script, { mode: 0o755 })
+}
+
 beforeEach(() => {
   binDir = mkdtempSync(join(tmpdir(), 'cf-fakebin-'))
   cwd = mkdtempSync(join(tmpdir(), 'cf-work-'))
@@ -33,6 +54,63 @@ afterEach(() => {
   process.env.PATH = priorPath
   rmSync(binDir, { recursive: true, force: true })
   rmSync(cwd, { recursive: true, force: true })
+})
+
+describe('carryClaudeSystemPrompt', () => {
+  it('keeps a normal system prompt on --append-system-prompt', () => {
+    const { appendArgs, prompt, folded } = carryClaudeSystemPrompt('ROLE', 'TASK')
+    expect(appendArgs).toEqual(['--append-system-prompt', 'ROLE'])
+    expect(prompt).toBe('TASK')
+    expect(folded).toBe(false)
+  })
+
+  it('folds an argv-overflowing system prompt into the stdin prompt', () => {
+    // > the 96 KiB argv-string budget (and the 128 KiB Linux MAX_ARG_STRLEN that caused E2BIG).
+    const big = 'X'.repeat(200 * 1024)
+    const { appendArgs, prompt, folded } = carryClaudeSystemPrompt(big, 'TASK')
+    expect(appendArgs).toEqual([])
+    expect(prompt.startsWith(big)).toBe(true)
+    expect(prompt.endsWith('TASK')).toBe(true)
+    expect(folded).toBe(true)
+  })
+})
+
+describe.skipIf(!unix)('runClaudeCode system-prompt carriage', () => {
+  it('passes a normal system prompt on argv and only the task over stdin', async () => {
+    recordingCli('claude')
+    const outcome = await runClaudeCode({
+      cwd,
+      model: 'claude-opus-4-8',
+      systemPrompt: 'ROLE',
+      userPrompt: 'TASK',
+      ambientAuth: true,
+    })
+    expect(outcome.summary).toBe('ok')
+    const argv = JSON.parse(readFileSync(join(cwd, 'argv.json'), 'utf8')) as string[]
+    expect(argv).toContain('--append-system-prompt')
+    expect(argv).toContain('ROLE')
+    expect(readFileSync(join(cwd, 'stdin.txt'), 'utf8')).toBe('TASK')
+  })
+
+  it('does not E2BIG on a huge system prompt: folds it into stdin, off argv', async () => {
+    recordingCli('claude')
+    // Larger than Linux MAX_ARG_STRLEN (128 KiB) — before the fix, spawning with this on
+    // argv fails the whole run with `spawn E2BIG` (the pr-reviewer failure this reproduces).
+    const big = 'S'.repeat(200 * 1024)
+    const outcome = await runClaudeCode({
+      cwd,
+      model: 'claude-opus-4-8',
+      systemPrompt: big,
+      userPrompt: 'TASK',
+      ambientAuth: true,
+    })
+    expect(outcome.summary).toBe('ok')
+    const argv = JSON.parse(readFileSync(join(cwd, 'argv.json'), 'utf8')) as string[]
+    expect(argv).not.toContain('--append-system-prompt')
+    const stdin = readFileSync(join(cwd, 'stdin.txt'), 'utf8')
+    expect(stdin.startsWith(big)).toBe(true)
+    expect(stdin).toContain('TASK')
+  })
 })
 
 describe.skipIf(!unix)('runClaudeCode telemetry', () => {
