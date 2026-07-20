@@ -589,6 +589,20 @@ export interface GitHubClient {
     number: number,
   ): Promise<string | null>
   /**
+   * The head commit SHA of a PR (`pulls/{n}.head.sha`), or null when the PR can't be read. The
+   * PR-deep-review captures this the moment the review is dispatched (the "reviewed at" marker)
+   * and re-reads it at `post` time: a change means the branch moved since the review, so the
+   * findings' frozen line numbers are no longer trustworthy anchors. Reads `head.sha` directly
+   * off the PR (so it is correct for a fork PR, unlike a `branchHeadSha` on the base repo).
+   * Optional (see {@link getPullRequestHeadRef}); a provider that can't read it omits it and the
+   * drift check is simply skipped.
+   */
+  getPullRequestHeadSha?(
+    installationId: number,
+    ref: GitHubRepoRef,
+    number: number,
+  ): Promise<string | null>
+  /**
    * List the files a PR changed (`GET /repos/{o}/{r}/pulls/{n}/files`, paginated & fully
    * drained). The PR-deep-review slicer partitions these into cohesive slices from the cheap
    * fields, and the per-slice reviewer reads the `patch`. Optional (see

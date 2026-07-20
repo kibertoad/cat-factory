@@ -259,6 +259,7 @@ export {
   prReview,
   type PrReviewOutput,
   registerPrReviewerAgent,
+  resolvePrNumber,
 } from './agents/kinds/pr-reviewer.js'
 export {
   FORK_CHAT_AGENT_KIND,

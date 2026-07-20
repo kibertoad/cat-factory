@@ -152,6 +152,10 @@ export function asGitHubClient(options: VcsBackedGitHubClientOptions): GitHubCli
     client.getPullRequestHeadRef = (i, ref, n) =>
       vcs.getPullRequestHeadRef!(conn(i), toRepoRef(ref), n)
   }
+  if (vcs.getPullRequestHeadSha) {
+    client.getPullRequestHeadSha = (i, ref, n) =>
+      vcs.getPullRequestHeadSha!(conn(i), toRepoRef(ref), n)
+  }
   if (vcs.createReview) {
     client.createReview = (i, ref, n, input) => vcs.createReview!(conn(i), toRepoRef(ref), n, input)
   }
