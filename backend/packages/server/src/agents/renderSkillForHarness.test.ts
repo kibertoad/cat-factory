@@ -1,6 +1,6 @@
 import type { AgentRunContext } from '@cat-factory/kernel'
 import { describe, expect, it } from 'vitest'
-import { renderSkillForHarness } from './ContainerAgentExecutor.js'
+import { renderSkillForHarness } from './contextFiles.js'
 
 // Coverage for the harness-aware rendering of a resolved `skill` (repo-sourced Claude Skills,
 // slice 2): the payload always travels as the top-level `skill` body field; only the PROMPT
