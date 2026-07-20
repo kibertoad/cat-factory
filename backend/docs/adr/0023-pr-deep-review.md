@@ -82,7 +82,13 @@ need (`getPullRequestHeadRef`, `createReview`) are new **optional** methods on t
   is wrong) and spend the review on what is new. It reuses the existing optional `listReviewThreads`
   method already implemented on `FetchGitHubClient` and forwarded by `vcsBackedGitHubClient`, so
   GitLab gets it for free; a client that can't read threads omits the method and the preOp passes
-  through (the reviewer reviews cold, exactly as before).
+  through (the reviewer reviews cold, exactly as before). Because this file is third-party prose
+  (any human/bot that can comment on the PR authored it) and the feature deliberately tells the
+  reviewer to DEFER to it (skip what it covers), the prompt fences it as untrusted data — the
+  reviewer is told to use it only to avoid repeating findings and to ignore any instructions inside
+  it (steer the verdict, suppress findings, approve). The blast radius is bounded regardless: the
+  reviewer is a read-only `container-explore` kind, so a hostile comment can at worst distort the
+  review output, never merge or mutate the repo.
 - **State-on-step + park/resolve mirror the fork-decision flow.** The `fix` resolution reuses the
   proven `choose`-style re-arm (`resetStepForRerun` + `startStep` + `signalDecision`), and `prReview`
   survives `resetStepForRerun` exactly like `forkDecision`. This kept the whole feature free of a
