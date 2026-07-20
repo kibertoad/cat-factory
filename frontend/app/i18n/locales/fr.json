@@ -4929,7 +4929,9 @@
     "line": "ligne {line}",
     "reviewing": {
       "title": "Revue de la pull request…",
-      "hint": "Découpage du diff en blocs cohérents et revue de chacun."
+      "hint": "Découpage du diff en blocs cohérents et revue de chacun.",
+      "chunks": "{completed} sur {total} sections examinées",
+      "inProgress": "{count} en cours"
     },
     "fixing": {
       "title": "Correction des points sélectionnés…",

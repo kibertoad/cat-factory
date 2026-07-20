@@ -5,6 +5,7 @@ import type {
   PrReviewFinding,
   PrReviewSeverity,
   PrReviewSlice,
+  PrReviewStepState,
 } from '@cat-factory/kernel'
 
 // ---------------------------------------------------------------------------
@@ -32,6 +33,31 @@ export interface CoercedPrReview {
   summary: string | null
   slices: PrReviewSlice[]
   findings: PrReviewFinding[]
+}
+
+/**
+ * The in-flight review state seeded onto a `pr-reviewer` step the moment its container job is
+ * dispatched, so a review run surfaces a real `reviewing` phase in the deep-review window — the
+ * reviewed PR, the model, and (via the step's live todo subtasks) the slices-reviewed-so-far
+ * progress — instead of an empty panel until the findings land. It is superseded by
+ * {@link coercePrReview}'s result when the reviewer returns (`awaiting_selection`/`done`); the
+ * `recordFindings` interceptor treats this `reviewing` status as "not yet recorded" and coerces
+ * over it, while any later status short-circuits as already-settled.
+ */
+export function initialPrReviewState(
+  prUrl: string | null,
+  model: string | null,
+): PrReviewStepState {
+  return {
+    status: 'reviewing',
+    summary: null,
+    slices: [],
+    findings: [],
+    selectedFindingIds: [],
+    resolution: null,
+    prUrl,
+    model,
+  }
 }
 
 /**

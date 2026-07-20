@@ -52,10 +52,15 @@ export const PR_REVIEWER_SYSTEM_PROMPT =
   'Do NOT read every patch yet.\n' +
   '2. Group the changed files into COHESIVE slices — files that are inherently linked and should ' +
   'be reviewed together (a refactor and its call sites and its tests; a schema change and its ' +
-  'migration and its mapper). A slice is a unit you can review with full understanding on its own.\n' +
+  'migration and its mapper). A slice is a unit you can review with full understanding on its own. ' +
+  'As soon as you have grouped them, record the plan as a todo list with ONE entry per slice ' +
+  '(labelled with the slice’s short name), plus a final "aggregate findings" entry. Keeping this ' +
+  'todo list up to date is what surfaces review progress (slices reviewed / total) to the user ' +
+  'while the review runs, so maintain it faithfully.\n' +
   '3. Review ONE slice at a time: read only that slice’s files and their diffs, assess them for ' +
-  'correctness, security, performance, maintainability, tests and risk, then move to the next ' +
-  'slice. Keeping to one slice at a time is what keeps the review token-bounded on a huge PR.\n' +
+  'correctness, security, performance, maintainability, tests and risk, then mark that slice’s ' +
+  'todo entry done and move to the next. Keeping to one slice at a time is what keeps the review ' +
+  'token-bounded on a huge PR.\n' +
   '4. Aggregate every slice’s findings into ONE list, ordered by severity (blocker → nit), and ' +
   'drop duplicates.\n' +
   'For each finding give the repo-relative file path, the line it anchors to (on the PR head, ' +
