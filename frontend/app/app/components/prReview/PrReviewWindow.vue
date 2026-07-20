@@ -21,6 +21,7 @@ import type {
   StepSubtasks,
 } from '~/types/execution'
 import { subtaskIconClass } from '~/utils/pipelineRender'
+import { activeChunkLabels, chunkReviewPercent, isSlicingChunks } from '~/utils/prReviewProgress'
 import ResultWindowShell from '~/components/panels/ResultWindowShell.vue'
 
 const execution = useExecutionStore()
@@ -49,28 +50,21 @@ const status = computed(() => state.value?.status ?? null)
 const awaiting = computed(() => status.value === 'awaiting_selection')
 // The reviewer's live todo list while it works, streamed onto the step. Its entries are the
 // cohesive slices/chunks the agent grouped the diff into (plus a final "aggregate" step). The
-// two `reviewing`-phase sub-states are told apart by whether this list exists yet:
-//   - no todo list yet (`hasProgress === false`) → the reviewer is still SLICING the diff into
-//     chunks (it has not committed a plan), so we show the slicing state, not a vague "reviewing".
-//   - todo list present → slicing is DONE, so we show every chunk with its status + which are
-//     being actively worked on right now.
+// derivation of the two `reviewing`-phase sub-states from it lives in `~/utils/prReviewProgress`
+// (pure + unit-tested); see that module for the slicing-vs-reviewing signal.
 const subtasks = computed<StepSubtasks | null>(() => step.value?.subtasks ?? null)
-const hasProgress = computed(() => (subtasks.value?.total ?? 0) > 0)
 
-/** Slicing done → reviewing the chunks; before that → still slicing the diff. */
-const slicing = computed(() => status.value === 'reviewing' && !hasProgress.value)
+/**
+ * Slicing sub-phase: the reviewer is still grouping the diff into chunks (no todo list yet).
+ * Once the list exists, slicing is done and we render the per-chunk status list instead.
+ */
+const slicing = computed(() => status.value === 'reviewing' && isSlicingChunks(subtasks.value))
 
 /** Chunk-review completion, clamped 0..100 for the progress bar. */
-const chunkPercent = computed(() => {
-  const s = subtasks.value
-  if (!s || s.total <= 0) return 0
-  return Math.min(100, Math.max(0, Math.round((s.completed / s.total) * 100)))
-})
+const chunkPercent = computed(() => chunkReviewPercent(subtasks.value))
 
 /** The chunks the reviewer is actively working through right now (their labels), for the callout. */
-const activeChunks = computed<string[]>(
-  () => subtasks.value?.items?.filter((i) => i.status === 'in_progress').map((i) => i.label) ?? [],
-)
+const activeChunks = computed<string[]>(() => activeChunkLabels(subtasks.value))
 
 /** Icon per todo-item status (matches the pipeline timeline's live subtask breakdown). */
 const ITEM_ICON: Record<StepSubtaskItem['status'], string> = {
