@@ -26,7 +26,7 @@ const { t } = useI18n()
 const toast = useToast()
 
 const { open, blockId, close } = useResultView('initiative-tracker', {
-  onOpen: (id) => void initiatives.load(id),
+  onOpen: ({ blockId }) => void initiatives.load(blockId),
 })
 
 const block = computed(() => (blockId.value ? board.getBlock(blockId.value) : undefined))

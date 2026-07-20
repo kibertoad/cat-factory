@@ -55,7 +55,7 @@ const docCollapsedOverride = ref<boolean | null>(null)
 // fresh each open, so a non-immediate per-window watch used to leave it empty for whichever
 // route (a pipeline step / "Review & approve") didn't warm the cache by selecting the block.
 const { open, blockId, instanceId, stepIndex, close } = useResultView('requirements-review', {
-  onOpen: (id) => {
+  onOpen: ({ blockId }) => {
     drafts.value = {}
     seededReply.value = {}
     recommendMode.value = new Set()
@@ -64,7 +64,7 @@ const { open, blockId, instanceId, stepIndex, close } = useResultView('requireme
     redoComment.value = ''
     showRedo.value = false
     docCollapsedOverride.value = null
-    void requirements.load(id)
+    void requirements.load(blockId)
   },
   // Closing the window (X, backdrop, Escape) must not silently drop an answer the user typed
   // but never blurred out of. Flush before the view tears down; flushDrafts captures the

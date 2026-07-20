@@ -16,7 +16,7 @@ const { t } = useI18n()
 const access = useWorkspaceAccess()
 
 const { open, blockId, close } = useResultView('doc-interview', {
-  onOpen: (id) => void docInterview.load(id),
+  onOpen: ({ blockId }) => void docInterview.load(blockId),
 })
 
 const block = computed(() => (blockId.value ? board.getBlock(blockId.value) : undefined))

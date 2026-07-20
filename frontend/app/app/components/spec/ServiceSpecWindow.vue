@@ -25,10 +25,10 @@ const mode = ref<ViewMode>('structured')
 const selected = ref<{ m: number; g: number } | null>(null)
 
 const { open, blockId, close } = useResultView('service-spec', {
-  onOpen: (id) => {
+  onOpen: ({ blockId }) => {
     mode.value = 'structured'
     selected.value = null
-    void serviceSpec.load(id)
+    void serviceSpec.load(blockId)
   },
 })
 
