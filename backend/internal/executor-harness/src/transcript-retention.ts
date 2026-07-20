@@ -1,4 +1,4 @@
-import { mkdir, readdir, rename, rm, stat } from 'node:fs/promises'
+import { cp, mkdir, readdir, rename, rm, stat, writeFile } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
 import { basename, join } from 'node:path'
 import type { Logger } from './logger.js'
@@ -24,6 +24,13 @@ import type { Logger } from './logger.js'
 
 /** Default retention window: 3 days. Overridable via `HARNESS_TRANSCRIPT_TTL_MS`. */
 const DEFAULT_TTL_MS = 3 * 24 * 60 * 60 * 1000
+
+/**
+ * A marker file dropped into every retention dir THIS module creates. The pruner deletes ONLY
+ * dirs carrying it, so pointing `HARNESS_TRANSCRIPT_ROOT` at a shared (non-dedicated) directory
+ * can never `rm -rf` unrelated sibling content — we only ever sweep our own retained transcripts.
+ */
+export const RETENTION_MARKER = '.cf-retained'
 
 /** The retention root (one dir per retained home underneath it). Overridable for operators. */
 function retentionRoot(): string {
@@ -59,8 +66,7 @@ export async function retainSessionTranscripts(
   const { label, log } = options
   const root = retentionRoot()
   // A filesystem-safe, sortable per-home dir name: an ISO stamp (colons/dots → dashes) + the
-  // home's basename (already unique — `mkdtemp` seeded). Same filesystem as `home` (both under
-  // the retention root's / tmpdir's device), so the `rename` below is a cheap move, not a copy.
+  // home's basename (already unique — `mkdtemp` seeded).
   const dest = join(root, `${new Date().toISOString().replace(/[:.]/g, '-')}-${basename(home)}`)
   let moved = 0
   try {
@@ -71,8 +77,8 @@ export async function retainSessionTranscripts(
       } catch {
         continue // the CLI never wrote this subdir this run — nothing to retain
       }
-      await mkdir(dest, { recursive: true })
-      await rename(from, join(dest, sub))
+      if (moved === 0) await ensureRetentionDir(dest)
+      await moveDir(from, join(dest, sub))
       moved += 1
     }
     if (moved > 0) log?.info('retained session transcripts', { label, dest, subdirs: moved })
@@ -88,7 +94,33 @@ export async function retainSessionTranscripts(
   return moved > 0 ? dest : undefined
 }
 
-/** Delete retained-transcript dirs whose mtime is older than `maxAgeMs`. Best-effort per entry. */
+/** Create a retention dir and stamp it with the ownership marker (see {@link RETENTION_MARKER}). */
+async function ensureRetentionDir(dest: string): Promise<void> {
+  await mkdir(dest, { recursive: true })
+  await writeFile(join(dest, RETENTION_MARKER), '')
+}
+
+/**
+ * Move `from` → `to`, preferring a cheap same-filesystem `rename`. When the retention root is on
+ * a DIFFERENT device than the config home (an operator override of `HARNESS_TRANSCRIPT_ROOT`),
+ * `rename` fails with `EXDEV` — fall back to a recursive copy + remove so the transcript is still
+ * lifted out before the caller deletes the home, rather than being silently lost.
+ */
+async function moveDir(from: string, to: string): Promise<void> {
+  try {
+    await rename(from, to)
+  } catch (err) {
+    if ((err as NodeJS.ErrnoException)?.code !== 'EXDEV') throw err
+    await cp(from, to, { recursive: true })
+    await rm(from, { recursive: true, force: true })
+  }
+}
+
+/**
+ * Delete retained-transcript dirs whose mtime is older than `maxAgeMs`. Only dirs carrying the
+ * retention marker are candidates — foreign content under a shared retention root is never
+ * touched. Best-effort per entry (a concurrent sweep or a vanished dir must not abort the loop).
+ */
 async function pruneRetentionRoot(root: string, maxAgeMs: number, log?: Logger): Promise<void> {
   const cutoff = Date.now() - maxAgeMs
   let entries: string[]
@@ -101,10 +133,16 @@ async function pruneRetentionRoot(root: string, maxAgeMs: number, log?: Logger):
     const path = join(root, name)
     try {
       const info = await stat(path)
-      if (info.mtimeMs < cutoff) {
-        await rm(path, { recursive: true, force: true })
-        log?.debug('pruned expired session transcripts', { path })
+      if (!info.isDirectory() || info.mtimeMs >= cutoff) continue
+      // Ownership gate: only sweep dirs WE created (they carry the marker). This makes a
+      // shared/non-dedicated `HARNESS_TRANSCRIPT_ROOT` safe — unrelated dirs are left alone.
+      try {
+        await stat(join(path, RETENTION_MARKER))
+      } catch {
+        continue // not one of ours — never delete it
       }
+      await rm(path, { recursive: true, force: true })
+      log?.debug('pruned expired session transcripts', { path })
     } catch {
       // best-effort per entry — a concurrent sweep or a vanished dir must not abort the loop
     }

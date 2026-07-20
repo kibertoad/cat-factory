@@ -11,7 +11,7 @@ import { existsSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { afterEach, beforeEach, describe, expect, it } from 'vitest'
-import { retainSessionTranscripts } from '../src/transcript-retention.js'
+import { RETENTION_MARKER, retainSessionTranscripts } from '../src/transcript-retention.js'
 
 // Drives the REAL `retainSessionTranscripts` against a temp config home + an isolated
 // retention root (via `HARNESS_TRANSCRIPT_ROOT`), so the move-out-then-prune behaviour and
@@ -82,8 +82,10 @@ describe('retainSessionTranscripts', () => {
 
   it('prunes retained transcripts older than the TTL and keeps fresh ones', async () => {
     // A stale retained dir from a prior run, back-dated well beyond the 3-day default TTL.
+    // Marker written BEFORE the utimes back-date so the dir's mtime stays in the past.
     const stale = join(root, '2000-01-01T00-00-00-000Z-cf-claude-old')
     mkdirSync(join(stale, 'projects'), { recursive: true })
+    writeFileSync(join(stale, RETENTION_MARKER), '')
     const longAgo = new Date('2000-01-01T00:00:00Z')
     utimesSync(stale, longAgo, longAgo)
 
@@ -102,6 +104,7 @@ describe('retainSessionTranscripts', () => {
     // A retained dir aged ~1 hour — fresh under the 3-day default, expired under the 1s TTL.
     const aged = join(root, 'aged-cf-claude-x')
     mkdirSync(aged, { recursive: true })
+    writeFileSync(join(aged, RETENTION_MARKER), '')
     const anHourAgo = new Date(Date.now() - 60 * 60 * 1000)
     utimesSync(aged, anHourAgo, anHourAgo)
 
@@ -111,5 +114,22 @@ describe('retainSessionTranscripts', () => {
     expect(existsSync(aged)).toBe(false)
     // Sanity: the retention root still exists and holds this run's dir.
     expect(readdirSync(root).length).toBeGreaterThan(0)
+  })
+
+  it('never prunes foreign dirs lacking the retention marker (shared-root safety)', async () => {
+    // An unrelated, ancient directory a co-tenant left under a SHARED retention root — no
+    // marker, so the sweep must leave it strictly alone even though it's well past the TTL.
+    const foreign = join(root, 'someone-elses-important-data')
+    mkdirSync(foreign, { recursive: true })
+    writeFileSync(join(foreign, 'keep.txt'), 'do not delete')
+    const longAgo = new Date('2000-01-01T00:00:00Z')
+    utimesSync(foreign, longAgo, longAgo)
+
+    seedHome()
+    await retainSessionTranscripts(home, ['projects'], {})
+
+    // The foreign dir and its contents survive the prune untouched.
+    expect(existsSync(foreign)).toBe(true)
+    expect(readFileSync(join(foreign, 'keep.txt'), 'utf8')).toBe('do not delete')
   })
 })

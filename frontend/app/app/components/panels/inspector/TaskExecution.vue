@@ -411,6 +411,7 @@ async function mergePr() {
               variant="soft"
               size="xs"
               icon="i-lucide-clipboard-check"
+              data-testid="pr-review-open"
               @click="openPrReviewFor(i)"
             >
               {{ t('inspector.execution.reviewFindings') }}
