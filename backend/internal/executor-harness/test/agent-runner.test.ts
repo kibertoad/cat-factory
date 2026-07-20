@@ -190,6 +190,45 @@ describe.skipIf(!unix)('runClaudeCode telemetry', () => {
     ])
   })
 
+  it('seeds telemetry as a single folded user turn (no phantom system) when the prompt overflows argv', async () => {
+    fakeCli('claude', [
+      JSON.stringify({
+        type: 'assistant',
+        message: {
+          model: 'claude-opus-4-8',
+          stop_reason: 'end_turn',
+          usage: { input_tokens: 10, output_tokens: 5 },
+          content: [{ type: 'text', text: 'Done' }],
+        },
+      }),
+      JSON.stringify({
+        type: 'result',
+        result: 'ok',
+        usage: { input_tokens: 10, output_tokens: 5 },
+      }),
+    ])
+
+    // Overflows the 96 KiB argv budget, so the system prompt is folded into the stdin user
+    // turn — and the telemetry must reflect that no system turn of ours was actually sent.
+    const big = 'S'.repeat(200 * 1024)
+    const outcome = await runClaudeCode({
+      cwd,
+      model: 'claude-opus-4-8',
+      systemPrompt: big,
+      userPrompt: 'TASK',
+      ambientAuth: true,
+    })
+
+    const calls = outcome.callMetrics ?? []
+    expect(calls).toHaveLength(1)
+    // One folded user turn, not a [system, user] pair — the reconstruction matches the wire.
+    expect(calls[0]!.messageCount).toBe(1)
+    const seeded = JSON.parse(calls[0]!.promptText) as Array<{ role: string; content: string }>
+    expect(seeded.map((m) => m.role)).toEqual(['user'])
+    expect(seeded[0]!.content.startsWith(big)).toBe(true)
+    expect(seeded[0]!.content.endsWith('TASK')).toBe(true)
+  })
+
   it('scrubs the leased credential from captured bodies', async () => {
     const token = 'sk-ant-oat01-super-secret-value'
     fakeCli('claude', [

@@ -222,11 +222,12 @@ function foldSystemPrompt(systemPrompt: string, userPrompt: string): string {
 }
 
 /**
- * Linux caps a SINGLE argv string at MAX_ARG_STRLEN (32 pages = 128 KiB) independently of the
- * roomier total ARG_MAX. A system prompt with best-practice fragments folded in can exceed that,
- * and `execve` then fails the whole spawn with `E2BIG` before the agent runs at all — the failure
- * mode seen on the `pr-reviewer` step (a ~150 KiB composed prompt). Stay well under the limit; the
- * margin below 128 KiB also covers the rest of argv + the environment block, which share ARG_MAX.
+ * Linux caps a SINGLE argv string at MAX_ARG_STRLEN (32 pages = 128 KiB) — a per-string limit,
+ * distinct from (and reached long before) the far larger total ARG_MAX for argv + env combined. A
+ * system prompt with best-practice fragments folded in can exceed that per-string cap, and `execve`
+ * then fails the whole spawn with `E2BIG` before the agent runs at all — the failure mode seen on
+ * the `pr-reviewer` step (a ~150 KiB composed prompt). The binding constraint is that per-string
+ * cap; 96 KiB stays comfortably under 128 KiB so the system-prompt argv can never approach it.
  */
 const MAX_ARGV_STRING_BYTES = 96 * 1024
 
@@ -295,18 +296,33 @@ export async function runClaudeCode(opts: SubscriptionRunOptions): Promise<PiRun
   let summary = ''
   let usage: { inputTokens: number; outputTokens: number } | undefined
 
+  // Decide how the composed system prompt is carried up front, so the telemetry seed below
+  // reflects what actually reaches the model: a small prompt rides `--append-system-prompt`
+  // (a real system turn), while an argv-overflowing prompt is folded into the first user turn
+  // — in which case NO system turn of ours is sent (the `E2BIG` fallback).
+  const { appendArgs, prompt, folded } = carryClaudeSystemPrompt(opts.systemPrompt, opts.userPrompt)
+  if (folded) {
+    opts.log?.warn('system prompt exceeds argv limit; folding into the task prompt', {
+      bytes: Buffer.byteLength(opts.systemPrompt, 'utf8'),
+    })
+  }
+
   // Reconstruct the full per-call request/response bodies for telemetry from the
   // stream. `--output-format stream-json --verbose` emits each turn as a near-verbatim
   // Anthropic Messages envelope, so `assistant` events carry the complete response
   // (text + tool_use blocks + usage), and `user` events carry the tool_result blocks
-  // fed back — together the growing prompt transcript. We seed it with the two inputs
-  // the harness supplies (they never appear in the stream): the system + first user
-  // message. Bodies are credential-scrubbed (they can echo the leased token).
+  // fed back — together the growing prompt transcript. We seed it with the inputs the
+  // harness supplies (they never appear in the stream): the system + first user message
+  // when the prompt rides argv, or a single folded user turn when it doesn't — so the
+  // reconstruction never shows a system turn that was never sent. Bodies are
+  // credential-scrubbed (they can echo the leased token).
   const secrets = opts.subscriptionToken ? secretsToRedact(opts.subscriptionToken) : []
-  const messages: Array<{ role: string; content: unknown }> = [
-    { role: 'system', content: opts.systemPrompt },
-    { role: 'user', content: opts.userPrompt },
-  ]
+  const messages: Array<{ role: string; content: unknown }> = folded
+    ? [{ role: 'user', content: prompt }]
+    : [
+        { role: 'system', content: opts.systemPrompt },
+        { role: 'user', content: opts.userPrompt },
+      ]
   const calls: HarnessCallMetric[] = []
 
   const onEvent = (event: Record<string, unknown>): void => {
@@ -411,15 +427,6 @@ export async function runClaudeCode(opts: SubscriptionRunOptions): Promise<PiRun
             }
           : { CLAUDE_CODE_OAUTH_TOKEN: opts.subscriptionToken! }),
       }
-
-  // A large composed system prompt can't ride argv (`E2BIG`); fall back to folding it into
-  // the stdin task prompt when it would overflow the single-argv-string limit.
-  const { appendArgs, prompt, folded } = carryClaudeSystemPrompt(opts.systemPrompt, opts.userPrompt)
-  if (folded) {
-    opts.log?.warn('system prompt exceeds argv limit; folding into the task prompt', {
-      bytes: Buffer.byteLength(opts.systemPrompt, 'utf8'),
-    })
-  }
 
   try {
     const { stderrTail } = await streamCli(
