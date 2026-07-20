@@ -184,15 +184,9 @@ export function makeApp(
     opts?: { gates?: boolean[] },
   ): Promise<ExecutionInstance> {
     const c = buildContainer(env, coreOverrides, { gateProviders: appOptions.gateProviders })
-    return c.executionService.start(
-      workspaceId,
-      blockId,
-      pipelineId,
-      undefined,
-      undefined,
-      undefined,
-      opts?.gates,
-    )
+    return c.executionService.start(workspaceId, blockId, pipelineId, {
+      gatesOverride: opts?.gates,
+    })
   }
 
   async function driveBootstrap(

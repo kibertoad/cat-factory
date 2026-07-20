@@ -154,16 +154,11 @@ export class CompanionController {
     }
     if (result.model) step.model = result.model
 
-    return this.applyAssessment(
-      workspaceId,
-      instance,
-      step,
-      block,
-      isFinalStep,
+    return this.applyAssessment(workspaceId, instance, step, block, isFinalStep, {
       producerIndex,
       assessment,
       result,
-    )
+    })
   }
 
   /**
@@ -186,16 +181,11 @@ export class CompanionController {
     const producerIndex = this.producerIndexFor(instance, step)
     if (result.model) step.model = result.model
     const assessment = parseContainerVerdict(result)
-    return this.applyAssessment(
-      workspaceId,
-      instance,
-      step,
-      block,
-      isFinalStep,
+    return this.applyAssessment(workspaceId, instance, step, block, isFinalStep, {
       producerIndex,
       assessment,
       result,
-    )
+    })
   }
 
   /** The nearest earlier step whose kind this companion reviews (the producer), or -1. */
@@ -230,10 +220,13 @@ export class CompanionController {
     step: PipelineStep,
     block: Block,
     isFinalStep: boolean,
-    producerIndex: number,
-    assessment: CompanionAssessment | undefined,
-    result: AgentRunResult,
+    grading: {
+      producerIndex: number
+      assessment: CompanionAssessment | undefined
+      result: AgentRunResult
+    },
   ): Promise<AdvanceResult> {
+    const { producerIndex, assessment, result } = grading
     const companion = step.companion ?? {
       threshold: companionFor(step.agentKind)?.defaultThreshold ?? 0.8,
       maxAttempts: DEFAULT_COMPANION_MAX_ATTEMPTS,

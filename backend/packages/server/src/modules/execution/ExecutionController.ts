@@ -54,13 +54,10 @@ export function executionController(): Hono<AppEnv> {
       c.get('user'),
       readPersonalPassword(c),
     )
-    const instance = await container.executionService.start(
-      workspaceId,
-      blockId,
-      pipelineId,
+    const instance = await container.executionService.start(workspaceId, blockId, pipelineId, {
       initiatedBy,
       activate,
-    )
+    })
     return c.json(instance, 201)
   })
 

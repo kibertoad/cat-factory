@@ -416,15 +416,9 @@ export class InitiativeLoopService {
       // Thread the item's preset-authored per-run gate override (slice 2) into the spawned run:
       // a docs-refresh task with human-review off runs its gates disabled, on runs them enabled.
       // System-initiated (no initiator / activation), manual origin — hence the leading undefineds.
-      await this.deps.executionService.start(
-        workspaceId,
-        block.id,
-        pipelineId,
-        undefined,
-        undefined,
-        undefined,
-        item.spawn?.gates,
-      )
+      await this.deps.executionService.start(workspaceId, block.id, pipelineId, {
+        gatesOverride: item.spawn?.gates,
+      })
       return { outcome: 'spawned', entity: claimed }
     } catch (error) {
       // Roll back the block, then decide on the item. A per-service task-limit ConflictError is

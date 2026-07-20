@@ -390,12 +390,9 @@ export function publicApiController(): Hono<AppEnv> {
     // rows were written).
     let execution: ExecutionInstance
     try {
-      execution = await container.executionService.start(
-        auth.workspaceId,
-        block.id,
-        pipelineId,
-        null,
-      )
+      execution = await container.executionService.start(auth.workspaceId, block.id, pipelineId, {
+        initiatedBy: null,
+      })
     } catch (err) {
       await rollbackInitiativeRun(c, auth.workspaceId, block.id)
       throw err
@@ -671,7 +668,9 @@ export function publicApiController(): Hono<AppEnv> {
     // (per-service running-task cap, dependency gate, runnability) apply as for any board start;
     // their `DomainError`s map to the right HTTP status via the shared error handler. This is the
     // abuse backstop for board starts — the analogue of the initiative surface's active-run cap.
-    await container.executionService.start(auth.workspaceId, taskId, pipelineId, null)
+    await container.executionService.start(auth.workspaceId, taskId, pipelineId, {
+      initiatedBy: null,
+    })
     // Re-read the task so the caller gets its AUTHORITATIVE post-start projection (status,
     // executionId, progress) rather than an optimistic guess — a run may park/block at its first
     // step rather than land on `in_progress`. `getServiceTask` never returns null here (start did

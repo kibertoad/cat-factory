@@ -395,15 +395,9 @@ export function makeConformanceApp(
       ),
     drive,
     startExecution: (workspaceId, blockId, pipelineId, opts) =>
-      container.executionService.start(
-        workspaceId,
-        blockId,
-        pipelineId,
-        undefined,
-        undefined,
-        undefined,
-        opts?.gates,
-      ),
+      container.executionService.start(workspaceId, blockId, pipelineId, {
+        gatesOverride: opts?.gates,
+      }),
     driveBootstrap,
     driveEnvConfigRepair,
     executionEmits,

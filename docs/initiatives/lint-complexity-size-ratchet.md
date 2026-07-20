@@ -1,8 +1,7 @@
 # Initiative: ratchet down oxlint complexity & size ceilings
 
-**Status:** in progress — `max-nested-callbacks` AND `max-depth` at their final targets (4);
-`max-lines` / `max-lines-per-function` at their free floors; `max-params` at step 1 (**10**, the
-20-param `buildNodeContainerExecutor` converted to an options object). `complexity` /
+**Status:** in progress — `max-nested-callbacks`, `max-depth`, AND `max-params` at their final
+targets (4 / 4 / **6**); `max-lines` / `max-lines-per-function` at their free floors. `complexity` /
 `max-statements` / the two size rules still need the DI-builder / god-file refactors to move ·
 **Owner:** core · **Started:** 2026-07-20
 
@@ -39,13 +38,28 @@ conformance suites) split along cohesive seams — the same god-file re-accretio
 
 ## The target pattern (how to run each slice)
 
+**Every PR here MUST be a meaningful slice, not a token one.** A slice is sized by the WORK it
+lands — refactor a rule to its next real step (or to its final target when the offenders above it
+are a tractable, cohesive set), and prefer to carry a rule ALL THE WAY DOWN in one PR when the
+offenders are the same class of change (e.g. `max-params`' whole 20 → 6 was one options-object
+sweep). A PR whose only diff is bumping one `.oxlintrc.json` number by one notch after a single
+trivial edit does **not** earn its review + CI cost; fold that into a fuller slice (more offenders,
+a further step, or a second rule that shares the refactor) so each PR moves the initiative
+materially. When a rule genuinely can only move one step at a time (a big god-file split blocks the
+next), say so in the PR — a small slice is fine when it's small because the WORK is irreducible, not
+because the author stopped early.
+
 The rules live in the root [`.oxlintrc.json`](../../.oxlintrc.json) `rules` block, each as
 `["error", { "max": N }]`. A slice is:
 
-1. Pick the next rule + its next step from the checklist below.
-2. Refactor the handful of offenders above that step's threshold (split the function/file
-   along a cohesive seam — the `RunDispatcher` controller extractions are the model; see the
-   file-size guard notes in [`CLAUDE.md`](../../CLAUDE.md) → "Run the CI guard scripts").
+1. Pick the next rule + its next step from the checklist below (or several steps of one rule, or a
+   whole rule, when the offenders form one tractable set — see the sizing mandate above).
+2. Refactor **every** offender above that step's threshold (split the function/file along a
+   cohesive seam — the `RunDispatcher` controller extractions and the `max-params` options-object /
+   context-bundle sweep are the models; see the file-size guard notes in
+   [`CLAUDE.md`](../../CLAUDE.md) → "Run the CI guard scripts"). A refactor that touches the
+   executor-harness `src/**` MUST bump the runner image tag (see the harness image rules in
+   `CLAUDE.md`).
 3. Lower that rule's `max` in `.oxlintrc.json` to the step value and run the whole-tree lint
    (`pnpm lint`, i.e. `oxlint` from the repo root — **never** a file subset).
 4. If green, commit + update this checklist row. If a straggler remains, either fold it into
@@ -69,7 +83,7 @@ worst offender. These are the starting ceilings, not the goal.
 | `max-statements`         |         157 |            **30** | `frontend/app/app/stores/ui/modals.ts` (157)                     |
 | `max-lines-per-function` |    **2453** |           **150** | `internal/conformance/src/suites/core.ts` (2453)                 |
 | `max-lines`              |    **2802** |          **1500** | `orchestration/src/modules/execution/ExecutionService.ts` (2802) |
-| `max-params`             |      **10** |             **6** | `orchestration/…/DeployerStepController.ts` (10)                 |
+| `max-params`             |    **6** ✅ |             **6** | at target — 0 offenders above 6                                  |
 | `max-depth`              |    **4** ✅ |             **4** | at target — 0 offenders above 4                                  |
 | `max-nested-callbacks`   |    **4** ✅ |             **4** | at target — 0 offenders above 4                                  |
 
@@ -90,12 +104,16 @@ worst offender. These are the starting ceilings, not the goal.
 > tool-call conversion, and the OTEL conformity metric fold. The size/complexity rules are still
 > pinned at their ceilings pending the DI-builder / god-file refactors.
 >
-> **Third pass (landed):** `max-params` reached **step 1** (20 → **10**) by converting the lone
-> 20-arg offender — the Node facade's `buildNodeContainerExecutor` — from positional parameters to
-> a single `NodeContainerExecutorDeps` options object (its one call site in `runtimes/node`'s
-> `container.ts` passes named fields). The floor is now **10** (`DeployerStepController`), so step 2
-> (→ 8) needs the 9/10-arg DI/controller functions split next. The size/complexity rules remain
-> pinned pending the DI-builder / god-file refactors.
+> **Third pass (landed):** `max-params` reached its **final** target (20 → **6**) in one slice by
+> converting every offending function from a positional list to a bundled argument — DI builders to
+> dependency objects (`NodeContainerExecutorDeps`, the Worker `WorkerExecutorDeps`,
+> `buildResolveTransport`, `selectEnvConfigRepairer`), loop-invariant step context to one object
+> (the deployer `DeployerFanOut`, the companion/Tester/gate bundles), `ExecutionService.start`'s
+> trailing options to a `RunStartOptions` object (extracted to its own file to keep
+> `ExecutionService.ts` under the `max-lines` ceiling), and the callback / identity bundles in
+> `syncResource` / `runWriterForChunk` / `runProviderValidate` / `syncSkillDir` / the harness
+> `streamCli` (which republishes the runner image — tags synced to `1.50.1`). The size/complexity
+> rules remain pinned pending the DI-builder / god-file refactors.
 
 `max-lines`' final target of **1500** deliberately matches `check-file-size.mjs`'s default
 budget, so the two guards agree on the file ceiling (the custom guard keeps its per-file
@@ -149,12 +167,12 @@ Update the `Status` cell + the live `max` in `.oxlintrc.json` at the end of each
 
 ### `max-params` — 20 → 6
 
-| Step      | `max` | Offenders to split first                                                                   | Status    |
-| --------- | ----: | ------------------------------------------------------------------------------------------ | --------- |
-| baseline  |    20 | —                                                                                          | ✅ landed |
-| 1         |    10 | (1) `buildNodeContainerExecutor` (20 positional args → options object)                     | ✅ landed |
-| 2         |     8 | (5) `DeployerStepController` 10, `cloudflare/container.ts` 9, `RequirementReviewService` 9 | ☐ todo    |
-| 3 (final) |     6 | (16)                                                                                       | ☐ todo    |
+| Step      | `max` | Offenders to split first                                                                         | Status    |
+| --------- | ----: | ------------------------------------------------------------------------------------------------ | --------- |
+| baseline  |    20 | —                                                                                                | ✅ landed |
+| 1         |    10 | (1) `buildNodeContainerExecutor` (20 positional args → options object)                           | ✅ landed |
+| 2         |     8 | (4) `DeployerStepController` 10, `cloudflare/container.ts` 9 ×2, `RequirementReviewService` 9    | ✅ landed |
+| 3 (final) |     6 | (11) DI builders + step-context bundles + `ExecutionService.start` options + harness `streamCli` | ✅ landed |
 
 ### `max-depth` — 6 → 4
 
@@ -173,6 +191,21 @@ Update the `Status` cell + the live `max` in `.oxlintrc.json` at the end of each
 
 ## Conventions & gotchas carried between iterations
 
+- **Slice by WORK, not by a one-notch config bump.** See the sizing mandate under "The target
+  pattern": each PR must move the initiative materially (a full step, several steps, or a whole
+  rule when the offenders are one class of change), never a lone `.oxlintrc.json` decrement bolted
+  onto a trivial edit. `max-params`' 20 → 6 landed as ONE options-object / context-bundle sweep of
+  all ~15 offenders — that is the reference for "a real slice".
+- **Bundle, don't just split, for `max-params`.** The going-down move for a too-long parameter list
+  is to bundle it into ONE argument along a cohesive seam: a DI **dependency object**
+  (`NodeContainerExecutorDeps` / `WorkerExecutorDeps`), a **loop-invariant context** threaded
+  through a call family (`DeployerFanOut`), a trailing **options bag** (`RunStartOptions`, extracted
+  to its own file so the host doesn't breach `max-lines`), or a **callback / identity** bundle
+  (`syncResource` handlers, `runProviderValidate`'s repo target). Destructure at the top of the body
+  so the diff below the signature is untouched — that keeps the refactor behaviour-neutral.
+- **A refactor touching `executor-harness/src/**`republishes the runner image.** Bump the harness`version`+ run`pnpm sync:image-tags`(updates the three pins +`RECOMMENDED_HARNESS_IMAGE`) +
+add the `@cat-factory/executor-harness`changeset, and verify with`node scripts/check-runner-image-tag.mjs --since origin/main`. This is why an offender in the
+harness (e.g. `streamCli`) makes a lint slice heavier than a pure library one.
 - **Never raise a `max` back up.** Once a step lands, the ceiling only moves down. If a new
   PR would exceed a live ceiling, the PR splits its code — that is the whole point.
 - **`error`, not `warn`.** The rules match the repo's `correctness: error` posture so a

@@ -457,16 +457,19 @@ export class GitHubSyncService {
     repoGithubId: number,
     kind: SyncCursorKind,
     full: boolean,
-    fetch: (
-      cursor: SyncCursor | null,
-    ) => Promise<{ items: T[]; etag?: string | null; notModified?: boolean }>,
-    upsert: (items: T[]) => Promise<void>,
-    nextCursor: (
-      prev: SyncCursor | null,
-      etag: string | null | undefined,
-      now: number,
-    ) => SyncCursor,
+    handlers: {
+      fetch: (
+        cursor: SyncCursor | null,
+      ) => Promise<{ items: T[]; etag?: string | null; notModified?: boolean }>
+      upsert: (items: T[]) => Promise<void>
+      nextCursor: (
+        prev: SyncCursor | null,
+        etag: string | null | undefined,
+        now: number,
+      ) => SyncCursor
+    },
   ): Promise<{ items: T[]; etag?: string | null; notModified?: boolean }> {
+    const { fetch, upsert, nextCursor } = handlers
     const repos = this.deps.repoProjectionRepository
     // The cursor is installation-scoped (shared across the org's workspaces). A `full`
     // pass ignores it (treats it as empty) so a newly-linked workspace gets fully
@@ -540,61 +543,49 @@ export class GitHubSyncService {
     // needs the default-branch head resolved from the branch fetch.
     const [branches] = await Promise.all([
       // Branches — conditional GET via ETag.
-      this.syncResource(
-        installationId,
-        id,
-        'branches',
-        full,
-        (cursor) => client.listBranches(installationId, ref, cursor?.etag ?? undefined),
-        (items) => fanOut((ws) => this.deps.branchProjectionRepository.upsertMany(ws, items)),
-        etagCursor(false),
-      ),
+      this.syncResource(installationId, id, 'branches', full, {
+        fetch: (cursor) => client.listBranches(installationId, ref, cursor?.etag ?? undefined),
+        upsert: (items) =>
+          fanOut((ws) => this.deps.branchProjectionRepository.upsertMany(ws, items)),
+        nextCursor: etagCursor(false),
+      }),
       // Pull requests — delta by `since` (GitHub's updated_at lower bound).
-      this.syncResource(
-        installationId,
-        id,
-        'pulls',
-        full,
-        (cursor) =>
+      this.syncResource(installationId, id, 'pulls', full, {
+        fetch: (cursor) =>
           client.listPullRequests(installationId, ref, {
             since: cursor?.sinceIso ?? undefined,
             etag: cursor?.etag ?? undefined,
           }),
-        (items) => fanOut((ws) => this.deps.pullRequestProjectionRepository.upsertMany(ws, items)),
-        etagCursor(true),
-      ),
+        upsert: (items) =>
+          fanOut((ws) => this.deps.pullRequestProjectionRepository.upsertMany(ws, items)),
+        nextCursor: etagCursor(true),
+      }),
       // Issues — delta by `since`.
-      this.syncResource(
-        installationId,
-        id,
-        'issues',
-        full,
-        (cursor) =>
+      this.syncResource(installationId, id, 'issues', full, {
+        fetch: (cursor) =>
           client.listIssues(installationId, ref, {
             since: cursor?.sinceIso ?? undefined,
             etag: cursor?.etag ?? undefined,
           }),
-        (items) => fanOut((ws) => this.deps.issueProjectionRepository.upsertMany(ws, items)),
-        etagCursor(true),
-      ),
+        upsert: (items) =>
+          fanOut((ws) => this.deps.issueProjectionRepository.upsertMany(ws, items)),
+        nextCursor: etagCursor(true),
+      }),
       // Commits — delta by `since` on the default branch. On the first sync there is no
       // cursor, so fall back to the backfill horizon (if configured).
-      this.syncResource(
-        installationId,
-        id,
-        'commits',
-        full,
-        (cursor) =>
+      this.syncResource(installationId, id, 'commits', full, {
+        fetch: (cursor) =>
           client.listCommits(installationId, ref, {
             since: cursor?.sinceIso ?? commitBackfillSince,
           }),
-        (items) => fanOut((ws) => this.deps.commitProjectionRepository.upsertMany(ws, items)),
-        (_prev, _etag, now) => ({
+        upsert: (items) =>
+          fanOut((ws) => this.deps.commitProjectionRepository.upsertMany(ws, items)),
+        nextCursor: (_prev, _etag, now) => ({
           etag: null,
           lastSyncedAt: now,
           sinceIso: new Date(now).toISOString(),
         }),
-      ),
+      }),
     ])
     const defaultBranchSha =
       branches.items.find((b) => b.name === repo.defaultBranch)?.headSha ?? null

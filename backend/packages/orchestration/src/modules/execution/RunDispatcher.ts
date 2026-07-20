@@ -1905,15 +1905,10 @@ export class RunDispatcher {
       const fix = step.gate.pendingFix
       step.gate.pendingFix = null
       await this.runStateMachine.casPersist(workspaceId, instance)
-      return this.dispatchGateHelper(
-        workspaceId,
-        instance,
-        step,
-        block,
-        isFinalStep,
+      return this.dispatchGateHelper(workspaceId, instance, step, block, isFinalStep, {
         gate,
-        fix.instructions,
-      )
+        failureSummary: fix.instructions,
+      })
     }
     // A time-windowed gate (post-release-health) marks when it began watching, on first
     // entry, so its probe knows whether the monitoring window has elapsed. Harmless for
@@ -1962,15 +1957,10 @@ export class RunDispatcher {
     // of burning the attempt budget on a helper that can't touch the problem.
     const canEscalate = isAsyncAgentExecutor(this.agentExecutor) && probe.escalatable !== false
     if (canEscalate && step.gate.attempts < step.gate.maxAttempts) {
-      return this.dispatchGateHelper(
-        workspaceId,
-        instance,
-        step,
-        block,
-        isFinalStep,
+      return this.dispatchGateHelper(workspaceId, instance, step, block, isFinalStep, {
         gate,
-        probe.failureSummary,
-      )
+        failureSummary: probe.failureSummary,
+      })
     }
 
     // Budget spent (or no async executor to escalate to): give up.
@@ -1996,9 +1986,9 @@ export class RunDispatcher {
     step: PipelineStep,
     block: Block,
     isFinalStep: boolean,
-    gate: GateDefinition,
-    failureSummary?: string,
+    helper: { gate: GateDefinition; failureSummary?: string },
   ): Promise<AdvanceResult> {
+    const { gate, failureSummary } = helper
     const executor = this.agentExecutor
     if (!isAsyncAgentExecutor(executor)) {
       // Defensive: evaluateGate only calls this when async-capable.

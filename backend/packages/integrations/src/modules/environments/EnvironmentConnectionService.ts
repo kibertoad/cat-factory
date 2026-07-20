@@ -691,8 +691,7 @@ export class EnvironmentConnectionService {
       provider,
       bound,
       gitRef,
-      input.owner,
-      input.repo,
+      { owner: input.owner, repo: input.repo },
       stringifyProviderConfig(manifest?.providerConfig),
       resolveSecret,
     )
@@ -938,8 +937,7 @@ export class EnvironmentConnectionService {
       provider,
       bound,
       writeBranch,
-      input.owner,
-      input.repo,
+      { owner: input.owner, repo: input.repo },
       config,
       resolveSecret,
     )
@@ -1073,8 +1071,7 @@ export class EnvironmentConnectionService {
           provider,
           bound,
           targetBranch,
-          input.owner,
-          input.repo,
+          { owner: input.owner, repo: input.repo },
           stringifyProviderConfig(manifest?.providerConfig),
           resolveSecret,
         )
@@ -1154,7 +1151,7 @@ export class EnvironmentConnectionService {
     const manifest = await this.optionalManifest(workspaceId)
     const resolveSecret = await this.resolveSecrets(workspaceId)
     const config = stringifyProviderConfig(manifest?.providerConfig)
-    return this.runProviderValidate(provider, bound, gitRef, owner, repo, config, resolveSecret)
+    return this.runProviderValidate(provider, bound, gitRef, { owner, repo }, config, resolveSecret)
   }
 
   /**
@@ -1233,8 +1230,7 @@ export class EnvironmentConnectionService {
     provider: EnvironmentProvider,
     bound: RunRepoContext,
     gitRef: string,
-    owner: string,
-    repo: string,
+    target: { owner: string; repo: string },
     config: Record<string, string> | undefined,
     resolveSecret: (key: string) => string | undefined,
   ): Promise<RepoValidationResult> {
@@ -1242,8 +1238,8 @@ export class EnvironmentConnectionService {
     return provider.validateRepo({
       readRepoFile: (path, ref) => bound.repo.getFile(path, ref ?? gitRef),
       defaultGitRef: gitRef,
-      repoOwner: owner,
-      repoName: repo,
+      repoOwner: target.owner,
+      repoName: target.repo,
       ...(config ? { config } : {}),
       resolveSecret,
     })

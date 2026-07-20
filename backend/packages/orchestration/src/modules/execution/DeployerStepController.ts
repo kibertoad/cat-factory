@@ -48,6 +48,22 @@ interface DeployTarget {
 }
 
 /**
+ * The loop-invariant context of a single `deployer` fan-out — the run + step being advanced, the
+ * task block, whether the deployer is the run's final step, and the already-resolved ordered
+ * target set. Threaded unchanged through {@link DeployerStepController.advanceDeployerFrames} and
+ * every per-frame settle so those methods take one context object rather than the same six
+ * positional args (resolved ONCE per fan-out in `runDeployerStep` / `pollDeployerJob`).
+ */
+interface DeployerFanOut {
+  workspaceId: string
+  instance: ExecutionInstance
+  step: PipelineStep
+  block: Block
+  isFinalStep: boolean
+  targets: readonly DeployTarget[]
+}
+
+/**
  * The `peerEnvUrls` provision input for the frame about to be provisioned: a comma-joined set of
  * `slug=url` pairs for every target frame whose env is ALREADY ready this run — so a later
  * provider (own frame, provisioned last in provider-before-consumer order) can template a
@@ -252,7 +268,7 @@ export class DeployerStepController {
     // regardless of a mid-flight reparent (see {@link resolveDeployTargets}). Persisted with the
     // first synchronous-settle / async-park upsert below.
     step.deployPrimaryFrameId ??= targets.find((t) => t.isPrimary)?.frameId
-    return this.advanceDeployerFrames(workspaceId, instance, step, block, isFinalStep, targets)
+    return this.advanceDeployerFrames({ workspaceId, instance, step, block, isFinalStep, targets })
   }
 
   /**
@@ -263,19 +279,13 @@ export class DeployerStepController {
    * replay resumes at the first un-settled frame. Re-entered (with the SAME targets) after each
    * synchronous/infraless/failed-peer frame settles — never re-reading the block list per frame.
    */
-  private async advanceDeployerFrames(
-    workspaceId: string,
-    instance: ExecutionInstance,
-    step: PipelineStep,
-    block: Block,
-    isFinalStep: boolean,
-    targets: readonly DeployTarget[],
-  ): Promise<AdvanceResult> {
+  private async advanceDeployerFrames(ctx: DeployerFanOut): Promise<AdvanceResult> {
+    const { workspaceId, instance, step, block, targets } = ctx
     const done = step.deployEnvs ?? {}
     const next = targets.find((t) => !done[t.frameId])
     if (!next) {
       // Every frame settled: finish the step (all ready → done; a primary failure short-circuited).
-      return this.completeDeployerStep(workspaceId, instance, step, isFinalStep, targets)
+      return this.completeDeployerStep(ctx)
     }
     // The deployer is the SINGLE environment provisioner: it stands the frame's env up whenever
     // there is genuinely one to stand up, so every downstream consumer (tester / human-test /
@@ -325,7 +335,7 @@ export class DeployerStepController {
       // one (which, on the synchronous REST path, would re-hit the provider — no idempotency guard
       // there, unlike the deterministic async job ref).
       await this.runStateMachine.casPersist(workspaceId, instance)
-      return this.advanceDeployerFrames(workspaceId, instance, step, block, isFinalStep, targets)
+      return this.advanceDeployerFrames(ctx)
     }
     // Start provisioning the next frame: a raw-manifest config provisions SYNCHRONOUSLY over REST
     // (a final handle); a config that needs rendering dispatches a CONTAINER-backed deploy job we
@@ -344,33 +354,16 @@ export class DeployerStepController {
         ref,
       )
     } catch (error) {
-      return this.settleDeployerFailure(
-        workspaceId,
-        instance,
-        step,
-        block,
-        isFinalStep,
-        targets,
-        next,
-        null,
-        getErrorMessage(error),
+      return this.settleDeployerFailure(ctx, next, {
+        error: getErrorMessage(error),
         // Propagate the provider's machine-readable cause (e.g. `deploy_runner_unwired`) so the
         // SPA can render precise, runtime-specific guidance rather than string-matching the prose.
-        getErrorReason(error),
-      )
+        reason: getErrorReason(error),
+      })
     }
     if (dispatch.kind === 'completed') {
       // Synchronous provision: record this frame's outcome, then continue to the next frame.
-      return this.settleDeployerFrame(
-        workspaceId,
-        instance,
-        step,
-        block,
-        isFinalStep,
-        targets,
-        next,
-        dispatch.handle,
-      )
+      return this.settleDeployerFrame(ctx, next, dispatch.handle)
     }
     // An async deploy job was dispatched: park on this frame. `dispatch` blocked until the job was
     // accepted, so the container is up; the live phase + the provisioned outcome arrive on the
@@ -465,27 +458,16 @@ export class DeployerStepController {
    * frame). Shared by the synchronous-provision and async-finalized paths.
    */
   private async settleDeployerFrame(
-    workspaceId: string,
-    instance: ExecutionInstance,
-    step: PipelineStep,
-    block: Block,
-    isFinalStep: boolean,
-    targets: readonly DeployTarget[],
+    ctx: DeployerFanOut,
     target: DeployTarget,
     handle: EnvironmentHandle,
   ): Promise<AdvanceResult> {
+    const { workspaceId, instance, step } = ctx
     if (handle.status === 'failed') {
-      return this.settleDeployerFailure(
-        workspaceId,
-        instance,
-        step,
-        block,
-        isFinalStep,
-        targets,
-        target,
-        handle.url,
-        handle.lastError ?? 'Provisioning failed.',
-      )
+      return this.settleDeployerFailure(ctx, target, {
+        url: handle.url,
+        error: handle.lastError ?? 'Provisioning failed.',
+      })
     }
     if (handle.status !== 'ready' && !target.isPrimary) {
       // A PEER env that isn't `ready` (`provisioning`, `expired`, `tearing_down`, …) is not usable
@@ -494,24 +476,17 @@ export class DeployerStepController {
       // URL into a consumer's `peerEnvUrls`. Drop it as a non-terminal peer failure instead. (The
       // OWN frame keeps the historical behaviour — its env is the deploy's product; its live status
       // is surfaced via the Environment projection, and the run proceeds as before.)
-      return this.settleDeployerFailure(
-        workspaceId,
-        instance,
-        step,
-        block,
-        isFinalStep,
-        targets,
-        target,
-        handle.url,
-        `Environment not ready (status: ${handle.status}).`,
-      )
+      return this.settleDeployerFailure(ctx, target, {
+        url: handle.url,
+        error: `Environment not ready (status: ${handle.status}).`,
+      })
     }
     const done = step.deployEnvs ?? {}
     step.deployEnvs = { ...done, [target.frameId]: { status: 'ready', url: handle.url } }
     // Persist this frame's TERMINAL outcome BEFORE provisioning the next frame (see the infraless
     // branch) so a crash/replay resumes at the first un-settled frame, not re-provisioning this one.
     await this.runStateMachine.casPersist(workspaceId, instance)
-    return this.advanceDeployerFrames(workspaceId, instance, step, block, isFinalStep, targets)
+    return this.advanceDeployerFrames(ctx)
   }
 
   /**
@@ -523,18 +498,17 @@ export class DeployerStepController {
    * outcome is still recorded (surfaced in {@link completeDeployerStep}).
    */
   private async settleDeployerFailure(
-    workspaceId: string,
-    instance: ExecutionInstance,
-    step: PipelineStep,
-    block: Block,
-    isFinalStep: boolean,
-    targets: readonly DeployTarget[],
+    ctx: DeployerFanOut,
     target: DeployTarget,
-    url: string | null | undefined,
-    error: string,
-    /** Machine-readable cause (e.g. `deploy_runner_unwired`) carried to the failure record. */
-    reason?: string,
+    failure: {
+      url?: string | null
+      error: string
+      /** Machine-readable cause (e.g. `deploy_runner_unwired`) carried to the failure record. */
+      reason?: string
+    },
   ): Promise<AdvanceResult> {
+    const { workspaceId, instance, step } = ctx
+    const { url, error, reason } = failure
     const done = step.deployEnvs ?? {}
     step.deployEnvs = { ...done, [target.frameId]: { status: 'failed', url: url ?? null, error } }
     if (target.isPrimary) {
@@ -543,7 +517,7 @@ export class DeployerStepController {
     // A PEER failure is non-terminal — persist it BEFORE moving to the next frame so a replay
     // doesn't re-attempt this failed peer (same rationale as the ready/infraless settle paths).
     await this.runStateMachine.casPersist(workspaceId, instance)
-    return this.advanceDeployerFrames(workspaceId, instance, step, block, isFinalStep, targets)
+    return this.advanceDeployerFrames(ctx)
   }
 
   /**
@@ -631,6 +605,7 @@ export class DeployerStepController {
     const provisioning =
       step.deployProvisioning ?? (await this.resolveServiceProvisioning(workspaceId, block))
     const target: DeployTarget = { frameId, isPrimary: frameId === ownFrameId, provisioning, frame }
+    const ctx: DeployerFanOut = { workspaceId, instance, step, block, isFinalStep, targets }
     step.jobId = undefined
     step.deployFrameId = undefined
     step.subtasks = undefined
@@ -652,17 +627,7 @@ export class DeployerStepController {
       // peer's is not (the fan-out proceeds), so route through `settleDeployerFailure`.
       if (step.container) step.container = { ...step.container, status: 'errored' }
       step.deployProvisioning = undefined
-      return this.settleDeployerFailure(
-        workspaceId,
-        instance,
-        step,
-        block,
-        isFinalStep,
-        targets,
-        target,
-        null,
-        getErrorMessage(error),
-      )
+      return this.settleDeployerFailure(ctx, target, { error: getErrorMessage(error) })
     }
     step.deployProvisioning = undefined
     // Reflect the container's terminal state from the RESOLVED outcome, not the raw view: a `done`
@@ -671,16 +636,7 @@ export class DeployerStepController {
     if (handle.status === 'failed' && step.container) {
       step.container = { ...step.container, status: 'errored' }
     }
-    return this.settleDeployerFrame(
-      workspaceId,
-      instance,
-      step,
-      block,
-      isFinalStep,
-      targets,
-      target,
-      handle,
-    )
+    return this.settleDeployerFrame(ctx, target, handle)
   }
 
   /**
@@ -758,13 +714,8 @@ export class DeployerStepController {
    * panel); otherwise the env summary (status / URL / provision type / engine) is recorded as the
    * step output. Shared by the synchronous and async-finalized provision paths.
    */
-  private async completeDeployerStep(
-    workspaceId: string,
-    instance: ExecutionInstance,
-    step: PipelineStep,
-    isFinalStep: boolean,
-    targets: readonly DeployTarget[],
-  ): Promise<AdvanceResult> {
+  private async completeDeployerStep(ctx: DeployerFanOut): Promise<AdvanceResult> {
+    const { workspaceId, instance, step, isFinalStep, targets } = ctx
     const byFrame = new Map(targets.map((t) => [t.frameId, t]))
     const primaryFrameId = step.deployPrimaryFrameId ?? targets.find((t) => t.isPrimary)?.frameId
     // Re-project the now-final OWN environment (ready/expired + URL) so the deployer step's

@@ -523,14 +523,16 @@ export class RecurringPipelineService {
         workspaceId,
         schedule.blockId,
         schedule.pipelineId,
-        // Present for a run-now (the acting user); null for a sweeper fire. Records the
-        // initiator + mints the per-run personal-credential activation for an on-demand
-        // schedule's individual-usage model.
-        opts.initiatedBy,
-        opts.activate,
-        // `origin: 'recurring'` gates the pipeline's launch availability — a one-off-only
-        // pipeline can never be fired from a schedule (see assertPipelineLaunchable).
-        'recurring',
+        {
+          // Present for a run-now (the acting user); null for a sweeper fire. Records the
+          // initiator + mints the per-run personal-credential activation for an on-demand
+          // schedule's individual-usage model.
+          initiatedBy: opts.initiatedBy,
+          activate: opts.activate,
+          // `origin: 'recurring'` gates the pipeline's launch availability — a one-off-only
+          // pipeline can never be fired from a schedule (see assertPipelineLaunchable).
+          origin: 'recurring',
+        },
       )
       executionId = instance.id
     } catch (error) {

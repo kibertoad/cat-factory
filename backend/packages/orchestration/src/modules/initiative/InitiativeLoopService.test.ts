@@ -255,17 +255,11 @@ describe('InitiativeLoopService', () => {
       }),
     )
     await h.loop.runDue(clockNow)
-    // `start(ws, blockId, pipelineId, initiatedBy, activate, origin, gatesOverride)` — a spawned
-    // run is system-initiated (no initiator/activation), manual origin, and (here) no override.
-    expect(h.start).toHaveBeenCalledWith(
-      'ws-1',
-      expect.any(String),
-      'pl_heavy',
-      undefined,
-      undefined,
-      undefined,
-      undefined,
-    )
+    // `start(ws, blockId, pipelineId, { gatesOverride })` — a spawned run is system-initiated
+    // (no initiator/activation), manual origin, and (here) carries no gate override.
+    expect(h.start).toHaveBeenCalledWith('ws-1', expect.any(String), 'pl_heavy', {
+      gatesOverride: undefined,
+    })
   })
 
   it("threads a spawned item's per-run gate override into its run (spawn.gates)", async () => {
@@ -278,15 +272,9 @@ describe('InitiativeLoopService', () => {
 
     await h.loop.runDue(clockNow)
 
-    expect(h.start).toHaveBeenCalledWith(
-      'ws-1',
-      expect.any(String),
-      'pl_full',
-      undefined,
-      undefined,
-      undefined,
-      [true, false, false],
-    )
+    expect(h.start).toHaveBeenCalledWith('ws-1', expect.any(String), 'pl_full', {
+      gatesOverride: [true, false, false],
+    })
   })
 
   it('passes no gate override for an item with no spawn decoration', async () => {
@@ -295,15 +283,9 @@ describe('InitiativeLoopService', () => {
 
     await h.loop.runDue(clockNow)
 
-    expect(h.start).toHaveBeenCalledWith(
-      'ws-1',
-      expect.any(String),
-      'pl_full',
-      undefined,
-      undefined,
-      undefined,
-      undefined,
-    )
+    expect(h.start).toHaveBeenCalledWith('ws-1', expect.any(String), 'pl_full', {
+      gatesOverride: undefined,
+    })
   })
 
   it("folds a spawned item's preset decoration onto the task block (taskType/taskTypeFields/fragmentIds/agentConfig)", async () => {
