@@ -1702,6 +1702,75 @@ interface KubernetesBuildOptions {
 }
 
 /**
+ * Surface the "which manifest root" picker when several k8s roots resolved (complements the overlay
+ * picker), recording the note. Returns undefined (and pushes nothing) for a single root.
+ */
+function buildManifestRootCandidates(
+  effectiveRoots: KubernetesRoot[],
+  sourcePath: string,
+  chosen: KubernetesRoot,
+  notes: ProvisioningDetectionNote[],
+): ProvisioningManifestRootCandidate[] | undefined {
+  if (effectiveRoots.length <= 1) return undefined
+  const manifestRootCandidates = effectiveRoots.map((r, i) => ({
+    // The recommended root uses the RESOLVED source path (which may be a kustomize overlay subdir,
+    // e.g. `k8s/overlays/prenv`) so its chip matches `manifestSource.path` and stays highlighted —
+    // and picking it re-applies that same overlay-resolved path rather than the bare root.
+    path: i === 0 ? sourcePath : r.dir || '.',
+    name: dirLabel(r.dir),
+    renderer: r.hasKustomization ? ('kustomize' as const) : ('raw' as const),
+    recommended: i === 0,
+  }))
+  notes.push({
+    field: 'manifestRoot',
+    confidence: 'low',
+    message: `Found ${effectiveRoots.length} manifest locations; pre-selected ${dirLabel(chosen.dir)}. Pick another below if that's wrong.`,
+  })
+  return manifestRootCandidates
+}
+
+/**
+ * Resolve the secret injections for a kustomize `secretGenerator` (if any): find the first
+ * `.env.example` across the generator/base/lookup dirs, map its keys to secret refs, and record the
+ * confidence note. Returns [] (and pushes nothing) when the manifests declare no generator.
+ */
+async function buildSecretInjections(
+  scanner: BudgetedRepoScanner,
+  scan: ManifestScan,
+  path: string,
+  lookupRoot: string,
+  notes: ProvisioningDetectionNote[],
+): Promise<KubernetesSecretInjection[]> {
+  const secretInjections: KubernetesSecretInjection[] = []
+  if (scan.secretGenerator) {
+    const envFilePath = joinRepoPath(scan.secretGenerator.baseDir, scan.secretGenerator.envFile)
+    const exampleDirs = [...new Set([scan.secretGenerator.baseDir, path, lookupRoot])]
+    let keys: string[] = []
+    for (const dir of exampleDirs) {
+      const example = await scanner.getFirstFile(dir, ENV_EXAMPLE_FILES)
+      if (example) {
+        keys = parseEnvExampleKeys(example.content)
+        if (keys.length > 0) break
+      }
+    }
+    secretInjections.push({
+      mode: 'generatorEnvFile',
+      envFilePath,
+      entries: keys.map((key) => ({ key, secretRef: { key } })),
+    })
+    notes.push({
+      field: 'secretInjections',
+      confidence: keys.length > 0 ? 'high' : 'low',
+      message:
+        keys.length > 0
+          ? `A secretGenerator reads ${envFilePath}; proposed ${keys.length} key(s) from a .env example (you supply the values via the workspace secret bundle).`
+          : `A secretGenerator reads ${envFilePath} but no .env.example was found — add the keys it needs manually.`,
+    })
+  }
+  return secretInjections
+}
+
+/**
  * Build the full kubernetes recommendation from the collected `roots` (roots[0] is the chosen one).
  * `lookupRoot` is the base directory used for the helm + `.env.example` lookups (the service root for
  * a colocated pick, the repo root for a shared-slice pick). Surfaces sibling roots as
@@ -1780,23 +1849,12 @@ async function buildKubernetesRecommendation(
   })
 
   // Several k8s roots resolved — surface the "which root" picker (complements the overlay picker).
-  let manifestRootCandidates: ProvisioningManifestRootCandidate[] | undefined
-  if (effectiveRoots.length > 1) {
-    manifestRootCandidates = effectiveRoots.map((r, i) => ({
-      // The recommended root uses the RESOLVED source path (which may be a kustomize overlay subdir,
-      // e.g. `k8s/overlays/prenv`) so its chip matches `manifestSource.path` and stays highlighted —
-      // and picking it re-applies that same overlay-resolved path rather than the bare root.
-      path: i === 0 ? sourcePath : r.dir || '.',
-      name: dirLabel(r.dir),
-      renderer: r.hasKustomization ? ('kustomize' as const) : ('raw' as const),
-      recommended: i === 0,
-    }))
-    notes.push({
-      field: 'manifestRoot',
-      confidence: 'low',
-      message: `Found ${effectiveRoots.length} manifest locations; pre-selected ${dirLabel(chosen.dir)}. Pick another below if that's wrong.`,
-    })
-  }
+  const manifestRootCandidates = buildManifestRootCandidates(
+    effectiveRoots,
+    sourcePath,
+    chosen,
+    notes,
+  )
 
   if (overlayCandidates && overlayCandidates.length > 1) {
     const recommended = overlayCandidates.find((o) => o.recommended)
@@ -1842,32 +1900,7 @@ async function buildKubernetesRecommendation(
     })
   }
 
-  const secretInjections: KubernetesSecretInjection[] = []
-  if (scan.secretGenerator) {
-    const envFilePath = joinRepoPath(scan.secretGenerator.baseDir, scan.secretGenerator.envFile)
-    const exampleDirs = [...new Set([scan.secretGenerator.baseDir, path, lookupRoot])]
-    let keys: string[] = []
-    for (const dir of exampleDirs) {
-      const example = await scanner.getFirstFile(dir, ENV_EXAMPLE_FILES)
-      if (example) {
-        keys = parseEnvExampleKeys(example.content)
-        if (keys.length > 0) break
-      }
-    }
-    secretInjections.push({
-      mode: 'generatorEnvFile',
-      envFilePath,
-      entries: keys.map((key) => ({ key, secretRef: { key } })),
-    })
-    notes.push({
-      field: 'secretInjections',
-      confidence: keys.length > 0 ? 'high' : 'low',
-      message:
-        keys.length > 0
-          ? `A secretGenerator reads ${envFilePath}; proposed ${keys.length} key(s) from a .env example (you supply the values via the workspace secret bundle).`
-          : `A secretGenerator reads ${envFilePath} but no .env.example was found — add the keys it needs manually.`,
-    })
-  }
+  const secretInjections = await buildSecretInjections(scanner, scan, path, lookupRoot, notes)
 
   const helm = await inferHelmReleases(scanner, lookupRoot, chosen.dir)
   if (helm.note) notes.push(helm.note)

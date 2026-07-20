@@ -290,53 +290,15 @@ export class CompanionController {
 
     // PASS: the producer cleared the bar (and was not force-looped on its first batch).
     if (passed) {
-      this.deps.stepGraph.finishStep(step)
-      step.progress = 1
-      // The spec-companion just corroborated the spec-writer's business-vs-technical
-      // determination: infer the block's `technical` label from the writer's
-      // `noBusinessSpecs` (recorded on the producer step) + this verdict's
-      // `technicalCorroborated`. Honours human authority (never overrides a set value).
-      // `assessment` is guaranteed present here when there is a producer to grade (an
-      // unparseable verdict against a real producer already returned above).
-      if (step.agentKind === 'spec-companion' && producerIndex >= 0 && assessment) {
-        await this.deps.inferTechnicalLabel?.(
-          workspaceId,
-          block,
-          instance.steps[producerIndex]!,
-          step,
-        )
-      }
-      // A gated companion now raises the HUMAN approval gate on the producer's output
-      // (the human reviews what the companion just cleared). Never on the final step.
-      if (step.requiresApproval && !isFinalStep && step.approval?.status !== 'approved') {
-        const producer = producerIndex >= 0 ? instance.steps[producerIndex] : undefined
-        step.approval = {
-          id: this.deps.idGenerator.next('appr'),
-          status: 'pending',
-          proposal: producer?.output ?? step.output,
-        }
-        this.deps.stepGraph.pauseStepForInput(step)
-        instance.status = 'blocked'
-        await this.deps.stateMachine.updateBlockProgress(workspaceId, instance, 'blocked')
-        await this.deps.stateMachine.casPersist(workspaceId, instance)
-        await this.deps.stateMachine.emitInstance(workspaceId, instance)
-        return { kind: 'awaiting_decision', decisionId: step.approval.id }
-      }
-      if (isFinalStep) {
-        instance.status = 'done'
-        await this.deps.stateMachine.finalizeBlock(workspaceId, instance, undefined)
-        await this.deps.stateMachine.casPersist(workspaceId, instance)
-        await this.deps.stateMachine.emitInstance(workspaceId, instance)
-        await this.deps.stateMachine.stopRunContainer(workspaceId, instance)
-        return { kind: 'done' }
-      }
-      instance.currentStep += 1
-      const next = instance.steps[instance.currentStep]
-      if (next) this.deps.stepGraph.startStep(next)
-      await this.deps.stateMachine.updateBlockProgress(workspaceId, instance, 'in_progress')
-      await this.deps.stateMachine.casPersist(workspaceId, instance)
-      await this.deps.stateMachine.emitInstance(workspaceId, instance)
-      return { kind: 'continue' }
+      return this.resolvePassedCompanion({
+        workspaceId,
+        instance,
+        step,
+        block,
+        isFinalStep,
+        producerIndex,
+        assessment,
+      })
     }
 
     // BELOW THRESHOLD, automatic budget spent → DON'T get stuck. Park on a human
@@ -369,6 +331,71 @@ export class CompanionController {
       feedback: assessment?.summary ?? '',
       ...(assessment?.comments?.length ? { comments: assessment.comments } : {}),
     })
+    await this.deps.stateMachine.updateBlockProgress(workspaceId, instance, 'in_progress')
+    await this.deps.stateMachine.casPersist(workspaceId, instance)
+    await this.deps.stateMachine.emitInstance(workspaceId, instance)
+    return { kind: 'continue' }
+  }
+
+  /**
+   * The PASS branch of {@link applyAssessment}: the producer cleared the bar (and was not
+   * force-looped on its first batch). Finish the step, infer the spec-companion's `technical`
+   * label, raise the HUMAN approval gate for a gated companion, then either finalize the run (final
+   * step) or advance to the next step. Split out to keep `applyAssessment` under the statement ceiling.
+   */
+  private async resolvePassedCompanion(args: {
+    workspaceId: string
+    instance: ExecutionInstance
+    step: PipelineStep
+    block: Block
+    isFinalStep: boolean
+    producerIndex: number
+    assessment: CompanionAssessment | undefined
+  }): Promise<AdvanceResult> {
+    const { workspaceId, instance, step, block, isFinalStep, producerIndex, assessment } = args
+    this.deps.stepGraph.finishStep(step)
+    step.progress = 1
+    // The spec-companion just corroborated the spec-writer's business-vs-technical
+    // determination: infer the block's `technical` label from the writer's
+    // `noBusinessSpecs` (recorded on the producer step) + this verdict's
+    // `technicalCorroborated`. Honours human authority (never overrides a set value).
+    // `assessment` is guaranteed present here when there is a producer to grade (an
+    // unparseable verdict against a real producer already returned above).
+    if (step.agentKind === 'spec-companion' && producerIndex >= 0 && assessment) {
+      await this.deps.inferTechnicalLabel?.(
+        workspaceId,
+        block,
+        instance.steps[producerIndex]!,
+        step,
+      )
+    }
+    // A gated companion now raises the HUMAN approval gate on the producer's output
+    // (the human reviews what the companion just cleared). Never on the final step.
+    if (step.requiresApproval && !isFinalStep && step.approval?.status !== 'approved') {
+      const producer = producerIndex >= 0 ? instance.steps[producerIndex] : undefined
+      step.approval = {
+        id: this.deps.idGenerator.next('appr'),
+        status: 'pending',
+        proposal: producer?.output ?? step.output ?? '',
+      }
+      this.deps.stepGraph.pauseStepForInput(step)
+      instance.status = 'blocked'
+      await this.deps.stateMachine.updateBlockProgress(workspaceId, instance, 'blocked')
+      await this.deps.stateMachine.casPersist(workspaceId, instance)
+      await this.deps.stateMachine.emitInstance(workspaceId, instance)
+      return { kind: 'awaiting_decision', decisionId: step.approval.id }
+    }
+    if (isFinalStep) {
+      instance.status = 'done'
+      await this.deps.stateMachine.finalizeBlock(workspaceId, instance, undefined)
+      await this.deps.stateMachine.casPersist(workspaceId, instance)
+      await this.deps.stateMachine.emitInstance(workspaceId, instance)
+      await this.deps.stateMachine.stopRunContainer(workspaceId, instance)
+      return { kind: 'done' }
+    }
+    instance.currentStep += 1
+    const next = instance.steps[instance.currentStep]
+    if (next) this.deps.stepGraph.startStep(next)
     await this.deps.stateMachine.updateBlockProgress(workspaceId, instance, 'in_progress')
     await this.deps.stateMachine.casPersist(workspaceId, instance)
     await this.deps.stateMachine.emitInstance(workspaceId, instance)

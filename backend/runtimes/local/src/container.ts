@@ -176,6 +176,51 @@ function resolveLocalVcs(
   return { gitToken, delegatedGitHub, vcsClient, deploymentProvider, resolveRepoOrigin }
 }
 
+/**
+ * On a Docker-family runtime, build the shared host-docker compose runtime + preflight probes and
+ * register the `compose` environment backend by reference. Apple `container` can't nest a daemon,
+ * so both stay undefined there (the same asymmetry as `localDind`); the host-docker seam is shared
+ * by the compose env backend + the shared-stack lifecycle, so it is threaded back to both call
+ * sites. Extracted from {@link buildLocalContainer} to keep it under the statement ceiling.
+ */
+function setupLocalComposeRuntime(
+  env: NodeJS.ProcessEnv,
+  backendRegistries: ReturnType<typeof createBackendRegistries>,
+): {
+  localComposeRuntime: ReturnType<typeof createDockerComposeRuntime> | undefined
+  localPreflightProbes: ReturnType<typeof createDockerPreflightProbes> | undefined
+} {
+  // Docker Compose ephemeral environments (the Checkbox compose-stack mechanic): register the
+  // `compose` env backend by reference, closing over the host docker CLI seam, so a workspace
+  // can stand the PR repo's own `docker-compose.yml` up as a Tester preview env. It needs a
+  // Docker daemon, so it is registered ONLY on the Docker-family runtimes (Apple `container`
+  // can't run compose-on-host the same way — the same asymmetry as `localDind`); the Worker
+  // never registers it. A pre-registered `compose` kind (the conformance harness's fake-runtime
+  // backend) wins — the guard keeps this real-daemon registration from clobbering it.
+  const localRuntimeId = resolveRuntimeId(env)
+  // The host Docker seam is shared by the compose ENVIRONMENT backend (per-PR preview stacks) and
+  // the SHARED-STACK lifecycle (long-lived infra), so build it once on a Docker-family runtime and
+  // thread it into both — the backend registry here, and the core deps via `overrides.composeRuntime`
+  // below (so `SharedStackService.ensureUp`/`teardown` can drive the daemon).
+  let localComposeRuntime: ReturnType<typeof createDockerComposeRuntime> | undefined
+  // Host-bound PREFLIGHT probes (docker daemon / disk / RAM / registry login / reachability /
+  // mkcert / hosts / secrets marker) that enforce a stack recipe's `prerequisites` at provision
+  // start. Built alongside the compose runtime on a Docker-family runtime (same daemon + binary).
+  let localPreflightProbes: ReturnType<typeof createDockerPreflightProbes> | undefined
+  if (
+    runtimeProfile(localRuntimeId).family === 'docker' &&
+    !backendRegistries.environmentBackendRegistry.get('compose')
+  ) {
+    const composeBinary = env.LOCAL_DOCKER_BINARY?.trim() || runtimeProfile(localRuntimeId).binary
+    localComposeRuntime = createDockerComposeRuntime({ binary: composeBinary })
+    localPreflightProbes = createDockerPreflightProbes({ binary: composeBinary })
+    backendRegistries.environmentBackendRegistry.register(
+      composeEnvironmentBackend(localComposeRuntime),
+    )
+  }
+  return { localComposeRuntime, localPreflightProbes }
+}
+
 export function buildLocalContainer(options: NodeContainerOptions): ServerContainer {
   const env = applyLocalDefaults(options.env ?? process.env)
   // One shared clock/idGenerator, reused by the per-workspace transport chooser below AND
@@ -448,34 +493,14 @@ export function buildLocalContainer(options: NodeContainerOptions): ServerContai
   // here AND `buildNodeContainer` below (via `backendRegistries`), so the runner backend a
   // workspace's `kind` resolves to is the same instance everywhere. Defaults to the built-ins.
   const backendRegistries = options.backendRegistries ?? createBackendRegistries()
-  // Docker Compose ephemeral environments (the Checkbox compose-stack mechanic): register the
-  // `compose` env backend by reference, closing over the host docker CLI seam, so a workspace
-  // can stand the PR repo's own `docker-compose.yml` up as a Tester preview env. It needs a
-  // Docker daemon, so it is registered ONLY on the Docker-family runtimes (Apple `container`
-  // can't run compose-on-host the same way — the same asymmetry as `localDind`); the Worker
-  // never registers it. A pre-registered `compose` kind (the conformance harness's fake-runtime
-  // backend) wins — the guard keeps this real-daemon registration from clobbering it.
-  const localRuntimeId = resolveRuntimeId(env)
-  // The host Docker seam is shared by the compose ENVIRONMENT backend (per-PR preview stacks) and
-  // the SHARED-STACK lifecycle (long-lived infra), so build it once on a Docker-family runtime and
-  // thread it into both — the backend registry here, and the core deps via `overrides.composeRuntime`
-  // below (so `SharedStackService.ensureUp`/`teardown` can drive the daemon).
-  let localComposeRuntime: ReturnType<typeof createDockerComposeRuntime> | undefined
-  // Host-bound PREFLIGHT probes (docker daemon / disk / RAM / registry login / reachability /
-  // mkcert / hosts / secrets marker) that enforce a stack recipe's `prerequisites` at provision
-  // start. Built alongside the compose runtime on a Docker-family runtime (same daemon + binary).
-  let localPreflightProbes: ReturnType<typeof createDockerPreflightProbes> | undefined
-  if (
-    runtimeProfile(localRuntimeId).family === 'docker' &&
-    !backendRegistries.environmentBackendRegistry.get('compose')
-  ) {
-    const composeBinary = env.LOCAL_DOCKER_BINARY?.trim() || runtimeProfile(localRuntimeId).binary
-    localComposeRuntime = createDockerComposeRuntime({ binary: composeBinary })
-    localPreflightProbes = createDockerPreflightProbes({ binary: composeBinary })
-    backendRegistries.environmentBackendRegistry.register(
-      composeEnvironmentBackend(localComposeRuntime),
-    )
-  }
+  // Docker Compose ephemeral environments + host preflight probes: on a Docker-family runtime,
+  // build the shared host-docker seam and register the `compose` env backend by reference (a
+  // no-op on Apple `container`, which can't nest a daemon). Threaded into the core deps below via
+  // `overrides.composeRuntime` / `preflightHostProbes`.
+  const { localComposeRuntime, localPreflightProbes } = setupLocalComposeRuntime(
+    env,
+    backendRegistries,
+  )
   const poolResolve = buildNodeResolveTransport(
     config,
     runnerPoolConnectionRepository,

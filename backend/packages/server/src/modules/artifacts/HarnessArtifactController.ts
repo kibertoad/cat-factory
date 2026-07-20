@@ -20,6 +20,20 @@ import {
 const MAX_SCREENSHOTS_PER_RUN = 100
 
 /**
+ * Resolve the stored content type for an uploaded screenshot. Screenshots are always PNGs, so a
+ * typeless upload defaults to PNG; a declared type is gated through the shared image allow-list.
+ * Returns the normalized content type, or `null` for a recognised non-image type (which the caller
+ * rejects with 415 rather than storing mislabelled).
+ */
+function resolveScreenshotContentType(declaredType: string | undefined): string | null {
+  const trimmed = declaredType?.trim()
+  if (!trimmed) {
+    return 'image/png'
+  }
+  return normalizeImageContentType(trimmed)
+}
+
+/**
  * The in-container screenshot ingest endpoint for the UI tester (`tester-ui`). It lives on
  * the harness path (mounted at `/`, reachable at `${proxyBaseUrl}/artifacts/ingest`) and is
  * authed by the SAME short-lived container session token the agent already carries for the
@@ -116,24 +130,17 @@ export function harnessArtifactController(): Hono<AppEnv> {
       // recognised non-image type rather than silently storing it mislabelled — keeping this path's
       // content-type posture aligned with the workspace upload endpoint (both gate on the shared
       // image allow-list in imageArtifacts.ts).
-      const declaredType = file.type?.trim()
-      let contentType: string
-      if (!declaredType) {
-        contentType = 'image/png'
-      } else {
-        const normalized = normalizeImageContentType(declaredType)
-        if (!normalized) {
-          return c.json(
-            {
-              error: {
-                code: 'unsupported_media',
-                message: 'Only raster image screenshots are accepted',
-              },
+      const contentType = resolveScreenshotContentType(file.type)
+      if (!contentType) {
+        return c.json(
+          {
+            error: {
+              code: 'unsupported_media',
+              message: 'Only raster image screenshots are accepted',
             },
-            415,
-          )
-        }
-        contentType = normalized
+          },
+          415,
+        )
       }
       const bytes = new Uint8Array(await file.arrayBuffer())
       if (bytes.byteLength > MAX_UPLOAD_BYTES) {

@@ -695,6 +695,130 @@ function resolveNodeAppRegistries(options: NodeContainerOptions) {
   }
 }
 
+/**
+ * Wire the browsable frontend-preview module (slice 5c) onto the built dependencies. Local mode
+ * injects the real transport; the conformance suite injects BOTH a fake transport + a fake job
+ * builder via `overrides` (which win, so the flow runs on real Postgres without GitHub). The
+ * Worker/Node-pool inject neither ⇒ the module stays absent (the controller 503s). When a
+ * transport is present but no builder was injected, construct the real one from the SAME
+ * repo/token/session seams the container executor uses; without those (no PUBLIC_URL / session
+ * secret / token mint) the module stays unwired rather than half-built. Extracted from
+ * {@link buildNodeContainer} to keep it under the statement ceiling.
+ */
+interface PreviewModuleContext {
+  env: NodeJS.ProcessEnv
+  config: AppConfig
+  repos: ReturnType<typeof createDrizzleRepositories>
+  resolveRepoTarget: ReturnType<typeof buildResolveRepoTarget>
+  baseDeployMint: ReturnType<typeof buildNodeTransportDeploy>['baseDeployMint']
+}
+
+function wirePreviewModule(
+  dependencies: CoreDependencies,
+  options: NodeContainerOptions,
+  ctx: PreviewModuleContext,
+): void {
+  const { env, config, repos, resolveRepoTarget, baseDeployMint } = ctx
+  if (options.previewTransport && !dependencies.previewTransport) {
+    dependencies.previewTransport = options.previewTransport
+  }
+  if (dependencies.previewTransport && !dependencies.buildPreviewJob) {
+    const previewPublicUrl = env.PUBLIC_URL?.trim()
+    const previewSessionSecret = config.auth.sessionSecret
+    if (previewPublicUrl && previewSessionSecret && baseDeployMint) {
+      dependencies.buildPreviewJob = makePreviewJobBuilder({
+        blockRepository: repos.blockRepository,
+        resolveRepoTarget,
+        mintInstallationToken: baseDeployMint,
+        ...(options.resolveRepoOrigin ? { resolveRepoOrigin: options.resolveRepoOrigin } : {}),
+        sessionService: new ContainerSessionService({ secret: previewSessionSecret }),
+        proxyBaseUrl: `${previewPublicUrl.replace(/\/+$/, '')}/v1`,
+        ...(config.github.apiBase ? { githubApiBase: config.github.apiBase } : {}),
+        ...(dependencies.environmentRegistryRepository
+          ? { environmentRegistryRepository: dependencies.environmentRegistryRepository }
+          : {}),
+      })
+    }
+  }
+}
+
+/**
+ * Mothership mode (`db` undefined): `AgentContextBuilder` reads a block's linked docs/tasks
+ * (`documentRepository`/`taskRepository`.listByBlock/get) on EVERY container agent dispatch, so
+ * these are on the board-load + run path even though the document/task INTEGRATIONS are opt-in.
+ * The sub-helpers (`selectNodeDocumentsDeps`/`selectNodeTasksDeps`) build them directly over the
+ * absent `db`, so re-source the context-builder run-path repos from the remote registry — plus the
+ * environment CONNECTION management surface. The document/task connection/provider surfaces they
+ * also build stay db-direct (a later integration slice remotes them — their credential rows would
+ * ship DECRYPTED over the RPC, an open secrets design point, unlike the sealed-blob environment
+ * connection here). Routing is orthogonal to the allow-list: an un-allow-listed remote method
+ * returns a clean `unknown_method`, never a `db`-undefined `TypeError`. A no-op outside mothership
+ * mode (`remoteRepos` undefined). Extracted from {@link buildNodeContainer} to keep it under budget.
+ */
+function applyMothershipRemoteRepos(
+  dependencies: CoreDependencies,
+  remoteRepos: Record<string, unknown> | undefined,
+): void {
+  if (!remoteRepos) return
+  dependencies.documentRepository =
+    remoteRepos.documentRepository as CoreDependencies['documentRepository']
+  dependencies.taskRepository = remoteRepos.taskRepository as CoreDependencies['taskRepository']
+  // The context builder also resolves the block's live environment per step
+  // (`environmentProvisioning.resolveForBlock` → `environmentRegistryRepository.getByBlock`,
+  // null when no env is provisioned — the common path). Route both environment repos so the
+  // service `createCore` builds reads org state remotely. NOTE: a remotely-stored env access
+  // cipher is sealed with the mothership's key, which never reaches the laptop, so actually
+  // DECRYPTING a provisioned env's creds locally is a later (secrets-delegation) slice — only
+  // the non-secret block→env mapping read is on the basic run path here.
+  dependencies.environmentRegistryRepository =
+    remoteRepos.environmentRegistryRepository as CoreDependencies['environmentRegistryRepository']
+  dependencies.environmentConnectionRepository =
+    remoteRepos.environmentConnectionRepository as CoreDependencies['environmentConnectionRepository']
+  // The environments management panel also reads/edits the workspace's custom-manifest-type
+  // catalog (`EnvironmentConnectionService.listCustomTypes`/`upsertCustomType`), built directly
+  // over the absent `db` by `selectNodeEnvironmentsDeps`. Route it from the remote registry too so
+  // the connection + infra-handler management surface is functional (no secrets — just manifest
+  // metadata; the RPC allow-list gates its CRUD). Provisioning WRITES stay db-direct/off (a later
+  // secrets-delegation slice), like the environment registry above.
+  dependencies.customManifestTypeRepository =
+    remoteRepos.customManifestTypeRepository as CoreDependencies['customManifestTypeRepository']
+  // The prompt-fragment library (`FragmentLibraryService`, built directly over the absent `db`
+  // by `selectNodeFragmentLibraryDeps`) — its management surface (list/create/update/delete
+  // fragments + list/link sources) is served remotely so the library panels are functional in
+  // mothership mode; rows carry no secrets, and the RPC allow-list gates each method by its
+  // `(ownerKind, ownerId)` scope. Repo-SYNC (the source service's GitHub reads) stays
+  // db-direct/off — the mothership owns GitHub sync.
+  //
+  // Route only when the library is ALREADY configured (`config.fragmentLibrary.enabled` — else
+  // these are absent). UNLIKE the document/task/env repos above (whose modules need extra deps,
+  // so setting the repo alone leaves the module off), the fragment module assembles from
+  // `promptFragmentRepository` ALONE — so unconditionally setting it would spuriously turn the
+  // module ON and force fragment resolution on EVERY run against a mothership that may not wire
+  // the repo. Overriding in place preserves the "module only when configured" gate while swapping
+  // the (db-less, broken) Drizzle repo for the remote one.
+  if (dependencies.promptFragmentRepository) {
+    dependencies.promptFragmentRepository =
+      remoteRepos.promptFragmentRepository as CoreDependencies['promptFragmentRepository']
+  }
+  if (dependencies.fragmentSourceRepository) {
+    dependencies.fragmentSourceRepository =
+      remoteRepos.fragmentSourceRepository as CoreDependencies['fragmentSourceRepository']
+  }
+  // The Claude Skills library, same shape as the fragment library above: swap the
+  // (db-less, broken) Drizzle repos for the remote ones when the mothership exposes
+  // them. Until the mothership RPC surfaces skills, `remoteRepos.*` is undefined, which
+  // leaves the skill module UNassembled in mothership mode (the controller 503s) rather
+  // than assembling over a broken db — a clean opt-in follow-up, like fragment repo-sync.
+  if (dependencies.accountSkillRepository) {
+    dependencies.accountSkillRepository =
+      remoteRepos.accountSkillRepository as CoreDependencies['accountSkillRepository']
+  }
+  if (dependencies.skillSourceRepository) {
+    dependencies.skillSourceRepository =
+      remoteRepos.skillSourceRepository as CoreDependencies['skillSourceRepository']
+  }
+}
+
 export function buildNodeContainer(options: NodeContainerOptions): ServerContainer {
   const env = options.env ?? process.env
   const config = options.config ?? loadNodeConfig(env)
@@ -1400,33 +1524,14 @@ export function buildNodeContainer(options: NodeContainerOptions): ServerContain
   }
 
   // Browsable frontend preview (slice 5c): wire the preview module when a per-runtime preview
-  // transport is available. Local mode injects the real transport; the conformance suite injects
-  // BOTH a fake transport + a fake job builder via `overrides` (which win, so the flow runs on
-  // real Postgres without GitHub). The Worker/Node-pool inject neither ⇒ the module stays absent
-  // (the controller 503s). When a transport is present but no builder was injected, construct the
-  // real one from the SAME repo/token/session seams the container executor uses; without those
-  // (no PUBLIC_URL / session secret / token mint) the module stays unwired rather than half-built.
-  if (options.previewTransport && !dependencies.previewTransport) {
-    dependencies.previewTransport = options.previewTransport
-  }
-  if (dependencies.previewTransport && !dependencies.buildPreviewJob) {
-    const previewPublicUrl = env.PUBLIC_URL?.trim()
-    const previewSessionSecret = config.auth.sessionSecret
-    if (previewPublicUrl && previewSessionSecret && baseDeployMint) {
-      dependencies.buildPreviewJob = makePreviewJobBuilder({
-        blockRepository: repos.blockRepository,
-        resolveRepoTarget,
-        mintInstallationToken: baseDeployMint,
-        ...(options.resolveRepoOrigin ? { resolveRepoOrigin: options.resolveRepoOrigin } : {}),
-        sessionService: new ContainerSessionService({ secret: previewSessionSecret }),
-        proxyBaseUrl: `${previewPublicUrl.replace(/\/+$/, '')}/v1`,
-        ...(config.github.apiBase ? { githubApiBase: config.github.apiBase } : {}),
-        ...(dependencies.environmentRegistryRepository
-          ? { environmentRegistryRepository: dependencies.environmentRegistryRepository }
-          : {}),
-      })
-    }
-  }
+  // transport is available (real in local mode / a fake pair in the conformance suite).
+  wirePreviewModule(dependencies, options, {
+    env,
+    config,
+    repos,
+    resolveRepoTarget,
+    baseDeployMint,
+  })
 
   // Wire the live env-config repair agent over the FINAL environment provider (after the
   // `...options.overrides` above), so an injected native adapter — not the default manifest
@@ -1448,75 +1553,9 @@ export function buildNodeContainer(options: NodeContainerOptions): ServerContain
     dependencies.envConfigRepairer = envConfigRepairer
   }
 
-  // Mothership mode (`db` undefined): `AgentContextBuilder` reads a block's linked docs/tasks
-  // (`documentRepository`/`taskRepository`.listByBlock/get) on EVERY container agent dispatch, so
-  // these are on the board-load + run path even though the document/task INTEGRATIONS are opt-in.
-  // The sub-helpers above (`selectNodeDocumentsDeps`/`selectNodeTasksDeps`) build them directly
-  // over the absent `db`, so re-source the context-builder run-path repos from the remote registry —
-  // plus (below) the environment CONNECTION management surface. The document/task connection/provider
-  // surfaces they also build stay db-direct (a later integration slice remotes them — their
-  // credential rows would ship DECRYPTED over the RPC, an open secrets design point, unlike the
-  // sealed-blob environment connection here). Routing is orthogonal to the allow-list: an
-  // un-allow-listed remote method returns a clean `unknown_method`, never a `db`-undefined `TypeError`.
-  if (remoteRepos) {
-    dependencies.documentRepository =
-      remoteRepos.documentRepository as CoreDependencies['documentRepository']
-    dependencies.taskRepository = remoteRepos.taskRepository as CoreDependencies['taskRepository']
-    // The context builder also resolves the block's live environment per step
-    // (`environmentProvisioning.resolveForBlock` → `environmentRegistryRepository.getByBlock`,
-    // null when no env is provisioned — the common path). Route both environment repos so the
-    // service `createCore` builds reads org state remotely. NOTE: a remotely-stored env access
-    // cipher is sealed with the mothership's key, which never reaches the laptop, so actually
-    // DECRYPTING a provisioned env's creds locally is a later (secrets-delegation) slice — only
-    // the non-secret block→env mapping read is on the basic run path here.
-    dependencies.environmentRegistryRepository =
-      remoteRepos.environmentRegistryRepository as CoreDependencies['environmentRegistryRepository']
-    dependencies.environmentConnectionRepository =
-      remoteRepos.environmentConnectionRepository as CoreDependencies['environmentConnectionRepository']
-    // The environments management panel also reads/edits the workspace's custom-manifest-type
-    // catalog (`EnvironmentConnectionService.listCustomTypes`/`upsertCustomType`), built directly
-    // over the absent `db` by `selectNodeEnvironmentsDeps`. Route it from the remote registry too so
-    // the connection + infra-handler management surface is functional (no secrets — just manifest
-    // metadata; the RPC allow-list gates its CRUD). Provisioning WRITES stay db-direct/off (a later
-    // secrets-delegation slice), like the environment registry above.
-    dependencies.customManifestTypeRepository =
-      remoteRepos.customManifestTypeRepository as CoreDependencies['customManifestTypeRepository']
-    // The prompt-fragment library (`FragmentLibraryService`, built directly over the absent `db`
-    // by `selectNodeFragmentLibraryDeps`) — its management surface (list/create/update/delete
-    // fragments + list/link sources) is served remotely so the library panels are functional in
-    // mothership mode; rows carry no secrets, and the RPC allow-list gates each method by its
-    // `(ownerKind, ownerId)` scope. Repo-SYNC (the source service's GitHub reads) stays
-    // db-direct/off — the mothership owns GitHub sync.
-    //
-    // Route only when the library is ALREADY configured (`config.fragmentLibrary.enabled` — else
-    // these are absent). UNLIKE the document/task/env repos above (whose modules need extra deps,
-    // so setting the repo alone leaves the module off), the fragment module assembles from
-    // `promptFragmentRepository` ALONE — so unconditionally setting it would spuriously turn the
-    // module ON and force fragment resolution on EVERY run against a mothership that may not wire
-    // the repo. Overriding in place preserves the "module only when configured" gate while swapping
-    // the (db-less, broken) Drizzle repo for the remote one.
-    if (dependencies.promptFragmentRepository) {
-      dependencies.promptFragmentRepository =
-        remoteRepos.promptFragmentRepository as CoreDependencies['promptFragmentRepository']
-    }
-    if (dependencies.fragmentSourceRepository) {
-      dependencies.fragmentSourceRepository =
-        remoteRepos.fragmentSourceRepository as CoreDependencies['fragmentSourceRepository']
-    }
-    // The Claude Skills library, same shape as the fragment library above: swap the
-    // (db-less, broken) Drizzle repos for the remote ones when the mothership exposes
-    // them. Until the mothership RPC surfaces skills, `remoteRepos.*` is undefined, which
-    // leaves the skill module UNassembled in mothership mode (the controller 503s) rather
-    // than assembling over a broken db — a clean opt-in follow-up, like fragment repo-sync.
-    if (dependencies.accountSkillRepository) {
-      dependencies.accountSkillRepository =
-        remoteRepos.accountSkillRepository as CoreDependencies['accountSkillRepository']
-    }
-    if (dependencies.skillSourceRepository) {
-      dependencies.skillSourceRepository =
-        remoteRepos.skillSourceRepository as CoreDependencies['skillSourceRepository']
-    }
-  }
+  // Mothership mode (`db` undefined): re-source the run-path org/durable repos the sub-helpers
+  // built directly over the absent `db` from the remote registry (a no-op outside mothership mode).
+  applyMothershipRemoteRepos(dependencies, remoteRepos)
 
   return {
     ...createCore(dependencies),

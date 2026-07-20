@@ -1,14 +1,21 @@
-import { Hono } from 'hono'
+import { type Context, Hono } from 'hono'
 import { cachedTokensFromUsage, promptCacheParams } from '@cat-factory/agents'
 import { isLocalRunner } from '@cat-factory/contracts'
 import { fetchLocalRunner } from '@cat-factory/integrations'
 import { type ApiKeyProvider, contextWindowFor } from '@cat-factory/kernel'
 import { openAiCompatibleBaseUrlError } from '../../agents/providerErrors.js'
-import { ContainerSessionService } from '../../containers/ContainerSessionService.js'
-import type { AppEnv } from '../../http/env.js'
+import {
+  type ContainerSession,
+  ContainerSessionService,
+} from '../../containers/ContainerSessionService.js'
+import type { AppEnv, ServerContainer } from '../../http/env.js'
 import { makeWaitUntil } from '../../http/waitUntil.js'
 import { logger } from '../../observability/logger.js'
-import type { LlmTokenUsage, ProxyCallObservation } from '../../runtime/gateways.js'
+import type {
+  LlmTokenUsage,
+  ProxyCallObservation,
+  RuntimeGateways,
+} from '../../runtime/gateways.js'
 
 // The OpenAI Chat Completions-compatible proxy that implementation containers
 // point Pi at. It is the seam that keeps provider secrets out of the container:
@@ -81,6 +88,330 @@ function bearer(header: string | undefined): string | null {
   if (!header) return null
   const match = /^Bearer\s+(.+)$/i.exec(header.trim())
   return match ? match[1]!.trim() : null
+}
+
+/**
+ * Apply the workers-ai output-token ceiling to `payload` in place and return the `max_tokens`
+ * value we actually applied (so the recorded metric reflects the effective ceiling, not the
+ * often-absent asked value). A no-op that returns `current` for every other provider.
+ *
+ * Give container agents (Pi) generous output room for in-process Workers AI models (which clamp
+ * to their large ceilings gracefully). Other providers keep Pi's value to respect their stricter
+ * upstream output caps.
+ */
+function applyWorkersAiCeiling(
+  session: ContainerSession,
+  payload: Record<string, unknown>,
+  promptText: string,
+  current: number | null,
+): number | null {
+  if (session.provider !== 'workers-ai') return current
+  const asked = typeof payload.max_tokens === 'number' ? payload.max_tokens : 0
+  const toolsText = Array.isArray(payload.tools) ? JSON.stringify(payload.tools) : ''
+  const floored = workersAiOutputCeiling({
+    asked,
+    contextWindow: contextWindowFor({ provider: session.provider, model: session.model }),
+    inputChars: promptText.length + toolsText.length,
+  })
+  payload.max_tokens = floored
+  // Record the ceiling we actually applied, not the (often absent) asked value.
+  return floored
+}
+
+/**
+ * The per-call state a proxied chat completion threads through its dispatch helpers: the verified
+ * session, the hardened payload, and the two closures the handler owns — `observe` (meter + emit
+ * live activity) and `record` (fold usage into spend + key rotation) — which stay bound to the
+ * handler's mutable `requestMaxTokens` / `leasedApiKeyId`. Bundled into one object so the helpers
+ * stay within the repo's parameter budget.
+ */
+interface ProxyCallContext {
+  session: ContainerSession
+  payload: Record<string, unknown>
+  streaming: boolean
+  promptText: string
+  log: typeof logger
+  gateways: RuntimeGateways
+  apiKeys: ServerContainer['apiKeys']
+  localModelEndpoints: ServerContainer['localModelEndpoints']
+  waitUntil: (task: Promise<unknown>) => void
+  observe: (obs: ProxyCallObservation) => void
+  record: (usage: LlmTokenUsage | null) => Promise<number>
+}
+
+/** A resolved OpenAI-compatible upstream (base URL + bearer key + optional leased pool key). */
+interface UpstreamTarget {
+  baseURL: string
+  apiKey: string
+  leasedApiKeyId: string | null
+  localRunner: boolean
+}
+
+/**
+ * Workers AI (and any binding-reached provider) has no external upstream: run it in-process via
+ * the facade's gateway, which owns the model timing and reports its own observation via
+ * `recordMetric`. We only observe here when the dispatch itself is unavailable or throws.
+ */
+async function dispatchInProcess(c: Context<AppEnv>, ctx: ProxyCallContext): Promise<Response> {
+  const { session, payload, streaming, gateways, log, observe, record, waitUntil } = ctx
+  const dispatchAt = Date.now()
+  const inProcess = gateways.llmUpstream.runInProcess({
+    model: session.model,
+    payload,
+    streaming,
+    record,
+    recordMetric: observe,
+    waitUntil,
+    log,
+  })
+  if (!inProcess) {
+    log.error('llm proxy: in-process provider is not available in this runtime')
+    observe({
+      usage: null,
+      finishReason: null,
+      responseText: '',
+      ok: false,
+      httpStatus: 502,
+      errorMessage: `Provider '${session.provider}' is not available`,
+      upstreamMs: 0,
+    })
+    return c.json({ error: { message: `Provider '${session.provider}' is not available` } }, 502)
+  }
+  try {
+    return await inProcess
+  } catch (err) {
+    const message = err instanceof Error ? err.message : String(err)
+    log.error({ err: message }, 'llm proxy: in-process call failed')
+    observe({
+      usage: null,
+      finishReason: null,
+      responseText: '',
+      ok: false,
+      httpStatus: 502,
+      errorMessage: message,
+      upstreamMs: Date.now() - dispatchAt,
+    })
+    return c.json(
+      { error: { message: `In-process call failed for model '${session.model}': ${message}` } },
+      502,
+    )
+  }
+}
+
+/**
+ * Resolve the upstream base URL + bearer key. Two paths:
+ *  - LOCAL runners (Ollama / LM Studio / …): the endpoint is configured PER USER, so resolve it
+ *    by the run INITIATOR (`session.userId`) and use its optional key directly — NO DB key lease
+ *    (these runners are keyless by default; a placeholder bearer is harmless). `leasedApiKeyId`
+ *    stays null so no spend key is attributed.
+ *  - Cloud providers: resolve the base URL from the gateway and lease the key from the DB-backed
+ *    pool (workspace + account + initiator).
+ *
+ * Returns a ready-to-return failure `Response` (already observed) when the provider is
+ * unavailable / the key store is missing / no key could be leased.
+ */
+async function resolveUpstreamTarget(
+  c: Context<AppEnv>,
+  ctx: ProxyCallContext,
+): Promise<UpstreamTarget | { failure: Response }> {
+  const { session, gateways, apiKeys, localModelEndpoints, log, observe } = ctx
+  const localRunner = isLocalRunner(session.provider)
+  if (localRunner) {
+    const resolved =
+      session.userId && localModelEndpoints
+        ? await localModelEndpoints.resolve(session.userId, session.provider)
+        : null
+    if (!resolved) {
+      log.error('llm proxy: no local runner endpoint configured for the run initiator')
+      observe({
+        usage: null,
+        finishReason: null,
+        responseText: '',
+        ok: false,
+        httpStatus: 502,
+        errorMessage: `No local runner '${session.provider}' configured for this run`,
+        upstreamMs: 0,
+      })
+      return {
+        failure: c.json(
+          { error: { message: `No local runner '${session.provider}' configured for this run` } },
+          502,
+        ),
+      }
+    }
+    // Most local runners ignore auth; the SDK/fetch still emit an Authorization header.
+    return {
+      baseURL: resolved.baseUrl.replace(/\/+$/, ''),
+      apiKey: resolved.apiKey || 'local',
+      leasedApiKeyId: null,
+      localRunner,
+    }
+  }
+  const upstream = gateways.llmUpstream.resolveOpenAiCompatible(session.provider)
+  if (!upstream) {
+    log.error('llm proxy: provider is not available (no base URL resolved)')
+    const message = openAiCompatibleBaseUrlError(session.provider)
+    observe({
+      usage: null,
+      finishReason: null,
+      responseText: '',
+      ok: false,
+      httpStatus: 502,
+      errorMessage: message,
+      upstreamMs: 0,
+    })
+    return { failure: c.json({ error: { message } }, 502) }
+  }
+  // Lease the API key for this provider from the DB-backed pool (workspace + owning account + the
+  // run initiator), scoped from the signed session claims. Keys are no longer env-baked: an empty
+  // pool means the provider is not configured.
+  if (!apiKeys) {
+    log.error('llm proxy: API-key store is not configured')
+    observe({
+      usage: null,
+      finishReason: null,
+      responseText: '',
+      ok: false,
+      httpStatus: 502,
+      errorMessage: 'API-key store is not configured',
+      upstreamMs: 0,
+    })
+    return { failure: c.json({ error: { message: 'API-key store is not configured' } }, 502) }
+  }
+  try {
+    const leased = await apiKeys.lease(session.workspaceId, session.provider as ApiKeyProvider, {
+      accountId: session.accountId,
+      userId: session.userId,
+    })
+    return {
+      baseURL: upstream.baseURL,
+      apiKey: leased.secret,
+      leasedApiKeyId: leased.keyId,
+      localRunner,
+    }
+  } catch (err) {
+    const message = err instanceof Error ? err.message : String(err)
+    log.error({ err: message }, 'llm proxy: no API key configured for provider')
+    observe({
+      usage: null,
+      finishReason: null,
+      responseText: '',
+      ok: false,
+      httpStatus: 502,
+      errorMessage: message,
+      upstreamMs: 0,
+    })
+    return {
+      failure: c.json(
+        { error: { message: `No API key configured for provider '${session.provider}'` } },
+        502,
+      ),
+    }
+  }
+}
+
+/**
+ * Forward the hardened request to the resolved upstream and meter the response. The local-runner
+ * base URL is user-supplied and forwarded server-side, so follow redirects manually and re-validate
+ * every hop against the SSRF allow-list (`fetchLocalRunner`); cloud providers use a trusted,
+ * hardcoded base URL, so they keep plain `fetch`. Non-2xx is passed straight back (nothing to
+ * meter); a streamed body is teed through {@link observationStream} so spend + the observation are
+ * recorded off the response path; a buffered body is metered then relayed verbatim.
+ */
+async function relayUpstream(
+  c: Context<AppEnv>,
+  ctx: ProxyCallContext,
+  target: UpstreamTarget,
+): Promise<Response> {
+  const { payload, streaming, log, observe, record, waitUntil } = ctx
+  const { baseURL, apiKey, localRunner } = target
+  if (streaming) {
+    payload.stream_options = { include_usage: true }
+  }
+
+  // Upstream-dispatch clock: the slice between here and the response is the model's execution;
+  // the rest of the proxy's time is transport overhead.
+  const dispatchAt = Date.now()
+  const upstreamUrl = `${baseURL}/chat/completions`
+  const upstreamInit: RequestInit = {
+    method: 'POST',
+    headers: {
+      authorization: `Bearer ${apiKey}`,
+      'content-type': 'application/json',
+    },
+    body: JSON.stringify(payload),
+  }
+  let upstreamRes: Response
+  if (localRunner) {
+    try {
+      upstreamRes = await fetchLocalRunner(upstreamUrl, upstreamInit)
+    } catch (err) {
+      const message = err instanceof Error ? err.message : String(err)
+      log.error({ err: message }, 'llm proxy: local runner request blocked')
+      observe({
+        usage: null,
+        finishReason: null,
+        responseText: '',
+        ok: false,
+        httpStatus: 502,
+        errorMessage: message,
+        upstreamMs: Date.now() - dispatchAt,
+      })
+      return c.json({ error: { message } }, 502)
+    }
+  } else {
+    upstreamRes = await fetch(upstreamUrl, upstreamInit)
+  }
+
+  // Non-2xx: pass the upstream error straight back, nothing to meter.
+  if (!upstreamRes.ok || !upstreamRes.body) {
+    log.error({ status: upstreamRes.status }, 'llm proxy: upstream returned non-2xx')
+    observe({
+      usage: null,
+      finishReason: null,
+      responseText: '',
+      ok: false,
+      httpStatus: upstreamRes.status,
+      errorMessage: `Upstream returned ${upstreamRes.status}`,
+      upstreamMs: Date.now() - dispatchAt,
+    })
+    return new Response(upstreamRes.body, {
+      status: upstreamRes.status,
+      headers: { 'content-type': upstreamRes.headers.get('content-type') ?? 'application/json' },
+    })
+  }
+
+  if (streaming) {
+    // Tee the SSE stream so we can scrape the trailing `usage` chunk + finish
+    // reason + assistant text without buffering the response, then meter spend and
+    // record the observation (off the response path) once it ends.
+    const body = upstreamRes.body.pipeThrough(
+      observationStream(dispatchAt, (obs) => {
+        waitUntil(record(obs.usage))
+        observe(obs)
+      }),
+    )
+    return new Response(body, {
+      status: upstreamRes.status,
+      headers: { 'content-type': 'text/event-stream' },
+    })
+  }
+
+  // Buffered JSON: read usage, meter, record the observation, and relay verbatim.
+  const json = (await upstreamRes.json()) as BufferedCompletion
+  const upstreamMs = Date.now() - dispatchAt
+  await record(json.usage ?? null)
+  observe({
+    usage: json.usage ?? null,
+    finishReason: json.choices?.[0]?.finish_reason ?? null,
+    responseText: assistantTextFromCompletion(json),
+    reasoningText: reasoningTextFromCompletion(json),
+    ok: true,
+    httpStatus: upstreamRes.status,
+    errorMessage: null,
+    upstreamMs,
+  })
+  return c.json(json as Record<string, unknown>)
 }
 
 export function llmProxyController(): Hono<AppEnv> {
@@ -274,21 +605,9 @@ export function llmProxyController(): Hono<AppEnv> {
       return c.json({ error: { message: 'Spend budget exhausted' } }, 402)
     }
 
-    // Give container agents (Pi) generous output room for in-process Workers AI models
-    // (which clamp to their large ceilings gracefully). Other providers keep Pi's value
-    // to respect their stricter upstream output caps.
-    if (session.provider === 'workers-ai') {
-      const asked = typeof payload.max_tokens === 'number' ? payload.max_tokens : 0
-      const toolsText = Array.isArray(payload.tools) ? JSON.stringify(payload.tools) : ''
-      const floored = workersAiOutputCeiling({
-        asked,
-        contextWindow: contextWindowFor({ provider: session.provider, model: session.model }),
-        inputChars: promptText.length + toolsText.length,
-      })
-      payload.max_tokens = floored
-      // Record the ceiling we actually applied, not the (often absent) asked value.
-      requestMaxTokens = floored
-    }
+    // Give container agents generous output room for in-process Workers AI models (a no-op
+    // for other providers); records the ceiling actually applied so the metric is accurate.
+    requestMaxTokens = applyWorkersAiCeiling(session, payload, promptText, requestMaxTokens)
 
     // The pooled API key leased for this call (non-binding providers), so usage can be
     // folded back into its rolling-window rotation counters when the call completes.
@@ -313,246 +632,32 @@ export function llmProxyController(): Hono<AppEnv> {
       })
     }
 
-    // Workers AI (and any binding-reached provider) has no external upstream: run it
-    // in-process via the facade's gateway. Null means this runtime can't (e.g. Node) →
-    // the provider is unavailable.
-    if (session.provider === 'workers-ai') {
-      // The in-process gateway reports its own observation via `recordMetric` (it
-      // owns the model timing). We only record here when the dispatch itself fails.
-      const dispatchAt = Date.now()
-      const inProcess = gateways.llmUpstream.runInProcess({
-        model: session.model,
-        payload,
-        streaming,
-        record,
-        recordMetric: observe,
-        waitUntil,
-        log,
-      })
-      if (!inProcess) {
-        log.error('llm proxy: in-process provider is not available in this runtime')
-        observe({
-          usage: null,
-          finishReason: null,
-          responseText: '',
-          ok: false,
-          httpStatus: 502,
-          errorMessage: `Provider '${session.provider}' is not available`,
-          upstreamMs: 0,
-        })
-        return c.json(
-          { error: { message: `Provider '${session.provider}' is not available` } },
-          502,
-        )
-      }
-      try {
-        return await inProcess
-      } catch (err) {
-        const message = err instanceof Error ? err.message : String(err)
-        log.error({ err: message }, 'llm proxy: in-process call failed')
-        observe({
-          usage: null,
-          finishReason: null,
-          responseText: '',
-          ok: false,
-          httpStatus: 502,
-          errorMessage: message,
-          upstreamMs: Date.now() - dispatchAt,
-        })
-        return c.json(
-          { error: { message: `In-process call failed for model '${session.model}': ${message}` } },
-          502,
-        )
-      }
+    // The per-call state the dispatch helpers below thread through; `observe` / `record` stay
+    // bound to this handler's mutable `requestMaxTokens` / `leasedApiKeyId`.
+    const ctx: ProxyCallContext = {
+      session,
+      payload,
+      streaming,
+      promptText,
+      log,
+      gateways,
+      apiKeys,
+      localModelEndpoints,
+      waitUntil,
+      observe,
+      record,
     }
 
-    // Resolve the upstream base URL + bearer key. Two paths:
-    //  - LOCAL runners (Ollama / LM Studio / …): the endpoint is configured PER USER, so
-    //    resolve it by the run INITIATOR (`session.userId`) and use its optional key
-    //    directly — NO DB key lease (these runners are keyless by default; a placeholder
-    //    bearer is harmless). `leasedApiKeyId` stays undefined so no spend key is attributed.
-    //  - Cloud providers: resolve the base URL from the gateway and lease the key from the
-    //    DB-backed pool (workspace + account + initiator).
-    let baseURL: string
-    let apiKey: string
-    const localRunner = isLocalRunner(session.provider)
-    if (localRunner) {
-      const resolved =
-        session.userId && localModelEndpoints
-          ? await localModelEndpoints.resolve(session.userId, session.provider)
-          : null
-      if (!resolved) {
-        log.error('llm proxy: no local runner endpoint configured for the run initiator')
-        observe({
-          usage: null,
-          finishReason: null,
-          responseText: '',
-          ok: false,
-          httpStatus: 502,
-          errorMessage: `No local runner '${session.provider}' configured for this run`,
-          upstreamMs: 0,
-        })
-        return c.json(
-          { error: { message: `No local runner '${session.provider}' configured for this run` } },
-          502,
-        )
-      }
-      baseURL = resolved.baseUrl.replace(/\/+$/, '')
-      // Most local runners ignore auth; the SDK/fetch still emit an Authorization header.
-      apiKey = resolved.apiKey || 'local'
-    } else {
-      const upstream = gateways.llmUpstream.resolveOpenAiCompatible(session.provider)
-      if (!upstream) {
-        log.error('llm proxy: provider is not available (no base URL resolved)')
-        const message = openAiCompatibleBaseUrlError(session.provider)
-        observe({
-          usage: null,
-          finishReason: null,
-          responseText: '',
-          ok: false,
-          httpStatus: 502,
-          errorMessage: message,
-          upstreamMs: 0,
-        })
-        return c.json({ error: { message } }, 502)
-      }
-      // Lease the API key for this provider from the DB-backed pool (workspace + owning
-      // account + the run initiator), scoped from the signed session claims. Keys are no
-      // longer env-baked: an empty pool means the provider is not configured.
-      if (!apiKeys) {
-        log.error('llm proxy: API-key store is not configured')
-        observe({
-          usage: null,
-          finishReason: null,
-          responseText: '',
-          ok: false,
-          httpStatus: 502,
-          errorMessage: 'API-key store is not configured',
-          upstreamMs: 0,
-        })
-        return c.json({ error: { message: 'API-key store is not configured' } }, 502)
-      }
-      try {
-        const leased = await apiKeys.lease(
-          session.workspaceId,
-          session.provider as ApiKeyProvider,
-          {
-            accountId: session.accountId,
-            userId: session.userId,
-          },
-        )
-        leasedApiKeyId = leased.keyId
-        apiKey = leased.secret
-      } catch (err) {
-        const message = err instanceof Error ? err.message : String(err)
-        log.error({ err: message }, 'llm proxy: no API key configured for provider')
-        observe({
-          usage: null,
-          finishReason: null,
-          responseText: '',
-          ok: false,
-          httpStatus: 502,
-          errorMessage: message,
-          upstreamMs: 0,
-        })
-        return c.json(
-          { error: { message: `No API key configured for provider '${session.provider}'` } },
-          502,
-        )
-      }
-      baseURL = upstream.baseURL
-    }
-    if (streaming) {
-      payload.stream_options = { include_usage: true }
-    }
+    // Workers AI (and any binding-reached provider) has no external upstream: run it in-process
+    // via the facade's gateway. Null-provider (e.g. Node can't) surfaces as unavailable.
+    if (session.provider === 'workers-ai') return dispatchInProcess(c, ctx)
 
-    // Upstream-dispatch clock: the slice between here and the response is the model's
-    // execution; the rest of the proxy's time is transport overhead.
-    const dispatchAt = Date.now()
-    const upstreamUrl = `${baseURL}/chat/completions`
-    const upstreamInit: RequestInit = {
-      method: 'POST',
-      headers: {
-        authorization: `Bearer ${apiKey}`,
-        'content-type': 'application/json',
-      },
-      body: JSON.stringify(payload),
-    }
-    let upstreamRes: Response
-    if (localRunner) {
-      // The local-runner base URL is user-supplied and forwarded server-side, so follow
-      // redirects manually and re-validate every hop against the SSRF allow-list — a
-      // reachable runner must not 302 us into the cloud-metadata endpoint or a public
-      // host. Cloud providers use a trusted, hardcoded base URL, so they keep plain fetch.
-      try {
-        upstreamRes = await fetchLocalRunner(upstreamUrl, upstreamInit)
-      } catch (err) {
-        const message = err instanceof Error ? err.message : String(err)
-        log.error({ err: message }, 'llm proxy: local runner request blocked')
-        observe({
-          usage: null,
-          finishReason: null,
-          responseText: '',
-          ok: false,
-          httpStatus: 502,
-          errorMessage: message,
-          upstreamMs: Date.now() - dispatchAt,
-        })
-        return c.json({ error: { message } }, 502)
-      }
-    } else {
-      upstreamRes = await fetch(upstreamUrl, upstreamInit)
-    }
-
-    // Non-2xx: pass the upstream error straight back, nothing to meter.
-    if (!upstreamRes.ok || !upstreamRes.body) {
-      log.error({ status: upstreamRes.status }, 'llm proxy: upstream returned non-2xx')
-      observe({
-        usage: null,
-        finishReason: null,
-        responseText: '',
-        ok: false,
-        httpStatus: upstreamRes.status,
-        errorMessage: `Upstream returned ${upstreamRes.status}`,
-        upstreamMs: Date.now() - dispatchAt,
-      })
-      return new Response(upstreamRes.body, {
-        status: upstreamRes.status,
-        headers: { 'content-type': upstreamRes.headers.get('content-type') ?? 'application/json' },
-      })
-    }
-
-    if (streaming) {
-      // Tee the SSE stream so we can scrape the trailing `usage` chunk + finish
-      // reason + assistant text without buffering the response, then meter spend and
-      // record the observation (off the response path) once it ends.
-      const body = upstreamRes.body.pipeThrough(
-        observationStream(dispatchAt, (obs) => {
-          waitUntil(record(obs.usage))
-          observe(obs)
-        }),
-      )
-      return new Response(body, {
-        status: upstreamRes.status,
-        headers: { 'content-type': 'text/event-stream' },
-      })
-    }
-
-    // Buffered JSON: read usage, meter, record the observation, and relay verbatim.
-    const json = (await upstreamRes.json()) as BufferedCompletion
-    const upstreamMs = Date.now() - dispatchAt
-    await record(json.usage ?? null)
-    observe({
-      usage: json.usage ?? null,
-      finishReason: json.choices?.[0]?.finish_reason ?? null,
-      responseText: assistantTextFromCompletion(json),
-      reasoningText: reasoningTextFromCompletion(json),
-      ok: true,
-      httpStatus: upstreamRes.status,
-      errorMessage: null,
-      upstreamMs,
-    })
-    return c.json(json as Record<string, unknown>)
+    // Resolve the upstream base URL + bearer key (local runner vs the DB-backed key pool), then
+    // forward + meter. A failure is already observed and returned ready-to-send.
+    const target = await resolveUpstreamTarget(c, ctx)
+    if ('failure' in target) return target.failure
+    leasedApiKeyId = target.leasedApiKeyId
+    return relayUpstream(c, ctx, target)
   })
 
   return app

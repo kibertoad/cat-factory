@@ -24,26 +24,11 @@ function defaultConsensusConfig(): ConsensusStepConfig {
 }
 
 /**
- * Saved, reusable pipelines (the pipeline palette) plus the in-progress draft
- * being assembled in the pipeline builder. Saved pipelines live on the backend;
- * the draft is transient client state. The draft doubles as the EDIT surface: a
- * custom pipeline can be loaded into it (`loadForEdit`) and saved back in place,
- * while a built-in is cloned first (`clonePipeline`) into an editable copy.
+ * The per-step, index-aligned draft arrays. Every one is kept the same length as `draft` and
+ * spliced/reordered in lockstep (see `insertAt` / `removeFromDraft` / `moveUnit`), so grouping
+ * their construction keeps that alignment contract — and its documentation — in one place.
  */
-export const usePipelinesStore = defineStore('pipelines', () => {
-  const api = useApi()
-  const {
-    items: pipelines,
-    upsert: upsertPipeline,
-    remove: dropPipeline,
-  } = useUpsertList<Pipeline>({ key: (p) => p.id })
-  /**
-   * Current built-in catalog versions (`seedPipelines()`), keyed by pipeline id, from the
-   * workspace snapshot. A built-in whose stored `version` is below its catalog value here has
-   * a newer definition available (see `usePipelineHealth`).
-   */
-  const catalogVersions = ref<Record<string, number>>({})
-
+function createDraftStepState() {
   /** The chain currently being assembled in the builder. */
   const draft = ref<AgentKind[]>([])
   /** Per-step approval gates, kept index-aligned with `draft`. */
@@ -79,6 +64,52 @@ export const usePipelinesStore = defineStore('pipelines', () => {
    * default, so an entry exists only when a step opts out of something.
    */
   const draftStepOptions = ref<(StepOptions | null)[]>([])
+  return {
+    draft,
+    draftGates,
+    draftEnabled,
+    draftThresholds,
+    draftConsensus,
+    draftGating,
+    draftFollowUps,
+    draftTesterQuality,
+    draftStepOptions,
+  }
+}
+
+/**
+ * Saved, reusable pipelines (the pipeline palette) plus the in-progress draft
+ * being assembled in the pipeline builder. Saved pipelines live on the backend;
+ * the draft is transient client state. The draft doubles as the EDIT surface: a
+ * custom pipeline can be loaded into it (`loadForEdit`) and saved back in place,
+ * while a built-in is cloned first (`clonePipeline`) into an editable copy.
+ */
+export const usePipelinesStore = defineStore('pipelines', () => {
+  const api = useApi()
+  const {
+    items: pipelines,
+    upsert: upsertPipeline,
+    remove: dropPipeline,
+  } = useUpsertList<Pipeline>({ key: (p) => p.id })
+  /**
+   * Current built-in catalog versions (`seedPipelines()`), keyed by pipeline id, from the
+   * workspace snapshot. A built-in whose stored `version` is below its catalog value here has
+   * a newer definition available (see `usePipelineHealth`).
+   */
+  const catalogVersions = ref<Record<string, number>>({})
+
+  // The per-step, index-aligned draft arrays (kept in lockstep — see `createDraftStepState`).
+  const {
+    draft,
+    draftGates,
+    draftEnabled,
+    draftThresholds,
+    draftConsensus,
+    draftGating,
+    draftFollowUps,
+    draftTesterQuality,
+    draftStepOptions,
+  } = createDraftStepState()
   /** Organizational labels for the pipeline being assembled/edited. */
   const draftLabels = ref<string[]>([])
   /**

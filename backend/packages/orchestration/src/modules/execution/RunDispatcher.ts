@@ -747,45 +747,7 @@ export class RunDispatcher {
       agentKind: step.agentKind,
     })
     if (update.state === 'running') {
-      // A successful poll proves the container is up, so the cold-boot phase is over
-      // (defensive: a replay may have left the flag set). Surface live subtask progress
-      // (e.g. 3/8 todos done) without advancing the step. Only persist + emit when something
-      // actually changed so an idle poll doesn't churn storage or the event stream.
-      //
-      // Fold the poll's delta onto a target instance via {@link applyRunningFold}. The captured
-      // `update` is the source, so re-applying on a freshly-reloaded instance is idempotent for
-      // the set-to-latest folds AND correct for the APPEND fold: the harness follow-up buffer is
-      // drain-on-read (`runner.ts`), so those streamed items exist ONLY on this `update` — abort-
-      // and-redrive would lose them, whereas re-applying under `mutateInstance` (which reloads a
-      // clean base each attempt) preserves them.
-      const foldCtx = { jobId: step.jobId, update, workspaceId }
-      // Cheap pre-check against the loaded snapshot: skip the write entirely on an idle poll
-      // (the common case). The mutation is discarded — the authoritative write re-applies the
-      // same fold on fresh state under CAS below.
-      if (await this.applyRunningFold(instance, foldCtx)) {
-        try {
-          const persisted = await this.runStateMachine.mutateInstance(
-            workspaceId,
-            executionId,
-            async (fresh) => {
-              await this.applyRunningFold(fresh, foldCtx)
-            },
-          )
-          // Progress-only fold (subtask ticks / streamed follow-ups): skip the per-run
-          // LLM-metrics GROUP BY so a live container's poll cadence doesn't re-aggregate
-          // the run on every tick. The rollup refreshes on the step-boundary/terminal emit.
-          await this.runStateMachine.emitInstance(workspaceId, persisted, { rollUpMetrics: false })
-        } catch (error) {
-          // The run was cancelled/removed mid-poll (`NotFoundError`) or stayed hot-contended
-          // past the retry budget (`ConflictError`) — re-drive on fresh state rather than
-          // failing the run; the next entry no-ops on a gone/terminal run.
-          if (error instanceof NotFoundError || error instanceof ConflictError) {
-            throw new RunContendedError(executionId)
-          }
-          throw error
-        }
-      }
-      return { kind: 'awaiting_job', jobId: step.jobId, stepIndex: instance.currentStep }
+      return this.handleRunningPoll(workspaceId, executionId, instance, update, step.jobId)
     }
 
     // A gate whose helper INVESTIGATES instead of fixing (post-release-health → on-call)
@@ -795,36 +757,13 @@ export class RunDispatcher {
     // budget) and finish the gate step with the output it returns. The gate raises its own
     // `release_regression` notification + enriches any open incident inside the hook (from the
     // signals stashed at escalation); the run then completes for a human to act out-of-band.
-    const completionGate = this.gateFor(step.agentKind)
-    if (
-      completionGate?.resolveHelperCompletion &&
-      step.gate?.phase === 'working' &&
-      (update.state === 'done' || update.state === 'failed')
-    ) {
-      const block = await this.blockRepository.get(workspaceId, instance.blockId)
-      step.jobId = undefined
-      step.subtasks = undefined
-      if (!block) return { kind: 'noop' }
-      const isFinalStep = instance.currentStep === instance.steps.length - 1
-      const jobResult: GateHelperJobResult =
-        update.state === 'done'
-          ? { state: 'done', result: update.result }
-          : { state: 'failed', error: update.error ?? null }
-      const resolution = await completionGate.resolveHelperCompletion({
-        workspaceId,
-        instance,
-        block,
-        step,
-        result: jobResult,
-      })
-      // Preserve the done-result's fields (usage metering etc.) while recording the gate's
-      // resolved output; a failed investigation has no result to carry.
-      const base: AgentRunResult = update.state === 'done' ? update.result : { output: '' }
-      return this.recordStepResult(workspaceId, instance, step, isFinalStep, {
-        ...base,
-        output: resolution.output,
-      })
-    }
+    const investigated = await this.resolveInvestigateHelperCompletion(
+      workspaceId,
+      instance,
+      step,
+      update,
+    )
+    if (investigated) return investigated
 
     // A polling gate step's in-flight job is its helper agent (ci-fixer /
     // conflict-resolver), NOT the step's own work: when it finishes (or fails) we
@@ -942,6 +881,99 @@ export class RunDispatcher {
     // Clear the handle before recording so a replay re-attaches to nothing.
     step.jobId = undefined
     return this.recordStepResult(workspaceId, instance, step, isFinalStep, update.result)
+  }
+
+  /**
+   * Handle a `running` poll: a successful poll proves the container is up, so surface live subtask
+   * progress (e.g. 3/8 todos) without advancing the step. Only persist + emit when something
+   * actually changed so an idle poll doesn't churn storage or the event stream. Folds the poll's
+   * delta via {@link applyRunningFold} — a cheap pre-check against the loaded snapshot, then the
+   * authoritative re-apply on fresh state under CAS (idempotent for the set-to-latest folds and
+   * correct for the drain-on-read follow-up append). Split from {@link pollAgentJobInner} to stay
+   * under the statement ceiling.
+   */
+  private async handleRunningPoll(
+    workspaceId: string,
+    executionId: string,
+    instance: ExecutionInstance,
+    update: Extract<AgentJobUpdate, { state: 'running' }>,
+    jobId: string,
+  ): Promise<AdvanceResult> {
+    const foldCtx = { jobId, update, workspaceId }
+    // Cheap pre-check against the loaded snapshot: skip the write entirely on an idle poll
+    // (the common case). The mutation is discarded — the authoritative write re-applies the
+    // same fold on fresh state under CAS below.
+    if (await this.applyRunningFold(instance, foldCtx)) {
+      try {
+        const persisted = await this.runStateMachine.mutateInstance(
+          workspaceId,
+          executionId,
+          async (fresh) => {
+            await this.applyRunningFold(fresh, foldCtx)
+          },
+        )
+        // Progress-only fold (subtask ticks / streamed follow-ups): skip the per-run
+        // LLM-metrics GROUP BY so a live container's poll cadence doesn't re-aggregate
+        // the run on every tick. The rollup refreshes on the step-boundary/terminal emit.
+        await this.runStateMachine.emitInstance(workspaceId, persisted, { rollUpMetrics: false })
+      } catch (error) {
+        // The run was cancelled/removed mid-poll (`NotFoundError`) or stayed hot-contended
+        // past the retry budget (`ConflictError`) — re-drive on fresh state rather than
+        // failing the run; the next entry no-ops on a gone/terminal run.
+        if (error instanceof NotFoundError || error instanceof ConflictError) {
+          throw new RunContendedError(executionId)
+        }
+        throw error
+      }
+    }
+    return { kind: 'awaiting_job', jobId, stepIndex: instance.currentStep }
+  }
+
+  /**
+   * A gate whose helper INVESTIGATES instead of fixing (post-release-health → on-call) declares a
+   * `resolveHelperCompletion` hook. When such a helper's job settles — done OR failed — call the
+   * hook INSTEAD of re-probing the precheck (re-probing an investigate-don't-fix helper would just
+   * regress again and burn the budget) and finish the gate step with the output it returns. Returns
+   * the resulting {@link AdvanceResult}, or `null` when this branch doesn't apply (the caller falls
+   * through to the re-probe / other completion paths).
+   */
+  private async resolveInvestigateHelperCompletion(
+    workspaceId: string,
+    instance: ExecutionInstance,
+    step: PipelineStep,
+    update: AgentJobUpdate,
+  ): Promise<AdvanceResult | null> {
+    const completionGate = this.gateFor(step.agentKind)
+    if (
+      completionGate?.resolveHelperCompletion &&
+      step.gate?.phase === 'working' &&
+      (update.state === 'done' || update.state === 'failed')
+    ) {
+      const block = await this.blockRepository.get(workspaceId, instance.blockId)
+      step.jobId = undefined
+      step.subtasks = undefined
+      if (!block) return { kind: 'noop' }
+      const isFinalStep = instance.currentStep === instance.steps.length - 1
+      const jobResult: GateHelperJobResult =
+        update.state === 'done'
+          ? { state: 'done', result: update.result }
+          : { state: 'failed', error: update.error ?? null }
+      const resolution = await completionGate.resolveHelperCompletion({
+        workspaceId,
+        instance,
+        block,
+        step,
+        result: jobResult,
+      })
+      // Preserve the done-result's fields (usage metering etc.) while recording the gate's
+      // resolved output; a failed investigation has no result to carry.
+      const base: AgentRunResult = update.state === 'done' ? update.result : { output: '' }
+      return this.recordStepResult(workspaceId, instance, step, isFinalStep, {
+        ...base,
+        output: resolution.output,
+      })
+    }
+    return null
   }
 
   /**
@@ -1344,12 +1376,7 @@ export class RunDispatcher {
         options: [...result.decision.options],
         chosen: null,
       }
-      this.stepGraph.pauseStepForInput(step)
-      instance.status = 'blocked'
-      await this.runStateMachine.updateBlockProgress(workspaceId, instance, 'blocked')
-      await this.runStateMachine.casPersist(workspaceId, instance)
-      await this.runStateMachine.emitInstance(workspaceId, instance)
-      return { kind: 'awaiting_decision', decisionId: step.decision.id }
+      return this.parkStepAwaitingInput(workspaceId, instance, step, step.decision.id)
     }
 
     // Completion-path interceptors short-circuit before the normal finish/advance for the
@@ -1390,32 +1417,7 @@ export class RunDispatcher {
     // (service-connections phase 3) additionally reports the PRs it opened in the
     // connected involved-service repos; record them beside the own-service PR (they may
     // even arrive when the own service was a no-op and only a peer changed).
-    if (result.pullRequest || result.peerPullRequests?.length) {
-      // Read the block before the update so we can tell whether this PR is newly
-      // opened (vs. the same PR re-reported by a re-run/retry of the coder step).
-      const priorBlock = this.issueWriteback
-        ? await this.blockRepository.get(workspaceId, instance.blockId)
-        : null
-      await this.blockRepository.update(workspaceId, instance.blockId, {
-        ...(result.pullRequest ? { pullRequest: result.pullRequest } : {}),
-        ...(result.peerPullRequests?.length ? { peerPullRequests: result.peerPullRequests } : {}),
-      })
-      // Best-effort writeback: comment on the task's linked tracker issue(s) that a
-      // PR opened. Only for the OWN-service PR, and only when it is newly recorded — a
-      // retry that re-reports the same PR must not re-comment (the tracker comment is not
-      // idempotent). Gated inside the provider by the workspace setting + per-task
-      // override; fire-and-forget so a tracker outage never fails the run.
-      if (
-        this.issueWriteback &&
-        priorBlock &&
-        result.pullRequest &&
-        priorBlock.pullRequest?.url !== result.pullRequest.url
-      ) {
-        await this.issueWriteback
-          .onPullRequestOpened(workspaceId, priorBlock, result.pullRequest)
-          .catch(() => {})
-      }
-    }
+    await this.recordOpenedPullRequests(workspaceId, instance, result)
 
     // Run any POST-COMPLETION resolver registered for this step kind (blueprint/spec
     // ingestion, task-estimate persistence). It reshapes the agent's structured result into
@@ -1424,20 +1426,7 @@ export class RunDispatcher {
     // reviewable-output rendering and the follow-up/approval gates read `step.output`, so it
     // sits exactly where the old inline ingestion branches did. See
     // {@link buildStepResolverRegistry} and {@link StepCompletionResolver.phase}.
-    const postCompletionResolver = this.stepResolverFor(step.agentKind)
-    if (
-      postCompletionResolver?.phase === 'post-completion' &&
-      (postCompletionResolver.applies?.(result) ?? true)
-    ) {
-      const resolution = await postCompletionResolver.resolve({
-        workspaceId,
-        instance,
-        step,
-        result,
-        isFinalStep,
-      })
-      if (resolution?.output !== undefined) step.output = resolution.output
-    }
+    await this.applyPostCompletionResolver(workspaceId, instance, step, result, isFinalStep)
 
     // A producer that emits a STRUCTURED ARTIFACT (the spec doc, the blueprint tree, …)
     // returns its raw Pi transcript summary as `result.output` — useless for review.
@@ -1473,12 +1462,7 @@ export class RunDispatcher {
         status: 'pending',
         proposal: step.output,
       }
-      this.stepGraph.pauseStepForInput(step)
-      instance.status = 'blocked'
-      await this.runStateMachine.updateBlockProgress(workspaceId, instance, 'blocked')
-      await this.runStateMachine.casPersist(workspaceId, instance)
-      await this.runStateMachine.emitInstance(workspaceId, instance)
-      return { kind: 'awaiting_decision', decisionId: step.approval.id }
+      return this.parkStepAwaitingInput(workspaceId, instance, step, step.approval.id)
     }
 
     // Persist the agent's reported confidence whenever a step reports it, for board
@@ -1496,23 +1480,13 @@ export class RunDispatcher {
     // — so inserting a later step (post-release-health) can't silently disable it. A
     // resolver that owns the block's terminal status (the merger sets `done`/`pr_ready`)
     // tells `finalizeBlock` to leave it alone.
-    const resolver = this.stepResolverFor(step.agentKind)
-    let resolverOwnsTerminalStatus = false
-    if (
-      resolver &&
-      (resolver.phase ?? 'terminal') === 'terminal' &&
-      (resolver.applies?.(result) ?? true)
-    ) {
-      const resolution = await resolver.resolve({
-        workspaceId,
-        instance,
-        step,
-        result,
-        isFinalStep,
-      })
-      if (resolution?.output !== undefined) step.output = resolution.output
-      if (resolution?.ownsTerminalStatus) resolverOwnsTerminalStatus = true
-    }
+    const resolverOwnsTerminalStatus = await this.applyTerminalStepResolver(
+      workspaceId,
+      instance,
+      step,
+      result,
+      isFinalStep,
+    )
 
     // A registered custom kind's POST-ops run deterministic backend repo work from the
     // agent's structured result (coerce its JSON, render artifact files, commit them via
@@ -1552,6 +1526,120 @@ export class RunDispatcher {
     await this.runStateMachine.casPersist(workspaceId, instance)
     await this.runStateMachine.emitInstance(workspaceId, instance)
     return { kind: 'continue' }
+  }
+
+  /**
+   * Park a step on the durable decision-wait: pause it for input, flip the run + block to
+   * `blocked`, persist under CAS, emit, and report `awaiting_decision` keyed by `decisionId`.
+   * Shared by the raised-decision and human-approval branches of {@link recordStepResult}.
+   */
+  private async parkStepAwaitingInput(
+    workspaceId: string,
+    instance: ExecutionInstance,
+    step: PipelineStep,
+    decisionId: string,
+  ): Promise<AdvanceResult> {
+    this.stepGraph.pauseStepForInput(step)
+    instance.status = 'blocked'
+    await this.runStateMachine.updateBlockProgress(workspaceId, instance, 'blocked')
+    await this.runStateMachine.casPersist(workspaceId, instance)
+    await this.runStateMachine.emitInstance(workspaceId, instance)
+    return { kind: 'awaiting_decision', decisionId }
+  }
+
+  /**
+   * Record any PR(s) the step opened onto the block (its own-service PR + any peer-service PRs),
+   * and best-effort write back to the task's linked tracker issue(s) when the own-service PR is
+   * NEWLY opened (a retry that re-reports the same PR must not re-comment). Split from
+   * {@link recordStepResult} to keep it under the statement ceiling; a no-op when no PR was opened.
+   */
+  private async recordOpenedPullRequests(
+    workspaceId: string,
+    instance: ExecutionInstance,
+    result: AgentRunResult,
+  ): Promise<void> {
+    if (!(result.pullRequest || result.peerPullRequests?.length)) return
+    // Read the block before the update so we can tell whether this PR is newly
+    // opened (vs. the same PR re-reported by a re-run/retry of the coder step).
+    const priorBlock = this.issueWriteback
+      ? await this.blockRepository.get(workspaceId, instance.blockId)
+      : null
+    await this.blockRepository.update(workspaceId, instance.blockId, {
+      ...(result.pullRequest ? { pullRequest: result.pullRequest } : {}),
+      ...(result.peerPullRequests?.length ? { peerPullRequests: result.peerPullRequests } : {}),
+    })
+    // Best-effort writeback: comment on the task's linked tracker issue(s) that a
+    // PR opened. Only for the OWN-service PR, and only when it is newly recorded — a
+    // retry that re-reports the same PR must not re-comment (the tracker comment is not
+    // idempotent). Gated inside the provider by the workspace setting + per-task
+    // override; fire-and-forget so a tracker outage never fails the run.
+    if (
+      this.issueWriteback &&
+      priorBlock &&
+      result.pullRequest &&
+      priorBlock.pullRequest?.url !== result.pullRequest.url
+    ) {
+      await this.issueWriteback
+        .onPullRequestOpened(workspaceId, priorBlock, result.pullRequest)
+        .catch(() => {})
+    }
+  }
+
+  /**
+   * Run any POST-COMPLETION resolver registered for this step kind (blueprint/spec ingestion,
+   * task-estimate persistence). It reshapes the agent's structured result into domain state and may
+   * replace `step.output`. A no-op when no post-completion resolver applies. See
+   * {@link buildStepResolverRegistry} and {@link StepCompletionResolver.phase}.
+   */
+  private async applyPostCompletionResolver(
+    workspaceId: string,
+    instance: ExecutionInstance,
+    step: PipelineStep,
+    result: AgentRunResult,
+    isFinalStep: boolean,
+  ): Promise<void> {
+    const postCompletionResolver = this.stepResolverFor(step.agentKind)
+    if (
+      postCompletionResolver?.phase !== 'post-completion' ||
+      !(postCompletionResolver.applies?.(result) ?? true)
+    ) {
+      return
+    }
+    const resolution = await postCompletionResolver.resolve({
+      workspaceId,
+      instance,
+      step,
+      result,
+      isFinalStep,
+    })
+    if (resolution?.output !== undefined) step.output = resolution.output
+  }
+
+  /**
+   * Run any DETERMINISTIC terminal-phase resolver for this step kind (e.g. the merger performs the
+   * real GitHub merge with backend-held credentials), mutating `step.output` when it reshapes it.
+   * Position-independent: it fires whenever the step finishes, not only when it's last. Returns
+   * whether the resolver OWNS the block's terminal status (the merger sets `done`/`pr_ready`), so
+   * the advance/finalize path leaves that status alone rather than clobbering it to `in_progress`.
+   */
+  private async applyTerminalStepResolver(
+    workspaceId: string,
+    instance: ExecutionInstance,
+    step: PipelineStep,
+    result: AgentRunResult,
+    isFinalStep: boolean,
+  ): Promise<boolean> {
+    const resolver = this.stepResolverFor(step.agentKind)
+    if (
+      !resolver ||
+      (resolver.phase ?? 'terminal') !== 'terminal' ||
+      !(resolver.applies?.(result) ?? true)
+    ) {
+      return false
+    }
+    const resolution = await resolver.resolve({ workspaceId, instance, step, result, isFinalStep })
+    if (resolution?.output !== undefined) step.output = resolution.output
+    return resolution?.ownsTerminalStatus ?? false
   }
 
   /**

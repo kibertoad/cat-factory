@@ -108,88 +108,52 @@ function border(cx: number, cy: number, hw: number, hh: number, tx: number, ty: 
   return { x: cx + dx * t, y: cy + dy * t }
 }
 
+/** Resolve the on-screen, origin-relative border-to-border segment between two blocks,
+ * or null when either end is missing or both collapsed into the same frame. */
+function segmentBetween(sourceId: string, targetId: string, origin: DOMRect) {
+  const a = anchorEl(sourceId)
+  const b = anchorEl(targetId)
+  if (!a || !b || a === b) return null // missing, or both collapsed into the same frame
+  const ra = a.getBoundingClientRect()
+  const rb = b.getBoundingClientRect()
+  const ax = ra.left + ra.width / 2 - origin.left
+  const ay = ra.top + ra.height / 2 - origin.top
+  const bx = rb.left + rb.width / 2 - origin.left
+  const by = rb.top + rb.height / 2 - origin.top
+  const start = border(ax, ay, ra.width / 2, ra.height / 2, bx, by)
+  const end = border(bx, by, rb.width / 2, rb.height / 2, ax, ay)
+  return { x1: start.x, y1: start.y, x2: end.x, y2: end.y }
+}
+
+/** Map a list of {id, source, target} links to their drawable (arrowhead-agnostic) segments. */
+function linkSegments(
+  links: { id: string; source: string; target: string }[],
+  origin: DOMRect,
+): { id: string; x1: number; y1: number; x2: number; y2: number }[] {
+  const out: { id: string; x1: number; y1: number; x2: number; y2: number }[] = []
+  for (const link of links) {
+    const seg = segmentBetween(link.source, link.target, origin)
+    if (seg) out.push({ id: link.id, ...seg })
+  }
+  return out
+}
+
 function recompute() {
   const el = svg.value
   if (!el) return
   const origin = el.getBoundingClientRect()
+
   const next: Seg[] = []
-
   for (const d of taskDeps.value) {
-    const a = anchorEl(d.source)
-    const b = anchorEl(d.target)
-    if (!a || !b || a === b) continue // missing, or both collapsed into the same frame
-
-    const ra = a.getBoundingClientRect()
-    const rb = b.getBoundingClientRect()
-    const ax = ra.left + ra.width / 2 - origin.left
-    const ay = ra.top + ra.height / 2 - origin.top
-    const bx = rb.left + rb.width / 2 - origin.left
-    const by = rb.top + rb.height / 2 - origin.top
-
-    const start = border(ax, ay, ra.width / 2, ra.height / 2, bx, by)
-    const end = border(bx, by, rb.width / 2, rb.height / 2, ax, ay)
-
-    next.push({
-      id: d.id,
-      x1: start.x,
-      y1: start.y,
-      x2: end.x,
-      y2: end.y,
-      done: board.getBlock(d.source)?.status === 'done',
-    })
+    const seg = segmentBetween(d.source, d.target, origin)
+    if (!seg) continue
+    next.push({ id: d.id, ...seg, done: board.getBlock(d.source)?.status === 'done' })
   }
   segments.value = next
 
-  const members: MemberSeg[] = []
-  for (const link of epicLinks.value) {
-    const a = anchorEl(link.source)
-    const b = anchorEl(link.target)
-    if (!a || !b || a === b) continue
-    const ra = a.getBoundingClientRect()
-    const rb = b.getBoundingClientRect()
-    const ax = ra.left + ra.width / 2 - origin.left
-    const ay = ra.top + ra.height / 2 - origin.top
-    const bx = rb.left + rb.width / 2 - origin.left
-    const by = rb.top + rb.height / 2 - origin.top
-    const start = border(ax, ay, ra.width / 2, ra.height / 2, bx, by)
-    const end = border(bx, by, rb.width / 2, rb.height / 2, ax, ay)
-    members.push({ id: link.id, x1: start.x, y1: start.y, x2: end.x, y2: end.y })
-  }
-  memberSegments.value = members
-
-  const fes: FrontendSeg[] = []
-  for (const link of frontendLinks.value) {
-    const a = anchorEl(link.source)
-    const b = anchorEl(link.target)
-    if (!a || !b || a === b) continue
-    const ra = a.getBoundingClientRect()
-    const rb = b.getBoundingClientRect()
-    const ax = ra.left + ra.width / 2 - origin.left
-    const ay = ra.top + ra.height / 2 - origin.top
-    const bx = rb.left + rb.width / 2 - origin.left
-    const by = rb.top + rb.height / 2 - origin.top
-    const start = border(ax, ay, ra.width / 2, ra.height / 2, bx, by)
-    const end = border(bx, by, rb.width / 2, rb.height / 2, ax, ay)
-    fes.push({ id: link.id, x1: start.x, y1: start.y, x2: end.x, y2: end.y })
-  }
-  frontendSegments.value = fes
-
-  const conns: ConnectionSeg[] = []
-  for (const link of connectionLinks.value) {
-    const a = anchorEl(link.source)
-    const b = anchorEl(link.target)
-    if (!a || !b || a === b) continue
-    const ra = a.getBoundingClientRect()
-    const rb = b.getBoundingClientRect()
-    const ax = ra.left + ra.width / 2 - origin.left
-    const ay = ra.top + ra.height / 2 - origin.top
-    const bx = rb.left + rb.width / 2 - origin.left
-    const by = rb.top + rb.height / 2 - origin.top
-    const start = border(ax, ay, ra.width / 2, ra.height / 2, bx, by)
-    const end = border(bx, by, rb.width / 2, rb.height / 2, ax, ay)
-    conns.push({ id: link.id, x1: start.x, y1: start.y, x2: end.x, y2: end.y })
-  }
-  connectionSegments.value = conns
+  memberSegments.value = linkSegments(epicLinks.value, origin)
+  frontendSegments.value = linkSegments(frontendLinks.value, origin)
+  connectionSegments.value = linkSegments(connectionLinks.value, origin)
 }
 
 const { pause, resume } = useRafFn(recompute, { immediate: false })
