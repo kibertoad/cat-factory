@@ -195,15 +195,11 @@ export class TesterController {
     // An unparseable report can't gate a release — fail loudly rather than silently
     // greenlighting or looping forever.
     if (!report) {
-      return this.failTester(
-        workspaceId,
-        instance,
-        step,
-        block,
-        result.output ?? 'Tester returned an unparseable report.',
-        'Tester returned an unparseable test report.',
-        step.test.attempts,
-      )
+      return this.failTester(workspaceId, instance, step, block, {
+        output: result.output ?? 'Tester returned an unparseable report.',
+        error: 'Tester returned an unparseable test report.',
+        attempts: step.test.attempts,
+      })
     }
 
     // The FIRST testing round always loops the fixer when the report flags ANYTHING — any
@@ -242,15 +238,12 @@ export class TesterController {
       return this.dispatchFixer(workspaceId, instance, step, block, report)
     }
     // Budget spent (or no async executor to fix with): give up for human attention.
-    return this.failTester(
-      workspaceId,
-      instance,
-      step,
-      block,
-      report.summary || 'Tester withheld its greenlight.',
-      `Tester withheld its greenlight after ${step.test.attempts} fix attempt(s). ${describeTestConcerns(report)}`.trim(),
-      step.test.attempts,
-    )
+    return this.failTester(workspaceId, instance, step, block, {
+      output: report.summary || 'Tester withheld its greenlight.',
+      error:
+        `Tester withheld its greenlight after ${step.test.attempts} fix attempt(s). ${describeTestConcerns(report)}`.trim(),
+      attempts: step.test.attempts,
+    })
   }
 
   /**
@@ -412,10 +405,9 @@ export class TesterController {
     instance: ExecutionInstance,
     step: PipelineStep,
     block: Block | null,
-    output: string,
-    error: string,
-    attempts: number,
+    failure: { output: string; error: string; attempts: number },
   ): Promise<AdvanceResult> {
+    const { output, error, attempts } = failure
     step.output = output
     await this.deps.stateMachine.casPersist(workspaceId, instance)
     await this.raiseTestFailed(workspaceId, instance, block, error, attempts)
@@ -521,15 +513,12 @@ export class TesterController {
     // earlier step never produced a PR) can't be auto-fixed — fail cleanly with the
     // report instead of letting the job-body builder throw out of the advance.
     if (!block.pullRequest?.branch) {
-      return this.failTester(
-        workspaceId,
-        instance,
-        step,
-        block,
-        report.summary || 'Tester withheld its greenlight.',
-        `Tester withheld its greenlight and there is no PR branch for the fixer to push to. ${describeTestConcerns(report)}`.trim(),
-        step.test?.attempts ?? 0,
-      )
+      return this.failTester(workspaceId, instance, step, block, {
+        output: report.summary || 'Tester withheld its greenlight.',
+        error:
+          `Tester withheld its greenlight and there is no PR branch for the fixer to push to. ${describeTestConcerns(report)}`.trim(),
+        attempts: step.test?.attempts ?? 0,
+      })
     }
     const isFinalStep = instance.currentStep === instance.steps.length - 1
     // Build the context AS the fixer: the hosting step's kind is the tester, so the

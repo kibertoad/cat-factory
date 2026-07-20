@@ -319,6 +319,12 @@ export class RequirementReviewService extends IterativeReviewService<
       workspaceId,
       pending.map((p) => p.sourceFinding.title),
     )
+    // Finding-independent grounding, assembled once and reused across every per-chunk Writer call.
+    const grounding: RecommendationGrounding = {
+      fragments,
+      specExcerpts: sharedSpecExcerpts,
+      webResults: sharedWebResults,
+    }
 
     // Group the pending placeholders by their "do it differently" note so every finding in a
     // batched prompt shares the one note the prompt carries (a fresh batch shares null; a
@@ -360,14 +366,11 @@ export class RequirementReviewService extends IterativeReviewService<
         const suggestions = liveFindings.length
           ? await this.runWriterForChunk(
               workspaceId,
-              model,
-              ref,
+              { model, ref },
               context,
               liveFindings,
               note,
-              fragments,
-              sharedSpecExcerpts,
-              sharedWebResults,
+              grounding,
             )
           : new Map<string, { recommendation: string; fromStandard: string | null }>()
         // Re-read fresh before applying: the human may have acted during the Writer call.
@@ -556,20 +559,13 @@ export class RequirementReviewService extends IterativeReviewService<
    */
   private async runWriterForChunk(
     workspaceId: string,
-    model: ReturnType<ModelProvider['resolve']>,
-    ref: ModelRef,
+    resolved: { model: ReturnType<ModelProvider['resolve']>; ref: ModelRef },
     context: RequirementsContext,
     findings: RequirementReviewItem[],
     note: string | undefined,
-    fragments: GroundingFragment[],
-    sharedSpecExcerpts: string[],
-    sharedWebResults: GroundingWebResult[],
+    grounding: RecommendationGrounding,
   ): Promise<Map<string, { recommendation: string; fromStandard: string | null }>> {
-    const grounding: RecommendationGrounding = {
-      fragments,
-      specExcerpts: sharedSpecExcerpts,
-      webResults: sharedWebResults,
-    }
+    const { model, ref } = resolved
     try {
       const result = await generateText({
         model,

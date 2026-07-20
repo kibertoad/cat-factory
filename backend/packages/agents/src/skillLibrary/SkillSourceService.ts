@@ -144,9 +144,7 @@ export class SkillSourceService {
           const skillId = `src:${source.id}:${slug}`
           const synced = await this.syncSkillDir(
             source,
-            dir.name,
-            dir.path,
-            skillId,
+            { name: dir.name, path: dir.path, skillId },
             existingById.get(skillId),
             installationId,
             readRef,
@@ -228,14 +226,13 @@ export class SkillSourceService {
    */
   private async syncSkillDir(
     source: SkillSourceRecord,
-    dirName: string,
-    dirPath: string,
-    skillId: string,
+    skillDir: { name: string; path: string; skillId: string },
     prior: AccountSkillRecord | undefined,
     installationId: number,
     readRef: string,
     now: number,
   ): Promise<'skip' | 'kept' | 'stale' | 'upserted'> {
+    const { name: dirName, path: dirPath, skillId } = skillDir
     const entries = await this.listDir(source, installationId, dirPath, readRef)
     const manifest = entries.find((e) => e.type === 'file' && isSkillManifest(e.name))
     if (!manifest) return 'skip' // not a skill directory (SKILL.md removed → prior tombstoned)

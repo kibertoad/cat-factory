@@ -38,7 +38,8 @@ import type {
   RunInitiatorScope,
   StepResolverRegistry,
 } from '@cat-factory/kernel'
-import { assertPipelineLaunchable, type RunOrigin } from '../pipelines/pipelineShape.js'
+import { assertPipelineLaunchable } from '../pipelines/pipelineShape.js'
+import type { RunStartOptions } from './runStartOptions.js'
 import { shouldRunGatedStep } from './stepGating.logic.js'
 import {
   resolveIndividualVendors,
@@ -1138,40 +1139,9 @@ export class ExecutionService {
     workspaceId: string,
     blockId: string,
     pipelineId: string,
-    /**
-     * Internal user id of the initiator. Recorded on the run so an individual-usage
-     * model (Claude) uses this user's OWN personal subscription. Absent for
-     * system-initiated runs (recurring schedules) and auth-disabled dev.
-     */
-    initiatedBy?: string | null,
-    /**
-     * Mint the per-run personal-credential activation for an individual-usage model.
-     * Invoked with the new run's id BEFORE it is persisted/dispatched, so the async
-     * steps can lease it; a throw (wrong/missing password) aborts the start cleanly
-     * with nothing persisted. The server layer supplies this (the personal store lives
-     * outside the domain Core); absent for non-individual runs.
-     */
-    activate?: (executionId: string) => Promise<void>,
-    /**
-     * How this run is being launched: a `'manual'` one-off task (default) or a `'recurring'`
-     * schedule fire ({@link RecurringPipelineService.fire}). Gates the pipeline's declared
-     * `availability` — a `'recurring'`-only pipeline can't be started manually and vice versa
-     * (see {@link assertPipelineLaunchable}). A retry/restart re-drives an already-validated
-     * run, so it never re-checks this.
-     */
-    origin: RunOrigin = 'manual',
-    /**
-     * Per-run approval-gate override (the initiative-preset gate-override seam). When supplied
-     * it REPLACES the pipeline's declared `gates` for THIS run only — one boolean per pipeline
-     * step, indexed by the pipeline's ORIGINAL step index exactly like `pipeline.gates`, so it
-     * must be parallel to `pipeline.agentKinds`. `undefined` ⇒ today's behaviour (the pipeline's
-     * own gates). The initiative loop threads an item's `spawn.gates` through here; a preset's
-     * review mapping computes the array from the user's `humanReview` choice. The override is
-     * copied onto the run's steps (`requiresApproval`), so a retry/restart — which re-drive the
-     * STORED steps — preserve it with no extra persistence.
-     */
-    gatesOverride?: boolean[],
+    options: RunStartOptions = {},
   ): Promise<ExecutionInstance> {
+    const { initiatedBy, activate, origin = 'manual', gatesOverride } = options
     await this.requireWorkspace(workspaceId)
     const block = await this.requireBlock(workspaceId, blockId)
     const pipeline = assertFound(
@@ -2103,7 +2073,7 @@ export class ExecutionService {
       )
       if (individual.length > 0) continue
       try {
-        await this.start(workspaceId, dependent.id, pipeline.id, null)
+        await this.start(workspaceId, dependent.id, pipeline.id, { initiatedBy: null })
       } catch {
         // Already running, no usable provider, still-unmet dep racing, etc. — leave this
         // dependent for a manual start; the others still get their chance.

@@ -395,17 +395,26 @@ function buildResolveWorkspaceModelDefault(
  * missing we fail the deploy loudly here rather than starting with a half-wired
  * implementer that would only fault the moment a repo-operating step is dispatched.
  */
-function selectAgentExecutor(
-  env: Env,
-  config: AppConfig,
-  db: D1Database,
-  clock: Clock,
-  resolveTransport: ResolveRunnerTransport | null,
-  agentKindRegistry: AgentKindRegistry,
-  subscriptions?: ProviderSubscriptionService,
-  personalSubscriptions?: PersonalSubscriptionService,
-  agentContextObservability?: AgentContextRecorder,
-): AgentExecutor {
+/**
+ * The shared prerequisites both the composite executor selection and its container leg
+ * need — the Worker's infra handles (`env`/`config`/`db`/`clock`), the resolved runner
+ * transport, the agent-kind registry, and the optional subscription / observability seams.
+ * Bundled so the two builders take one dependency object rather than nine positional args.
+ */
+interface WorkerExecutorDeps {
+  env: Env
+  config: AppConfig
+  db: D1Database
+  clock: Clock
+  resolveTransport: ResolveRunnerTransport | null
+  agentKindRegistry: AgentKindRegistry
+  subscriptions?: ProviderSubscriptionService
+  personalSubscriptions?: PersonalSubscriptionService
+  agentContextObservability?: AgentContextRecorder
+}
+
+function selectAgentExecutor(deps: WorkerExecutorDeps): AgentExecutor {
+  const { env, config, db, agentKindRegistry } = deps
   const inline = new AiAgentExecutor({
     modelProviderResolver: buildModelProviderResolver(env, db),
     agentRouting: config.agents.routing,
@@ -425,17 +434,7 @@ function selectAgentExecutor(
   // EXEC_CONTAINER binding or a registered runner pool) is missing. We refuse to
   // start with a half-configured implementer rather than quietly running the
   // repo-operating steps as useless one-shot LLM calls.
-  const container = buildContainerExecutor(
-    env,
-    config,
-    db,
-    clock,
-    resolveTransport,
-    agentKindRegistry,
-    subscriptions,
-    personalSubscriptions,
-    agentContextObservability,
-  )
+  const container = buildContainerExecutor(deps)
   if (!container) {
     throw configProblem({ key: 'CONTAINER_EXECUTOR', ...ENV_HELP.CONTAINER_EXECUTOR })
   }
@@ -485,19 +484,21 @@ function maybeWrapConsensus(
  * otherwise the per-run Cloudflare Container. Returns null when neither backend is
  * available, so {@link buildContainerExecutor} falls back to inline work.
  */
-function buildResolveTransport(
-  env: Env,
-  config: AppConfig,
-  db: D1Database,
-  clock: Clock,
-  provisioningLog: ProvisioningLogRecorder | undefined,
+function buildResolveTransport(deps: {
+  env: Env
+  config: AppConfig
+  db: D1Database
+  clock: Clock
+  provisioningLog: ProvisioningLogRecorder | undefined
   // The app-owned runner-backend registry the service resolves a stored `kind` through.
-  runnerBackendRegistry: RunnerBackendRegistry,
+  runnerBackendRegistry: RunnerBackendRegistry
   // The shared HTTP provider the built-in `manifest` backend reuses when supplied (its OAuth
   // cache reused). NOT the custom-kind seam — a bespoke runner backend is registered by
   // reference into `runnerBackendRegistry`. Absent → the generic manifest-driven HTTP provider.
-  injectedPoolProvider?: RunnerPoolProvider,
-): ResolveRunnerTransport | null {
+  injectedPoolProvider?: RunnerPoolProvider
+}): ResolveRunnerTransport | null {
+  const { env, config, db, clock, provisioningLog, runnerBackendRegistry, injectedPoolProvider } =
+    deps
   // The Cloudflare backend folds in instance-level reaping: the registry records
   // each dispatched container in the live inventory and clears it on release, so the
   // cron reaper (index.ts) can kill anything that outlived its lifetime — covering
@@ -1292,17 +1293,18 @@ function buildDefaultWebSearchUpstream(env: Env): WebSearchUpstream | undefined 
   })
 }
 
-function buildContainerExecutor(
-  env: Env,
-  config: AppConfig,
-  db: D1Database,
-  clock: Clock,
-  resolveTransport: ResolveRunnerTransport | null,
-  agentKindRegistry: AgentKindRegistry,
-  subscriptions?: ProviderSubscriptionService,
-  personalSubscriptions?: PersonalSubscriptionService,
-  agentContextObservability?: AgentContextRecorder,
-): AgentExecutor | null {
+function buildContainerExecutor(deps: WorkerExecutorDeps): AgentExecutor | null {
+  const {
+    env,
+    config,
+    db,
+    clock,
+    resolveTransport,
+    agentKindRegistry,
+    subscriptions,
+    personalSubscriptions,
+    agentContextObservability,
+  } = deps
   if (
     !config.github.enabled ||
     !env.GITHUB_APP_PRIVATE_KEY ||
@@ -1938,15 +1940,16 @@ function selectRepoBootstrapper(
  * provider the engine validates with. NOT to be confused with the repo bootstrapper: this
  * is an ordinary clone→edit→push coding job (no history reset / force-push).
  */
-function selectEnvConfigRepairer(
-  env: Env,
-  config: AppConfig,
-  db: D1Database,
-  clock: Clock,
-  resolveTransport: ResolveRunnerTransport | null,
-  override: CoreDependencies['environmentProvider'],
-  environmentBackendRegistry: EnvironmentBackendRegistry,
-): ContainerEnvConfigRepairer | undefined {
+function selectEnvConfigRepairer(deps: {
+  env: Env
+  config: AppConfig
+  db: D1Database
+  clock: Clock
+  resolveTransport: ResolveRunnerTransport | null
+  override: CoreDependencies['environmentProvider']
+  environmentBackendRegistry: EnvironmentBackendRegistry
+}): ContainerEnvConfigRepairer | undefined {
+  const { env, config, db, clock, resolveTransport, override, environmentBackendRegistry } = deps
   const repairUrlPolicy = resolveUrlSafetyPolicy(config.environments)
   // Prefer the internal override (the conformance suite's fake repair provider) else scan
   // the env-backend registry for the first repair-capable backend.
@@ -2233,15 +2236,15 @@ export function buildContainer(
   // connection-management UI, so thread it here too so it ALSO drives the manifest backend's
   // dispatch transport. (A bespoke runner backend is registered by reference into
   // `runnerBackendRegistry`, NOT this provider override.)
-  const resolveTransport = buildResolveTransport(
+  const resolveTransport = buildResolveTransport({
     env,
     config,
     db,
     clock,
-    provisioningLogRecorder,
+    provisioningLog: provisioningLogRecorder,
     runnerBackendRegistry,
-    overrides.runnerPoolProvider,
-  )
+    injectedPoolProvider: overrides.runnerPoolProvider,
+  })
 
   // The subscription-token pool (Claude Code / Codex credentials) — built once and
   // shared by the container executor (lease + usage feedback) and the
@@ -2407,7 +2410,7 @@ export function buildContainer(
     agentExecutor:
       overrides.agentExecutor ??
       maybeWrapConsensus(
-        selectAgentExecutor(
+        selectAgentExecutor({
           env,
           config,
           db,
@@ -2417,7 +2420,7 @@ export function buildContainer(
           subscriptions,
           personalSubscriptions,
           agentContextObservability,
-        ),
+        }),
         env,
         config,
         db,
@@ -2542,15 +2545,15 @@ export function buildContainer(
   // `...overrides` above), so a native adapter injected via overrides — not the default
   // manifest provider — is the one the repair dispatcher uses. Unwired on a stock deployment
   // (the generic provider has no `describeRepairAgent`), exactly like the service guard.
-  const envConfigRepairer = selectEnvConfigRepairer(
+  const envConfigRepairer = selectEnvConfigRepairer({
     env,
     config,
     db,
     clock,
     resolveTransport,
-    dependencies.environmentProvider,
+    override: dependencies.environmentProvider,
     environmentBackendRegistry,
-  )
+  })
   // Don't clobber an override-provided repairer (e.g. the conformance suite's fake): an
   // explicit `overrides.envConfigRepairer` wins, exactly like `repoBootstrapper`.
   if (envConfigRepairer && !dependencies.envConfigRepairer) {

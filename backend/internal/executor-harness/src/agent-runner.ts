@@ -118,14 +118,14 @@ function attributeCumulativeUsage(
  * the role + best-practice context is not lost.
  */
 function streamCli(
-  command: string,
-  args: string[],
+  cli: { command: string; args: string[] },
   prompt: string,
   opts: SubscriptionRunOptions,
   env: Record<string, string>,
   secrets: string[],
   onEvent: (event: Record<string, unknown>) => void,
 ): Promise<{ stderrTail: string }> {
+  const { command, args } = cli
   return new Promise((resolve, reject) => {
     if (opts.signal?.aborted) {
       reject(new Error(`${command} aborted before start`))
@@ -374,23 +374,25 @@ export async function runClaudeCode(opts: SubscriptionRunOptions): Promise<PiRun
 
   try {
     const { stderrTail } = await streamCli(
-      'claude',
-      [
-        '-p',
-        '--output-format',
-        'stream-json',
-        '--verbose',
-        // The per-run container IS the sandbox, and the run is fully headless (no one
-        // to approve a tool call) — so bypass permissions entirely. `acceptEdits`
-        // would auto-accept file edits but still gate Bash, which in `-p` mode is then
-        // denied, leaving the agent unable to run builds/tests/git to verify its work.
-        '--permission-mode',
-        'bypassPermissions',
-        '--model',
-        opts.model,
-        '--append-system-prompt',
-        opts.systemPrompt,
-      ],
+      {
+        command: 'claude',
+        args: [
+          '-p',
+          '--output-format',
+          'stream-json',
+          '--verbose',
+          // The per-run container IS the sandbox, and the run is fully headless (no one
+          // to approve a tool call) — so bypass permissions entirely. `acceptEdits`
+          // would auto-accept file edits but still gate Bash, which in `-p` mode is then
+          // denied, leaving the agent unable to run builds/tests/git to verify its work.
+          '--permission-mode',
+          'bypassPermissions',
+          '--model',
+          opts.model,
+          '--append-system-prompt',
+          opts.systemPrompt,
+        ],
+      },
       opts.userPrompt,
       opts,
       env,
@@ -594,18 +596,20 @@ export async function runCodex(opts: SubscriptionRunOptions): Promise<PiRunOutco
 
   try {
     const { stderrTail } = await streamCli(
-      'codex',
-      [
-        'exec',
-        '--json',
-        '--skip-git-repo-check',
-        // The per-run container IS the sandbox; let Codex write files and reach the
-        // vendor unrestricted, with no approval prompts (the run is headless).
-        '--dangerously-bypass-approvals-and-sandbox',
-        '--model',
-        opts.model,
-        '-',
-      ],
+      {
+        command: 'codex',
+        args: [
+          'exec',
+          '--json',
+          '--skip-git-repo-check',
+          // The per-run container IS the sandbox; let Codex write files and reach the
+          // vendor unrestricted, with no approval prompts (the run is headless).
+          '--dangerously-bypass-approvals-and-sandbox',
+          '--model',
+          opts.model,
+          '-',
+        ],
+      },
       prompt,
       opts,
       codexHome ? { CODEX_HOME: codexHome } : {},

@@ -1399,7 +1399,7 @@ export function buildNodeContainer(options: NodeContainerOptions): ServerContain
     registry: defaultSubscriptionQuotaRegistry,
   })
 
-  const container = buildNodeContainerExecutor(
+  const container = buildNodeContainerExecutor({
     env,
     config,
     appRegistry,
@@ -1408,19 +1408,20 @@ export function buildNodeContainer(options: NodeContainerOptions): ServerContain
     resolveTransport,
     resolveWorkspaceModelDefault,
     agentKindRegistry,
-    options.mintInstallationToken,
+    mintInstallationTokenOverride: options.mintInstallationToken,
     subscriptions,
     personalSubscriptions,
-    (workspaceId) => repos.workspaceRepository.accountOf(workspaceId),
+    resolveAccountId: (workspaceId) => repos.workspaceRepository.accountOf(workspaceId),
     resolveUserGitHubToken,
     agentContextObservability,
     resolveWebSearchAvailability,
-    options.resolveRepoOrigin,
+    resolveRepoOrigin: options.resolveRepoOrigin,
     resolvePackageRegistries,
     resolveTestSecrets,
     recordHarnessCalls,
-    (target, usage) => subscriptionQuotaProvider.recordUsage(target, usage),
-  )
+    recordSubscriptionQuotaUsage: (target, usage) =>
+      subscriptionQuotaProvider.recordUsage(target, usage),
+  })
 
   // Always a composite: inline kinds run as one-shot LLM calls; repo-operating kinds
   // route to the container (and fail loudly when its prerequisites are unconfigured).
