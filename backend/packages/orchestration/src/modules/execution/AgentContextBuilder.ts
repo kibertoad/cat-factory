@@ -24,6 +24,7 @@ import type {
   WorkspaceRepository,
 } from '@cat-factory/kernel'
 import {
+  applicableFragmentIds,
   buildExcerpt,
   CONTEXT_BUDGET,
   resolveServiceFrameBlock,
@@ -833,15 +834,19 @@ export class AgentContextBuilder {
   }
 
   /**
-   * Resolve the best-practice fragments to fold into a step's system prompt. Service
-   * fragments reach an agent ONLY when its kind carries the `code-aware` trait (technical
-   * standards) OR the `doc-aware` trait (document writing-style fragments): those kinds get
-   * the running SERVICE's selected fragments (the frame's `serviceFragmentIds`, seeded from
-   * the workspace default and editable per service) unioned with the block's own manual pins
-   * (for a document task, the default-on `style.*` pins seeded at creation), resolved against
-   * the universal pool. A kind carrying neither trait returns null so `composeBlockSystemPrompt`
-   * falls back to the block's own `fragmentIds` unchanged. Records the selected ids on the step
-   * for observability; never throws (a lookup failure degrades to the block pins).
+   * Resolve the best-practice fragments to fold into a step's system prompt. Fragments reach an
+   * agent ONLY when its kind carries the `code-aware` trait (technical standards) OR the
+   * `doc-aware` trait (document writing-style fragments); a kind carrying neither returns null so
+   * `composeBlockSystemPrompt` falls back to the block's own `fragmentIds` unchanged.
+   *
+   * A TASK owns its fragment selection outright: its inheritance from the service is materialised
+   * onto `block.fragmentIds` at creation (see `BoardService.addTask`), so the service's fragments
+   * are NOT re-unioned here — that is what lets a per-task removal actually take effect. Only a
+   * FRAME-level run (e.g. `blueprints` on the service itself) folds in the service's own
+   * `serviceFragmentIds` (there `serviceFrame === block`), so the service's standards still govern
+   * the frame's own agents. Ids are deduped, service-then-block order, resolved against the
+   * universal pool. Records the selected ids on the step for observability; never throws (a lookup
+   * failure degrades to the block pins).
    */
   private async resolveFragments(
     workspaceId: string,
@@ -862,18 +867,11 @@ export class AgentContextBuilder {
       return null
     }
     try {
-      // The owning service frame's selected fragments — read off the frame `buildContext` already
-      // walked to (threaded in), not a fresh ancestry walk. A `frame`-level block IS its own frame,
-      // so `serviceFrame` is the frame whose `serviceFragmentIds` we want in every case.
-      const serviceIds = serviceFrame?.serviceFragmentIds ?? []
-      // Service standards first, then the block's own pins; deduped, stable order.
-      const ids: string[] = []
-      const seen = new Set<string>()
-      for (const id of [...serviceIds, ...(block.fragmentIds ?? [])]) {
-        if (seen.has(id)) continue
-        seen.add(id)
-        ids.push(id)
-      }
+      // The applicable fragment ids for this block — the shared, task-authoritative rule (a task
+      // folds only its own `fragmentIds`; only a frame-level run re-unions the service's
+      // `serviceFragmentIds`, where `serviceFrame === block`). Kept in one kernel helper so this
+      // and the requirements-review grounding can't drift.
+      const ids = applicableFragmentIds(block, serviceFrame)
       // Prefer the tenant-catalog resolver (managed + live document-backed
       // fragments) when wired; otherwise resolve against the static built-in pool.
       const fragments = this.deps.fragmentResolver

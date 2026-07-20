@@ -13,6 +13,7 @@
  */
 
 import type { AppCaches, Block, ExecutionEventPublisher } from '@cat-factory/kernel'
+import { applicableFragmentIds, resolveServiceFrameBlock } from '@cat-factory/kernel'
 import { getFragment } from '@cat-factory/prompt-fragments'
 import { type AgentKindRegistry } from '@cat-factory/agents'
 import {
@@ -744,31 +745,21 @@ export function createRequirementsModule(
     // The Requirement Writer (second companion) grounds recommendations on the run's repo
     // (`spec/` + `tech-spec/` via the checkout-free RepoFiles) — wired in all three facades.
     resolveRunRepoContext: deps.resolveRunRepoContext,
-    // …and on the block's best-practice fragments (team/org standards), checked FIRST. Walk
-    // the owning frame's service standards then union the block's own pins (same precedence
-    // as the agent context builder), resolved against the merged tenant catalog when the
-    // fragment library is wired (so managed + document-backed fragments ground the review
-    // exactly like they reach a code-aware run), else the static universal pool.
+    // …and on the block's best-practice fragments (team/org standards), checked FIRST. Uses the
+    // SAME task-authoritative rule as the agent context builder (the shared `applicableFragmentIds`
+    // helper): a task grounds on its OWN `fragmentIds` only — a per-task removal must stick here too
+    // — while a frame-level review re-unions the service's `serviceFragmentIds`. Resolved against
+    // the merged tenant catalog when the fragment library is wired (so managed + document-backed
+    // fragments ground the review exactly like they reach a code-aware run), else the static pool.
     resolveBlockFragments: async (workspaceId: string, blockId: string) => {
       const block = await deps.blockRepository.get(workspaceId, blockId)
       if (!block) return []
-      const ids: string[] = []
-      const seen = new Set<string>()
-      const add = (id: string) => {
-        if (!seen.has(id)) {
-          seen.add(id)
-          ids.push(id)
-        }
-      }
-      let current: Block | null = block
-      for (let i = 0; current && i < 8; i++) {
-        if (current.level === 'frame' || !current.parentId) {
-          for (const id of current.serviceFragmentIds ?? []) add(id)
-          break
-        }
-        current = await deps.blockRepository.get(workspaceId, current.parentId)
-      }
-      for (const id of block.fragmentIds ?? []) add(id)
+      const serviceFrame = await resolveServiceFrameBlock(
+        (id) => deps.blockRepository.get(workspaceId, id),
+        blockId,
+        block,
+      )
+      const ids = applicableFragmentIds(block, serviceFrame)
       if (fragmentLibrary) {
         // Resolve the merged tenant catalog ONCE and reuse it for both the titles map and
         // the body resolution (which would otherwise re-resolve the same catalog).

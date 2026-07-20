@@ -4,9 +4,11 @@ import { getFragment } from '@cat-factory/prompt-fragments'
 // system prompt. There are two sources of fragment bodies, in priority order:
 //
 //  1. `resolvedFragments` — already-resolved `{ id, body }` entries the execution
-//     engine attaches for a `code-aware` step: the running service's selected
-//     fragments (the frame's `serviceFragmentIds`) unioned with the block's own
-//     pins, resolved against the universal pool. Used as-is.
+//     engine attaches for a `code-aware`/`doc-aware` step: the block's applicable
+//     best-practice fragments, resolved against the universal pool. For a TASK that
+//     is the task's OWN `fragmentIds` (which already carries the service standards it
+//     inherited at creation — the service's set is NOT re-unioned at run time); only a
+//     FRAME-level run adds the frame's `serviceFragmentIds`. Used as-is.
 //  2. `fragmentIds` — the block's own manual selection, resolved against the
 //     universal fragment pool in @cat-factory/prompt-fragments. This is the path
 //     for non-code-aware kinds (the engine attaches no `resolvedFragments` for them).

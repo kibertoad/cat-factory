@@ -224,10 +224,44 @@ export function defineAgentConformance(harness: ConformanceHarness): void {
         expect(frame.body.serviceFragmentIds).toEqual(['node.best-practices', 'node.performance'])
       })
 
-      it('folds the service fragments into code-aware agents only', async () => {
-        // Register a deployment-style custom fragment into the universal pool, select it
-        // as a service's standards, and assert the engine folds it into a `code-aware`
-        // step's prompt (coder) but not a non-code-aware one (documenter).
+      it("seeds a new task's fragments from its service, honouring an explicit override", async () => {
+        const { call, createWorkspace } = harness.makeApp()
+        const { workspace } = await createWorkspace()
+        const wsId = workspace.id
+
+        // Give the seeded auth service a fragment selection.
+        await call('PATCH', `/workspaces/${wsId}/blocks/blk_auth`, {
+          serviceFragmentIds: ['node.best-practices', 'node.performance'],
+        })
+
+        // A task created under it inherits that selection onto its OWN fragmentIds — so it is
+        // visible and editable/removable per task from here (the service is not re-unioned at run).
+        const inherited = await call<Block>('POST', `/workspaces/${wsId}/blocks/blk_auth/tasks`, {
+          title: 'Inherits the service standards',
+        })
+        expect(inherited.body.fragmentIds).toEqual(['node.best-practices', 'node.performance'])
+
+        // An explicit list on the create request is authoritative (the user edited the picker).
+        const overridden = await call<Block>('POST', `/workspaces/${wsId}/blocks/blk_auth/tasks`, {
+          title: 'Overrides the inherited set',
+          fragmentIds: ['node.performance'],
+        })
+        expect(overridden.body.fragmentIds).toEqual(['node.performance'])
+
+        // An explicit EMPTY list means "the user cleared the inherited selection" — no seeding.
+        const cleared = await call<Block>('POST', `/workspaces/${wsId}/blocks/blk_auth/tasks`, {
+          title: 'Clears the inherited set',
+          fragmentIds: [],
+        })
+        expect(cleared.body.fragmentIds ?? []).toEqual([])
+      })
+
+      it('folds the task fragments into code-aware agents only', async () => {
+        // Register a deployment-style custom fragment into the universal pool, select it on the
+        // TASK's own selection, and assert the engine folds it into a `code-aware` step's prompt
+        // (coder) but not a non-code-aware one (documenter). A task owns its fragment selection
+        // (seeded from the service at creation, then editable), so the fold reads the task's own
+        // `fragmentIds` — the service's fragments are not re-unioned at run time.
         registerPromptFragment({
           id: 'test.svc-standard',
           version: '1.0.0',
@@ -241,9 +275,9 @@ export function defineAgentConformance(harness: ConformanceHarness): void {
           const { workspace } = await app.createWorkspace()
           const wsId = workspace.id
 
-          // Set the service-level selection on the seeded auth frame (task_login's owner).
-          await app.call('PATCH', `/workspaces/${wsId}/blocks/blk_auth`, {
-            serviceFragmentIds: ['test.svc-standard'],
+          // Select the fragment on the seeded task itself.
+          await app.call('PATCH', `/workspaces/${wsId}/blocks/task_login`, {
+            fragmentIds: ['test.svc-standard'],
           })
 
           const pipeline = await app.call<Pipeline>('POST', `/workspaces/${wsId}/pipelines`, {
@@ -256,12 +290,12 @@ export function defineAgentConformance(harness: ConformanceHarness): void {
           expect(start.status).toBe(201)
           const exec = (await app.drive(wsId)).find((e) => e.blockId === 'task_login')!
 
-          // The coder is `code-aware`: it receives the service's fragment.
+          // The coder is `code-aware`: it receives the task's fragment.
           const coder = exec.steps.find((s) => s.agentKind === 'coder')!
           expect(coder.output).toContain('[frags]test.svc-standard[/frags]')
           expect(coder.selectedFragmentIds).toEqual(['test.svc-standard'])
 
-          // The doc-outliner is `doc-aware`: it folds the same service fragments (the
+          // The doc-outliner is `doc-aware`: it folds the same fragments (the
           // document writing-style path is the doc analogue of code-aware).
           const outliner = exec.steps.find((s) => s.agentKind === 'doc-outliner')!
           expect(outliner.output).toContain('[frags]test.svc-standard[/frags]')
@@ -295,8 +329,8 @@ export function defineAgentConformance(harness: ConformanceHarness): void {
         })
         expect(created.status).toBe(201)
 
-        await app.call('PATCH', `/workspaces/${wsId}/blocks/blk_auth`, {
-          serviceFragmentIds: ['db.managed-standard'],
+        await app.call('PATCH', `/workspaces/${wsId}/blocks/task_login`, {
+          fragmentIds: ['db.managed-standard'],
         })
         const pipeline = await app.call<Pipeline>('POST', `/workspaces/${wsId}/pipelines`, {
           name: 'Code',
@@ -316,7 +350,7 @@ export function defineAgentConformance(harness: ConformanceHarness): void {
       it('resolves the built-in design.context fragment into a code-aware run', async () => {
         // The shared design-context fragment (the one a linked Figma/Zeplin document's
         // materialised `.cat-context/*.md` pairs with) is a built-in catalog entry. Pinning
-        // it on a service and asserting a `coder` run resolves it proves the fragment is in
+        // it on the task and asserting a `coder` run resolves it proves the fragment is in
         // the universal pool and reaches a code-aware agent identically on D1 and Postgres —
         // a rename/removal of the design fragment fails here. (The document body's own
         // materialisation into the agent context is covered by the generic document-source
@@ -325,8 +359,8 @@ export function defineAgentConformance(harness: ConformanceHarness): void {
         const { workspace } = await app.createWorkspace()
         const wsId = workspace.id
 
-        await app.call('PATCH', `/workspaces/${wsId}/blocks/blk_auth`, {
-          serviceFragmentIds: ['design.context'],
+        await app.call('PATCH', `/workspaces/${wsId}/blocks/task_login`, {
+          fragmentIds: ['design.context'],
         })
         const pipeline = await app.call<Pipeline>('POST', `/workspaces/${wsId}/pipelines`, {
           name: 'Code',

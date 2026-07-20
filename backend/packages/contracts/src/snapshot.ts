@@ -2,11 +2,11 @@ import * as v from 'valibot'
 import {
   blockSchema,
   budgetCapsSchema,
-  executionInstanceSchema,
   pipelineSchema,
   spendStatusSchema,
   workspaceSchema,
 } from './entities.js'
+import { executionInstanceSchema } from './execution.js'
 import { userSettingsSchema } from './user-settings.js'
 import { bootstrapJobSchema } from './bootstrap.js'
 import { envConfigRepairJobSchema } from './env-config-repair.js'

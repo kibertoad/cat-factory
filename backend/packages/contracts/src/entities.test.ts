@@ -5,9 +5,9 @@ import {
   aprioriReferenceBranches,
   aprioriWorkingBranch,
   isSafeGitBranchName,
-  isWebSearchProvider,
   resolveAprioriWorkingBranch,
 } from './entities.js'
+import { isWebSearchProvider } from './execution.js'
 
 // isSafeGitBranchName is a write-boundary guard: the value is used as a git ref, so a
 // regression that admits a leading '-', whitespace, or a forbidden ref char lets a stored

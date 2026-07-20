@@ -1,4 +1,5 @@
-import type { Block, ExecutionInstance } from './entities.js'
+import type { Block } from './entities.js'
+import type { ExecutionInstance } from './execution.js'
 import type { BootstrapJob } from './bootstrap.js'
 import type { EnvConfigRepairJob } from './env-config-repair.js'
 import type { EnvironmentTestRun } from './environment-test.js'

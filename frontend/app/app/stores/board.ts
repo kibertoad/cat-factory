@@ -241,7 +241,10 @@ export const useBoardStore = defineStore('board', () => {
       ...(options?.modelPresetId ? { modelPresetId: options.modelPresetId } : {}),
       ...(options?.pipelineId ? { pipelineId: options.pipelineId } : {}),
       ...(options?.agentConfig ? { agentConfig: options.agentConfig } : {}),
-      ...(options?.fragmentIds?.length ? { fragmentIds: options.fragmentIds } : {}),
+      // Forward the selection when the caller provides one (the create form always does, even
+      // when empty — an explicit clear the backend must honour rather than re-seed); omit only
+      // when a caller doesn't manage fragments at all (then the backend seeds from the service).
+      ...(options?.fragmentIds !== undefined ? { fragmentIds: options.fragmentIds } : {}),
       ...(options?.technical ? { technical: true } : {}),
     })
     upsert(block)

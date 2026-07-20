@@ -1,5 +1,5 @@
 import * as v from 'valibot'
-import { agentFailureSchema, stepSubtasksSchema } from './entities.js'
+import { agentFailureSchema, stepSubtasksSchema } from './execution.js'
 import { frameRepoTypeSchema } from './primitives.js'
 
 // ---------------------------------------------------------------------------
