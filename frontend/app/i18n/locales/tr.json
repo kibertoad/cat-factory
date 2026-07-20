@@ -4936,7 +4936,9 @@
     "line": "satır {line}",
     "reviewing": {
       "title": "Pull request inceleniyor…",
-      "hint": "Fark tutarlı parçalara bölünüp her biri inceleniyor."
+      "hint": "Fark tutarlı parçalara bölünüp her biri inceleniyor.",
+      "chunks": "{total} bölümden {completed} tanesi incelendi",
+      "inProgress": "{count} devam ediyor"
     },
     "fixing": {
       "title": "Seçili bulgular düzeltiliyor…",

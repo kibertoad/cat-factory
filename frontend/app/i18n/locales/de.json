@@ -4936,7 +4936,9 @@
     "line": "Zeile {line}",
     "reviewing": {
       "title": "Pull Request wird geprüft…",
-      "hint": "Der Diff wird in zusammenhängende Teile zerlegt und einzeln geprüft."
+      "hint": "Der Diff wird in zusammenhängende Teile zerlegt und einzeln geprüft.",
+      "chunks": "{completed} von {total} Abschnitten geprüft",
+      "inProgress": "{count} in Bearbeitung"
     },
     "fixing": {
       "title": "Ausgewählte Befunde werden behoben…",

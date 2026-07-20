@@ -5065,7 +5065,9 @@
     "line": "line {line}",
     "reviewing": {
       "title": "Reviewing the pull request…",
-      "hint": "Slicing the diff into cohesive chunks and reviewing each one."
+      "hint": "Slicing the diff into cohesive chunks and reviewing each one.",
+      "chunks": "{completed} of {total} chunks reviewed",
+      "inProgress": "{count} in progress"
     },
     "fixing": {
       "title": "Fixing the selected findings…",

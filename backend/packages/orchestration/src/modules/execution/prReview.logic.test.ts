@@ -3,6 +3,7 @@ import type { PrReviewAgentOutput, PrReviewFinding } from '@cat-factory/kernel'
 import {
   buildPrReviewPost,
   coercePrReview,
+  initialPrReviewState,
   renderPrReviewFixerFeedback,
   severityRank,
 } from './prReview.logic.js'
@@ -25,6 +26,32 @@ function ids(prefix: string): () => string {
   let n = 0
   return () => `${prefix}${++n}`
 }
+
+describe('initialPrReviewState', () => {
+  it('seeds an empty `reviewing` state carrying the PR + model, so the window shows a real phase', () => {
+    const state = initialPrReviewState('https://github.com/o/r/pull/42', 'anthropic:claude')
+    expect(state).toEqual({
+      status: 'reviewing',
+      summary: null,
+      slices: [],
+      findings: [],
+      selectedFindingIds: [],
+      resolution: null,
+      prUrl: 'https://github.com/o/r/pull/42',
+      model: 'anthropic:claude',
+    })
+  })
+
+  it('tolerates an unknown PR / model (null), and the recordFindings guard coerces over it', () => {
+    const state = initialPrReviewState(null, null)
+    expect(state.status).toBe('reviewing')
+    expect(state.prUrl).toBeNull()
+    expect(state.model).toBeNull()
+    // The completion interceptor treats `reviewing` as "not yet recorded" (it only short-circuits
+    // on a status OTHER than `reviewing`), so a seeded run still coerces its findings on completion.
+    expect(state.status).toBe('reviewing')
+  })
+})
 
 describe('coercePrReview', () => {
   it('mints ids, anchors findings to their slice, and sorts blocker-first', () => {

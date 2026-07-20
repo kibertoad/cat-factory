@@ -4936,7 +4936,9 @@
     "line": "riga {line}",
     "reviewing": {
       "title": "Revisione della pull request…",
-      "hint": "Suddivisione del diff in blocchi coerenti e revisione di ciascuno."
+      "hint": "Suddivisione del diff in blocchi coerenti e revisione di ciascuno.",
+      "chunks": "{completed} di {total} sezioni esaminate",
+      "inProgress": "{count} in corso"
     },
     "fixing": {
       "title": "Correzione dei rilievi selezionati…",

@@ -4924,7 +4924,9 @@
     "line": "wiersz {line}",
     "reviewing": {
       "title": "Przeglądanie pull requesta…",
-      "hint": "Dzielenie zmian na spójne części i przeglądanie każdej z nich."
+      "hint": "Dzielenie zmian na spójne części i przeglądanie każdej z nich.",
+      "chunks": "Sprawdzono {completed} z {total} fragmentów",
+      "inProgress": "{count} w toku"
     },
     "fixing": {
       "title": "Naprawianie wybranych uwag…",
