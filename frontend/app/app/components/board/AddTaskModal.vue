@@ -156,8 +156,8 @@ function deriveReviewTitle(raw: string): string {
     return t('board.addTask.review.derivedTitle', { ref: `#${parsed.prNumber}` })
   if (parsed?.prUrl) {
     const m = /github\.com\/([^/]+)\/([^/]+)\/pull\/(\d+)/.exec(parsed.prUrl)
-    const ref = m ? `${m[1]}/${m[2]}#${m[3]}` : parsed.prUrl
-    return t('board.addTask.review.derivedTitle', { ref })
+    const refLabel = m ? `${m[1]}/${m[2]}#${m[3]}` : parsed.prUrl
+    return t('board.addTask.review.derivedTitle', { ref: refLabel })
   }
   return t('board.addTask.review.derivedTitleFallback')
 }
