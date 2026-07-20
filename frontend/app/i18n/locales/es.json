@@ -649,7 +649,9 @@
       "serviceHint": "Estándares de programación para todo el servicio. El contenido de cada fragmento seleccionado se añade al prompt de cada agente que conoce el código y trabaja en tareas de este servicio.",
       "serviceEmpty": "Ninguna. Los agentes que conocen el código en este servicio siguen su guía predeterminada.",
       "manageBoard": "Gestionar la biblioteca de fragmentos de este tablero…",
-      "manageAccount": "Gestionar los fragmentos de la cuenta…"
+      "manageAccount": "Gestionar los fragmentos de la cuenta…",
+      "done": "Listo",
+      "pickerEmpty": "No hay fragmentos disponibles."
     },
     "frontendConfig": {
       "title": "Frontend",

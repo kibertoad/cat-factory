@@ -649,7 +649,9 @@
       "serviceHint": "Tüm servis için programlama standartları. Seçilen her parçanın içeriği, bu servisin görevlerinde çalışan kod farkında her ajanın prompt'una eklenir.",
       "serviceEmpty": "Yok. Bu servisteki kod farkında ajanlar varsayılan yönergelerini izler.",
       "manageBoard": "Bu pano'nun fragman kütüphanesini yönet…",
-      "manageAccount": "Hesap fragmanlarını yönet…"
+      "manageAccount": "Hesap fragmanlarını yönet…",
+      "done": "Tamam",
+      "pickerEmpty": "Kullanılabilir parça yok."
     },
     "frontendConfig": {
       "title": "Frontend",

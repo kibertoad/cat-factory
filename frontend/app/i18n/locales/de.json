@@ -931,7 +931,9 @@
       "serviceHint": "Programmierstandards für den gesamten Service. Der Inhalt jedes ausgewählten Fragments wird dem Prompt jedes code-bewussten Agents hinzugefügt, der an Aufgaben unter diesem Service arbeitet.",
       "serviceEmpty": "Keine. Code-bewusste Agents dieses Service folgen ihren Standardvorgaben.",
       "manageBoard": "Fragment-Bibliothek dieses Boards verwalten…",
-      "manageAccount": "Konto-Fragmente verwalten…"
+      "manageAccount": "Konto-Fragmente verwalten…",
+      "done": "Fertig",
+      "pickerEmpty": "Keine Fragmente verfügbar."
     },
     "frontendConfig": {
       "title": "Frontend",

@@ -649,7 +649,9 @@
       "serviceHint": "Normes de programmation pour tout le service. Le contenu de chaque fragment sélectionné est ajouté au prompt de chaque agent conscient du code travaillant sur les tâches de ce service.",
       "serviceEmpty": "Aucune. Les agents conscients du code sur ce service suivent leurs consignes par défaut.",
       "manageBoard": "Gérer la bibliothèque de fragments de ce tableau…",
-      "manageAccount": "Gérer les fragments du compte…"
+      "manageAccount": "Gérer les fragments du compte…",
+      "done": "Terminé",
+      "pickerEmpty": "Aucun fragment disponible."
     },
     "frontendConfig": {
       "title": "Frontend",

@@ -1,6 +1,6 @@
 import { describe, it, expect } from 'vitest'
 import type { PromptFragment } from '~/types/domain'
-import { buildFragmentPickerGroups } from './fragmentPicker'
+import { buildFragmentCategoryGroups, buildFragmentPickerGroups } from './fragmentPicker'
 
 const frag = (id: string, category: string, title = id): PromptFragment =>
   ({ id, version: '1.0.0', title, category, summary: '', body: '' }) as PromptFragment
@@ -56,5 +56,26 @@ describe('buildFragmentPickerGroups', () => {
     // Fire the first real item under the first category (index 1, past the label heading).
     ;(groups[0]![1] as { onSelect: () => void }).onSelect()
     expect(picked).toEqual(['node.best-practices'])
+  })
+})
+
+describe('buildFragmentCategoryGroups', () => {
+  it('buckets every fragment by category in first-appearance order, keeping pool order within', () => {
+    const groups = buildFragmentCategoryGroups(pool)
+    expect(groups.map((g) => g.category)).toEqual(['Node', 'Writing style'])
+    expect(groups[0]!.fragments.map((f) => f.id)).toEqual([
+      'node.best-practices',
+      'node.performance',
+    ])
+    expect(groups[1]!.fragments.map((f) => f.id)).toEqual([
+      'style.anti-llmisms',
+      'style.concise-actionable',
+    ])
+  })
+
+  it('keeps selected fragments in their bucket (multi-select toggles in place, never hides)', () => {
+    // Unlike the dropdown builder, the category grouping does no selection filtering.
+    const groups = buildFragmentCategoryGroups(pool)
+    expect(groups.flatMap((g) => g.fragments)).toHaveLength(pool.length)
   })
 })
