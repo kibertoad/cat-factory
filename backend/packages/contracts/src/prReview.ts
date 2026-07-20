@@ -181,6 +181,15 @@ export const prReviewStepStateSchema = v.object({
   /** Identifier of the model that produced the review, for transparency. */
   model: v.optional(v.nullable(v.string())),
   /**
+   * The PR head commit sha at the moment the review STARTED (captured when the reviewer was
+   * dispatched), or null when it couldn't be resolved (no VCS wired / older run). The `post`
+   * resolution compares it to the PR's CURRENT head: if the branch moved since the review, the
+   * frozen finding line numbers may now point at shifted/different code, so every finding is
+   * folded into the summary comment rather than anchored inline to a possibly-drifted line. Null
+   * ⇒ the drift check is skipped (the pre-existing per-line diff filtering still applies).
+   */
+  reviewedHeadSha: v.optional(v.nullable(v.string())),
+  /**
    * The outcome of the most recent `post` attempt (null until one runs). A partial or failed
    * post keeps the review parked at `awaiting_selection` carrying this report, so the window
    * shows what posted / what failed and the human can retry ONLY the posting (re-`post`) rather

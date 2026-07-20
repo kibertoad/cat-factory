@@ -92,6 +92,9 @@ export class PrReviewController {
     }
 
     const prUrl = block?.taskTypeFields?.prUrl?.trim() || null
+    // Preserve the head sha captured when the reviewer was dispatched (the review's "head at
+    // start"), so the `post` resolution can detect a branch update since the review.
+    const reviewedHeadSha = step.prReview?.reviewedHeadSha ?? null
     const { summary, slices, findings } = coercePrReview(
       output,
       () => this.deps.idGenerator.next('prs'),
@@ -110,6 +113,7 @@ export class PrReviewController {
         resolution: 'finish',
         prUrl: prUrl ?? null,
         model: model ?? null,
+        reviewedHeadSha,
         postReport: null,
         postedFindingIds: [],
         postedBody: false,
@@ -126,6 +130,7 @@ export class PrReviewController {
       resolution: null,
       prUrl: prUrl ?? null,
       model: model ?? null,
+      reviewedHeadSha,
       postReport: null,
       postedFindingIds: [],
       postedBody: false,

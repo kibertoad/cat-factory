@@ -178,6 +178,9 @@ export class FakeVcsClient implements VcsClient {
   async getPullRequestHeadRef(): Promise<string | null> {
     return this.o.headRef
   }
+  async getPullRequestHeadSha(): Promise<string | null> {
+    return this.o.headSha
+  }
   async listReviewThreads(): Promise<GitHubReviewThread[]> {
     return this.o.reviewThreads ?? []
   }

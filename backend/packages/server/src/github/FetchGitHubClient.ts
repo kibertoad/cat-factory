@@ -992,6 +992,24 @@ export class FetchGitHubClient implements GitHubClient {
     }
   }
 
+  async getPullRequestHeadSha(
+    installationId: number,
+    ref: GitHubRepoRef,
+    number: number,
+  ): Promise<string | null> {
+    try {
+      const { json } = await this.request(`/repos/${ref.owner}/${ref.repo}/pulls/${number}`, {
+        installationId,
+      })
+      return (json as { head?: { sha?: string } }).head?.sha ?? null
+    } catch (error) {
+      // A deleted/missing PR (404) means there is no head to compare against — the deep-review
+      // drift check treats a null as "unknown" and skips, rather than failing the post.
+      if (error instanceof GitHubApiError && error.status === 404) return null
+      throw error
+    }
+  }
+
   async listReviewThreads(
     installationId: number,
     ref: GitHubRepoRef,

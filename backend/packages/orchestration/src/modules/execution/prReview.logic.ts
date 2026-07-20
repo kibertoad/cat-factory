@@ -50,6 +50,7 @@ export interface CoercedPrReview {
 export function initialPrReviewState(
   prUrl: string | null,
   model: string | null,
+  reviewedHeadSha: string | null = null,
 ): PrReviewStepState {
   return {
     status: 'reviewing',
@@ -60,6 +61,7 @@ export function initialPrReviewState(
     resolution: null,
     prUrl,
     model,
+    reviewedHeadSha,
     postReport: null,
     postedFindingIds: [],
     postedBody: false,
@@ -246,6 +248,13 @@ export interface BuiltPrReviewPost {
  * rejected. When `commentable` is omitted (no diff available) every line-carrying finding is
  * attempted inline and any residual failure is reported per-comment. Deterministic + total.
  *
+ * `options.staleHead` — set when the PR branch moved SINCE the review started (the reviewed head
+ * sha no longer matches the PR's current head): the findings' frozen line numbers may now point at
+ * shifted/different code, so NO finding is anchored inline. Every line-carrying finding is folded
+ * into the summary under a heading that says the branch changed, so the review still lands (as one
+ * summary comment) rather than stamping comments onto possibly-drifted lines. Overrides
+ * `commentable`.
+ *
  * The review always carries a non-empty `body` (GitHub rejects a blank-body comment): when
  * neither a summary nor any folded/unanchored finding supplies one, we fall back to a one-line
  * count of the inline comments.
@@ -254,7 +263,9 @@ export function buildPrReviewPost(
   findings: PrReviewFinding[],
   summary: string | null | undefined,
   commentable?: Map<string, CommentableLines>,
+  options?: { staleHead?: boolean },
 ): BuiltPrReviewPost {
+  const staleHead = options?.staleHead === true
   const comments: CreateReviewComment[] = []
   const commentFindingIds: string[] = []
   const foldedFindingIds: string[] = []
@@ -262,6 +273,7 @@ export function buildPrReviewPost(
   for (const finding of findings) {
     const side = finding.side ?? 'RIGHT'
     const anchorable =
+      !staleHead &&
       finding.line != null &&
       finding.path.length > 0 &&
       (commentable === undefined ||
@@ -287,7 +299,10 @@ export function buildPrReviewPost(
   if (summary?.trim()) bodyParts.push(summary.trim())
   if (unanchored.length > 0) {
     bodyParts.push(
-      'Additional findings (no in-diff line to anchor to):',
+      staleHead
+        ? 'Findings (the pull request branch was updated after this review started, so they are ' +
+            'summarized here rather than anchored to lines that may have since shifted):'
+        : 'Additional findings (no in-diff line to anchor to):',
       unanchored
         .map((f) => {
           const loc = f.line != null ? `${f.path}:${f.line}` : f.path

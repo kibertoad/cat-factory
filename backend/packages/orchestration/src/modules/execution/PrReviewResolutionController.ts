@@ -191,18 +191,40 @@ export class PrReviewResolutionController {
       })
     }
 
+    // Detect branch DRIFT: if the PR head moved since the review started, the findings' frozen
+    // line numbers may now point at shifted/different code, so posting inline comments would
+    // anchor them to the wrong lines. Re-read the current head and compare to the sha captured at
+    // review start. Best-effort: an unknown sha on either side (no capability / older run / read
+    // blip) leaves `staleHead` false, so the pre-existing per-line diff filtering still applies.
+    let staleHead = false
+    if (review.reviewedHeadSha && repo.pullRequestHeadSha) {
+      try {
+        const headSha = repo.pullRequestHeadSha
+        const currentHeadSha = await this.deps.runInitiatorScope(instance.initiatedBy, () =>
+          headSha(prNumber),
+        )
+        staleHead = currentHeadSha != null && currentHeadSha !== review.reviewedHeadSha
+      } catch {
+        staleHead = false
+      }
+    }
+
     // Pre-filter against the actual PR diff so out-of-diff lines are folded into the summary
     // rather than sent as inline comments GitHub would 422. Best-effort: if the changed-file
     // read fails or isn't wired, we skip the filter and let per-comment posting report failures.
+    // Skipped when the head drifted — `staleHead` already folds every finding, so the diff read
+    // would be wasted work against a diff the findings no longer map onto cleanly.
     let commentable: ReturnType<typeof computeCommentableLines> | undefined
-    try {
-      const files = await repo.listChangedFiles?.(prNumber)
-      if (files) commentable = computeCommentableLines(files)
-    } catch {
-      commentable = undefined
+    if (!staleHead) {
+      try {
+        const files = await repo.listChangedFiles?.(prNumber)
+        if (files) commentable = computeCommentableLines(files)
+      } catch {
+        commentable = undefined
+      }
     }
 
-    const built = buildPrReviewPost(selected, review.summary, commentable)
+    const built = buildPrReviewPost(selected, review.summary, commentable, { staleHead })
     // The summary/body comment is posted AT MOST ONCE. If it already landed on a prior attempt,
     // suppress it here so retrying the un-anchored inline comments doesn't duplicate the summary
     // conversation comment (the body's analogue of `postedFindingIds`). A body that FAILED before
@@ -235,9 +257,12 @@ export class PrReviewResolutionController {
     if (isPrReviewPostComplete(report)) {
       step.prReview = { ...step.prReview, status: 'done' }
       const total = postedFindingIds.length
+      const foldedReason = staleHead
+        ? 'the branch was updated after the review started'
+        : 'no in-diff line to anchor to'
       const foldedNote =
         report.folded > 0
-          ? ` (${report.folded} finding${report.folded === 1 ? '' : 's'} added to the summary — no in-diff line to anchor to)`
+          ? ` (${report.folded} finding${report.folded === 1 ? '' : 's'} added to the summary — ${foldedReason})`
           : ''
       return this.deps.recordStepResult(workspaceId, instance, step, isFinalStep, {
         output: `Posted ${total} review comment${total === 1 ? '' : 's'} to the pull request${foldedNote}.`,
