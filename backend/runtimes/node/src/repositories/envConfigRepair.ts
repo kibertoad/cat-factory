@@ -4,8 +4,8 @@ import type {
   EnvConfigRepairJobRecordPatch,
   EnvConfigRepairJobRepository,
   RepoValidationIssue,
-  StepSubtasks,
 } from '@cat-factory/kernel'
+import { parseSubtasks } from '@cat-factory/kernel'
 import { isKnownAgentFailureKind } from '@cat-factory/server'
 import { and, desc, eq, sql } from 'drizzle-orm'
 import type { DrizzleDb } from '../db/client.js'
@@ -26,39 +26,6 @@ interface EnvConfigRepairDetail {
   issues: RepoValidationIssue[]
   /** The original bootstrap form inputs, kept so a retry re-dispatches the same prompt. */
   inputs: Record<string, string> | null
-}
-
-function parseSubtasks(raw: string | null): StepSubtasks | null {
-  if (!raw) return null
-  try {
-    const o = JSON.parse(raw) as Record<string, unknown>
-    if (
-      typeof o.completed === 'number' &&
-      typeof o.inProgress === 'number' &&
-      typeof o.total === 'number'
-    ) {
-      type Item = NonNullable<StepSubtasks['items']>[number]
-      let items: Item[] | undefined
-      if (Array.isArray(o.items)) {
-        items = []
-        for (const it of o.items as unknown[]) {
-          if (!it || typeof it !== 'object') continue
-          const r = it as Record<string, unknown>
-          const status = r.status
-          if (
-            typeof r.label === 'string' &&
-            (status === 'pending' || status === 'in_progress' || status === 'completed')
-          ) {
-            items.push({ label: r.label, status })
-          }
-        }
-      }
-      return { completed: o.completed, inProgress: o.inProgress, total: o.total, items }
-    }
-  } catch {
-    // fall through
-  }
-  return null
 }
 
 function parseFailure(raw: string | null): AgentFailure | null {

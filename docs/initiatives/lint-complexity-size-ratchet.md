@@ -1,7 +1,8 @@
 # Initiative: ratchet down oxlint complexity & size ceilings
 
-**Status:** in progress — first pass landed (`max-nested-callbacks` at its final target;
-`max-depth` at step 1; `max-lines` / `max-lines-per-function` dropped to their free floors) ·
+**Status:** in progress — `max-nested-callbacks` AND `max-depth` at their final targets (4);
+`max-lines` / `max-lines-per-function` at their free floors. `complexity` / `max-statements` /
+`max-params` / the two size rules still need the DI-builder / god-file refactors to move ·
 **Owner:** core · **Started:** 2026-07-20
 
 > This is the durable source of truth for a multi-PR initiative. Read it first before
@@ -68,7 +69,7 @@ worst offender. These are the starting ceilings, not the goal.
 | `max-lines-per-function` |    **2453** |           **150** | `internal/conformance/src/suites/core.ts` (2453)                 |
 | `max-lines`              |    **2802** |          **1500** | `orchestration/src/modules/execution/ExecutionService.ts` (2802) |
 | `max-params`             |          20 |             **6** | `runtimes/node/src/container-executor-deps.ts` (20)              |
-| `max-depth`              |       **5** |             **4** | 18 sites at 5 (`ExecutionWorkflow.ts`, several D1 repos, …)      |
+| `max-depth`              |    **4** ✅ |             **4** | at target — 0 offenders above 4                                  |
 | `max-nested-callbacks`   |    **4** ✅ |             **4** | at target — 0 offenders above 4                                  |
 
 > **First pass (landed):** the god-file split in #1266 dropped the two size-rule floors well
@@ -78,6 +79,15 @@ worst offender. These are the starting ceilings, not the goal.
 > two loop-body extractions. `complexity` / `max-statements` / `max-params` are unchanged —
 > their floors equal their ceilings, so they need the DI-builder / god-file refactors before
 > moving.
+>
+> **Second pass (landed):** `max-depth` reached its **final** target (5 → **4**) by hoisting the
+> 18 depth-5 loop bodies into helpers — a shared `parseSubtasks` in `@cat-factory/kernel`
+> (de-duplicating the four bootstrap / env-config-repair repo copies at the same time), the two
+> `ExecutionWorkflow` poll loops (`drivePollLoop` / `driveGatePollLoop` + `pollOnce`), the
+> benchmark harness's per-task fixture dispatch, `provision-detect`'s seed-dump child scan,
+> `EnvironmentConnectionService`'s bootstrap commit/PR path, `WorkersAiLlmUpstream`'s assistant
+> tool-call conversion, and the OTEL conformity metric fold. The size/complexity rules are still
+> pinned at their ceilings pending the DI-builder / god-file refactors.
 
 `max-lines`' final target of **1500** deliberately matches `check-file-size.mjs`'s default
 budget, so the two guards agree on the file ceiling (the custom guard keeps its per-file
@@ -140,11 +150,11 @@ Update the `Status` cell + the live `max` in `.oxlintrc.json` at the end of each
 
 ### `max-depth` — 6 → 4
 
-| Step      | `max` | Offenders to split first                                                                                                                | Status    |
-| --------- | ----: | --------------------------------------------------------------------------------------------------------------------------------------- | --------- |
-| baseline  |     6 | —                                                                                                                                       | ✅ landed |
-| 1         |     5 | (2) `RequirementReviewService.ts` (→ `applyRecommendationToTarget`), `observability-otel/src/conformity.test.ts` (→ `accumulateMetric`) | ✅ landed |
-| 2 (final) |     4 | (18) — ESLint's default                                                                                                                 | ☐ todo    |
+| Step      | `max` | Offenders to split first                                                                                                                                                                                                                                                                              | Status    |
+| --------- | ----: | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | --------- |
+| baseline  |     6 | —                                                                                                                                                                                                                                                                                                     | ✅ landed |
+| 1         |     5 | (2) `RequirementReviewService.ts` (→ `applyRecommendationToTarget`), `observability-otel/src/conformity.test.ts` (→ `accumulateMetric`)                                                                                                                                                               | ✅ landed |
+| 2 (final) |     4 | (18) — ESLint's default; hoisted into helpers: shared `parseSubtasks` (kernel, de-dupes 4 repo copies), `ExecutionWorkflow` poll loops, benchmark per-task dispatch, `provision-detect` seed scan, `EnvironmentConnectionService` commit/PR path, `WorkersAiLlmUpstream` tool-calls, OTEL metric fold | ✅ landed |
 
 ### `max-nested-callbacks` — 6 → 4
 

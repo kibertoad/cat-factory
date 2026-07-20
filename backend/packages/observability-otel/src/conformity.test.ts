@@ -5,6 +5,7 @@ import {
   InMemoryMetricExporter,
   PeriodicExportingMetricReader,
 } from '@opentelemetry/sdk-metrics'
+import type { MetricData } from '@opentelemetry/sdk-metrics'
 import type { LlmGenerationEvent, LlmToolSpan, LlmToolSpanContext } from '@cat-factory/kernel'
 import { OtelTraceSink } from './index.js'
 import { NodeOtelTraceSink } from './node.js'
@@ -106,6 +107,28 @@ function accumulateMetric(
   }
 }
 
+/**
+ * The SDK-side analogue of {@link accumulateMetric}, folding one in-memory `MetricData` into the
+ * running token/duration totals. Extracted so the per-datapoint loop doesn't nest under the
+ * batch/scope/metric loops in {@link collectSdk} (keeps max-depth ≤ 4).
+ */
+function accumulateSdkMetric(
+  m: MetricData,
+  tokenUsage: Record<string, number>,
+  duration: { count: number; sum: number },
+): void {
+  if (m.descriptor.name === 'gen_ai.client.token.usage') {
+    for (const p of m.dataPoints) {
+      tokenUsage[String((p.attributes as Record<string, unknown>)['gen_ai.token.type'])] =
+        p.value as number
+    }
+  } else if (m.descriptor.name === 'gen_ai.client.operation.duration') {
+    const hist = m.dataPoints[0]!.value as { count: number; sum?: number }
+    duration.count += hist.count
+    duration.sum += hist.sum ?? 0
+  }
+}
+
 // OTLP status: UNSET(0)/ERROR(2). The SDK maps the same, so normalise both to those codes.
 async function collectFetch(): Promise<NormalizedTelemetry> {
   const traceBodies: Record<string, unknown>[] = []
@@ -192,16 +215,7 @@ async function collectSdk(): Promise<NormalizedTelemetry> {
   for (const batch of metricExporter.getMetrics()) {
     for (const sm of batch.scopeMetrics) {
       for (const m of sm.metrics) {
-        if (m.descriptor.name === 'gen_ai.client.token.usage') {
-          for (const p of m.dataPoints) {
-            tokenUsage[String((p.attributes as Record<string, unknown>)['gen_ai.token.type'])] =
-              p.value as number
-          }
-        } else if (m.descriptor.name === 'gen_ai.client.operation.duration') {
-          const hist = m.dataPoints[0]!.value as { count: number; sum?: number }
-          duration.count += hist.count
-          duration.sum += hist.sum ?? 0
-        }
+        accumulateSdkMetric(m, tokenUsage, duration)
       }
     }
   }

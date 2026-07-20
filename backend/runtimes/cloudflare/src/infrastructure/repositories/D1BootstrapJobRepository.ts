@@ -5,6 +5,7 @@ import type {
   BootstrapJobRepository,
 } from '@cat-factory/kernel'
 import type { D1Database } from '@cloudflare/workers-types'
+import { parseSubtasks } from '@cat-factory/kernel'
 import { isKnownAgentFailureKind } from '@cat-factory/server'
 import { chunkForIn } from './chunk'
 
@@ -40,40 +41,6 @@ interface BootstrapDetail {
   repoOwner: string | null
   repoUrl: string | null
   instructions: string
-}
-
-/** Parse the JSON-encoded subtask counts column, tolerating a null/garbage value. */
-function parseSubtasks(raw: string | null): BootstrapJobRecord['subtasks'] {
-  if (!raw) return null
-  try {
-    const o = JSON.parse(raw) as Record<string, unknown>
-    if (
-      typeof o.completed === 'number' &&
-      typeof o.inProgress === 'number' &&
-      typeof o.total === 'number'
-    ) {
-      type Item = NonNullable<NonNullable<BootstrapJobRecord['subtasks']>['items']>[number]
-      let items: Item[] | undefined
-      if (Array.isArray(o.items)) {
-        items = []
-        for (const it of o.items as unknown[]) {
-          if (!it || typeof it !== 'object') continue
-          const r = it as Record<string, unknown>
-          const status = r.status
-          if (
-            typeof r.label === 'string' &&
-            (status === 'pending' || status === 'in_progress' || status === 'completed')
-          ) {
-            items.push({ label: r.label, status })
-          }
-        }
-      }
-      return { completed: o.completed, inProgress: o.inProgress, total: o.total, items }
-    }
-  } catch {
-    // fall through
-  }
-  return null
 }
 
 /** Parse the JSON-encoded structured failure column, tolerating null/garbage. */

@@ -21,6 +21,7 @@ import type {
   SharedStackRecommendation,
   StackRecipe,
 } from '@cat-factory/contracts'
+import type { RepoScanEntry } from '@cat-factory/kernel'
 import { BudgetedRepoScanner, joinRepoPath } from '@cat-factory/kernel'
 import { parse as parseYaml, parseAllDocuments } from 'yaml'
 import {
@@ -1448,23 +1449,29 @@ async function collectSeedDumps(
     seen.add(path)
     found.push({ path, name })
   }
+  // Collect `.sql` dumps for one directory entry: a file is added directly; a dir is scanned
+  // one level in. Extracted so the child-dir loop doesn't nest under the two outer loops
+  // (keeps max-depth ≤ 4).
+  const scanEntry = async (dir: string, entry: RepoScanEntry): Promise<void> => {
+    if (entry.type !== 'dir') {
+      addSql(dir, entry.name)
+      return
+    }
+    // A `migrations`/`migration` child holds schema DDL, not seed data — never a seed dump.
+    if (/^migrations?$/i.test(entry.name)) return
+    const childDir = joinRepoPath(dir, entry.name)
+    for (const child of await scanner.listDir(childDir)) {
+      if (child.type !== 'dir') addSql(childDir, child.name)
+      if (found.length >= MAX_SEED_DUMPS) break
+    }
+  }
   for (const rel of resolveSeedDirs(conventions)) {
     if (found.length >= MAX_SEED_DUMPS) break
     const dir = joinRepoPath(root, rel)
     const entries = await scanner.listDir(dir)
     for (const entry of entries) {
       if (found.length >= MAX_SEED_DUMPS) break
-      if (entry.type === 'dir') {
-        // A `migrations`/`migration` child holds schema DDL, not seed data — never a seed dump.
-        if (/^migrations?$/i.test(entry.name)) continue
-        const childDir = joinRepoPath(dir, entry.name)
-        for (const child of await scanner.listDir(childDir)) {
-          if (child.type !== 'dir') addSql(childDir, child.name)
-          if (found.length >= MAX_SEED_DUMPS) break
-        }
-      } else {
-        addSql(dir, entry.name)
-      }
+      await scanEntry(dir, entry)
     }
   }
   if (found.length === 0) return []
