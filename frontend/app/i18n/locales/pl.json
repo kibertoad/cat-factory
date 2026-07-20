@@ -953,7 +953,8 @@
         "body": "Uruchom pipeline, aby zobaczyć tutaj historię uruchomień."
       },
       "chooseApproach": "Wybierz podejście",
-      "elapsedTooltip": "Czas, który upłynął na tym kroku"
+      "elapsedTooltip": "Czas, który upłynął na tym kroku",
+      "reviewFindings": "Przejrzyj ustalenia"
     },
     "structure": {
       "title": "Struktura",
@@ -1266,11 +1267,12 @@
       "tokensInOut": "Tokeny (we / wy)",
       "transportOverhead": "Narzut transportu",
       "modelExecution": "Wykonanie modelu",
-      "truncated": "{count} obcięte | {count} obcięte | {count} obciętych"
+      "truncated": "{count} obcięte | {count} obcięte | {count} obciętych",
+      "cached": "{tokens} z pamięci podręcznej"
     },
     "metricsBar": {
       "calls": "{count} wywołanie | {count} wywołania | {count} wywołań",
-      "promptCompletionTokens": "Tokeny promptu / dopełnienia",
+      "promptCompletionTokens": "Świeże (niebuforowane) tokeny promptu / dopełnienia",
       "cachedTokens": "({tokens} z pamięci podręcznej)",
       "cachedTokensHint": "Tokeny promptu obsłużone z pamięci podręcznej dostawcy",
       "errors": "{count} błąd | {count} błędy | {count} błędów",
@@ -3523,7 +3525,10 @@
         "proposing": "Proponowanie podejść…",
         "choose": "Wybierz podejście"
       },
-      "elapsedTooltip": "Czas, który upłynął na tym kroku"
+      "elapsedTooltip": "Czas, który upłynął na tym kroku",
+      "prReview": {
+        "review": "Przejrzyj ustalenia"
+      }
     },
     "health": {
       "title": "Stan pipeline'ów",

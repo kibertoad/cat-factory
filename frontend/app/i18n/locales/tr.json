@@ -953,7 +953,8 @@
         "body": "Çalıştırma geçmişini burada görmek için bir pipeline başlatın."
       },
       "chooseApproach": "Yaklaşım seç",
-      "elapsedTooltip": "Bu adımda geçen süre"
+      "elapsedTooltip": "Bu adımda geçen süre",
+      "reviewFindings": "Bulguları incele"
     },
     "structure": {
       "title": "Yapı",
@@ -1266,11 +1267,12 @@
       "tokensInOut": "Token (giriş / çıkış)",
       "transportOverhead": "Taşıma yükü",
       "modelExecution": "Model yürütme",
-      "truncated": "{count} kesildi | {count} kesildi"
+      "truncated": "{count} kesildi | {count} kesildi",
+      "cached": "{tokens} önbellekte"
     },
     "metricsBar": {
       "calls": "{count} çağrı | {count} çağrı",
-      "promptCompletionTokens": "İstem / tamamlama token'ları",
+      "promptCompletionTokens": "Yeni (önbelleğe alınmamış) istem / tamamlama token'ları",
       "cachedTokens": "({tokens} önbelleğe alındı)",
       "cachedTokensHint": "Sağlayıcının önbelleğinden sunulan istem token'ları",
       "errors": "{count} hata | {count} hata",
@@ -3535,7 +3537,10 @@
         "proposing": "Yaklaşımlar öneriliyor…",
         "choose": "Bir yaklaşım seçin"
       },
-      "elapsedTooltip": "Bu adımda geçen süre"
+      "elapsedTooltip": "Bu adımda geçen süre",
+      "prReview": {
+        "review": "Bulguları incele"
+      }
     },
     "health": {
       "title": "Pipeline sağlığı",

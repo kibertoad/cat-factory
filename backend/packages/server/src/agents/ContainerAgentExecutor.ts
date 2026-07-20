@@ -952,6 +952,12 @@ export class ContainerAgentExecutor implements AsyncAgentExecutor {
       }
     }
     const runResult = toRunResult(result, handle.agentKind)
+    // The poll site can't resolve the model ref, but the dispatch captured its label
+    // (`handle.model`, already used for `recordHarnessCalls`). Fold it onto the result so the
+    // durable poll path's `recordStepResult` → `spend.record` records the REAL model instead of
+    // 'unknown' (which `SpendService.parseModel` split into provider "unknown" / model ""). The
+    // inline `run()` path folded this in itself; doing it here fixes both paths at the source.
+    if (handle.model) runResult.model = handle.model
     // A subscription harness (Claude Code / Codex / GLM / pooled Kimi & DeepSeek) bypasses
     // the LLM proxy, so its tokens aren't metered there. It's the ONLY container path that
     // emits per-call `callMetrics`, so their presence unambiguously marks a subscription
@@ -1029,9 +1035,8 @@ export class ContainerAgentExecutor implements AsyncAgentExecutor {
     for (;;) {
       const update = await this.pollJob(handle)
       if (update.state === 'done') {
-        // The poll site can't resolve the model ref, so fold in the label the
-        // dispatch captured (matches what the durable path records on the step).
-        return { ...update.result, ...(handle.model ? { model: handle.model } : {}) }
+        // `pollJob` already folds `handle.model` onto the result, so both paths carry it.
+        return update.result
       }
       if (update.state === 'failed') throw new Error(update.error)
       await new Promise((resolve) => setTimeout(resolve, RUN_POLL_INTERVAL_MS))

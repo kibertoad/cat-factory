@@ -4,6 +4,7 @@ import type { StepMetrics } from '~/types/execution'
 import {
   formatMs,
   formatTokens,
+  freshPromptTokens,
   headroomColor,
   headroomRatio,
   pct,
@@ -22,6 +23,12 @@ defineEmits<{ inspect: [] }>()
 const { t } = useI18n()
 
 const m = computed(() => props.metrics)
+// The headline "↑" is FRESH (uncached) input, not the raw prompt-token sum: a long agentic
+// run re-sends its whole transcript every turn, so the raw sum is ~all cache reads and reads
+// as a blow-up. The cached prefix is shown separately (the green chip) so the two are distinct.
+const freshPrompt = computed(() =>
+  freshPromptTokens(m.value.promptTokens, m.value.cachedPromptTokens ?? 0),
+)
 const headroom = computed(() => headroomRatio(m.value))
 const transport = computed(() => transportRatio(m.value))
 const headroomTone = computed(() => headroomColor(headroom.value, m.value.truncatedCalls > 0))
@@ -48,7 +55,7 @@ const headroomTone = computed(() => headroomColor(headroom.value, m.value.trunca
         class="tabular-nums text-slate-400"
         :title="t('observability.metricsBar.promptCompletionTokens')"
       >
-        {{ formatTokens(m.promptTokens) }}↑ {{ formatTokens(m.completionTokens) }}↓
+        {{ formatTokens(freshPrompt) }}↑ {{ formatTokens(m.completionTokens) }}↓
       </span>
       <span
         v-if="(m.cachedPromptTokens ?? 0) > 0"

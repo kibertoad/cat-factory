@@ -11,6 +11,18 @@ export function formatTokens(n: number): string {
   return `${(n / 1_000_000).toFixed(1)}M`
 }
 
+/**
+ * FRESH (uncached) prompt tokens: the prompt tokens actually re-read this call/rollup after
+ * subtracting the prefix served from the provider's cache. A long agentic run re-sends its
+ * whole growing transcript every turn, so the raw `promptTokens` sum is dominated by cache
+ * reads (often >99%) — showing THAT as "tokens burned" reads as a blow-up when almost nothing
+ * fresh was processed. Surfacing this alongside the cached figure separates the two. Clamped
+ * at 0 (cached should never exceed prompt, but guard against a provider's off-by-one).
+ */
+export function freshPromptTokens(promptTokens: number, cachedPromptTokens: number): number {
+  return Math.max(0, promptTokens - cachedPromptTokens)
+}
+
 /** Compact duration: 850 → "850ms", 1500 → "1.5s", 90_000 → "1m 30s". */
 export function formatMs(ms: number): string {
   if (ms < 1000) return `${Math.round(ms)}ms`

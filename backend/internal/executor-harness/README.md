@@ -73,6 +73,8 @@ Kimi / DeepSeek) and meters spend. The provider key never enters the container.
 | `src/bootstrap.ts` | The `/bootstrap` handler (clone-or-empty → adapt → reinit + force-push).                                |
 | `src/blueprint.ts` | The `/blueprint` handler (decompose → render `blueprints/` → commit on branch).                         |
 | `src/embed.ts`     | Bundled assets/templates written into the workspace.                                                    |
+| `src/agent-runner.ts` | The subscription-harness runners (`runClaudeCode` / `runCodex`) — talk direct to the vendor with a leased OAuth token, lift per-turn usage/telemetry off the CLI event stream. |
+| `src/transcript-retention.ts` | Lifts the CLI session transcripts (`projects/` / `sessions/`) out of the isolated, credential-bearing config home before it is deleted, and prunes them on a TTL (debugging artifact retention). |
 | `src/logger.ts`    | Structured logging.                                                                                     |
 
 ## Runner lifecycle knobs
@@ -85,6 +87,8 @@ runner):
 | `PORT`                | `8080`          | HTTP port the harness listens on.                           |
 | `JOB_MAX_DURATION_MS` | `3600000` (60m) | Hard ceiling on a job's wall-clock time; force-fails after. |
 | `JOB_INACTIVITY_MS`   | `600000` (10m)  | Kills a hung agent that produces no output for this long.   |
+| `HARNESS_TRANSCRIPT_TTL_MS` | `259200000` (3d) | How long lifted subscription-CLI session transcripts are kept before the retention sweep prunes them. |
+| `HARNESS_TRANSCRIPT_ROOT`   | `<tmpdir>/cf-agent-transcripts` | Where retained session transcripts are moved to (one dir per run). Meaningful only on a reused (warm-pool) container; a per-run container is torn down with the job. |
 
 ## Build / test
 

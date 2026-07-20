@@ -1235,7 +1235,8 @@
       "open": "Aperta",
       "mergePr": "Unisci PR",
       "chooseApproach": "Scegli approccio",
-      "elapsedTooltip": "Tempo trascorso su questo passaggio"
+      "elapsedTooltip": "Tempo trascorso su questo passaggio",
+      "reviewFindings": "Esamina i rilievi"
     },
     "structure": {
       "title": "Struttura",
@@ -2748,11 +2749,12 @@
       "tokensInOut": "Token (in / out)",
       "transportOverhead": "Overhead di trasporto",
       "modelExecution": "Esecuzione del modello",
-      "truncated": "{count} troncata | {count} troncate"
+      "truncated": "{count} troncata | {count} troncate",
+      "cached": "{tokens} in cache"
     },
     "metricsBar": {
       "calls": "{count} chiamata | {count} chiamate",
-      "promptCompletionTokens": "Token di prompt / completion",
+      "promptCompletionTokens": "Token freschi (non in cache) di prompt / completion",
       "cachedTokens": "({tokens} in cache)",
       "cachedTokensHint": "Token di prompt serviti dalla cache del provider",
       "errors": "{count} errore | {count} errori",
@@ -3256,7 +3258,10 @@
         "proposing": "Proposta di approcci…",
         "choose": "Scegli un approccio"
       },
-      "elapsedTooltip": "Tempo trascorso su questo passaggio"
+      "elapsedTooltip": "Tempo trascorso su questo passaggio",
+      "prReview": {
+        "review": "Esamina i rilievi"
+      }
     },
     "health": {
       "title": "Stato delle pipeline",

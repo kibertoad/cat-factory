@@ -70,11 +70,16 @@ export function createUiResultViews() {
     // A step that actually ran the consensus mechanism opens the dedicated Consensus
     // Session window, regardless of its kind's normal result view — consensus is an
     // execution MODE on a kind, not a kind, so it can't be a static archetype `resultView`.
+    // A step carrying a PR deep-review parks with BOTH a pending approval and
+    // `prReview.status`, so the generic approval button funnels here; route it to the
+    // findings-selection window regardless of catalog/manifest state (mirrors consensus).
     const view = step?.consensus?.enabled
       ? 'consensus-session'
-      : step
-        ? agentKindMeta(step.agentKind).resultView
-        : undefined
+      : step?.prReview
+        ? 'pr-review'
+        : step
+          ? agentKindMeta(step.agentKind).resultView
+          : undefined
     if (view && instance) {
       // The brainstorm window is shared by both stages; carry which one from the step's kind.
       const stage =

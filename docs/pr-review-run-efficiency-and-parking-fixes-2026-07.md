@@ -1,8 +1,13 @@
 # PR-review run: token-usage investigation and two parking-flow fixes (2026-07)
 
 This document collects three related findings from investigating one local PR-review run,
-plus a fix plan for the two defects it surfaced. Nothing here is implemented yet; this is the
-plan to review before writing code.
+plus a fix plan for the two defects it surfaced.
+
+> **Status:** the concrete fixes below have since landed — the parked PR-review approve routing
+> (§2), the container `spend.record` model threading + fresh-vs-cached token surfacing (§1's two
+> data-quality gaps), and 3-day session-transcript retention (§3). The larger, speculative
+> turn-count reduction floated in §1 ("hand the pr-reviewer the diff up front") is a design
+> direction, not part of that change.
 
 The run under investigation:
 
@@ -21,10 +26,10 @@ The run under investigation:
 
 Two different token numbers come from this one run, and they measure different things:
 
-| Source | Number | What it is |
-| --- | --- | --- |
-| `public.token_usage` (1 row) | 557,325 (541,879 in + 15,446 out) | The single terminal `result.usage` the CLI emits at end of session |
-| `telemetry.llm_call_metrics` (350 rows) | 31,100,498 `prompt_tokens` | The sum of per-call input across every agentic turn |
+| Source                                  | Number                            | What it is                                                         |
+| --------------------------------------- | --------------------------------- | ------------------------------------------------------------------ |
+| `public.token_usage` (1 row)            | 557,325 (541,879 in + 15,446 out) | The single terminal `result.usage` the CLI emits at end of session |
+| `telemetry.llm_call_metrics` (350 rows) | 31,100,498 `prompt_tokens`        | The sum of per-call input across every agentic turn                |
 
 The 31M figure the run surfaced is `sum(prompt_tokens)` over 350 model calls. The breakdown:
 
@@ -48,13 +53,13 @@ being handed the diff.
 
 Cache reads are not free. Anthropic prompt-cache pricing:
 
-| Token class | Multiplier vs base input | Opus 4.8 rate (base input $5/MTok) |
-| --- | --- | --- |
-| Fresh input | 1x | $5.00 / MTok |
-| Cache write (5-min TTL) | 1.25x | $6.25 / MTok |
-| Cache write (1-hour TTL) | 2x | $10.00 / MTok |
-| Cache read | ~0.1x | $0.50 / MTok |
-| Output | n/a | $25.00 / MTok |
+| Token class              | Multiplier vs base input | Opus 4.8 rate (base input $5/MTok) |
+| ------------------------ | ------------------------ | ---------------------------------- |
+| Fresh input              | 1x                       | $5.00 / MTok                       |
+| Cache write (5-min TTL)  | 1.25x                    | $6.25 / MTok                       |
+| Cache write (1-hour TTL) | 2x                       | $10.00 / MTok                      |
+| Cache read               | ~0.1x                    | $0.50 / MTok                       |
+| Output                   | n/a                      | $25.00 / MTok                      |
 
 On the metered API, 31.1M cache-read tokens would cost roughly 31.1M x $0.50/MTok = about $15.50.
 That is cheap per token (10% of input price) but not nothing.
@@ -227,7 +232,7 @@ the existing `rm` still removes the credential.
      overridable via env for operators. Best-effort throughout: a retention failure must never fail
      an otherwise-successful run.
 2. **Call it from both `finally` blocks** before the `rm`: `retainSessionTranscripts(configHome,
-   ['projects'], ...)` in `runClaudeCode`, `retainSessionTranscripts(codexHome, ['sessions'], ...)`
+['projects'], ...)` in `runClaudeCode`, `retainSessionTranscripts(codexHome, ['sessions'], ...)`
    in `runCodex`, then the existing `rm(home)`.
 3. **Thread the per-job logger** so the retained path is logged with `jobId`: add `log?: Logger` to
    `SubscriptionRunOptions` and forward `opts.log` from `runAgentInWorkspace` (`pi-workspace.ts`).

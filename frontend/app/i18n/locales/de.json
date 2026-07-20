@@ -1235,7 +1235,8 @@
       "open": "Öffnen",
       "mergePr": "PR mergen",
       "chooseApproach": "Ansatz wählen",
-      "elapsedTooltip": "Verstrichene Zeit für diesen Schritt"
+      "elapsedTooltip": "Verstrichene Zeit für diesen Schritt",
+      "reviewFindings": "Befunde prüfen"
     },
     "structure": {
       "title": "Struktur",
@@ -2748,11 +2749,12 @@
       "tokensInOut": "Tokens (ein / aus)",
       "transportOverhead": "Transport-Overhead",
       "modelExecution": "Modellausführung",
-      "truncated": "{count} abgeschnitten | {count} abgeschnitten"
+      "truncated": "{count} abgeschnitten | {count} abgeschnitten",
+      "cached": "{tokens} gecacht"
     },
     "metricsBar": {
       "calls": "{count} Aufruf | {count} Aufrufe",
-      "promptCompletionTokens": "Prompt-/Completion-Tokens",
+      "promptCompletionTokens": "Frische (nicht gecachte) Prompt-/Completion-Tokens",
       "cachedTokens": "({tokens} zwischengespeichert)",
       "cachedTokensHint": "Prompt-Tokens, die aus dem Cache des Providers bedient wurden",
       "errors": "{count} Fehler | {count} Fehler",
@@ -3256,7 +3258,10 @@
         "proposing": "Ansätze werden vorgeschlagen…",
         "choose": "Ansatz wählen"
       },
-      "elapsedTooltip": "Verstrichene Zeit für diesen Schritt"
+      "elapsedTooltip": "Verstrichene Zeit für diesen Schritt",
+      "prReview": {
+        "review": "Befunde prüfen"
+      }
     },
     "health": {
       "title": "Pipeline-Zustand",

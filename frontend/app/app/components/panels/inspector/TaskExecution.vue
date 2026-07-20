@@ -151,6 +151,12 @@ function openForkFor(i: number) {
   if (instance.value) ui.openForkDecision(instance.value.id, i)
 }
 
+// Open the PR deep-review findings-selection window for a pr-reviewer step parked awaiting
+// a selection (its dedicated chip, mirroring the fork-decision one above).
+function openPrReviewFor(i: number) {
+  if (instance.value) ui.openPrReview(instance.value.id, i)
+}
+
 // Stop the run WITHOUT deleting it: halts the container + driver and records a
 // `cancelled` failure, leaving the run readable + retryable (the block goes
 // `blocked`). The destructive reset (delete the run, return the task to `planned`)
@@ -392,6 +398,22 @@ async function mergePr() {
               @click="openForkFor(i)"
             >
               {{ t('inspector.execution.chooseApproach') }}
+            </UButton>
+            <!-- A pr-reviewer step parked awaiting a finding selection: open the dedicated
+                 findings-selection window, not the generic approval gate. -->
+            <UButton
+              v-else-if="
+                s.approval &&
+                s.approval.status === 'pending' &&
+                s.prReview?.status === 'awaiting_selection'
+              "
+              color="primary"
+              variant="soft"
+              size="xs"
+              icon="i-lucide-clipboard-check"
+              @click="openPrReviewFor(i)"
+            >
+              {{ t('inspector.execution.reviewFindings') }}
             </UButton>
             <UButton
               v-else-if="s.approval && s.approval.status === 'pending'"

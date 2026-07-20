@@ -66,6 +66,24 @@ export const AGENT_ARCHETYPES: AgentArchetype[] = [
     resultView: 'generic-structured',
   },
   {
+    // A read-only, token-bounded deep review of an EXISTING open pull request (the `pl_review`
+    // pipeline's single step). Registered on the backend so it also arrives via the workspace
+    // manifest, but modelled statically here so `agentKindMeta('pr-reviewer').resultView`
+    // resolves to the findings-selection window on every surface — not just when the manifest
+    // is hydrated. Mirrors the backend `presentation` in `pr-reviewer.ts`.
+    kind: 'pr-reviewer',
+    label: 'PR Reviewer',
+    icon: 'i-lucide-clipboard-check',
+    color: '#6366f1',
+    category: 'review',
+    description:
+      'Deep, token-bounded review of an open pull request: slices a large diff into cohesive ' +
+      'chunks, reviews each, and returns prioritized findings.',
+    // Opens the dedicated PR-review window (findings grouped by slice + multi-select →
+    // resolve) instead of the generic read-only JSON viewer. See PrReviewWindow.vue.
+    resultView: 'pr-review',
+  },
+  {
     // A timeboxed read-only research/investigation agent. Its structured findings open in the
     // shared generic viewer; the findings document is committed by a backend post-op (delivered
     // as a pull request by default, or straight to base via the direct pipeline).
