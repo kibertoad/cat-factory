@@ -1,5 +1,17 @@
 # @cat-factory/server
 
+## 0.138.16
+
+### Patch Changes
+
+- 511076d: Make the `pr-reviewer` agent comment-aware. A second preOp injects the PR's existing review threads (prior review rounds, human reviewers, other bots) as `.cat-context/pr-existing-comments.md` via a new optional `RepoFiles.listReviewThreads`, and the reviewer prompt now de-dups against them — skip issues already raised, focus on what is new or still unaddressed. Reuses the `listReviewThreads` read already implemented for the `human-review` gate (forwarded by `vcsBackedGitHubClient`, so GitLab gets it for free); passes through unchanged when the client can't read threads.
+- Updated dependencies [511076d]
+  - @cat-factory/kernel@0.147.3
+  - @cat-factory/agents@0.66.6
+  - @cat-factory/integrations@0.88.11
+  - @cat-factory/orchestration@0.129.11
+  - @cat-factory/spend@0.12.65
+
 ## 0.138.15
 
 ### Patch Changes
