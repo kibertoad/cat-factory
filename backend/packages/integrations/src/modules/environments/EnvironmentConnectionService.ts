@@ -819,6 +819,43 @@ export class EnvironmentConnectionService {
   }
 
   /**
+   * Write the generated config files: a direct commit, or (in PR mode) create the config
+   * branch off the target head when it doesn't yet exist, commit onto it, and open the PR.
+   * Extracted from {@link bootstrapRepo} so its branch/PR conditionals don't nest under the
+   * generation guards (keeps max-depth ≤ 4).
+   */
+  private async writeGeneratedConfig(
+    repo: RunRepoContext['repo'],
+    opts: {
+      message: string
+      changed: { path: string; content: string }[]
+      writeBranch: string
+      targetBranch: string
+      prMode: boolean
+      prBranchHead: string | null
+    },
+  ): Promise<void> {
+    const { message, changed, writeBranch, targetBranch, prMode, prBranchHead } = opts
+    if (!prMode) {
+      await repo.commitFiles({ branch: writeBranch, message, files: changed })
+      return
+    }
+    if (!prBranchHead) {
+      const base = await repo.headSha(targetBranch)
+      if (base) await repo.createBranch(writeBranch, base)
+    }
+    await repo.commitFiles({ branch: writeBranch, message, files: changed })
+    if (!prBranchHead) {
+      await repo.openPullRequest({
+        title: message,
+        head: writeBranch,
+        base: targetBranch,
+        body: 'Automated provider configuration bootstrap.',
+      })
+    }
+  }
+
+  /**
    * Mechanically bootstrap the provider's config file into a target repo from the
    * collected `inputs`, commit it (or open a PR), then re-validate — falling back to the
    * repair agent when mechanical generation can't produce a valid config and the caller
@@ -885,23 +922,14 @@ export class EnvironmentConnectionService {
       }
       if (changed.length) {
         const message = generated.commitMessage ?? 'chore: bootstrap environment provider config'
-        if (prMode) {
-          if (!prBranchHead) {
-            const base = await bound.repo.headSha(targetBranch)
-            if (base) await bound.repo.createBranch(writeBranch, base)
-          }
-          await bound.repo.commitFiles({ branch: writeBranch, message, files: changed })
-          if (!prBranchHead) {
-            await bound.repo.openPullRequest({
-              title: message,
-              head: writeBranch,
-              base: targetBranch,
-              body: 'Automated provider configuration bootstrap.',
-            })
-          }
-        } else {
-          await bound.repo.commitFiles({ branch: writeBranch, message, files: changed })
-        }
+        await this.writeGeneratedConfig(bound.repo, {
+          message,
+          changed,
+          writeBranch,
+          targetBranch,
+          prMode,
+          prBranchHead,
+        })
         committed = true
       }
     }

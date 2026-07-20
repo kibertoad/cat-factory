@@ -20,6 +20,9 @@ const STEP_CONFIG = {
   timeout: '5 minutes',
 } satisfies WorkflowStepConfig
 
+/** Outcome of one durable status read: a settled result, or a tolerated transient read error. */
+type PollAttempt = { kind: 'ok'; result: AdvanceResult } | { kind: 'read_failed'; message: string }
+
 /**
  * Durable driver for one pipeline run. It contains NO business logic — every
  * decision lives in core's ExecutionService. Each loop iteration advances the
@@ -68,6 +71,122 @@ export class ExecutionWorkflow extends WorkflowEntrypoint<Env, ExecutionWorkflow
       )
     }
 
+    // Run one durable status read, converting a *thrown* (transient) poll error into a
+    // `read_failed` value the caller tolerates rather than a failure that kills the run.
+    // Eviction / a genuine job failure are RETURNED as an `ok` AdvanceResult, not thrown.
+    const pollOnce = async (
+      label: string,
+      read: () => Promise<AdvanceResult>,
+    ): Promise<PollAttempt> => {
+      try {
+        return { kind: 'ok', result: (await step.do(label, STEP_CONFIG, read)) as AdvanceResult }
+      } catch (error) {
+        return {
+          kind: 'read_failed',
+          message: error instanceof Error ? error.message : String(error),
+        }
+      }
+    }
+
+    // Poll a dispatched async job (a container coding step) for step `i` between durable
+    // sleeps until it finishes. A thrown poll error is always transient, so tolerate a
+    // bounded run of them (reset on any good poll) and only fail the run once the tolerance
+    // is spent or the budget runs out. Returns the settled result, or `null` once it has
+    // already failed the run (the caller returns).
+    const drivePollLoop = async (
+      i: number,
+      initial: AdvanceResult,
+    ): Promise<AdvanceResult | null> => {
+      let result = initial
+      let polled = false
+      let pollReadFailures = 0
+      for (let p = 0; p < execConfig.jobMaxPolls; p++) {
+        // Poll-first: the job was dispatched instants ago by `advance-${i}`, so the first
+        // status read runs immediately — a leading sleep would be a full poll interval of
+        // dead air. Later iterations sleep between polls.
+        if (p > 0) await step.sleep(`poll-wait-${i}-${p}`, jobPollInterval)
+        const attempt = await pollOnce(`poll-${i}-${p}`, () =>
+          container.executionService.pollAgentJob(workspaceId, executionId),
+        )
+        if (attempt.kind === 'read_failed') {
+          pollReadFailures += 1
+          logger.warn(
+            { workspaceId, executionId, step: i, poll: p, pollReadFailures, err: attempt.message },
+            'poll could not read job status; treating as still running and retrying',
+          )
+          if (pollReadFailures < execConfig.jobPollFailureTolerance) continue
+          await failRun(
+            i,
+            `Job status was unreadable for ${pollReadFailures} consecutive polls; ` +
+              `the container appears unreachable (last error: ${attempt.message})`,
+            'timeout',
+          )
+          return null
+        }
+        pollReadFailures = 0
+        result = attempt.result
+        if (result.kind !== 'awaiting_job') {
+          polled = true
+          break
+        }
+      }
+      if (!polled && result.kind === 'awaiting_job') {
+        await failRun(i, 'Implementation job did not finish within its polling budget', 'timeout')
+        return null
+      }
+      return result
+    }
+
+    // Drive a polling gate (`ci` / `conflicts` / post-release-health) for step `i` between
+    // durable sleeps until its precheck yields something terminal. A passing precheck
+    // returns `continue`, a dispatched helper agent returns `awaiting_job`, and a spent
+    // budget resolves through the gate's own exhaustion policy. Read failures are tolerated
+    // exactly like the job loop. Returns the updated result, or `null` once it failed the run.
+    const driveGatePollLoop = async (
+      i: number,
+      initial: AdvanceResult,
+    ): Promise<AdvanceResult | null> => {
+      let result = initial
+      let settled = false
+      let pollReadFailures = 0
+      for (let p = 0; p < execConfig.ciMaxPolls; p++) {
+        await step.sleep(`gate-wait-${i}-${p}`, ciPollInterval)
+        const attempt = await pollOnce(`gate-poll-${i}-${p}`, () =>
+          container.executionService.pollGate(workspaceId, executionId),
+        )
+        if (attempt.kind === 'read_failed') {
+          pollReadFailures += 1
+          logger.warn(
+            { workspaceId, executionId, step: i, poll: p, pollReadFailures, err: attempt.message },
+            'gate poll could not read its precheck; treating as still pending and retrying',
+          )
+          if (pollReadFailures < execConfig.jobPollFailureTolerance) continue
+          await failRun(
+            i,
+            `Gate precheck was unreadable for ${pollReadFailures} consecutive polls ` +
+              `(last error: ${attempt.message})`,
+            'timeout',
+          )
+          return null
+        }
+        pollReadFailures = 0
+        result = attempt.result
+        if (result.kind !== 'awaiting_gate') {
+          settled = true
+          break
+        }
+      }
+      if (!settled && result.kind === 'awaiting_gate') {
+        // Poll budget spent. Let the gate decide: a time-windowed watch gate
+        // (post-release-health) PASSES, while CI/conflicts resolve to a `job_failed`
+        // timeout the checks below funnel through `failRun`. One policy, both runtimes.
+        result = (await step.do(`gate-exhausted-${i}`, STEP_CONFIG, () =>
+          container.executionService.resolveGatePollExhaustion(workspaceId, executionId),
+        )) as AdvanceResult
+      }
+      return result
+    }
+
     for (let i = 0; ; i++) {
       let result: AdvanceResult
       try {
@@ -82,115 +201,26 @@ export class ExecutionWorkflow extends WorkflowEntrypoint<Env, ExecutionWorkflow
         return
       }
 
-      // An async step (a container coding job) dispatched and parked. Poll it
-      // between durable sleeps until it finishes — each poll is its own short,
-      // retriable step, so the job can run far longer than one step's timeout
-      // while the driver stays cheap and survives eviction. The job's bound is
-      // enforced container-side (inactivity + max-duration watchdogs); `jobMaxPolls`
-      // is only a backstop in case it never reports a terminal state.
+      // An async step (a container coding job) dispatched and parked. Poll it between
+      // durable sleeps until it finishes — each poll is its own short, retriable step, so
+      // the job can run far longer than one step's timeout while the driver stays cheap and
+      // survives eviction. The job's bound is enforced container-side (inactivity +
+      // max-duration watchdogs); `jobMaxPolls` is only a backstop. `null` means the loop
+      // already failed the run.
       if (result.kind === 'awaiting_job') {
-        let polled = false
-        // Consecutive failures to READ status — not the job failing. A coding step
-        // legitimately runs long shell commands (installing deps, build/test/e2e
-        // suites) that can briefly make the container unresponsive to a poll. The
-        // job's real liveness is bounded container-side (inactivity + max-duration
-        // watchdogs); eviction surfaces as a 404→failed value and a genuine job
-        // error as job_failed — both returned, not thrown. So a *thrown* poll error
-        // is always transient: tolerate a bounded run of them (reset on any good
-        // poll) rather than failing a healthy long-running job on the first blip.
-        let pollReadFailures = 0
-        for (let p = 0; p < execConfig.jobMaxPolls; p++) {
-          // Poll-first: the job was dispatched instants ago by `advance-${i}`, so the
-          // first status read runs immediately — a leading sleep would be a full poll
-          // interval (default 15s) of dead air between "job accepted" and the first
-          // running/subtask state reaching the board. Later iterations sleep between
-          // polls as before. (The gate loop below stays sleep-first on purpose: its
-          // precheck just ran inside advance/pollGate, so an immediate re-probe would
-          // only duplicate an external status read.)
-          if (p > 0) await step.sleep(`poll-wait-${i}-${p}`, jobPollInterval)
-          try {
-            result = (await step.do(`poll-${i}-${p}`, STEP_CONFIG, () =>
-              container.executionService.pollAgentJob(workspaceId, executionId),
-            )) as AdvanceResult
-          } catch (error) {
-            pollReadFailures += 1
-            const message = error instanceof Error ? error.message : String(error)
-            logger.warn(
-              { workspaceId, executionId, step: i, poll: p, pollReadFailures, err: message },
-              'poll could not read job status; treating as still running and retrying',
-            )
-            if (pollReadFailures >= execConfig.jobPollFailureTolerance) {
-              await failRun(
-                i,
-                `Job status was unreadable for ${pollReadFailures} consecutive polls; ` +
-                  `the container appears unreachable (last error: ${message})`,
-                'timeout',
-              )
-              return
-            }
-            continue
-          }
-          pollReadFailures = 0
-          if (result.kind !== 'awaiting_job') {
-            polled = true
-            break
-          }
-        }
-        if (!polled && result.kind === 'awaiting_job') {
-          await failRun(i, 'Implementation job did not finish within its polling budget', 'timeout')
-          return
-        }
+        const polledResult = await drivePollLoop(i, result)
+        if (polledResult === null) return
+        result = polledResult
       }
 
-      // A polling gate step (`ci` / `conflicts`) is gating the PR on its precheck.
-      // Re-run the precheck between durable sleeps — mirroring the job-poll loop above
-      // — until the gate yields something terminal: a passing precheck returns
-      // `continue`, a dispatched helper agent returns `awaiting_job` (handled on the
-      // next outer-loop iteration), and a spent budget returns `job_failed`. Which gate
-      // is resolved inside `pollGate` from the current step, so one loop drives both.
-      // Each poll is its own short, retriable step so the gate can wait far longer than
-      // one step's timeout while the driver stays cheap and survives eviction.
+      // A polling gate step (`ci` / `conflicts` / post-release-health) is gating the PR on
+      // its precheck. Re-run the precheck between durable sleeps until the gate yields
+      // something terminal (see `driveGatePollLoop`). One loop drives every gate kind, since
+      // which gate is resolved inside `pollGate` from the current step.
       if (result.kind === 'awaiting_gate') {
-        let settled = false
-        let pollReadFailures = 0
-        for (let p = 0; p < execConfig.ciMaxPolls; p++) {
-          await step.sleep(`gate-wait-${i}-${p}`, ciPollInterval)
-          try {
-            result = (await step.do(`gate-poll-${i}-${p}`, STEP_CONFIG, () =>
-              container.executionService.pollGate(workspaceId, executionId),
-            )) as AdvanceResult
-          } catch (error) {
-            pollReadFailures += 1
-            const message = error instanceof Error ? error.message : String(error)
-            logger.warn(
-              { workspaceId, executionId, step: i, poll: p, pollReadFailures, err: message },
-              'gate poll could not read its precheck; treating as still pending and retrying',
-            )
-            if (pollReadFailures >= execConfig.jobPollFailureTolerance) {
-              await failRun(
-                i,
-                `Gate precheck was unreadable for ${pollReadFailures} consecutive polls (last error: ${message})`,
-                'timeout',
-              )
-              return
-            }
-            continue
-          }
-          pollReadFailures = 0
-          if (result.kind !== 'awaiting_gate') {
-            settled = true
-            break
-          }
-        }
-        if (!settled && result.kind === 'awaiting_gate') {
-          // Poll budget spent. Let the gate decide: a time-windowed watch gate
-          // (post-release-health) PASSES (the window outlasted the budget with no
-          // regression), while CI/conflicts resolve to a `job_failed` timeout the
-          // checks below funnel through `failRun`. One policy, both runtimes.
-          result = (await step.do(`gate-exhausted-${i}`, STEP_CONFIG, () =>
-            container.executionService.resolveGatePollExhaustion(workspaceId, executionId),
-          )) as AdvanceResult
-        }
+        const gatedResult = await driveGatePollLoop(i, result)
+        if (gatedResult === null) return
+        result = gatedResult
         // Fall through: the now-updated `result` (continue / done / awaiting_job /
         // job_failed) is handled by the checks below and the next outer-loop iteration.
       }

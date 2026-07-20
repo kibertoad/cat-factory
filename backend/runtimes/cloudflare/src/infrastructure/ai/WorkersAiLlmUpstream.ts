@@ -431,6 +431,26 @@ function systemFromMessages(raw: unknown): string | undefined {
 }
 
 /**
+ * Convert an assistant message's OpenAI `tool_calls` into AI SDK `tool-call` content parts,
+ * skipping any malformed entry. Extracted so the per-call loop doesn't nest under the
+ * message loop + role branch in {@link toModelMessages} (keeps max-depth ≤ 4).
+ */
+function assistantToolCallParts(toolCalls: unknown): Array<Record<string, unknown>> {
+  if (!Array.isArray(toolCalls)) return []
+  const parts: Array<Record<string, unknown>> = []
+  for (const tc of toolCalls) {
+    if (!isObject(tc) || !isObject(tc.function) || typeof tc.function.name !== 'string') continue
+    parts.push({
+      type: 'tool-call',
+      toolCallId: typeof tc.id === 'string' ? tc.id : '',
+      toolName: tc.function.name,
+      input: safeParseArgs(tc.function.arguments),
+    })
+  }
+  return parts
+}
+
+/**
  * Convert OpenAI chat messages to AI SDK `ModelMessage`s, handling the tool
  * round-trip: an assistant message's `tool_calls` become `tool-call` content parts,
  * and a `tool` message becomes a `tool-result` (its tool name recovered by id from
@@ -466,19 +486,7 @@ function toModelMessages(raw: unknown): ModelMessage[] {
       const parts: Array<Record<string, unknown>> = []
       const text = contentText(m.content)
       if (text) parts.push({ type: 'text', text })
-      if (Array.isArray(m.tool_calls)) {
-        for (const tc of m.tool_calls) {
-          if (!isObject(tc) || !isObject(tc.function) || typeof tc.function.name !== 'string') {
-            continue
-          }
-          parts.push({
-            type: 'tool-call',
-            toolCallId: typeof tc.id === 'string' ? tc.id : '',
-            toolName: tc.function.name,
-            input: safeParseArgs(tc.function.arguments),
-          })
-        }
-      }
+      parts.push(...assistantToolCallParts(m.tool_calls))
       out.push({ role: 'assistant', content: parts.length > 0 ? parts : text } as ModelMessage)
     } else if (m.role === 'tool') {
       const toolCallId = typeof m.tool_call_id === 'string' ? m.tool_call_id : ''
