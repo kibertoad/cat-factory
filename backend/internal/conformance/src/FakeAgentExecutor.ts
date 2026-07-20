@@ -199,6 +199,14 @@ export interface FakeAgentOptions {
    */
   customResult?: unknown
   /**
+   * Per-agent-kind override of {@link customResult}, so ONE test can drive several structured
+   * container-explore kinds that return DIFFERENT payloads (e.g. a `pr-reviewer` returning findings
+   * AND the `challenge-investigator` returning an uphold/retract verdict on the same run). Keyed by
+   * the DISPATCHED kind (`context.agentKind` — the helper's kind, not the step's). A kind absent
+   * here falls back to {@link customResult}, then `{ ok: true }`.
+   */
+  customResultByKind?: Record<string, unknown>
+  /**
    * The multi-phase plan draft the `initiative-planner` step returns as `result.initiativePlan`
    * (an {@link InitiativePlanDraft}); the engine ingests it via `InitiativeService.ingestPlan`.
    * Set it whenever a test drives an initiative PLANNING pipeline to completion — the planner's
@@ -460,7 +468,8 @@ export class FakeAgentExecutor implements AgentExecutor {
       return {
         output: `[${context.agentKind}] produced structured output for "${context.block.title}"`,
         model: 'fake',
-        custom: this.options.customResult ?? { ok: true },
+        custom: this.options.customResultByKind?.[context.agentKind] ??
+          this.options.customResult ?? { ok: true },
       }
     }
 

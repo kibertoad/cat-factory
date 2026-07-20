@@ -1,4 +1,9 @@
-import { getPrReviewContract, resolvePrReviewContract } from '@cat-factory/contracts'
+import {
+  challengePrReviewFindingContract,
+  dismissPrReviewFindingContract,
+  getPrReviewContract,
+  resolvePrReviewContract,
+} from '@cat-factory/contracts'
 import { buildHonoRoute } from '@toad-contracts/hono'
 import { Hono } from 'hono'
 import { runWithInitiator } from '../../github/runInitiatorContext.js'
@@ -34,6 +39,34 @@ export function prReviewController(): Hono<AppEnv> {
       c
         .get('container')
         .executionService.resolvePrReview(param(c, 'workspaceId'), executionId, input),
+    )
+    return c.json(state, 200)
+  })
+
+  // Dismiss a parked finding entirely (curation, not a resolution — the run stays parked).
+  buildHonoRoute(app, dismissPrReviewFindingContract, async (c) => {
+    const { executionId, findingId } = c.req.valid('param')
+    const state = await c
+      .get('container')
+      .executionService.dismissPrReviewFinding(param(c, 'workspaceId'), executionId, findingId)
+    return c.json(state, 200)
+  })
+
+  // Challenge a parked finding: dispatch the Challenge Investigator to re-examine it. Runs under
+  // the acting user's ambient context (the investigator dispatch mints tokens like other run work).
+  buildHonoRoute(app, challengePrReviewFindingContract, async (c) => {
+    const { executionId, findingId } = c.req.valid('param')
+    const input = c.req.valid('json')
+    const userId = c.get('user')?.id
+    const state = await runWithInitiator(userId, () =>
+      c
+        .get('container')
+        .executionService.challengePrReviewFinding(
+          param(c, 'workspaceId'),
+          executionId,
+          findingId,
+          input,
+        ),
     )
     return c.json(state, 200)
   })

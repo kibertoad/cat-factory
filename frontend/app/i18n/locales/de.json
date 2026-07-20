@@ -4948,6 +4948,22 @@
       "chunks": "{completed} von {total} Abschnitten geprüft",
       "inProgress": "{count} in Bearbeitung"
     },
+    "challenge": {
+      "action": "Anfechten",
+      "reChallenge": "Erneut anfechten",
+      "dismiss": "Verwerfen",
+      "submit": "Untersuchen",
+      "placeholder": "Optional: Was genau ist an diesem Befund falsch oder nicht überzeugend?",
+      "hint": "Leer lassen, damit der Prüfer tiefer gräbt, den Befund begründet und prüft, ob er zutreffend und relevant ist.",
+      "investigatingBanner": "Der Challenge-Investigator prüft einen Befund erneut anhand des Quellcodes…",
+      "investigatingBadge": "Wird untersucht",
+      "strengthenedBadge": "Bestärkt",
+      "upheldBadge": "Bestätigt",
+      "retractedBadge": "Zurückgezogen",
+      "verdictLabel": "Prüfer:",
+      "failedBadge": "Anfechtung fehlgeschlagen",
+      "failedLabel": "Anfechtung fehlgeschlagen:"
+    },
     "fixing": {
       "title": "Ausgewählte Befunde werden behoben…",
       "hint": "Ein Fixer committet Änderungen für die ausgewählten Befunde auf den Pull-Request-Branch."

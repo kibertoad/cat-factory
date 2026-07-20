@@ -4948,6 +4948,22 @@
       "chunks": "{total} 個中 {completed} 個のチャンクをレビュー済み",
       "inProgress": "{count} 件処理中"
     },
+    "challenge": {
+      "action": "異議を唱える",
+      "reChallenge": "再度異議を唱える",
+      "dismiss": "却下",
+      "submit": "調査する",
+      "placeholder": "任意: この指摘のどこが誤り、または納得できないかを記入してください。",
+      "hint": "空欄のままにすると、調査担当がさらに深く掘り下げ、指摘の根拠を示し、正確性と関連性を検証します。",
+      "investigatingBanner": "異議調査担当がソースコードに照らして指摘を再検証しています…",
+      "investigatingBadge": "調査中",
+      "strengthenedBadge": "強化済み",
+      "upheldBadge": "支持",
+      "retractedBadge": "撤回済み",
+      "verdictLabel": "調査担当:",
+      "failedBadge": "異議調査に失敗",
+      "failedLabel": "異議調査に失敗:"
+    },
     "fixing": {
       "title": "選択した指摘を修正中…",
       "hint": "フィクサーが選択した指摘の変更をプルリクエストのブランチにコミットしています。"

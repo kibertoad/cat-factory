@@ -4936,6 +4936,22 @@
       "chunks": "Sprawdzono {completed} z {total} fragmentów",
       "inProgress": "{count} w toku"
     },
+    "challenge": {
+      "action": "Zakwestionuj",
+      "reChallenge": "Zakwestionuj ponownie",
+      "dismiss": "Odrzuć",
+      "submit": "Zbadaj",
+      "placeholder": "Opcjonalnie: co dokładnie jest błędne lub nieprzekonujące w tym ustaleniu?",
+      "hint": "Pozostaw puste, aby badacz zgłębił temat, uzasadnił ustalenie i sprawdził, czy jest trafne i istotne.",
+      "investigatingBanner": "Badacz zastrzeżeń ponownie analizuje ustalenie w oparciu o kod źródłowy…",
+      "investigatingBadge": "Badanie",
+      "strengthenedBadge": "Wzmocnione",
+      "upheldBadge": "Podtrzymane",
+      "retractedBadge": "Wycofane",
+      "verdictLabel": "Badacz:",
+      "failedBadge": "Zakwestionowanie nie powiodło się",
+      "failedLabel": "Zakwestionowanie nie powiodło się:"
+    },
     "fixing": {
       "title": "Naprawianie wybranych uwag…",
       "hint": "Fixer zatwierdza zmiany dla wybranych uwag w gałęzi pull requesta."

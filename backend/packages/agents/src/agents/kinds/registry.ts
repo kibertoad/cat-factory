@@ -13,6 +13,7 @@ import type { StructuredOutput } from './structured-output.js'
 import { registerBugInvestigatorAgent } from './bug-investigator.js'
 import { registerForkProposerAgent } from './fork-proposer.js'
 import { registerPrReviewerAgent } from './pr-reviewer.js'
+import { registerChallengeInvestigatorAgent } from './challenge-investigator.js'
 import { registerReproTestAgent } from './repro-test.js'
 import { registerRalphAgent } from './ralph.js'
 import { registerDocumentAgents } from './document.js'
@@ -327,6 +328,7 @@ export function defaultAgentKindRegistry(): AgentKindRegistry {
   registerBugInvestigatorAgent(registry)
   registerForkProposerAgent(registry)
   registerPrReviewerAgent(registry)
+  registerChallengeInvestigatorAgent(registry)
   registerReproTestAgent(registry)
   registerRalphAgent(registry)
   registerDocumentAgents(registry)

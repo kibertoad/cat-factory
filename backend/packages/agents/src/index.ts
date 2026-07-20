@@ -262,6 +262,14 @@ export {
   resolvePrNumber,
 } from './agents/kinds/pr-reviewer.js'
 export {
+  CHALLENGE_INVESTIGATOR_KIND,
+  CHALLENGE_INVESTIGATOR_AGENT_KINDS,
+  CHALLENGE_INVESTIGATOR_SYSTEM_PROMPT,
+  prReviewChallenge,
+  type PrReviewChallengeOutput,
+  registerChallengeInvestigatorAgent,
+} from './agents/kinds/challenge-investigator.js'
+export {
   FORK_CHAT_AGENT_KIND,
   FORK_CHAT_SYSTEM_PROMPT,
   type ForkChatGrounding,
