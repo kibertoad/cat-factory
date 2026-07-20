@@ -2084,6 +2084,7 @@
       "recurringNoFrame": "Un'attività ricorrente deve risiedere su un servizio. Aggiungila da un frame di servizio (o da un modulo al suo interno).",
       "titleField": "Titolo",
       "titlePlaceholder": "Cosa bisogna fare?",
+      "titlePlaceholderReview": "Facoltativo — derivato dalla pull request",
       "issueIncluded": "{title} (dall'issue, incluso)",
       "loadingIssue": "Caricamento della descrizione dell'issue collegata…",
       "additionalNotes": "Note aggiuntive",
@@ -2172,6 +2173,8 @@
       "defaultPreset": "Predefinito ({name}) — {thresholds}",
       "defaultModelPreset": "Predefinito ({name})",
       "modelPreset": "Preset di modello",
+      "bestPractices": "Best practice",
+      "bestPracticesHint": "Fissa i frammenti di best practice affinché gli agenti di questa attività li seguano, oltre agli standard a livello di servizio.",
       "agentConfiguration": "Configurazione dell'agente",
       "contextDocuments": "Documenti di contesto",
       "contextIssues": "Issue di contesto",
@@ -2195,7 +2198,9 @@
         "prUrl": "Pull request",
         "prUrlHint": "URL o numero della pull request da revisionare",
         "focus": "Focus della revisione",
-        "focusPlaceholder": "es. concentrati sulle modifiche di autenticazione e sulla gestione degli errori"
+        "focusPlaceholder": "es. concentrati sulle modifiche di autenticazione e sulla gestione degli errori",
+        "derivedTitle": "Rivedi {ref}",
+        "derivedTitleFallback": "Rivedi la pull request"
       }
     },
     "recurring": {

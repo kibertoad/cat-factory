@@ -2084,6 +2084,7 @@
       "recurringNoFrame": "Eine wiederkehrende Aufgabe muss auf einem Service liegen. Fügen Sie sie aus einem Service-Frame (oder einem darin enthaltenen Modul) hinzu.",
       "titleField": "Titel",
       "titlePlaceholder": "Was muss getan werden?",
+      "titlePlaceholderReview": "Optional – wird aus dem Pull Request abgeleitet",
       "issueIncluded": "{title} (aus Issue, enthalten)",
       "loadingIssue": "Beschreibung des verknüpften Issues wird geladen…",
       "additionalNotes": "Zusätzliche Notizen",
@@ -2172,6 +2173,8 @@
       "defaultPreset": "Standard ({name}) — {thresholds}",
       "defaultModelPreset": "Standard ({name})",
       "modelPreset": "Modell-Preset",
+      "bestPractices": "Best Practices",
+      "bestPracticesHint": "Best-Practice-Fragmente anheften, damit die Agenten dieser Aufgabe sie zusätzlich zu den Standards auf Service-Ebene befolgen.",
       "agentConfiguration": "Agent-Konfiguration",
       "contextDocuments": "Kontextdokumente",
       "contextIssues": "Kontext-Issues",
@@ -2195,7 +2198,9 @@
         "prUrl": "Pull Request",
         "prUrlHint": "URL oder Nummer des zu prüfenden Pull Requests",
         "focus": "Prüfungsschwerpunkt",
-        "focusPlaceholder": "z. B. Fokus auf die Auth-Änderungen und Fehlerbehandlung"
+        "focusPlaceholder": "z. B. Fokus auf die Auth-Änderungen und Fehlerbehandlung",
+        "derivedTitle": "{ref} prüfen",
+        "derivedTitleFallback": "Pull Request prüfen"
       }
     },
     "recurring": {

@@ -203,6 +203,7 @@
       "recurringNoFrame": "A recurring task must live on a service. Add it from a service frame (or a module inside one).",
       "titleField": "Title",
       "titlePlaceholder": "What needs to be done?",
+      "titlePlaceholderReview": "Optional — derived from the pull request",
       "issueIncluded": "{title} (from issue, included)",
       "loadingIssue": "Loading the linked issue's description…",
       "additionalNotes": "Additional notes",
@@ -291,6 +292,8 @@
       "defaultPreset": "Default ({name}) — {thresholds}",
       "defaultModelPreset": "Default ({name})",
       "modelPreset": "Model preset",
+      "bestPractices": "Best practices",
+      "bestPracticesHint": "Pin best-practice fragments so this task's agents follow them, on top of the service-level standards.",
       "agentConfiguration": "Agent configuration",
       "contextDocuments": "Context documents",
       "contextIssues": "Context issues",
@@ -317,7 +320,9 @@
         "prUrl": "Pull request",
         "prUrlHint": "URL or number of the pull request to review",
         "focus": "Review focus",
-        "focusPlaceholder": "e.g. focus on the auth changes and error handling"
+        "focusPlaceholder": "e.g. focus on the auth changes and error handling",
+        "derivedTitle": "Review {ref}",
+        "derivedTitleFallback": "Review pull request"
       }
     },
     "recurring": {

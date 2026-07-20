@@ -1,6 +1,7 @@
 <script setup lang="ts">
 // Create a new task on the board. The user names the task and writes its
-// description themselves — there are no auto-generated placeholder titles. The
+// description themselves (a REVIEW task is the one exception — its title is optional
+// and derived from the target PR when left blank, since the PR is the subject). The
 // task lands in `planned` state; it is never launched here. The user starts a
 // pipeline on it explicitly (and can keep editing it until they do).
 //
@@ -19,10 +20,12 @@ import type {
   TaskTypeFields,
 } from '~/types/domain'
 import { DOC_KINDS, DOC_KIND_FIELDS } from '~/types/domain'
+import type { DropdownMenuItem } from '@nuxt/ui'
 import ContextDocumentPicker from '~/components/documents/ContextDocumentPicker.vue'
 import ContextIssuePicker from '~/components/tasks/ContextIssuePicker.vue'
 import { riskPolicyOptionLabel, riskPolicySummary } from '~/utils/riskPolicy'
 import { pipelineAllowedForManualStart } from '~/utils/pipeline'
+import { buildFragmentPickerGroups } from '~/utils/fragmentPicker'
 
 const ui = useUiStore()
 const board = useBoardStore()
@@ -32,6 +35,8 @@ const riskPolicies = useRiskPoliciesStore()
 const modelPresets = useModelPresetsStore()
 const pipelines = usePipelinesStore()
 const agentConfig = useAgentConfigStore()
+const fragments = useFragmentsStore()
+const accounts = useAccountsStore()
 const toast = useToast()
 const { t } = useI18n()
 
@@ -121,6 +126,12 @@ const docOutlineHints = ref('')
 const reviewPrRef = ref('')
 const reviewFocus = ref('')
 
+// Best-practice prompt fragments the user pins on the task up front (folded into its agents
+// on top of the service-level standards, exactly like the inspector's picker). Chosen from the
+// resolved catalog, filtered to the enclosing frame's block type ("appropriate scope").
+const fragmentIds = ref<string[]>([])
+const isReview = computed(() => taskType.value === 'review')
+
 // Parse the PR-reference input into the contract fields: a bare positive integer (optionally
 // `#`-prefixed) becomes `prNumber` (a PR on the service's linked repo); anything else is taken
 // as a full URL (`prUrl`). Returns undefined when blank or unparseable — the caller uses that
@@ -134,6 +145,21 @@ function parseReviewPrRef(raw: string): Pick<TaskTypeFields, 'prUrl' | 'prNumber
     return Number.isSafeInteger(n) && n >= 1 ? { prNumber: n } : undefined
   }
   return { prUrl: trimmed }
+}
+
+// A review task doesn't require a title (the PR reference IS the subject), so when the user
+// leaves it blank we derive a concise one from the parsed PR ref — `owner/repo#123` from a
+// GitHub-style URL, else `#number`, else a bare label — so the board card still reads sensibly.
+function deriveReviewTitle(raw: string): string {
+  const parsed = parseReviewPrRef(raw)
+  if (parsed?.prNumber)
+    return t('board.addTask.review.derivedTitle', { ref: `#${parsed.prNumber}` })
+  if (parsed?.prUrl) {
+    const m = /github\.com\/([^/]+)\/([^/]+)\/pull\/(\d+)/.exec(parsed.prUrl)
+    const ref = m ? `${m[1]}/${m[2]}#${m[3]}` : parsed.prUrl
+    return t('board.addTask.review.derivedTitle', { ref })
+  }
+  return t('board.addTask.review.derivedTitleFallback')
 }
 // Per-kind specific fields (see DOC_KIND_FIELDS). Held in one keyed record; only the fields
 // for the selected kind are shown and submitted, so a value from a previously-selected kind is
@@ -285,6 +311,52 @@ const selectedModelPresetLabel = computed(() => {
     t('board.addTask.workspaceDefault')
   )
 })
+
+// ---- best-practice prompt fragments (pinned at creation) -------------------
+// The fragments already chosen, resolved against the catalog. An id the catalog no longer
+// resolves still renders (labelled by its raw id) so it stays visible and removable — mirrors
+// the inspector's TaskStructure picker.
+const selectedFragments = computed(() =>
+  fragmentIds.value.map((id) => fragments.getFragment(id) ?? { id, title: id, summary: '' }),
+)
+// A trailing group linking out to the fragment library (board tier always; account tier when
+// enabled) — managing fragments is open to every member, exactly like the inspector picker.
+const fragmentManageItems = computed<DropdownMenuItem[]>(() => {
+  const items: DropdownMenuItem[] = [
+    {
+      label: t('inspector.fragments.manageBoard'),
+      icon: 'i-lucide-book-marked',
+      onSelect: () => ui.openFragmentLibrary(),
+    },
+  ]
+  if (accounts.enabled) {
+    items.push({
+      label: t('inspector.fragments.manageAccount'),
+      icon: 'i-lucide-users',
+      onSelect: () => ui.openAccountSettings('fragments'),
+    })
+  }
+  return items
+})
+// Picker menu: fragments appropriate to the enclosing frame's block type (the "scope"), not
+// already selected, grouped by category, with the management links appended as the final group.
+// Falls back to `service` before a frame resolves so the catalog is still browsable.
+const fragmentMenu = computed<DropdownMenuItem[][]>(() => {
+  const selected = new Set(fragmentIds.value)
+  return [
+    ...buildFragmentPickerGroups(
+      fragments.forBlockType(frame.value?.type ?? 'service'),
+      (id) => selected.has(id),
+      (id) => {
+        if (!fragmentIds.value.includes(id)) fragmentIds.value = [...fragmentIds.value, id]
+      },
+    ),
+    fragmentManageItems.value,
+  ]
+})
+function removeFragment(id: string) {
+  fragmentIds.value = fragmentIds.value.filter((x) => x !== id)
+}
 
 // Hide UI-testing pipelines (`tester-ui` / `visual-confirmation`) when the target frame has no
 // UI to exercise — they'd be refused server-side (see utils/pipeline + the backend gate). Also
@@ -468,6 +540,7 @@ watch(open, (isOpen) => {
   docOutlineHints.value = ''
   reviewPrRef.value = ''
   reviewFocus.value = ''
+  fragmentIds.value = []
   for (const key of Object.keys(docKindFieldValues) as DocKindFieldKey[])
     delete docKindFieldValues[key]
   riskPolicyId.value = ''
@@ -491,6 +564,8 @@ watch(open, (isOpen) => {
   }
   documents.loadDocuments().catch(() => {})
   tasks.loadTasks().catch(() => {})
+  // Load the best-practice fragment catalog so the picker is populated (no-op while current).
+  fragments.ensureLoaded().catch(() => {})
   // Fetch any staged search-hit issue's body so its description shows read-only below.
   resolvePendingIssueBodies().catch(() => {})
 })
@@ -523,6 +598,7 @@ const { requestClose } = useUnsavedGuard({
     modelPresetId: modelPresetId.value,
     pipelineId: pipelineId.value,
     agentConfig: { ...agentConfigValues.value },
+    fragmentIds: [...fragmentIds.value],
     context: pendingContext.value.map(contextKey),
   }),
 })
@@ -536,8 +612,10 @@ const RALPH_VALIDATION_COMMAND_ID = 'ralph.validationCommand'
 
 const canAdd = computed(() => {
   if (isRecurring.value) return recurringFrameId.value !== null
+  // A review task doesn't require a title (the PR reference is the subject — we derive one),
+  // so it only needs a valid target PR. Every other type still requires a title.
+  if (isReview.value) return parseReviewPrRef(reviewPrRef.value) !== undefined
   if (title.value.trim().length === 0) return false
-  if (taskType.value === 'review' && !parseReviewPrRef(reviewPrRef.value)) return false
   if (
     taskType.value === 'ralph' &&
     configValue(RALPH_VALIDATION_COMMAND_ID, '').trim().length === 0
@@ -568,15 +646,21 @@ async function add() {
     const fullDescription =
       [...linkedIssueBodies.value.map((b) => b.body), notes].filter(Boolean).join('\n\n') ||
       undefined
-    const block = await board.addTask(containerId, title.value.trim(), fullDescription, {
+    // A review task's title is optional; when blank we derive one from the PR reference so the
+    // board card still reads sensibly (the backend also folds the PR ref into the description).
+    const effectiveTitle =
+      title.value.trim() || (isReview.value ? deriveReviewTitle(reviewPrRef.value) : '')
+    const block = await board.addTask(containerId, effectiveTitle, fullDescription, {
       taskType: taskType.value as CreateTaskType,
       ...(typeFields ? { taskTypeFields: typeFields } : {}),
-      ...(riskPolicyId.value ? { riskPolicyId: riskPolicyId.value } : {}),
+      // A review task merges nothing, so its risk (merge) policy is meaningless — never send it.
+      ...(riskPolicyId.value && !isReview.value ? { riskPolicyId: riskPolicyId.value } : {}),
       ...(modelPresetId.value ? { modelPresetId: modelPresetId.value } : {}),
       ...(pipelineId.value ? { pipelineId: pipelineId.value } : {}),
       ...(Object.keys(agentConfigValues.value).length
         ? { agentConfig: agentConfigValues.value }
         : {}),
+      ...(fragmentIds.value.length ? { fragmentIds: [...fragmentIds.value] } : {}),
       ...(technical.value ? { technical: true } : {}),
     })
     if (block) {
@@ -645,11 +729,19 @@ async function add() {
         </div>
 
         <template v-if="!isRecurring">
-          <UFormField :label="t('board.addTask.titleField')" required>
+          <UFormField
+            :label="t('board.addTask.titleField')"
+            :required="!isReview"
+            :hint="isReview ? t('board.addTask.optional') : undefined"
+          >
             <UInput
               v-model="title"
               data-testid="add-task-title"
-              :placeholder="t('board.addTask.titlePlaceholder')"
+              :placeholder="
+                isReview
+                  ? t('board.addTask.titlePlaceholderReview')
+                  : t('board.addTask.titlePlaceholder')
+              "
               autofocus
               class="w-full"
               @keydown.enter="add"
@@ -902,7 +994,8 @@ async function add() {
               />
             </UFormField>
 
-            <UFormField :label="t('board.addTask.mergePolicy')">
+            <!-- A review task merges nothing, so its risk (merge) policy is meaningless — omit it. -->
+            <UFormField v-if="!isReview" :label="t('board.addTask.mergePolicy')">
               <UDropdownMenu :items="presetMenu" class="w-full">
                 <UButton
                   color="neutral"
@@ -962,6 +1055,43 @@ async function add() {
               />
               <p class="text-[11px] leading-snug text-slate-500">{{ d.description }}</p>
             </div>
+          </div>
+
+          <!-- Best-practice fragments pinned on the task at creation, scoped to the frame's type. -->
+          <div class="space-y-2">
+            <div class="flex items-center justify-between">
+              <span class="text-[11px] font-semibold uppercase tracking-wide text-slate-400">
+                {{ t('board.addTask.bestPractices') }}
+              </span>
+              <UDropdownMenu :items="fragmentMenu">
+                <UButton
+                  color="neutral"
+                  variant="soft"
+                  size="xs"
+                  icon="i-lucide-plus"
+                  trailing-icon="i-lucide-chevron-down"
+                >
+                  {{ t('board.addTask.attach') }}
+                </UButton>
+              </UDropdownMenu>
+            </div>
+            <div v-if="selectedFragments.length" class="flex flex-wrap gap-1">
+              <UBadge
+                v-for="f in selectedFragments"
+                :key="f.id"
+                color="primary"
+                variant="subtle"
+                size="sm"
+                class="cursor-pointer"
+                :title="f.summary"
+                @click="removeFragment(f.id)"
+              >
+                {{ f.title }}<UIcon name="i-lucide-x" class="ms-0.5 h-3 w-3" />
+              </UBadge>
+            </div>
+            <p v-else class="text-[11px] text-slate-500">
+              {{ t('board.addTask.bestPracticesHint') }}
+            </p>
           </div>
 
           <!-- Context documents (ungated; Attach disabled until a source is connected). -->

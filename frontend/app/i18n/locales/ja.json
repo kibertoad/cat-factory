@@ -182,6 +182,7 @@
       "recurringNoFrame": "繰り返しタスクはサービス上に配置する必要があります。サービスフレーム（またはその中のモジュール）から追加してください。",
       "titleField": "タイトル",
       "titlePlaceholder": "何を実施する必要がありますか？",
+      "titlePlaceholderReview": "任意 — プルリクエストから生成されます",
       "issueIncluded": "{title}（issue から、含む）",
       "loadingIssue": "リンクされた issue の説明を読み込み中…",
       "additionalNotes": "追加メモ",
@@ -270,6 +271,8 @@
       "defaultPreset": "既定（{name}）— {thresholds}",
       "defaultModelPreset": "既定（{name}）",
       "modelPreset": "モデルプリセット",
+      "bestPractices": "ベストプラクティス",
+      "bestPracticesHint": "サービスレベルの標準に加えて、このタスクのエージェントが従うようにベストプラクティスのフラグメントを固定します。",
       "agentConfiguration": "エージェント設定",
       "contextDocuments": "コンテキストドキュメント",
       "contextIssues": "コンテキスト issue",
@@ -293,7 +296,9 @@
         "prUrl": "プルリクエスト",
         "prUrlHint": "レビュー対象のプルリクエストのURLまたは番号",
         "focus": "レビューの重点",
-        "focusPlaceholder": "例: 認証の変更とエラー処理に注目"
+        "focusPlaceholder": "例: 認証の変更とエラー処理に注目",
+        "derivedTitle": "{ref} をレビュー",
+        "derivedTitleFallback": "プルリクエストをレビュー"
       }
     },
     "recurring": {
