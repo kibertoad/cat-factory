@@ -2084,7 +2084,6 @@
       "recurringNoFrame": "Eine wiederkehrende Aufgabe muss auf einem Service liegen. Fügen Sie sie aus einem Service-Frame (oder einem darin enthaltenen Modul) hinzu.",
       "titleField": "Titel",
       "titlePlaceholder": "Was muss getan werden?",
-      "titlePlaceholderReview": "Optional – wird aus dem Pull Request abgeleitet",
       "issueIncluded": "{title} (aus Issue, enthalten)",
       "loadingIssue": "Beschreibung des verknüpften Issues wird geladen…",
       "additionalNotes": "Zusätzliche Notizen",

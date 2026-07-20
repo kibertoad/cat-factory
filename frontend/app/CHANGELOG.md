@@ -1,5 +1,32 @@
 # @cat-factory/app
 
+## 0.143.1
+
+### Patch Changes
+
+- b9c7c12: Hide the Title and Description fields on the Add-task form for review tasks. The target
+  pull request is the subject (the title is derived from the PR reference) and any notes
+  belong in the dedicated "Review focus" field, so the generic Title/Description inputs
+  were redundant. A follow-up to #1250, which made the review title optional but never
+  actually removed the fields from the form.
+
+## 0.143.0
+
+### Minor Changes
+
+- e679977: Streamline the Add-task form. Review tasks no longer require a Title (one is derived
+  from the target pull request when left blank) and no longer show the Risk (merge)
+  policy selector — a review merges nothing, so the policy was meaningless there. The
+  form also gains a Best-practices picker: any task can pin prompt fragments from the
+  resolved catalog (scoped to the enclosing frame's block type) at creation, via the new
+  optional `fragmentIds` on the add-task contract (unioned with the document
+  writing-style defaults for document tasks).
+
+### Patch Changes
+
+- Updated dependencies [e679977]
+  - @cat-factory/contracts@0.152.0
+
 ## 0.142.0
 
 ### Minor Changes

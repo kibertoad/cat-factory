@@ -182,7 +182,6 @@
       "recurringNoFrame": "Yinelenen bir görev bir serviste bulunmalıdır. Bir servis çerçevesinden (veya içindeki bir modülden) ekleyin.",
       "titleField": "Başlık",
       "titlePlaceholder": "Ne yapılması gerekiyor?",
-      "titlePlaceholderReview": "İsteğe bağlı — pull request'ten türetilir",
       "issueIncluded": "{title} (sorundan, dahil edildi)",
       "loadingIssue": "Bağlantılı sorunun açıklaması yükleniyor…",
       "additionalNotes": "Ek notlar",
