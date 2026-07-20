@@ -26,12 +26,17 @@ const execution = useExecutionStore()
 const board = useBoardStore()
 const prReview = usePrReviewStore()
 const access = useWorkspaceAccess()
+const ui = useUiStore()
 
 const { t } = useI18n()
 
 const { open, blockId, instanceId, stepIndex, close } = useResultView('pr-review', {
+  // `onOpen` fires synchronously from `useResultView`'s immediate watch, BEFORE the
+  // `instanceId` const below is initialised — so read it straight off the store here
+  // (referencing `instanceId.value` would hit its temporal dead zone and throw on every open).
   onOpen: (_id) => {
-    if (instanceId.value) void prReview.load(instanceId.value)
+    const id = ui.resultView?.instanceId
+    if (id) void prReview.load(id)
   },
 })
 
