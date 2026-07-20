@@ -33,7 +33,9 @@ describe('isSafeRepoDirPath', () => {
   })
 })
 
-function field(over: Partial<InitiativePresetField> & Pick<InitiativePresetField, 'key'>): InitiativePresetField {
+function field(
+  over: Partial<InitiativePresetField> & Pick<InitiativePresetField, 'key'>,
+): InitiativePresetField {
   return { label: over.key, ...over }
 }
 
@@ -176,9 +178,10 @@ describe('sanitizeInitiativePresetInputs', () => {
       field({ key: 'mode', type: 'text' }),
       field({ key: 'child', type: 'path', showWhen: { key: 'mode', equals: 'advanced' } }),
     ])
-    expect(
-      sanitizeInitiativePresetInputs(d, { mode: 'advanced', child: 'docs' }),
-    ).toEqual({ mode: 'advanced', child: 'docs' })
+    expect(sanitizeInitiativePresetInputs(d, { mode: 'advanced', child: 'docs' })).toEqual({
+      mode: 'advanced',
+      child: 'docs',
+    })
   })
 })
 

@@ -182,7 +182,6 @@
       "recurringNoFrame": "Una tarea recurrente debe vivir en un servicio. Añádela desde un marco de servicio (o un módulo dentro de él).",
       "titleField": "Título",
       "titlePlaceholder": "¿Qué hay que hacer?",
-      "titlePlaceholderReview": "Opcional: se deriva de la pull request",
       "issueIncluded": "{title} (de la incidencia, incluida)",
       "loadingIssue": "Cargando la descripción de la incidencia vinculada…",
       "additionalNotes": "Notas adicionales",

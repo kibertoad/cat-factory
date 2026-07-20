@@ -182,7 +182,6 @@
       "recurringNoFrame": "Une tâche récurrente doit appartenir à un service. Ajoutez-la depuis un cadre de service (ou un module à l’intérieur).",
       "titleField": "Titre",
       "titlePlaceholder": "Que faut-il faire ?",
-      "titlePlaceholderReview": "Facultatif — dérivé de la pull request",
       "issueIncluded": "{title} (depuis le ticket, incluse)",
       "loadingIssue": "Chargement de la description du ticket lié…",
       "additionalNotes": "Notes supplémentaires",
