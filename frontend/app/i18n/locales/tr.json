@@ -4812,6 +4812,7 @@
     }
   },
   "environmentWizard": {
+    "progress": "Adım {index} / {total}",
     "title": "Bir test ortamı kur",
     "subtitle": "Deployer sağlasın diye bir Docker Compose tarifini algıla, gözden geçir ve kaydet.",
     "recommended": "önerilen",

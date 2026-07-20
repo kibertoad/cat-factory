@@ -4941,6 +4941,7 @@
     }
   },
   "environmentWizard": {
+    "progress": "Step {index} of {total}",
     "title": "Set up a test environment",
     "subtitle": "Detect, review, and save a Docker Compose recipe so the Deployer provisions it.",
     "recommended": "recommended",

@@ -4800,6 +4800,7 @@
     }
   },
   "environmentWizard": {
+    "progress": "Paso {index} de {total}",
     "title": "Configurar un entorno de pruebas",
     "subtitle": "Detecta, revisa y guarda una receta de Docker Compose para que el Deployer la aprovisione.",
     "recommended": "recomendado",

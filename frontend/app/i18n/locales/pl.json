@@ -4800,6 +4800,7 @@
     }
   },
   "environmentWizard": {
+    "progress": "Krok {index} z {total}",
     "title": "Skonfiguruj środowisko testowe",
     "subtitle": "Wykryj, przejrzyj i zapisz przepis Docker Compose, aby Deployer go udostępnił.",
     "recommended": "zalecane",

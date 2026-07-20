@@ -4808,6 +4808,7 @@
     }
   },
   "environmentWizard": {
+    "progress": "Passaggio {index} di {total}",
     "title": "Configura un ambiente di test",
     "subtitle": "Rileva, rivedi e salva una ricetta Docker Compose in modo che il Deployer la esegua.",
     "recommended": "consigliato",

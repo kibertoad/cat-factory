@@ -10,15 +10,26 @@
  * trial) stay in that Pinia store, which the step components still drive; the
  * journey just decides WHICH step shows and threads the target frame id.
  *
- * This file is deliberately free of Vue/`.vue`/`defineModule` imports so the
- * transition graph is unit-tested directly (`environmentSetup.spec.ts`); the
- * component wiring lives in `environmentSetup.ts`, which feeds these helpers into
- * `defineJourney`'s `transitions` map.
+ * The step ORDER is no longer spelled out a second time as an ordered array: it
+ * is DERIVED from the annotated transition graph below (production-feedback item
+ * 4 in modular-react#83). Each transition wraps its handler with
+ * `defineTransition({ targets, handle })` so the static `targets` declare where
+ * the flow can go; `resolveStepSequence` / `useJourneyProgress` walk that graph
+ * to produce the ordered step list and the wizard's "Step X of N" progress from
+ * the one place the flow is encoded. `steps` carries each step's progress-label
+ * key beside the transitions.
+ *
+ * This definition lives in the logic file (not the SFC-importing
+ * `environmentSetup.ts`) so the graph stays free of `.vue` imports and is
+ * unit-tested directly (`environmentSetup.logic.spec.ts`). It references the step
+ * module only as a TYPE (`import type`), which is erased at runtime, so importing
+ * this file pulls no components. `environmentSetup.ts` supplies the module (with
+ * its step components) and re-exports the journey + the launch handle + the
+ * persistence adapter.
  */
-
-/** The journey's ordered step entries (also the module's `entryPoints` keys). */
-export const ENV_STEP_ORDER = ['pick', 'review', 'preflight', 'save'] as const
-export type EnvStep = (typeof ENV_STEP_ORDER)[number]
+import type { ExitCtx } from '@modular-vue/journeys'
+import { defineJourney, defineTransition } from '@modular-vue/journeys'
+import type { environmentSetupModule } from '~/modular/journeys/environmentSetup'
 
 /** The single module id every step entry lives under. */
 export const ENV_MODULE_ID = 'cat-factory:environment-setup' as const
@@ -52,35 +63,91 @@ export function envInitialState(input: EnvSetupInput): EnvSetupState {
 }
 
 /** First step: skip the picker when the launcher already chose a frame. */
-export function envStartStep(_state: EnvSetupState, input: EnvSetupInput): EnvStep {
+export function envStartStep(_state: EnvSetupState, input: EnvSetupInput): 'pick' | 'review' {
   return input.frameId ? 'review' : 'pick'
 }
 
 /**
- * The step reached by advancing from `from` via its forward exit, or `'done'`
- * when the flow completes. The pick step advances via `select` (a distinct
- * exit); the rest via `advance`. Pure and total over `EnvStep`.
- *
- * This is the SINGLE SOURCE OF TRUTH for the linear forward chain: the journey
- * definition (`environmentSetup.ts`) derives its `advance` transitions' target
- * entries from it, so pinning this function in `environmentSetup.logic.spec.ts`
- * genuinely guards the wired graph against a silent reorder/drop. The overloads
- * narrow the return to a concrete entry (or `'done'`) so a transition handler can
- * feed the result straight into a `StepSpec` without a widened `EnvStep | 'done'`.
+ * The journey's module type map — one module, referenced by its `typeof` so the
+ * transition + step maps resolve its literal entry/exit vocabulary with no casts.
+ * This is the case production-feedback item 3 (modular-react#83) fixed: before it,
+ * `defineModule` widened the descriptor, so `typeof environmentSetupModule` could
+ * not stand in as a `TModules` member without re-declaring the entry names by hand.
  */
-export function envNextAfter(from: 'pick'): 'review'
-export function envNextAfter(from: 'review'): 'preflight'
-export function envNextAfter(from: 'preflight'): 'save'
-export function envNextAfter(from: 'save'): 'done'
-export function envNextAfter(from: EnvStep): EnvStep | 'done' {
-  switch (from) {
-    case 'pick':
-      return 'review'
-    case 'review':
-      return 'preflight'
-    case 'preflight':
-      return 'save'
-    case 'save':
-      return 'done'
-  }
-}
+export type EnvModules = { [ENV_MODULE_ID]: typeof environmentSetupModule }
+
+/** Binder threading the journey generics into each annotated transition handler. */
+const transition = defineTransition<EnvModules, EnvSetupState>()
+
+/**
+ * The journey definition. `start` skips the picker when a frame was preselected.
+ * The forward chain is the annotated transitions' `targets`: pick →(select)→
+ * review →(advance)→ preflight →(advance)→ save →(advance)→ complete. Back
+ * navigation is handled by the entries' `allowBack` (declared on the module in
+ * `environmentSetup.ts`), not explicit transitions.
+ */
+export const environmentSetupJourney = defineJourney<EnvModules, EnvSetupState>()({
+  id: 'environment-setup',
+  version: '1.0.0',
+  initialState: (input: EnvSetupInput) => envInitialState(input),
+  start: (state, input: EnvSetupInput) =>
+    envStartStep(state, input) === 'review'
+      ? { module: ENV_MODULE_ID, entry: 'review', input: { frameId: state.frameId } }
+      : { module: ENV_MODULE_ID, entry: 'pick', input: { frameId: state.frameId } },
+  steps: {
+    [ENV_MODULE_ID]: {
+      pick: { progressLabel: 'environmentWizard.steps.pick' },
+      review: { progressLabel: 'environmentWizard.steps.review' },
+      preflight: { progressLabel: 'environmentWizard.steps.preflight' },
+      save: { progressLabel: 'environmentWizard.steps.save' },
+    },
+  },
+  transitions: {
+    [ENV_MODULE_ID]: {
+      pick: {
+        [ENV_SELECT_EXIT]: transition({
+          targets: [{ module: ENV_MODULE_ID, entry: 'review' }],
+          handle: (ctx: ExitCtx<EnvSetupState, EnvSelectOutput, unknown>) => ({
+            next: {
+              module: ENV_MODULE_ID,
+              entry: 'review',
+              input: { frameId: ctx.output.frameId },
+            },
+            state: { frameId: ctx.output.frameId },
+          }),
+        }),
+      },
+      review: {
+        [ENV_ADVANCE_EXIT]: transition({
+          targets: [{ module: ENV_MODULE_ID, entry: 'preflight' }],
+          handle: (ctx) => ({
+            next: {
+              module: ENV_MODULE_ID,
+              entry: 'preflight',
+              input: { frameId: ctx.state.frameId },
+            },
+          }),
+        }),
+      },
+      preflight: {
+        [ENV_ADVANCE_EXIT]: transition({
+          targets: [{ module: ENV_MODULE_ID, entry: 'save' }],
+          handle: (ctx) => ({
+            next: {
+              module: ENV_MODULE_ID,
+              entry: 'save',
+              input: { frameId: ctx.state.frameId },
+            },
+          }),
+        }),
+      },
+      // `save` advances to journey completion.
+      save: {
+        [ENV_ADVANCE_EXIT]: transition({
+          targets: ['complete'],
+          handle: () => ({ complete: undefined }),
+        }),
+      },
+    },
+  },
+})

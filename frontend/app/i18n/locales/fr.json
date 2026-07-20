@@ -4800,6 +4800,7 @@
     }
   },
   "environmentWizard": {
+    "progress": "Étape {index} sur {total}",
     "title": "Configurer un environnement de test",
     "subtitle": "Détectez, vérifiez et enregistrez une recette Docker Compose pour que le Deployer la provisionne.",
     "recommended": "recommandé",
