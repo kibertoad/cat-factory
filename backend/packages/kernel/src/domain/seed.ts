@@ -612,9 +612,10 @@ export function seedPipelines(registry?: PipelineRegistry): Pipeline[] {
       id: 'pl_review',
       name: 'Review a pull request',
       purpose: 'review',
-      version: 3,
+      // Version bumped for the large-PR / chunked-review description reseed.
+      version: 4,
       description:
-        'A read-only deep review of an open pull request that returns prioritized findings — no code is written and no PR is opened.',
+        'A read-only deep review of an open pull request that returns prioritized findings — no code is written and no PR is opened. Built for large PRs: it slices the diff into cohesive chunks and reviews each one, so it can work through a big change over a longer run rather than choking on it in a single pass.',
       agentKinds: ['pr-reviewer'],
     },
     definePipeline({

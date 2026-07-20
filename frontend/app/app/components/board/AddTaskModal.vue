@@ -361,8 +361,9 @@ function removeFragment(id: string) {
 // Hide UI-testing pipelines (`tester-ui` / `visual-confirmation`) when the target frame has no
 // UI to exercise — they'd be refused server-side (see utils/pipeline + the backend gate). Also
 // hide `'recurring'`-only pipelines (a one-off task start of one is refused at run start) and,
-// for a `document` task, every non-document pipeline (it authors a doc — only document pipelines
-// are relevant, per the `purpose` classifier). Re-filters as the chosen task type changes.
+// for a `document` / `review` task, every pipeline whose purpose doesn't match (a doc task authors
+// a doc, a review task reviews a PR — only document / review pipelines are relevant, per the
+// `purpose` classifier). Re-filters as the chosen task type changes.
 const selectablePipelines = computed(() =>
   pipelines.pipelines.filter((p) =>
     pipelineAllowedForManualStart(p, frame.value, board.blocks, taskType.value),
@@ -374,14 +375,16 @@ const selectablePipelines = computed(() =>
 // must appear in the form BEFORE creation:
 //   - `ralph` needs its preset so the per-task validation command + iteration budget the `ralph`
 //     agent contributes surface for editing ("choose at run time" would be a dead end);
-//   - a `document` task defaults to `pl_document` so its document-only picker (the `purpose` gate
-//     hides every non-document pipeline) is never rendered empty.
-// The other typed defaults (spike/review) carry no up-front config and don't narrow their picker,
-// so the modal leaves `pipelineId` unset and `BoardService` applies the backend type-default at
-// creation. Keep these ids in step with the backend helper.
+//   - a `document` task defaults to `pl_document` and a `review` task to `pl_review` so their
+//     purpose-narrowed picker (the `purpose` gate hides every non-document / non-review pipeline)
+//     is never rendered empty.
+// The other typed default (spike) carries no up-front config and doesn't narrow its picker, so the
+// modal leaves `pipelineId` unset and `BoardService` applies the backend type-default at creation.
+// Keep these ids in step with the backend helper.
 const DEFAULT_PIPELINE_FOR_TYPE: Partial<Record<TaskTypeChoice, string>> = {
   ralph: 'pl_ralph',
   document: 'pl_document',
+  review: 'pl_review',
 }
 watch(taskType, (next) => {
   const preset = DEFAULT_PIPELINE_FOR_TYPE[next]

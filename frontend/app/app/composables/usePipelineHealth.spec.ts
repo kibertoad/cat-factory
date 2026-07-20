@@ -142,4 +142,26 @@ describe('usePipelineHealth', () => {
     expect(invalid.value).toHaveLength(1)
     expect(outdated.value).toHaveLength(0)
   })
+
+  it('surfaces a brand-new built-in the workspace does not have yet (offer to add)', () => {
+    // A board seeded before `pl_review` shipped: the catalog versions advertise it, but no stored
+    // pipeline has that id — so it must appear as a "new" pipeline the user can add.
+    const stored = builtin(['coder', 'reviewer'], { id: 'pl_full', version: 1 })
+    const { newPipelines, hasIssues, invalid, outdated } = scan([stored], {
+      pl_full: 1,
+      pl_review: 4,
+    })
+    expect(newPipelines.value).toEqual([{ id: 'pl_review', name: 'review' }])
+    expect(hasIssues.value).toBe(true)
+    // A brand-new built-in is not "invalid" or "outdated" — those only concern STORED pipelines.
+    expect(invalid.value).toHaveLength(0)
+    expect(outdated.value).toHaveLength(0)
+  })
+
+  it('reports no new pipelines when every catalog id is already stored', () => {
+    const stored = builtin(['coder', 'reviewer'], { id: 'pl_full', version: 1 })
+    const { newPipelines, hasIssues } = scan([stored], { pl_full: 1 })
+    expect(newPipelines.value).toHaveLength(0)
+    expect(hasIssues.value).toBe(false)
+  })
 })

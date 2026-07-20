@@ -1,13 +1,16 @@
 <script setup lang="ts">
 // Startup advisory for unhealthy pipelines. Opened once per session from the board page when
 // `usePipelineHealth` reports any issue. Lists:
+//   • new built-in pipelines the workspace doesn't have yet (ADD them);
 //   • invalid pipelines (unknown agent kind / bad shape) — DELETE a custom one, RESEED a built-in;
 //   • outdated built-ins (a newer catalog definition is available) — RESEED to adopt it.
-// Detection is client-side (see usePipelineHealth); the actions hit the pipelines store.
+// Adding a new built-in and reseeding an existing one are the same reseed call (it creates or
+// updates by catalog id). Detection is client-side (see usePipelineHealth); the actions hit the
+// pipelines store.
 const { t } = useI18n()
 const ui = useUiStore()
 const pipelines = usePipelinesStore()
-const { invalid, outdated, hasIssues } = usePipelineHealth()
+const { invalid, outdated, newPipelines, hasIssues } = usePipelineHealth()
 const toast = useToast()
 
 const open = computed({
@@ -45,17 +48,20 @@ const reseed = (id: string) =>
 const remove = (id: string) =>
   run(id, () => pipelines.removePipeline(id), t('pipeline.health.toast.deleteFailed'))
 
-/** Reseed every reseedable pipeline (outdated built-ins + invalid built-ins) in one go. */
+/** Reseed every reseedable pipeline (new + outdated built-ins + invalid built-ins) in one go. */
 async function reseedAll() {
-  const ids = [...invalid.value.filter((h) => h.pipeline.builtin), ...outdated.value].map(
-    (h) => h.pipeline.id,
-  )
+  const ids = [
+    ...newPipelines.value.map((p) => p.id),
+    ...invalid.value.filter((h) => h.pipeline.builtin).map((h) => h.pipeline.id),
+    ...outdated.value.map((h) => h.pipeline.id),
+  ]
   for (const id of new Set(ids)) await reseed(id)
 }
 
 const reseedableCount = computed(
   () =>
     new Set([
+      ...newPipelines.value.map((p) => p.id),
       ...invalid.value.filter((h) => h.pipeline.builtin).map((h) => h.pipeline.id),
       ...outdated.value.map((h) => h.pipeline.id),
     ]).size,
@@ -71,6 +77,41 @@ const reseedableCount = computed(
       </div>
 
       <div v-else class="space-y-5">
+        <!-- New built-in pipelines the workspace can add. -->
+        <section v-if="newPipelines.length" class="space-y-2">
+          <div class="flex items-center gap-2">
+            <UIcon name="i-lucide-sparkles" class="h-4 w-4 text-emerald-400" />
+            <h3 class="text-sm font-semibold text-slate-200">
+              {{ t('pipeline.health.newHeading') }}
+            </h3>
+          </div>
+          <p class="text-[11px] text-slate-500">{{ t('pipeline.health.newDescription') }}</p>
+          <ul class="space-y-2">
+            <li
+              v-for="p in newPipelines"
+              :key="p.id"
+              class="flex items-center justify-between gap-3 rounded-lg border border-slate-800 bg-slate-900/40 p-3"
+            >
+              <div class="min-w-0">
+                <span class="truncate text-sm font-medium text-slate-100 capitalize">{{
+                  p.name
+                }}</span>
+              </div>
+              <UButton
+                size="xs"
+                color="primary"
+                variant="subtle"
+                icon="i-lucide-plus"
+                :loading="isBusy(p.id)"
+                :disabled="anyBusy"
+                @click="reseed(p.id)"
+              >
+                {{ t('pipeline.health.add') }}
+              </UButton>
+            </li>
+          </ul>
+        </section>
+
         <!-- Invalid: unknown agent kinds or a broken shape. -->
         <section v-if="invalid.length" class="space-y-2">
           <div class="flex items-center gap-2">

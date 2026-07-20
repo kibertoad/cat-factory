@@ -59,15 +59,18 @@ export function purposeAllowsAgentCategory(
 
 /**
  * Whether `pipeline` should be offered when starting a task of `taskType` — the pickers' gate.
- * Only a `document` task narrows the set: it authors a document, so it offers ONLY
- * `purpose: 'document'` pipelines. Every other task type (and an undefined `taskType`) is
- * unrestricted. A pipeline with no `purpose` is therefore hidden from a document task and shown
- * for every other. Composed with the launch-availability / visual-frame filters at each picker.
+ * A `document` task authors a document and a `review` task reviews an existing PR, so each narrows
+ * the set to ONLY its matching purpose (`document` / `review`): every other pipeline writes/ships
+ * code, which is meaningless for those tasks. Every OTHER task type (and an undefined `taskType`) is
+ * unrestricted. A pipeline with no `purpose` is therefore hidden from a document/review task (it
+ * requires the explicit classifier) and shown for every other. Composed with the launch-availability
+ * / visual-frame filters at each picker.
  */
 export function pipelineAllowedForTaskType(
   pipeline: Pick<Pipeline, 'purpose'>,
   taskType: TaskType | undefined,
 ): boolean {
   if (taskType === 'document') return pipeline.purpose === 'document'
+  if (taskType === 'review') return pipeline.purpose === 'review'
   return true
 }
