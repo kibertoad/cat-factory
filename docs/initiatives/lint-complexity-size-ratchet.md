@@ -1,8 +1,9 @@
 # Initiative: ratchet down oxlint complexity & size ceilings
 
 **Status:** in progress — `max-nested-callbacks` AND `max-depth` at their final targets (4);
-`max-lines` / `max-lines-per-function` at their free floors. `complexity` / `max-statements` /
-`max-params` / the two size rules still need the DI-builder / god-file refactors to move ·
+`max-lines` / `max-lines-per-function` at their free floors; `max-params` at step 1 (**10**, the
+20-param `buildNodeContainerExecutor` converted to an options object). `complexity` /
+`max-statements` / the two size rules still need the DI-builder / god-file refactors to move ·
 **Owner:** core · **Started:** 2026-07-20
 
 > This is the durable source of truth for a multi-PR initiative. Read it first before
@@ -68,7 +69,7 @@ worst offender. These are the starting ceilings, not the goal.
 | `max-statements`         |         157 |            **30** | `frontend/app/app/stores/ui/modals.ts` (157)                     |
 | `max-lines-per-function` |    **2453** |           **150** | `internal/conformance/src/suites/core.ts` (2453)                 |
 | `max-lines`              |    **2802** |          **1500** | `orchestration/src/modules/execution/ExecutionService.ts` (2802) |
-| `max-params`             |          20 |             **6** | `runtimes/node/src/container-executor-deps.ts` (20)              |
+| `max-params`             |      **10** |             **6** | `orchestration/…/DeployerStepController.ts` (10)                 |
 | `max-depth`              |    **4** ✅ |             **4** | at target — 0 offenders above 4                                  |
 | `max-nested-callbacks`   |    **4** ✅ |             **4** | at target — 0 offenders above 4                                  |
 
@@ -88,6 +89,13 @@ worst offender. These are the starting ceilings, not the goal.
 > `EnvironmentConnectionService`'s bootstrap commit/PR path, `WorkersAiLlmUpstream`'s assistant
 > tool-call conversion, and the OTEL conformity metric fold. The size/complexity rules are still
 > pinned at their ceilings pending the DI-builder / god-file refactors.
+>
+> **Third pass (landed):** `max-params` reached **step 1** (20 → **10**) by converting the lone
+> 20-arg offender — the Node facade's `buildNodeContainerExecutor` — from positional parameters to
+> a single `NodeContainerExecutorDeps` options object (its one call site in `runtimes/node`'s
+> `container.ts` passes named fields). The floor is now **10** (`DeployerStepController`), so step 2
+> (→ 8) needs the 9/10-arg DI/controller functions split next. The size/complexity rules remain
+> pinned pending the DI-builder / god-file refactors.
 
 `max-lines`' final target of **1500** deliberately matches `check-file-size.mjs`'s default
 budget, so the two guards agree on the file ceiling (the custom guard keeps its per-file
@@ -144,7 +152,7 @@ Update the `Status` cell + the live `max` in `.oxlintrc.json` at the end of each
 | Step      | `max` | Offenders to split first                                                                   | Status    |
 | --------- | ----: | ------------------------------------------------------------------------------------------ | --------- |
 | baseline  |    20 | —                                                                                          | ✅ landed |
-| 1         |    10 | (1) `buildNodeContainer` (20 positional args → options object)                             | ☐ todo    |
+| 1         |    10 | (1) `buildNodeContainerExecutor` (20 positional args → options object)                     | ✅ landed |
 | 2         |     8 | (5) `DeployerStepController` 10, `cloudflare/container.ts` 9, `RequirementReviewService` 9 | ☐ todo    |
 | 3 (final) |     6 | (16)                                                                                       | ☐ todo    |
 

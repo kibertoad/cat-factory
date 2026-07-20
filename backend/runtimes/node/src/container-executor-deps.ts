@@ -205,35 +205,59 @@ export function missingContainerExecutorPrereqs(input: {
  * (e.g. a static PAT for local mode), otherwise it is minted via the GitHub App
  * registry (which additionally requires the App private key + `github.enabled`).
  */
-export function buildNodeContainerExecutor(
-  env: NodeJS.ProcessEnv,
-  config: AppConfig,
-  appRegistry: GitHubAppRegistry | undefined,
-  resolveRepoTarget: ResolveRepoTarget,
-  resolveRepoTargets: ResolveRepoTargets,
-  resolveTransport: ResolveRunnerTransport | null,
+export interface NodeContainerExecutorDeps {
+  env: NodeJS.ProcessEnv
+  config: AppConfig
+  appRegistry: GitHubAppRegistry | undefined
+  resolveRepoTarget: ResolveRepoTarget
+  resolveRepoTargets: ResolveRepoTargets
+  resolveTransport: ResolveRunnerTransport | null
   resolveWorkspaceModelDefault: (
     workspaceId: string,
     agentKind: string,
     modelPresetId?: string,
-  ) => Promise<string | undefined>,
-  agentKindRegistry: AgentKindRegistry,
-  mintInstallationTokenOverride?: (installationId: number) => Promise<string>,
-  subscriptions?: ProviderSubscriptionService,
-  personalSubscriptions?: PersonalSubscriptionService,
-  resolveAccountId?: (workspaceId: string) => Promise<string | null | undefined>,
-  resolveUserGitHubToken?: ResolveUserGitHubToken,
-  agentContextObservability?: AgentContextObservabilityService,
-  resolveWebSearchAvailability?: (workspaceId: string) => Promise<WebSearchAvailability>,
-  resolveRepoOrigin?: ResolveRepoOrigin,
-  resolvePackageRegistries?: (workspaceId: string) => Promise<JobPackageRegistrySpec[]>,
-  resolveTestSecrets?: (workspaceId: string, blockId: string) => Promise<TestSecretEntry[]>,
-  recordHarnessCalls?: (input: HarnessCallsRecordInput) => Promise<void>,
+  ) => Promise<string | undefined>
+  agentKindRegistry: AgentKindRegistry
+  mintInstallationTokenOverride?: (installationId: number) => Promise<string>
+  subscriptions?: ProviderSubscriptionService
+  personalSubscriptions?: PersonalSubscriptionService
+  resolveAccountId?: (workspaceId: string) => Promise<string | null | undefined>
+  resolveUserGitHubToken?: ResolveUserGitHubToken
+  agentContextObservability?: AgentContextObservabilityService
+  resolveWebSearchAvailability?: (workspaceId: string) => Promise<WebSearchAvailability>
+  resolveRepoOrigin?: ResolveRepoOrigin
+  resolvePackageRegistries?: (workspaceId: string) => Promise<JobPackageRegistrySpec[]>
+  resolveTestSecrets?: (workspaceId: string, blockId: string) => Promise<TestSecretEntry[]>
+  recordHarnessCalls?: (input: HarnessCallsRecordInput) => Promise<void>
   recordSubscriptionQuotaUsage?: (
     target: SubscriptionQuotaTarget,
     usage: { inputTokens: number; outputTokens: number },
-  ) => Promise<void>,
-): AgentExecutor | null {
+  ) => Promise<void>
+}
+
+export function buildNodeContainerExecutor(deps: NodeContainerExecutorDeps): AgentExecutor | null {
+  const {
+    env,
+    config,
+    appRegistry,
+    resolveRepoTarget,
+    resolveRepoTargets,
+    resolveTransport,
+    resolveWorkspaceModelDefault,
+    agentKindRegistry,
+    mintInstallationTokenOverride,
+    subscriptions,
+    personalSubscriptions,
+    resolveAccountId,
+    resolveUserGitHubToken,
+    agentContextObservability,
+    resolveWebSearchAvailability,
+    resolveRepoOrigin,
+    resolvePackageRegistries,
+    resolveTestSecrets,
+    recordHarnessCalls,
+    recordSubscriptionQuotaUsage,
+  } = deps
   // The harness reaches models only through this service's LLM proxy; `PUBLIC_URL`
   // is this service's externally reachable base (the runner pool / local container
   // must be able to reach it). Pi posts to `${PUBLIC_URL}/v1/chat/completions`.
