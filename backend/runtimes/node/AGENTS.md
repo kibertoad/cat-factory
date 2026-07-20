@@ -23,10 +23,18 @@ transport, and Node model provisioning.
   "Migration safety").
 - `container.ts` — the DI composition root (`buildNodeContainer`, with injected
   `resolveTransport`/`mintInstallationToken`/`githubClient` seams the local facade overrides).
-  Its container-agent-executor wiring (transport resolver, provisioning-log wrapper, container
-  executor + repo bootstrapper + env-config repairer, GitHub-issue filer, trace-sink builder)
-  lives in the sibling `container-executor-deps.ts`; the public seams stay exported from
-  `container.ts`.
+  Cohesive slices of the composition root live in sibling `container-*-deps.ts` modules so the
+  root stays within the file-size budget (the public seams stay exported from `container.ts`):
+  `container-executor-deps.ts` (transport resolver, provisioning-log wrapper, container executor +
+  env-config repairer, GitHub-issue filer, trace-sink builder), `container-github-deps.ts`
+  (`selectNodeGitHubDeps` — the engine GitHub client + CI/mergeability/review/doc-quality gate
+  wiring + task-source + issue-writeback + GitHub projection/sync module deps),
+  `container-model-deps.ts` (credential/token stores + the model-provider resolver + inline
+  executor), `container-run-services-deps.ts` (agent-observability + web-search + sealed-secret
+  services), `container-transport-deps.ts` (runner transport + deploy seams + repo bootstrapper),
+  `container-account-deps.ts` (per-account settings + binary-artifact storage +
+  observability/incident gate wiring), `container-realtime-deps.ts` (event publisher +
+  notification channel + consensus wrap), and `container-content-library-deps.ts`.
 - `execution/` — pg-boss durable execution (`pgBossRunner`, `drive`).
 - `gateways.ts`, `modelProvider.ts`, `realtime.ts`, `config.ts`, `retention.ts` — Node gateway
   - model + transport wiring and the retention sweep.

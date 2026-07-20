@@ -11,8 +11,21 @@
     "max-params": ["error", { "max": 6 }],
     "max-statements": ["error", { "max": 157 }],
     "max-lines": ["error", { "max": 2802 }],
-    "max-lines-per-function": ["error", { "max": 2453 }]
+    "max-lines-per-function": ["error", { "max": 1000 }]
   },
+  "overrides": [
+    {
+      "files": [
+        "**/*.test.ts",
+        "**/*.spec.ts",
+        "backend/internal/conformance/src/**",
+        "backend/internal/e2e/**"
+      ],
+      "rules": {
+        "max-lines-per-function": ["error", { "max": 2453 }]
+      }
+    }
+  ],
   "ignorePatterns": ["**/*.generated.ts"],
   "env": {
     "builtin": true
