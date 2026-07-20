@@ -1,5 +1,6 @@
 import type { AgentRunContext } from '@cat-factory/kernel'
 import type { AgentKindDefinition, AgentKindRegistry } from './registry.js'
+import { CODE_AWARE_TRAIT } from './traits.js'
 import { PLATFORM_DELIVERY_CONTRACT } from '../prompts/delivery-contract.js'
 import { STANDARDS_FOOTER } from '../prompts/shared.js'
 import { linkedContextSection } from '../prompts/standard.js'
@@ -78,6 +79,8 @@ export const SKILL_AGENT_KINDS: AgentKindDefinition[] = [
     kind: SKILL_AGENT_KIND,
     systemPrompt: SKILL_SYSTEM_PROMPT,
     userPrompt: skillUserPrompt,
+    // Commits code changes, so the engine folds the task's best-practice fragments into its prompt.
+    traits: [CODE_AWARE_TRAIT],
     agent: {
       surface: 'container-coding',
       clone: { branch: 'pr-or-work' },

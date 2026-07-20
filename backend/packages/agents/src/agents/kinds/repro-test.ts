@@ -3,6 +3,7 @@ import type { AgentRunContext } from '@cat-factory/kernel'
 import { defineStructuredOutput } from './structured-output.js'
 import { FINAL_ANSWER_IN_REPLY } from '../prompts/shared.js'
 import type { AgentKindDefinition, AgentKindRegistry } from './registry.js'
+import { CODE_AWARE_TRAIT } from './traits.js'
 
 // ---------------------------------------------------------------------------
 // The `repro-test` agent kind — Reproduction Test Automation (bug-triage phase G).
@@ -114,6 +115,8 @@ export const REPRO_TEST_AGENT_KINDS: AgentKindDefinition[] = [
   {
     kind: REPRO_TEST_KIND,
     systemPrompt: REPRO_TEST_SYSTEM_PROMPT,
+    // Writes test code, so the engine folds the task's best-practice fragments into its prompt.
+    traits: [CODE_AWARE_TRAIT],
     // Coding on the shared per-block work branch: commit + push the failing test(s), but leave
     // the PR for the coder to open (it resumes this branch and adds the fix). A concede
     // (`not_reproducible`) commits nothing, which must NOT fail the run.

@@ -1,5 +1,6 @@
 import type { AgentConfigDescriptor } from '@cat-factory/kernel'
 import type { AgentKindDefinition, AgentKindRegistry } from './registry.js'
+import { CODE_AWARE_TRAIT } from './traits.js'
 
 // ---------------------------------------------------------------------------
 // The `ralph` agent kind — the "Ralph loop" iteration body.
@@ -64,6 +65,9 @@ export const RALPH_AGENT_KINDS: AgentKindDefinition[] = [
   {
     kind: RALPH_AGENT_KIND,
     systemPrompt: RALPH_SYSTEM_PROMPT,
+    // Writes code (a coder-equivalent loop), so the engine folds the task's best-practice
+    // fragments into its prompt — like `coder`.
+    traits: [CODE_AWARE_TRAIT],
     // Coding that accretes on ONE branch/PR: `pr-or-work` opens the PR on iteration 1 (work
     // flow) then amends that PR branch in place on every later iteration (pr flow) — so prior
     // iterations' commits are resumed, not reset. A no-change iteration must NOT hard-fail the

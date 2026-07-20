@@ -1,6 +1,7 @@
 import * as v from 'valibot'
 import { defineStructuredOutput } from './structured-output.js'
 import type { AgentKindDefinition, AgentKindRegistry } from './registry.js'
+import { CODE_AWARE_TRAIT } from './traits.js'
 
 // ---------------------------------------------------------------------------
 // The `fork-proposer` agent kind — the read-only proposer that OPENS the optional
@@ -99,6 +100,9 @@ export const FORK_PROPOSER_AGENT_KINDS: AgentKindDefinition[] = [
   {
     kind: FORK_PROPOSER_KIND,
     systemPrompt: FORK_PROPOSER_SYSTEM_PROMPT,
+    // Reads the code to propose implementation approaches, so the engine folds the task's
+    // best-practice fragments into its prompt (they inform which approaches fit the standards).
+    traits: [CODE_AWARE_TRAIT],
     // Read-only checkout of the primary repo's base branch. `agent.output` is derived
     // from the schema. No `presentation`: never a palette step (see the header note).
     agent: { surface: 'container-explore', clone: { branch: 'base' } },

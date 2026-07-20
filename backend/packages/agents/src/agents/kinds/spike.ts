@@ -2,6 +2,7 @@ import * as v from 'valibot'
 import type { AgentRunContext, RepoOp, RepoOpContext, RepoOpResult } from '@cat-factory/kernel'
 import { defineStructuredOutput } from './structured-output.js'
 import type { AgentKindDefinition, AgentKindRegistry } from './registry.js'
+import { CODE_AWARE_TRAIT } from './traits.js'
 
 // ---------------------------------------------------------------------------
 // The built-in `spike` agent kind — a TIMEBOXED research/investigation task that
@@ -308,6 +309,9 @@ export const SPIKE_AGENT_KINDS: AgentKindDefinition[] = [
   {
     kind: SPIKE_AGENT_KIND,
     systemPrompt: SPIKE_SYSTEM_PROMPT,
+    // Reads the codebase to investigate a technical question and reach a recommendation, so the
+    // engine folds the service's best-practice fragments into its prompt (like `bug-investigator`).
+    traits: [CODE_AWARE_TRAIT],
     // Read-only checkout of the primary repo's base branch; `agent.output` is derived from the
     // schema. The findings render + delivery is the backend post-op above (a PR by default, or a
     // direct base commit for `pl_spike_direct`).

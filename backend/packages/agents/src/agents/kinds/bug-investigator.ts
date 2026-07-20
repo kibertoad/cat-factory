@@ -1,6 +1,7 @@
 import * as v from 'valibot'
 import { defineStructuredOutput } from './structured-output.js'
 import type { AgentKindDefinition, AgentKindRegistry } from './registry.js'
+import { CODE_AWARE_TRAIT } from './traits.js'
 
 // ---------------------------------------------------------------------------
 // The `bug-investigator` agent kind — the read-only, multi-repo investigation that
@@ -91,6 +92,9 @@ export const BUG_INVESTIGATOR_AGENT_KINDS: AgentKindDefinition[] = [
   {
     kind: BUG_INVESTIGATOR_KIND,
     systemPrompt: BUG_INVESTIGATOR_SYSTEM_PROMPT,
+    // Reads the codebase to trace a bug's root cause, so the engine folds the task's best-practice
+    // fragments into its prompt (the service's standards inform what "correct" looks like).
+    traits: [CODE_AWARE_TRAIT],
     // Read-only checkout of the primary repo's base branch (+ any peer repos as siblings,
     // wired by the executor's multi-repo fan-out). `agent.output` is derived from the schema.
     agent: { surface: 'container-explore', clone: { branch: 'base' } },

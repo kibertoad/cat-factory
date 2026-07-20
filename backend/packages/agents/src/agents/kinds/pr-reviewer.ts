@@ -2,6 +2,7 @@ import { prReviewAgentOutputSchema } from '@cat-factory/contracts'
 import type { GitHubChangedFile, RepoOp, RepoOpContext, RepoOpResult } from '@cat-factory/kernel'
 import { defineStructuredOutput } from './structured-output.js'
 import type { AgentKindDefinition, AgentKindRegistry } from './registry.js'
+import { CODE_AWARE_TRAIT } from './traits.js'
 
 // ---------------------------------------------------------------------------
 // The `pr-reviewer` agent kind — a deep, token-bounded review of an EXISTING open
@@ -198,6 +199,13 @@ export const PR_REVIEWER_AGENT_KINDS: AgentKindDefinition[] = [
     // prompt fetches the PR head by number (`git fetch origin pull/<n>/head`) and diffs it against
     // the base. Full history so the base..head diff resolves. `agent.output` is derived from the schema.
     agent: { surface: 'container-explore', clone: { branch: 'base', full: true } },
+    // Code-aware: the reviewer reads and judges code, so the execution engine folds the review
+    // task's selected best-practice / guideline fragments into its system prompt — exactly like
+    // the built-in `reviewer` companion (STANDARD_AGENT_TRAITS). Without this the task's chosen
+    // fragments are silently dropped by `AgentContextBuilder.resolveFragments` (which gates on the
+    // `code-aware`/`doc-aware` traits), so they never reach the tenant fragment resolver, never
+    // fold as review criteria, and record 0 in the agent-context snapshot ("Provided context").
+    traits: [CODE_AWARE_TRAIT],
     structuredOutput: prReview,
     presentation: {
       label: 'PR Reviewer',
