@@ -24,6 +24,7 @@ import type {
   WorkspaceRepository,
 } from '@cat-factory/kernel'
 import {
+  applicableFragmentIds,
   buildExcerpt,
   CONTEXT_BUDGET,
   resolveServiceFrameBlock,
@@ -866,20 +867,11 @@ export class AgentContextBuilder {
       return null
     }
     try {
-      // Only a frame-level run folds in the service's own `serviceFragmentIds` — for a frame
-      // `serviceFrame === block`, so this is the frame folding its own standards. A task (or
-      // module) does NOT re-union the service's fragments: a task already carries its inherited
-      // selection on `block.fragmentIds` (materialised at creation) and can remove any of them,
-      // so re-unioning here would silently resurrect a removed fragment.
-      const serviceIds = block.level === 'frame' ? (serviceFrame?.serviceFragmentIds ?? []) : []
-      // Service standards first, then the block's own pins; deduped, stable order.
-      const ids: string[] = []
-      const seen = new Set<string>()
-      for (const id of [...serviceIds, ...(block.fragmentIds ?? [])]) {
-        if (seen.has(id)) continue
-        seen.add(id)
-        ids.push(id)
-      }
+      // The applicable fragment ids for this block — the shared, task-authoritative rule (a task
+      // folds only its own `fragmentIds`; only a frame-level run re-unions the service's
+      // `serviceFragmentIds`, where `serviceFrame === block`). Kept in one kernel helper so this
+      // and the requirements-review grounding can't drift.
+      const ids = applicableFragmentIds(block, serviceFrame)
       // Prefer the tenant-catalog resolver (managed + live document-backed
       // fragments) when wired; otherwise resolve against the static built-in pool.
       const fragments = this.deps.fragmentResolver

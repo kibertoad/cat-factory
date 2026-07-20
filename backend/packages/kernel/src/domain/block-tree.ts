@@ -24,3 +24,28 @@ export async function resolveServiceFrameBlock(
   }
   return current ?? null
 }
+
+/**
+ * The best-practice fragment ids that apply to a block's run — the SINGLE source of truth shared
+ * by every run-time fold path (the engine's `AgentContextBuilder` and the requirements-review
+ * grounding), so the two can't drift. A TASK (or module) OWNS its selection outright: its inherited
+ * service standards are materialised onto `fragmentIds` at creation and a per-task removal must
+ * stick, so ONLY a FRAME-level run folds in the service's own `serviceFragmentIds` (there the
+ * resolved service frame IS the block). Service standards first, then the block's own pins; deduped,
+ * stable order. Pass the block's resolved service frame (via {@link resolveServiceFrameBlock}); it
+ * is read only for a frame-level block, where it equals the block itself.
+ */
+export function applicableFragmentIds(
+  block: Pick<Block, 'level' | 'fragmentIds'>,
+  serviceFrame: Pick<Block, 'serviceFragmentIds'> | null | undefined,
+): string[] {
+  const serviceIds = block.level === 'frame' ? (serviceFrame?.serviceFragmentIds ?? []) : []
+  const ids: string[] = []
+  const seen = new Set<string>()
+  for (const id of [...serviceIds, ...(block.fragmentIds ?? [])]) {
+    if (seen.has(id)) continue
+    seen.add(id)
+    ids.push(id)
+  }
+  return ids
+}

@@ -1,6 +1,6 @@
 import { ContractNoBody, defineApiContract, withObjectKeys } from '@toad-contracts/valibot'
 import * as v from 'valibot'
-import { executionInstanceSchema } from '../entities.js'
+import { executionInstanceSchema } from '../execution.js'
 import { requestVisualConfirmFixSchema } from '../visual-confirm.js'
 import { errorResponses } from './_shared.js'
 

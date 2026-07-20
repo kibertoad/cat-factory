@@ -1,11 +1,7 @@
 import { ContractNoBody, defineApiContract, withObjectKeys } from '@toad-contracts/valibot'
 import * as v from 'valibot'
-import {
-  blockSchema,
-  executionInstanceSchema,
-  spendStatusSchema,
-  usageReportSchema,
-} from '../entities.js'
+import { blockSchema, spendStatusSchema, usageReportSchema } from '../entities.js'
+import { executionInstanceSchema } from '../execution.js'
 import { resolveIterationCapSchema } from '../iteration-cap.js'
 import {
   agentContextSnapshotSchema,
