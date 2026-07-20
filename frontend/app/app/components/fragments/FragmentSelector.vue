@@ -1,14 +1,15 @@
 <script setup lang="ts">
-// Shared best-practice prompt-fragment picker: a category-grouped "add" dropdown (with links out
-// to the fragment library) plus the currently-selected fragments as removable badges.
+// Shared best-practice prompt-fragment picker: a category-grouped MULTI-SELECT popover (with links
+// out to the fragment library) plus the currently-selected fragments as removable badges.
+// Selecting a row TOGGLES it and leaves the list open, so several fragments can be picked (and
+// unpicked) in one visit; a dedicated "Done" button closes the panel.
 // Presentational + `v-model`-driven — the caller owns WHERE the selection lives (a task's
 // `fragmentIds`, a service's `serviceFragmentIds`, or a not-yet-created task's local draft) and
 // binds the id list. Authored once and reused by the create-task form and the task/service
 // inspectors so the three pickers can't drift. Ids the catalog no longer resolves still render
 // (labelled by their raw id) so they stay visible and removable.
-import type { DropdownMenuItem } from '@nuxt/ui'
 import type { PromptFragment } from '~/types/domain'
-import { buildFragmentPickerGroups } from '~/utils/fragmentPicker'
+import { buildFragmentCategoryGroups } from '~/utils/fragmentPicker'
 
 const props = withDefaults(
   defineProps<{
@@ -30,6 +31,8 @@ const ui = useUiStore()
 const accounts = useAccountsStore()
 const { t } = useI18n()
 
+const open = ref(false)
+
 // The catalog is per-board and invalidated on a workspace switch; (re)load it lazily — a no-op
 // while current.
 onMounted(() => fragments.ensureLoaded())
@@ -38,39 +41,18 @@ const selectedFragments = computed(() =>
   props.modelValue.map((id) => fragments.getFragment(id) ?? { id, title: id, summary: '' }),
 )
 
-// A trailing group that jumps from "attach a fragment" to authoring/editing the library itself
-// (board tier always; account tier when accounts are enabled). Open to every member.
-const manageItems = computed<DropdownMenuItem[]>(() => {
-  const items: DropdownMenuItem[] = [
-    {
-      label: t('inspector.fragments.manageBoard'),
-      icon: 'i-lucide-book-marked',
-      onSelect: () => ui.openFragmentLibrary(),
-    },
-  ]
-  if (accounts.enabled) {
-    items.push({
-      label: t('inspector.fragments.manageAccount'),
-      icon: 'i-lucide-users',
-      onSelect: () => ui.openAccountSettings('fragments'),
-    })
+const selectedSet = computed(() => new Set(props.modelValue))
+
+// Pool fragments bucketed into labelled per-category sections. Selected rows stay in the list so
+// they can be unpicked in place (a check marks the current selection).
+const categoryGroups = computed(() => buildFragmentCategoryGroups(props.pool))
+
+function toggleFragment(id: string) {
+  if (props.modelValue.includes(id)) {
+    removeFragment(id)
+  } else {
+    emit('update:modelValue', [...props.modelValue, id])
   }
-  return items
-})
-
-// Picker menu: pool fragments not already selected, grouped into labelled per-category sections,
-// with the management links appended as the final group.
-const fragmentMenu = computed<DropdownMenuItem[][]>(() => {
-  const selected = new Set(props.modelValue)
-  return [
-    ...buildFragmentPickerGroups(props.pool, (id) => selected.has(id), addFragment),
-    manageItems.value,
-  ]
-})
-
-function addFragment(id: string) {
-  if (props.modelValue.includes(id)) return
-  emit('update:modelValue', [...props.modelValue, id])
 }
 
 function removeFragment(id: string) {
@@ -78,6 +60,16 @@ function removeFragment(id: string) {
     'update:modelValue',
     props.modelValue.filter((x) => x !== id),
   )
+}
+
+function manageBoard() {
+  open.value = false
+  ui.openFragmentLibrary()
+}
+
+function manageAccount() {
+  open.value = false
+  ui.openAccountSettings('fragments')
 }
 </script>
 
@@ -88,7 +80,7 @@ function removeFragment(id: string) {
         {{ label }}
       </span>
       <span v-else />
-      <UDropdownMenu :items="fragmentMenu">
+      <UPopover v-model:open="open" :content="{ align: 'end' }">
         <UButton
           size="xs"
           variant="ghost"
@@ -97,7 +89,79 @@ function removeFragment(id: string) {
           trailing-icon="i-lucide-chevron-down"
           data-testid="fragment-add"
         />
-      </UDropdownMenu>
+
+        <template #content>
+          <div
+            class="flex max-h-[24rem] w-[min(22rem,92vw)] flex-col"
+            data-testid="fragment-picker-panel"
+          >
+            <div class="min-h-0 flex-1 overflow-y-auto p-1">
+              <template v-if="categoryGroups.length">
+                <div v-for="group in categoryGroups" :key="group.category">
+                  <p
+                    class="px-2 pb-0.5 pt-1.5 text-[11px] font-semibold uppercase tracking-wide text-slate-500"
+                  >
+                    {{ group.category }}
+                  </p>
+                  <button
+                    v-for="f in group.fragments"
+                    :key="f.id"
+                    type="button"
+                    class="flex w-full items-center gap-2 rounded px-2 py-1.5 text-start text-sm hover:bg-slate-800/60"
+                    :class="selectedSet.has(f.id) ? 'text-slate-100' : 'text-slate-300'"
+                    :title="f.summary"
+                    :data-testid="`fragment-option-${f.id}`"
+                    :aria-pressed="selectedSet.has(f.id)"
+                    @click="toggleFragment(f.id)"
+                  >
+                    <UIcon
+                      :name="selectedSet.has(f.id) ? 'i-lucide-check' : 'i-lucide-plus'"
+                      class="h-4 w-4 shrink-0"
+                      :class="selectedSet.has(f.id) ? 'text-primary-400' : 'text-slate-500'"
+                    />
+                    <span class="flex-1 truncate">{{ f.title }}</span>
+                  </button>
+                </div>
+              </template>
+              <p v-else class="px-2 py-3 text-[12px] text-slate-500">
+                {{ t('inspector.fragments.pickerEmpty') }}
+              </p>
+
+              <div class="mt-1 border-t border-slate-800 pt-1">
+                <button
+                  type="button"
+                  class="flex w-full items-center gap-2 rounded px-2 py-1.5 text-start text-sm text-slate-300 hover:bg-slate-800/60"
+                  @click="manageBoard"
+                >
+                  <UIcon name="i-lucide-book-marked" class="h-4 w-4 shrink-0 text-slate-400" />
+                  <span class="flex-1 truncate">{{ t('inspector.fragments.manageBoard') }}</span>
+                </button>
+                <button
+                  v-if="accounts.enabled"
+                  type="button"
+                  class="flex w-full items-center gap-2 rounded px-2 py-1.5 text-start text-sm text-slate-300 hover:bg-slate-800/60"
+                  @click="manageAccount"
+                >
+                  <UIcon name="i-lucide-users" class="h-4 w-4 shrink-0 text-slate-400" />
+                  <span class="flex-1 truncate">{{ t('inspector.fragments.manageAccount') }}</span>
+                </button>
+              </div>
+            </div>
+
+            <div class="flex justify-end border-t border-slate-800 p-1.5">
+              <UButton
+                size="xs"
+                color="neutral"
+                variant="soft"
+                data-testid="fragment-picker-done"
+                @click="open = false"
+              >
+                {{ t('inspector.fragments.done') }}
+              </UButton>
+            </div>
+          </div>
+        </template>
+      </UPopover>
     </div>
     <div v-if="selectedFragments.length" class="flex flex-wrap gap-1">
       <UBadge

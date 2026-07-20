@@ -931,7 +931,9 @@
       "serviceHint": "Standard di programmazione per l'intero servizio. Il contenuto di ogni frammento selezionato viene aggiunto al prompt di ogni agente code-aware che lavora sulle attivita' di questo servizio.",
       "serviceEmpty": "Nessuno. Gli agenti code-aware su questo servizio seguono le loro linee guida predefinite.",
       "manageBoard": "Gestisci la libreria di frammenti di questa board…",
-      "manageAccount": "Gestisci i frammenti dell'account…"
+      "manageAccount": "Gestisci i frammenti dell'account…",
+      "done": "Fatto",
+      "pickerEmpty": "Nessun frammento disponibile."
     },
     "frontendConfig": {
       "title": "Frontend",
