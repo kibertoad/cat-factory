@@ -835,8 +835,13 @@ and a locally-green branch fails CI when one of them is skipped. **Before commit
 always after adding/renaming a package, touching dependencies, or bumping the harness —
 run the guards your change class can trip:**
 
+> **Do NOT run `pnpm lint:knip` or `node scripts/check-package-catalog.mjs` locally — CI runs
+> them for you.** They are slow (knip needs a full build first) and CI's `Build & typecheck`
+> job is the authoritative gate for both, so running them by hand just burns time. Skip them
+> locally and let CI report any unused-export / missing-catalog-row failure.
+
 - `node scripts/check-package-catalog.mjs` — every workspace package must have a row in
-  README.md's repository-layout tables.
+  README.md's repository-layout tables. **(CI-only — do not run locally; see the note above.)**
 - `node scripts/check-file-size.mjs` — soft max-lines budget (default 1,500) for non-test
   source files, with ratcheted allowances for the legacy oversized files (the engine
   god-file re-accretion guard). Grew a file past its budget ⇒ **split it along a cohesive
@@ -844,8 +849,8 @@ run the guards your change class can trip:**
   applies to oxlint's `max-lines-per-function` (the test/conformance budget in `.oxlintrc.json`).
 - `pnpm exec changeset status --since=origin/main` — every changed versioned package needs
   a changeset (run after committing locally; it diffs git refs).
-- `pnpm lint:knip` — unused files/deps/exports (run after `pnpm build`); remember
-  dynamically-imported deps need a `knip.jsonc` ignore entry.
+- `pnpm lint:knip` — unused files/deps/exports; remember dynamically-imported deps need a
+  `knip.jsonc` ignore entry. **(CI-only — do not run locally; see the note above.)**
 - `pnpm lint:monorepo` (sherif) — cross-package dependency-version consistency.
 - `pnpm check:publish` (publint + attw, after `pnpm build`) — publish-artifact integrity
   for every publishable package.

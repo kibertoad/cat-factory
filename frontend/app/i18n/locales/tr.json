@@ -4946,6 +4946,19 @@
       "chunks": "{total} bölümden {completed} tanesi incelendi",
       "inProgress": "{count} devam ediyor"
     },
+    "challenge": {
+      "action": "İtiraz et",
+      "reChallenge": "Tekrar itiraz et",
+      "dismiss": "Yoksay",
+      "submit": "İncele",
+      "placeholder": "İsteğe bağlı: Bu bulguda tam olarak yanlış veya ikna edici olmayan nedir?",
+      "hint": "Araştırmacının daha derine inmesi, bulguyu gerekçelendirmesi ve doğru ve ilgili olduğunu doğrulaması için boş bırakın.",
+      "investigatingBanner": "İtiraz Araştırmacısı bir bulguyu kaynak koda göre yeniden inceliyor…",
+      "investigatingBadge": "İnceleniyor",
+      "strengthenedBadge": "Güçlendirildi",
+      "retractedBadge": "Geri çekildi",
+      "verdictLabel": "Araştırmacı:"
+    },
     "fixing": {
       "title": "Seçili bulgular düzeltiliyor…",
       "hint": "Bir düzeltici, seçili bulgular için değişiklikleri pull request dalına işliyor."

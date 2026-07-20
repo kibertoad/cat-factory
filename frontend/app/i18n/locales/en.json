@@ -5075,6 +5075,19 @@
       "chunks": "{completed} of {total} chunks reviewed",
       "inProgress": "{count} in progress"
     },
+    "challenge": {
+      "action": "Challenge",
+      "reChallenge": "Challenge again",
+      "dismiss": "Dismiss",
+      "submit": "Investigate",
+      "placeholder": "Optional: what specifically is wrong or unconvincing about this finding?",
+      "hint": "Leave blank to have the investigator dig deeper, justify the finding, and check it's accurate and relevant.",
+      "investigatingBanner": "The Challenge Investigator is re-examining a finding against the source…",
+      "investigatingBadge": "Investigating",
+      "strengthenedBadge": "Strengthened",
+      "retractedBadge": "Retracted",
+      "verdictLabel": "Investigator:"
+    },
     "fixing": {
       "title": "Fixing the selected findings…",
       "hint": "A fixer is committing changes for the selected findings onto the pull request branch."

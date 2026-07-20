@@ -4,6 +4,7 @@ import type {
   CreateReviewResult,
   GitHubChangedFile,
   PrReviewAgentOutput,
+  PrReviewChallengeOutput,
   PrReviewFinding,
   PrReviewPostReport,
   PrReviewSeverity,
@@ -361,4 +362,99 @@ export function buildPrReviewPostReport(
 /** Whether a post attempt fully succeeded — every inline comment landed and the body (if any) posted. */
 export function isPrReviewPostComplete(report: PrReviewPostReport): boolean {
   return report.failures.length === 0 && report.bodyPosted !== false
+}
+
+// ---------------------------------------------------------------------------
+// Per-finding DISMISS + CHALLENGE (this PR): a human can drop a finding entirely, or dispatch the
+// read-only Challenge Investigator to re-examine one finding (strengthen or retract it). Both are
+// pure/deterministic mutations of the parked `step.prReview` state — no engine state, no IO.
+// ---------------------------------------------------------------------------
+
+/**
+ * Remove a finding from the parked review entirely (the "Dismiss" action), pruning it from the
+ * live findings AND from every id list that referenced it (the selection + the already-posted
+ * set), so nothing downstream can act on a finding the human deleted. Total — an unknown id is a
+ * no-op. The review stays `awaiting_selection`.
+ */
+export function dismissFinding(state: PrReviewStepState, findingId: string): PrReviewStepState {
+  return {
+    ...state,
+    findings: (state.findings ?? []).filter((f) => f.id !== findingId),
+    selectedFindingIds: (state.selectedFindingIds ?? []).filter((id) => id !== findingId),
+    postedFindingIds: (state.postedFindingIds ?? []).filter((id) => id !== findingId),
+  }
+}
+
+/**
+ * The generic prompt used when the human challenges a finding WITHOUT a specific concern: ask the
+ * investigator to dig deeper, justify the finding's grounding, and validate it is accurate + relevant.
+ */
+export const GENERIC_CHALLENGE_PROMPT =
+  'No specific concern was given. Dig deeper on this finding: justify its grounding in the ' +
+  'actual code, and validate that it is accurate AND relevant to this pull request’s change.'
+
+/**
+ * Render the challenged finding (+ the human's optional concern, or the generic prompt) into the
+ * instruction block handed to the Challenge Investigator — fed as a prior output on its dispatch,
+ * the same injection point the PR-review Fixer + the gate helpers use. The investigator then digs
+ * into the real source and returns its uphold/retract verdict.
+ */
+export function renderChallengeInvestigatorFeedback(
+  finding: PrReviewFinding,
+  question: string | null | undefined,
+  summary: string | null | undefined,
+): string {
+  const location = finding.line != null ? `${finding.path}:${finding.line}` : finding.path
+  const lines: string[] = [
+    'A human has CHALLENGED the following code-review finding raised on this pull request. ' +
+      'Re-examine it against the real source and decide whether it holds up: UPHOLD it (optionally ' +
+      'strengthening or clarifying it) or RETRACT it, with a grounded justification either way.',
+    '',
+    'Finding under challenge:',
+    `- [${finding.severity} · ${finding.category}] ${location} — ${finding.title}`,
+  ]
+  if (finding.detail) lines.push(`  ${finding.detail}`)
+  if (finding.suggestedFix) lines.push(`  Suggested fix: ${finding.suggestedFix}`)
+  if (summary?.trim()) lines.push('', `Reviewer’s overall PR assessment: ${summary.trim()}`)
+  const concern = question?.trim()
+  lines.push('', 'The human’s challenge:', concern || GENERIC_CHALLENGE_PROMPT)
+  return lines.join('\n')
+}
+
+/**
+ * Apply the Challenge Investigator's verdict to the challenged finding and return the review to
+ * `awaiting_selection`. An `upheld` verdict KEEPS the finding, folding in any `revised*` field
+ * (title / detail / severity / suggested fix) and recording the justification as an `amended`
+ * challenge; a `retracted` verdict records a `retracted` challenge with its justification AND
+ * auto-deselects the finding (a retracted finding must never be acted on). A missing/degenerate
+ * output degrades to `upheld` with no changes (the finding stands) rather than dropping it. Total.
+ */
+export function applyChallengeVerdict(
+  state: PrReviewStepState,
+  findingId: string,
+  question: string | null,
+  output: PrReviewChallengeOutput | undefined,
+): PrReviewStepState {
+  const verdict = output?.verdict ?? 'upheld'
+  const justification = output?.justification?.trim() || null
+  const findings = (state.findings ?? []).map((f) => {
+    if (f.id !== findingId) return f
+    if (verdict === 'retracted') {
+      return { ...f, challenge: { status: 'retracted' as const, question, justification } }
+    }
+    const revisedFix = output?.revisedSuggestedFix?.trim()
+    return {
+      ...f,
+      title: output?.revisedTitle?.trim() || f.title,
+      detail: output?.revisedDetail?.trim() || f.detail,
+      severity: output?.revisedSeverity ?? f.severity,
+      suggestedFix: revisedFix ? revisedFix : f.suggestedFix,
+      challenge: { status: 'amended' as const, question, justification },
+    }
+  })
+  const selectedFindingIds =
+    verdict === 'retracted'
+      ? (state.selectedFindingIds ?? []).filter((id) => id !== findingId)
+      : (state.selectedFindingIds ?? [])
+  return { ...state, findings, selectedFindingIds, status: 'awaiting_selection', resolution: null }
 }

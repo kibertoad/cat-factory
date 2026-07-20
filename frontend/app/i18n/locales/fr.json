@@ -4934,6 +4934,19 @@
       "chunks": "{completed} sur {total} sections examinées",
       "inProgress": "{count} en cours"
     },
+    "challenge": {
+      "action": "Contester",
+      "reChallenge": "Contester à nouveau",
+      "dismiss": "Écarter",
+      "submit": "Enquêter",
+      "placeholder": "Facultatif : qu'y a-t-il précisément d'incorrect ou de peu convaincant dans ce constat ?",
+      "hint": "Laissez vide pour que l'enquêteur approfondisse, justifie le constat et vérifie qu'il est exact et pertinent.",
+      "investigatingBanner": "L'enquêteur de contestation réexamine un constat par rapport au code source…",
+      "investigatingBadge": "Enquête en cours",
+      "strengthenedBadge": "Renforcé",
+      "retractedBadge": "Retiré",
+      "verdictLabel": "Enquêteur :"
+    },
     "fixing": {
       "title": "Correction des points sélectionnés…",
       "hint": "Un correcteur valide des modifications pour les points sélectionnés sur la branche de la pull request."

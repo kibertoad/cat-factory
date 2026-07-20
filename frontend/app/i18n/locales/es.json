@@ -4934,6 +4934,19 @@
       "chunks": "{completed} de {total} fragmentos revisados",
       "inProgress": "{count} en curso"
     },
+    "challenge": {
+      "action": "Cuestionar",
+      "reChallenge": "Cuestionar de nuevo",
+      "dismiss": "Descartar",
+      "submit": "Investigar",
+      "placeholder": "Opcional: ¿qué es exactamente lo incorrecto o poco convincente de este hallazgo?",
+      "hint": "Déjalo en blanco para que el investigador profundice, justifique el hallazgo y compruebe que es preciso y relevante.",
+      "investigatingBanner": "El Investigador de Objeciones está reexaminando un hallazgo frente al código fuente…",
+      "investigatingBadge": "Investigando",
+      "strengthenedBadge": "Reforzado",
+      "retractedBadge": "Retirado",
+      "verdictLabel": "Investigador:"
+    },
     "fixing": {
       "title": "Corrigiendo los hallazgos seleccionados…",
       "hint": "Un corrector está confirmando cambios para los hallazgos seleccionados en la rama del pull request."

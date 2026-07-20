@@ -4945,6 +4945,19 @@
       "chunks": "{completed} מתוך {total} מקטעים נבדקו",
       "inProgress": "{count} בתהליך"
     },
+    "challenge": {
+      "action": "ערער",
+      "reChallenge": "ערער שוב",
+      "dismiss": "התעלם",
+      "submit": "חקור",
+      "placeholder": "רשות: מה בדיוק שגוי או לא משכנע בממצא הזה?",
+      "hint": "השאירו ריק כדי שהחוקר יעמיק, ינמק את הממצא ויוודא שהוא מדויק ורלוונטי.",
+      "investigatingBanner": "חוקר הערעורים בוחן מחדש ממצא מול קוד המקור…",
+      "investigatingBadge": "בחקירה",
+      "strengthenedBadge": "חוזק",
+      "retractedBadge": "בוטל",
+      "verdictLabel": "חוקר:"
+    },
     "fixing": {
       "title": "מתקן את הממצאים שנבחרו…",
       "hint": "מתקן מבצע commit לשינויים עבור הממצאים שנבחרו אל ענף בקשת המשיכה."

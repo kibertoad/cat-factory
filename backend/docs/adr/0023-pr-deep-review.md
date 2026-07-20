@@ -126,6 +126,38 @@ need (`getPullRequestHeadRef`, `createReview`) are new **optional** methods on t
   the normal spine finish (no park); an unwired reviewer / no VCS write degrades gracefully. The
   cross-runtime conformance suite asserts the park → select → resolve loop for all three actions.
 
+## Per-finding curation: dismiss + challenge (follow-up)
+
+The park→select→resolve loop was extended with two per-finding actions in the deep-review window,
+so a human curates the findings themselves — not just which to act on:
+
+- **Dismiss** (`POST /executions/:id/pr-review/findings/:findingId/dismiss`) drops a finding
+  entirely, pruning it from `findings` + `selectedFindingIds` + `postedFindingIds`. It is pure
+  curation — the run stays parked at `awaiting_selection` (no re-arm, no signal), a synchronous
+  mutation of `step.prReview`.
+- **Challenge** (`POST …/findings/:findingId/challenge`, optional `{ question }`) dispatches a new
+  read-only **`challenge-investigator`** agent kind (`container-explore`, base full clone — the
+  `pr-reviewer` template) against the ONE finding. It rides the SAME re-arm the `fix`/`post`
+  resolutions use (`resetStepForRerun` + `startStep` + `signalDecision`), recording
+  `step.pendingChallenge = { findingId, question }` and moving the review to a new `challenging`
+  status; the driver's `pr-review-resolution` handler dispatches the investigator with the finding
+  - the human's concern (or a generic "dig deeper + validate" prompt when blank) folded in as a
+    prior output. The investigator returns `prReviewChallengeOutputSchema` (a lenient uphold/retract
+    verdict + optional `revised*` fields), which a dedicated `pr-review-challenge` completion
+    interceptor (ordered BEFORE `pr-review` so it wins during a challenge) applies to the finding via
+    `applyChallengeVerdict`: `upheld` strengthens the finding's body + records an `amended` challenge;
+    `retracted` records a `retracted` challenge with its justification AND auto-deselects the finding
+    (it can never be fixed/posted/finished — `resolve`'s selectable set excludes retracted findings).
+    The review then re-parks at `awaiting_selection`. A finding carries its challenge lifecycle on
+    `PrReviewFinding.challenge` (`investigating` → `amended` | `retracted`), rendered in the window
+    (a spinner while investigating, a badge + the investigator's justification once settled). All of
+    this rides `step.prReview` / `step.pendingChallenge` — still NO side table, so it stays
+    runtime-symmetric, asserted by the conformance suite (dismiss, challenge-retract, challenge-uphold).
+- **Separately-configurable model.** Because the investigator dispatches under its OWN agent kind
+  (`challenge-investigator`, via the `handleAgentStep` dispatch-kind override), model routing keys
+  off it — so a workspace can point it at a different (stronger) model than the reviewer through a
+  per-kind model-preset override, with no new plumbing (it appears in the Model Defaults panel).
+
 ## Consequences
 
 - A read-only pipeline (`pl_review`) finishes `done` with no PR-assuming card — the no-PR terminal

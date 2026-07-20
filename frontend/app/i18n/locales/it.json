@@ -4946,6 +4946,19 @@
       "chunks": "{completed} di {total} sezioni esaminate",
       "inProgress": "{count} in corso"
     },
+    "challenge": {
+      "action": "Contesta",
+      "reChallenge": "Contesta di nuovo",
+      "dismiss": "Scarta",
+      "submit": "Indaga",
+      "placeholder": "Facoltativo: cosa c'è di preciso di sbagliato o poco convincente in questo rilievo?",
+      "hint": "Lascia vuoto per far approfondire l'investigatore, giustificare il rilievo e verificarne accuratezza e pertinenza.",
+      "investigatingBanner": "L'investigatore delle contestazioni sta riesaminando un rilievo rispetto al codice sorgente…",
+      "investigatingBadge": "In esame",
+      "strengthenedBadge": "Rafforzato",
+      "retractedBadge": "Ritirato",
+      "verdictLabel": "Investigatore:"
+    },
     "fixing": {
       "title": "Correzione dei rilievi selezionati…",
       "hint": "Un fixer sta effettuando il commit delle modifiche per i rilievi selezionati sul branch della pull request."

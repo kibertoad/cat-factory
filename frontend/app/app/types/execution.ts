@@ -45,6 +45,7 @@ export type {
   ForkDecisionStepState,
   PrReviewStepState,
   PrReviewFinding,
+  PrReviewFindingChallenge,
   PrReviewSlice,
   PrReviewSeverity,
   PrReviewCategory,

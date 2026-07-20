@@ -412,6 +412,20 @@ export const SYSTEM_AGENT_META: Record<string, AgentArchetype> = {
     color: '#22d3ee',
     description: 'Maps the repository into the service → modules blueprint.',
   },
+  // The read-only Challenge Investigator: dispatched off a parked `pr-reviewer` step when a human
+  // challenges a finding, it re-examines that ONE finding against the full source and upholds
+  // (strengthening) or retracts it. Never a palette block; modelled here purely so it is a
+  // configurable per-kind default in the Model Defaults panel — a workspace can point it at a
+  // different (stronger) model than the reviewer. Its output renders in the pr-review window.
+  'challenge-investigator': {
+    kind: 'challenge-investigator',
+    label: 'Challenge Investigator',
+    icon: 'i-lucide-gavel',
+    color: '#6366f1',
+    description:
+      'Re-examines a single challenged PR-review finding against the full source, then upholds ' +
+      '(strengthening it) or retracts it with a justification. Configurable separately from the reviewer.',
+  },
   // The single environment provisioner: an operational (non-LLM) step that stands up the ephemeral
   // environment the tester / human-test gate run against for a kubernetes/custom service, and is a
   // fast no-op for docker-compose / infraless. Seeded before the first tester/human-test step in the
@@ -634,6 +648,9 @@ export const MODEL_CONFIGURABLE_SYSTEM_KINDS: AgentArchetype[] = [
     'fixer',
     'merger',
     'kaizen',
+    // The PR-review Challenge Investigator — pinnable to its own (stronger) model, separately
+    // from the reviewer that produced the findings.
+    'challenge-investigator',
   ].map((kind) => SYSTEM_AGENT_META[kind]!),
   // Companions run LLMs but aren't palette-addable (they're producer toggles), so include
   // them here to keep their per-workspace default model pinnable in the Model Defaults panel.

@@ -1,11 +1,13 @@
 import type {
   Block,
+  ChallengePrReviewFindingInput,
   Clock,
   ExecutionInstance,
   ExecutionRepository,
   IdGenerator,
   PipelineStep,
   PrReviewAgentOutput,
+  PrReviewChallengeOutput,
   PrReviewStepState,
   ResolvePrReviewInput,
   WorkRunner,
@@ -14,7 +16,7 @@ import { ConflictError } from '@cat-factory/kernel'
 import { PR_REVIEWER_KIND } from '@cat-factory/agents'
 import type { NotificationService } from '../notifications/NotificationService.js'
 import type { AdvanceResult } from './advance.js'
-import { coercePrReview } from './prReview.logic.js'
+import { applyChallengeVerdict, coercePrReview, dismissFinding } from './prReview.logic.js'
 import type { RunStateMachine } from './RunStateMachine.js'
 import type { StepGraph } from './StepGraph.js'
 
@@ -161,30 +163,28 @@ export class PrReviewController {
       workspaceId,
       executionId,
       (inst) => {
-        stepIndex = inst.steps.findIndex(
-          (s) =>
-            s.agentKind === PR_REVIEW_STEP_KIND &&
-            s.state === 'waiting_decision' &&
-            s.approval?.status === 'pending' &&
-            s.prReview?.status === 'awaiting_selection',
+        const parked = this.findParkedReview(inst)
+        stepIndex = parked.stepIndex
+        const step = parked.step
+        // A RETRACTED finding (the Challenge Investigator dropped it) can never be acted on, so it
+        // is not selectable even if the client passes its id — the window already deselects it.
+        const known = new Set(
+          (step.prReview!.findings ?? [])
+            .filter((f) => f.challenge?.status !== 'retracted')
+            .map((f) => f.id),
         )
-        const step = stepIndex === -1 ? undefined : inst.steps[stepIndex]
-        if (!step?.approval || !step.prReview) {
-          throw new ConflictError('The run is no longer awaiting a PR-review selection')
-        }
-        const known = new Set(step.prReview.findings?.map((f) => f.id) ?? [])
         const selectedFindingIds = (input.findingIds ?? []).filter((id) => known.has(id))
         if ((action === 'fix' || action === 'post') && selectedFindingIds.length === 0) {
           throw new ConflictError(`Select at least one finding to ${action}.`)
         }
         if (action === 'finish') {
           step.prReview = {
-            ...step.prReview,
+            ...step.prReview!,
             status: 'done',
             resolution: 'finish',
             selectedFindingIds,
           }
-          step.approval.status = 'approved'
+          step.approval!.status = 'approved'
           this.deps.stateMachine.advanceRunPastGate(inst, stepIndex)
           state = step.prReview
           return
@@ -192,9 +192,9 @@ export class PrReviewController {
         // fix / post: re-arm the SAME step for a second dispatch (the driver's pr-review
         // resolution handler picks it up by status). Capture the approval id BEFORE the reset
         // (which clears `step.approval`) so we can signal the parked driver afterwards.
-        approvalId = step.approval.id
+        approvalId = step.approval!.id
         step.prReview = {
-          ...step.prReview,
+          ...step.prReview!,
           status: action === 'fix' ? 'fixing' : 'posting',
           resolution: action,
           selectedFindingIds,
@@ -222,6 +222,129 @@ export class PrReviewController {
       await this.deps.workRunner.signalDecision(workspaceId, instance.id, approvalId, 'approved')
     }
     return state!
+  }
+
+  /**
+   * Dismiss a parked finding entirely: drop it from the review + the selection (and the
+   * already-posted set). The run STAYS parked at `awaiting_selection` — dismissing is a curation
+   * action, not a resolution — so no re-arm / signal, just persist + emit the pruned state.
+   * Idempotent: an unknown / already-removed finding is a no-op returning the current state.
+   */
+  async dismissFinding(
+    workspaceId: string,
+    executionId: string,
+    findingId: string,
+  ): Promise<PrReviewStepState> {
+    let state: PrReviewStepState | undefined
+    const instance = await this.deps.stateMachine.mutateInstance(
+      workspaceId,
+      executionId,
+      (inst) => {
+        const { step } = this.findParkedReview(inst)
+        step.prReview = dismissFinding(step.prReview!, findingId)
+        state = step.prReview
+      },
+    )
+    await this.deps.stateMachine.emitInstance(workspaceId, instance)
+    return state!
+  }
+
+  /**
+   * Challenge a parked finding: mark it `investigating`, re-arm the `pr-reviewer` step (recording
+   * `step.pendingChallenge`) so the durable driver dispatches the read-only Challenge Investigator
+   * against it, and wake the parked driver — mirroring the `fix`/`post` re-arm. The investigator's
+   * uphold/retract verdict is applied by the `pr-review-challenge` completion interceptor
+   * ({@link recordChallengeResult}), which re-parks the review at `awaiting_selection`. An unknown
+   * finding is rejected. An empty `question` uses the generic "dig deeper + validate" prompt.
+   */
+  async challengeFinding(
+    workspaceId: string,
+    executionId: string,
+    findingId: string,
+    input: ChallengePrReviewFindingInput,
+  ): Promise<PrReviewStepState> {
+    const question = input.question?.trim() || null
+    let approvalId: string | undefined
+    let state: PrReviewStepState | undefined
+    const instance = await this.deps.stateMachine.mutateInstance(
+      workspaceId,
+      executionId,
+      (inst) => {
+        const { step } = this.findParkedReview(inst)
+        const review = step.prReview!
+        if (!review.findings?.some((f) => f.id === findingId)) {
+          throw new ConflictError('That finding is no longer part of the review.')
+        }
+        approvalId = step.approval!.id
+        const findings = review.findings.map((f) =>
+          f.id === findingId
+            ? {
+                ...f,
+                challenge: { status: 'investigating' as const, question, justification: null },
+              }
+            : f,
+        )
+        step.prReview = { ...review, status: 'challenging', resolution: null, findings }
+        step.pendingChallenge = { findingId, question }
+        this.deps.stepGraph.resetStepForRerun(step)
+        this.deps.stepGraph.startStep(step)
+        if (inst.status === 'blocked') inst.status = 'running'
+        state = step.prReview
+      },
+    )
+    await this.deps.stateMachine.clearWaitingNotification(workspaceId, instance)
+    await this.deps.stateMachine.updateBlockProgress(workspaceId, instance, 'in_progress')
+    await this.deps.stateMachine.emitInstance(workspaceId, instance)
+    if (approvalId) {
+      await this.deps.workRunner.signalDecision(workspaceId, instance.id, approvalId, 'approved')
+    }
+    return state!
+  }
+
+  /**
+   * Apply a completed Challenge Investigator's verdict to the challenged finding, then RE-PARK the
+   * review at `awaiting_selection`. Run as the `pr-review-challenge` completion interceptor's body
+   * (short-circuiting the normal completion). `upheld` strengthens the finding's body from any
+   * `revised*` field + records the justification (`amended`); `retracted` records the justification
+   * and auto-deselects the finding. Idempotent: a replay after the marker cleared (status no longer
+   * `challenging`) returns `null`, letting the normal `pr-review` interceptor re-park.
+   */
+  async recordChallengeResult(
+    workspaceId: string,
+    instance: ExecutionInstance,
+    step: PipelineStep,
+    output: PrReviewChallengeOutput | undefined,
+  ): Promise<AdvanceResult | null> {
+    const pending = step.pendingChallenge
+    if (!step.prReview || step.prReview.status !== 'challenging' || !pending) return null
+    step.pendingChallenge = null
+    step.prReview = applyChallengeVerdict(
+      step.prReview,
+      pending.findingId,
+      pending.question ?? null,
+      output,
+    )
+    return this.deps.stateMachine.parkStepOnDecision(workspaceId, instance, step)
+  }
+
+  /**
+   * The run's parked `pr-reviewer` step (the human is curating findings) — the single lookup the
+   * `resolve` / `dismiss` / `challenge` actions share. Throws {@link ConflictError} when the run is
+   * no longer awaiting a selection (already resolved, or a challenge is mid-flight).
+   */
+  private findParkedReview(instance: ExecutionInstance): { step: PipelineStep; stepIndex: number } {
+    const stepIndex = instance.steps.findIndex(
+      (s) =>
+        s.agentKind === PR_REVIEW_STEP_KIND &&
+        s.state === 'waiting_decision' &&
+        s.approval?.status === 'pending' &&
+        s.prReview?.status === 'awaiting_selection',
+    )
+    const step = stepIndex === -1 ? undefined : instance.steps[stepIndex]
+    if (!step?.approval || !step.prReview) {
+      throw new ConflictError('The run is no longer awaiting a PR-review selection')
+    }
+    return { step, stepIndex }
   }
 
   /** The active PR-review state for a run's GET, or null when no `pr-reviewer` step carries one. */

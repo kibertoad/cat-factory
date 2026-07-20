@@ -20,6 +20,7 @@ import type {
   ForkChatRequestInput,
   PrReviewStepState,
   ResolvePrReviewInput,
+  ChallengePrReviewFindingInput,
   GateContext,
   GateDefinition,
   GateRegistry,
@@ -2273,6 +2274,25 @@ export class RunDispatcher {
     input: ResolvePrReviewInput,
   ): Promise<PrReviewStepState> {
     return this.prReviewController.resolve(workspaceId, executionId, input)
+  }
+
+  /** Dismiss a parked PR-review finding entirely (remove it + prune it from the selection). */
+  dismissPrReviewFinding(
+    workspaceId: string,
+    executionId: string,
+    findingId: string,
+  ): Promise<PrReviewStepState> {
+    return this.prReviewController.dismissFinding(workspaceId, executionId, findingId)
+  }
+
+  /** Challenge a parked PR-review finding — dispatch the Challenge Investigator to re-examine it. */
+  challengePrReviewFinding(
+    workspaceId: string,
+    executionId: string,
+    findingId: string,
+    input: ChallengePrReviewFindingInput,
+  ): Promise<PrReviewStepState> {
+    return this.prReviewController.challengeFinding(workspaceId, executionId, findingId, input)
   }
 
   // ---- Follow-up companion pass-throughs ----------------------------------

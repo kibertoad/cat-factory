@@ -54,6 +54,31 @@ export const prReviewSliceSchema = v.object({
 export type PrReviewSlice = v.InferOutput<typeof prReviewSliceSchema>
 
 /**
+ * A finding's CHALLENGE lifecycle. A human can challenge a finding — optionally with a specific
+ * question / concern — which dispatches the read-only **Challenge Investigator** container agent
+ * to dig into the finding against the FULL source. The investigator either UPHELD the finding
+ * (strengthening or clarifying its body — `status: 'amended'`) or RETRACTED it (`status:
+ * 'retracted'`, at which point the finding is auto-deselected and rendered struck-through beside
+ * its retraction justification). While the investigator runs the finding carries
+ * `status: 'investigating'`.
+ */
+export const prReviewFindingChallengeSchema = v.object({
+  /** Lifecycle: `investigating` (agent in flight) → `amended` (upheld + clarified) | `retracted`. */
+  status: v.picklist(['investigating', 'amended', 'retracted']),
+  /**
+   * The human's specific challenge / question / concern, or null when they challenged with no
+   * text (the generic "dig deeper, justify the grounding, validate accuracy + relevance" prompt).
+   */
+  question: v.optional(v.nullable(v.string())),
+  /**
+   * The investigator's justification — why it strengthened the finding (`amended`) or why the
+   * finding does not hold up (`retracted`). Null while `investigating`.
+   */
+  justification: v.optional(v.nullable(v.string())),
+})
+export type PrReviewFindingChallenge = v.InferOutput<typeof prReviewFindingChallengeSchema>
+
+/**
  * One prioritized review finding, id-stamped by the engine and anchored to a slice. Carries
  * everything the window needs to render it and everything PR 3's resolutions consume (the
  * `path`/`line`/`side` anchor for an inline PR comment; the `suggestedFix` for the Fixer).
@@ -77,6 +102,11 @@ export const prReviewFindingSchema = v.object({
   detail: v.string(),
   /** A concrete suggested change, when the reviewer offered one. */
   suggestedFix: v.optional(v.nullable(v.string())),
+  /**
+   * The finding's challenge state, when a human challenged it (see
+   * {@link prReviewFindingChallengeSchema}). Absent for an un-challenged finding.
+   */
+  challenge: v.optional(v.nullable(prReviewFindingChallengeSchema)),
 })
 export type PrReviewFinding = v.InferOutput<typeof prReviewFindingSchema>
 
@@ -84,6 +114,9 @@ export type PrReviewFinding = v.InferOutput<typeof prReviewFindingSchema>
  * The PR-review lifecycle on a `pr-reviewer` step:
  * - `reviewing`: the read-only reviewer container job is in flight (the agent dispatch).
  * - `awaiting_selection`: parked; the human curates which findings matter through the window.
+ * - `challenging`: a human challenged a finding, so the read-only Challenge Investigator container
+ *   job is in flight digging into it; the review returns to `awaiting_selection` once its verdict
+ *   (strengthen the finding, or retract it) is applied.
  * - `fixing` / `posting`: a resolution is executing — the Fixer is committing fixes onto the
  *   PR branch (`fixing`), or the selected findings are being posted as inline comments (`posting`).
  * - `done`: the review is resolved (the human finished; PR 3: fixed / posted).
@@ -92,6 +125,7 @@ export type PrReviewFinding = v.InferOutput<typeof prReviewFindingSchema>
 export const prReviewStatusSchema = v.picklist([
   'reviewing',
   'awaiting_selection',
+  'challenging',
   'fixing',
   'posting',
   'done',
@@ -260,6 +294,39 @@ export const prReviewAgentOutputSchema = v.object({
 })
 export type PrReviewAgentOutput = v.InferOutput<typeof prReviewAgentOutputSchema>
 
+// ---- Challenge Investigator agent output ----------------------------------
+
+/**
+ * The LENIENT structured shape the read-only **Challenge Investigator** container agent returns
+ * as `result.custom` when a human challenges a finding. The engine applies it to the challenged
+ * finding: an `upheld` verdict keeps the finding and strengthens/clarifies its body from any
+ * supplied `revised*` field (folding the justification in), while a `retracted` verdict
+ * auto-deselects the finding and records the justification beside it. Every field falls back to a
+ * safe default (`v.fallback`) — exactly like {@link prReviewAgentOutputSchema} — so a
+ * partially-malformed reply degrades sensibly (an unreadable verdict reads as `upheld`, KEEPING
+ * the finding rather than silently dropping it) instead of failing the run. This is the SINGLE
+ * source of truth for the investigator's output shape, consumed both by the agent kind's
+ * `defineStructuredOutput` (validation at completion) and the engine's coercion.
+ */
+export const prReviewChallengeOutputSchema = v.object({
+  /**
+   * Does the finding hold up? `upheld` keeps it (and may strengthen it via the `revised*` fields);
+   * `retracted` drops it from the selection because the challenge showed it is wrong / irrelevant.
+   */
+  verdict: v.fallback(v.picklist(['upheld', 'retracted']), 'upheld'),
+  /** Why the finding holds up, or why it does not — surfaced beside the finding in the window. */
+  justification: v.fallback(v.string(), ''),
+  /** When upheld: a clarified / strengthened finding body replacing `detail` (optional). */
+  revisedDetail: v.fallback(v.optional(v.string()), undefined),
+  /** When upheld: a revised headline replacing `title` (optional). */
+  revisedTitle: v.fallback(v.optional(v.string()), undefined),
+  /** When upheld: a re-assessed severity (optional). */
+  revisedSeverity: v.fallback(v.optional(prReviewSeveritySchema), undefined),
+  /** When upheld: a revised concrete suggested fix replacing `suggestedFix` (optional). */
+  revisedSuggestedFix: v.fallback(v.optional(v.string()), undefined),
+})
+export type PrReviewChallengeOutput = v.InferOutput<typeof prReviewChallengeOutputSchema>
+
 // ---- Request bodies -------------------------------------------------------
 
 /**
@@ -273,3 +340,17 @@ export const resolvePrReviewSchema = v.object({
   findingIds: v.optional(v.array(v.string()), []),
 })
 export type ResolvePrReviewInput = v.InferOutput<typeof resolvePrReviewSchema>
+
+/**
+ * Challenge a parked finding: dispatch the Challenge Investigator with an OPTIONAL specific
+ * concern. An omitted / blank `question` uses the generic prompt (dig deeper, justify the
+ * grounding, validate the finding is accurate + relevant). The finding is named in the path.
+ */
+export const challengePrReviewFindingSchema = v.object({
+  /**
+   * The specific challenge / question / concern for the investigator to dig into. Omitted or
+   * blank ⇒ the generic "dig deeper and validate this finding" prompt.
+   */
+  question: v.optional(v.string()),
+})
+export type ChallengePrReviewFindingInput = v.InferOutput<typeof challengePrReviewFindingSchema>

@@ -9,12 +9,14 @@ import type {
   RunInitiatorScope,
 } from '@cat-factory/kernel'
 import { FIXER_AGENT_KIND, getErrorMessage } from '@cat-factory/kernel'
+import { CHALLENGE_INVESTIGATOR_KIND } from '@cat-factory/agents'
 import type { AdvanceResult } from './advance.js'
 import {
   buildPrReviewPost,
   buildPrReviewPostReport,
   computeCommentableLines,
   isPrReviewPostComplete,
+  renderChallengeInvestigatorFeedback,
   renderPrReviewFixerFeedback,
 } from './prReview.logic.js'
 import type { RunStateMachine } from './RunStateMachine.js'
@@ -64,13 +66,48 @@ export class PrReviewResolutionController {
   constructor(private readonly deps: PrReviewResolutionControllerDeps) {}
 
   /**
+   * - `challenging`: dispatch the read-only Challenge Investigator against the ONE challenged
+   *   finding (parks on the job; its verdict is applied by the `pr-review-challenge` interceptor,
+   *   which re-parks the review).
    * - `fixing`: dispatch the Fixer against the reviewed PR's head branch with the selected
    *   findings folded in (parks on the job; its completion marks the review `done`).
    * - `posting`: publish the selected findings as inline PR review comments, then finish the step.
    */
   handle(ctx: StepHandlerContext): Promise<AdvanceResult> {
+    if (ctx.step.prReview?.status === 'challenging') return this.dispatchChallenge(ctx)
     if (ctx.step.prReview?.status === 'posting') return this.post(ctx)
     return this.dispatchFixer(ctx)
+  }
+
+  /**
+   * Dispatch the read-only Challenge Investigator for a challenged finding. The finding + the
+   * human's optional concern (else the generic "dig deeper + validate" prompt) are folded into the
+   * dispatch as a prior output — the same injection point the Fixer uses — so the investigator
+   * re-examines that ONE finding against the full source (it dispatches under
+   * {@link CHALLENGE_INVESTIGATOR_KIND}, so it resolves its OWN — possibly stronger — model). The
+   * step's own `pr-reviewer` pre-ops still run (they key off the step kind), so the investigator
+   * also gets the PR diff in `.cat-context/pr-diff.md`. On a replay (jobId already set) it
+   * re-attaches without re-injecting.
+   */
+  private dispatchChallenge(ctx: StepHandlerContext): Promise<AdvanceResult> {
+    const { step } = ctx
+    const review = step.prReview!
+    const pending = step.pendingChallenge
+    const finding = review.findings?.find((f) => f.id === pending?.findingId)
+    return this.deps.handleAgentStep(ctx, CHALLENGE_INVESTIGATOR_KIND, (context) => {
+      if (!finding) return
+      context.priorOutputs = [
+        ...context.priorOutputs,
+        {
+          agentKind: CHALLENGE_INVESTIGATOR_KIND,
+          output: renderChallengeInvestigatorFeedback(
+            finding,
+            pending?.question ?? null,
+            review.summary,
+          ),
+        },
+      ]
+    })
   }
 
   /**

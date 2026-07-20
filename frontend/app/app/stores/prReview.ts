@@ -82,5 +82,50 @@ export const usePrReviewStore = defineStore('prReview', () => {
     }
   }
 
-  return { resolving, error, load, resolve }
+  /** Dismiss a finding entirely: it's removed from the review (and the selection). Stays parked. */
+  async function dismiss(executionId: string, findingId: string): Promise<void> {
+    error.value = null
+    resolving.value = true
+    try {
+      const state = await api.dismissPrReviewFinding(workspace.requireId(), executionId, findingId)
+      reflect(executionId, state as PrReviewStepState)
+    } catch (e) {
+      error.value = e instanceof Error ? e.message : 'Failed to dismiss finding'
+      throw e
+    } finally {
+      resolving.value = false
+    }
+  }
+
+  /**
+   * Challenge a finding: dispatch the Challenge Investigator with an OPTIONAL specific concern
+   * (blank ⇒ the generic "dig deeper + validate" prompt). The review moves to `challenging` while
+   * the investigator digs in; its verdict (strengthen / retract the finding) arrives via the stream.
+   */
+  async function challenge(
+    executionId: string,
+    findingId: string,
+    question?: string,
+  ): Promise<void> {
+    error.value = null
+    resolving.value = true
+    try {
+      const state = await api.challengePrReviewFinding(
+        workspace.requireId(),
+        executionId,
+        findingId,
+        {
+          question,
+        },
+      )
+      reflect(executionId, state as PrReviewStepState)
+    } catch (e) {
+      error.value = e instanceof Error ? e.message : 'Failed to challenge finding'
+      throw e
+    } finally {
+      resolving.value = false
+    }
+  }
+
+  return { resolving, error, load, resolve, dismiss, challenge }
 })
