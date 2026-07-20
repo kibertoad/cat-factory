@@ -4941,10 +4941,23 @@
     "suggestedFix": "Correzione suggerita:",
     "line": "riga {line}",
     "reviewing": {
-      "title": "Revisione della pull request…",
-      "hint": "Suddivisione del diff in blocchi coerenti e revisione di ciascuno.",
+      "slicing": {
+        "title": "Suddivisione del diff in blocchi…",
+        "hint": "Raggruppamento dei file modificati in blocchi coerenti per esaminare ciascuno separatamente. L'elenco dei blocchi comparirà qui al termine della suddivisione."
+      },
+      "reviewingChunks": {
+        "title": "Revisione dei blocchi…",
+        "hint": "La suddivisione è terminata. Ogni blocco viene esaminato uno alla volta e le osservazioni vengono raccolte."
+      },
       "chunks": "{completed} di {total} sezioni esaminate",
-      "inProgress": "{count} in corso"
+      "inProgress": "{count} in corso",
+      "activeHeading": "In revisione ora",
+      "chunksHeading": "Blocchi",
+      "chunkStatus": {
+        "completed": "Esaminato",
+        "in_progress": "In revisione…",
+        "pending": "In coda"
+      }
     },
     "fixing": {
       "title": "Correzione dei rilievi selezionati…",

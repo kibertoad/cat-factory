@@ -5070,10 +5070,23 @@
     "suggestedFix": "Suggested fix:",
     "line": "line {line}",
     "reviewing": {
-      "title": "Reviewing the pull request…",
-      "hint": "Slicing the diff into cohesive chunks and reviewing each one.",
+      "slicing": {
+        "title": "Slicing the diff into chunks…",
+        "hint": "Grouping the changed files into cohesive chunks so each can be reviewed on its own. The chunk list appears here once slicing is done."
+      },
+      "reviewingChunks": {
+        "title": "Reviewing the chunks…",
+        "hint": "Slicing is done. Working through each chunk one at a time and collecting findings."
+      },
       "chunks": "{completed} of {total} chunks reviewed",
-      "inProgress": "{count} in progress"
+      "inProgress": "{count} in progress",
+      "activeHeading": "Reviewing now",
+      "chunksHeading": "Chunks",
+      "chunkStatus": {
+        "completed": "Reviewed",
+        "in_progress": "Reviewing…",
+        "pending": "Queued"
+      }
     },
     "fixing": {
       "title": "Fixing the selected findings…",

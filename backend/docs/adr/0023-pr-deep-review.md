@@ -156,8 +156,11 @@ need (`getPullRequestHeadRef`, `createReview`) are new **optional** methods on t
   reviewer's container job dispatches — the `recordFindings` interceptor already treated `reviewing`
   as "not yet recorded" and coerces over it — so the deep-review window renders a real in-flight
   phase instead of an empty panel. The reviewer's prompt maintains a per-slice todo list, which
-  surfaces as the step's live `subtasks`; the window renders that as slices-reviewed / total during
-  `reviewing`, so a running deep review shows its chunk progress rather than a bare "agent running".
+  surfaces as the step's live `subtasks`; the window uses the presence of that list to tell the two
+  `reviewing` sub-phases apart precisely — SLICING (no todo list yet, the diff is still being grouped
+  into chunks) vs REVIEWING (the list exists, so slicing is done) — and in the reviewing sub-phase it
+  lists every chunk with an explicit status (Reviewed / Reviewing… / Queued) plus a "Reviewing now"
+  callout for the in-progress chunk(s), rather than a bare slices-reviewed count or "agent running".
 - **Same-repo, non-fork PRs only.** The reviewer clones the service's linked repo and fetches the
   PR head by number, and the Fixer pushes to that head branch — so the `fix` resolution requires a
   PR on the service's own repo the platform can push to. A cross-repo `prUrl` (a PR on a different
