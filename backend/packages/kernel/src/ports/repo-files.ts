@@ -5,6 +5,7 @@ import type {
   CreateReviewResult,
   GitHubChangedFile,
   GitHubRepoRef,
+  GitHubReviewThread,
   RepoContentEntry,
   RepoFileContent,
 } from './github-client.js'
@@ -91,6 +92,15 @@ export interface RepoFiles {
    * passes through and the agent falls back to reconstructing the diff itself.
    */
   listChangedFiles?(number: number): Promise<GitHubChangedFile[]>
+  /**
+   * List a pull request's existing review threads (each with its resolved state, anchor path/line
+   * and comments), oldest→newest. The `pr-reviewer` preOp reads this to hand the reviewer the
+   * findings ALREADY raised on the PR — prior review rounds, human comments, third-party bots — so
+   * the prompt can tell it to skip re-reporting them and focus on what is new or still unaddressed.
+   * Optional: a bound client that can't read a PR's review threads (unwired / a VCS provider
+   * without the capability) omits it, so the preOp passes through and the reviewer reviews cold.
+   */
+  listReviewThreads?(number: number): Promise<GitHubReviewThread[]>
 }
 
 /**

@@ -1,5 +1,11 @@
 import { prReviewAgentOutputSchema } from '@cat-factory/contracts'
-import type { GitHubChangedFile, RepoOp, RepoOpContext, RepoOpResult } from '@cat-factory/kernel'
+import type {
+  GitHubChangedFile,
+  GitHubReviewThread,
+  RepoOp,
+  RepoOpContext,
+  RepoOpResult,
+} from '@cat-factory/kernel'
 import { defineStructuredOutput } from './structured-output.js'
 import type { AgentKindDefinition, AgentKindRegistry } from './registry.js'
 import { CODE_AWARE_TRAIT } from './traits.js'
@@ -17,6 +23,10 @@ import { CODE_AWARE_TRAIT } from './traits.js'
 // time — reading only that slice's files — and finally aggregates + prioritizes the
 // findings by severity. Pi's agentic tool loop keeps each slice's context bounded, so
 // token usage scales with the slice budget, not the whole PR.
+//
+// It is also comment-aware: a preOp injects the PR's EXISTING review threads (prior rounds, human
+// reviewers, other bots) as `.cat-context/pr-existing-comments.md`, and the prompt tells the
+// reviewer to de-dup against them — skip issues already raised, focus on what is new/unaddressed.
 //
 // The structured JSON (slices + severity-ordered findings) is recorded on the step as
 // `result.custom` and rendered by the dedicated `pr-review` window: the run parks for a
@@ -54,6 +64,15 @@ export const PR_REVIEWER_SYSTEM_PROMPT =
   'You always have the full base checkout: read unchanged neighbouring files (call sites, helpers, ' +
   'tests) from it, and fetch the PR head for full file bodies, whenever a slice needs more than the ' +
   'patch.\n' +
+  'This PR may ALREADY carry review comments — from an earlier review round, from human reviewers, ' +
+  'or from other bots. When any exist, they are prepared for you in ' +
+  '`.cat-context/pr-existing-comments.md` (each with its file, line, resolved state and text). READ ' +
+  'THAT before you start, and treat those findings as already-known: do NOT re-report an issue that ' +
+  'an existing comment already covers, even if you would phrase it differently. Skip an unresolved ' +
+  'thread (the point has been made and is awaiting action); for a resolved thread, only raise it ' +
+  'again if the change in front of you shows the fix is wrong or incomplete. Spend your review on ' +
+  'what is NEW or still unaddressed. If that file is absent, no comments have been posted yet — ' +
+  'review the whole diff normally.\n' +
   'The PR may be large (hundreds of changed files), so review it in a way that stays within a ' +
   'bounded context rather than reading the whole diff at once:\n' +
   '1. First read the changed-file list (from `.cat-context/pr-diff.md`, or the `--name-status` + ' +
@@ -70,7 +89,8 @@ export const PR_REVIEWER_SYSTEM_PROMPT =
   'todo entry done and move to the next. Keeping to one slice at a time is what keeps the review ' +
   'token-bounded on a huge PR.\n' +
   '4. Aggregate every slice’s findings into ONE list, ordered by severity (blocker → nit), and ' +
-  'drop duplicates.\n' +
+  'drop duplicates — both repeats across slices AND anything an existing comment in ' +
+  '`.cat-context/pr-existing-comments.md` already raised.\n' +
   'For each finding give the repo-relative file path, the line it anchors to (on the PR head, ' +
   'side "RIGHT", unless it concerns a removed/base line), a severity, a category, a short title, ' +
   'a precise detail, and — when you can — a concrete suggested fix. Reference the specific code ' +
@@ -98,6 +118,9 @@ export const PR_REVIEWER_SYSTEM_PROMPT =
 
 /** The injected context file (under `.cat-context/`) the diff preOp writes for the reviewer. */
 export const PR_DIFF_CONTEXT_FILE = 'pr-diff.md'
+
+/** The injected context file listing the PR's already-posted review comments (for de-dup). */
+export const PR_EXISTING_COMMENTS_CONTEXT_FILE = 'pr-existing-comments.md'
 
 /**
  * Byte budget for the injected PATCHES. The changed-file LIST (cheap, and the slicing signal) is
@@ -189,11 +212,96 @@ export const prReviewerDiffPreOp: RepoOp = async (
   }
 }
 
+/**
+ * Byte budget for the injected existing-comments file. Review threads are short prose, so this is
+ * generous; past it, the remaining threads are summarised as a count so the file never dominates
+ * the context on a PR with a very long comment history.
+ */
+const MAX_EXISTING_COMMENTS_BYTES = 64 * 1024
+
+/** A single review-thread comment's body, trimmed + collapsed to a one-liner excerpt for the list. */
+function commentExcerpt(body: string, max = 500): string {
+  const flat = body.trim().replace(/\s+/g, ' ')
+  return flat.length > max ? `${flat.slice(0, max)}…` : flat
+}
+
+/**
+ * Render the PR's existing review threads as the injected `.cat-context/pr-existing-comments.md`, so
+ * the reviewer can de-dup against findings already raised (prior rounds / humans / other bots). Each
+ * thread shows its anchor (path:line, or "general"), resolved state and the opening comment's text.
+ */
+export function renderExistingReviewComments(
+  number: number,
+  threads: GitHubReviewThread[],
+): string {
+  const header =
+    `# Pull request #${number} — existing review comments\n\n` +
+    'These findings have ALREADY been raised on this PR (earlier review rounds, human reviewers, or ' +
+    'other bots). Do NOT re-report an issue an existing comment already covers. Skip UNRESOLVED ' +
+    'threads (already awaiting action); re-raise a RESOLVED thread only if the change shows its fix ' +
+    'is wrong or incomplete. Focus your review on what is new or still unaddressed.\n\n' +
+    `## Threads (${threads.length})\n`
+  const enc = new TextEncoder()
+  let bytes = 0
+  let omitted = 0
+  const items: string[] = []
+  for (const t of threads) {
+    const anchor = t.path ? `${t.path}${t.line != null ? `:${t.line}` : ''}` : 'general'
+    const state = t.isResolved ? 'RESOLVED' : 'UNRESOLVED'
+    const first = t.comments[0]
+    const author = first?.author ? `@${first.author}` : 'unknown'
+    const excerpt = first ? commentExcerpt(first.body) : '(no comment body)'
+    const replies =
+      t.comments.length > 1
+        ? ` (+${t.comments.length - 1} repl${t.comments.length - 1 === 1 ? 'y' : 'ies'})`
+        : ''
+    const block = `\n### ${anchor} — ${state}\n${author}${replies}: ${excerpt}\n`
+    const size = enc.encode(block).length
+    if (bytes + size > MAX_EXISTING_COMMENTS_BYTES) {
+      omitted += 1
+      continue
+    }
+    bytes += size
+    items.push(block)
+  }
+  const footer =
+    omitted > 0
+      ? `\n_${omitted} more thread(s) omitted to stay within the injected-context budget._\n`
+      : ''
+  return `${header}${items.join('')}${footer}`
+}
+
+/**
+ * PreOp for the `pr-reviewer` kind: hand the reviewer the PR's EXISTING review threads up front as
+ * `.cat-context/pr-existing-comments.md`, so it de-dups against findings already raised (prior
+ * review rounds, human reviewers, other bots) instead of re-reporting them. Pass-through — injecting
+ * nothing — when the PR number can't be resolved, the bound client can't read review threads
+ * (unwired / a VCS provider without the capability), or the PR has no review threads yet.
+ */
+export const prReviewerExistingCommentsPreOp: RepoOp = async (
+  ctx: RepoOpContext,
+): Promise<RepoOpResult | void> => {
+  const listReviewThreads = ctx.repo.listReviewThreads
+  if (!listReviewThreads) return
+  const number = resolvePrNumber(ctx.context.block.taskTypeFields)
+  if (number == null) return
+  const threads = await listReviewThreads(number)
+  if (!threads.length) return
+  return {
+    contextFiles: [
+      {
+        path: PR_EXISTING_COMMENTS_CONTEXT_FILE,
+        content: renderExistingReviewComments(number, threads),
+      },
+    ],
+  }
+}
+
 export const PR_REVIEWER_AGENT_KINDS: AgentKindDefinition[] = [
   {
     kind: PR_REVIEWER_KIND,
     systemPrompt: PR_REVIEWER_SYSTEM_PROMPT,
-    preOps: [prReviewerDiffPreOp],
+    preOps: [prReviewerDiffPreOp, prReviewerExistingCommentsPreOp],
     // Read-only FULL clone of the repo's BASE (default) branch — a review task targets an
     // EXISTING external PR that the run never opened, so there is no work branch to clone; the
     // prompt fetches the PR head by number (`git fetch origin pull/<n>/head`) and diffs it against
