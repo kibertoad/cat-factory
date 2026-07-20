@@ -706,7 +706,9 @@
       "serviceHint": "Programming standards for the whole service. The content of each selected fragment is added to the prompt of every code-aware agent working on tasks under this service.",
       "serviceEmpty": "None. Code-aware agents on this service follow their default guidance.",
       "manageBoard": "Manage this board's fragment library…",
-      "manageAccount": "Manage account fragments…"
+      "manageAccount": "Manage account fragments…",
+      "done": "Done",
+      "pickerEmpty": "No fragments available."
     },
     "frontendConfig": {
       "title": "Frontend",
