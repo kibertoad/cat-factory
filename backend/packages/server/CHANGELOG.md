@@ -1,5 +1,60 @@
 # @cat-factory/server
 
+## 0.138.7
+
+### Patch Changes
+
+- a10bfdf: Implement the follow-ups from the PR-review run investigation (#1261): the parked PR-review
+  approve bug, misleading token surfacing, and session-transcript retention.
+
+  - **PR-review "Review & approve" now opens the findings-selection window.** A parked
+    `pr-reviewer` step carries both a pending approval and `prReview.status`, so every board /
+    pipeline / inspector surface funnelled its generic approval button into the prose panel (wrong
+    endpoint, no findings UI) instead of `PrReviewWindow`. `dispatchStepView` now special-cases a
+    step carrying `prReview` (mirroring the `consensus` case) and `pr-reviewer` is modelled in the
+    frontend catalog with `resultView: 'pr-review'`, so the existing approval button routes
+    correctly. A dedicated "Review findings" chip (mirroring the fork-decision chip) is added to the
+    pipeline rail and the inspector.
+
+  - **Container token usage records the real model.** The durable poll path
+    (`ContainerAgentExecutor.pollJob`) folds `handle.model` onto the result, so `spend.record` /
+    `token_usage` records the actual `provider:model` instead of `unknown` / `""`.
+
+  - **Token surfaces separate fresh vs cached input.** A long agentic run re-sends its whole
+    transcript every turn, so the raw prompt-token sum is ~all cache reads and reads as a blow-up.
+    The step-metrics bar and the observability panel now show FRESH (uncached) input as the headline
+    with the cached prefix called out separately (a new `freshPromptTokens` helper).
+
+  - **Session transcripts are retained for 3 days.** Both subscription runners
+    (`runClaudeCode` / `runCodex`) deleted the isolated config home — with the CLI session
+    transcripts — in `finally`. A new `retainSessionTranscripts` lifts ONLY the transcript subtree
+    (`projects/` / `sessions/`) out to a retention root before the credential-bearing home is
+    deleted, and prunes on a 3-day TTL (overridable via `HARNESS_TRANSCRIPT_TTL_MS` /
+    `HARNESS_TRANSCRIPT_ROOT`). The credential at the home root is still removed.
+
+- a10bfdf: Hand the `pr-reviewer` the PR diff up front to cut token burn.
+
+  A deep PR review used to clone the base branch and reconstruct the diff by hand (many `git diff`
+  runs + grep passes), and each agentic turn re-sends the whole growing transcript — so the
+  discovery turns dominated the run's token cost. A new `pr-reviewer` preOp now computes the
+  changed-file list + per-file patches on the backend (via the previously-dormant
+  `GitHubClient.listChangedFiles`) and injects them as `.cat-context/pr-diff.md`, so the agent plans
+  its slices from a prepared artifact instead of rebuilding the diff.
+
+  Backend-only and runtime-symmetric (rides the shared `ContainerAgentExecutor` + the HTTP-only
+  `RepoFiles` port), no harness image bump. New seams: `RepoFiles.listChangedFiles?` (forwarded from
+  the wired client), and `RepoOpResult.contextFiles` → `AgentRunContext.injectedContextFiles` so a
+  preOp can hand the agent context files up front. The full base clone + git fallback stay, so a
+  deployment without the capability (or an unresolvable PR) passes through unchanged. See
+  `docs/initiatives/pr-review-turn-reduction.md`.
+
+- Updated dependencies [a10bfdf]
+  - @cat-factory/kernel@0.147.0
+  - @cat-factory/agents@0.66.0
+  - @cat-factory/orchestration@0.129.2
+  - @cat-factory/integrations@0.88.6
+  - @cat-factory/spend@0.12.62
+
 ## 0.138.6
 
 ### Patch Changes
