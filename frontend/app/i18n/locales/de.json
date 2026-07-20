@@ -4808,6 +4808,7 @@
     }
   },
   "environmentWizard": {
+    "progress": "Schritt {index} von {total}",
     "title": "Eine Testumgebung einrichten",
     "subtitle": "Erkenne, prüfe und speichere ein Docker-Compose-Rezept, damit der Deployer es bereitstellt.",
     "recommended": "empfohlen",

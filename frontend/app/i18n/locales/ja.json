@@ -4812,6 +4812,7 @@
     }
   },
   "environmentWizard": {
+    "progress": "ステップ {index} / {total}",
     "title": "テスト環境をセットアップ",
     "subtitle": "Docker Compose レシピを検出・確認・保存して、Deployer がプロビジョニングできるようにします。",
     "recommended": "推奨",
