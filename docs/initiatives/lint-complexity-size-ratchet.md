@@ -1,8 +1,9 @@
 # Initiative: ratchet down oxlint complexity & size ceilings
 
 **Status:** in progress — `max-nested-callbacks`, `max-depth`, AND `max-params` at their final
-targets (4 / 4 / **6**); `max-lines` / `max-lines-per-function` at their free floors. `complexity` /
-`max-statements` / the two size rules still need the DI-builder / god-file refactors to move ·
+targets (4 / 4 / **6**); `max-lines-per-function` at **step 1 (1000)** for product code (test
+suites carved off into an `overrides` ratchet at 2453); `max-lines` at its free floor. `complexity` /
+`max-statements` / `max-lines` still need the remaining DI-builder / god-file refactors to move ·
 **Owner:** core · **Started:** 2026-07-20
 
 > This is the durable source of truth for a multi-PR initiative. Read it first before
@@ -77,15 +78,15 @@ node scripts/lint-limits-report.mjs --top 15   # more offenders per rule
 Every rule below currently passes with **zero** violations because its `max` equals the
 worst offender. These are the starting ceilings, not the goal.
 
-| Rule                     | Ceiling now | Reasonable target | Worst offender today                                             |
-| ------------------------ | ----------: | ----------------: | ---------------------------------------------------------------- |
-| `complexity`             |         141 |            **20** | `runtimes/node/src/config.ts` (`loadNodeConfig`, 141)            |
-| `max-statements`         |         157 |            **30** | `frontend/app/app/stores/ui/modals.ts` (157)                     |
-| `max-lines-per-function` |    **2453** |           **150** | `internal/conformance/src/suites/core.ts` (2453)                 |
-| `max-lines`              |    **2802** |          **1500** | `orchestration/src/modules/execution/ExecutionService.ts` (2802) |
-| `max-params`             |    **6** ✅ |             **6** | at target — 0 offenders above 6                                  |
-| `max-depth`              |    **4** ✅ |             **4** | at target — 0 offenders above 4                                  |
-| `max-nested-callbacks`   |    **4** ✅ |             **4** | at target — 0 offenders above 4                                  |
+| Rule                     | Ceiling now | Reasonable target | Worst offender today                                                                             |
+| ------------------------ | ----------: | ----------------: | ------------------------------------------------------------------------------------------------ |
+| `complexity`             |         141 |            **20** | `runtimes/node/src/config.ts` (`loadNodeConfig`, 141)                                            |
+| `max-statements`         |         157 |            **30** | `frontend/app/app/stores/ui/modals.ts` (157)                                                     |
+| `max-lines-per-function` |    **1000** |           **150** | product: `runtimes/node/src/container.ts` (`buildNodeContainer`, 991); tests: 2453 (`overrides`) |
+| `max-lines`              |    **2802** |          **1500** | `orchestration/src/modules/execution/ExecutionService.ts` (2802)                                 |
+| `max-params`             |    **6** ✅ |             **6** | at target — 0 offenders above 6                                                                  |
+| `max-depth`              |    **4** ✅ |             **4** | at target — 0 offenders above 4                                                                  |
+| `max-nested-callbacks`   |    **4** ✅ |             **4** | at target — 0 offenders above 4                                                                  |
 
 > **First pass (landed):** the god-file split in #1266 dropped the two size-rule floors well
 > below their pinned ceilings, so `max-lines` (3119 → **2802**) and `max-lines-per-function`
@@ -103,6 +104,23 @@ worst offender. These are the starting ceilings, not the goal.
 > `EnvironmentConnectionService`'s bootstrap commit/PR path, `WorkersAiLlmUpstream`'s assistant
 > tool-call conversion, and the OTEL conformity metric fold. The size/complexity rules are still
 > pinned at their ceilings pending the DI-builder / god-file refactors.
+>
+> **Fourth pass (landed):** `max-lines-per-function` reached **step 1 (2453 → 1000)** by (a) carving
+> the table-driven **test suites** off into an `overrides` entry (globs `**/*.test.ts`,
+> `**/*.spec.ts`, `internal/conformance/src/**`, `internal/e2e/**`) held to their own ratchet at
+> **2453** — resolving the "decide at step 2 whether test globs warrant a looser ceiling" question
+> below in favour of an override, so product-code function limits aren't forced onto Vitest suites —
+> and (b) splitting the lone product offender above 1000, the Node DI god-builder `buildNodeContainer`
+> (**1616 → 991**), into seven cohesive sibling `container-*-deps.ts` helpers following the existing
+> `container-executor-deps.ts` pattern: `container-github-deps.ts` (`selectNodeGitHubDeps`, mirroring
+> the Worker's `selectGitHubDeps`), `container-model-deps.ts` (credential stores + model provider +
+> inline executor), `container-run-services-deps.ts` (observability + web-search + sealed-secret
+> services), `container-transport-deps.ts` (runner transport + deploy + repo bootstrapper),
+> `container-account-deps.ts` (per-account settings + binary-artifact storage + observability/incident
+> gate wiring), and `container-realtime-deps.ts` (event publisher + notification channel + consensus
+> wrap). All behaviour-neutral (verified by the Node + local conformance suites on real Postgres). The
+> DI split also drops `buildNodeContainer`'s `complexity` (139) and `max-statements` (144) well below
+> their pinned ceilings, but `config.ts`/`modals.ts` still cap those rules, so they don't move yet.
 >
 > **Third pass (landed):** `max-params` reached its **final** target (20 → **6**) in one slice by
 > converting every offending function from a positional list to a bundled argument — DI builders to
@@ -143,18 +161,20 @@ Update the `Status` cell + the live `max` in `.oxlintrc.json` at the end of each
 
 ### `max-lines-per-function` — 3103 → 150
 
-| Step       | `max` | Offenders to split first                                                                                                                    | Status    |
-| ---------- | ----: | ------------------------------------------------------------------------------------------------------------------------------------------- | --------- |
-| baseline   |  3103 | —                                                                                                                                           | ✅ landed |
-| free floor |  2453 | — (no refactor; #1266 split the old 3103 `suites/execution.ts` offender)                                                                    | ✅ landed |
-| 1          |  1000 | (9) — the conformance `suites/core.ts` (2453/2451) + `execution-review.ts` / `execution-tester.ts` / `agents.ts` `describe` blocks dominate | ☐ todo    |
-| 2          |   300 | (67)                                                                                                                                        | ☐ todo    |
-| 3 (final)  |   150 | (232)                                                                                                                                       | ☐ todo    |
+| Step       | `max` | Offenders to split first                                                                                                                                                                           | Status    |
+| ---------- | ----: | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | --------- |
+| baseline   |  3103 | —                                                                                                                                                                                                  | ✅ landed |
+| free floor |  2453 | — (no refactor; #1266 split the old 3103 `suites/execution.ts` offender)                                                                                                                           | ✅ landed |
+| 1          |  1000 | (product) `buildNodeContainer` 1616 → 991 (split into 7 `container-*-deps.ts` helpers) + test suites carved into `overrides` at 2453 — see fourth pass                                             | ✅ landed |
+| 2          |   300 | (product) `frontend/stores/ui/modals.ts` 789, `server/PublicApiController.ts` 764, `kernel/seed.ts` 678, `local/container.ts` 659, `frontend/stores/board.ts` 635, `cloudflare/container.ts` 626 … | ☐ todo    |
+| 3 (final)  |   150 | (product long tail)                                                                                                                                                                                | ☐ todo    |
 
 > Note: most `max-lines-per-function` offenders are **test files** (`conformance/src/suites/*`,
-> big `describe`/`it` blocks). Consider whether the final target warrants a test-file
-> `overrides` entry (a looser `max` for `**/*.spec.ts` / `**/*.test.ts` / `conformance/src/suites/*`)
-> rather than forcing product-code limits onto Vitest suites. Decide at step 2.
+> big `describe`/`it` blocks). **Decided (step 1):** an `overrides` entry holds the test globs
+> (`**/*.test.ts`, `**/*.spec.ts`, `internal/conformance/src/**`, `internal/e2e/**`) to their own
+> ratchet (currently **2453**) so the global (product) ceiling tightens without contorting the
+> table-driven Vitest suites. Steps 2/3 walk the PRODUCT ceiling down; tighten the test override
+> separately if the suites shrink.
 
 ### `max-lines` — 3119 → 1500
 
