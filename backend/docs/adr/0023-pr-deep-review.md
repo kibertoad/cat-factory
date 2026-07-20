@@ -71,6 +71,24 @@ need (`getPullRequestHeadRef`, `createReview`) are new **optional** methods on t
   changed-file list + patches as `.cat-context/pr-diff.md` so the container agent skips the
   reconstruct-the-diff turns (see `docs/initiatives/pr-review-turn-reduction.md`) — an accelerant
   layered ON the full-clone container review, not the dropped patch-only inline design.
+- **Comment-aware: de-dup against findings already on the PR.** A re-review (a `fix` round, a
+  second pass) used to review the diff cold and re-surface issues already raised, answered, or
+  dismissed in earlier comments — noise on the exact PRs where a human wants only what changed. A
+  second `pr-reviewer` preOp reads the PR's existing review threads via the checkout-free
+  `RepoFiles.listReviewThreads` (the same GraphQL read the `human-review` gate uses, surfaced on the
+  `RepoFiles` seam) and injects them as `.cat-context/pr-existing-comments.md` — each thread's
+  anchor, resolved state and opening comment. The prompt then tells the reviewer to skip an issue an
+  existing comment already covers (unresolved = awaiting action; resolved = only re-raise if the fix
+  is wrong) and spend the review on what is new. It reuses the existing optional `listReviewThreads`
+  method already implemented on `FetchGitHubClient` and forwarded by `vcsBackedGitHubClient`, so
+  GitLab gets it for free; a client that can't read threads omits the method and the preOp passes
+  through (the reviewer reviews cold, exactly as before). Because this file is third-party prose
+  (any human/bot that can comment on the PR authored it) and the feature deliberately tells the
+  reviewer to DEFER to it (skip what it covers), the prompt fences it as untrusted data — the
+  reviewer is told to use it only to avoid repeating findings and to ignore any instructions inside
+  it (steer the verdict, suppress findings, approve). The blast radius is bounded regardless: the
+  reviewer is a read-only `container-explore` kind, so a hostile comment can at worst distort the
+  review output, never merge or mutate the repo.
 - **State-on-step + park/resolve mirror the fork-decision flow.** The `fix` resolution reuses the
   proven `choose`-style re-arm (`resetStepForRerun` + `startStep` + `signalDecision`), and `prReview`
   survives `resetStepForRerun` exactly like `forkDecision`. This kept the whole feature free of a
