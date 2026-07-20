@@ -12,5 +12,9 @@ export default defineConfig({
     // workers never contend on shared tables. Files sharing a worker still run
     // sequentially against that worker's database, isolated by per-test workspace ids.
     testTimeout: 30_000,
+    // Match the hook budget to the test budget: several specs do heavyweight Postgres DDL
+    // (`CREATE DATABASE` / `DROP DATABASE ... WITH (FORCE)`) in beforeAll/afterAll, which can
+    // exceed vitest's default 10s hook timeout under parallel CI load.
+    hookTimeout: 30_000,
   },
 })
