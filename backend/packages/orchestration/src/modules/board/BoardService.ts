@@ -45,7 +45,7 @@ import {
   unfinishedTasksUnder,
   wouldCreateCycle,
 } from './board.logic.js'
-import { DEFAULT_DOCUMENT_STYLE_FRAGMENT_IDS } from '@cat-factory/prompt-fragments'
+import { defaultFragmentIdsForTaskType } from '@cat-factory/prompt-fragments'
 
 export interface BoardServiceDependencies {
   workspaceRepository: WorkspaceRepository
@@ -566,14 +566,12 @@ export class BoardService {
     // explicit list when provided (the user edited the pre-seeded picker) — including an empty
     // list, meaning "the user cleared the inherited picks" — else the enclosing service's
     // `serviceFragmentIds` (so a task created without the form, e.g. via the public API, still
-    // inherits its service's standards). A document task additionally always carries the universal
-    // writing-style defaults (a document-authoring default, not a per-service standard). Deduped.
+    // inherits its service's standards). Every task additionally always carries its TASK-TYPE
+    // defaults (`defaultFragmentIdsForTaskType` — the built-in document writing-style set plus any
+    // deployment-registered per-type defaults, e.g. custom documentation/review guidance). Deduped.
     const inheritedFragmentIds = input.fragmentIds ?? service?.serviceFragmentIds ?? []
     const fragmentIds = [
-      ...new Set([
-        ...inheritedFragmentIds,
-        ...(taskType === 'document' ? DEFAULT_DOCUMENT_STYLE_FRAGMENT_IDS : []),
-      ]),
+      ...new Set([...inheritedFragmentIds, ...defaultFragmentIdsForTaskType(taskType)]),
     ]
     if (fragmentIds.length) {
       block.fragmentIds = fragmentIds

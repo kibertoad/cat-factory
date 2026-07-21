@@ -1,6 +1,10 @@
-import { describe, expect, it } from 'vitest'
+import { afterEach, describe, expect, it } from 'vitest'
 import type { Block } from '@cat-factory/kernel'
-import { DEFAULT_DOCUMENT_STYLE_FRAGMENT_IDS } from '@cat-factory/prompt-fragments'
+import {
+  clearRegisteredTaskTypeDefaultFragments,
+  DEFAULT_DOCUMENT_STYLE_FRAGMENT_IDS,
+  registerTaskTypeDefaultFragments,
+} from '@cat-factory/prompt-fragments'
 import { BoardService, type BoardServiceDependencies } from './BoardService.js'
 
 // A task OWNS its best-practice prompt fragment selection from creation. These pin how
@@ -11,6 +15,8 @@ import { BoardService, type BoardServiceDependencies } from './BoardService.js'
 // it does NOT re-union the service's fragments at run time (see AgentContextBuilder).
 describe('BoardService fragment pinning at creation', () => {
   const WS = 'ws_1'
+
+  afterEach(() => clearRegisteredTaskTypeDefaultFragments())
 
   function build(serviceFragmentIds?: string[]) {
     const frame: Block = {
@@ -79,6 +85,22 @@ describe('BoardService fragment pinning at creation', () => {
   it('still applies the document defaults when nothing is picked', async () => {
     const task = await build().addTask(WS, 'frame_svc', { title: 'Doc', taskType: 'document' })
     expect(task.fragmentIds).toEqual([...DEFAULT_DOCUMENT_STYLE_FRAGMENT_IDS])
+  })
+
+  it('seeds a deployment-registered task-type default (e.g. review) onto a new task', async () => {
+    registerTaskTypeDefaultFragments('review', ['org.review-checklist'])
+    const task = await build().addTask(WS, 'frame_svc', { title: 'Review', taskType: 'review' })
+    expect(task.fragmentIds).toEqual(['org.review-checklist'])
+  })
+
+  it('unions a registered type default with the inherited service standards (deduped)', async () => {
+    registerTaskTypeDefaultFragments('feature', ['org.feature-default'])
+    const task = await build(['node.best-practices', 'org.feature-default']).addTask(
+      WS,
+      'frame_svc',
+      { title: 'Feature', taskType: 'feature' },
+    )
+    expect(task.fragmentIds).toEqual(['node.best-practices', 'org.feature-default'])
   })
 
   it("inherits the service's standards when the form sends no list", async () => {
