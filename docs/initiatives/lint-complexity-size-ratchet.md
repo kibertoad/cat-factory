@@ -2,10 +2,10 @@
 
 **Status:** in progress — `max-nested-callbacks`, `max-depth`, AND `max-params` at their final
 targets (4 / 4 / **6**); `complexity` at **step 1 (60)**; `max-statements` at **step 2 (50)**;
-`max-lines-per-function` at **step 1 (1000)** for product code (test suites carved off into an
+`max-lines-per-function` at **step 1.5 (632)** for product code (test suites carved off into an
 `overrides` ratchet at 2453); `max-lines` at its free floor. `complexity` / `max-statements` /
-`max-lines` still need the remaining god-file refactors to reach their final targets ·
-**Owner:** core · **Started:** 2026-07-20
+`max-lines` / `max-lines-per-function` still need the remaining god-file refactors to reach their
+final targets · **Owner:** core · **Started:** 2026-07-20
 
 > This is the durable source of truth for a multi-PR initiative. Read it first before
 > picking up the next slice; update the checklist at the end of each PR.
@@ -79,16 +79,36 @@ node scripts/lint-limits-report.mjs --top 15   # more offenders per rule
 Every rule below currently passes with **zero** violations because its `max` equals the
 worst offender. These are the starting ceilings, not the goal.
 
-| Rule                     | Ceiling now | Reasonable target | Worst offender today                                                                             |
-| ------------------------ | ----------: | ----------------: | ------------------------------------------------------------------------------------------------ |
-| `complexity`             |      **60** |            **20** | at step 1 — floor 57 (`server/persistence/rpc.ts` `checkCallScope`)                              |
-| `max-statements`         |      **50** |            **30** | at step 2 — floor 50 (`orchestration/container.ts` `createCore`, `RunDispatcher` handlers)       |
-| `max-lines-per-function` |    **1000** |           **150** | product: `runtimes/node/src/container.ts` (`buildNodeContainer`, 991); tests: 2453 (`overrides`) |
-| `max-lines`              |    **2802** |          **1500** | `orchestration/src/modules/execution/ExecutionService.ts` (2802)                                 |
-| `max-params`             |    **6** ✅ |             **6** | at target — 0 offenders above 6                                                                  |
-| `max-depth`              |    **4** ✅ |             **4** | at target — 0 offenders above 4                                                                  |
-| `max-nested-callbacks`   |    **4** ✅ |             **4** | at target — 0 offenders above 4                                                                  |
+| Rule                     | Ceiling now | Reasonable target | Worst offender today                                                                        |
+| ------------------------ | ----------: | ----------------: | ------------------------------------------------------------------------------------------- |
+| `complexity`             |      **60** |            **20** | at step 1 — floor 57 (`server/persistence/rpc.ts` `checkCallScope`)                         |
+| `max-statements`         |      **50** |            **30** | at step 2 — floor 50 (`orchestration/container.ts` `createCore`, `RunDispatcher` handlers)  |
+| `max-lines-per-function` |     **632** |           **150** | product floor: `cloudflare/container.ts` (`buildContainer`, 631); tests: 2453 (`overrides`) |
+| `max-lines`              |    **2802** |          **1500** | `orchestration/src/modules/execution/ExecutionService.ts` (2802)                            |
+| `max-params`             |    **6** ✅ |             **6** | at target — 0 offenders above 6                                                             |
+| `max-depth`              |    **4** ✅ |             **4** | at target — 0 offenders above 4                                                             |
+| `max-nested-callbacks`   |    **4** ✅ |             **4** | at target — 0 offenders above 4                                                             |
 
+> **Seventh pass (landed):** `max-lines-per-function` moved from **step 1 (1000) to step 1.5
+> (632)** by splitting the six product functions above 632 along cohesive seams (all
+> behaviour-neutral). `kernel/seed.ts` `seedPipelines` (678) → three module-level catalog builders
+> (`buildDeliveryPipelines` / `buildBuildVariantPipelines` / `buildSpecialtyPipelines`) it composes;
+> `server` `PublicApiController` (764) + `AuthController` (533) → per-route-group registrars
+> (`registerJobRoutes` / `registerTaskRoutes` / … and `registerOAuthRoutes` / `registerCredentialRoutes`
+> / …), mirroring the `registerCoreControllers` mount-group split; the `board` Pinia store (635) →
+> `stores/board/{mutations,removal,context}.ts` factories that close over a shared `BoardWriteContext`
+> (the `createUiModals` precedent); and the Node DI god-builder `buildNodeContainer` (878) → two in-file
+> siblings `assembleNodeCoreDependencies` (the `CoreDependencies` object) + `projectNodeServerContainer`
+> (the `ServerContainer` projection), each fed one `ReturnType<typeof build*Deps>`-typed bundle so the
+> moved object literals stay byte-identical. `local`'s `buildLocalContainer` (605) was pre-split the
+> same way (`buildLocalNodeOptions`), pre-clearing the sub-632 band. **The floor now is
+> `cloudflare/container.ts` `buildContainer` (631):** it is deliberately NOT split here because that
+> file (2719 lines) sits just under the `max-lines` ceiling (2802), so ANY in-file function extraction
+> (which nets ~+120 lines of bundle interface/wrapper/call boilerplate) breaches it, and its ~30
+> container-local `select*Deps` helpers make a sibling-file move a large cascade — so the Worker
+> builder's split is folded into the eventual `max-lines` step-1 file split of that god-file (step 2
+> below). `complexity` / `max-statements` / `max-lines` unchanged.
+>
 > **Sixth pass (landed):** `max-statements` went **straight from its pinned baseline (157) to
 > below 60 — step 2 (50)** in one sweep, splitting every one of the 24 functions above 50 along a
 > cohesive seam (all behaviour-neutral; verified by the package unit suites + the cross-runtime
@@ -195,13 +215,14 @@ Update the `Status` cell + the live `max` in `.oxlintrc.json` at the end of each
 
 ### `max-lines-per-function` — 3103 → 150
 
-| Step       | `max` | Offenders to split first                                                                                                                                                                           | Status    |
-| ---------- | ----: | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | --------- |
-| baseline   |  3103 | —                                                                                                                                                                                                  | ✅ landed |
-| free floor |  2453 | — (no refactor; #1266 split the old 3103 `suites/execution.ts` offender)                                                                                                                           | ✅ landed |
-| 1          |  1000 | (product) `buildNodeContainer` 1616 → 991 (split into 7 `container-*-deps.ts` helpers) + test suites carved into `overrides` at 2453 — see fourth pass                                             | ✅ landed |
-| 2          |   300 | (product) `frontend/stores/ui/modals.ts` 789, `server/PublicApiController.ts` 764, `kernel/seed.ts` 678, `local/container.ts` 659, `frontend/stores/board.ts` 635, `cloudflare/container.ts` 626 … | ☐ todo    |
-| 3 (final)  |   150 | (product long tail)                                                                                                                                                                                | ☐ todo    |
+| Step       | `max` | Offenders to split first                                                                                                                                                                                | Status    |
+| ---------- | ----: | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | --------- |
+| baseline   |  3103 | —                                                                                                                                                                                                       | ✅ landed |
+| free floor |  2453 | — (no refactor; #1266 split the old 3103 `suites/execution.ts` offender)                                                                                                                                | ✅ landed |
+| 1          |  1000 | (product) `buildNodeContainer` 1616 → 991 (split into 7 `container-*-deps.ts` helpers) + test suites carved into `overrides` at 2453 — see fourth pass                                                  | ✅ landed |
+| 1.5        |   632 | (6) `buildNodeContainer` 878, `PublicApiController` 764, `kernel/seed.ts` 678, `board.ts` store 635, `local/container.ts` 605, `AuthController` 533 — see seventh pass                                  | ✅ landed |
+| 2          |   300 | (product) `cloudflare/container.ts` `buildContainer` 631 (floor; needs a file split first — see below), `orchestration/container.ts` 472, the 7 Pinia `defineStore` setups, `cloudflare/index.ts` 451 … | ☐ todo    |
+| 3 (final)  |   150 | (product long tail)                                                                                                                                                                                     | ☐ todo    |
 
 > Note: most `max-lines-per-function` offenders are **test files** (`conformance/src/suites/*`,
 > big `describe`/`it` blocks). **Decided (step 1):** an `overrides` entry holds the test globs

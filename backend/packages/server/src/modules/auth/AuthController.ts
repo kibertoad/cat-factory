@@ -280,7 +280,17 @@ const tooManyAttempts = <E extends AppEnv>(c: Context<E>) =>
 
 export function authController(): Hono<AppEnv> {
   const app = new Hono<AppEnv>()
+  // Route registrations grouped into cohesive registrars (OAuth, credential login, account
+  // recovery, session) purely so no single function exceeds the size budget; each registers
+  // onto the shared `app` and depends only on the module-level helpers above.
+  registerOAuthRoutes(app)
+  registerCredentialRoutes(app)
+  registerAccountRecoveryRoutes(app)
+  registerSessionRoutes(app)
+  return app
+}
 
+function registerOAuthRoutes(app: Hono<AppEnv>): void {
   // Lets the SPA decide which login controls to show, and (local mode only) surface a
   // setup banner when the GitHub PAT is missing.
   buildHonoRoute(app, authConfigContract, (c) => {
@@ -458,7 +468,9 @@ export function authController(): Hono<AppEnv> {
     const { token } = await mintSession(cfg, sessionUser(user, identity.email || user.id))
     return c.redirect(withToken(state.redirect, token))
   })
+}
 
+function registerCredentialRoutes(app: Hono<AppEnv>): void {
   // ---- Email / password ---------------------------------------------------
 
   buildHonoRoute(app, signupContract, async (c) => {
@@ -683,7 +695,9 @@ export function authController(): Hono<AppEnv> {
       200,
     )
   })
+}
 
+function registerAccountRecoveryRoutes(app: Hono<AppEnv>): void {
   // ---- Forgot / reset password --------------------------------------------
 
   // Request a reset link. ALWAYS returns 204 (whether or not the email is registered)
@@ -781,7 +795,9 @@ export function authController(): Hono<AppEnv> {
       throw err
     }
   })
+}
 
+function registerSessionRoutes(app: Hono<AppEnv>): void {
   // Who am I? Used by the SPA to validate a stored token on boot. A valid session resolves
   // even when auth is otherwise "disabled" (a local PAT/password session under devOpen);
   // only an absent/invalid token on a disabled deployment reports the anonymous state.
@@ -808,8 +824,6 @@ export function authController(): Hono<AppEnv> {
 
   // Stateless sessions: logout is a client-side token drop. Provided for symmetry.
   buildHonoRoute(app, logoutContract, (c) => c.body(null, 204))
-
-  return app
 }
 
 /** Verify + single-use the OAuth state (signature, expiry, browser-binding cookie). */
