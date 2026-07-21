@@ -52,6 +52,17 @@ over the WebSocket. How that sync works is written up in
 | `types/`          | TypeScript domain unions (`domain.ts`) and wire types mirroring the contracts.                                                                        |
 | `utils/`          | Small pure helpers.                                                                                                                                   |
 
+## Extending the layer (consumer modules)
+
+A deployment can contribute its own components — result windows, nav entries, inspector
+panels, agent-kind palette data — **without forking**, through the auto-imported
+`registerAppModule` seam (the frontend analogue of the backend's `registerAgentKind` /
+`registerGate` registries). The authoring walkthrough, the reusable shared building blocks
+(`ResultWindowShell`, the `StepRunMeta` run-metadata block, `useResultView`, …), and the
+namespacing / degradation rules are in
+[`app/docs/consumer-extensions.md`](./app/docs/consumer-extensions.md); a full worked
+example ships in [`deploy/frontend`](../../deploy/frontend) (the `acme:security` module).
+
 ## Key UI surfaces
 
 - **Board canvas** (`components/board`) — `BoardCanvas` + `nodes/` (`BlockNode`,

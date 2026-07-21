@@ -1,6 +1,6 @@
 # Initiative: frontend extension mechanism (consumer modules over modular-vue)
 
-**Status:** design · no slice started · **Owner:** frontend · **Started:** 2026-07-21
+**Status:** slice A landed (dogfood consumer module + authoring guide) · **Owner:** frontend · **Started:** 2026-07-21
 
 > Durable source of truth for a multi-PR initiative. Read this first before picking up a
 > slice; update the checklist at the end of each PR. This initiative builds ON TOP of the
@@ -351,15 +351,15 @@ ships an explicit, exported, semver-guarded public surface from `@cat-factory/ap
 
 ## Per-slice checklist
 
-| #   | Slice                     | Target                                                                                                                                                                                                                                                    | Status | PRs |
-| --- | ------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ------ | --- |
-| A   | Dogfood + authoring guide | Worked consumer example module in `deploy/frontend` pairing with `@cat-factory/example-custom-agent` (result window for `security-auditor`, a nav entry, an inspector panel); `frontend/app` consumer-authoring doc; e2e spec driving the consumer window | todo   | —   |
-| B   | Custom task types         | Contracts widen + `customTaskTypeSchema`; kernel `TaskTypeRegistry` + validation + conformance; snapshot `customTaskTypes`; frontend `taskTypes` slot/store/read-model, `AddTaskModal` descriptor fields + `taskTypeFormPanels`, card badge fallback      | todo   | —   |
-| C   | Generic step interaction  | Backend `interaction` registration + generic park/submit routes + `interaction_pending` notification; frontend `useStepInteraction`; example interactive consumer agent; conformance both runtimes                                                        | todo   | —   |
-| D   | Overlays                  | `appOverlays` slot + `<AppOverlayHost>` (adopting upstream `OverlayOutlet`/`useOverlay`) + `ui.openOverlay`; one consumer example; opportunistic first conversions                                                                                        | todo   | —   |
-| E   | Notification kinds        | `notificationTypeSchema` widen + `notificationKinds` slot + safe default row                                                                                                                                                                              | todo   | —   |
-| F   | Custom stream events      | `custom` `WorkspaceEvent` member + `streamHandlers` slot + single `onMessage` branch                                                                                                                                                                      | todo   | —   |
-| G   | Public surface            | Exported registration/composable/type surface, export audit, semver policy documented                                                                                                                                                                     | todo   | —   |
+| #   | Slice                     | Target                                                                                                                                                                                                                                                    | Status | PRs     |
+| --- | ------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ------ | ------- |
+| A   | Dogfood + authoring guide | Worked consumer example module in `deploy/frontend` pairing with `@cat-factory/example-custom-agent` (result window for `security-auditor`, a nav entry, an inspector panel); `frontend/app` consumer-authoring doc; e2e spec driving the consumer window | done   | this PR |
+| B   | Custom task types         | Contracts widen + `customTaskTypeSchema`; kernel `TaskTypeRegistry` + validation + conformance; snapshot `customTaskTypes`; frontend `taskTypes` slot/store/read-model, `AddTaskModal` descriptor fields + `taskTypeFormPanels`, card badge fallback      | todo   | —       |
+| C   | Generic step interaction  | Backend `interaction` registration + generic park/submit routes + `interaction_pending` notification; frontend `useStepInteraction`; example interactive consumer agent; conformance both runtimes                                                        | todo   | —       |
+| D   | Overlays                  | `appOverlays` slot + `<AppOverlayHost>` (adopting upstream `OverlayOutlet`/`useOverlay`) + `ui.openOverlay`; one consumer example; opportunistic first conversions                                                                                        | todo   | —       |
+| E   | Notification kinds        | `notificationTypeSchema` widen + `notificationKinds` slot + safe default row                                                                                                                                                                              | todo   | —       |
+| F   | Custom stream events      | `custom` `WorkspaceEvent` member + `streamHandlers` slot + single `onMessage` branch                                                                                                                                                                      | todo   | —       |
+| G   | Public surface            | Exported registration/composable/type surface, export audit, semver policy documented                                                                                                                                                                     | todo   | —       |
 
 Sequencing: A first (it exercises only landed seams and produces the guide the later
 slices extend); B and C are independent after A; D–F are independent of each other;
@@ -367,6 +367,45 @@ G closes. Each slice follows the repo rules: e2e (`data-testid` + live-push) bef
 refactor, changesets, doc sweep, and — where a slice touches modular-vue itself — the
 co-evolution loop from the [adoption tracker](./modular-vue-adoption.md) (upstream fix,
 release, re-adopt in-slice; no shims outliving a slice).
+
+## Slice A outcomes (landed)
+
+- **A worked consumer module ships in `deploy/frontend`** — the `acme:security` module
+  (`deploy/frontend/app/modular/acme-security.ts`, registered from
+  `app/plugins/acme-security.client.ts`), the frontend analogue of the backend
+  `@cat-factory/example-custom-agent`. One `registerAppModule` call contributes to EVERY landed
+  seam at once: a bespoke `resultViews` window (`AcmeSecurityReport.vue`) paired to
+  `acme:security-report`, the `agentKinds` palette entry that routes the `security-auditor` kind
+  to it, a `nav` sidebar/command destination, and an `inspectorPanels` panel for task blocks —
+  all with zero host edits and no deep imports into the layer's `app/components/*` internals
+  (shared components are named through the `#components` virtual registry; composables + the
+  `registerAppModule` seam are auto-imported). Its strings ship in
+  `deploy/frontend/i18n/locales/en.json` (layer deep-merge).
+- **Shared building blocks are reused, not reinvented.** The example window composes the layer's
+  `ResultWindowShell` (chrome + `useModalBehavior` Escape/focus-trap/scroll-lock), the shared
+  `StepRunMeta` run-details metadata block, and `MarkdownProse` — all referenced via
+  `#components` — together with the auto-imported `useResultView`; the inspector panel reuses
+  `InspectorSection` (via `#components`) + `usePanelSubject`. This proves a consumer gets the
+  same run-detail surface the first-party windows use for free — the explicit ask that shaped
+  this slice. **Gotcha carried to slice G:** a bare layer-component tag in a _consumer_ SFC
+  silently renders as an unknown element (Nuxt registers layer components under a path-derived
+  name and only rewrites bare tags in the layer's own SFCs), so a consumer must reference them
+  through `#components`; slice G hardens this into an explicit, location-independent public
+  export surface. The authoring guide documents the reusable palette + this rule.
+- **The authoring guide** (`frontend/app/app/docs/consumer-extensions.md`, linked from the layer
+  README + `deploy/frontend/README.md`) documents the one seam (`registerAppModule` +
+  `enforce:'post'` ordering), the landed seam table, the shared-building-block table, the i18n
+  deep-merge, and the namespacing/degradation rules.
+- **e2e drives the dogfood end to end** (`backend/internal/e2e/tests/consumer-extension.spec.ts`):
+  the consumer nav entry + inspector panel render, and a run whose pipeline includes
+  `security-auditor` opens the paired consumer window from the completed step. No backend change
+  was needed — the pipeline-shape validation doesn't gate kind existence and the deterministic
+  fake runs an unregistered kind inline (prose), so the window renders without registering the
+  example package on the e2e backend (a deployment that ships the backend package additionally
+  gets the structured assessment on `step.custom`).
+- **Only landed seams were exercised.** No modular-vue upstream work and no `@cat-factory/app`
+  code change — the layer change is docs-only; `deploy/frontend` + `@cat-factory/e2e` are
+  changeset-ignored. Slices B–G add the still-missing seams on top of this proven base.
 
 ## Conventions & gotchas (carried between slices)
 
