@@ -862,6 +862,57 @@ export async function fetchReferenceBranches(opts: {
   return fetched
 }
 
+/** The local tracking ref a fetched PR/MR head lands on, so the reviewer reads `origin/pr-head`. */
+export const PR_HEAD_REF = 'refs/remotes/origin/pr-head'
+
+/**
+ * The `git fetch` refspec that maps a PR/MR's server-side HEAD ref onto {@link PR_HEAD_REF}. A
+ * PR head is a synthetic ref the host maintains, NOT part of a normal clone: GitHub exposes it at
+ * `refs/pull/<n>/head`, GitLab at `refs/merge-requests/<n>/head`. Pure so the provider branch is
+ * unit-tested without a network. The leading `+` forces the update (the ref is read-only here).
+ */
+export function pullHeadRefspec(number: number, provider: 'github' | 'gitlab'): string {
+  const src =
+    provider === 'gitlab' ? `refs/merge-requests/${number}/head` : `refs/pull/${number}/head`
+  return `+${src}:${PR_HEAD_REF}`
+}
+
+/**
+ * Fetch the reviewed PR/MR's HEAD into {@link PR_HEAD_REF} so a read-only reviewer can inspect the
+ * PROPOSED code — files the PR adds (absent from the base checkout) and the head version of every
+ * modified file — with `git diff origin/<base>...origin/pr-head`, `git show origin/pr-head:<path>`.
+ * The base clone never includes the pull ref, and the container agent holds no git credential of
+ * its own (the token lives with the harness), so the agent's own `git fetch pull/<n>/head` fails
+ * on a private repo — this harness-side fetch (which carries the token out of band via GIT_ASKPASS,
+ * exactly like {@link fetchReferenceBranches}) is what actually makes the head reachable.
+ *
+ * Best-effort: a fetch failure (a closed/deleted PR, a host without the pull ref, a transient
+ * network error) is reported via `onSkip` and swallowed — the review then proceeds on the base
+ * checkout + the injected diff, never fails. Returns whether the head was fetched.
+ */
+export async function fetchPullRequestHead(opts: {
+  dir: string
+  number: number
+  provider: 'github' | 'gitlab'
+  ghToken: string
+  signal?: AbortSignal
+  /** Called when the fetch failed, so the caller (which owns a logger) can warn. */
+  onSkip?: (reason: string) => void
+}): Promise<boolean> {
+  const { dir, number, provider, ghToken, signal, onSkip } = opts
+  try {
+    await git(['fetch', '--no-tags', 'origin', pullHeadRefspec(number, provider)], {
+      cwd: dir,
+      signal,
+      env: await authEnv(ghToken),
+    })
+    return true
+  } catch (err) {
+    onSkip?.(err instanceof Error ? err.message : String(err))
+    return false
+  }
+}
+
 /**
  * Push the work branch to origin. The remote URL carries only the username, so
  * the token is supplied here via the askpass env (never in argv).

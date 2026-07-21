@@ -6,6 +6,7 @@ import {
   FOLLOW_UP_GUIDANCE,
   isContainerBackedCompanion,
   isReadOnlyAgentKind,
+  resolvePrNumber,
   systemPromptFor,
   userPromptFor,
 } from '@cat-factory/agents'
@@ -397,6 +398,15 @@ function buildRegisteredAgentBody(
   const exploreReferenceBranches = parts.referenceBranches?.length
     ? parts.referenceBranches
     : undefined
+  // The pr-reviewer (`clone.prHead`) reviews an EXISTING PR: resolve its number so the harness can
+  // prefetch the PR head into `origin/pr-head`. Without it the review clones only the base branch,
+  // and — since the container agent has no git credential to fetch the head itself — files the PR
+  // ADDS and the head version of modified files are unreachable, silently limiting the review to
+  // the injected diff. The number comes from the task's PR fields (`prNumber`/`prUrl`), the same
+  // source the diff preOp uses; absent (unresolvable) ⇒ no prefetch (the review degrades cleanly).
+  const reviewPrNumber = step.clone?.prHead
+    ? (resolvePrNumber(context.block.taskTypeFields) ?? undefined)
+    : undefined
   return {
     kind: 'agent',
     body: {
@@ -411,6 +421,7 @@ function buildRegisteredAgentBody(
       ...(explorePeers ? { peerRepos: explorePeers } : {}),
       ...(exploreReferenceBranches ? { referenceBranches: exploreReferenceBranches } : {}),
       ...(step.clone?.full ? { full: true } : {}),
+      ...(reviewPrNumber !== undefined ? { reviewPrNumber } : {}),
       ...structuredOutputField(step.output),
       ...webTools,
     },

@@ -57,13 +57,17 @@ export const PR_REVIEWER_SYSTEM_PROMPT =
   'The task names the pull request to review — its number (e.g. #123) and URL. The PR’s ' +
   'changed-file list and per-file diff have usually been prepared for you in ' +
   '`.cat-context/pr-diff.md` — READ THAT FIRST and build your review plan from it, rather than ' +
-  'reconstructing the diff by hand. If that file is absent, or a slice needs a patch it does not ' +
-  'contain, fetch the head into the checkout and diff it against the base yourself:\n' +
-  '  git fetch origin pull/<number>/head:pr-head\n' +
-  '  git diff --name-status origin/<base>...pr-head   # <base> = the default branch unless told otherwise\n' +
-  'You always have the full base checkout: read unchanged neighbouring files (call sites, helpers, ' +
-  'tests) from it, and fetch the PR head for full file bodies, whenever a slice needs more than the ' +
-  'patch.\n' +
+  'reconstructing the diff by hand. You have the full BASE checkout (the PR’s target branch is ' +
+  'checked out), and the PR’s HEAD has usually been fetched for you as `origin/pr-head`. When a ' +
+  'slice needs more than the injected patch — the full body of a file the PR ADDS (those files do ' +
+  'NOT exist on the base checkout), the head version of a modified file, or an unchanged ' +
+  'neighbour (call site, helper, test) — read it directly:\n' +
+  '  git diff --name-status origin/<base>...origin/pr-head   # <base> = the PR’s target branch\n' +
+  '  git diff origin/<base>...origin/pr-head -- <path>       # the head diff for one file\n' +
+  '  git show origin/pr-head:<path>                          # a file’s full body at the PR head\n' +
+  'Read unchanged neighbours from the base checkout directly (they are on the checked-out branch). ' +
+  'If `origin/pr-head` is absent (the fetch was skipped), fall back to reviewing from ' +
+  '`.cat-context/pr-diff.md` and note any file you could not fully inspect.\n' +
   'This PR may ALREADY carry review comments — from an earlier review round, from human reviewers, ' +
   'or from other bots. When any exist, they are prepared for you in ' +
   '`.cat-context/pr-existing-comments.md` (each with its file, line, resolved state and text). READ ' +
@@ -160,9 +164,11 @@ export function renderPrDiffContext(number: number, files: GitHubChangedFile[]):
   const header =
     `# Pull request #${number} — changed files and diff\n\n` +
     'Prepared from the GitHub API so you can plan your review slices WITHOUT reconstructing the ' +
-    'diff yourself. You still have the full base checkout: read unchanged neighbouring files from ' +
-    `it, and \`git fetch origin pull/${number}/head\` for full head file bodies, when a slice ` +
-    'needs more than the patch below.\n\n'
+    'diff yourself. You have the full base checkout AND (usually) the PR head fetched as ' +
+    '`origin/pr-head`: read unchanged neighbours from the base checkout, and use ' +
+    '`git show origin/pr-head:<path>` / `git diff origin/<base>...origin/pr-head -- <path>` for the ' +
+    'full body of an ADDED file or the head version of a modified one, when a slice needs more than ' +
+    'the patch below.\n\n'
   const list = [`## Changed files (${files.length})\n`]
   for (const f of files) {
     const rename = f.previousPath ? ` (renamed from ${f.previousPath})` : ''
@@ -189,7 +195,7 @@ export function renderPrDiffContext(number: number, files: GitHubChangedFile[]):
   }
   const footer =
     omitted > 0
-      ? `\n_${omitted} file patch(es) omitted to stay within the injected-diff budget — read those files from the checkout when their slice needs them._\n`
+      ? `\n_${omitted} file patch(es) omitted to stay within the injected-diff budget — read those files with \`git show origin/pr-head:<path>\` (or the base checkout for unchanged neighbours) when their slice needs them._\n`
       : ''
   return `${header}${list.join('\n')}\n\n## Patches\n${patches.join('')}${footer}`
 }
@@ -307,10 +313,13 @@ export const PR_REVIEWER_AGENT_KINDS: AgentKindDefinition[] = [
     systemPrompt: PR_REVIEWER_SYSTEM_PROMPT,
     preOps: [prReviewerDiffPreOp, prReviewerExistingCommentsPreOp],
     // Read-only FULL clone of the repo's BASE (default) branch — a review task targets an
-    // EXISTING external PR that the run never opened, so there is no work branch to clone; the
-    // prompt fetches the PR head by number (`git fetch origin pull/<n>/head`) and diffs it against
-    // the base. Full history so the base..head diff resolves. `agent.output` is derived from the schema.
-    agent: { surface: 'container-explore', clone: { branch: 'base', full: true } },
+    // EXISTING external PR that the run never opened, so there is no work branch to clone. Full
+    // history so the base..head diff resolves. `prHead: true` has the ENGINE resolve the reviewed
+    // PR number and the HARNESS fetch that PR's head into `origin/pr-head` before the run: the
+    // agent has no git credential of its own, so without this prefetch the files the PR ADDS (not
+    // on the base checkout) and the head version of modified files are unreachable and the review
+    // is silently limited to the injected diff. `agent.output` is derived from the schema.
+    agent: { surface: 'container-explore', clone: { branch: 'base', full: true, prHead: true } },
     // Code-aware: the reviewer reads and judges code, so the execution engine folds the review
     // task's selected best-practice / guideline fragments into its system prompt — exactly like
     // the built-in `reviewer` companion (STANDARD_AGENT_TRAITS). Without this the task's chosen

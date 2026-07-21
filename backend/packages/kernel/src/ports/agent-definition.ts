@@ -68,6 +68,17 @@ export interface AgentCloneSpec {
   sparsePaths?: string[]
   /** Full history (needed to diff against base / merge); absent ⇒ shallow. */
   full?: boolean
+  /**
+   * Fetch the reviewed PR's HEAD into the checkout as `origin/pr-head` before the agent runs
+   * (the `pr-reviewer`). A review clones the `base` branch — so files the PR ADDS are absent and
+   * modified files are only at their base version — and the container agent has no git credential
+   * of its own, so it cannot fetch the head itself (the token lives with the harness). When set,
+   * the engine resolves the block's reviewed PR number into the job's `reviewPrNumber` and the
+   * harness fetches `pull/<n>/head` (GitHub) / `merge-requests/<n>/head` (GitLab) with its token,
+   * so the agent can `git diff origin/<base>...origin/pr-head` and read full head file bodies.
+   * Best-effort: a failed fetch just leaves the review on the base checkout + injected diff.
+   */
+  prHead?: boolean
 }
 
 /** The optional LLM step of an agent definition. */
