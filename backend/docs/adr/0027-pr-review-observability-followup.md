@@ -85,7 +85,7 @@ The CLI does not follow the sequential instruction. It writes the todo plan once
 
 The two mechanisms undercut each other. The prompt satisfies `sawTodoPlan`'s precondition (so the fallback disables itself) without delivering the incremental updates the fallback was meant to replace. Progress pinned at 0 for the whole run is the exact symptom.
 
-Even with the gate removed, the fallback alone is weak for this shape: `SliceTracker.progress()` (`subagents.ts:92-105`) derives `completed` from `Task` tool_results, and parallel subagents all return in a burst at the end, so it reports 0/N until the finish then jumps to N/N. D2.1 restored slice _items_ but cannot produce an incremental percentage for the parallel shape.
+Even with the gate removed, the fallback alone is weak for this shape: `SliceTracker.progress()` (`subagents.ts:92-105`) derives `completed` from `Task` tool results, and parallel subagents all return in a burst at the end, so it reports 0/N until the finish then jumps to N/N. D2.1 restored slice items but cannot produce an incremental percentage for the parallel shape.
 
 ### One unverified detail
 
