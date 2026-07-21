@@ -32,7 +32,8 @@
   },
   "dependencies": {
     "@cat-factory/contracts": "workspace:*",
-    "ai": "^6.0.230"
+    "ai": "^6.0.230",
+    "yaml": "^2.9.0"
   },
   "devDependencies": {
     "@vitest/coverage-v8": "^4.1.10",

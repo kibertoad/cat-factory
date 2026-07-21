@@ -40,6 +40,13 @@ import * as v from 'valibot'
 // See `backend/docs/custom-agents.md` for the full model.
 // ---------------------------------------------------------------------------
 
+// The custom test-infrastructure PROVIDER example (autodetection over a multi-file signature).
+export {
+  STACK_DEPLOY_MANIFEST_ID,
+  detectStackDeployProvider,
+  registerExampleStackDeployProvider,
+} from './stack-deploy.js'
+
 export const ORG_REVIEWER_KIND = 'org-reviewer'
 export const SECURITY_AUDITOR_KIND = 'security-auditor'
 export const ORG_AUDIT_PIPELINE_ID = 'pl_org_audit'

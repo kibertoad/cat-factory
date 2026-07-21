@@ -16,6 +16,10 @@ else imports its **ports** and domain types from here.
   `provider-registry.ts`, `vcs-registry.ts`, `step-resolver-registry.ts`,
   `service-registration.ts`. The `registerGate`/`registerPipeline`/`registerAgentKind`/
   `registerVcsProvider` seams live here — a gate/agent package never depends on orchestration.
-- `shared/` — `*.logic.ts` pure helpers.
+- `shared/` — `*.logic.ts` pure helpers, incl. the checkout-free repo-scan primitives
+  (`repo-scan.logic.ts` — `BudgetedRepoScanner`) and the **manifest-probe** toolkit for
+  custom-provider autodetection (`manifest-probe.logic.ts` — `matchManifestSignature`,
+  `firstPresent`/`allPresent`, `readYamlDoc`, `listFiles`, + the `CustomManifestDetection` /
+  `CustomManifestDetectionContext` authoring types).
 
 **See also:** `CLAUDE.md` → "Gates vs agents (the step taxonomy)", "Custom agents".

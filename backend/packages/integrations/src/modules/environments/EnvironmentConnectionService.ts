@@ -41,9 +41,9 @@ import type {
 } from '@cat-factory/contracts'
 import {
   type DetectionConventions,
-  detectCustomManifest,
   detectKubernetesProvisioning,
 } from './provision-detect.logic.js'
+import { arbitrateCustomProviders, resolveCustomProvisioning } from './custom-detect.logic.js'
 import { detectFrontendConfig } from './frontend-detect.logic.js'
 import { RepoReadError } from './repo-read-error.js'
 import type {
@@ -724,31 +724,52 @@ export class EnvironmentConnectionService {
         ],
       }
     }
-    // `custom`: detect the in-repo manifest PATH from the selected type's default (monorepo-aware),
-    // rather than the kubernetes/compose heuristic. Requires a selected `manifestId` to look up
-    // the default; without one there's nothing type-specific to detect.
-    if (input.prefer === 'custom' && input.manifestId) {
-      const type = (await this.listCustomTypes(workspaceId)).find(
-        (t) => t.manifestId === input.manifestId,
-      )
-      return this.mapRepoReadError(input, () =>
-        detectCustomManifest(bound.repo, {
-          gitRef: input.gitRef ?? bound.baseBranch,
-          ...(input.directory ? { directory: input.directory } : {}),
-          manifestId: input.manifestId,
-          ...(type?.defaultManifestPath ? { defaultPath: type.defaultManifestPath } : {}),
-          ...(input.currentManifestPath ? { currentPath: input.currentManifestPath } : {}),
+    // `custom`: run the provider's own autodetection rather than the kubernetes/compose heuristic.
+    // With a SELECTED `manifestId` ⇒ that type's `detect()` hook (or its `defaultManifestPath`
+    // path-only search when it has no hook). WITHOUT one ⇒ ARBITRATE across every registered
+    // type's `detect()` and propose the best match.
+    const registered = this.deps.customManifestTypeRegistry?.list() ?? []
+    const scope = {
+      gitRef: input.gitRef ?? bound.baseBranch,
+      ...(input.directory ? { directory: input.directory } : {}),
+      ...(input.currentManifestPath ? { currentManifestPath: input.currentManifestPath } : {}),
+    }
+    // `custom` tab: the provider's own autodetection (selected type's hook, or arbitration across
+    // all registered types). A null (arbitration found nothing) falls through to the k8s sweep.
+    if (input.prefer === 'custom') {
+      const wire = input.manifestId
+        ? (await this.listCustomTypes(workspaceId)).find((t) => t.manifestId === input.manifestId)
+        : undefined
+      const rec = await this.mapRepoReadError(input, () =>
+        resolveCustomProvisioning(bound.repo, registered, {
+          ...scope,
+          ...(input.manifestId ? { manifestId: input.manifestId } : {}),
+          ...(wire?.defaultManifestPath ? { defaultPath: wire.defaultManifestPath } : {}),
         }),
       )
+      if (rec) return rec
     }
-    return this.mapRepoReadError(input, () =>
+
+    const recommendation = await this.mapRepoReadError(input, () =>
       detectKubernetesProvisioning(bound.repo, {
-        gitRef: input.gitRef ?? bound.baseBranch,
+        gitRef: scope.gitRef,
         ...(input.directory ? { directory: input.directory } : {}),
         ...(input.prefer ? { prefer: input.prefer } : {}),
         ...(this.deps.detectionConventions ? { conventions: this.deps.detectionConventions } : {}),
       }),
     )
+    // Last resort (only when NOT already on the custom tab, which arbitrated above): if the
+    // default sweep found no k8s/compose layout, try custom arbitration so a repo carrying ONLY a
+    // custom provider signature (a company's own deploy convention) is still recognized. This runs
+    // a second scanner (the k8s sweep's cache isn't shared), but only on the no-detection miss path
+    // and still budget-bounded — a rare, bounded cost, not an N+1.
+    if (!recommendation.detected && input.prefer !== 'custom') {
+      const arbitrated = await this.mapRepoReadError(input, () =>
+        arbitrateCustomProviders(bound.repo, registered, scope),
+      )
+      if (arbitrated) return arbitrated
+    }
+    return recommendation
   }
 
   /**
