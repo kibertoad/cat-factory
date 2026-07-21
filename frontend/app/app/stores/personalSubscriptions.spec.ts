@@ -1,17 +1,22 @@
 import { describe, it, expect, beforeEach, vi } from 'vitest'
 import { ApiError } from '~/composables/api/errors'
-import { usePersonalSubscriptionsStore } from '~/stores/personalSubscriptions'
+import {
+  personalPasswordCacheKey,
+  usePersonalSubscriptionsStore,
+} from '~/stores/personalSubscriptions'
 
-// The single localStorage key the store caches the personal password under (private to the
-// store; hard-coded here so the buffer/expiry semantics can be asserted directly).
-const CACHE_KEY = 'cf.personal-pw'
+// The scoped localStorage key the store caches under, for the stubbed apiBase ('') + user
+// (null → 'anon') the default test setup provides (see test/setup.ts). ADR 0026 D7.
+const CACHE_KEY = personalPasswordCacheKey('', null)
+/** The retired pre-scoping global key. */
+const LEGACY_CACHE_KEY = 'cf.personal-pw'
 const HOUR = 60 * 60 * 1000
 /** Mirrors PASSWORD_EXPIRY_BUFFER_MS in the store — the runway a key must have to be ridden. */
 const BUFFER_MS = 8 * HOUR
 
 /** Write a cache entry with an explicit remaining lifetime (positive = valid, negative = past). */
-function seedCache(password: string, msFromNow: number) {
-  localStorage.setItem(CACHE_KEY, JSON.stringify({ password, expiresAt: Date.now() + msFromNow }))
+function seedCache(password: string, msFromNow: number, key = CACHE_KEY) {
+  localStorage.setItem(key, JSON.stringify({ password, expiresAt: Date.now() + msFromNow }))
 }
 
 /** A 428 credential_required error shaped like the server envelope the store parses. */
@@ -58,6 +63,52 @@ describe('personal-password cache expiry buffer', () => {
     seedCache('stale', -HOUR)
     expect(store.getCachedPassword()).toBeUndefined()
     expect(localStorage.getItem(CACHE_KEY)).toBeNull()
+  })
+})
+
+// ADR 0026 D7: the cache is scoped per installation (apiBase) + user, and the retired global
+// `cf.personal-pw` key is purged on sight and never reused.
+describe('per-installation + per-user cache scoping', () => {
+  beforeEach(() => {
+    localStorage.clear()
+  })
+
+  it('derives distinct keys per installation and per user', () => {
+    // Same origin, different installations (apiBase) → different keys.
+    expect(personalPasswordCacheKey('https://a.example', 'usr_1')).not.toBe(
+      personalPasswordCacheKey('https://b.example', 'usr_1'),
+    )
+    // Same installation, different users → different keys.
+    expect(personalPasswordCacheKey('https://a.example', 'usr_1')).not.toBe(
+      personalPasswordCacheKey('https://a.example', 'usr_2'),
+    )
+    // A missing user id collapses to a stable `anon` segment (auth disabled).
+    expect(personalPasswordCacheKey('https://a.example', null)).toBe(
+      personalPasswordCacheKey('https://a.example', undefined),
+    )
+  })
+
+  it('does NOT read another installation/user cache entry', () => {
+    const store = usePersonalSubscriptionsStore()
+    // A healthy entry belonging to a DIFFERENT scope must be invisible to this store.
+    seedCache('other-secret', 40 * HOUR, personalPasswordCacheKey('https://other', 'usr_x'))
+    expect(store.getCachedPassword()).toBeUndefined()
+  })
+
+  it('purges the retired global `cf.personal-pw` key on read and never reuses it', () => {
+    const store = usePersonalSubscriptionsStore()
+    seedCache('legacy-secret', 40 * HOUR, LEGACY_CACHE_KEY)
+    // The legacy value is not offered (the scoped key is absent)…
+    expect(store.getCachedPassword()).toBeUndefined()
+    // …and the retired global key is removed so it can't be reused across installs/users.
+    expect(localStorage.getItem(LEGACY_CACHE_KEY)).toBeNull()
+  })
+
+  it('round-trips a password under the scoped key', () => {
+    const store = usePersonalSubscriptionsStore()
+    seedCache('mine', 40 * HOUR)
+    expect(store.getCachedPassword()).toBe('mine')
+    expect(localStorage.getItem(CACHE_KEY)).not.toBeNull()
   })
 })
 

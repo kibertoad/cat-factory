@@ -5072,9 +5072,9 @@
     "suggestedFix": "Suggested fix:",
     "line": "line {line}",
     "reviewing": {
-      "slicing": {
-        "title": "Slicing the diff into chunks…",
-        "hint": "Grouping the changed files into cohesive chunks so each can be reviewed on its own. The chunk list appears here once slicing is done."
+      "planning": {
+        "title": "Reviewing the pull request…",
+        "hint": "The reviewer is working through the diff. Per-slice progress appears here once it groups the changes into slices."
       },
       "reviewingChunks": {
         "title": "Reviewing the chunks…",
@@ -5091,7 +5091,7 @@
       }
     },
     "phase": {
-      "slicing": "Slicing…",
+      "planning": "Reviewing…",
       "reviewing": "Reviewing {completed}/{total} slices",
       "awaiting": "Findings ready",
       "challenging": "Investigating…",

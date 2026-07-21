@@ -3,7 +3,7 @@ import type { PrReviewStepState, StepSubtasks } from '~/types/execution'
 import {
   activeChunkLabels,
   chunkReviewPercent,
-  isSlicingChunks,
+  hasNoSlicePlan,
   prReviewPhase,
 } from './prReviewProgress'
 
@@ -14,18 +14,19 @@ const subtasks = (over: Partial<StepSubtasks>): StepSubtasks => ({
   ...over,
 })
 
-describe('isSlicingChunks', () => {
-  it('is slicing when there is no todo list yet (null/undefined or empty)', () => {
-    // No plan committed → the reviewer is still grouping the diff into chunks.
-    expect(isSlicingChunks(null)).toBe(true)
-    expect(isSlicingChunks(undefined)).toBe(true)
-    expect(isSlicingChunks(subtasks({ total: 0 }))).toBe(true)
+describe('hasNoSlicePlan', () => {
+  it('has no plan when there is no todo list yet (null/undefined or empty)', () => {
+    // No per-slice plan reported — a NEUTRAL signal (grouping, OR a subagent review that never
+    // writes a parent plan), NOT proof of "slicing".
+    expect(hasNoSlicePlan(null)).toBe(true)
+    expect(hasNoSlicePlan(undefined)).toBe(true)
+    expect(hasNoSlicePlan(subtasks({ total: 0 }))).toBe(true)
   })
 
-  it('is not slicing once the todo list exists (slicing is done)', () => {
-    expect(isSlicingChunks(subtasks({ total: 3, completed: 1 }))).toBe(false)
-    // A single-chunk plan still counts as sliced — a plan of size 1 is a committed plan.
-    expect(isSlicingChunks(subtasks({ total: 1 }))).toBe(false)
+  it('has a plan once the todo list exists', () => {
+    expect(hasNoSlicePlan(subtasks({ total: 3, completed: 1 }))).toBe(false)
+    // A single-slice plan still counts — a plan of size 1 is a committed plan.
+    expect(hasNoSlicePlan(subtasks({ total: 1 }))).toBe(false)
   })
 })
 
@@ -89,15 +90,16 @@ describe('prReviewPhase', () => {
     expect(prReviewPhase(state('skipped'), null)).toBeNull()
   })
 
-  it('is slicing while reviewing with no todo list yet (counts zeroed)', () => {
-    // No plan committed → don't leak a misleading 0/0 slice count.
+  it('is the neutral `planning` kind while reviewing with no todo list yet (counts zeroed)', () => {
+    // No plan reported → surface a neutral "reviewing, planning" phase (NOT "slicing") and don't
+    // leak a misleading 0/0 slice count.
     expect(prReviewPhase(state('reviewing'), null)).toEqual({
-      kind: 'slicing',
+      kind: 'planning',
       completed: 0,
       total: 0,
     })
     expect(prReviewPhase(state('reviewing'), subtasks({ total: 0 }))).toEqual({
-      kind: 'slicing',
+      kind: 'planning',
       completed: 0,
       total: 0,
     })

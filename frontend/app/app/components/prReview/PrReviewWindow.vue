@@ -21,7 +21,7 @@ import type {
   StepSubtasks,
 } from '~/types/execution'
 import { subtaskIconClass } from '~/utils/pipelineRender'
-import { activeChunkLabels, chunkReviewPercent, isSlicingChunks } from '~/utils/prReviewProgress'
+import { activeChunkLabels, chunkReviewPercent, hasNoSlicePlan } from '~/utils/prReviewProgress'
 import ResultWindowShell from '~/components/panels/ResultWindowShell.vue'
 import StepRunMeta from '~/components/panels/StepRunMeta.vue'
 
@@ -55,15 +55,18 @@ const awaiting = computed(() => status.value === 'awaiting_selection')
 const challenging = computed(() => status.value === 'challenging')
 // The reviewer's live todo list while it works, streamed onto the step. Its entries are the
 // cohesive slices/chunks the agent grouped the diff into (plus a final "aggregate" step). The
-// derivation of the two `reviewing`-phase sub-states from it lives in `~/utils/prReviewProgress`
-// (pure + unit-tested); see that module for the slicing-vs-reviewing signal.
+// derivation of the `reviewing`-phase sub-states from it lives in `~/utils/prReviewProgress`
+// (pure + unit-tested); see that module for the has-a-plan signal.
 const subtasks = computed<StepSubtasks | null>(() => step.value?.subtasks ?? null)
 
 /**
- * Slicing sub-phase: the reviewer is still grouping the diff into chunks (no todo list yet).
- * Once the list exists, slicing is done and we render the per-chunk status list instead.
+ * Planning sub-phase: no per-slice todo plan has been reported yet. This is NEUTRAL — the
+ * reviewer may still be grouping the diff, OR it may be reviewing via parallel subagents that
+ * never write a parent todo plan (ADR 0026 D2.2). Either way we must NOT claim a specific
+ * "slicing" phase; we show a neutral "reviewing…" state and switch to the per-slice list the
+ * moment a plan exists.
  */
-const slicing = computed(() => status.value === 'reviewing' && isSlicingChunks(subtasks.value))
+const planning = computed(() => status.value === 'reviewing' && hasNoSlicePlan(subtasks.value))
 
 /** Chunk-review completion, clamped 0..100 for the progress bar. */
 const chunkPercent = computed(() => chunkReviewPercent(subtasks.value))
@@ -256,28 +259,29 @@ async function onDismiss(id: string): Promise<void> {
 
     <div class="flex min-h-0 flex-1">
       <div class="min-w-0 flex-1 overflow-y-auto px-5 py-4">
-        <!-- Reviewing: the read-only reviewer is still working. The phase is told apart precisely —
-           SLICING (still grouping the diff into chunks, no plan yet) vs REVIEWING (slicing done,
-           working through the chunks) — so the copy never claims "reviewing" while it's slicing. -->
+        <!-- Reviewing: the read-only reviewer is still working. Two sub-states, told apart by
+           whether a per-slice todo plan exists — a NEUTRAL "planning" state (no plan reported yet;
+           may be grouping OR reviewing via subagents that write no parent plan) vs the per-slice
+           list. The copy never asserts a specific "slicing" phase from an empty todo list. -->
         <div
           v-if="status === 'reviewing'"
           data-testid="pr-review-reviewing"
           class="flex h-full flex-col"
         >
-          <!-- SLICING: no todo list yet — the reviewer is still grouping the diff into chunks. -->
+          <!-- PLANNING: no per-slice plan yet — a neutral "reviewing…" state, not a "slicing" claim. -->
           <div
-            v-if="slicing"
-            data-testid="pr-review-slicing"
+            v-if="planning"
+            data-testid="pr-review-planning"
             class="flex h-full flex-col items-center justify-center gap-2 py-10 text-center text-slate-400"
           >
             <UIcon name="i-lucide-loader-circle" class="h-8 w-8 animate-spin opacity-60" />
-            <p class="text-sm text-slate-200">{{ t('prReview.reviewing.slicing.title') }}</p>
+            <p class="text-sm text-slate-200">{{ t('prReview.reviewing.planning.title') }}</p>
             <p class="max-w-sm text-[11px] text-slate-500">
-              {{ t('prReview.reviewing.slicing.hint') }}
+              {{ t('prReview.reviewing.planning.hint') }}
             </p>
           </div>
 
-          <!-- REVIEWING: slicing is done — show every chunk with its status + which are active now. -->
+          <!-- REVIEWING: a per-slice plan exists — show every slice with its status + which are active now. -->
           <div v-else data-testid="pr-review-reviewing-chunks" class="py-2">
             <div class="mb-1 flex items-center gap-2 text-sm text-slate-200">
               <UIcon

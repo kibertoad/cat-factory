@@ -29,6 +29,7 @@ import {
   type ContainerRuntimeAdapter,
   createRuntimeAdapter,
   DockerRuntimeAdapter,
+  resolveInstallId,
 } from './runtimes/index.js'
 import { requireHarnessSharedSecret } from './config.js'
 import { harnessAllowedHosts } from './github.js'
@@ -240,6 +241,9 @@ export class LocalContainerRunnerTransport implements RunnerTransport {
         addHostGateway: true,
         localDind: true,
         pooling: true,
+        // Namespace this install's containers by a secret-derived id (ADR 0026 D5); the env-based
+        // factory injects an adapter, so this default only runs on a direct construction.
+        installId: resolveInstallId({ HARNESS_SHARED_SECRET: options.sharedSecret }),
       })
     this.image = options.image
     this.sharedSecret = options.sharedSecret

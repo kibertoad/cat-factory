@@ -56,6 +56,57 @@ export interface DispatchFailureClassification {
 }
 
 /**
+ * What the step had already accomplished when the dispatch threw — the "run history" the
+ * classifier needs to tell a fresh-start failure apart from a container lost AFTER work had
+ * begun (ADR 0026 D1). Populated from the step at the throw site; every field is optional so
+ * the first-dispatch path (no history) passes nothing and gets the classic framing.
+ */
+export interface DispatchFailureContext {
+  /**
+   * Automatic crash-eviction recoveries already spent on this step. `> 0` means the step
+   * reached the agent phase, lost its container to an eviction, and this throw is the FAILED
+   * recovery re-dispatch — not a container that never started. This is the primary "work had
+   * begun" signal (the recovery path increments it before re-dispatching).
+   */
+  evictionRecoveries?: number
+  /** Transient-churn recoveries already spent — same "work had begun" signal as above. */
+  transientEvictionRecoveries?: number
+  /** Epoch ms the step first began executing, to render "after N minutes of work". */
+  startedAt?: number | null
+  /** Slices the reviewer had already grouped the diff into (partial progress), if any. */
+  sliceCount?: number
+  /** Injected `now` (epoch ms) for deterministic tests; defaults to `Date.now()`. */
+  now?: number
+}
+
+/** Whole minutes of work between `startedAt` and now, or null when it can't be computed / is <1. */
+function elapsedWorkMinutes(context: DispatchFailureContext): number | null {
+  if (context.startedAt == null) return null
+  const now = context.now ?? Date.now()
+  const minutes = Math.floor((now - context.startedAt) / 60_000)
+  return minutes >= 1 ? minutes : null
+}
+
+/**
+ * The honest terminal message for a container lost to an eviction AFTER the step had done work
+ * (see {@link classifyDispatchFailure}'s catch-all). Reads as "evicted mid-work, unrecoverable"
+ * rather than "never started", and folds in the elapsed minutes + any partial slice count so the
+ * board and PR-review window can render "work was in progress".
+ */
+function evictionAfterWorkMessage(context: DispatchFailureContext): string {
+  const minutes = elapsedWorkMinutes(context)
+  const when =
+    minutes != null
+      ? `after ${minutes} minute${minutes === 1 ? '' : 's'} of work`
+      : 'after work had begun'
+  const slices =
+    context.sliceCount && context.sliceCount > 0
+      ? ` (${context.sliceCount} slice${context.sliceCount === 1 ? '' : 's'} reviewed)`
+      : ''
+  return `The container was evicted ${when}${slices} and could not be recovered.`
+}
+
+/**
  * Classify a throw from an async agent dispatch (`startJob`) into a terminal failure. The
  * dispatch catch used to assume EVERY throw was the container failing to accept the job, but a
  * job is also built (auth, repo target, context) BEFORE any container is contacted — so a
@@ -70,11 +121,22 @@ export interface DispatchFailureClassification {
  *  - A container eviction/crash routes to `evicted` (a fresh-container retry may help).
  *  - A structured {@link DispatchError} from a transport `dispatch()` routes to `dispatch` and
  *    surfaces its already-elaborated message verbatim (the raw status line + any 404 stale-image
- *    remedy), rather than the generic "failed to start" framing.
+ *    remedy), rather than the generic "failed to start" framing. This DELIBERATELY takes
+ *    precedence over the evicted-after-work case below: even on a recovery re-dispatch of a step
+ *    that had done work, that elaborated message (e.g. "redeploy the stale image") is both more
+ *    actionable and less misleading than the generic eviction message — and it is NOT the "failed
+ *    to start" wording D1 set out to remove — so a genuine dispatch fault keeps its own framing.
+ *  - A generic throw on a step that had ALREADY begun work (`context.evictionRecoveries > 0` —
+ *    the failed recovery re-dispatch of a container that reached the agent phase and was then
+ *    evicted) is framed as `evicted` with an eviction-after-work message, NOT the misleading
+ *    "container failed to start" (which reads as "never started"). See ADR 0026 D1.
  *  - Anything else is a genuine container accept failure (`dispatch`): the container/runner
- *    never accepted the job (an HTTP/network error, a capacity blip).
+ *    never accepted the job (an HTTP/network error, a capacity blip) before any work happened.
  */
-export function classifyDispatchFailure(error: unknown): DispatchFailureClassification {
+export function classifyDispatchFailure(
+  error: unknown,
+  context: DispatchFailureContext = {},
+): DispatchFailureClassification {
   const message = getErrorMessage(error)
   if (error instanceof DomainError) {
     const reason = error.details?.reason
@@ -89,7 +151,18 @@ export function classifyDispatchFailure(error: unknown): DispatchFailureClassifi
     return { error: message, failureKind: 'evicted', detail: message }
   }
   if (error instanceof DispatchError) {
+    // Intentionally BEFORE the evicted-after-work branch: a structured dispatch fault carries an
+    // accurate, actionable message (the raw status line + any stale-image remedy) that beats the
+    // generic eviction wording even when the step had already done work — so keep `dispatch`.
     return { error: message, failureKind: 'dispatch', detail: message }
+  }
+  // The step had already reached the agent phase and lost a container to an eviction (the
+  // recovery path bumped the recovery count before this re-dispatch): the run DID work, so
+  // report an unrecoverable eviction rather than a fresh-start failure. The verbatim throw
+  // stays on `detail` for the post-mortem.
+  const recoveries = (context.evictionRecoveries ?? 0) + (context.transientEvictionRecoveries ?? 0)
+  if (recoveries > 0) {
+    return { error: evictionAfterWorkMessage(context), failureKind: 'evicted', detail: message }
   }
   return { error: 'The container failed to start.', failureKind: 'dispatch', detail: message }
 }

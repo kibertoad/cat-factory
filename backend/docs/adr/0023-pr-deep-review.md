@@ -197,14 +197,16 @@ so a human curates the findings themselves — not just which to act on:
   as "not yet recorded" and coerces over it — so the deep-review window renders a real in-flight
   phase instead of an empty panel. The reviewer's prompt maintains a per-slice todo list, which
   surfaces as the step's live `subtasks`; the window uses the presence of that list to tell the two
-  `reviewing` sub-phases apart precisely — SLICING (no todo list yet, the diff is still being grouped
-  into chunks) vs REVIEWING (the list exists, so slicing is done) — and in the reviewing sub-phase it
+  `reviewing` sub-phases apart — a neutral PLANNING state (no per-slice todo plan reported yet — the
+  reviewer may still be grouping the diff, OR reviewing via parallel subagents that never write a
+  parent plan) vs REVIEWING (a per-slice plan exists) — and in the reviewing sub-phase it
   lists every chunk with an explicit status (Reviewed / Reviewing… / Queued) plus a "Reviewing now"
   callout for the in-progress chunk(s), rather than a bare slices-reviewed count or "agent running".
+  The UI never asserts a specific "slicing" phase purely from an empty todo list (ADR 0026 D2.2).
   The same sub-phase is surfaced compactly on the **board** — the task-card mini pipeline and the
-  focus-view timeline render a `PrReviewPhaseBadge` ("Slicing…" / "Reviewing X/Y slices", plus the
+  focus-view timeline render a `PrReviewPhaseBadge` ("Reviewing…" / "Reviewing X/Y slices", plus the
   awaiting / investigating / fixing / posting states) in place of the generic subtask count, derived
-  by the pure `prReviewPhase` helper (a sibling of `isSlicingChunks`, unit-tested in
+  by the pure `prReviewPhase` helper (a sibling of `hasNoSlicePlan`, unit-tested in
   `prReviewProgress.spec.ts`). The window itself also carries the shared `StepRunMeta` run-details
   block (elapsed / model / run id + the LLM call/token rollup), so the reviewer's run reads the same
   "which run / how did the model do" facts as the generic step detail and the gate/tester windows.

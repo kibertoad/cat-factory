@@ -23,7 +23,7 @@ const phase = computed(() => prReviewPhase(props.step.prReview, props.step.subta
 // working (suppressed on a failed run). `awaiting` is the parked "findings ready" state — a
 // steady amber prompt, not a spinner.
 const PHASE_META: Record<PrReviewPhaseKind, { icon: string; spin: boolean; class: string }> = {
-  slicing: { icon: 'i-lucide-loader-circle', spin: true, class: 'text-indigo-300' },
+  planning: { icon: 'i-lucide-loader-circle', spin: true, class: 'text-indigo-300' },
   reviewing: { icon: 'i-lucide-loader-circle', spin: true, class: 'text-indigo-300' },
   awaiting: { icon: 'i-lucide-clipboard-check', spin: false, class: 'text-amber-300' },
   challenging: { icon: 'i-lucide-gavel', spin: true, class: 'text-indigo-300' },
@@ -35,7 +35,7 @@ const PHASE_META: Record<PrReviewPhaseKind, { icon: string; spin: boolean; class
 // label fails the typecheck (the sanctioned dynamic enum→key guard — tier 1 can't see a
 // runtime-built key), matching the `CHUNK_STATUS_KEY` pattern in PrReviewWindow.vue.
 const PHASE_LABEL_KEY: Record<PrReviewPhaseKind, string> = {
-  slicing: 'prReview.phase.slicing',
+  planning: 'prReview.phase.planning',
   reviewing: 'prReview.phase.reviewing',
   awaiting: 'prReview.phase.awaiting',
   challenging: 'prReview.phase.challenging',

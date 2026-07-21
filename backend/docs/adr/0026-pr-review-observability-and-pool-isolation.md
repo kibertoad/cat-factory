@@ -1,6 +1,6 @@
 # ADR 0026: PR-review run observability and warm-pool isolation
 
-- **Status:** Proposed
+- **Status:** Partially implemented — D1, D2.2, D5, D7 landed; D2.1, D3, D4, D6 outstanding
 - **Date:** 2026-07-21
 - **Context layer:** backend (`@cat-factory/agents`, `@cat-factory/orchestration`, `@cat-factory/contracts`, executor-harness, `backend/runtimes/local`) + frontend (`@cat-factory/app`)
 - **Relates to:** ADR 0023 (PR deep review), `backend/docs/container-reaping.md`, PR #1296 (E2BIG fold fix)
@@ -127,12 +127,24 @@ Key the cache by discriminators the client already has: the configured API base 
 
 Independent changes; suggested order by value and blast radius:
 
-1. D1 (small, high value, no behavioural risk).
-2. D2.2 then D2.1 (the reported symptom; D2.2 is a safe UI copy change that stops the false "slicing" claim even before D2.1 lands).
-3. D6.1 and D7 (both small and self-contained: an O(1) boot drift check, and per-installation cache scoping that also closes a cross-install credential-reuse path).
-4. D5 (prevents a class of local-mode failures on multi-install machines).
-5. D6.2 and the surfaced issue, then D6.3 remediation.
-6. D3 and D4 (telemetry and early-wedge diagnostics).
+1. D1 (small, high value, no behavioural risk). **✅ Landed** — `classifyDispatchFailure` now
+   takes the step's run history (`evictionRecoveries`, `startedAt`, partial slice count) and
+   frames a container lost after work began as `evicted` with an "evicted after N minutes of work"
+   message, not "container failed to start".
+2. D2.2 then D2.1 (the reported symptom; D2.2 is a safe UI copy change that stops the false
+   "slicing" claim even before D2.1 lands). **✅ D2.2 landed** — the reviewer's no-plan state is a
+   neutral `planning` phase ("Reviewing…"), never a "slicing" assertion inferred from an empty
+   todo list. D2.1 (subagent-transcript watcher) is still outstanding.
+3. D6.1 and D7 (both small and self-contained: an O(1) boot drift check, and per-installation
+   cache scoping that also closes a cross-install credential-reuse path). **✅ D7 landed** — the
+   personal-password cache is keyed `cf.personal-pw:<hash(apiBase)>:<userId>` and the retired
+   global key is purged on sight. D6.1 is still outstanding.
+4. D5 (prevents a class of local-mode failures on multi-install machines). **✅ Landed** — every
+   managed local container is namespaced by a secret-derived install id (Docker label /
+   Apple name prefix) and the reaper/adopter/enumerations filter strictly on it; see the
+   label contract in `backend/docs/container-reaping.md`.
+5. D6.2 and the surfaced issue, then D6.3 remediation. **Outstanding.**
+6. D3 and D4 (telemetry and early-wedge diagnostics). **Outstanding.**
 
 The immediate `environment_connections` drift on this install is still cleared operationally by re-entering the affected credentials; D6 is what stops the next occurrence from being discovered the hard way.
 

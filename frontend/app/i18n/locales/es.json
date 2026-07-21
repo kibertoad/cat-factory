@@ -4931,9 +4931,9 @@
     "suggestedFix": "Corrección sugerida:",
     "line": "línea {line}",
     "reviewing": {
-      "slicing": {
-        "title": "Dividiendo el diff en fragmentos…",
-        "hint": "Agrupando los archivos modificados en fragmentos coherentes para revisar cada uno por separado. La lista de fragmentos aparecerá aquí cuando termine la división."
+      "planning": {
+        "title": "Revisando la pull request…",
+        "hint": "El revisor está analizando el diff. El progreso por sección aparecerá aquí cuando agrupe los cambios en secciones."
       },
       "reviewingChunks": {
         "title": "Revisando los fragmentos…",
@@ -4950,7 +4950,7 @@
       }
     },
     "phase": {
-      "slicing": "Dividiendo…",
+      "planning": "Revisando…",
       "reviewing": "Revisando {completed}/{total} secciones",
       "awaiting": "Resultados listos",
       "challenging": "Investigando…",

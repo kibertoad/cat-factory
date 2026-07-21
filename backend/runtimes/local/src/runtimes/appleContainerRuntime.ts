@@ -26,6 +26,8 @@ import {
 
 const NAME_PREFIX = 'cf-'
 const LABEL_MANAGED = 'cat-factory.managed=apple'
+/** Per-install label (parity with the Docker adapter; the actual scoping is the name prefix). */
+const LABEL_INSTALL = 'cat-factory.install'
 
 /**
  * Statuses we treat as terminal — i.e. safe to reap. A container whose status we can't
@@ -34,23 +36,11 @@ const LABEL_MANAGED = 'cat-factory.managed=apple'
  */
 const TERMINAL_STATUSES = new Set(['stopped', 'exited', 'dead'])
 
-/** The deterministic container name (== id) for a run. */
-function runName(runId: string): string {
-  // Container names allow [a-zA-Z0-9][a-zA-Z0-9_.-]*; run ids are already in that set,
-  // but sanitise defensively so an unusual id can't produce an invalid name.
-  return `${NAME_PREFIX}${runId.replace(/[^a-zA-Z0-9_.-]/g, '-')}`
-}
-
 interface ListEntry {
   id: string
   /** The assigned `--name`, when the CLI reports it separately from `id`. */
   name?: string
   status: string
-}
-
-/** Whether a listed container is one we manage (matched on either the id or the name). */
-function isManaged(row: ListEntry): boolean {
-  return row.id.startsWith(NAME_PREFIX) || (row.name?.startsWith(NAME_PREFIX) ?? false)
 }
 
 /** Parse `container list --format json` into a normalised {id,name,status} list, tolerantly. */
@@ -139,13 +129,37 @@ export class AppleContainerRuntimeAdapter implements ContainerRuntimeAdapter {
   // keeps the per-run path here even when a pool size is configured.
   readonly capabilities = { localDind: false, pooling: false }
 
-  constructor(options: { binary?: string; hostAlias: string }) {
+  /**
+   * The deterministic container-name PREFIX for this installation: `cf-<installId>-`. Folding the
+   * install id into the name (Apple `container` has no reliable label filter, so identity is
+   * name-based) NAMESPACES the reaper + enumerations, so a machine running two installs against one
+   * `container` daemon never reaps or lists a neighbour's per-run container (ADR 0026 D5). Absent
+   * install id ⇒ the bare `cf-` prefix.
+   */
+  private readonly namePrefix: string
+  private readonly installId: string
+
+  constructor(options: { binary?: string; hostAlias: string; installId: string }) {
     this.binary = options.binary ?? 'container'
     this.hostAlias = options.hostAlias
+    this.installId = options.installId
+    this.namePrefix = `${NAME_PREFIX}${options.installId}-`
+  }
+
+  /** The deterministic container name (== id) for a run, scoped to this installation. */
+  private runName(runId: string): string {
+    // Container names allow [a-zA-Z0-9][a-zA-Z0-9_.-]*; run ids are already in that set,
+    // but sanitise defensively so an unusual id can't produce an invalid name.
+    return `${this.namePrefix}${runId.replace(/[^a-zA-Z0-9_.-]/g, '-')}`
+  }
+
+  /** Whether a listed container is one THIS install manages (matched on either the id or the name). */
+  private isManaged(row: ListEntry): boolean {
+    return row.id.startsWith(this.namePrefix) || (row.name?.startsWith(this.namePrefix) ?? false)
   }
 
   async run(exec: ContainerExec, spec: RunContainerSpec): Promise<string> {
-    const name = runName(spec.runId)
+    const name = this.runName(spec.runId)
     const args = [
       'run',
       '-d',
@@ -153,6 +167,8 @@ export class AppleContainerRuntimeAdapter implements ContainerRuntimeAdapter {
       name,
       '-l',
       LABEL_MANAGED,
+      '-l',
+      `${LABEL_INSTALL}=${this.installId}`,
       '-e',
       `HARNESS_SHARED_SECRET=${spec.sharedSecret}`,
     ]
@@ -168,7 +184,7 @@ export class AppleContainerRuntimeAdapter implements ContainerRuntimeAdapter {
   }
 
   async find(exec: ContainerExec, runId: string): Promise<string | undefined> {
-    const name = runName(runId)
+    const name = this.runName(runId)
     const rows = parseList((await exec(['list', '--all', '--format', 'json'])).stdout)
     // The deterministic name is the addressable handle (inspect/delete accept it). Match it
     // against either the `id` or the `name` field, since `container list`'s `id` may be a
@@ -212,7 +228,7 @@ export class AppleContainerRuntimeAdapter implements ContainerRuntimeAdapter {
   }
 
   async removeRun(exec: ContainerExec, runId: string): Promise<void> {
-    await this.remove(exec, runName(runId))
+    await this.remove(exec, this.runName(runId))
   }
 
   async reapExited(exec: ContainerExec): Promise<number> {
@@ -221,7 +237,7 @@ export class AppleContainerRuntimeAdapter implements ContainerRuntimeAdapter {
     // `status=exited` filter). Address by the assigned name when present (always a valid
     // handle), else the id.
     const rows = parseList((await exec(['list', '--all', '--format', 'json'])).stdout).filter(
-      (r) => isManaged(r) && TERMINAL_STATUSES.has(r.status),
+      (r) => this.isManaged(r) && TERMINAL_STATUSES.has(r.status),
     )
     if (rows.length) {
       await exec(['delete', '--force', ...rows.map((r) => r.name ?? r.id)]).catch(() => undefined)
@@ -237,18 +253,18 @@ export class AppleContainerRuntimeAdapter implements ContainerRuntimeAdapter {
   async listRunContainers(
     exec: ContainerExec,
   ): Promise<Array<{ runId: string; containerId: string }>> {
-    // Running (non-terminal) managed VMs. The deterministic name IS `cf-<runId>`, so the run
-    // id is recovered by stripping the prefix (run ids only ever use `[a-zA-Z0-9_]`, which the
-    // name sanitizer leaves untouched, so this round-trips). Pooling is unsupported here, so
-    // every managed container is a per-run one.
+    // Running (non-terminal) managed VMs for THIS install. The deterministic name IS
+    // `cf-<installId>-<runId>`, so the run id is recovered by stripping the per-install prefix (run
+    // ids only ever use `[a-zA-Z0-9_]`, which the name sanitizer leaves untouched, so this
+    // round-trips). Pooling is unsupported here, so every managed container is a per-run one.
     const rows = parseList((await exec(['list', '--all', '--format', 'json'])).stdout).filter(
-      (r) => isManaged(r) && !TERMINAL_STATUSES.has(r.status),
+      (r) => this.isManaged(r) && !TERMINAL_STATUSES.has(r.status),
     )
     return rows
       .map((r) => {
         const handle = r.name ?? r.id
-        const named = handle.startsWith(NAME_PREFIX) ? handle : (r.id ?? handle)
-        return { runId: named.slice(NAME_PREFIX.length), containerId: handle }
+        const named = handle.startsWith(this.namePrefix) ? handle : (r.id ?? handle)
+        return { runId: named.slice(this.namePrefix.length), containerId: handle }
       })
       .filter((c) => c.runId && c.containerId)
   }

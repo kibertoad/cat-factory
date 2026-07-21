@@ -19,6 +19,14 @@ const LABEL_RUN = 'cat-factory.runId'
 const LABEL_MANAGED = 'cat-factory.managed=local-docker'
 /** Marks a reusable warm-pool member (not bound to any run id; leased in-process). */
 const LABEL_POOL = 'cat-factory.pool=1'
+/**
+ * NAMESPACES a container by installation (ADR 0026 D5). Every managed container carries
+ * `cat-factory.install=<installId>`, and every daemon-wide enumeration filters on it, so a machine
+ * running two installs against one Docker daemon never adopts, reaps, or re-leases a container the
+ * OTHER install created — critical for the warm pool, whose members bake this install's
+ * `HARNESS_SHARED_SECRET` in and would fail authentication if leased by a neighbour.
+ */
+const LABEL_INSTALL = 'cat-factory.install'
 
 export interface DockerRuntimeAdapterOptions {
   id: RuntimeId
@@ -29,6 +37,8 @@ export interface DockerRuntimeAdapterOptions {
   localDind: boolean
   /** Whether the warm-container pool is supported (Docker-family: true). */
   pooling: boolean
+  /** Stable per-installation id namespacing this install's containers (see {@link LABEL_INSTALL}). */
+  installId: string
 }
 
 export class DockerRuntimeAdapter implements ContainerRuntimeAdapter {
@@ -40,18 +50,26 @@ export class DockerRuntimeAdapter implements ContainerRuntimeAdapter {
   // preview's served-app port is reachable (and pinnable) on localhost.
   readonly publishesToLocalhost = true
   private readonly addHostGateway: boolean
+  private readonly installId: string
 
   constructor(options: DockerRuntimeAdapterOptions) {
     this.id = options.id
     this.binary = options.binary
     this.hostAlias = options.hostAlias
     this.addHostGateway = options.addHostGateway
+    this.installId = options.installId
     this.capabilities = { localDind: options.localDind, pooling: options.pooling }
+  }
+
+  /** The `--filter` pair scoping a daemon-wide enumeration to THIS install's containers. */
+  private installFilter(): string[] {
+    return ['--filter', `label=${LABEL_INSTALL}=${this.installId}`]
   }
 
   async run(exec: ContainerExec, spec: RunContainerSpec): Promise<string> {
     // A pool member is labelled `pool=1` and NOT bound to a run id (the transport leases
-    // it in-process); a classic per-run container is labelled by its run id.
+    // it in-process); a classic per-run container is labelled by its run id. Every container also
+    // carries the per-install label so a neighbouring install can't adopt/reap/reuse it.
     const args = [
       'run',
       '-d',
@@ -59,6 +77,8 @@ export class DockerRuntimeAdapter implements ContainerRuntimeAdapter {
       spec.pool ? LABEL_POOL : `${LABEL_RUN}=${spec.runId}`,
       '--label',
       LABEL_MANAGED,
+      '--label',
+      `${LABEL_INSTALL}=${this.installId}`,
       '-p',
       `127.0.0.1:0:${HARNESS_PORT}`,
       '-e',
@@ -91,6 +111,7 @@ export class DockerRuntimeAdapter implements ContainerRuntimeAdapter {
       `label=${LABEL_RUN}=${runId}`,
       '--filter',
       `label=${LABEL_MANAGED}`,
+      ...this.installFilter(),
     ])
     return stdout.trim().split('\n')[0]?.trim() || undefined
   }
@@ -140,6 +161,7 @@ export class DockerRuntimeAdapter implements ContainerRuntimeAdapter {
       `label=${LABEL_RUN}=${runId}`,
       '--filter',
       `label=${LABEL_MANAGED}`,
+      ...this.installFilter(),
     ])
     const ids = stdout
       .trim()
@@ -155,6 +177,7 @@ export class DockerRuntimeAdapter implements ContainerRuntimeAdapter {
       '-aq',
       '--filter',
       `label=${LABEL_MANAGED}`,
+      ...this.installFilter(),
       '--filter',
       'status=exited',
     ])
@@ -173,6 +196,7 @@ export class DockerRuntimeAdapter implements ContainerRuntimeAdapter {
       '-aq',
       '--filter',
       `label=${LABEL_MANAGED}`,
+      ...this.installFilter(),
       '--filter',
       `label=${LABEL_POOL}`,
     ])
@@ -193,6 +217,7 @@ export class DockerRuntimeAdapter implements ContainerRuntimeAdapter {
       'ps',
       '--filter',
       `label=${LABEL_MANAGED}`,
+      ...this.installFilter(),
       '--filter',
       `label=${LABEL_RUN}`,
       '--filter',
