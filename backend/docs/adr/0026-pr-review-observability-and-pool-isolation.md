@@ -45,7 +45,7 @@ const slicing = computed(() => status.value === 'reviewing' && isSlicingChunks(s
 The executor-harness reconstructs progress, activity, and telemetry from the parent `claude` process's `stream-json` stdout (`streamCli` and the `onEvent` accumulator in `backend/internal/executor-harness/src/agent-runner.ts`). Subagent turns are written to separate `subagents/*.jsonl` transcript files and do not appear on the parent stream between the Task dispatch and its final tool_result. Three consequences:
 
 - **Progress:** the `TodoWrite → onProgress` path never fires for subagent-driven review, so the step's progress stays 0 (feeds P2).
-- **Heartbeat:** the backend's `agent_runs.updated_at` only advances on progress changes, so it froze at the moment the agent started (07:06:15) even though the run was alive and working. A quiet-but-alive run is indistinguishable from a wedged one from the DB.
+- **Heartbeat:** the backend's `agent_runs.updated_at` only advances on progress changes, so it froze at the moment the agent started (07:06:15) even though the run was alive and working. A quiet-but-alive run is indistinguishable from a wedged one from the DB. (Two layers to this: D2.1/D3 restored the harness-side liveness heartbeat and the _watchdog_; the _observable_ heartbeat — forwarding it across the transport boundary so it actually advances `updated_at` and drives an "active Ns ago" UI signal — is D3.1 below.)
 - **Telemetry:** `token_usage` for the execution stayed at 0 rows during the whole review because usage is recorded at job end, not incrementally. Cost accrued invisibly (hundreds of thousands of output tokens, larger input).
 
 ### P4 — No early signal for a genuine cold-start wedge
@@ -160,6 +160,17 @@ Independent changes; suggested order by value and blast radius:
    recorder. D4: a short cold-start watchdog (`JOB_COLD_START_MS`, default 120s) records a
    structured diagnostic — without killing the run — when a job produces no output early, plus a
    one-line assertion that the pre-seeded onboarding keys landed, logged with the CLI version.
+   **✅ D3.1 landed (the observable heartbeat).** D3 restored the harness heartbeat + the watchdog,
+   but it was still dropped at the transport boundary: `ContainerAgentExecutor.pollJob` forwarded
+   phase/progress/follow-ups but never `view.heartbeatAt`, so a quiet-but-alive run still froze
+   `updated_at` (the stale-run sweeper + UI could not tell it from a wedged one). Now `RunnerJobView`
+   carries `heartbeatAt` (Cloudflare/local cast the harness view verbatim; the runner pool maps an
+   optional `heartbeatPath`), `pollJob` forwards it as the running `AgentJobUpdate.lastActivityAt`,
+   and the engine folds it onto the step's `lastActivityAt` **throttled** (`shouldPersistActivity`,
+   a 20s window well under the 5-min sweeper lease) — so a live-but-quiet run keeps its `updated_at`
+   fresh while a wedged run's frozen heartbeat correctly lets it go stale. The field rides the step
+   JSON, so both runtimes persist it with no migration; the SPA surfaces "active Ns ago" in
+   `StepRunMeta` (and thus the PR-review window) distinct from the elapsed clock.
 6. D6.2 (the bounded startup sweep + one surfaced drift issue) and D6.3 (explicit per-secret
    drop/re-seal remediation). **✅ Landed.** Both ride the `SealedSecretInventory` kernel port
    (`listSealed` + `drop`), implemented per runtime (D1 + Drizzle, asserted by

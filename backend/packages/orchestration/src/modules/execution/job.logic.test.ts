@@ -1,10 +1,12 @@
 import { ConflictError, harnessDispatchError } from '@cat-factory/kernel'
 import { describe, expect, it } from 'vitest'
 import {
+  ACTIVITY_PERSIST_THROTTLE_MS,
   classifyDispatchFailure,
   isContainerEvictionError,
   MAX_EVICTION_RECOVERIES,
   MAX_TRANSIENT_EVICTION_RECOVERIES,
+  shouldPersistActivity,
 } from './job.logic.js'
 
 const CRASH_EVICTION = 'Job not found (container evicted or crashed)'
@@ -34,6 +36,36 @@ describe('isContainerEvictionError (dispatch-time throw only)', () => {
   it('recovers a single crash eviction (budget of 1), transient a larger one', () => {
     expect(MAX_EVICTION_RECOVERIES).toBe(1)
     expect(MAX_TRANSIENT_EVICTION_RECOVERIES).toBeGreaterThan(MAX_EVICTION_RECOVERIES)
+  })
+})
+
+describe('shouldPersistActivity (throttled liveness heartbeat)', () => {
+  const base = 1_000_000_000_000
+
+  it('persists the first heartbeat when none is stored yet', () => {
+    expect(shouldPersistActivity(undefined, base)).toBe(true)
+    expect(shouldPersistActivity(null, base)).toBe(true)
+  })
+
+  it('skips an advance smaller than the throttle window (avoids a write on every poll)', () => {
+    expect(shouldPersistActivity(base, base + ACTIVITY_PERSIST_THROTTLE_MS - 1)).toBe(false)
+    // A ~15s poll cadence is under the 20s window, so a single poll's advance is throttled out.
+    expect(shouldPersistActivity(base, base + 15_000)).toBe(false)
+  })
+
+  it('persists once the heartbeat has advanced by at least the throttle window', () => {
+    expect(shouldPersistActivity(base, base + ACTIVITY_PERSIST_THROTTLE_MS)).toBe(true)
+    expect(shouldPersistActivity(base, base + 60_000)).toBe(true)
+  })
+
+  it('never persists a frozen (wedged) or absent heartbeat, so updated_at can go stale', () => {
+    // A wedged job reports the SAME heartbeat every poll → never re-stamped → the sweeper/UI
+    // correctly see the run as stale. This is the whole point of the signal.
+    expect(shouldPersistActivity(base, base)).toBe(false)
+    // A heartbeat that somehow went backwards is likewise not persisted.
+    expect(shouldPersistActivity(base, base - 5_000)).toBe(false)
+    // No incoming value (older harness image / transport that doesn't forward it) → no-op.
+    expect(shouldPersistActivity(base, undefined)).toBe(false)
   })
 })
 

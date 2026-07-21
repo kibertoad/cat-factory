@@ -27,7 +27,7 @@ const props = defineProps<{
 const models = useModelsStore()
 const { t, d } = useI18n()
 
-const { isRunning, durationLabel } = useStepTimer({
+const { isRunning, durationLabel, activityAgoLabel } = useStepTimer({
   step: () => props.step,
   runFailed: () => props.runFailed ?? false,
   failureAt: () => props.failureAt,
@@ -71,6 +71,19 @@ async function copyRunId() {
         <span v-if="isRunning" class="text-[11px] text-slate-500">{{
           t('panels.stepMeta.elapsed')
         }}</span>
+      </p>
+    </div>
+
+    <!-- Liveness: time since the agent's last sign of life (the harness heartbeat), distinct from
+         the elapsed clock above — a long, quiet phase keeps this small while elapsed climbs, so a
+         genuinely-active-but-quiet run reads apart from a wedged one. Only while actively running. -->
+    <div v-if="isRunning && activityAgoLabel" data-testid="step-activity">
+      <h4 class="mb-1 text-[11px] font-semibold uppercase tracking-wide text-slate-500">
+        {{ t('panels.stepMeta.activity') }}
+      </h4>
+      <p class="flex items-center gap-1.5 text-[12px] tabular-nums text-slate-300">
+        <span class="h-1.5 w-1.5 rounded-full bg-emerald-400" />
+        {{ t('panels.stepMeta.activityAgo', { duration: activityAgoLabel }) }}
       </p>
     </div>
 

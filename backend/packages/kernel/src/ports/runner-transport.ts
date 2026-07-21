@@ -234,6 +234,17 @@ export interface RunnerJobView {
    */
   phase?: string
   /**
+   * Epoch ms of the harness's LAST sign of life (job start, then every stdout chunk / subagent
+   * transcript tail — pure liveness, forwarded verbatim from the harness {@link JobView.heartbeatAt}).
+   * Distinct from {@link progress}: a long, quiet phase (a reviewer reading files without ticking its
+   * todo list) advances the heartbeat but not the subtask counts, so this is what tells a
+   * genuinely-active-but-quiet job apart from a wedged one. The engine persists it as the step's
+   * throttled `lastActivityAt`, keeping the run's `updated_at` fresh (so the stale-run sweeper doesn't
+   * treat a live-but-quiet run as orphaned) and surfacing "active Ns ago" in the UI. Absent on an
+   * older harness image (or a pool/transport that doesn't forward it).
+   */
+  heartbeatAt?: number
+  /**
    * The container's identity/address once it is up, attached by the TRANSPORT (the
    * harness can't know its own external address). Best-effort + transport-specific; see
    * {@link RunnerJobContainer}. Absent when the transport has nothing to surface.

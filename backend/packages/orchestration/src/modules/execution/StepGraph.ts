@@ -67,6 +67,9 @@ export class StepGraph {
     step.jobId = undefined
     step.approval = null
     step.subtasks = undefined
+    // Drop the prior run's liveness heartbeat so a re-run doesn't briefly render a stale
+    // "active Ns ago" before its first fresh poll re-stamps it.
+    step.lastActivityAt = null
     step.progress = 0
     step.output = undefined
     // Drop the prior run's structured output too, so a re-run that produces no `custom`

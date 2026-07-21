@@ -1204,6 +1204,19 @@ export const pipelineStepSchema = v.object({
    */
   finishedAt: v.optional(v.nullable(v.number())),
   /**
+   * Epoch ms of the container agent's last observed sign of life, forwarded from the harness
+   * heartbeat (job start, then every stdout chunk / subagent transcript tail) and persisted here
+   * THROTTLED — only re-stamped once the heartbeat has advanced by a bounded window, so a live
+   * container's poll cadence doesn't rewrite the run on every tick. Distinct from {@link startedAt}
+   * (a fixed clock) and from `subtasks`/`progress` (which only move when the agent ticks its todo
+   * list): a long, quiet phase — a reviewer reading hundreds of files — advances THIS but not the
+   * subtask counts, so the UI can surface "active Ns ago" and tell a genuinely-active-but-quiet run
+   * apart from a wedged one. Its persistence also keeps the run's `updated_at` fresh so the stale-run
+   * sweeper doesn't treat a live-but-quiet run as orphaned. Only ever set on async (container) steps;
+   * cleared on re-run; absent on non-container steps, steps not yet polled, and older harness images.
+   */
+  lastActivityAt: v.optional(v.nullable(v.number())),
+  /**
    * Epoch ms the step parked on a human (an approval gate, a raised decision, or an
    * iteration-cap gate), freezing its duration clock: while parked, elapsed time stops
    * accruing — the symmetric counterpart of {@link finishedAt}'s terminal freeze, so a

@@ -62,3 +62,22 @@ describe('StepGraph.loopCompanionProducer', () => {
     expect(inst.steps[1]!.companion).toBeDefined()
   })
 })
+
+describe('StepGraph.resetStepForRerun', () => {
+  it('clears the liveness heartbeat so a re-run does not render a stale "active Ns ago"', () => {
+    const graph = new StepGraph(clock)
+    const s = step({
+      state: 'working',
+      startedAt: 1000,
+      jobId: 'job_1',
+      subtasks: { completed: 2, inProgress: 1, total: 5 },
+      lastActivityAt: 4000,
+    })
+    graph.resetStepForRerun(s)
+    expect(s.lastActivityAt).toBeNull()
+    // Sanity: the other per-dispatch live fields reset alongside it.
+    expect(s.subtasks).toBeUndefined()
+    expect(s.jobId).toBeUndefined()
+    expect(s.state).toBe('pending')
+  })
+})

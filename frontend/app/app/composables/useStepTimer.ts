@@ -40,6 +40,21 @@ export function stepDurationLabel(
 }
 
 /**
+ * Milliseconds since the container agent's last observed sign of life (`lastActivityAt`, the
+ * harness liveness heartbeat), at wall-clock `nowMs` — or null when the step has none (a
+ * non-container step, one not yet polled, or an older harness image). Clamped at 0 so minor
+ * container/server clock skew never renders a negative "active in the future" value. This is the
+ * LIVENESS clock (time since the agent last did anything), distinct from {@link stepDurationMs}'s
+ * ELAPSED clock (total time the step has been running) — a long, quiet phase keeps the elapsed
+ * clock climbing while this stays small, which is exactly how a genuinely-active-but-quiet run is
+ * told apart from a wedged one.
+ */
+export function stepActivityAgoMs(step: PipelineStep | null, nowMs: number): number | null {
+  if (step?.lastActivityAt == null) return null
+  return Math.max(0, nowMs - step.lastActivityAt)
+}
+
+/**
  * A shared 1s wall-clock tick for surfaces that render many steps' live durations
  * at once (the pipeline timeline, the inspector run list). One interval drives every
  * step's elapsed label instead of a per-step timer. Stays `0` until mounted so the
@@ -84,7 +99,16 @@ export function useStepTimer(opts: {
     durationMs.value == null ? null : formatDuration(durationMs.value),
   )
 
-  return { isRunning, durationMs, durationLabel }
+  // Time since the agent's last sign of life (the liveness heartbeat), ticking only while the
+  // step is actively running — a finished/parked/failed step isn't "active", so it reads null.
+  const activityAgoMs = computed(() =>
+    isRunning.value ? stepActivityAgoMs(opts.step(), nowTick.value) : null,
+  )
+  const activityAgoLabel = computed(() =>
+    activityAgoMs.value == null ? null : formatDuration(activityAgoMs.value),
+  )
+
+  return { isRunning, durationMs, durationLabel, activityAgoMs, activityAgoLabel }
 }
 
 export function formatDuration(ms: number): string {

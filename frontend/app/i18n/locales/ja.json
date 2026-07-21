@@ -1104,6 +1104,8 @@
       "stateLabel": "状態",
       "duration": "所要時間",
       "elapsed": "経過",
+      "activity": "最終アクティビティ",
+      "activityAgo": "{duration}前にアクティブ",
       "step": "ステップ",
       "stepOf": "{total} 中 {number}",
       "started": "開始",
