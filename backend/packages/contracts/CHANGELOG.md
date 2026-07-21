@@ -1,5 +1,14 @@
 # @cat-factory/contracts
 
+## 0.156.0
+
+### Minor Changes
+
+- 3c7d62b: Extend `provisioningRecommendationSchema` with additive `custom`-only fields for custom-provider
+  autodetection: `customConfigSeed` (extracted config to prefill), `secondaryManifestPaths` (the
+  other files a multi-file signature matched), and `detectedManifestTypeCandidates` (the arbitration
+  result). Documents `prefer: 'custom'` without a `manifestId` as the arbitration trigger.
+
 ## 0.155.0
 
 ### Minor Changes
