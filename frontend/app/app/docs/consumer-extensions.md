@@ -104,24 +104,48 @@ nullish subject (the boot-time validation resolve passes `null`).
 
 ## Reuse the shared building blocks — don't reinvent them
 
-The layer's window/inspector primitives are **auto-imported layer-wide**, so your consumer
-components use them with **zero imports and zero deep paths**. Compose these instead of
-hand-rolling chrome or re-deriving the "which run is this / how did the model do" facts:
+The layer ships window/inspector primitives you compose instead of hand-rolling chrome or
+re-deriving the "which run is this / how did the model do" facts. **Composables** (and the
+`registerAppModule` helper) are auto-imported into your consumer code with zero imports;
+**components** must be named through the `#components` virtual module (see the boxed note
+below). Compose these:
 
-| Building block         | What it gives you                                                                                                                                                                                                                                                                                             |
-| ---------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `<ResultWindowShell>`  | The shared modal chrome for a result window — backdrop, header (icon/title/subtitle), a `#header-extras` slot, close button, and the modal _behaviour_ (focus-trap + return, body-scroll lock, shared-stack Escape via `useModalBehavior`). Pass `stepRef` to surface the shared "restart from here" control. |
-| `<StepRunMeta>`        | **The shared run-details metadata block** every agent window reuses: step position, live duration, model, run id, and the LLM model-activity rollup. Drop it into your window's sidebar — never reinvent run metadata.                                                                                        |
-| `useResultView(id)`    | The window seam contract: `{ open, blockId, instanceId, stepIndex, close }` (+ an `onOpen` loader for windows that fetch, and an `onClose` flush). Escape is owned by the shell, not here.                                                                                                                    |
-| `<MarkdownProse>`      | Render an agent's prose output as markdown.                                                                                                                                                                                                                                                                   |
-| `<CopyButton>`         | The shared copy-to-clipboard affordance.                                                                                                                                                                                                                                                                      |
-| `<InspectorSection>`   | The collapsible inspector-section shell (chevron header, count, hint) so a consumer panel reads like a built-in one.                                                                                                                                                                                          |
-| `usePanelSubject<T>()` | Read the block injected into an inspector panel by `<PanelsOutlet>` (`@modular-vue/core`).                                                                                                                                                                                                                    |
+| Building block         | Reference it as                           | What it gives you                                                                                                                                                                                                                                                                                             |
+| ---------------------- | ----------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `ResultWindowShell`    | `#components` → `PanelsResultWindowShell` | The shared modal chrome for a result window — backdrop, header (icon/title/subtitle), a `#header-extras` slot, close button, and the modal _behaviour_ (focus-trap + return, body-scroll lock, shared-stack Escape via `useModalBehavior`). Pass `stepRef` to surface the shared "restart from here" control. |
+| `StepRunMeta`          | `#components` → `PanelsStepRunMeta`       | **The shared run-details metadata block** every agent window reuses: step position, live duration, model, run id, and the LLM model-activity rollup. Drop it into your window's sidebar — never reinvent run metadata.                                                                                        |
+| `MarkdownProse`        | `#components` → `CommonMarkdownProse`     | Render an agent's prose output as markdown.                                                                                                                                                                                                                                                                   |
+| `CopyButton`           | `#components` → `CommonCopyButton`        | The shared copy-to-clipboard affordance.                                                                                                                                                                                                                                                                      |
+| `InspectorSection`     | `#components` → `PanelsInspectorSection`  | The collapsible inspector-section shell (chevron header, count, hint) so a consumer panel reads like a built-in one.                                                                                                                                                                                          |
+| `useResultView(id)`    | auto-imported                             | The window seam contract: `{ open, blockId, instanceId, stepIndex, close }` (+ an `onOpen` loader for windows that fetch, and an `onClose` flush). Escape is owned by the shell, not here.                                                                                                                    |
+| `usePanelSubject<T>()` | `@modular-vue/core`                       | Read the block injected into an inspector panel by `<PanelsOutlet>`.                                                                                                                                                                                                                                          |
 
-The example `AcmeSecurityReport.vue` window is a full demonstration: it composes
-`<ResultWindowShell>` + `<StepRunMeta>` + `useResultView` + `<MarkdownProse>`, adds only its
-own bespoke body (the security findings), and reads the auditor's structured assessment
-straight off `step.custom`.
+> **Reference layer components through `#components`, not bare tags.** Nuxt auto-registers a
+> layer's components under a **path-derived** name (`components/panels/ResultWindowShell.vue`
+> → `PanelsResultWindowShell`), and only rewrites bare `<ResultWindowShell>` tags inside the
+> layer's own SFCs. A bare tag in a **consumer** SFC resolves to nothing and silently renders
+> as an unknown element — its `<slot>` children still appear, so a shallow test can pass while
+> the shared chrome (and its `data-testid`) never mounts. Import the ones you use from
+> `#components` (Nuxt's stable virtual registry — **not** a deep path into the layer's
+> `app/components/*`), aliasing them back to the short names for readable templates:
+>
+> ```ts
+> import {
+>   PanelsResultWindowShell as ResultWindowShell,
+>   PanelsStepRunMeta as StepRunMeta,
+>   CommonMarkdownProse as MarkdownProse,
+> } from '#components'
+> ```
+>
+> Composables (`useResultView`, `useI18n`, the Pinia stores) and `registerAppModule` are
+> auto-imported across layers by Nuxt's separate imports mechanism, so those need no import.
+> Hardening these building blocks into an explicitly exported, location-independent public
+> surface is slice G of the initiative.
+
+The example `AcmeSecurityReport.vue` window is a full demonstration: it imports
+`ResultWindowShell` + `StepRunMeta` + `MarkdownProse` from `#components`, composes them with
+the auto-imported `useResultView`, adds only its own bespoke body (the security findings), and
+reads the auditor's structured assessment straight off `step.custom`.
 
 ## i18n
 

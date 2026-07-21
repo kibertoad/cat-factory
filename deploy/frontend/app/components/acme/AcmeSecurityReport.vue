@@ -7,8 +7,9 @@
 //
 // The point of this file is DOGFOODING the layer's public building blocks: a consumer
 // deployment gets the SAME shared chrome + run-metadata surface the first-party windows
-// use, with ZERO deep imports and ZERO host edits — everything below is auto-imported
-// from the `@cat-factory/app` layer:
+// use, with ZERO host edits — the shared components below are referenced through the
+// `#components` virtual module (Nuxt's stable registry of the layer's auto-imported
+// components), NOT deep file paths into the layer's `app/components/*` internals:
 //   - `<ResultWindowShell>`   — the shared modal chrome (backdrop, header, focus-trap,
 //                               scroll-lock, shared-stack Escape via `useModalBehavior`)
 //                               + the "restart from here" control when given a `stepRef`.
@@ -16,9 +17,17 @@
 //                               reuses (step position, live duration, model, run id, the
 //                               LLM model-activity rollup). A consumer NEVER reinvents it.
 //   - `useResultView(id)`     — the seam contract (open / blockId / instanceId / stepIndex
-//                               / close). The host (`StepResultViewHost`) mounts this
+//                               / close), auto-imported like the rest of the layer's
+//                               composables. The host (`StepResultViewHost`) mounts this
 //                               window when a `security-auditor` step is opened.
-//   - `<MarkdownProse>` / `<CopyButton>` — the shared prose + copy affordances.
+//   - `<MarkdownProse>`       — the shared prose renderer.
+//
+// Why `#components` rather than bare `<ResultWindowShell>` tags: Nuxt auto-registers a
+// layer's components under a path-derived name (`PanelsResultWindowShell`), so a bare tag
+// in a CONSUMER SFC resolves to nothing and silently renders as an unknown element. The
+// layer's own SFCs are transformed in-scope so their bare tags resolve; a consumer SFC is
+// not, so it names the components explicitly via `#components` (aliased back to the short
+// names for readability). Slice G hardens this into an explicitly exported public surface.
 //
 // It reads the auditor's structured assessment straight off the execution step
 // (`step.custom`, the engine's structured-output channel), rendering it as a real report;
@@ -26,6 +35,11 @@
 // is translated through the deployment's own i18n catalog (`acme.*` in
 // `deploy/frontend/i18n/locales/en.json`, deep-merged into the layer catalog).
 import { computed } from 'vue'
+import {
+  PanelsResultWindowShell as ResultWindowShell,
+  PanelsStepRunMeta as StepRunMeta,
+  CommonMarkdownProse as MarkdownProse,
+} from '#components'
 
 /** The structured assessment the backend `security-auditor` kind returns as `result.custom`
  *  (mirrors `@cat-factory/example-custom-agent`'s `securityAssessment`). Read defensively —

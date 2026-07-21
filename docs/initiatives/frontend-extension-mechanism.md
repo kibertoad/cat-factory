@@ -377,14 +377,21 @@ release, re-adopt in-slice; no shims outliving a slice).
   seam at once: a bespoke `resultViews` window (`AcmeSecurityReport.vue`) paired to
   `acme:security-report`, the `agentKinds` palette entry that routes the `security-auditor` kind
   to it, a `nav` sidebar/command destination, and an `inspectorPanels` panel for task blocks —
-  all with zero host edits and only `@modular-vue/core` + auto-imports (no deep layer imports).
-  Its strings ship in `deploy/frontend/i18n/locales/en.json` (layer deep-merge).
+  all with zero host edits and no deep imports into the layer's `app/components/*` internals
+  (shared components are named through the `#components` virtual registry; composables + the
+  `registerAppModule` seam are auto-imported). Its strings ship in
+  `deploy/frontend/i18n/locales/en.json` (layer deep-merge).
 - **Shared building blocks are reused, not reinvented.** The example window composes the layer's
-  auto-imported `<ResultWindowShell>` (chrome + `useModalBehavior` Escape/focus-trap/scroll-lock),
-  the shared `<StepRunMeta>` run-details metadata block, `useResultView`, `<MarkdownProse>`, and
-  `<CopyButton>`; the inspector panel reuses `<InspectorSection>` + `usePanelSubject`. This proves
-  a consumer gets the same run-detail surface the first-party windows use for free — the explicit
-  ask that shaped this slice. The authoring guide documents them as the reusable palette.
+  `ResultWindowShell` (chrome + `useModalBehavior` Escape/focus-trap/scroll-lock), the shared
+  `StepRunMeta` run-details metadata block, and `MarkdownProse` — all referenced via
+  `#components` — together with the auto-imported `useResultView`; the inspector panel reuses
+  `InspectorSection` (via `#components`) + `usePanelSubject`. This proves a consumer gets the
+  same run-detail surface the first-party windows use for free — the explicit ask that shaped
+  this slice. **Gotcha carried to slice G:** a bare layer-component tag in a _consumer_ SFC
+  silently renders as an unknown element (Nuxt registers layer components under a path-derived
+  name and only rewrites bare tags in the layer's own SFCs), so a consumer must reference them
+  through `#components`; slice G hardens this into an explicit, location-independent public
+  export surface. The authoring guide documents the reusable palette + this rule.
 - **The authoring guide** (`frontend/app/app/docs/consumer-extensions.md`, linked from the layer
   README + `deploy/frontend/README.md`) documents the one seam (`registerAppModule` +
   `enforce:'post'` ordering), the landed seam table, the shared-building-block table, the i18n

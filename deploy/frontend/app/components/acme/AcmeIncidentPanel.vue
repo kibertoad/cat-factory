@@ -4,13 +4,18 @@
 // so `<PanelsOutlet>` in the layer's `InspectorPanel.vue` renders it for matching blocks
 // with ZERO host edits — the same seam the first-party inspector panels use.
 //
-// It reuses the layer's shared `<InspectorSection>` chrome (auto-imported, no deep import)
-// so a consumer panel reads exactly like a built-in one, and reads the selected block via
-// the subject-keyed panels primitive `usePanelSubject` (`@modular-vue/core`). This example
-// surfaces an "Acme compliance" note for a task; a real deployment would show live data
-// from its own store (patched by a consumer stream handler / fetched from its own backend).
+// It reuses the layer's shared `<InspectorSection>` chrome — referenced through the
+// `#components` virtual module (Nuxt's stable registry of the layer's auto-imported
+// components) rather than a deep path into the layer internals — so a consumer panel reads
+// exactly like a built-in one, and reads the selected block via the subject-keyed panels
+// primitive `usePanelSubject` (`@modular-vue/core`). (A bare `<InspectorSection>` tag would
+// silently fail in a CONSUMER SFC: Nuxt registers the layer component under its path-derived
+// name `PanelsInspectorSection`, and only in-scope layer SFCs get their bare tags rewritten —
+// see the note in `AcmeSecurityReport.vue`.) This example surfaces an "Acme compliance" note
+// for a task; a real deployment would show live data from its own store.
 import { computed } from 'vue'
 import { usePanelSubject } from '@modular-vue/core'
+import { PanelsInspectorSection as InspectorSection } from '#components'
 
 /** The subject the inspector injects. Typed structurally so this example needs no deep
  *  import of the layer's `Block` type (that reachable public type is slice G's job). */

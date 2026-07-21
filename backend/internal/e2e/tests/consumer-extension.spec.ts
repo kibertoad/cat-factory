@@ -44,6 +44,17 @@ test.describe('consumer extension (dogfood)', () => {
     await expect(page.getByTestId('inspector-panel')).toBeVisible({ timeout: LIVE_TIMEOUT })
     await expect(page.getByTestId('acme-incident-panel')).toBeVisible({ timeout: LIVE_TIMEOUT })
     await expect(page.getByTestId('acme-incident-status')).toBeVisible()
+
+    // Prove the panel actually reuses the shared `<InspectorSection>` chrome — not just that
+    // its own body markup rendered. A consumer SFC that referenced the layer component by a
+    // bare tag would silently render it as an unknown element (its children leak, but its
+    // `inspector-section` chrome never mounts); asserting the acme panel is wrapped in a
+    // resolved `inspector-section` with its collapse toggle is what catches that regression.
+    const acmeSection = page
+      .getByTestId('inspector-section')
+      .filter({ has: page.getByTestId('acme-incident-panel') })
+    await expect(acmeSection).toBeVisible()
+    await expect(acmeSection.getByTestId('inspector-section-toggle')).toBeVisible()
   })
 
   test('a security-auditor step opens the consumer result window', async ({
