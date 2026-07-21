@@ -15,7 +15,9 @@ import type {
   Workspace,
   WorkspaceRepository,
 } from '@cat-factory/kernel'
+import { matchManifestSignature } from '@cat-factory/kernel'
 import { EnvironmentConnectionService } from './EnvironmentConnectionService.js'
+import { CustomManifestTypeRegistry } from './custom-manifest-types.js'
 import {
   type EnvironmentBackendProvider,
   EnvironmentBackendRegistry,
@@ -650,6 +652,101 @@ describe('EnvironmentConnectionService — detect read faults', () => {
     await expect(
       service.detectFrontendConfig('ws1', { owner: 'o', repo: 'r' }),
     ).rejects.toMatchObject({ code: 'validation' })
+  })
+})
+
+describe('EnvironmentConnectionService — custom-provider autodetection', () => {
+  // A registry holding a custom type whose detect() matches a 2-file signature.
+  function stackRegistry(): CustomManifestTypeRegistry {
+    const reg = new CustomManifestTypeRegistry()
+    reg.register({
+      manifestId: 'stack-deploy',
+      label: 'Stack deploy',
+      defaultManifestPath: 'deploy/stack.yml',
+      detect: async (ctx) => {
+        const sig = await matchManifestSignature(
+          ctx.scanner,
+          { required: ['deploy/stack.yml', 'deploy/up.sh'] },
+          ctx.directory ? { root: ctx.directory } : {},
+        )
+        return sig.matched
+          ? {
+              matched: true,
+              confidence: sig.confidence,
+              manifestPath: 'deploy/stack.yml',
+              configSeed: [{ key: 'deployCommand', value: 'deploy/up.sh' }],
+            }
+          : null
+      },
+    })
+    return reg
+  }
+
+  const stackRepo = () =>
+    fakeRepoFiles({ 'deploy/stack.yml': 'service: app', 'deploy/up.sh': '#!/bin/bash' })
+
+  function detectService(repo: RepoFiles, customManifestTypeRegistry: CustomManifestTypeRegistry) {
+    return new EnvironmentConnectionService({
+      environmentConnectionRepository: fakeConnections(),
+      workspaceRepository: fakeWorkspaces,
+      secretCipher: fakeCipher,
+      clock,
+      environmentBackendRegistry: registry,
+      customManifestTypeRegistry,
+      resolveRepoFilesForWorkspace: async () => repoCtx(repo),
+    })
+  }
+
+  it('arbitrates across registered types when no manifestId is selected', async () => {
+    const service = detectService(stackRepo(), stackRegistry())
+    const rec = await service.detectServiceProvisioning('ws1', {
+      owner: 'o',
+      repo: 'r',
+      prefer: 'custom',
+    })
+    expect(rec.detected).toBe(true)
+    expect(rec.provisioning).toMatchObject({ type: 'custom', manifestId: 'stack-deploy' })
+    expect(rec.detectedManifestTypeCandidates).toEqual([
+      { manifestId: 'stack-deploy', label: 'Stack deploy', confidence: 'high', recommended: true },
+    ])
+    expect(rec.customConfigSeed).toEqual([{ key: 'deployCommand', value: 'deploy/up.sh' }])
+  })
+
+  it('runs the SELECTED type’s detect() hook when a manifestId is given', async () => {
+    const service = detectService(stackRepo(), stackRegistry())
+    const rec = await service.detectServiceProvisioning('ws1', {
+      owner: 'o',
+      repo: 'r',
+      prefer: 'custom',
+      manifestId: 'stack-deploy',
+    })
+    expect(rec.provisioning).toMatchObject({
+      type: 'custom',
+      manifestId: 'stack-deploy',
+      manifestPath: 'deploy/stack.yml',
+    })
+    expect(rec.customConfigSeed).toHaveLength(1)
+    // A single selected type doesn't produce the arbitration candidate list.
+    expect(rec.detectedManifestTypeCandidates).toBeUndefined()
+  })
+
+  it('recognizes a custom signature from the DEFAULT tab as a last resort', async () => {
+    // No prefer ⇒ the k8s/compose sweep runs first, finds nothing, then custom arbitration wins.
+    const service = detectService(stackRepo(), stackRegistry())
+    const rec = await service.detectServiceProvisioning('ws1', { owner: 'o', repo: 'r' })
+    expect(rec.detected).toBe(true)
+    expect(rec.provisioning).toMatchObject({ type: 'custom', manifestId: 'stack-deploy' })
+  })
+
+  it('falls through to infraless when no custom provider matches', async () => {
+    const service = detectService(fakeRepoFiles({ 'readme.md': 'x' }), stackRegistry())
+    const rec = await service.detectServiceProvisioning('ws1', {
+      owner: 'o',
+      repo: 'r',
+      prefer: 'custom',
+    })
+    expect(rec.detected).toBe(false)
+    expect(rec.provisioning.type).toBe('infraless')
   })
 })
 

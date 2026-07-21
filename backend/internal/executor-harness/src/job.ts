@@ -1250,44 +1250,116 @@ export function parseAgentJob(input: unknown): AgentJob {
   // requires them (throws when missing/empty), exactly as before.
   const agentField = (value: unknown, path: string): string =>
     mode === 'preview' ? (typeof value === 'string' ? value : '') : str(value, path)
+  // Parse each field, then hand the pieces to `assembleAgentJob` for the (large) object literal —
+  // the parse/assemble split keeps both within the cyclomatic-complexity budget. Behaviour is
+  // byte-identical (the literal + host validation moved verbatim).
+  const job = assembleAgentJob(o, mode, agentField, {
+    output: parseAgentOutputSpec(o.output),
+    pr: parseAgentPrSpec(o.pr),
+    infra: parseAgentInfraSpec(o.infra),
+    peerRepos: parsePeerRepos(o.peerRepos),
+    referenceRepos: parseReferenceRepos(o.referenceRepos),
+    referenceBranches: parseReferenceBranches(o.referenceBranches),
+    bootstrap: parseAgentBootstrapSpec(o.bootstrap),
+    contextFiles: parseContextFiles(o.contextFiles),
+    packageRegistries: parsePackageRegistries(o.packageRegistries),
+    skill: parseSkillSpec(o.skill),
+    testSecrets: parseTestSecrets(o.testSecrets),
+    guardLimits: parseGuardLimits(o.guardLimits),
+    validation: parseValidationSpec(o.validation),
+    reviewPrNumber: posInt(o.reviewPrNumber),
+  })
+  assertAllowedHost(job.repo.cloneUrl, 'repo.cloneUrl')
+  if (job.githubApiBase) assertAllowedHost(job.githubApiBase, 'githubApiBase')
+  // Bootstrap pushes the result to a SEPARATE target repo, so its clone URL must be an
+  // allowed GitHub host too (the installation token is sent to it on the force-push).
+  if (job.bootstrap) assertAllowedHost(job.bootstrap.target.cloneUrl, 'bootstrap.target.cloneUrl')
+  // Each peer repo's clone URL receives the installation token on clone/push, so it must be
+  // an allowed GitHub host too — a body-supplied peer pointing at an attacker host would
+  // exfiltrate the token exactly like a rogue primary clone URL.
+  for (const [i, peer] of (job.peerRepos ?? []).entries()) {
+    assertAllowedHost(peer.repo.cloneUrl, `peerRepos[${i}].repo.cloneUrl`)
+  }
+  // Each reference repo's clone URL receives the installation/PAT token on clone (read-only,
+  // never pushed), so it must be an allowed host too — a body-supplied reference pointing at an
+  // attacker host would exfiltrate the token exactly like a rogue peer clone URL.
+  for (const [i, ref] of (job.referenceRepos ?? []).entries()) {
+    assertAllowedHost(ref.repo.cloneUrl, `referenceRepos[${i}].repo.cloneUrl`)
+  }
+  return job
+}
+
+/** The pre-parsed field bundle {@link parseAgentJob} hands to {@link assembleAgentJob}. */
+interface ParsedAgentJobParts {
+  output: AgentOutputSpec | undefined
+  pr: { title: string; body: string } | undefined
+  infra: ReturnType<typeof parseAgentInfraSpec>
+  peerRepos: ReturnType<typeof parsePeerRepos>
+  referenceRepos: ReturnType<typeof parseReferenceRepos>
+  referenceBranches: ReturnType<typeof parseReferenceBranches>
+  bootstrap: ReturnType<typeof parseAgentBootstrapSpec>
+  contextFiles: ReturnType<typeof parseContextFiles>
+  packageRegistries: ReturnType<typeof parsePackageRegistries>
+  skill: ReturnType<typeof parseSkillSpec>
+  testSecrets: ReturnType<typeof parseTestSecrets>
+  guardLimits: ReturnType<typeof parseGuardLimits>
+  validation: ReturnType<typeof parseValidationSpec>
+  reviewPrNumber: number | undefined
+}
+
+/** Parse the optional structured-output spec (`{ kind, shapeHint?, repair?, failOnUnusableFinal? }`). */
+function parseAgentOutputSpec(raw: unknown): AgentOutputSpec | undefined {
+  if (typeof raw !== 'object' || raw === null) return undefined
+  const so = raw as Record<string, unknown>
+  const kind = so.kind === 'structured' ? 'structured' : 'prose'
+  const spec: AgentOutputSpec = { kind }
+  if (typeof so.shapeHint === 'string') spec.shapeHint = so.shapeHint
+  // Carry an explicit `repair: false` through — the handler defaults to repair-on
+  // when absent, so dropping `false` would silently re-enable the repair call for a
+  // kind that opted out (it keys off `output.repair === false`).
+  if (typeof so.repair === 'boolean') spec.repair = so.repair
+  // Carry the opt-in truncation gate through (document producers set it); dropping
+  // it would silently re-enable laundering a cut-off reply into a half-baked doc.
+  if (so.failOnUnusableFinal === true) spec.failOnUnusableFinal = true
+  return spec
+}
+
+/** Parse the optional PR spec (`{ title, body }`). */
+function parseAgentPrSpec(raw: unknown): { title: string; body: string } | undefined {
+  if (typeof raw !== 'object' || raw === null) return undefined
+  const p = raw as Record<string, unknown>
+  return { title: str(p.title, 'pr.title'), body: typeof p.body === 'string' ? p.body : '' }
+}
+
+/**
+ * Assemble the {@link AgentJob} object from the request `o` + the pre-parsed {@link
+ * ParsedAgentJobParts}. Extracted from {@link parseAgentJob} so the large conditional-spread
+ * literal doesn't blow the complexity budget; behaviour is byte-identical (spread order preserved).
+ */
+function assembleAgentJob(
+  o: Record<string, unknown>,
+  mode: AgentJob['mode'],
+  agentField: (value: unknown, path: string) => string,
+  parts: ParsedAgentJobParts,
+): AgentJob {
+  const {
+    output,
+    pr,
+    infra,
+    peerRepos,
+    referenceRepos,
+    referenceBranches,
+    bootstrap,
+    contextFiles,
+    packageRegistries,
+    skill,
+    testSecrets,
+    guardLimits,
+    validation,
+    reviewPrNumber,
+  } = parts
   const repo = (o.repo ?? {}) as Record<string, unknown>
-  const output =
-    typeof o.output === 'object' && o.output !== null
-      ? (() => {
-          const so = o.output as Record<string, unknown>
-          const kind = so.kind === 'structured' ? 'structured' : 'prose'
-          const spec: AgentOutputSpec = { kind }
-          if (typeof so.shapeHint === 'string') spec.shapeHint = so.shapeHint
-          // Carry an explicit `repair: false` through — the handler defaults to repair-on
-          // when absent, so dropping `false` would silently re-enable the repair call for a
-          // kind that opted out (it keys off `output.repair === false`).
-          if (typeof so.repair === 'boolean') spec.repair = so.repair
-          // Carry the opt-in truncation gate through (document producers set it); dropping
-          // it would silently re-enable laundering a cut-off reply into a half-baked doc.
-          if (so.failOnUnusableFinal === true) spec.failOnUnusableFinal = true
-          return spec
-        })()
-      : undefined
-  const pr =
-    typeof o.pr === 'object' && o.pr !== null
-      ? (() => {
-          const p = o.pr as Record<string, unknown>
-          return { title: str(p.title, 'pr.title'), body: typeof p.body === 'string' ? p.body : '' }
-        })()
-      : undefined
-  const infra = parseAgentInfraSpec(o.infra)
-  const peerRepos = parsePeerRepos(o.peerRepos)
-  const referenceRepos = parseReferenceRepos(o.referenceRepos)
-  const referenceBranches = parseReferenceBranches(o.referenceBranches)
-  const bootstrap = parseAgentBootstrapSpec(o.bootstrap)
-  const contextFiles = parseContextFiles(o.contextFiles)
-  const packageRegistries = parsePackageRegistries(o.packageRegistries)
-  const skill = parseSkillSpec(o.skill)
-  const testSecrets = parseTestSecrets(o.testSecrets)
-  const guardLimits = parseGuardLimits(o.guardLimits)
-  const validation = parseValidationSpec(o.validation)
-  const reviewPrNumber = posInt(o.reviewPrNumber)
-  const job: AgentJob = {
+  return {
     jobId: str(o.jobId, 'jobId'),
     mode,
     systemPrompt: agentField(o.systemPrompt, 'systemPrompt'),
@@ -1325,22 +1397,4 @@ export function parseAgentJob(input: unknown): AgentJob {
     ...(guardLimits ? { guardLimits } : {}),
     ...(validation ? { validation } : {}),
   }
-  assertAllowedHost(job.repo.cloneUrl, 'repo.cloneUrl')
-  if (job.githubApiBase) assertAllowedHost(job.githubApiBase, 'githubApiBase')
-  // Bootstrap pushes the result to a SEPARATE target repo, so its clone URL must be an
-  // allowed GitHub host too (the installation token is sent to it on the force-push).
-  if (job.bootstrap) assertAllowedHost(job.bootstrap.target.cloneUrl, 'bootstrap.target.cloneUrl')
-  // Each peer repo's clone URL receives the installation token on clone/push, so it must be
-  // an allowed GitHub host too — a body-supplied peer pointing at an attacker host would
-  // exfiltrate the token exactly like a rogue primary clone URL.
-  for (const [i, peer] of (job.peerRepos ?? []).entries()) {
-    assertAllowedHost(peer.repo.cloneUrl, `peerRepos[${i}].repo.cloneUrl`)
-  }
-  // Each reference repo's clone URL receives the installation/PAT token on clone (read-only,
-  // never pushed), so it must be an allowed host too — a body-supplied reference pointing at an
-  // attacker host would exfiltrate the token exactly like a rogue peer clone URL.
-  for (const [i, ref] of (job.referenceRepos ?? []).entries()) {
-    assertAllowedHost(ref.repo.cloneUrl, `referenceRepos[${i}].repo.cloneUrl`)
-  }
-  return job
 }

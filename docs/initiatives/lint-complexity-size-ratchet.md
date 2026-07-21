@@ -1,7 +1,7 @@
 # Initiative: ratchet down oxlint complexity & size ceilings
 
 **Status:** in progress — `max-nested-callbacks`, `max-depth`, AND `max-params` at their final
-targets (4 / 4 / **6**); `complexity` at **step 1 (60)**; `max-statements` at **step 2 (50)**;
+targets (4 / 4 / **6**); `complexity` at **step 1.5 (40)**; `max-statements` at **step 2 (50)**;
 `max-lines-per-function` at **step 1.5 (632)** for product code (test suites carved off into an
 `overrides` ratchet at 2453); `max-lines` at its free floor. `complexity` / `max-statements` /
 `max-lines` / `max-lines-per-function` still need the remaining god-file refactors to reach their
@@ -81,7 +81,7 @@ worst offender. These are the starting ceilings, not the goal.
 
 | Rule                     | Ceiling now | Reasonable target | Worst offender today                                                                        |
 | ------------------------ | ----------: | ----------------: | ------------------------------------------------------------------------------------------- |
-| `complexity`             |      **60** |            **20** | at step 1 — floor 57 (`server/persistence/rpc.ts` `checkCallScope`)                         |
+| `complexity`             |      **40** |            **20** | at step 1.5 — floor 40 (`cli/args.ts`, `orchestration/container/modules.ts`)                |
 | `max-statements`         |      **50** |            **30** | at step 2 — floor 50 (`orchestration/container.ts` `createCore`, `RunDispatcher` handlers)  |
 | `max-lines-per-function` |     **632** |           **150** | product floor: `cloudflare/container.ts` (`buildContainer`, 631); tests: 2453 (`overrides`) |
 | `max-lines`              |    **2802** |          **1500** | `orchestration/src/modules/execution/ExecutionService.ts` (2802)                            |
@@ -89,6 +89,25 @@ worst offender. These are the starting ceilings, not the goal.
 | `max-depth`              |    **4** ✅ |             **4** | at target — 0 offenders above 4                                                             |
 | `max-nested-callbacks`   |    **4** ✅ |             **4** | at target — 0 offenders above 4                                                             |
 
+> **Eighth pass (landed):** `complexity` moved from **step 1 (60) to an intermediate step 1.5
+> (40)** by extracting cohesive helpers from the ten functions above 40 (all behaviour-neutral;
+> verified by the server / orchestration / agents unit suites + node config specs, with the
+> cross-runtime conformance + worker suites in CI). `server` `buildRegisteredAgentBody` (54) →
+> `buildCodingAgentBody` / `buildExploreAgentBody`; `toRunResult` (53) → `coerceCustomResult` /
+> `mapPushOrPrResult`; `ContainerAgentExecutor.pollJob` (47) → the two `recordSubscription*Once`
+> feedback methods; `WorkspaceController`'s snapshot handler (42) → a `definedFields` spread helper;
+> `orchestration` `AgentContextBuilder.buildContext` (45) → `buildBlockPayload`; `agents`
+> `coerceInitiativePlan` (42) → `coerceInitiativePhases` / `coerceInitiativeItems` /
+> `coerceInitiativeDecisions`; `node` `buildAuthConfig` (46) + Worker `loadAuthConfig` (44) → a
+> `resolve*AuthEnablement` prelude each; the harness `parseAgentJob` (47) → `parseAgentOutputSpec` /
+> `parseAgentPrSpec` / `assembleAgentJob` (image bumped to 1.50.11); conformance
+> `FakeAgentExecutor.run` (53) → `runStructuredKinds`. The floor dropped to **40** (`cli/args.ts`,
+> `orchestration/container/modules.ts`), so 40 lands with zero violations. **Why 40, not step 2's
+> 30:** the last functions between 30 and 40 are the deferred god-files — the Worker `buildContainer`
+> (38, blocked by the `max-lines` file-split it shares) and the `RunDispatcher` step-handler tail
+> (39) — so 40 is the clean stop before step 2 has to take them on. `max-statements` / `max-lines` /
+> `max-lines-per-function` unchanged.
+>
 > **Seventh pass (landed):** `max-lines-per-function` moved from **step 1 (1000) to step 1.5
 > (632)** by splitting the six product functions above 632 along cohesive seams (all
 > behaviour-neutral). `kernel/seed.ts` `seedPipelines` (678) → three module-level catalog builders
@@ -198,12 +217,13 @@ Update the `Status` cell + the live `max` in `.oxlintrc.json` at the end of each
 
 ### `complexity` — 141 → 20
 
-| Step      | `max` | Offenders to split first                                                                                                                                                                           | Status    |
-| --------- | ----: | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | --------- |
-| baseline  |   141 | —                                                                                                                                                                                                  | ✅ landed |
-| 1         |    60 | (7) `loadNodeConfig` 141, `dispatchPersistenceCall` 101, `buildJobBody` 75, `FakeAgentExecutor.run` 68, `buildLocalContainer` 66, `buildNodeContainer` 64, `pollAgentJobInner` 61 — see fifth pass | ✅ landed |
-| 2         |    30 | (46) — `RunDispatcher` methods, `toRunResult`, `buildRegisteredAgentBody`, …                                                                                                                       | ☐ todo    |
-| 3 (final) |    20 | (99) — ESLint's default; the long tail                                                                                                                                                             | ☐ todo    |
+| Step      | `max` | Offenders to split first                                                                                                                                                                                                                                                       | Status    |
+| --------- | ----: | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ | --------- |
+| baseline  |   141 | —                                                                                                                                                                                                                                                                              | ✅ landed |
+| 1         |    60 | (7) `loadNodeConfig` 141, `dispatchPersistenceCall` 101, `buildJobBody` 75, `FakeAgentExecutor.run` 68, `buildLocalContainer` 66, `buildNodeContainer` 64, `pollAgentJobInner` 61 — see fifth pass                                                                             | ✅ landed |
+| 1.5       |    40 | (10) `jobBody` 54, `toRunResult` 53, `FakeAgentExecutor.run` 53, `ContainerAgentExecutor.pollJob` 47, harness `parseAgentJob` 47, node `buildAuthConfig` 46, `buildContext` 45, Worker auth 44, `coerceInitiativePlan` 42, `WorkspaceController` snapshot 42 — see eighth pass | ✅ landed |
+| 2         |    30 | (~44) — the 30–40 tail: Worker `buildContainer` 38 (blocked by its `max-lines` file split), `RunDispatcher` methods 39, `toRunResult`-shaped coercers, …                                                                                                                       | ☐ todo    |
+| 3 (final) |    20 | (99) — ESLint's default; the long tail                                                                                                                                                                                                                                         | ☐ todo    |
 
 ### `max-statements` — 157 → 30
 

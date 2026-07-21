@@ -385,45 +385,15 @@ export class AgentContextBuilder {
       // harness-aware by the container executor. Pinned onto the step (skillVersion) inside the
       // resolver. Absent for every non-skill step.
       ...(skill ? { skill } : {}),
-      block: {
-        id: block.id,
-        title: block.title,
-        type: block.type,
+      block: this.buildBlockPayload({
+        block,
         description,
-        fragmentIds: block.fragmentIds,
-        ...(resolved ? { resolvedFragments: resolved.fragments } : {}),
-        // The resolved technical label, threaded whenever a concrete determination exists
-        // (true ⇒ task definition is primary + spec-writer may skip specs; false ⇒ explicit
-        // business, spec-writer must produce specs). Omitted only when unset, so an
-        // undetermined task keeps the unchanged spec-led behaviour.
-        ...(typeof block.technical === 'boolean' ? { technical: block.technical } : {}),
-        modelId: block.modelId,
-        ...(block.modelPresetId ? { modelPresetId: block.modelPresetId } : {}),
-        ...(agentConfig ? { agentConfig } : {}),
-        ...(block.pullRequest ? { pullRequest: block.pullRequest } : {}),
-        // Peer PRs from a multi-repo run (own-service PR stays on `pullRequest`) — the merger
-        // reads these to clone each peer's PR branch and score the combined cross-repo diff.
-        ...(block.peerPullRequests?.length ? { peerPullRequests: block.peerPullRequests } : {}),
-        ...(contextDocs.length ? { contextDocs } : {}),
-        ...(contextTasks.length ? { contextTasks } : {}),
-        // The task-estimator's triage, when produced earlier in this run — the
-        // consensus executor's gating input.
-        ...(block.estimate ? { estimate: block.estimate } : {}),
-        // Per-type creation fields (a `document` task's docKind/audience/targetPath/…),
-        // so a kind's user-prompt builder can specialise on them — the document-authoring
-        // agents read these. Sparse; omitted when none were collected.
-        ...(block.taskTypeFields ? { taskTypeFields: block.taskTypeFields } : {}),
-        // Workspace-linked template / exemplar documents for a doc-authoring kind (WS1). Omitted
-        // when nothing is linked (the prompts then fall back to the built-in skeleton / built-in
-        // exemplars) or the kind isn't doc-aware.
-        ...(docAuthoring.docTemplateBody ? { docTemplateBody: docAuthoring.docTemplateBody } : {}),
-        ...(docAuthoring.docExemplars?.length ? { docExemplars: docAuthoring.docExemplars } : {}),
-        // The converged interactive-interview authoring brief (WS5), when the interview ran and
-        // synthesized one — the doc-writer folds it in as the refined spec to write from.
-        ...(docAuthoring.docInterviewBrief
-          ? { docInterviewBrief: docAuthoring.docInterviewBrief }
-          : {}),
-      },
+        resolved,
+        agentConfig,
+        contextDocs,
+        contextTasks,
+        docAuthoring,
+      }),
       ...(environment ? { environment } : {}),
       ...(service ? { service } : {}),
       ...(frontend ? { frontend } : {}),
@@ -453,6 +423,65 @@ export class AgentContextBuilder {
       // human's gate feedback share one revision shape; the companion path takes
       // precedence when both are present.
       ...buildRevisionContext(step),
+    }
+  }
+
+  /**
+   * Assemble the `block` sub-payload of the agent context — the block identity plus its many
+   * OPTIONAL fields (resolved fragments, technical label, model preset, PR + peer PRs, linked
+   * context docs/tasks, estimate, per-type creation fields, doc-authoring template/exemplars/
+   * brief). Extracted verbatim from {@link buildContext} so that hot builder stays within the
+   * cyclomatic-complexity budget; behaviour is byte-identical.
+   */
+  private buildBlockPayload(args: {
+    block: Block
+    description: string
+    resolved: Awaited<ReturnType<AgentContextBuilder['resolveFragments']>>
+    agentConfig: Block['agentConfig']
+    contextDocs: Awaited<ReturnType<AgentContextBuilder['resolveLinkedContext']>>['docs']
+    contextTasks: Awaited<ReturnType<AgentContextBuilder['resolveLinkedContext']>>['tasks']
+    docAuthoring: Awaited<ReturnType<AgentContextBuilder['resolveDocAuthoringContext']>>
+  }): AgentRunContext['block'] {
+    const { block, description, resolved, agentConfig, contextDocs, contextTasks, docAuthoring } =
+      args
+    return {
+      id: block.id,
+      title: block.title,
+      type: block.type,
+      description,
+      fragmentIds: block.fragmentIds,
+      ...(resolved ? { resolvedFragments: resolved.fragments } : {}),
+      // The resolved technical label, threaded whenever a concrete determination exists
+      // (true ⇒ task definition is primary + spec-writer may skip specs; false ⇒ explicit
+      // business, spec-writer must produce specs). Omitted only when unset, so an
+      // undetermined task keeps the unchanged spec-led behaviour.
+      ...(typeof block.technical === 'boolean' ? { technical: block.technical } : {}),
+      modelId: block.modelId,
+      ...(block.modelPresetId ? { modelPresetId: block.modelPresetId } : {}),
+      ...(agentConfig ? { agentConfig } : {}),
+      ...(block.pullRequest ? { pullRequest: block.pullRequest } : {}),
+      // Peer PRs from a multi-repo run (own-service PR stays on `pullRequest`) — the merger
+      // reads these to clone each peer's PR branch and score the combined cross-repo diff.
+      ...(block.peerPullRequests?.length ? { peerPullRequests: block.peerPullRequests } : {}),
+      ...(contextDocs.length ? { contextDocs } : {}),
+      ...(contextTasks.length ? { contextTasks } : {}),
+      // The task-estimator's triage, when produced earlier in this run — the
+      // consensus executor's gating input.
+      ...(block.estimate ? { estimate: block.estimate } : {}),
+      // Per-type creation fields (a `document` task's docKind/audience/targetPath/…),
+      // so a kind's user-prompt builder can specialise on them — the document-authoring
+      // agents read these. Sparse; omitted when none were collected.
+      ...(block.taskTypeFields ? { taskTypeFields: block.taskTypeFields } : {}),
+      // Workspace-linked template / exemplar documents for a doc-authoring kind (WS1). Omitted
+      // when nothing is linked (the prompts then fall back to the built-in skeleton / built-in
+      // exemplars) or the kind isn't doc-aware.
+      ...(docAuthoring.docTemplateBody ? { docTemplateBody: docAuthoring.docTemplateBody } : {}),
+      ...(docAuthoring.docExemplars?.length ? { docExemplars: docAuthoring.docExemplars } : {}),
+      // The converged interactive-interview authoring brief (WS5), when the interview ran and
+      // synthesized one — the doc-writer folds it in as the refined spec to write from.
+      ...(docAuthoring.docInterviewBrief
+        ? { docInterviewBrief: docAuthoring.docInterviewBrief }
+        : {}),
     }
   }
 

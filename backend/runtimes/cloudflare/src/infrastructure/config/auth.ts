@@ -17,7 +17,24 @@ const MIN_SESSION_SECRET_LENGTH = 32
 /** Deployment environments where the AUTH_DEV_OPEN escape hatch is refused. */
 const PRODUCTION_ENVIRONMENTS = new Set(['production', 'prod', 'staging'])
 
-export function loadAuthConfig(env: Env): AuthConfig {
+/**
+ * Resolve the per-provider enablement + credential fields from the env — the decision-heavy
+ * prelude of {@link loadAuthConfig}, extracted so that builder stays within the cyclomatic-
+ * complexity budget. Behaviour is byte-identical (the checks moved verbatim).
+ */
+function resolveAuthEnablement(env: Env): {
+  clientId: string
+  clientSecret: string
+  sessionSecret: string
+  ttlHours: number | undefined
+  devOpen: boolean
+  testingNoAuth: boolean
+  githubEnabled: boolean
+  googleClientId: string
+  googleClientSecret: string
+  googleEnabled: boolean
+  passwordEnabled: boolean
+} {
   // Enabled when the OAuth credentials and a sufficiently strong session secret
   // are all present, mirroring the GitHub-integration default-off convention.
   const clientId = env.GITHUB_OAUTH_CLIENT_ID?.trim() ?? ''
@@ -41,6 +58,35 @@ export function loadAuthConfig(env: Env): AuthConfig {
   const googleClientSecret = env.GOOGLE_OAUTH_CLIENT_SECRET?.trim() ?? ''
   const googleEnabled = googleClientId !== '' && googleClientSecret !== '' && strongSecret
   const passwordEnabled = env.AUTH_PASSWORD_ENABLED?.trim() === 'true' && strongSecret
+  return {
+    clientId,
+    clientSecret,
+    sessionSecret,
+    ttlHours,
+    devOpen,
+    testingNoAuth,
+    githubEnabled,
+    googleClientId,
+    googleClientSecret,
+    googleEnabled,
+    passwordEnabled,
+  }
+}
+
+export function loadAuthConfig(env: Env): AuthConfig {
+  const {
+    clientId,
+    clientSecret,
+    sessionSecret,
+    ttlHours,
+    devOpen,
+    testingNoAuth,
+    githubEnabled,
+    googleClientId,
+    googleClientSecret,
+    googleEnabled,
+    passwordEnabled,
+  } = resolveAuthEnablement(env)
   return {
     // Enabled when ANY provider is configured (with a strong session secret).
     enabled: githubEnabled || googleEnabled || passwordEnabled,
