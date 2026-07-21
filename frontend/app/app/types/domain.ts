@@ -59,6 +59,10 @@ export type {
   AgentKind,
   AgentCategory,
   CustomAgentKind,
+  CustomTaskType,
+  TaskTypePresentation,
+  TaskTypeFieldDescriptor,
+  TaskTypeFieldOption,
   Pipeline,
   PipelinePurpose,
   SpendStatus,
@@ -115,6 +119,25 @@ export interface AgentArchetype {
    * hardcoding a kind. Absent → the generic `AgentStepDetail` panel.
    */
   resultView?: string
+}
+
+/**
+ * Display metadata for a task TYPE (the card badge + create-task picker), resolved through the
+ * `taskTypeMeta` read-model. A BUILT-IN type carries an i18n {@link labelKey}; a CUSTOM
+ * (deployment-registered) type carries a literal {@link label} from the wire presentation. The
+ * renderer resolves the display string as `labelKey ? t(labelKey) : label`. Frontend-only.
+ */
+export interface TaskTypeMeta {
+  /** The task type id this meta describes. */
+  taskType: string
+  /** iconify name (lucide). */
+  icon: string
+  /** tailwind-ish accent token used across the card badge / picker. */
+  color: string
+  /** i18n key for a BUILT-IN type's label; absent for a custom type. */
+  labelKey?: string
+  /** Literal label for a CUSTOM type (from the wire presentation); absent for a built-in. */
+  label?: string
 }
 
 /** Level-of-detail buckets driven by the canvas zoom level. Shallow → deep:

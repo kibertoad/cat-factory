@@ -1,5 +1,90 @@
 # @cat-factory/server
 
+## 0.141.1
+
+### Patch Changes
+
+- Updated dependencies [3c7d62b]
+- Updated dependencies [3c7d62b]
+- Updated dependencies [3c7d62b]
+  - @cat-factory/contracts@0.156.0
+  - @cat-factory/integrations@0.89.0
+  - @cat-factory/kernel@0.150.0
+  - @cat-factory/agents@0.67.7
+  - @cat-factory/orchestration@0.132.1
+  - @cat-factory/prompt-fragments@0.14.3
+  - @cat-factory/spend@0.12.73
+
+## 0.141.0
+
+### Minor Changes
+
+- 916278b: feat(frontend-extension-mechanism slice B): custom task types — a deployment-registered work
+  item (an "incident", "pentest", "compliance-audit") is now a first-class create-task choice +
+  card badge, symmetric with custom agent kinds, with zero host edits.
+
+  - **Contracts.** `taskTypeSchema` / `createTaskTypeSchema` widen from a closed picklist to
+    `picklist ∪ namespaced` (`<ns>:<name>`) — the shape `presentation.resultView` already uses. The
+    result-view-only `NAMESPACED_RESULT_VIEW_ID_PATTERN` is generalized into a shared `primitives.ts`
+    atom (`NAMESPACED_ID_PATTERN` / `isNamespacedId` / `namespacedIdSchema`) reused across every
+    extension surface. New `customTaskTypeSchema` (+ `taskTypeFieldDescriptorSchema`), a sparse
+    `taskTypeFields.custom` bag for descriptor values, and `workspaceSnapshot.customTaskTypes`.
+  - **Kernel.** App-owned `TaskTypeRegistry` (`defaultTaskTypeRegistry()`, empty), mirroring
+    `AgentKindRegistry`/`PipelineRegistry`; `defaultPipelineIdForTaskType` consults it after the
+    built-in map.
+  - **Orchestration.** `CoreDependencies.taskTypeRegistry` threaded into `BoardService` + re-exposed
+    on `Core`; `validateRegistrations` gains task-type checks (namespaced id, `formPanel`,
+    `defaultPipelineId` resolves).
+  - **Server + all three facades.** Snapshot projects `customTaskTypes` (shared `WorkspaceController`);
+    the Worker / Node / local facades build, install, validate, and re-export the registry (a
+    `taskTypeRegistry` option on `createApp`/`start`/`startLocal`).
+  - **Frontend (`@cat-factory/app`).** A `taskTypes` slot + a `useTaskTypesStore` (cloning the
+    agents-store merge → `taskTypeMeta` read-model); `buildAgentCapabilitiesManifest` generalized to
+    one `buildWorkspaceCapabilitiesManifest(kinds, taskTypes)` carrying both slots (agents store's
+    `hydrateCustomKinds` → `hydrateCapabilities`). `AddTaskModal` merges custom types into its picker
+    and renders their descriptor fields (or a `taskTypeFormPanels`-paired section) into
+    `taskTypeFields.custom`; `TaskCard` shows a type badge via `taskTypeMeta` (unregistered
+    namespaced types degrade to the `feature` presentation).
+
+  Cross-runtime conformance asserts the backend round-trip on both runtimes; the `deploy/frontend`
+  `acme:security` module dogfoods a CODE-shipped `acme:incident` task type end to end (e2e).
+
+### Patch Changes
+
+- Updated dependencies [916278b]
+  - @cat-factory/contracts@0.155.0
+  - @cat-factory/kernel@0.149.0
+  - @cat-factory/orchestration@0.132.0
+  - @cat-factory/agents@0.67.6
+  - @cat-factory/integrations@0.88.18
+  - @cat-factory/prompt-fragments@0.14.2
+  - @cat-factory/spend@0.12.72
+
+## 0.140.7
+
+### Patch Changes
+
+- 1bcb223: Internal refactor (lint complexity/size ratchet — `max-lines-per-function` step 1.5, 1000 → 632):
+  split the product functions above the new ceiling along cohesive seams, all behaviour-neutral. No
+  public API, wire shape, or runtime behaviour changes.
+
+  - `@cat-factory/kernel`: `seedPipelines` split into three module-level catalog builders it composes.
+  - `@cat-factory/server`: `publicApiController` / `authController` split into per-route-group registrars
+    (mirroring `registerCoreControllers`'s mount groups).
+  - `@cat-factory/app`: the `board` Pinia store's write operations extracted into `stores/board/`
+    factories (`createBoardMutations` / `createBoardRemoval`) over a shared `BoardWriteContext`.
+  - `@cat-factory/node-server`: `buildNodeContainer` split into `assembleNodeCoreDependencies` +
+    `projectNodeServerContainer` (the `CoreDependencies` object and the `ServerContainer` projection).
+  - `@cat-factory/local-server`: `buildLocalContainer`'s `buildNodeContainer` options extracted into
+    `buildLocalNodeOptions`.
+
+- Updated dependencies [1bcb223]
+  - @cat-factory/kernel@0.148.5
+  - @cat-factory/agents@0.67.5
+  - @cat-factory/integrations@0.88.17
+  - @cat-factory/orchestration@0.131.7
+  - @cat-factory/spend@0.12.71
+
 ## 0.140.6
 
 ### Patch Changes

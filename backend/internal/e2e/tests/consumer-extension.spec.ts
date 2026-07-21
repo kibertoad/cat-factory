@@ -3,6 +3,7 @@ import {
   LIVE_TIMEOUT,
   RUN_TERMINAL_TIMEOUT,
   createSimplePipeline,
+  createTask,
   setFakeProfile,
   startRun,
   taskCard,
@@ -97,5 +98,39 @@ test.describe('consumer extension (dogfood)', () => {
     // Escape is owned by the shared shell's `useModalBehavior` — the consumer window inherits it.
     await page.keyboard.press('Escape')
     await expect(dialog).toBeHidden()
+  })
+
+  // Slice B (custom task types): the consumer module contributes a CODE-shipped `acme:incident`
+  // task type via the `taskTypes` slot. A task created with that namespaced type (accepted by the
+  // widened `taskType` contract) reaches the board LIVE and its card renders the type BADGE — its
+  // icon/label/color resolved through the merged task-type catalog + the `taskTypeMeta` read-model,
+  // proving the code-shipped slot → catalog → card path end-to-end through the assembled product.
+  // A run isn't needed: this is a create + live-push + read-model render, not an execution.
+  test('a custom-typed task renders its card badge from a registered taskTypes slot', async ({
+    page,
+    request,
+    seededBoard,
+  }) => {
+    const { workspaceId } = seededBoard
+    // Create an `acme:incident` task under `blk_auth` (the seeded module that homes `task_login`,
+    // so its sibling renders at the same default zoom). The backend accepts the namespaced type
+    // (widened contract) and stores the descriptor value in `taskTypeFields.custom` — no backend
+    // registration needed; the presentation is the deployment's code-shipped slot.
+    const task = await createTask(request, workspaceId, 'blk_auth', 'DB outage', {
+      taskType: 'acme:incident',
+      taskTypeFields: { custom: { severity: 'sev1' } },
+    })
+
+    // The new card is pushed onto the board live (a coarse `board` event → refresh).
+    const card = taskCard(page, task.id)
+    await expect(card).toBeVisible({ timeout: LIVE_TIMEOUT })
+
+    // Its type badge renders the consumer type's presentation: the label as the hover title and
+    // the raw type on `data-task-type-badge`. A built-in `feature` sibling shows no badge, so a
+    // visible badge here is proof the custom type resolved through the merged catalog.
+    const badge = card.getByTestId('task-type-badge')
+    await expect(badge).toBeVisible()
+    await expect(badge).toHaveAttribute('data-task-type-badge', 'acme:incident')
+    await expect(badge).toHaveAttribute('title', 'Incident')
   })
 })

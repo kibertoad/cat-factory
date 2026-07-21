@@ -28,6 +28,7 @@ import type {
   Service,
   TaskRepository,
   TaskSourceProvider,
+  TaskTypeRegistry,
   WorkspaceMemberRepository,
   WorkspaceRepository,
   WorkspaceSnapshot,
@@ -497,6 +498,14 @@ export interface ConformanceAppOptions {
    * container build. Absent → the facade's default built-in-only registry.
    */
   initiativePresetRegistry?: InitiativePresetRegistry
+  /**
+   * Inject the app-owned custom task-type registry, pre-loaded with a CUSTOM task type, so the
+   * suite can assert a deployment-registered task type round-trips identically on EVERY runtime
+   * (its snapshot `customTaskTypes` projection + a task created with its namespaced id defaulting
+   * to its registered pipeline). Each facade harness threads the SAME instance into its container
+   * build. Absent → the facade's default (empty) task-type registry.
+   */
+  taskTypeRegistry?: TaskTypeRegistry
   /**
    * Inject the test quality-control companion's inline reviewer (a deterministic fake in the
    * suite) so the full QC loop — audit a Tester report, loop the Tester on gaps, settle on an

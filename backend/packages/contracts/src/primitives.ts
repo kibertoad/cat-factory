@@ -10,6 +10,38 @@ export const nonEmpty = v.pipe(v.string(), v.minLength(1))
 /** A bounded, trimmed URL string (≤2000 chars). Not a full URL parse — the runtime validates reachability. */
 export const urlString = v.pipe(v.string(), v.trim(), v.minLength(1), v.maxLength(2000))
 
+/**
+ * A CONSUMER-namespaced id: `<ns>:<name>`, each segment a lowercase `a-z0-9` dash-separated
+ * token (e.g. `acme:security-report`, `acme:incident`). The colon distinguishes a
+ * deployment-provided id from a bare built-in one, so a namespaced consumer id is accepted
+ * across EVERY extension surface (result views, task types, form panels, …) while a typo'd
+ * built-in (no colon, not in that surface's picklist) is still rejected — the typo guardrail.
+ * This is the SINGLE source of truth for the rule; every extension schema
+ * (`agentPresentationSchema.resultView`, `taskTypeSchema`, `customTaskTypeSchema.formPanel`,
+ * …) shares these atoms so they can't drift. (Generalized from the original result-view-only
+ * `NAMESPACED_RESULT_VIEW_ID_PATTERN`.)
+ */
+export const NAMESPACED_ID_PATTERN = /^[a-z0-9]+(?:-[a-z0-9]+)*:[a-z0-9]+(?:-[a-z0-9]+)*$/
+
+/** Whether `id` is a well-formed consumer-namespaced id (`<ns>:<name>`). */
+export function isNamespacedId(id: string): boolean {
+  return NAMESPACED_ID_PATTERN.test(id)
+}
+
+/**
+ * A valibot schema accepting exactly a well-formed consumer-namespaced id. Unioned with a
+ * built-in picklist wherever an extension surface widens a closed set to also admit
+ * deployment-provided ids (the union keeps the picklist's literal-type narrowing that a bare
+ * predicate would erase — see `agentPresentationSchema.resultView` / `taskTypeSchema`).
+ */
+export const namespacedIdSchema = v.pipe(
+  v.string(),
+  v.regex(
+    NAMESPACED_ID_PATTERN,
+    'Consumer id must be <namespace>:<name> (lowercase a-z0-9, dash-separated)',
+  ),
+)
+
 export const blockTypeSchema = v.picklist([
   'frontend',
   'service',
@@ -63,6 +95,26 @@ export type BlockStatus = v.InferOutput<typeof blockStatusSchema>
 export const blockLevelSchema = v.picklist(['frame', 'module', 'task', 'epic', 'initiative'])
 export type BlockLevel = v.InferOutput<typeof blockLevelSchema>
 
+/** The BUILT-IN task types, in display order (the closed set before any deployment widening). */
+export const BUILTIN_TASK_TYPES = [
+  'feature',
+  'bug',
+  'document',
+  'spike',
+  'review',
+  'ralph',
+  'recurring',
+] as const
+/** The built-in task types a human can pick in the create-task form (`recurring` is schedule-only). */
+export const BUILTIN_CREATE_TASK_TYPES = [
+  'feature',
+  'bug',
+  'document',
+  'spike',
+  'review',
+  'ralph',
+] as const
+
 /**
  * The kind of work a task represents, chosen by the human at creation. Drives the
  * task card's icon/badge, per-type creation fields, and (optionally) the per-service
@@ -71,26 +123,21 @@ export type BlockLevel = v.InferOutput<typeof blockLevelSchema>
  * special: such tasks are NOT created through `addTask` — they are the reused on-board
  * block of a recurring-pipeline schedule, stamped with this type so the board renders
  * them consistently.
+ *
+ * A BUILT-IN id OR a CONSUMER-namespaced one ({@link namespacedIdSchema}, `<ns>:<name>`,
+ * e.g. `acme:incident`) a deployment registers via its app-owned `TaskTypeRegistry` — the
+ * exact `picklist ∪ namespaced` shape `agentPresentationSchema.resultView` uses. A bare
+ * non-built-in id still fails validation (the typo guardrail); a namespaced id is trusted to
+ * the deployment and rendered from its registered presentation (an unregistered one degrades
+ * to the `feature` presentation on the frontend, so stale data never breaks a card).
  */
-export const taskTypeSchema = v.picklist([
-  'feature',
-  'bug',
-  'document',
-  'spike',
-  'review',
-  'ralph',
-  'recurring',
-])
+export const taskTypeSchema = v.union([v.picklist(BUILTIN_TASK_TYPES), namespacedIdSchema])
 export type TaskType = v.InferOutput<typeof taskTypeSchema>
 
 /** The task types a human can pick in the create-task form (recurring is created via a schedule). */
-export const createTaskTypeSchema = v.picklist([
-  'feature',
-  'bug',
-  'document',
-  'spike',
-  'review',
-  'ralph',
+export const createTaskTypeSchema = v.union([
+  v.picklist(BUILTIN_CREATE_TASK_TYPES),
+  namespacedIdSchema,
 ])
 export type CreateTaskType = v.InferOutput<typeof createTaskTypeSchema>
 
@@ -212,6 +259,15 @@ export const taskTypeFieldsSchema = v.object({
   prUrl: v.optional(v.pipe(v.string(), v.trim(), v.maxLength(500))),
   /** Review: freeform focus/guidance for the reviewer (e.g. "focus on the auth changes"). */
   reviewFocus: v.optional(v.pipe(v.string(), v.maxLength(4000))),
+
+  // --- Custom-task-type fields ----------------------------------------------
+  /**
+   * Values for the descriptor-driven fields a CUSTOM (deployment-registered) task type
+   * declares (see `customTaskTypeSchema.fields`), keyed by each field descriptor's `key`.
+   * Sparse and additive like the built-in fields above — never migrated, never touches them.
+   * String or number per the descriptor's input `type`; the built-in types leave this absent.
+   */
+  custom: v.optional(v.record(v.string(), v.union([v.string(), v.number()]))),
 })
 export type TaskTypeFields = v.InferOutput<typeof taskTypeFieldsSchema>
 

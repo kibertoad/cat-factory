@@ -5,6 +5,7 @@ import type {
   AgentKind,
   BlockStatus,
   BlockType,
+  TaskTypeMeta,
 } from '~/types/domain'
 
 /** Simple unique id helper (fine for a client-only prototype). */
@@ -696,6 +697,112 @@ export function agentKindMeta(kind: string): AgentArchetype {
  */
 export function isKnownAgentKind(kind: string): boolean {
   return kind in AGENT_BY_KIND || kind in SYSTEM_AGENT_META || kind in customAgentKindMeta.value
+}
+
+// ---------------------------------------------------------------------------
+// Task-type presentation (frontend-extension-mechanism initiative, slice B) — the exact twin of
+// the agent-kind read-model above: a frozen BUILT-IN map + a reactive CUSTOM projection fed by the
+// task-types store, resolved through {@link taskTypeMeta} so the card badge + create-task picker
+// render a built-in OR a deployment-registered custom type — and an UNREGISTERED namespaced type
+// (stale data after an extension was removed) degrades to the `feature` presentation, never a crash.
+// ---------------------------------------------------------------------------
+
+/**
+ * The BUILT-IN task-type presentations, keyed by type. Icons mirror the create-task picker's old
+ * hardcoded list; `labelKey` is the i18n key the renderer resolves (built-in labels are localized,
+ * unlike a custom type's literal wire label). `recurring` is not human-creatable but is stamped on
+ * the reused schedule block, so it needs a badge too.
+ */
+export const TASK_TYPE_META: Record<string, TaskTypeMeta> = {
+  feature: {
+    taskType: 'feature',
+    icon: 'i-lucide-sparkles',
+    color: '#38bdf8',
+    labelKey: 'board.addTask.types.feature',
+  },
+  bug: {
+    taskType: 'bug',
+    icon: 'i-lucide-bug',
+    color: '#f87171',
+    labelKey: 'board.addTask.types.bug',
+  },
+  document: {
+    taskType: 'document',
+    icon: 'i-lucide-file-text',
+    color: '#c084fc',
+    labelKey: 'board.addTask.types.document',
+  },
+  spike: {
+    taskType: 'spike',
+    icon: 'i-lucide-flask-conical',
+    color: '#fbbf24',
+    labelKey: 'board.addTask.types.spike',
+  },
+  review: {
+    taskType: 'review',
+    icon: 'i-lucide-clipboard-check',
+    color: '#34d399',
+    labelKey: 'board.addTask.types.review',
+  },
+  ralph: {
+    taskType: 'ralph',
+    icon: 'i-lucide-infinity',
+    color: '#a78bfa',
+    labelKey: 'board.addTask.types.ralph',
+  },
+  recurring: {
+    taskType: 'recurring',
+    icon: 'i-lucide-repeat',
+    color: '#94a3b8',
+    labelKey: 'board.addTask.types.recurring',
+  },
+}
+
+/**
+ * Reactive read-model of the deployment's CUSTOM task types (consumer-slot + backend
+ * remote-manifest), kept in sync by the task-types store — the exact twin of
+ * {@link customAgentKindMeta}. The store is the source of truth; this `shallowRef` is its
+ * synchronous projection so {@link taskTypeMeta} / {@link isKnownTaskType} resolve a custom type
+ * WITHOUT importing the store (circular) or mutating {@link TASK_TYPE_META}.
+ */
+const customTaskTypeMeta = shallowRef<Record<string, TaskTypeMeta>>({})
+
+/** Replace the custom task-type projection (called only by the task-types store). */
+export function setCustomTaskTypeMeta(map: Record<string, TaskTypeMeta>): void {
+  customTaskTypeMeta.value = map
+}
+
+/** Test-only: clear the custom task-type projection so a spec starts from built-ins only. */
+export function __resetCustomTaskTypeMetaForTest(): void {
+  customTaskTypeMeta.value = {}
+}
+
+/**
+ * Resolve display metadata for ANY task type — a BUILT-IN ({@link TASK_TYPE_META}), a deployment
+ * CUSTOM type (projected into {@link customTaskTypeMeta} by the task-types store), or an
+ * UNREGISTERED namespaced one (stale data after its extension was removed) — ALWAYS returning a
+ * usable icon/color/label. An unregistered/unknown type falls back to the `feature` presentation
+ * (its icon/color) but keeps the raw id as its literal label, so a leftover string renders a badge
+ * instead of breaking the card. Reading `customTaskTypeMeta` reactively means a component computed
+ * re-runs when the custom catalog changes.
+ */
+export function taskTypeMeta(taskType: string | undefined): TaskTypeMeta {
+  if (!taskType) return TASK_TYPE_META.feature!
+  return (
+    TASK_TYPE_META[taskType] ??
+    customTaskTypeMeta.value[taskType] ?? {
+      taskType,
+      icon: TASK_TYPE_META.feature!.icon,
+      color: TASK_TYPE_META.feature!.color,
+      // Unregistered namespaced type: no i18n key, so show its raw id rather than a blank badge.
+      label: taskType,
+    }
+  )
+}
+
+/** Whether a task type is known to this build — a built-in or a projected custom type. */
+export function isKnownTaskType(taskType: string): boolean {
+  return taskType in TASK_TYPE_META || taskType in customTaskTypeMeta.value
 }
 
 type BlockTypeMeta = { label: string; icon: string; accent: string }

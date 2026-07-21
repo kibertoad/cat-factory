@@ -1,13 +1,14 @@
 import type { AgentKindRegistry } from '@cat-factory/agents'
-import type { GateRegistry, PipelineRegistry } from '@cat-factory/kernel'
+import type { GateRegistry, PipelineRegistry, TaskTypeRegistry } from '@cat-factory/kernel'
 import {
   CI_FIXER_AGENT_KIND,
   CONFLICT_RESOLVER_AGENT_KIND,
   FIXER_AGENT_KIND,
   ON_CALL_AGENT_KIND,
+  seedPipelines,
   stubGateContext,
 } from '@cat-factory/kernel'
-import { isValidResultViewId, RESULT_VIEW_ID_SET } from '@cat-factory/contracts'
+import { isNamespacedId, isValidResultViewId, RESULT_VIEW_ID_SET } from '@cat-factory/contracts'
 
 // ---------------------------------------------------------------------------
 // Boot-time validation of the deployment's registered extensions (agent kinds, gates,
@@ -62,6 +63,13 @@ export interface ValidateRegistrationsOptions {
    * nonexistent kind fails at boot rather than mid-run.
    */
   pipelineRegistry?: PipelineRegistry
+  /**
+   * The app-owned custom task-type registry to validate (the facade's injected instance — the
+   * SAME one it threads through `CoreDependencies.taskTypeRegistry`). Optional: when omitted, no
+   * task-type checks run. A facade that registers custom task types passes it so a malformed id,
+   * a bad `formPanel`, or a `defaultPipelineId` naming a nonexistent pipeline fails at boot.
+   */
+  taskTypeRegistry?: TaskTypeRegistry
   /** Override the canonical result-view id set (defaults to contracts' {@link RESULT_VIEW_ID_SET}). */
   knownResultViewIds?: ReadonlySet<string>
   /** Built-in helper kinds a gate may escalate to (defaults to ci-fixer/conflict-resolver/on-call). */
@@ -182,6 +190,48 @@ export function collectRegistrationProblems(
               `known built-in, a registered kind, or a registered gate.`,
           })
         }
+      }
+    }
+  }
+
+  // 5. Custom task types (only when a task-type registry is supplied). Each registration must
+  //    carry a NAMESPACED id (`<ns>:<name>`) and, if set, a well-formed namespaced `formPanel`
+  //    id; a `defaultPipelineId` must resolve against the built-in + registered pipeline catalog
+  //    (else the created task would silently fall back to the positional default).
+  if (opts.taskTypeRegistry) {
+    const knownPipelineIds = new Set(seedPipelines(opts.pipelineRegistry).map((p) => p.id))
+    for (const taskType of opts.taskTypeRegistry.all()) {
+      if (!isNamespacedId(taskType.taskType)) {
+        problems.push({
+          severity: 'error',
+          code: 'task_type_not_namespaced',
+          message:
+            `Custom task type "${taskType.taskType}" is not a namespaced id (<ns>:<name>, ` +
+            `lowercase a-z0-9, dash-separated). A bare id collides with the built-in picklist.`,
+        })
+      }
+      if (taskType.formPanel !== undefined && !isNamespacedId(taskType.formPanel)) {
+        problems.push({
+          severity: 'error',
+          code: 'task_type_form_panel_invalid',
+          message:
+            `Custom task type "${taskType.taskType}" declares formPanel "${taskType.formPanel}", ` +
+            `which is not a namespaced id (<ns>:<name>). Pair it with a frontend component in the ` +
+            `taskTypeFormPanels slot under that id.`,
+        })
+      }
+      if (
+        taskType.defaultPipelineId !== undefined &&
+        !knownPipelineIds.has(taskType.defaultPipelineId)
+      ) {
+        problems.push({
+          severity: 'error',
+          code: 'task_type_unknown_pipeline',
+          message:
+            `Custom task type "${taskType.taskType}" declares defaultPipelineId ` +
+            `"${taskType.defaultPipelineId}", which is neither a built-in nor a registered ` +
+            `pipeline. Register the pipeline (PipelineRegistry) or fix the id.`,
+        })
       }
     }
   }

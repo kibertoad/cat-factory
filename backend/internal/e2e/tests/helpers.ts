@@ -101,11 +101,22 @@ export async function createTask(
   workspaceId: string,
   parentId: string,
   title = 'E2E task',
-  opts: { agentConfig?: Record<string, string> } = {},
+  opts: {
+    agentConfig?: Record<string, string>
+    /** A built-in or CUSTOM (namespaced `<ns>:<name>`) task type. */
+    taskType?: string
+    /** The sparse per-type fields bag (e.g. `{ custom: { severity: 'sev1' } }`). */
+    taskTypeFields?: Record<string, unknown>
+  } = {},
 ): Promise<Block> {
   return json<Block>(
     await request.post(`${BACKEND_URL}/workspaces/${workspaceId}/blocks/${parentId}/tasks`, {
-      data: { title, ...(opts.agentConfig ? { agentConfig: opts.agentConfig } : {}) },
+      data: {
+        title,
+        ...(opts.agentConfig ? { agentConfig: opts.agentConfig } : {}),
+        ...(opts.taskType ? { taskType: opts.taskType } : {}),
+        ...(opts.taskTypeFields ? { taskTypeFields: opts.taskTypeFields } : {}),
+      },
     }),
   )
 }

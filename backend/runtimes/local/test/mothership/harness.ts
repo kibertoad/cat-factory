@@ -221,6 +221,7 @@ export function makeMothershipConformanceApp(
     resolveRepoFilesForCoords?: CoreDependencies['resolveRepoFilesForCoords']
     backendRegistries?: BackendRegistries
     initiativePresetRegistry?: CoreDependencies['initiativePresetRegistry']
+    taskTypeRegistry?: CoreDependencies['taskTypeRegistry']
     testerQualityReviewer?: CoreDependencies['testerQualityReviewer']
     detectionConventions?: CoreDependencies['detectionConventions']
   },
@@ -318,6 +319,9 @@ export function makeMothershipConformanceApp(
     ...(opts?.initiativePresetRegistry
       ? { initiativePresetRegistry: opts.initiativePresetRegistry }
       : {}),
+    // Inject the app-owned task-type registry (pre-loaded in the custom-task-type suite) so the
+    // SUT container resolves it by reference on this runtime.
+    ...(opts?.taskTypeRegistry ? { taskTypeRegistry: opts.taskTypeRegistry } : {}),
   })
   const app = createApp(container, SUT_ENV)
 
