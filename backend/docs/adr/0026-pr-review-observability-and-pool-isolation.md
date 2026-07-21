@@ -56,13 +56,21 @@ The inactivity watchdog (default 10 min, `JOB_INACTIVITY_MS`; `git.ts` derives i
 
 `backend/runtimes/local/src/container.ts` runs a warm pool of pre-warmed executor containers, reaped and re-warmed at startup. Pooled containers bake `HARNESS_SHARED_SECRET` (and other config) in at creation. This machine runs two installs against one Docker daemon (`checkbox-cat-factory-postgres-1` on 5433 and the upstream monorepo's `local-postgres-1` on 5432). If the startup reaper adopts a container that the other install pre-warmed, its baked `HARNESS_SHARED_SECRET` will not match this backend's, and the orchestrator's authenticated calls to it fail. Whether this can happen today depends on whether pool members are namespaced per-install by a Docker label; that needs verification, and if they are not namespaced, this is a real poisoning vector.
 
-### Note on ENCRYPTION_KEY drift (not a code defect)
+### P6 — ENCRYPTION_KEY drift is discovered lazily, per-secret, at the worst time
 
-The `ENCRYPTION_KEY` decrypt errors in the backend log (`A stored secret could not be decrypted … does not match the one it was sealed under`) are all on `GET /environments/connection|provider`, the frontend polling the Environments panel. They are not on the review path; the review's stored subscription token decrypted fine. This is partial, per-secret drift: specific `environment_connections` rows were sealed under a different key and persist in the Postgres volume across a key change, most likely written before the current key existed. It is not caused by any Docker image (`ENCRYPTION_KEY` is host-side and never enters a container). The remedy is operational: re-enter or re-seal the affected connection credentials. No code change is proposed here for it, but P5's per-install hygiene is the related durable improvement.
+The `ENCRYPTION_KEY` decrypt errors in the backend log (`A stored secret could not be decrypted … does not match the one it was sealed under`) are all on `GET /environments/connection|provider`, the frontend polling the Environments panel. They are not on the review path; the review's stored subscription token decrypted fine. This is partial, per-secret drift: specific `environment_connections` rows were sealed under a different key and persist in the Postgres volume across a key change, most likely written before the current key existed. It is not caused by any Docker image (`ENCRYPTION_KEY` is host-side and never enters a container).
+
+The root drift is operational, but the way we find out about it is a real gap. Today drift surfaces only when some request or run happens to touch a stale secret, one opaque error at a time, with no boot-time signal and no inventory of what is affected. Two structural reasons, both in `WebCryptoSecretCipher` (`backend/packages/server/src/crypto/WebCryptoSecretCipher.ts`): the `v1.<salt>.<iv>.<ciphertext>` envelope carries a version tag but **no key identifier or fingerprint**, and the per-record random HKDF salt means nothing about a record reveals which master key sealed it short of attempting an AES-GCM decrypt (the auth-tag check is the only signal). So drift can only be learned piecemeal, on access. D6 closes that; the value itself, once sealed under a lost key, is unrecoverable without restoring that key.
+
+### P7 — The browser personal-password cache is not scoped per installation
+
+This is a different key from P6, and the two must not be conflated. `frontend/app/app/stores/personalSubscriptions.ts` caches the signed-in user's personal-subscription **password** in localStorage under a single global key, `CACHE_KEY = 'cf.personal-pw'`, with a 40h TTL, and rides it on gated actions as the `X-Personal-Password` header. That password unlocks the per-user personal token server-side; it is explicitly **not** the at-rest `ENCRYPTION_KEY` (the store's own comment: "the real at-rest protection is the server's system encryption, which the cache doesn't touch"). So it did not cause the P6 drift.
+
+But the cache key is scoped only by browser origin. It carries no installation, workspace, or user discriminator. On this machine two local installs can be served from the same origin (localhost), and a hosted origin can front more than one deployment, so the cached password of one installation is offered to another as `X-Personal-Password`. The failure is not silent corruption (the server rejects a wrong password with a 428 re-challenge), but it is a cross-installation credential reuse in intent and a confusing wrong-password loop in practice. The same global key also means a second signed-in user on a shared browser profile inherits the first user's cached password until it expires or is rejected.
 
 ## Decision
 
-Close P1–P4 in the review/observability path and fix P5's pool hygiene. Each carries its own design below. They are independent and can land separately.
+Close P1–P4 in the review/observability path, fix P5's pool hygiene, add early detection and guarded remediation for key drift (P6), and scope the browser password cache per installation (P7). Each carries its own design below. They are independent and can land separately.
 
 ### D1 — Preserve run history in the failure classifier (fixes P1)
 
@@ -89,12 +97,30 @@ Add a short, first-output watchdog distinct from the 10-minute inactivity window
 
 Label every pooled and job container with a per-install identity (for example a stable `cat-factory.install-id` derived from the deployment's config, plus the existing kind labels), and make the startup reaper and the pool adopter filter strictly on that label. A container that lacks this install's id is never adopted; it is left alone (it belongs to another install) rather than reaped or reused. This removes the cross-install poisoning path regardless of how many installs share the Docker daemon, and it makes the reap safe to run without fear of touching a neighbour's containers. Document the label contract in `backend/docs/container-reaping.md`.
 
+### D6 — Detect, surface, and offer guarded remediation for key drift (fixes P6)
+
+Three parts, increasing in cost. They answer the direct question "can we identify drift early, surface it, and propose dropping the stale value" with yes, yes, and yes-but-guarded.
+
+1. **Boot-time drift check via a key fingerprint.** Store a non-secret fingerprint of the master key: `HKDF(masterKey, info="cat-factory:key-fingerprint")` truncated to ~8 bytes, base64. It is a one-way function of the key and leaks nothing usable (you cannot recover a 32-byte key from 8 bytes of HKDF output). Persist it once (local settings) the first time it is computed. On every boot, recompute from the current `ENCRYPTION_KEY` and compare. A mismatch is an O(1), definitive "the key changed since secrets were last sealed" signal, available before any request touches a stale secret. This is the cheap early-warning the incident lacked.
+
+2. **Bounded startup sweep plus a single surfaced issue.** When the fingerprint mismatches (or always, in local mode where the credential count is small), attempt to decrypt each secret-bearing column and bucket the outcome into three cases the cipher already distinguishes: decryptable (fine), AES-GCM auth failure (key mismatch, the drift case), and envelope corruption (the separate truncated/foreign-scheme error). Raise one structured issue or notification that lists the affected credentials by connection type, id, and seal time, never the value, with remediation guidance. This turns a stream of opaque per-request errors into one legible, actionable item in the UI.
+
+3. **Explicit, per-secret drop/re-seal remediation.** Offer an operator action (CLI and the connection UI) that, for a chosen affected credential, drops the unrecoverable ciphertext and flips its owning connection to "needs re-entry," so the app stops throwing on it and the user re-enters it once. This must be opt-in and per-secret, never automatic. If the key was changed by mistake, restoring the original key recovers every value, and an auto-drop would destroy recoverable data. The action states that plainly ("restoring the previous ENCRYPTION_KEY recovers these instead") before it drops anything, and a "drop all stale" batch sits behind the same confirmation.
+
+Forward-looking: adopt a `v2` envelope that embeds the key fingerprint per record, so future drift is classifiable per-record without a decrypt attempt and records sealed under different historical keys are distinguishable. `v1` records carry no fingerprint and continue to need a decrypt attempt; the sweep handles both.
+
+### D7 — Scope the personal-password cache per installation and per user (fixes P7)
+
+Key the cache by discriminators the client already has: the configured API base (`useRuntimeConfig().public.apiBase`, distinct per installation even when the frontend origin is shared) and the signed-in user id. Use `cf.personal-pw:<hash(apiBase)>:<userId>` rather than the bare `cf.personal-pw`. A cached password is then reachable only by the same installation and the same user that entered it; another installation or user on the same origin sees no cache and challenges normally. Per-workspace scoping is not needed and would only add redundant prompts: the backend applies one password to all of a run's individual-usage vendors for a user, so the password is a per-user secret, not a per-workspace one. On read, ignore or migrate any legacy bare `cf.personal-pw` value so the upgrade does not strand a still-valid entry. This is a small, self-contained frontend change and is the browser-layer instance of the same "never reuse a cached secret across installations" hygiene that D5 enforces at the container layer.
+
 ## Consequences
 
 - The common case (a healthy, long, parallel-subagent review) becomes legible: progress advances, the heartbeat moves, per-slice status shows, and mid-run token cost is visible.
 - A genuinely wedged run surfaces within a couple of minutes instead of ten.
 - A run that dies to infrastructure after doing work reports that honestly, so "reruns start broken" stops being the reasonable read of a normal eviction.
 - Warm pools stop being a shared-daemon hazard.
+- Key drift is caught at boot with an inventory of what is affected, instead of one opaque per-request error at a time, and stale values can be dropped deliberately (never silently, so a mistaken key change stays recoverable by restoring the key).
+- The browser password cache stops being reachable across installations or users on a shared origin.
 - D2.1 and D3 add a dependency on the CLI's subagent transcript layout. That format is not a stable contract, so the watcher must degrade gracefully (fall back to today's parent-stream-only behaviour) if the layout changes, and it should be covered by a harness test against a recorded transcript fixture.
 
 ## Rollout
@@ -103,10 +129,12 @@ Independent changes; suggested order by value and blast radius:
 
 1. D1 (small, high value, no behavioural risk).
 2. D2.2 then D2.1 (the reported symptom; D2.2 is a safe UI copy change that stops the false "slicing" claim even before D2.1 lands).
-3. D5 (prevents a class of local-mode failures on multi-install machines).
-4. D3 and D4 (telemetry and early-wedge diagnostics).
+3. D6.1 and D7 (both small and self-contained: an O(1) boot drift check, and per-installation cache scoping that also closes a cross-install credential-reuse path).
+4. D5 (prevents a class of local-mode failures on multi-install machines).
+5. D6.2 and the surfaced issue, then D6.3 remediation.
+6. D3 and D4 (telemetry and early-wedge diagnostics).
 
-The `environment_connections` decrypt drift is handled operationally (re-enter the affected credentials) and is out of scope for the code changes above.
+The immediate `environment_connections` drift on this install is still cleared operationally by re-entering the affected credentials; D6 is what stops the next occurrence from being discovered the hard way.
 
 ## Appendix: evidence
 
