@@ -1745,7 +1745,8 @@
         "markRead": "Als gelesen markieren",
         "fork_decision_pending": "Als gelesen markieren",
         "pr_review_ready": "Als gelesen markieren",
-        "budget_paused": "Als gelesen markieren"
+        "budget_paused": "Als gelesen markieren",
+        "key_drift": "Veraltete Zugangsdaten entfernen"
       }
     },
     "aiProvidersBanner": {

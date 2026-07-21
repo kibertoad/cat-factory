@@ -70,6 +70,8 @@ const routes = reactive<Record<NotificationType, SlackRoute>>({
   initiative: { enabled: false, channel: '' },
   platform_health: { enabled: false, channel: '' },
   budget_paused: { enabled: false, channel: '' },
+  // In-app only (not in ROUTABLE), but the map is exhaustive over the type.
+  key_drift: { enabled: false, channel: '' },
 })
 const mentionsEnabled = ref(false)
 // Editable member rows carry a client-only stable `uid` (see `slackMemberMapping`) so

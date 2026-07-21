@@ -55,6 +55,17 @@ export function notificationActEffect(
           await container.executionService.retry(workspaceId, notification.executionId)
         }
         break
+      case 'key_drift':
+        // ADR 0026 D6.3: acting on a key-drift card drops EVERY unrecoverable credential it
+        // lists (the "drop all stale" batch), flipping each owning connection to needs-re-entry.
+        // A single credential is dropped from the operator CLI instead. Explicit + confirmed on
+        // the card — the values are gone under the old key, so this never runs automatically.
+        if (container.sealedSecretInventory) {
+          for (const ref of notification.payload?.driftAffected ?? []) {
+            await container.sealedSecretInventory.drop({ source: ref.source, id: ref.id })
+          }
+        }
+        break
     }
   }
 }

@@ -192,6 +192,47 @@
                     ],
                     "type": "object"
                   },
+                  "driftAffected": {
+                    "items": {
+                      "properties": {
+                        "id": {
+                          "type": "string"
+                        },
+                        "label": {
+                          "type": "string"
+                        },
+                        "reason": {
+                          "enum": [
+                            "key-mismatch",
+                            "corrupt"
+                          ],
+                          "type": "string"
+                        },
+                        "sealedAt": {
+                          "anyOf": [
+                            {
+                              "type": "number"
+                            },
+                            {
+                              "type": "null"
+                            }
+                          ]
+                        },
+                        "source": {
+                          "type": "string"
+                        }
+                      },
+                      "required": [
+                        "source",
+                        "id",
+                        "label",
+                        "reason",
+                        "sealedAt"
+                      ],
+                      "type": "object"
+                    },
+                    "type": "array"
+                  },
                   "findingCount": {
                     "type": "number"
                   },
@@ -386,7 +427,8 @@
               "pr_review_ready",
               "initiative",
               "platform_health",
-              "budget_paused"
+              "budget_paused",
+              "key_drift"
             ],
             "type": "string"
           }

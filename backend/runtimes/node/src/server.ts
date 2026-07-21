@@ -15,6 +15,8 @@ import {
   mountAuthGate,
   registerCoreControllers,
   resolveCorsOrigin,
+  sweepKeyDriftAndRaise,
+  WebCryptoSecretCipher,
 } from '@cat-factory/server'
 import { DrizzleKeyFingerprintStore } from './repositories/drizzle/settings.js'
 import { pinoKeyFingerprintLogger } from './keyFingerprint.js'
@@ -532,6 +534,18 @@ async function bootServer(
     defaultModelPresetId: options.defaultModelPresetId,
   })
   bootClock.mark('container')
+  // ADR 0026 D6.2: a one-shot drift sweep at boot — attempt to decrypt every sealed credential
+  // and raise ONE `key_drift` card per affected workspace (or clear a stale one), so drift is a
+  // single legible issue instead of a stream of opaque per-request errors. Runs after the
+  // container is built (it needs the notifications module + the inventory). Best-effort +
+  // fire-and-forget so it never delays the listen; a no-op when unwired (no ENCRYPTION_KEY).
+  if (encryptionKey) {
+    void sweepKeyDriftAndRaise(
+      container,
+      (info) => new WebCryptoSecretCipher({ masterKeyBase64: encryptionKey, info }),
+      pinoKeyFingerprintLogger(logger),
+    ).catch((error: unknown) => logger.warn({ err: String(error) }, 'key drift sweep failed'))
+  }
   // Connect the cross-node adapters (a no-op when none are configured) so peer events start
   // reaching this node's browsers.
   await realtimePropagator.start(logger)

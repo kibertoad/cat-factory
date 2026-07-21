@@ -1656,7 +1656,8 @@
         "markRead": "Oznacz jako przeczytane",
         "fork_decision_pending": "Oznacz jako przeczytane",
         "pr_review_ready": "Oznacz jako przeczytane",
-        "budget_paused": "Oznacz jako przeczytane"
+        "budget_paused": "Oznacz jako przeczytane",
+        "key_drift": "Usuń nieaktualne poświadczenia"
       },
       "toast": {
         "acted": "Oznaczono jako obsłużone",
