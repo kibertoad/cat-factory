@@ -85,6 +85,11 @@ export { InitiativePresetRegistry, type InitiativePresetRegistration } from '@ca
 // a deployment news a `defaultPipelineRegistry()`, registers its pipelines on it, and passes it to
 // `start()` via `buildContainer`'s `pipelineRegistry` option — replacing the old `registerPipeline`.
 export { PipelineRegistry, defaultPipelineRegistry } from '@cat-factory/kernel'
+// Installation-level extension point for custom task types (the same DI seam as agent kinds):
+// a deployment news a `defaultTaskTypeRegistry()`, registers its namespaced task types on it, and
+// passes it to `start()` via `buildContainer`'s `taskTypeRegistry` option — the SPA renders each
+// as a first-class create-task choice + card badge (snapshot `customTaskTypes`).
+export { TaskTypeRegistry, defaultTaskTypeRegistry } from '@cat-factory/kernel'
 // The built-in model-preset ids + the catalog fallback default, re-exported so a deploy-app
 // wrapper can name a preset when passing `start({ defaultModelPresetId })` without a direct
 // `@cat-factory/kernel` import.

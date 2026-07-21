@@ -18,9 +18,11 @@ package. `app/plugins/acme-security.client.ts` registers one module
 (`app/modular/acme-security.ts`) that contributes to every landed consumer seam at
 once: a bespoke run-detail window for the `security-auditor` agent kind (reusing the
 layer's shared `ResultWindowShell` + `StepRunMeta` chrome), the palette entry that
-routes that kind to the window, a sidebar/command-palette destination, and an extra
-inspector panel — all through the auto-imported `registerAppModule` seam, with zero
-host edits. Its strings live in `i18n/locales/en.json` (deep-merged into the layer
+routes that kind to the window, a sidebar/command-palette destination, an extra
+inspector panel, and a CODE-shipped custom task type (`acme:incident`, with
+descriptor-driven create-form fields) that becomes a first-class create-task choice +
+card badge — all through the auto-imported `registerAppModule` seam, with zero host
+edits. Its strings live in `i18n/locales/en.json` (deep-merged into the layer
 catalog). Delete `app/plugins/acme-security.client.ts` (or the whole `app/` dir) to
 drop it. See the authoring walkthrough in
 [`frontend/app/app/docs/consumer-extensions.md`](../../frontend/app/app/docs/consumer-extensions.md).

@@ -95,6 +95,7 @@ import type {
   PipelineRegistry,
   PreviewTransport,
   ProviderRegistry,
+  TaskTypeRegistry,
   VcsIdentityRegistry,
   VcsProviderRegistry,
 } from '@cat-factory/kernel'
@@ -608,6 +609,14 @@ export interface NodeContainerOptions {
    */
   pipelineRegistry?: PipelineRegistry
   /**
+   * The app-owned custom task-type registry (deployment-registered namespaced task types). Rides
+   * its own option like `pipelineRegistry`; defaults (inside `createCore`) to
+   * `defaultTaskTypeRegistry()`. A deployment registers its task types on it so they surface in the
+   * snapshot (`customTaskTypes`) + resolve their default pipeline; the conformance suite injects a
+   * pre-loaded one to assert the seam is symmetric.
+   */
+  taskTypeRegistry?: TaskTypeRegistry
+  /**
    * Skip wrapping the resolved transport with the provisioning-log decorator. A sibling
    * facade that pre-wraps each transport branch with its OWN subsystem tag (local mode
    * tags the per-run container vs the runner pool separately) sets this so
@@ -968,6 +977,10 @@ function assembleNodeCoreDependencies(bundle: NodeCoreDepsBundle): CoreDependenc
     // The app-owned pipeline registry (deployment-registered extra pipelines); createCore threads
     // it into the workspace + pipeline services and re-exposes it on Core for boot-time validation.
     pipelineRegistry: options.pipelineRegistry,
+    // The app-owned custom task-type registry (deployment-registered namespaced task types);
+    // createCore threads it into the board service (default-pipeline resolution) and re-exposes it
+    // on Core for the snapshot projection (`customTaskTypes`) + boot-time validation.
+    taskTypeRegistry: options.taskTypeRegistry,
     // The app-owned initiative-preset registry; the initiative services read it and it is
     // re-exposed on Core for the snapshot descriptors + preset probe.
     initiativePresetRegistry,

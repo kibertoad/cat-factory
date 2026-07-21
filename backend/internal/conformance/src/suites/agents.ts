@@ -1,5 +1,7 @@
 import { defaultAgentKindRegistry } from '@cat-factory/agents'
+import { defaultTaskTypeRegistry } from '@cat-factory/kernel'
 import type {
+  Block,
   Pipeline,
   RepoFiles,
   SandboxExperiment,
@@ -378,6 +380,73 @@ export function defineAgentConformance(harness: ConformanceHarness): void {
         // The post-op committed onto the apriori working branch, NOT `cat-factory/task_login`.
         expect(commits).toHaveLength(1)
         expect(commits[0]?.branch).toBe('feature/spike')
+      })
+    })
+
+    describe('registered custom task type', () => {
+      // A deployment registers a namespaced task type on its app-owned TaskTypeRegistry (the
+      // frontend analogue of a custom agent kind). This asserts the SAME injected instance reaches
+      // BOTH the HTTP snapshot projection (`customTaskTypes`) AND `defaultPipelineIdForTaskType`'s
+      // registry consult — and that a task created with the namespaced type + its descriptor-driven
+      // `custom` fields round-trips through create + a full snapshot re-read — identically on D1 and
+      // Postgres, so a facade that forgot to thread the registry fails here rather than shipping.
+      it('projects a custom task type into the snapshot, defaults its pipeline, and round-trips a typed task', async () => {
+        const taskTypeRegistry = defaultTaskTypeRegistry()
+        taskTypeRegistry.register({
+          taskType: 'conf:incident',
+          presentation: {
+            label: 'Incident',
+            icon: 'i-lucide-siren',
+            color: '#ef4444',
+            description: 'A production incident to triage.',
+          },
+          fields: [
+            {
+              key: 'severity',
+              label: 'Severity',
+              type: 'select',
+              options: [
+                { value: 'sev1', label: 'SEV1' },
+                { value: 'sev2', label: 'SEV2' },
+              ],
+            },
+          ],
+          // A BUILT-IN pipeline id (resolves via `seedPipelines()`), so the assertion that the
+          // registry default wins needs no separately-registered pipeline.
+          defaultPipelineId: 'pl_review',
+        })
+        const app = harness.makeApp(undefined, { taskTypeRegistry })
+        const { workspace } = await app.createWorkspace()
+        const wsId = workspace.id
+
+        // 1. Advertised in the snapshot's custom-task-type catalog on every runtime.
+        const snap = await app.call<{
+          customTaskTypes?: { taskType: string; defaultPipelineId?: string }[]
+        }>('GET', `/workspaces/${wsId}`)
+        const listed = (snap.body.customTaskTypes ?? []).find((t) => t.taskType === 'conf:incident')
+        expect(listed).toBeTruthy()
+        expect(listed?.defaultPipelineId).toBe('pl_review')
+
+        // 2. A task created with the namespaced type + descriptor `custom` fields round-trips, and
+        //    (with no pinned pipeline) defaults to the registry's pipeline — proving
+        //    `defaultPipelineIdForTaskType` consults the injected registry after the built-in map.
+        const created = await app.call<Block>('POST', `/workspaces/${wsId}/blocks/blk_auth/tasks`, {
+          title: 'DB outage',
+          description: 'Investigate the incident.',
+          taskType: 'conf:incident',
+          taskTypeFields: { custom: { severity: 'sev1' } },
+        })
+        expect(created.status).toBe(201)
+        expect(created.body.taskType).toBe('conf:incident')
+        expect(created.body.taskTypeFields?.custom?.severity).toBe('sev1')
+        expect(created.body.pipelineId).toBe('pl_review')
+
+        // 3. And it survives a full REPLACE-style snapshot re-read (the persistence mappers carry
+        //    the widened `taskType` + the sparse `custom` bag through the scalar/JSON columns).
+        const reread = await app.call<WorkspaceSnapshot>('GET', `/workspaces/${wsId}`)
+        const block = reread.body.blocks.find((b) => b.id === created.body.id)
+        expect(block?.taskType).toBe('conf:incident')
+        expect(block?.taskTypeFields?.custom?.severity).toBe('sev1')
       })
     })
 

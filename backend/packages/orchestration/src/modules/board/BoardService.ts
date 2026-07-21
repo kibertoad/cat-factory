@@ -28,6 +28,7 @@ import type {
   Service,
   ServiceFragmentDefaultsRepository,
   ServiceRepository,
+  TaskTypeRegistry,
   WorkspaceMountRepository,
   WorkspaceRepository,
 } from '@cat-factory/kernel'
@@ -100,6 +101,13 @@ export interface BoardServiceDependencies {
    * Absent (tests / no real-time transport) → mutations behave exactly as before.
    */
   executionEventPublisher?: ExecutionEventPublisher
+  /**
+   * The app-owned custom task-type registry. When wired, a task created with a CUSTOM
+   * (deployment-registered) namespaced `taskType` resolves its default pipeline through the
+   * registry (after the built-in type map), so a proprietary work item can pin its own
+   * pipeline. Absent (tests / no custom types) ⇒ only the built-in type defaults apply.
+   */
+  taskTypeRegistry?: TaskTypeRegistry
 }
 
 /**
@@ -138,6 +146,7 @@ export class BoardService {
   private readonly serviceFragmentDefaultsRepository?: ServiceFragmentDefaultsRepository
   private readonly initiativeRepository?: InitiativeRepository
   private readonly events?: ExecutionEventPublisher
+  private readonly taskTypeRegistry?: TaskTypeRegistry
 
   constructor({
     workspaceRepository,
@@ -152,6 +161,7 @@ export class BoardService {
     serviceFragmentDefaultsRepository,
     initiativeRepository,
     executionEventPublisher,
+    taskTypeRegistry,
   }: BoardServiceDependencies) {
     this.workspaceRepository = workspaceRepository
     this.blockRepository = blockRepository
@@ -165,6 +175,7 @@ export class BoardService {
     this.serviceFragmentDefaultsRepository = serviceFragmentDefaultsRepository
     this.initiativeRepository = initiativeRepository
     this.events = executionEventPublisher
+    this.taskTypeRegistry = taskTypeRegistry
   }
 
   /**
@@ -595,7 +606,7 @@ export class BoardService {
     // through to the run-time picker's positional default.
     if (input.pipelineId) block.pipelineId = input.pipelineId
     else {
-      const typeDefault = defaultPipelineIdForTaskType(taskType)
+      const typeDefault = defaultPipelineIdForTaskType(taskType, this.taskTypeRegistry)
       if (typeDefault) block.pipelineId = typeDefault
     }
     // Task-level agent-contributed config values (e.g. the Tester's environment),

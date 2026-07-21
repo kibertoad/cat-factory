@@ -4,6 +4,7 @@ import type { serve } from '@hono/node-server'
 import {
   type AgentKindRegistry,
   type InitiativePresetRegistry,
+  type TaskTypeRegistry,
   DEFAULT_APP_CACHES_PROFILE,
   NodeRealtimeHub,
   createApp,
@@ -68,6 +69,13 @@ export async function startLocal(
      * Absent → the built-in-only default (generic / docs-refresh / tech-migration).
      */
     initiativePresetRegistry?: InitiativePresetRegistry
+    /**
+     * App-owned DI seam for custom task types — a deployment news a `defaultTaskTypeRegistry()`,
+     * registers its namespaced task types on it, and passes it here. Threaded through to
+     * `buildLocalContainer` (both the Postgres and mothership paths). Absent → the built-in
+     * picklist only.
+     */
+    taskTypeRegistry?: TaskTypeRegistry
     /**
      * App-owned backend registries (environment + runner kind → provider), registered BY
      * REFERENCE — the same seam the Node facade exposes on `buildContainer.backendRegistries`.
@@ -186,14 +194,7 @@ async function bootLocal(
   // state lives on the mothership and runs are driven by the in-process work runner. Take the
   // dedicated boot path instead of the Node facade's `start()` (which requires Postgres).
   if (isMothershipMode(localized)) {
-    return startLocalMothership(
-      localized,
-      options.host,
-      options.agentKindRegistry,
-      options.initiativePresetRegistry,
-      options.backendRegistries,
-      options.defaultModelPresetId,
-    )
+    return startLocalMothership(localized, options.host, options)
   }
 
   return start({
@@ -206,6 +207,7 @@ async function bootLocal(
     host: options.host,
     agentKindRegistry: options.agentKindRegistry,
     initiativePresetRegistry: options.initiativePresetRegistry,
+    taskTypeRegistry: options.taskTypeRegistry,
     // A mandatory value missing from the reused Node boot (DATABASE_URL) is caught inside `start()`,
     // so it never reaches this facade's own catch above — thread the same local-mode `.env`-CLI
     // advertisement through `start()`'s misconfiguration path so those problems get it too.
@@ -248,12 +250,24 @@ async function bootLocal(
  */
 async function startLocalMothership(
   env: NodeJS.ProcessEnv,
-  host?: string,
-  agentKindRegistry?: AgentKindRegistry,
-  initiativePresetRegistry?: InitiativePresetRegistry,
-  backendRegistries?: BackendRegistries,
-  defaultModelPresetId?: string,
+  host: string | undefined,
+  /** The deployment extension seams threaded into `buildLocalContainer` (bundled to stay under
+   *  the parameter-count lint; `startLocal` passes its own `options`, a structural superset). */
+  extensions: {
+    agentKindRegistry?: AgentKindRegistry
+    initiativePresetRegistry?: InitiativePresetRegistry
+    backendRegistries?: BackendRegistries
+    defaultModelPresetId?: string
+    taskTypeRegistry?: TaskTypeRegistry
+  },
 ): Promise<Awaited<ReturnType<typeof serve>>> {
+  const {
+    agentKindRegistry,
+    initiativePresetRegistry,
+    backendRegistries,
+    defaultModelPresetId,
+    taskTypeRegistry,
+  } = extensions
   logger.info(
     { mothership: env.LOCAL_MOTHERSHIP_URL },
     'local mode: booting in MOTHERSHIP mode (no local Postgres; org state served remotely)',
@@ -270,6 +284,7 @@ async function startLocalMothership(
     initiativePresetRegistry,
     backendRegistries,
     defaultModelPresetId,
+    taskTypeRegistry,
   })
 
   // Validate registered gates / agent kinds once before serving (parity with `start()`).

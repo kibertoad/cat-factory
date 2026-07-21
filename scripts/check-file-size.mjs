@@ -56,7 +56,7 @@ const LEGACY_ALLOWANCES = new Map([
   // `container.ts` holds the `CoreDependencies`/`Core` contract + the spine assembly only. The Node
   // root's container-agent-executor wiring now lives in `container-executor-deps.ts`.
   ['backend/runtimes/node/src/container.ts', 2600],
-  ['backend/packages/orchestration/src/container.ts', 1958],
+  ['backend/packages/orchestration/src/container.ts', 1948],
   ['backend/packages/orchestration/src/container/modules.ts', 1350],
   ['backend/runtimes/cloudflare/src/infrastructure/container.ts', 2720],
   // Wide-but-flat declaration files (schemas / wire contracts), not control flow.

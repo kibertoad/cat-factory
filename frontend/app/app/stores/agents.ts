@@ -1,7 +1,7 @@
 import { defineStore } from 'pinia'
 import { computed, ref, watch } from 'vue'
 import type { RemoteModuleManifest } from '@modular-vue/core'
-import { buildAgentCapabilitiesManifest, customKindToArchetype } from '~/modular/agent-kinds'
+import { customKindToArchetype } from '~/modular/agent-kinds'
 import type { AppSlots } from '~/modular/slots'
 import {
   AGENT_ARCHETYPES,
@@ -21,9 +21,9 @@ import type { AgentArchetype, AgentKind, CustomAgentKind } from '~/types/domain'
  *  - the built-in archetypes (static);
  *  - CONSUMER-shipped kinds contributed as CODE via the modular `agentKinds`
  *    slot (`registerConsumerKinds`, fed once at boot from the resolved manifest);
- *  - the deployment's BACKEND-registered kinds, modeled as a single
+ *  - the deployment's BACKEND-registered kinds, read from the shared per-workspace
  *    {@link RemoteModuleManifest} swapped per workspace snapshot
- *    (`hydrateCustomKinds`) and read directly (single-active-manifest shape).
+ *    (`hydrateCapabilities`, reading its own `agentKinds` slot — single-active-manifest shape).
  *
  * The merged custom catalog is projected back into `catalog.ts`'s
  * {@link setCustomAgentKindMeta} read-model so the pure `agentKindMeta` /
@@ -77,7 +77,7 @@ export const useAgentsStore = defineStore('agents', () => {
 
   // Keep `catalog.ts`'s pure-util projection in sync with the merged custom
   // catalog so `agentKindMeta` / `isKnownAgentKind` resolve custom kinds. Sync
-  // flush so an imperative read right after `hydrateCustomKinds` (e.g. the run
+  // flush so an imperative read right after `hydrateCapabilities` (e.g. the run
   // dispatch resolving a custom kind's `resultView`) sees the fresh catalog with
   // no tick gap. The watch lives in the store's effect scope (disposed with it).
   watch(customByKind, (map) => setCustomAgentKindMeta(map), { immediate: true, flush: 'sync' })
@@ -119,20 +119,19 @@ export const useAgentsStore = defineStore('agents', () => {
   }
 
   /**
-   * Hydrate the deployment's BACKEND-registered custom kinds from a workspace
-   * snapshot, modeled as a single remote capability manifest (swapped wholesale
-   * per workspace). Replaces the old `registerCustomKinds` that mutated
-   * {@link AGENT_BY_KIND} directly.
+   * Hydrate the deployment's BACKEND-registered custom kinds from the shared per-workspace
+   * capability manifest (built by the workspace store from the snapshot, carrying both `agentKinds`
+   * + `taskTypes`; this store reads only its own `agentKinds` slot). Swapped wholesale per
+   * workspace. Replaces the old `registerCustomKinds` that mutated {@link AGENT_BY_KIND} directly.
    *
-   * The snapshot re-delivers the same deployment kinds on every board refresh, so
-   * skip the swap — and the downstream projection invalidation of every
-   * `agentKindMeta` consumer — when the content-derived manifest version is
-   * unchanged. A genuinely different workspace's kinds change the version and swap.
+   * The snapshot re-delivers the same deployment kinds on every board refresh, so skip the swap —
+   * and the downstream projection invalidation of every `agentKindMeta` consumer — when the
+   * content-derived manifest version is unchanged. A genuinely different workspace's capabilities
+   * change the version and swap.
    */
-  function hydrateCustomKinds(kinds: CustomAgentKind[]) {
-    const next = buildAgentCapabilitiesManifest(kinds)
-    if (capabilitiesManifest.value?.version === next.version) return
-    capabilitiesManifest.value = next
+  function hydrateCapabilities(manifest: RemoteModuleManifest<AppSlots>) {
+    if (capabilitiesManifest.value?.version === manifest.version) return
+    capabilitiesManifest.value = manifest
   }
 
   return {
@@ -141,6 +140,6 @@ export const useAgentsStore = defineStore('agents', () => {
     get,
     addAgent,
     registerConsumerKinds,
-    hydrateCustomKinds,
+    hydrateCapabilities,
   }
 })

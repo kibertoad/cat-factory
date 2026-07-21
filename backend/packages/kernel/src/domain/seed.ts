@@ -1,4 +1,5 @@
 import type { PipelineRegistry } from './pipeline-registry.js'
+import type { TaskTypeRegistry } from './task-type-registry.js'
 import type { Block, Pipeline } from './types.js'
 
 // Sample architecture used to populate a workspace on creation. Mirrors the
@@ -940,14 +941,20 @@ export const RALPH_PIPELINE_ID = 'pl_ralph'
  * The pipeline a task of the given task type should default to when the creator pins none.
  * `document` → `pl_document`, `spike` → `pl_spike`, and `review` → `pl_review` (the full-build
  * `pl_full` is wrong for all three — a document has no code, a spike has no code, a review opens
- * no PR); every other task type falls through to the workspace's positional default. Returns
+ * no PR); every other BUILT-IN task type falls through to the workspace's positional default.
+ * A CUSTOM (namespaced) task type consults the injected {@link TaskTypeRegistry} AFTER the
+ * built-in map, so a deployment-registered type can pin its own default pipeline. Returns
  * `undefined` when there is no type-specific default, so the caller leaves `pipelineId` unset.
  */
-export function defaultPipelineIdForTaskType(taskType: Block['taskType']): string | undefined {
+export function defaultPipelineIdForTaskType(
+  taskType: Block['taskType'],
+  taskTypeRegistry?: TaskTypeRegistry,
+): string | undefined {
   if (taskType === 'document') return DOCUMENT_PIPELINE_ID
   if (taskType === 'spike') return SPIKE_PIPELINE_ID
   if (taskType === 'review') return REVIEW_PIPELINE_ID
   if (taskType === 'ralph') return RALPH_PIPELINE_ID
+  if (taskType && taskTypeRegistry) return taskTypeRegistry.defaultPipelineId(taskType)
   return undefined
 }
 

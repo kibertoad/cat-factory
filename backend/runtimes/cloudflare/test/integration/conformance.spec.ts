@@ -121,6 +121,9 @@ const harness: ConformanceHarness = {
         ...(opts?.initiativePresetRegistry
           ? { initiativePresetRegistry: opts.initiativePresetRegistry }
           : {}),
+        // Inject the app-owned task-type registry (pre-loaded with a custom task type in the
+        // custom-task-type suite) via the CoreDependencies overrides the Worker build reads.
+        ...(opts?.taskTypeRegistry ? { taskTypeRegistry: opts.taskTypeRegistry } : {}),
         ...fragmentLibraryDeps(),
         // A deterministic task source (fake 'jira') over the real D1 task repos, so the
         // shared suite can assert create-task-from-issue parity against D1 too. The suite may

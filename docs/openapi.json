@@ -30,15 +30,23 @@
             "type": "string"
           },
           "taskType": {
-            "enum": [
-              "feature",
-              "bug",
-              "document",
-              "spike",
-              "review",
-              "ralph"
-            ],
-            "type": "string"
+            "anyOf": [
+              {
+                "enum": [
+                  "feature",
+                  "bug",
+                  "document",
+                  "spike",
+                  "review",
+                  "ralph"
+                ],
+                "type": "string"
+              },
+              {
+                "pattern": "^[a-z0-9]+(?:-[a-z0-9]+)*:[a-z0-9]+(?:-[a-z0-9]+)*$",
+                "type": "string"
+              }
+            ]
           },
           "title": {
             "maxLength": 200,
@@ -833,16 +841,24 @@
             "type": "string"
           },
           "taskType": {
-            "enum": [
-              "feature",
-              "bug",
-              "document",
-              "spike",
-              "review",
-              "ralph",
-              "recurring"
-            ],
-            "type": "string"
+            "anyOf": [
+              {
+                "enum": [
+                  "feature",
+                  "bug",
+                  "document",
+                  "spike",
+                  "review",
+                  "ralph",
+                  "recurring"
+                ],
+                "type": "string"
+              },
+              {
+                "pattern": "^[a-z0-9]+(?:-[a-z0-9]+)*:[a-z0-9]+(?:-[a-z0-9]+)*$",
+                "type": "string"
+              }
+            ]
           },
           "title": {
             "type": "string"

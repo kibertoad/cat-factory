@@ -19,6 +19,8 @@
 // modular `agentKinds` / `resultViews` slots — no built-in id needed here.
 // ---------------------------------------------------------------------------
 
+import { NAMESPACED_ID_PATTERN, isNamespacedId } from './primitives.js'
+
 export const RESULT_VIEW_IDS = [
   'requirements-review',
   'clarity-review',
@@ -46,18 +48,17 @@ export type ResultViewId = (typeof RESULT_VIEW_IDS)[number]
 export const RESULT_VIEW_ID_SET: ReadonlySet<string> = new Set(RESULT_VIEW_IDS)
 
 /**
- * A CONSUMER-namespaced result-view id: `<ns>:<name>`, each segment a lowercase
- * `a-z0-9` dash-separated token (e.g. `acme:security-report`). The colon distinguishes a
- * deployment-provided view id from a bare built-in one. The SINGLE source of truth for the
- * rule, shared by `agentPresentationSchema` (wire validation) and the backend registration
- * validator so they can't drift.
+ * A CONSUMER-namespaced result-view id (`<ns>:<name>`) — the generalized
+ * {@link NAMESPACED_ID_PATTERN} rule, re-exported under its result-view name for the
+ * existing consumers (`agentPresentationSchema`, the registration validator). The rule is
+ * now shared across every extension surface (task types, form panels, …) via `primitives.ts`
+ * so they can't drift.
  */
-export const NAMESPACED_RESULT_VIEW_ID_PATTERN =
-  /^[a-z0-9]+(?:-[a-z0-9]+)*:[a-z0-9]+(?:-[a-z0-9]+)*$/
+export const NAMESPACED_RESULT_VIEW_ID_PATTERN = NAMESPACED_ID_PATTERN
 
 /** Whether `id` is a well-formed consumer-namespaced result-view id (`<ns>:<name>`). */
 export function isNamespacedResultViewId(id: string): boolean {
-  return NAMESPACED_RESULT_VIEW_ID_PATTERN.test(id)
+  return isNamespacedId(id)
 }
 
 /**

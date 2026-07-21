@@ -121,6 +121,12 @@ export { applicableFragmentIds, resolveServiceFrameBlock } from './domain/block-
 // `PipelineRegistry` at startup and `seedPipelines(registry)` seeds them into every new workspace.
 export { PipelineRegistry, defaultPipelineRegistry } from './domain/pipeline-registry.js'
 
+// Installation-level extension point for CUSTOM task types (mirrors the agent-kind / pipeline
+// registry seams): a deployment registers namespaced task types on the app-owned
+// `TaskTypeRegistry` at startup; the server projects them into the snapshot (`customTaskTypes`)
+// and `defaultPipelineIdForTaskType` consults it after the built-in map.
+export { TaskTypeRegistry, defaultTaskTypeRegistry } from './domain/task-type-registry.js'
+
 // Installation-level extension point for initiative PRESETS (mirrors the pipeline / gate
 // registry seams): a preset bundles a create-time form descriptor + planning-pipeline binding
 // + defaults + code hooks (repo-detection prefill, plan post-processor, prompt steering). The

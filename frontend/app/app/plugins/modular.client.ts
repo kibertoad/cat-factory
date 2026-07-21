@@ -16,7 +16,7 @@ import {
   environmentSetupPersistence,
 } from '~/modular/journeys/environmentSetup'
 import type { AppSlots, ResultViewContribution } from '~/modular/slots'
-import type { Block, CustomAgentKind } from '~/types/domain'
+import type { Block, CustomAgentKind, CustomTaskType } from '~/types/domain'
 
 /**
  * Wire the modular-vue registry into the Nuxt app (slice 0 of the modular-vue
@@ -98,9 +98,14 @@ export default defineNuxtPlugin({
     // selected. `<PanelsOutlet>` re-resolves reactively per subject; this only
     // validates the wiring.
     resolvePanels((slots.inspectorPanels ?? []) as PanelEntry<Block>[], null)
-    // Consumer agent kinds contributed as CODE to the static `agentKinds` slot
-    // (module slots resolve once, so the static base is the full set).
+    // Same fail-fast for the custom-task-type form-panel registry (extension slice B): a
+    // duplicate `formPanel` id across the first-party + consumer modules throws at BOOT
+    // rather than the first time the create-task form opens a custom type's section.
+    resolveComponentRegistry((slots.taskTypeFormPanels ?? []) as ResultViewContribution[])
+    // Consumer agent kinds + task types contributed as CODE to the static `agentKinds` /
+    // `taskTypes` slots (module slots resolve once, so the static base is the full set).
     useAgentsStore().registerConsumerKinds((slots.agentKinds ?? []) as CustomAgentKind[])
+    useTaskTypesStore().registerConsumerTaskTypes((slots.taskTypes ?? []) as CustomTaskType[])
     return { provide: { modular: manifest } }
   },
 })
