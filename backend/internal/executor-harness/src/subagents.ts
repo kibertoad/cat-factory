@@ -148,7 +148,12 @@ export function startSubagentWatcher(dir: string, opts: SubagentWatcherOptions):
   const offsets = new Map<string, number>()
   const calls: HarnessCallMetric[] = []
   const usage = { inputTokens: 0, outputTokens: 0 }
-  const carry = new Map<string, string>() // per-file partial-line remainder
+  // Per-file partial-line remainder, carried as raw BYTES (not a decoded string). A JSONL
+  // record can straddle two polls (the file is appended between ticks), and the byte offset
+  // we stop at can fall in the middle of a multi-byte UTF-8 character; decoding a partial
+  // read to a string would replace that split character with U+FFFD and corrupt the line.
+  // Buffering bytes and decoding only whole lines keeps the captured text faithful.
+  const carry = new Map<string, Buffer>()
   let polling = false
 
   const ingestLine = (line: string): void => {
@@ -189,22 +194,29 @@ export function startSubagentWatcher(dir: string, opts: SubagentWatcherOptions):
     usage.outputTokens += u.outputTokens
   }
 
+  const NEWLINE = 0x0a
   const readNew = (path: string, from: number, to: number): Promise<void> =>
     new Promise((resolve) => {
-      let buffer = carry.get(path) ?? ''
-      const stream = createReadStream(path, { start: from, end: to - 1, encoding: 'utf8' })
-      stream.on('data', (chunk: string | Buffer) => {
-        buffer += chunk.toString()
-        let nl = buffer.indexOf('\n')
+      // Tail as raw bytes and split on the newline byte, decoding each COMPLETE line to
+      // UTF-8 only on that boundary (a '\n' is a single byte, never part of a multi-byte
+      // sequence), so a record — or a multi-byte character — that spans this read and the
+      // next is reassembled from the byte carry rather than corrupted at the seam.
+      let buffer = carry.get(path) ?? Buffer.alloc(0)
+      const stream = createReadStream(path, { start: from, end: to - 1 })
+      stream.on('data', (chunk: Buffer) => {
+        buffer = buffer.length ? Buffer.concat([buffer, chunk]) : chunk
+        let nl = buffer.indexOf(NEWLINE)
         while (nl !== -1) {
-          ingestLine(buffer.slice(0, nl))
-          buffer = buffer.slice(nl + 1)
-          nl = buffer.indexOf('\n')
+          ingestLine(buffer.subarray(0, nl).toString('utf8'))
+          buffer = buffer.subarray(nl + 1)
+          nl = buffer.indexOf(NEWLINE)
         }
       })
       stream.on('error', () => resolve())
       stream.on('close', () => {
-        carry.set(path, buffer)
+        // Copy the remainder out of the shared chunk backing store before caching it, so a
+        // later Buffer.concat can't be aliased by a reused stream buffer.
+        carry.set(path, Buffer.from(buffer))
         resolve()
       })
     })

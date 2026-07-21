@@ -497,6 +497,14 @@ export async function runClaudeCode(opts: SubscriptionRunOptions): Promise<PiRun
     const subUsage = subagents?.usage() ?? { inputTokens: 0, outputTokens: 0 }
     const subCalls = subagents?.calls() ?? []
     const mergedCalls = [...calls, ...subCalls]
+    // INVARIANT (do not "fix" this into a double count): the run total is the parent usage
+    // PLUS the subagent usage because the two are disjoint sources. The parent `usage` here
+    // is the terminal `result` event's cumulative, which covers ONLY the parent loop — the
+    // ADR 0026 incident is itself the proof: a heavily subagent-parallelised review reported
+    // ~0 tokens, i.e. the parent stream (and its `result` total) never included the subagent
+    // spend. The subagent tokens live exclusively in the `subagents/*.jsonl` transcripts (a
+    // directory distinct from the parent's `projects/` session transcript), which the watcher
+    // reads and nothing else does — so neither `calls` nor `usage` can already contain them.
     const mergedUsage =
       usage || subUsage.inputTokens || subUsage.outputTokens
         ? {

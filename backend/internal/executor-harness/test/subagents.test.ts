@@ -131,6 +131,27 @@ describe('startSubagentWatcher', () => {
     expect(watcher.usage()).toEqual({ inputTokens: 17, outputTokens: 8 })
   })
 
+  it('reassembles a multi-byte character split across two polls (no corruption)', async () => {
+    const sub = join(dir, 'subagents')
+    mkdirSync(sub)
+    const file = join(sub, 'a.jsonl')
+    // A subagent turn whose response text carries a multi-byte character (é = C3 A9). Write
+    // the file in two chunks split BETWEEN é's two bytes, polling in between — the byte carry
+    // must stitch it back rather than emit two U+FFFD replacements.
+    const line = Buffer.from(assistantLine({ input: 8, output: 4, text: 'café' }) + '\n', 'utf8')
+    const splitAt = line.indexOf(0xc3) + 1 // land inside the é
+    writeFileSync(file, line.subarray(0, splitAt))
+
+    const watcher = startSubagentWatcher(sub, { intervalMs: 1_000_000 })
+    await watcher.stop() // partial line: nothing ingested yet
+    expect(watcher.calls()).toHaveLength(0)
+
+    appendFileSync(file, line.subarray(splitAt))
+    await watcher.stop()
+    expect(watcher.usage()).toEqual({ inputTokens: 8, outputTokens: 4 })
+    expect(watcher.calls()[0]?.responseText).toBe('café')
+  })
+
   it('degrades gracefully when the directory never appears', async () => {
     const watcher = startSubagentWatcher(join(dir, 'nope'), { intervalMs: 1_000_000 })
     await expect(watcher.stop()).resolves.toBeUndefined()

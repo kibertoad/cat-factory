@@ -117,10 +117,14 @@ export interface JobView<TResult extends JobResultBase = JobResultBase> {
   /**
    * ADR 0026 D4: set when the cold-start watchdog fired — the job produced NO activity
    * within {@link RunnerLimits.coldStartMs} of starting, a likely onboarding/auth wedge.
-   * This does NOT fail the job (the inactivity/max-duration watchdogs still own that); it
-   * is a diagnostic the backend can surface so a genuine cold-start wedge is legible early
-   * instead of only after the full inactivity window. Absent on a job that produced output
-   * promptly (the overwhelming common case). Sticky once set.
+   * This does NOT fail the job (the inactivity/max-duration watchdogs still own that).
+   *
+   * Legibility today is via the per-job container log line emitted the moment it fires
+   * (the ~2-minute early signal the ADR wants); this field additionally carries the
+   * structured record on the GET /jobs/{id} view so an operator hitting the endpoint — or a
+   * future engine-side consumer — can read it without scraping logs. No engine code consumes
+   * it yet, so surfacing it up through the runner-transport layer is deliberately deferred.
+   * Absent on a job that produced output promptly (the overwhelming common case). Sticky once set.
    */
   coldStart?: { atMs: number; message: string }
 }
