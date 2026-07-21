@@ -1,5 +1,39 @@
 # @cat-factory/worker
 
+## 0.96.2
+
+### Patch Changes
+
+- 2cfae1e: Internal refactor (lint complexity/size ratchet — `complexity` 60 → 40): extract cohesive helpers
+  from the ten functions above cyclomatic complexity 40 so each lands under the new ceiling, all
+  behaviour-neutral. No public API, wire shape, or runtime behaviour changes; verified by the
+  server / orchestration / agents unit suites and the node config specs (the cross-runtime
+  conformance + worker suites run in CI).
+
+  - `@cat-factory/server`: `buildRegisteredAgentBody` split into `buildCodingAgentBody` /
+    `buildExploreAgentBody`; `toRunResult` into `coerceCustomResult` / `mapPushOrPrResult`;
+    `ContainerAgentExecutor.pollJob`'s subscription/quota usage feedback moved into
+    `recordSubscriptionUsageOnce` / `recordSubscriptionQuotaUsageOnce`; the workspace snapshot
+    handler's optional-field spread ladder folded into a `definedFields` helper.
+  - `@cat-factory/orchestration`: `AgentContextBuilder.buildContext`'s `block` sub-payload extracted
+    into `buildBlockPayload`.
+  - `@cat-factory/agents`: `coerceInitiativePlan`'s section loops extracted into
+    `coerceInitiativePhases` / `coerceInitiativeItems` / `coerceInitiativeDecisions`.
+  - `@cat-factory/node-server`: `buildAuthConfig`'s enablement prelude + fail-fast guards extracted
+    into `resolveNodeAuthEnablement`.
+  - `@cat-factory/worker`: `loadAuthConfig`'s enablement prelude extracted into `resolveAuthEnablement`.
+  - `@cat-factory/executor-harness`: `parseAgentJob` split into `parseAgentOutputSpec` /
+    `parseAgentPrSpec` / `assembleAgentJob`. Touches the runner image, so its tag is bumped
+    (1.50.11) and the three pins re-synced.
+  - `@cat-factory/local-server`: carries the re-synced `RECOMMENDED_HARNESS_IMAGE` pin.
+
+- Updated dependencies [2cfae1e]
+  - @cat-factory/server@0.141.2
+  - @cat-factory/orchestration@0.132.2
+  - @cat-factory/agents@0.67.8
+  - @cat-factory/consensus@0.11.22
+  - @cat-factory/provider-cloudflare@0.7.272
+
 ## 0.96.1
 
 ### Patch Changes
