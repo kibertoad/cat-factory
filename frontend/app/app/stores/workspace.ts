@@ -25,6 +25,8 @@ import { useRecurringPipelinesStore } from '~/stores/recurringPipelines'
 import { useInitiativesStore } from '~/stores/initiative'
 import { useServicesStore } from '~/stores/services'
 import { useAgentsStore } from '~/stores/agents'
+import { useTaskTypesStore } from '~/stores/taskTypes'
+import { buildWorkspaceCapabilitiesManifest } from '~/modular/capabilities'
 import { useSkillsStore } from '~/stores/skills'
 import { useTrackerStore } from '~/stores/tracker'
 import { useRequirementsStore } from '~/stores/requirements'
@@ -169,10 +171,18 @@ export const useWorkspaceStore = defineStore(
       useInitiativesStore().hydratePresets(snapshot.initiativePresets)
       useTrackerStore().hydrate(snapshot.trackerSettings)
       useServicesStore().hydrate(snapshot.mounts ?? [], snapshot.serviceCatalog ?? [])
-      // Hydrate the deployment's backend-registered custom agent kinds as the workspace's
-      // remote capability manifest, so a proprietary kind renders as a first-class palette
-      // block + result view. Swapped wholesale per workspace (no global-catalog mutation).
-      useAgentsStore().hydrateCustomKinds(snapshot.customAgentKinds ?? [])
+      // Hydrate the deployment's backend-registered capabilities from ONE shared per-workspace
+      // remote capability manifest carrying BOTH custom agent kinds AND custom task types (its
+      // version covers both, so an unchanged snapshot no-ops both stores). Each store reads its
+      // own slot off it, so a proprietary agent kind renders as a first-class palette block +
+      // result view and a proprietary task type as a first-class create-task choice + card badge.
+      // Swapped wholesale per workspace (no global-catalog mutation).
+      const capabilities = buildWorkspaceCapabilitiesManifest(
+        snapshot.customAgentKinds ?? [],
+        snapshot.customTaskTypes ?? [],
+      )
+      useAgentsStore().hydrateCapabilities(capabilities)
+      useTaskTypesStore().hydrateCapabilities(capabilities)
       // The account's repo-sourced Claude Skills catalog (shared across its workspaces), so the
       // pipeline builder's per-step skill picker has its options. A straight replace.
       useSkillsStore().hydrate(snapshot.skills ?? [])

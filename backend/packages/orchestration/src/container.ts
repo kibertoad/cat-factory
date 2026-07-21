@@ -9,7 +9,6 @@ import type {
   WorkspaceMemberRepository,
   WorkspaceRepository,
 } from '@cat-factory/kernel'
-import { createAppCaches } from '@cat-factory/caching'
 import type { AppCaches } from '@cat-factory/kernel'
 import { ModuleRegistry } from './container/module-registry.js'
 import {
@@ -44,6 +43,7 @@ import {
   createTrackerModule,
   createRecurringModule,
 } from './container/modules.js'
+import { resolveCoreRuntime } from './container/runtime.js'
 import type { AccountRepository, MembershipRepository } from '@cat-factory/kernel'
 import type {
   AccountInvitationRepository,
@@ -63,8 +63,8 @@ import type { LlmCallMetricRepository } from '@cat-factory/kernel'
 import type { PlatformMetricsRepository } from '@cat-factory/kernel'
 import type { ProvisioningLogRepository } from '@cat-factory/kernel'
 import type { LlmTraceSink } from '@cat-factory/kernel'
-import { type WorkRunner, NoopWorkRunner } from '@cat-factory/kernel'
-import { type ExecutionEventPublisher, NoopEventPublisher } from '@cat-factory/kernel'
+import type { WorkRunner } from '@cat-factory/kernel'
+import type { ExecutionEventPublisher } from '@cat-factory/kernel'
 import type { GitHubClient } from '@cat-factory/kernel'
 import type { GitHubProvisioningClient } from '@cat-factory/kernel'
 import type { WebhookVerifier } from '@cat-factory/kernel'
@@ -248,8 +248,6 @@ import { InitiativeInterviewService } from './modules/initiative/InitiativeInter
 import { BLUEPRINT_PIPELINE_ID } from '@cat-factory/kernel'
 import {
   type AgentKindRegistry,
-  defaultAgentKindRegistry,
-  defaultInitiativePresetRegistry,
   FragmentLibraryService,
   FragmentSourceService,
   type ResolveFragmentInstallationId,
@@ -268,13 +266,8 @@ import type {
   PipelineRegistry,
   ProviderRegistry,
   StepResolverRegistry,
+  TaskTypeRegistry,
   VcsProviderRegistry,
-} from '@cat-factory/kernel'
-import {
-  defaultGateRegistry,
-  defaultPipelineRegistry,
-  defaultProviderRegistry,
-  defaultStepResolverRegistry,
 } from '@cat-factory/kernel'
 
 // Composition root for the domain layer. The worker's infrastructure builds the
@@ -378,6 +371,15 @@ export interface CoreDependencies {
    * (tests / harnesses) that omit it get an empty registry (built-in catalog only).
    */
   pipelineRegistry?: PipelineRegistry
+  /**
+   * The app-owned custom task-type registry (deployment-registered namespaced task types).
+   * Optional + defaulted to `defaultTaskTypeRegistry()` (EMPTY — there are no built-in custom
+   * task types). Threaded into the board service so a custom-typed task resolves its default
+   * pipeline, and re-exposed on {@link Core} for the HTTP layer's snapshot projection
+   * (`customTaskTypes`); a facade injects the SAME instance it registers custom task types on.
+   * Existing construction sites (tests / harnesses) that omit it get an empty registry.
+   */
+  taskTypeRegistry?: TaskTypeRegistry
   /**
    * The app-owned initiative-preset registry (built-in generic / docs-refresh / tech-migration
    * plus any a deployment registered by reference). Optional + defaulted to
@@ -1315,6 +1317,12 @@ export interface CoreSpine {
    */
   pipelineRegistry: PipelineRegistry
   /**
+   * The app-owned custom task-type registry the engine resolved (the facade's injected instance,
+   * else the empty default). Re-exposed so the HTTP layer's workspace-snapshot projection
+   * (`customTaskTypes`) reads the SAME instance, and the facade passes it to `validateRegistrations`.
+   */
+  taskTypeRegistry: TaskTypeRegistry
+  /**
    * The app-owned initiative-preset registry the engine resolved (the facade's injected instance,
    * else the built-ins-only default). Re-exposed so the HTTP layer's workspace-snapshot descriptors
    * + the preset probe read the SAME instance the initiative services use.
@@ -1446,30 +1454,6 @@ export interface ServicesModule {
 /** Assemble the in-org service-sharing module when its repositories are wired. */
 
 /**
- * Resolve the app-owned registries + shared runtime singletons ONCE. Each registry uses the
- * facade's injected instance (so a deployment's custom kinds/gates/resolvers/pipelines/presets
- * are visible) else a fresh default; the SAME instances are threaded into the engine and
- * re-exposed on `Core` for the HTTP snapshot. `workRunner`/`executionEventPublisher` fall back
- * to no-ops, and `caches` (the caching-initiative slice bag) to bare in-memory loaders — so the
- * cached path, including the services' write-site invalidation, is exercised everywhere. Built
- * up-front so every service below can be threaded the same instances.
- */
-function resolveCoreRuntime(dependencies: CoreDependencies) {
-  return {
-    agentKindRegistry: dependencies.agentKindRegistry ?? defaultAgentKindRegistry(),
-    gateRegistry: dependencies.gateRegistry ?? defaultGateRegistry(),
-    stepResolverRegistry: dependencies.stepResolverRegistry ?? defaultStepResolverRegistry(),
-    providerRegistry: dependencies.providerRegistry ?? defaultProviderRegistry(),
-    pipelineRegistry: dependencies.pipelineRegistry ?? defaultPipelineRegistry(),
-    initiativePresetRegistry:
-      dependencies.initiativePresetRegistry ?? defaultInitiativePresetRegistry(),
-    workRunner: dependencies.workRunner ?? new NoopWorkRunner(),
-    executionEventPublisher: dependencies.executionEventPublisher ?? new NoopEventPublisher(),
-    caches: dependencies.caches ?? createAppCaches(),
-  }
-}
-
-/**
  * Register the optional modules whose only wiring is `dependencies` (no captured local is
  * consumed downstream). Grouped so the composition root stays under the statement ceiling; the
  * registration order relative to the surrounding builds is preserved.
@@ -1490,6 +1474,7 @@ export function createCore(dependencies: CoreDependencies): Core {
     stepResolverRegistry,
     providerRegistry,
     pipelineRegistry,
+    taskTypeRegistry,
     initiativePresetRegistry,
     workRunner,
     executionEventPublisher,
@@ -1512,6 +1497,10 @@ export function createCore(dependencies: CoreDependencies): Core {
     ...dependencies,
     executionEventPublisher,
     repoProjectionCache: caches.repoProjection,
+    // The resolved (defaulted) task-type registry, so a custom-typed task resolves its
+    // deployment-registered default pipeline (the raw `dependencies.taskTypeRegistry` may be
+    // undefined; this is the same instance re-exposed on `Core` for the snapshot projection).
+    taskTypeRegistry,
   })
   const workspaceService = new WorkspaceService({
     ...dependencies,
@@ -1950,6 +1939,7 @@ export function createCore(dependencies: CoreDependencies): Core {
     agentKindRegistry,
     gateRegistry,
     pipelineRegistry,
+    taskTypeRegistry,
     initiativePresetRegistry,
     executionEventPublisher,
     ...modules.assemble(),

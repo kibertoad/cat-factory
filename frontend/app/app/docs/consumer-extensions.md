@@ -62,14 +62,15 @@ export default defineNuxtPlugin(() => {
 
 ## The landed seams
 
-| Seam                                | Slot key          | Entry shape                                                                                      | Host                                        |
-| ----------------------------------- | ----------------- | ------------------------------------------------------------------------------------------------ | ------------------------------------------- |
-| Run-detail windows                  | `resultViews`     | `{ id: '<ns>:<name>', component }`                                                               | `StepResultViewHost` via `dispatchStepView` |
-| Agent kinds (palette data)          | `agentKinds`      | `{ kind, container, presentation: { label, icon, color, description, category?, resultView? } }` | agents store merge → `agentKindMeta`        |
-| Sidebar / command-palette / toolbar | `nav`             | `{ id, labelKey, icon, surfaces, gate?, run, sidebar?, command?, toolbar? }`                     | the three shells via `useNavContributions`  |
-| Inspector body panels               | `inspectorPanels` | `{ id, component, when(block), order }` (`PanelEntry<Block>`)                                    | `<PanelsOutlet>` in `InspectorPanel`        |
-| Multi-step wizards                  | (journeys)        | `registerJourney` + step modules                                                                 | `<JourneyHost>` / `<JourneyOutlet>`         |
-| Locale strings                      | (i18n)            | `i18n/locales/*.json` in the deployment                                                          | `@nuxtjs/i18n` layer deep-merge             |
+| Seam                                | Slot key          | Entry shape                                                                                      | Host                                                                 |
+| ----------------------------------- | ----------------- | ------------------------------------------------------------------------------------------------ | -------------------------------------------------------------------- |
+| Run-detail windows                  | `resultViews`     | `{ id: '<ns>:<name>', component }`                                                               | `StepResultViewHost` via `dispatchStepView`                          |
+| Agent kinds (palette data)          | `agentKinds`      | `{ kind, container, presentation: { label, icon, color, description, category?, resultView? } }` | agents store merge → `agentKindMeta`                                 |
+| Custom task types                   | `taskTypes`       | `{ taskType: '<ns>:<name>', presentation, fields?, defaultPipelineId?, formPanel? }`             | `AddTaskModal` picker/fields + `TaskCard` badge (via `taskTypeMeta`) |
+| Sidebar / command-palette / toolbar | `nav`             | `{ id, labelKey, icon, surfaces, gate?, run, sidebar?, command?, toolbar? }`                     | the three shells via `useNavContributions`                           |
+| Inspector body panels               | `inspectorPanels` | `{ id, component, when(block), order }` (`PanelEntry<Block>`)                                    | `<PanelsOutlet>` in `InspectorPanel`                                 |
+| Multi-step wizards                  | (journeys)        | `registerJourney` + step modules                                                                 | `<JourneyHost>` / `<JourneyOutlet>`                                  |
+| Locale strings                      | (i18n)            | `i18n/locales/*.json` in the deployment                                                          | `@nuxtjs/i18n` layer deep-merge                                      |
 
 ### Run-detail windows (`resultViews` + `agentKinds`)
 
@@ -101,6 +102,31 @@ Contribute `PanelEntry<Block>` entries; each `when(block)` predicate decides whi
 show the panel, and `order` places it among the built-ins. Your panel component reads the
 selected block via `usePanelSubject<Block>()` (`@modular-vue/core`). `when` must tolerate a
 nullish subject (the boot-time validation resolve passes `null`).
+
+### Custom task types (`taskTypes`)
+
+Model a proprietary work item — an "incident", "pentest", "compliance-audit" — as a first-class
+task type, the create-task twin of an agent kind. Contribute `{ taskType: '<ns>:<name>',
+presentation: { label, icon, color, description }, fields?, defaultPipelineId?, formPanel? }` to
+the `taskTypes` slot (see `acme:incident` in the example module). The SPA merges it into the
+create-task picker and the card-badge catalog:
+
+- **`presentation`** drives the create-task picker entry and the `TaskCard` type badge (resolved
+  through the pure `taskTypeMeta` read-model — the `agentKindMeta` twin). An UNREGISTERED
+  namespaced type (a stale row after your extension is removed) degrades to the `feature`
+  presentation, so a leftover string never breaks a card.
+- **`fields`** are descriptor-driven create-form inputs (`text` / `textarea` / `number` /
+  `select`); their values land in the task's sparse `taskTypeFields.custom` bag (no migration).
+- **`formPanel`** optionally names a bespoke create-form section component you contribute to the
+  `taskTypeFormPanels` slot (paired by that id, like `resultViews`); shown INSTEAD of `fields`. An
+  unpaired id degrades to the descriptor fields.
+- **`defaultPipelineId`** pre-selects the type's pipeline in the picker.
+
+The **same type can be delivered from the backend** instead of code-shipped: register it on the
+deployment's app-owned `TaskTypeRegistry` and it arrives in the workspace snapshot's
+`customTaskTypes`, folded into the SAME merged catalog (data over the wire, never components). The
+widened `taskType` contract (`<built-in> | <ns>:<name>`) accepts the namespaced id everywhere, so a
+task created with it round-trips with zero host edits.
 
 ## Reuse the shared building blocks — don't reinvent them
 

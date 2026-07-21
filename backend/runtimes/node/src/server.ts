@@ -232,6 +232,13 @@ export async function start(
      */
     initiativePresetRegistry?: NodeContainerOptions['initiativePresetRegistry']
     /**
+     * App-owned DI seam for custom task types (mirroring `agentKindRegistry`): a deployment news
+     * a `defaultTaskTypeRegistry()`, registers its namespaced task types on it by reference, and
+     * passes it here. Forwarded to `buildNodeContainer` (and, via the local facade's builder, to
+     * `buildLocalContainer`). Absent → no custom task types (the built-in picklist only).
+     */
+    taskTypeRegistry?: NodeContainerOptions['taskTypeRegistry']
+    /**
      * The address to bind the HTTP listener to. Defaults to `HOST` from the env, else
      * all interfaces. A facade or operator can pass `127.0.0.1` to keep the service off
      * the LAN — but note repo-operating agent containers reach this service's LLM proxy
@@ -529,6 +536,7 @@ async function bootServer(
     caches,
     agentKindRegistry: options.agentKindRegistry,
     initiativePresetRegistry: options.initiativePresetRegistry,
+    taskTypeRegistry: options.taskTypeRegistry,
     // Forward the deployment's default-preset choice (undefined ⇒ the builder's facade
     // default). The local facade rides on this same field via its `buildContainer` override.
     defaultModelPresetId: options.defaultModelPresetId,
@@ -568,6 +576,7 @@ async function bootServer(
     agentKindRegistry: container.agentKindRegistry,
     gateRegistry: container.gateRegistry,
     pipelineRegistry: container.pipelineRegistry,
+    taskTypeRegistry: container.taskTypeRegistry,
     onWarn: (problem) => logger.warn({ code: problem.code }, problem.message),
   })
 

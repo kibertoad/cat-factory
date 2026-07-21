@@ -47,7 +47,11 @@ import {
 } from '@cat-factory/orchestration'
 import { defaultAgentKindRegistry, defaultInitiativePresetRegistry } from '@cat-factory/agents'
 import { gateRegistryWithBuiltins } from '@cat-factory/gates'
-import { DEFAULT_WORKSPACE_SETTINGS, defaultPipelineRegistry } from '@cat-factory/kernel'
+import {
+  DEFAULT_WORKSPACE_SETTINGS,
+  defaultPipelineRegistry,
+  defaultTaskTypeRegistry,
+} from '@cat-factory/kernel'
 import { D1WorkspaceRepository } from './infrastructure/repositories/D1WorkspaceRepository'
 import { D1WorkspaceSettingsRepository } from './infrastructure/repositories/D1WorkspaceSettingsRepository'
 import { D1KeyFingerprintStore } from './infrastructure/repositories/D1KeyFingerprintStore'
@@ -105,6 +109,11 @@ export { InitiativePresetRegistry, type InitiativePresetRegistration } from '@ca
 // a deployment news a `defaultPipelineRegistry()`, registers its pipelines on it by reference, and
 // injects it via the `pipelineRegistry` override — replacing the old module-global `registerPipeline`.
 export { PipelineRegistry, defaultPipelineRegistry } from '@cat-factory/kernel'
+// Installation-level extension point for custom task types (the same DI seam as agent kinds):
+// a deployment news a `defaultTaskTypeRegistry()`, registers its namespaced task types on it by
+// reference, and injects it via the `taskTypeRegistry` override — the SPA renders each as a
+// first-class create-task choice + card badge (snapshot `customTaskTypes`).
+export { TaskTypeRegistry, defaultTaskTypeRegistry } from '@cat-factory/kernel'
 // The built-in model-preset ids + the catalog fallback default. A custom Worker entry that builds
 // its own app can seed a different out-of-the-box default with
 // `createApp({ overrides: { defaultModelPresetId: MODEL_PRESET_SEED_IDS.claude } })` (a
@@ -132,12 +141,17 @@ const stepResolverRegistry = defaultStepResolverRegistry()
 // the boot-time validation below; a deployment registers its extra pipelines on this instance
 // before the first request so they seed into every new workspace and validate at boot.
 const pipelineRegistry = defaultPipelineRegistry()
+// One app-owned task-type registry (empty by default), shared by every per-request container AND
+// the boot-time validation below; a deployment registers its custom task types on this instance
+// before the first request so they surface in the snapshot and validate at boot.
+const taskTypeRegistry = defaultTaskTypeRegistry()
 const app = createApp({
   overrides: {
     agentKindRegistry,
     gateRegistry,
     stepResolverRegistry,
     pipelineRegistry,
+    taskTypeRegistry,
     initiativePresetRegistry,
   },
 })
@@ -205,6 +219,7 @@ export default {
       agentKindRegistry,
       gateRegistry,
       pipelineRegistry,
+      taskTypeRegistry,
       onWarn: (problem) => logger.warn({ code: problem.code }, problem.message),
     })
     return app.fetch(request, env, ctx)

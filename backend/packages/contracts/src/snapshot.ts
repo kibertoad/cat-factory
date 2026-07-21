@@ -21,6 +21,7 @@ import { serviceSchema, workspaceMountSchema } from './services.js'
 import { trackerSettingsSchema } from './tracker.js'
 import { workspaceSettingsSchema } from './workspace-settings.js'
 import { customAgentKindSchema } from './agent-presentation.js'
+import { customTaskTypeSchema } from './task-types.js'
 import { infraEngineSchema } from './environments.js'
 import { infraSetupSchema } from './infra-setup.js'
 import { initiativeSchema } from './initiative.js'
@@ -197,6 +198,15 @@ export const workspaceSnapshotSchema = v.object({
    * by the facade, so optional on the wire and omitted when no custom kind is registered.
    */
   customAgentKinds: v.optional(v.array(customAgentKindSchema)),
+  /**
+   * Registered CUSTOM task types (namespaced id + presentation + create-form fields) a
+   * deployment mixed in via its app-owned `TaskTypeRegistry`. The SPA merges these into its
+   * task-type catalog so a proprietary work item becomes a first-class create-task choice +
+   * card badge instead of the generic fallback — symmetric with {@link customAgentKinds}.
+   * Static (engine-level registry), workspace-independent; attached by the facade, so optional
+   * on the wire and omitted when no custom task type is registered.
+   */
+  customTaskTypes: v.optional(v.array(customTaskTypeSchema)),
   /**
    * The registered ephemeral-environment / runner-pool backend kinds (built-in + any a
    * deployment registered into the app-owned backend registries), each `{ kind, label }`. The

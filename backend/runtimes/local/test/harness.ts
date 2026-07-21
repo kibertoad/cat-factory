@@ -174,6 +174,7 @@ export function makeConformanceApp(
     gateRegistry?: CoreDependencies['gateRegistry']
     stepResolverRegistry?: CoreDependencies['stepResolverRegistry']
     initiativePresetRegistry?: CoreDependencies['initiativePresetRegistry']
+    taskTypeRegistry?: CoreDependencies['taskTypeRegistry']
     testerQualityReviewer?: CoreDependencies['testerQualityReviewer']
     taskSourceProviders?: CoreDependencies['taskSourceProviders']
     detectionConventions?: CoreDependencies['detectionConventions']
@@ -288,6 +289,9 @@ export function makeConformanceApp(
     ...(opts?.initiativePresetRegistry
       ? { initiativePresetRegistry: opts.initiativePresetRegistry }
       : {}),
+    // Inject the app-owned task-type registry (pre-loaded in the custom-task-type suite) so
+    // buildLocalContainer forwards it into buildNodeContainer on this runtime.
+    ...(opts?.taskTypeRegistry ? { taskTypeRegistry: opts.taskTypeRegistry } : {}),
   })
   const app = createApp(container, TEST_ENV)
 

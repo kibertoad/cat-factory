@@ -16,6 +16,12 @@
 //                         (backend data × code-shipped component, joined by the id).
 //   - `nav`             — a sidebar + command-palette destination with its own `run`.
 //   - `inspectorPanels` — an extra inspector body panel for task blocks.
+//   - `taskTypes`       — a CODE-shipped CUSTOM task type (`acme:incident`, extension slice B)
+//                         with descriptor-driven create-form fields. It becomes a first-class
+//                         create-task choice + card badge with ZERO host edits — the frontend
+//                         twin of a backend-registered agent kind. (A deployment can also deliver
+//                         a task type from the backend via its app-owned `TaskTypeRegistry`; the
+//                         SPA merges both into one catalog. This shows the code-shipped channel.)
 //
 // See `frontend/app/app/docs/consumer-extensions.md` for the authoring walkthrough.
 import { defineModule } from '@modular-vue/core'
@@ -31,10 +37,36 @@ export const ACME_SECURITY_REPORT_VIEW = 'acme:security-report'
  *  `SECURITY_AUDITOR_KIND` in `@cat-factory/example-custom-agent`. */
 const SECURITY_AUDITOR_KIND = 'security-auditor'
 
+/** The CUSTOM task type this deployment contributes (a namespaced `<ns>:<name>` id). */
+export const ACME_INCIDENT_TASK_TYPE = 'acme:incident'
+
 /** The subject the inspector panel filters on — typed structurally so the example needs no
  *  deep import of the layer's `Block` type (the reachable public type is slice G's work). */
 interface InspectedBlock {
   level?: 'frame' | 'module' | 'task'
+}
+
+/**
+ * The wire shape of a custom task type (a structural copy of `@cat-factory/contracts`'s
+ * `CustomTaskType`, so the example needs no deep import — the reachable public type is slice G).
+ * `taskType` is a namespaced id; `fields` are the descriptor-driven create-form inputs whose
+ * values land in the task's sparse `taskTypeFields.custom` bag.
+ */
+interface CustomTaskTypeContribution {
+  taskType: string
+  presentation: { label: string; icon: string; color: string; description: string }
+  fields?: {
+    key: string
+    label: string
+    type: 'text' | 'textarea' | 'number' | 'select'
+    help?: string
+    placeholder?: string
+    options?: { value: string; label: string }[]
+    required?: boolean
+    maxLength?: number
+  }[]
+  defaultPipelineId?: string
+  formPanel?: string
 }
 
 /**
@@ -99,5 +131,42 @@ export const acmeSecurityModule = defineModule({
         order: 55,
       },
     ] satisfies PanelEntry<InspectedBlock>[],
+    // A CODE-shipped CUSTOM task type (extension slice B). The SPA merges it into the create-task
+    // picker + the card-badge catalog, and renders its descriptor `fields` in the create form —
+    // their values land in the task's `taskTypeFields.custom` bag. `defaultPipelineId`/`formPanel`
+    // are omitted here (the type uses the workspace default pipeline and the descriptor fields);
+    // a real deployment could also register this type on the BACKEND `TaskTypeRegistry` to deliver
+    // it in the snapshot instead.
+    taskTypes: [
+      {
+        taskType: ACME_INCIDENT_TASK_TYPE,
+        presentation: {
+          label: 'Incident',
+          icon: 'i-lucide-siren',
+          color: '#ef4444',
+          description: 'A production incident to triage and resolve.',
+        },
+        fields: [
+          {
+            key: 'severity',
+            label: 'Severity',
+            type: 'select',
+            required: true,
+            options: [
+              { value: 'sev1', label: 'SEV1 — critical' },
+              { value: 'sev2', label: 'SEV2 — major' },
+              { value: 'sev3', label: 'SEV3 — minor' },
+            ],
+          },
+          {
+            key: 'incidentUrl',
+            label: 'Incident URL',
+            type: 'text',
+            help: 'Link to the incident in your on-call tool.',
+            placeholder: 'https://acme.pagerduty.com/incidents/…',
+          },
+        ],
+      },
+    ] satisfies CustomTaskTypeContribution[],
   },
 })
