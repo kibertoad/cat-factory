@@ -1,5 +1,14 @@
 # @cat-factory/server
 
+## 0.140.3
+
+### Patch Changes
+
+- Updated dependencies [b1d1e2c]
+  - @cat-factory/prompt-fragments@0.14.0
+  - @cat-factory/orchestration@0.131.3
+  - @cat-factory/agents@0.67.2
+
 ## 0.140.2
 
 ### Patch Changes

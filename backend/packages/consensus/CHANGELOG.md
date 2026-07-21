@@ -1,5 +1,11 @@
 # @cat-factory/consensus
 
+## 0.11.16
+
+### Patch Changes
+
+- @cat-factory/agents@0.67.2
+
 ## 0.11.15
 
 ### Patch Changes

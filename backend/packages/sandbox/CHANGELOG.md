@@ -1,5 +1,11 @@
 # @cat-factory/sandbox
 
+## 0.9.125
+
+### Patch Changes
+
+- @cat-factory/agents@0.67.2
+
 ## 0.9.124
 
 ### Patch Changes
