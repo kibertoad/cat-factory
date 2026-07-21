@@ -1,5 +1,60 @@
 # @cat-factory/node-server
 
+## 0.107.21
+
+### Patch Changes
+
+- 021f2a0: Surface + remediate ENCRYPTION_KEY drift (ADR 0026 D6.2/D6.3), building on the D6.1 fingerprint
+  and typed `SecretDecryptError`.
+
+  - A new `SealedSecretInventory` kernel port (`listSealed` + `drop`) is implemented per runtime
+    (D1 + Drizzle, asserted by `defineSealedSecretInventorySuite`) over `environment_connections`
+    and `observability_connections`. Adding a source is a change to the inventory pair, never the
+    sweep.
+  - `sweepKeyDriftAndRaise` (runtime-neutral) attempts a decrypt of every sealed secret, buckets by
+    `reason`, and raises ONE `key_drift` notification per affected workspace — listing the affected
+    credentials by source / id / label / reason / seal time (never the value), de-duped on that set
+    and auto-cleared when a workspace recovers. It runs at Node boot and on the Worker's daily cron.
+  - Remediation (D6.3) is explicit + per-secret: the `key_drift` card's action drops every credential
+    it lists, and a `pnpm --filter @cat-factory/node-server key-drift:drop` operator CLI drops one.
+    Both flip the owning connection to needs-re-entry (env → soft-delete, observability → row delete)
+    and state that restoring the previous ENCRYPTION_KEY recovers the values instead — never automatic.
+  - Adds the `key_drift` notification type (contracts) + its inbox card copy across all locales.
+
+- 021f2a0: Detect ENCRYPTION_KEY drift at boot via a master-key fingerprint (ADR 0026 D6.1), and make a
+  decrypt failure classifiable (D6.2 foundation).
+
+  - A non-secret `HKDF(masterKey, "cat-factory:key-fingerprint")[:8]` fingerprint is persisted
+    once in a new `key_fingerprint` singleton table (D1 + Drizzle, mirrored per runtime) and
+    recompared on every boot: the Node facade checks right after `migrate()`, and the Worker on
+    its daily cron. A mismatch logs a definitive "the key changed since secrets were last
+    sealed" signal before any request touches a stale secret, instead of the old stream of
+    opaque per-request decrypt errors.
+  - `SecretCipher.decrypt` now throws a typed `SecretDecryptError` carrying a
+    `reason: 'key-mismatch' | 'corrupt'` discriminant, so a drift sweep can bucket a failure
+    without parsing message text.
+
+- Updated dependencies [021f2a0]
+- Updated dependencies [021f2a0]
+  - @cat-factory/contracts@0.154.1
+  - @cat-factory/kernel@0.148.2
+  - @cat-factory/server@0.140.2
+  - @cat-factory/integrations@0.88.14
+  - @cat-factory/agents@0.67.1
+  - @cat-factory/consensus@0.11.15
+  - @cat-factory/eks@0.1.118
+  - @cat-factory/gates@0.7.11
+  - @cat-factory/gitlab@0.11.11
+  - @cat-factory/observability-otel@0.2.25
+  - @cat-factory/orchestration@0.131.2
+  - @cat-factory/prompt-fragments@0.13.48
+  - @cat-factory/spend@0.12.68
+  - @cat-factory/caching@0.10.24
+  - @cat-factory/observability-langfuse@0.7.242
+  - @cat-factory/provider-bedrock@0.7.264
+  - @cat-factory/provider-cloudflare@0.7.265
+  - @cat-factory/provider-s3@0.2.192
+
 ## 0.107.20
 
 ### Patch Changes
