@@ -1,5 +1,16 @@
 # @cat-factory/local-server
 
+## 0.70.21
+
+### Patch Changes
+
+- 90a0c1b: Namespace local-mode containers per installation (ADR 0026 D5). Every managed job + warm-pool container is now tagged with a stable, secret-derived install id (a Docker `cat-factory.install` label; the Apple `container` name prefix), and the reaper/adopter/enumerations filter strictly on it. A machine running two local installs against one container daemon can no longer adopt, reap, or re-lease a neighbour's container — closing the warm-pool cross-install `HARNESS_SHARED_SECRET` poisoning vector.
+- Updated dependencies [90a0c1b]
+  - @cat-factory/orchestration@0.131.1
+  - @cat-factory/server@0.140.1
+  - @cat-factory/node-server@0.107.20
+  - @cat-factory/executor-harness@1.50.6
+
 ## 0.70.20
 
 ### Patch Changes
