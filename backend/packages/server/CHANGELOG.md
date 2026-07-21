@@ -1,5 +1,30 @@
 # @cat-factory/server
 
+## 0.140.7
+
+### Patch Changes
+
+- 1bcb223: Internal refactor (lint complexity/size ratchet — `max-lines-per-function` step 1.5, 1000 → 632):
+  split the product functions above the new ceiling along cohesive seams, all behaviour-neutral. No
+  public API, wire shape, or runtime behaviour changes.
+
+  - `@cat-factory/kernel`: `seedPipelines` split into three module-level catalog builders it composes.
+  - `@cat-factory/server`: `publicApiController` / `authController` split into per-route-group registrars
+    (mirroring `registerCoreControllers`'s mount groups).
+  - `@cat-factory/app`: the `board` Pinia store's write operations extracted into `stores/board/`
+    factories (`createBoardMutations` / `createBoardRemoval`) over a shared `BoardWriteContext`.
+  - `@cat-factory/node-server`: `buildNodeContainer` split into `assembleNodeCoreDependencies` +
+    `projectNodeServerContainer` (the `CoreDependencies` object and the `ServerContainer` projection).
+  - `@cat-factory/local-server`: `buildLocalContainer`'s `buildNodeContainer` options extracted into
+    `buildLocalNodeOptions`.
+
+- Updated dependencies [1bcb223]
+  - @cat-factory/kernel@0.148.5
+  - @cat-factory/agents@0.67.5
+  - @cat-factory/integrations@0.88.17
+  - @cat-factory/orchestration@0.131.7
+  - @cat-factory/spend@0.12.71
+
 ## 0.140.6
 
 ### Patch Changes

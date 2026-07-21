@@ -1,5 +1,41 @@
 # @cat-factory/node-server
 
+## 0.107.26
+
+### Patch Changes
+
+- 1bcb223: Internal refactor (lint complexity/size ratchet — `max-lines-per-function` step 1.5, 1000 → 632):
+  split the product functions above the new ceiling along cohesive seams, all behaviour-neutral. No
+  public API, wire shape, or runtime behaviour changes.
+
+  - `@cat-factory/kernel`: `seedPipelines` split into three module-level catalog builders it composes.
+  - `@cat-factory/server`: `publicApiController` / `authController` split into per-route-group registrars
+    (mirroring `registerCoreControllers`'s mount groups).
+  - `@cat-factory/app`: the `board` Pinia store's write operations extracted into `stores/board/`
+    factories (`createBoardMutations` / `createBoardRemoval`) over a shared `BoardWriteContext`.
+  - `@cat-factory/node-server`: `buildNodeContainer` split into `assembleNodeCoreDependencies` +
+    `projectNodeServerContainer` (the `CoreDependencies` object and the `ServerContainer` projection).
+  - `@cat-factory/local-server`: `buildLocalContainer`'s `buildNodeContainer` options extracted into
+    `buildLocalNodeOptions`.
+
+- Updated dependencies [1bcb223]
+  - @cat-factory/kernel@0.148.5
+  - @cat-factory/server@0.140.7
+  - @cat-factory/agents@0.67.5
+  - @cat-factory/caching@0.10.27
+  - @cat-factory/consensus@0.11.19
+  - @cat-factory/eks@0.1.121
+  - @cat-factory/gates@0.7.14
+  - @cat-factory/gitlab@0.11.14
+  - @cat-factory/integrations@0.88.17
+  - @cat-factory/observability-langfuse@0.7.245
+  - @cat-factory/observability-otel@0.2.28
+  - @cat-factory/orchestration@0.131.7
+  - @cat-factory/provider-bedrock@0.7.268
+  - @cat-factory/provider-cloudflare@0.7.269
+  - @cat-factory/provider-s3@0.2.195
+  - @cat-factory/spend@0.12.71
+
 ## 0.107.25
 
 ### Patch Changes
