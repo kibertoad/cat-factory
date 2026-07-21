@@ -113,13 +113,16 @@ export function boardController(): Hono<AppEnv> {
   })
 
   buildHonoRoute(app, updateBlockContract, async (c) => {
-    const block = await c
-      .get('container')
-      .boardService.updateBlock(
-        param(c, 'workspaceId'),
-        c.req.valid('param').blockId,
-        c.req.valid('json'),
-      )
+    const block = await c.get('container').boardService.updateBlock(
+      param(c, 'workspaceId'),
+      c.req.valid('param').blockId,
+      c.req.valid('json'),
+      // Skip echoing this edit back to the tab that made it — its REST response already
+      // carried the authoritative block, so a self-echo would only force a redundant
+      // board-wide re-hydrate (the visible "board jumps" on rapid inspector edits). Same
+      // `X-Connection-Id` / `?ticket=` plumbing move/reparent use.
+      c.req.header('x-connection-id') ?? null,
+    )
     return c.json(block, 200)
   })
 

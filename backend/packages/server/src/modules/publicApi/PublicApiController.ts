@@ -327,7 +327,17 @@ async function rollbackInitiativeRun<E extends AppEnv>(
 
 export function publicApiController(): Hono<AppEnv> {
   const app = new Hono<AppEnv>()
+  // The route registrations are grouped into cohesive registrars (jobs, board tasks, pipeline
+  // discovery, notification inbox) purely so no single function exceeds the size budget; each
+  // registers onto the shared `app` and depends only on the module-level helpers above.
+  registerJobRoutes(app)
+  registerTaskRoutes(app)
+  registerPipelineRoutes(app)
+  registerNotificationRoutes(app)
+  return app
+}
 
+function registerJobRoutes(app: Hono<AppEnv>): void {
   // Start an initiative run: validate the pipeline is public + inline, create a headless internal
   // block to anchor the run, and start it. Returns 202 with the job id + follow-up links.
   buildHonoRoute(app, createInitiativeJobContract, async (c) => {
@@ -517,7 +527,9 @@ export function publicApiController(): Hono<AppEnv> {
       }
     })
   })
+}
 
+function registerTaskRoutes(app: Hono<AppEnv>): void {
   // --- Basic board workloads: services + tasks -------------------------------
   // The external counterparts of the SPA's board operations, scoped to the key's workspace
   // via `resolveKey`. Reads project a `Block` onto the small `publicTask`/`publicService`
@@ -917,7 +929,9 @@ export function publicApiController(): Hono<AppEnv> {
       }
     })
   })
+}
 
+function registerPipelineRoutes(app: Hono<AppEnv>): void {
   // --- Pipeline discovery ----------------------------------------------------
   // List the workspace's pipelines so a caller can discover a valid `pipelineId` for `start`
   // (closing the `pipeline_required`-with-no-way-to-discover gap) and whether each is safe to
@@ -941,7 +955,9 @@ export function publicApiController(): Hono<AppEnv> {
       200,
     )
   })
+}
 
+function registerNotificationRoutes(app: Hono<AppEnv>): void {
   // --- Notification inbox: merge / confirm / retry the run tails --------------
   // The external counterparts of the SPA's notification inbox — the operational capstone
   // of the task lifecycle. A run can end parked on a human decision it raised as a
@@ -1086,6 +1102,4 @@ export function publicApiController(): Hono<AppEnv> {
     )
     return c.json(resolved, 200)
   })
-
-  return app
 }

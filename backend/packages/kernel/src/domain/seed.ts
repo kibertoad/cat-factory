@@ -167,16 +167,12 @@ function definePipeline(spec: {
   } as Pipeline
 }
 
-/**
- * Reusable pipelines shown in the pipeline palette on first load: the built-in catalog plus any
- * pipelines a deployment registered on the app-owned {@link PipelineRegistry} (e.g. a proprietary
- * org package), merged by id. Omit `registry` (or pass a fresh one) for the built-in catalog only —
- * the shape a caller that only resolves a BUILT-IN pipeline's id needs (e.g. plan-helpers, the
- * cross-runtime conformance baseline). The workspace + pipeline services thread the app-owned
- * instance so a deployment's custom pipelines are seeded into every new workspace.
- */
-export function seedPipelines(registry?: PipelineRegistry): Pipeline[] {
-  const builtins: Pipeline[] = [
+// The built-in pipeline catalog is split across three cohesive builders (delivery, build
+// variants, specialty) purely so no single function exceeds the size budget; `seedPipelines`
+// below composes them in order. Each returns plain `Pipeline[]` and shares the module-level
+// `definePipeline` helper.
+function buildDeliveryPipelines(): Pipeline[] {
+  return [
     // `requirements` runs first and reviews the collected requirements; the spec-writer then
     // applies them as an increment onto the in-repo spec baseline, and only THEN does the architect
     // design the solution against that written spec (the architect is spec-aware). The requirements
@@ -427,6 +423,11 @@ export function seedPipelines(registry?: PipelineRegistry): Pipeline[] {
         'merger',
       ],
     },
+  ]
+}
+
+function buildBuildVariantPipelines(): Pipeline[] {
+  return [
     // A UI-focused build: implement → review → mock → the UI tester drives a browser through
     // the new screens (capturing a screenshot of each distinct view), then a
     // `visual-confirmation` gate PARKS for a person to review those screenshots against the
@@ -604,6 +605,11 @@ export function seedPipelines(registry?: PipelineRegistry): Pipeline[] {
         'Map the repository into the service → modules blueprint and populate the board (run after a bootstrap).',
       agentKinds: ['blueprints'],
     },
+  ]
+}
+
+function buildSpecialtyPipelines(): Pipeline[] {
+  return [
     // The PR deep-review pipeline (the DEFAULT for a `review` task): a single read-only
     // `pr-reviewer` step that slices an open PR's diff into cohesive chunks, reviews each,
     // and returns prioritized findings. No code is written and no PR is opened, so there is
@@ -839,6 +845,22 @@ export function seedPipelines(registry?: PipelineRegistry): Pipeline[] {
         'Read the implementation and capture the service business rules / domain constraints as in-repo docs, then gate on conflicts + CI and ship the PR.',
       agentKinds: ['business-documenter', 'conflicts', 'ci', 'merger'],
     },
+  ]
+}
+
+/**
+ * Reusable pipelines shown in the pipeline palette on first load: the built-in catalog plus any
+ * pipelines a deployment registered on the app-owned {@link PipelineRegistry} (e.g. a proprietary
+ * org package), merged by id. Omit `registry` (or pass a fresh one) for the built-in catalog only —
+ * the shape a caller that only resolves a BUILT-IN pipeline's id needs (e.g. plan-helpers, the
+ * cross-runtime conformance baseline). The workspace + pipeline services thread the app-owned
+ * instance so a deployment's custom pipelines are seeded into every new workspace.
+ */
+export function seedPipelines(registry?: PipelineRegistry): Pipeline[] {
+  const builtins: Pipeline[] = [
+    ...buildDeliveryPipelines(),
+    ...buildBuildVariantPipelines(),
+    ...buildSpecialtyPipelines(),
   ]
   // Every curated catalog pipeline is a read-only template: it can be cloned into an
   // editable copy but not edited in place (see PipelineService.update / clone). Each carries

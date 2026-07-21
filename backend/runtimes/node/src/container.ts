@@ -829,6 +829,673 @@ function applyMothershipRemoteRepos(
   }
 }
 
+type NodeAppRegistriesResult = ReturnType<typeof resolveNodeAppRegistries>
+type NodeModelDepsResult = ReturnType<typeof buildNodeModelDeps>
+type NodeTransportDeployResult = ReturnType<typeof buildNodeTransportDeploy>
+type NodeRunServicesResult = ReturnType<typeof buildNodeRunServices>
+type NodeGitHubDepsResult = ReturnType<typeof selectNodeGitHubDeps>
+type NodeBootstrapperResult = ReturnType<typeof buildNodeBootstrapper>
+type NodeRealtimeDepsResult = ReturnType<typeof buildNodeRealtimeDeps>
+type NodeAccountDepsResult = ReturnType<typeof buildNodeAccountDeps>
+
+/**
+ * The intermediate values {@link buildNodeContainer} builds before it assembles the engine
+ * {@link CoreDependencies}: the resolved config/options, the shared Drizzle repo set + the
+ * mothership-aware `sourced` picker, and every build*Deps / select*Deps fragment.
+ * Bundled so {@link assembleNodeCoreDependencies} can own the large `dependencies` object
+ * literal (a size-only split — behaviour is identical), keeping the composition root within the
+ * function-size budget.
+ */
+interface NodeCoreDepsBundle {
+  config: AppConfig
+  options: NodeContainerOptions
+  env: NodeJS.ProcessEnv
+  db: DrizzleDb
+  repos: ReturnType<typeof createDrizzleRepositories>
+  sourced: <T>(name: string, build: (d: DrizzleDb) => T) => T
+  idGenerator: CoreDependencies['idGenerator']
+  clock: CoreDependencies['clock']
+  gateways: ReturnType<typeof createNodeGateways>
+  runnerUrlPolicy: ReturnType<typeof resolveUrlSafetyPolicy>
+  githubInstallationRepository: GitHubInstallationRepository
+  environmentBackendRegistry: NodeAppRegistriesResult['environmentBackendRegistry']
+  runnerBackendRegistry: NodeAppRegistriesResult['runnerBackendRegistry']
+  customManifestTypeRegistry: NodeAppRegistriesResult['customManifestTypeRegistry']
+  agentKindRegistry: NodeAppRegistriesResult['agentKindRegistry']
+  gateRegistry: NodeAppRegistriesResult['gateRegistry']
+  stepResolverRegistry: NodeAppRegistriesResult['stepResolverRegistry']
+  initiativePresetRegistry: NodeAppRegistriesResult['initiativePresetRegistry']
+  providerRegistry: NodeAppRegistriesResult['providerRegistry']
+  apiKeys: NodeModelDepsResult['apiKeys']
+  subscriptions: NodeModelDepsResult['subscriptions']
+  personalSubscriptions: NodeModelDepsResult['personalSubscriptions']
+  localModelEndpoints: NodeModelDepsResult['localModelEndpoints']
+  openRouterCatalog: NodeModelDepsResult['openRouterCatalog']
+  modelProviderResolver: NodeModelDepsResult['modelProviderResolver']
+  cloudflareModelsEnabled: NodeModelDepsResult['cloudflareModelsEnabled']
+  deployDeps: NodeTransportDeployResult['deployDeps']
+  runnerPoolConnectionRepository: CoreDependencies['runnerPoolConnectionRepository']
+  agentContextObservability: NodeRunServicesResult['agentContextObservability']
+  searchQueryObservability: NodeRunServicesResult['searchQueryObservability']
+  resolveTestSecretRefs: NodeRunServicesResult['resolveTestSecretRefs']
+  githubClient: NodeGitHubDepsResult['githubClient']
+  tasks: NodeGitHubDepsResult['tasks']
+  fileGitHubIssue: NodeGitHubDepsResult['fileGitHubIssue']
+  issueWritebackProvider: NodeGitHubDepsResult['issueWritebackProvider']
+  githubGateDeps: NodeGitHubDepsResult['githubGateDeps']
+  githubModuleDeps: NodeGitHubDepsResult['githubModuleDeps']
+  bootstrapJobRepository: NodeBootstrapperResult['bootstrapJobRepository']
+  repoBootstrapper: NodeBootstrapperResult['repoBootstrapper']
+  slackDeps: NodeRealtimeDepsResult['slackDeps']
+  executionEventPublisher: NodeRealtimeDepsResult['executionEventPublisher']
+  agentExecutor: NodeRealtimeDepsResult['agentExecutor']
+  notificationChannel: NodeRealtimeDepsResult['notificationChannel']
+  releaseHealthDeps: NodeAccountDepsResult['releaseHealthDeps']
+  packageRegistryDeps: NodeAccountDepsResult['packageRegistryDeps']
+  incidentEnrichmentDeps: NodeAccountDepsResult['incidentEnrichmentDeps']
+  accountSettings: NodeAccountDepsResult['accountSettings']
+  resolveBinaryArtifactStore: NodeAccountDepsResult['resolveBinaryArtifactStore']
+}
+
+/**
+ * Assemble the engine {@link CoreDependencies} from the {@link NodeCoreDepsBundle} the composition
+ * root built. Extracted verbatim from {@link buildNodeContainer} so the runtime object is identical
+ * (later spreads still override earlier ones in the same order) — purely the function-size ratchet
+ * split, not a behaviour change.
+ */
+function assembleNodeCoreDependencies(bundle: NodeCoreDepsBundle): CoreDependencies {
+  const {
+    config,
+    options,
+    env,
+    db,
+    repos,
+    sourced,
+    idGenerator,
+    clock,
+    gateways,
+    runnerUrlPolicy,
+    githubInstallationRepository,
+    environmentBackendRegistry,
+    runnerBackendRegistry,
+    customManifestTypeRegistry,
+    agentKindRegistry,
+    gateRegistry,
+    stepResolverRegistry,
+    initiativePresetRegistry,
+    providerRegistry,
+    apiKeys,
+    subscriptions,
+    personalSubscriptions,
+    localModelEndpoints,
+    openRouterCatalog,
+    modelProviderResolver,
+    cloudflareModelsEnabled,
+    deployDeps,
+    runnerPoolConnectionRepository,
+    agentContextObservability,
+    searchQueryObservability,
+    resolveTestSecretRefs,
+    githubClient,
+    tasks,
+    fileGitHubIssue,
+    issueWritebackProvider,
+    githubGateDeps,
+    githubModuleDeps,
+    bootstrapJobRepository,
+    repoBootstrapper,
+    slackDeps,
+    executionEventPublisher,
+    agentExecutor,
+    notificationChannel,
+    releaseHealthDeps,
+    packageRegistryDeps,
+    incidentEnrichmentDeps,
+    accountSettings,
+    resolveBinaryArtifactStore,
+  } = bundle
+  return {
+    ...releaseHealthDeps,
+    ...incidentEnrichmentDeps,
+    ...packageRegistryDeps,
+    // Fold the service frame's SENSITIVE test-credential refs (key + description, never values)
+    // into the tester prompt. Present when ENCRYPTION_KEY is set; absent ⇒ no advertised secrets.
+    ...(resolveTestSecretRefs ? { resolveTestSecretRefs } : {}),
+    // App-owned backend registries (kind → provider) the connection services resolve through.
+    environmentBackendRegistry,
+    runnerBackendRegistry,
+    // The app-owned agent-kind registry (built-ins + any deployment-registered kinds); the
+    // engine reads it (traits / inline-surface / pre-post-op hooks) and re-exposes it on Core.
+    agentKindRegistry,
+    // The app-owned gate + step-resolver registries; the engine's gate machine + completion hub
+    // read them, and the gate registry is re-exposed on Core for the boot-time validation.
+    gateRegistry,
+    stepResolverRegistry,
+    // The app-owned provider registry the gate providers were wired onto above; the engine's gate
+    // machine reads the SAME instance through its GateContext.
+    providerRegistry,
+    // The app-owned pipeline registry (deployment-registered extra pipelines); createCore threads
+    // it into the workspace + pipeline services and re-exposes it on Core for boot-time validation.
+    pipelineRegistry: options.pipelineRegistry,
+    // The app-owned custom task-type registry (deployment-registered namespaced task types);
+    // createCore threads it into the board service (default-pipeline resolution) and re-exposes it
+    // on Core for the snapshot projection (`customTaskTypes`) + boot-time validation.
+    taskTypeRegistry: options.taskTypeRegistry,
+    // The app-owned initiative-preset registry; the initiative services read it and it is
+    // re-exposed on Core for the snapshot descriptors + preset probe.
+    initiativePresetRegistry,
+    // The code-defined custom provision-type catalog, merged with the workspace rows by
+    // `listCustomTypes` so a programmatically-registered type surfaces in the infra editor + the
+    // per-service provisioning picker.
+    customManifestTypeRegistry,
+    ...(accountSettings ? { accountSettings } : {}),
+    // Resolves the per-account binary-artifact store (screenshots) for the visual-confirmation
+    // gate; resolving to null (no storage configured) ⇒ the gate passes through.
+    resolveBinaryArtifactStore,
+    workspaceRepository: repos.workspaceRepository,
+    workspaceMemberRepository: repos.workspaceMemberRepository,
+    accountRepository: repos.accountRepository,
+    membershipRepository: repos.membershipRepository,
+    userRepository: repos.userRepository,
+    passwordHasher: new WebCryptoPasswordHasher(),
+    blockRepository: repos.blockRepository,
+    pipelineRepository: repos.pipelineRepository,
+    executionRepository: repos.executionRepository,
+    // Clear a finished run's personal-credential activation promptly (TTL sweep is the backstop).
+    // In mothership mode its home is the LOCAL `node:sqlite` credential bucket (the activation
+    // re-seals the token for the run, and the LOCAL container executor decrypts it), injected via
+    // `options.subscriptionActivationRepository` — the SAME instance the personal-subscription
+    // service above mints into, so mint + clear agree. Absent (plain Node / siloed-Postgres local)
+    // → the Drizzle repo over `db`. This is NEVER routed through `sourced` (the remote registry):
+    // every no-db (mothership) caller injects the override — `buildLocalContainer` in production
+    // and `makeMothershipConformanceApp` in tests — so `db` here is always a real Postgres handle,
+    // and routing an activation clear to the mothership (where `deleteByExecution` isn't
+    // allow-listed) is a path no caller takes.
+    subscriptionActivationRepository:
+      options.subscriptionActivationRepository ?? new DrizzleSubscriptionActivationRepository(db),
+    // In-org shared services. When a realtime hub is wired (start()), the engine's
+    // event publisher (composed above) is a `FanOutEventPublisher` over these two repos,
+    // so a shared service's live events reach every board that mounts it — parity with
+    // the Cloudflare facade. Without a hub (createServer/tests) the engine uses its
+    // NoopEventPublisher and nothing is pushed.
+    serviceRepository: repos.serviceRepository,
+    workspaceMountRepository: repos.workspaceMountRepository,
+    tokenUsageRepository: repos.tokenUsageRepository,
+    llmCallMetricRepository: repos.llmCallMetricRepository,
+    // Deployment-level rollups over `agent_runs` for the operator dashboard.
+    platformMetricsRepository: repos.platformMetricsRepository,
+    // Unified provisioning event log (its own Postgres schema). Threads the recorder
+    // into the env services and exposes the read service for the logs controller.
+    provisioningLogRepository: repos.provisioningLogRepository,
+    recordLlmPrompts: config.observability.recordPrompts,
+    // Re-exposed on the core for the agent-context read endpoint; the same instance
+    // is injected into the container executor above for the write path.
+    agentContextObservability,
+    // Re-exposed on the core for the search-query read endpoint AND the search proxy's
+    // write path (it reads it off the request container).
+    searchQueryObservability,
+    // Opt-in external trace sink(s) — Langfuse and/or OpenTelemetry — fanning every
+    // recorded LLM call out as a generation. Built only when configured; otherwise
+    // undefined and there is no external emission.
+    llmTraceSink: buildTraceSink(config),
+    modelPresetRepository: repos.modelPresetRepository,
+    // A fresh workspace's model-preset library is seeded with this built-in as the default
+    // (Node deploy → Kimi K2.7, the Cloudflare-runnable baseline; the local facade injects
+    // Claude). Applied only at first seed, so a user's later manual default choice wins.
+    defaultModelPresetId: options.defaultModelPresetId ?? DEFAULT_MODEL_PRESET_ID,
+    serviceFragmentDefaultsRepository: repos.serviceFragmentDefaultsRepository,
+    // Requirements-review feature (stateless reviewer + the requirements-rework
+    // step). Wired identically to the Cloudflare facade's `selectRequirementsDeps`
+    // so both runtimes serve the review/rework API AND substitute a block's reworked
+    // requirements into the agent context (the cross-runtime conformance suite asserts
+    // the substitution against both stores). The reviewer's model resolves exactly
+    // like a pipeline step: block-pin > workspace per-kind default > routing default
+    // (which falls back to Cloudflare Workers AI unless a direct key is set).
+    requirementReviewRepository: repos.requirementReviewRepository,
+    // Interactive document-interview sessions (WS5). Wired unconditionally; the interviewer
+    // reuses the requirements reviewer's model config resolved just below.
+    docInterviewRepository: repos.docInterviewRepository,
+    // Kaizen agent (post-run grading). Wired unconditionally, mirroring the Cloudflare
+    // facade, so the engine schedules gradings at run completion and the background sweep
+    // runs them. The grader resolves its model for the `kaizen` kind exactly like a step.
+    kaizenGradingRepository: repos.kaizenGradingRepository,
+    kaizenVerifiedComboRepository: repos.kaizenVerifiedComboRepository,
+    clarityReviewRepository: repos.clarityReviewRepository,
+    brainstormSessionRepository: repos.brainstormSessionRepository,
+    // Initiatives (the long-running multi-task work container). Wired unconditionally,
+    // mirroring the Worker's `selectMergeLifecycleDeps`, so the create/read API + the
+    // planning pipeline's ingest/committer steps work identically on both runtimes.
+    initiativeRepository: repos.initiativeRepository,
+    // Merge threshold presets: the per-workspace auto-merge ceiling library a task's
+    // merge gate resolves (block-pinned preset > workspace default). Wired
+    // unconditionally, exactly like the Worker's `selectMergeLifecycleDeps`, so the
+    // preset CRUD API + the merger step's threshold resolution work identically.
+    riskPolicyRepository: repos.riskPolicyRepository,
+    // Shared stacks (long-lived compose infra a consumer environment attaches to). Wired
+    // unconditionally like the merge presets so the CRUD API works identically on both
+    // runtimes; the bring-up (`ensureUp`) needs a host daemon, so plain Node has no
+    // `composeRuntime` — the local facade injects one via `overrides.composeRuntime`.
+    sharedStackRepository: repos.sharedStackRepository,
+    // Sandbox (parallel prompt/model testing) — contributed as one sandbox-owned mixin,
+    // symmetric with the Worker's `...selectSandboxDeps(db)`; the run-driver reuses the
+    // reviewer model config below. The container body never enumerates the five repos.
+    ...createDrizzleSandboxDeps(db),
+    // Per-workspace runtime settings (human-wait escalation threshold + per-service task
+    // limit). Wired unconditionally so the settings API + the limit enforcement + the
+    // escalation sweep work identically to the Worker.
+    workspaceSettingsRepository: repos.workspaceSettingsRepository,
+    userSettingsRepository: repos.userSettingsRepository,
+    modelProviderResolver,
+    requirementReviewModel: config.agents.routing.default.ref,
+    requirementReviewResolveModel: config.agents.resolveBlockModel,
+    // Local mode runs the inline reviewers/brainstorm/estimator on the ambient Claude Code /
+    // Codex CLI when the pinned model is a subscription harness (undefined on stock Node, so
+    // such refs degrade to the routing default). Also drives the preset satisfiability guard.
+    ...(config.agents.inlineHarnessRef ? { inlineHarnessRef: config.agents.inlineHarnessRef } : {}),
+    // Notifications subsystem (parity with the Worker, which wires it unconditionally):
+    // the inbox + the human-action surfaces. Node has no real-time push, so the rows
+    // persist (inbox + snapshot) and any channel composed below — e.g. Slack — delivers.
+    notificationRepository: sourced(
+      'notificationRepository',
+      (d) => new DrizzleNotificationRepository(d),
+    ),
+    ...tasks.deps,
+    // Recurring pipelines + the workspace tracker selection. The tracker provider
+    // files the tech-debt pipeline's issue by resolving the *workspace's* connected
+    // integration: GitHub issues through the workspace's GitHub App installation,
+    // Jira tickets from the per-workspace encrypted connection store — both per-tenant.
+    pipelineScheduleRepository: repos.pipelineScheduleRepository,
+    trackerSettingsRepository: repos.trackerSettingsRepository,
+    ticketTrackerProvider: new TicketTrackerService({
+      trackerSettingsRepository: repos.trackerSettingsRepository,
+      fetchImpl: fetch,
+      ...(fileGitHubIssue ? { fileGitHubIssue } : {}),
+      ...(tasks.taskConnectionRepository
+        ? {
+            resolveJiraConnection: async (workspaceId) => {
+              const connection = await tasks.taskConnectionRepository!.getByWorkspace(
+                workspaceId,
+                'jira',
+              )
+              const { baseUrl, accountEmail, apiToken } = connection?.credentials ?? {}
+              if (!baseUrl || !accountEmail || !apiToken) return null
+              return { baseUrl, accountEmail, apiToken }
+            },
+            resolveLinearConnection: async (workspaceId) => {
+              const connection = await tasks.taskConnectionRepository!.getByWorkspace(
+                workspaceId,
+                'linear',
+              )
+              const { apiKey, token } = connection?.credentials ?? {}
+              return apiKey || token ? { apiKey, token } : null
+            },
+          }
+        : {}),
+    }),
+    issueWritebackProvider,
+    idGenerator,
+    clock,
+    agentExecutor,
+    spendPricing: config.spend,
+    // Price metered dynamic OpenRouter models at their real per-model rate (not the
+    // bare-`openrouter` fallback) using this workspace's enabled catalog.
+    dynamicModelPricesFor: openRouterCatalog
+      ? (ws) => openRouterCatalog.capabilitiesFor(ws)
+      : undefined,
+    // The runner-pool integration assembles when enabled, so a workspace can
+    // register the self-hosted pool its container agents dispatch to.
+    ...(config.runners.enabled && config.runners.encryptionKey
+      ? {
+          runnerPoolConnectionRepository,
+          runnerSecretCipher: new WebCryptoSecretCipher({
+            masterKeyBase64: config.runners.encryptionKey,
+            info: RUNNERS_CIPHER_INFO,
+          }),
+          // The pool provider instance backs the connection service's describeProvider +
+          // testConnection (the manifest editor's secret-key form + a pre-save probe). An
+          // injected native adapter wins here too (same instance that drives dispatch), so
+          // its describeConfig/testConnection render — else the generic manifest provider
+          // (same SSRF policy as the dispatch transport).
+          runnerPoolProvider:
+            options.runnerPoolProvider ??
+            new HttpRunnerPoolProvider(runnerUrlPolicy ? { urlPolicy: runnerUrlPolicy } : {}),
+          // Node (and local) has undici, so it can verify a private CA / skip TLS for a
+          // Kubernetes apiserver — accept such a config at registration.
+          runnerCustomTlsSupported: true,
+          ...(runnerUrlPolicy ? { runnerUrlSafetyPolicy: runnerUrlPolicy } : {}),
+        }
+      : {}),
+    ...(options.boss
+      ? {
+          workRunner: new PgBossWorkRunner(options.boss, executionRuntime(config, env).queue),
+          // The durable bootstrap driver (analogue of the Worker's BootstrapWorkflow):
+          // BootstrapService.startRun enqueues a drive job that polls the run to terminal.
+          bootstrapRunner: new PgBossBootstrapRunner(
+            options.boss,
+            executionRuntime(config, env).queue,
+          ),
+          // The durable env-config-repair driver (analogue of the Worker's
+          // EnvConfigRepairWorkflow): start enqueues a drive job that polls the run to terminal.
+          envConfigRepairRunner: new PgBossEnvConfigRepairRunner(
+            options.boss,
+            executionRuntime(config, env).queue,
+          ),
+          // The durable ephemeral-environment self-test driver (analogue of the Worker's
+          // EnvironmentTestWorkflow): startRun enqueues a drive job that advances the run.
+          environmentTestRunner: new PgBossEnvironmentTestRunner(
+            options.boss,
+            executionRuntime(config, env).queue,
+          ),
+        }
+      : {}),
+    ...githubGateDeps,
+    // GitHub installation + repo/branch/PR/issue/commit/check-run projections + the
+    // sync/webhook module (inline ingest persists to these repos on Node).
+    ...githubModuleDeps,
+    // Repo-bootstrap: the reference-architecture library + bootstrap-run store make the
+    // module + API available; `repoBootstrapper` (when wired) dispatches the bootstrap
+    // container through the shared runner seam, and `bootstrapRunner` (pg-boss, below)
+    // durably drives its poll loop — parity with the Worker's BootstrapWorkflow.
+    referenceArchitectureRepository: sourced(
+      'referenceArchitectureRepository',
+      (d) => new DrizzleReferenceArchitectureRepository(d),
+    ),
+    bootstrapJobRepository,
+    ...(repoBootstrapper ? { repoBootstrapper } : {}),
+    // Env-config-repair runs share the unified agent_runs table (kind-scoped). The job
+    // repository is wired unconditionally; the repairer (agent fallback) is wired
+    // post-overrides below over the FINAL provider, and the durable runner in the
+    // `options.boss` block above — parity with the Worker's EnvConfigRepairWorkflow.
+    envConfigRepairJobRepository: sourced(
+      'envConfigRepairJobRepository',
+      (d) => new DrizzleEnvConfigRepairJobRepository(d),
+    ),
+    // Ephemeral-environment self-test runs (their own table). The store is wired
+    // unconditionally; the environments module builds the service when it + a git provider
+    // are present, and the durable runner is wired in the `options.boss` block above.
+    environmentTestRunRepository: sourced(
+      'environmentTestRunRepository',
+      (d) => new DrizzleEnvironmentTestRunRepository(d),
+    ),
+    // Document sources (Confluence / Notion / GitHub docs): wired from the shared
+    // integration providers exactly like the Worker, so a workspace can connect a
+    // source and import requirement/PRD/RFC pages as agent context.
+    ...selectNodeDocumentsDeps(config, db, githubClient, githubInstallationRepository),
+    // Ephemeral environments (opt-in): a workspace registers its own environment
+    // management API; the tester provisions/destroys per-run environments from it. A
+    // trusted in-house adapter can replace the default HTTP provider via the seam.
+    // The environment integration scopes its own URL/host policy from
+    // `config.environments` inside this selector (separate from the runner pool's).
+    ...selectNodeEnvironmentsDeps(config, db),
+    // The async container-backed Kubernetes deploy lifecycle (deployJobClient +
+    // resolveDeployCloneTarget) — pool-backed by default, overridable by the local facade.
+    ...deployDeps,
+    // Prompt-fragment library (ADR 0006; opt-in): the managed tenant-scoped catalog
+    // of best-practice fragments feeding every agent run, wired exactly like the
+    // Worker's selectFragmentLibraryDeps (repos + installation resolver + selector).
+    ...selectNodeFragmentLibraryDeps(
+      config,
+      env,
+      db,
+      githubClient,
+      githubInstallationRepository,
+      modelProviderResolver,
+    ),
+    // Repo-sourced Claude Skills library (docs/initiatives/repo-skills.md; opt-in): the
+    // account's catalog of repo-authored skills, wired exactly like the Worker's
+    // selectSkillLibraryDeps (account repos + installation resolver).
+    ...selectNodeSkillLibraryDeps(config, db, githubClient, githubInstallationRepository),
+    // Push-webhook skill-source freshness fan-out (slice 4): resync affected sources via the
+    // pg-boss GitHub-sync queue. No boss (pure-logic test) ⇒ no proactive resync; the
+    // dispatch-time probe is the freshness backstop.
+    enqueueSkillResync: async ({ accountId, sourceId }) => {
+      await gateways.githubWebhook.queueSkillResync(accountId, sourceId)
+    },
+    // Slack: an extra notification transport (the channel) + its management module.
+    // Default-off; when enabled its channel is composed into `notificationChannel` below
+    // alongside the in-app push, identically to the Worker.
+    ...slackDeps,
+    // Account invitations + per-account email senders (UI-onboarded, DB-stored).
+    ...selectNodeEmailInvitationDeps(config, repos),
+    // The pipeline-start guard resolves what's configured for a workspace + initiator.
+    resolveProviderCapabilities: (workspaceId, initiatedBy) =>
+      resolveWorkspaceCapabilities(
+        {
+          apiKeys,
+          subscriptions,
+          personalSubscriptions,
+          cloudflareModelsEnabled,
+          baseUrlFor: (provider) => baseUrlForNode(provider, env),
+          localModelEndpoints,
+          openRouterCatalog,
+          accountSettings,
+          workspaceAccountOf: (workspaceId) => repos.workspaceRepository.accountOf(workspaceId),
+          modelPolicySupported: config.infrastructure?.modelPolicy?.supported ?? false,
+          ...(options.caches ? { caches: options.caches } : {}),
+        },
+        workspaceId,
+        initiatedBy,
+      ),
+    // Real-time push (when a hub is wired) + the composed notification channel (in-app
+    // push + Slack). These come AFTER the spreads so the composite replaces the bare
+    // Slack channel `slackDeps` set; both are absent (no override) when nothing is wired.
+    ...(executionEventPublisher ? { executionEventPublisher } : {}),
+    ...(notificationChannel ? { notificationChannel } : {}),
+    // Run the engine's gate-probe / merge GitHub reads under the run initiator's ambient
+    // context, so a per-user PAT (when set) is preferred over the App/env token.
+    runInitiatorScope: runWithInitiator,
+    // The process-wide cache bag from start() (Redis-notified invalidation when REDIS_URL
+    // is set). Absent ⇒ createCore builds bare in-memory defaults.
+    ...(options.caches ? { caches: options.caches } : {}),
+    ...options.overrides,
+  }
+}
+
+interface NodeServerContainerBundle {
+  dependencies: CoreDependencies
+  config: AppConfig
+  defaultWebSearchUpstream: NodeRunServicesResult['defaultWebSearchUpstream']
+  resolveRepoTarget: ReturnType<typeof buildResolveRepoTarget>
+  repos: ReturnType<typeof createDrizzleRepositories>
+  appRegistry: ReturnType<typeof buildNodeAppRegistry>
+  options: NodeContainerOptions
+  repoProjectionRepository: DrizzleRepoProjectionRepository
+  githubInstallationRepository: GitHubInstallationRepository
+  environmentBackendRegistry: NodeAppRegistriesResult['environmentBackendRegistry']
+  runnerBackendRegistry: NodeAppRegistriesResult['runnerBackendRegistry']
+  resolveBinaryArtifactStore: NodeAccountDepsResult['resolveBinaryArtifactStore']
+  gateways: ReturnType<typeof createNodeGateways>
+  vcsRegistry: NodeAppRegistriesResult['vcsRegistry']
+  testSecretsService: NodeRunServicesResult['testSecretsService']
+  subscriptions: NodeModelDepsResult['subscriptions']
+  personalSubscriptions: NodeModelDepsResult['personalSubscriptions']
+  apiKeys: NodeModelDepsResult['apiKeys']
+  publicApiKeys: NodeModelDepsResult['publicApiKeys']
+  cloudflareModelsEnabled: NodeModelDepsResult['cloudflareModelsEnabled']
+  env: NodeJS.ProcessEnv
+  localModelEndpoints: NodeModelDepsResult['localModelEndpoints']
+  userSecrets: NodeModelDepsResult['userSecrets']
+  db: DrizzleDb
+  openRouterCatalog: NodeModelDepsResult['openRouterCatalog']
+  traceSink: NodeModelDepsResult['traceSink']
+}
+
+/**
+ * Project the assembled engine core + the Node-facade extras onto the {@link ServerContainer}
+ * the HTTP layer resolves. Extracted verbatim from {@link buildNodeContainer} (a function-size
+ * ratchet split — behaviour is identical); the mothership persistence-registry surface, the
+ * per-user credential stores, and the VCS/gateway wiring are surfaced exactly as before.
+ */
+function projectNodeServerContainer(bundle: NodeServerContainerBundle): ServerContainer {
+  const {
+    dependencies,
+    config,
+    defaultWebSearchUpstream,
+    resolveRepoTarget,
+    repos,
+    appRegistry,
+    options,
+    repoProjectionRepository,
+    githubInstallationRepository,
+    environmentBackendRegistry,
+    runnerBackendRegistry,
+    resolveBinaryArtifactStore,
+    gateways,
+    vcsRegistry,
+    testSecretsService,
+    subscriptions,
+    personalSubscriptions,
+    apiKeys,
+    publicApiKeys,
+    cloudflareModelsEnabled,
+    env,
+    localModelEndpoints,
+    userSecrets,
+    db,
+    openRouterCatalog,
+    traceSink,
+  } = bundle
+  return {
+    ...createCore(dependencies),
+    config,
+    // The deployment-wide trusted web-search upstream (built from `WEB_SEARCH_*` env above),
+    // read by `WebSearchProxyController` as the fallback when a run's account has no keys.
+    ...(defaultWebSearchUpstream ? { defaultWebSearchUpstream } : {}),
+    // The same checkout-free repo resolver the engine binds pre/post-ops with, surfaced so
+    // the shared service-spec read controller can read the `spec/` artifact off main.
+    resolveRunRepoContext: dependencies.resolveRunRepoContext,
+    // The block→service→repo resolver, surfaced so the task-search controller can scope a
+    // GitHub-issue search to the originating service's repo (and refuse it when unlinked).
+    resolveRepoTarget,
+    agentRunRepository: repos.agentRunRepository,
+    // Execution-scoped repo, surfaced for the conformance suite's compareAndSwap parity check.
+    executionRepository: repos.executionRepository,
+    // The repository registry the mothership-mode machine API (`/internal/persistence`) reflects
+    // over, so a Node deployment can act as a mothership for mothership-mode local nodes. The
+    // controller gates which repo+method is callable (allow-list) and account-scopes each call;
+    // exposing the whole `dependencies` (which carries every repo under its canonical name) is
+    // safe. `agentRunRepository` is the one repo NOT part of `CoreDependencies` (the engine's
+    // Core never reads it — it's surfaced separately above for `AgentRunController`), so fold it
+    // in explicitly, else the board's retry/stop `getRef` call comes back `... is not wired`.
+    // Sourced identically on both facades so they attach the same registry surface.
+    // Mothership-side GitHub token delegation (`POST /internal/github/installation-token`):
+    // when this deployment's GitHub App is configured, a machine-authed mothership-mode node
+    // can mint the short-lived installation tokens its agent containers/gates need — the App
+    // private key never leaves this service. The registry satisfies the seam structurally.
+    // Wired symmetrically on the Cloudflare facade.
+    ...(appRegistry ? { githubTokenDelegation: appRegistry } : {}),
+    // Mothership-side real-time UPSTREAM delivery (`POST /internal/events/publish`): when this
+    // deployment is a mothership (its realtime transport is wired), a machine-authed mothership-mode
+    // node's relayed engine events land in this deployment's OWN fan-out (`options.realtimeSink` —
+    // the hub, or the layered propagator on a multi-node deployment), so hosted teammates on the
+    // shared board see the local node's activity live. Wired symmetrically on the Cloudflare facade
+    // (the per-workspace WorkspaceEventsHub Durable Object). Absent realtime ⇒ the endpoint 503s.
+    ...(options.realtimeSink
+      ? { machineEventRelay: new LocalMachineEventRelay(options.realtimeSink) }
+      : {}),
+    repositories: {
+      ...dependencies,
+      agentRunRepository: repos.agentRunRepository,
+      // The binary-artifact METADATA store (visual-confirmation gate screenshots/references) is
+      // not part of `CoreDependencies` (it's composed into `resolveBinaryArtifactStore`, not the
+      // engine's Core), so fold it into the reflected registry explicitly — else a mothership-mode
+      // node's artifact reads/writes come back `... is not wired`. The blob BYTES stay per-account
+      // local; only the metadata is proxied.
+      binaryArtifactMetadataStore: repos.binaryArtifactMetadataStore,
+      // The sensitive per-service test-credential store is org/durable state the engine reads via
+      // the `resolveTestSecretRefs` FUNCTION (never the repo directly), so it isn't in
+      // `CoreDependencies` either — fold it in explicitly, else a mothership-mode node's tester
+      // run-path read + the inspector CRUD come back `... is not wired`. Only the SEALED blob is
+      // proxied (decrypted service-side under the LOCAL key), like the observability/runner-pool
+      // connections.
+      testSecretsRepository: repos.testSecretsRepository,
+      // GitHub projection + installation reads the mothership serves over the persistence RPC even
+      // when its OWN github service is off. A mothership-mode local node reaches GitHub by token
+      // DELEGATION (no local App), which enables `container.github`, so its board snapshot
+      // (`github.service.listRepos` → `repoProjectionRepository.list`) and run-path repo resolution
+      // (`githubInstallationRepository.getByWorkspace` + `repoProjectionRepository.list`) read the
+      // projection over RPC. Both are plain org tables the mothership owns, constructed
+      // unconditionally above — so reflect them regardless of `config.github.enabled` (they land in
+      // `dependencies` only when the github MODULE is wired), else a mothership without its own App
+      // configured 500s that board load with `... is not wired`. Allow-listed in
+      // `REMOTE_PERSISTENCE_METHODS`; folded in explicitly like the stores above.
+      repoProjectionRepository,
+      githubInstallationRepository,
+    } as unknown as PersistenceRegistry,
+    // App-owned backend registries, surfaced so the workspace snapshot's backend-kind
+    // selectors (`environmentBackendKinds` / `runnerBackendKinds`) read the registered kinds.
+    environmentBackendRegistry,
+    runnerBackendRegistry,
+    // The consensus transcript store, for the read endpoint (window load / reload).
+    consensusSessionRepository: repos.consensusSessionRepository,
+    // Resolves the per-account binary-artifact store (screenshots) for the artifact
+    // controllers + the visual-confirmation gate (configured per-account in the UI).
+    resolveBinaryArtifactStore,
+    // Stock/remote Node has NO built-in container runtime, so container agents run ONLY on a
+    // self-hosted runner pool — an unregistered pool means no agent can run, which the infra-setup
+    // banner should surface. Local mode injects its own per-run-host-container `resolveTransport`
+    // (so the pool is optional there); detect that by the absence of the default pool transport.
+    agentExecutorRequiresRunnerPool: options.resolveTransport === undefined,
+    // A missing ephemeral-environment provider is a real setup gap ONLY when no zero-config
+    // in-container test-env default exists. Stock Node's sole test-env backend is the
+    // `environment-provider`, so it's required here; local mode on a Docker-family runtime
+    // advertises `local-compose` (docker-compose in the run's container, no connection), which
+    // flips this false so the "test environment not configured" banner stays quiet. Derived from
+    // the capability descriptor local already populated, so the two can't drift.
+    ephemeralEnvironmentsRequireProvider: !testEnvHasZeroConfigDefault(config.infrastructure),
+    // pg-boss-backed async GitHub ingest when the durable engine is wired (the real
+    // server drains the queue via `startGitHubSyncWorker`); inline fallback with no boss.
+    // Built once above so the skill-freshness fan-out shares this same instance.
+    gateways,
+    // Source-control PAT login: lets a user sign in with their own GitHub/GitLab PAT via
+    // `/auth/pat`, held to the server's login/org/domain allowlist. Local mode overrides this
+    // (via its container spread) with a configured-token, allowlist-exempt registry.
+    vcsIdentity: buildNodeVcsIdentityRegistry(config),
+    // The app-owned VCS provider registry the neutral webhook route resolves a provider from.
+    vcsRegistry,
+    // The sensitive per-service test-credential store the shared test-secrets controller reads;
+    // present when the shared ENCRYPTION_KEY is configured.
+    ...(testSecretsService ? { testSecrets: testSecretsService } : {}),
+    // The vendor-credential (subscription token pool) service the shared controller
+    // reads; present when the shared ENCRYPTION_KEY is configured.
+    subscriptions,
+    // The per-user individual-usage subscription store (Claude); present when the
+    // shared ENCRYPTION_KEY is configured.
+    personalSubscriptions,
+    // The direct-provider API-key pool (account/workspace/user); present when the
+    // shared ENCRYPTION_KEY is configured.
+    apiKeys,
+    // The inbound public-API key store; present when the shared ENCRYPTION_KEY is configured.
+    publicApiKeys,
+    // Whether the opt-in Cloudflare Workers AI lib is enabled (REST creds present).
+    cloudflareModelsEnabled,
+    // The direct-provider base-URL resolver the catalog uses to gate selectability on a
+    // resolvable endpoint (e.g. LiteLLM stays unselectable until LITELLM_BASE_URL is set).
+    baseUrlFor: (provider) => baseUrlForNode(provider, env),
+    // The per-user locally-run model endpoints store; present when ENCRYPTION_KEY is set.
+    localModelEndpoints,
+    // The per-user generic secret store (GitHub PAT, …); present when ENCRYPTION_KEY is set.
+    userSecrets,
+    // The per-user "repos my PAT can reach" projection (board redaction + picker expansion);
+    // Postgres-backed, so absent in the no-DB mothership node (redaction degrades to visible).
+    userRepoAccess: db ? new DrizzleUserRepoAccessRepository(db) : undefined,
+    // The sealed-secret inventory the key-drift sweep + drop remediation use (ADR 0026 D6.2/D6.3);
+    // Postgres-backed and gated on ENCRYPTION_KEY (no key ⇒ nothing is sealed to scan).
+    ...(db && env.ENCRYPTION_KEY?.trim()
+      ? { sealedSecretInventory: new DrizzleSealedSecretInventory(db) }
+      : {}),
+    // The per-workspace OpenRouter dynamic-catalog store; present when the API-key pool is.
+    openRouterCatalog,
+    // Flush + release the external trace sink on graceful shutdown so the OpenTelemetry SDK
+    // exporter's final batch of spans/metrics isn't dropped and its background timers are
+    // cleared. Best-effort; a no-op for the fetch-based Langfuse sink and when nothing is
+    // wired. (The local facade composes this into its own `onShutdown` — see its container.)
+    onShutdown: async () => {
+      await traceSink?.shutdown?.()
+    },
+  }
+}
+
 export function buildNodeContainer(options: NodeContainerOptions): ServerContainer {
   const env = options.env ?? process.env
   const config = options.config ?? loadNodeConfig(env)
@@ -1201,341 +1868,56 @@ export function buildNodeContainer(options: NodeContainerOptions): ServerContain
   // (slice 4) enqueues through the SAME `githubWebhook` seam rather than re-deriving the queue.
   const gateways = createNodeGateways(env, options.boss)
 
-  const dependencies: CoreDependencies = {
-    ...releaseHealthDeps,
-    ...incidentEnrichmentDeps,
-    ...packageRegistryDeps,
-    // Fold the service frame's SENSITIVE test-credential refs (key + description, never values)
-    // into the tester prompt. Present when ENCRYPTION_KEY is set; absent ⇒ no advertised secrets.
-    ...(resolveTestSecretRefs ? { resolveTestSecretRefs } : {}),
-    // App-owned backend registries (kind → provider) the connection services resolve through.
-    environmentBackendRegistry,
-    runnerBackendRegistry,
-    // The app-owned agent-kind registry (built-ins + any deployment-registered kinds); the
-    // engine reads it (traits / inline-surface / pre-post-op hooks) and re-exposes it on Core.
-    agentKindRegistry,
-    // The app-owned gate + step-resolver registries; the engine's gate machine + completion hub
-    // read them, and the gate registry is re-exposed on Core for the boot-time validation.
-    gateRegistry,
-    stepResolverRegistry,
-    // The app-owned provider registry the gate providers were wired onto above; the engine's gate
-    // machine reads the SAME instance through its GateContext.
-    providerRegistry,
-    // The app-owned pipeline registry (deployment-registered extra pipelines); createCore threads
-    // it into the workspace + pipeline services and re-exposes it on Core for boot-time validation.
-    pipelineRegistry: options.pipelineRegistry,
-    // The app-owned custom task-type registry (deployment-registered namespaced task types);
-    // createCore threads it into the board service (default-pipeline resolution) and re-exposes it
-    // on Core for the snapshot projection (`customTaskTypes`) + boot-time validation.
-    taskTypeRegistry: options.taskTypeRegistry,
-    // The app-owned initiative-preset registry; the initiative services read it and it is
-    // re-exposed on Core for the snapshot descriptors + preset probe.
-    initiativePresetRegistry,
-    // The code-defined custom provision-type catalog, merged with the workspace rows by
-    // `listCustomTypes` so a programmatically-registered type surfaces in the infra editor + the
-    // per-service provisioning picker.
-    customManifestTypeRegistry,
-    ...(accountSettings ? { accountSettings } : {}),
-    // Resolves the per-account binary-artifact store (screenshots) for the visual-confirmation
-    // gate; resolving to null (no storage configured) ⇒ the gate passes through.
-    resolveBinaryArtifactStore,
-    workspaceRepository: repos.workspaceRepository,
-    workspaceMemberRepository: repos.workspaceMemberRepository,
-    accountRepository: repos.accountRepository,
-    membershipRepository: repos.membershipRepository,
-    userRepository: repos.userRepository,
-    passwordHasher: new WebCryptoPasswordHasher(),
-    blockRepository: repos.blockRepository,
-    pipelineRepository: repos.pipelineRepository,
-    executionRepository: repos.executionRepository,
-    // Clear a finished run's personal-credential activation promptly (TTL sweep is the backstop).
-    // In mothership mode its home is the LOCAL `node:sqlite` credential bucket (the activation
-    // re-seals the token for the run, and the LOCAL container executor decrypts it), injected via
-    // `options.subscriptionActivationRepository` — the SAME instance the personal-subscription
-    // service above mints into, so mint + clear agree. Absent (plain Node / siloed-Postgres local)
-    // → the Drizzle repo over `db`. This is NEVER routed through `sourced` (the remote registry):
-    // every no-db (mothership) caller injects the override — `buildLocalContainer` in production
-    // and `makeMothershipConformanceApp` in tests — so `db` here is always a real Postgres handle,
-    // and routing an activation clear to the mothership (where `deleteByExecution` isn't
-    // allow-listed) is a path no caller takes.
-    subscriptionActivationRepository:
-      options.subscriptionActivationRepository ?? new DrizzleSubscriptionActivationRepository(db),
-    // In-org shared services. When a realtime hub is wired (start()), the engine's
-    // event publisher (composed above) is a `FanOutEventPublisher` over these two repos,
-    // so a shared service's live events reach every board that mounts it — parity with
-    // the Cloudflare facade. Without a hub (createServer/tests) the engine uses its
-    // NoopEventPublisher and nothing is pushed.
-    serviceRepository: repos.serviceRepository,
-    workspaceMountRepository: repos.workspaceMountRepository,
-    tokenUsageRepository: repos.tokenUsageRepository,
-    llmCallMetricRepository: repos.llmCallMetricRepository,
-    // Deployment-level rollups over `agent_runs` for the operator dashboard.
-    platformMetricsRepository: repos.platformMetricsRepository,
-    // Unified provisioning event log (its own Postgres schema). Threads the recorder
-    // into the env services and exposes the read service for the logs controller.
-    provisioningLogRepository: repos.provisioningLogRepository,
-    recordLlmPrompts: config.observability.recordPrompts,
-    // Re-exposed on the core for the agent-context read endpoint; the same instance
-    // is injected into the container executor above for the write path.
-    agentContextObservability,
-    // Re-exposed on the core for the search-query read endpoint AND the search proxy's
-    // write path (it reads it off the request container).
-    searchQueryObservability,
-    // Opt-in external trace sink(s) — Langfuse and/or OpenTelemetry — fanning every
-    // recorded LLM call out as a generation. Built only when configured; otherwise
-    // undefined and there is no external emission.
-    llmTraceSink: buildTraceSink(config),
-    modelPresetRepository: repos.modelPresetRepository,
-    // A fresh workspace's model-preset library is seeded with this built-in as the default
-    // (Node deploy → Kimi K2.7, the Cloudflare-runnable baseline; the local facade injects
-    // Claude). Applied only at first seed, so a user's later manual default choice wins.
-    defaultModelPresetId: options.defaultModelPresetId ?? DEFAULT_MODEL_PRESET_ID,
-    serviceFragmentDefaultsRepository: repos.serviceFragmentDefaultsRepository,
-    // Requirements-review feature (stateless reviewer + the requirements-rework
-    // step). Wired identically to the Cloudflare facade's `selectRequirementsDeps`
-    // so both runtimes serve the review/rework API AND substitute a block's reworked
-    // requirements into the agent context (the cross-runtime conformance suite asserts
-    // the substitution against both stores). The reviewer's model resolves exactly
-    // like a pipeline step: block-pin > workspace per-kind default > routing default
-    // (which falls back to Cloudflare Workers AI unless a direct key is set).
-    requirementReviewRepository: repos.requirementReviewRepository,
-    // Interactive document-interview sessions (WS5). Wired unconditionally; the interviewer
-    // reuses the requirements reviewer's model config resolved just below.
-    docInterviewRepository: repos.docInterviewRepository,
-    // Kaizen agent (post-run grading). Wired unconditionally, mirroring the Cloudflare
-    // facade, so the engine schedules gradings at run completion and the background sweep
-    // runs them. The grader resolves its model for the `kaizen` kind exactly like a step.
-    kaizenGradingRepository: repos.kaizenGradingRepository,
-    kaizenVerifiedComboRepository: repos.kaizenVerifiedComboRepository,
-    clarityReviewRepository: repos.clarityReviewRepository,
-    brainstormSessionRepository: repos.brainstormSessionRepository,
-    // Initiatives (the long-running multi-task work container). Wired unconditionally,
-    // mirroring the Worker's `selectMergeLifecycleDeps`, so the create/read API + the
-    // planning pipeline's ingest/committer steps work identically on both runtimes.
-    initiativeRepository: repos.initiativeRepository,
-    // Merge threshold presets: the per-workspace auto-merge ceiling library a task's
-    // merge gate resolves (block-pinned preset > workspace default). Wired
-    // unconditionally, exactly like the Worker's `selectMergeLifecycleDeps`, so the
-    // preset CRUD API + the merger step's threshold resolution work identically.
-    riskPolicyRepository: repos.riskPolicyRepository,
-    // Shared stacks (long-lived compose infra a consumer environment attaches to). Wired
-    // unconditionally like the merge presets so the CRUD API works identically on both
-    // runtimes; the bring-up (`ensureUp`) needs a host daemon, so plain Node has no
-    // `composeRuntime` — the local facade injects one via `overrides.composeRuntime`.
-    sharedStackRepository: repos.sharedStackRepository,
-    // Sandbox (parallel prompt/model testing) — contributed as one sandbox-owned mixin,
-    // symmetric with the Worker's `...selectSandboxDeps(db)`; the run-driver reuses the
-    // reviewer model config below. The container body never enumerates the five repos.
-    ...createDrizzleSandboxDeps(db),
-    // Per-workspace runtime settings (human-wait escalation threshold + per-service task
-    // limit). Wired unconditionally so the settings API + the limit enforcement + the
-    // escalation sweep work identically to the Worker.
-    workspaceSettingsRepository: repos.workspaceSettingsRepository,
-    userSettingsRepository: repos.userSettingsRepository,
-    modelProviderResolver,
-    requirementReviewModel: config.agents.routing.default.ref,
-    requirementReviewResolveModel: config.agents.resolveBlockModel,
-    // Local mode runs the inline reviewers/brainstorm/estimator on the ambient Claude Code /
-    // Codex CLI when the pinned model is a subscription harness (undefined on stock Node, so
-    // such refs degrade to the routing default). Also drives the preset satisfiability guard.
-    ...(config.agents.inlineHarnessRef ? { inlineHarnessRef: config.agents.inlineHarnessRef } : {}),
-    // Notifications subsystem (parity with the Worker, which wires it unconditionally):
-    // the inbox + the human-action surfaces. Node has no real-time push, so the rows
-    // persist (inbox + snapshot) and any channel composed below — e.g. Slack — delivers.
-    notificationRepository: sourced(
-      'notificationRepository',
-      (d) => new DrizzleNotificationRepository(d),
-    ),
-    ...tasks.deps,
-    // Recurring pipelines + the workspace tracker selection. The tracker provider
-    // files the tech-debt pipeline's issue by resolving the *workspace's* connected
-    // integration: GitHub issues through the workspace's GitHub App installation,
-    // Jira tickets from the per-workspace encrypted connection store — both per-tenant.
-    pipelineScheduleRepository: repos.pipelineScheduleRepository,
-    trackerSettingsRepository: repos.trackerSettingsRepository,
-    ticketTrackerProvider: new TicketTrackerService({
-      trackerSettingsRepository: repos.trackerSettingsRepository,
-      fetchImpl: fetch,
-      ...(fileGitHubIssue ? { fileGitHubIssue } : {}),
-      ...(tasks.taskConnectionRepository
-        ? {
-            resolveJiraConnection: async (workspaceId) => {
-              const connection = await tasks.taskConnectionRepository!.getByWorkspace(
-                workspaceId,
-                'jira',
-              )
-              const { baseUrl, accountEmail, apiToken } = connection?.credentials ?? {}
-              if (!baseUrl || !accountEmail || !apiToken) return null
-              return { baseUrl, accountEmail, apiToken }
-            },
-            resolveLinearConnection: async (workspaceId) => {
-              const connection = await tasks.taskConnectionRepository!.getByWorkspace(
-                workspaceId,
-                'linear',
-              )
-              const { apiKey, token } = connection?.credentials ?? {}
-              return apiKey || token ? { apiKey, token } : null
-            },
-          }
-        : {}),
-    }),
-    issueWritebackProvider,
+  const dependencies = assembleNodeCoreDependencies({
+    config,
+    options,
+    env,
+    db,
+    repos,
+    sourced,
     idGenerator,
     clock,
-    agentExecutor,
-    spendPricing: config.spend,
-    // Price metered dynamic OpenRouter models at their real per-model rate (not the
-    // bare-`openrouter` fallback) using this workspace's enabled catalog.
-    dynamicModelPricesFor: openRouterCatalog
-      ? (ws) => openRouterCatalog.capabilitiesFor(ws)
-      : undefined,
-    // The runner-pool integration assembles when enabled, so a workspace can
-    // register the self-hosted pool its container agents dispatch to.
-    ...(config.runners.enabled && config.runners.encryptionKey
-      ? {
-          runnerPoolConnectionRepository,
-          runnerSecretCipher: new WebCryptoSecretCipher({
-            masterKeyBase64: config.runners.encryptionKey,
-            info: RUNNERS_CIPHER_INFO,
-          }),
-          // The pool provider instance backs the connection service's describeProvider +
-          // testConnection (the manifest editor's secret-key form + a pre-save probe). An
-          // injected native adapter wins here too (same instance that drives dispatch), so
-          // its describeConfig/testConnection render — else the generic manifest provider
-          // (same SSRF policy as the dispatch transport).
-          runnerPoolProvider:
-            options.runnerPoolProvider ??
-            new HttpRunnerPoolProvider(runnerUrlPolicy ? { urlPolicy: runnerUrlPolicy } : {}),
-          // Node (and local) has undici, so it can verify a private CA / skip TLS for a
-          // Kubernetes apiserver — accept such a config at registration.
-          runnerCustomTlsSupported: true,
-          ...(runnerUrlPolicy ? { runnerUrlSafetyPolicy: runnerUrlPolicy } : {}),
-        }
-      : {}),
-    ...(options.boss
-      ? {
-          workRunner: new PgBossWorkRunner(options.boss, executionRuntime(config, env).queue),
-          // The durable bootstrap driver (analogue of the Worker's BootstrapWorkflow):
-          // BootstrapService.startRun enqueues a drive job that polls the run to terminal.
-          bootstrapRunner: new PgBossBootstrapRunner(
-            options.boss,
-            executionRuntime(config, env).queue,
-          ),
-          // The durable env-config-repair driver (analogue of the Worker's
-          // EnvConfigRepairWorkflow): start enqueues a drive job that polls the run to terminal.
-          envConfigRepairRunner: new PgBossEnvConfigRepairRunner(
-            options.boss,
-            executionRuntime(config, env).queue,
-          ),
-          // The durable ephemeral-environment self-test driver (analogue of the Worker's
-          // EnvironmentTestWorkflow): startRun enqueues a drive job that advances the run.
-          environmentTestRunner: new PgBossEnvironmentTestRunner(
-            options.boss,
-            executionRuntime(config, env).queue,
-          ),
-        }
-      : {}),
-    ...githubGateDeps,
-    // GitHub installation + repo/branch/PR/issue/commit/check-run projections + the
-    // sync/webhook module (inline ingest persists to these repos on Node).
-    ...githubModuleDeps,
-    // Repo-bootstrap: the reference-architecture library + bootstrap-run store make the
-    // module + API available; `repoBootstrapper` (when wired) dispatches the bootstrap
-    // container through the shared runner seam, and `bootstrapRunner` (pg-boss, below)
-    // durably drives its poll loop — parity with the Worker's BootstrapWorkflow.
-    referenceArchitectureRepository: sourced(
-      'referenceArchitectureRepository',
-      (d) => new DrizzleReferenceArchitectureRepository(d),
-    ),
+    gateways,
+    runnerUrlPolicy,
+    githubInstallationRepository,
+    environmentBackendRegistry,
+    runnerBackendRegistry,
+    customManifestTypeRegistry,
+    agentKindRegistry,
+    gateRegistry,
+    stepResolverRegistry,
+    initiativePresetRegistry,
+    providerRegistry,
+    apiKeys,
+    subscriptions,
+    personalSubscriptions,
+    localModelEndpoints,
+    openRouterCatalog,
+    modelProviderResolver,
+    cloudflareModelsEnabled,
+    deployDeps,
+    runnerPoolConnectionRepository,
+    agentContextObservability,
+    searchQueryObservability,
+    resolveTestSecretRefs,
+    githubClient,
+    tasks,
+    fileGitHubIssue,
+    issueWritebackProvider,
+    githubGateDeps,
+    githubModuleDeps,
     bootstrapJobRepository,
-    ...(repoBootstrapper ? { repoBootstrapper } : {}),
-    // Env-config-repair runs share the unified agent_runs table (kind-scoped). The job
-    // repository is wired unconditionally; the repairer (agent fallback) is wired
-    // post-overrides below over the FINAL provider, and the durable runner in the
-    // `options.boss` block above — parity with the Worker's EnvConfigRepairWorkflow.
-    envConfigRepairJobRepository: sourced(
-      'envConfigRepairJobRepository',
-      (d) => new DrizzleEnvConfigRepairJobRepository(d),
-    ),
-    // Ephemeral-environment self-test runs (their own table). The store is wired
-    // unconditionally; the environments module builds the service when it + a git provider
-    // are present, and the durable runner is wired in the `options.boss` block above.
-    environmentTestRunRepository: sourced(
-      'environmentTestRunRepository',
-      (d) => new DrizzleEnvironmentTestRunRepository(d),
-    ),
-    // Document sources (Confluence / Notion / GitHub docs): wired from the shared
-    // integration providers exactly like the Worker, so a workspace can connect a
-    // source and import requirement/PRD/RFC pages as agent context.
-    ...selectNodeDocumentsDeps(config, db, githubClient, githubInstallationRepository),
-    // Ephemeral environments (opt-in): a workspace registers its own environment
-    // management API; the tester provisions/destroys per-run environments from it. A
-    // trusted in-house adapter can replace the default HTTP provider via the seam.
-    // The environment integration scopes its own URL/host policy from
-    // `config.environments` inside this selector (separate from the runner pool's).
-    ...selectNodeEnvironmentsDeps(config, db),
-    // The async container-backed Kubernetes deploy lifecycle (deployJobClient +
-    // resolveDeployCloneTarget) — pool-backed by default, overridable by the local facade.
-    ...deployDeps,
-    // Prompt-fragment library (ADR 0006; opt-in): the managed tenant-scoped catalog
-    // of best-practice fragments feeding every agent run, wired exactly like the
-    // Worker's selectFragmentLibraryDeps (repos + installation resolver + selector).
-    ...selectNodeFragmentLibraryDeps(
-      config,
-      env,
-      db,
-      githubClient,
-      githubInstallationRepository,
-      modelProviderResolver,
-    ),
-    // Repo-sourced Claude Skills library (docs/initiatives/repo-skills.md; opt-in): the
-    // account's catalog of repo-authored skills, wired exactly like the Worker's
-    // selectSkillLibraryDeps (account repos + installation resolver).
-    ...selectNodeSkillLibraryDeps(config, db, githubClient, githubInstallationRepository),
-    // Push-webhook skill-source freshness fan-out (slice 4): resync affected sources via the
-    // pg-boss GitHub-sync queue. No boss (pure-logic test) ⇒ no proactive resync; the
-    // dispatch-time probe is the freshness backstop.
-    enqueueSkillResync: async ({ accountId, sourceId }) => {
-      await gateways.githubWebhook.queueSkillResync(accountId, sourceId)
-    },
-    // Slack: an extra notification transport (the channel) + its management module.
-    // Default-off; when enabled its channel is composed into `notificationChannel` below
-    // alongside the in-app push, identically to the Worker.
-    ...slackDeps,
-    // Account invitations + per-account email senders (UI-onboarded, DB-stored).
-    ...selectNodeEmailInvitationDeps(config, repos),
-    // The pipeline-start guard resolves what's configured for a workspace + initiator.
-    resolveProviderCapabilities: (workspaceId, initiatedBy) =>
-      resolveWorkspaceCapabilities(
-        {
-          apiKeys,
-          subscriptions,
-          personalSubscriptions,
-          cloudflareModelsEnabled,
-          baseUrlFor: (provider) => baseUrlForNode(provider, env),
-          localModelEndpoints,
-          openRouterCatalog,
-          accountSettings,
-          workspaceAccountOf: (workspaceId) => repos.workspaceRepository.accountOf(workspaceId),
-          modelPolicySupported: config.infrastructure?.modelPolicy?.supported ?? false,
-          ...(options.caches ? { caches: options.caches } : {}),
-        },
-        workspaceId,
-        initiatedBy,
-      ),
-    // Real-time push (when a hub is wired) + the composed notification channel (in-app
-    // push + Slack). These come AFTER the spreads so the composite replaces the bare
-    // Slack channel `slackDeps` set; both are absent (no override) when nothing is wired.
-    ...(executionEventPublisher ? { executionEventPublisher } : {}),
-    ...(notificationChannel ? { notificationChannel } : {}),
-    // Run the engine's gate-probe / merge GitHub reads under the run initiator's ambient
-    // context, so a per-user PAT (when set) is preferred over the App/env token.
-    runInitiatorScope: runWithInitiator,
-    // The process-wide cache bag from start() (Redis-notified invalidation when REDIS_URL
-    // is set). Absent ⇒ createCore builds bare in-memory defaults.
-    ...(options.caches ? { caches: options.caches } : {}),
-    ...options.overrides,
-  }
+    repoBootstrapper,
+    slackDeps,
+    executionEventPublisher,
+    agentExecutor,
+    notificationChannel,
+    releaseHealthDeps,
+    packageRegistryDeps,
+    incidentEnrichmentDeps,
+    accountSettings,
+    resolveBinaryArtifactStore,
+  })
 
   // Browsable frontend preview (slice 5c): wire the preview module when a per-runtime preview
   // transport is available (real in local mode / a fake pair in the conformance suite).
@@ -1571,145 +1953,34 @@ export function buildNodeContainer(options: NodeContainerOptions): ServerContain
   // built directly over the absent `db` from the remote registry (a no-op outside mothership mode).
   applyMothershipRemoteRepos(dependencies, remoteRepos)
 
-  return {
-    ...createCore(dependencies),
+  return projectNodeServerContainer({
+    dependencies,
     config,
-    // The deployment-wide trusted web-search upstream (built from `WEB_SEARCH_*` env above),
-    // read by `WebSearchProxyController` as the fallback when a run's account has no keys.
-    ...(defaultWebSearchUpstream ? { defaultWebSearchUpstream } : {}),
-    // The same checkout-free repo resolver the engine binds pre/post-ops with, surfaced so
-    // the shared service-spec read controller can read the `spec/` artifact off main.
-    resolveRunRepoContext: dependencies.resolveRunRepoContext,
-    // The block→service→repo resolver, surfaced so the task-search controller can scope a
-    // GitHub-issue search to the originating service's repo (and refuse it when unlinked).
+    defaultWebSearchUpstream,
     resolveRepoTarget,
-    agentRunRepository: repos.agentRunRepository,
-    // Execution-scoped repo, surfaced for the conformance suite's compareAndSwap parity check.
-    executionRepository: repos.executionRepository,
-    // The repository registry the mothership-mode machine API (`/internal/persistence`) reflects
-    // over, so a Node deployment can act as a mothership for mothership-mode local nodes. The
-    // controller gates which repo+method is callable (allow-list) and account-scopes each call;
-    // exposing the whole `dependencies` (which carries every repo under its canonical name) is
-    // safe. `agentRunRepository` is the one repo NOT part of `CoreDependencies` (the engine's
-    // Core never reads it — it's surfaced separately above for `AgentRunController`), so fold it
-    // in explicitly, else the board's retry/stop `getRef` call comes back `... is not wired`.
-    // Sourced identically on both facades so they attach the same registry surface.
-    // Mothership-side GitHub token delegation (`POST /internal/github/installation-token`):
-    // when this deployment's GitHub App is configured, a machine-authed mothership-mode node
-    // can mint the short-lived installation tokens its agent containers/gates need — the App
-    // private key never leaves this service. The registry satisfies the seam structurally.
-    // Wired symmetrically on the Cloudflare facade.
-    ...(appRegistry ? { githubTokenDelegation: appRegistry } : {}),
-    // Mothership-side real-time UPSTREAM delivery (`POST /internal/events/publish`): when this
-    // deployment is a mothership (its realtime transport is wired), a machine-authed mothership-mode
-    // node's relayed engine events land in this deployment's OWN fan-out (`options.realtimeSink` —
-    // the hub, or the layered propagator on a multi-node deployment), so hosted teammates on the
-    // shared board see the local node's activity live. Wired symmetrically on the Cloudflare facade
-    // (the per-workspace WorkspaceEventsHub Durable Object). Absent realtime ⇒ the endpoint 503s.
-    ...(options.realtimeSink
-      ? { machineEventRelay: new LocalMachineEventRelay(options.realtimeSink) }
-      : {}),
-    repositories: {
-      ...dependencies,
-      agentRunRepository: repos.agentRunRepository,
-      // The binary-artifact METADATA store (visual-confirmation gate screenshots/references) is
-      // not part of `CoreDependencies` (it's composed into `resolveBinaryArtifactStore`, not the
-      // engine's Core), so fold it into the reflected registry explicitly — else a mothership-mode
-      // node's artifact reads/writes come back `... is not wired`. The blob BYTES stay per-account
-      // local; only the metadata is proxied.
-      binaryArtifactMetadataStore: repos.binaryArtifactMetadataStore,
-      // The sensitive per-service test-credential store is org/durable state the engine reads via
-      // the `resolveTestSecretRefs` FUNCTION (never the repo directly), so it isn't in
-      // `CoreDependencies` either — fold it in explicitly, else a mothership-mode node's tester
-      // run-path read + the inspector CRUD come back `... is not wired`. Only the SEALED blob is
-      // proxied (decrypted service-side under the LOCAL key), like the observability/runner-pool
-      // connections.
-      testSecretsRepository: repos.testSecretsRepository,
-      // GitHub projection + installation reads the mothership serves over the persistence RPC even
-      // when its OWN github service is off. A mothership-mode local node reaches GitHub by token
-      // DELEGATION (no local App), which enables `container.github`, so its board snapshot
-      // (`github.service.listRepos` → `repoProjectionRepository.list`) and run-path repo resolution
-      // (`githubInstallationRepository.getByWorkspace` + `repoProjectionRepository.list`) read the
-      // projection over RPC. Both are plain org tables the mothership owns, constructed
-      // unconditionally above — so reflect them regardless of `config.github.enabled` (they land in
-      // `dependencies` only when the github MODULE is wired), else a mothership without its own App
-      // configured 500s that board load with `... is not wired`. Allow-listed in
-      // `REMOTE_PERSISTENCE_METHODS`; folded in explicitly like the stores above.
-      repoProjectionRepository,
-      githubInstallationRepository,
-    } as unknown as PersistenceRegistry,
-    // App-owned backend registries, surfaced so the workspace snapshot's backend-kind
-    // selectors (`environmentBackendKinds` / `runnerBackendKinds`) read the registered kinds.
+    repos,
+    appRegistry,
+    options,
+    repoProjectionRepository,
+    githubInstallationRepository,
     environmentBackendRegistry,
     runnerBackendRegistry,
-    // The consensus transcript store, for the read endpoint (window load / reload).
-    consensusSessionRepository: repos.consensusSessionRepository,
-    // Resolves the per-account binary-artifact store (screenshots) for the artifact
-    // controllers + the visual-confirmation gate (configured per-account in the UI).
     resolveBinaryArtifactStore,
-    // Stock/remote Node has NO built-in container runtime, so container agents run ONLY on a
-    // self-hosted runner pool — an unregistered pool means no agent can run, which the infra-setup
-    // banner should surface. Local mode injects its own per-run-host-container `resolveTransport`
-    // (so the pool is optional there); detect that by the absence of the default pool transport.
-    agentExecutorRequiresRunnerPool: options.resolveTransport === undefined,
-    // A missing ephemeral-environment provider is a real setup gap ONLY when no zero-config
-    // in-container test-env default exists. Stock Node's sole test-env backend is the
-    // `environment-provider`, so it's required here; local mode on a Docker-family runtime
-    // advertises `local-compose` (docker-compose in the run's container, no connection), which
-    // flips this false so the "test environment not configured" banner stays quiet. Derived from
-    // the capability descriptor local already populated, so the two can't drift.
-    ephemeralEnvironmentsRequireProvider: !testEnvHasZeroConfigDefault(config.infrastructure),
-    // pg-boss-backed async GitHub ingest when the durable engine is wired (the real
-    // server drains the queue via `startGitHubSyncWorker`); inline fallback with no boss.
-    // Built once above so the skill-freshness fan-out shares this same instance.
     gateways,
-    // Source-control PAT login: lets a user sign in with their own GitHub/GitLab PAT via
-    // `/auth/pat`, held to the server's login/org/domain allowlist. Local mode overrides this
-    // (via its container spread) with a configured-token, allowlist-exempt registry.
-    vcsIdentity: buildNodeVcsIdentityRegistry(config),
-    // The app-owned VCS provider registry the neutral webhook route resolves a provider from.
     vcsRegistry,
-    // The sensitive per-service test-credential store the shared test-secrets controller reads;
-    // present when the shared ENCRYPTION_KEY is configured.
-    ...(testSecretsService ? { testSecrets: testSecretsService } : {}),
-    // The vendor-credential (subscription token pool) service the shared controller
-    // reads; present when the shared ENCRYPTION_KEY is configured.
+    testSecretsService,
     subscriptions,
-    // The per-user individual-usage subscription store (Claude); present when the
-    // shared ENCRYPTION_KEY is configured.
     personalSubscriptions,
-    // The direct-provider API-key pool (account/workspace/user); present when the
-    // shared ENCRYPTION_KEY is configured.
     apiKeys,
-    // The inbound public-API key store; present when the shared ENCRYPTION_KEY is configured.
     publicApiKeys,
-    // Whether the opt-in Cloudflare Workers AI lib is enabled (REST creds present).
     cloudflareModelsEnabled,
-    // The direct-provider base-URL resolver the catalog uses to gate selectability on a
-    // resolvable endpoint (e.g. LiteLLM stays unselectable until LITELLM_BASE_URL is set).
-    baseUrlFor: (provider) => baseUrlForNode(provider, env),
-    // The per-user locally-run model endpoints store; present when ENCRYPTION_KEY is set.
+    env,
     localModelEndpoints,
-    // The per-user generic secret store (GitHub PAT, …); present when ENCRYPTION_KEY is set.
     userSecrets,
-    // The per-user "repos my PAT can reach" projection (board redaction + picker expansion);
-    // Postgres-backed, so absent in the no-DB mothership node (redaction degrades to visible).
-    userRepoAccess: db ? new DrizzleUserRepoAccessRepository(db) : undefined,
-    // The sealed-secret inventory the key-drift sweep + drop remediation use (ADR 0026 D6.2/D6.3);
-    // Postgres-backed and gated on ENCRYPTION_KEY (no key ⇒ nothing is sealed to scan).
-    ...(db && env.ENCRYPTION_KEY?.trim()
-      ? { sealedSecretInventory: new DrizzleSealedSecretInventory(db) }
-      : {}),
-    // The per-workspace OpenRouter dynamic-catalog store; present when the API-key pool is.
+    db,
     openRouterCatalog,
-    // Flush + release the external trace sink on graceful shutdown so the OpenTelemetry SDK
-    // exporter's final batch of spans/metrics isn't dropped and its background timers are
-    // cleared. Best-effort; a no-op for the fetch-based Langfuse sink and when nothing is
-    // wired. (The local facade composes this into its own `onShutdown` — see its container.)
-    onShutdown: async () => {
-      await traceSink?.shutdown?.()
-    },
-  }
+    traceSink,
+  })
 }
 
 /**
