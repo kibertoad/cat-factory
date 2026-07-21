@@ -178,12 +178,13 @@ export class BoardService {
    * move). Best-effort: swallow any failure so a missed push never fails the already-persisted
    * mutation — the client reconciles by re-fetching its snapshot.
    *
-   * When `originConnectionId` is given (a user-driven positional mutation — move/reparent —
+   * When `originConnectionId` is given (a user-driven mutation — move / reparent / field edit —
    * carrying the acting tab's connection id), the realtime transport SKIPS delivering this
    * echo back to that connection: its REST response already carried the authoritative result,
-   * so refreshing off its own event would only race an in-flight drag and snap the block back
-   * to a stale position. Every OTHER subscriber still receives the coarse signal and refreshes.
-   * Engine-driven board changes pass no origin id, so they fan out to everyone as before.
+   * so refreshing off its own event would only race an in-flight drag (snapping a block back to
+   * a stale position) or trigger a redundant board-wide re-hydrate on every inspector edit. Every
+   * OTHER subscriber still receives the coarse signal and refreshes. Engine-driven board changes
+   * pass no origin id, so they fan out to everyone as before.
    */
   private async emitBoardChanged(
     originWorkspaceId: string,
@@ -893,7 +894,12 @@ export class BoardService {
     return assertFound(await this.blockRepository.get(homeWorkspaceId, id), 'Block', id)
   }
 
-  async updateBlock(workspaceId: string, id: string, patch: UpdateBlockInput): Promise<Block> {
+  async updateBlock(
+    workspaceId: string,
+    id: string,
+    patch: UpdateBlockInput,
+    originConnectionId?: string | null,
+  ): Promise<Block> {
     await this.requireWorkspace(workspaceId)
     const { homeWorkspaceId, block } = await this.resolveBlock(workspaceId, id)
     // `serviceFragmentIds` is a service-level (frame) setting the engine only reads off
@@ -992,7 +998,12 @@ export class BoardService {
     }
     await this.blockRepository.update(homeWorkspaceId, id, effective)
     // Origin = the block's HOME so editing a shared block fans out to every board mounting it.
-    await this.emitBoardChanged(homeWorkspaceId, 'block-updated', id)
+    // Forward the acting tab's connection id so the realtime transport SKIPS echoing this coarse
+    // signal back to it: the REST response already carried the authoritative block (the SPA
+    // upserts it), so a self-echo would only trigger a redundant board-wide re-hydrate — the same
+    // "don't refresh off your own mutation" contract move/reparent already follow. Every OTHER
+    // subscriber still receives the signal and refreshes.
+    await this.emitBoardChanged(homeWorkspaceId, 'block-updated', id, originConnectionId)
     return assertFound(await this.blockRepository.get(homeWorkspaceId, id), 'Block', id)
   }
 
