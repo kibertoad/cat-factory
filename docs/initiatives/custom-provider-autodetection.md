@@ -11,10 +11,14 @@ script plus a compose stack under a `deploy/` directory) could not have the plat
 arbitrate which provider fits, or extract config from those files. Such a convention typically
 carries config worth extracting too (the health port/path, the deploy command).
 
-**End state:** a custom-provider package (kernel + contracts only) authors an autodetection hook
-using reusable checkout-free primitives — including MULTI-FILE signatures — and the platform
-arbitrates across registered providers and prefills an extracted config seed. The user always
-confirms; nothing is applied silently.
+**End state:** a custom-provider package authors an autodetection hook using reusable
+checkout-free primitives — including MULTI-FILE signatures — and the platform arbitrates across
+registered providers and prefills an extracted config seed. The user always confirms; nothing is
+applied silently. The hook _logic_ itself is authored with `@cat-factory/kernel` alone (the probe
+primitives + the `CustomManifestDetection` authoring types); _registering_ the type carries it on
+the `RegisteredCustomManifestType` interface from `@cat-factory/integrations` (the registry type),
+so a provider package depends on kernel for the hook and integrations only for the one registration
+call — no engine, no harness change.
 
 ## The target pattern (reference implementation)
 

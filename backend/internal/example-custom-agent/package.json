@@ -21,11 +21,11 @@
   },
   "dependencies": {
     "@cat-factory/agents": "workspace:*",
-    "@cat-factory/integrations": "workspace:*",
     "@cat-factory/kernel": "workspace:*",
     "valibot": "^1.4.2"
   },
   "devDependencies": {
+    "@cat-factory/integrations": "workspace:*",
     "typescript": "7.0.2",
     "vitest": "^4.1.10"
   }

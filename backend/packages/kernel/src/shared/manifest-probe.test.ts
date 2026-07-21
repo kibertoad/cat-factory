@@ -5,6 +5,7 @@ import {
   firstPresent,
   listFiles,
   matchManifestSignature,
+  readTextFile,
   readYamlDoc,
   readYamlDocs,
 } from './manifest-probe.logic.js'
@@ -59,6 +60,11 @@ describe('manifest-probe presence combinators', () => {
       (e) => e.name.startsWith('.env'),
     )
     expect(envFiles.map((e) => e.name).sort()).toEqual(['.env.app', '.env.redis'])
+  })
+
+  it('readTextFile returns file content, or null when absent', async () => {
+    expect(await readTextFile(scannerFor({ 'notes.txt': 'hello' }), 'notes.txt')).toBe('hello')
+    expect(await readTextFile(scannerFor({}), 'missing.txt')).toBeNull()
   })
 })
 

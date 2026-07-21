@@ -184,9 +184,6 @@ importers:
       '@cat-factory/agents':
         specifier: workspace:*
         version: link:../../packages/agents
-      '@cat-factory/integrations':
-        specifier: workspace:*
-        version: link:../../packages/integrations
       '@cat-factory/kernel':
         specifier: workspace:*
         version: link:../../packages/kernel
@@ -194,6 +191,9 @@ importers:
         specifier: ^1.4.2
         version: 1.4.2(typescript@7.0.2)
     devDependencies:
+      '@cat-factory/integrations':
+        specifier: workspace:*
+        version: link:../../packages/integrations
       typescript:
         specifier: 7.0.2
         version: 7.0.2

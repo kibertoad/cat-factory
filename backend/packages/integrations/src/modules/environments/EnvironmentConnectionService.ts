@@ -760,7 +760,9 @@ export class EnvironmentConnectionService {
     )
     // Last resort (only when NOT already on the custom tab, which arbitrated above): if the
     // default sweep found no k8s/compose layout, try custom arbitration so a repo carrying ONLY a
-    // custom provider signature (a company's own deploy convention) is still recognized.
+    // custom provider signature (a company's own deploy convention) is still recognized. This runs
+    // a second scanner (the k8s sweep's cache isn't shared), but only on the no-detection miss path
+    // and still budget-bounded — a rare, bounded cost, not an N+1.
     if (!recommendation.detected && input.prefer !== 'custom') {
       const arbitrated = await this.mapRepoReadError(input, () =>
         arbitrateCustomProviders(bound.repo, registered, scope),

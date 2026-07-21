@@ -207,6 +207,10 @@ export async function detectCustomProviderAcrossTypes(
     if (detection?.matched) matches.push({ type, detection })
   }
   if (matches.length === 0) {
+    // Only surface a read fault when NOTHING matched: a fault mid-sweep is ambiguous (it may have
+    // caused a clean-looking non-match), so "no provider recognized the repo" could really be
+    // "couldn't read it" — raise the actionable error rather than a misleading null. A fault
+    // alongside a positive match is deliberately ignored: a match IS a usable result.
     if (scanner.readFault) throw new RepoReadError(scanner.readFault)
     return null
   }
