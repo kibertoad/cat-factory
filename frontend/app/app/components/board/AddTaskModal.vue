@@ -158,6 +158,20 @@ const customFormPanel = computed(() => {
   const id = selectedCustomType.value?.formPanel
   return id ? (formPanelRegistry.value.get(id) ?? null) : null
 })
+// Whether every REQUIRED descriptor field of the selected custom type has a value. Only the
+// descriptor path is enforced up front — a bespoke `formPanel` owns its own validation, so we
+// don't block on it (nor can we read its required semantics). No custom type selected (or none
+// of its fields are required) ⇒ trivially satisfied. Folded into `canAdd` so the required marker
+// the form renders is actually honoured before submit.
+const customRequiredFieldsFilled = computed(() => {
+  const custom = selectedCustomType.value
+  if (!custom || customFormPanel.value) return true
+  return (custom.fields ?? []).every((field) => {
+    if (!field.required) return true
+    const raw = customFieldValues.value[field.key]
+    return raw !== undefined && String(raw).trim() !== ''
+  })
+})
 // The type picker: the built-in choices (i18n labels) + the custom types (their wire presentation).
 const typeChoices = computed<{ value: TaskTypeChoice; label: string; icon: string }[]>(() => [
   ...TASK_TYPES.value,
@@ -289,7 +303,13 @@ function buildTypeFields(): TaskTypeFields | undefined {
       for (const field of custom.fields ?? []) {
         const raw = customFieldValues.value[field.key]
         if (raw === undefined || raw === '') continue
-        bag[field.key] = field.type === 'number' ? Number(raw) : raw
+        if (field.type === 'number') {
+          // Skip a non-numeric value rather than sending NaN (which serialises to null on the wire).
+          const n = Number(raw)
+          if (Number.isFinite(n)) bag[field.key] = n
+        } else {
+          bag[field.key] = raw
+        }
       }
     }
     return Object.keys(bag).length ? { custom: bag } : undefined
@@ -650,6 +670,8 @@ const canAdd = computed(() => {
     configValue(RALPH_VALIDATION_COMMAND_ID, '').trim().length === 0
   )
     return false
+  // A custom type's required descriptor fields must be filled (its form renders them as required).
+  if (!customRequiredFieldsFilled.value) return false
   return true
 })
 

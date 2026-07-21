@@ -128,6 +128,13 @@ deployment's app-owned `TaskTypeRegistry` and it arrives in the workspace snapsh
 widened `taskType` contract (`<built-in> | <ns>:<name>`) accepts the namespaced id everywhere, so a
 task created with it round-trips with zero host edits.
 
+> **Validation.** A BACKEND-registered task type is checked at boot by `validateRegistrations`
+> (namespaced id, well-formed `formPanel`, a `defaultPipelineId` that resolves to a real pipeline).
+> A CODE-shipped `taskTypes` entry is trusted and **not** validated (like a code-shipped agent kind):
+> a malformed `taskType`/`formPanel` id or a `defaultPipelineId` naming no real pipeline fails
+> silently — the type just won't pre-select a pipeline and an unpaired `formPanel` degrades to the
+> descriptor `fields`. Prefer backend registration when you want the fail-fast guardrail.
+
 ## Reuse the shared building blocks — don't reinvent them
 
 The layer ships window/inspector primitives you compose instead of hand-rolling chrome or
