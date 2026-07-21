@@ -243,6 +243,29 @@ describe('parseAgentJob', () => {
     )
   })
 
+  it('parses reviewPrNumber (the pr-reviewer PR-head prefetch target)', () => {
+    const job = parseAgentJob({ ...base, mode: 'explore', reviewPrNumber: 4558 })
+    expect(job.reviewPrNumber).toBe(4558)
+  })
+
+  it('floors a fractional reviewPrNumber to a positive integer', () => {
+    const job = parseAgentJob({ ...base, mode: 'explore', reviewPrNumber: 12.9 })
+    expect(job.reviewPrNumber).toBe(12)
+  })
+
+  it('omits reviewPrNumber when absent or non-positive', () => {
+    expect(parseAgentJob({ ...base, mode: 'explore' }).reviewPrNumber).toBeUndefined()
+    expect(
+      parseAgentJob({ ...base, mode: 'explore', reviewPrNumber: 0 }).reviewPrNumber,
+    ).toBeUndefined()
+    expect(
+      parseAgentJob({ ...base, mode: 'explore', reviewPrNumber: -3 }).reviewPrNumber,
+    ).toBeUndefined()
+    expect(
+      parseAgentJob({ ...base, mode: 'explore', reviewPrNumber: 'nope' }).reviewPrNumber,
+    ).toBeUndefined()
+  })
+
   it('accepts a structured explore job', () => {
     const job = parseAgentJob({
       ...base,

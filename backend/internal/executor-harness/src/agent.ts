@@ -18,9 +18,11 @@ import {
   cloneRepo,
   commitAll,
   conflictDiff,
+  fetchPullRequestHead,
   fetchReferenceBranches,
   hasAgentChanges,
   headCommit,
+  inferVcsProvider,
   mergeBranch,
   openPullRequest,
   prepareExistingCheckout,
@@ -491,6 +493,30 @@ async function runExploreMode(job: AgentJob, opts: RunOptions): Promise<AgentRes
           requested: job.referenceBranches.length,
           fetched: fetched.length,
         })
+      }
+
+      // The pr-reviewer reviews an EXISTING PR: fetch its HEAD into `origin/pr-head` so the
+      // read-only agent can inspect the PROPOSED code — files the PR adds (absent from this base
+      // checkout) and the head version of every modified file. The agent holds no git credential
+      // of its own, so this harness-side fetch (token out of band) is the only way the head is
+      // reachable; the prompt then diffs `origin/<base>...origin/pr-head`. Best-effort: on failure
+      // the review proceeds on the base checkout + the injected `.cat-context/pr-diff.md`.
+      if (job.reviewPrNumber !== undefined) {
+        const provider = job.repo.provider ?? inferVcsProvider(job.repo.cloneUrl)
+        const fetched = await fetchPullRequestHead({
+          dir,
+          number: job.reviewPrNumber,
+          provider,
+          ghToken: job.ghToken,
+          signal: opts.signal,
+          onSkip: (reason) =>
+            logger.warn('agent(explore): PR head fetch skipped', {
+              number: job.reviewPrNumber,
+              provider,
+              reason,
+            }),
+        })
+        logger.info('agent(explore): PR head fetch', { number: job.reviewPrNumber, fetched })
       }
 
       // Optional infra stand-up (the tester): bring the service's docker-compose

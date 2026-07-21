@@ -477,6 +477,42 @@ describe('ContainerAgentExecutor apriori reference branches', () => {
   })
 })
 
+// The pr-reviewer (`clone.prHead`) reviews an EXISTING PR: the engine resolves that PR's number
+// from the review task's fields (`prNumber`/`prUrl`, the same source the diff pre-op uses) into the
+// job's `reviewPrNumber`, so the harness can prefetch `pull/<n>/head` into `origin/pr-head`. A kind
+// without `clone.prHead` never carries it, and an unresolvable number degrades to no prefetch.
+describe('ContainerAgentExecutor pr-reviewer PR-head prefetch (reviewPrNumber)', () => {
+  it('carries reviewPrNumber resolved from the review task prNumber field', async () => {
+    const { executor, captured } = makeExecutor()
+    await executor.startJob(context('pr-reviewer', { taskTypeFields: { prNumber: 4558 } }))
+    const spec = captured[0]!.spec
+    expect(spec.mode).toBe('explore')
+    expect(spec.reviewPrNumber).toBe(4558)
+  })
+
+  it('resolves reviewPrNumber from a prUrl when prNumber is absent', async () => {
+    const { executor, captured } = makeExecutor()
+    await executor.startJob(
+      context('pr-reviewer', {
+        taskTypeFields: { prUrl: 'https://github.com/acme/widgets/pull/321' },
+      }),
+    )
+    expect(captured[0]!.spec.reviewPrNumber).toBe(321)
+  })
+
+  it('omits reviewPrNumber when the review task carries no PR reference (degrades cleanly)', async () => {
+    const { executor, captured } = makeExecutor()
+    await executor.startJob(context('pr-reviewer'))
+    expect(captured[0]!.spec.reviewPrNumber).toBeUndefined()
+  })
+
+  it('never carries reviewPrNumber for a kind without clone.prHead (architect), even with PR fields', async () => {
+    const { executor, captured } = makeExecutor()
+    await executor.startJob(context('architect', { taskTypeFields: { prNumber: 4558 } }))
+    expect(captured[0]!.spec.reviewPrNumber).toBeUndefined()
+  })
+})
+
 describe('ContainerAgentExecutor multi-repo gate/merge targeting', () => {
   // Service-connections phase 4 follow-ups: the conflict-resolver is dispatched AT a conflicted
   // PEER repo, and the merger scores the COMBINED diff across every PR's repo. Both need the plural

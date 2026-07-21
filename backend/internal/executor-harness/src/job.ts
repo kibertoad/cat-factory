@@ -785,6 +785,15 @@ export interface AgentJob extends HarnessAuthFields {
    */
   referenceBranches?: string[]
   /**
+   * Explore mode (the `pr-reviewer`): the reviewed PR/MR number. Present ⇒ after the base
+   * checkout the harness fetches that PR's HEAD into `origin/pr-head` (best-effort) so the
+   * read-only reviewer can diff/read the PROPOSED code — files the PR adds are otherwise absent
+   * from the base checkout, and the agent has no git credential to fetch the head itself. The
+   * GitHub-vs-GitLab pull ref is chosen from `repo.provider` (host-inferred when absent). Absent
+   * ⇒ no head fetch (every non-review run). See {@link file://./git.ts} `fetchPullRequestHead`.
+   */
+  reviewPrNumber?: number
+  /**
    * Coding mode: whether a no-op run (nothing changed) is a failure. The implementer
    * fails on a no-op; the in-place fixers (ci-fix / fix-tests) treat it as a non-fatal
    * no-op. Default true.
@@ -1277,6 +1286,7 @@ export function parseAgentJob(input: unknown): AgentJob {
   const testSecrets = parseTestSecrets(o.testSecrets)
   const guardLimits = parseGuardLimits(o.guardLimits)
   const validation = parseValidationSpec(o.validation)
+  const reviewPrNumber = posInt(o.reviewPrNumber)
   const job: AgentJob = {
     jobId: str(o.jobId, 'jobId'),
     mode,
@@ -1308,6 +1318,7 @@ export function parseAgentJob(input: unknown): AgentJob {
     ...(peerRepos.length ? { peerRepos } : {}),
     ...(referenceRepos.length ? { referenceRepos } : {}),
     ...(referenceBranches.length ? { referenceBranches } : {}),
+    ...(reviewPrNumber !== undefined ? { reviewPrNumber } : {}),
     ...(o.noChangesIsError === false ? { noChangesIsError: false } : {}),
     ...(o.persistentCheckout === true ? { persistentCheckout: true } : {}),
     ...(o.streamFollowUps === true ? { streamFollowUps: true } : {}),
