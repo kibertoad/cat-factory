@@ -727,6 +727,12 @@ export type AgentJobUpdate =
       /** Which runner backend served this job (see {@link RunnerJobView.backend}); recorded in
        *  the run diagnostics on the first poll that reports it. */
       backend?: string
+      /**
+       * Epoch ms of the harness's last sign of life (forwarded from {@link RunnerJobView.heartbeatAt}),
+       * so a quiet-but-alive job keeps advancing the step's throttled `lastActivityAt` — and thus the
+       * run's `updated_at` — even when no subtask/phase changed. Absent on an older harness image.
+       */
+      lastActivityAt?: number
     }
   /**
    * Finished successfully; `result` carries the work product. `followUps`, when present,

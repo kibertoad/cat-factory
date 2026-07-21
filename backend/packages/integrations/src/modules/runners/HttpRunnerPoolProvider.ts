@@ -359,6 +359,12 @@ export class HttpRunnerPoolProvider implements RunnerPoolProvider {
     const progress = this.mapProgress(manifest, json)
     if (progress) view.progress = progress
 
+    // The harness liveness heartbeat (epoch ms), when the manifest maps it — so a long, quiet phase
+    // on a pool-backed run still refreshes the step's throttled `lastActivityAt`, exactly like a
+    // Cloudflare container. Best-effort: a missing/non-numeric value is simply not forwarded.
+    const heartbeatAt = this.mapHeartbeat(manifest, json)
+    if (heartbeatAt !== undefined) view.heartbeatAt = heartbeatAt
+
     // Forward-looking follow-up items the Coder streamed since the last poll (drain-on-read),
     // when the manifest maps them. Surfaced on every poll (running or done) so a fast final
     // burst isn't lost. Best-effort: a malformed entry is dropped.
@@ -407,6 +413,14 @@ export class HttpRunnerPoolProvider implements RunnerPoolProvider {
       view.result = result
     }
     return view
+  }
+
+  /** The harness liveness heartbeat (epoch ms) the manifest maps, coerced to a finite number. */
+  private mapHeartbeat(manifest: RunnerPoolManifest, json: unknown): number | undefined {
+    const raw = environmentsLogic.extractString(json, manifest.response.heartbeatPath)
+    if (raw === undefined) return undefined
+    const n = Number(raw)
+    return Number.isFinite(n) ? n : undefined
   }
 
   private mapProgress(

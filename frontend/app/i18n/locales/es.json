@@ -1104,6 +1104,8 @@
       "stateLabel": "Estado",
       "duration": "Duración",
       "elapsed": "transcurrido",
+      "activity": "Última actividad",
+      "activityAgo": "activo hace {duration}",
       "step": "Paso",
       "stepOf": "{number} de {total}",
       "started": "Iniciado",

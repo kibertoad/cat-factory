@@ -1104,6 +1104,8 @@
       "stateLabel": "מצב",
       "duration": "משך",
       "elapsed": "חלף",
+      "activity": "פעילות אחרונה",
+      "activityAgo": "פעיל לפני {duration}",
       "step": "שלב",
       "stepOf": "{number} מתוך {total}",
       "started": "התחיל",

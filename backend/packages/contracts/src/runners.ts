@@ -72,6 +72,14 @@ export const runnerPoolResponseMappingSchema = v.object({
   progressCompletedPath: v.optional(v.string()),
   progressInProgressPath: v.optional(v.string()),
   progressTotalPath: v.optional(v.string()),
+  /**
+   * Dot-path to the harness liveness heartbeat (epoch ms of its last sign of life — the harness
+   * `heartbeatAt`). A pool that proxies the cat-factory executor-harness verbatim should set this to
+   * `heartbeatAt` so a long, quiet phase on a pool-backed run still refreshes the step's throttled
+   * `lastActivityAt` (and the run's `updated_at`), exactly like a Cloudflare container — otherwise a
+   * live-but-quiet pool run looks wedged to the sweeper + UI. Absent ⇒ no liveness signal is forwarded.
+   */
+  heartbeatPath: v.optional(v.string()),
   /** Dot-paths to the finished work product. */
   prUrlPath: v.optional(v.string()),
   branchPath: v.optional(v.string()),

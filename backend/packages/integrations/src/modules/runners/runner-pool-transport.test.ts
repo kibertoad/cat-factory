@@ -238,6 +238,39 @@ describe('HttpRunnerPoolProvider', () => {
     expect(view.result?.prUrl).toBe('https://github.com/o/r/pull/9')
   })
 
+  it('forwards the harness liveness heartbeat when the manifest maps it', async () => {
+    // Runtime symmetry: a pool that proxies the executor-harness verbatim must surface the
+    // heartbeat just like a Cloudflare container, so a live-but-quiet pool run keeps its
+    // `lastActivityAt` (and the run's `updated_at`) fresh instead of looking wedged.
+    capture('/api/jobs/job-7', 'GET', {
+      state: 'in_progress',
+      progress: { completed: 1, total: 5 },
+      heartbeatAt: 1_700_000_123_456,
+    })
+    const provider = new HttpRunnerPoolProvider()
+    const withHeartbeat: RunnerPoolManifest = {
+      ...manifest,
+      response: { ...manifest.response, heartbeatPath: 'heartbeatAt' },
+    }
+    const view = await provider.poll({
+      manifest: withHeartbeat,
+      jobId: 'job-7',
+      resolveSecret: () => 't',
+    })
+    expect(view.state).toBe('running')
+    expect(view.heartbeatAt).toBe(1_700_000_123_456)
+  })
+
+  it('omits the heartbeat when the manifest maps no path (absent ⇒ no liveness signal)', async () => {
+    capture('/api/jobs/job-7', 'GET', {
+      state: 'in_progress',
+      heartbeatAt: 1_700_000_123_456,
+    })
+    const provider = new HttpRunnerPoolProvider()
+    const view = await provider.poll({ manifest, jobId: 'job-7', resolveSecret: () => 't' })
+    expect(view.heartbeatAt).toBeUndefined()
+  })
+
   it('forwards the harness failureCause + detail on a failed view when the manifest maps them', async () => {
     // Runtime symmetry: a pool that proxies the executor-harness verbatim must surface the
     // STRUCTURED cause/detail just like a Cloudflare container, so the engine classifies the

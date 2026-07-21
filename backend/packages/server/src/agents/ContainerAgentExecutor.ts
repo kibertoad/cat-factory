@@ -745,6 +745,11 @@ export class ContainerAgentExecutor implements AsyncAgentExecutor {
         ...(view.phase ? { phase: view.phase } : {}),
         ...(view.container ? { container: view.container } : {}),
         ...(view.backend ? { backend: view.backend } : {}),
+        // Forward the harness liveness heartbeat (last stdout chunk / subagent transcript tail)
+        // so the engine can persist a throttled `lastActivityAt` and keep the run's `updated_at`
+        // fresh on a quiet-but-alive job — distinct from the subtask progress above, which only
+        // moves when the agent ticks its todo list. Absent on an older harness image.
+        ...(view.heartbeatAt ? { lastActivityAt: view.heartbeatAt } : {}),
       }
       return view.progress
         ? { state: 'running', subtasks: view.progress, ...followUps, ...containerMeta }

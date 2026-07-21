@@ -1104,6 +1104,8 @@
       "stateLabel": "Durum",
       "duration": "Süre",
       "elapsed": "geçen süre",
+      "activity": "Son etkinlik",
+      "activityAgo": "{duration} önce etkindi",
       "step": "Adım",
       "stepOf": "{total} adımdan {number}.",
       "started": "Başladı",

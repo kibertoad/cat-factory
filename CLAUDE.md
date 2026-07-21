@@ -881,8 +881,12 @@ runs an agent in a container should mirror it.
    Pi's JSON-line events; `parseTodoProgress()` turns the todo tool's output into
    `{completed, inProgress, total}` via the `onProgress` callback →
    `JobRegistry` (`src/runner.ts`) → exposed on the `/jobs/{id}` `JobView.progress`.
-5. `ExecutionService.pollAgentJob()` writes `step.subtasks`/`step.progress`,
-   `executionRepository.upsert()`, then `emitInstance()`.
+5. `ExecutionService.pollAgentJob()` writes `step.subtasks`/`step.progress` — plus a
+   THROTTLED `step.lastActivityAt` folded from the harness liveness heartbeat
+   (`RunnerJobView.heartbeatAt` → `AgentJobUpdate.lastActivityAt`), which keeps the run's
+   `updated_at` fresh on a quiet-but-alive job so the stale-run sweeper doesn't orphan it and
+   the UI can show "active Ns ago" (see ADR 0026 D3.1) — then `executionRepository.upsert()`
+   and `emitInstance()`.
 6. Events reach the browser by **push, not polling**:
    `DurableObjectEventPublisher.executionChanged()` →
    `WorkspaceEventsHub` Durable Object (`/publish`, hibernatable WebSockets,

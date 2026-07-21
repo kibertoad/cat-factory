@@ -78,6 +78,7 @@ import {
   classifyDispatchFailure,
   MAX_EVICTION_RECOVERIES,
   MAX_TRANSIENT_EVICTION_RECOVERIES,
+  shouldPersistActivity,
 } from './job.logic.js'
 import { AgentContextBuilder } from './AgentContextBuilder.js'
 import { DeployerStepController } from './DeployerStepController.js'
@@ -1058,6 +1059,10 @@ export class RunDispatcher {
     let changed = false
     if (this.applyContainerRunning(s, update)) changed = true
     if (this.applySubtaskProgress(s, update.subtasks)) changed = true
+    // Persist the harness liveness heartbeat (throttled) so a quiet-but-alive container keeps the
+    // run's `updated_at` fresh — the signal a long, output-less phase (a reviewer reading files)
+    // would otherwise never emit, leaving it indistinguishable from a wedged run to the sweeper + UI.
+    if (this.applyLastActivity(s, update.lastActivityAt)) changed = true
     // The transport reports WHICH backend served the job on the first poll (native host
     // process vs. sandboxed container) — record it in the run diagnostics.
     if (this.recordBackendDiagnostics(target, update.backend)) changed = true
@@ -1177,6 +1182,19 @@ export class RunDispatcher {
     if (!counts || sameSubtasks(step.subtasks, counts)) return false
     step.subtasks = counts
     step.progress = counts.total > 0 ? counts.completed / counts.total : 0
+    return true
+  }
+
+  /**
+   * Fold a running poll's forwarded liveness heartbeat onto `step.lastActivityAt`, THROTTLED via
+   * {@link shouldPersistActivity}: re-stamped only once the heartbeat has advanced by a bounded
+   * window (not on every ~15s poll), and never when a wedged job's heartbeat is frozen — so its
+   * `updated_at` correctly stops advancing. Returns whether it changed, so the caller persists +
+   * emits (refreshing the run's `updated_at` and the UI's "active Ns ago") only on a real advance.
+   */
+  private applyLastActivity(step: PipelineStep, incoming: number | undefined): boolean {
+    if (!shouldPersistActivity(step.lastActivityAt, incoming)) return false
+    step.lastActivityAt = incoming
     return true
   }
 

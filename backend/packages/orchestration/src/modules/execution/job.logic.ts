@@ -26,6 +26,33 @@ export const MAX_EVICTION_RECOVERIES = 1
 export const MAX_TRANSIENT_EVICTION_RECOVERIES = 5
 
 /**
+ * Throttle window (ms) for persisting a container step's liveness heartbeat as its
+ * `lastActivityAt`. The harness heartbeat advances on every stdout chunk and the driver polls
+ * every ~15s, so persisting on every poll would rewrite the run needlessly; instead the engine
+ * only re-stamps `lastActivityAt` once the forwarded heartbeat has moved forward by at least this
+ * much. Chosen well under the stale-run sweeper's 5-minute lease so a live-but-quiet run always
+ * refreshes its `updated_at` in time, while roughly halving the write rate versus the poll cadence.
+ */
+export const ACTIVITY_PERSIST_THROTTLE_MS = 20_000
+
+/**
+ * Whether a freshly-polled liveness heartbeat should be persisted as the step's `lastActivityAt`,
+ * given the value already stored. True when nothing is stored yet (first poll) or the incoming
+ * heartbeat has advanced by at least {@link ACTIVITY_PERSIST_THROTTLE_MS}. A wedged job whose
+ * heartbeat is frozen returns false forever — so its `updated_at` stops advancing and the sweeper /
+ * UI correctly see it as stale, which is the whole point of distinguishing quiet-but-alive from
+ * wedged. A non-advancing or absent incoming value is never persisted.
+ */
+export function shouldPersistActivity(
+  stored: number | null | undefined,
+  incoming: number | undefined,
+): boolean {
+  if (incoming == null) return false
+  if (stored == null) return true
+  return incoming - stored >= ACTIVITY_PERSIST_THROTTLE_MS
+}
+
+/**
  * Whether a thrown DISPATCH-time error is a *container eviction/crash* (the container
  * vanished before it accepted the job) rather than a genuine dispatch fault. Some transports
  * have no job view at dispatch time (the Kubernetes `waitForPodReady` wait, the inline-job
