@@ -1,6 +1,7 @@
 import type { HarnessCallMetric, PiRunStats } from './pi.js'
 import type { HarnessKind } from './pi-workspace.js'
 import type { FailureCause } from './failure.js'
+import type { EffortReport } from './effort.js'
 
 // The job the Worker's ContainerAgentExecutor POSTs to /run. Kept as plain
 // types with a hand-rolled validator so the image needs no schema dependency.
@@ -921,6 +922,12 @@ export interface AgentResult {
    * {@link HarnessCallMetric}.
    */
   callMetrics?: HarnessCallMetric[]
+  /**
+   * The agent's effort self-assessment (how hard the work was, what reduced its effectiveness,
+   * the key obstacles), lifted from its sentinel file after the run. The backend forwards it onto
+   * the job result and records it on the step for run details. Absent when the agent wrote none.
+   */
+  effortReport?: EffortReport
 }
 
 /** Parse the coding-mode bootstrap spec, or undefined when absent. Validates the target. */

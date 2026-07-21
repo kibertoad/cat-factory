@@ -219,6 +219,7 @@ import { EnvConfigRepairService } from './modules/envConfigRepair/EnvConfigRepai
 import { EnvironmentTestService } from './modules/environments/EnvironmentTestService.js'
 import { BoardScanService } from './modules/boardScan/BoardScanService.js'
 import { RequirementReviewService } from './modules/requirements/RequirementReviewService.js'
+import { FragmentTitleService } from './modules/fragmentLibrary/FragmentTitleService.js'
 import { type TesterQualityReviewer } from './modules/execution/TesterQualityReviewService.js'
 import { KaizenService } from './modules/kaizen/KaizenService.js'
 import { ClarityReviewService } from './modules/clarity/ClarityReviewService.js'
@@ -1261,6 +1262,11 @@ export interface FragmentLibraryModule {
   libraryService: FragmentLibraryService
   /** Repo-sourced fragments; present only when the GitHub client + source repo are wired. */
   sourceService?: FragmentSourceService
+  /**
+   * The inline "auto-generate title" LLM helper behind the fragment editor's button; present only
+   * when a model provider + routing-default ref are wired. Absent ⇒ the endpoint returns 503.
+   */
+  titleService?: FragmentTitleService
 }
 
 /**

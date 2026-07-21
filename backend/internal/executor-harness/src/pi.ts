@@ -7,6 +7,7 @@ import { pathExists } from './fs-utils.js'
 import { redactSecrets } from './redact.js'
 import { HarnessFailure } from './failure.js'
 import { log } from './logger.js'
+import type { EffortReport } from './effort.js'
 
 // Drives the Pi coding-agent CLI. Pi is pointed at the Worker's OpenAI-compatible
 // proxy via a custom provider in ~/.pi/agent/models.json, authenticated with the
@@ -534,6 +535,12 @@ export interface PiRunOutcome {
   callMetrics?: HarnessCallMetric[]
   /** Output-quality signals (truncation / empty final answer); see {@link RunDiagnostics}. */
   diagnostics?: RunDiagnostics
+  /**
+   * The agent's effort self-assessment, lifted from its sentinel file after the run (how hard the
+   * work was, what reduced its effectiveness, the key obstacles). Absent when the agent wrote none.
+   * See {@link EffortReport}.
+   */
+  effortReport?: EffortReport
 }
 
 /**

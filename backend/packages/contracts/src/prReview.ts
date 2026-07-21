@@ -1,4 +1,5 @@
 import * as v from 'valibot'
+import { fragmentAdherenceSchema } from './fragment-adherence.js'
 
 // ---------------------------------------------------------------------------
 // PR deep-review wire contracts. A `review` task runs the read-only `pr-reviewer`
@@ -310,6 +311,12 @@ export const prReviewAgentOutputSchema = v.object({
     ),
     [],
   ),
+  /**
+   * Per-best-practice-standard adherence report (see {@link fragmentAdherenceSchema}): for each
+   * best-practice fragment folded into the reviewer's prompt, a 1..10 rating of how well the PR
+   * adheres plus the findings that standard surfaced. Empty when no standards were reachable.
+   */
+  fragmentAdherence: v.fallback(v.optional(fragmentAdherenceSchema), undefined),
 })
 export type PrReviewAgentOutput = v.InferOutput<typeof prReviewAgentOutputSchema>
 

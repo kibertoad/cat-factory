@@ -1476,7 +1476,20 @@
       "confirmReject": "Ablehnung bestätigen",
       "requestChanges": "Änderungen anfordern",
       "reject": "Ablehnen",
-      "requestChangesHint": "Änderungen anfordern führt diesen Schritt mit deinem Feedback & deinen Kommentaren erneut aus. Ablehnen stoppt den Lauf vollständig."
+      "requestChangesHint": "Änderungen anfordern führt diesen Schritt mit deinem Feedback & deinen Kommentaren erneut aus. Ablehnen stoppt den Lauf vollständig.",
+      "effort": {
+        "heading": "Agenten-Aufwand",
+        "difficulty": "Schwierigkeit",
+        "outOfTen": "{value}/10",
+        "reduced": "Was die Effektivität verringert hat",
+        "obstacles": "Wichtigste Hindernisse"
+      },
+      "adherence": {
+        "heading": "Einhaltung der Best Practices",
+        "outOfTen": "{value}/10",
+        "relatedFindings": "Zugehörige Befunde",
+        "unnamed": "Standard"
+      }
     },
     "inspector": {
       "frameStatus": {
@@ -3565,7 +3578,10 @@
       "summaryPlaceholder": "Einzeilige Zusammenfassung (vom Selektor verwendet)",
       "bodyPlaceholder": "Richtlinientext (in den Prompt injiziert)",
       "tagsPlaceholder": "Tags, kommagetrennt (z. B. backend, db)",
-      "add": "Fragment hinzufügen"
+      "add": "Fragment hinzufügen",
+      "generateTitle": "Generieren",
+      "generateTitleHint": "Titel aus dem Inhalt des Fragments vorschlagen",
+      "titleGenFailed": "Titel konnte nicht generiert werden"
     },
     "documents": {
       "intro": "Verknüpfen Sie eine Confluence-/Notion-Seite oder eine GitHub-Datei als Best-Practice-Fragment. Ihre Richtlinie wird zur Laufzeit aus der Quelle neu aufgelöst: Bearbeiten Sie das Dokument, und der nächste Agentenlauf folgt der neuen Version (kein erneuter Import).",
@@ -3615,7 +3631,9 @@
       "checkSourceFailed": "Quelle konnte nicht geprüft werden",
       "sourceUnlinked": "Quelle-Verknüpfung aufgehoben",
       "unlinkSourceFailed": "Quelle-Verknüpfung konnte nicht aufgehoben werden",
-      "documentsLinked": "{count} Dokument als lebendes Fragment verknüpft | {count} Dokumente als lebende Fragmente verknüpft"
+      "documentsLinked": "{count} Dokument als lebendes Fragment verknüpft | {count} Dokumente als lebende Fragmente verknüpft",
+      "updated": "Fragment aktualisiert",
+      "updateFailed": "Fragment konnte nicht aktualisiert werden"
     },
     "confirmRemove": {
       "title": "Dieses Fragment löschen?",
@@ -3984,7 +4002,8 @@
       "body": "Du hast Änderungen vorgenommen, die noch nicht gespeichert wurden. Schließen und verlieren?",
       "confirm": "Verwerfen",
       "keep": "Weiter bearbeiten"
-    }
+    },
+    "edit": "Bearbeiten"
   },
   "access": {
     "noBoardWrite": "Nur-Lese-Zugriff: Sie können dieses Board ansehen, aber nicht bearbeiten.",

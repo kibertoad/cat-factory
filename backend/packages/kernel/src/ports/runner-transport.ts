@@ -1,6 +1,7 @@
 import type { CloudProvider, InstanceSize, StepSubtasks } from '../domain/types.js'
 import type { HarnessFailureCause } from '../domain/harness-failure.js'
 import type { LlmToolSpan } from './llm-trace-sink.js'
+import type { AgentEffortReport } from '@cat-factory/contracts'
 
 // Port for "where a repo-operating coding job actually runs". The
 // ContainerAgentExecutor dispatches each job and polls it through this transport
@@ -139,6 +140,14 @@ export interface RunnerJobResult {
    * for the proxy-metered Pi harness. See {@link HarnessCallMetric}.
    */
   callMetrics?: HarnessCallMetric[]
+  /**
+   * The container agent's self-assessment of the work — how hard/easy it was, what reduced its
+   * effectiveness, the key obstacles — lifted by the harness from the agent's sentinel-file
+   * report (`.cat-effort.json`). The executor's `toRunResult` forwards it onto
+   * {@link AgentRunResult.effortReport}; the engine records it on the step for run details.
+   * Absent when the agent wrote no report (or on an older harness image).
+   */
+  effortReport?: AgentEffortReport
 }
 
 /**

@@ -530,7 +530,40 @@ function coerceRunnerResult(raw: unknown): Partial<RunnerJobResult> {
   // verbatim) record them — a facade-parity divergence.
   const callMetrics = coerceCallMetrics(o.callMetrics)
   if (callMetrics.length) out.callMetrics = callMetrics
+  // The agent's effort self-assessment (how hard the work was, what reduced its effectiveness,
+  // the obstacles). A pool proxying the executor-harness verbatim carries it in its result
+  // envelope; keep it so a pool-backed run surfaces effort in run details exactly like the
+  // Cloudflare/local transports (which return the harness view verbatim).
+  const effortReport = coerceEffortReport(o.effortReport)
+  if (effortReport) out.effortReport = effortReport
   return out
+}
+
+/**
+ * Coerce a scheduler's `effortReport` envelope into the canonical {@link RunnerJobResult.effortReport}
+ * shape, defaulting `difficulty` and keeping only well-formed prose/obstacle fields. Returns
+ * undefined for anything that isn't an object, so a malformed/absent envelope injects nothing.
+ * Mirrors the executor-harness's own `coerceEffort`.
+ */
+function coerceEffortReport(raw: unknown): RunnerJobResult['effortReport'] | undefined {
+  if (typeof raw !== 'object' || raw === null) return undefined
+  const o = raw as Record<string, unknown>
+  const difficulty =
+    typeof o.difficulty === 'number' && Number.isFinite(o.difficulty)
+      ? Math.min(10, Math.max(1, Math.round(o.difficulty)))
+      : 5
+  const report: NonNullable<RunnerJobResult['effortReport']> = { difficulty }
+  if (typeof o.summary === 'string' && o.summary.trim()) report.summary = o.summary.trim()
+  if (typeof o.reducedEffectiveness === 'string' && o.reducedEffectiveness.trim()) {
+    report.reducedEffectiveness = o.reducedEffectiveness.trim()
+  }
+  if (Array.isArray(o.obstacles)) {
+    const obstacles = o.obstacles.filter(
+      (x): x is string => typeof x === 'string' && x.trim() !== '',
+    )
+    if (obstacles.length) report.obstacles = obstacles
+  }
+  return report
 }
 
 /**

@@ -111,6 +111,21 @@ function fragmentLibrarySetup(kind: FragmentOwnerKind, resolveOwnerId: () => str
     await Promise.all([reloadTier(), refreshResolved()])
   }
 
+  /**
+   * Auto-generate a title for a fragment from its content (an inline LLM call). Returns the
+   * suggested title for the caller to drop into the editor; performs no write. At the account
+   * scope the model resolves against `viaWorkspaceId`'s credential scope.
+   */
+  async function generateTitle(input: { body: string; summary?: string }): Promise<string> {
+    const { title } = await api.generateFragmentTitle(
+      kind,
+      requireOwnerId(),
+      input,
+      viaWorkspaceId.value,
+    )
+    return title
+  }
+
   /** Link an external document as a living (dynamically-resolved) fragment. */
   async function createDocumentFragment(input: CreateDocumentFragmentInput) {
     loading.value = true
@@ -203,6 +218,7 @@ function fragmentLibrarySetup(kind: FragmentOwnerKind, resolveOwnerId: () => str
     createDocumentFragment,
     refreshDocumentFragment,
     update,
+    generateTitle,
     remove,
     linkSource,
     unlinkSource,

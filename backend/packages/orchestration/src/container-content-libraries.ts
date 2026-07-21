@@ -7,6 +7,7 @@ import {
 } from '@cat-factory/agents'
 import type { AppCaches, DocumentContentResolver } from '@cat-factory/kernel'
 import type { CoreDependencies, FragmentLibraryModule, SkillLibraryModule } from './container.js'
+import { FragmentTitleService } from './modules/fragmentLibrary/FragmentTitleService.js'
 
 // The two content-library module factories (prompt fragments + repo-sourced Claude Skills),
 // extracted from `container.ts` for file-size hygiene. Pure composition helpers: each takes the
@@ -57,7 +58,16 @@ export function createFragmentLibraryModule(
         })
       : undefined
 
-  return { libraryService, sourceService }
+  // The inline "auto-generate title" helper: assembles whenever a model provider is wired (a
+  // routing-default ref is required for it to be `enabled`). Reuses the document-planner /
+  // requirement-review default refs — a title is a small, cheap completion.
+  const titleService = new FragmentTitleService({
+    modelProviderResolver: deps.modelProviderResolver,
+    modelProvider: deps.modelProvider,
+    modelRef: deps.documentPlannerModel ?? deps.requirementReviewModel,
+  })
+
+  return { libraryService, sourceService, titleService }
 }
 
 /**

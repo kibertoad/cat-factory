@@ -3,6 +3,7 @@ import {
   createPromptFragmentContract,
   deletePromptFragmentContract,
   fragmentSourceStatusContract,
+  generatePromptFragmentTitleContract,
   linkFragmentSourceContract,
   listFragmentSourcesContract,
   listPromptFragmentsContract,
@@ -121,6 +122,44 @@ export function fragmentLibraryController(scope: Scope): Hono<AppEnv> {
     if (!lib) return unavailable(c)
     await lib.libraryService.remove(ownerKind, ownerId(c), c.req.valid('param').fragmentId)
     return c.body(null, 204)
+  })
+
+  // Auto-generate a title for a hand-authored fragment from its content (an inline LLM call).
+  // The model resolves against a workspace's credential scope: the addressed workspace at the
+  // workspace scope, else the `viaWorkspaceId` query param at the account scope (re-authorized,
+  // exactly like a document fragment's fetch). 503 when no model is wired for the deployment.
+  buildHonoRoute(app, generatePromptFragmentTitleContract, async (c) => {
+    const lib = requireLibrary(c)
+    if (!lib) return unavailable(c)
+    if (!lib.titleService?.enabled) {
+      return c.json(
+        {
+          error: {
+            code: 'unavailable',
+            message: 'Fragment-title generation requires a model provider to be configured',
+          },
+        },
+        503,
+      )
+    }
+    const viaWorkspaceId =
+      scope === 'workspace' ? param(c, 'workspaceId') : (c.req.valid('query').viaWorkspaceId ?? '')
+    if (!viaWorkspaceId) {
+      throw new ValidationError(
+        'An account-tier title generation needs a `viaWorkspaceId` query param (the workspace whose model scope to use)',
+      )
+    }
+    // SEC-RBAC-0: re-authorize the query-supplied `viaWorkspaceId` (see createDocumentFragment).
+    if (scope === 'account') {
+      await requireViaWorkspaceAccess(
+        c.get('container'),
+        c.get('user')?.id,
+        ownerId(c),
+        viaWorkspaceId,
+      )
+    }
+    const { title } = await lib.titleService.generate(viaWorkspaceId, c.req.valid('json'))
+    return c.json({ title }, 200)
   })
 
   // ---- document-backed fragments (living source of truth) -----------------

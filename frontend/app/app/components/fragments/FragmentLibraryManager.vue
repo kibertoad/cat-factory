@@ -135,6 +135,80 @@ const draftValid = computed(
   () => draft.value.title.trim() && draft.value.summary.trim() && draft.value.body.trim(),
 )
 
+// ---- auto-generate a title from the fragment's content (inline LLM call) ---
+// Shared by the create form and the inline editor; keyed so only the button that triggered it
+// spins. Generation needs a body (the title is derived from it); the summary rides along.
+const generatingTitleFor = ref<string | null>(null)
+async function autofillTitle(
+  key: string,
+  get: () => { body: string; summary?: string },
+  set: (title: string) => void,
+) {
+  const { body, summary } = get()
+  if (!body.trim() || generatingTitleFor.value) return
+  generatingTitleFor.value = key
+  try {
+    const title = await library.generateTitle({
+      body: body.trim(),
+      summary: summary?.trim() || undefined,
+    })
+    set(title)
+  } catch (e) {
+    notifyError(t('fragments.authored.titleGenFailed'), e)
+  } finally {
+    generatingTitleFor.value = null
+  }
+}
+
+// ---- edit an existing hand-authored fragment (title / summary / body / tags) ---
+const editDraft = ref<{
+  id: string
+  title: string
+  summary: string
+  body: string
+  tags: string
+} | null>(null)
+function startEdit(f: (typeof library.fragments)[number]) {
+  editDraft.value = {
+    id: f.id,
+    title: f.title,
+    summary: f.summary,
+    body: f.body,
+    tags: (f.tags ?? []).join(', '),
+  }
+}
+function cancelEdit() {
+  editDraft.value = null
+}
+const editValid = computed(
+  () =>
+    !!editDraft.value &&
+    !!editDraft.value.title.trim() &&
+    !!editDraft.value.summary.trim() &&
+    !!editDraft.value.body.trim(),
+)
+async function saveEdit() {
+  const d = editDraft.value
+  if (!d || !editValid.value) return
+  await withRow(`edit:${d.id}`, async () => {
+    try {
+      await library.update(d.id, {
+        title: d.title.trim(),
+        summary: d.summary.trim(),
+        body: d.body.trim(),
+        tags: d.tags
+          .split(',')
+          .map((t) => t.trim())
+          .filter(Boolean),
+      })
+      editDraft.value = null
+      toast.add({ title: t('fragments.toast.updated'), icon: 'i-lucide-check' })
+    } catch (e) {
+      notifyError(t('fragments.toast.updateFailed'), e)
+    }
+  })
+}
+
 async function createFragment() {
   if (!draftValid.value) return
   creating.value = true
@@ -522,26 +596,96 @@ async function unlinkSource(id: string) {
         <div
           v-for="f in library.fragments"
           :key="f.id"
-          class="flex items-start gap-2 rounded-md border border-slate-800 bg-slate-900/60 p-3"
+          class="rounded-md border border-slate-800 bg-slate-900/60 p-3"
         >
-          <div class="min-w-0">
-            <div class="flex items-center gap-2">
-              <span class="font-medium text-slate-100">{{ f.title }}</span>
-              <UBadge v-if="f.source" size="xs" color="info" variant="subtle">{{
-                t('fragments.authored.fromRepo')
-              }}</UBadge>
+          <!-- Inline editor (hand-authored fragments): title / summary / body / tags, with the
+               same auto-generate-title button as the create form. -->
+          <div v-if="editDraft && editDraft.id === f.id" class="flex flex-col gap-2">
+            <div class="flex gap-2">
+              <UInput
+                v-model="editDraft.title"
+                :placeholder="t('fragments.authored.titlePlaceholder')"
+                class="flex-1"
+              />
+              <UButton
+                icon="i-lucide-wand-2"
+                size="sm"
+                variant="outline"
+                :disabled="!editDraft.body.trim()"
+                :loading="generatingTitleFor === `edit:${f.id}`"
+                :title="t('fragments.authored.generateTitleHint')"
+                @click="
+                  autofillTitle(
+                    `edit:${f.id}`,
+                    () => ({ body: editDraft!.body, summary: editDraft!.summary }),
+                    (title) => {
+                      if (editDraft) editDraft.title = title
+                    },
+                  )
+                "
+              >
+                {{ t('fragments.authored.generateTitle') }}
+              </UButton>
             </div>
-            <p class="text-sm text-slate-400">{{ f.summary }}</p>
+            <UInput
+              v-model="editDraft.summary"
+              :placeholder="t('fragments.authored.summaryPlaceholder')"
+            />
+            <UTextarea
+              v-model="editDraft.body"
+              :placeholder="t('fragments.authored.bodyPlaceholder')"
+              :rows="4"
+            />
+            <UInput
+              v-model="editDraft.tags"
+              :placeholder="t('fragments.authored.tagsPlaceholder')"
+            />
+            <div class="flex gap-2">
+              <UButton
+                size="sm"
+                :disabled="!editValid"
+                :loading="rowBusy(`edit:${f.id}`)"
+                @click="saveEdit"
+              >
+                {{ t('common.save') }}
+              </UButton>
+              <UButton size="sm" variant="ghost" color="neutral" @click="cancelEdit">
+                {{ t('common.cancel') }}
+              </UButton>
+            </div>
           </div>
-          <UButton
-            icon="i-lucide-trash-2"
-            size="xs"
-            color="error"
-            variant="ghost"
-            class="ms-auto"
-            :loading="rowBusy(`remove:${f.id}`)"
-            @click="removeFragment(f.id)"
-          />
+          <!-- Row -->
+          <div v-else class="flex items-start gap-2">
+            <div class="min-w-0">
+              <div class="flex items-center gap-2">
+                <span class="font-medium text-slate-100">{{ f.title }}</span>
+                <UBadge v-if="f.source" size="xs" color="info" variant="subtle">{{
+                  t('fragments.authored.fromRepo')
+                }}</UBadge>
+              </div>
+              <p class="text-sm text-slate-400">{{ f.summary }}</p>
+            </div>
+            <div class="ms-auto flex gap-1">
+              <!-- Editing a repo-SOURCED fragment locally would be overwritten on the next sync,
+                   so only hand-authored fragments are editable here. -->
+              <UButton
+                v-if="!f.source"
+                icon="i-lucide-pencil"
+                size="xs"
+                variant="ghost"
+                :title="t('common.edit')"
+                @click="startEdit(f)"
+              />
+              <UButton
+                icon="i-lucide-trash-2"
+                size="xs"
+                color="error"
+                variant="ghost"
+                :loading="rowBusy(`remove:${f.id}`)"
+                @click="removeFragment(f.id)"
+              />
+            </div>
+          </div>
         </div>
         <p v-if="!library.fragments.length" class="text-sm text-slate-500">
           {{
@@ -554,7 +698,33 @@ async function unlinkSource(id: string) {
         <div class="rounded-md border border-slate-800 p-3">
           <p class="mb-2 text-sm font-medium">{{ t('fragments.authored.addTitle') }}</p>
           <div class="flex flex-col gap-2">
-            <UInput v-model="draft.title" :placeholder="t('fragments.authored.titlePlaceholder')" />
+            <div class="flex gap-2">
+              <UInput
+                v-model="draft.title"
+                :placeholder="t('fragments.authored.titlePlaceholder')"
+                class="flex-1"
+              />
+              <UButton
+                icon="i-lucide-wand-2"
+                size="sm"
+                variant="outline"
+                :disabled="!draft.body.trim()"
+                :loading="generatingTitleFor === 'create'"
+                :title="t('fragments.authored.generateTitleHint')"
+                data-testid="fragment-generate-title"
+                @click="
+                  autofillTitle(
+                    'create',
+                    () => ({ body: draft.body, summary: draft.summary }),
+                    (title) => {
+                      draft.title = title
+                    },
+                  )
+                "
+              >
+                {{ t('fragments.authored.generateTitle') }}
+              </UButton>
+            </div>
             <UInput
               v-model="draft.summary"
               :placeholder="t('fragments.authored.summaryPlaceholder')"

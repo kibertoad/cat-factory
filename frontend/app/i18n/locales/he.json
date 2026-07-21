@@ -73,7 +73,8 @@
       "body": "ביצעת שינויים שלא נשמרו. לסגור ולאבד אותם?",
       "confirm": "לבטל",
       "keep": "להמשיך לערוך"
-    }
+    },
+    "edit": "עריכה"
   },
   "access": {
     "noBoardWrite": "גישת קריאה בלבד: אפשר לצפות בלוח הזה אך לא לערוך אותו.",
@@ -1194,7 +1195,20 @@
       "confirmReject": "אשר דחייה",
       "requestChanges": "בקש שינויים",
       "reject": "דחה",
-      "requestChangesHint": "בקשת שינויים מריצה מחדש שלב זה עם המשוב וההערות שלך. דחייה עוצרת את הריצה לחלוטין."
+      "requestChangesHint": "בקשת שינויים מריצה מחדש שלב זה עם המשוב וההערות שלך. דחייה עוצרת את הריצה לחלוטין.",
+      "effort": {
+        "heading": "מאמץ הסוכן",
+        "difficulty": "רמת קושי",
+        "outOfTen": "{value}/10",
+        "reduced": "מה הפחית את היעילות",
+        "obstacles": "מכשולים עיקריים"
+      },
+      "adherence": {
+        "heading": "עמידה בשיטות עבודה מומלצות",
+        "outOfTen": "{value}/10",
+        "relatedFindings": "ממצאים קשורים",
+        "unnamed": "תקן"
+      }
     },
     "inspector": {
       "frameStatus": {
@@ -4400,7 +4414,10 @@
       "summaryPlaceholder": "תקציר בשורה אחת (בשימוש הבורר)",
       "bodyPlaceholder": "גוף ההנחיה (מוזרק לפרומפט)",
       "tagsPlaceholder": "תגיות, מופרדות בפסיקים (למשל backend, db)",
-      "add": "הוסף מקטע"
+      "add": "הוסף מקטע",
+      "generateTitle": "יצירה",
+      "generateTitleHint": "הצעת כותרת לפי תוכן הקטע",
+      "titleGenFailed": "לא ניתן היה ליצור כותרת"
     },
     "documents": {
       "intro": "קשר עמוד Confluence/Notion או קובץ GitHub כמקטע מומלץ. ההנחיה שלו מיושבת מחדש מהמקור בזמן ההרצה: ערוך את המסמך וההרצה הבאה עוקבת אחר הגרסה החדשה (ללא ייבוא מחדש).",
@@ -4450,7 +4467,9 @@
       "checkSourceFailed": "לא ניתן היה לבדוק את המקור",
       "sourceUnlinked": "קישור המקור בוטל",
       "unlinkSourceFailed": "לא ניתן היה לבטל את קישור המקור",
-      "documentsLinked": "{count} מסמך קושר כמקטע חי | {count} מסמכים קושרו כמקטעים חיים"
+      "documentsLinked": "{count} מסמך קושר כמקטע חי | {count} מסמכים קושרו כמקטעים חיים",
+      "updated": "הקטע עודכן",
+      "updateFailed": "לא ניתן היה לעדכן את הקטע"
     },
     "confirmRemove": {
       "title": "למחוק את המקטע הזה?",

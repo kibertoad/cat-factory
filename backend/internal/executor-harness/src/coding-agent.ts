@@ -31,6 +31,7 @@ import {
 } from './git.js'
 import { FOLLOW_UPS_FILENAME, FollowUpTailer } from './follow-ups.js'
 import type { HarnessCallMetric, PiRunStats } from './pi.js'
+import type { EffortReport } from './effort.js'
 import {
   acquireRepoCheckout,
   agentNeverActed,
@@ -123,6 +124,8 @@ export interface CodingAgentOutcome {
   usage?: { inputTokens: number; outputTokens: number }
   /** Per-model-call telemetry from a subscription harness's CLI stream (absent for Pi). */
   callMetrics?: HarnessCallMetric[]
+  /** The agent's effort self-assessment, lifted from its sentinel file (absent when it wrote none). */
+  effortReport?: EffortReport
   /**
    * Ralph loop: the verdict of the post-commit validation command (whether it exited 0, the
    * exit code, and a bounded/redacted output tail). Present only when {@link CodingAgentSpec.validation}
@@ -462,7 +465,7 @@ async function finalizeCodingRun(args: {
     agentRun,
   } = args
   const { signal } = opts
-  const { summary, stats, stderrTail, usage, callMetrics } = agentRun
+  const { summary, stats, stderrTail, usage, callMetrics, effortReport } = agentRun
   let outcome: CodingAgentOutcome
 
   // Stop tailing the follow-up sentinel and flush any items written after the last
@@ -521,6 +524,7 @@ async function finalizeCodingRun(args: {
       ...(stderrTail ? { stderrTail } : {}),
       ...(usage ? { usage } : {}),
       ...(callMetrics ? { callMetrics } : {}),
+      ...(effortReport ? { effortReport } : {}),
     }
   } else {
     opts.onPhase?.('push')
@@ -534,6 +538,7 @@ async function finalizeCodingRun(args: {
       ...(stderrTail ? { stderrTail } : {}),
       ...(usage ? { usage } : {}),
       ...(callMetrics ? { callMetrics } : {}),
+      ...(effortReport ? { effortReport } : {}),
     }
   }
 
@@ -765,26 +770,27 @@ export async function runMultiRepoCoding(
     // note + the backend system-prompt section explain the layout.
     opts.onPhase?.('agent')
     logger.info('multi-repo: running agent', { repos: legs.map((l) => l.dirName) })
-    const { summary, stats, stderrTail, usage, callMetrics } = await runAgentInWorkspace(
-      {
-        dir: root,
-        systemPrompt: job.systemPrompt,
-        userPrompt: job.userPrompt,
-        model: job.model,
-        harness: job.harness,
-        subscriptionToken: job.subscriptionToken,
-        subscriptionBaseUrl: job.subscriptionBaseUrl,
-        ambientAuth: job.ambientAuth,
-        proxyBaseUrl: job.proxyBaseUrl,
-        sessionToken: job.sessionToken,
-        webToolsGuidance: job.webToolsGuidance,
-        webSearchProxy: job.webSearch,
-        guardLimits: job.guardLimits,
-        ...(job.contextFiles ? { contextFiles: job.contextFiles } : {}),
-        multiRepo: true,
-      },
-      opts,
-    )
+    const { summary, stats, stderrTail, usage, callMetrics, effortReport } =
+      await runAgentInWorkspace(
+        {
+          dir: root,
+          systemPrompt: job.systemPrompt,
+          userPrompt: job.userPrompt,
+          model: job.model,
+          harness: job.harness,
+          subscriptionToken: job.subscriptionToken,
+          subscriptionBaseUrl: job.subscriptionBaseUrl,
+          ambientAuth: job.ambientAuth,
+          proxyBaseUrl: job.proxyBaseUrl,
+          sessionToken: job.sessionToken,
+          webToolsGuidance: job.webToolsGuidance,
+          webSearchProxy: job.webSearch,
+          guardLimits: job.guardLimits,
+          ...(job.contextFiles ? { contextFiles: job.contextFiles } : {}),
+          multiRepo: true,
+        },
+        opts,
+      )
 
     // Commit forgotten tracked edits, then push + open a PR for each repo the run actually changed.
     const { primaryPushed, primaryPrUrl, peerPullRequests } = await pushMultiRepoLegs(
@@ -807,6 +813,7 @@ export async function runMultiRepoCoding(
           stats,
           ...(usage ? { usage } : {}),
           ...(callMetrics ? { callMetrics } : {}),
+          ...(effortReport ? { effortReport } : {}),
         }
       }
       return {
@@ -822,6 +829,7 @@ export async function runMultiRepoCoding(
         failureCause: 'no-changes',
         ...(usage ? { usage } : {}),
         ...(callMetrics ? { callMetrics } : {}),
+        ...(effortReport ? { effortReport } : {}),
       }
     }
     logger.info('multi-repo: complete', {
@@ -838,6 +846,7 @@ export async function runMultiRepoCoding(
       stats,
       ...(usage ? { usage } : {}),
       ...(callMetrics ? { callMetrics } : {}),
+      ...(effortReport ? { effortReport } : {}),
     }
   })
 }

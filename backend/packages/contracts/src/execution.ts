@@ -5,6 +5,8 @@ import { followUpsStepStateSchema } from './followUp.js'
 import { forkDecisionStepStateSchema } from './forkDecision.js'
 import { ralphStepStateSchema } from './ralph.js'
 import { prReviewStepStateSchema } from './prReview.js'
+import { fragmentAdherenceSchema } from './fragment-adherence.js'
+import { agentEffortReportSchema } from './agent-effort.js'
 import { releaseSignalSchema } from './release.js'
 import {
   environmentStatusSchema,
@@ -1170,6 +1172,21 @@ export const pipelineStepSchema = v.object({
    * the fragment-library module is not configured.
    */
   selectedFragmentIds: v.optional(v.array(v.string())),
+  /**
+   * A code/PR review step's per-best-practice-standard adherence report: for each
+   * best-practice fragment folded into the reviewer's prompt, a 1..10 rating of how well the
+   * reviewed change/PR adheres plus the issues that standard surfaced. Recorded by the engine
+   * from the review agent's output and surfaced in run details / the PR-review window. Empty
+   * when the reviewer reported no reachable standards; absent for every non-review step.
+   */
+  fragmentAdherence: v.optional(fragmentAdherenceSchema),
+  /**
+   * A container agent's self-assessment of the work it just did — how hard/easy it was, what
+   * reduced its effectiveness, and the key obstacles it hit (see {@link agentEffortReportSchema}).
+   * Recorded by the engine from the agent's sentinel-file report and surfaced in run details.
+   * Absent for inline agents, non-container steps, and runs on an older harness image.
+   */
+  effortReport: v.optional(agentEffortReportSchema),
   /**
    * The repo-sourced Claude Skill this step was PINNED to at dispatch (a `skill` step; see
    * `docs/initiatives/repo-skills.md`). Recorded so a run executes a stable version of the

@@ -422,7 +422,7 @@ export class FragmentLibraryService implements FragmentResolver {
     // Emit in stable catalog order for replay-stable prompts.
     const ordered = catalog.filter((e) => seen.has(e.id))
     return {
-      fragments: ordered.map((e) => ({ id: e.id, body: e.body })),
+      fragments: ordered.map((e) => ({ id: e.id, title: e.title, body: e.body })),
       selectedIds: ordered.map((e) => e.id),
     }
   }
@@ -448,12 +448,12 @@ export class FragmentLibraryService implements FragmentResolver {
     workspaceId: string,
     ids: string[],
     catalog?: ResolvedCatalogEntry[],
-  ): Promise<{ id: string; body: string }[]> {
+  ): Promise<{ id: string; title: string; body: string }[]> {
     if (ids.length === 0) return []
     const entries = catalog ?? (await this.resolveCatalog(workspaceId))
     const byId = new Map(entries.map((e) => [e.id, e]))
 
-    const out: { id: string; body: string }[] = []
+    const out: { id: string; title: string; body: string }[] = []
     const seen = new Set<string>()
     for (const id of ids) {
       if (seen.has(id)) continue
@@ -463,7 +463,9 @@ export class FragmentLibraryService implements FragmentResolver {
       const body = entry.documentRef
         ? await this.resolveDocumentBody(workspaceId, entry)
         : entry.body
-      out.push({ id, body })
+      // Carry the human title so the prompt composer can render each standard as its own labelled
+      // block (and a code/PR reviewer can cite it by title in its adherence report).
+      out.push({ id, title: entry.title, body })
     }
     return out
   }

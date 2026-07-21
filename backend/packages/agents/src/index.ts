@@ -276,6 +276,11 @@ export {
   renderForkChatPrompt,
 } from './agents/prompts/fork-decision.js'
 export {
+  FRAGMENT_TITLE_AGENT_KIND,
+  FRAGMENT_TITLE_SYSTEM_PROMPT,
+  renderFragmentTitlePrompt,
+} from './agents/prompts/fragment-title.js'
+export {
   ENVIRONMENT_ANALYST_KIND,
   ENVIRONMENT_ANALYST_AGENT_KINDS,
   environmentRecipeDraft,
@@ -312,8 +317,11 @@ export {
 } from './agents/prompts/business-logic.js'
 export { PLATFORM_DELIVERY_CONTRACT } from './agents/prompts/delivery-contract.js'
 export {
+  EFFORT_REPORT_FILE,
+  EFFORT_REPORT_GUIDANCE,
   FINAL_ANSWER_IN_REPLY,
   FOLLOW_UP_GUIDANCE,
+  FRAGMENT_ADHERENCE_GUIDANCE,
   STANDARDS_FOOTER,
 } from './agents/prompts/shared.js'
 

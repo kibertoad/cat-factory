@@ -466,6 +466,14 @@ async function onDismiss(id: string): Promise<void> {
             {{ state.summary }}
           </p>
 
+          <!-- Best-practice adherence: per standard folded into the reviewer's prompt, a 1..10
+               rating of how well the PR adheres + the issues that standard surfaced. -->
+          <StepFragmentAdherence
+            v-if="step?.fragmentAdherence?.length"
+            :items="step.fragmentAdherence"
+            class="mb-3"
+          />
+
           <!-- A clean PR / resolved review with no findings. -->
           <div
             v-if="findings.length === 0"

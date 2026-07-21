@@ -31,8 +31,17 @@ import {
  * (the coder), or just `pushed` (the in-place fixers / conflict-resolver). No `model` here:
  * the proxy meters tokens and the async path doesn't carry the provider ref to the poll
  * site; `usage` is likewise omitted (metered by the proxy).
+ *
+ * The container agent's effort self-assessment (`result.effortReport`, lifted by the harness
+ * from the agent's sentinel file) is attached to EVERY mapped result — it is orthogonal to
+ * the kind-specific channels — so the engine records it on the step for run details.
  */
 export function toRunResult(result: RunnerJobResult, agentKind?: string): AgentRunResult {
+  const mapped = mapRunnerResult(result, agentKind)
+  return result.effortReport ? { ...mapped, effortReport: result.effortReport } : mapped
+}
+
+function mapRunnerResult(result: RunnerJobResult, agentKind?: string): AgentRunResult {
   // A generic, structured `agent` (explore) job returns its parsed JSON as `custom`. A
   // migrated built-in kind has it coerced into the well-known engine field here, KIND-AWARE
   // — the conservative coercion that used to live in the bespoke harness handlers

@@ -1,6 +1,6 @@
 import type { AgentKind } from '@cat-factory/kernel'
 import { companionFor, isContainerBackedCompanion } from '../kinds/companions.js'
-import { FINAL_ANSWER_IN_REPLY } from './shared.js'
+import { FINAL_ANSWER_IN_REPLY, FRAGMENT_ADHERENCE_GUIDANCE } from './shared.js'
 
 // System prompt for a companion agent, parameterised by the producer kind it
 // reviews. The companion returns a single overall quality rating (0..1) plus prose
@@ -98,7 +98,12 @@ export function companionSystemPrompt(kind: AgentKind): string | undefined {
     ...(kind === 'spec-companion'
       ? ['Include `technicalCorroborated` (true/false) as described above.']
       : []),
+    // The code reviewer additionally reports how well the change adheres to each best-practice
+    // standard folded into its prompt (a `fragmentAdherence` array) — see the guidance appended
+    // below. Only the code `reviewer` does this; the other companions review different artifacts.
+    ...(kind === 'reviewer' ? ['Include a `fragmentAdherence` array as described below.'] : []),
     'No prose outside the JSON, no code fences.',
+    ...(kind === 'reviewer' ? ['', FRAGMENT_ADHERENCE_GUIDANCE] : []),
     '',
     FINAL_ANSWER_IN_REPLY,
   ].join('\n')

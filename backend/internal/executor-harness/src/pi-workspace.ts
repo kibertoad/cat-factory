@@ -2,6 +2,7 @@ import { mkdir, mkdtemp, rm } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import type { RepoSpec, SkillSpec } from './job.js'
+import { readEffortReport } from './effort.js'
 import { log } from './logger.js'
 import {
   type ContextFileInfo,
@@ -258,7 +259,7 @@ export async function runAgentInWorkspace(
     if (!spec.ambientAuth && !spec.subscriptionToken) {
       throw new Error(`The ${spec.harness} harness requires a subscription token`)
     }
-    return runSubscriptionHarness(spec.harness, {
+    const subOutcome = await runSubscriptionHarness(spec.harness, {
       cwd: spec.dir,
       model: spec.model,
       systemPrompt: subscriptionSystemPrompt(spec.systemPrompt, contextFiles),
@@ -272,6 +273,7 @@ export async function runAgentInWorkspace(
       onProgress: opts.onProgress,
       ...(opts.log ? { log: opts.log } : {}),
     })
+    return withEffortReport(spec.dir, subOutcome)
   }
   if (!spec.proxyBaseUrl || !spec.sessionToken) {
     throw new Error('The Pi harness requires proxyBaseUrl and sessionToken')
@@ -301,7 +303,7 @@ export async function runAgentInWorkspace(
   })
   await writePiModelsConfig({ model: spec.model, proxyBaseUrl })
   const { signal, onActivity, onProgress, onSpan } = opts
-  return runPi({
+  const piOutcome = await runPi({
     cwd: spec.dir,
     model: spec.model,
     userPrompt: spec.userPrompt,
@@ -316,6 +318,17 @@ export async function runAgentInWorkspace(
     guardLimits: mergeGuardLimits(progressGuardLimitsFromEnv(), spec.guardLimits),
     extraEnv,
   })
+  return withEffortReport(spec.dir, piOutcome)
+}
+
+/**
+ * Lift the agent's effort self-assessment off its sentinel file in `dir` and fold it onto the
+ * run outcome. Shared by both harness paths so EVERY container agent's effort report is captured
+ * in one place. Never throws (a bad/absent report just yields no `effortReport`).
+ */
+async function withEffortReport(dir: string, outcome: PiRunOutcome): Promise<PiRunOutcome> {
+  const effortReport = await readEffortReport(dir)
+  return effortReport ? { ...outcome, effortReport } : outcome
 }
 
 /**

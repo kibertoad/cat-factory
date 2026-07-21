@@ -73,7 +73,8 @@
       "body": "Masz niezapisane zmiany. Zamknąć i je utracić?",
       "confirm": "Odrzuć",
       "keep": "Kontynuuj edycję"
-    }
+    },
+    "edit": "Edytuj"
   },
   "access": {
     "noBoardWrite": "Dostęp tylko do odczytu: możesz przeglądać tę tablicę, ale nie możesz jej edytować.",
@@ -1194,7 +1195,20 @@
       "confirmReject": "Potwierdź odrzucenie",
       "requestChanges": "Zażądaj zmian",
       "reject": "Odrzuć",
-      "requestChangesHint": "Zażądanie zmian uruchamia ten krok ponownie z Twoją opinią i komentarzami. Odrzucenie całkowicie zatrzymuje uruchomienie."
+      "requestChangesHint": "Zażądanie zmian uruchamia ten krok ponownie z Twoją opinią i komentarzami. Odrzucenie całkowicie zatrzymuje uruchomienie.",
+      "effort": {
+        "heading": "Wysiłek agenta",
+        "difficulty": "Trudność",
+        "outOfTen": "{value}/10",
+        "reduced": "Co obniżyło skuteczność",
+        "obstacles": "Kluczowe przeszkody"
+      },
+      "adherence": {
+        "heading": "Zgodność z najlepszymi praktykami",
+        "outOfTen": "{value}/10",
+        "relatedFindings": "Powiązane ustalenia",
+        "unnamed": "Standard"
+      }
     },
     "inspector": {
       "frameStatus": {
@@ -4389,7 +4403,10 @@
       "summaryPlaceholder": "Jednowierszowe podsumowanie (używane przez selektor)",
       "bodyPlaceholder": "Treść wytycznej (wstrzykiwana do promptu)",
       "tagsPlaceholder": "Tagi, oddzielone przecinkami (np. backend, db)",
-      "add": "Dodaj fragment"
+      "add": "Dodaj fragment",
+      "generateTitle": "Generuj",
+      "generateTitleHint": "Zaproponuj tytuł na podstawie treści fragmentu",
+      "titleGenFailed": "Nie udało się wygenerować tytułu"
     },
     "documents": {
       "intro": "Połącz stronę Confluence/Notion lub plik GitHub jako fragment najlepszych praktyk. Jego wytyczna jest ponownie pobierana ze źródła w czasie uruchomienia: zmień dokument, a następne uruchomienie agenta podąży za nową wersją (bez ponownego importu).",
@@ -4439,7 +4456,9 @@
       "checkSourceFailed": "Nie udało się sprawdzić źródła",
       "sourceUnlinked": "Odłączono źródło",
       "unlinkSourceFailed": "Nie udało się odłączyć źródła",
-      "documentsLinked": "Połączono {count} dokument jako żywy fragment | Połączono {count} dokumenty jako żywe fragmenty | Połączono {count} dokumentów jako żywe fragmenty"
+      "documentsLinked": "Połączono {count} dokument jako żywy fragment | Połączono {count} dokumenty jako żywe fragmenty | Połączono {count} dokumentów jako żywe fragmenty",
+      "updated": "Zaktualizowano fragment",
+      "updateFailed": "Nie udało się zaktualizować fragmentu"
     },
     "confirmRemove": {
       "title": "Usunąć ten fragment?",
