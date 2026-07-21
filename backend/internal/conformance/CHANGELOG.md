@@ -1,5 +1,13 @@
 # @cat-factory/conformance
 
+## 0.11.49
+
+### Patch Changes
+
+- Updated dependencies [e86e95b]
+  - @cat-factory/orchestration@0.131.6
+  - @cat-factory/server@0.140.6
+
 ## 0.11.48
 
 ### Patch Changes
