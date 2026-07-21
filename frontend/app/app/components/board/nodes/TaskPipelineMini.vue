@@ -9,6 +9,8 @@ import {
   COMPANION_STATE_META,
 } from '~/utils/pipelineRender'
 import { lodAtLeast } from '~/composables/useSemanticZoom'
+import { prReviewPhase } from '~/utils/prReviewProgress'
+import PrReviewPhaseBadge from '~/components/prReview/PrReviewPhaseBadge.vue'
 
 // Spatial drill-down inside a task card: at the `steps` zoom band the task's
 // build-pipeline steps appear, and one band deeper (`subtasks`) each step's live
@@ -83,6 +85,13 @@ function stepSpinning(s: PipelineStep) {
   return !runFailed.value && (s.state === 'working' || backgroundReview(s))
 }
 
+// Whether a step is a `pr-reviewer` with a LIVE phase to surface (slicing / reviewing / … ).
+// Drives replacing the generic N/M count + state icon with the phase badge, while a terminal
+// (done/skipped) review keeps its normal check/count visuals.
+function prPhaseActive(s: PipelineStep): boolean {
+  return prReviewPhase(s.prReview, s.subtasks) !== null
+}
+
 // Same todo-status icons the bootstrap card uses, so a zoomed-in task reads the
 // same way as a zoomed-in bootstrap.
 const ITEM_ICON: Record<string, string> = {
@@ -118,20 +127,32 @@ const ITEM_ICON: Record<string, string> = {
           name="i-lucide-file-text"
           class="h-2.5 w-2.5 shrink-0 text-slate-500"
         />
+        <!-- The plain N/M count, replaced by the phase line below while a `pr-reviewer` step is
+             live — its slice progress reads better as Slicing… / Reviewing X/Y slices. -->
         <span
-          v-if="s.subtasks && s.subtasks.total > 0"
+          v-if="s.subtasks && s.subtasks.total > 0 && !prPhaseActive(s)"
           class="ms-auto shrink-0 font-mono text-[9px] tabular-nums text-slate-400"
         >
           {{ s.subtasks.completed }}/{{ s.subtasks.total }}
         </span>
         <UIcon
-          v-else
+          v-else-if="!prPhaseActive(s)"
           :name="stepVisual(s).icon"
           class="ms-auto h-2.5 w-2.5 shrink-0"
           :class="stepSpinning(s) ? 'animate-spin' : ''"
           :style="{ color: stepVisual(s).color }"
         />
       </button>
+
+      <!-- PR reviewer: the precise sub-phase (slicing vs reviewing N/M slices), so the board
+           card tells the reviewer's progress apart from a bare subtask count. Self-hides once
+           the review is terminal / for any non-pr-reviewer step. -->
+      <PrReviewPhaseBadge
+        v-if="prPhaseActive(s)"
+        :step="s"
+        :run-failed="runFailed"
+        class="ms-4 mt-1 text-[9px]"
+      />
 
       <!-- pending approval gate: jump straight to the conclusions reader. Suppressed
            while a reviewer gate is folding/re-reviewing in the background (no human needed). -->

@@ -1,6 +1,11 @@
 import { describe, it, expect } from 'vitest'
-import type { StepSubtasks } from '~/types/execution'
-import { activeChunkLabels, chunkReviewPercent, isSlicingChunks } from './prReviewProgress'
+import type { PrReviewStepState, StepSubtasks } from '~/types/execution'
+import {
+  activeChunkLabels,
+  chunkReviewPercent,
+  isSlicingChunks,
+  prReviewPhase,
+} from './prReviewProgress'
 
 const subtasks = (over: Partial<StepSubtasks>): StepSubtasks => ({
   completed: 0,
@@ -69,5 +74,49 @@ describe('activeChunkLabels', () => {
         }),
       ),
     ).toEqual([])
+  })
+})
+
+// `prReviewPhase` reads only `status`; the other PrReviewStepState fields are irrelevant here.
+const state = (status: PrReviewStepState['status']): PrReviewStepState =>
+  ({ status }) as PrReviewStepState
+
+describe('prReviewPhase', () => {
+  it('is null with no live review or a terminal/passed-through status', () => {
+    expect(prReviewPhase(null, null)).toBeNull()
+    expect(prReviewPhase(undefined, subtasks({ total: 3, completed: 3 }))).toBeNull()
+    expect(prReviewPhase(state('done'), subtasks({ total: 3, completed: 3 }))).toBeNull()
+    expect(prReviewPhase(state('skipped'), null)).toBeNull()
+  })
+
+  it('is slicing while reviewing with no todo list yet (counts zeroed)', () => {
+    // No plan committed → don't leak a misleading 0/0 slice count.
+    expect(prReviewPhase(state('reviewing'), null)).toEqual({
+      kind: 'slicing',
+      completed: 0,
+      total: 0,
+    })
+    expect(prReviewPhase(state('reviewing'), subtasks({ total: 0 }))).toEqual({
+      kind: 'slicing',
+      completed: 0,
+      total: 0,
+    })
+  })
+
+  it('is reviewing with the slice counts once the todo list exists', () => {
+    expect(prReviewPhase(state('reviewing'), subtasks({ total: 4, completed: 1 }))).toEqual({
+      kind: 'reviewing',
+      completed: 1,
+      total: 4,
+    })
+  })
+
+  it('maps the parked / resolving statuses to their phase', () => {
+    expect(
+      prReviewPhase(state('awaiting_selection'), subtasks({ total: 4, completed: 4 }))?.kind,
+    ).toBe('awaiting')
+    expect(prReviewPhase(state('challenging'), null)?.kind).toBe('challenging')
+    expect(prReviewPhase(state('fixing'), null)?.kind).toBe('fixing')
+    expect(prReviewPhase(state('posting'), null)?.kind).toBe('posting')
   })
 })

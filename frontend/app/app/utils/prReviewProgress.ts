@@ -1,4 +1,4 @@
-import type { StepSubtasks } from '~/types/execution'
+import type { PrReviewStepState, StepSubtasks } from '~/types/execution'
 
 // Pure derivation of the PR deep-reviewer's `reviewing`-phase progress, factored out of
 // `PrReviewWindow.vue` so it is unit-testable independently of the Vue component.
@@ -25,4 +25,55 @@ export function chunkReviewPercent(subtasks: StepSubtasks | null | undefined): n
 /** Labels of the chunk(s) the reviewer is actively working through right now (for the callout). */
 export function activeChunkLabels(subtasks: StepSubtasks | null | undefined): string[] {
   return subtasks?.items?.filter((i) => i.status === 'in_progress').map((i) => i.label) ?? []
+}
+
+/**
+ * The at-a-glance phase of a `pr-reviewer` step, collapsing its `prReview.status` (+ the
+ * slicing-vs-reviewing signal from the todo list) into a single kind the board surfaces label
+ * without re-deriving. `completed`/`total` carry the slice counts for the `reviewing` kind.
+ * Returns `null` for the terminal / passed-through states (`done`/`skipped`) and when there is
+ * no live review — those have no in-flight phase to show.
+ */
+export type PrReviewPhaseKind =
+  | 'slicing'
+  | 'reviewing'
+  | 'awaiting'
+  | 'challenging'
+  | 'fixing'
+  | 'posting'
+
+export interface PrReviewPhase {
+  kind: PrReviewPhaseKind
+  /** Slices whose review is finished (0 while slicing). */
+  completed: number
+  /** Total slices the reviewer grouped the diff into (0 while slicing). */
+  total: number
+}
+
+export function prReviewPhase(
+  state: PrReviewStepState | null | undefined,
+  subtasks: StepSubtasks | null | undefined,
+): PrReviewPhase | null {
+  const status = state?.status
+  if (!status) return null
+  const completed = subtasks?.completed ?? 0
+  const total = subtasks?.total ?? 0
+  switch (status) {
+    case 'reviewing':
+      // No todo list yet ⇒ still grouping the diff; otherwise working through the chunks.
+      return isSlicingChunks(subtasks)
+        ? { kind: 'slicing', completed: 0, total: 0 }
+        : { kind: 'reviewing', completed, total }
+    case 'awaiting_selection':
+      return { kind: 'awaiting', completed, total }
+    case 'challenging':
+      return { kind: 'challenging', completed, total }
+    case 'fixing':
+      return { kind: 'fixing', completed, total }
+    case 'posting':
+      return { kind: 'posting', completed, total }
+    default:
+      // done / skipped — no live phase to surface.
+      return null
+  }
 }

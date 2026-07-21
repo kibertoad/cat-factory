@@ -11,7 +11,9 @@ import {
   FAILED_STEP_META,
   containerPhaseLabel,
 } from '~/utils/pipelineRender'
+import { prReviewPhase } from '~/utils/prReviewProgress'
 import StepMetricsBar from '~/components/observability/StepMetricsBar.vue'
+import PrReviewPhaseBadge from '~/components/prReview/PrReviewPhaseBadge.vue'
 import { useNowTick, stepDurationLabel } from '~/composables/useStepTimer'
 
 const props = defineProps<{ instance: ExecutionInstance }>()
@@ -82,6 +84,15 @@ function forkPhase(step: PipelineStep): 'proposing' | 'awaiting_choice' | null {
  */
 function prReviewAwaiting(step: PipelineStep): boolean {
   return step.prReview?.status === 'awaiting_selection'
+}
+
+/**
+ * Whether a `pr-reviewer` step has a LIVE phase to surface (slicing / reviewing / … ). Drives
+ * showing the phase badge in place of the generic subtask count header; a terminal (done/skipped)
+ * review keeps the plain count.
+ */
+function prPhaseActive(step: PipelineStep): boolean {
+  return prReviewPhase(step.prReview, step.subtasks) !== null
 }
 
 // --- restart from a step -----------------------------------------------------
@@ -444,9 +455,22 @@ const ITEM_ICON: Record<string, string> = {
             <span>{{ stepPhaseLabel(s) }}</span>
           </div>
 
+          <!-- PR reviewer: the precise sub-phase (Slicing… / Reviewing N/M slices), which reads
+               better than a bare subtask count. Shows during slicing (no todo list yet) too, so
+               it fills the gap before the chunk list exists. -->
+          <PrReviewPhaseBadge
+            v-if="prPhaseActive(s)"
+            :step="s"
+            :run-failed="runFailed"
+            class="mt-2 text-[11px]"
+          />
+
           <!-- live subtask counts from the agent's todo list -->
           <div v-if="s.subtasks && s.subtasks.total > 0" class="mt-2">
-            <div class="flex items-center justify-between text-[10px] text-slate-400">
+            <div
+              v-if="!prPhaseActive(s)"
+              class="flex items-center justify-between text-[10px] text-slate-400"
+            >
               <span>
                 {{
                   t('pipeline.progress.subtasks', {
