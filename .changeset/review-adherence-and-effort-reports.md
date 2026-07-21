@@ -7,6 +7,7 @@
 '@cat-factory/integrations': minor
 '@cat-factory/app': minor
 '@cat-factory/executor-harness': patch
+'@cat-factory/prompt-fragments': patch
 ---
 
 Review adherence reports + per-agent effort self-assessment, surfaced in run details.

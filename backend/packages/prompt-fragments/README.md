@@ -23,7 +23,12 @@ hint (`blockTypes` / `agentKinds`).
 - The Worker serves this catalog **read-only** at `GET /prompt-fragments`; the SPA
   shows it in the per-block fragment picker.
 - A block stores selected `fragmentIds[]`; at run time core composes the chosen
-  bodies into the system prompt.
+  bodies into the system prompt. Each standard is folded as its **own delimited,
+  title-labelled block** (`<best-practice-standard id="…" title="…">`) rather than one
+  concatenated blob, so an agent can tell the standards apart and cite one by its title
+  (`composeSystemPrompt` / `composeBlockSystemPrompt` in `@cat-factory/agents`). The
+  code + PR **review** agents additionally report per-standard **adherence** (a 1–10
+  rating + related findings) back on the step, surfaced in run details.
 - When the optional library is enabled, this becomes the **built-in tier** of a
   three-tier merge (built-in ∪ account ∪ workspace); ids here can be shadowed or
   suppressed by higher tiers. See
