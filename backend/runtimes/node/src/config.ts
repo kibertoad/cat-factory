@@ -323,7 +323,26 @@ function buildGithubConfig(env: NodeJS.ProcessEnv): AppConfig['github'] {
  * always enables password login via `applyLocalDefaults`, and the test/CI harnesses opt into
  * AUTH_DEV_OPEN, so neither trips these guards.
  */
-function buildAuthConfig(env: NodeJS.ProcessEnv): AppConfig['auth'] {
+/**
+ * Resolve the per-provider enablement + credential fields (and validate the two fail-fast
+ * config footguns) — the decision-heavy prelude of {@link buildAuthConfig}, extracted so that
+ * builder stays within the cyclomatic-complexity budget. Behaviour is byte-identical: the checks,
+ * throws, and derivations moved verbatim.
+ */
+function resolveNodeAuthEnablement(env: NodeJS.ProcessEnv): {
+  clientId: string
+  clientSecret: string
+  sessionSecret: string
+  ttlHours: number | undefined
+  devOpen: boolean
+  testingNoAuth: boolean
+  githubEnabled: boolean
+  googleClientId: string
+  googleClientSecret: string
+  googleEnabled: boolean
+  passwordEnabled: boolean
+  authEnabled: boolean
+} {
   const sessionSecret = env.AUTH_SESSION_SECRET?.trim() ?? ''
   const clientId = env.GITHUB_OAUTH_CLIENT_ID?.trim() ?? ''
   const clientSecret = env.GITHUB_OAUTH_CLIENT_SECRET?.trim() ?? ''
@@ -367,6 +386,38 @@ function buildAuthConfig(env: NodeJS.ProcessEnv): AppConfig['auth'] {
   if (!authEnabled && !devOpen) {
     throw configProblem({ key: 'AUTH_PROVIDER', ...ENV_HELP.AUTH_PROVIDER })
   }
+
+  return {
+    clientId,
+    clientSecret,
+    sessionSecret,
+    ttlHours,
+    devOpen,
+    testingNoAuth,
+    githubEnabled,
+    googleClientId,
+    googleClientSecret,
+    googleEnabled,
+    passwordEnabled,
+    authEnabled,
+  }
+}
+
+function buildAuthConfig(env: NodeJS.ProcessEnv): AppConfig['auth'] {
+  const {
+    clientId,
+    clientSecret,
+    sessionSecret,
+    ttlHours,
+    devOpen,
+    testingNoAuth,
+    githubEnabled,
+    googleClientId,
+    googleClientSecret,
+    googleEnabled,
+    passwordEnabled,
+    authEnabled,
+  } = resolveNodeAuthEnablement(env)
 
   return {
     enabled: authEnabled,

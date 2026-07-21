@@ -364,6 +364,20 @@ function effectiveWorkspaceRole(
   return access.allowed ? access.role : undefined
 }
 
+/**
+ * Spread-ready projection of the OPTIONAL board-snapshot slices: keeps only the entries whose
+ * value is present (truthy), exactly as the former ladder of `...(x ? { x } : {})` spreads did —
+ * a wired module returns its slice, an unwired one returns undefined (dropped). Folding the ~18
+ * conditional spreads into one call keeps the snapshot handler within the complexity budget.
+ */
+function definedFields<T extends Record<string, unknown>>(fields: T): Partial<T> {
+  const out: Partial<T> = {}
+  for (const key of Object.keys(fields) as (keyof T)[]) {
+    if (fields[key]) out[key] = fields[key]
+  }
+  return out
+}
+
 /** Board (workspace) lifecycle and full-snapshot retrieval. */
 export function workspaceController(): Hono<AppEnv> {
   const app = new Hono<AppEnv>()
@@ -603,30 +617,37 @@ export function workspaceController(): Hono<AppEnv> {
         blocks: redacted.blocks,
         executions: redacted.executions,
         spend,
-        ...(access ? { access } : {}),
         ...budgetTiers,
-        ...(redacted.bootstrapJobs ? { bootstrapJobs: redacted.bootstrapJobs } : {}),
-        ...(envConfigRepairJobs ? { envConfigRepairJobs } : {}),
-        ...(environmentTestRuns ? { environmentTestRuns } : {}),
-        ...(redacted.notifications ? { notifications: redacted.notifications } : {}),
-        ...(riskPolicies ? { riskPolicies } : {}),
-        ...(sharedStacks ? { sharedStacks } : {}),
-        ...(modelPresets ? { modelPresets } : {}),
-        ...(serviceFragmentDefaults ? { serviceFragmentDefaults } : {}),
-        ...(recurringPipelines ? { recurringPipelines } : {}),
-        ...(trackerSettings ? { trackerSettings } : {}),
-        ...(initiatives ? { initiatives } : {}),
-        ...(settings ? { settings } : {}),
-        ...(mounts ? { mounts } : {}),
-        ...(redacted.services ? { serviceCatalog: redacted.services } : {}),
         agentConfigCatalog: snapshotAgentConfigCatalog(snapshot, container.agentKindRegistry),
         deploymentModelDefaults: deploymentModelDefaults(container.config.agents.routing),
-        ...(customAgentKinds ? { customAgentKinds } : {}),
-        ...(customTaskTypes ? { customTaskTypes } : {}),
-        ...(initiativePresets.length ? { initiativePresets } : {}),
-        ...(skills ? { skills } : {}),
         ...snapshotBackendKinds(container),
         infraSetup,
+        // The optional slices, present only when their module is wired / the value is non-empty.
+        // Gathered through `definedFields` (truthy-gated — identical to the former
+        // `...(x ? { x } : {})` ladder) so this handler stays within the complexity budget. None of
+        // these keys collide with the unconditional fields above, so the single trailing spread is
+        // order-equivalent to the original interleaved spreads.
+        ...definedFields({
+          access,
+          bootstrapJobs: redacted.bootstrapJobs,
+          envConfigRepairJobs,
+          environmentTestRuns,
+          notifications: redacted.notifications,
+          riskPolicies,
+          sharedStacks,
+          modelPresets,
+          serviceFragmentDefaults,
+          recurringPipelines,
+          trackerSettings,
+          initiatives,
+          settings,
+          mounts,
+          serviceCatalog: redacted.services,
+          customAgentKinds,
+          customTaskTypes,
+          initiativePresets: initiativePresets.length ? initiativePresets : undefined,
+          skills,
+        }),
       },
       200,
     )

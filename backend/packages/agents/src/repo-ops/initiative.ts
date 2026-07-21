@@ -142,6 +142,38 @@ export function coerceInitiativePlan(parsed: unknown): InitiativePlanDraft | nul
       ? (root.plan as Record<string, unknown>)
       : root
 
+  // Coerce each section in its own helper so this entry point stays within the complexity
+  // budget; behaviour is byte-identical (the section loops moved verbatim).
+  const { phases, phaseIdMap } = coerceInitiativePhases(obj)
+  if (phases.length === 0) return null
+
+  const items = coerceInitiativeItems(obj, phaseIdMap)
+  if (items.length === 0) return null
+
+  const decisions = coerceInitiativeDecisions(obj)
+
+  return {
+    goal: (asString(obj.goal) ?? '').slice(0, MAX_PROSE),
+    constraints: coerceStringList(obj.constraints, MAX_SHORT),
+    nonGoals: coerceStringList(obj.nonGoals, MAX_SHORT),
+    analysisSummary: (asString(obj.analysisSummary) ?? '').slice(0, MAX_PROSE),
+    phases,
+    items,
+    policy: coercePolicy(obj.policy),
+    decisions,
+    caveats: coerceStringList(obj.caveats, MAX_SHORT),
+  }
+}
+
+/**
+ * Coerce the plan's `phases[]`, minting a deterministic unique id per phase and building the
+ * `providedId | titleSlug → final id` map items reference phases through. Extracted verbatim from
+ * {@link coerceInitiativePlan} to keep it within the complexity budget.
+ */
+function coerceInitiativePhases(obj: Record<string, unknown>): {
+  phases: InitiativePlanDraft['phases']
+  phaseIdMap: Map<string, string>
+} {
   const phaseIds = new Set<string>()
   // providedId/titleSlug → final id, so items can reference phases either way.
   const phaseIdMap = new Map<string, string>()
@@ -167,8 +199,18 @@ export function coerceInitiativePlan(parsed: unknown): InitiativePlanDraft | nul
     })
     if (phases.length >= MAX_PHASES) break
   }
-  if (phases.length === 0) return null
+  return { phases, phaseIdMap }
+}
 
+/**
+ * Coerce the plan's `items[]` (dropping any whose `phaseId` matches no phase), then resolve each
+ * item's `dependsOn` refs once every item id is known (unknown/self refs dropped). Returns [] when
+ * no usable item remains. Extracted verbatim from {@link coerceInitiativePlan}.
+ */
+function coerceInitiativeItems(
+  obj: Record<string, unknown>,
+  phaseIdMap: Map<string, string>,
+): InitiativeDraftItem[] {
   const itemIds = new Set<string>()
   const itemIdMap = new Map<string, string>()
   const rawItems: Array<{ item: InitiativeDraftItem; rawDeps: string[] }> = []
@@ -202,10 +244,10 @@ export function coerceInitiativePlan(parsed: unknown): InitiativePlanDraft | nul
     })
     if (rawItems.length >= MAX_ITEMS) break
   }
-  if (rawItems.length === 0) return null
+  if (rawItems.length === 0) return []
 
   // Resolve dependencies once every item id is known; unknown refs are dropped.
-  const items: InitiativeDraftItem[] = rawItems.map(({ item, rawDeps }) => {
+  return rawItems.map(({ item, rawDeps }) => {
     const deps = new Set<string>()
     for (const dep of rawDeps) {
       const resolved = itemIdMap.get(dep.trim()) ?? itemIdMap.get(moduleSlug(dep))
@@ -213,7 +255,10 @@ export function coerceInitiativePlan(parsed: unknown): InitiativePlanDraft | nul
     }
     return { ...item, dependsOn: [...deps] }
   })
+}
 
+/** Coerce the plan's `decisions[]` (drop untitled). Extracted verbatim from {@link coerceInitiativePlan}. */
+function coerceInitiativeDecisions(obj: Record<string, unknown>): InitiativePlanDraft['decisions'] {
   const decisions: InitiativePlanDraft['decisions'] = []
   for (const raw of Array.isArray(obj.decisions) ? obj.decisions : []) {
     if (typeof raw !== 'object' || raw === null) continue
@@ -226,18 +271,7 @@ export function coerceInitiativePlan(parsed: unknown): InitiativePlanDraft | nul
     })
     if (decisions.length >= MAX_LIST_ENTRIES) break
   }
-
-  return {
-    goal: (asString(obj.goal) ?? '').slice(0, MAX_PROSE),
-    constraints: coerceStringList(obj.constraints, MAX_SHORT),
-    nonGoals: coerceStringList(obj.nonGoals, MAX_SHORT),
-    analysisSummary: (asString(obj.analysisSummary) ?? '').slice(0, MAX_PROSE),
-    phases,
-    items,
-    policy: coercePolicy(obj.policy),
-    decisions,
-    caveats: coerceStringList(obj.caveats, MAX_SHORT),
-  }
+  return decisions
 }
 
 // ---------------------------------------------------------------------------
