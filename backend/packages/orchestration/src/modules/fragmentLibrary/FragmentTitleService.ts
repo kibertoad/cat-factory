@@ -87,7 +87,7 @@ export class FragmentTitleService {
  * quotes / a leading "Title:" label / trailing punctuation, and clamp to the schema's 200-char cap.
  * The prompt asks for a bare title line, but a reasoning model can wrap or prefix it.
  */
-function cleanTitle(raw: string): string {
+export function cleanTitle(raw: string): string {
   const firstLine = raw
     .split('\n')
     .map((l) => l.trim())

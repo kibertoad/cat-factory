@@ -31,7 +31,7 @@ import {
 } from './git.js'
 import { FOLLOW_UPS_FILENAME, FollowUpTailer } from './follow-ups.js'
 import type { HarnessCallMetric, PiRunStats } from './pi.js'
-import type { EffortReport } from './effort.js'
+import { EFFORT_REPORT_FILE, type EffortReport } from './effort.js'
 import {
   acquireRepoCheckout,
   agentNeverActed,
@@ -244,6 +244,14 @@ export async function runCodingAgent(
       const serviceDirectory = spec.repo.serviceDirectory
       const workDir = serviceDirectory ? join(dir, serviceDirectory) : dir
       if (serviceDirectory) await mkdir(workDir, { recursive: true })
+
+      // Every container agent is asked to write its effort self-assessment to `.cat-effort.json`
+      // in its cwd (the backend appends EFFORT_REPORT_GUIDANCE to every container prompt). Locally
+      // exclude it from git — exactly like the follow-ups sentinel below — so the agent's own
+      // `git add` can never stage it into the PR. `readEffortReport` also removes it after the run,
+      // but that cannot un-stage a mid-run commit; the per-clone exclude is what prevents it. A bare
+      // filename pattern matches the file in any subdirectory, so it covers a monorepo `workDir` too.
+      await excludeFromGit(dir, EFFORT_REPORT_FILE, signal)
 
       // Follow-up companion: tail the Coder's sentinel file and stream new items out on the
       // job view. Locally exclude it from git first so the agent's own `git add` can never

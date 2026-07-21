@@ -548,10 +548,10 @@ function coerceRunnerResult(raw: unknown): Partial<RunnerJobResult> {
 function coerceEffortReport(raw: unknown): RunnerJobResult['effortReport'] | undefined {
   if (typeof raw !== 'object' || raw === null) return undefined
   const o = raw as Record<string, unknown>
-  const difficulty =
-    typeof o.difficulty === 'number' && Number.isFinite(o.difficulty)
-      ? Math.min(10, Math.max(1, Math.round(o.difficulty)))
-      : 5
+  const hasFiniteDifficulty = typeof o.difficulty === 'number' && Number.isFinite(o.difficulty)
+  const difficulty = hasFiniteDifficulty
+    ? Math.min(10, Math.max(1, Math.round(o.difficulty as number)))
+    : 5
   const report: NonNullable<RunnerJobResult['effortReport']> = { difficulty }
   if (typeof o.summary === 'string' && o.summary.trim()) report.summary = o.summary.trim()
   if (typeof o.reducedEffectiveness === 'string' && o.reducedEffectiveness.trim()) {
@@ -562,6 +562,17 @@ function coerceEffortReport(raw: unknown): RunnerJobResult['effortReport'] | und
       (x): x is string => typeof x === 'string' && x.trim() !== '',
     )
     if (obstacles.length) report.obstacles = obstacles
+  }
+  // Mirror the harness's `coerceEffort` drop rule: an envelope carrying only a DEFAULTED difficulty
+  // (no real difficulty, prose, or obstacles) says nothing — drop it so a pool-backed run doesn't
+  // surface a bare "5/10, no detail" card that the Cloudflare/local path suppresses (facade parity).
+  if (
+    !hasFiniteDifficulty &&
+    report.summary === undefined &&
+    report.reducedEffectiveness === undefined &&
+    report.obstacles === undefined
+  ) {
+    return undefined
   }
   return report
 }

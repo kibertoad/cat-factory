@@ -30,9 +30,13 @@ export interface ComposableBlock {
   resolvedFragments?: ComposableFragment[]
 }
 
-/** Escape the double-quotes in a delimiter attribute value so the tag stays well-formed. */
+/**
+ * Neutralise the characters that would break the single-line `<best-practice-standard …>` tag —
+ * quotes and angle brackets become apostrophes, and any run of whitespace (incl. newlines) collapses
+ * to a single space — so an arbitrary fragment title always yields a well-formed attribute value.
+ */
 function escapeAttr(value: string): string {
-  return value.replace(/"/g, "'")
+  return value.replace(/["<>]/g, "'").replace(/\s+/g, ' ').trim()
 }
 
 /**
