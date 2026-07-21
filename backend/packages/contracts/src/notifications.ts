@@ -235,14 +235,8 @@ export type Notification = v.InferOutput<typeof notificationSchema>
 export const resolveNotificationActionSchema = v.picklist(['act', 'dismiss'])
 export type ResolveNotificationAction = v.InferOutput<typeof resolveNotificationActionSchema>
 
-/**
- * Drop one unrecoverable sealed credential (ADR 0026 D6.3): the operator names the affected
- * `(source, id)` from a `key_drift` card. The endpoint drops that ciphertext and flips its
- * connection to "needs re-entry". Explicit + per-secret — never a blanket auto-drop, so a
- * mistaken key change stays recoverable by restoring the original key.
- */
-export const dropKeyDriftSecretSchema = v.object({
-  source: v.string(),
-  id: v.string(),
-})
-export type DropKeyDriftSecretInput = v.InferOutput<typeof dropKeyDriftSecretSchema>
+// Remediation of a drifted sealed credential (ADR 0026 D6.3) is explicit + per-secret but has NO
+// HTTP contract: the in-app `key_drift` card action drops every credential it lists (batch), and
+// the `key-drift:drop` operator CLI drops a single `(source, id)`. Neither takes a wire body, so
+// there is deliberately no `dropKeyDriftSecret*` schema here — add one only if a per-secret HTTP
+// drop endpoint is introduced.

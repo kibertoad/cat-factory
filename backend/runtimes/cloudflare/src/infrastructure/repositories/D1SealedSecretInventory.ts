@@ -43,8 +43,15 @@ function parseEnvId(id: string): {
   provisionType: string
   manifestId: string
 } {
-  const [workspaceId = '', provisionType = '', manifestId = ''] = id.split('|')
-  return { workspaceId, provisionType, manifestId }
+  // workspaceId/provisionType are system slugs with no `|`; manifestId may contain one, so it
+  // captures everything after the second delimiter — keeping the round-trip with `envId`'s
+  // `join('|')` lossless even for a pipe-bearing manifestId (drop would otherwise miss the row).
+  const parts = id.split('|')
+  return {
+    workspaceId: parts[0] ?? '',
+    provisionType: parts[1] ?? '',
+    manifestId: parts.slice(2).join('|'),
+  }
 }
 
 export class D1SealedSecretInventory implements SealedSecretInventory {

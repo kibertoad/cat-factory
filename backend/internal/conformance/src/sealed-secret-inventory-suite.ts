@@ -101,6 +101,34 @@ export function defineSealedSecretInventorySuite(
       })
     })
 
+    it('round-trips an env id whose manifestId contains the `|` delimiter', async () => {
+      // The composite env id is `workspaceId|provisionType|manifestId`; a manifestId that itself
+      // contains `|` must survive listSealed → drop, or the drop silently misses the row. Seed one,
+      // read its id back from the inventory, and drop by exactly that id.
+      const h = make()
+      const ws = `ws-${uniq()}`
+      await h.seedEnvConnection({
+        workspaceId: ws,
+        provisionType: 'kubernetes',
+        manifestId: 'multi|part|manifest',
+        secretsCipher: 'v1.env.sealed',
+        createdAt: 1,
+      })
+      const listed = await h.inventory.listSealed()
+      const ref = listed.find(
+        (r) => r.source === 'environment_connection' && r.workspaceId === ws,
+      )
+      expect(ref?.id).toBe(`${ws}|kubernetes|multi|part|manifest`)
+
+      expect(await h.inventory.drop({ source: 'environment_connection', id: ref!.id })).toEqual({
+        dropped: true,
+      })
+      const after = await h.inventory.listSealed()
+      expect(
+        after.find((r) => r.source === 'environment_connection' && r.workspaceId === ws),
+      ).toBeUndefined()
+    })
+
     it('drops an observability connection so it leaves the inventory', async () => {
       const h = make()
       const ws = `ws-${uniq()}`

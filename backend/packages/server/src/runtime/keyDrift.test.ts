@@ -36,10 +36,12 @@ function fakeContainer(refs: SealedSecretRef[]) {
     listSealed: async () => refs,
     drop: async () => ({ dropped: true }),
   }
-  const raise =
-    vi.fn<(workspaceId: string, input: { type: string; blockId: null; payload: { driftAffected: unknown[] } }) => Promise<void>>(
-      async () => {},
-    )
+  const raise = vi.fn<
+    (
+      workspaceId: string,
+      input: { type: string; blockId: null; payload: { driftAffected: unknown[] } },
+    ) => Promise<void>
+  >(async () => {})
   const clearByType = vi.fn(async () => true)
   const listOpenByType = vi.fn(async (ids: string[]) => new Map(ids.map((id) => [id, 'n1'])))
   const container = {

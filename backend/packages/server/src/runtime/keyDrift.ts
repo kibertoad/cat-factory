@@ -22,7 +22,13 @@ function toAffected(ref: SealedSecretRef, reason: 'key-mismatch' | 'corrupt'): K
   return { source: ref.source, id: ref.id, label: ref.label, reason, sealedAt: ref.sealedAt }
 }
 
-/** Card copy for a workspace's affected credentials (title + one-line body). */
+/**
+ * Card copy for a workspace's affected credentials (title + one-line body). The count is a FLOOR,
+ * not a total: the sweep currently scans only the sources the inventory enumerates (environment +
+ * observability connections), so it deliberately reads "at least N" and warns that other credential
+ * types may be affected by the same key change — see the deferred-sources note in ADR 0026 D6.2. The
+ * D6.1 boot fingerprint still detects the key change globally, so nothing goes fully unnoticed.
+ */
 function cardContent(affected: KeyDriftAffected[]): { title: string; body: string } {
   const mismatched = affected.filter((a) => a.reason === 'key-mismatch').length
   const corrupt = affected.length - mismatched
@@ -32,9 +38,10 @@ function cardContent(affected: KeyDriftAffected[]): { title: string; body: strin
   return {
     title: 'Stored credentials could not be decrypted',
     body:
-      `${affected.length} stored credential(s) could not be decrypted (${parts.join(', ')}). ` +
-      'They are unrecoverable unless the original ENCRYPTION_KEY is restored. Review them, then ' +
-      'drop the stale ones to re-enter — restoring the previous key instead recovers them all.',
+      `At least ${affected.length} stored credential(s) could not be decrypted (${parts.join(', ')}). ` +
+      'They are unrecoverable unless the original ENCRYPTION_KEY is restored, and other credential ' +
+      'types may be affected by the same key change. Review the listed ones, then drop the stale ones ' +
+      'to re-enter — restoring the previous key instead recovers them all.',
   }
 }
 

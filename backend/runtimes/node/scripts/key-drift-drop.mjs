@@ -57,12 +57,20 @@ async function main() {
   )
   console.warn('')
 
-  const pool = new Pool({ connectionString: url })
+  // Set search_path via the connection `options` (mirrors `createDbClient`) so EVERY connection the
+  // pool hands out lands in the right schema. A separate `SET search_path` query would only bind the
+  // one pooled connection it happened to run on, not the connection the UPDATE/DELETE later acquires.
+  const pool = new Pool({ connectionString: url, options: `-c search_path=${schema}` })
   try {
-    await pool.query(`SET search_path TO "${schema}"`)
     let changes = 0
     if (source === 'environment_connection') {
-      const [workspaceId = '', provisionType = '', manifestId = ''] = id.split('|')
+      // The composite id is `workspaceId|provisionType|manifestId`. workspaceId/provisionType are
+      // system slugs with no `|`; manifestId may contain one, so it captures everything after the
+      // second delimiter (keeping the round-trip with `envId`'s `join('|')` lossless).
+      const parts = id.split('|')
+      const workspaceId = parts[0] ?? ''
+      const provisionType = parts[1] ?? ''
+      const manifestId = parts.slice(2).join('|')
       const res = await pool.query(
         `UPDATE environment_connections SET deleted_at = $1
          WHERE workspace_id = $2 AND provision_type = $3 AND manifest_id = $4 AND deleted_at IS NULL`,

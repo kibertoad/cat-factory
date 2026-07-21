@@ -119,7 +119,7 @@ Key the cache by discriminators the client already has: the configured API base 
 - A genuinely wedged run surfaces within a couple of minutes instead of ten.
 - A run that dies to infrastructure after doing work reports that honestly, so "reruns start broken" stops being the reasonable read of a normal eviction.
 - Warm pools stop being a shared-daemon hazard.
-- Key drift is caught at boot with an inventory of what is affected, instead of one opaque per-request error at a time, and stale values can be dropped deliberately (never silently, so a mistaken key change stays recoverable by restoring the key).
+- Key drift is caught at boot (the fingerprint) with an inventory of the affected credentials in the scanned sources — currently environment + observability connections, a floor rather than a total (see the deferred note below) — instead of one opaque per-request error at a time, and stale values can be dropped deliberately (never silently, so a mistaken key change stays recoverable by restoring the key).
 - The browser password cache stops being reachable across installations or users on a shared origin.
 - D2.1 and D3 add a dependency on the CLI's subagent transcript layout. That format is not a stable contract, so the watcher must degrade gracefully (fall back to today's parent-stream-only behaviour) if the layout changes, and it should be covered by a harness test against a recorded transcript fixture.
 
@@ -178,6 +178,18 @@ key-drift:drop --source … --id …` operator CLI drops one, and both route thr
    sealed columns are NOT NULL and can't be nulled in place). The value stays unrecoverable, so the
    card + CLI both state that restoring the previous ENCRYPTION_KEY recovers them instead — the drop
    is never automatic.
+
+   **Deferred — inventory coverage is intentionally partial.** The sweep currently scans only the
+   two sources the incident named (`environment_connections`, `observability_connections`), not the
+   full set of ~15 sealed-secret domains (`provider-api-keys`, `provider-subscriptions`,
+   `personal-subscriptions`, `package-registries`, `incident-enrichment`, `test-secrets`,
+   `user-secret`, `runners`, `slack`, …). Consequently the surfaced card's count is a FLOOR, not a
+   total — its copy reads "at least N" and warns that other credential types may be affected by the
+   same key change, so an operator doesn't read it as an exhaustive inventory. This is safe because
+   the D6.1 boot fingerprint still detects the key change globally; the per-credential inventory is
+   the incremental part. Extending coverage is a change to the `SealedSecretInventory` pair (its two
+   repo methods + a conformance seed) plus the drop semantics for the added table (soft-delete vs
+   row-delete), never a change to the runtime-neutral sweep.
 
 The immediate `environment_connections` drift on this install is still cleared operationally by re-entering the affected credentials; D6 is what stops the next occurrence from being discovered the hard way.
 
