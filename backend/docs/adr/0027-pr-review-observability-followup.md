@@ -1,6 +1,6 @@
 # ADR 0027: PR-review observability, follow-up — D2.1 and D3 don't work for the parallel-subagent shape
 
-- **Status:** Proposed — two confirmed defects, fixes outlined below not yet landed
+- **Status:** Accepted — both confirmed defects fixed (see the **Landed** note under each fix)
 - **Date:** 2026-07-21
 - **Context layer:** backend (`@cat-factory/executor-harness`, `@cat-factory/agents`, `@cat-factory/orchestration`)
 - **Relates to:** ADR 0026 (marks D2.1/D3/D4 "landed"), ADR 0023 (PR deep review)
@@ -64,6 +64,8 @@ Point the watcher at the real location. The session UUID isn't known before the 
 
 Either way, add a harness test against a recorded transcript fixture laid out the way the CLI actually writes it. ADR 0026's own consequences section asked for exactly this fixture test ("covered by a harness test against a recorded transcript fixture"); it would have caught this.
 
+**Landed.** Took the first option: `startSubagentWatcher` now takes the `projects` root and `findSubagentTranscripts` walks it, collecting any `*.jsonl` under a `subagents/` directory while EXCLUDING the sibling parent session transcript (so the parent's usage — already totalled by the `result` event — is never double-counted). `agent-runner.ts` watches `join(configHome, 'projects')`. `test/subagents.test.ts` lays the `projects/<encoded-cwd>/<session-uuid>/subagents/` tree out exactly as the CLI writes it and asserts the parent transcript is skipped; `test/agent-runner.test.ts`'s fake `claude` was writing to the old (never-created) `<configHome>/subagents` — it now writes to the real per-session path, so the suite exercises the fix instead of the bug.
+
 ## Defect B — no live slice progress: the todo-plan source and the D2.1 fallback cancel out
 
 `progress` stayed 0 for the whole review and the deep-review window showed no slice breakdown until the findings landed. The end-to-end wiring is intact (verified `subtasks: view.progress` and `lastActivityAt: view.heartbeatAt` in the installed `server@0.140.5`, and `applySubtaskProgress` in the installed orchestration), so this is not a missing-code or version problem. Two design facts combine to produce zero live signal.
@@ -83,7 +85,7 @@ The CLI does not follow the sequential instruction. It writes the todo plan once
 
 The two mechanisms undercut each other. The prompt satisfies `sawTodoPlan`'s precondition (so the fallback disables itself) without delivering the incremental updates the fallback was meant to replace. Progress pinned at 0 for the whole run is the exact symptom.
 
-Even with the gate removed, the fallback alone is weak for this shape: `SliceTracker.progress()` (`subagents.ts:92-105`) derives `completed` from `Task` tool_results, and parallel subagents all return in a burst at the end, so it reports 0/N until the finish then jumps to N/N. D2.1 restored slice _items_ but cannot produce an incremental percentage for the parallel shape.
+Even with the gate removed, the fallback alone is weak for this shape: `SliceTracker.progress()` (`subagents.ts:92-105`) derives `completed` from `Task` tool results, and parallel subagents all return in a burst at the end, so it reports 0/N until the finish then jumps to N/N. D2.1 restored slice items but cannot produce an incremental percentage for the parallel shape.
 
 ### One unverified detail
 
@@ -96,6 +98,8 @@ Any of, roughly in order of value:
 - **Don't gate the fallback on `sawTodoPlan` alone.** Prefer whichever source is actually advancing, or merge them, so a stale once-written todo plan doesn't mask live `Task` progress.
 - **Count in-flight `Task` dispatches as signal.** Surface "N slices in progress" rather than a 0% bar, since a parallel review has no completed slices until the end.
 - **Reconcile the prompt with reality.** If the CLI parallelizes regardless, either tell it to update the parent todo as each subagent returns, or drop the sequential-todo instruction and rely on the tracker. The prompt currently claims "keeping this todo list up to date is what surfaces review progress," which is not what happens.
+
+**Landed.** Took the first two together. The `sawTodoPlan` gate is gone; a new pure `pickProgress(todo, slice)` (`subagents.ts`) reconciles the parent TodoWrite plan and the slice tracker on every update, preferring whichever is further along — more `completed`, then more `inProgress` (so live in-flight `Task` slices beat an all-pending, once-written plan), then more `total`, else the todo plan. So the parallel shape now surfaces "N in progress → N/N" off the `Task` dispatches, and a genuinely sequential run still rides its advancing todo plan. The pr-reviewer prompt's progress sentence is corrected to say progress comes from the todo list AND from parallel subagent dispatches (the prompt is unversioned, so no version bump). `pickProgress` is unit-tested for both shapes and the tie-breaks.
 
 ## Consequences
 
