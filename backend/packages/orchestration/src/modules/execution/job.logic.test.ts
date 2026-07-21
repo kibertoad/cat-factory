@@ -127,5 +127,19 @@ describe('classifyDispatchFailure', () => {
       expect(c.failureKind).toBe('dispatch')
       expect(c.error).toBe('The container failed to start.')
     })
+
+    // A structured DispatchError keeps its `dispatch` framing even on a recovery re-dispatch: its
+    // elaborated, actionable message (the raw status line + any stale-image remedy) is more useful
+    // than — and not as misleading as — the generic eviction message. Precedence is deliberate.
+    it('keeps a structured DispatchError as `dispatch` even after work had begun', () => {
+      const c = classifyDispatchFailure(
+        harnessDispatchError({ label: 'Container', status: 404, body: 'not found' }),
+        { evictionRecoveries: 1, startedAt: 1_000_000_000_000 - 17 * 60_000, sliceCount: 6 },
+      )
+      expect(c.failureKind).toBe('dispatch')
+      // The elaborated remedy is surfaced, NOT the generic "evicted after N minutes" message.
+      expect(c.error).toContain('predates this dispatch route')
+      expect(c.error).not.toContain('minutes of work')
+    })
   })
 })

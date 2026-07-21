@@ -121,7 +121,11 @@ function evictionAfterWorkMessage(context: DispatchFailureContext): string {
  *  - A container eviction/crash routes to `evicted` (a fresh-container retry may help).
  *  - A structured {@link DispatchError} from a transport `dispatch()` routes to `dispatch` and
  *    surfaces its already-elaborated message verbatim (the raw status line + any 404 stale-image
- *    remedy), rather than the generic "failed to start" framing.
+ *    remedy), rather than the generic "failed to start" framing. This DELIBERATELY takes
+ *    precedence over the evicted-after-work case below: even on a recovery re-dispatch of a step
+ *    that had done work, that elaborated message (e.g. "redeploy the stale image") is both more
+ *    actionable and less misleading than the generic eviction message — and it is NOT the "failed
+ *    to start" wording D1 set out to remove — so a genuine dispatch fault keeps its own framing.
  *  - A generic throw on a step that had ALREADY begun work (`context.evictionRecoveries > 0` —
  *    the failed recovery re-dispatch of a container that reached the agent phase and was then
  *    evicted) is framed as `evicted` with an eviction-after-work message, NOT the misleading
@@ -147,6 +151,9 @@ export function classifyDispatchFailure(
     return { error: message, failureKind: 'evicted', detail: message }
   }
   if (error instanceof DispatchError) {
+    // Intentionally BEFORE the evicted-after-work branch: a structured dispatch fault carries an
+    // accurate, actionable message (the raw status line + any stale-image remedy) that beats the
+    // generic eviction wording even when the step had already done work — so keep `dispatch`.
     return { error: message, failureKind: 'dispatch', detail: message }
   }
   // The step had already reached the agent phase and lost a container to an eviction (the
