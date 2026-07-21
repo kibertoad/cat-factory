@@ -4961,6 +4961,14 @@
         "pending": "待機中"
       }
     },
+    "phase": {
+      "slicing": "分割中…",
+      "reviewing": "レビュー中 {completed}/{total} 区分",
+      "awaiting": "指摘の準備完了",
+      "challenging": "調査中…",
+      "fixing": "修正中…",
+      "posting": "投稿中…"
+    },
     "challenge": {
       "action": "異議を唱える",
       "reChallenge": "再度異議を唱える",

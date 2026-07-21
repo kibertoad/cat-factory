@@ -23,6 +23,7 @@ import type {
 import { subtaskIconClass } from '~/utils/pipelineRender'
 import { activeChunkLabels, chunkReviewPercent, isSlicingChunks } from '~/utils/prReviewProgress'
 import ResultWindowShell from '~/components/panels/ResultWindowShell.vue'
+import StepRunMeta from '~/components/panels/StepRunMeta.vue'
 
 const execution = useExecutionStore()
 const board = useBoardStore()
@@ -253,446 +254,468 @@ async function onDismiss(id: string): Promise<void> {
       </a>
     </template>
 
-    <div class="min-h-0 flex-1 overflow-y-auto px-5 py-4">
-      <!-- Reviewing: the read-only reviewer is still working. The phase is told apart precisely —
+    <div class="flex min-h-0 flex-1">
+      <div class="min-w-0 flex-1 overflow-y-auto px-5 py-4">
+        <!-- Reviewing: the read-only reviewer is still working. The phase is told apart precisely —
            SLICING (still grouping the diff into chunks, no plan yet) vs REVIEWING (slicing done,
            working through the chunks) — so the copy never claims "reviewing" while it's slicing. -->
-      <div
-        v-if="status === 'reviewing'"
-        data-testid="pr-review-reviewing"
-        class="flex h-full flex-col"
-      >
-        <!-- SLICING: no todo list yet — the reviewer is still grouping the diff into chunks. -->
         <div
-          v-if="slicing"
-          data-testid="pr-review-slicing"
+          v-if="status === 'reviewing'"
+          data-testid="pr-review-reviewing"
+          class="flex h-full flex-col"
+        >
+          <!-- SLICING: no todo list yet — the reviewer is still grouping the diff into chunks. -->
+          <div
+            v-if="slicing"
+            data-testid="pr-review-slicing"
+            class="flex h-full flex-col items-center justify-center gap-2 py-10 text-center text-slate-400"
+          >
+            <UIcon name="i-lucide-loader-circle" class="h-8 w-8 animate-spin opacity-60" />
+            <p class="text-sm text-slate-200">{{ t('prReview.reviewing.slicing.title') }}</p>
+            <p class="max-w-sm text-[11px] text-slate-500">
+              {{ t('prReview.reviewing.slicing.hint') }}
+            </p>
+          </div>
+
+          <!-- REVIEWING: slicing is done — show every chunk with its status + which are active now. -->
+          <div v-else data-testid="pr-review-reviewing-chunks" class="py-2">
+            <div class="mb-1 flex items-center gap-2 text-sm text-slate-200">
+              <UIcon
+                name="i-lucide-loader-circle"
+                class="h-4 w-4 shrink-0 animate-spin text-indigo-300"
+              />
+              <span>{{ t('prReview.reviewing.reviewingChunks.title') }}</span>
+            </div>
+            <p class="mb-3 text-[11px] text-slate-500">
+              {{ t('prReview.reviewing.reviewingChunks.hint') }}
+            </p>
+
+            <div class="flex items-center justify-between text-[11px] text-slate-400">
+              <span data-testid="pr-review-chunk-count">
+                {{
+                  t('prReview.reviewing.chunks', {
+                    completed: subtasks!.completed,
+                    total: subtasks!.total,
+                  })
+                }}
+              </span>
+              <span v-if="subtasks!.inProgress > 0" class="text-indigo-300">
+                {{ t('prReview.reviewing.inProgress', { count: subtasks!.inProgress }) }}
+              </span>
+            </div>
+            <div class="mt-1 h-1.5 overflow-hidden rounded-full bg-slate-700/60">
+              <div
+                class="h-full rounded-full bg-indigo-400 transition-all duration-500"
+                :style="{ width: `${chunkPercent}%` }"
+              />
+            </div>
+
+            <!-- The chunk(s) being actively reviewed right now, called out on their own. -->
+            <div
+              v-if="activeChunks.length"
+              data-testid="pr-review-active-chunks"
+              class="mt-3 rounded-lg border border-indigo-500/30 bg-indigo-500/5 px-2.5 py-2"
+            >
+              <p class="mb-1 text-[10px] font-semibold uppercase tracking-wide text-indigo-300">
+                {{ t('prReview.reviewing.activeHeading') }}
+              </p>
+              <ul class="space-y-1">
+                <li
+                  v-for="(label, i) in activeChunks"
+                  :key="i"
+                  class="flex items-start gap-1.5 text-[12px] text-slate-100"
+                >
+                  <UIcon
+                    name="i-lucide-loader-circle"
+                    class="mt-0.5 h-3.5 w-3.5 shrink-0 animate-spin text-indigo-300"
+                  />
+                  <span class="min-w-0">{{ label }}</span>
+                </li>
+              </ul>
+            </div>
+
+            <!-- Every chunk with its explicit status (Reviewed / Reviewing… / Queued). -->
+            <template v-if="subtasks!.items?.length">
+              <p
+                class="mb-1.5 mt-3 text-[10px] font-semibold uppercase tracking-wide text-slate-400"
+              >
+                {{ t('prReview.reviewing.chunksHeading') }}
+              </p>
+              <ul class="space-y-1.5" data-testid="pr-review-chunks">
+                <li
+                  v-for="(item, i) in subtasks!.items"
+                  :key="i"
+                  data-testid="pr-review-chunk"
+                  class="flex items-center gap-1.5 text-[12px]"
+                  :class="
+                    item.status === 'completed'
+                      ? 'text-slate-500'
+                      : item.status === 'in_progress'
+                        ? 'text-slate-100'
+                        : 'text-slate-400'
+                  "
+                >
+                  <UIcon
+                    :name="ITEM_ICON[item.status]"
+                    class="h-3.5 w-3.5 shrink-0"
+                    :class="subtaskIconClass(item.status, false)"
+                  />
+                  <span
+                    class="min-w-0 flex-1 truncate"
+                    :class="item.status === 'completed' ? 'line-through' : ''"
+                  >
+                    {{ item.label }}
+                  </span>
+                  <span
+                    data-testid="pr-review-chunk-status"
+                    class="shrink-0 rounded px-1.5 py-0.5 text-[10px] font-medium uppercase"
+                    :class="CHUNK_STATUS_CLASS[item.status]"
+                  >
+                    {{ chunkStatusLabel(item.status) }}
+                  </span>
+                </li>
+              </ul>
+            </template>
+          </div>
+        </div>
+
+        <!-- A resolution is executing: the Fixer is committing / comments are being posted. -->
+        <div
+          v-else-if="working"
+          data-testid="pr-review-working"
           class="flex h-full flex-col items-center justify-center gap-2 py-10 text-center text-slate-400"
         >
           <UIcon name="i-lucide-loader-circle" class="h-8 w-8 animate-spin opacity-60" />
-          <p class="text-sm text-slate-200">{{ t('prReview.reviewing.slicing.title') }}</p>
+          <p class="text-sm">
+            {{ status === 'fixing' ? t('prReview.fixing.title') : t('prReview.posting.title') }}
+          </p>
           <p class="max-w-sm text-[11px] text-slate-500">
-            {{ t('prReview.reviewing.slicing.hint') }}
+            {{ status === 'fixing' ? t('prReview.fixing.hint') : t('prReview.posting.hint') }}
           </p>
-        </div>
-
-        <!-- REVIEWING: slicing is done — show every chunk with its status + which are active now. -->
-        <div v-else data-testid="pr-review-reviewing-chunks" class="py-2">
-          <div class="mb-1 flex items-center gap-2 text-sm text-slate-200">
-            <UIcon
-              name="i-lucide-loader-circle"
-              class="h-4 w-4 shrink-0 animate-spin text-indigo-300"
-            />
-            <span>{{ t('prReview.reviewing.reviewingChunks.title') }}</span>
-          </div>
-          <p class="mb-3 text-[11px] text-slate-500">
-            {{ t('prReview.reviewing.reviewingChunks.hint') }}
-          </p>
-
-          <div class="flex items-center justify-between text-[11px] text-slate-400">
-            <span data-testid="pr-review-chunk-count">
-              {{
-                t('prReview.reviewing.chunks', {
-                  completed: subtasks!.completed,
-                  total: subtasks!.total,
-                })
-              }}
-            </span>
-            <span v-if="subtasks!.inProgress > 0" class="text-indigo-300">
-              {{ t('prReview.reviewing.inProgress', { count: subtasks!.inProgress }) }}
-            </span>
-          </div>
-          <div class="mt-1 h-1.5 overflow-hidden rounded-full bg-slate-700/60">
-            <div
-              class="h-full rounded-full bg-indigo-400 transition-all duration-500"
-              :style="{ width: `${chunkPercent}%` }"
-            />
-          </div>
-
-          <!-- The chunk(s) being actively reviewed right now, called out on their own. -->
-          <div
-            v-if="activeChunks.length"
-            data-testid="pr-review-active-chunks"
-            class="mt-3 rounded-lg border border-indigo-500/30 bg-indigo-500/5 px-2.5 py-2"
-          >
-            <p class="mb-1 text-[10px] font-semibold uppercase tracking-wide text-indigo-300">
-              {{ t('prReview.reviewing.activeHeading') }}
-            </p>
-            <ul class="space-y-1">
-              <li
-                v-for="(label, i) in activeChunks"
-                :key="i"
-                class="flex items-start gap-1.5 text-[12px] text-slate-100"
-              >
-                <UIcon
-                  name="i-lucide-loader-circle"
-                  class="mt-0.5 h-3.5 w-3.5 shrink-0 animate-spin text-indigo-300"
-                />
-                <span class="min-w-0">{{ label }}</span>
-              </li>
-            </ul>
-          </div>
-
-          <!-- Every chunk with its explicit status (Reviewed / Reviewing… / Queued). -->
-          <template v-if="subtasks!.items?.length">
-            <p class="mb-1.5 mt-3 text-[10px] font-semibold uppercase tracking-wide text-slate-400">
-              {{ t('prReview.reviewing.chunksHeading') }}
-            </p>
-            <ul class="space-y-1.5" data-testid="pr-review-chunks">
-              <li
-                v-for="(item, i) in subtasks!.items"
-                :key="i"
-                data-testid="pr-review-chunk"
-                class="flex items-center gap-1.5 text-[12px]"
-                :class="
-                  item.status === 'completed'
-                    ? 'text-slate-500'
-                    : item.status === 'in_progress'
-                      ? 'text-slate-100'
-                      : 'text-slate-400'
-                "
-              >
-                <UIcon
-                  :name="ITEM_ICON[item.status]"
-                  class="h-3.5 w-3.5 shrink-0"
-                  :class="subtaskIconClass(item.status, false)"
-                />
-                <span
-                  class="min-w-0 flex-1 truncate"
-                  :class="item.status === 'completed' ? 'line-through' : ''"
-                >
-                  {{ item.label }}
-                </span>
-                <span
-                  data-testid="pr-review-chunk-status"
-                  class="shrink-0 rounded px-1.5 py-0.5 text-[10px] font-medium uppercase"
-                  :class="CHUNK_STATUS_CLASS[item.status]"
-                >
-                  {{ chunkStatusLabel(item.status) }}
-                </span>
-              </li>
-            </ul>
-          </template>
-        </div>
-      </div>
-
-      <!-- A resolution is executing: the Fixer is committing / comments are being posted. -->
-      <div
-        v-else-if="working"
-        data-testid="pr-review-working"
-        class="flex h-full flex-col items-center justify-center gap-2 py-10 text-center text-slate-400"
-      >
-        <UIcon name="i-lucide-loader-circle" class="h-8 w-8 animate-spin opacity-60" />
-        <p class="text-sm">
-          {{ status === 'fixing' ? t('prReview.fixing.title') : t('prReview.posting.title') }}
-        </p>
-        <p class="max-w-sm text-[11px] text-slate-500">
-          {{ status === 'fixing' ? t('prReview.fixing.hint') : t('prReview.posting.hint') }}
-        </p>
-      </div>
-
-      <template v-else>
-        <p
-          v-if="prReview.error"
-          class="mb-3 rounded-md bg-rose-500/10 px-3 py-2 text-[12px] text-rose-300"
-        >
-          {{ prReview.error }}
-        </p>
-
-        <!-- The outcome of the most recent `post` attempt: how many of how many comments landed,
-             which failed + why, and how many findings were folded into the summary because their
-             line isn't in the PR diff. Surfaced so a partial/failed post is legible + retryable. -->
-        <div
-          v-if="postReport"
-          data-testid="pr-review-post-report"
-          class="mb-3 rounded-lg border px-3 py-2 text-[12px]"
-          :class="
-            postReport.failures.length > 0 || postReport.bodyPosted === false
-              ? 'border-amber-500/40 bg-amber-500/10 text-amber-200'
-              : 'border-emerald-500/40 bg-emerald-500/10 text-emerald-200'
-          "
-        >
-          <div class="mb-1 flex items-center gap-1.5 font-medium">
-            <UIcon
-              :name="
-                postReport.failures.length > 0 || postReport.bodyPosted === false
-                  ? 'i-lucide-alert-triangle'
-                  : 'i-lucide-check-circle-2'
-              "
-              class="h-4 w-4 shrink-0"
-            />
-            <span>{{ t('prReview.postReport.heading') }}</span>
-          </div>
-          <p data-testid="pr-review-post-count">
-            {{
-              t('prReview.postReport.posted', {
-                posted: postReport.posted,
-                attempted: postReport.attempted,
-              })
-            }}
-          </p>
-          <p v-if="postReport.folded > 0" class="mt-0.5 opacity-90">
-            {{ t('prReview.postReport.folded', { count: postReport.folded }) }}
-          </p>
-          <template v-if="postReport.failures.length > 0">
-            <p class="mt-1.5 font-medium">{{ t('prReview.postReport.failuresHeading') }}</p>
-            <ul class="mt-0.5 space-y-0.5" data-testid="pr-review-post-failures">
-              <li v-for="f in postReport.failures" :key="f.findingId" class="flex gap-1.5">
-                <code class="shrink-0 text-amber-100"
-                  >{{ f.path }}<template v-if="f.line != null">:{{ f.line }}</template></code
-                >
-                <span class="opacity-90">— {{ f.reason }}</span>
-              </li>
-            </ul>
-          </template>
-          <p v-if="postReport.bodyPosted === false && postReport.bodyError" class="mt-1.5">
-            {{ t('prReview.postReport.bodyError', { error: postReport.bodyError }) }}
-          </p>
-        </div>
-
-        <!-- The reviewer's overall assessment. -->
-        <p
-          v-if="state?.summary"
-          class="mb-3 rounded-md bg-slate-800/50 px-3 py-2 text-[12px] text-slate-300"
-        >
-          <span class="text-slate-500">{{ t('prReview.summaryLabel') }}</span>
-          {{ state.summary }}
-        </p>
-
-        <!-- A clean PR / resolved review with no findings. -->
-        <div
-          v-if="findings.length === 0"
-          class="rounded-xl border border-slate-800 bg-slate-900/60 px-4 py-6 text-center text-[13px] text-slate-300"
-        >
-          {{ t('prReview.noFindings') }}
         </div>
 
         <template v-else>
-          <!-- A challenge is in flight: the Challenge Investigator is re-examining a finding. -->
-          <div
-            v-if="challenging"
-            data-testid="pr-review-challenging"
-            class="mb-3 flex items-center gap-2 rounded-md border border-indigo-500/40 bg-indigo-500/10 px-3 py-2 text-[12px] text-indigo-200"
+          <p
+            v-if="prReview.error"
+            class="mb-3 rounded-md bg-rose-500/10 px-3 py-2 text-[12px] text-rose-300"
           >
-            <UIcon name="i-lucide-loader-circle" class="h-4 w-4 shrink-0 animate-spin" />
-            <span>{{ t('prReview.challenge.investigatingBanner') }}</span>
-          </div>
+            {{ prReview.error }}
+          </p>
 
-          <!-- Selection toolbar -->
-          <div v-if="awaiting" class="mb-2 flex items-center gap-3 text-[11px] text-slate-400">
-            <span data-testid="pr-review-selected-count">
-              {{ t('prReview.selectedCount', { count: activeSelectedIds.length }) }}
-            </span>
-            <button class="text-indigo-300 hover:underline" @click="selectAll">
-              {{ t('prReview.selectAll') }}
-            </button>
-            <button class="text-indigo-300 hover:underline" @click="clearAll">
-              {{ t('prReview.clear') }}
-            </button>
-          </div>
-
-          <!-- Findings grouped by slice -->
-          <section v-for="g in groups" :key="g.id" class="mb-4">
-            <h3 class="mb-1.5 text-[11px] font-semibold uppercase tracking-wide text-slate-400">
-              {{ g.title }}
-            </h3>
-            <p v-if="g.rationale" class="mb-1.5 text-[11px] text-slate-500">
-              {{ g.rationale }}
+          <!-- The outcome of the most recent `post` attempt: how many of how many comments landed,
+             which failed + why, and how many findings were folded into the summary because their
+             line isn't in the PR diff. Surfaced so a partial/failed post is legible + retryable. -->
+          <div
+            v-if="postReport"
+            data-testid="pr-review-post-report"
+            class="mb-3 rounded-lg border px-3 py-2 text-[12px]"
+            :class="
+              postReport.failures.length > 0 || postReport.bodyPosted === false
+                ? 'border-amber-500/40 bg-amber-500/10 text-amber-200'
+                : 'border-emerald-500/40 bg-emerald-500/10 text-emerald-200'
+            "
+          >
+            <div class="mb-1 flex items-center gap-1.5 font-medium">
+              <UIcon
+                :name="
+                  postReport.failures.length > 0 || postReport.bodyPosted === false
+                    ? 'i-lucide-alert-triangle'
+                    : 'i-lucide-check-circle-2'
+                "
+                class="h-4 w-4 shrink-0"
+              />
+              <span>{{ t('prReview.postReport.heading') }}</span>
+            </div>
+            <p data-testid="pr-review-post-count">
+              {{
+                t('prReview.postReport.posted', {
+                  posted: postReport.posted,
+                  attempted: postReport.attempted,
+                })
+              }}
             </p>
-            <article
-              v-for="f in g.items"
-              :key="f.id"
-              data-testid="pr-review-finding"
-              class="mb-1.5 rounded-xl border px-3 py-2 transition"
-              :class="[
-                awaiting && selected.has(f.id) && !isRetracted(f)
-                  ? 'border-indigo-500/60 bg-indigo-500/5'
-                  : 'border-slate-800 bg-slate-900/60',
-                isRetracted(f) ? 'opacity-60' : '',
-              ]"
+            <p v-if="postReport.folded > 0" class="mt-0.5 opacity-90">
+              {{ t('prReview.postReport.folded', { count: postReport.folded }) }}
+            </p>
+            <template v-if="postReport.failures.length > 0">
+              <p class="mt-1.5 font-medium">{{ t('prReview.postReport.failuresHeading') }}</p>
+              <ul class="mt-0.5 space-y-0.5" data-testid="pr-review-post-failures">
+                <li v-for="f in postReport.failures" :key="f.findingId" class="flex gap-1.5">
+                  <code class="shrink-0 text-amber-100"
+                    >{{ f.path }}<template v-if="f.line != null">:{{ f.line }}</template></code
+                  >
+                  <span class="opacity-90">— {{ f.reason }}</span>
+                </li>
+              </ul>
+            </template>
+            <p v-if="postReport.bodyPosted === false && postReport.bodyError" class="mt-1.5">
+              {{ t('prReview.postReport.bodyError', { error: postReport.bodyError }) }}
+            </p>
+          </div>
+
+          <!-- The reviewer's overall assessment. -->
+          <p
+            v-if="state?.summary"
+            class="mb-3 rounded-md bg-slate-800/50 px-3 py-2 text-[12px] text-slate-300"
+          >
+            <span class="text-slate-500">{{ t('prReview.summaryLabel') }}</span>
+            {{ state.summary }}
+          </p>
+
+          <!-- A clean PR / resolved review with no findings. -->
+          <div
+            v-if="findings.length === 0"
+            class="rounded-xl border border-slate-800 bg-slate-900/60 px-4 py-6 text-center text-[13px] text-slate-300"
+          >
+            {{ t('prReview.noFindings') }}
+          </div>
+
+          <template v-else>
+            <!-- A challenge is in flight: the Challenge Investigator is re-examining a finding. -->
+            <div
+              v-if="challenging"
+              data-testid="pr-review-challenging"
+              class="mb-3 flex items-center gap-2 rounded-md border border-indigo-500/40 bg-indigo-500/10 px-3 py-2 text-[12px] text-indigo-200"
             >
-              <div class="flex items-start gap-2">
-                <input
-                  v-if="awaiting || challenging"
-                  type="checkbox"
-                  class="mt-1 accent-indigo-500"
-                  data-testid="pr-review-finding-toggle"
-                  :checked="selected.has(f.id) && !isRetracted(f)"
-                  :disabled="!awaiting || isRetracted(f)"
-                  @change="toggle(f.id)"
-                />
-                <div class="min-w-0 flex-1">
-                  <div class="flex flex-wrap items-center gap-1.5">
-                    <span
-                      class="rounded px-1.5 py-0.5 text-[10px] font-semibold uppercase ring-1"
-                      :class="SEVERITY_CLASS[f.severity]"
-                    >
-                      {{ t(`prReview.severity.${f.severity}`) }}
-                    </span>
-                    <span class="rounded bg-slate-800 px-1.5 py-0.5 text-[10px] text-slate-300">
-                      {{ t(`prReview.category.${f.category}`) }}
-                    </span>
-                    <span
-                      v-if="postedIds.has(f.id)"
-                      data-testid="pr-review-finding-posted"
-                      class="rounded bg-emerald-500/15 px-1.5 py-0.5 text-[10px] font-semibold uppercase text-emerald-300 ring-1 ring-emerald-500/30"
-                    >
-                      {{ t('prReview.postReport.postedBadge') }}
-                    </span>
-                    <!-- Challenge outcome badges -->
-                    <span
-                      v-if="isRetracted(f)"
-                      data-testid="pr-review-finding-retracted"
-                      class="rounded bg-rose-500/15 px-1.5 py-0.5 text-[10px] font-semibold uppercase text-rose-300 ring-1 ring-rose-500/30"
-                    >
-                      {{ t('prReview.challenge.retractedBadge') }}
-                    </span>
-                    <span
-                      v-else-if="isAmended(f)"
-                      data-testid="pr-review-finding-amended"
-                      class="rounded bg-sky-500/15 px-1.5 py-0.5 text-[10px] font-semibold uppercase text-sky-300 ring-1 ring-sky-500/30"
-                    >
-                      {{ t('prReview.challenge.strengthenedBadge') }}
-                    </span>
-                    <span
-                      v-else-if="isUpheld(f)"
-                      data-testid="pr-review-finding-upheld"
-                      class="rounded bg-emerald-500/15 px-1.5 py-0.5 text-[10px] font-semibold uppercase text-emerald-300 ring-1 ring-emerald-500/30"
-                    >
-                      {{ t('prReview.challenge.upheldBadge') }}
-                    </span>
-                    <span
-                      v-else-if="isChallengeFailed(f)"
-                      data-testid="pr-review-finding-challenge-failed"
-                      class="rounded bg-amber-500/15 px-1.5 py-0.5 text-[10px] font-semibold uppercase text-amber-300 ring-1 ring-amber-500/30"
-                    >
-                      {{ t('prReview.challenge.failedBadge') }}
-                    </span>
-                    <span
-                      v-else-if="isInvestigating(f)"
-                      data-testid="pr-review-finding-investigating"
-                      class="flex items-center gap-1 rounded bg-indigo-500/15 px-1.5 py-0.5 text-[10px] font-semibold uppercase text-indigo-300 ring-1 ring-indigo-500/30"
-                    >
-                      <UIcon name="i-lucide-loader-circle" class="h-3 w-3 animate-spin" />
-                      {{ t('prReview.challenge.investigatingBadge') }}
-                    </span>
-                    <h4
-                      class="min-w-0 flex-1 text-[13px] font-medium text-slate-100"
+              <UIcon name="i-lucide-loader-circle" class="h-4 w-4 shrink-0 animate-spin" />
+              <span>{{ t('prReview.challenge.investigatingBanner') }}</span>
+            </div>
+
+            <!-- Selection toolbar -->
+            <div v-if="awaiting" class="mb-2 flex items-center gap-3 text-[11px] text-slate-400">
+              <span data-testid="pr-review-selected-count">
+                {{ t('prReview.selectedCount', { count: activeSelectedIds.length }) }}
+              </span>
+              <button class="text-indigo-300 hover:underline" @click="selectAll">
+                {{ t('prReview.selectAll') }}
+              </button>
+              <button class="text-indigo-300 hover:underline" @click="clearAll">
+                {{ t('prReview.clear') }}
+              </button>
+            </div>
+
+            <!-- Findings grouped by slice -->
+            <section v-for="g in groups" :key="g.id" class="mb-4">
+              <h3 class="mb-1.5 text-[11px] font-semibold uppercase tracking-wide text-slate-400">
+                {{ g.title }}
+              </h3>
+              <p v-if="g.rationale" class="mb-1.5 text-[11px] text-slate-500">
+                {{ g.rationale }}
+              </p>
+              <article
+                v-for="f in g.items"
+                :key="f.id"
+                data-testid="pr-review-finding"
+                class="mb-1.5 rounded-xl border px-3 py-2 transition"
+                :class="[
+                  awaiting && selected.has(f.id) && !isRetracted(f)
+                    ? 'border-indigo-500/60 bg-indigo-500/5'
+                    : 'border-slate-800 bg-slate-900/60',
+                  isRetracted(f) ? 'opacity-60' : '',
+                ]"
+              >
+                <div class="flex items-start gap-2">
+                  <input
+                    v-if="awaiting || challenging"
+                    type="checkbox"
+                    class="mt-1 accent-indigo-500"
+                    data-testid="pr-review-finding-toggle"
+                    :checked="selected.has(f.id) && !isRetracted(f)"
+                    :disabled="!awaiting || isRetracted(f)"
+                    @change="toggle(f.id)"
+                  />
+                  <div class="min-w-0 flex-1">
+                    <div class="flex flex-wrap items-center gap-1.5">
+                      <span
+                        class="rounded px-1.5 py-0.5 text-[10px] font-semibold uppercase ring-1"
+                        :class="SEVERITY_CLASS[f.severity]"
+                      >
+                        {{ t(`prReview.severity.${f.severity}`) }}
+                      </span>
+                      <span class="rounded bg-slate-800 px-1.5 py-0.5 text-[10px] text-slate-300">
+                        {{ t(`prReview.category.${f.category}`) }}
+                      </span>
+                      <span
+                        v-if="postedIds.has(f.id)"
+                        data-testid="pr-review-finding-posted"
+                        class="rounded bg-emerald-500/15 px-1.5 py-0.5 text-[10px] font-semibold uppercase text-emerald-300 ring-1 ring-emerald-500/30"
+                      >
+                        {{ t('prReview.postReport.postedBadge') }}
+                      </span>
+                      <!-- Challenge outcome badges -->
+                      <span
+                        v-if="isRetracted(f)"
+                        data-testid="pr-review-finding-retracted"
+                        class="rounded bg-rose-500/15 px-1.5 py-0.5 text-[10px] font-semibold uppercase text-rose-300 ring-1 ring-rose-500/30"
+                      >
+                        {{ t('prReview.challenge.retractedBadge') }}
+                      </span>
+                      <span
+                        v-else-if="isAmended(f)"
+                        data-testid="pr-review-finding-amended"
+                        class="rounded bg-sky-500/15 px-1.5 py-0.5 text-[10px] font-semibold uppercase text-sky-300 ring-1 ring-sky-500/30"
+                      >
+                        {{ t('prReview.challenge.strengthenedBadge') }}
+                      </span>
+                      <span
+                        v-else-if="isUpheld(f)"
+                        data-testid="pr-review-finding-upheld"
+                        class="rounded bg-emerald-500/15 px-1.5 py-0.5 text-[10px] font-semibold uppercase text-emerald-300 ring-1 ring-emerald-500/30"
+                      >
+                        {{ t('prReview.challenge.upheldBadge') }}
+                      </span>
+                      <span
+                        v-else-if="isChallengeFailed(f)"
+                        data-testid="pr-review-finding-challenge-failed"
+                        class="rounded bg-amber-500/15 px-1.5 py-0.5 text-[10px] font-semibold uppercase text-amber-300 ring-1 ring-amber-500/30"
+                      >
+                        {{ t('prReview.challenge.failedBadge') }}
+                      </span>
+                      <span
+                        v-else-if="isInvestigating(f)"
+                        data-testid="pr-review-finding-investigating"
+                        class="flex items-center gap-1 rounded bg-indigo-500/15 px-1.5 py-0.5 text-[10px] font-semibold uppercase text-indigo-300 ring-1 ring-indigo-500/30"
+                      >
+                        <UIcon name="i-lucide-loader-circle" class="h-3 w-3 animate-spin" />
+                        {{ t('prReview.challenge.investigatingBadge') }}
+                      </span>
+                      <h4
+                        class="min-w-0 flex-1 text-[13px] font-medium text-slate-100"
+                        :class="isRetracted(f) ? 'line-through' : ''"
+                      >
+                        {{ f.title }}
+                      </h4>
+                    </div>
+                    <p class="mt-0.5 text-[11px] text-slate-500">
+                      {{ f.path
+                      }}<template v-if="f.line != null">
+                        · {{ t('prReview.line', { line: f.line }) }}</template
+                      >
+                    </p>
+                    <p
+                      class="mt-1 whitespace-pre-wrap text-[12px] text-slate-300"
                       :class="isRetracted(f) ? 'line-through' : ''"
                     >
-                      {{ f.title }}
-                    </h4>
-                  </div>
-                  <p class="mt-0.5 text-[11px] text-slate-500">
-                    {{ f.path
-                    }}<template v-if="f.line != null">
-                      · {{ t('prReview.line', { line: f.line }) }}</template
-                    >
-                  </p>
-                  <p
-                    class="mt-1 whitespace-pre-wrap text-[12px] text-slate-300"
-                    :class="isRetracted(f) ? 'line-through' : ''"
-                  >
-                    {{ f.detail }}
-                  </p>
-                  <p
-                    v-if="f.suggestedFix"
-                    class="mt-1 whitespace-pre-wrap rounded-md bg-slate-800/50 px-2 py-1 text-[11px] text-slate-300"
-                  >
-                    <span class="text-slate-500">{{ t('prReview.suggestedFix') }}</span>
-                    {{ f.suggestedFix }}
-                  </p>
-
-                  <!-- The investigator's justification (why the finding holds up / was retracted),
-                       or the reason the challenge investigation failed. -->
-                  <p
-                    v-if="f.challenge?.justification"
-                    data-testid="pr-review-finding-justification"
-                    class="mt-1.5 whitespace-pre-wrap rounded-md px-2 py-1 text-[11px]"
-                    :class="
-                      isRetracted(f)
-                        ? 'bg-rose-500/10 text-rose-200'
-                        : isChallengeFailed(f)
-                          ? 'bg-amber-500/10 text-amber-200'
-                          : 'bg-sky-500/10 text-sky-200'
-                    "
-                  >
-                    <span class="font-medium">{{
-                      isChallengeFailed(f)
-                        ? t('prReview.challenge.failedLabel')
-                        : t('prReview.challenge.verdictLabel')
-                    }}</span>
-                    {{ f.challenge.justification }}
-                  </p>
-
-                  <!-- Per-finding actions: Challenge + Dismiss (only while awaiting a selection). -->
-                  <div
-                    v-if="awaiting && !isInvestigating(f)"
-                    class="mt-1.5 flex items-center gap-3 text-[11px]"
-                  >
-                    <button
-                      v-if="!isRetracted(f)"
-                      data-testid="pr-review-finding-challenge"
-                      class="flex items-center gap-1 text-indigo-300 hover:underline disabled:opacity-50"
-                      :disabled="!canResolve || !access.canExecuteRuns.value"
-                      @click="openChallenge(f.id)"
-                    >
-                      <UIcon name="i-lucide-gavel" class="h-3.5 w-3.5" />
-                      {{
-                        f.challenge
-                          ? t('prReview.challenge.reChallenge')
-                          : t('prReview.challenge.action')
-                      }}
-                    </button>
-                    <button
-                      data-testid="pr-review-finding-dismiss"
-                      class="flex items-center gap-1 text-slate-400 hover:text-rose-300 hover:underline disabled:opacity-50"
-                      :disabled="!canResolve || !access.canExecuteRuns.value"
-                      @click="onDismiss(f.id)"
-                    >
-                      <UIcon name="i-lucide-trash-2" class="h-3.5 w-3.5" />
-                      {{ t('prReview.challenge.dismiss') }}
-                    </button>
-                  </div>
-
-                  <!-- The inline challenge box: an OPTIONAL specific concern for the investigator. -->
-                  <div
-                    v-if="challengeForId === f.id"
-                    data-testid="pr-review-challenge-box"
-                    class="mt-2 rounded-md border border-indigo-500/40 bg-slate-900/80 p-2"
-                  >
-                    <textarea
-                      v-model="challengeText"
-                      data-testid="pr-review-challenge-input"
-                      rows="2"
-                      :placeholder="t('prReview.challenge.placeholder')"
-                      class="w-full resize-y rounded border border-slate-700 bg-slate-950/60 px-2 py-1 text-[12px] text-slate-200 outline-none focus:border-indigo-500"
-                    />
-                    <p class="mt-1 text-[10px] text-slate-500">
-                      {{ t('prReview.challenge.hint') }}
+                      {{ f.detail }}
                     </p>
-                    <div class="mt-1.5 flex justify-end gap-2">
+                    <p
+                      v-if="f.suggestedFix"
+                      class="mt-1 whitespace-pre-wrap rounded-md bg-slate-800/50 px-2 py-1 text-[11px] text-slate-300"
+                    >
+                      <span class="text-slate-500">{{ t('prReview.suggestedFix') }}</span>
+                      {{ f.suggestedFix }}
+                    </p>
+
+                    <!-- The investigator's justification (why the finding holds up / was retracted),
+                       or the reason the challenge investigation failed. -->
+                    <p
+                      v-if="f.challenge?.justification"
+                      data-testid="pr-review-finding-justification"
+                      class="mt-1.5 whitespace-pre-wrap rounded-md px-2 py-1 text-[11px]"
+                      :class="
+                        isRetracted(f)
+                          ? 'bg-rose-500/10 text-rose-200'
+                          : isChallengeFailed(f)
+                            ? 'bg-amber-500/10 text-amber-200'
+                            : 'bg-sky-500/10 text-sky-200'
+                      "
+                    >
+                      <span class="font-medium">{{
+                        isChallengeFailed(f)
+                          ? t('prReview.challenge.failedLabel')
+                          : t('prReview.challenge.verdictLabel')
+                      }}</span>
+                      {{ f.challenge.justification }}
+                    </p>
+
+                    <!-- Per-finding actions: Challenge + Dismiss (only while awaiting a selection). -->
+                    <div
+                      v-if="awaiting && !isInvestigating(f)"
+                      class="mt-1.5 flex items-center gap-3 text-[11px]"
+                    >
                       <button
-                        class="rounded px-2 py-1 text-[11px] text-slate-400 hover:text-slate-200"
-                        @click="cancelChallenge"
+                        v-if="!isRetracted(f)"
+                        data-testid="pr-review-finding-challenge"
+                        class="flex items-center gap-1 text-indigo-300 hover:underline disabled:opacity-50"
+                        :disabled="!canResolve || !access.canExecuteRuns.value"
+                        @click="openChallenge(f.id)"
                       >
-                        {{ t('common.cancel') }}
+                        <UIcon name="i-lucide-gavel" class="h-3.5 w-3.5" />
+                        {{
+                          f.challenge
+                            ? t('prReview.challenge.reChallenge')
+                            : t('prReview.challenge.action')
+                        }}
                       </button>
                       <button
-                        data-testid="pr-review-challenge-submit"
-                        class="rounded bg-indigo-500/80 px-2 py-1 text-[11px] font-medium text-white hover:bg-indigo-500 disabled:opacity-50"
-                        :disabled="!canResolve"
-                        @click="submitChallenge(f.id)"
+                        data-testid="pr-review-finding-dismiss"
+                        class="flex items-center gap-1 text-slate-400 hover:text-rose-300 hover:underline disabled:opacity-50"
+                        :disabled="!canResolve || !access.canExecuteRuns.value"
+                        @click="onDismiss(f.id)"
                       >
-                        {{ t('prReview.challenge.submit') }}
+                        <UIcon name="i-lucide-trash-2" class="h-3.5 w-3.5" />
+                        {{ t('prReview.challenge.dismiss') }}
                       </button>
+                    </div>
+
+                    <!-- The inline challenge box: an OPTIONAL specific concern for the investigator. -->
+                    <div
+                      v-if="challengeForId === f.id"
+                      data-testid="pr-review-challenge-box"
+                      class="mt-2 rounded-md border border-indigo-500/40 bg-slate-900/80 p-2"
+                    >
+                      <textarea
+                        v-model="challengeText"
+                        data-testid="pr-review-challenge-input"
+                        rows="2"
+                        :placeholder="t('prReview.challenge.placeholder')"
+                        class="w-full resize-y rounded border border-slate-700 bg-slate-950/60 px-2 py-1 text-[12px] text-slate-200 outline-none focus:border-indigo-500"
+                      />
+                      <p class="mt-1 text-[10px] text-slate-500">
+                        {{ t('prReview.challenge.hint') }}
+                      </p>
+                      <div class="mt-1.5 flex justify-end gap-2">
+                        <button
+                          class="rounded px-2 py-1 text-[11px] text-slate-400 hover:text-slate-200"
+                          @click="cancelChallenge"
+                        >
+                          {{ t('common.cancel') }}
+                        </button>
+                        <button
+                          data-testid="pr-review-challenge-submit"
+                          class="rounded bg-indigo-500/80 px-2 py-1 text-[11px] font-medium text-white hover:bg-indigo-500 disabled:opacity-50"
+                          :disabled="!canResolve"
+                          @click="submitChallenge(f.id)"
+                        >
+                          {{ t('prReview.challenge.submit') }}
+                        </button>
+                      </div>
                     </div>
                   </div>
                 </div>
-              </div>
-            </article>
-          </section>
+              </article>
+            </section>
+          </template>
         </template>
-      </template>
+      </div>
+
+      <!-- Run details: the same timing / model / run id + LLM model-activity rollup (calls,
+           tokens) every step-backed result window carries, so the reviewer's run reads the
+           same "which run is this / how did the model do" facts as the generic step detail. -->
+      <aside
+        v-if="step"
+        data-testid="pr-review-run-meta"
+        class="hidden w-60 shrink-0 flex-col gap-4 overflow-y-auto border-s border-slate-800 bg-slate-900/50 px-4 py-4 lg:flex"
+      >
+        <StepRunMeta
+          :step="step"
+          :instance-id="instanceId ?? undefined"
+          :step-number="stepIndex === null ? undefined : stepIndex + 1"
+          :total-steps="instance?.steps.length"
+          :run-failed="instance?.status === 'failed'"
+          :failure-at="instance?.failure?.occurredAt"
+        />
+      </aside>
     </div>
 
     <!-- Footer -->

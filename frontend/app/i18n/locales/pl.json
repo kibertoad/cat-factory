@@ -4949,6 +4949,14 @@
         "pending": "W kolejce"
       }
     },
+    "phase": {
+      "slicing": "Dzielenie…",
+      "reviewing": "Przegląd {completed}/{total} fragmentów",
+      "awaiting": "Wyniki gotowe",
+      "challenging": "Analizowanie…",
+      "fixing": "Naprawianie…",
+      "posting": "Publikowanie…"
+    },
     "challenge": {
       "action": "Zakwestionuj",
       "reChallenge": "Zakwestionuj ponownie",

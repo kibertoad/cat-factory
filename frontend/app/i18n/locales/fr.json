@@ -4949,6 +4949,14 @@
         "pending": "En attente"
       }
     },
+    "phase": {
+      "slicing": "Découpage…",
+      "reviewing": "Révision {completed}/{total} sections",
+      "awaiting": "Résultats prêts",
+      "challenging": "Analyse en cours…",
+      "fixing": "Correction…",
+      "posting": "Publication…"
+    },
     "challenge": {
       "action": "Contester",
       "reChallenge": "Contester à nouveau",

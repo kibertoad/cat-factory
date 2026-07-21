@@ -4960,6 +4960,14 @@
         "pending": "בתור"
       }
     },
+    "phase": {
+      "slicing": "מחלק…",
+      "reviewing": "בודק {completed}/{total} מקטעים",
+      "awaiting": "הממצאים מוכנים",
+      "challenging": "חוקר…",
+      "fixing": "מתקן…",
+      "posting": "מפרסם…"
+    },
     "challenge": {
       "action": "ערער",
       "reChallenge": "ערער שוב",

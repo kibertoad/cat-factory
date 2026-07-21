@@ -5090,6 +5090,14 @@
         "pending": "Queued"
       }
     },
+    "phase": {
+      "slicing": "Slicing…",
+      "reviewing": "Reviewing {completed}/{total} slices",
+      "awaiting": "Findings ready",
+      "challenging": "Investigating…",
+      "fixing": "Fixing…",
+      "posting": "Posting…"
+    },
     "challenge": {
       "action": "Challenge",
       "reChallenge": "Challenge again",

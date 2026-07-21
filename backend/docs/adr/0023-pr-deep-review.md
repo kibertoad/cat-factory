@@ -201,6 +201,13 @@ so a human curates the findings themselves — not just which to act on:
   into chunks) vs REVIEWING (the list exists, so slicing is done) — and in the reviewing sub-phase it
   lists every chunk with an explicit status (Reviewed / Reviewing… / Queued) plus a "Reviewing now"
   callout for the in-progress chunk(s), rather than a bare slices-reviewed count or "agent running".
+  The same sub-phase is surfaced compactly on the **board** — the task-card mini pipeline and the
+  focus-view timeline render a `PrReviewPhaseBadge` ("Slicing…" / "Reviewing X/Y slices", plus the
+  awaiting / investigating / fixing / posting states) in place of the generic subtask count, derived
+  by the pure `prReviewPhase` helper (a sibling of `isSlicingChunks`, unit-tested in
+  `prReviewProgress.spec.ts`). The window itself also carries the shared `StepRunMeta` run-details
+  block (elapsed / model / run id + the LLM call/token rollup), so the reviewer's run reads the same
+  "which run / how did the model do" facts as the generic step detail and the gate/tester windows.
 - **Same-repo, non-fork PRs only.** The reviewer clones the service's linked repo and fetches the
   PR head by number, and the Fixer pushes to that head branch — so the `fix` resolution requires a
   PR on the service's own repo the platform can push to. A cross-repo `prUrl` (a PR on a different
