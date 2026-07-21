@@ -247,6 +247,33 @@ const DOC_FIELD_PLACEHOLDER_KEYS: Record<DocKindFieldKey, string> = {
 }
 const SEVERITIES = ['low', 'medium', 'high', 'critical'] as const
 
+// A CUSTOM (deployment-registered) task type: fold the collected values into the sparse
+// `taskTypeFields.custom` bag. A bespoke form panel owns the whole bag (taken verbatim); the
+// descriptor path reads only the declared fields, coercing a `number` descriptor's string input.
+function buildCustomTypeFields(): TaskTypeFields | undefined {
+  const custom = selectedCustomType.value
+  if (!custom) return undefined
+  const bag: Record<string, string | number> = {}
+  if (customFormPanel.value) {
+    for (const [key, value] of Object.entries(customFieldValues.value)) {
+      if (value !== undefined && value !== '') bag[key] = value
+    }
+  } else {
+    for (const field of custom.fields ?? []) {
+      const raw = customFieldValues.value[field.key]
+      if (raw === undefined || raw === '') continue
+      if (field.type === 'number') {
+        // Skip a non-numeric value rather than sending NaN (which serialises to null on the wire).
+        const n = Number(raw)
+        if (Number.isFinite(n)) bag[field.key] = n
+      } else {
+        bag[field.key] = raw
+      }
+    }
+  }
+  return Object.keys(bag).length ? { custom: bag } : undefined
+}
+
 function buildTypeFields(): TaskTypeFields | undefined {
   if (taskType.value === 'bug') {
     const f: TaskTypeFields = {}
@@ -289,32 +316,7 @@ function buildTypeFields(): TaskTypeFields | undefined {
     if (reviewFocus.value.trim()) f.reviewFocus = reviewFocus.value.trim()
     return Object.keys(f).length ? f : undefined
   }
-  // A CUSTOM (deployment-registered) task type: fold the collected values into the sparse
-  // `taskTypeFields.custom` bag. A bespoke form panel owns the whole bag (taken verbatim); the
-  // descriptor path reads only the declared fields, coercing a `number` descriptor's string input.
-  const custom = selectedCustomType.value
-  if (custom) {
-    const bag: Record<string, string | number> = {}
-    if (customFormPanel.value) {
-      for (const [key, value] of Object.entries(customFieldValues.value)) {
-        if (value !== undefined && value !== '') bag[key] = value
-      }
-    } else {
-      for (const field of custom.fields ?? []) {
-        const raw = customFieldValues.value[field.key]
-        if (raw === undefined || raw === '') continue
-        if (field.type === 'number') {
-          // Skip a non-numeric value rather than sending NaN (which serialises to null on the wire).
-          const n = Number(raw)
-          if (Number.isFinite(n)) bag[field.key] = n
-        } else {
-          bag[field.key] = raw
-        }
-      }
-    }
-    return Object.keys(bag).length ? { custom: bag } : undefined
-  }
-  return undefined
+  return buildCustomTypeFields()
 }
 
 // For a recurring task, the schedule attaches to the service frame: the container itself
