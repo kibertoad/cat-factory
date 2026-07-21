@@ -112,6 +112,17 @@ describe('BoardService real-time origin for mounted (shared) services', () => {
     expect(e?.blockId).toBe(created.id)
   })
 
+  it('updateBlock forwards the origin connection id so the acting tab is not echoed its own edit', async () => {
+    const { service, emits } = build([task('blk_shared', 'frame_shared')])
+    await service.updateBlock(ACTING, 'blk_shared', { title: 'Renamed live' }, 'cid-upd')
+    const e = emits.find((x) => x.reason === 'block-updated')
+    expect(e).toBeDefined()
+    // Home origin (fan-out to every mounting board) AND the acting connection carried through so
+    // the realtime transport can suppress the redundant self-refresh.
+    expect(e?.workspaceId).toBe(HOME)
+    expect(e?.originConnectionId).toBe('cid-upd')
+  })
+
   it('moveBlock forwards the origin connection id so the transport can suppress the self-echo', async () => {
     const { service, emits } = build([task('blk_shared', 'frame_shared')])
     await service.moveBlock(ACTING, 'blk_shared', { x: 5, y: 9 }, 'cid-abc')

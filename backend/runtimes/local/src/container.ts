@@ -221,6 +221,208 @@ function setupLocalComposeRuntime(
   return { localComposeRuntime, localPreflightProbes }
 }
 
+/**
+ * The local-facade seams + resolved config {@link buildLocalContainer} threads into
+ * {@link buildNodeContainer}. Bundled so {@link buildLocalNodeOptions} can own the large options
+ * literal (a function-size ratchet split — behaviour is identical), keeping the composition root
+ * within budget.
+ */
+interface LocalNodeOptionsBundle {
+  options: NodeContainerOptions
+  env: NodeJS.ProcessEnv
+  config: AppConfig
+  repos: ReturnType<typeof resolveLocalPersistence>['repos']
+  realtimeSink: LocalEventSink | undefined
+  mothership: ReturnType<typeof resolveLocalPersistence>['mothership']
+  backendRegistries: ReturnType<typeof createBackendRegistries>
+  resolveTransport: ResolveRunnerTransport
+  deployJobClient: NodeContainerOptions['deployJobClient']
+  gitToken: ReturnType<typeof resolveLocalVcs>['gitToken']
+  delegatedGitHub: ReturnType<typeof resolveLocalVcs>['delegatedGitHub']
+  vcsClient: ReturnType<typeof resolveLocalVcs>['vcsClient']
+  resolveRepoOrigin: ReturnType<typeof resolveLocalVcs>['resolveRepoOrigin']
+  inlineAgents: boolean
+  inlineHarnesses: HarnessKind[]
+  resolveContainerTransport: () => Promise<LocalContainerRunnerTransport>
+  githubInstallationRepository: NodeContainerOptions['githubInstallationRepository']
+  assertAgentBackendConfigured: (workspaceId: string) => Promise<void>
+  localComposeRuntime: ReturnType<typeof setupLocalComposeRuntime>['localComposeRuntime']
+  localPreflightProbes: ReturnType<typeof setupLocalComposeRuntime>['localPreflightProbes']
+  inProcessRunner: SqliteWorkRunner | undefined
+}
+
+/**
+ * Build the {@link NodeContainerOptions} for {@link buildNodeContainer} from the local seams.
+ * Extracted verbatim from {@link buildLocalContainer} so the options are identical (later spreads
+ * still override earlier ones in the same order) — purely the function-size ratchet split.
+ */
+function buildLocalNodeOptions(bundle: LocalNodeOptionsBundle): NodeContainerOptions {
+  const {
+    options,
+    env,
+    config,
+    repos,
+    realtimeSink,
+    mothership,
+    backendRegistries,
+    resolveTransport,
+    deployJobClient,
+    gitToken,
+    delegatedGitHub,
+    vcsClient,
+    resolveRepoOrigin,
+    inlineAgents,
+    inlineHarnesses,
+    resolveContainerTransport,
+    githubInstallationRepository,
+    assertAgentBackendConfigured,
+    localComposeRuntime,
+    localPreflightProbes,
+    inProcessRunner,
+  } = bundle
+  return {
+    ...options,
+    env,
+    config,
+    repos,
+    // Override the spread `options.realtimeSink` with the mothership-layered sink (a no-op wrap
+    // when not in mothership mode — it stays the injected hub).
+    ...(realtimeSink ? { realtimeSink } : {}),
+    // Local mode seeds a fresh workspace's model-preset library with Claude Opus 4.8 as the
+    // default: the local facade runs subscription-only models (via the developer's ambient
+    // `claude` CLI for inline steps + a leased personal credential for container steps), so
+    // Claude is a first-class default here even though it can't run on the bare Cloudflare
+    // baseline. Overridable (the conformance harness passes Kimi so its fake-executor runs
+    // resolve to a Cloudflare-usable model). Applied only at first seed — a user's later
+    // manual default choice always wins.
+    defaultModelPresetId: options.defaultModelPresetId ?? MODEL_PRESET_SEED_IDS.claude,
+    // Mothership credentials stay on the laptop: inject the local node:sqlite store's repos so
+    // the API-key pool, local-model endpoints, AND the subscription credentials (pooled tokens +
+    // per-user personal creds + their per-run activations) are sealed with the LOCAL key and
+    // leased by the LOCAL container executor — the mothership's ENCRYPTION_KEY never reaches this
+    // machine. Off → Drizzle over Postgres. `subscriptionActivationRepository` is threaded ONCE
+    // here and reused by BOTH consumers in buildNodeContainer (the personal-subscription service's
+    // mint + the engine core's clear-on-completion), so they agree on one store.
+    ...(mothership
+      ? {
+          providerApiKeyRepository: mothership.credentialStore.providerApiKeyRepository,
+          localModelEndpointRepository: mothership.credentialStore.localModelEndpointRepository,
+          providerSubscriptionTokenRepository:
+            mothership.credentialStore.providerSubscriptionTokenRepository,
+          personalSubscriptionRepository: mothership.credentialStore.personalSubscriptionRepository,
+          subscriptionActivationRepository:
+            mothership.credentialStore.subscriptionActivationRepository,
+        }
+      : {}),
+    // Share the SAME registries the pool resolver above was built with (so a custom runner
+    // backend resolves to one instance across the local chooser + the engine's connection service).
+    backendRegistries,
+    // The per-workspace chooser (host Docker / native local vs the runner pool). Pre-wrapped
+    // with the correct provisioning-log subsystem per branch, so tell buildNodeContainer not
+    // to re-wrap with a single subsystem tag.
+    resolveTransport,
+    // Deploy runs on its OWN backend (native host CLIs / a deploy-image container), never the
+    // agent transport — so suppress buildNodeContainer's pool-backed default and inject ours
+    // (absent ⇒ deploy unwired, render configs fail loudly).
+    disableDefaultDeployJobClient: true,
+    ...(deployJobClient ? { deployJobClient } : {}),
+    skipProvisioningLogWrap: true,
+    // Local mode defaults binary-artifact (screenshot) storage to the on-disk filesystem
+    // backend (`.file-storage`), so UI-tester screenshots work out of the box with no setup;
+    // an account can still switch to S3 in the UI. (Node mode defaults to `off` — storage
+    // there requires explicit per-account configuration.)
+    contentStorageDefaultBackend: 'fs',
+    // Authenticate git with the developer's PAT when present (GitHub or GitLab — the harness
+    // credential is host-neutral); in mothership mode without a PAT, mint the per-installation
+    // push/clone token from the mothership's GitHub App instead. Absent both → the executor
+    // falls back to the GitHub App path (and is null without it), so container kinds fail
+    // loudly rather than silently mis-running.
+    ...(gitToken
+      ? { mintInstallationToken: async () => gitToken }
+      : delegatedGitHub
+        ? { mintInstallationToken: (id: number) => delegatedGitHub.installationToken(id) }
+        : {}),
+    // The PAT-backed VCS client wires the CI gate + merge / mergeability providers, so a local
+    // pipeline gates on real CI and merges the PR/MR for real, AND serves the read/link
+    // endpoints. GitHub uses the PAT client (repos via /user/repos); GitLab uses the
+    // FetchGitLabClient adapted to the same GitHubClient port.
+    ...(vcsClient ? { githubClient: vcsClient } : {}),
+    // For a GitLab backend, make agent containers clone the GitLab host + open MRs (without
+    // this the clone URL is always github.com, so a GitLab repo can't be cloned).
+    ...(resolveRepoOrigin ? { resolveRepoOrigin } : {}),
+    // Browsable frontend preview (slice 5c): the local Docker/Apple adapter can publish a served
+    // app's port to the host + keep the container alive, so local mode wires the real preview
+    // transport (buildNodeContainer builds the job builder from local's PAT-backed seams). The
+    // capability was already advertised `frontendPreview.supported: true` above.
+    previewTransport: createLocalPreviewTransportFromEnv(env),
+    // Serve enabled subscription harness refs (Claude Code / Codex + the non-native
+    // claude-code vendors GLM/Kimi/DeepSeek) as INLINE calls: the developer's OWN host CLI
+    // when its binary is present (ambient login, unmetered), else a warm CONTAINER on a LEASED
+    // subscription credential — so the inline reviewers/brainstorm/estimator + inline agent
+    // kinds run on the subscription even without a host CLI (and in mothership mode). Gated by
+    // `LOCAL_NATIVE_INLINE` (default on), independent of the container-native opt-in above. The
+    // per-run personal / pooled lease seams are supplied by `buildNodeContainer` (built from the
+    // same subscription services the container executor uses) via the wrap `deps` argument.
+    ...(inlineAgents
+      ? {
+          wrapModelProviderResolver: (inner, leaseDeps) =>
+            wrapResolverWithInlineHarness({
+              inlineHarnesses,
+              hostCliVendors: detectHostInlineClis(env),
+              runInline: (req) => resolveContainerTransport().then((t) => t.runInline(req)),
+              ...leaseDeps,
+            })(inner),
+        }
+      : {}),
+    // Auto-provision the synthetic per-workspace installation so the integration reports
+    // connected with no manual connect step.
+    ...(githubInstallationRepository ? { githubInstallationRepository } : {}),
+    overrides: {
+      // Refuse a run up front when the workspace delegates container agents to a runner pool
+      // that isn't registered. Listed BEFORE `...options.overrides` so a caller (the
+      // cross-runtime conformance harness) can override it.
+      assertAgentBackendConfigured,
+      // Shared-stack bring-up/teardown drives the host Docker daemon, so hand the core deps the
+      // same runtime the compose env backend uses. Only on a Docker-family runtime; absent ⇒ the
+      // lifecycle endpoints refuse (Apple `container` can't nest, like `localDind`).
+      ...(localComposeRuntime ? { composeRuntime: localComposeRuntime } : {}),
+      // The host-probe seam that enforces a stack recipe's machine `prerequisites` at provision
+      // start (and backs the preflight API). Present only on a Docker-family runtime (same gate as
+      // the compose runtime above); absent ⇒ the preflight API 503s.
+      ...(localPreflightProbes ? { preflightHostProbes: localPreflightProbes } : {}),
+      // Clone a shared stack's repo with the same source-control PAT the agent containers push
+      // with, so a stack whose `cloneUrl` is a PRIVATE repo can be brought up (else public-only).
+      ...(gitToken ? { sharedStackCloneToken: gitToken } : {}),
+      ...options.overrides,
+      // Mothership mode's in-process work runner (no pg-boss). After `...options.overrides` so an
+      // explicit test override still wins; in mothership boot there is no `boss`, so this is the
+      // only runner wired.
+      ...(inProcessRunner ? { workRunner: inProcessRunner } : {}),
+      // The local PAT carries the CI-config scope (GitHub `workflow` — pre-selected by the
+      // creation URL; GitLab `api` covers it), so the connection isn't missing that grant —
+      // report it granted to suppress the advisory banner. (The App-permissions probe this
+      // normally uses needs an app JWT, which a single-token connection has no equivalent of.)
+      ...(gitToken
+        ? ({ workflowsGranted: async () => true } satisfies Partial<CoreDependencies>)
+        : {}),
+      // Per-USER infra handler overrides are a LOCAL-mode feature: only the local facade
+      // wires the repository, so the per-user override service + controller assemble here
+      // (and stay 503 / inert on the Worker + Node facades). A developer can point a
+      // provision type at their own Docker / k3s for the runs they initiate. It is backed by
+      // local Postgres, so it only wires when a `db` is present — in mothership mode (`db`
+      // undefined) there is no local database, so the override service stays inert (503),
+      // exactly like `localSettingsService` above; remoting it is a later environments slice.
+      ...(options.db
+        ? {
+            environmentUserHandlerRepository: new DrizzleEnvironmentUserHandlerRepository(
+              options.db,
+            ),
+          }
+        : {}),
+    } satisfies Partial<CoreDependencies>,
+  }
+}
+
 export function buildLocalContainer(options: NodeContainerOptions): ServerContainer {
   const env = applyLocalDefaults(options.env ?? process.env)
   // One shared clock/idGenerator, reused by the per-workspace transport chooser below AND
@@ -639,147 +841,31 @@ export function buildLocalContainer(options: NodeContainerOptions): ServerContai
       ? new LayeredEventPropagator(options.realtimeSink, [mothership.realtimeAdapter])
       : options.realtimeSink
 
-  const container = buildNodeContainer({
-    ...options,
-    env,
-    config,
-    repos,
-    // Override the spread `options.realtimeSink` with the mothership-layered sink (a no-op wrap
-    // when not in mothership mode — it stays the injected hub).
-    ...(realtimeSink ? { realtimeSink } : {}),
-    // Local mode seeds a fresh workspace's model-preset library with Claude Opus 4.8 as the
-    // default: the local facade runs subscription-only models (via the developer's ambient
-    // `claude` CLI for inline steps + a leased personal credential for container steps), so
-    // Claude is a first-class default here even though it can't run on the bare Cloudflare
-    // baseline. Overridable (the conformance harness passes Kimi so its fake-executor runs
-    // resolve to a Cloudflare-usable model). Applied only at first seed — a user's later
-    // manual default choice always wins.
-    defaultModelPresetId: options.defaultModelPresetId ?? MODEL_PRESET_SEED_IDS.claude,
-    // Mothership credentials stay on the laptop: inject the local node:sqlite store's repos so
-    // the API-key pool, local-model endpoints, AND the subscription credentials (pooled tokens +
-    // per-user personal creds + their per-run activations) are sealed with the LOCAL key and
-    // leased by the LOCAL container executor — the mothership's ENCRYPTION_KEY never reaches this
-    // machine. Off → Drizzle over Postgres. `subscriptionActivationRepository` is threaded ONCE
-    // here and reused by BOTH consumers in buildNodeContainer (the personal-subscription service's
-    // mint + the engine core's clear-on-completion), so they agree on one store.
-    ...(mothership
-      ? {
-          providerApiKeyRepository: mothership.credentialStore.providerApiKeyRepository,
-          localModelEndpointRepository: mothership.credentialStore.localModelEndpointRepository,
-          providerSubscriptionTokenRepository:
-            mothership.credentialStore.providerSubscriptionTokenRepository,
-          personalSubscriptionRepository: mothership.credentialStore.personalSubscriptionRepository,
-          subscriptionActivationRepository:
-            mothership.credentialStore.subscriptionActivationRepository,
-        }
-      : {}),
-    // Share the SAME registries the pool resolver above was built with (so a custom runner
-    // backend resolves to one instance across the local chooser + the engine's connection service).
-    backendRegistries,
-    // The per-workspace chooser (host Docker / native local vs the runner pool). Pre-wrapped
-    // with the correct provisioning-log subsystem per branch, so tell buildNodeContainer not
-    // to re-wrap with a single subsystem tag.
-    resolveTransport,
-    // Deploy runs on its OWN backend (native host CLIs / a deploy-image container), never the
-    // agent transport — so suppress buildNodeContainer's pool-backed default and inject ours
-    // (absent ⇒ deploy unwired, render configs fail loudly).
-    disableDefaultDeployJobClient: true,
-    ...(deployJobClient ? { deployJobClient } : {}),
-    skipProvisioningLogWrap: true,
-    // Local mode defaults binary-artifact (screenshot) storage to the on-disk filesystem
-    // backend (`.file-storage`), so UI-tester screenshots work out of the box with no setup;
-    // an account can still switch to S3 in the UI. (Node mode defaults to `off` — storage
-    // there requires explicit per-account configuration.)
-    contentStorageDefaultBackend: 'fs',
-    // Authenticate git with the developer's PAT when present (GitHub or GitLab — the harness
-    // credential is host-neutral); in mothership mode without a PAT, mint the per-installation
-    // push/clone token from the mothership's GitHub App instead. Absent both → the executor
-    // falls back to the GitHub App path (and is null without it), so container kinds fail
-    // loudly rather than silently mis-running.
-    ...(gitToken
-      ? { mintInstallationToken: async () => gitToken }
-      : delegatedGitHub
-        ? { mintInstallationToken: (id: number) => delegatedGitHub.installationToken(id) }
-        : {}),
-    // The PAT-backed VCS client wires the CI gate + merge / mergeability providers, so a local
-    // pipeline gates on real CI and merges the PR/MR for real, AND serves the read/link
-    // endpoints. GitHub uses the PAT client (repos via /user/repos); GitLab uses the
-    // FetchGitLabClient adapted to the same GitHubClient port.
-    ...(vcsClient ? { githubClient: vcsClient } : {}),
-    // For a GitLab backend, make agent containers clone the GitLab host + open MRs (without
-    // this the clone URL is always github.com, so a GitLab repo can't be cloned).
-    ...(resolveRepoOrigin ? { resolveRepoOrigin } : {}),
-    // Browsable frontend preview (slice 5c): the local Docker/Apple adapter can publish a served
-    // app's port to the host + keep the container alive, so local mode wires the real preview
-    // transport (buildNodeContainer builds the job builder from local's PAT-backed seams). The
-    // capability was already advertised `frontendPreview.supported: true` above.
-    previewTransport: createLocalPreviewTransportFromEnv(env),
-    // Serve enabled subscription harness refs (Claude Code / Codex + the non-native
-    // claude-code vendors GLM/Kimi/DeepSeek) as INLINE calls: the developer's OWN host CLI
-    // when its binary is present (ambient login, unmetered), else a warm CONTAINER on a LEASED
-    // subscription credential — so the inline reviewers/brainstorm/estimator + inline agent
-    // kinds run on the subscription even without a host CLI (and in mothership mode). Gated by
-    // `LOCAL_NATIVE_INLINE` (default on), independent of the container-native opt-in above. The
-    // per-run personal / pooled lease seams are supplied by `buildNodeContainer` (built from the
-    // same subscription services the container executor uses) via the wrap `deps` argument.
-    ...(inlineAgents
-      ? {
-          wrapModelProviderResolver: (inner, leaseDeps) =>
-            wrapResolverWithInlineHarness({
-              inlineHarnesses,
-              hostCliVendors: detectHostInlineClis(env),
-              runInline: (req) => resolveContainerTransport().then((t) => t.runInline(req)),
-              ...leaseDeps,
-            })(inner),
-        }
-      : {}),
-    // Auto-provision the synthetic per-workspace installation so the integration reports
-    // connected with no manual connect step.
-    ...(githubInstallationRepository ? { githubInstallationRepository } : {}),
-    overrides: {
-      // Refuse a run up front when the workspace delegates container agents to a runner pool
-      // that isn't registered. Listed BEFORE `...options.overrides` so a caller (the
-      // cross-runtime conformance harness) can override it.
+  const container = buildNodeContainer(
+    buildLocalNodeOptions({
+      options,
+      env,
+      config,
+      repos,
+      realtimeSink,
+      mothership,
+      backendRegistries,
+      resolveTransport,
+      deployJobClient,
+      gitToken,
+      delegatedGitHub,
+      vcsClient,
+      resolveRepoOrigin,
+      inlineAgents,
+      inlineHarnesses,
+      resolveContainerTransport,
+      githubInstallationRepository,
       assertAgentBackendConfigured,
-      // Shared-stack bring-up/teardown drives the host Docker daemon, so hand the core deps the
-      // same runtime the compose env backend uses. Only on a Docker-family runtime; absent ⇒ the
-      // lifecycle endpoints refuse (Apple `container` can't nest, like `localDind`).
-      ...(localComposeRuntime ? { composeRuntime: localComposeRuntime } : {}),
-      // The host-probe seam that enforces a stack recipe's machine `prerequisites` at provision
-      // start (and backs the preflight API). Present only on a Docker-family runtime (same gate as
-      // the compose runtime above); absent ⇒ the preflight API 503s.
-      ...(localPreflightProbes ? { preflightHostProbes: localPreflightProbes } : {}),
-      // Clone a shared stack's repo with the same source-control PAT the agent containers push
-      // with, so a stack whose `cloneUrl` is a PRIVATE repo can be brought up (else public-only).
-      ...(gitToken ? { sharedStackCloneToken: gitToken } : {}),
-      ...options.overrides,
-      // Mothership mode's in-process work runner (no pg-boss). After `...options.overrides` so an
-      // explicit test override still wins; in mothership boot there is no `boss`, so this is the
-      // only runner wired.
-      ...(inProcessRunner ? { workRunner: inProcessRunner } : {}),
-      // The local PAT carries the CI-config scope (GitHub `workflow` — pre-selected by the
-      // creation URL; GitLab `api` covers it), so the connection isn't missing that grant —
-      // report it granted to suppress the advisory banner. (The App-permissions probe this
-      // normally uses needs an app JWT, which a single-token connection has no equivalent of.)
-      ...(gitToken
-        ? ({ workflowsGranted: async () => true } satisfies Partial<CoreDependencies>)
-        : {}),
-      // Per-USER infra handler overrides are a LOCAL-mode feature: only the local facade
-      // wires the repository, so the per-user override service + controller assemble here
-      // (and stay 503 / inert on the Worker + Node facades). A developer can point a
-      // provision type at their own Docker / k3s for the runs they initiate. It is backed by
-      // local Postgres, so it only wires when a `db` is present — in mothership mode (`db`
-      // undefined) there is no local database, so the override service stays inert (503),
-      // exactly like `localSettingsService` above; remoting it is a later environments slice.
-      ...(options.db
-        ? {
-            environmentUserHandlerRepository: new DrizzleEnvironmentUserHandlerRepository(
-              options.db,
-            ),
-          }
-        : {}),
-    } satisfies Partial<CoreDependencies>,
-  })
+      localComposeRuntime,
+      localPreflightProbes,
+      inProcessRunner,
+    }),
+  )
 
   // Bind the in-process work runner to the now-built execution service, so `startRun` /
   // `signalDecision` drive runs in-process (mothership mode; no-op otherwise). The kind-spanning

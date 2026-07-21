@@ -844,6 +844,7 @@ function setSize(value: InstanceSize) {
           :model-value="customManifestId"
           :items="customTypeItems"
           size="xs"
+          class="w-full"
           :placeholder="t('inspector.testConfig.customManifestIdPlaceholder')"
           @update:model-value="(v: string) => setCustomManifestId(v)"
         />
@@ -861,7 +862,7 @@ function setSize(value: InstanceSize) {
         <UInput
           :model-value="customManifestPath"
           size="xs"
-          class="font-mono"
+          class="w-full font-mono"
           @blur="(e: FocusEvent) => setCustomManifestPath((e.target as HTMLInputElement).value)"
           @keydown.enter="
             (e: KeyboardEvent) => setCustomManifestPath((e.target as HTMLInputElement).value)

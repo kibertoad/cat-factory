@@ -1,5 +1,41 @@
 # @cat-factory/app
 
+## 0.147.7
+
+### Patch Changes
+
+- 1bcb223: Internal refactor (lint complexity/size ratchet — `max-lines-per-function` step 1.5, 1000 → 632):
+  split the product functions above the new ceiling along cohesive seams, all behaviour-neutral. No
+  public API, wire shape, or runtime behaviour changes.
+
+  - `@cat-factory/kernel`: `seedPipelines` split into three module-level catalog builders it composes.
+  - `@cat-factory/server`: `publicApiController` / `authController` split into per-route-group registrars
+    (mirroring `registerCoreControllers`'s mount groups).
+  - `@cat-factory/app`: the `board` Pinia store's write operations extracted into `stores/board/`
+    factories (`createBoardMutations` / `createBoardRemoval`) over a shared `BoardWriteContext`.
+  - `@cat-factory/node-server`: `buildNodeContainer` split into `assembleNodeCoreDependencies` +
+    `projectNodeServerContainer` (the `CoreDependencies` object and the `ServerContainer` projection).
+  - `@cat-factory/local-server`: `buildLocalContainer`'s `buildNodeContainer` options extracted into
+    `buildLocalNodeOptions`.
+
+## 0.147.6
+
+### Patch Changes
+
+- e86e95b: fix(board): stop the board churning on inspector edits + widen the custom-manifest picker
+
+  Two Test Infrastructure inspector papercuts:
+
+  - **Board no longer jumps when a Provision Type is selected.** `updateBlock` echoed its
+    coarse `board` event back to the acting tab, forcing a full board re-hydrate on every
+    field edit (each provision-type click). It now forwards the acting tab's
+    `X-Connection-Id` and the realtime transport suppresses that self-echo — the same
+    contract `moveBlock`/`reparent` already follow. The tab still applies the change from its
+    REST response; every other subscriber still refreshes.
+  - **The custom manifest-type picker renders full-width.** The `USelect` (and its path
+    input) carried no width, so as an `inline-flex` control it and its dropdown rendered as a
+    narrow box overlapping the hint text. Added `w-full` to match every other select.
+
 ## 0.147.5
 
 ### Patch Changes
