@@ -3,9 +3,9 @@
 //
 // The built-in provisioning detectors recognize `kubernetes`/`docker-compose` repos from a
 // targeted, budget-bounded slice of the repo (see the environments detectors). A CUSTOM
-// test-infrastructure provider (a company's own ephemeral-environment convention — e.g. a
-// root `.kargo.yml` PLUS `deployment/deploy.kargo.sh` PLUS `deployment/docker-compose.kargo.yml`)
-// needs the same power to recognize ITSELF from a repo's shape, extract config, and locate its
+// test-infrastructure provider (a company's own ephemeral-environment convention — e.g. a root
+// deploy manifest PLUS a bring-up script PLUS a compose stack under a `deploy/` directory) needs
+// the same power to recognize ITSELF from a repo's shape, extract config, and locate its
 // manifest(s) — often a MULTI-FILE signature.
 //
 // These combinators sit on top of {@link BudgetedRepoScanner} (they never touch the network
@@ -82,10 +82,7 @@ export async function readYamlDoc<T = unknown>(
  * Absent file ⇒ `[]`; a doc that fails to parse is skipped (best-effort), so one bad document
  * doesn't lose the rest. For the common single-doc case prefer {@link readYamlDoc}.
  */
-export async function readYamlDocs(
-  scanner: BudgetedRepoScanner,
-  path: string,
-): Promise<unknown[]> {
+export async function readYamlDocs(scanner: BudgetedRepoScanner, path: string): Promise<unknown[]> {
   const text = await scanner.getFile(path)
   if (text === null) return []
   const out: unknown[] = []

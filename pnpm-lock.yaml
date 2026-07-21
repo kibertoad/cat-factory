@@ -184,6 +184,9 @@ importers:
       '@cat-factory/agents':
         specifier: workspace:*
         version: link:../../packages/agents
+      '@cat-factory/integrations':
+        specifier: workspace:*
+        version: link:../../packages/integrations
       '@cat-factory/kernel':
         specifier: workspace:*
         version: link:../../packages/kernel

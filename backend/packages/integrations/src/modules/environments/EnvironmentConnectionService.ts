@@ -40,12 +40,10 @@ import type {
   RepairCustomManifestInput,
 } from '@cat-factory/contracts'
 import {
-  type CustomTypeForDetection,
   type DetectionConventions,
-  detectCustomManifest,
-  detectCustomProviderAcrossTypes,
   detectKubernetesProvisioning,
 } from './provision-detect.logic.js'
+import { arbitrateCustomProviders, resolveCustomProvisioning } from './custom-detect.logic.js'
 import { detectFrontendConfig } from './frontend-detect.logic.js'
 import { RepoReadError } from './repo-read-error.js'
 import type {
@@ -55,7 +53,6 @@ import type {
 import {
   aggregateCustomManifestTypes,
   type CustomManifestTypeRegistry,
-  type RegisteredCustomManifestType,
 } from './custom-manifest-types.js'
 import {
   buildInfraHandlerFields,
@@ -297,23 +294,6 @@ export interface ResolvedTypeProvider {
   provisionType: ProvisionType
   engine: InfraEngine
   resolveSecret: SecretResolver
-}
-
-/**
- * Reduce the registered custom manifest types to the {@link CustomTypeForDetection} shape the
- * arbitration sweep needs (binding each `detect()` hook to its type so `this` inside a
- * method-style hook stays correct). Workspace-defined rows are never included — they carry no
- * `detect()` hook, so they can't be arbitrated.
- */
-function detectableCustomTypes(
-  registered: RegisteredCustomManifestType[],
-): CustomTypeForDetection[] {
-  return registered.map((t) => ({
-    manifestId: t.manifestId,
-    label: t.label,
-    ...(t.defaultManifestPath ? { defaultManifestPath: t.defaultManifestPath } : {}),
-    ...(t.detect ? { detect: t.detect.bind(t) } : {}),
-  }))
 }
 
 export class EnvironmentConnectionService {
@@ -748,39 +728,31 @@ export class EnvironmentConnectionService {
     // With a SELECTED `manifestId` ⇒ that type's `detect()` hook (or its `defaultManifestPath`
     // path-only search when it has no hook). WITHOUT one ⇒ ARBITRATE across every registered
     // type's `detect()` and propose the best match.
+    const registered = this.deps.customManifestTypeRegistry?.list() ?? []
+    const scope = {
+      gitRef: input.gitRef ?? bound.baseBranch,
+      ...(input.directory ? { directory: input.directory } : {}),
+      ...(input.currentManifestPath ? { currentManifestPath: input.currentManifestPath } : {}),
+    }
+    // `custom` tab: the provider's own autodetection (selected type's hook, or arbitration across
+    // all registered types). A null (arbitration found nothing) falls through to the k8s sweep.
     if (input.prefer === 'custom') {
-      const registered = this.deps.customManifestTypeRegistry?.list() ?? []
-      const gitRef = input.gitRef ?? bound.baseBranch
-      if (input.manifestId) {
-        const type = registered.find((t) => t.manifestId === input.manifestId)
-        const wire = (await this.listCustomTypes(workspaceId)).find(
-          (t) => t.manifestId === input.manifestId,
-        )
-        return this.mapRepoReadError(input, () =>
-          detectCustomManifest(bound.repo, {
-            gitRef,
-            ...(input.directory ? { directory: input.directory } : {}),
-            manifestId: input.manifestId,
-            ...(wire?.defaultManifestPath ? { defaultPath: wire.defaultManifestPath } : {}),
-            ...(input.currentManifestPath ? { currentPath: input.currentManifestPath } : {}),
-            ...(type?.detect ? { detect: type.detect.bind(type) } : {}),
-          }),
-        )
-      }
-      const arbitrated = await this.mapRepoReadError(input, () =>
-        detectCustomProviderAcrossTypes(bound.repo, detectableCustomTypes(registered), {
-          gitRef,
-          ...(input.directory ? { directory: input.directory } : {}),
-          ...(input.currentManifestPath ? { currentPath: input.currentManifestPath } : {}),
+      const wire = input.manifestId
+        ? (await this.listCustomTypes(workspaceId)).find((t) => t.manifestId === input.manifestId)
+        : undefined
+      const rec = await this.mapRepoReadError(input, () =>
+        resolveCustomProvisioning(bound.repo, registered, {
+          ...scope,
+          ...(input.manifestId ? { manifestId: input.manifestId } : {}),
+          ...(wire?.defaultManifestPath ? { defaultPath: wire.defaultManifestPath } : {}),
         }),
       )
-      if (arbitrated) return arbitrated
-      // No custom provider recognized the repo ⇒ fall through to the kubernetes/compose sweep.
+      if (rec) return rec
     }
 
     const recommendation = await this.mapRepoReadError(input, () =>
       detectKubernetesProvisioning(bound.repo, {
-        gitRef: input.gitRef ?? bound.baseBranch,
+        gitRef: scope.gitRef,
         ...(input.directory ? { directory: input.directory } : {}),
         ...(input.prefer ? { prefer: input.prefer } : {}),
         ...(this.deps.detectionConventions ? { conventions: this.deps.detectionConventions } : {}),
@@ -788,14 +760,10 @@ export class EnvironmentConnectionService {
     )
     // Last resort (only when NOT already on the custom tab, which arbitrated above): if the
     // default sweep found no k8s/compose layout, try custom arbitration so a repo carrying ONLY a
-    // custom provider signature (e.g. `.kargo.yml`) is still recognized from the default tab.
+    // custom provider signature (a company's own deploy convention) is still recognized.
     if (!recommendation.detected && input.prefer !== 'custom') {
-      const registered = this.deps.customManifestTypeRegistry?.list() ?? []
       const arbitrated = await this.mapRepoReadError(input, () =>
-        detectCustomProviderAcrossTypes(bound.repo, detectableCustomTypes(registered), {
-          gitRef: input.gitRef ?? bound.baseBranch,
-          ...(input.directory ? { directory: input.directory } : {}),
-        }),
+        arbitrateCustomProviders(bound.repo, registered, scope),
       )
       if (arbitrated) return arbitrated
     }

@@ -200,8 +200,9 @@ candidate exists (else a `type-mismatch`). This is how a **custom environment/de
 `engines: () => ['remote-custom']`) becomes a selectable run target for a service's `custom`
 type — no new table, controller, or UI window.
 
-A custom manifest type may also declare two optional fields (both on the code-registered
-`RegisteredCustomManifestType` AND the workspace-editable rows):
+A custom manifest type may also declare optional fields (the first two live both on the
+code-registered `RegisteredCustomManifestType` AND the workspace-editable rows; `detect` is
+code-only, since a hook is a function):
 
 - **`defaultManifestPath`** — the default in-repo manifest path (a complete `deploy/preview.yaml`
   or a bare `preview.yaml`). The service inspector **prefills** a service's `manifestPath` with it
@@ -212,6 +213,9 @@ A custom manifest type may also declare two optional fields (both on the code-re
   `env-config-repair` run (see the merge-lifecycle repair flow) writing to the entered path. Absent
   ⇒ no button. Before dispatch the service runs the connected `remote-custom` provider's
   `validateRepo` (when any) to enrich the prompt, but the agent runs regardless (a double-check).
+- **`detect`** — an optional **autodetection hook** (`detect(ctx) => CustomManifestDetection | null`)
+  that recognizes THIS provider from a repo's shape and locates its manifest(s). See
+  [Custom-provider autodetection](#custom-provider-autodetection-the-detect-hook) below.
 
 ## Per-user handler override (local mode)
 
@@ -242,8 +246,8 @@ user always confirms/edits — nothing is applied silently. What it infers, by c
   `overlays/*` is the ephemeral one (ranked by name — `prenv`/`preview`/`pr`/`ephemeral`/`dev`),
   and helm releases declared parseably (`helmfile.yaml` / a `Chart.yaml` dependency).
 
-For a **`custom`** service, detection instead resolves the in-repo **manifest path** from the
-selected type's `defaultManifestPath` (`detectCustomManifest`, same checkout-free reader). It is
+For a **`custom`** service, detection resolves the in-repo **manifest path** from the selected
+type's `defaultManifestPath` (`detectCustomManifest`, same checkout-free reader). It is
 monorepo-aware — the search is rooted at the service subtree (`directory`) or the repo root — and:
 keeps the current `manifestPath` when it already points at an existing file; else checks the exact
 `<root>/<defaultPath>`; else, when the default is a **bare filename**, checks that file one level
@@ -253,6 +257,42 @@ generate). Pass `manifestId` (+ the current `manifestPath`) to the detect endpoi
 Wired as `EnvironmentConnectionService.detectServiceProvisioning` → `POST
 …/environments/detect-provisioning`; the SPA's `ServiceTestConfig.vue` prefills
 `block.provisioning` with the per-field confidence notes.
+
+### Custom-provider autodetection (the `detect` hook)
+
+The `defaultManifestPath` search only locates ONE known file. A real custom **test-infrastructure
+provider** — a company's own ephemeral-environment convention — is usually recognized by a
+**multi-file signature** (e.g. a root deploy manifest + a bring-up script + a compose stack under a
+`deploy/` directory) and carries config worth extracting (the health port/path, the deploy
+command). A custom manifest type opts into that by declaring a `detect` hook:
+
+```ts
+detect(ctx: CustomManifestDetectionContext): Promise<CustomManifestDetection | null>
+```
+
+- **Author it with the kernel probe primitives** (`@cat-factory/kernel`, kernel + contracts only —
+  no engine, no harness change): `matchManifestSignature({ required, optional, anyOf })`,
+  `firstPresent` / `allPresent` / `anyPresent`, `readYamlDoc` / `readYamlDocs`, `listFiles`,
+  `joinRepoPath`. They run against the shared, budget-bounded `ctx.scanner` (a `BudgetedRepoScanner`),
+  so a sweep across many providers reuses one read budget + cache — never N× round-trips.
+- **Return** `{ matched, confidence, manifestPath?, secondaryPaths?, configSeed?, notes? }`, or
+  `null`/`matched:false` for "not my provider". `configSeed` (extracted key/values) prefills the
+  form; `secondaryPaths` are the other signature files, surfaced for context.
+- **Arbitration.** With NO `manifestId` selected, `detectServiceProvisioning` runs EVERY registered
+  type's `detect` over one scanner (`detectCustomProviderAcrossTypes`), ranks the matches (high
+  confidence first), and returns the winner plus a `detectedManifestTypeCandidates` list so the user
+  can switch. When the default `kubernetes`/`docker-compose` sweep finds nothing, custom arbitration
+  runs as a **last resort**, so a repo carrying only a custom signature is still recognized from the
+  default tab. A type WITHOUT a hook can't be arbitrated (it has no signature) and is skipped.
+- **Extra recommendation fields.** A matched hook enriches `ProvisioningRecommendation` with
+  `customConfigSeed`, `secondaryManifestPaths`, and `detectedManifestTypeCandidates` (all optional,
+  additive; `@cat-factory/contracts`).
+
+The worked reference is `@cat-factory/example-custom-agent`'s `detectStackDeployProvider` +
+`registerExampleStackDeployProvider` (`backend/internal/example-custom-agent/src/stack-deploy.ts`)
+— a company-authored provider that recognizes a 3-file signature and seeds the health probe +
+deploy command from the root manifest. A deployment registers it by reference on the app-owned
+`customManifestTypeRegistry` (`createBackendRegistries()`), exactly like a custom backend.
 
 ## The Tester gate
 

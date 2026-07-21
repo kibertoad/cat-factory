@@ -844,6 +844,77 @@ export function defineEnvironmentsConformance(harness: ConformanceHarness): void
       expect(on.body.provisioning.composePath).toBe('stack.yml')
     })
 
+    it('runs a registered custom provider’s detect() hook for service-provisioning detection', async () => {
+      // The custom-provider AUTODETECTION seam: a deployment registers a `custom` manifest type
+      // carrying a `detect()` hook by reference on the app-owned `customManifestTypeRegistry`, and
+      // the detect-provisioning route must run it — arbitrating across types when none is selected
+      // — on EVERY runtime. A facade that forgot to thread the registry into the connection service
+      // fails here (nothing is detected). The reader is a fake in-memory repo (a multi-file
+      // custom-provider signature) flowing through the same `resolveRepoFilesForCoords` seam.
+      const seed = (files: Record<string, string>): RunRepoContext =>
+        ({
+          repo: {
+            getFile: async (path: string) =>
+              path in files ? { content: files[path]!, sha: `sha:${path}` } : null,
+            listDirectory: async () => [],
+            headSha: async () => 'base-sha',
+            createBranch: async () => {},
+            deleteBranch: async () => {},
+            commitFiles: async () => ({ sha: 'c' }),
+            openPullRequest: async () => ({ number: 1 }) as never,
+          },
+          baseBranch: 'main',
+        }) as unknown as RunRepoContext
+
+      const backendRegistries = createBackendRegistries()
+      backendRegistries.customManifestTypeRegistry.register({
+        manifestId: 'conformance-stack',
+        label: 'Conformance stack deploy',
+        defaultManifestPath: 'deploy/stack.yml',
+        detect: async (ctx) => {
+          const present = async (p: string) => (await ctx.scanner.getFile(p)) !== null
+          const matched = (await present('deploy/stack.yml')) && (await present('deploy/up.sh'))
+          return matched
+            ? {
+                matched: true,
+                confidence: 'high',
+                manifestPath: 'deploy/stack.yml',
+                configSeed: [{ key: 'deployCommand', value: 'deploy/up.sh' }],
+              }
+            : null
+        },
+      })
+
+      const files = { 'deploy/stack.yml': 'service: app', 'deploy/up.sh': '#!/bin/bash' }
+      const app = harness.makeApp(undefined, {
+        backendRegistries,
+        resolveRepoFilesForCoords: async () => seed(files),
+      })
+      const { workspace } = await app.createWorkspace()
+      type DetectResult = {
+        detected: boolean
+        provisioning: { type: string; manifestId?: string }
+        customConfigSeed?: { key: string; value: string }[]
+        detectedManifestTypeCandidates?: { manifestId: string; recommended: boolean }[]
+      }
+      const res = await app.call<DetectResult>(
+        'POST',
+        `/workspaces/${workspace.id}/environments/detect-provisioning`,
+        { owner: 'acme', repo: 'widgets', prefer: 'custom' },
+      )
+      expect(res.status).toBe(200)
+      expect(res.body.detected).toBe(true)
+      expect(res.body.provisioning).toMatchObject({
+        type: 'custom',
+        manifestId: 'conformance-stack',
+      })
+      expect(res.body.customConfigSeed).toEqual([{ key: 'deployCommand', value: 'deploy/up.sh' }])
+      expect(res.body.detectedManifestTypeCandidates).toHaveLength(1)
+      expect(res.body.detectedManifestTypeCandidates).toMatchObject([
+        { manifestId: 'conformance-stack', recommended: true },
+      ])
+    })
+
     it('drives an env-config-repair run to success and records the post-repair validation', async () => {
       // The durable, asynchronous config-repair fallback (PR #424 follow-up): when
       // mechanical bootstrap can't synthesise a valid provider config and the caller opts

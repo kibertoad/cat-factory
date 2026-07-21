@@ -1,5 +1,4 @@
 import type {
-  DetectedManifestTypeCandidate,
   KubernetesHelmRelease,
   KubernetesImageOverride,
   KubernetesManifestSource,
@@ -9,7 +8,6 @@ import type {
   ProvisionType,
   ProvisioningComposeFileCandidate,
   ProvisioningComposeServiceCandidate,
-  ProvisioningCustomConfigSeed,
   ProvisioningDetectionNote,
   ProvisioningManifestRootCandidate,
   ProvisioningOverlayCandidate,
@@ -23,11 +21,7 @@ import type {
   SharedStackRecommendation,
   StackRecipe,
 } from '@cat-factory/contracts'
-import type {
-  CustomManifestDetection,
-  CustomManifestDetectionContext,
-  RepoScanEntry,
-} from '@cat-factory/kernel'
+import type { RepoScanEntry } from '@cat-factory/kernel'
 import { BudgetedRepoScanner, joinRepoPath } from '@cat-factory/kernel'
 import { parse as parseYaml, parseAllDocuments } from 'yaml'
 import {
@@ -283,7 +277,7 @@ const ENV_EXAMPLE_FILES = ['.env.example', '.env.sample', '.env.template', '.env
 // name/dir wins" ordering both depend on deterministic, in-order accounting. In practice a real
 // repo resolves in a handful of reads well before the cap; the cap only bites on decoy-heavy repos,
 // where truncation is surfaced as a note (see `BudgetedRepoScanner.exhausted`).
-const READ_BUDGET = 200
+export const READ_BUDGET = 200
 const MAX_IMAGES = 8
 
 // ---- Slice 2: stack-recipe detection (compose repos) -----------------------------------------
@@ -2214,242 +2208,4 @@ export async function detectSharedStack(
     envFiles,
     notes,
   }
-}
-
-export interface DetectCustomManifestOptions {
-  /** Service subdirectory within the repo (monorepo); absent/'' ⇒ the repo root. */
-  directory?: string
-  /** Git ref to read at; absent ⇒ the reader's default branch. */
-  gitRef?: string
-  /** The custom-manifest-type id the service pins (echoed back on the recommendation). */
-  manifestId?: string
-  /** The selected custom type's default manifest path (complete path, or a bare filename). */
-  defaultPath?: string
-  /** The service's CURRENT `manifestPath`, if any — kept as-is when it already resolves. */
-  currentPath?: string
-  /**
-   * The selected type's `detect()` hook, when it has one. Run BEFORE the `defaultPath`-only
-   * search: a matched hook result wins (its manifest path + config seed); a non-match falls
-   * through to the path-only resolution, so a type with a hook is a strict superset.
-   */
-  detect?: (ctx: CustomManifestDetectionContext) => Promise<CustomManifestDetection | null>
-}
-
-/** A registered custom type reduced to what {@link detectCustomProviderAcrossTypes} needs. */
-export interface CustomTypeForDetection {
-  manifestId: string
-  label: string
-  defaultManifestPath?: string
-  detect?: (ctx: CustomManifestDetectionContext) => Promise<CustomManifestDetection | null>
-}
-
-/** Build the {@link CustomManifestDetectionContext} and run a type's `detect()` hook. */
-async function runCustomDetect(
-  detect: (ctx: CustomManifestDetectionContext) => Promise<CustomManifestDetection | null>,
-  scanner: BudgetedRepoScanner,
-  ctx: { directory?: string; gitRef?: string; currentPath?: string; defaultManifestPath?: string },
-): Promise<CustomManifestDetection | null> {
-  return detect({
-    scanner,
-    ...(ctx.directory ? { directory: ctx.directory } : {}),
-    ...(ctx.gitRef ? { gitRef: ctx.gitRef } : {}),
-    ...(ctx.currentPath ? { currentPath: ctx.currentPath } : {}),
-    ...(ctx.defaultManifestPath ? { defaultManifestPath: ctx.defaultManifestPath } : {}),
-  })
-}
-
-/** Map a matched {@link CustomManifestDetection} onto the wire {@link ProvisioningRecommendation}. */
-function customDetectionToRecommendation(
-  manifestId: string | undefined,
-  detection: CustomManifestDetection,
-  extra?: { detectedManifestTypeCandidates?: DetectedManifestTypeCandidate[] },
-): ProvisioningRecommendation {
-  const notes: ProvisioningDetectionNote[] =
-    detection.notes && detection.notes.length > 0
-      ? detection.notes
-      : [
-          {
-            field: 'manifestPath',
-            confidence: detection.confidence,
-            message: detection.manifestPath
-              ? `Detected a custom manifest at ${detection.manifestPath}.`
-              : 'Detected a custom provider signature.',
-          },
-        ]
-  const configSeed: ProvisioningCustomConfigSeed[] | undefined = detection.configSeed
-  return {
-    detected: detection.matched,
-    provisioning: {
-      type: 'custom',
-      ...(manifestId ? { manifestId } : {}),
-      ...(detection.manifestPath ? { manifestPath: detection.manifestPath } : {}),
-    },
-    ...(configSeed && configSeed.length > 0 ? { customConfigSeed: configSeed } : {}),
-    ...(detection.secondaryPaths && detection.secondaryPaths.length > 0
-      ? { secondaryManifestPaths: detection.secondaryPaths }
-      : {}),
-    ...(extra?.detectedManifestTypeCandidates
-      ? { detectedManifestTypeCandidates: extra.detectedManifestTypeCandidates }
-      : {}),
-    notes,
-  }
-}
-
-/**
- * ARBITRATION sweep: run every registered custom type's `detect()` hook over ONE shared,
- * budget-bounded scanner (memoized, so overlapping probes across providers cost one read), rank
- * the matches (high confidence before low, registration order within a tier), and return the
- * winner as a `custom` recommendation with the full candidate list. `null` ⇒ no custom provider
- * recognized the repo (the caller falls through). Types without a `detect()` hook can't be
- * arbitrated (they have no signature) and are skipped.
- */
-export async function detectCustomProviderAcrossTypes(
-  reader: ProvisioningRepoReader,
-  types: CustomTypeForDetection[],
-  options: { directory?: string; gitRef?: string; currentPath?: string } = {},
-): Promise<ProvisioningRecommendation | null> {
-  const detectable = types.filter(
-    (t): t is CustomTypeForDetection & { detect: NonNullable<CustomTypeForDetection['detect']> } =>
-      typeof t.detect === 'function',
-  )
-  if (detectable.length === 0) return null
-  const scanner = new BudgetedRepoScanner(reader, READ_BUDGET, options.gitRef)
-  const matches: { type: CustomTypeForDetection; detection: CustomManifestDetection }[] = []
-  for (const type of detectable) {
-    const detection = await runCustomDetect(type.detect, scanner, {
-      directory: options.directory,
-      gitRef: options.gitRef,
-      currentPath: options.currentPath,
-      defaultManifestPath: type.defaultManifestPath,
-    })
-    if (detection?.matched) matches.push({ type, detection })
-  }
-  if (matches.length === 0) {
-    if (scanner.readFault) throw new RepoReadError(scanner.readFault)
-    return null
-  }
-  const rankOf = (c: 'high' | 'low'): number => (c === 'high' ? 0 : 1)
-  matches.sort((a, b) => rankOf(a.detection.confidence) - rankOf(b.detection.confidence))
-  const candidates: DetectedManifestTypeCandidate[] = matches.map((m, i) => ({
-    manifestId: m.type.manifestId,
-    label: m.type.label,
-    confidence: m.detection.confidence,
-    recommended: i === 0,
-  }))
-  const winner = matches[0]!
-  return customDetectionToRecommendation(winner.type.manifestId, winner.detection, {
-    detectedManifestTypeCandidates: candidates,
-  })
-}
-
-/**
- * Detect the in-repo path of a `custom` service's manifest, read CHECKOUT-FREE. Monorepo-aware:
- * the search is rooted at the service subtree (`options.directory`) or the repo root. Rules:
- *
- * 1. If `currentPath` already points at an existing file, KEEP it (nothing changes).
- * 2. Otherwise, resolve from `defaultPath`:
- *    - exact `<root>/<defaultPath>` (the complete relative path with filename); else
- *    - when `defaultPath` is a bare filename (no `/`), also check ONE level deep — the same file
- *      inside each immediate child directory of the root; else
- *    - fall back to the default location (`<root>/<defaultPath>`), noting it wasn't found (it
- *      will be created when the manifest is generated).
- *
- * Never throws / never persists; the SPA confirms the prefilled `manifestPath`.
- */
-export async function detectCustomManifest(
-  reader: ProvisioningRepoReader,
-  options: DetectCustomManifestOptions = {},
-): Promise<ProvisioningRecommendation> {
-  const root = joinRepoPath(options.directory ?? '')
-  const scanner = new BudgetedRepoScanner(reader, READ_BUDGET, options.gitRef)
-  const manifestIdPart = options.manifestId ? { manifestId: options.manifestId } : {}
-
-  // 0. The type's own `detect()` hook wins when it recognizes the repo (multi-file signature +
-  //    config seed). A non-match falls through to the `defaultPath` search below, so a type WITH
-  //    a hook is a strict superset of the path-only behaviour.
-  if (options.detect) {
-    const detection = await runCustomDetect(options.detect, scanner, {
-      directory: options.directory,
-      gitRef: options.gitRef,
-      currentPath: options.currentPath,
-      defaultManifestPath: options.defaultPath,
-    })
-    if (detection?.matched) {
-      return customDetectionToRecommendation(options.manifestId, detection)
-    }
-  }
-
-  const rec = (
-    detected: boolean,
-    manifestPath: string | undefined,
-    note: ProvisioningDetectionNote,
-  ): ProvisioningRecommendation => ({
-    detected,
-    provisioning: {
-      type: 'custom',
-      ...manifestIdPart,
-      ...(manifestPath ? { manifestPath } : {}),
-    },
-    notes: [note],
-  })
-
-  // 1. An existing, accurate current value wins — don't churn a working path.
-  const currentPath = options.currentPath?.trim()
-  if (currentPath && (await scanner.getFile(currentPath)) !== null) {
-    return rec(true, currentPath, {
-      field: 'manifestPath',
-      confidence: 'high',
-      message: `The current manifest path (${currentPath}) already points to a file in the repo — kept unchanged.`,
-    })
-  }
-
-  const defaultPath = options.defaultPath?.trim()
-  if (!defaultPath) {
-    return rec(false, currentPath || undefined, {
-      field: 'manifestPath',
-      confidence: 'low',
-      message:
-        'This custom manifest type declares no default path, so there is nothing to auto-detect. Enter the manifest path manually.',
-    })
-  }
-
-  // 2a. Exact: the complete relative path (with filename) under the service subtree / repo root.
-  const exact = joinRepoPath(root, defaultPath)
-  if ((await scanner.getFile(exact)) !== null) {
-    return rec(true, exact, {
-      field: 'manifestPath',
-      confidence: 'high',
-      message: `Found the custom manifest at ${exact} (the default path).`,
-    })
-  }
-
-  // 2b. Bare filename ⇒ also look one level deep, inside each immediate child directory.
-  if (!defaultPath.includes('/')) {
-    for (const entry of await scanner.listDir(root)) {
-      if (entry.type !== 'dir') continue
-      const nested = joinRepoPath(entry.path, defaultPath)
-      if ((await scanner.getFile(nested)) !== null) {
-        return rec(true, nested, {
-          field: 'manifestPath',
-          confidence: 'high',
-          message: `Found ${defaultPath} one level deep at ${nested}.`,
-        })
-      }
-    }
-  }
-
-  // 2c. Not found anywhere. If the lookups couldn't actually READ the repo (a genuine fault, not a
-  // clean miss), surface that instead of a misleading "not found — will be created".
-  if (scanner.readFault) throw new RepoReadError(scanner.readFault)
-  // Keep a path the user deliberately entered (they may be pointing at a file to be generated);
-  // only fall back to the default location when there's no current value — never silently
-  // overwrite an explicit entry. Either way "generate" writes to the kept path.
-  const target = currentPath || exact
-  return rec(false, target, {
-    field: 'manifestPath',
-    confidence: 'low',
-    message: currentPath
-      ? `No custom manifest found; kept the entered path ${target}. It will be created when you generate the manifest.`
-      : `No custom manifest found; pre-filled the default location ${target}. It will be created when you generate the manifest.`,
-  })
 }
