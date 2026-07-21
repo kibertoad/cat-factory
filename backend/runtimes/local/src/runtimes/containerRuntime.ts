@@ -9,6 +9,8 @@
 // adapter (`DockerRuntimeAdapter`) parameterised by binary + networking. Apple
 // `container` gets its own (`AppleContainerRuntimeAdapter`).
 
+import { createHash } from 'node:crypto'
+
 /** The in-container port the executor-harness listens on. */
 export const HARNESS_PORT = 8080
 
@@ -286,4 +288,27 @@ export function resolveHostAlias(env: NodeJS.ProcessEnv): string {
   const explicit = env.LOCAL_HARNESS_HOST_ALIAS?.trim()
   if (explicit) return explicit
   return runtimeProfile(resolveRuntimeId(env)).hostAlias
+}
+
+/**
+ * A stable, non-secret per-INSTALLATION id used to NAMESPACE every managed container (via a
+ * Docker label / the Apple container name), so a machine running two local installs against ONE
+ * container daemon never adopts, reaps, or re-leases a neighbour's container (ADR 0026 D5).
+ *
+ * Derived as a short fingerprint of `HARNESS_SHARED_SECRET` — the exact axis the isolation
+ * protects: a pooled container bakes that secret in at creation, and ONLY an install that shares
+ * the secret can authenticate to it, so keying the install id on the secret makes the reaper's
+ * rule precisely "adopt iff mutually authenticable" (two installs that genuinely share a secret,
+ * e.g. a copied `.env`, are safe to share containers and correctly get the same id). The digest is
+ * one-way and truncated, so the label leaks nothing usable about the secret. Falls back to other
+ * stable config (the database URL, then the public URL) when the secret is unset, so the id is
+ * always defined; `default` is the last resort.
+ */
+export function resolveInstallId(env: NodeJS.ProcessEnv): string {
+  const seed =
+    env.HARNESS_SHARED_SECRET?.trim() ||
+    env.DATABASE_URL?.trim() ||
+    env.PUBLIC_URL?.trim() ||
+    'default'
+  return createHash('sha256').update(seed).digest('hex').slice(0, 16)
 }

@@ -3,14 +3,21 @@ import type { PrReviewStepState, StepSubtasks } from '~/types/execution'
 // Pure derivation of the PR deep-reviewer's `reviewing`-phase progress, factored out of
 // `PrReviewWindow.vue` so it is unit-testable independently of the Vue component.
 //
-// The reviewer maintains a per-slice todo list (`step.subtasks`) once it has grouped the diff
-// into cohesive chunks. The PRESENCE of that list is the signal that slicing is done, so the two
-// `reviewing` sub-phases are told apart by it:
-//   - no todo list yet (`total === 0`) → still SLICING the diff into chunks (no plan committed).
-//   - todo list present (`total > 0`) → slicing DONE, working through the chunks.
+// When the reviewer maintains a per-slice todo list (`step.subtasks`) — one entry per cohesive
+// chunk of the diff — the UI shows per-slice progress. But that list is NOT always present: the
+// reviewer often reviews via parallel general-purpose subagents, which never write a parent-level
+// TodoWrite plan, so `subtasks` stays empty for the whole review (ADR 0026 P2/D2.2). So an empty
+// todo list is NOT proof the reviewer is "still slicing" — it only means no per-slice plan has
+// been reported yet. We therefore surface a NEUTRAL "reviewing, planning slices" state and switch
+// to per-slice status the moment a plan exists — the UI never asserts a specific "slicing" phase
+// purely because the parent stream emitted no todo list.
 
-/** True while the reviewer is still grouping the diff into chunks (it has not committed a plan). */
-export function isSlicingChunks(subtasks: StepSubtasks | null | undefined): boolean {
+/**
+ * True while NO per-slice todo plan has been reported (`total <= 0`). This is a neutral
+ * "no plan yet" signal — the reviewer may be grouping the diff OR reviewing via subagents that
+ * don't write a parent plan — NOT an assertion that it is "still slicing" (see the note above).
+ */
+export function hasNoSlicePlan(subtasks: StepSubtasks | null | undefined): boolean {
   return (subtasks?.total ?? 0) <= 0
 }
 
@@ -29,13 +36,16 @@ export function activeChunkLabels(subtasks: StepSubtasks | null | undefined): st
 
 /**
  * The at-a-glance phase of a `pr-reviewer` step, collapsing its `prReview.status` (+ the
- * slicing-vs-reviewing signal from the todo list) into a single kind the board surfaces label
- * without re-deriving. `completed`/`total` carry the slice counts for the `reviewing` kind.
+ * has-a-plan signal from the todo list) into a single kind the board surfaces label without
+ * re-deriving. `completed`/`total` carry the slice counts for the `reviewing` kind. The
+ * `planning` kind is the NEUTRAL "reviewing, no per-slice plan reported yet" state (see
+ * {@link hasNoSlicePlan}) — it deliberately does NOT claim a specific "slicing" phase, since an
+ * empty todo list is the normal shape of a subagent-driven review, not proof of slicing.
  * Returns `null` for the terminal / passed-through states (`done`/`skipped`) and when there is
  * no live review — those have no in-flight phase to show.
  */
 export type PrReviewPhaseKind =
-  | 'slicing'
+  | 'planning'
   | 'reviewing'
   | 'awaiting'
   | 'challenging'
@@ -44,9 +54,9 @@ export type PrReviewPhaseKind =
 
 export interface PrReviewPhase {
   kind: PrReviewPhaseKind
-  /** Slices whose review is finished (0 while slicing). */
+  /** Slices whose review is finished (0 while planning). */
   completed: number
-  /** Total slices the reviewer grouped the diff into (0 while slicing). */
+  /** Total slices the reviewer grouped the diff into (0 while planning). */
   total: number
 }
 
@@ -60,9 +70,10 @@ export function prReviewPhase(
   const total = subtasks?.total ?? 0
   switch (status) {
     case 'reviewing':
-      // No todo list yet ⇒ still grouping the diff; otherwise working through the chunks.
-      return isSlicingChunks(subtasks)
-        ? { kind: 'slicing', completed: 0, total: 0 }
+      // No per-slice plan reported yet ⇒ neutral "planning" (don't claim "slicing"); once a plan
+      // exists, work through the chunks with live counts.
+      return hasNoSlicePlan(subtasks)
+        ? { kind: 'planning', completed: 0, total: 0 }
         : { kind: 'reviewing', completed, total }
     case 'awaiting_selection':
       return { kind: 'awaiting', completed, total }

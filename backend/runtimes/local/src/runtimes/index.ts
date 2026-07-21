@@ -1,6 +1,7 @@
 import {
   type ContainerRuntimeAdapter,
   resolveHostAlias,
+  resolveInstallId,
   resolveRuntimeId,
   runtimeProfile,
 } from './containerRuntime.js'
@@ -22,9 +23,13 @@ export function createRuntimeAdapter(env: NodeJS.ProcessEnv): ContainerRuntimeAd
   const profile = runtimeProfile(resolveRuntimeId(env))
   const binary = env.LOCAL_DOCKER_BINARY?.trim() || profile.binary
   const hostAlias = resolveHostAlias(env)
+  // Namespaces every managed container by installation so a shared container daemon can't cross
+  // installs (ADR 0026 D5). Preview + deploy transports build through here too, so they inherit
+  // the same id and land in the same namespace as this install's runs.
+  const installId = resolveInstallId(env)
 
   if (profile.family === 'apple') {
-    return new AppleContainerRuntimeAdapter({ binary, hostAlias })
+    return new AppleContainerRuntimeAdapter({ binary, hostAlias, installId })
   }
 
   // An explicit LOCAL_DOCKER_ADD_HOST_GATEWAY wins; otherwise the profile default
@@ -39,5 +44,6 @@ export function createRuntimeAdapter(env: NodeJS.ProcessEnv): ContainerRuntimeAd
     addHostGateway,
     localDind: profile.localDind,
     pooling: profile.pooling,
+    installId,
   })
 }

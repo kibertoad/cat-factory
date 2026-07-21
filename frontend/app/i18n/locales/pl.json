@@ -4931,9 +4931,9 @@
     "suggestedFix": "Sugerowana poprawka:",
     "line": "wiersz {line}",
     "reviewing": {
-      "slicing": {
-        "title": "Dzielenie zmian na fragmenty…",
-        "hint": "Grupowanie zmienionych plików w spójne fragmenty, aby każdy można było przejrzeć osobno. Lista fragmentów pojawi się tutaj po zakończeniu podziału."
+      "planning": {
+        "title": "Przeglądanie pull requesta…",
+        "hint": "Recenzent analizuje zmiany. Postęp poszczególnych fragmentów pojawi się tutaj po pogrupowaniu zmian we fragmenty."
       },
       "reviewingChunks": {
         "title": "Przeglądanie fragmentów…",
@@ -4950,7 +4950,7 @@
       }
     },
     "phase": {
-      "slicing": "Dzielenie…",
+      "planning": "Przegląd…",
       "reviewing": "Przegląd {completed}/{total} fragmentów",
       "awaiting": "Wyniki gotowe",
       "challenging": "Analizowanie…",

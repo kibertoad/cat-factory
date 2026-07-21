@@ -4943,9 +4943,9 @@
     "suggestedFix": "Önerilen düzeltme:",
     "line": "satır {line}",
     "reviewing": {
-      "slicing": {
-        "title": "Fark parçalara bölünüyor…",
-        "hint": "Değiştirilen dosyalar, her biri ayrı ayrı incelenebilsin diye tutarlı parçalara gruplanıyor. Bölme tamamlandığında parça listesi burada görünecek."
+      "planning": {
+        "title": "Pull request inceleniyor…",
+        "hint": "İnceleyici farkı gözden geçiriyor. Değişiklikler bölümlere gruplandığında bölüm bazlı ilerleme burada görünecek."
       },
       "reviewingChunks": {
         "title": "Parçalar inceleniyor…",
@@ -4962,7 +4962,7 @@
       }
     },
     "phase": {
-      "slicing": "Dilimleniyor…",
+      "planning": "İnceleniyor…",
       "reviewing": "İnceleniyor {completed}/{total} bölüm",
       "awaiting": "Bulgular hazır",
       "challenging": "Araştırılıyor…",

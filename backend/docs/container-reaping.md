@@ -181,3 +181,38 @@ To reclaim a single live instance without nuking the app, either:
   instances endpoint) with an API token — surgical, leaves the app intact.
 
 `inactive` instances need no action (already stopped/unbilled).
+
+## Local mode — per-install container namespacing (ADR 0026 D5)
+
+The Cloudflare instance model above is per-run and globally addressed, so it can't
+cross deployments. Local mode is different: it runs job + **warm-pool** containers on
+a shared host container daemon (Docker / Podman / OrbStack / Colima, or Apple
+`container`), and a developer machine can run **two installs against one daemon**.
+Because a pooled container bakes THIS install's `HARNESS_SHARED_SECRET` in at
+creation, a startup reaper that adopted a neighbour's pool member would fail every
+authenticated call to it. So every managed local container is **namespaced by a stable
+per-install id** and the reaper/adopter/enumeration filter strictly on it.
+
+**The label contract** (`backend/runtimes/local/src/runtimes/`):
+
+- **Install id** — `resolveInstallId(env)` (`containerRuntime.ts`): a truncated
+  one-way fingerprint of `HARNESS_SHARED_SECRET` (falling back to `DATABASE_URL` /
+  `PUBLIC_URL`). Keying it on the secret makes the reaper's rule precisely "adopt iff
+  mutually authenticable" — two installs that genuinely share a secret (a copied
+  `.env`) safely share containers and get the same id; different secrets never mix. The
+  digest leaks nothing usable about the secret.
+- **Docker family** (`dockerRuntime.ts`): every `run` (per-run **and** pool member)
+  stamps `cat-factory.managed=local-docker`, the run-id/`pool=1` label, **and**
+  `cat-factory.install=<installId>`. Every daemon-wide enumeration —
+  `reapExited`, `listPoolMembers`, `listRunContainers`, `find`, `removeRun` — adds
+  `--filter label=cat-factory.install=<installId>`, so a container that lacks this
+  install's id is never reaped, listed, or re-leased; it is left alone.
+- **Apple `container`** (`appleContainerRuntime.ts`): no reliable label filter (identity
+  is name-based), so the install id is folded into the deterministic name prefix
+  `cf-<installId>-<runId>`. `reapExited` / `listRunContainers` match that per-install
+  prefix, so a neighbour's `cf-<other>-…` is invisible. (Apple has no warm pool, so the
+  contamination vector is only the reaper touching a neighbour's per-run container.)
+
+Both adapters are built by `createRuntimeAdapter(env)`, which resolves the install id
+once and threads it into the run + preview transports, so runs and previews of the same
+install share one namespace and never collide with a co-hosted install's containers.

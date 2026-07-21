@@ -4943,9 +4943,9 @@
     "suggestedFix": "Lösungsvorschlag:",
     "line": "Zeile {line}",
     "reviewing": {
-      "slicing": {
-        "title": "Diff wird in Abschnitte zerlegt…",
-        "hint": "Die geänderten Dateien werden in zusammenhängende Abschnitte gruppiert, damit jeder einzeln geprüft werden kann. Die Abschnittsliste erscheint hier, sobald die Zerlegung abgeschlossen ist."
+      "planning": {
+        "title": "Pull Request wird geprüft…",
+        "hint": "Der Prüfer arbeitet den Diff durch. Der Fortschritt pro Abschnitt erscheint hier, sobald die Änderungen in Abschnitte gruppiert werden."
       },
       "reviewingChunks": {
         "title": "Abschnitte werden geprüft…",
@@ -4962,7 +4962,7 @@
       }
     },
     "phase": {
-      "slicing": "Wird aufgeteilt…",
+      "planning": "Wird geprüft…",
       "reviewing": "Prüfe {completed}/{total} Abschnitte",
       "awaiting": "Ergebnisse bereit",
       "challenging": "Wird untersucht…",

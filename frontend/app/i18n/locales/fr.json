@@ -4931,9 +4931,9 @@
     "suggestedFix": "Correction suggérée :",
     "line": "ligne {line}",
     "reviewing": {
-      "slicing": {
-        "title": "Découpage du diff en sections…",
-        "hint": "Regroupement des fichiers modifiés en sections cohérentes afin de pouvoir examiner chacune séparément. La liste des sections apparaîtra ici une fois le découpage terminé."
+      "planning": {
+        "title": "Révision de la pull request…",
+        "hint": "Le relecteur parcourt le diff. La progression par section apparaîtra ici une fois les modifications regroupées en sections."
       },
       "reviewingChunks": {
         "title": "Revue des sections…",
@@ -4950,7 +4950,7 @@
       }
     },
     "phase": {
-      "slicing": "Découpage…",
+      "planning": "Révision…",
       "reviewing": "Révision {completed}/{total} sections",
       "awaiting": "Résultats prêts",
       "challenging": "Analyse en cours…",

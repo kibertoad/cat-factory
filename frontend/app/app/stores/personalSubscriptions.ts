@@ -12,12 +12,22 @@ import type {
 // a personal PASSWORD. The token itself is double-encrypted server-side and never returned;
 // this store only carries metadata + the renewal warning.
 //
-// To keep the password mostly transparent, it is cached CLIENT-SIDE in localStorage under a
-// SINGLE key with a TTL: the backend gate applies one password to ALL of a run's
-// individual-usage vendors, so there's no point keying the cache per vendor. A task
-// start/retry (and each interaction with a live run) rides along with the cached password —
-// sent as the `X-Personal-Password` header — and the user is only re-prompted once it
-// expires (or is wrong).
+// To keep the password mostly transparent, it is cached CLIENT-SIDE in localStorage with a
+// TTL: the backend gate applies one password to ALL of a run's individual-usage vendors, so
+// there's no point keying the cache per vendor. A task start/retry (and each interaction with a
+// live run) rides along with the cached password — sent as the `X-Personal-Password` header —
+// and the user is only re-prompted once it expires (or is wrong).
+//
+// The cache key is scoped PER INSTALLATION and PER USER (ADR 0026 D7): `cf.personal-pw:<hash of
+// the configured API base>:<user id>`. The bare `cf.personal-pw` it replaced was keyed only by
+// browser origin, so on a shared origin (two local installs on localhost, or one hosted origin
+// fronting several deployments) one installation's cached password was offered to another as
+// `X-Personal-Password`, and a second signed-in user on a shared browser profile inherited the
+// first user's password. Keying on the API base (distinct per installation even when the origin
+// is shared) and the user id closes both: another installation or user sees no cache and is
+// challenged normally. Per-workspace scoping is NOT added — the password is a per-user secret
+// (the backend applies one to all of a run's individual-usage vendors), so it would only add
+// redundant prompts.
 //
 // Every gated action (start / retry / confirm) re-validates the cache against an 8h EXPIRY
 // BUFFER: a key with less than that runway left is withheld (treated as absent) so the
@@ -43,7 +53,37 @@ const PASSWORD_TTL_MS = 40 * 60 * 60 * 1000
  * EARLY — a buffer wide enough that a pipeline kicked off now won't outlive the key (8h).
  */
 const PASSWORD_EXPIRY_BUFFER_MS = 8 * 60 * 60 * 1000
-const CACHE_KEY = 'cf.personal-pw'
+
+/** Prefix for the per-installation + per-user cache key (see the file header). */
+const CACHE_KEY_PREFIX = 'cf.personal-pw'
+/**
+ * The pre-scoping GLOBAL key (origin-only), retired by ADR 0026 D7. It is purged on sight and
+ * its value is NEVER reused — migrating it would re-introduce exactly the cross-installation /
+ * cross-user reuse the scoping removes, so the affected user is simply re-challenged once.
+ */
+const LEGACY_CACHE_KEY = 'cf.personal-pw'
+
+/** A short, stable non-cryptographic hash (FNV-1a → base36) of the API base, for the key scope. */
+function scopeHash(input: string): string {
+  let h = 0x811c9dc5
+  for (let i = 0; i < input.length; i++) {
+    h ^= input.charCodeAt(i)
+    h = Math.imul(h, 0x01000193)
+  }
+  return (h >>> 0).toString(36)
+}
+
+/**
+ * The localStorage key the personal password is cached under, scoped per installation (the
+ * configured `apiBase`, hashed) and per user (`userId`, or `anon` when auth is off / nobody is
+ * signed in). Exported for the store's unit test to seed/read the exact key the store uses.
+ */
+export function personalPasswordCacheKey(
+  apiBase: string,
+  userId: string | null | undefined,
+): string {
+  return `${CACHE_KEY_PREFIX}:${scopeHash(apiBase)}:${userId ?? 'anon'}`
+}
 
 /** A credential prompt the UI must satisfy (set when the server replies 428). */
 export interface PendingCredential {
@@ -71,6 +111,14 @@ export function parseCredentialError(
 
 export const usePersonalSubscriptionsStore = defineStore('personalSubscriptions', () => {
   const api = useApi()
+  const auth = useAuthStore()
+  // The configured API base is a static per-installation fact, so hash it once at setup; the user
+  // id is dynamic, so it is read lazily off the auth store when the key is computed.
+  const apiBase = String(useRuntimeConfig().public.apiBase ?? '')
+  /** The current per-installation + per-user cache key. */
+  function cacheKey(): string {
+    return personalPasswordCacheKey(apiBase, auth.user?.id)
+  }
   const subscriptions = ref<PersonalSubscriptionStatus[]>([])
   const loading = ref(false)
   /** When set, a credential modal should open to satisfy the pending prompt. */
@@ -119,12 +167,15 @@ export const usePersonalSubscriptionsStore = defineStore('personalSubscriptions'
    */
   function getCachedPassword(bufferMs = 0): string | undefined {
     if (typeof localStorage === 'undefined') return undefined
+    // Retire the pre-scoping global key on sight (never reused — see LEGACY_CACHE_KEY).
+    purgeLegacyCache()
     try {
-      const raw = localStorage.getItem(CACHE_KEY)
+      const key = cacheKey()
+      const raw = localStorage.getItem(key)
       if (!raw) return undefined
       const { password, expiresAt } = JSON.parse(raw) as { password: string; expiresAt: number }
       if (Date.now() > expiresAt) {
-        localStorage.removeItem(CACHE_KEY)
+        localStorage.removeItem(key)
         return undefined
       }
       // Within the buffer the key is still valid — keep it, but withhold it so the action
@@ -140,7 +191,7 @@ export const usePersonalSubscriptionsStore = defineStore('personalSubscriptions'
     if (typeof localStorage === 'undefined') return
     try {
       localStorage.setItem(
-        CACHE_KEY,
+        cacheKey(),
         JSON.stringify({ password, expiresAt: Date.now() + PASSWORD_TTL_MS }),
       )
     } catch {
@@ -151,7 +202,17 @@ export const usePersonalSubscriptionsStore = defineStore('personalSubscriptions'
   function clearCachedPassword() {
     if (typeof localStorage === 'undefined') return
     try {
-      localStorage.removeItem(CACHE_KEY)
+      localStorage.removeItem(cacheKey())
+    } catch {
+      // best-effort
+    }
+  }
+
+  /** Remove the retired global `cf.personal-pw` key so its value can never be offered again. */
+  function purgeLegacyCache() {
+    if (typeof localStorage === 'undefined') return
+    try {
+      localStorage.removeItem(LEGACY_CACHE_KEY)
     } catch {
       // best-effort
     }

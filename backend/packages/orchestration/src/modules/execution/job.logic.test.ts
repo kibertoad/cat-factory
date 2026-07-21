@@ -82,4 +82,50 @@ describe('classifyDispatchFailure', () => {
     expect(c.detail).toContain('predates this dispatch route')
     expect(c.reason).toBeUndefined()
   })
+
+  // ADR 0026 D1: a generic throw on the FAILED recovery re-dispatch of an already-evicted step
+  // (which had reached the agent phase and done work) must NOT read as "container failed to start".
+  describe('a generic throw on a step that had already begun work (evicted-after-work)', () => {
+    it('frames it as `evicted`, not a fresh-start `dispatch`', () => {
+      const c = classifyDispatchFailure(new Error('HTTP 500 re-dispatch failed'), {
+        evictionRecoveries: 1,
+      })
+      expect(c.failureKind).toBe('evicted')
+      expect(c.error).not.toContain('failed to start')
+      // The verbatim throw stays on `detail` for the post-mortem.
+      expect(c.detail).toBe('HTTP 500 re-dispatch failed')
+    })
+
+    it('folds the elapsed minutes + partial slice count into the message', () => {
+      const now = 1_000_000_000_000
+      const c = classifyDispatchFailure(new Error('boom'), {
+        evictionRecoveries: 1,
+        startedAt: now - 17 * 60_000,
+        sliceCount: 6,
+        now,
+      })
+      expect(c.failureKind).toBe('evicted')
+      expect(c.error).toContain('17 minutes of work')
+      expect(c.error).toContain('6 slices reviewed')
+      expect(c.error).toContain('could not be recovered')
+    })
+
+    it('reads cleanly with no timing/slice history (singular minute, no slice clause)', () => {
+      const now = 1_000_000_000_000
+      const c = classifyDispatchFailure(new Error('boom'), {
+        transientEvictionRecoveries: 2,
+        startedAt: now - 60_000,
+        now,
+      })
+      expect(c.error).toBe(
+        'The container was evicted after 1 minute of work and could not be recovered.',
+      )
+    })
+
+    it('still frames a first-dispatch throw (no recoveries, no history) as `dispatch`', () => {
+      const c = classifyDispatchFailure(new Error('HTTP 502 from runner'))
+      expect(c.failureKind).toBe('dispatch')
+      expect(c.error).toBe('The container failed to start.')
+    })
+  })
 })

@@ -540,7 +540,19 @@ export class RunDispatcher {
           step.container = { status: 'errored' }
           await this.runStateMachine.casPersist(workspaceId, instance)
           await this.runStateMachine.emitInstance(workspaceId, instance)
-          return { kind: 'job_failed', ...classifyDispatchFailure(error) }
+          // Hand the classifier the step's run history so a container lost AFTER work began (a
+          // failed eviction-recovery re-dispatch, `evictionRecoveries > 0`) is reported as an
+          // unrecoverable eviction — with elapsed minutes + any partial slice count — rather than
+          // the misleading "container failed to start". See ADR 0026 D1.
+          return {
+            kind: 'job_failed',
+            ...classifyDispatchFailure(error, {
+              evictionRecoveries: step.evictionRecoveries,
+              transientEvictionRecoveries: step.transientEvictionRecoveries,
+              startedAt: step.startedAt,
+              sliceCount: step.prReview?.slices?.length,
+            }),
+          }
         }
         step.jobId = handle.jobId
         // Record the model at dispatch — the poll site can't resolve it later.
