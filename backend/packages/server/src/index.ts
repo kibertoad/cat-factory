@@ -31,6 +31,7 @@ export {
 } from './modules/webSearch/upstreams.js'
 export { escalateStaleNotifications } from './runtime/escalateNotifications.js'
 export { sweepPlatformHealth, type PlatformHealthSweepLogger } from './runtime/platformHealth.js'
+export { sweepKeyDriftAndRaise } from './runtime/keyDrift.js'
 export { noRunnerBackendAvailableError } from './runtime/runnerBackendError.js'
 export {
   GITHUB_RECONCILE_STALE_MS,
@@ -169,6 +170,8 @@ export {
   type KeyFingerprintCheck,
   type KeyFingerprintLogger,
 } from './crypto/keyFingerprint.js'
+// ADR 0026 D6.2 — the runtime-neutral drift sweep over the sealed-secret inventory.
+export { sweepKeyDrift, hasKeyDrift, type KeyDriftReport } from './crypto/keyDriftSweep.js'
 export {
   GitHubAppAuth,
   type GitHubAppAuthDependencies,

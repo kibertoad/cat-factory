@@ -1,6 +1,6 @@
 # ADR 0026: PR-review run observability and warm-pool isolation
 
-- **Status:** Partially implemented — D1, D2.1, D2.2, D3, D4, D5, D6.1, D7 landed; D6.2, D6.3 outstanding
+- **Status:** Fully implemented — D1–D7 all landed
 - **Date:** 2026-07-21
 - **Context layer:** backend (`@cat-factory/agents`, `@cat-factory/orchestration`, `@cat-factory/contracts`, executor-harness, `backend/runtimes/local`) + frontend (`@cat-factory/app`)
 - **Relates to:** ADR 0023 (PR deep review), `backend/docs/container-reaping.md`, PR #1296 (E2BIG fold fix)
@@ -161,15 +161,23 @@ Independent changes; suggested order by value and blast radius:
    structured diagnostic — without killing the run — when a job produces no output early, plus a
    one-line assertion that the pre-seeded onboarding keys landed, logged with the CLI version.
 6. D6.2 (the bounded startup sweep + one surfaced drift issue) and D6.3 (explicit per-secret
-   drop/re-seal remediation). **Outstanding.** These build on the D6.1 fingerprint + the typed
-   `SecretDecryptError` discriminant already landed: the sweep decrypts each secret-bearing
-   column and buckets by `reason`, the surfaced issue lists affected credentials (by connection
-   type / id / seal time, never the value), and remediation drops a chosen unrecoverable
-   ciphertext and flips its connection to "needs re-entry". They remain a separate change because
-   a faithful implementation is cross-cutting — a sealed-secret inventory spanning the ~16 secret
-   tables in BOTH runtimes, a new `key_drift` notification type (contracts + all locales), a CLI
-   action, and a connection-UI remediation surface — and should land as its own reviewed slice
-   rather than be half-wired here.
+   drop/re-seal remediation). **✅ Landed.** Both ride the `SealedSecretInventory` kernel port
+   (`listSealed` + `drop`), implemented per runtime (D1 + Drizzle, asserted by
+   `defineSealedSecretInventorySuite`) over the two sources the incident named
+   (`environment_connections`, `observability_connections`) — extending it to another source is a
+   change to the inventory pair, never the sweep. **D6.2:** `sweepKeyDriftAndRaise` (runtime-neutral,
+   in `@cat-factory/server`) attempts a decrypt of every sealed secret, buckets each via the typed
+   `SecretDecryptError` `reason`, and raises ONE `key_drift` notification per affected workspace
+   (listing the affected credentials by source / id / label / reason / seal time, NEVER the value;
+   it de-dupes on the affected set and auto-clears once a workspace recovers). It runs at Node boot
+   (after the container is built) and on the Worker's daily cron, next to the D6.1 fingerprint
+   check. **D6.3:** dropping is explicit + per-secret — the `key_drift` card's action drops every
+   credential it lists ("drop all stale"), the `pnpm --filter @cat-factory/node-server
+key-drift:drop --source … --id …` operator CLI drops one, and both route through
+   `inventory.drop` (env connection → soft-delete tombstone; observability → row delete, since the
+   sealed columns are NOT NULL and can't be nulled in place). The value stays unrecoverable, so the
+   card + CLI both state that restoring the previous ENCRYPTION_KEY recovers them instead — the drop
+   is never automatic.
 
 The immediate `environment_connections` drift on this install is still cleared operationally by re-entering the affected credentials; D6 is what stops the next occurrence from being discovered the hard way.
 

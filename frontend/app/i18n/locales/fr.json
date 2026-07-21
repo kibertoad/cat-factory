@@ -1656,7 +1656,8 @@
         "markRead": "Marquer comme lu",
         "fork_decision_pending": "Marquer comme lu",
         "pr_review_ready": "Marquer comme lu",
-        "budget_paused": "Marquer comme lu"
+        "budget_paused": "Marquer comme lu",
+        "key_drift": "Supprimer les identifiants obsolètes"
       },
       "toast": {
         "acted": "Marqué comme traité",

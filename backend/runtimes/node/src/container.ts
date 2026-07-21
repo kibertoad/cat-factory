@@ -123,6 +123,7 @@ import {
 import { DrizzleRepoProjectionRepository } from './repositories/github.js'
 import { DrizzleSubscriptionActivationRepository } from './repositories/personalSubscription.js'
 import { DrizzleUserRepoAccessRepository } from './repositories/userRepoAccess.js'
+import { DrizzleSealedSecretInventory } from './repositories/drizzle/sealedSecretInventory.js'
 import { createDrizzleRepositories, createDrizzleSandboxDeps } from './repositories/drizzle.js'
 import type { ContentStorageBackend } from '@cat-factory/contracts'
 import { DrizzleReferenceArchitectureRepository } from './repositories/bootstrap.js'
@@ -1681,6 +1682,11 @@ export function buildNodeContainer(options: NodeContainerOptions): ServerContain
     // The per-user "repos my PAT can reach" projection (board redaction + picker expansion);
     // Postgres-backed, so absent in the no-DB mothership node (redaction degrades to visible).
     userRepoAccess: db ? new DrizzleUserRepoAccessRepository(db) : undefined,
+    // The sealed-secret inventory the key-drift sweep + drop remediation use (ADR 0026 D6.2/D6.3);
+    // Postgres-backed and gated on ENCRYPTION_KEY (no key ⇒ nothing is sealed to scan).
+    ...(db && env.ENCRYPTION_KEY?.trim()
+      ? { sealedSecretInventory: new DrizzleSealedSecretInventory(db) }
+      : {}),
     // The per-workspace OpenRouter dynamic-catalog store; present when the API-key pool is.
     openRouterCatalog,
     // Flush + release the external trace sink on graceful shutdown so the OpenTelemetry SDK

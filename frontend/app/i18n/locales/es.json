@@ -1656,7 +1656,8 @@
         "markRead": "Marcar como leída",
         "fork_decision_pending": "Marcar como leído",
         "pr_review_ready": "Marcar como leída",
-        "budget_paused": "Marcar como leída"
+        "budget_paused": "Marcar como leída",
+        "key_drift": "Descartar credenciales obsoletas"
       },
       "toast": {
         "acted": "Marcado como resuelto",

@@ -1656,7 +1656,8 @@
         "markRead": "סמן כנקרא",
         "fork_decision_pending": "סמן כנקרא",
         "pr_review_ready": "סמן כנקרא",
-        "budget_paused": "סמן כנקרא"
+        "budget_paused": "סמן כנקרא",
+        "key_drift": "מחק אישורים מיושנים"
       },
       "toast": {
         "acted": "סומן כטופל",

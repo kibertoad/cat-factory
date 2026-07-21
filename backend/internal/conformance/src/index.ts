@@ -52,6 +52,10 @@ export {
   type ContentStorageResolutionHarness,
 } from './content-storage-resolution-suite.js'
 export { defineAgentContextSuite } from './agent-context-suite.js'
+export {
+  defineSealedSecretInventorySuite,
+  type SealedSecretInventoryHarness,
+} from './sealed-secret-inventory-suite.js'
 export { defineAgentSearchQuerySuite } from './agent-search-queries-suite.js'
 export { defineCacheSuite } from './cache-suite.js'
 export { defineSkillLibrarySuite, type SkillLibraryRepos } from './skill-library-suite.js'

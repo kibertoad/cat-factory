@@ -293,6 +293,11 @@ export type {
 export type { SecretCipher, SecretDecryptFailureReason } from './secret-cipher.js'
 export { SecretDecryptError, isSecretDecryptError } from './secret-cipher.js'
 export type { KeyFingerprintStore } from './key-fingerprint-store.js'
+export type {
+  SealedSecretInventory,
+  SealedSecretRef,
+  DropSealedSecretResult,
+} from './sealed-secret-inventory.js'
 export type { PersonalSecretCipher } from './personal-secret-cipher.js'
 export type {
   EnvironmentProvider,

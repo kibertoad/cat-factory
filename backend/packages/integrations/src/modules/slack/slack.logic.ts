@@ -83,6 +83,9 @@ const MENTION_AUDIENCE: Record<NotificationType, MentionAudience> = {
   // A workspace-wide spend pause: no task creator (block-less), so it @-mentions no one. It is
   // in-app-only (absent from SLACK_ROUTABLE_TYPES) — this entry only satisfies the exhaustive map.
   budget_paused: { roles: [], includeCreator: false },
+  // An ENCRYPTION_KEY-drift alert (ADR 0026 D6.2): an operational, deployment-wide credential
+  // issue for the operators who watch the deployment; in-app-only (absent from SLACK_ROUTABLE_TYPES).
+  key_drift: { roles: ['engineering'], includeCreator: false },
 }
 
 /** The mention audience for a notification type. */
@@ -172,6 +175,7 @@ const TYPE_LABEL: Record<NotificationType, string> = {
   initiative: ':world_map: Initiative update',
   platform_health: ':bar_chart: Platform health alert',
   budget_paused: ':moneybag: Runs paused — spend budget reached',
+  key_drift: ':key: Encryption-key drift — credentials need re-entry',
 }
 
 /** Format a percentage from a 0..1 score for the assessment context line. */

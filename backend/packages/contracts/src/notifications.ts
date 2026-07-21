@@ -94,8 +94,33 @@ export const notificationTypeSchema = v.picklist([
   'initiative',
   'platform_health',
   'budget_paused',
+  'key_drift',
 ])
 export type NotificationType = v.InferOutput<typeof notificationTypeSchema>
+
+/**
+ * One credential the ENCRYPTION_KEY-drift sweep (ADR 0026 D6.2) could not decrypt, carried on a
+ * `key_drift` notification. NEVER carries the secret value — only its non-secret identity (source
+ * table, row id, a human label) plus WHY it failed, so the surfaced issue is legible and the
+ * operator's drop/re-seal action (D6.3) can target a specific one.
+ */
+export const keyDriftAffectedSchema = v.object({
+  /** The store the secret lives in, e.g. `'environment_connection'` / `'observability_connection'`. */
+  source: v.string(),
+  /** The owning row's id — the target of the drop action. */
+  id: v.string(),
+  /** A human label (connection type / provider) for the card. */
+  label: v.string(),
+  /**
+   * Why it failed: `key-mismatch` (sealed under a different ENCRYPTION_KEY — unrecoverable without
+   * it) or `corrupt` (malformed/foreign envelope — a separate fault). Only `key-mismatch` is true
+   * key drift; both are surfaced so a corrupt row isn't misread as a key change.
+   */
+  reason: v.picklist(['key-mismatch', 'corrupt']),
+  /** Epoch ms the secret was sealed, when known — helps an operator correlate a key change. */
+  sealedAt: v.nullable(v.number()),
+})
+export type KeyDriftAffected = v.InferOutput<typeof keyDriftAffectedSchema>
 
 /**
  * Lifecycle of a notification: `open` until a human engages, terminal `acted`
@@ -168,6 +193,13 @@ export const notificationPayloadSchema = v.object({
    * card links to); the reason set + window are enough to convey "what's wrong, go look".
    */
   platformAlerts: v.optional(v.array(platformAlertReasonSchema)),
+  /**
+   * On a `key_drift` notification: the stored credentials the drift sweep could not decrypt
+   * (never their values). This is the card's dedup identity — the sweep re-raises the SAME card
+   * each run but only re-delivers when this set changes — AND the list the drop/re-seal action
+   * (D6.3) targets. Sorted by `(source, id)` so the identity is stable across sweeps.
+   */
+  driftAffected: v.optional(v.array(keyDriftAffectedSchema)),
 })
 export type NotificationPayload = v.InferOutput<typeof notificationPayloadSchema>
 
@@ -202,3 +234,15 @@ export type Notification = v.InferOutput<typeof notificationSchema>
 /** How a human resolved a notification from its card. */
 export const resolveNotificationActionSchema = v.picklist(['act', 'dismiss'])
 export type ResolveNotificationAction = v.InferOutput<typeof resolveNotificationActionSchema>
+
+/**
+ * Drop one unrecoverable sealed credential (ADR 0026 D6.3): the operator names the affected
+ * `(source, id)` from a `key_drift` card. The endpoint drops that ciphertext and flips its
+ * connection to "needs re-entry". Explicit + per-secret — never a blanket auto-drop, so a
+ * mistaken key change stays recoverable by restoring the original key.
+ */
+export const dropKeyDriftSecretSchema = v.object({
+  source: v.string(),
+  id: v.string(),
+})
+export type DropKeyDriftSecretInput = v.InferOutput<typeof dropKeyDriftSecretSchema>

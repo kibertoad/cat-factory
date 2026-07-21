@@ -34,6 +34,7 @@
     "db:check": "drizzle-kit check",
     "db:rebase-snapshot": "node scripts/rebase-migration-snapshot.mjs",
     "db:reset": "node scripts/db-reset.mjs",
+    "key-drift:drop": "node scripts/key-drift-drop.mjs",
     "test": "vitest run",
     "test:run": "vitest run"
   },
