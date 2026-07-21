@@ -1,5 +1,21 @@
 # @cat-factory/kernel
 
+## 0.150.0
+
+### Minor Changes
+
+- 3c7d62b: Add reusable checkout-free **manifest-probe** primitives for custom test-infrastructure
+  provider autodetection (`src/shared/manifest-probe.logic.ts`): `matchManifestSignature`
+  (declarative multi-file signatures), `firstPresent`/`allPresent`/`anyPresent`, `readYamlDoc`/
+  `readYamlDocs`, `listFiles`, all over the shared `BudgetedRepoScanner`, plus the `detect()`
+  authoring types `CustomManifestDetectionContext` / `CustomManifestDetection`. Adds `yaml` as a
+  runtime dependency for the YAML helpers.
+
+### Patch Changes
+
+- Updated dependencies [3c7d62b]
+  - @cat-factory/contracts@0.156.0
+
 ## 0.149.0
 
 ### Minor Changes
