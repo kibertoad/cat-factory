@@ -260,6 +260,42 @@ describe('ContainerAgentExecutor', () => {
     })
   })
 
+  it('forwards the harness liveness heartbeat as lastActivityAt from a running poll', async () => {
+    // The full transport→executor hop for the observable heartbeat: the harness JobView carries
+    // `heartbeatAt`, CloudflareContainerTransport casts that view VERBATIM, and pollJob must lift
+    // it onto the running update as `lastActivityAt` (which the engine then persists throttled).
+    // Distinct from `progress`: a quiet-but-alive job advances the heartbeat without ticking its
+    // todo counts, so assert the heartbeat rides through even with no progress attached.
+    const runningWithHeartbeat = {
+      idFromName: (name: string) => ({ toString: () => name }),
+      get: () => ({
+        fetch: () =>
+          Promise.resolve(
+            new Response(JSON.stringify({ state: 'running', heartbeatAt: 1_700_000_123_456 })),
+          ),
+      }),
+    } as unknown as DurableObjectNamespace<ExecutionContainer>
+
+    const executor = new ContainerAgentExecutor({
+      resolveTransport: resolveTo(runningWithHeartbeat),
+      agentRouting: routing('qwen', 'qwen3-max'),
+      resolveBlockModel: () => undefined,
+      resolveRepoTarget: () => Promise.resolve(repo),
+      mintInstallationToken: () => Promise.resolve('gh-token'),
+      sessionService: new ContainerSessionService({ secret: 'secret' }),
+      proxyBaseUrl: 'https://worker.example/v1',
+    })
+
+    const update = await executor.pollJob({ jobId: 'ex-1' })
+    expect(update).toEqual({
+      state: 'running',
+      // No `subtasks` key: a heartbeat-only poll (quiet phase) forwards liveness without progress.
+      lastActivityAt: 1_700_000_123_456,
+      container: { id: 'ex-1' },
+      backend: 'cloudflare-container',
+    })
+  })
+
   it('surfaces a job-level error from the container', async () => {
     const executor = new ContainerAgentExecutor({
       resolveTransport: fakeContainer(

@@ -239,6 +239,30 @@ describe('LocalContainerRunnerTransport', () => {
     expect(view.result?.prUrl).toBe('https://x/pr/1')
   })
 
+  it('forwards the harness liveness heartbeat verbatim on a running poll', async () => {
+    // Runtime symmetry with the Cloudflare container transport: local casts the harness JobView
+    // verbatim, so the harness `heartbeatAt` must ride through to `RunnerJobView.heartbeatAt` (which
+    // the executor lifts onto `lastActivityAt`) — otherwise a live-but-quiet local run looks wedged.
+    const { exec } = fakeDocker()
+    const fetchImpl = vi.fn(async (input: string | URL | Request) => {
+      const url = String(input)
+      if (url.endsWith('/health')) return new Response('ok', { status: 200 })
+      if (url.includes('/jobs/')) {
+        return jsonResponse({ state: 'running', heartbeatAt: 1_700_000_123_456 }, 200)
+      }
+      return jsonResponse({ state: 'running' }, 202)
+    })
+    const transport = mkTransport({
+      image: 'harness:test',
+      exec,
+      fetchImpl: fetchImpl as unknown as typeof fetch,
+    })
+    await transport.dispatch({ runId: 'job-hb', jobId: 'job-hb' }, {}, 'agent')
+    const view = await transport.poll({ runId: 'job-hb', jobId: 'job-hb' })
+    expect(view.state).toBe('running')
+    expect(view.heartbeatAt).toBe(1_700_000_123_456)
+  })
+
   it('reports an eviction when no container exists for the job', async () => {
     // ps returns nothing → the job has no container.
     const { exec } = fakeDocker({ ps: '' })
