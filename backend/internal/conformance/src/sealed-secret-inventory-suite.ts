@@ -115,9 +115,7 @@ export function defineSealedSecretInventorySuite(
         createdAt: 1,
       })
       const listed = await h.inventory.listSealed()
-      const ref = listed.find(
-        (r) => r.source === 'environment_connection' && r.workspaceId === ws,
-      )
+      const ref = listed.find((r) => r.source === 'environment_connection' && r.workspaceId === ws)
       expect(ref?.id).toBe(`${ws}|kubernetes|multi|part|manifest`)
 
       expect(await h.inventory.drop({ source: 'environment_connection', id: ref!.id })).toEqual({

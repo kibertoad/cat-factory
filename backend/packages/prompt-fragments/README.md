@@ -29,6 +29,47 @@ hint (`blockTypes` / `agentKinds`).
   suppressed by higher tiers. See
   [ADR 0006](../../docs/adr/0006-prompt-fragment-library.md).
 
+## Programmatic deployment seams (custom fragments + per-task-type defaults)
+
+Two **module-global** registration seams let a deployment (local **or** hosted) extend
+the fragment behaviour at startup — an import side effect from the deployment entry, run
+**once before** `start()` / `startLocal()`, mirroring `registerAgentKind`. No fork, no
+rebuild, no per-workspace UI.
+
+- **Add custom fragments to the universal pool** — `registerPromptFragment(fragment)` /
+  `registerPromptFragments(fragments)`. Every `GET /prompt-fragments` catalog read and
+  every run-time body lookup then sees them; re-registering an id overrides the built-in
+  of that id. (`universalFragments()` is the merged built-in ∪ registered pool.)
+- **Mark fragments as the default for a task type** —
+  `registerTaskTypeDefaultFragments(taskType, fragmentIds)`. Every **new** task of that
+  type (`document`, `review`, `feature`, …) is then seeded with those fragments onto its
+  own `fragmentIds` at creation (unioned with the built-in defaults and whatever it
+  inherits from its service). The board resolves a new task's seed set through
+  `defaultFragmentIdsForTaskType(taskType)`; the only built-in per-type default is the
+  document writing-style set (`DEFAULT_DOCUMENT_STYLE_FRAGMENT_IDS`), which registered
+  ids augment rather than replace. Seeding is server-side and authoritative — it applies
+  even for tasks created via the public API with no create-form picker.
+
+```ts
+// deployment entry, before start()/startLocal()
+import {
+  registerPromptFragments,
+  registerTaskTypeDefaultFragments,
+} from '@cat-factory/prompt-fragments'
+
+registerPromptFragments([
+  {
+    id: 'org.review-checklist',
+    version: '1.0.0',
+    title: 'Review checklist',
+    summary: 'Our PR review bar.',
+    body: '- Check error handling…',
+  },
+])
+// every new REVIEW task starts with this guidance
+registerTaskTypeDefaultFragments('review', ['org.review-checklist'])
+```
+
 ## Adding a collection
 
 1. Create `src/collections/<topic>.ts` and export an array of `PromptFragment`.
