@@ -1,4 +1,9 @@
-import type { CustomManifestType, CustomManifestTypeRecord } from '@cat-factory/kernel'
+import type {
+  CustomManifestDetection,
+  CustomManifestDetectionContext,
+  CustomManifestType,
+  CustomManifestTypeRecord,
+} from '@cat-factory/kernel'
 
 // The custom-manifest-type catalog seam. The full set of `custom` provision types a service
 // can declare is the union of:
@@ -27,6 +32,15 @@ export interface RegisteredCustomManifestType {
    * present but invalid). Absent ⇒ no generate/fix affordance for this type.
    */
   fixerPrompt?: string
+  /**
+   * Optional AUTODETECTION hook. Given a shared, budget-bounded checkout-free scanner (compose
+   * the `@cat-factory/kernel` probe primitives — `matchManifestSignature` / `firstPresent` /
+   * `readYamlDoc` / … — against it), recognize THIS provider from the repo's shape (typically a
+   * MULTI-FILE signature), locate its manifest path, and optionally extract a config seed. Return
+   * `null` (or `matched: false`) when the repo is not this provider — the arbitration sweep then
+   * skips it. Absent ⇒ the detector falls back to path-only resolution from `defaultManifestPath`.
+   */
+  detect?(ctx: CustomManifestDetectionContext): Promise<CustomManifestDetection | null>
 }
 
 export class CustomManifestTypeRegistry {

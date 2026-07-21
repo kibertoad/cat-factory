@@ -1,4 +1,5 @@
 import type {
+  DetectedManifestTypeCandidate,
   KubernetesHelmRelease,
   KubernetesImageOverride,
   KubernetesManifestSource,
@@ -8,6 +9,7 @@ import type {
   ProvisionType,
   ProvisioningComposeFileCandidate,
   ProvisioningComposeServiceCandidate,
+  ProvisioningCustomConfigSeed,
   ProvisioningDetectionNote,
   ProvisioningManifestRootCandidate,
   ProvisioningOverlayCandidate,
@@ -21,7 +23,11 @@ import type {
   SharedStackRecommendation,
   StackRecipe,
 } from '@cat-factory/contracts'
-import type { RepoScanEntry } from '@cat-factory/kernel'
+import type {
+  CustomManifestDetection,
+  CustomManifestDetectionContext,
+  RepoScanEntry,
+} from '@cat-factory/kernel'
 import { BudgetedRepoScanner, joinRepoPath } from '@cat-factory/kernel'
 import { parse as parseYaml, parseAllDocuments } from 'yaml'
 import {
@@ -2221,6 +2227,119 @@ export interface DetectCustomManifestOptions {
   defaultPath?: string
   /** The service's CURRENT `manifestPath`, if any — kept as-is when it already resolves. */
   currentPath?: string
+  /**
+   * The selected type's `detect()` hook, when it has one. Run BEFORE the `defaultPath`-only
+   * search: a matched hook result wins (its manifest path + config seed); a non-match falls
+   * through to the path-only resolution, so a type with a hook is a strict superset.
+   */
+  detect?: (ctx: CustomManifestDetectionContext) => Promise<CustomManifestDetection | null>
+}
+
+/** A registered custom type reduced to what {@link detectCustomProviderAcrossTypes} needs. */
+export interface CustomTypeForDetection {
+  manifestId: string
+  label: string
+  defaultManifestPath?: string
+  detect?: (ctx: CustomManifestDetectionContext) => Promise<CustomManifestDetection | null>
+}
+
+/** Build the {@link CustomManifestDetectionContext} and run a type's `detect()` hook. */
+async function runCustomDetect(
+  detect: (ctx: CustomManifestDetectionContext) => Promise<CustomManifestDetection | null>,
+  scanner: BudgetedRepoScanner,
+  ctx: { directory?: string; gitRef?: string; currentPath?: string; defaultManifestPath?: string },
+): Promise<CustomManifestDetection | null> {
+  return detect({
+    scanner,
+    ...(ctx.directory ? { directory: ctx.directory } : {}),
+    ...(ctx.gitRef ? { gitRef: ctx.gitRef } : {}),
+    ...(ctx.currentPath ? { currentPath: ctx.currentPath } : {}),
+    ...(ctx.defaultManifestPath ? { defaultManifestPath: ctx.defaultManifestPath } : {}),
+  })
+}
+
+/** Map a matched {@link CustomManifestDetection} onto the wire {@link ProvisioningRecommendation}. */
+function customDetectionToRecommendation(
+  manifestId: string | undefined,
+  detection: CustomManifestDetection,
+  extra?: { detectedManifestTypeCandidates?: DetectedManifestTypeCandidate[] },
+): ProvisioningRecommendation {
+  const notes: ProvisioningDetectionNote[] =
+    detection.notes && detection.notes.length > 0
+      ? detection.notes
+      : [
+          {
+            field: 'manifestPath',
+            confidence: detection.confidence,
+            message: detection.manifestPath
+              ? `Detected a custom manifest at ${detection.manifestPath}.`
+              : 'Detected a custom provider signature.',
+          },
+        ]
+  const configSeed: ProvisioningCustomConfigSeed[] | undefined = detection.configSeed
+  return {
+    detected: detection.matched,
+    provisioning: {
+      type: 'custom',
+      ...(manifestId ? { manifestId } : {}),
+      ...(detection.manifestPath ? { manifestPath: detection.manifestPath } : {}),
+    },
+    ...(configSeed && configSeed.length > 0 ? { customConfigSeed: configSeed } : {}),
+    ...(detection.secondaryPaths && detection.secondaryPaths.length > 0
+      ? { secondaryManifestPaths: detection.secondaryPaths }
+      : {}),
+    ...(extra?.detectedManifestTypeCandidates
+      ? { detectedManifestTypeCandidates: extra.detectedManifestTypeCandidates }
+      : {}),
+    notes,
+  }
+}
+
+/**
+ * ARBITRATION sweep: run every registered custom type's `detect()` hook over ONE shared,
+ * budget-bounded scanner (memoized, so overlapping probes across providers cost one read), rank
+ * the matches (high confidence before low, registration order within a tier), and return the
+ * winner as a `custom` recommendation with the full candidate list. `null` ⇒ no custom provider
+ * recognized the repo (the caller falls through). Types without a `detect()` hook can't be
+ * arbitrated (they have no signature) and are skipped.
+ */
+export async function detectCustomProviderAcrossTypes(
+  reader: ProvisioningRepoReader,
+  types: CustomTypeForDetection[],
+  options: { directory?: string; gitRef?: string; currentPath?: string } = {},
+): Promise<ProvisioningRecommendation | null> {
+  const detectable = types.filter(
+    (t): t is CustomTypeForDetection & { detect: NonNullable<CustomTypeForDetection['detect']> } =>
+      typeof t.detect === 'function',
+  )
+  if (detectable.length === 0) return null
+  const scanner = new BudgetedRepoScanner(reader, READ_BUDGET, options.gitRef)
+  const matches: { type: CustomTypeForDetection; detection: CustomManifestDetection }[] = []
+  for (const type of detectable) {
+    const detection = await runCustomDetect(type.detect, scanner, {
+      directory: options.directory,
+      gitRef: options.gitRef,
+      currentPath: options.currentPath,
+      defaultManifestPath: type.defaultManifestPath,
+    })
+    if (detection?.matched) matches.push({ type, detection })
+  }
+  if (matches.length === 0) {
+    if (scanner.readFault) throw new RepoReadError(scanner.readFault)
+    return null
+  }
+  const rankOf = (c: 'high' | 'low'): number => (c === 'high' ? 0 : 1)
+  matches.sort((a, b) => rankOf(a.detection.confidence) - rankOf(b.detection.confidence))
+  const candidates: DetectedManifestTypeCandidate[] = matches.map((m, i) => ({
+    manifestId: m.type.manifestId,
+    label: m.type.label,
+    confidence: m.detection.confidence,
+    recommended: i === 0,
+  }))
+  const winner = matches[0]!
+  return customDetectionToRecommendation(winner.type.manifestId, winner.detection, {
+    detectedManifestTypeCandidates: candidates,
+  })
 }
 
 /**
@@ -2244,6 +2363,22 @@ export async function detectCustomManifest(
   const root = joinRepoPath(options.directory ?? '')
   const scanner = new BudgetedRepoScanner(reader, READ_BUDGET, options.gitRef)
   const manifestIdPart = options.manifestId ? { manifestId: options.manifestId } : {}
+
+  // 0. The type's own `detect()` hook wins when it recognizes the repo (multi-file signature +
+  //    config seed). A non-match falls through to the `defaultPath` search below, so a type WITH
+  //    a hook is a strict superset of the path-only behaviour.
+  if (options.detect) {
+    const detection = await runCustomDetect(options.detect, scanner, {
+      directory: options.directory,
+      gitRef: options.gitRef,
+      currentPath: options.currentPath,
+      defaultManifestPath: options.defaultPath,
+    })
+    if (detection?.matched) {
+      return customDetectionToRecommendation(options.manifestId, detection)
+    }
+  }
+
   const rec = (
     detected: boolean,
     manifestPath: string | undefined,

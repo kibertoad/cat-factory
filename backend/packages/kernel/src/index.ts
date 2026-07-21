@@ -287,6 +287,22 @@ export {
   joinRepoPath,
   BudgetedRepoScanner,
 } from './shared/repo-scan.logic.js'
+export {
+  type ManifestMatchConfidence,
+  type ManifestSignature,
+  type ManifestSignatureMatch,
+  type CustomProviderConfigSeed,
+  type CustomManifestDetectionContext,
+  type CustomManifestDetection,
+  allPresent,
+  anyPresent,
+  firstPresent,
+  readTextFile,
+  readYamlDoc,
+  readYamlDocs,
+  listFiles,
+  matchManifestSignature,
+} from './shared/manifest-probe.logic.js'
 
 export { requireWorkspace } from './workspace-guard.js'
 

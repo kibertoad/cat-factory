@@ -1176,6 +1176,38 @@ export type ProvisioningRepoCliHint = v.InferOutput<typeof provisioningRepoCliHi
  * `composeProfiles` | `envFiles` | `externalNetworks` | `sharedStackRefs` | `setupSteps` |
  * `healthGate` | `seedDump` | `repoCli`.
  */
+/**
+ * A single extracted key/value a CUSTOM provider's `detect()` surfaced (a health port/path
+ * parsed from its manifest, a deploy command, …) for the SPA to prefill into the connect/
+ * provision form. Advisory — nothing is applied without the user confirming.
+ */
+export const provisioningCustomConfigSeedSchema = v.object({
+  /** The config field name the provider names (e.g. `healthPort`, `healthPath`, `deployCommand`). */
+  key: v.pipe(v.string(), v.minLength(1), v.maxLength(200)),
+  /** The extracted value (stringified). */
+  value: v.pipe(v.string(), v.maxLength(1000)),
+})
+export type ProvisioningCustomConfigSeed = v.InferOutput<typeof provisioningCustomConfigSeedSchema>
+
+/**
+ * A CUSTOM manifest type whose `detect()` hook matched the repo, surfaced by the arbitration
+ * sweep (when no type was pre-selected). The best-ranked one is pre-selected (`recommended`);
+ * the rest let the user switch if the platform guessed wrong.
+ */
+export const detectedManifestTypeCandidateSchema = v.object({
+  /** The matched custom-manifest-type id (the value `provisioning.manifestId` would take). */
+  manifestId: v.string(),
+  /** The type's human label (for the picker). */
+  label: v.string(),
+  /** How confident that provider's `detect()` was in the match. */
+  confidence: provisioningDetectionConfidenceSchema,
+  /** The top-ranked candidate (the one pre-selected in `provisioning.manifestId`). */
+  recommended: v.boolean(),
+})
+export type DetectedManifestTypeCandidate = v.InferOutput<
+  typeof detectedManifestTypeCandidateSchema
+>
+
 export const provisioningRecommendationSchema = v.object({
   detected: v.boolean(),
   /** The prefilled service provisioning the user confirms/edits (the "what + where"). */
@@ -1200,6 +1232,23 @@ export const provisioningRecommendationSchema = v.object({
   seedDumpCandidates: v.optional(v.array(provisioningSeedDumpCandidateSchema)),
   /** Report-only: the repo has its own imperative bring-up ⇒ suggest the environment analyst. */
   repoCliHint: v.optional(provisioningRepoCliHintSchema),
+  /**
+   * `custom` only: config a matching custom provider's `detect()` extracted from its manifest(s)
+   * (health port/path, deploy command, …) for the SPA to prefill. Advisory.
+   */
+  customConfigSeed: v.optional(v.array(provisioningCustomConfigSeedSchema)),
+  /**
+   * `custom` only: the OTHER manifest files a multi-file custom signature matched beyond the
+   * primary `provisioning.manifestPath` (e.g. the deploy script + compose file alongside the
+   * root manifest), surfaced for context.
+   */
+  secondaryManifestPaths: v.optional(v.array(v.string())),
+  /**
+   * `custom` only: every registered custom type whose `detect()` matched, produced by the
+   * arbitration sweep when no `manifestId` was pre-selected. The top-ranked is reflected in
+   * `provisioning.manifestId`; the list lets the user switch.
+   */
+  detectedManifestTypeCandidates: v.optional(v.array(detectedManifestTypeCandidateSchema)),
   /** Per-field confidence + hints for the SPA. */
   notes: v.array(provisioningDetectionNoteSchema),
 })
@@ -1228,8 +1277,12 @@ export const detectServiceProvisioningSchema = v.object({
    */
   prefer: v.optional(provisionTypeSchema),
   /**
-   * `custom` only: the selected custom-manifest-type id. Its `defaultManifestPath` seeds the
-   * path search (see {@link customManifestTypeSchema}). Ignored for other provision types.
+   * `custom` only: the selected custom-manifest-type id. When PRESENT, that type's `detect()`
+   * hook runs (or its `defaultManifestPath` seeds the path search when it has no hook — see
+   * {@link customManifestTypeSchema}). When ABSENT with `prefer: 'custom'`, the detector runs
+   * an ARBITRATION sweep across every registered custom type's `detect()` and proposes the
+   * best-matching one (echoed back in `provisioning.manifestId` + `detectedManifestTypeCandidates`).
+   * Ignored for other provision types.
    */
   manifestId: v.optional(manifestIdSchema),
   /**
