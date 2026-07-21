@@ -9,6 +9,22 @@ overrides (`nuxt.config.ts`) and the Pages project (`wrangler.toml`).
 Use it as a template: copy this directory, override the branding, point it at your
 backend, and deploy.
 
+## Worked example: a consumer extension module
+
+This template also ships a **worked example** of extending the SPA without forking
+the layer — the frontend analogue of the backend
+[`@cat-factory/example-custom-agent`](../../backend/internal/example-custom-agent)
+package. `app/plugins/acme-security.client.ts` registers one module
+(`app/modular/acme-security.ts`) that contributes to every landed consumer seam at
+once: a bespoke run-detail window for the `security-auditor` agent kind (reusing the
+layer's shared `ResultWindowShell` + `StepRunMeta` chrome), the palette entry that
+routes that kind to the window, a sidebar/command-palette destination, and an extra
+inspector panel — all through the auto-imported `registerAppModule` seam, with zero
+host edits. Its strings live in `i18n/locales/en.json` (deep-merged into the layer
+catalog). Delete `app/plugins/acme-security.client.ts` (or the whole `app/` dir) to
+drop it. See the authoring walkthrough in
+[`frontend/app/app/docs/consumer-extensions.md`](../../frontend/app/app/docs/consumer-extensions.md).
+
 ## How it depends on the library
 
 In this monorepo the dependency is `workspace:*`. **In your own deployment, depend

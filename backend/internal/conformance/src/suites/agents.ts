@@ -1,6 +1,5 @@
 import { defaultAgentKindRegistry } from '@cat-factory/agents'
 import type {
-  Block,
   Pipeline,
   RepoFiles,
   SandboxExperiment,

@@ -1,0 +1,29 @@
+{
+  "acme": {
+    "nav": {
+      "securityDashboard": "Security dashboard"
+    },
+    "securityReport": {
+      "title": "Security audit",
+      "titleWithBlock": "Security audit — {title}",
+      "subtitle": "Read-only audit of the change, with a compliance report.",
+      "riskBadge": "Risk {risk}",
+      "findingsHeading": "Findings",
+      "untitledFinding": "Untitled finding",
+      "empty": "The auditor produced no result yet.",
+      "severity": {
+        "low": "low",
+        "medium": "medium",
+        "high": "high",
+        "critical": "critical"
+      }
+    },
+    "incidentPanel": {
+      "title": "Acme compliance",
+      "hint": "This deployment's own inspector panel, contributed via registerAppModule.",
+      "compliant": "Compliant",
+      "actionNeeded": "Action needed",
+      "body": "A real deployment renders live compliance state here from its own store."
+    }
+  }
+}
