@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import type { Block } from '~/types/domain'
-import { STATUS_META, MODULE_META } from '~/utils/catalog'
+import { STATUS_META, MODULE_META, taskTypeMeta } from '~/utils/catalog'
 import AgentFailureCard from '~/components/board/AgentFailureCard.vue'
 import TaskPipelineMini from './TaskPipelineMini.vue'
 
@@ -18,6 +18,22 @@ const { confirm } = useConfirm()
 
 const task = computed<Block | undefined>(() => board.getBlock(props.taskId))
 const statusMeta = computed(() => (task.value ? STATUS_META[task.value.status] : null))
+
+// A type badge for any NON-default task type — built-in (bug/document/spike/review/ralph) or a
+// deployment CUSTOM type (resolved through the `taskTypeMeta` read-model, which degrades an
+// unregistered namespaced type to the `feature` presentation, so a stale id never breaks the card).
+// `feature` is the implicit default and shows no badge to keep ordinary cards uncluttered. A
+// built-in type's label is an i18n key; a custom type's is a literal from its wire presentation.
+const typeBadge = computed(() => {
+  const tt = task.value?.taskType
+  if (!tt || tt === 'feature') return null
+  const meta = taskTypeMeta(tt)
+  return {
+    icon: meta.icon,
+    color: meta.color,
+    label: meta.labelKey ? t(meta.labelKey) : (meta.label ?? tt),
+  }
+})
 const selected = computed(() => ui.selectedBlockId === props.taskId)
 
 // Drag-to-connect: dragging from this card's handle onto another task makes THAT task
@@ -215,6 +231,18 @@ function selectTask() {
          on its own row rather than stealing horizontal space from the title. -->
     <div class="flex items-center gap-1.5">
       <span class="h-2 w-2 shrink-0 rounded-full" :style="{ backgroundColor: statusMeta.color }" />
+      <!-- Task-type badge (non-`feature` only): the type's icon, tinted with its accent, label on
+           hover. Renders a built-in OR a deployment-registered custom type via `taskTypeMeta`. -->
+      <span
+        v-if="typeBadge"
+        class="inline-flex h-3.5 w-3.5 shrink-0 items-center justify-center rounded"
+        :style="{ color: typeBadge.color, backgroundColor: `${typeBadge.color}22` }"
+        :title="typeBadge.label"
+        :data-task-type-badge="task.taskType"
+        data-testid="task-type-badge"
+      >
+        <UIcon :name="typeBadge.icon" class="h-2.5 w-2.5" />
+      </span>
       <UIcon
         v-if="schedule"
         name="i-lucide-repeat"

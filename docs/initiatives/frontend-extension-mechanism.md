@@ -1,6 +1,6 @@
 # Initiative: frontend extension mechanism (consumer modules over modular-vue)
 
-**Status:** slice A landed (dogfood consumer module + authoring guide) · **Owner:** frontend · **Started:** 2026-07-21
+**Status:** slices A–B landed (dogfood consumer module + authoring guide; custom task types) · **Owner:** frontend · **Started:** 2026-07-21
 
 > Durable source of truth for a multi-PR initiative. Read this first before picking up a
 > slice; update the checklist at the end of each PR. This initiative builds ON TOP of the
@@ -354,7 +354,7 @@ ships an explicit, exported, semver-guarded public surface from `@cat-factory/ap
 | #   | Slice                     | Target                                                                                                                                                                                                                                                    | Status | PRs     |
 | --- | ------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ------ | ------- |
 | A   | Dogfood + authoring guide | Worked consumer example module in `deploy/frontend` pairing with `@cat-factory/example-custom-agent` (result window for `security-auditor`, a nav entry, an inspector panel); `frontend/app` consumer-authoring doc; e2e spec driving the consumer window | done   | this PR |
-| B   | Custom task types         | Contracts widen + `customTaskTypeSchema`; kernel `TaskTypeRegistry` + validation + conformance; snapshot `customTaskTypes`; frontend `taskTypes` slot/store/read-model, `AddTaskModal` descriptor fields + `taskTypeFormPanels`, card badge fallback      | todo   | —       |
+| B   | Custom task types         | Contracts widen + `customTaskTypeSchema`; kernel `TaskTypeRegistry` + validation + conformance; snapshot `customTaskTypes`; frontend `taskTypes` slot/store/read-model, `AddTaskModal` descriptor fields + `taskTypeFormPanels`, card badge fallback      | done   | this PR |
 | C   | Generic step interaction  | Backend `interaction` registration + generic park/submit routes + `interaction_pending` notification; frontend `useStepInteraction`; example interactive consumer agent; conformance both runtimes                                                        | todo   | —       |
 | D   | Overlays                  | `appOverlays` slot + `<AppOverlayHost>` (adopting upstream `OverlayOutlet`/`useOverlay`) + `ui.openOverlay`; one consumer example; opportunistic first conversions                                                                                        | todo   | —       |
 | E   | Notification kinds        | `notificationTypeSchema` widen + `notificationKinds` slot + safe default row                                                                                                                                                                              | todo   | —       |
@@ -406,6 +406,64 @@ release, re-adopt in-slice; no shims outliving a slice).
 - **Only landed seams were exercised.** No modular-vue upstream work and no `@cat-factory/app`
   code change — the layer change is docs-only; `deploy/frontend` + `@cat-factory/e2e` are
   changeset-ignored. Slices B–G add the still-missing seams on top of this proven base.
+
+## Slice B outcomes (landed)
+
+Custom task types are now a first-class extension axis, SYMMETRIC with custom agent kinds
+(slice 2) end to end — contracts → kernel registry → both facades → snapshot → frontend catalog →
+create-form + card badge → dogfood + e2e + conformance.
+
+- **The `taskType` picklist opened to `picklist ∪ namespaced`.** `taskTypeSchema` /
+  `createTaskTypeSchema` (`@cat-factory/contracts`) now accept a BUILT-IN id OR a consumer
+  `<ns>:<name>` id — the exact shape `agentPresentationSchema.resultView` uses. The
+  result-view-only `NAMESPACED_RESULT_VIEW_ID_PATTERN` was GENERALIZED into a shared
+  `primitives.ts` atom (`NAMESPACED_ID_PATTERN` / `isNamespacedId` / `namespacedIdSchema`) that
+  result views, task types, and `customTaskTypeSchema.formPanel` all share, so the rule can't
+  drift. `taskTypeFields` gained a sparse `custom: Record<string, string | number>` bag (additive,
+  no migration) for the descriptor-driven field values. New `customTaskTypeSchema` (+
+  `taskTypeFieldDescriptorSchema`) carries the wire projection (presentation + create-form fields +
+  optional `defaultPipelineId`/`formPanel`).
+- **App-owned `TaskTypeRegistry` (kernel), mirroring `AgentKindRegistry`/`PipelineRegistry`.**
+  `defaultTaskTypeRegistry()` is EMPTY (there are no built-in custom types); a deployment registers
+  by reference and injects the SAME instance through `CoreDependencies.taskTypeRegistry` (threaded
+  into `BoardService` so `defaultPipelineIdForTaskType` consults it after the built-in map, and
+  re-exposed on `Core` for the snapshot). Boot-time `validateRegistrations` gained task-type checks
+  (namespaced id, well-formed `formPanel`, `defaultPipelineId` resolves against the built-in +
+  registered pipeline catalog). All three facades build + install + validate it, and re-export the
+  seam (`start`/`startLocal`/`createApp` `taskTypeRegistry` option) — engine-level, so no
+  persistence parity work beyond the conformance assertion.
+- **Snapshot `customTaskTypes`** is projected in the shared `WorkspaceController` (next to
+  `customAgentKinds`), so both facades pick it up automatically.
+- **Frontend: the agents-store shape cloned exactly.** A new `taskTypes` slot + a `useTaskTypesStore`
+  (consumer slot + backend manifest → merged catalog → the `taskTypeMeta` read-model in
+  `utils/catalog.ts`, sync-flushed like `agentKindMeta`). `buildAgentCapabilitiesManifest`
+  generalized to **`buildWorkspaceCapabilitiesManifest(kinds, taskTypes)`** in a new
+  `modular/capabilities.ts` — ONE per-workspace manifest carrying BOTH slots with a combined
+  content version, so an unchanged snapshot no-ops both stores; the agents store's
+  `hydrateCustomKinds` became `hydrateCapabilities(manifest)` (both stores read their own slot off
+  the shared manifest). `AddTaskModal` merges custom types into its type picker and renders their
+  descriptor `fields` (text/textarea/number/select) — or a `taskTypeFormPanels`-paired bespoke
+  section — into the `taskTypeFields.custom` bag; `TaskCard` shows a type badge via `taskTypeMeta`
+  (built-in OR custom), with an UNREGISTERED namespaced type degrading to the `feature`
+  presentation (raw id as label) so stale data never breaks a card.
+- **Dogfood + coverage.** The `deploy/frontend` `acme:security` module gained a CODE-shipped
+  `acme:incident` task type (a `severity` select + an incident-URL text field) — zero host edits.
+  The e2e (`consumer-extension.spec.ts`) creates an `acme:incident` task over REST and asserts its
+  card badge renders LIVE from the merged catalog. The cross-runtime conformance suite asserts the
+  BACKEND channel on both runtimes (snapshot projection + `defaultPipelineId` resolution + a typed
+  task round-trip). Store/read-model/manifest unit specs (`taskTypes.spec.ts`, `capabilities.spec.ts`)
+  pin the merge/no-op/degradation.
+- **What bent (the reflection half).** (1) The doc specced "one manifest, version covering both
+  lists"; realized by renaming the agents store's `hydrateCustomKinds(kinds)` →
+  `hydrateCapabilities(manifest)` and having the workspace store build the shared manifest once —
+  the small slice-2 churn was worth the single-version no-op. (2) Widening `CreateTaskType` to an
+  open `string` erased the literal narrowing `WorkspaceSettingsPanel.vue`'s per-type-limit records
+  relied on; fixed by keying those records off a LOCAL finite `LimitTaskType` union (the config
+  surface is built-in-only; a custom type buckets server-side in `RunAdmission`, not configured
+  there). (3) `taskTypeFormPanels` is wired (slot + boot fail-fast resolve + `AddTaskModal`
+  pairing) but the dogfood uses the descriptor-`fields` path; the formPanel path degrades to the
+  fields when unpaired. No modular-vue upstream work was needed — only landed primitives
+  (`resolveComponentRegistry`, `useReactiveSlots`, the remote-manifest shape).
 
 ## Conventions & gotchas (carried between slices)
 

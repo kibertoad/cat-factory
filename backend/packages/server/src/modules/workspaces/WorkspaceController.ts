@@ -14,6 +14,7 @@ import type {
   BackendKindOption,
   BudgetCaps,
   CustomAgentKind,
+  CustomTaskType,
   InfraSetup,
   SkillSummary,
   SpendStatus,
@@ -22,7 +23,7 @@ import type {
 } from '@cat-factory/contracts'
 import type { AgentKindRegistry, AgentRouting } from '@cat-factory/agents'
 import { resolveWorkspaceAccess } from '@cat-factory/kernel'
-import type { AccountRole, ModelRef, WorkspaceRole } from '@cat-factory/kernel'
+import type { AccountRole, ModelRef, TaskTypeRegistry, WorkspaceRole } from '@cat-factory/kernel'
 import type { Workspace } from '@cat-factory/contracts'
 import type { ServerContainer } from '../../http/env.js'
 
@@ -108,6 +109,19 @@ function snapshotCustomAgentKinds(registry: AgentKindRegistry): CustomAgentKind[
       container: registry.requiresContainer(def.kind),
     }))
   return kinds.length > 0 ? kinds : undefined
+}
+
+/**
+ * The registered CUSTOM task types, mapped to the wire shape the SPA merges into its
+ * task-type catalog (create-task choice + card badge). The registry already stores the
+ * wire projection, so this is a straight `all()`. Static (engine-level registry), so
+ * identical for every workspace and every facade. Returns undefined when none are
+ * registered, so the field is simply absent on the stock product — symmetric with
+ * {@link snapshotCustomAgentKinds}.
+ */
+function snapshotCustomTaskTypes(registry: TaskTypeRegistry): CustomTaskType[] | undefined {
+  const types = registry.all()
+  return types.length > 0 ? types : undefined
 }
 
 /**
@@ -350,6 +364,20 @@ function effectiveWorkspaceRole(
   return access.allowed ? access.role : undefined
 }
 
+/**
+ * Spread-ready projection of the OPTIONAL board-snapshot slices: keeps only the entries whose
+ * value is present (truthy), exactly as the former ladder of `...(x ? { x } : {})` spreads did —
+ * a wired module returns its slice, an unwired one returns undefined (dropped). Folding the ~18
+ * conditional spreads into one call keeps the snapshot handler within the complexity budget.
+ */
+function definedFields<T extends Record<string, unknown>>(fields: T): Partial<T> {
+  const out: Partial<T> = {}
+  for (const key of Object.keys(fields) as (keyof T)[]) {
+    if (fields[key]) out[key] = fields[key]
+  }
+  return out
+}
+
 /** Board (workspace) lifecycle and full-snapshot retrieval. */
 export function workspaceController(): Hono<AppEnv> {
   const app = new Hono<AppEnv>()
@@ -423,6 +451,7 @@ export function workspaceController(): Hono<AppEnv> {
       snapshotSkills(container, accountId),
     ])
     const customAgentKinds = snapshotCustomAgentKinds(container.agentKindRegistry)
+    const customTaskTypes = snapshotCustomTaskTypes(container.taskTypeRegistry)
     // The registered initiative presets (built-in generic + any a deployment mixed in). Read off the
     // app-owned registry the container carries — identical for every workspace and both facades —
     // attached here in the shared controller (like `customAgentKinds`) rather than per-facade.
@@ -445,6 +474,7 @@ export function workspaceController(): Hono<AppEnv> {
         agentConfigCatalog: snapshotAgentConfigCatalog(snapshot, container.agentKindRegistry),
         deploymentModelDefaults: deploymentModelDefaults(container.config.agents.routing),
         ...(customAgentKinds ? { customAgentKinds } : {}),
+        ...(customTaskTypes ? { customTaskTypes } : {}),
         ...(initiativePresets.length ? { initiativePresets } : {}),
         ...(skills ? { skills } : {}),
         ...snapshotBackendKinds(container),
@@ -538,6 +568,7 @@ export function workspaceController(): Hono<AppEnv> {
       snapshotSkills(container, budgetAccountId),
     ])
     const customAgentKinds = snapshotCustomAgentKinds(container.agentKindRegistry)
+    const customTaskTypes = snapshotCustomTaskTypes(container.taskTypeRegistry)
     // The registered initiative presets (built-in generic + any a deployment mixed in). Read off the
     // app-owned registry the container carries — identical for every workspace and both facades —
     // attached here in the shared controller (like `customAgentKinds`) rather than per-facade.
@@ -586,29 +617,37 @@ export function workspaceController(): Hono<AppEnv> {
         blocks: redacted.blocks,
         executions: redacted.executions,
         spend,
-        ...(access ? { access } : {}),
         ...budgetTiers,
-        ...(redacted.bootstrapJobs ? { bootstrapJobs: redacted.bootstrapJobs } : {}),
-        ...(envConfigRepairJobs ? { envConfigRepairJobs } : {}),
-        ...(environmentTestRuns ? { environmentTestRuns } : {}),
-        ...(redacted.notifications ? { notifications: redacted.notifications } : {}),
-        ...(riskPolicies ? { riskPolicies } : {}),
-        ...(sharedStacks ? { sharedStacks } : {}),
-        ...(modelPresets ? { modelPresets } : {}),
-        ...(serviceFragmentDefaults ? { serviceFragmentDefaults } : {}),
-        ...(recurringPipelines ? { recurringPipelines } : {}),
-        ...(trackerSettings ? { trackerSettings } : {}),
-        ...(initiatives ? { initiatives } : {}),
-        ...(settings ? { settings } : {}),
-        ...(mounts ? { mounts } : {}),
-        ...(redacted.services ? { serviceCatalog: redacted.services } : {}),
         agentConfigCatalog: snapshotAgentConfigCatalog(snapshot, container.agentKindRegistry),
         deploymentModelDefaults: deploymentModelDefaults(container.config.agents.routing),
-        ...(customAgentKinds ? { customAgentKinds } : {}),
-        ...(initiativePresets.length ? { initiativePresets } : {}),
-        ...(skills ? { skills } : {}),
         ...snapshotBackendKinds(container),
         infraSetup,
+        // The optional slices, present only when their module is wired / the value is non-empty.
+        // Gathered through `definedFields` (truthy-gated — identical to the former
+        // `...(x ? { x } : {})` ladder) so this handler stays within the complexity budget. None of
+        // these keys collide with the unconditional fields above, so the single trailing spread is
+        // order-equivalent to the original interleaved spreads.
+        ...definedFields({
+          access,
+          bootstrapJobs: redacted.bootstrapJobs,
+          envConfigRepairJobs,
+          environmentTestRuns,
+          notifications: redacted.notifications,
+          riskPolicies,
+          sharedStacks,
+          modelPresets,
+          serviceFragmentDefaults,
+          recurringPipelines,
+          trackerSettings,
+          initiatives,
+          settings,
+          mounts,
+          serviceCatalog: redacted.services,
+          customAgentKinds,
+          customTaskTypes,
+          initiativePresets: initiativePresets.length ? initiativePresets : undefined,
+          skills,
+        }),
       },
       200,
     )

@@ -1,5 +1,61 @@
 # @cat-factory/executor-harness
 
+## 1.50.14
+
+### Patch Changes
+
+- da0b83b: fix(pr-review observability): close ADR 0027 Defect A + Defect B for the parallel-subagent shape
+
+  Both mechanisms ADR 0026 shipped for a `Task`-parallelised PR review were defeated on the exact
+  shape they targeted. ADR 0027 confirmed the root causes; this closes them.
+
+  - **Defect A — subagent token usage never counted.** The watcher was pointed at
+    `<configHome>/subagents`, which the Claude CLI never creates — it writes each parallel subagent's
+    transcript per-session under `<configHome>/projects/<encoded-cwd>/<session-uuid>/subagents/*.jsonl`.
+    `startSubagentWatcher` now takes the `projects` root and DISCOVERS the `subagents/` dirs by walking
+    (the session uuid isn't known before the CLI mints it), summing every `subagents/*.jsonl` turn's
+    usage while deliberately EXCLUDING the sibling parent session transcript (whose usage the terminal
+    `result` event already totals) so the parent is never double-counted. A harness fixture test now
+    lays the tree out exactly as the CLI writes it.
+
+  - **Defect B — progress pinned at 0%.** The slice-tracker fallback was gated off by `sawTodoPlan`,
+    but the pr-reviewer prompt makes the CLI write its todo plan ONCE at grouping time and then fan the
+    review out across parallel subagents that never mark the plan done — so the todo source sat at 0/N
+    and the very fallback meant to cover the parallel shape was disabled. The gate is gone: a new pure
+    `pickProgress` reconciles the two redundant views on every update, preferring whichever is further
+    along (more completed, then more in-flight, then richer), so live in-flight `Task` slices surface as
+    progress and a stale todo plan can no longer mask them. The pr-reviewer prompt is corrected to say
+    progress is surfaced from the todo list AND from parallel subagent dispatches.
+
+  The executor-harness image tag is bumped for the `src/**` change (Defect A + B live in the harness).
+
+## 1.50.12
+
+### Patch Changes
+
+- 2cfae1e: Internal refactor (lint complexity/size ratchet — `complexity` 60 → 40): extract cohesive helpers
+  from the ten functions above cyclomatic complexity 40 so each lands under the new ceiling, all
+  behaviour-neutral. No public API, wire shape, or runtime behaviour changes; verified by the
+  server / orchestration / agents unit suites and the node config specs (the cross-runtime
+  conformance + worker suites run in CI).
+
+  - `@cat-factory/server`: `buildRegisteredAgentBody` split into `buildCodingAgentBody` /
+    `buildExploreAgentBody`; `toRunResult` into `coerceCustomResult` / `mapPushOrPrResult`;
+    `ContainerAgentExecutor.pollJob`'s subscription/quota usage feedback moved into
+    `recordSubscriptionUsageOnce` / `recordSubscriptionQuotaUsageOnce`; the workspace snapshot
+    handler's optional-field spread ladder folded into a `definedFields` helper.
+  - `@cat-factory/orchestration`: `AgentContextBuilder.buildContext`'s `block` sub-payload extracted
+    into `buildBlockPayload`.
+  - `@cat-factory/agents`: `coerceInitiativePlan`'s section loops extracted into
+    `coerceInitiativePhases` / `coerceInitiativeItems` / `coerceInitiativeDecisions`.
+  - `@cat-factory/node-server`: `buildAuthConfig`'s enablement prelude + fail-fast guards extracted
+    into `resolveNodeAuthEnablement`.
+  - `@cat-factory/worker`: `loadAuthConfig`'s enablement prelude extracted into `resolveAuthEnablement`.
+  - `@cat-factory/executor-harness`: `parseAgentJob` split into `parseAgentOutputSpec` /
+    `parseAgentPrSpec` / `assembleAgentJob`. Touches the runner image, so its tag is bumped
+    (1.50.11) and the three pins re-synced.
+  - `@cat-factory/local-server`: carries the re-synced `RECOMMENDED_HARNESS_IMAGE` pin.
+
 ## 1.50.10
 
 ### Patch Changes

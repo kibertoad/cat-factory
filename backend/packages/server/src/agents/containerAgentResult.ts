@@ -37,92 +37,104 @@ import {
  * the kind-specific channels — so the engine records it on the step for run details.
  */
 export function toRunResult(result: RunnerJobResult, agentKind?: string): AgentRunResult {
-  const mapped = mapRunnerResult(result, agentKind)
+  const mapped =
+    result.custom !== undefined ? coerceCustomResult(result, agentKind) : mapPushOrPrResult(result)
   return result.effortReport ? { ...mapped, effortReport: result.effortReport } : mapped
 }
 
-function mapRunnerResult(result: RunnerJobResult, agentKind?: string): AgentRunResult {
-  // A generic, structured `agent` (explore) job returns its parsed JSON as `custom`. A
-  // migrated built-in kind has it coerced into the well-known engine field here, KIND-AWARE
-  // — the conservative coercion that used to live in the bespoke harness handlers
-  // (blueprint/spec/merge/on-call/test) now runs backend-side, so the engine's
-  // resolvers/gates see `blueprintService`/`spec`/`mergeAssessment`/`onCallAssessment`/
-  // `testReport` exactly as before. Any other kind (a registered custom kind) surfaces the
-  // raw JSON as `custom` for its post-op to coerce/render from.
-  if (result.custom !== undefined) {
-    // Blueprinter: coerce into `blueprintService` (board reconcile + `blueprintPostOp`
-    // render/commit). A nameless/garbage tree coerces to null ⇒ left unset.
-    if (agentKind === BLUEPRINTS_AGENT_KIND) {
-      const service = coerceBlueprintService(result.custom, '')
-      return {
-        output: result.summary?.trim() || 'Service blueprint updated.',
-        ...(service ? { blueprintService: service } : {}),
-      }
-    }
-    // Spec-writer: coerce into `spec` (engine strict-validate + `specPostOp` shard/commit).
-    // The doc must carry its OWN `service` name (no repo-name rescue — backwards-compat is a
-    // non-goal); a nameless/garbage doc coerces to null ⇒ left unset (no ingest, no commit).
-    if (agentKind === SPEC_WRITER_AGENT_KIND) {
-      // A purely TECHNICAL task has no business requirements to specify: the writer signals
-      // `noBusinessSpecs` and we leave the baseline spec untouched (NO `spec` channel, so
-      // `specPostOp` commits nothing). The engine reads the flag to infer the block's
-      // `technical` label (with the spec-companion's corroboration). Checked first so a
-      // model that returned both the flag and a stray baseline echo never commits over it.
-      const custom = result.custom as Record<string, unknown> | null
-      if (custom && typeof custom === 'object' && custom.noBusinessSpecs === true) {
-        return {
-          output:
-            result.summary?.trim() ||
-            'No business requirements to specify — this is a technical task.',
-          noBusinessSpecs: true,
-        }
-      }
-      const spec = coerceSpecDoc(result.custom, '')
-      return {
-        output: result.summary?.trim() || 'Service specification updated.',
-        ...(spec ? { spec } : {}),
-      }
-    }
-    // Initiative planner: coerce into `initiativePlan` (the engine's strict parse +
-    // ingest into the `initiatives` entity). A structureless/garbage plan coerces to
-    // null ⇒ left unset (no ingest — the step still records its prose output).
-    if (agentKind === INITIATIVE_PLANNER_AGENT_KIND) {
-      const plan = coerceInitiativePlan(result.custom)
-      return {
-        output: result.summary?.trim() || 'Initiative plan drafted.',
-        ...(plan ? { initiativePlan: plan } : {}),
-      }
-    }
-    if (agentKind === MERGER_AGENT_KIND) {
-      return {
-        output: result.summary?.trim() || 'Pull request assessed.',
-        mergeAssessment: coerceMergeAssessment(result.custom, result.summary),
-      }
-    }
-    if (agentKind === ON_CALL_AGENT_KIND) {
-      return {
-        output: result.summary?.trim() || 'Release regression investigated.',
-        onCallAssessment: coerceOnCallAssessment(result.custom, result.summary),
-      }
-    }
-    // Tester: coerce into `testReport` (greenlight-or-loop the fixer; the conservative
-    // greenlight/blocking rule the harness `/test` handler applied now runs in
-    // `coerceTestReport`, re-applied defensively by the TesterController).
-    if (agentKind === TESTER_AGENT_KIND || agentKind === UI_TESTER_AGENT_KIND) {
-      return {
-        output: result.summary?.trim() || 'Testing complete.',
-        testReport: coerceTestReport(result.custom, result.summary),
-        // The in-container docker-compose stand-up record (local-infra tester) — forwarded so
-        // the engine can persist its captured logs on the Tester step. Harness-produced, so
-        // no coercion; the TesterController validates it defensively before persisting.
-        ...(result.infraSetup ? { infraSetup: result.infraSetup } : {}),
-      }
-    }
+/**
+ * Coerce a structured `agent` job's parsed `custom` JSON into the engine's {@link AgentRunResult},
+ * KIND-AWARE — the conservative coercion that used to live in the bespoke harness handlers
+ * (blueprint/spec/merge/on-call/test) now runs backend-side, so the engine's resolvers/gates see
+ * `blueprintService`/`spec`/`mergeAssessment`/`onCallAssessment`/`testReport` exactly as before.
+ * Any other kind (a registered custom kind) surfaces the raw JSON as `custom` for its post-op to
+ * coerce/render from. Called only when `result.custom !== undefined`.
+ */
+function coerceCustomResult(
+  result: RunnerJobResult,
+  agentKind: string | undefined,
+): AgentRunResult {
+  // Blueprinter: coerce into `blueprintService` (board reconcile + `blueprintPostOp`
+  // render/commit). A nameless/garbage tree coerces to null ⇒ left unset.
+  if (agentKind === BLUEPRINTS_AGENT_KIND) {
+    const service = coerceBlueprintService(result.custom, '')
     return {
-      output: result.summary?.trim() || 'Agent run complete.',
-      custom: result.custom,
+      output: result.summary?.trim() || 'Service blueprint updated.',
+      ...(service ? { blueprintService: service } : {}),
     }
   }
+  // Spec-writer: coerce into `spec` (engine strict-validate + `specPostOp` shard/commit).
+  // The doc must carry its OWN `service` name (no repo-name rescue — backwards-compat is a
+  // non-goal); a nameless/garbage doc coerces to null ⇒ left unset (no ingest, no commit).
+  if (agentKind === SPEC_WRITER_AGENT_KIND) {
+    // A purely TECHNICAL task has no business requirements to specify: the writer signals
+    // `noBusinessSpecs` and we leave the baseline spec untouched (NO `spec` channel, so
+    // `specPostOp` commits nothing). The engine reads the flag to infer the block's
+    // `technical` label (with the spec-companion's corroboration). Checked first so a
+    // model that returned both the flag and a stray baseline echo never commits over it.
+    const custom = result.custom as Record<string, unknown> | null
+    if (custom && typeof custom === 'object' && custom.noBusinessSpecs === true) {
+      return {
+        output:
+          result.summary?.trim() ||
+          'No business requirements to specify — this is a technical task.',
+        noBusinessSpecs: true,
+      }
+    }
+    const spec = coerceSpecDoc(result.custom, '')
+    return {
+      output: result.summary?.trim() || 'Service specification updated.',
+      ...(spec ? { spec } : {}),
+    }
+  }
+  // Initiative planner: coerce into `initiativePlan` (the engine's strict parse +
+  // ingest into the `initiatives` entity). A structureless/garbage plan coerces to
+  // null ⇒ left unset (no ingest — the step still records its prose output).
+  if (agentKind === INITIATIVE_PLANNER_AGENT_KIND) {
+    const plan = coerceInitiativePlan(result.custom)
+    return {
+      output: result.summary?.trim() || 'Initiative plan drafted.',
+      ...(plan ? { initiativePlan: plan } : {}),
+    }
+  }
+  if (agentKind === MERGER_AGENT_KIND) {
+    return {
+      output: result.summary?.trim() || 'Pull request assessed.',
+      mergeAssessment: coerceMergeAssessment(result.custom, result.summary),
+    }
+  }
+  if (agentKind === ON_CALL_AGENT_KIND) {
+    return {
+      output: result.summary?.trim() || 'Release regression investigated.',
+      onCallAssessment: coerceOnCallAssessment(result.custom, result.summary),
+    }
+  }
+  // Tester: coerce into `testReport` (greenlight-or-loop the fixer; the conservative
+  // greenlight/blocking rule the harness `/test` handler applied now runs in
+  // `coerceTestReport`, re-applied defensively by the TesterController).
+  if (agentKind === TESTER_AGENT_KIND || agentKind === UI_TESTER_AGENT_KIND) {
+    return {
+      output: result.summary?.trim() || 'Testing complete.',
+      testReport: coerceTestReport(result.custom, result.summary),
+      // The in-container docker-compose stand-up record (local-infra tester) — forwarded so
+      // the engine can persist its captured logs on the Tester step. Harness-produced, so
+      // no coercion; the TesterController validates it defensively before persisting.
+      ...(result.infraSetup ? { infraSetup: result.infraSetup } : {}),
+    }
+  }
+  return {
+    output: result.summary?.trim() || 'Agent run complete.',
+    custom: result.custom,
+  }
+}
+
+/**
+ * Map a finished coding/fixer job (no structured `custom`) into the engine result: a PR the run
+ * opened, an in-place push back onto the branch, or a clean no-op — carrying any peer PRs a
+ * multi-repo run opened. Extracted from {@link toRunResult} to keep each function within the
+ * complexity budget; behaviour is byte-identical.
+ */
+function mapPushOrPrResult(result: RunnerJobResult): AgentRunResult {
   // PRs a multi-repo run opened in connected services' repos (service-connections phase 3),
   // beside the own-service PR. Lifted onto `AgentRunResult.peerPullRequests` for the engine
   // to record on the block; absent for a single-repo run.

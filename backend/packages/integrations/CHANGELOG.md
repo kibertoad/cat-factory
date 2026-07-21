@@ -1,5 +1,32 @@
 # @cat-factory/integrations
 
+## 0.89.0
+
+### Minor Changes
+
+- 3c7d62b: Custom test-infrastructure providers can now define autodetection. A `custom` manifest type may
+  declare an optional `detect(ctx)` hook (`RegisteredCustomManifestType`) that recognizes the
+  provider from a repo's shape (multi-file signatures via the new kernel probe primitives), locates
+  its manifest, and extracts a config seed. `detectServiceProvisioning` runs the selected type's
+  hook, arbitrates across every registered type's hook when none is selected
+  (`detectCustomProviderAcrossTypes`), and falls back to custom arbitration as a last resort after
+  the kubernetes/compose sweep.
+
+### Patch Changes
+
+- Updated dependencies [3c7d62b]
+- Updated dependencies [3c7d62b]
+  - @cat-factory/contracts@0.156.0
+  - @cat-factory/kernel@0.150.0
+
+## 0.88.18
+
+### Patch Changes
+
+- Updated dependencies [916278b]
+  - @cat-factory/contracts@0.155.0
+  - @cat-factory/kernel@0.149.0
+
 ## 0.88.17
 
 ### Patch Changes

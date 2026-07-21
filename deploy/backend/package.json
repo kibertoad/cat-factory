@@ -7,7 +7,7 @@
   "scripts": {
     "dev": "wrangler dev",
     "deploy": "wrangler deploy",
-    "image:publish": "wrangler containers build ../../backend/internal/executor-harness -t cat-factory-executor:1.50.11 --push",
+    "image:publish": "wrangler containers build ../../backend/internal/executor-harness -t cat-factory-executor:1.50.15 --push",
     "image:publish:deploy": "wrangler containers build ../../backend/internal/deploy-harness -t cat-factory-deploy:0.2.8 --push",
     "typecheck": "tsc -p tsconfig.json --noEmit",
     "db:migrate:local": "wrangler d1 migrations apply cat_factory --local && wrangler d1 migrations apply cat_factory_telemetry --local",

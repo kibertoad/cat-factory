@@ -1,6 +1,9 @@
 # ADR 0026: PR-review run observability and warm-pool isolation
 
-- **Status:** Fully implemented — D1–D7 all landed
+- **Status:** Fully implemented — D1–D7 all landed. NOTE: D2.1 (live slice progress) and D3
+  (subagent token usage) shipped here but did NOT deliver their signal on the parallel-subagent
+  shape they targeted; that was diagnosed and fixed in [ADR 0027](./0027-pr-review-observability-followup.md),
+  which supersedes their "landed" status.
 - **Date:** 2026-07-21
 - **Context layer:** backend (`@cat-factory/agents`, `@cat-factory/orchestration`, `@cat-factory/contracts`, executor-harness, `backend/runtimes/local`) + frontend (`@cat-factory/app`)
 - **Relates to:** ADR 0023 (PR deep review), `backend/docs/container-reaping.md`, PR #1296 (E2BIG fold fix)

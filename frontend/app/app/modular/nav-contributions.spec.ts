@@ -50,6 +50,8 @@ const slots = (): AppSlots => ({
   resultViews: [],
   agentKinds: [],
   inspectorPanels: [],
+  taskTypes: [],
+  taskTypeFormPanels: [],
 })
 const ids = (s: unknown) => (s as AppSlots).nav.map((i) => i.id)
 

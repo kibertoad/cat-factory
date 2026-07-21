@@ -1,6 +1,6 @@
 import type { Component } from 'vue'
 import type { ComponentEntry, PanelEntry } from '@modular-vue/core'
-import type { Block, CustomAgentKind } from '~/types/domain'
+import type { Block, CustomAgentKind, CustomTaskType } from '~/types/domain'
 import type { NavContribution } from './nav-contributions'
 
 /**
@@ -23,6 +23,14 @@ import type { NavContribution } from './nav-contributions'
  *    predicate. Replaces `InspectorPanel.vue`'s level/type `v-if` fan; a consumer
  *    contributes its own panels to the SAME slot via `registerAppModule`. This is
  *    the slot key `definePanelGroup<Block>('inspectorPanels')` names.
+ *  - `taskTypes` (extension slice B) — CODE-shipped custom task types a consumer
+ *    module contributes (the create-task-picker + card-badge data half). BACKEND-
+ *    registered types arrive separately in the shared capability manifest read by
+ *    the task-types store — see `stores/taskTypes.ts`. Symmetric with `agentKinds`.
+ *  - `taskTypeFormPanels` (extension slice B) — a bespoke create-task-form section
+ *    per custom task type, addressed by the type's `formPanel` id and paired via
+ *    `resolveComponentRegistry` (same shape as `resultViews`); shown INSTEAD of the
+ *    descriptor-driven `fields`. An unpaired id degrades to the descriptor fields.
  *
  * The index signature is mutable (`unknown[]`) to satisfy the runtime's
  * `SlotMap` constraint while `unknown[]` still meets `useReactiveSlots`'
@@ -33,6 +41,8 @@ export interface AppSlots {
   resultViews: ResultViewContribution[]
   agentKinds: CustomAgentKind[]
   inspectorPanels: PanelEntry<Block>[]
+  taskTypes: CustomTaskType[]
+  taskTypeFormPanels: ResultViewContribution[]
   [key: string]: unknown[]
 }
 
@@ -43,5 +53,7 @@ export interface AppSlots {
  * helpers index and pair it with the wire-delivered `presentation.resultView`
  * id — the sanctioned "backend data selects a code-shipped, locally-registered
  * component" pairing (see the modular-vue Remote Capability Manifests guide).
+ * Reused for `taskTypeFormPanels` (a bespoke create-form section paired by a
+ * custom task type's `formPanel` id).
  */
 export type ResultViewContribution = ComponentEntry<Component>

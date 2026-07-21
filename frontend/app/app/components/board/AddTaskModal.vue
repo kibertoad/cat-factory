@@ -21,6 +21,9 @@ import type {
   TaskTypeFields,
 } from '~/types/domain'
 import { DOC_KINDS, DOC_KIND_FIELDS } from '~/types/domain'
+import { resolveComponentRegistry } from '@modular-vue/core'
+import { useReactiveSlots } from '@modular-vue/runtime'
+import type { AppSlots, ResultViewContribution } from '~/modular/slots'
 import ContextDocumentPicker from '~/components/documents/ContextDocumentPicker.vue'
 import ContextIssuePicker from '~/components/tasks/ContextIssuePicker.vue'
 import FragmentSelector from '~/components/fragments/FragmentSelector.vue'
@@ -131,6 +134,54 @@ const reviewFocus = ref('')
 const fragmentIds = ref<string[]>([])
 const isReview = computed(() => taskType.value === 'review')
 
+// Custom (deployment-registered) task types — the frontend-extension-mechanism slice B twin of
+// custom agent kinds. The task-types store merges CODE-shipped (`taskTypes` slot) + BACKEND
+// (snapshot `customTaskTypes`) into one catalog; the picker offers them alongside the built-ins.
+// A document repo only accepts document/spike (server-rejected otherwise), so custom types are
+// hidden there — mirroring the built-in `isDocRepo` filter.
+const taskTypesStore = useTaskTypesStore()
+const customTaskTypes = computed(() => (isDocRepo.value ? [] : taskTypesStore.customTaskTypes))
+const selectedCustomType = computed(() =>
+  customTaskTypes.value.find((tt) => tt.taskType === taskType.value),
+)
+// Descriptor-field values for a selected custom type (or a bespoke form panel's own bag), folded
+// into `taskTypeFields.custom` on submit. Cleared when the type changes / the modal reopens.
+const customFieldValues = ref<Record<string, string | number>>({})
+// A bespoke create-form section paired to the custom type's `formPanel` id via the
+// `taskTypeFormPanels` slot; shown INSTEAD of the descriptor fields. Unpaired ⇒ descriptor fields
+// (degrade, never crash) — the same pairing shape as the result-view windows.
+const appSlots = useReactiveSlots<AppSlots>()
+const formPanelRegistry = computed(() =>
+  resolveComponentRegistry((appSlots.value.taskTypeFormPanels ?? []) as ResultViewContribution[]),
+)
+const customFormPanel = computed(() => {
+  const id = selectedCustomType.value?.formPanel
+  return id ? (formPanelRegistry.value.get(id) ?? null) : null
+})
+// Whether every REQUIRED descriptor field of the selected custom type has a value. Only the
+// descriptor path is enforced up front — a bespoke `formPanel` owns its own validation, so we
+// don't block on it (nor can we read its required semantics). No custom type selected (or none
+// of its fields are required) ⇒ trivially satisfied. Folded into `canAdd` so the required marker
+// the form renders is actually honoured before submit.
+const customRequiredFieldsFilled = computed(() => {
+  const custom = selectedCustomType.value
+  if (!custom || customFormPanel.value) return true
+  return (custom.fields ?? []).every((field) => {
+    if (!field.required) return true
+    const raw = customFieldValues.value[field.key]
+    return raw !== undefined && String(raw).trim() !== ''
+  })
+})
+// The type picker: the built-in choices (i18n labels) + the custom types (their wire presentation).
+const typeChoices = computed<{ value: TaskTypeChoice; label: string; icon: string }[]>(() => [
+  ...TASK_TYPES.value,
+  ...customTaskTypes.value.map((tt) => ({
+    value: tt.taskType as TaskTypeChoice,
+    label: tt.presentation.label,
+    icon: tt.presentation.icon,
+  })),
+])
+
 // Parse the PR-reference input into the contract fields: a bare positive integer (optionally
 // `#`-prefixed) becomes `prNumber` (a PR on the service's linked repo); anything else is taken
 // as a full URL (`prUrl`). Returns undefined when blank or unparseable — the caller uses that
@@ -196,6 +247,33 @@ const DOC_FIELD_PLACEHOLDER_KEYS: Record<DocKindFieldKey, string> = {
 }
 const SEVERITIES = ['low', 'medium', 'high', 'critical'] as const
 
+// A CUSTOM (deployment-registered) task type: fold the collected values into the sparse
+// `taskTypeFields.custom` bag. A bespoke form panel owns the whole bag (taken verbatim); the
+// descriptor path reads only the declared fields, coercing a `number` descriptor's string input.
+function buildCustomTypeFields(): TaskTypeFields | undefined {
+  const custom = selectedCustomType.value
+  if (!custom) return undefined
+  const bag: Record<string, string | number> = {}
+  if (customFormPanel.value) {
+    for (const [key, value] of Object.entries(customFieldValues.value)) {
+      if (value !== undefined && value !== '') bag[key] = value
+    }
+  } else {
+    for (const field of custom.fields ?? []) {
+      const raw = customFieldValues.value[field.key]
+      if (raw === undefined || raw === '') continue
+      if (field.type === 'number') {
+        // Skip a non-numeric value rather than sending NaN (which serialises to null on the wire).
+        const n = Number(raw)
+        if (Number.isFinite(n)) bag[field.key] = n
+      } else {
+        bag[field.key] = raw
+      }
+    }
+  }
+  return Object.keys(bag).length ? { custom: bag } : undefined
+}
+
 function buildTypeFields(): TaskTypeFields | undefined {
   if (taskType.value === 'bug') {
     const f: TaskTypeFields = {}
@@ -238,7 +316,7 @@ function buildTypeFields(): TaskTypeFields | undefined {
     if (reviewFocus.value.trim()) f.reviewFocus = reviewFocus.value.trim()
     return Object.keys(f).length ? f : undefined
   }
-  return undefined
+  return buildCustomTypeFields()
 }
 
 // For a recurring task, the schedule attaches to the service frame: the container itself
@@ -346,7 +424,13 @@ const DEFAULT_PIPELINE_FOR_TYPE: Partial<Record<TaskTypeChoice, string>> = {
   review: 'pl_review',
 }
 watch(taskType, (next) => {
-  const preset = DEFAULT_PIPELINE_FOR_TYPE[next]
+  // A custom type owns a fresh field bag on every switch (its descriptors differ per type).
+  customFieldValues.value = {}
+  // Pre-select the type's default pipeline: a custom type's registered `defaultPipelineId`, else
+  // the built-in map. (For a custom type with no default, `BoardService` applies the registry
+  // default at creation, so leaving the picker unset is fine.)
+  const custom = customTaskTypes.value.find((tt) => tt.taskType === next)
+  const preset = custom?.defaultPipelineId ?? DEFAULT_PIPELINE_FOR_TYPE[next]
   if (!preset) return
   const match = pipelines.pipelines.find((p) => p.id === preset)
   if (match) pipelineId.value = match.id
@@ -502,6 +586,7 @@ watch(open, (isOpen) => {
   docOutlineHints.value = ''
   reviewPrRef.value = ''
   reviewFocus.value = ''
+  customFieldValues.value = {}
   // Pre-seed the best-practice fragments from the enclosing service's standards, so a new task
   // ships with its service's fragments already selected (and freely add/removable here). The task
   // OWNS this selection from creation — the engine folds exactly these, without re-unioning the
@@ -587,6 +672,8 @@ const canAdd = computed(() => {
     configValue(RALPH_VALIDATION_COMMAND_ID, '').trim().length === 0
   )
     return false
+  // A custom type's required descriptor fields must be filled (its form renders them as required).
+  if (!customRequiredFieldsFilled.value) return false
   return true
 })
 
@@ -667,12 +754,13 @@ async function add() {
         <UFormField :label="t('board.addTask.typeLabel')">
           <div class="flex flex-wrap gap-1">
             <UButton
-              v-for="ty in TASK_TYPES"
+              v-for="ty in typeChoices"
               :key="ty.value"
               :color="taskType === ty.value ? 'primary' : 'neutral'"
               :variant="taskType === ty.value ? 'soft' : 'ghost'"
               :icon="ty.icon"
               size="xs"
+              :data-testid="`task-type-${ty.value}`"
               @click="
                 () => {
                   taskType = ty.value
@@ -947,6 +1035,61 @@ async function add() {
                 class="w-full"
               />
             </UFormField>
+          </div>
+
+          <!-- A CUSTOM (deployment-registered) task type: a bespoke create-form section when its
+               `formPanel` is paired to the `taskTypeFormPanels` slot, else the descriptor-driven
+               `fields` the type declares. None of the built-in `v-if` branches above match a
+               namespaced custom type, so this renders on its own. -->
+          <div v-if="selectedCustomType" class="space-y-3" data-testid="custom-task-fields">
+            <component
+              :is="customFormPanel"
+              v-if="customFormPanel"
+              :task-type="selectedCustomType"
+              :model-value="customFieldValues"
+              @update:model-value="customFieldValues = $event"
+            />
+            <template v-else>
+              <UFormField
+                v-for="field in selectedCustomType.fields ?? []"
+                :key="field.key"
+                :label="field.label"
+                :help="field.help"
+                :required="field.required"
+              >
+                <div v-if="field.type === 'select'" class="flex flex-wrap gap-1">
+                  <UButton
+                    v-for="opt in field.options ?? []"
+                    :key="opt.value"
+                    :color="customFieldValues[field.key] === opt.value ? 'primary' : 'neutral'"
+                    :variant="customFieldValues[field.key] === opt.value ? 'soft' : 'ghost'"
+                    size="xs"
+                    :data-testid="`custom-field-${field.key}-${opt.value}`"
+                    @click="() => (customFieldValues[field.key] = opt.value)"
+                  >
+                    {{ opt.label }}
+                  </UButton>
+                </div>
+                <UTextarea
+                  v-else-if="field.type === 'textarea'"
+                  v-model="customFieldValues[field.key]"
+                  :rows="2"
+                  :maxlength="field.maxLength"
+                  :placeholder="field.placeholder"
+                  :data-testid="`custom-field-${field.key}`"
+                  class="w-full"
+                />
+                <UInput
+                  v-else
+                  v-model="customFieldValues[field.key]"
+                  :type="field.type === 'number' ? 'number' : 'text'"
+                  :maxlength="field.maxLength"
+                  :placeholder="field.placeholder"
+                  :data-testid="`custom-field-${field.key}`"
+                  class="w-full"
+                />
+              </UFormField>
+            </template>
           </div>
 
           <div class="grid grid-cols-2 gap-3">

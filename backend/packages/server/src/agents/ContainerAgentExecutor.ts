@@ -15,6 +15,7 @@ import {
   type RunnerDispatchKind,
   type RunnerDispatchOptions,
   type RunnerJobRef,
+  type RunnerJobResult,
   type SubscriptionQuotaTarget,
   type SubscriptionVendor,
   type TestSecretEntry,
@@ -780,53 +781,11 @@ export class ContainerAgentExecutor implements AsyncAgentExecutor {
     if (result.error) {
       return { state: 'failed', error: `Implementation failed: ${result.error}`, ...failureMeta }
     }
-    // Attribute a subscription harness's reported usage to its leased pool token
-    // (usage-aware rotation) and the telemetry sink. Best-effort: a missing usage
-    // signal or unconfigured recorder is a no-op; recorded at most once per job id
-    // so a retried/replayed poll can't double-count (see `recordedUsageJobs`).
-    if (
-      handle.subscriptionTokenId &&
-      handle.workspaceId &&
-      result.usage &&
-      this.deps.recordSubscriptionUsage &&
-      !this.recordedUsageJobs.has(handle.jobId)
-    ) {
-      await this.deps.recordSubscriptionUsage(
-        handle.workspaceId,
-        handle.subscriptionTokenId,
-        result.usage,
-      )
-      // Mark only AFTER a successful write: a failed record is left to retry rather
-      // than silently dropped. Bound the set so a long-lived process can't grow it
-      // unboundedly (clearing only risks a benign re-record on a later retry).
-      if (this.recordedUsageJobs.size >= 10_000) this.recordedUsageJobs.clear()
-      this.recordedUsageJobs.add(handle.jobId)
-    }
-    // Fold the SAME subscription usage into the modeled quota-cycle counters (Part B), for
-    // BOTH pooled and personal runs. A subscription run is the one reporting per-call
-    // metrics (Pi is proxy-metered and has none), and the handle's provider is the vendor
-    // slug. Scope = the leased pool token when present, else the run initiator (personal).
-    // Best-effort, once per job id so a replayed poll can't double-count.
-    const quotaVendor = handle.provider ?? providerOf(handle.model)
-    if (
-      result.callMetrics &&
-      result.callMetrics.length > 0 &&
-      result.usage &&
-      this.deps.recordSubscriptionQuotaUsage &&
-      isSubscriptionVendor(quotaVendor) &&
-      !this.recordedQuotaJobs.has(handle.jobId)
-    ) {
-      const target: SubscriptionQuotaTarget | null = handle.subscriptionTokenId
-        ? { scope: 'pooled', scopeId: handle.subscriptionTokenId, vendor: quotaVendor }
-        : handle.initiatedByUserId
-          ? { scope: 'user', scopeId: handle.initiatedByUserId, vendor: quotaVendor }
-          : null
-      if (target) {
-        await this.deps.recordSubscriptionQuotaUsage(target, result.usage)
-        if (this.recordedQuotaJobs.size >= 10_000) this.recordedQuotaJobs.clear()
-        this.recordedQuotaJobs.add(handle.jobId)
-      }
-    }
+    // Best-effort subscription usage attribution, split into their own methods so `pollJob` stays
+    // within the complexity budget: the pool-token usage feedback + telemetry sink, and the
+    // modeled quota-cycle counters. Both are idempotent (once per job id) and behaviour-neutral.
+    await this.recordSubscriptionUsageOnce(handle, result)
+    await this.recordSubscriptionQuotaUsageOnce(handle, result)
     const runResult = toRunResult(result, handle.agentKind)
     // The poll site can't resolve the model ref, but the dispatch captured its label
     // (`handle.model`, already used for `recordHarnessCalls`). Fold it onto the result so the
@@ -887,6 +846,69 @@ export class ContainerAgentExecutor implements AsyncAgentExecutor {
     } catch {
       // Swallowed: telemetry is observability, never a reason to fail (or fail to
       // complete) a run.
+    }
+  }
+
+  /**
+   * Attribute a subscription harness's reported usage to its leased pool token
+   * (usage-aware rotation) and the telemetry sink. Best-effort: a missing usage
+   * signal or unconfigured recorder is a no-op; recorded at most once per job id
+   * so a retried/replayed poll can't double-count (see `recordedUsageJobs`).
+   */
+  private async recordSubscriptionUsageOnce(
+    handle: AgentJobHandle,
+    result: RunnerJobResult,
+  ): Promise<void> {
+    if (
+      handle.subscriptionTokenId &&
+      handle.workspaceId &&
+      result.usage &&
+      this.deps.recordSubscriptionUsage &&
+      !this.recordedUsageJobs.has(handle.jobId)
+    ) {
+      await this.deps.recordSubscriptionUsage(
+        handle.workspaceId,
+        handle.subscriptionTokenId,
+        result.usage,
+      )
+      // Mark only AFTER a successful write: a failed record is left to retry rather
+      // than silently dropped. Bound the set so a long-lived process can't grow it
+      // unboundedly (clearing only risks a benign re-record on a later retry).
+      if (this.recordedUsageJobs.size >= 10_000) this.recordedUsageJobs.clear()
+      this.recordedUsageJobs.add(handle.jobId)
+    }
+  }
+
+  /**
+   * Fold the SAME subscription usage into the modeled quota-cycle counters (Part B), for
+   * BOTH pooled and personal runs. A subscription run is the one reporting per-call
+   * metrics (Pi is proxy-metered and has none), and the handle's provider is the vendor
+   * slug. Scope = the leased pool token when present, else the run initiator (personal).
+   * Best-effort, once per job id so a replayed poll can't double-count.
+   */
+  private async recordSubscriptionQuotaUsageOnce(
+    handle: AgentJobHandle,
+    result: RunnerJobResult,
+  ): Promise<void> {
+    const quotaVendor = handle.provider ?? providerOf(handle.model)
+    if (
+      result.callMetrics &&
+      result.callMetrics.length > 0 &&
+      result.usage &&
+      this.deps.recordSubscriptionQuotaUsage &&
+      isSubscriptionVendor(quotaVendor) &&
+      !this.recordedQuotaJobs.has(handle.jobId)
+    ) {
+      const target: SubscriptionQuotaTarget | null = handle.subscriptionTokenId
+        ? { scope: 'pooled', scopeId: handle.subscriptionTokenId, vendor: quotaVendor }
+        : handle.initiatedByUserId
+          ? { scope: 'user', scopeId: handle.initiatedByUserId, vendor: quotaVendor }
+          : null
+      if (target) {
+        await this.deps.recordSubscriptionQuotaUsage(target, result.usage)
+        if (this.recordedQuotaJobs.size >= 10_000) this.recordedQuotaJobs.clear()
+        this.recordedQuotaJobs.add(handle.jobId)
+      }
     }
   }
 

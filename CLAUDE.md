@@ -19,7 +19,7 @@ favor of the design a future maintainer would thank you for.
   underlying flaw in place is a failed fix, not a completed one.
 - **Respect the existing seams.** Extend behaviour through the established ports, registries,
   and public seams (the app-owned registries — `AgentKindRegistry`, `GateRegistry`,
-  `PipelineRegistry`, `VcsProviderRegistry`, … — a deployment registers on by reference, the kernel
+  `PipelineRegistry`, `TaskTypeRegistry`, `VcsProviderRegistry`, … — a deployment registers on by reference, the kernel
   ports, the runtime `gateways`) instead of reaching around them or bolting on a parallel
   path. Copy the shape of the nearest good citizen rather than inventing a one-off.
 - **No shortcuts that create debt.** Do not hard-code what should be configured, duplicate

@@ -1,10 +1,13 @@
+import type { CustomManifestDetection, CustomManifestDetectionContext } from '@cat-factory/kernel'
+import { matchManifestSignature, readYamlDoc } from '@cat-factory/kernel'
 import { describe, expect, it } from 'vitest'
-import type { ProvisioningRepoReader } from './provision-detect.logic.js'
 import {
+  type CustomTypeForDetection,
   detectCustomManifest,
-  detectKubernetesProvisioning,
-  detectSharedStack,
-} from './provision-detect.logic.js'
+  detectCustomProviderAcrossTypes,
+} from './custom-detect.logic.js'
+import type { ProvisioningRepoReader } from './provision-detect.logic.js'
+import { detectKubernetesProvisioning, detectSharedStack } from './provision-detect.logic.js'
 import { RepoReadError } from './repo-read-error.js'
 
 // A reader that THROWS on every read (as the real GitHub/GitLab client does on a non-404 —
@@ -1502,5 +1505,116 @@ metadata:
     // positive would have picked "." because of the root catalog-info.yaml.
     expect(rec.provisioning.manifestSource?.path).toBe('deployment/k8s/overlays/pre')
     expect(rec.namespace).toBe('app-pre')
+  })
+})
+
+// A worked "stack-deploy-style" custom provider detect() hook: a 3-file signature + a config seed
+// parsed from the root manifest. Mirrors the example-custom-agent one but kept local to the test.
+async function detectStackDeploy(
+  ctx: CustomManifestDetectionContext,
+): Promise<CustomManifestDetection | null> {
+  const root = ctx.directory
+  const sig = await matchManifestSignature(
+    ctx.scanner,
+    { required: ['deploy/stack.yml', 'deploy/up.sh', 'deploy/compose.yml'] },
+    root ? { root } : {},
+  )
+  if (!sig.matched) return null
+  const manifest = await readYamlDoc<{ deploy?: { command?: string } }>(
+    ctx.scanner,
+    root ? `${root}/deploy/stack.yml` : 'deploy/stack.yml',
+  )
+  const command = manifest?.deploy?.command
+  return {
+    matched: true,
+    confidence: sig.confidence,
+    manifestPath: sig.matchedPaths[0],
+    secondaryPaths: sig.matchedPaths.slice(1),
+    ...(command ? { configSeed: [{ key: 'deployCommand', value: command }] } : {}),
+  }
+}
+
+const STACK_REPO: Record<string, string> = {
+  'deploy/stack.yml': 'deploy:\n  command: deploy/up.sh',
+  'deploy/up.sh': '#!/bin/bash',
+  'deploy/compose.yml': 'services: {}',
+}
+
+describe('detectCustomManifest with a detect() hook', () => {
+  const stackType = (): CustomTypeForDetection['detect'] => detectStackDeploy
+
+  it('a matched hook wins over the path-only search (manifest path + config seed)', async () => {
+    const rec = await detectCustomManifest(makeReader(STACK_REPO), {
+      manifestId: 'stack-deploy',
+      detect: stackType(),
+    })
+    expect(rec.detected).toBe(true)
+    expect(rec.provisioning).toMatchObject({
+      type: 'custom',
+      manifestId: 'stack-deploy',
+      manifestPath: 'deploy/stack.yml',
+    })
+    expect(rec.secondaryManifestPaths).toEqual(['deploy/up.sh', 'deploy/compose.yml'])
+    expect(rec.customConfigSeed).toEqual([{ key: 'deployCommand', value: 'deploy/up.sh' }])
+  })
+
+  it('falls back to the path-only search when the hook does not match', async () => {
+    const rec = await detectCustomManifest(makeReader({ 'infra/env.yaml': 'x' }), {
+      manifestId: 'stack-deploy',
+      defaultPath: 'infra/env.yaml',
+      detect: stackType(),
+    })
+    expect(rec.detected).toBe(true)
+    expect(rec.provisioning.manifestPath).toBe('infra/env.yaml')
+  })
+})
+
+describe('detectCustomProviderAcrossTypes (arbitration)', () => {
+  const stackTypeDef: CustomTypeForDetection = {
+    manifestId: 'stack-deploy',
+    label: 'Stack deploy',
+    detect: detectStackDeploy,
+  }
+  // A second provider that never matches this repo (a different single-file signature).
+  const otherTypeDef: CustomTypeForDetection = {
+    manifestId: 'nomad',
+    label: 'Nomad',
+    detect: async (ctx) => {
+      const sig = await matchManifestSignature(ctx.scanner, { required: ['nomad.hcl'] })
+      return sig.matched ? { matched: true, confidence: sig.confidence } : null
+    },
+  }
+
+  it('recognizes the matching provider and echoes the candidate list', async () => {
+    const rec = await detectCustomProviderAcrossTypes(makeReader(STACK_REPO), [
+      otherTypeDef,
+      stackTypeDef,
+    ])
+    expect(rec).not.toBeNull()
+    expect(rec!.provisioning).toMatchObject({ type: 'custom', manifestId: 'stack-deploy' })
+    expect(rec!.detectedManifestTypeCandidates).toEqual([
+      { manifestId: 'stack-deploy', label: 'Stack deploy', confidence: 'high', recommended: true },
+    ])
+  })
+
+  it('returns null when no registered provider recognizes the repo', async () => {
+    const rec = await detectCustomProviderAcrossTypes(makeReader({ 'readme.md': 'x' }), [
+      stackTypeDef,
+      otherTypeDef,
+    ])
+    expect(rec).toBeNull()
+  })
+
+  it('skips types with no detect() hook', async () => {
+    const rec = await detectCustomProviderAcrossTypes(makeReader(STACK_REPO), [
+      { manifestId: 'hookless', label: 'Hookless' },
+    ])
+    expect(rec).toBeNull()
+  })
+
+  it('surfaces a genuine read fault as a RepoReadError', async () => {
+    await expect(
+      detectCustomProviderAcrossTypes(makeThrowingReader(), [stackTypeDef]),
+    ).rejects.toBeInstanceOf(RepoReadError)
   })
 })

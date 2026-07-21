@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest'
 import { useAgentsStore } from './agents'
+import { buildWorkspaceCapabilitiesManifest } from '~/modular/capabilities'
 import {
   __resetCustomAgentKindMetaForTest,
   agentKindMeta,
@@ -23,6 +24,11 @@ const backendKind = (
   },
 })
 
+/** Hydrate the store's backend-manifest half with `kinds` (via the shared capability manifest). */
+const hydrate = (agents: ReturnType<typeof useAgentsStore>, kinds: CustomAgentKind[]): void => {
+  agents.hydrateCapabilities(buildWorkspaceCapabilitiesManifest(kinds, []))
+}
+
 describe('agents store — custom-kind catalog (slice 2)', () => {
   it('exposes only the built-in archetypes before any custom kind is hydrated', () => {
     const agents = useAgentsStore()
@@ -37,9 +43,7 @@ describe('agents store — custom-kind catalog (slice 2)', () => {
     expect(isKnownAgentKind('acme-audit')).toBe(false)
     expect(agentKindMeta('acme-audit').label).toBe('Agent') // generic fallback
 
-    agents.hydrateCustomKinds([
-      backendKind('acme-audit', { category: 'review', resultView: 'acme:audit' }),
-    ])
+    hydrate(agents, [backendKind('acme-audit', { category: 'review', resultView: 'acme:audit' })])
 
     // Palette + kind lookup both see it now (sync-flush projection — no tick needed).
     expect(agents.archetypes.some((a) => a.kind === 'acme-audit')).toBe(true)
@@ -52,7 +56,7 @@ describe('agents store — custom-kind catalog (slice 2)', () => {
 
   it('never lets a custom kind shadow a built-in kind', () => {
     const agents = useAgentsStore()
-    agents.hydrateCustomKinds([backendKind('coder', { label: 'Evil Coder' })])
+    hydrate(agents, [backendKind('coder', { label: 'Evil Coder' })])
     // `coder` is a built-in; the custom entry is dropped, the built-in wins.
     expect(agents.customArchetypes.some((a) => a.kind === 'coder')).toBe(false)
     expect(agentKindMeta('coder').label).not.toBe('Evil Coder')
@@ -61,7 +65,7 @@ describe('agents store — custom-kind catalog (slice 2)', () => {
   it('merges CODE-shipped consumer kinds with BACKEND manifest kinds, de-duplicated', () => {
     const agents = useAgentsStore()
     agents.registerConsumerKinds([backendKind('acme-consumer')])
-    agents.hydrateCustomKinds([backendKind('acme-backend'), backendKind('acme-consumer')])
+    hydrate(agents, [backendKind('acme-backend'), backendKind('acme-consumer')])
     const kinds = agents.customArchetypes.map((a) => a.kind)
     expect(kinds).toContain('acme-consumer')
     expect(kinds).toContain('acme-backend')
@@ -71,20 +75,20 @@ describe('agents store — custom-kind catalog (slice 2)', () => {
 
   it('no-ops a re-hydrate of identical content (stable projection, content-versioned manifest)', () => {
     const agents = useAgentsStore()
-    agents.hydrateCustomKinds([backendKind('acme-x', { resultView: 'acme:x' })])
+    hydrate(agents, [backendKind('acme-x', { resultView: 'acme:x' })])
     const first = agents.customArchetypes
     // A new snapshot re-delivering structurally-equal kinds (fresh objects) must not
     // recompute the merged catalog — the content-derived manifest version is unchanged, so
     // `hydrateCustomKinds` skips the swap and the computed keeps its cached identity.
-    agents.hydrateCustomKinds([backendKind('acme-x', { resultView: 'acme:x' })])
+    hydrate(agents, [backendKind('acme-x', { resultView: 'acme:x' })])
     expect(agents.customArchetypes).toBe(first)
   })
 
   it('swaps the backend catalog wholesale on re-hydrate (per-workspace manifest)', () => {
     const agents = useAgentsStore()
-    agents.hydrateCustomKinds([backendKind('ws1-kind')])
+    hydrate(agents, [backendKind('ws1-kind')])
     expect(agents.customArchetypes.some((a) => a.kind === 'ws1-kind')).toBe(true)
-    agents.hydrateCustomKinds([backendKind('ws2-kind')])
+    hydrate(agents, [backendKind('ws2-kind')])
     expect(agents.customArchetypes.some((a) => a.kind === 'ws1-kind')).toBe(false)
     expect(agents.customArchetypes.some((a) => a.kind === 'ws2-kind')).toBe(true)
     expect(isKnownAgentKind('ws1-kind')).toBe(false)

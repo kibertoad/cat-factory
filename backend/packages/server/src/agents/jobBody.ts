@@ -282,7 +282,27 @@ function buildRegisteredAgentBody(
    */
   userPrompt: string = userPromptFor(context, registry, { materialized: true }),
 ): { body: Record<string, unknown>; kind: RunnerDispatchKind } {
-  const { common, webTools, repo, workBranch, workBranchReady } = parts
+  // Two mutually-exclusive surfaces, split into their own builders so each stays within the
+  // cyclomatic-complexity budget (the shared branch prelude is cheap enough to recompute in each).
+  return step.surface === 'container-coding'
+    ? buildCodingAgentBody(context, parts, step, roleSystemPrompt, userPrompt)
+    : buildExploreAgentBody(context, parts, step, roleSystemPrompt, userPrompt)
+}
+
+/**
+ * The `container-coding` job body: branch off base onto the deterministic work branch, push it and
+ * open a PR (coder-like); or, when the kind targets the PR branch, work in place and push back with
+ * no new PR (fixer-like). Extracted verbatim from {@link buildRegisteredAgentBody} so each function
+ * stays within the complexity budget — behaviour is byte-identical.
+ */
+function buildCodingAgentBody(
+  context: AgentRunContext,
+  parts: KindBodyParts,
+  step: AgentStepSpec,
+  roleSystemPrompt: string,
+  userPrompt: string,
+): { body: Record<string, unknown>; kind: RunnerDispatchKind } {
+  const { common, webTools, repo, workBranch } = parts
   const prBranch = context.block.pullRequest?.branch
   // Amend an EXISTING PR in place (fixer-like: push back, open no new PR) when the kind targets
   // the PR branch, OR targets `pr-or-work` and a PR already exists. A `pr-or-work` kind with no PR
@@ -290,17 +310,7 @@ function buildRegisteredAgentBody(
   // a BAU pipeline step (amend the coder's PR) and a standalone/initiative run (open its own PR).
   const onPr =
     step.clone?.branch === 'pr' || (step.clone?.branch === 'pr-or-work' && Boolean(prBranch))
-  const wantsPr = step.clone?.branch === 'pr' || step.clone?.branch === 'pr-or-work'
-  const exploreBranch =
-    step.clone?.branch === 'base'
-      ? repo.baseBranch
-      : wantsPr
-        ? (prBranch ?? repo.baseBranch)
-        : workBranchReady
-          ? workBranch
-          : (prBranch ?? repo.baseBranch)
-
-  if (step.surface === 'container-coding') {
+  {
     // `pr` clone ⇒ work in place on the PR branch and push back (fixer-like, no new PR);
     // otherwise branch off base onto the work branch, push it and open a PR (coder-like).
     const pr = {
@@ -385,6 +395,31 @@ function buildRegisteredAgentBody(
       },
     }
   }
+}
+
+/**
+ * The `container-explore` job body: a read-only clone returning prose, or a structured JSON object
+ * as `custom`. Extracted verbatim from {@link buildRegisteredAgentBody} so each function stays
+ * within the complexity budget — behaviour is byte-identical.
+ */
+function buildExploreAgentBody(
+  context: AgentRunContext,
+  parts: KindBodyParts,
+  step: AgentStepSpec,
+  roleSystemPrompt: string,
+  userPrompt: string,
+): { body: Record<string, unknown>; kind: RunnerDispatchKind } {
+  const { common, webTools, repo, workBranch, workBranchReady } = parts
+  const prBranch = context.block.pullRequest?.branch
+  const wantsPr = step.clone?.branch === 'pr' || step.clone?.branch === 'pr-or-work'
+  const exploreBranch =
+    step.clone?.branch === 'base'
+      ? repo.baseBranch
+      : wantsPr
+        ? (prBranch ?? repo.baseBranch)
+        : workBranchReady
+          ? workBranch
+          : (prBranch ?? repo.baseBranch)
 
   // container-explore (read-only): prose, or a structured JSON object as `custom`.
   // Multi-repo (service-connections phase 3, read-only): a fan-out kind (today the

@@ -262,7 +262,9 @@ describe.skipIf(!unix)('runClaudeCode telemetry', () => {
 })
 
 describe.skipIf(!unix)('runClaudeCode subagent observability (D2.1/D3)', () => {
-  // A fake `claude` that (1) writes a subagent transcript under $CLAUDE_CONFIG_DIR/subagents,
+  // A fake `claude` that (1) writes a subagent transcript at the REAL location the CLI uses —
+  // `$CLAUDE_CONFIG_DIR/projects/<encoded-cwd>/<session-uuid>/subagents/*.jsonl` (ADR 0027
+  // Defect A; the old `$CLAUDE_CONFIG_DIR/subagents` this fake used to write never exists) —
   // exactly as the real CLI does for a `Task`-parallelised review, and (2) emits a parent
   // stream that dispatches one `Task` subagent and returns. Lets the test assert that the
   // slice progress is derived from the parent stream AND the subagent's tokens (invisible on
@@ -309,8 +311,9 @@ describe.skipIf(!unix)('runClaudeCode subagent observability (D2.1/D3)', () => {
 const fs = require('node:fs'); const path = require('node:path')
 const home = process.env.CLAUDE_CONFIG_DIR
 if (home) {
-  fs.mkdirSync(path.join(home, 'subagents'), { recursive: true })
-  fs.writeFileSync(path.join(home, 'subagents', 'a.jsonl'), ${JSON.stringify(subagentLine + '\n')})
+  const sub = path.join(home, 'projects', '-tmp-agent-explore', 'session-uuid', 'subagents')
+  fs.mkdirSync(sub, { recursive: true })
+  fs.writeFileSync(path.join(sub, 'a.jsonl'), ${JSON.stringify(subagentLine + '\n')})
 }
 process.stdin.resume(); process.stdin.on('data', () => {})
 process.stdout.write(${JSON.stringify(parent.join('\n') + '\n')}, () => process.exit(0))

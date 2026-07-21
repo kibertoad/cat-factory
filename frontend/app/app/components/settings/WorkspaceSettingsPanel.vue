@@ -8,7 +8,7 @@
 // The latter three are body-only section components rendered in tabs here (no longer
 // standalone modals).
 import { reactive, ref, watch } from 'vue'
-import type { CreateTaskType, TaskLimitMode } from '~/types/domain'
+import type { TaskLimitMode } from '~/types/domain'
 import RiskPolicyPanel from '~/components/settings/RiskPolicyPanel.vue'
 import IssueTrackerPanel from '~/components/settings/IssueTrackerPanel.vue'
 import ServiceFragmentDefaultsPanel from '~/components/settings/ServiceFragmentDefaultsPanel.vue'
@@ -103,12 +103,18 @@ const tabsUi = {
   indicator: 'hidden',
 }
 
-const TASK_TYPES: CreateTaskType[] = ['feature', 'bug', 'document', 'spike']
+// The finite BUILT-IN create-task types this per-type running-task-limit UI configures.
+// `CreateTaskType` widened to an open `string` (to admit consumer-registered CUSTOM task types),
+// so the config surface pins the built-in set it renders inputs for — a custom type buckets on its
+// own id server-side (`RunAdmission`) and is not configured here. Keying the records below off this
+// finite union (not the open `CreateTaskType`) keeps them exhaustive + undefined-free.
+type LimitTaskType = 'feature' | 'bug' | 'document' | 'spike' | 'review' | 'ralph'
+const TASK_TYPES: LimitTaskType[] = ['feature', 'bug', 'document', 'spike']
 
 // Per-task-type label for the "Max {type} tasks" inputs. An exhaustive Record keyed off
-// the CreateTaskType union (a missing member fails the typecheck); each value is a LITERAL
-// catalog key so the typed-message-keys check sees it. Leaf keys mirror the enum verbatim.
-const TASK_TYPE_KEYS: Record<CreateTaskType, string> = {
+// the finite {@link LimitTaskType} union (a missing member fails the typecheck); each value is a
+// LITERAL catalog key so the typed-message-keys check sees it. Leaf keys mirror the enum verbatim.
+const TASK_TYPE_KEYS: Record<LimitTaskType, string> = {
   feature: 'settings.workspaceSettings.taskTypes.feature',
   bug: 'settings.workspaceSettings.taskTypes.bug',
   document: 'settings.workspaceSettings.taskTypes.document',
@@ -124,7 +130,7 @@ const MODES = computed<{ value: TaskLimitMode; label: string }[]>(() => [
 ])
 
 /** The localized "Max {type} tasks" label for a per-type running-task limit input. */
-function maxTaskTypeLabel(type: CreateTaskType): string {
+function maxTaskTypeLabel(type: LimitTaskType): string {
   const key = TASK_TYPE_KEYS[type]
   const typeLabel = te(key) ? t(key) : type
   return t('settings.workspaceSettings.taskLimit.maxPerType', { type: typeLabel })
@@ -135,7 +141,7 @@ const draft = reactive({
   waitingEscalationMinutes: 120,
   taskLimitMode: 'off' as TaskLimitMode,
   taskLimitShared: 5 as number,
-  perType: {} as Record<CreateTaskType, number>,
+  perType: {} as Record<LimitTaskType, number>,
   storeAgentContext: true,
   artifactRetentionDays: 14,
   kaizenEnabled: true,
@@ -173,7 +179,7 @@ async function save() {
                 acc[t] = draft.perType[t]
                 return acc
               },
-              {} as Record<CreateTaskType, number>,
+              {} as Record<LimitTaskType, number>,
             )
           : null,
       storeAgentContext: draft.storeAgentContext,

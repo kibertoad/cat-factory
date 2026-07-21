@@ -392,6 +392,55 @@ export class FakeAgentExecutor implements AgentExecutor {
     const produced = this.runProducerKinds(context)
     if (produced) return produced
 
+    // The structured / verdict kinds (tester, fixer, estimator, planner, generic-structured,
+    // ralph, merger, on-call) are split into their own dispatcher so `run` stays under the
+    // complexity ceiling; it returns undefined when the kind is none of those, so control falls
+    // through to the generic prose result below.
+    const confidence = this.options.confidence ?? 1
+    const structured = this.runStructuredKinds(context, confidence)
+    if (structured) return structured
+
+    // Surface revision feedback (and any per-block comment count) so a "request
+    // changes" re-run — freeform and/or comment-driven — can be asserted.
+    const commentCount = context.revision?.comments?.length ?? 0
+    const revisionSuffix = context.revision
+      ? ` [revised: ${context.revision.feedback ?? ''}${commentCount ? ` +${commentCount} comments` : ''}]`
+      : ''
+    const descSuffix = this.options.echoDescription
+      ? ` [desc]${context.block.description}[/desc]`
+      : ''
+    const fragSuffix = this.options.echoFragments
+      ? ` [frags]${(context.block.resolvedFragments ?? []).map((f) => f.id).join(',')}[/frags]`
+      : ''
+    const preset = context.initiative?.preset
+    const presetSuffix = this.options.echoPreset
+      ? ` [preset]${preset ? `${preset.label}|${preset.promptAddition ?? ''}` : ''}[/preset]`
+      : ''
+    return {
+      output: `[${context.agentKind}] processed "${context.block.title}"${revisionSuffix}${descSuffix}${fragSuffix}${presetSuffix}`,
+      model: 'fake',
+      confidence: context.isFinalStep ? confidence : undefined,
+      ...this.usageFields(),
+      // Mimic the container "implementer" agent opening a PR for repo-operating work.
+      ...(this.options.pullRequest ? { pullRequest: this.options.pullRequest } : {}),
+      // ...and, for a multi-repo run, the PRs it opened in the connected services' repos.
+      ...(this.options.peerPullRequests?.length
+        ? { peerPullRequests: this.options.peerPullRequests }
+        : {}),
+    }
+  }
+
+  /**
+   * The structured / verdict agent kinds, split out of {@link run} to keep both within the
+   * complexity budget. Returns the deterministic result for its kind, or `undefined` when the
+   * kind is none of these (so `run` falls through to the generic prose result). `confidence` is
+   * threaded in (the merger derives its assessment from it). Behaviour is byte-identical — the
+   * per-kind branches moved verbatim.
+   */
+  private runStructuredKinds(
+    context: AgentRunContext,
+    confidence: number,
+  ): AgentRunResult | undefined {
     // The `tester` step returns a structured report. A `testReports` sequence walks
     // one report per Tester call (last repeats) so a test can drive a withheld
     // greenlight → fixer loop → greenlight; omitted ⇒ greenlight immediately.
@@ -495,8 +544,6 @@ export class FakeAgentExecutor implements AgentExecutor {
       }
     }
 
-    const confidence = this.options.confidence ?? 1
-
     // The `merger` step returns a PR assessment the engine compares to the task's
     // thresholds. Derive it from `confidence` (unless explicitly supplied) so the
     // old auto-merge-vs-PR semantics carry over: high confidence → within-threshold
@@ -536,34 +583,7 @@ export class FakeAgentExecutor implements AgentExecutor {
       }
     }
 
-    // Surface revision feedback (and any per-block comment count) so a "request
-    // changes" re-run — freeform and/or comment-driven — can be asserted.
-    const commentCount = context.revision?.comments?.length ?? 0
-    const revisionSuffix = context.revision
-      ? ` [revised: ${context.revision.feedback ?? ''}${commentCount ? ` +${commentCount} comments` : ''}]`
-      : ''
-    const descSuffix = this.options.echoDescription
-      ? ` [desc]${context.block.description}[/desc]`
-      : ''
-    const fragSuffix = this.options.echoFragments
-      ? ` [frags]${(context.block.resolvedFragments ?? []).map((f) => f.id).join(',')}[/frags]`
-      : ''
-    const preset = context.initiative?.preset
-    const presetSuffix = this.options.echoPreset
-      ? ` [preset]${preset ? `${preset.label}|${preset.promptAddition ?? ''}` : ''}[/preset]`
-      : ''
-    return {
-      output: `[${context.agentKind}] processed "${context.block.title}"${revisionSuffix}${descSuffix}${fragSuffix}${presetSuffix}`,
-      model: 'fake',
-      confidence: context.isFinalStep ? confidence : undefined,
-      ...this.usageFields(),
-      // Mimic the container "implementer" agent opening a PR for repo-operating work.
-      ...(this.options.pullRequest ? { pullRequest: this.options.pullRequest } : {}),
-      // ...and, for a multi-repo run, the PRs it opened in the connected services' repos.
-      ...(this.options.peerPullRequests?.length
-        ? { peerPullRequests: this.options.peerPullRequests }
-        : {}),
-    }
+    return undefined
   }
 }
 
