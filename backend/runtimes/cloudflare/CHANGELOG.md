@@ -1,5 +1,13 @@
 # @cat-factory/worker
 
+## 0.95.19
+
+### Patch Changes
+
+- Updated dependencies [90a0c1b]
+  - @cat-factory/orchestration@0.131.1
+  - @cat-factory/server@0.140.1
+
 ## 0.95.18
 
 ### Patch Changes
