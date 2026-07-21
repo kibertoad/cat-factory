@@ -1,5 +1,35 @@
 # @cat-factory/local-server
 
+## 0.70.22
+
+### Patch Changes
+
+- 021f2a0: Make a parallel-subagent review observable and correctly metered (ADR 0026 D2.1/D3/D4).
+
+  - D2.1: the Claude Code runner now derives slice progress from the parent stream's `Task`
+    dispatches + their tool_results (which DO appear there), so a subagent-driven review no
+    longer sits at 0% — per-slice progress surfaces without a parent TodoWrite plan.
+  - D3: a best-effort watcher tails the CLI's `subagents/*.jsonl` transcripts while the run is
+    live, feeding the inactivity heartbeat (so a quiet-but-alive review stops looking wedged)
+    and summing each subagent turn's token usage into the run's `usage` + per-call telemetry —
+    the subagent cost that was previously invisible.
+  - D4: a short cold-start watchdog (`JOB_COLD_START_MS`, default 120s, 0 to disable) records a
+    structured diagnostic when a job produces no output early — without killing it — plus a
+    one-line assertion that the pre-seeded onboarding keys landed, logged with the CLI version.
+
+- Updated dependencies [021f2a0]
+- Updated dependencies [021f2a0]
+- Updated dependencies [021f2a0]
+  - @cat-factory/executor-harness@1.50.8
+  - @cat-factory/contracts@0.154.1
+  - @cat-factory/kernel@0.148.2
+  - @cat-factory/server@0.140.2
+  - @cat-factory/integrations@0.88.14
+  - @cat-factory/node-server@0.107.21
+  - @cat-factory/agents@0.67.1
+  - @cat-factory/gitlab@0.11.11
+  - @cat-factory/orchestration@0.131.2
+
 ## 0.70.21
 
 ### Patch Changes
