@@ -1,5 +1,22 @@
 # @cat-factory/orchestration
 
+## 0.131.3
+
+### Patch Changes
+
+- b1d1e2c: Add a programmatic seam to mark prompt fragments as the default for every new task of a
+  given type. A deployment (local or hosted) registers its own custom fragments via
+  `registerPromptFragments(...)` and then declares them as the per-type default via the new
+  `registerTaskTypeDefaultFragments(taskType, fragmentIds)` — so e.g. every new
+  documentation or review task starts with that org's guidance, with no per-block or
+  per-workspace configuration. The board seeds a new task's `fragmentIds` through
+  `defaultFragmentIdsForTaskType(taskType)`; the built-in document writing-style default is
+  now expressed through this seam and augmented (never replaced) by registered ids.
+- Updated dependencies [b1d1e2c]
+  - @cat-factory/prompt-fragments@0.14.0
+  - @cat-factory/agents@0.67.2
+  - @cat-factory/sandbox@0.9.125
+
 ## 0.131.2
 
 ### Patch Changes
