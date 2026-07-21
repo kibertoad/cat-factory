@@ -124,6 +124,21 @@ describe('renderPrDiffContext', () => {
     // ... but some patches are omitted with an explicit note.
     expect(out).toMatch(/patch\(es\) omitted to stay within the injected-diff budget/)
   })
+
+  it('stubs a single oversized patch and does not spend the global budget on it', () => {
+    // A ~40 KiB generated-file patch is over the 32 KiB per-file cap; the small patch after it must
+    // still inline (the giant patch must not draw down the global budget and starve it).
+    const huge = '+x\n'.repeat(20000) // ~40 KiB
+    const out = renderPrDiffContext(3, [
+      changedFile({ path: 'pnpm-lock.yaml', patch: huge }),
+      changedFile({ path: 'src/small.ts', patch: '@@ +1 @@\n+kept' }),
+    ])
+    // The oversized patch is stubbed with an on-demand pointer, not inlined ...
+    expect(out).toContain('over the per-file inline budget')
+    expect(out).not.toContain(huge)
+    // ... and the small patch after it is still fully inlined.
+    expect(out).toContain('+kept')
+  })
 })
 
 describe('prReviewerDiffPreOp', () => {
@@ -255,6 +270,14 @@ describe('pr-reviewer kind registration', () => {
     const ops = defaultAgentKindRegistry().preOps(PR_REVIEWER_KIND)
     expect(ops).toContain(prReviewerDiffPreOp)
     expect(ops).toContain(prReviewerExistingCommentsPreOp)
+  })
+
+  it('requests the PR-head prefetch (clone.prHead) so the engine resolves reviewPrNumber', () => {
+    // Without this the review clones only the base branch and — the container agent holding no git
+    // credential — the head version of modified files and every ADDED file are unreachable.
+    const spec = defaultAgentKindRegistry().agentStep(PR_REVIEWER_KIND)
+    expect(spec?.clone?.prHead).toBe(true)
+    expect(spec?.clone?.full).toBe(true)
   })
 
   it('is code-aware so the review task’s selected best-practice fragments are folded', () => {

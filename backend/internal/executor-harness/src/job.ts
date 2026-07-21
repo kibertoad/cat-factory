@@ -1286,6 +1286,7 @@ export function parseAgentJob(input: unknown): AgentJob {
   const testSecrets = parseTestSecrets(o.testSecrets)
   const guardLimits = parseGuardLimits(o.guardLimits)
   const validation = parseValidationSpec(o.validation)
+  const reviewPrNumber = posInt(o.reviewPrNumber)
   const job: AgentJob = {
     jobId: str(o.jobId, 'jobId'),
     mode,
@@ -1317,7 +1318,7 @@ export function parseAgentJob(input: unknown): AgentJob {
     ...(peerRepos.length ? { peerRepos } : {}),
     ...(referenceRepos.length ? { referenceRepos } : {}),
     ...(referenceBranches.length ? { referenceBranches } : {}),
-    ...(posInt(o.reviewPrNumber) !== undefined ? { reviewPrNumber: posInt(o.reviewPrNumber) } : {}),
+    ...(reviewPrNumber !== undefined ? { reviewPrNumber } : {}),
     ...(o.noChangesIsError === false ? { noChangesIsError: false } : {}),
     ...(o.persistentCheckout === true ? { persistentCheckout: true } : {}),
     ...(o.streamFollowUps === true ? { streamFollowUps: true } : {}),

@@ -139,6 +139,15 @@ export const PR_EXISTING_COMMENTS_CONTEXT_FILE = 'pr-existing-comments.md'
  */
 const MAX_PR_DIFF_PATCH_BYTES = 256 * 1024
 
+/**
+ * Per-file inline cap for a single patch. A patch over this is NOT inlined (it is stubbed with a
+ * pointer to `origin/pr-head`) and does NOT draw down the global {@link MAX_PR_DIFF_PATCH_BYTES}
+ * budget — so one enormous generated patch (a lockfile, a snapshot, a vendored blob) can no longer
+ * crowd out the many small, reviewable source patches that would otherwise fit. The reviewer reads
+ * a stubbed file on demand from the prefetched head, so nothing is lost — just not pre-inlined.
+ */
+const MAX_SINGLE_PATCH_BYTES = 32 * 1024
+
 /** Resolve the reviewed PR's number from the block's task-type fields (prefer `prNumber`). */
 export function resolvePrNumber(
   fields: { prNumber?: number; prUrl?: string } | undefined,
@@ -182,6 +191,17 @@ export function renderPrDiffContext(number: number, files: GitHubChangedFile[]):
     const heading = `\n### ${f.path} (${f.status}, +${f.additions}/-${f.deletions})\n`
     if (f.patch == null) {
       patches.push(`${heading}(no patch — binary or too large; read the file from the checkout)\n`)
+      continue
+    }
+    const patchBytes = enc.encode(f.patch).length
+    // A single oversized patch is stubbed (not inlined) and left OUT of the global budget, so it
+    // can't starve the small patches that follow. It still appears at its position with a pointer.
+    if (patchBytes > MAX_SINGLE_PATCH_BYTES) {
+      const kib = Math.ceil(patchBytes / 1024)
+      patches.push(
+        `${heading}(patch ~${kib} KiB — over the per-file inline budget; read it with ` +
+          '`git show origin/pr-head:<path>` or `git diff origin/<base>...origin/pr-head -- <path>`)\n',
+      )
       continue
     }
     const block = `${heading}\`\`\`diff\n${f.patch}\n\`\`\`\n`
