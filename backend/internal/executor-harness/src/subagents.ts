@@ -1,13 +1,13 @@
 import { readdir, stat } from 'node:fs/promises'
-import { createReadStream } from 'node:fs'
-import { join } from 'node:path'
+import { createReadStream, type Dirent } from 'node:fs'
+import { basename, join } from 'node:path'
 import { claudeAssistantContent, claudeCallUsage, isObject, redactBody } from './claude-stream.js'
 import type { Logger } from './logger.js'
 import type { HarnessCallMetric, TodoProgress } from './pi.js'
 
-// ADR 0026 D2.1 + D3. When the Claude Code CLI reviews a large PR it fans the work
-// out across parallel `Task` subagents. Two things then go dark to the harness, which
-// only reads the PARENT process's stream-json stdout:
+// ADR 0026 D2.1 + D3, corrected by ADR 0027. When the Claude Code CLI reviews a large PR
+// it fans the work out across parallel `Task` subagents. Two things then go dark to the
+// harness, which only reads the PARENT process's stream-json stdout:
 //
 //  - the parent stream falls quiet for the whole (potentially 15+ minute) parallel
 //    review, so the inactivity heartbeat freezes and a healthy run looks wedged (P3);
@@ -21,10 +21,18 @@ import type { HarnessCallMetric, TodoProgress } from './pi.js'
 //  - {@link createSliceTracker} derives the slice plan + per-slice progress from the
 //    PARENT stream alone — the `Task` tool_use dispatch and its terminal tool_result
 //    DO appear there (only the subagent's intermediate turns don't), so slices/progress
-//    need no file watching (D2.1);
+//    need no file watching (D2.1). {@link pickProgress} reconciles it with any parent
+//    TodoWrite plan (ADR 0027 Defect B);
 //  - {@link startSubagentWatcher} tails the `subagents/*.jsonl` transcripts for the
 //    heartbeat (any new bytes ⇒ `onActivity`) and sums each subagent turn's usage into
 //    the run's telemetry (D3).
+//
+// The CLI does NOT write those transcripts to `<configHome>/subagents` (the location ADR
+// 0026 assumed, which never exists — ADR 0027 Defect A). It writes them PER SESSION under
+// `<configHome>/projects/<encoded-cwd>/<session-uuid>/subagents/agent-*.jsonl`, and the
+// session-uuid dir isn't known before the CLI mints it — so the watcher is pointed at the
+// `projects` root and DISCOVERS the `subagents/` dir by walking (see
+// {@link findSubagentTranscripts}).
 //
 // Both degrade gracefully: the CLI's subagent transcript layout is not a stable contract,
 // so a missing directory, an unreadable file, or an unparseable line is swallowed and the
@@ -52,8 +60,10 @@ export interface SliceTracker {
   hasSlices(): boolean
   /**
    * Progress derived from the dispatched subagents (completed / in-flight / total),
-   * or undefined when none have been dispatched. Used ONLY as a fallback when the
-   * agent never wrote a parent TodoWrite plan — a real todo list, when present, wins.
+   * or undefined when none have been dispatched. Reconciled with any parent TodoWrite
+   * plan by {@link pickProgress} — it is NOT gated off by the presence of a todo plan
+   * (that gate was ADR 0027 Defect B: the pr-reviewer prompt writes the plan ONCE at
+   * grouping time and never marks it done, which used to permanently mask this signal).
    */
   progress(): TodoProgress | undefined
 }
@@ -106,6 +116,31 @@ export function createSliceTracker(): SliceTracker {
   }
 }
 
+/**
+ * Reconcile the two redundant views of the same slice work into the one to surface
+ * (ADR 0027 Defect B). A pr-reviewer run has BOTH a parent `TodoWrite` plan (the slices,
+ * written once at grouping time) and the {@link SliceTracker}'s `Task`-dispatch view. The
+ * sequential shape advances the todo plan; the parallel-subagent shape advances ONLY the
+ * slice tracker (the CLI writes the plan once and never marks it done, while the parallel
+ * `Task`s report in-flight/complete). Neither alone covers both shapes, and gating the
+ * slice tracker OFF whenever a todo plan exists (the old behaviour) pinned parallel runs
+ * at 0%. So prefer whichever view is further along: more `completed`, then more
+ * `inProgress` (an all-pending todo plan must not beat live in-flight slices), then more
+ * `total` (the richer view — the todo plan can carry an extra "aggregate" entry), else the
+ * todo plan. Pure + total; returns whichever single input is present when only one is.
+ */
+export function pickProgress(
+  todo: TodoProgress | undefined,
+  slice: TodoProgress | undefined,
+): TodoProgress | undefined {
+  if (!todo) return slice
+  if (!slice) return todo
+  if (slice.completed !== todo.completed) return slice.completed > todo.completed ? slice : todo
+  if (slice.inProgress !== todo.inProgress) return slice.inProgress > todo.inProgress ? slice : todo
+  if (slice.total !== todo.total) return slice.total > todo.total ? slice : todo
+  return todo
+}
+
 // ---------------------------------------------------------------------------
 // Subagent transcript watcher (heartbeat + usage) (D3)
 // ---------------------------------------------------------------------------
@@ -135,15 +170,51 @@ export interface SubagentWatcher {
 }
 
 /**
- * Start watching `dir` (the CLI's `<configHome>/subagents`) for `*.jsonl` transcripts,
- * tailing each file by byte offset. New content feeds `onActivity` (heartbeat) and each
- * assistant turn carrying usage is lifted into a {@link HarnessCallMetric} + summed into
- * the cumulative usage. Best-effort throughout: the directory may not exist yet (created
- * lazily by the CLI), a file may be mid-write, and the line/usage shape may change across
- * CLI versions — every such case is swallowed so the watcher can only ever ADD signal,
- * never break the run.
+ * Recursively collect every `*.jsonl` file that lives inside a `subagents/` directory
+ * anywhere under `root` (the CLI's `<configHome>/projects` tree). The Claude CLI writes
+ * each parallel `Task` subagent's transcript to
+ * `<configHome>/projects/<encoded-cwd>/<session-uuid>/subagents/agent-*.jsonl`; the
+ * session-uuid dir isn't known before the CLI mints it, so we DISCOVER the `subagents/`
+ * dir by walking rather than guessing its path (ADR 0027 Defect A). Files NOT under a
+ * `subagents/` dir — critically the parent's own `<session-uuid>.jsonl` session transcript,
+ * whose per-turn usage the terminal `result` event already totals — are deliberately
+ * excluded: reading them would double-count the parent. `root` itself counts as inside a
+ * `subagents/` dir when its own basename is `subagents` (so passing the leaf dir works too).
+ * Best-effort: an unreadable directory is skipped, never thrown.
  */
-export function startSubagentWatcher(dir: string, opts: SubagentWatcherOptions): SubagentWatcher {
+async function findSubagentTranscripts(root: string): Promise<string[]> {
+  const out: string[] = []
+  const walk = async (dir: string, inSubagents: boolean): Promise<void> => {
+    let entries: Dirent[]
+    try {
+      entries = await readdir(dir, { withFileTypes: true })
+    } catch {
+      return // dir not created yet (or vanished) — try again next tick
+    }
+    for (const entry of entries) {
+      const full = join(dir, entry.name)
+      if (entry.isDirectory()) {
+        await walk(full, inSubagents || entry.name === 'subagents')
+      } else if (inSubagents && entry.isFile() && entry.name.endsWith('.jsonl')) {
+        out.push(full)
+      }
+    }
+  }
+  await walk(root, basename(root) === 'subagents')
+  return out
+}
+
+/**
+ * Start watching `root` (the CLI's `<configHome>/projects` tree) for subagent `*.jsonl`
+ * transcripts — any file under a `subagents/` directory beneath it (see
+ * {@link findSubagentTranscripts}) — tailing each file by byte offset. New content feeds
+ * `onActivity` (heartbeat) and each assistant turn carrying usage is lifted into a
+ * {@link HarnessCallMetric} + summed into the cumulative usage. Best-effort throughout: the
+ * tree may not exist yet (created lazily by the CLI), a file may be mid-write, and the
+ * line/usage shape may change across CLI versions — every such case is swallowed so the
+ * watcher can only ever ADD signal, never break the run.
+ */
+export function startSubagentWatcher(root: string, opts: SubagentWatcherOptions): SubagentWatcher {
   const secrets = opts.secrets ?? []
   const offsets = new Map<string, number>()
   const calls: HarnessCallMetric[] = []
@@ -225,15 +296,8 @@ export function startSubagentWatcher(dir: string, opts: SubagentWatcherOptions):
     if (polling) return
     polling = true
     try {
-      let entries: string[]
-      try {
-        entries = (await readdir(dir)).filter((n) => n.endsWith('.jsonl'))
-      } catch {
-        return // dir not created yet (or vanished) — try again next tick
-      }
       let grew = false
-      for (const name of entries) {
-        const path = join(dir, name)
+      for (const path of await findSubagentTranscripts(root)) {
         let size: number
         try {
           size = (await stat(path)).size

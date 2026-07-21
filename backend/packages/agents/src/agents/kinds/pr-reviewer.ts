@@ -89,9 +89,10 @@ export const PR_REVIEWER_SYSTEM_PROMPT =
   'be reviewed together (a refactor and its call sites and its tests; a schema change and its ' +
   'migration and its mapper). A slice is a unit you can review with full understanding on its own. ' +
   'As soon as you have grouped them, record the plan as a todo list with ONE entry per slice ' +
-  '(labelled with the slice’s short name), plus a final "aggregate findings" entry. Keeping this ' +
-  'todo list up to date is what surfaces review progress (slices reviewed / total) to the user ' +
-  'while the review runs, so maintain it faithfully.\n' +
+  '(labelled with the slice’s short name), plus a final "aggregate findings" entry. Review ' +
+  'progress (slices reviewed / total) is surfaced to the user from this todo list — and, when ' +
+  'you fan the review out across parallel review subagents, from those subagent dispatches too — ' +
+  'so keep the todo list up to date as each slice is reviewed.\n' +
   '3. Review ONE slice at a time: read only that slice’s files and their diffs, assess them for ' +
   'correctness, security, performance, maintainability, tests and risk, then mark that slice’s ' +
   'todo entry done and move to the next. Keeping to one slice at a time is what keeps the review ' +

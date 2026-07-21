@@ -13,7 +13,7 @@ import type { Logger } from './logger.js'
 import type { HarnessCallMetric, PiRunOutcome, PiRunStats, TodoProgress } from './pi.js'
 import { killChildProcess, spawnDetached } from './process.js'
 import { redact, secretsToRedact } from './redact.js'
-import { createSliceTracker, startSubagentWatcher } from './subagents.js'
+import { createSliceTracker, pickProgress, startSubagentWatcher } from './subagents.js'
 import { assertOnboardingKeysCurrent, writeOnboardingPreseed } from './onboarding-preseed.js'
 import { retainSessionTranscripts } from './transcript-retention.js'
 
@@ -325,16 +325,18 @@ export async function runClaudeCode(opts: SubscriptionRunOptions): Promise<PiRun
       ]
   const calls: HarnessCallMetric[] = []
 
-  // ADR 0026 D2.1: derive slice progress from the parent stream's `Task` dispatches +
-  // their terminal tool_results (both DO appear here — only a subagent's intermediate
-  // turns don't). A real parent TodoWrite plan, when the agent writes one, wins; the
-  // slice-derived progress is the fallback for the parallel-subagent shape that writes no
-  // parent plan (the pr-reviewer failure this fixes).
+  // ADR 0026 D2.1 + ADR 0027 Defect B: surface live slice progress from TWO reconciled
+  // sources. The parent's `Task` dispatches + their terminal tool_results DO appear on this
+  // stream (only a subagent's intermediate turns don't), so `sliceTracker` derives per-slice
+  // progress for the parallel-subagent shape; a parent `TodoWrite` plan (the sequential
+  // shape) is tracked in `lastTodo`. `pickProgress` picks whichever is further along on each
+  // update, so neither masks the other — the pr-reviewer prompt writes its todo plan ONCE
+  // and never marks it done, which used to gate the slice signal off and pin progress at 0%.
   const sliceTracker = createSliceTracker()
-  let sawTodoPlan = false
-  const emitSliceProgress = (): void => {
-    if (sawTodoPlan || !opts.onProgress) return
-    const progress = sliceTracker.progress()
+  let lastTodo: TodoProgress | undefined
+  const emitProgress = (): void => {
+    if (!opts.onProgress) return
+    const progress = pickProgress(lastTodo, sliceTracker.progress())
     if (progress) opts.onProgress(progress)
   }
 
@@ -347,21 +349,13 @@ export async function runClaudeCode(opts: SubscriptionRunOptions): Promise<PiRun
       stats.assistantChars += text.length
       stats.toolCalls += toolUses
       for (const block of content) {
-        if (
-          isObject(block) &&
-          block.type === 'tool_use' &&
-          block.name === 'TodoWrite' &&
-          opts.onProgress
-        ) {
+        if (isObject(block) && block.type === 'tool_use' && block.name === 'TodoWrite') {
           const progress = todosToProgress((block.input as Record<string, unknown>)?.todos)
-          if (progress) {
-            sawTodoPlan = true
-            opts.onProgress(progress)
-          }
+          if (progress) lastTodo = progress
         }
       }
       sliceTracker.onAssistant(content)
-      emitSliceProgress()
+      emitProgress()
       // Record this call BEFORE appending its turn: the prompt is the history that
       // produced this response. The append-only array keeps each call's prompt a strict
       // prefix of the next, so the backend's telemetry chain delta-compresses cleanly.
@@ -383,7 +377,7 @@ export async function runClaudeCode(opts: SubscriptionRunOptions): Promise<PiRun
       const content = (event.message as Record<string, unknown>).content
       if (Array.isArray(content)) {
         sliceTracker.onUser(content)
-        emitSliceProgress()
+        emitProgress()
         messages.push({ role: 'tool', content })
       }
     } else if (type === 'result') {
@@ -446,13 +440,16 @@ export async function runClaudeCode(opts: SubscriptionRunOptions): Promise<PiRun
           : { CLAUDE_CODE_OAUTH_TOKEN: opts.subscriptionToken! }),
       }
 
-  // ADR 0026 D2.1/D3: while the run is live, tail the CLI's `subagents/*.jsonl`
-  // transcripts (under the isolated config home) so a parallel-subagent review keeps the
-  // inactivity heartbeat alive (any new bytes ⇒ `onActivity`) and its otherwise-invisible
-  // token spend is lifted into the run's telemetry. Ambient mode has no isolated home to
-  // watch. Best-effort — a missing/renamed transcript layout just yields no extra signal.
+  // ADR 0026 D3 (path corrected by ADR 0027 Defect A): while the run is live, tail the CLI's
+  // subagent `*.jsonl` transcripts so a parallel-subagent review keeps the inactivity
+  // heartbeat alive (any new bytes ⇒ `onActivity`) and its otherwise-invisible token spend is
+  // lifted into the run's telemetry. The CLI writes them per-session under
+  // `<configHome>/projects/<encoded-cwd>/<session-uuid>/subagents/*.jsonl`, so we watch the
+  // `projects` tree and let the watcher discover the `subagents/` dir (the session uuid isn't
+  // known up front). Ambient mode has no isolated home to watch. Best-effort — a
+  // missing/renamed transcript layout just yields no extra signal.
   const subagents = configHome
-    ? startSubagentWatcher(join(configHome, 'subagents'), {
+    ? startSubagentWatcher(join(configHome, 'projects'), {
         ...(opts.onActivity ? { onActivity: opts.onActivity } : {}),
         secrets,
         model: opts.model,
@@ -502,9 +499,10 @@ export async function runClaudeCode(opts: SubscriptionRunOptions): Promise<PiRun
     // is the terminal `result` event's cumulative, which covers ONLY the parent loop — the
     // ADR 0026 incident is itself the proof: a heavily subagent-parallelised review reported
     // ~0 tokens, i.e. the parent stream (and its `result` total) never included the subagent
-    // spend. The subagent tokens live exclusively in the `subagents/*.jsonl` transcripts (a
-    // directory distinct from the parent's `projects/` session transcript), which the watcher
-    // reads and nothing else does — so neither `calls` nor `usage` can already contain them.
+    // spend. The subagent tokens live exclusively in the per-session `subagents/*.jsonl`
+    // transcripts, which the watcher reads and nothing else does; it deliberately EXCLUDES the
+    // sibling parent session transcript (whose usage `result` already totals), so neither
+    // `calls` nor `usage` can already contain the subagent spend.
     const mergedUsage =
       usage || subUsage.inputTokens || subUsage.outputTokens
         ? {

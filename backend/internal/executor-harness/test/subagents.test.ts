@@ -2,9 +2,12 @@ import { mkdtempSync, mkdirSync, rmSync, writeFileSync, appendFileSync } from 'n
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { afterEach, beforeEach, describe, expect, it } from 'vitest'
-import { createSliceTracker, startSubagentWatcher } from '../src/subagents.js'
+import { createSliceTracker, pickProgress, startSubagentWatcher } from '../src/subagents.js'
+import type { TodoProgress } from '../src/pi.js'
 
-// D2.1 (slice progress off the parent stream) + D3 (subagent usage off the transcripts).
+// D2.1 (slice progress off the parent stream) + D3 (subagent usage off the transcripts),
+// corrected by ADR 0027: the watcher walks the `projects` tree for `**/subagents/*.jsonl`
+// (Defect A), and `pickProgress` reconciles the todo-plan + slice-tracker views (Defect B).
 
 describe('createSliceTracker', () => {
   const taskBlock = (id: string, description: string) => ({
@@ -54,6 +57,41 @@ describe('createSliceTracker', () => {
     const t = createSliceTracker()
     t.onAssistant([{ type: 'tool_use', name: 'Task', id: 't1', input: {} }])
     expect(t.progress()?.items?.[0]?.label).toBe('Subagent 1')
+  })
+})
+
+describe('pickProgress (ADR 0027 Defect B)', () => {
+  const p = (completed: number, inProgress: number, total: number): TodoProgress => ({
+    completed,
+    inProgress,
+    total,
+    items: [],
+  })
+
+  it('returns whichever single source is present (or neither)', () => {
+    expect(pickProgress(undefined, undefined)).toBeUndefined()
+    expect(pickProgress(p(1, 0, 3), undefined)).toEqual(p(1, 0, 3))
+    expect(pickProgress(undefined, p(0, 2, 2))).toEqual(p(0, 2, 2))
+  })
+
+  it('prefers the slice tracker when the once-written todo plan is stale', () => {
+    // The pr-reviewer shape: the todo plan is written ONCE (5 slices + an aggregate entry),
+    // all pending, and never marked done. The parallel Task slices are what actually advance
+    // — first in flight, then all returned — so the slice tracker must win in both states.
+    const stalePlan = p(0, 0, 6)
+    expect(pickProgress(stalePlan, p(0, 4, 4))).toEqual(p(0, 4, 4)) // in-flight beats all-pending
+    expect(pickProgress(stalePlan, p(4, 0, 4))).toEqual(p(4, 0, 4)) // all returned beats 0 done
+  })
+
+  it('prefers the advancing todo plan for the sequential shape', () => {
+    expect(pickProgress(p(3, 1, 6), undefined)).toEqual(p(3, 1, 6))
+    expect(pickProgress(p(3, 1, 6), p(0, 2, 2))).toEqual(p(3, 1, 6)) // more completed wins
+  })
+
+  it('breaks a completed+inProgress tie toward the richer (more total) view, else the todo plan', () => {
+    expect(pickProgress(p(1, 1, 6), p(1, 1, 4))).toEqual(p(1, 1, 6))
+    const todo = p(2, 1, 5)
+    expect(pickProgress(todo, p(2, 1, 5))).toBe(todo) // full tie keeps the todo plan
   })
 })
 
@@ -114,6 +152,45 @@ describe('startSubagentWatcher', () => {
     // A transcript with no model falls back to the supplied model.
     expect(calls.find((c) => c.model === 'fallback-model')).toBeTruthy()
     expect(activity).toBeGreaterThan(0)
+  })
+
+  it('discovers subagent transcripts under the real projects/<cwd>/<session>/subagents layout', async () => {
+    // Lay the tree out exactly as the Claude CLI writes it (recovered verbatim in ADR 0027):
+    // the PARENT session transcript sits directly under the session dir, and each parallel
+    // Task subagent writes beside it in a `subagents/` subdir. The watcher is pointed at the
+    // `projects` ROOT (the session uuid isn't known before the CLI mints it), so it must find
+    // the subagent files by walking — the exact case Defect A got wrong.
+    const projects = join(dir, 'projects')
+    const session = join(
+      projects,
+      '-tmp-agent-explore-Z0Fhxx',
+      'aeb3854a-0ff9-42a2-8b82-b60615a3834e',
+    )
+    const sub = join(session, 'subagents')
+    mkdirSync(sub, { recursive: true })
+    // The parent's OWN session transcript. It carries usage too, but the terminal `result`
+    // event already totals it — reading it here would double-count the parent, so a file NOT
+    // under a `subagents/` dir must be EXCLUDED.
+    writeFileSync(
+      join(session, 'aeb3854a-0ff9-42a2-8b82-b60615a3834e.jsonl'),
+      assistantLine({ input: 9999, output: 9999 }) + '\n',
+    )
+    writeFileSync(
+      join(sub, 'agent-1.jsonl'),
+      assistantLine({ input: 100, output: 20, model: 'claude-opus-4-8' }) + '\n',
+    )
+    writeFileSync(join(sub, 'agent-2.jsonl'), assistantLine({ input: 200, output: 30 }) + '\n')
+
+    const watcher = startSubagentWatcher(projects, {
+      intervalMs: 1_000_000,
+      model: 'fallback-model',
+    })
+    await watcher.stop()
+
+    // Only the two subagent transcripts are summed (300 in / 50 out); the parent session
+    // transcript's 9999/9999 is skipped — proof the walk excludes the sibling parent file.
+    expect(watcher.usage()).toEqual({ inputTokens: 300, outputTokens: 50 })
+    expect(watcher.calls()).toHaveLength(2)
   })
 
   it('tails only NEW content across polls (no double count)', async () => {
