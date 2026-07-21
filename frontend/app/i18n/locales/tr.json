@@ -1656,7 +1656,8 @@
         "markRead": "Okundu işaretle",
         "fork_decision_pending": "Okundu olarak işaretle",
         "pr_review_ready": "Okundu işaretle",
-        "budget_paused": "Okundu işaretle"
+        "budget_paused": "Okundu işaretle",
+        "key_drift": "Eski kimlik bilgilerini kaldır"
       },
       "toast": {
         "acted": "İşlendi olarak işaretlendi",

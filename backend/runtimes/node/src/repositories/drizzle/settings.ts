@@ -7,6 +7,7 @@
 import type {
   AccountSettingsRecord,
   AccountSettingsRepository,
+  KeyFingerprintStore,
   LocalSettingsRecord,
   LocalSettingsRepository,
   ModelPreset,
@@ -22,12 +23,41 @@ import { and, eq, inArray, sql } from 'drizzle-orm'
 import type { DrizzleDb } from '../../db/client.js'
 import {
   accountSettings,
+  keyFingerprint,
   localSettings,
   modelPresets,
   trackerSettings,
   userSettings,
   workspaceSettings,
 } from '../../db/schema.js'
+
+/** The fixed singleton-row id for the deployment's key fingerprint (ADR 0026 D6.1). */
+const KEY_FINGERPRINT_ID = 'key'
+
+export class DrizzleKeyFingerprintStore implements KeyFingerprintStore {
+  constructor(
+    private readonly db: DrizzleDb,
+    private readonly now: () => number = () => Date.now(),
+  ) {}
+
+  async get(): Promise<string | null> {
+    const [row] = await this.db
+      .select()
+      .from(keyFingerprint)
+      .where(eq(keyFingerprint.id, KEY_FINGERPRINT_ID))
+      .limit(1)
+    return row?.fingerprint ?? null
+  }
+
+  async set(fingerprint: string): Promise<void> {
+    // Seed-once: never clobber an existing (possibly-mismatching) value — the boot check
+    // relies on the stored fingerprint staying pinned to what secrets were sealed under.
+    await this.db
+      .insert(keyFingerprint)
+      .values({ id: KEY_FINGERPRINT_ID, fingerprint, created_at: this.now() })
+      .onConflictDoNothing({ target: keyFingerprint.id })
+  }
+}
 
 export class DrizzleUserSettingsRepository implements UserSettingsRepository {
   constructor(private readonly db: DrizzleDb) {}

@@ -1656,7 +1656,8 @@
         "markRead": "既読にする",
         "fork_decision_pending": "既読にする",
         "pr_review_ready": "既読にする",
-        "budget_paused": "既読にする"
+        "budget_paused": "既読にする",
+        "key_drift": "古い認証情報を削除"
       },
       "toast": {
         "acted": "対応済みにしました",

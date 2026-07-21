@@ -4,6 +4,7 @@ import type {
   ResolveBinaryArtifactStore,
   ConsensusSessionRepository,
   ResolveRunRepoContext,
+  SealedSecretInventory,
   UserRepoAccessRepository,
   VcsIdentityRegistry,
   VcsProviderRegistry,
@@ -173,6 +174,14 @@ export interface ServerContainer extends Core {
    * (needs ENCRYPTION_KEY). Drives the user-secret controller and `ResolveUserGitHubToken`.
    */
   userSecrets?: UserSecretService
+  /**
+   * The deployment's sealed-secret inventory (ADR 0026 D6.2/D6.3): enumerates every
+   * sealed-at-rest credential so the boot drift sweep can attempt to decrypt each, and drops a
+   * specific unrecoverable one on the operator's request. Present only when the facade wired it
+   * (needs ENCRYPTION_KEY-backed stores); absent ⇒ the drift sweep is skipped and the
+   * `key_drift` card's drop action no-ops.
+   */
+  sealedSecretInventory?: SealedSecretInventory
   /**
    * The per-USER "repos my personal access token can reach" projection. Present only when the
    * facade wired GitHub (needs an installation-backed projection). Drives (a) the fail-closed

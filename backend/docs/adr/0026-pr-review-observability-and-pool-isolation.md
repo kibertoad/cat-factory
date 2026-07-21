@@ -1,6 +1,6 @@
 # ADR 0026: PR-review run observability and warm-pool isolation
 
-- **Status:** Partially implemented — D1, D2.2, D5, D7 landed; D2.1, D3, D4, D6 outstanding
+- **Status:** Fully implemented — D1–D7 all landed
 - **Date:** 2026-07-21
 - **Context layer:** backend (`@cat-factory/agents`, `@cat-factory/orchestration`, `@cat-factory/contracts`, executor-harness, `backend/runtimes/local`) + frontend (`@cat-factory/app`)
 - **Relates to:** ADR 0023 (PR deep review), `backend/docs/container-reaping.md`, PR #1296 (E2BIG fold fix)
@@ -119,7 +119,7 @@ Key the cache by discriminators the client already has: the configured API base 
 - A genuinely wedged run surfaces within a couple of minutes instead of ten.
 - A run that dies to infrastructure after doing work reports that honestly, so "reruns start broken" stops being the reasonable read of a normal eviction.
 - Warm pools stop being a shared-daemon hazard.
-- Key drift is caught at boot with an inventory of what is affected, instead of one opaque per-request error at a time, and stale values can be dropped deliberately (never silently, so a mistaken key change stays recoverable by restoring the key).
+- Key drift is caught at boot (the fingerprint) with an inventory of the affected credentials in the scanned sources — currently environment + observability connections, a floor rather than a total (see the deferred note below) — instead of one opaque per-request error at a time, and stale values can be dropped deliberately (never silently, so a mistaken key change stays recoverable by restoring the key).
 - The browser password cache stops being reachable across installations or users on a shared origin.
 - D2.1 and D3 add a dependency on the CLI's subagent transcript layout. That format is not a stable contract, so the watcher must degrade gracefully (fall back to today's parent-stream-only behaviour) if the layout changes, and it should be covered by a harness test against a recorded transcript fixture.
 
@@ -134,17 +134,62 @@ Independent changes; suggested order by value and blast radius:
 2. D2.2 then D2.1 (the reported symptom; D2.2 is a safe UI copy change that stops the false
    "slicing" claim even before D2.1 lands). **✅ D2.2 landed** — the reviewer's no-plan state is a
    neutral `planning` phase ("Reviewing…"), never a "slicing" assertion inferred from an empty
-   todo list. D2.1 (subagent-transcript watcher) is still outstanding.
+   todo list. **✅ D2.1 landed** — the Claude Code runner derives per-slice progress from the
+   parent stream's `Task` dispatches + their tool_results (both DO appear there), so a
+   subagent-driven review advances instead of pinning at 0%, and a best-effort watcher tails the
+   CLI's `subagents/*.jsonl` transcripts (`subagents.ts`) for the heartbeat + usage. Degrades to
+   parent-stream-only behaviour if the transcript layout changes.
 3. D6.1 and D7 (both small and self-contained: an O(1) boot drift check, and per-installation
    cache scoping that also closes a cross-install credential-reuse path). **✅ D7 landed** — the
    personal-password cache is keyed `cf.personal-pw:<hash(apiBase)>:<userId>` and the retired
-   global key is purged on sight. D6.1 is still outstanding.
+   global key is purged on sight. **✅ D6.1 landed** — a non-secret
+   `HKDF(masterKey, "cat-factory:key-fingerprint")[:8]` fingerprint is persisted once in a new
+   `key_fingerprint` singleton (D1 + Drizzle, mirrored per runtime) and recompared on every boot
+   (Node right after `migrate()`; the Worker on its daily cron), logging a definitive drift signal
+   before any request touches a stale secret. `SecretCipher.decrypt` now also throws a typed
+   `SecretDecryptError` with a `reason: 'key-mismatch' | 'corrupt'` discriminant — the D6.2
+   foundation, so a sweep can bucket a failure without parsing message text.
 4. D5 (prevents a class of local-mode failures on multi-install machines). **✅ Landed** — every
    managed local container is namespaced by a secret-derived install id (Docker label /
    Apple name prefix) and the reaper/adopter/enumerations filter strictly on it; see the
    label contract in `backend/docs/container-reaping.md`.
-5. D6.2 and the surfaced issue, then D6.3 remediation. **Outstanding.**
-6. D3 and D4 (telemetry and early-wedge diagnostics). **Outstanding.**
+5. D3 and D4 (telemetry and early-wedge diagnostics). **✅ Landed** — D3: the subagent-transcript
+   watcher (D2.1) sums each subagent turn's token usage into the run's `usage` + per-call
+   telemetry and feeds the heartbeat, so a long parallel review no longer reports ~0 tokens and
+   no longer looks wedged; subagent cost lands in `llm_call_metrics` via the existing terminal
+   recorder. D4: a short cold-start watchdog (`JOB_COLD_START_MS`, default 120s) records a
+   structured diagnostic — without killing the run — when a job produces no output early, plus a
+   one-line assertion that the pre-seeded onboarding keys landed, logged with the CLI version.
+6. D6.2 (the bounded startup sweep + one surfaced drift issue) and D6.3 (explicit per-secret
+   drop/re-seal remediation). **✅ Landed.** Both ride the `SealedSecretInventory` kernel port
+   (`listSealed` + `drop`), implemented per runtime (D1 + Drizzle, asserted by
+   `defineSealedSecretInventorySuite`) over the two sources the incident named
+   (`environment_connections`, `observability_connections`) — extending it to another source is a
+   change to the inventory pair, never the sweep. **D6.2:** `sweepKeyDriftAndRaise` (runtime-neutral,
+   in `@cat-factory/server`) attempts a decrypt of every sealed secret, buckets each via the typed
+   `SecretDecryptError` `reason`, and raises ONE `key_drift` notification per affected workspace
+   (listing the affected credentials by source / id / label / reason / seal time, NEVER the value;
+   it de-dupes on the affected set and auto-clears once a workspace recovers). It runs at Node boot
+   (after the container is built) and on the Worker's daily cron, next to the D6.1 fingerprint
+   check. **D6.3:** dropping is explicit + per-secret — the `key_drift` card's action drops every
+   credential it lists ("drop all stale"), the `pnpm --filter @cat-factory/node-server
+key-drift:drop --source … --id …` operator CLI drops one, and both route through
+   `inventory.drop` (env connection → soft-delete tombstone; observability → row delete, since the
+   sealed columns are NOT NULL and can't be nulled in place). The value stays unrecoverable, so the
+   card + CLI both state that restoring the previous ENCRYPTION_KEY recovers them instead — the drop
+   is never automatic.
+
+   **Deferred — inventory coverage is intentionally partial.** The sweep currently scans only the
+   two sources the incident named (`environment_connections`, `observability_connections`), not the
+   full set of ~15 sealed-secret domains (`provider-api-keys`, `provider-subscriptions`,
+   `personal-subscriptions`, `package-registries`, `incident-enrichment`, `test-secrets`,
+   `user-secret`, `runners`, `slack`, …). Consequently the surfaced card's count is a FLOOR, not a
+   total — its copy reads "at least N" and warns that other credential types may be affected by the
+   same key change, so an operator doesn't read it as an exhaustive inventory. This is safe because
+   the D6.1 boot fingerprint still detects the key change globally; the per-credential inventory is
+   the incremental part. Extending coverage is a change to the `SealedSecretInventory` pair (its two
+   repo methods + a conformance seed) plus the drop semantics for the added table (soft-delete vs
+   row-delete), never a change to the runtime-neutral sweep.
 
 The immediate `environment_connections` drift on this install is still cleared operationally by re-entering the affected credentials; D6 is what stops the next occurrence from being discovered the hard way.
 

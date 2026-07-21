@@ -210,6 +210,17 @@ export const localSettings = pgTable('local_settings', {
   updated_at: bigint('updated_at', { mode: 'number' }).notNull(),
 })
 
+// ADR 0026 D6.1 — the non-secret fingerprint of the deployment's master ENCRYPTION_KEY,
+// a per-DEPLOYMENT SINGLETON addressed by a fixed `id` ('key'). Seeded once on first boot
+// and compared on every boot to detect key drift before any request touches a stale secret.
+// The value is a one-way HKDF of the key (leaks nothing usable), so it is stored in the
+// clear. Mirrored to D1 (`key_fingerprint` migration) per the runtime-symmetry rule.
+export const keyFingerprint = pgTable('key_fingerprint', {
+  id: text('id').primaryKey(),
+  fingerprint: text('fingerprint').notNull(),
+  created_at: bigint('created_at', { mode: 'number' }).notNull(),
+})
+
 // Email invitations into an org account. Only the token's hash is stored.
 export const accountInvitations = pgTable(
   'account_invitations',

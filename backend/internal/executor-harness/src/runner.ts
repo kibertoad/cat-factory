@@ -114,6 +114,19 @@ export interface JobView<TResult extends JobResultBase = JobResultBase> {
    * surfaces the first one (and only on a follow-ups-enabled coding run).
    */
   followUps?: FollowUpLine[]
+  /**
+   * ADR 0026 D4: set when the cold-start watchdog fired — the job produced NO activity
+   * within {@link RunnerLimits.coldStartMs} of starting, a likely onboarding/auth wedge.
+   * This does NOT fail the job (the inactivity/max-duration watchdogs still own that).
+   *
+   * Legibility today is via the per-job container log line emitted the moment it fires
+   * (the ~2-minute early signal the ADR wants); this field additionally carries the
+   * structured record on the GET /jobs/{id} view so an operator hitting the endpoint — or a
+   * future engine-side consumer — can read it without scraping logs. No engine code consumes
+   * it yet, so surfacing it up through the runner-transport layer is deliberately deferred.
+   * Absent on a job that produced output promptly (the overwhelming common case). Sticky once set.
+   */
+  coldStart?: { atMs: number; message: string }
 }
 
 interface JobEntry<TResult extends JobResultBase> extends JobView<TResult> {
@@ -133,11 +146,27 @@ export interface RunnerLimits {
   maxDurationMs: number
   /** Force-fail the job if the agent produces no output for this long (hang guard). */
   inactivityMs: number
+  /**
+   * ADR 0026 D4: a short first-output window. If the job produces NO activity within this
+   * long after start, emit a structured cold-start diagnostic (a likely onboarding/auth
+   * wedge) — WITHOUT killing the run. Purely a legibility signal so a genuine cold-start
+   * wedge surfaces in a couple of minutes instead of waiting out the full inactivity
+   * window. Safely under the clone-inclusive phases (a large clone still streams git
+   * progress, which counts as activity). Set to 0 to disable.
+   */
+  coldStartMs: number
 }
 
 function intEnv(value: string | undefined, fallback: number): number {
   const n = value ? Number(value) : NaN
   return Number.isFinite(n) && n > 0 ? n : fallback
+}
+
+/** Like {@link intEnv} but allows an explicit 0 (used to DISABLE a window). */
+function intEnvAllowZero(value: string | undefined, fallback: number): number {
+  if (value === undefined) return fallback
+  const n = Number(value)
+  return Number.isFinite(n) && n >= 0 ? n : fallback
 }
 
 export function loadRunnerLimits(env: NodeJS.ProcessEnv = process.env): RunnerLimits {
@@ -152,6 +181,9 @@ export function loadRunnerLimits(env: NodeJS.ProcessEnv = process.env): RunnerLi
     // with git's own clear reason rather than this watchdog's "likely hung" message,
     // for any configured window. See the invariant note in git.ts.
     inactivityMs: intEnv(env.JOB_INACTIVITY_MS, 10 * 60_000),
+    // 2 minutes: comfortably longer than a warm agent's time-to-first-token yet far
+    // under the 10-minute inactivity kill, so a truly output-less start is flagged early.
+    coldStartMs: intEnvAllowZero(env.JOB_COLD_START_MS, 2 * 60_000),
   }
 }
 
@@ -298,7 +330,28 @@ export class JobRegistry<TJob = unknown, TResult extends JobResultBase = JobResu
       killReason ??= 'max-duration'
       controller.abort(new Error('max duration exceeded'))
     }, this.limits.maxDurationMs)
+
+    // ADR 0026 D4: a one-shot cold-start watchdog. If the job produces no activity within
+    // `coldStartMs`, record a structured diagnostic (a likely onboarding/auth wedge) so it
+    // is legible early — it does NOT abort the run (the inactivity watchdog still owns
+    // that). Cleared the moment the first activity arrives.
+    let sawActivity = false
+    let coldStart: ReturnType<typeof setTimeout> | undefined
+    if (this.limits.coldStartMs > 0) {
+      coldStart = setTimeout(() => {
+        if (sawActivity) return
+        const secs = Math.round(this.limits.coldStartMs / 1000)
+        const message = `agent produced no output ${secs}s after start; possible onboarding/auth wedge (phase: ${phase})`
+        entry.coldStart = { atMs: Date.now(), message }
+        jobLog.warn('cold-start: no agent output', { afterMs: this.limits.coldStartMs, phase })
+      }, this.limits.coldStartMs)
+    }
+
     const heartbeat = (): void => {
+      if (!sawActivity) {
+        sawActivity = true
+        clearTimeout(coldStart)
+      }
       entry.heartbeatAt = Date.now()
       resetInactivity()
     }
@@ -361,6 +414,7 @@ export class JobRegistry<TJob = unknown, TResult extends JobResultBase = JobResu
     } finally {
       clearTimeout(inactivity)
       clearTimeout(cap)
+      clearTimeout(coldStart)
       entry.abort = undefined
       entry.heartbeatAt = Date.now()
     }

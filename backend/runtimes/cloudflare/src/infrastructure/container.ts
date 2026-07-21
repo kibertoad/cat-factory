@@ -160,6 +160,7 @@ import { HttpRunnerPoolProvider } from './runners/HttpRunnerPoolProvider'
 import { D1RunnerPoolConnectionRepository } from './repositories/D1RunnerPoolConnectionRepository'
 import { D1SubscriptionActivationRepository } from './repositories/D1PersonalSubscriptionRepository'
 import { D1UserRepoAccessRepository } from './repositories/D1UserRepoAccessRepository'
+import { D1SealedSecretInventory } from './repositories/D1SealedSecretInventory'
 import { ContainerRepoBootstrapper } from './ai/ContainerRepoBootstrapper'
 import { CompositeAgentExecutor } from './ai/CompositeAgentExecutor'
 import { ContainerSessionService } from './containers/ContainerSessionService'
@@ -2692,6 +2693,11 @@ export function buildContainer(
     userSecrets,
     // The per-user "repos my PAT can reach" projection (board redaction + picker expansion).
     userRepoAccess: new D1UserRepoAccessRepository({ db }),
+    // The sealed-secret inventory the key-drift sweep + drop remediation use (ADR 0026 D6.2/D6.3);
+    // gated on ENCRYPTION_KEY (no key ⇒ nothing is sealed to scan).
+    ...(env.ENCRYPTION_KEY?.trim()
+      ? { sealedSecretInventory: new D1SealedSecretInventory({ db }) }
+      : {}),
     // The per-workspace OpenRouter dynamic-catalog store; present when the API-key pool is.
     openRouterCatalog,
     gateways: {

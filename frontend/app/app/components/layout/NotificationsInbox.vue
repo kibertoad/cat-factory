@@ -77,6 +77,10 @@ const META: Record<Notification['type'], { icon: string; color: Accent }> = {
   // Runs were paused by the spend safeguard. Workspace-scoped (no block to reveal); "act" just
   // marks it read (the human raises the budget then resumes from the spend panel).
   budget_paused: { icon: 'i-lucide-wallet', color: 'warning' },
+  // Stored credentials could not be decrypted (the ENCRYPTION_KEY changed since they were
+  // sealed). Not block-scoped; "act" drops the listed stale ciphertexts so they can be re-entered
+  // (or restore the previous key to recover them instead).
+  key_drift: { icon: 'i-lucide-key-round', color: 'error' },
 }
 
 // Per-type primary-action label. An exhaustive Record keyed off the notification
@@ -100,6 +104,7 @@ const ACTION_KEYS: Record<Notification['type'], string> = {
   initiative: 'layout.notifications.action.initiative',
   platform_health: 'layout.notifications.action.platform_health',
   budget_paused: 'layout.notifications.action.budget_paused',
+  key_drift: 'layout.notifications.action.key_drift',
 }
 
 /** The localized primary-action label for a notification (te()-guarded against a
