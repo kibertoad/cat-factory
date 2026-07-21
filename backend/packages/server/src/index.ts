@@ -162,6 +162,13 @@ export {
   type WebCryptoSecretCipherOptions,
 } from './crypto/WebCryptoSecretCipher.js'
 export { WebCryptoPersonalSecretCipher } from './crypto/WebCryptoPersonalSecretCipher.js'
+// ADR 0026 D6.1 — master-key fingerprint + the boot-time drift check built on it.
+export {
+  computeKeyFingerprint,
+  checkKeyFingerprint,
+  type KeyFingerprintCheck,
+  type KeyFingerprintLogger,
+} from './crypto/keyFingerprint.js'
 export {
   GitHubAppAuth,
   type GitHubAppAuthDependencies,

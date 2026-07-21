@@ -50,6 +50,8 @@ import { gateRegistryWithBuiltins } from '@cat-factory/gates'
 import { DEFAULT_WORKSPACE_SETTINGS, defaultPipelineRegistry } from '@cat-factory/kernel'
 import { D1WorkspaceRepository } from './infrastructure/repositories/D1WorkspaceRepository'
 import { D1WorkspaceSettingsRepository } from './infrastructure/repositories/D1WorkspaceSettingsRepository'
+import { D1KeyFingerprintStore } from './infrastructure/repositories/D1KeyFingerprintStore'
+import { type KeyFingerprintLogger, checkKeyFingerprint } from '@cat-factory/server'
 
 // Cloudflare Worker entry. In addition to the Hono `fetch` handler, we expose a
 // `scheduled` handler (the cron sweeper, now also reconciling GitHub
@@ -143,6 +145,13 @@ function errInfo(error: unknown): { message: string; stack?: string } {
   return { message: String(error) }
 }
 
+/** Bridge the pino-style worker logger to the message-first {@link KeyFingerprintLogger}. */
+const keyFingerprintLogger: KeyFingerprintLogger = {
+  info: (message, fields) => logger.info({ cron: 'key-fingerprint', ...fields }, message),
+  warn: (message, fields) => logger.warn({ cron: 'key-fingerprint', ...fields }, message),
+  error: (message, fields) => logger.error({ cron: 'key-fingerprint', ...fields }, message),
+}
+
 /** A run is treated as orphaned if its lease is older than this. */
 const SWEEP_LEASE_MS = 5 * 60 * 1000
 /** An execution whose instance stays missing this long is failed `stalled`, not re-driven. */
@@ -203,6 +212,23 @@ export default {
     // windows. The tables exist regardless of whether GitHub/agents are
     // configured, so this runs unconditionally; an unused table reclaims nothing.
     if (controller.cron === RETENTION_CRON) {
+      // ADR 0026 D6.1: the Worker has no boot moment, so the O(1) ENCRYPTION_KEY drift check
+      // rides the daily cron. It seeds the fingerprint on first run and logs a definitive
+      // drift signal on a key change. Independent of (and cheaper than) the retention work.
+      if (env.ENCRYPTION_KEY) {
+        ctx.waitUntil(
+          checkKeyFingerprint({
+            store: new D1KeyFingerprintStore({ db: env.DB }),
+            masterKeyBase64: env.ENCRYPTION_KEY,
+            logger: keyFingerprintLogger,
+          }).catch((error) =>
+            logger.error(
+              { cron: 'key-fingerprint', err: errInfo(error) },
+              'key fingerprint check failed',
+            ),
+          ),
+        )
+      }
       // This branch never calls buildContainer (no request container is built for the
       // sweep), so do the same fail-fast the build does: a clear error beats an opaque
       // NPE deep in a telemetry repo when the binding is unbound.

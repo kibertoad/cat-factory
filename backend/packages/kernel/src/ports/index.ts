@@ -290,7 +290,9 @@ export type {
   FragmentRunSelection,
   FragmentResolver,
 } from './fragment-selector.js'
-export type { SecretCipher } from './secret-cipher.js'
+export type { SecretCipher, SecretDecryptFailureReason } from './secret-cipher.js'
+export { SecretDecryptError, isSecretDecryptError } from './secret-cipher.js'
+export type { KeyFingerprintStore } from './key-fingerprint-store.js'
 export type { PersonalSecretCipher } from './personal-secret-cipher.js'
 export type {
   EnvironmentProvider,

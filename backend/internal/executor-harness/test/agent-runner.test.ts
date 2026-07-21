@@ -261,6 +261,90 @@ describe.skipIf(!unix)('runClaudeCode telemetry', () => {
   })
 })
 
+describe.skipIf(!unix)('runClaudeCode subagent observability (D2.1/D3)', () => {
+  // A fake `claude` that (1) writes a subagent transcript under $CLAUDE_CONFIG_DIR/subagents,
+  // exactly as the real CLI does for a `Task`-parallelised review, and (2) emits a parent
+  // stream that dispatches one `Task` subagent and returns. Lets the test assert that the
+  // slice progress is derived from the parent stream AND the subagent's tokens (invisible on
+  // the parent stream) are folded into the outcome.
+  function fakeClaudeWithSubagent(): void {
+    const parent = [
+      JSON.stringify({
+        type: 'assistant',
+        message: {
+          model: 'claude-opus-4-8',
+          stop_reason: 'tool_use',
+          usage: { input_tokens: 10, output_tokens: 5 },
+          content: [
+            { type: 'text', text: 'Grouping the diff' },
+            {
+              type: 'tool_use',
+              name: 'Task',
+              id: 'task-1',
+              input: { description: 'Review auth/session slice' },
+            },
+          ],
+        },
+      }),
+      JSON.stringify({
+        type: 'user',
+        message: { content: [{ type: 'tool_result', tool_use_id: 'task-1', content: 'done' }] },
+      }),
+      JSON.stringify({
+        type: 'result',
+        result: 'Reviewed',
+        usage: { input_tokens: 10, output_tokens: 5 },
+      }),
+    ]
+    const subagentLine = JSON.stringify({
+      type: 'assistant',
+      message: {
+        model: 'claude-opus-4-8',
+        stop_reason: 'end_turn',
+        usage: { input_tokens: 500, output_tokens: 295 },
+        content: [{ type: 'text', text: 'subagent findings' }],
+      },
+    })
+    const script = `#!/usr/bin/env node
+const fs = require('node:fs'); const path = require('node:path')
+const home = process.env.CLAUDE_CONFIG_DIR
+if (home) {
+  fs.mkdirSync(path.join(home, 'subagents'), { recursive: true })
+  fs.writeFileSync(path.join(home, 'subagents', 'a.jsonl'), ${JSON.stringify(subagentLine + '\n')})
+}
+process.stdin.resume(); process.stdin.on('data', () => {})
+process.stdout.write(${JSON.stringify(parent.join('\n') + '\n')}, () => process.exit(0))
+`
+    writeFileSync(join(binDir, 'claude'), script, { mode: 0o755 })
+  }
+
+  it('derives slice progress from Task dispatches and folds in subagent token usage', async () => {
+    fakeClaudeWithSubagent()
+    const progresses: Array<{ completed: number; total: number }> = []
+    const outcome = await runClaudeCode({
+      cwd,
+      model: 'claude-opus-4-8',
+      systemPrompt: 'SYS',
+      userPrompt: 'USER',
+      subscriptionToken: 'sk-ant-oat01-tok',
+      onProgress: (p) => progresses.push({ completed: p.completed, total: p.total }),
+    })
+
+    // Slice progress came off the parent stream's Task dispatch + its tool_result.
+    expect(progresses.some((p) => p.total === 1 && p.completed === 0)).toBe(true)
+    expect(progresses.some((p) => p.total === 1 && p.completed === 1)).toBe(true)
+
+    // The subagent's 500/295 tokens (invisible on the parent stream) are summed into the
+    // run's usage on top of the parent's 10/5.
+    expect(outcome.usage).toEqual({ inputTokens: 510, outputTokens: 300 })
+    // Its per-call telemetry is appended after the parent's call.
+    const calls = outcome.callMetrics ?? []
+    expect(calls).toHaveLength(2)
+    expect(calls[1]!.outputTokens).toBe(295)
+    expect(calls[1]!.responseText).toBe('subagent findings')
+  })
+})
+
 describe.skipIf(!unix)('runCodex telemetry', () => {
   it('records one call per token_count using the per-turn usage + latest text', async () => {
     fakeCli('codex', [

@@ -1,6 +1,6 @@
 # ADR 0026: PR-review run observability and warm-pool isolation
 
-- **Status:** Partially implemented — D1, D2.2, D5, D7 landed; D2.1, D3, D4, D6 outstanding
+- **Status:** Partially implemented — D1, D2.1, D2.2, D3, D4, D5, D6.1, D7 landed; D6.2, D6.3 outstanding
 - **Date:** 2026-07-21
 - **Context layer:** backend (`@cat-factory/agents`, `@cat-factory/orchestration`, `@cat-factory/contracts`, executor-harness, `backend/runtimes/local`) + frontend (`@cat-factory/app`)
 - **Relates to:** ADR 0023 (PR deep review), `backend/docs/container-reaping.md`, PR #1296 (E2BIG fold fix)
@@ -134,17 +134,42 @@ Independent changes; suggested order by value and blast radius:
 2. D2.2 then D2.1 (the reported symptom; D2.2 is a safe UI copy change that stops the false
    "slicing" claim even before D2.1 lands). **✅ D2.2 landed** — the reviewer's no-plan state is a
    neutral `planning` phase ("Reviewing…"), never a "slicing" assertion inferred from an empty
-   todo list. D2.1 (subagent-transcript watcher) is still outstanding.
+   todo list. **✅ D2.1 landed** — the Claude Code runner derives per-slice progress from the
+   parent stream's `Task` dispatches + their tool_results (both DO appear there), so a
+   subagent-driven review advances instead of pinning at 0%, and a best-effort watcher tails the
+   CLI's `subagents/*.jsonl` transcripts (`subagents.ts`) for the heartbeat + usage. Degrades to
+   parent-stream-only behaviour if the transcript layout changes.
 3. D6.1 and D7 (both small and self-contained: an O(1) boot drift check, and per-installation
    cache scoping that also closes a cross-install credential-reuse path). **✅ D7 landed** — the
    personal-password cache is keyed `cf.personal-pw:<hash(apiBase)>:<userId>` and the retired
-   global key is purged on sight. D6.1 is still outstanding.
+   global key is purged on sight. **✅ D6.1 landed** — a non-secret
+   `HKDF(masterKey, "cat-factory:key-fingerprint")[:8]` fingerprint is persisted once in a new
+   `key_fingerprint` singleton (D1 + Drizzle, mirrored per runtime) and recompared on every boot
+   (Node right after `migrate()`; the Worker on its daily cron), logging a definitive drift signal
+   before any request touches a stale secret. `SecretCipher.decrypt` now also throws a typed
+   `SecretDecryptError` with a `reason: 'key-mismatch' | 'corrupt'` discriminant — the D6.2
+   foundation, so a sweep can bucket a failure without parsing message text.
 4. D5 (prevents a class of local-mode failures on multi-install machines). **✅ Landed** — every
    managed local container is namespaced by a secret-derived install id (Docker label /
    Apple name prefix) and the reaper/adopter/enumerations filter strictly on it; see the
    label contract in `backend/docs/container-reaping.md`.
-5. D6.2 and the surfaced issue, then D6.3 remediation. **Outstanding.**
-6. D3 and D4 (telemetry and early-wedge diagnostics). **Outstanding.**
+5. D3 and D4 (telemetry and early-wedge diagnostics). **✅ Landed** — D3: the subagent-transcript
+   watcher (D2.1) sums each subagent turn's token usage into the run's `usage` + per-call
+   telemetry and feeds the heartbeat, so a long parallel review no longer reports ~0 tokens and
+   no longer looks wedged; subagent cost lands in `llm_call_metrics` via the existing terminal
+   recorder. D4: a short cold-start watchdog (`JOB_COLD_START_MS`, default 120s) records a
+   structured diagnostic — without killing the run — when a job produces no output early, plus a
+   one-line assertion that the pre-seeded onboarding keys landed, logged with the CLI version.
+6. D6.2 (the bounded startup sweep + one surfaced drift issue) and D6.3 (explicit per-secret
+   drop/re-seal remediation). **Outstanding.** These build on the D6.1 fingerprint + the typed
+   `SecretDecryptError` discriminant already landed: the sweep decrypts each secret-bearing
+   column and buckets by `reason`, the surfaced issue lists affected credentials (by connection
+   type / id / seal time, never the value), and remediation drops a chosen unrecoverable
+   ciphertext and flips its connection to "needs re-entry". They remain a separate change because
+   a faithful implementation is cross-cutting — a sealed-secret inventory spanning the ~16 secret
+   tables in BOTH runtimes, a new `key_drift` notification type (contracts + all locales), a CLI
+   action, and a connection-UI remediation surface — and should land as its own reviewed slice
+   rather than be half-wired here.
 
 The immediate `environment_connections` drift on this install is still cleared operationally by re-entering the affected credentials; D6 is what stops the next occurrence from being discovered the hard way.
 

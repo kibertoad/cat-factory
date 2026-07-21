@@ -4,6 +4,7 @@ import {
   CORS_ALLOWED_HEADERS,
   type ConfigProblem,
   type ServerContainer,
+  checkKeyFingerprint,
   corsReflectsWhenUnset,
   createMisconfiguredApp,
   formatConfigProblems,
@@ -15,6 +16,8 @@ import {
   registerCoreControllers,
   resolveCorsOrigin,
 } from '@cat-factory/server'
+import { DrizzleKeyFingerprintStore } from './repositories/drizzle/settings.js'
+import { pinoKeyFingerprintLogger } from './keyFingerprint.js'
 import { loadNodeConfig } from './config.js'
 import { startBootClock } from './bootTimings.js'
 import { Hono } from 'hono'
@@ -460,6 +463,20 @@ async function bootServer(
   // a recovery hint when the DB is wedged.
   await migrate(db, pool, { schema: dbSchema, migrationsSchema, databaseUrl })
   bootClock.mark('migrate')
+  // ADR 0026 D6.1: an O(1) ENCRYPTION_KEY drift check, right after the schema is up (the
+  // `key_fingerprint` table exists) and before any request/run touches a stale secret. It
+  // seeds the fingerprint on first boot and logs a definitive drift signal on a key change.
+  // Best-effort: wrapped so a store hiccup logs and never blocks boot.
+  const encryptionKey = env.ENCRYPTION_KEY?.trim()
+  if (encryptionKey) {
+    await checkKeyFingerprint({
+      store: new DrizzleKeyFingerprintStore(db),
+      masterKeyBase64: encryptionKey,
+      logger: pinoKeyFingerprintLogger(logger),
+    }).catch((error: unknown) =>
+      logger.warn({ err: String(error) }, 'key fingerprint check failed'),
+    )
+  }
   await boss.start()
   bootClock.mark('bossStart')
   // pg-boss lifecycle flags for the `/ready` probe: it's running once `start()` resolves and stops

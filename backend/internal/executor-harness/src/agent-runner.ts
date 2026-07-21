@@ -2,10 +2,19 @@ import { spawn } from 'node:child_process'
 import { mkdir, mkdtemp, rm, writeFile } from 'node:fs/promises'
 import { homedir, tmpdir } from 'node:os'
 import { dirname, join } from 'node:path'
+import {
+  claudeAssistantContent,
+  claudeCallUsage,
+  isObject,
+  numberOf,
+  redactBody,
+} from './claude-stream.js'
 import type { Logger } from './logger.js'
 import type { HarnessCallMetric, PiRunOutcome, PiRunStats, TodoProgress } from './pi.js'
 import { killChildProcess, spawnDetached } from './process.js'
 import { redact, secretsToRedact } from './redact.js'
+import { createSliceTracker, startSubagentWatcher } from './subagents.js'
+import { assertOnboardingKeysCurrent, writeOnboardingPreseed } from './onboarding-preseed.js'
 import { retainSessionTranscripts } from './transcript-retention.js'
 
 // The alternate (subscription) harness runners. The Pi harness reaches models
@@ -77,15 +86,6 @@ export interface SubscriptionRunOptions {
    * session-transcript path is logged for the run when the isolated config home is torn down.
    */
   log?: Logger
-}
-
-function isObject(value: unknown): value is Record<string, unknown> {
-  return typeof value === 'object' && value !== null
-}
-
-/** Scrub any leased-credential occurrences from a telemetry body (no-op when none). */
-function redactBody(text: string, secrets: string[]): string {
-  return secrets.length ? redact(text, secrets) : text
 }
 
 /**
@@ -325,6 +325,19 @@ export async function runClaudeCode(opts: SubscriptionRunOptions): Promise<PiRun
       ]
   const calls: HarnessCallMetric[] = []
 
+  // ADR 0026 D2.1: derive slice progress from the parent stream's `Task` dispatches +
+  // their terminal tool_results (both DO appear here — only a subagent's intermediate
+  // turns don't). A real parent TodoWrite plan, when the agent writes one, wins; the
+  // slice-derived progress is the fallback for the parallel-subagent shape that writes no
+  // parent plan (the pr-reviewer failure this fixes).
+  const sliceTracker = createSliceTracker()
+  let sawTodoPlan = false
+  const emitSliceProgress = (): void => {
+    if (sawTodoPlan || !opts.onProgress) return
+    const progress = sliceTracker.progress()
+    if (progress) opts.onProgress(progress)
+  }
+
   const onEvent = (event: Record<string, unknown>): void => {
     const type = event.type
     if (type === 'assistant' && isObject(event.message)) {
@@ -341,9 +354,14 @@ export async function runClaudeCode(opts: SubscriptionRunOptions): Promise<PiRun
           opts.onProgress
         ) {
           const progress = todosToProgress((block.input as Record<string, unknown>)?.todos)
-          if (progress) opts.onProgress(progress)
+          if (progress) {
+            sawTodoPlan = true
+            opts.onProgress(progress)
+          }
         }
       }
+      sliceTracker.onAssistant(content)
+      emitSliceProgress()
       // Record this call BEFORE appending its turn: the prompt is the history that
       // produced this response. The append-only array keeps each call's prompt a strict
       // prefix of the next, so the backend's telemetry chain delta-compresses cleanly.
@@ -363,7 +381,11 @@ export async function runClaudeCode(opts: SubscriptionRunOptions): Promise<PiRun
     } else if (type === 'user' && isObject(event.message)) {
       // tool_result blocks the harness fed back to the model — part of the next prompt.
       const content = (event.message as Record<string, unknown>).content
-      if (Array.isArray(content)) messages.push({ role: 'tool', content })
+      if (Array.isArray(content)) {
+        sliceTracker.onUser(content)
+        emitSliceProgress()
+        messages.push({ role: 'tool', content })
+      }
     } else if (type === 'result') {
       if (typeof event.result === 'string') summary = event.result
       usage = claudeUsage(event.usage) ?? usage
@@ -389,16 +411,12 @@ export async function runClaudeCode(opts: SubscriptionRunOptions): Promise<PiRun
   // as already accepted so `-p` starts straight into the run. Best-effort: written
   // before the CLI starts; unknown keys are harmless if a CLI version ignores them.
   // (Ambient mode skips this — the developer's own config is already onboarded.)
+  // ADR 0026 D4: assert the pinned onboarding keys landed and log them with the CLI
+  // version, so a future first-run gate this set doesn't cover (which looks identical to
+  // a healthy-but-quiet subagent start) is diffable when the cold-start watchdog fires.
   if (configHome) {
-    await writeFile(
-      join(configHome, '.claude.json'),
-      JSON.stringify({
-        hasCompletedOnboarding: true,
-        bypassPermissionsModeAccepted: true,
-        hasTrustDialogAccepted: true,
-      }),
-      { mode: 0o600 },
-    ).catch(() => {})
+    await writeOnboardingPreseed(configHome)
+    await assertOnboardingKeysCurrent(configHome, process.env.CLAUDE_CLI_VERSION, opts.log)
   }
 
   // Repo-sourced Claude Skill (slice 2): install it as a native skill under the config dir's
@@ -428,6 +446,20 @@ export async function runClaudeCode(opts: SubscriptionRunOptions): Promise<PiRun
           : { CLAUDE_CODE_OAUTH_TOKEN: opts.subscriptionToken! }),
       }
 
+  // ADR 0026 D2.1/D3: while the run is live, tail the CLI's `subagents/*.jsonl`
+  // transcripts (under the isolated config home) so a parallel-subagent review keeps the
+  // inactivity heartbeat alive (any new bytes ⇒ `onActivity`) and its otherwise-invisible
+  // token spend is lifted into the run's telemetry. Ambient mode has no isolated home to
+  // watch. Best-effort — a missing/renamed transcript layout just yields no extra signal.
+  const subagents = configHome
+    ? startSubagentWatcher(join(configHome, 'subagents'), {
+        ...(opts.onActivity ? { onActivity: opts.onActivity } : {}),
+        secrets,
+        model: opts.model,
+        ...(opts.log ? { log: opts.log } : {}),
+      })
+    : undefined
+
   try {
     const { stderrTail } = await streamCli(
       {
@@ -455,15 +487,32 @@ export async function runClaudeCode(opts: SubscriptionRunOptions): Promise<PiRun
       onEvent,
     )
 
+    // The parent's cumulative-usage fallback applies to the PARENT calls only (before the
+    // subagent calls, which carry their own per-turn tokens, are concatenated).
     attributeCumulativeUsage(calls, usage)
+    // Final drain of any subagent transcript writes that landed after the last poll, then
+    // fold the subagents' usage + per-call telemetry into the run's outcome — their tokens
+    // never appear on the parent stream, so this is the only place they are accounted.
+    await subagents?.stop()
+    const subUsage = subagents?.usage() ?? { inputTokens: 0, outputTokens: 0 }
+    const subCalls = subagents?.calls() ?? []
+    const mergedCalls = [...calls, ...subCalls]
+    const mergedUsage =
+      usage || subUsage.inputTokens || subUsage.outputTokens
+        ? {
+            inputTokens: (usage?.inputTokens ?? 0) + subUsage.inputTokens,
+            outputTokens: (usage?.outputTokens ?? 0) + subUsage.outputTokens,
+          }
+        : undefined
     return {
       summary,
       stats,
       stderrTail,
-      ...(usage ? { usage } : {}),
-      ...(calls.length ? { callMetrics: calls } : {}),
+      ...(mergedUsage ? { usage: mergedUsage } : {}),
+      ...(mergedCalls.length ? { callMetrics: mergedCalls } : {}),
     }
   } finally {
+    await subagents?.stop()
     if (configHome) {
       // Lift the CLI session transcripts (`projects/`) out for short-lived retention BEFORE the
       // home is deleted — the credential lives at the home root, never in `projects/`, so this
@@ -509,44 +558,6 @@ function claudeUsage(raw: unknown): { inputTokens: number; outputTokens: number 
   const output = numberOf(raw.output_tokens)
   if (input === 0 && output === 0) return undefined
   return { inputTokens: input, outputTokens: output }
-}
-
-/** Pull the text + reasoning out of a Claude `assistant` message's content blocks. */
-function claudeAssistantContent(content: unknown[]): {
-  text: string
-  reasoning: string
-  toolUses: number
-} {
-  let text = ''
-  let reasoning = ''
-  let toolUses = 0
-  for (const block of content) {
-    if (!isObject(block)) continue
-    if (block.type === 'text' && typeof block.text === 'string') text += block.text
-    else if (block.type === 'thinking' && typeof block.thinking === 'string')
-      reasoning += block.thinking
-    else if (block.type === 'tool_use') toolUses += 1
-  }
-  return { text, reasoning, toolUses }
-}
-
-/**
- * Per-CALL token usage off a Claude `assistant` message's `usage` (this turn only, not
- * the cumulative `result` total). `inputTokens` counts every billed input bucket (fresh
- * + both cache buckets); `cachedInputTokens` is the cache share, surfaced separately.
- */
-function claudeCallUsage(raw: unknown): {
-  inputTokens: number
-  cachedInputTokens: number
-  outputTokens: number
-} {
-  if (!isObject(raw)) return { inputTokens: 0, cachedInputTokens: 0, outputTokens: 0 }
-  const cached = numberOf(raw.cache_read_input_tokens) + numberOf(raw.cache_creation_input_tokens)
-  return {
-    inputTokens: numberOf(raw.input_tokens) + cached,
-    cachedInputTokens: cached,
-    outputTokens: numberOf(raw.output_tokens),
-  }
 }
 
 // ---------------------------------------------------------------------------
@@ -806,10 +817,6 @@ function codexLastTurnUsage(event: Record<string, unknown>):
   const output = numberOf(raw.output_tokens)
   if (input === 0 && output === 0) return undefined
   return { inputTokens: input, cachedInputTokens: cached, outputTokens: output }
-}
-
-function numberOf(value: unknown): number {
-  return typeof value === 'number' && Number.isFinite(value) ? value : 0
 }
 
 /** Dispatch to the configured subscription harness runner. */
