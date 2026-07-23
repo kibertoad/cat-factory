@@ -457,6 +457,22 @@
       "mergeFailed": "No se pudo fusionar",
       "restartFailed": "No se pudo reiniciar"
     },
+    "reviewFriction": {
+      "warnTitle": "Tareas esperando revisión",
+      "blockedTitle": "Demasiadas tareas esperando revisión",
+      "warnToast": "Algunas tareas esperan revisión humana. Considera revisarlas antes de crear más trabajo.",
+      "blockedToast": "La creación de tareas está bloqueada hasta reducir la cola de revisión.",
+      "warnBody": "{count} tarea(s) esperan revisión humana. Considera revisarlas antes de crear más trabajo.",
+      "blockedCountBody": "Creación bloqueada: {count} tarea(s) esperan revisión humana (límite {threshold}). Reduce primero la cola de revisión.",
+      "blockedStuckBody": "Creación bloqueada: una tarea lleva más de {minutes} minuto(s) esperando revisión humana. Reduce primero la cola de revisión.",
+      "waitingHeading": "Esperando revisión",
+      "waiting": "{minutes} min esperando",
+      "untitled": "Tarea sin título",
+      "close": "Cerrar",
+      "createAnyway": "Crear de todos modos",
+      "goReview": "Ir a revisar",
+      "badge": "{count} tarea(s) esperando revisión"
+    },
     "conflict": {
       "title": {
         "dependencies_unmet": "Bloqueado por dependencias",
@@ -2568,6 +2584,23 @@
         "spike": "spike",
         "review": "revisión",
         "ralph": "Bucle Ralph"
+      },
+      "reviewFriction": {
+        "heading": "Fricción por revisión pendiente",
+        "body": "Desalienta crear tareas nuevas mientras el trabajo terminado espera revisión humana. Desactivado por defecto. «Avisar» añade una confirmación; «Aplicar» rechaza la creación al superar un límite estricto.",
+        "mode": "Modo",
+        "modes": {
+          "off": "Desactivado",
+          "warn": "Avisar (confirmar para continuar)",
+          "enforce": "Aplicar (bloqueo estricto)"
+        },
+        "warnCount": "Avisar a partir de (tareas en revisión)",
+        "enforceHint": "«Aplicar» rechaza la creación de tareas. Activa al menos un disparador estricto abajo.",
+        "blockCountToggle": "Bloquear cuando haya demasiadas tareas en revisión",
+        "blockCount": "Bloquear a partir de (tareas en revisión)",
+        "blockStuckToggle": "Bloquear cuando una tarea lleve esperando demasiado",
+        "blockStuckMinutes": "Bloquear tras (minutos de espera)",
+        "needsTrigger": "El modo «Aplicar» necesita al menos un disparador estricto activo (un recuento o un tiempo de espera)."
       },
       "observability": {
         "heading": "Observabilidad del agente",

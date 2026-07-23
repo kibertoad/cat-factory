@@ -1312,6 +1312,13 @@ export const workspaceSettings = pgTable('workspace_settings', {
   // workspace's runner pool instead of the host container runtime. Off by default; integer
   // 0/1 to match the SQLite store.
   delegate_agents_to_runner_pool: integer('delegate_agents_to_runner_pool').notNull().default(0),
+  // Opt-in review-debt friction on task creation. Mode ('off'|'warn'|'enforce'), off by default;
+  // the soft warn threshold (count of tasks in human review, default 3); and the two nullable
+  // hard-block triggers (a count and a stuck-age in minutes). Mirrors the D1 columns.
+  review_friction_mode: text('review_friction_mode').notNull().default('off'),
+  review_friction_warn_count: integer('review_friction_warn_count').notNull().default(3),
+  review_friction_block_count: integer('review_friction_block_count'),
+  review_friction_block_stuck_minutes: integer('review_friction_block_stuck_minutes'),
   // Per-workspace spend budget (moved out of env). Both nullable; null ⇒ the built-in
   // DEFAULT_SPEND_PRICING base table.
   spend_currency: text('spend_currency'),

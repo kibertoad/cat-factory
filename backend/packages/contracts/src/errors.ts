@@ -65,6 +65,15 @@ export const CONFLICT_REASONS = [
   // The self-test needs a git provider to create/delete its throwaway branch, but the
   // workspace is not connected to one.
   'env_test_no_vcs',
+  // Opt-in review-debt friction (soft tier): the workspace has enough tasks parked on human
+  // review to cross its warn threshold. Creating a task is refused UNLESS the request carries
+  // `acknowledgeReviewDebt: true`; the SPA turns this into a confirm-to-proceed dialog listing
+  // exactly what is waiting, then retries with the flag. (See `review-debt-friction.md`.)
+  'review_debt_warn',
+  // Opt-in review-debt friction (hard tier): too many tasks are parked on human review (by count
+  // or by how long the oldest has waited), so task creation is refused outright until the review
+  // queue is worked down — an acknowledgement cannot tunnel through this.
+  'review_debt_blocked',
 ] as const
 
 export type ConflictReason = (typeof CONFLICT_REASONS)[number]

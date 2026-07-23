@@ -738,6 +738,23 @@
         "review": "Review",
         "ralph": "Ralph-Schleife"
       },
+      "reviewFriction": {
+        "heading": "Review-Rückstau-Bremse",
+        "body": "Erschwert das Anlegen neuer Aufgaben, solange fertige Arbeit auf die menschliche Prüfung wartet. Standardmäßig aus. „Warnen“ fügt eine Bestätigung hinzu; „Erzwingen“ verweigert das Anlegen ab einem harten Limit ganz.",
+        "mode": "Modus",
+        "modes": {
+          "off": "Aus",
+          "warn": "Warnen (Bestätigung nötig)",
+          "enforce": "Erzwingen (harte Sperre)"
+        },
+        "warnCount": "Warnen ab (Aufgaben in Prüfung)",
+        "enforceHint": "„Erzwingen“ verweigert das Anlegen von Aufgaben. Aktiviere unten mindestens einen harten Auslöser.",
+        "blockCountToggle": "Sperren, wenn zu viele Aufgaben in Prüfung sind",
+        "blockCount": "Sperren ab (Aufgaben in Prüfung)",
+        "blockStuckToggle": "Sperren, wenn eine Aufgabe zu lange wartet",
+        "blockStuckMinutes": "Sperren nach (Minuten Wartezeit)",
+        "needsTrigger": "Der Modus „Erzwingen“ benötigt mindestens einen aktiven harten Auslöser (eine Anzahl oder eine Wartezeit)."
+      },
       "observability": {
         "heading": "Agenten-Observability",
         "body": "Speichere den vollständigen Kontext, der jedem Agenten bereitgestellt wird: die zusammengesetzten Prompts, die eingefügten Best-Practice-Fragmente und den vollständigen Inhalt der in seinen Container injizierten Dateien, sodass er später in der Observability-Ansicht inspiziert werden kann. Die Inhalte werden für denselben Zeitraum wie die LLM-Telemetrie pro Aufruf aufbewahrt. Deaktivieren, um die Speicherung zu stoppen (bestehende Snapshots werden durch die Aufbewahrung bereinigt).",
@@ -4059,6 +4076,22 @@
       "startFailed": "Start fehlgeschlagen",
       "mergeFailed": "Zusammenführen fehlgeschlagen",
       "restartFailed": "Neustart fehlgeschlagen"
+    },
+    "reviewFriction": {
+      "warnTitle": "Aufgaben warten auf Prüfung",
+      "blockedTitle": "Zu viele Aufgaben warten auf Prüfung",
+      "warnToast": "Einige Aufgaben warten auf die menschliche Prüfung. Prüfe sie, bevor du mehr Arbeit anlegst.",
+      "blockedToast": "Das Anlegen von Aufgaben ist gesperrt, bis der Prüf-Rückstau abgebaut ist.",
+      "warnBody": "{count} Aufgabe(n) warten auf die menschliche Prüfung. Prüfe sie, bevor du mehr Arbeit anlegst.",
+      "blockedCountBody": "Anlegen gesperrt: {count} Aufgabe(n) warten auf die menschliche Prüfung (Limit {threshold}). Baue zuerst den Prüf-Rückstau ab.",
+      "blockedStuckBody": "Anlegen gesperrt: Eine Aufgabe wartet seit über {minutes} Minute(n) auf die menschliche Prüfung. Baue zuerst den Prüf-Rückstau ab.",
+      "waitingHeading": "Warten auf Prüfung",
+      "waiting": "{minutes} Min. Wartezeit",
+      "untitled": "Aufgabe ohne Titel",
+      "close": "Schließen",
+      "createAnyway": "Trotzdem anlegen",
+      "goReview": "Zur Prüfung",
+      "badge": "{count} Aufgabe(n) warten auf Prüfung"
     },
     "conflict": {
       "title": {

@@ -141,6 +141,12 @@ export const addTaskSchema = v.object({
   // Whether this is a purely TECHNICAL task (creation checkbox). Omitted → not yet
   // determined (the engine may infer it from the spec phase). A set value is authoritative.
   technical: v.optional(v.boolean()),
+  // Opt-in review-debt friction (see `backend/docs/review-debt-friction.md`): when the
+  // workspace has crossed its soft warn threshold, creation is refused with a
+  // `review_debt_warn` 409 UNLESS this flag is set. The SPA sets it on the retry after the
+  // human confirms in the friction dialog. It NEVER tunnels through a hard block (that tier
+  // is checked first and ignores the flag). Inert when friction is off.
+  acknowledgeReviewDebt: v.optional(v.boolean()),
 })
 export type AddTaskInput = v.InferOutput<typeof addTaskSchema>
 

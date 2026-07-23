@@ -54,6 +54,7 @@ export function boardApi({ send, ws }: ApiContext) {
         pipelineId?: string
         agentConfig?: Record<string, string>
         technical?: boolean
+        acknowledgeReviewDebt?: boolean
       },
     ) => send(addTaskContract, { pathPrefix: ws(workspaceId), pathParams: { blockId }, body }),
 

@@ -76,6 +76,7 @@ export type {
   WorkspaceAccess,
   WorkspaceMember,
   TaskLimitMode,
+  ReviewFrictionMode,
   WorkspaceSettings,
   UpdateWorkspaceSettingsInput,
   UserSettings,

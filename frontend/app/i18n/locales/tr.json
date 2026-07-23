@@ -457,6 +457,22 @@
       "mergeFailed": "Birleştirilemedi",
       "restartFailed": "Yeniden başlatılamadı"
     },
+    "reviewFriction": {
+      "warnTitle": "Görevler incelemeyi bekliyor",
+      "blockedTitle": "Çok fazla görev incelemeyi bekliyor",
+      "warnToast": "Bazı görevler insan incelemesini bekliyor. Daha fazla iş oluşturmadan önce onları incelemeyi düşünün.",
+      "blockedToast": "İnceleme kuyruğu azaltılana kadar görev oluşturma engellendi.",
+      "warnBody": "{count} görev insan incelemesini bekliyor. Daha fazla iş oluşturmadan önce onları incelemeyi düşünün.",
+      "blockedCountBody": "Oluşturma engellendi: {count} görev insan incelemesini bekliyor (sınır {threshold}). Önce inceleme kuyruğunu azaltın.",
+      "blockedStuckBody": "Oluşturma engellendi: bir görev {minutes} dakikadan uzun süredir insan incelemesini bekliyor. Önce inceleme kuyruğunu azaltın.",
+      "waitingHeading": "İncelemeyi bekliyor",
+      "waiting": "{minutes} dk bekliyor",
+      "untitled": "Başlıksız görev",
+      "close": "Kapat",
+      "createAnyway": "Yine de oluştur",
+      "goReview": "İncelemeye git",
+      "badge": "{count} görev incelemeyi bekliyor"
+    },
     "conflict": {
       "title": {
         "dependencies_unmet": "Bağımlılıklar tarafından engellendi",
@@ -2690,6 +2706,23 @@
         "spike": "inceleme",
         "review": "inceleme",
         "ralph": "Ralph döngüsü"
+      },
+      "reviewFriction": {
+        "heading": "İnceleme borcu sürtünmesi",
+        "body": "Tamamlanan iş insan incelemesini beklerken yeni görev oluşturmayı caydırır. Varsayılan olarak kapalı. «Uyar» bir onay adımı ekler; «Zorla» katı bir sınırın ötesinde oluşturmayı tümüyle reddeder.",
+        "mode": "Mod",
+        "modes": {
+          "off": "Kapalı",
+          "warn": "Uyar (devam için onayla)",
+          "enforce": "Zorla (katı engel)"
+        },
+        "warnCount": "Şu sayıda uyar (incelemedeki görevler)",
+        "enforceHint": "«Zorla» görev oluşturmayı reddeder. Aşağıda en az bir katı tetikleyici etkinleştirin.",
+        "blockCountToggle": "İncelemede çok fazla görev olduğunda engelle",
+        "blockCount": "Şu sayıda engelle (incelemedeki görevler)",
+        "blockStuckToggle": "Bir görev çok uzun süre beklediğinde engelle",
+        "blockStuckMinutes": "Şu süreden sonra engelle (dakika bekleme)",
+        "needsTrigger": "«Zorla» modu en az bir etkin katı tetikleyici gerektirir (bir sayı veya bir bekleme süresi)."
       },
       "observability": {
         "heading": "Agent gözlemlenebilirliği",

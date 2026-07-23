@@ -17,6 +17,7 @@ import DecisionModal from '~/components/panels/DecisionModal.vue'
 import AgentStepDetail from '~/components/panels/AgentStepDetail.vue'
 import StepResultViewHost from '~/components/panels/StepResultViewHost.vue'
 import AddTaskModal from '~/components/board/AddTaskModal.vue'
+import ReviewFrictionDialog from '~/components/board/ReviewFrictionDialog.vue'
 import CreateInitiativeModal from '~/components/board/CreateInitiativeModal.vue'
 import GitHubOnboarding from '~/components/github/GitHubOnboarding.vue'
 import CommandBar from '~/components/layout/CommandBar.vue'
@@ -377,6 +378,7 @@ watch(
       <AgentStepDetail />
       <StepResultViewHost />
       <AddTaskModal />
+      <ReviewFrictionDialog v-if="ui.reviewFrictionContext" />
       <CreateInitiativeModal />
       <CommandBar />
       <PersonalCredentialModal />

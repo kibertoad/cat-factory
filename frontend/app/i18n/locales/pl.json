@@ -457,6 +457,22 @@
       "mergeFailed": "Nie udało się scalić",
       "restartFailed": "Nie udało się ponownie uruchomić"
     },
+    "reviewFriction": {
+      "warnTitle": "Zadania czekające na przegląd",
+      "blockedTitle": "Zbyt wiele zadań czeka na przegląd",
+      "warnToast": "Niektóre zadania czekają na przegląd przez człowieka. Rozważ ich przejrzenie przed tworzeniem kolejnej pracy.",
+      "blockedToast": "Tworzenie zadań jest zablokowane do czasu zmniejszenia kolejki przeglądów.",
+      "warnBody": "{count} zadań czeka na przegląd przez człowieka. Rozważ ich przejrzenie przed tworzeniem kolejnej pracy.",
+      "blockedCountBody": "Tworzenie zablokowane: {count} zadań czeka na przegląd przez człowieka (limit {threshold}). Najpierw zmniejsz kolejkę przeglądów.",
+      "blockedStuckBody": "Tworzenie zablokowane: zadanie czeka na przegląd przez człowieka od ponad {minutes} minut(y). Najpierw zmniejsz kolejkę przeglądów.",
+      "waitingHeading": "Oczekujące na przegląd",
+      "waiting": "{minutes} min oczekiwania",
+      "untitled": "Zadanie bez tytułu",
+      "close": "Zamknij",
+      "createAnyway": "Utwórz mimo to",
+      "goReview": "Przejdź do przeglądu",
+      "badge": "{count} zadań czeka na przegląd"
+    },
     "conflict": {
       "title": {
         "dependencies_unmet": "Zablokowane przez zależności",
@@ -2568,6 +2584,23 @@
         "spike": "spike",
         "review": "przegląd",
         "ralph": "Pętla Ralph"
+      },
+      "reviewFriction": {
+        "heading": "Hamulec długu przeglądów",
+        "body": "Zniechęca do tworzenia nowych zadań, gdy ukończona praca czeka na przegląd przez człowieka. Domyślnie wyłączone. „Ostrzegaj” dodaje potwierdzenie; „Wymuszaj” całkowicie odmawia utworzenia po przekroczeniu twardego limitu.",
+        "mode": "Tryb",
+        "modes": {
+          "off": "Wyłączone",
+          "warn": "Ostrzegaj (potwierdź, aby kontynuować)",
+          "enforce": "Wymuszaj (twarda blokada)"
+        },
+        "warnCount": "Ostrzegaj od (zadań w przeglądzie)",
+        "enforceHint": "„Wymuszaj” odmawia tworzenia zadań. Włącz poniżej co najmniej jeden twardy wyzwalacz.",
+        "blockCountToggle": "Blokuj, gdy zbyt wiele zadań jest w przeglądzie",
+        "blockCount": "Blokuj od (zadań w przeglądzie)",
+        "blockStuckToggle": "Blokuj, gdy zadanie czeka zbyt długo",
+        "blockStuckMinutes": "Blokuj po (minutach oczekiwania)",
+        "needsTrigger": "Tryb „Wymuszaj” wymaga włączenia co najmniej jednego twardego wyzwalacza (liczby lub czasu oczekiwania)."
       },
       "observability": {
         "heading": "Obserwowalność agenta",

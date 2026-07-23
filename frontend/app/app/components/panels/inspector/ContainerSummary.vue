@@ -2,6 +2,7 @@
 import type { Block } from '~/types/domain'
 import { STATUS_META } from '~/utils/catalog'
 import InspectorSection from '~/components/panels/inspector/InspectorSection.vue'
+import ReviewDebtBadge from '~/components/board/ReviewDebtBadge.vue'
 
 const props = defineProps<{ block: Block }>()
 
@@ -61,9 +62,12 @@ function addTask() {
               : t('inspector.container.tasks', { count: tasks.length })
           }}
         </span>
-        <UButton size="xs" variant="soft" color="primary" icon="i-lucide-plus" @click="addTask">
-          {{ t('inspector.container.addTask') }}
-        </UButton>
+        <div class="flex items-center gap-1.5">
+          <ReviewDebtBadge />
+          <UButton size="xs" variant="soft" color="primary" icon="i-lucide-plus" @click="addTask">
+            {{ t('inspector.container.addTask') }}
+          </UButton>
+        </div>
       </div>
       <ul v-if="tasks.length" class="space-y-1">
         <li

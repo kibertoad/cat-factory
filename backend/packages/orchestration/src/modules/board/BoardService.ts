@@ -46,7 +46,17 @@ import {
   unfinishedTasksUnder,
   wouldCreateCycle,
 } from './board.logic.js'
+import type {
+  ReviewFrictionNotificationReader,
+  ReviewFrictionSettingsReader,
+} from './reviewFrictionGuard.js'
+import { ReviewFrictionGuard } from './reviewFrictionGuard.js'
 import { defaultFragmentIdsForTaskType } from '@cat-factory/prompt-fragments'
+
+export type {
+  ReviewFrictionNotificationReader,
+  ReviewFrictionSettingsReader,
+} from './reviewFrictionGuard.js'
 
 export interface BoardServiceDependencies {
   workspaceRepository: WorkspaceRepository
@@ -108,6 +118,15 @@ export interface BoardServiceDependencies {
    * pipeline. Absent (tests / no custom types) ⇒ only the built-in type defaults apply.
    */
   taskTypeRegistry?: TaskTypeRegistry
+  /**
+   * Opt-in review-debt friction on task creation (`backend/docs/review-debt-friction.md`).
+   * When BOTH readers are wired and the workspace has enabled friction, {@link BoardService.addTask}
+   * refuses (or requires acknowledgement for) authoring a new task while too many tasks sit parked
+   * on human review. Absent (tests / conformance / minimal facades / friction off) ⇒ the guard is a
+   * pass-through and creation behaves exactly as before.
+   */
+  reviewFrictionSettings?: ReviewFrictionSettingsReader
+  reviewFrictionNotifications?: ReviewFrictionNotificationReader
 }
 
 /**
@@ -147,6 +166,7 @@ export class BoardService {
   private readonly initiativeRepository?: InitiativeRepository
   private readonly events?: ExecutionEventPublisher
   private readonly taskTypeRegistry?: TaskTypeRegistry
+  private readonly reviewFrictionGuard: ReviewFrictionGuard
 
   constructor({
     workspaceRepository,
@@ -162,6 +182,8 @@ export class BoardService {
     initiativeRepository,
     executionEventPublisher,
     taskTypeRegistry,
+    reviewFrictionSettings,
+    reviewFrictionNotifications,
   }: BoardServiceDependencies) {
     this.workspaceRepository = workspaceRepository
     this.blockRepository = blockRepository
@@ -176,6 +198,11 @@ export class BoardService {
     this.initiativeRepository = initiativeRepository
     this.events = executionEventPublisher
     this.taskTypeRegistry = taskTypeRegistry
+    this.reviewFrictionGuard = new ReviewFrictionGuard({
+      clock,
+      settings: reviewFrictionSettings,
+      notifications: reviewFrictionNotifications,
+    })
   }
 
   /**
@@ -556,6 +583,15 @@ export class BoardService {
       throw new ValidationError('Tasks cannot contain other tasks')
     }
     const blocks = await this.blockRepository.listByWorkspace(homeWorkspaceId)
+    // Opt-in review-debt friction: refuse (or require acknowledgement for) authoring a new task
+    // while too many tasks sit parked on human review. Runs in the ACTING workspace's context
+    // (its settings + its open notifications) before any side effect; `blocks` supplies the debt
+    // titles with no extra query. Pass-through when the seams are unwired or friction is off.
+    await this.reviewFrictionGuard.assertAllows(
+      workspaceId,
+      blocks,
+      input.acknowledgeReviewDebt === true,
+    )
     const siblings = tasksOf(blocks, containerId).length
     const service = serviceOf(blocks, container)
     const taskType = input.taskType ?? 'feature'

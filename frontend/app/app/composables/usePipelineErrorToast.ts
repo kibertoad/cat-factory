@@ -166,6 +166,18 @@ const CONFLICT_INFO: Record<Exclude<ConflictReason, BespokeConflictReason>, Conf
       run: (ui) => ui.openGitHub(),
     },
   },
+  // Opt-in review-debt friction. In the normal task-create flow AddTaskModal intercepts these
+  // 409s and opens the friction dialog (which can retry with an acknowledgement), so these entries
+  // are the last-resort toast fallback for any OTHER caller — a generic, param-free title +
+  // description reusing the dialog's own `errors.reviewFriction.*` namespace.
+  review_debt_warn: {
+    titleKey: 'errors.reviewFriction.warnTitle',
+    descriptionKey: 'errors.reviewFriction.warnToast',
+  },
+  review_debt_blocked: {
+    titleKey: 'errors.reviewFriction.blockedTitle',
+    descriptionKey: 'errors.reviewFriction.blockedToast',
+  },
 }
 
 /**

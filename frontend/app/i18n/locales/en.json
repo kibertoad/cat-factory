@@ -493,6 +493,22 @@
       "mergeFailed": "Failed to merge",
       "restartFailed": "Failed to restart"
     },
+    "reviewFriction": {
+      "warnTitle": "Tasks waiting on review",
+      "blockedTitle": "Too many tasks waiting on review",
+      "warnToast": "Some tasks are waiting on human review. Consider reviewing them before creating more work.",
+      "blockedToast": "Task creation is blocked until the review queue is worked down.",
+      "warnBody": "{count} task(s) are waiting on human review. Consider reviewing them before creating more work.",
+      "blockedCountBody": "Task creation is blocked: {count} task(s) are waiting on human review (limit {threshold}). Work down the review queue first.",
+      "blockedStuckBody": "Task creation is blocked: a task has been waiting on human review for over {minutes} minute(s). Work down the review queue first.",
+      "waitingHeading": "Waiting on review",
+      "waiting": "{minutes} min waiting",
+      "untitled": "Untitled task",
+      "close": "Close",
+      "createAnyway": "Create anyway",
+      "goReview": "Go review",
+      "badge": "{count} task(s) waiting on review"
+    },
     "conflict": {
       "title": {
         "dependencies_unmet": "Blocked by dependencies",
@@ -2756,6 +2772,23 @@
         "spike": "spike",
         "review": "review",
         "ralph": "Ralph loop"
+      },
+      "reviewFriction": {
+        "heading": "Review-debt friction",
+        "body": "Discourage authoring new tasks while finished work waits on human review. Off by default. Warn adds a confirm-to-proceed step; Enforce also refuses task creation outright past a hard limit.",
+        "mode": "Mode",
+        "modes": {
+          "off": "Off",
+          "warn": "Warn (confirm to proceed)",
+          "enforce": "Enforce (hard block)"
+        },
+        "warnCount": "Warn at (tasks in review)",
+        "enforceHint": "Enforce refuses task creation. Enable at least one hard trigger below.",
+        "blockCountToggle": "Block when too many tasks are in review",
+        "blockCount": "Block at (tasks in review)",
+        "blockStuckToggle": "Block when a task has waited too long",
+        "blockStuckMinutes": "Block after (minutes waiting)",
+        "needsTrigger": "Enforce mode needs at least one hard trigger enabled (a count or a wait time)."
       },
       "observability": {
         "heading": "Agent observability",
