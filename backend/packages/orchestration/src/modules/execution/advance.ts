@@ -50,7 +50,17 @@ export type AdvanceResult =
    * (A first eviction is recovered silently inside {@link ExecutionService.pollAgentJob}
    * by re-dispatching and returning `continue`, so it never reaches the driver.)
    */
-  | { kind: 'job_evicted'; error: string }
+  | {
+      kind: 'job_evicted'
+      error: string
+      /**
+       * The transport's post-mortem of the dead container (exit state + its own log tail),
+       * recorded as the failure `detail`. Without it an eviction is an unfalsifiable dead end:
+       * the container is reclaimed as the run settles, so this is the only surviving record of
+       * WHY the harness process went away. Absent when the transport reported none.
+       */
+      detail?: string
+    }
   /** The final step completed; the run is finished. */
   | { kind: 'done' }
   /** The spend budget is exhausted; the run is paused until it frees up. */

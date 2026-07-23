@@ -211,6 +211,73 @@ describe('DockerRuntimeAdapter', () => {
     expect(calls[0]).toEqual(['port', 'cid', '4173/tcp'])
   })
 
+  // The endpoint contract (see `ContainerRuntimeAdapter.endpoint`): a container that has EXITED
+  // is "not ready", NOT an error — `find()` returns exited containers by design, and the
+  // transport re-creates one it can't reach. `docker port` exits non-zero for such a container,
+  // so letting that escape wedges the run on its own corpse and reports the CLI line as the cause
+  // of death. A fault against a LIVE container is a real problem and must still surface.
+  it('resolves an EXITED container to "not ready" when `docker port` fails', async () => {
+    const adapter = new DockerRuntimeAdapter({
+      id: 'docker',
+      binary: 'docker',
+      hostAlias: 'host.docker.internal',
+      addHostGateway: true,
+      localDind: true,
+      pooling: true,
+      installId: 'i0',
+    })
+    const exec: ContainerExec = (args) => {
+      if (args[0] === 'port') {
+        return Promise.reject(new Error("no public port '8080/tcp' published for cid"))
+      }
+      return Promise.resolve({ stdout: 'false\n', stderr: '' })
+    }
+    expect(await adapter.endpoint(exec, 'cid')).toBeUndefined()
+  })
+
+  it('rethrows a port lookup that fails against a RUNNING container', async () => {
+    const adapter = new DockerRuntimeAdapter({
+      id: 'docker',
+      binary: 'docker',
+      hostAlias: 'host.docker.internal',
+      addHostGateway: true,
+      localDind: true,
+      pooling: true,
+      installId: 'i0',
+    })
+    const exec: ContainerExec = (args) => {
+      if (args[0] === 'port') return Promise.reject(new Error('docker daemon connection reset'))
+      return Promise.resolve({ stdout: 'true\n', stderr: '' })
+    }
+    await expect(adapter.endpoint(exec, 'cid')).rejects.toThrow(/connection reset/)
+  })
+
+  it('reports the exit code + an OOM kill for a stopped container, nothing for a live one', async () => {
+    const adapter = new DockerRuntimeAdapter({
+      id: 'docker',
+      binary: 'docker',
+      hostAlias: 'host.docker.internal',
+      addHostGateway: true,
+      localDind: true,
+      pooling: true,
+      installId: 'i0',
+    })
+    // `{{.State.Running}} {{.State.ExitCode}} {{.State.OOMKilled}}`, the mid-run post-mortem's
+    // only way to tell an OOM kill (empty log tail) from a process that threw and printed nothing.
+    const oom = fakeExec({ inspect: 'false 137 true\n' })
+    expect(await adapter.exitState(oom.exec, 'cid')).toBe(
+      'exit code 137, OOM-killed by the container runtime',
+    )
+    const plain = fakeExec({ inspect: 'false 1 false\n' })
+    expect(await adapter.exitState(plain.exec, 'cid')).toBe('exit code 1')
+    // Still running ⇒ no exit state (it is a diagnostic, never a lifecycle signal).
+    const live = fakeExec({ inspect: 'true 0 false\n' })
+    expect(await adapter.exitState(live.exec, 'cid')).toBeUndefined()
+    // A reaped container can't be inspected at all: best-effort, so undefined rather than a throw.
+    const gone: ContainerExec = () => Promise.reject(new Error('No such object: cid'))
+    expect(await adapter.exitState(gone, 'cid')).toBeUndefined()
+  })
+
   // ADR 0026 D5: namespace every managed container by install id so a shared daemon can't cross
   // installs (a pool member bakes THIS install's HARNESS_SHARED_SECRET in).
   it('stamps the per-install label on run (per-run AND pool) and filters every enumeration on it', async () => {
@@ -313,6 +380,25 @@ describe('AppleContainerRuntimeAdapter', () => {
     const stopped = fakeExec({ inspect: JSON.stringify({ status: 'stopped' }) })
     expect(await adapter.isRunning(running.exec, n('x'))).toBe(true)
     expect(await adapter.isRunning(stopped.exec, n('x'))).toBe(false)
+  })
+
+  it('reports the terminal status as the exit state, and nothing while running', async () => {
+    // Apple `container inspect` exposes no exit code and no OOM flag, so the post-mortem gets the
+    // coarse status verbatim rather than the Docker-shaped detail.
+    const stopped = fakeExec({ inspect: JSON.stringify({ status: 'stopped' }) })
+    expect(await adapter.exitState(stopped.exec, n('x'))).toBe('status stopped')
+    const running = fakeExec({ inspect: JSON.stringify({ status: 'running' }) })
+    expect(await adapter.exitState(running.exec, n('x'))).toBeUndefined()
+    const gone: ContainerExec = () => Promise.reject(new Error('not found'))
+    expect(await adapter.exitState(gone, n('x'))).toBeUndefined()
+  })
+
+  it('resolves the endpoint to "not ready" when inspect faults (a reaped container)', async () => {
+    // The endpoint contract again: never throw for a container that is gone, or the transport
+    // can't replace it. Apple can't distinguish a reaped container from a runtime fault here, so
+    // it takes the safe half of the contract (see the port docs).
+    const gone: ContainerExec = () => Promise.reject(new Error('not found'))
+    expect(await adapter.endpoint(gone, n('run_42'))).toBeUndefined()
   })
 
   it('finds a run container by its per-install deterministic id in `container list`', async () => {

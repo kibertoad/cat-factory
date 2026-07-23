@@ -3,6 +3,7 @@ import { describe, expect, it } from 'vitest'
 import {
   ACTIVITY_PERSIST_THROTTLE_MS,
   classifyDispatchFailure,
+  evictionFailureDetail,
   isContainerEvictionError,
   MAX_EVICTION_RECOVERIES,
   MAX_TRANSIENT_EVICTION_RECOVERIES,
@@ -36,6 +37,30 @@ describe('isContainerEvictionError (dispatch-time throw only)', () => {
   it('recovers a single crash eviction (budget of 1), transient a larger one', () => {
     expect(MAX_EVICTION_RECOVERIES).toBe(1)
     expect(MAX_TRANSIENT_EVICTION_RECOVERIES).toBeGreaterThan(MAX_EVICTION_RECOVERIES)
+  })
+})
+
+// With a crash budget of 1, the container that dies FIRST is re-dispatched and removed at once —
+// so its post-mortem has to be carried forward on the step, or the recorded failure ends up
+// describing only the retry (a fresh container hitting the same wall).
+describe('evictionFailureDetail', () => {
+  it('keeps both post-mortems when the first death and the last differ', () => {
+    expect(evictionFailureDetail('exit code 137, OOM-killed', 'exit code 1')).toBe(
+      'First eviction:\nexit code 137, OOM-killed\n\nFinal eviction:\nexit code 1',
+    )
+  })
+
+  it('collapses to one when they say the same thing', () => {
+    expect(evictionFailureDetail('exit code 137', 'exit code 137')).toBe('exit code 137')
+  })
+
+  it('falls back to whichever one exists', () => {
+    expect(evictionFailureDetail('first only', undefined)).toBe('first only')
+    expect(evictionFailureDetail(undefined, 'last only')).toBe('last only')
+  })
+
+  it('is absent when no transport reported a post-mortem', () => {
+    expect(evictionFailureDetail(undefined, undefined)).toBeUndefined()
   })
 })
 

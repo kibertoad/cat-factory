@@ -10,7 +10,6 @@ import type {
   BrainstormSession,
   ClarityReview,
   Clock,
-  ContainerEvictionKind,
   ExecutionEventPublisher,
   ExecutionInstance,
   ExecutionRepository,
@@ -69,6 +68,8 @@ import { reviewableArtifactOutput } from './artifact-review.logic.js'
 import { ANALYSIS_AGENT_KIND, CONFLICTS_AGENT_KIND, HUMAN_TEST_AGENT_KIND } from './ci.logic.js'
 import {
   classifyDispatchFailure,
+  type ContainerFailureView,
+  evictionFailureDetail,
   MAX_EVICTION_RECOVERIES,
   MAX_TRANSIENT_EVICTION_RECOVERIES,
   shouldPersistActivity,
@@ -351,8 +352,8 @@ export class RunDispatcher {
         this.recordStepResult(ws, instance, step, isFinalStep, result),
       applyContainerRunning: (step, update) => this.applyContainerRunning(step, update),
       applySubtaskProgress: (step, counts) => this.applySubtaskProgress(step, counts),
-      recoverContainerEviction: (ws, instance, step, error, evicted, onBeforeRedispatch) =>
-        this.recoverContainerEviction(ws, instance, step, error, evicted, onBeforeRedispatch),
+      recoverContainerEviction: (ws, instance, step, failure, onBeforeRedispatch) =>
+        this.recoverContainerEviction(ws, instance, step, failure, onBeforeRedispatch),
     })
     this.followUpGate = new FollowUpGateController({
       executionRepository: deps.executionRepository,
@@ -392,8 +393,8 @@ export class RunDispatcher {
       prReviewController: deps.prReviewController,
       recordBackendDiagnostics: (instance, backend) =>
         this.recordBackendDiagnostics(instance, backend),
-      recoverContainerEviction: (ws, instance, step, error, evicted) =>
-        this.recoverContainerEviction(ws, instance, step, error, evicted),
+      recoverContainerEviction: (ws, instance, step, failure) =>
+        this.recoverContainerEviction(ws, instance, step, failure),
       markContainerErrored: (ws, instance, step) => this.markContainerErrored(ws, instance, step),
     })
     // Assemble the seam the extracted dispatch-registry builders close over: the collaborators
@@ -1129,10 +1130,10 @@ export class RunDispatcher {
     workspaceId: string,
     instance: ExecutionInstance,
     step: PipelineStep,
-    error: string | undefined,
-    evicted: ContainerEvictionKind | undefined,
+    failure: ContainerFailureView,
     onBeforeRedispatch?: () => Promise<void>,
   ): Promise<AdvanceResult | null> {
+    const { error, evicted, detail } = failure
     // The eviction verdict rides the transport's STRUCTURED `evicted` field (every transport
     // mints it). Absent ⇒ not an eviction, so the caller proceeds with genuine-failure handling.
     const kind = evicted
@@ -1145,6 +1146,11 @@ export class RunDispatcher {
     if (recoveries < limit) {
       if (transient) step.transientEvictionRecoveries = recoveries + 1
       else step.evictionRecoveries = recoveries + 1
+      // Retain the FIRST death's post-mortem before re-dispatching: the dead container is
+      // removed right now, so this recovery is the last moment its evidence exists — and it is
+      // usually the informative one (the retry is a fresh container hitting the same wall).
+      // `evictionFailureDetail` folds it into the failure if the budget later runs out.
+      if (detail && !step.firstEvictionDetail) step.firstEvictionDetail = detail
       if (onBeforeRedispatch) await onBeforeRedispatch()
       step.jobId = undefined
       step.subtasks = undefined
@@ -1161,11 +1167,16 @@ export class RunDispatcher {
     // in-memory-only mutation would be lost; it emits the terminal frame, so markContainerErrored
     // deliberately doesn't).
     await this.markContainerErrored(workspaceId, instance, step)
+    // The transports' post-mortems of the containers that died (exit state + log tail). Each
+    // container is reclaimed as the run settles or re-dispatches, so this is the only place the
+    // cause survives — carry it onto the failure rather than reporting a bare "still evicting".
+    const evictionDetail = evictionFailureDetail(step.firstEvictionDetail, detail)
     return {
       kind: 'job_evicted',
       error: transient
         ? `${error} (still evicting after ${recoveries} automatic restarts through the infrastructure churn — treating as deterministic)`
         : `${error ?? 'Container evicted'} (still evicting after ${recoveries} automatic container restart${recoveries === 1 ? '' : 's'} — treating as deterministic)`,
+      ...(evictionDetail ? { detail: evictionDetail } : {}),
     }
   }
 

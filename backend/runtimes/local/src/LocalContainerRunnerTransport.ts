@@ -8,6 +8,7 @@ import type {
   RunnerJobView,
   RunnerTransport,
 } from '@cat-factory/kernel'
+import { redactSecrets } from '@cat-factory/kernel'
 import { resolveDockerResources } from '@cat-factory/contracts'
 import type { LocalSettings } from '@cat-factory/contracts'
 import { logger } from '@cat-factory/server'
@@ -409,6 +410,7 @@ export class LocalContainerRunnerTransport implements RunnerTransport {
         this.cache.delete(ref.runId)
         return true
       },
+      postMortem: () => this.containerPostMortem(resolved.containerId),
     })
     // Surface the container's id + the (credential-free) host URL the harness is published
     // on, so the run's details can show WHICH local container the run is on and where to
@@ -857,7 +859,40 @@ export class LocalContainerRunnerTransport implements RunnerTransport {
     if (reason.trim()) parts.push(`Last error: ${reason.trim()}`)
     const logs = (await this.adapter.logs(this.exec, containerId)).trim()
     if (logs) parts.push(`Container logs:\n${logs}`)
-    return parts.join('\n')
+    // The container's own output is free text that can echo a token it was handed; this string
+    // is persisted on the run and rendered in its details, so scrub known secret shapes first
+    // (the same defence the harness applies to its structured failure messages).
+    return redactSecrets(parts.join('\n')) ?? ''
+  }
+
+  /**
+   * The post-mortem for a container that died MID-RUN (see `pollHarnessJob`'s `postMortem`):
+   * its exit state plus a tail of its own stdout/stderr. This is the only moment the logs are
+   * still readable — `release()` removes the container once the run settles — and without them
+   * a harness process that exits after minutes of work (a heap OOM, an uncaught throw) leaves
+   * nothing behind but "container evicted or crashed".
+   *
+   * Distinct from {@link startupFailure}, which explains a container that never came up: this
+   * one lands on the failure's `detail`, not its `error`, so the eviction classification and
+   * its fresh-container recovery are unaffected.
+   *
+   * Only claims the container EXITED when the runtime says so. The other eviction branch is a
+   * 404 from a container that answered the poll (its harness restarted and no longer knows the
+   * job), and asserting an exit there would put a wrong cause of death on the run.
+   */
+  private async containerPostMortem(containerId: string): Promise<string | undefined> {
+    const exit = await this.adapter.exitState(this.exec, containerId)
+    const logs = (await this.adapter.logs(this.exec, containerId)).trim()
+    if (!exit && !logs) return undefined
+    const parts = [
+      exit
+        ? `Container ${containerId} exited while the job was running. Exit: ${exit}`
+        : `Container ${containerId} stopped serving the job; the runtime reports no exit state for it (it may still be running).`,
+    ]
+    if (logs) parts.push(`Container logs:\n${logs}`)
+    // Persisted on the run and rendered in its details, so scrub known secret shapes out of the
+    // container's own output first.
+    return redactSecrets(parts.join('\n')) ?? undefined
   }
 }
 

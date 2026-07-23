@@ -35,6 +35,7 @@ import {
   unmergedPaths,
 } from '../src/git.js'
 import { producedRepoContent } from '../src/agent.js'
+import { stubTempHome } from './helpers.js'
 
 const exec = promisify(execFile)
 
@@ -918,36 +919,20 @@ describe('web search (rpiv-web-tools) configuration', () => {
   })
 
   it('writes only the provider id to the extension config (no secret on disk)', async () => {
-    const home = await mkdtemp(join(tmpdir(), 'home-'))
-    const prevHome = process.env.HOME
-    process.env.HOME = home
-    try {
-      const path = await writeWebToolsConfig({ provider: 'exa' })
-      const written = JSON.parse(await readFile(path, 'utf8')) as Record<string, unknown>
-      // Only the provider — keys/base URLs come from the environment, never written here.
-      expect(written).toEqual({ provider: 'exa' })
-      expect(path).toContain(join('.config', 'rpiv-web-tools', 'config.json'))
-    } finally {
-      if (prevHome === undefined) delete process.env.HOME
-      else process.env.HOME = prevHome
-      await rm(home, { recursive: true, force: true })
-    }
+    await stubTempHome()
+    const path = await writeWebToolsConfig({ provider: 'exa' })
+    const written = JSON.parse(await readFile(path, 'utf8')) as Record<string, unknown>
+    // Only the provider — keys/base URLs come from the environment, never written here.
+    expect(written).toEqual({ provider: 'exa' })
+    expect(path).toContain(join('.config', 'rpiv-web-tools', 'config.json'))
   })
 })
 
 describe('writeAgentsContext', () => {
   async function readContext(opts?: { webSearch?: boolean; guidance?: string }): Promise<string> {
-    const home = await mkdtemp(join(tmpdir(), 'home-'))
-    const prevHome = process.env.HOME
-    process.env.HOME = home
-    try {
-      await writeAgentsContext('ROLE PROMPT', opts)
-      return await readFile(join(home, '.pi', 'agent', 'AGENTS.md'), 'utf8')
-    } finally {
-      if (prevHome === undefined) delete process.env.HOME
-      else process.env.HOME = prevHome
-      await rm(home, { recursive: true, force: true })
-    }
+    const home = await stubTempHome()
+    await writeAgentsContext('ROLE PROMPT', opts)
+    return readFile(join(home, '.pi', 'agent', 'AGENTS.md'), 'utf8')
   }
 
   it('omits the web-tools guidance by default', async () => {

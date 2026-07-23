@@ -198,7 +198,9 @@ export async function driveExecution(
       return {}
     }
     if (result.kind === 'job_evicted') {
-      await fail(result.error, 'evicted')
+      // Record the transport's container post-mortem as the failure detail — the container is
+      // already reclaimed, so this is the only surviving account of why it died.
+      await fail(result.error, 'evicted', result.detail ?? null)
       return {}
     }
     // done / noop / paused: stop. awaiting_decision: park (resumed on signalDecision).

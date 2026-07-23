@@ -10,7 +10,15 @@ import {
   redactBody,
 } from './claude-stream.js'
 import type { Logger } from './logger.js'
-import type { HarnessCallMetric, PiRunOutcome, PiRunStats, TodoProgress } from './pi.js'
+import {
+  createCallMetricPublisher,
+  publishCallMetric,
+  type CallMetricPublisher,
+  type HarnessCallMetric,
+  type PiRunOutcome,
+  type PiRunStats,
+  type TodoProgress,
+} from './pi.js'
 import { killChildProcess, spawnDetached } from './process.js'
 import { redact, secretsToRedact } from './redact.js'
 import { createSliceTracker, pickProgress, startSubagentWatcher } from './subagents.js'
@@ -81,6 +89,12 @@ export interface SubscriptionRunOptions {
   onActivity?: () => void
   /** Called with the latest subtask counts each time the CLI updates its todo/plan list. */
   onProgress?: (progress: TodoProgress) => void
+  /**
+   * Called with each per-call telemetry row as the CLI stream yields it, so the backend can
+   * record the run's model calls WHILE it runs instead of only from its terminal result. The
+   * same row still rides the result, so a lost poll response costs nothing.
+   */
+  onCallMetric?: (call: HarnessCallMetric) => void
   /**
    * The per-job child logger (jobId/repo/branch correlation). Threaded so the retained
    * session-transcript path is logged for the run when the isolated config home is torn down.
@@ -324,6 +338,9 @@ export async function runClaudeCode(opts: SubscriptionRunOptions): Promise<PiRun
         { role: 'user', content: opts.userPrompt },
       ]
   const calls: HarnessCallMetric[] = []
+  // Streams each call as the CLI yields it, EXCEPT one whose tokens `attributeCumulativeUsage`
+  // may still rewrite below (a published call must be final — see the publisher).
+  const publisher = createCallMetricPublisher(calls, opts.onCallMetric)
 
   // ADR 0026 D2.1 + ADR 0027 Defect B: surface live slice progress from TWO reconciled
   // sources. The parent's `Task` dispatches + their terminal tool_results DO appear on this
@@ -360,7 +377,7 @@ export async function runClaudeCode(opts: SubscriptionRunOptions): Promise<PiRun
       // produced this response. The append-only array keeps each call's prompt a strict
       // prefix of the next, so the backend's telemetry chain delta-compresses cleanly.
       const u = claudeCallUsage(message.usage)
-      calls.push({
+      publisher.publish({
         ...(typeof message.model === 'string' ? { model: message.model } : {}),
         promptText: redactBody(JSON.stringify(messages), secrets),
         messageCount: messages.length,
@@ -439,6 +456,7 @@ export async function runClaudeCode(opts: SubscriptionRunOptions): Promise<PiRun
         ...(opts.onActivity ? { onActivity: opts.onActivity } : {}),
         secrets,
         model: opts.model,
+        ...(opts.onCallMetric ? { onCallMetric: opts.onCallMetric } : {}),
         ...(opts.log ? { log: opts.log } : {}),
       })
     : undefined
@@ -470,7 +488,15 @@ export async function runClaudeCode(opts: SubscriptionRunOptions): Promise<PiRun
       onEvent,
     )
 
-    return await assembleClaudeOutcome({ summary, stats, stderrTail, calls, usage, subagents })
+    return await assembleClaudeOutcome({
+      summary,
+      stats,
+      stderrTail,
+      calls,
+      publisher,
+      usage,
+      subagents,
+    })
   } finally {
     await subagents?.stop()
     if (configHome) {
@@ -523,13 +549,19 @@ async function assembleClaudeOutcome(args: {
   stats: PiRunStats
   stderrTail: string
   calls: HarnessCallMetric[]
+  /** The live-stream publisher, flushed once attribution has finalised the calls' tokens. */
+  publisher: CallMetricPublisher
   usage: { inputTokens: number; outputTokens: number } | undefined
   subagents: ReturnType<typeof startSubagentWatcher> | undefined
 }): Promise<PiRunOutcome> {
-  const { summary, stats, stderrTail, calls, usage, subagents } = args
+  const { summary, stats, stderrTail, calls, publisher, usage, subagents } = args
   // The parent's cumulative-usage fallback applies to the PARENT calls only (before the
   // subagent calls, which carry their own per-turn tokens, are concatenated).
   attributeCumulativeUsage(calls, usage)
+  // The withheld calls are final only NOW, so stream them: the completion poll drains them
+  // alongside the result, and the backend records the attributed numbers rather than the zeros
+  // they carried while the run was in flight.
+  publisher.flush()
   // Final drain of any subagent transcript writes that landed after the last poll, then
   // fold the subagents' usage + per-call telemetry into the run's outcome.
   await subagents?.stop()
@@ -668,17 +700,21 @@ export async function runCodex(opts: SubscriptionRunOptions): Promise<PiRunOutco
     // assistant text seen since the previous turn as one telemetry call.
     const perTurn = codexLastTurnUsage(event)
     if (perTurn) {
-      calls.push({
-        model: opts.model,
-        promptText: redactBody(JSON.stringify(messages), secrets),
-        messageCount: messages.length,
-        responseText: redactBody(pendingText, secrets),
-        reasoningText: '',
-        inputTokens: perTurn.inputTokens,
-        cachedInputTokens: perTurn.cachedInputTokens,
-        outputTokens: perTurn.outputTokens,
-        finishReason: null,
-      })
+      publishCallMetric(
+        calls,
+        {
+          model: opts.model,
+          promptText: redactBody(JSON.stringify(messages), secrets),
+          messageCount: messages.length,
+          responseText: redactBody(pendingText, secrets),
+          reasoningText: '',
+          inputTokens: perTurn.inputTokens,
+          cachedInputTokens: perTurn.cachedInputTokens,
+          outputTokens: perTurn.outputTokens,
+          finishReason: null,
+        },
+        opts.onCallMetric,
+      )
       if (pendingText) messages.push({ role: 'assistant', content: pendingText })
       pendingText = ''
     }
@@ -710,17 +746,21 @@ export async function runCodex(opts: SubscriptionRunOptions): Promise<PiRunOutco
     // Fallback for a CLI/version that never emits per-turn `last_token_usage`: record a
     // single call from the cumulative total + final text so the run is still observable.
     if (calls.length === 0 && (usage || summary)) {
-      calls.push({
-        model: opts.model,
-        promptText: redactBody(JSON.stringify(messages), secrets),
-        messageCount: messages.length,
-        responseText: redactBody(summary, secrets),
-        reasoningText: '',
-        inputTokens: usage?.inputTokens ?? 0,
-        cachedInputTokens: 0,
-        outputTokens: usage?.outputTokens ?? 0,
-        finishReason: null,
-      })
+      publishCallMetric(
+        calls,
+        {
+          model: opts.model,
+          promptText: redactBody(JSON.stringify(messages), secrets),
+          messageCount: messages.length,
+          responseText: redactBody(summary, secrets),
+          reasoningText: '',
+          inputTokens: usage?.inputTokens ?? 0,
+          cachedInputTokens: 0,
+          outputTokens: usage?.outputTokens ?? 0,
+          finishReason: null,
+        },
+        opts.onCallMetric,
+      )
     }
     return {
       summary,

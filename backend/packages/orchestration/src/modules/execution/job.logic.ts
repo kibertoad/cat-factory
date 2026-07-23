@@ -1,5 +1,41 @@
-import type { AgentFailureKind } from '@cat-factory/kernel'
+import type { AgentFailureKind, ContainerEvictionKind } from '@cat-factory/kernel'
 import { DispatchError, DomainError, getErrorMessage } from '@cat-factory/kernel'
+
+/**
+ * The fields of a FAILED job view that the shared container-eviction recovery reads. Grouped
+ * rather than passed as loose arguments because they always travel together — one transport
+ * verdict about one dead container — and both the agent and deployer call sites forward them
+ * verbatim off their poll result.
+ */
+export interface ContainerFailureView {
+  /** The transport's one-line failure message. */
+  error?: string
+  /** The STRUCTURED eviction verdict. Absent ⇒ not an eviction; the caller handles it. */
+  evicted?: ContainerEvictionKind
+  /**
+   * The transport's post-mortem of the dead container (its exit state + its own log tail),
+   * recorded as the failure `detail` once the eviction budget is spent. The container is
+   * reclaimed as the run settles, so this is the only account of WHY it died that outlives it.
+   */
+  detail?: string
+}
+
+/**
+ * Compose the failure `detail` for a step whose eviction budget is spent, from the post-mortem
+ * of the FIRST container that died on it (retained across recoveries on
+ * `PipelineStep.firstEvictionDetail`, since a re-dispatch removes the dead container at once)
+ * and that of the LAST. Both are kept when they differ — the first death normally explains the
+ * run, while the last is what the operator would otherwise be handed — and collapsed to one when
+ * only one exists or the two say the same thing.
+ */
+export function evictionFailureDetail(
+  first: string | undefined,
+  last: string | undefined,
+): string | undefined {
+  if (!first || first === last) return last
+  if (!last) return first
+  return `First eviction:\n${first}\n\nFinal eviction:\n${last}`
+}
 
 /**
  * Maximum number of times a step's *crash* eviction (OOM / a genuine crash) is

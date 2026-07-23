@@ -299,6 +299,108 @@ describe('LocalContainerRunnerTransport', () => {
     expect(view.error).toMatch(/container evicted or crashed/)
   })
 
+  it('carries the dead container exit state + logs as the eviction detail', async () => {
+    // The container is reclaimed the moment the run settles, so this poll is the last chance to
+    // read WHY the harness process went away. Without it an eviction is a dead end: the run
+    // records "container evicted or crashed" and the evidence is deleted seconds later.
+    const exec: ContainerExec = (args) => {
+      if (args[0] === 'run') return Promise.resolve({ stdout: 'container-pm\n', stderr: '' })
+      if (args[0] === 'port') return Promise.resolve({ stdout: '127.0.0.1:49170\n', stderr: '' })
+      if (args[0] === 'inspect') {
+        // `isRunning` reads `{{.State.Running}}`; `exitState` reads running+code+OOM.
+        return Promise.resolve({
+          stdout: args.includes('{{.State.Running}}') ? 'false\n' : 'false 137 true\n',
+          stderr: '',
+        })
+      }
+      if (args[0] === 'logs') return Promise.resolve({ stdout: 'agent: out of memory', stderr: '' })
+      return Promise.resolve({ stdout: '', stderr: '' })
+    }
+    const fetchImpl = vi.fn(async (input: string | URL | Request) => {
+      const url = String(input)
+      if (url.endsWith('/health')) return new Response('ok', { status: 200 })
+      if (url.includes('/jobs/')) throw new Error('ECONNREFUSED')
+      return jsonResponse({ state: 'running' }, 202)
+    })
+    const transport = mkTransport({
+      image: 'harness:test',
+      exec,
+      fetchImpl: fetchImpl as unknown as typeof fetch,
+    })
+    await transport.dispatch({ runId: 'job-pm', jobId: 'job-pm' }, {}, 'agent')
+    const view = await transport.poll({ runId: 'job-pm', jobId: 'job-pm' })
+    expect(view.state).toBe('failed')
+    expect(view.evicted).toBe('crash')
+    // The eviction classification is unchanged (it drives the fresh-container recovery); the
+    // post-mortem rides `detail`, which the engine records as the failure detail.
+    expect(view.error).toMatch(/container evicted or crashed/)
+    expect(view.detail).toMatch(/exit code 137/)
+    expect(view.detail).toMatch(/OOM-killed/)
+    expect(view.detail).toMatch(/agent: out of memory/)
+  })
+
+  it('recreates the container when a stale one makes `docker port` exit non-zero', async () => {
+    // The real regression: `docker port` FAILS (exit 1, "no public port … published") for an
+    // exited container, and `find()` returns exited containers by design. That throw used to
+    // escape `resolve()`, skipping the remove-and-recreate below and surfacing the CLI's
+    // message as the run's cause of death.
+    let staleLookupDone = false
+    const calls: string[][] = []
+    const exec: ContainerExec = (args) => {
+      calls.push(args)
+      const sub = args[0]
+      if (sub === 'run') return Promise.resolve({ stdout: 'fresh-container\n', stderr: '' })
+      if (sub === 'ps') return Promise.resolve({ stdout: 'stale-container\n', stderr: '' })
+      if (sub === 'port') {
+        if (!staleLookupDone) {
+          staleLookupDone = true
+          return Promise.reject(
+            new Error("no public port '8080/tcp' published for stale-container"),
+          )
+        }
+        return Promise.resolve({ stdout: '127.0.0.1:49180\n', stderr: '' })
+      }
+      // The stale container is gone; `endpoint` consults liveness to tell a dead container
+      // (not ready) apart from a daemon fault against a live one (a real error).
+      if (sub === 'inspect') return Promise.resolve({ stdout: 'false\n', stderr: '' })
+      return Promise.resolve({ stdout: '', stderr: '' })
+    }
+    const fetchImpl = vi.fn(async (input: string | URL | Request) => {
+      if (String(input).endsWith('/health')) return new Response('ok', { status: 200 })
+      return jsonResponse({ state: 'running' }, 202)
+    })
+    const transport = mkTransport({
+      image: 'harness:test',
+      exec,
+      fetchImpl: fetchImpl as unknown as typeof fetch,
+    })
+    await transport.dispatch({ runId: 'job-dead', jobId: 'job-dead' }, {}, 'agent')
+    expect(calls.some((c) => c[0] === 'rm' && c.includes('stale-container'))).toBe(true)
+    expect(calls.some((c) => c[0] === 'run')).toBe(true)
+  })
+
+  it('still reports a port lookup that fails against a RUNNING container', async () => {
+    // The other half of the contract: only a DEAD container maps to "not ready". A fault
+    // against a live one is a genuine problem, and swallowing it would replace the real cause
+    // with a bare start timeout.
+    const exec: ContainerExec = (args) => {
+      if (args[0] === 'run') return Promise.resolve({ stdout: 'live-container\n', stderr: '' })
+      if (args[0] === 'port') return Promise.reject(new Error('docker daemon connection reset'))
+      if (args[0] === 'inspect') return Promise.resolve({ stdout: 'true\n', stderr: '' })
+      if (args[0] === 'logs') return Promise.resolve({ stdout: 'still booting', stderr: '' })
+      return Promise.resolve({ stdout: '', stderr: '' })
+    }
+    const transport = mkTransport({
+      image: 'harness:test',
+      exec,
+      readyTimeoutMs: 20,
+      fetchImpl: vi.fn(async () => new Response('ok', { status: 200 })) as unknown as typeof fetch,
+    })
+    await expect(transport.dispatch({ runId: 'live', jobId: 'live' }, {}, 'agent')).rejects.toThrow(
+      /did not expose its endpoint before the start timeout[\s\S]*connection reset/,
+    )
+  })
+
   it('release force-removes the job container and is a no-op when absent', async () => {
     const { exec, calls } = fakeDocker()
     const fetchImpl = vi.fn(async (input: string | URL | Request) => {

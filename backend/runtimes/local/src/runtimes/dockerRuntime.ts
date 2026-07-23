@@ -121,7 +121,21 @@ export class DockerRuntimeAdapter implements ContainerRuntimeAdapter {
     containerId: string,
     inContainerPort: number = HARNESS_PORT,
   ): Promise<ContainerEndpoint | undefined> {
-    const { stdout } = await exec(['port', containerId, `${inContainerPort}/tcp`])
+    // `docker port` EXITS NON-ZERO for a container that isn't running ("no public port
+    // '8080/tcp' published for <id>"), and `find()` hands us exited containers by design. A
+    // dead container is "not ready" per the port contract, so it must resolve to undefined:
+    // a throw escapes `dispatchPerRun`'s `resolve()` and skips the remove-and-recreate
+    // recovery an exited container exists to trigger, surfacing the CLI's message as the
+    // run's cause of death instead. Anything else that faults IS worth reporting (a daemon
+    // blip against a live container), so only a confirmed-dead container is swallowed —
+    // `waitForEndpoint` folds a genuine error into its fail-fast spin-up diagnostic.
+    let stdout: string
+    try {
+      ;({ stdout } = await exec(['port', containerId, `${inContainerPort}/tcp`]))
+    } catch (err) {
+      if (await this.isRunning(exec, containerId)) throw err
+      return undefined
+    }
     // e.g. "127.0.0.1:49153" (possibly several lines for IPv4/IPv6); take the last
     // numeric segment of the first line.
     const line = stdout.trim().split('\n')[0]?.trim()
@@ -138,6 +152,22 @@ export class DockerRuntimeAdapter implements ContainerRuntimeAdapter {
     } catch {
       return false
     }
+  }
+
+  async exitState(exec: ContainerExec, containerId: string): Promise<string | undefined> {
+    // `OOMKilled` is only ever true for a CGROUP-limit kill (a `--memory` cap). A container
+    // with no cap that the VM's own OOM killer reaps reports a plain non-zero exit code, so
+    // read both rather than treating a false `OOMKilled` as "not a memory problem".
+    const inspected = await exec([
+      'inspect',
+      '-f',
+      '{{.State.Running}} {{.State.ExitCode}} {{.State.OOMKilled}}',
+      containerId,
+    ]).catch(() => undefined)
+    if (!inspected) return undefined
+    const [running, exitCode, oomKilled] = inspected.stdout.trim().split(/\s+/)
+    if (running !== 'false') return undefined
+    return `exit code ${exitCode ?? 'unknown'}${oomKilled === 'true' ? ', OOM-killed by the container runtime' : ''}`
   }
 
   async logs(exec: ContainerExec, containerId: string): Promise<string> {

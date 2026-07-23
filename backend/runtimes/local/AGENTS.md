@@ -16,7 +16,10 @@ transport + the GitHub token/client seams differ.
   the CF Container transport + the runner-pool transport, over the same `RunnerTransport` port).
 - `runtimes/` — the `ContainerRuntimeAdapter`s per engine (docker CLI shared by
   Docker/Podman/OrbStack/Colima; a separate Apple `container` adapter), selected by
-  `LOCAL_CONTAINER_RUNTIME`.
+  `LOCAL_CONTAINER_RUNTIME`. Two contracts an adapter is easy to get wrong: `endpoint()`
+  resolves an EXITED container to `undefined` (that is what lets the transport remove and
+  re-create it) yet still throws for a fault against a LIVE one, and `exitState()` reports how
+  a stopped container ended so a mid-run death leaves a post-mortem behind.
 - `github.ts`, `link-repo.ts` / `linkRepo.ts`, `installations.ts` — the PAT-backed GitHub
   client (`createLocalGitHubClient`) + the repo-projection seeding (`linkRepo`).
 - `container.ts` — threads the transport + GitHub seams into Node's `buildNodeContainer`.

@@ -3,7 +3,7 @@ import { createReadStream, type Dirent } from 'node:fs'
 import { basename, join } from 'node:path'
 import { claudeAssistantContent, claudeCallUsage, isObject, redactBody } from './claude-stream.js'
 import type { Logger } from './logger.js'
-import type { HarnessCallMetric, TodoProgress } from './pi.js'
+import { publishCallMetric, type HarnessCallMetric, type TodoProgress } from './pi.js'
 
 // ADR 0026 D2.1 + D3, corrected by ADR 0027. When the Claude Code CLI reviews a large PR
 // it fans the work out across parallel `Task` subagents. Two things then go dark to the
@@ -155,6 +155,13 @@ export interface SubagentWatcherOptions {
   secrets?: string[]
   /** Fallback model id stamped on a subagent call whose transcript omits one. */
   model?: string
+  /**
+   * Streams each lifted subagent call to the live telemetry drain (the run's `RunOptions`
+   * hook). Subagent work is exactly where a long review spends most of its tokens, and it is
+   * the phase the parent stream goes quiet for — so without this a run killed mid-fan-out
+   * reports nothing at all.
+   */
+  onCallMetric?: (call: HarnessCallMetric) => void
   /** Poll cadence (ms); overridable for tests. */
   intervalMs?: number
   log?: Logger
@@ -244,23 +251,27 @@ export function startSubagentWatcher(root: string, opts: SubagentWatcherOptions)
     if (u.inputTokens === 0 && u.outputTokens === 0) return
     const content = Array.isArray(message.content) ? message.content : []
     const { text, reasoning } = claudeAssistantContent(content)
-    calls.push({
-      ...(typeof message.model === 'string'
-        ? { model: message.model }
-        : opts.model
-          ? { model: opts.model }
-          : {}),
-      // The subagent's own transcript isn't a re-sendable prompt chain, so we don't
-      // reconstruct the request side (kept empty); the response + tokens are faithful.
-      promptText: '',
-      messageCount: 0,
-      responseText: redactBody(text, secrets),
-      reasoningText: redactBody(reasoning, secrets),
-      inputTokens: u.inputTokens,
-      cachedInputTokens: u.cachedInputTokens,
-      outputTokens: u.outputTokens,
-      finishReason: typeof message.stop_reason === 'string' ? message.stop_reason : null,
-    })
+    publishCallMetric(
+      calls,
+      {
+        ...(typeof message.model === 'string'
+          ? { model: message.model }
+          : opts.model
+            ? { model: opts.model }
+            : {}),
+        // The subagent's own transcript isn't a re-sendable prompt chain, so we don't
+        // reconstruct the request side (kept empty); the response + tokens are faithful.
+        promptText: '',
+        messageCount: 0,
+        responseText: redactBody(text, secrets),
+        reasoningText: redactBody(reasoning, secrets),
+        inputTokens: u.inputTokens,
+        cachedInputTokens: u.cachedInputTokens,
+        outputTokens: u.outputTokens,
+        finishReason: typeof message.stop_reason === 'string' ? message.stop_reason : null,
+      },
+      opts.onCallMetric,
+    )
     usage.inputTokens += u.inputTokens
     usage.outputTokens += u.outputTokens
   }

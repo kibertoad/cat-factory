@@ -584,6 +584,21 @@ export class ContainerAgentExecutor implements AsyncAgentExecutor {
   private readonly recordedCallMetricJobs = new Set<string>()
 
   /**
+   * Per-job set of harness call `seq`s this process already recorded from the LIVE poll drain,
+   * so the terminal write can skip them. Without it the terminal pass re-walks the job's WHOLE
+   * list, and each already-stored call costs a chain-tip read plus an ignored insert — hundreds
+   * of pointless round-trips at the end of a long run (and, on the Worker, hundreds of
+   * subrequests inside one Workflow step).
+   *
+   * A set of the seqs actually recorded, not a high-water mark: a drained batch whose write
+   * failed is swallowed (telemetry never fails a run), and those calls must still be picked up
+   * by the terminal write rather than skipped as "already done". Dropped once the job records
+   * terminally, and bounded by the same wholesale clear as {@link recordedCallMetricJobs} — a
+   * lost entry only costs the redundant write it was there to avoid.
+   */
+  private readonly recordedCallSeqs = new Map<string, Set<number>>()
+
+  /**
    * Job ids whose subscription usage has already been folded into the modeled quota
    * cycle. Separate from {@link recordedUsageJobs} because quota tracking counts BOTH
    * pooled and personal runs (not gated on a pooled token id). Same replay-safety
@@ -689,6 +704,12 @@ export class ContainerAgentExecutor implements AsyncAgentExecutor {
         // Swallowed: the sink logs its own errors; observability never breaks a run.
       }
     }
+    // Per-call telemetry the harness drained on this poll: record it NOW rather than waiting
+    // for the terminal result. A run whose container dies mid-flight never produces one, so
+    // batching to the end meant a killed run reported zero calls no matter how many tokens it
+    // had spent — the exact run an operator most needs to see. Idempotent via the calls' `seq`,
+    // so the terminal write below re-offers them harmlessly.
+    await this.recordHarnessCalls(handle, view.callMetrics)
     // Forward-looking items the Coder streamed since the last poll (drain-on-read): surfaced
     // on both running and done so a final burst on the completion poll isn't lost. Normalise
     // the transport's optional `detail` to the engine's `StreamedFollowUp` shape.
@@ -772,26 +793,25 @@ export class ContainerAgentExecutor implements AsyncAgentExecutor {
   }
 
   /**
-   * Record the subscription harness's per-call telemetry into `llm_call_metrics` — the
-   * proxy-bypassing analogue of the rows the LLM proxy writes for Pi. NOT gated on a
+   * Record a batch of the subscription harness's per-call telemetry into `llm_call_metrics`
+   * — the proxy-bypassing analogue of the rows the LLM proxy writes for Pi. NOT gated on a
    * pooled token id, so a personal (individual-usage) subscription run is observed too.
-   * Runs on every terminal state (success and failure alike). Best-effort: an unwired
-   * recorder or an empty metric list is a no-op. An in-memory once-per-job guard skips
-   * the redundant DB round-trip within this process; the recorder additionally mints
-   * deterministic per-call ids off the job id, so even a durable-driver replay in a
-   * fresh isolate (empty guard) re-records idempotently rather than duplicating rows.
+   *
+   * Called from two places, deliberately: on EVERY poll for the calls the harness drained
+   * since the last one (so a run's telemetry lands while it runs, and survives the run dying),
+   * and once on the terminal state for the complete list (so a transport that forwards no live
+   * drain, or a run whose last window never reached us, still records everything). The calls
+   * carry a stable per-job `seq`, so the ids the recorder mints are the same in both channels
+   * and the second write of an already-recorded call is a no-op at the store.
+   *
+   * Best-effort: an unwired recorder or an empty batch is a no-op, and a failure is swallowed
+   * — telemetry is observability, never a reason to fail (or fail to complete) a run.
    */
-  private async recordHarnessCallsOnce(
+  private async recordHarnessCalls(
     handle: AgentJobHandle,
-    result: { callMetrics?: HarnessCallMetric[] },
+    calls: HarnessCallMetric[] | undefined,
   ): Promise<void> {
-    if (
-      !handle.workspaceId ||
-      !result.callMetrics ||
-      result.callMetrics.length === 0 ||
-      !this.deps.recordHarnessCalls ||
-      this.recordedCallMetricJobs.has(handle.jobId)
-    ) {
+    if (!handle.workspaceId || !calls || calls.length === 0 || !this.deps.recordHarnessCalls) {
       return
     }
     try {
@@ -802,14 +822,56 @@ export class ContainerAgentExecutor implements AsyncAgentExecutor {
         provider: handle.provider ?? providerOf(handle.model),
         model: handle.model ?? '',
         jobId: handle.jobId,
-        calls: result.callMetrics,
+        calls,
       })
-      if (this.recordedCallMetricJobs.size >= 10_000) this.recordedCallMetricJobs.clear()
-      this.recordedCallMetricJobs.add(handle.jobId)
+      this.markCallSeqsRecorded(handle.jobId, calls)
     } catch {
       // Swallowed: telemetry is observability, never a reason to fail (or fail to
       // complete) a run.
     }
+  }
+
+  /**
+   * Remember which `seq`s of a job landed, so {@link recordHarnessCallsOnce} can skip them.
+   * Only called after the batch was written. A call with no `seq` (an older harness image,
+   * which streams nothing) is not tracked: there the terminal list is the only channel.
+   */
+  private markCallSeqsRecorded(jobId: string, calls: HarnessCallMetric[]): void {
+    const seqs = calls.map((c) => c.seq).filter((seq): seq is number => seq !== undefined)
+    if (seqs.length === 0) return
+    if (this.recordedCallSeqs.size >= 10_000) this.recordedCallSeqs.clear()
+    const known = this.recordedCallSeqs.get(jobId) ?? new Set<number>()
+    for (const seq of seqs) known.add(seq)
+    this.recordedCallSeqs.set(jobId, known)
+  }
+
+  /**
+   * The TERMINAL record of a job's full call list (see {@link recordHarnessCalls}). An
+   * in-memory once-per-job guard skips the redundant walk within this process; the recorder
+   * additionally mints deterministic per-call ids, so even a durable-driver replay in a fresh
+   * isolate (empty guard) re-records idempotently rather than duplicating rows.
+   *
+   * Calls this process already recorded from the live drain are filtered out first: the store
+   * would ignore them anyway, but only after a chain-tip read + an insert each, which on a long
+   * run is hundreds of round-trips for no new rows. Anything the drain never delivered (a lost
+   * poll response, a transport that forwards no drain, a replay in a fresh isolate) still goes
+   * through.
+   */
+  private async recordHarnessCallsOnce(
+    handle: AgentJobHandle,
+    result: { callMetrics?: HarnessCallMetric[] },
+  ): Promise<void> {
+    if (this.recordedCallMetricJobs.has(handle.jobId)) return
+    const recorded = this.recordedCallSeqs.get(handle.jobId)
+    const pending = recorded
+      ? result.callMetrics?.filter((c) => c.seq === undefined || !recorded.has(c.seq))
+      : result.callMetrics
+    await this.recordHarnessCalls(handle, pending)
+    if (this.recordedCallMetricJobs.size >= 10_000) this.recordedCallMetricJobs.clear()
+    this.recordedCallMetricJobs.add(handle.jobId)
+    // The job is settled: its per-seq bookkeeping can go (the once-per-job guard covers a
+    // repeat poll of the same terminal state from here on).
+    this.recordedCallSeqs.delete(handle.jobId)
   }
 
   /**

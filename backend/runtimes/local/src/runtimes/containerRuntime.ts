@@ -127,6 +127,23 @@ export interface ContainerRuntimeAdapter {
    * The host+port the orchestrator should connect to reach the container's `inContainerPort`
    * (default {@link HARNESS_PORT}), or undefined if not ready. The preview transport passes the
    * served-app port (published via {@link RunContainerSpec.publishPorts}) to reach the app.
+   *
+   * "Not ready" INCLUDES a container that has EXITED: {@link find} deliberately returns
+   * running-or-exited containers, so every adapter must map a dead one to `undefined` rather
+   * than throwing whatever its CLI printed. Callers rely on that — the transport's `resolve()`
+   * treats an endpoint-less container as absent and re-creates a fresh one, so an adapter that
+   * throws here instead breaks the fresh-container recovery and surfaces a CLI message ("no
+   * public port '8080/tcp' published for …") as the run's cause of death, masking the real one.
+   *
+   * A fault against a container that is still RUNNING is a different thing (a daemon blip, a
+   * misconfigured publish) and SHOULD throw: the spin-up path folds it into its fail-fast
+   * diagnostic, and swallowing it there would replace a real cause with a bare timeout.
+   *
+   * When a runtime can't tell the two apart from what its CLI reports, prefer `undefined`: the
+   * cost is a lost diagnostic on the spin-up path (which times out and says so), where the cost
+   * of throwing is a wedged run that can never replace its own dead container. The Apple adapter
+   * is in that position — `container inspect` faults identically for a reaped container and for a
+   * runtime problem — while the docker adapter re-checks liveness and honours both halves.
    */
   endpoint(
     exec: ContainerExec,
@@ -135,6 +152,17 @@ export interface ContainerRuntimeAdapter {
   ): Promise<ContainerEndpoint | undefined>
   /** Whether the container is currently running. */
   isRunning(exec: ContainerExec, containerId: string): Promise<boolean>
+  /**
+   * A one-line summary of HOW a stopped container ended — exit code, and whether the runtime
+   * OOM-killed it — for the mid-run post-mortem. Resolves to `undefined` when the container is
+   * still running, was already reaped, or the runtime can't report it. Best-effort: this is a
+   * diagnostic, never a lifecycle signal (use {@link isRunning} for that).
+   *
+   * Worth having beside {@link logs}: a container killed by the runtime's cgroup limit exits
+   * with an empty log tail, so the exit state is the ONLY thing separating "OOM-killed" from
+   * "the agent process threw and printed nothing".
+   */
+  exitState(exec: ContainerExec, containerId: string): Promise<string | undefined>
   /**
    * A short tail of the container's logs (stdout+stderr), best-effort — resolves to `''`
    * on any error or when the runtime can't read them. Used to explain WHY a container

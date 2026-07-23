@@ -134,12 +134,31 @@ export interface LlmPromptChainTip {
 }
 
 export interface LlmCallMetricRepository {
-  /** Append one metered call. */
+  /**
+   * Append one metered call, IGNORING a call whose {@link LlmCallMetric.id} is already stored.
+   *
+   * First write wins — never an update. Callers that mint a deterministic id (the harness-call
+   * recorder's `<jobId>-hc-<seq>`) deliberately record the same call more than once: live as
+   * the harness drains it, again in the job's terminal list, and again on a durable-driver
+   * replay. Ignoring the repeat is what makes those paths idempotent. Overwriting instead
+   * would corrupt the prompt-delta chain, whose stored delta is only meaningful against the
+   * tip that preceded the row when it was FIRST written.
+   *
+   * Ignore ONLY a duplicate id. A store that also swallows other constraint violations (SQLite's
+   * `INSERT OR IGNORE` does) would silently drop a malformed metric on one runtime while the
+   * other throws.
+   */
   record(metric: LlmCallMetric): Promise<void>
   /**
-   * The most recent call's chain tip for a `(workspaceId, executionId, agentKind)`
+   * The most recent CHAINABLE call's tip for a `(workspaceId, executionId, agentKind)`
    * conversation, or null when there is none. Lets the sink store the next call's
    * prompt as a delta against this one. Cheap: one indexed row, no text columns.
+   *
+   * Rows with `messageCount === 0` are EXCLUDED: they carry no re-sendable prompt chain (a
+   * subagent call, whose transcript isn't a request transcript), so they can never serve as a
+   * tip. They interleave with the parent's calls in record order now that harness telemetry
+   * streams live, and treating one as the tip would make every following parent call
+   * unchainable — storing its whole prompt instead of a delta.
    */
   latestChainTip(
     workspaceId: string,

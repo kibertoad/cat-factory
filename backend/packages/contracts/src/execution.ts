@@ -1258,6 +1258,15 @@ export const pipelineStepSchema = v.object({
    */
   transientEvictionRecoveries: v.optional(v.number()),
   /**
+   * The transport's post-mortem of the FIRST container to die on this step (its exit state plus
+   * a tail of its own logs). Retained across recoveries: a re-dispatch removes the dead
+   * container immediately, so evidence from the first death — usually the informative one, the
+   * later attempts being a fresh container hitting the same wall — survives nowhere else. Folded
+   * into the run's failure `detail` once the eviction budget is spent. Absent when the transport
+   * reported no post-mortem (or the step was never evicted).
+   */
+  firstEvictionDetail: v.optional(v.string()),
+  /**
    * The service-provisioning config a `deployer` step PINNED when it dispatched its async,
    * container-backed deploy job, so the later poll/finalize maps the job against the same config
    * the container was built from — NOT a fresh read of the service frame (which a person may have
