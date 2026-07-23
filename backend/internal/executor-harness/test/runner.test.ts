@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest'
 import { JobRegistry, loadRunnerLimits, type RunOptions } from '../src/runner.js'
 import { HarnessFailure } from '../src/failure.js'
+import type { HarnessCallMetric } from '../src/pi.js'
 
 // The registry is generic over the job/result shape; the lifecycle/watchdog tests only
 // need a job carrying its id and a result carrying the optional fields they assert on.
@@ -108,6 +109,52 @@ describe('JobRegistry', () => {
     expect(registry.get('exec-1')?.spans).toEqual([
       { tool: 'run_command', startedAt: 6, endedAt: 9, ok: false },
     ])
+  })
+
+  it('drains call telemetry per poll and stamps a job-wide sequence on each call', async () => {
+    // The point of streaming these: a run killed mid-flight never returns a result, so
+    // batching its calls to the end reported nothing at all for a run that spent real tokens.
+    const mkCall = (responseText: string): HarnessCallMetric => ({
+      promptText: '[]',
+      messageCount: 1,
+      responseText,
+      reasoningText: '',
+      inputTokens: 10,
+      cachedInputTokens: 0,
+      outputTokens: 5,
+      finishReason: 'end_turn',
+    })
+    const emitted: HarnessCallMetric[] = []
+    const registry = new JobRegistry<TestJob, TestResult>(
+      limits,
+      async (_job, opts: RunOptions) => {
+        for (const text of ['one', 'two']) {
+          const call = mkCall(text)
+          emitted.push(call)
+          opts.onCallMetric?.(call)
+        }
+        await tick(50)
+        const late = mkCall('three')
+        emitted.push(late)
+        opts.onCallMetric?.(late)
+        await tick(50)
+        return { summary: 's' }
+      },
+    )
+    registry.start('exec-1', job())
+    await tick()
+
+    // The first poll drains what was captured so far, and clears the buffer.
+    expect(registry.get('exec-1')?.callMetrics?.map((c) => c.responseText)).toEqual(['one', 'two'])
+    expect(registry.get('exec-1')?.callMetrics).toBeUndefined()
+
+    await tick(60)
+    expect(registry.get('exec-1')?.callMetrics?.map((c) => c.responseText)).toEqual(['three'])
+
+    // The sequence is job-wide and survives the drain, so a call keeps ONE identity across both
+    // channels — the drain that carried it here, and the terminal result list. That is what lets
+    // the backend mint a stable row id and skip the repeat instead of double-writing it.
+    expect(emitted.map((c) => c.seq)).toEqual([0, 1, 2])
   })
 
   it('records a thrown fault as failed with the `agent` cause', async () => {

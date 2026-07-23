@@ -1,5 +1,24 @@
-import type { AgentFailureKind } from '@cat-factory/kernel'
+import type { AgentFailureKind, ContainerEvictionKind } from '@cat-factory/kernel'
 import { DispatchError, DomainError, getErrorMessage } from '@cat-factory/kernel'
+
+/**
+ * The fields of a FAILED job view that the shared container-eviction recovery reads. Grouped
+ * rather than passed as loose arguments because they always travel together — one transport
+ * verdict about one dead container — and both the agent and deployer call sites forward them
+ * verbatim off their poll result.
+ */
+export interface ContainerFailureView {
+  /** The transport's one-line failure message. */
+  error?: string
+  /** The STRUCTURED eviction verdict. Absent ⇒ not an eviction; the caller handles it. */
+  evicted?: ContainerEvictionKind
+  /**
+   * The transport's post-mortem of the dead container (its exit state + its own log tail),
+   * recorded as the failure `detail` once the eviction budget is spent. The container is
+   * reclaimed as the run settles, so this is the only account of WHY it died that outlives it.
+   */
+  detail?: string
+}
 
 /**
  * Maximum number of times a step's *crash* eviction (OOM / a genuine crash) is

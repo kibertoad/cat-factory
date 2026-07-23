@@ -10,7 +10,13 @@ import {
   redactBody,
 } from './claude-stream.js'
 import type { Logger } from './logger.js'
-import type { HarnessCallMetric, PiRunOutcome, PiRunStats, TodoProgress } from './pi.js'
+import {
+  publishCallMetric,
+  type HarnessCallMetric,
+  type PiRunOutcome,
+  type PiRunStats,
+  type TodoProgress,
+} from './pi.js'
 import { killChildProcess, spawnDetached } from './process.js'
 import { redact, secretsToRedact } from './redact.js'
 import { createSliceTracker, pickProgress, startSubagentWatcher } from './subagents.js'
@@ -81,6 +87,12 @@ export interface SubscriptionRunOptions {
   onActivity?: () => void
   /** Called with the latest subtask counts each time the CLI updates its todo/plan list. */
   onProgress?: (progress: TodoProgress) => void
+  /**
+   * Called with each per-call telemetry row as the CLI stream yields it, so the backend can
+   * record the run's model calls WHILE it runs instead of only from its terminal result. The
+   * same row still rides the result, so a lost poll response costs nothing.
+   */
+  onCallMetric?: (call: HarnessCallMetric) => void
   /**
    * The per-job child logger (jobId/repo/branch correlation). Threaded so the retained
    * session-transcript path is logged for the run when the isolated config home is torn down.
@@ -360,17 +372,21 @@ export async function runClaudeCode(opts: SubscriptionRunOptions): Promise<PiRun
       // produced this response. The append-only array keeps each call's prompt a strict
       // prefix of the next, so the backend's telemetry chain delta-compresses cleanly.
       const u = claudeCallUsage(message.usage)
-      calls.push({
-        ...(typeof message.model === 'string' ? { model: message.model } : {}),
-        promptText: redactBody(JSON.stringify(messages), secrets),
-        messageCount: messages.length,
-        responseText: redactBody(text, secrets),
-        reasoningText: redactBody(reasoning, secrets),
-        inputTokens: u.inputTokens,
-        cachedInputTokens: u.cachedInputTokens,
-        outputTokens: u.outputTokens,
-        finishReason: typeof message.stop_reason === 'string' ? message.stop_reason : null,
-      })
+      publishCallMetric(
+        calls,
+        {
+          ...(typeof message.model === 'string' ? { model: message.model } : {}),
+          promptText: redactBody(JSON.stringify(messages), secrets),
+          messageCount: messages.length,
+          responseText: redactBody(text, secrets),
+          reasoningText: redactBody(reasoning, secrets),
+          inputTokens: u.inputTokens,
+          cachedInputTokens: u.cachedInputTokens,
+          outputTokens: u.outputTokens,
+          finishReason: typeof message.stop_reason === 'string' ? message.stop_reason : null,
+        },
+        opts.onCallMetric,
+      )
       messages.push({ role: 'assistant', content })
     } else if (type === 'user' && isObject(event.message)) {
       // tool_result blocks the harness fed back to the model — part of the next prompt.
@@ -439,6 +455,7 @@ export async function runClaudeCode(opts: SubscriptionRunOptions): Promise<PiRun
         ...(opts.onActivity ? { onActivity: opts.onActivity } : {}),
         secrets,
         model: opts.model,
+        ...(opts.onCallMetric ? { onCallMetric: opts.onCallMetric } : {}),
         ...(opts.log ? { log: opts.log } : {}),
       })
     : undefined
@@ -668,17 +685,21 @@ export async function runCodex(opts: SubscriptionRunOptions): Promise<PiRunOutco
     // assistant text seen since the previous turn as one telemetry call.
     const perTurn = codexLastTurnUsage(event)
     if (perTurn) {
-      calls.push({
-        model: opts.model,
-        promptText: redactBody(JSON.stringify(messages), secrets),
-        messageCount: messages.length,
-        responseText: redactBody(pendingText, secrets),
-        reasoningText: '',
-        inputTokens: perTurn.inputTokens,
-        cachedInputTokens: perTurn.cachedInputTokens,
-        outputTokens: perTurn.outputTokens,
-        finishReason: null,
-      })
+      publishCallMetric(
+        calls,
+        {
+          model: opts.model,
+          promptText: redactBody(JSON.stringify(messages), secrets),
+          messageCount: messages.length,
+          responseText: redactBody(pendingText, secrets),
+          reasoningText: '',
+          inputTokens: perTurn.inputTokens,
+          cachedInputTokens: perTurn.cachedInputTokens,
+          outputTokens: perTurn.outputTokens,
+          finishReason: null,
+        },
+        opts.onCallMetric,
+      )
       if (pendingText) messages.push({ role: 'assistant', content: pendingText })
       pendingText = ''
     }
@@ -710,17 +731,21 @@ export async function runCodex(opts: SubscriptionRunOptions): Promise<PiRunOutco
     // Fallback for a CLI/version that never emits per-turn `last_token_usage`: record a
     // single call from the cumulative total + final text so the run is still observable.
     if (calls.length === 0 && (usage || summary)) {
-      calls.push({
-        model: opts.model,
-        promptText: redactBody(JSON.stringify(messages), secrets),
-        messageCount: messages.length,
-        responseText: redactBody(summary, secrets),
-        reasoningText: '',
-        inputTokens: usage?.inputTokens ?? 0,
-        cachedInputTokens: 0,
-        outputTokens: usage?.outputTokens ?? 0,
-        finishReason: null,
-      })
+      publishCallMetric(
+        calls,
+        {
+          model: opts.model,
+          promptText: redactBody(JSON.stringify(messages), secrets),
+          messageCount: messages.length,
+          responseText: redactBody(summary, secrets),
+          reasoningText: '',
+          inputTokens: usage?.inputTokens ?? 0,
+          cachedInputTokens: 0,
+          outputTokens: usage?.outputTokens ?? 0,
+          finishReason: null,
+        },
+        opts.onCallMetric,
+      )
     }
     return {
       summary,

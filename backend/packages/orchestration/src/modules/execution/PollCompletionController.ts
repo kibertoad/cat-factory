@@ -2,11 +2,11 @@ import type {
   AgentJobUpdate,
   BlockRepository,
   Clock,
-  ContainerEvictionKind,
   ExecutionInstance,
   PipelineStep,
 } from '@cat-factory/kernel'
 import { failureKindFromHarnessCause } from '@cat-factory/kernel'
+import type { ContainerFailureView } from './job.logic.js'
 import { PR_REVIEWER_KIND } from '@cat-factory/agents'
 import { HUMAN_TEST_AGENT_KIND, isTesterKind, VISUAL_CONFIRM_AGENT_KIND } from './ci.logic.js'
 import type { AdvanceResult } from './advance.js'
@@ -38,8 +38,7 @@ export interface PollCompletionControllerDeps {
     workspaceId: string,
     instance: ExecutionInstance,
     step: PipelineStep,
-    error: string | undefined,
-    evicted: ContainerEvictionKind | undefined,
+    failure: ContainerFailureView,
   ) => Promise<AdvanceResult | null>
   markContainerErrored: (
     workspaceId: string,
@@ -168,13 +167,10 @@ export class PollCompletionController {
     // the driver re-dispatches the SAME step to a fresh container, within the per-flavour
     // budget (transient infra churn vs a crash/OOM); once the budget is spent it fails the run
     // as `evicted`. Returns null for a genuine agent/job failure, handled below.
-    const recovered = await this.recoverContainerEviction(
-      workspaceId,
-      instance,
-      step,
-      update.error,
-      update.evicted,
-    )
+    // `update.detail` is the transport's container post-mortem (exit state + log tail). It only
+    // surfaces if the eviction budget is spent; a recovered eviction re-dispatches and needs no
+    // diagnostic.
+    const recovered = await this.recoverContainerEviction(workspaceId, instance, step, update)
     if (recovered) return recovered
     // A read-only Challenge Investigator (dispatched off a parked `pr-reviewer` step when the
     // human challenged ONE finding) failed for real: settle the challenge as `failed` and RE-PARK

@@ -1,6 +1,6 @@
 import { redactSecrets } from './redact.js'
 import type { FollowUpLine } from './follow-ups.js'
-import type { TodoProgress, ToolSpan } from './pi.js'
+import type { HarnessCallMetric, TodoProgress, ToolSpan } from './pi.js'
 import { log, type Logger } from './logger.js'
 import {
   type FailureCause,
@@ -30,6 +30,19 @@ export interface RunOptions {
   onSpan?: (span: ToolSpan) => void
   /** Receives the forward-looking follow-up / question items the Coder streamed since the last poll. */
   onFollowUp?: (items: FollowUpLine[]) => void
+  /**
+   * Receives each per-call telemetry row the moment the agent's CLI stream yields it, so a
+   * run's model calls reach `llm_call_metrics` WHILE it runs rather than only in its terminal
+   * result. The registry stamps the call's job-scoped {@link HarnessCallMetric.seq} and buffers
+   * it for the next poll to drain.
+   *
+   * Call this for every metric you also put on the result — the SAME object, not a copy: the
+   * stamped `seq` is what lets the backend recognise the terminal write of an already-recorded
+   * call and skip it. A run that dies mid-flight (the container is evicted, the harness process
+   * is OOM-killed) never produces a terminal result, so without this its entire token spend and
+   * every prompt/response body are lost — exactly the run an operator most needs to inspect.
+   */
+  onCallMetric?: (call: HarnessCallMetric) => void
   /**
    * Mark the coarse lifecycle phase the handler has entered (`clone` / `agent` / `push` / …).
    * Drives the stuck-run breadcrumb: an inactivity kill reports WHICH phase was hung, and the
@@ -115,6 +128,17 @@ export interface JobView<TResult extends JobResultBase = JobResultBase> {
    */
   followUps?: FollowUpLine[]
   /**
+   * Per-model-call telemetry the agent's CLI stream yielded SINCE THE LAST POLL
+   * (drain-on-read, exactly like {@link spans}). The backend records these into
+   * `llm_call_metrics` as they arrive, so a run's token spend and prompt/response bodies are
+   * queryable while it is still running — and survive it dying before it can produce a
+   * terminal result. Each carries a job-scoped `seq` so the terminal
+   * {@link JobResultBase} list can re-offer the same calls without duplicating rows.
+   * Absent until the agent's first model call (and on the proxy-metered Pi harness, whose
+   * calls the LLM proxy meters directly).
+   */
+  callMetrics?: HarnessCallMetric[]
+  /**
    * ADR 0026 D4: set when the cold-start watchdog fired — the job produced NO activity
    * within {@link RunnerLimits.coldStartMs} of starting, a likely onboarding/auth wedge.
    * This does NOT fail the job (the inactivity/max-duration watchdogs still own that).
@@ -136,6 +160,13 @@ interface JobEntry<TResult extends JobResultBase> extends JobView<TResult> {
   spanBuffer: ToolSpan[]
   /** Follow-up items buffered since the last drain (see {@link JobView.followUps}). */
   followUpBuffer: FollowUpLine[]
+  /** Call telemetry buffered since the last drain (see {@link JobView.callMetrics}). */
+  callMetricBuffer: HarnessCallMetric[]
+  /**
+   * Next job-scoped {@link HarnessCallMetric.seq} to stamp. Monotonic for the life of the job
+   * (never reset by a drain), so a call's row id stays unique across every poll window.
+   */
+  callMetricSeq: number
   /** Abort the in-flight run (see {@link JobRegistry.abortAll}); set while running only. */
   abort?: (reason: string) => void
 }
@@ -192,6 +223,8 @@ function toView<TResult extends JobResultBase>(entry: JobEntry<TResult>): JobVie
     promise: _promise,
     spanBuffer: _spanBuffer,
     followUpBuffer: _followUpBuffer,
+    callMetricBuffer: _callMetricBuffer,
+    callMetricSeq: _callMetricSeq,
     abort: _abort,
     ...view
   } = entry
@@ -237,6 +270,8 @@ export class JobRegistry<TJob = unknown, TResult extends JobResultBase = JobResu
       promise: Promise.resolve(),
       spanBuffer: [],
       followUpBuffer: [],
+      callMetricBuffer: [],
+      callMetricSeq: 0,
     }
     this.jobs.set(id, entry)
     entry.promise = this.drive(entry, job)
@@ -244,9 +279,10 @@ export class JobRegistry<TJob = unknown, TResult extends JobResultBase = JobResu
   }
 
   /**
-   * Poll the job — and DRAIN its tool-span buffer (drain-on-read). The GET /jobs/{id}
-   * handler is the sole caller, so each poll returns the spans accumulated since the
-   * previous poll and clears them, bounding the harness buffer to one poll interval.
+   * Poll the job — and DRAIN its observability buffers (drain-on-read). The GET /jobs/{id}
+   * handler is the sole caller, so each poll returns the spans / follow-ups / call metrics
+   * accumulated since the previous poll and clears them, bounding the harness buffers to one
+   * poll interval.
    */
   get(id: string): JobView<TResult> | undefined {
     const entry = this.jobs.get(id)
@@ -259,6 +295,10 @@ export class JobRegistry<TJob = unknown, TResult extends JobResultBase = JobResu
     if (entry.followUpBuffer.length > 0) {
       view.followUps = entry.followUpBuffer
       entry.followUpBuffer = []
+    }
+    if (entry.callMetricBuffer.length > 0) {
+      view.callMetrics = entry.callMetricBuffer
+      entry.callMetricBuffer = []
     }
     return view
   }
@@ -373,6 +413,13 @@ export class JobRegistry<TJob = unknown, TResult extends JobResultBase = JobResu
         },
         onFollowUp: (items) => {
           entry.followUpBuffer.push(...items)
+        },
+        onCallMetric: (call) => {
+          // Stamp the job-scoped sequence on the metric OBJECT: the handler keeps the same
+          // instance for its terminal result, so both channels carry the same `seq` and the
+          // backend mints one stable row id per call.
+          call.seq = entry.callMetricSeq++
+          entry.callMetricBuffer.push(call)
         },
         onPhase: (next) => markPhase(next),
         log: jobLog,

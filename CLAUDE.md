@@ -642,7 +642,16 @@ facade so the runtimes can't drift (see "Cross-runtime conformance" below).
   (`docker run`, publish `:8080` to an ephemeral host port read with `docker port`,
   `cat-factory.runId` label), while **Apple `container`** has its own adapter
   (VM-per-container: `container run` addressed by a deterministic name, connect to the
-  container's own IP, no Docker-in-Docker). Each adapter exposes a `localDind` capability;
+  container's own IP, no Docker-in-Docker). An adapter's `endpoint()` must map an EXITED
+  container to `undefined` (`find()` returns running-or-exited containers by design, and
+  `resolve()` reads an endpoint-less one as absent so `dispatchPerRun` removes and re-creates
+  it) while still THROWING for a fault against a live one, which the spin-up path folds into
+  its fail-fast diagnostic — a docker adapter that let `docker port`'s "no public port
+  '8080/tcp' published" escape instead killed the fresh-container recovery and reported that
+  CLI line as the run's cause of death. When a container dies MID-RUN the poll captures a
+  post-mortem (`exitState()` + a `logs()` tail) onto the failed view's `detail`, since
+  `release()` removes the container as the run settles and its stdout is the only record of
+  why the harness process went away. Each adapter exposes a `localDind` capability;
   the local facade threads it into `ExecutionService` as `localTestInfraSupported` so a
   runtime that can't nest containers (Apple) **refuses a local-infra Tester run at start**
   ("limited mode" — steer to the ephemeral env or a no-infra service; see
@@ -1355,13 +1364,26 @@ sweep.
 - **`llm_call_metrics`** — per LLM call (prompt/response delta-stored, tokens, timing).
   Recorded by the LLM proxy via `LlmObservabilityService` for the proxy-metered Pi harness.
   The **subscription harnesses (Claude Code / Codex) bypass the proxy** (they talk direct to
-  the vendor), so the harness lifts per-call metrics off each CLI's event stream onto
-  `RunnerJobResult.callMetrics`, and `ContainerAgentExecutor.pollJob` feeds them through the
-  SAME `LlmObservabilityService` (via `makeHarnessCallRecorder`, wired per-facade as
-  `recordHarnessCalls`). Claude Code's `stream-json` carries full request/response bodies;
-  Codex's `exec --json` is thinner (flat assistant text + per-turn tokens, no request
-  transcript). Both have zero per-HTTP timing (the CLIs don't expose it). This captures what
-  the model _received_ per call.
+  the vendor), so the harness lifts per-call metrics off each CLI's event stream and
+  `ContainerAgentExecutor.pollJob` feeds them through the SAME `LlmObservabilityService` (via
+  `makeHarnessCallRecorder`, wired per-facade as `recordHarnessCalls`). Claude Code's
+  `stream-json` carries full request/response bodies; Codex's `exec --json` is thinner (flat
+  assistant text + per-turn tokens, no request transcript). Both have zero per-HTTP timing
+  (the CLIs don't expose it). This captures what the model _received_ per call.
+
+  **These stream — they are NOT batched to the end of the run.** The harness buffers each
+  call as its CLI yields it and hands over whatever accumulated since the previous poll
+  (`RunnerJobView.callMetrics`, drain-on-read exactly like `spans`/`followUps`); the same
+  complete list still rides the terminal `RunnerJobResult.callMetrics` for a transport that
+  forwards no drain. Both channels carry the SAME metric objects, each stamped with a
+  job-scoped `HarnessCallMetric.seq`, so both mint the same `<jobId>-hc-<seq>` row id and
+  `LlmCallMetricRepository.record` ignores the second write (`ON CONFLICT DO NOTHING` /
+  `INSERT OR IGNORE` — first write wins, NEVER an upsert, which would recompute the row's
+  prompt delta against a chain tip that has since moved on). Terminal-only recording meant a
+  run whose container died mid-flight — an eviction, an OOM-killed harness — reported ZERO
+  calls no matter how many tokens it had spent, which is precisely the run worth inspecting.
+  A self-hosted runner pool opts in by mapping `callMetricsPath` in its response manifest.
+
 - **`agent_context_snapshots`** — the complete context an agent was _provided_ per container
   dispatch: the fully fragment-composed system + user prompts, the best-practice fragment
   bodies folded in, and the **full content of the files injected into the container**

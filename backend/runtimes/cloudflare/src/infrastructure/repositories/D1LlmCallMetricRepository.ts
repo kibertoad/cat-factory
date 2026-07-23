@@ -82,9 +82,15 @@ export class D1LlmCallMetricRepository implements LlmCallMetricRepository {
   }
 
   async record(metric: LlmCallMetric): Promise<void> {
+    // `OR IGNORE`: first write wins (see the port). The harness-call recorder deliberately
+    // re-offers a deterministic id — the terminal write repeats calls the live poll drain
+    // already stored, and a durable-driver replay repeats the lot — so ignoring the repeat is
+    // what makes those paths idempotent. Never an UPSERT: overwriting would invalidate the
+    // row's stored prompt delta, which is only meaningful against the chain tip that preceded
+    // its FIRST write. Mirrors the Drizzle repo's `onConflictDoNothing`.
     await this.db
       .prepare(
-        `INSERT INTO llm_call_metrics
+        `INSERT OR IGNORE INTO llm_call_metrics
            (id, workspace_id, execution_id, agent_kind, provider, model, created_at,
             streaming, message_count, tool_count, request_max_tokens,
             prompt_tokens, cached_prompt_tokens, completion_tokens, total_tokens, finish_reason,

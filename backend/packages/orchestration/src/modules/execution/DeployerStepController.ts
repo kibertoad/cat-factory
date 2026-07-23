@@ -2,7 +2,6 @@ import type {
   AgentRunResult,
   Block,
   BlockRepository,
-  ContainerEvictionKind,
   EnvironmentHandle,
   ExecutionInstance,
   PipelineStep,
@@ -19,6 +18,7 @@ import type {
   ProvisionDispatch,
 } from '@cat-factory/integrations'
 import { deployEvictionEpoch, deployJobId, orderProvisionTargets } from './deployer.logic.js'
+import type { ContainerFailureView } from './job.logic.js'
 import { frameOf, validInvolvedServiceFrames } from './frame.logic.js'
 import { TESTER_AGENT_KIND, UI_TESTER_AGENT_KIND } from './ci.logic.js'
 import type { AgentContextBuilder } from './AgentContextBuilder.js'
@@ -129,8 +129,7 @@ export interface DeployerStepControllerDeps {
     workspaceId: string,
     instance: ExecutionInstance,
     step: PipelineStep,
-    error: string | undefined,
-    evicted: ContainerEvictionKind | undefined,
+    failure: ContainerFailureView,
     onBeforeRedispatch?: () => Promise<void>,
   ) => Promise<AdvanceResult | null>
 }
@@ -566,13 +565,8 @@ export class DeployerStepController {
     // un-settled frame since `step.jobId` is cleared) within the same per-flavour budgets as the
     // agent path, reclaiming the dead job's runner first. Null for a non-eviction failure.
     if (view.state === 'failed') {
-      const recovered = await this.recoverContainerEviction(
-        workspaceId,
-        instance,
-        step,
-        view.error,
-        view.evicted,
-        () => this.environmentProvisioning!.releaseProvisionJob(workspaceId, ref).catch(() => {}),
+      const recovered = await this.recoverContainerEviction(workspaceId, instance, step, view, () =>
+        this.environmentProvisioning!.releaseProvisionJob(workspaceId, ref).catch(() => {}),
       )
       if (recovered) return recovered
     }

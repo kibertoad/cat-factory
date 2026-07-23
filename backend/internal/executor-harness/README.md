@@ -35,6 +35,14 @@ are surfaced as `progress` while a job runs. The exact request/response shapes
 cat-factory sends are documented in
 [`docs/runner-pool-integration.md`](../../docs/runner-pool-integration.md).
 
+`GET /jobs/{id}` is also the harness's observability channel: `spans`, `followUps`
+and `callMetrics` are **drain-on-read** — each poll returns what accumulated since
+the previous one and clears the buffer. That is deliberate. A job that dies before
+it can return a terminal result (an evicted container, an OOM-killed process) has
+still reported the tool spans it ran and the model calls it paid for. Each drained
+`callMetrics` entry carries a job-scoped `seq`, and the terminal result repeats the
+complete list, so the backend can take both channels without double-counting a call.
+
 ## What a job does
 
 The implementation job (`POST /run`) is the canonical sequence:

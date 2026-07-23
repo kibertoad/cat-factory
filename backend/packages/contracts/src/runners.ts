@@ -104,6 +104,15 @@ export const runnerPoolResponseMappingSchema = v.object({
    * coerced to `{ kind, title, detail?, suggestedAction? }`.
    */
   followUpsPath: v.optional(v.string()),
+  /**
+   * Dot-path to the array of per-model-call telemetry rows the harness lifted from its CLI
+   * stream since the last poll (the harness `callMetrics` drain-on-read channel). A pool that
+   * proxies the cat-factory executor-harness verbatim should set this to `callMetrics`, so a
+   * pool-backed run's token spend and prompt/response bodies land in `llm_call_metrics` WHILE
+   * it runs — and survive it dying before it can return a terminal result. Absent ⇒ the calls
+   * are recorded only from the terminal result envelope, as before.
+   */
+  callMetricsPath: v.optional(v.string()),
   /** Dot-path to a job-level error message (a failed job, or a structured error). */
   errorPath: v.optional(v.string()),
   /**

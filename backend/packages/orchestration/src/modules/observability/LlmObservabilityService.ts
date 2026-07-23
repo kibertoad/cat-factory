@@ -336,8 +336,14 @@ export interface HarnessCallsRecordInput {
  * prompt-delta chain (which reads the previous row's tip) stays ordered. The CLIs expose
  * no per-HTTP timing, so `totalMs`/`upstreamMs` are 0 (overhead derives 0); tool counts
  * aren't surfaced per call, so `toolCount` is 0. When a `jobId` is supplied each row is
- * minted a deterministic id (`<jobId>-hc-<index>`) so a durable-driver replay re-records
- * idempotently (duplicate ids are rejected by the store) rather than duplicating rows.
+ * minted a deterministic id (`<jobId>-hc-<seq>`) so RE-recording a call is a no-op at the
+ * store rather than a duplicate row — which covers both a durable-driver replay and the
+ * terminal write of calls the live poll drain already recorded.
+ *
+ * `seq` is the harness's job-scoped sequence number, stable across both channels a call
+ * arrives on (the per-poll drain and the terminal result list). It falls back to the position
+ * in this batch only for an older harness image that streams nothing — there the terminal list
+ * is the sole channel, so its indices are already job-scoped.
  */
 export function makeHarnessCallRecorder(
   service: LlmObservabilityService,
@@ -345,7 +351,7 @@ export function makeHarnessCallRecorder(
   return async ({ workspaceId, executionId, agentKind, provider, model, jobId, calls }) => {
     for (const [index, call] of calls.entries()) {
       await service.record({
-        ...(jobId ? { id: `${jobId}-hc-${index}` } : {}),
+        ...(jobId ? { id: `${jobId}-hc-${call.seq ?? index}` } : {}),
         workspaceId,
         executionId,
         agentKind,

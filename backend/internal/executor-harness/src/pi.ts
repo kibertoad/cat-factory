@@ -505,6 +505,38 @@ export interface HarnessCallMetric {
   outputTokens: number
   /** The provider finish/stop reason when the CLI reports one (else null). */
   finishReason: string | null
+  /**
+   * This call's position in the JOB's telemetry sequence, stamped by the job registry the
+   * moment the call is emitted (see `RunOptions.onCallMetric`). It is what makes a call's
+   * recorded row id stable across the two channels that carry it: the live drain (per poll,
+   * so a run's telemetry is inspectable WHILE it runs) and the terminal result (the complete
+   * list, so a transport that doesn't drain still records everything). Both channels hold the
+   * SAME metric objects, so both mint the same `<jobId>-hc-<seq>` row id and the backend's
+   * second write of an already-recorded call is a no-op instead of a duplicate row.
+   *
+   * Absent only when a producer built a metric without emitting it live; the recorder then
+   * falls back to the array index, which is what it always used before streaming existed.
+   */
+  seq?: number
+}
+
+/**
+ * Publish one captured model call: append it to the run's list (which becomes the terminal
+ * result's `callMetrics`) AND hand the SAME object to the live stream, where the job registry
+ * stamps its {@link HarnessCallMetric.seq} and buffers it for the next poll to drain.
+ *
+ * Every producer goes through here rather than a bare `calls.push`, so the two channels can't
+ * drift: a call that reaches the terminal list but never the live stream would be invisible
+ * until the job ends, and one that reaches only the live stream would go unrecorded if the
+ * poll response were lost.
+ */
+export function publishCallMetric(
+  calls: HarnessCallMetric[],
+  call: HarnessCallMetric,
+  onCallMetric?: (call: HarnessCallMetric) => void,
+): void {
+  calls.push(call)
+  onCallMetric?.(call)
 }
 
 /** Pi's assistant summary plus {@link PiRunStats} describing what it did. */

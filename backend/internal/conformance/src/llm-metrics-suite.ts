@@ -286,6 +286,66 @@ export function defineLlmMetricsSuite(name: string, makeRepo: () => LlmCallMetri
       expect(byResp['done']!.promptPrefixCount).toBe(2)
     })
 
+    it('ignores a re-recorded call instead of duplicating or overwriting its row', async () => {
+      // A harness call reaches the backend more than once BY DESIGN: live as the harness
+      // drains it mid-run, again in the job's terminal list, and again on a durable-driver
+      // replay. Each mints the same `<jobId>-hc-<seq>` id, so the store must ignore the
+      // repeat. Two ways this goes wrong on a real store, neither visible to a unit test: a
+      // plain INSERT throws (dropping every LATER call in the same batch), and an UPSERT
+      // rewrites the row's prompt delta against a chain tip that has since moved on.
+      const repo = makeRepo()
+      const { ws, e1 } = ids()
+      let n = 0
+      const record = makeHarnessCallRecorder(
+        new LlmObservabilityService({
+          llmCallMetricRepository: repo,
+          idGenerator: { next: (p) => `${ws}-${p}-${(n += 1)}` },
+          clock: { now: () => 1 },
+        }),
+      )
+      // Each call's prompt extends the previous one, so the delta chain has something to
+      // compress and a rewritten row would show it.
+      const call = (seq: number, responseText: string): HarnessCallMetric => ({
+        model: 'claude-opus-4-8',
+        promptText: JSON.stringify(
+          Array.from({ length: seq + 1 }, () => ({ role: 'user', content: 'u' })),
+        ),
+        messageCount: seq + 1,
+        responseText,
+        reasoningText: '',
+        inputTokens: 10,
+        cachedInputTokens: 0,
+        outputTokens: 5,
+        finishReason: 'end_turn',
+      })
+      const base = {
+        workspaceId: ws,
+        executionId: e1,
+        agentKind: 'coder',
+        provider: 'claude',
+        model: 'claude:claude-opus-4-8',
+        jobId: `${ws}-job`,
+      }
+      // The live drain records calls 0 and 1 as they happen...
+      await record({ ...base, calls: [call(0, 'first'), call(1, 'second')] })
+      // ...then the terminal write re-offers them ALONGSIDE the ones that never streamed.
+      await record({
+        ...base,
+        calls: [call(0, 'first'), call(1, 'second'), call(2, 'third'), call(3, 'fourth')],
+      })
+
+      const rows = await repo.listByExecution(ws, e1)
+      // Four calls, four rows: the repeats were ignored AND the new ones still landed — a
+      // throwing INSERT would have aborted the batch and lost 'third' and 'fourth'.
+      expect(rows).toHaveLength(4)
+      expect(rows.map((r) => r.responseText).sort()).toEqual(['first', 'fourth', 'second', 'third'])
+      // First write wins: the chain each row was stored against is intact, not recomputed
+      // against a later tip.
+      const byResponse = Object.fromEntries(rows.map((r) => [r.responseText, r]))
+      expect(byResponse['first']!.promptPrefixCount).toBe(0)
+      expect(byResponse['second']!.promptPrefixCount).toBe(1)
+    })
+
     it('prunes rows older than a cutoff', async () => {
       const repo = makeRepo()
       const { ws, e1 } = ids()

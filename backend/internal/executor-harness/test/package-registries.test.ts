@@ -1,10 +1,9 @@
-import { mkdtemp, readFile, stat, writeFile } from 'node:fs/promises'
-import { tmpdir } from 'node:os'
-import { join } from 'node:path'
+import { readFile, stat, writeFile } from 'node:fs/promises'
 import { afterEach, describe, expect, it, vi } from 'vitest'
 import { parseAgentJob, parsePackageRegistries } from '../src/job.js'
 import { configurePackageRegistries, npmrcPath, renderNpmrc } from '../src/package-registries.js'
 import { redactSecrets } from '../src/redact.js'
+import { FS_HAS_POSIX_MODES, stubTempHome } from './helpers.js'
 
 // Private-registry auth: the job-body validator (host allowlist = anti-exfiltration),
 // the ~/.npmrc rendering, the per-job write/clear lifecycle on a reused container, and
@@ -131,20 +130,16 @@ describe('configurePackageRegistries', () => {
     vi.unstubAllEnvs()
   })
 
-  async function withTempHome(): Promise<string> {
-    const home = await mkdtemp(join(tmpdir(), 'harness-home-'))
-    vi.stubEnv('HOME', home)
-    return home
-  }
-
   it('writes ~/.npmrc with 0600 and clears it for a job with no entries', async () => {
-    await withTempHome()
+    await stubTempHome()
     await configurePackageRegistries([npmjsEntry])
     const path = npmrcPath()
     expect(await readFile(path, 'utf8')).toContain(
       '//registry.npmjs.org/:_authToken=npm_token_abcdef',
     )
-    expect(((await stat(path)).mode & 0o777).toString(8)).toBe('600')
+    if (FS_HAS_POSIX_MODES) {
+      expect(((await stat(path)).mode & 0o777).toString(8)).toBe('600')
+    }
 
     // The next job on this (reused) container carries no entries: the stale token
     // file must not leak into it.
@@ -153,16 +148,18 @@ describe('configurePackageRegistries', () => {
   })
 
   it('overwrites a pre-existing npmrc and tightens its mode', async () => {
-    await withTempHome()
+    await stubTempHome()
     await writeFile(npmrcPath(), 'stale=1\n', { mode: 0o644 })
     await configurePackageRegistries([npmjsEntry])
     const content = await readFile(npmrcPath(), 'utf8')
     expect(content).not.toContain('stale=1')
-    expect(((await stat(npmrcPath())).mode & 0o777).toString(8)).toBe('600')
+    if (FS_HAS_POSIX_MODES) {
+      expect(((await stat(npmrcPath())).mode & 0o777).toString(8)).toBe('600')
+    }
   })
 
   it('registers the tokens with the shared redaction', async () => {
-    await withTempHome()
+    await stubTempHome()
     await configurePackageRegistries([{ ...npmjsEntry, token: 'super_secret_registry_token' }])
     // A bare token echoed in npm error output (no KEY= shape) is scrubbed too.
     expect(redactSecrets('npm ERR! auth failed for super_secret_registry_token')).not.toContain(

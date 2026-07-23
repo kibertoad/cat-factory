@@ -101,7 +101,7 @@ function extractIp(node: unknown, keyHint = ''): string | undefined {
 }
 
 /** Parse `container inspect` output (array or object) into {ip?, running}. */
-function parseInspect(stdout: string): { ip?: string; running: boolean } {
+function parseInspect(stdout: string): { ip?: string; running: boolean; status?: string } {
   const trimmed = stdout.trim()
   if (!trimmed) return { running: false }
   let parsed: unknown
@@ -114,7 +114,7 @@ function parseInspect(stdout: string): { ip?: string; running: boolean } {
   if (typeof node !== 'object' || node === null) return { running: false }
   const obj = node as Record<string, unknown>
   const status = (asString(obj.status) ?? asString(obj.state) ?? '').toLowerCase()
-  return { ip: extractIp(obj), running: status === 'running' }
+  return { ip: extractIp(obj), running: status === 'running', ...(status ? { status } : {}) }
 }
 
 export class AppleContainerRuntimeAdapter implements ContainerRuntimeAdapter {
@@ -200,7 +200,12 @@ export class AppleContainerRuntimeAdapter implements ContainerRuntimeAdapter {
   ): Promise<ContainerEndpoint | undefined> {
     // One VM per container with its own IP and no published-port model, so ANY in-container
     // port (the harness :8080 or the preview's served-app port) is reached directly on that IP.
-    const { ip } = parseInspect((await exec(['inspect', containerId])).stdout)
+    // `inspect` faults for a container that was reaped out from under us; an exited one still
+    // inspects but has no IP. Both are "not ready" per the port contract — never a throw, which
+    // would escape the transport's `resolve()` and skip the fresh-container recovery.
+    const inspected = await exec(['inspect', containerId]).catch(() => undefined)
+    if (!inspected) return undefined
+    const { ip } = parseInspect(inspected.stdout)
     if (!ip) return undefined
     return { host: ip, port: inContainerPort }
   }
@@ -211,6 +216,16 @@ export class AppleContainerRuntimeAdapter implements ContainerRuntimeAdapter {
     } catch {
       return false
     }
+  }
+
+  async exitState(exec: ContainerExec, containerId: string): Promise<string | undefined> {
+    // Apple `container inspect` reports a coarse status only (no exit code, no OOM flag), so
+    // the post-mortem gets the terminal status verbatim rather than the Docker-shaped detail.
+    const inspected = await exec(['inspect', containerId]).catch(() => undefined)
+    if (!inspected) return undefined
+    const { status, running } = parseInspect(inspected.stdout)
+    if (running || !status) return undefined
+    return `status ${status}`
   }
 
   async logs(exec: ContainerExec, containerId: string): Promise<string> {

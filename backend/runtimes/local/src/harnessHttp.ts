@@ -68,6 +68,12 @@ export async function postHarnessJob(opts: {
  * backend is gone), false ⇒ rethrow the transient error so the caller retries. Any other
  * non-OK status throws a `<label>`-prefixed error. `isDead` is also where the caller
  * performs its own cleanup (drop a dead pool member / clear a stale cache entry).
+ *
+ * `postMortem` (optional) is the LAST chance to read anything off the dying backend: it runs
+ * only on an eviction branch, and its text rides the view's `detail` through to the run's
+ * recorded failure. A container that dies MID-RUN is otherwise reclaimed (`release()` removes
+ * it) with its stdout — the only record of WHY the harness process exited — destroyed, leaving
+ * a bare "container evicted or crashed" and nothing to diagnose from.
  */
 export async function pollHarnessJob(opts: {
   fetchImpl: typeof fetch
@@ -77,6 +83,7 @@ export async function pollHarnessJob(opts: {
   timeoutMs: number
   label: string
   isDead: () => boolean | Promise<boolean>
+  postMortem?: () => Promise<string | undefined>
 }): Promise<RunnerJobView> {
   let res: Response
   try {
@@ -89,14 +96,32 @@ export async function pollHarnessJob(opts: {
       },
     )
   } catch (err) {
-    if (await opts.isDead()) return { state: 'failed', error: EVICTION_ERROR, evicted: 'crash' }
+    if (await opts.isDead()) return evictionView(await postMortemOf(opts))
     throw err
   }
-  if (res.status === 404) return { state: 'failed', error: EVICTION_ERROR, evicted: 'crash' }
+  if (res.status === 404) return evictionView(await postMortemOf(opts))
   if (!res.ok) {
     throw new Error(`${opts.label} job poll failed (HTTP ${res.status}): ${await safeText(res)}`)
   }
   return (await res.json()) as RunnerJobView
+}
+
+/** The terminal eviction view, carrying the caller's post-mortem as the failure `detail`. */
+function evictionView(detail: string | undefined): RunnerJobView {
+  return {
+    state: 'failed',
+    error: EVICTION_ERROR,
+    evicted: 'crash',
+    ...(detail ? { detail } : {}),
+  }
+}
+
+/** Run the caller's post-mortem, if any. Best-effort: a diagnostic never fails the poll. */
+async function postMortemOf(opts: {
+  postMortem?: () => Promise<string | undefined>
+}): Promise<string | undefined> {
+  if (!opts.postMortem) return undefined
+  return opts.postMortem().catch(() => undefined)
 }
 
 /** The inline completion a finished `inline` job records (mirrors the harness `InlineResult`). */

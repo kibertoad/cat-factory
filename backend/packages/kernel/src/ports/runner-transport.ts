@@ -76,6 +76,14 @@ export interface HarnessCallMetric {
   cachedInputTokens: number
   outputTokens: number
   finishReason: string | null
+  /**
+   * The call's position in the JOB's telemetry sequence, stamped by the harness. A call reaches
+   * the backend twice — live on a poll ({@link RunnerJobView.callMetrics}) and again in the
+   * terminal {@link RunnerJobResult.callMetrics} — and this is what makes both mint the SAME
+   * row id, so the second write is a no-op rather than a duplicate row. Absent on an older
+   * harness image (which streams nothing), where the recorder falls back to the array index.
+   */
+  seq?: number
 }
 
 /** The structured work product a finished job records. */
@@ -303,6 +311,17 @@ export interface RunnerJobView {
    * run's step (the Follow-up companion). Absent on most polls / non-coder jobs.
    */
   followUps?: RunnerJobFollowUp[]
+  /**
+   * Per-model-call telemetry the harness lifted from its CLI event stream SINCE THE LAST POLL
+   * (drain-on-read, like {@link spans}). The executor records these into `llm_call_metrics` on
+   * every poll, so a run's token spend and prompt/response bodies are queryable WHILE it runs
+   * — and, more importantly, survive it dying before it can produce a terminal result. The
+   * same calls ride {@link RunnerJobResult.callMetrics} at the end (each carrying a stable
+   * {@link HarnessCallMetric.seq}), so the terminal write completes the record without
+   * duplicating what already landed. Absent on most polls, on the proxy-metered Pi harness,
+   * and on an older harness image.
+   */
+  callMetrics?: HarnessCallMetric[]
   /**
    * Which runner backend actually served this job — `local-native` (host process),
    * `local-container`, `runner-pool`, `cloudflare-container`. Reported so the engine can record

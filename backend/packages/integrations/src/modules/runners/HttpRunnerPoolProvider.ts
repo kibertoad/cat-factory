@@ -371,6 +371,13 @@ export class HttpRunnerPoolProvider implements RunnerPoolProvider {
     const followUps = this.mapFollowUps(manifest, json)
     if (followUps && followUps.length > 0) view.followUps = followUps
 
+    // Per-model-call telemetry the harness drained on this poll, when the manifest maps it —
+    // so a pool-backed run's calls reach `llm_call_metrics` as they happen, exactly like a
+    // Cloudflare/local container, instead of only from the terminal result (which a run that
+    // dies mid-flight never produces).
+    const callMetrics = this.mapCallMetrics(manifest, json)
+    if (callMetrics) view.callMetrics = callMetrics
+
     // The harness's structured failure cause + extended diagnostic, when the manifest maps
     // them — so a pool that proxies the executor-harness verbatim classifies a failure exactly
     // like a Cloudflare container, instead of degrading to the engine's error-string regex.
@@ -464,6 +471,21 @@ export class HttpRunnerPoolProvider implements RunnerPoolProvider {
       })
     }
     return items
+  }
+
+  /**
+   * Coerce the manifest-mapped per-poll call-telemetry array into the canonical shape. Reuses
+   * the SAME coercion the terminal result envelope goes through, so the live and terminal
+   * channels can't validate a call differently on a pool-backed run.
+   */
+  private mapCallMetrics(
+    manifest: RunnerPoolManifest,
+    json: unknown,
+  ): RunnerJobView['callMetrics'] | undefined {
+    const path = manifest.response.callMetricsPath
+    if (!path) return undefined
+    const metrics = coerceCallMetrics(environmentsLogic.extractByPath(json, path))
+    return metrics.length > 0 ? metrics : undefined
   }
 }
 
@@ -610,6 +632,10 @@ function coerceCallMetrics(raw: unknown): HarnessCallMetric[] {
       cachedInputTokens: e.cachedInputTokens,
       outputTokens: e.outputTokens,
       finishReason: typeof e.finishReason === 'string' ? e.finishReason : null,
+      // The harness's job-scoped sequence number. It MUST survive coercion: it is what keeps a
+      // call's recorded row id identical across the live poll drain and the terminal list, so
+      // dropping it here would make a pool-backed run store every streamed call twice.
+      ...(typeof e.seq === 'number' ? { seq: e.seq } : {}),
     })
   }
   return out

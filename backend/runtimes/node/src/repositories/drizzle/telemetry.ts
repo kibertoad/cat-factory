@@ -227,35 +227,43 @@ export class DrizzleLlmCallMetricRepository implements LlmCallMetricRepository {
   constructor(private readonly db: DrizzleDb) {}
 
   async record(metric: LlmCallMetric): Promise<void> {
-    await this.db.insert(llmCallMetrics).values({
-      id: metric.id,
-      workspace_id: metric.workspaceId,
-      execution_id: metric.executionId,
-      agent_kind: metric.agentKind,
-      provider: metric.provider,
-      model: metric.model,
-      created_at: metric.createdAt,
-      streaming: metric.streaming ? 1 : 0,
-      message_count: metric.messageCount,
-      tool_count: metric.toolCount,
-      request_max_tokens: metric.requestMaxTokens,
-      prompt_tokens: metric.promptTokens,
-      cached_prompt_tokens: metric.cachedPromptTokens,
-      completion_tokens: metric.completionTokens,
-      total_tokens: metric.totalTokens,
-      finish_reason: metric.finishReason,
-      upstream_ms: metric.upstreamMs,
-      overhead_ms: metric.overheadMs,
-      total_ms: metric.totalMs,
-      ok: metric.ok ? 1 : 0,
-      http_status: metric.httpStatus,
-      error_message: metric.errorMessage,
-      prompt_text: metric.promptText,
-      prompt_prefix_count: metric.promptPrefixCount,
-      prompt_hash: metric.promptHash,
-      response_text: metric.responseText,
-      reasoning_text: metric.reasoningText,
-    })
+    // First write wins (see the port). The harness-call recorder deliberately re-offers a
+    // deterministic id: the terminal write repeats calls the live poll drain already stored,
+    // and a durable-driver replay repeats the lot. Ignoring the repeat is what makes those
+    // paths idempotent; UPDATING instead would invalidate the row's stored prompt delta, which
+    // is only meaningful against the chain tip that preceded its FIRST write.
+    await this.db
+      .insert(llmCallMetrics)
+      .values({
+        id: metric.id,
+        workspace_id: metric.workspaceId,
+        execution_id: metric.executionId,
+        agent_kind: metric.agentKind,
+        provider: metric.provider,
+        model: metric.model,
+        created_at: metric.createdAt,
+        streaming: metric.streaming ? 1 : 0,
+        message_count: metric.messageCount,
+        tool_count: metric.toolCount,
+        request_max_tokens: metric.requestMaxTokens,
+        prompt_tokens: metric.promptTokens,
+        cached_prompt_tokens: metric.cachedPromptTokens,
+        completion_tokens: metric.completionTokens,
+        total_tokens: metric.totalTokens,
+        finish_reason: metric.finishReason,
+        upstream_ms: metric.upstreamMs,
+        overhead_ms: metric.overheadMs,
+        total_ms: metric.totalMs,
+        ok: metric.ok ? 1 : 0,
+        http_status: metric.httpStatus,
+        error_message: metric.errorMessage,
+        prompt_text: metric.promptText,
+        prompt_prefix_count: metric.promptPrefixCount,
+        prompt_hash: metric.promptHash,
+        response_text: metric.responseText,
+        reasoning_text: metric.reasoningText,
+      })
+      .onConflictDoNothing({ target: llmCallMetrics.id })
   }
 
   async latestChainTip(

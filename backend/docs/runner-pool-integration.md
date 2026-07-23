@@ -383,6 +383,7 @@ manifest just forwards everything; `{{input.kind}}` selects the path:
     "progressCompletedPath": "progress.completed",
     "progressInProgressPath": "progress.inProgress",
     "progressTotalPath": "progress.total",
+    "callMetricsPath": "callMetrics", // per-poll model-call telemetry (see the notes below)
     "errorPath": "error",
   },
 }
@@ -453,6 +454,14 @@ manifest.
 - `statusMap` matching is case-insensitive. An unmapped/unknown status falls back to
   `running` (keeps the driver waiting rather than wrongly failing). Map your terminal
   states explicitly to `done` / `failed`.
+- **Set `callMetricsPath` if your poll response proxies the harness view verbatim** (it is
+  `callMetrics` there). The harness drains per-model-call telemetry on every poll, so
+  mapping it lands a run's token spend and prompt/response bodies in observability WHILE the
+  run is in flight — and, more to the point, keeps them when a run dies before it can return
+  a terminal result. Leave it unset and those calls are recorded only from the terminal
+  result envelope, which an evicted or OOM-killed run never produces. Recording is
+  idempotent (each call carries a job-scoped `seq`), so the terminal envelope repeating them
+  costs nothing.
 - Every request carries your auth automatically; per-call timeouts are bounded
   (`timeoutMs`, ≤60s, default 30s). Responses over ~200KB are rejected.
 

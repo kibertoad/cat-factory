@@ -271,6 +271,10 @@ export async function runAgentInWorkspace(
       signal: opts.signal,
       onActivity: opts.onActivity,
       onProgress: opts.onProgress,
+      // Stream this run's per-call telemetry to the job's live drain. The subscription
+      // harnesses are the only producers of `callMetrics` (Pi's calls are metered by the LLM
+      // proxy as they happen), so this is the only path that needs the hook.
+      onCallMetric: opts.onCallMetric,
       ...(opts.log ? { log: opts.log } : {}),
     })
     return withEffortReport(spec.dir, subOutcome)
