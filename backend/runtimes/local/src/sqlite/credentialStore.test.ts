@@ -30,6 +30,8 @@ function apiKey(overrides: Partial<ProviderApiKeyRecord> = {}): ProviderApiKeyRe
     inputTokens: 0,
     outputTokens: 0,
     requestCount: 0,
+    enabled: true,
+    isDefault: false,
     deletedAt: null,
     ...overrides,
   }
@@ -345,6 +347,8 @@ function subToken(
     inputTokens: 0,
     outputTokens: 0,
     requestCount: 0,
+    enabled: true,
+    isDefault: false,
     deletedAt: null,
     ...overrides,
   }

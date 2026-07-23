@@ -1,5 +1,10 @@
 import { ContractNoBody, defineApiContract } from '@toad-contracts/valibot'
-import { addApiKeySchema, apiKeyListResultSchema, apiKeySchema } from '../api-keys.js'
+import {
+  addApiKeySchema,
+  apiKeyListResultSchema,
+  apiKeySchema,
+  updateApiKeySchema,
+} from '../api-keys.js'
 import { errorResponses, singleStringParam } from './_shared.js'
 
 // ---------------------------------------------------------------------------
@@ -27,6 +32,14 @@ export const addWorkspaceApiKeyContract = defineApiContract({
   responsesByStatusCode: { 201: apiKeySchema, ...errorResponses },
 })
 
+export const updateWorkspaceApiKeyContract = defineApiContract({
+  method: 'patch',
+  requestPathParamsSchema: idParams,
+  pathResolver: ({ id }) => `/api-keys/${id}`,
+  requestBodySchema: updateApiKeySchema,
+  responsesByStatusCode: { 200: apiKeySchema, ...errorResponses },
+})
+
 export const removeWorkspaceApiKeyContract = defineApiContract({
   method: 'delete',
   requestPathParamsSchema: idParams,
@@ -47,6 +60,14 @@ export const addUserApiKeyContract = defineApiContract({
   pathResolver: () => '/me/api-keys',
   requestBodySchema: addApiKeySchema,
   responsesByStatusCode: { 201: apiKeySchema, ...errorResponses },
+})
+
+export const updateUserApiKeyContract = defineApiContract({
+  method: 'patch',
+  requestPathParamsSchema: idParams,
+  pathResolver: ({ id }) => `/me/api-keys/${id}`,
+  requestBodySchema: updateApiKeySchema,
+  responsesByStatusCode: { 200: apiKeySchema, ...errorResponses },
 })
 
 export const removeUserApiKeyContract = defineApiContract({

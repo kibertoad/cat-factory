@@ -2895,7 +2895,8 @@
       "toast": {
         "connected": "Clé d'API connectée",
         "connectFailed": "Impossible de connecter la clé",
-        "removeFailed": "Impossible de supprimer la clé"
+        "removeFailed": "Impossible de supprimer la clé",
+        "updateFailed": "Impossible de mettre à jour la clé"
       },
       "providers": {
         "openai": {
@@ -2934,7 +2935,11 @@
           "step2": "L'URL de base de la passerelle est définie par l'opérateur de votre déploiement (LITELLM_BASE_URL), pas ici."
         }
       },
-      "keyNoun": "cette clé API"
+      "keyNoun": "cette clé API",
+      "defaultBadge": "Par défaut",
+      "pinDefault": "Définir par défaut",
+      "disabledBadge": "Désactivée",
+      "enableToggle": "Activer ou désactiver cette clé"
     },
     "vendorCredentials": {
       "title": "Fournisseurs de LLM",
@@ -2957,7 +2962,8 @@
       "toast": {
         "connected": "Token connecté",
         "connectFailed": "Impossible de connecter le token",
-        "removeFailed": "Impossible de supprimer le token"
+        "removeFailed": "Impossible de supprimer le token",
+        "updateFailed": "Impossible de mettre à jour le jeton"
       },
       "vendors": {
         "kimi": {
@@ -2976,7 +2982,11 @@
       "confirmRemove": {
         "title": "Retirer ces identifiants ?",
         "body": "\"{name}\" sera supprimé. Cette action est irréversible."
-      }
+      },
+      "defaultBadge": "Par défaut",
+      "pinDefault": "Définir par défaut",
+      "disabledBadge": "Désactivée",
+      "enableToggle": "Activer ou désactiver ce jeton"
     }
   },
   "github": {

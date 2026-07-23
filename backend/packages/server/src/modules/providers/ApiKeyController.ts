@@ -5,6 +5,8 @@ import {
   listWorkspaceApiKeysContract,
   removeUserApiKeyContract,
   removeWorkspaceApiKeyContract,
+  updateUserApiKeyContract,
+  updateWorkspaceApiKeyContract,
   type ApiKey,
 } from '@cat-factory/contracts'
 import type { ApiKeySummary } from '@cat-factory/integrations'
@@ -42,6 +44,8 @@ export function apiKeyToWire(summary: ApiKeySummary): ApiKey {
     inputTokens: summary.inputTokens,
     outputTokens: summary.outputTokens,
     requestCount: summary.requestCount,
+    enabled: summary.enabled,
+    isDefault: summary.isDefault,
   }
 }
 
@@ -62,6 +66,18 @@ export function workspaceApiKeyController(): Hono<AppEnv> {
     if (!apiKeys) return unavailable(c)
     const summary = await apiKeys.addKey('workspace', param(c, 'workspaceId'), c.req.valid('json'))
     return c.json(apiKeyToWire(summary), 201)
+  })
+
+  buildHonoRoute(app, updateWorkspaceApiKeyContract, async (c) => {
+    const apiKeys = c.get('container').apiKeys
+    if (!apiKeys) return unavailable(c)
+    const summary = await apiKeys.updateKey(
+      'workspace',
+      param(c, 'workspaceId'),
+      c.req.valid('param').id,
+      c.req.valid('json'),
+    )
+    return c.json(apiKeyToWire(summary), 200)
   })
 
   buildHonoRoute(app, removeWorkspaceApiKeyContract, async (c) => {
@@ -94,6 +110,20 @@ export function userApiKeyController(): Hono<AppEnv> {
     if (!user) return signInRequired(c)
     const summary = await apiKeys.addKey('user', user.id, c.req.valid('json'))
     return c.json(apiKeyToWire(summary), 201)
+  })
+
+  buildHonoRoute(app, updateUserApiKeyContract, async (c) => {
+    const apiKeys = c.get('container').apiKeys
+    if (!apiKeys) return unavailable(c)
+    const user = c.get('user')
+    if (!user) return signInRequired(c)
+    const summary = await apiKeys.updateKey(
+      'user',
+      user.id,
+      c.req.valid('param').id,
+      c.req.valid('json'),
+    )
+    return c.json(apiKeyToWire(summary), 200)
   })
 
   buildHonoRoute(app, removeUserApiKeyContract, async (c) => {

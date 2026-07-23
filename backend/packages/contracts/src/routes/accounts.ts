@@ -14,7 +14,12 @@ import {
   updateAccountSchema,
 } from '../accounts.js'
 import { accountSettingsViewSchema, updateAccountSettingsSchema } from '../accountSettings.js'
-import { addApiKeySchema, apiKeyListResultSchema, apiKeySchema } from '../api-keys.js'
+import {
+  addApiKeySchema,
+  apiKeyListResultSchema,
+  apiKeySchema,
+  updateApiKeySchema,
+} from '../api-keys.js'
 import { platformObservabilitySchema, platformObservabilityWindowSchema } from '../observability.js'
 import { errorResponses, singleStringParam } from './_shared.js'
 
@@ -129,6 +134,14 @@ export const addAccountApiKeyContract = defineApiContract({
   pathResolver: ({ accountId }) => `/accounts/${accountId}/api-keys`,
   requestBodySchema: addApiKeySchema,
   responsesByStatusCode: { 201: apiKeySchema, ...errorResponses },
+})
+
+export const updateAccountApiKeyContract = defineApiContract({
+  method: 'patch',
+  requestPathParamsSchema: withObjectKeys(v.object({ accountId: v.string(), id: v.string() })),
+  pathResolver: ({ accountId, id }) => `/accounts/${accountId}/api-keys/${id}`,
+  requestBodySchema: updateApiKeySchema,
+  responsesByStatusCode: { 200: apiKeySchema, ...errorResponses },
 })
 
 export const removeAccountApiKeyContract = defineApiContract({

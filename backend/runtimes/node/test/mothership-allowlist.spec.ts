@@ -509,6 +509,8 @@ const NON_REMOTE: Record<string, Record<string, Reason>> = {
     markLeased: 'local',
     leaseLeastUsed: 'local',
     recordUsage: 'local',
+    setEnabled: 'local',
+    setDefault: 'local',
     softDelete: 'local',
   },
   localModelEndpointRepository: {
@@ -523,6 +525,8 @@ const NON_REMOTE: Record<string, Record<string, Reason>> = {
     add: 'local',
     markLeased: 'local',
     recordUsage: 'local',
+    setEnabled: 'local',
+    setDefault: 'local',
     softDelete: 'local',
   },
   personalSubscriptionRepository: {

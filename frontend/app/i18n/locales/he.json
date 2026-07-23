@@ -2906,7 +2906,8 @@
       "toast": {
         "connected": "מפתח API חובר",
         "connectFailed": "לא ניתן לחבר את המפתח",
-        "removeFailed": "לא ניתן להסיר את המפתח"
+        "removeFailed": "לא ניתן להסיר את המפתח",
+        "updateFailed": "לא ניתן לעדכן את המפתח"
       },
       "providers": {
         "openai": {
@@ -2945,7 +2946,11 @@
           "step2": "כתובת הבסיס של השער נקבעת על ידי מפעיל הפריסה שלך (LITELLM_BASE_URL), ולא כאן."
         }
       },
-      "keyNoun": "מפתח API זה"
+      "keyNoun": "מפתח API זה",
+      "defaultBadge": "ברירת מחדל",
+      "pinDefault": "הגדר כברירת מחדל",
+      "disabledBadge": "מושבת",
+      "enableToggle": "הפעל או השבת מפתח זה"
     },
     "vendorCredentials": {
       "title": "ספקי LLM",
@@ -2968,7 +2973,8 @@
       "toast": {
         "connected": "הטוקן חובר",
         "connectFailed": "לא ניתן לחבר את הטוקן",
-        "removeFailed": "לא ניתן להסיר את הטוקן"
+        "removeFailed": "לא ניתן להסיר את הטוקן",
+        "updateFailed": "לא ניתן לעדכן את האסימון"
       },
       "vendors": {
         "kimi": {
@@ -2987,7 +2993,11 @@
       "confirmRemove": {
         "title": "להסיר את פרטי הגישה האלה?",
         "body": "\"{name}\" יימחק. לא ניתן לבטל פעולה זו."
-      }
+      },
+      "defaultBadge": "ברירת מחדל",
+      "pinDefault": "הגדר כברירת מחדל",
+      "disabledBadge": "מושבת",
+      "enableToggle": "הפעל או השבת אסימון זה"
     }
   },
   "github": {

@@ -28,6 +28,8 @@ function rowToRecord(row: Row): ProviderApiKeyRecord {
     inputTokens: row.input_tokens,
     outputTokens: row.output_tokens,
     requestCount: row.request_count,
+    enabled: row.enabled !== 0,
+    isDefault: row.is_default !== 0,
     deletedAt: row.deleted_at,
   }
 }
@@ -77,6 +79,7 @@ export class DrizzleProviderApiKeyRepository implements ProviderApiKeyRepository
           scopeMatch(scopes),
           eq(providerApiKeys.provider, provider),
           isNull(providerApiKeys.deleted_at),
+          eq(providerApiKeys.enabled, 1),
         ),
       )
       .orderBy(asc(providerApiKeys.created_at))
@@ -88,7 +91,9 @@ export class DrizzleProviderApiKeyRepository implements ProviderApiKeyRepository
     const rows = await this.db
       .selectDistinct({ provider: providerApiKeys.provider })
       .from(providerApiKeys)
-      .where(and(scopeMatch(scopes), isNull(providerApiKeys.deleted_at)))
+      .where(
+        and(scopeMatch(scopes), isNull(providerApiKeys.deleted_at), eq(providerApiKeys.enabled, 1)),
+      )
     return rows.map((r) => r.provider as ApiKeyProvider)
   }
 
@@ -127,6 +132,8 @@ export class DrizzleProviderApiKeyRepository implements ProviderApiKeyRepository
       input_tokens: record.inputTokens,
       output_tokens: record.outputTokens,
       request_count: record.requestCount,
+      enabled: record.enabled ? 1 : 0,
+      is_default: record.isDefault ? 1 : 0,
       deleted_at: record.deletedAt,
     })
   }
@@ -146,10 +153,11 @@ export class DrizzleProviderApiKeyRepository implements ProviderApiKeyRepository
   ): Promise<ProviderApiKeyRecord | null> {
     if (scopes.length === 0) return null
     // Pick-and-mark atomically inside one transaction: the winner is selected by the same
-    // policy as `chooseToken` (least rolling-window usage, then least-recently-leased —
-    // NULL last_used_at first — then oldest) under `FOR UPDATE SKIP LOCKED`, so two
-    // concurrent leases never select the same row (the second skips the locked winner and
-    // rotates to the next key) — the fix for the non-transactional read→choose→mark race.
+    // policy as `chooseToken` — a pinned default (is_default = 1) first, then least
+    // rolling-window usage, then least-recently-leased (NULL last_used_at first), then oldest —
+    // over the ENABLED keys only, under `FOR UPDATE SKIP LOCKED`, so two concurrent leases
+    // never select the same row (the second skips the locked winner and rotates to the next
+    // key) — the fix for the non-transactional read→choose→mark race.
     const usage = sql`CASE WHEN ${providerApiKeys.window_started_at} IS NULL
                             OR ${now} - ${providerApiKeys.window_started_at} >= ${windowMs}
                           THEN 0
@@ -163,9 +171,11 @@ export class DrizzleProviderApiKeyRepository implements ProviderApiKeyRepository
             scopeMatch(scopes),
             eq(providerApiKeys.provider, provider),
             isNull(providerApiKeys.deleted_at),
+            eq(providerApiKeys.enabled, 1),
           ),
         )
         .orderBy(
+          sql`${providerApiKeys.is_default} DESC`,
           sql`${usage} ASC`,
           sql`${providerApiKeys.last_used_at} ASC NULLS FIRST`,
           asc(providerApiKeys.created_at),
@@ -203,6 +213,60 @@ export class DrizzleProviderApiKeyRepository implements ProviderApiKeyRepository
         request_count: sql`CASE WHEN ${active} THEN ${cols.request_count} ELSE 0 END + 1`,
       })
       .where(eq(cols.id, id))
+  }
+
+  async setEnabled(
+    scope: ApiKeyScope,
+    scopeId: string,
+    id: string,
+    enabled: boolean,
+  ): Promise<void> {
+    await this.db
+      .update(providerApiKeys)
+      .set({ enabled: enabled ? 1 : 0 })
+      .where(
+        and(
+          eq(providerApiKeys.id, id),
+          eq(providerApiKeys.scope, scope),
+          eq(providerApiKeys.scope_id, scopeId),
+          isNull(providerApiKeys.deleted_at),
+        ),
+      )
+  }
+
+  async setDefault(
+    scope: ApiKeyScope,
+    scopeId: string,
+    provider: ApiKeyProvider,
+    id: string | null,
+  ): Promise<void> {
+    const cols = providerApiKeys
+    // Clear the group's default first (at most one per scope+scope_id+provider), then pin it.
+    await this.db
+      .update(cols)
+      .set({ is_default: 0 })
+      .where(
+        and(
+          eq(cols.scope, scope),
+          eq(cols.scope_id, scopeId),
+          eq(cols.provider, provider),
+          isNull(cols.deleted_at),
+        ),
+      )
+    if (id !== null) {
+      await this.db
+        .update(cols)
+        .set({ is_default: 1 })
+        .where(
+          and(
+            eq(cols.id, id),
+            eq(cols.scope, scope),
+            eq(cols.scope_id, scopeId),
+            eq(cols.provider, provider),
+            isNull(cols.deleted_at),
+          ),
+        )
+    }
   }
 
   async softDelete(scope: ApiKeyScope, scopeId: string, id: string, at: number): Promise<void> {

@@ -32,6 +32,8 @@ function rowToRecord(row: Row): ProviderSubscriptionTokenRecord {
     inputTokens: row.input_tokens,
     outputTokens: row.output_tokens,
     requestCount: row.request_count,
+    enabled: row.enabled !== 0,
+    isDefault: row.is_default !== 0,
     deletedAt: row.deleted_at,
   }
 }
@@ -86,6 +88,8 @@ export class DrizzleProviderSubscriptionTokenRepository implements ProviderSubsc
       input_tokens: record.inputTokens,
       output_tokens: record.outputTokens,
       request_count: record.requestCount,
+      enabled: record.enabled ? 1 : 0,
+      is_default: record.isDefault ? 1 : 0,
       deleted_at: record.deletedAt,
     })
   }
@@ -125,6 +129,47 @@ export class DrizzleProviderSubscriptionTokenRepository implements ProviderSubsc
         request_count: sql`CASE WHEN ${active} THEN ${cols.request_count} ELSE 0 END + 1`,
       })
       .where(and(eq(cols.id, id), eq(cols.workspace_id, workspaceId)))
+  }
+
+  async setEnabled(workspaceId: string, id: string, enabled: boolean): Promise<void> {
+    await this.db
+      .update(providerSubscriptionTokens)
+      .set({ enabled: enabled ? 1 : 0 })
+      .where(
+        and(
+          eq(providerSubscriptionTokens.id, id),
+          eq(providerSubscriptionTokens.workspace_id, workspaceId),
+          isNull(providerSubscriptionTokens.deleted_at),
+        ),
+      )
+  }
+
+  async setDefault(
+    workspaceId: string,
+    vendor: SubscriptionVendor,
+    id: string | null,
+  ): Promise<void> {
+    const cols = providerSubscriptionTokens
+    // Clear the group's default first (at most one per workspace+vendor), then pin the row.
+    await this.db
+      .update(cols)
+      .set({ is_default: 0 })
+      .where(
+        and(eq(cols.workspace_id, workspaceId), eq(cols.vendor, vendor), isNull(cols.deleted_at)),
+      )
+    if (id !== null) {
+      await this.db
+        .update(cols)
+        .set({ is_default: 1 })
+        .where(
+          and(
+            eq(cols.id, id),
+            eq(cols.workspace_id, workspaceId),
+            eq(cols.vendor, vendor),
+            isNull(cols.deleted_at),
+          ),
+        )
+    }
   }
 
   async softDelete(workspaceId: string, id: string, at: number): Promise<void> {

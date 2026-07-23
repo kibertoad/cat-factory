@@ -54,6 +54,18 @@ export interface ProviderApiKeyRecord {
   inputTokens: number
   outputTokens: number
   requestCount: number
+  /**
+   * Whether this key is eligible for leasing. A disabled key stays in its scope's pool
+   * (visible + re-enablable) but is skipped by `leaseLeastUsed` and not counted by
+   * `hasKey` / `listConfiguredProviders`. Defaults to true.
+   */
+  enabled: boolean
+  /**
+   * Whether this key is the pinned default for its provider within its scope: preferred
+   * at lease time over usage-aware rotation. At most one default per (scope, scopeId,
+   * provider); a disabled default is ignored. Defaults to false.
+   */
+  isDefault: boolean
   /** Set when the key is removed (tombstone). */
   deletedAt: number | null
 }
@@ -62,6 +74,8 @@ export interface ProviderApiKeyRepository {
   /**
    * All live keys for one (scope, scopeId), oldest first. Filtered to a single
    * `provider` when given, else every provider in the scope (one query, not N).
+   * Includes DISABLED keys — this is the management/list read, so the UI can show and
+   * re-enable them (the lease/availability reads below exclude disabled).
    */
   listByScope(
     scope: ApiKeyScope,
@@ -69,11 +83,12 @@ export interface ProviderApiKeyRepository {
     provider?: ApiKeyProvider,
   ): Promise<ProviderApiKeyRecord[]>
   /**
-   * All live keys for one provider across MANY scope segments — the merged-pool
-   * read used by lease(). Returns rows from every matching (scope, scopeId).
+   * All live, ENABLED keys for one provider across MANY scope segments — the merged-pool
+   * availability read behind hasKey(). Returns rows from every matching (scope, scopeId);
+   * disabled keys are excluded so an all-disabled provider reads as unconfigured.
    */
   listForPool(scopes: ApiKeyScopeRef[], provider: ApiKeyProvider): Promise<ProviderApiKeyRecord[]>
-  /** Distinct providers that have ≥1 live key across the given scope segments. */
+  /** Distinct providers that have ≥1 live, ENABLED key across the given scope segments. */
   listConfiguredProviders(scopes: ApiKeyScopeRef[]): Promise<ApiKeyProvider[]>
   /** Fetch one live key by id (scoped to its segment). */
   getById(scope: ApiKeyScope, scopeId: string, id: string): Promise<ProviderApiKeyRecord | null>
@@ -91,10 +106,12 @@ export interface ProviderApiKeyRepository {
    * D1: a single write the engine serialises) so two concurrent dispatches can't both
    * grab the same key. This replaces the non-transactional read→`chooseToken`→`markLeased`
    * sequence at the lease hot path, where two callers would otherwise read the same pool
-   * snapshot and both pick the same least-used key. Selection mirrors {@link chooseToken}:
-   * least rolling-window usage wins, ties break by least-recently-leased (never-leased
-   * first) then oldest-created. Stamps `lastUsedAt = now` on the winner and returns it (with
-   * the bumped value), or null when the pool is empty. `windowMs` sizes the usage window.
+   * snapshot and both pick the same least-used key. DISABLED keys are excluded from the
+   * candidate set. Selection mirrors {@link chooseToken}: a pinned default (any scope) wins
+   * first; otherwise least rolling-window usage, ties break by least-recently-leased
+   * (never-leased first) then oldest-created. Stamps `lastUsedAt = now` on the winner and
+   * returns it (with the bumped value), or null when the pool has no enabled key. `windowMs`
+   * sizes the usage window.
    */
   leaseLeastUsed(
     scopes: ApiKeyScopeRef[],
@@ -112,6 +129,19 @@ export interface ProviderApiKeyRepository {
     usage: { inputTokens: number; outputTokens: number },
     at: number,
     windowMs: number,
+  ): Promise<void>
+  /** Enable or disable a key (scoped to its segment) without deleting it. */
+  setEnabled(scope: ApiKeyScope, scopeId: string, id: string, enabled: boolean): Promise<void>
+  /**
+   * Set (or clear) the pinned default key for a (scope, scopeId, provider). Clears the
+   * `isDefault` flag on every other live key of that provider in the segment first, so at
+   * most one default ever exists per group. Passing `id: null` just clears the default.
+   */
+  setDefault(
+    scope: ApiKeyScope,
+    scopeId: string,
+    provider: ApiKeyProvider,
+    id: string | null,
   ): Promise<void>
   /** Tombstone a key (scoped to its segment). */
   softDelete(scope: ApiKeyScope, scopeId: string, id: string, at: number): Promise<void>

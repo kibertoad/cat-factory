@@ -141,6 +141,30 @@ async function add() {
   }
 }
 
+async function toggleEnabled(cred: { id: string }, enabled: boolean) {
+  try {
+    await creds.update(cred.id, { enabled })
+  } catch (e) {
+    toast.add({
+      title: t('providers.vendorCredentials.toast.updateFailed'),
+      description: e instanceof Error ? e.message : String(e),
+      color: 'error',
+    })
+  }
+}
+
+async function toggleDefault(cred: { id: string; isDefault: boolean }) {
+  try {
+    await creds.update(cred.id, { isDefault: !cred.isDefault })
+  } catch (e) {
+    toast.add({
+      title: t('providers.vendorCredentials.toast.updateFailed'),
+      description: e instanceof Error ? e.message : String(e),
+      color: 'error',
+    })
+  }
+}
+
 async function remove(cred: { id: string; label: string }) {
   const ok = await confirm({
     title: t('providers.vendorCredentials.confirmRemove.title'),
@@ -245,10 +269,14 @@ function vendorLabel(v: SubscriptionVendor): string {
                 v-for="c in creds.credentials"
                 :key="c.id"
                 class="flex items-center justify-between rounded-md border border-slate-700 bg-slate-900/50 px-3 py-2 text-sm"
+                :class="{ 'opacity-55': !c.enabled }"
               >
                 <div>
                   <span class="font-medium text-slate-200">{{ c.label }}</span>
                   <span class="ms-2 text-xs text-slate-500">{{ vendorLabel(c.vendor) }}</span>
+                  <UBadge v-if="!c.enabled" color="neutral" variant="subtle" size="sm" class="ms-2">
+                    {{ t('providers.vendorCredentials.disabledBadge') }}
+                  </UBadge>
                   <div class="text-[11px] tabular-nums text-slate-500">
                     {{
                       t(
@@ -262,13 +290,34 @@ function vendorLabel(v: SubscriptionVendor): string {
                     }}
                   </div>
                 </div>
-                <UButton
-                  icon="i-lucide-trash-2"
-                  color="error"
-                  variant="ghost"
-                  size="xs"
-                  @click="remove(c)"
-                />
+                <div class="flex items-center gap-2">
+                  <UButton
+                    :icon="c.isDefault ? 'i-lucide-star' : 'i-lucide-star-off'"
+                    :color="c.isDefault ? 'primary' : 'neutral'"
+                    :variant="c.isDefault ? 'subtle' : 'ghost'"
+                    size="xs"
+                    @click="toggleDefault(c)"
+                  >
+                    {{
+                      c.isDefault
+                        ? t('providers.vendorCredentials.defaultBadge')
+                        : t('providers.vendorCredentials.pinDefault')
+                    }}
+                  </UButton>
+                  <USwitch
+                    :model-value="c.enabled"
+                    size="sm"
+                    :aria-label="t('providers.vendorCredentials.enableToggle')"
+                    @update:model-value="(v: boolean) => toggleEnabled(c, v)"
+                  />
+                  <UButton
+                    icon="i-lucide-trash-2"
+                    color="error"
+                    variant="ghost"
+                    size="xs"
+                    @click="remove(c)"
+                  />
+                </div>
               </div>
             </div>
           </div>
