@@ -33,16 +33,22 @@ export function defineReviewFrictionSuite(harness: ConformanceHarness): void {
       return res.body.id
     }
 
-    /** Seed one OPEN review-wait notification (a `merge_review` card) as a unit of debt. */
+    /**
+     * Seed one OPEN review-wait notification as a unit of debt. Defaults to a `merge_review` card;
+     * the `type` override lets a test place two DISTINCT review-wait cards on the SAME block (the
+     * notifications table is UNIQUE on `(workspace_id, block_id, type)`, so two cards on one block
+     * must differ by type).
+     */
     async function seedDebt(
       app: ConformanceApp,
       wsId: string,
       blockId: string,
       createdAt: number,
+      type: 'merge_review' | 'human_review' = 'merge_review',
     ): Promise<void> {
       await app.notificationRepository().upsert(wsId, {
         id: `ntf-${uniq()}`,
-        type: 'merge_review',
+        type,
         status: 'open',
         blockId,
         executionId: null,
@@ -127,10 +133,12 @@ export function defineReviewFrictionSuite(harness: ConformanceHarness): void {
         (await setFriction(app, wsId, { reviewFrictionMode: 'warn', reviewFrictionWarnCount: 2 }))
           .status,
       ).toBe(200)
-      // Two open review-wait cards, but on the SAME block ⇒ one unit of debt < warn count.
+      // Two open review-wait cards of DISTINCT types, but on the SAME block ⇒ one unit of debt <
+      // warn count (they dedup per block; distinct types are required by the notifications table's
+      // `(workspace_id, block_id, type)` uniqueness).
       const oneBlock = `b-dupe-${uniq()}`
-      await seedDebt(app, wsId, oneBlock, 1)
-      await seedDebt(app, wsId, oneBlock, 2)
+      await seedDebt(app, wsId, oneBlock, 1, 'merge_review')
+      await seedDebt(app, wsId, oneBlock, 2, 'human_review')
       expect((await createTask(app, wsId, frameId)).status).toBe(201)
     })
   })
