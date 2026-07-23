@@ -1,5 +1,5 @@
 import { DomainError, type DomainErrorCode } from '@cat-factory/kernel'
-import { checkOwnerPairScope, checkServiceMountScope } from './rpc-scope.logic'
+import { checkOwnerPairScope, checkServiceMountScope } from './rpc-scope.logic.js'
 
 // The mothership-mode persistence RPC wire protocol.
 //
