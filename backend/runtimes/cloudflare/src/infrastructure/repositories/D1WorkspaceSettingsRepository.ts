@@ -1,5 +1,10 @@
 import type { WorkspaceSettingsRepository } from '@cat-factory/kernel'
-import type { TaskLimitMode, TaskLimitPerType, WorkspaceSettings } from '@cat-factory/contracts'
+import type {
+  ReviewFrictionMode,
+  TaskLimitMode,
+  TaskLimitPerType,
+  WorkspaceSettings,
+} from '@cat-factory/contracts'
 import type { D1Database } from '@cloudflare/workers-types'
 import { chunkForIn } from './chunk'
 
@@ -13,6 +18,10 @@ interface WorkspaceSettingsRow {
   artifact_retention_days: number
   kaizen_enabled: number
   delegate_agents_to_runner_pool: number
+  review_friction_mode: string
+  review_friction_warn_count: number
+  review_friction_block_count: number | null
+  review_friction_block_stuck_minutes: number | null
   spend_currency: string | null
   spend_monthly_limit: number | null
 }
@@ -36,6 +45,10 @@ function rowToSettings(row: WorkspaceSettingsRow): WorkspaceSettings {
     artifactRetentionDays: row.artifact_retention_days,
     kaizenEnabled: row.kaizen_enabled === 1,
     delegateAgentsToRunnerPool: row.delegate_agents_to_runner_pool === 1,
+    reviewFrictionMode: row.review_friction_mode as ReviewFrictionMode,
+    reviewFrictionWarnCount: row.review_friction_warn_count,
+    reviewFrictionBlockCount: row.review_friction_block_count,
+    reviewFrictionBlockStuckMinutes: row.review_friction_block_stuck_minutes,
     spendCurrency: row.spend_currency,
     spendMonthlyLimit: row.spend_monthly_limit,
   }
@@ -82,9 +95,10 @@ export class D1WorkspaceSettingsRepository implements WorkspaceSettingsRepositor
         `INSERT INTO workspace_settings
            (workspace_id, waiting_escalation_minutes, task_limit_mode, task_limit_shared,
             task_limit_per_type, store_agent_context, artifact_retention_days, kaizen_enabled,
-            delegate_agents_to_runner_pool, spend_currency,
+            delegate_agents_to_runner_pool, review_friction_mode, review_friction_warn_count,
+            review_friction_block_count, review_friction_block_stuck_minutes, spend_currency,
             spend_monthly_limit)
-         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
          ON CONFLICT (workspace_id) DO UPDATE SET
            waiting_escalation_minutes = excluded.waiting_escalation_minutes,
            task_limit_mode = excluded.task_limit_mode,
@@ -94,6 +108,10 @@ export class D1WorkspaceSettingsRepository implements WorkspaceSettingsRepositor
            artifact_retention_days = excluded.artifact_retention_days,
            kaizen_enabled = excluded.kaizen_enabled,
            delegate_agents_to_runner_pool = excluded.delegate_agents_to_runner_pool,
+           review_friction_mode = excluded.review_friction_mode,
+           review_friction_warn_count = excluded.review_friction_warn_count,
+           review_friction_block_count = excluded.review_friction_block_count,
+           review_friction_block_stuck_minutes = excluded.review_friction_block_stuck_minutes,
            spend_currency = excluded.spend_currency,
            spend_monthly_limit = excluded.spend_monthly_limit`,
       )
@@ -107,6 +125,10 @@ export class D1WorkspaceSettingsRepository implements WorkspaceSettingsRepositor
         settings.artifactRetentionDays,
         settings.kaizenEnabled ? 1 : 0,
         settings.delegateAgentsToRunnerPool ? 1 : 0,
+        settings.reviewFrictionMode,
+        settings.reviewFrictionWarnCount,
+        settings.reviewFrictionBlockCount,
+        settings.reviewFrictionBlockStuckMinutes,
         settings.spendCurrency,
         settings.spendMonthlyLimit,
       )

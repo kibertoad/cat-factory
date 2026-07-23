@@ -99,6 +99,45 @@ export const notificationTypeSchema = v.picklist([
 export type NotificationType = v.InferOutput<typeof notificationTypeSchema>
 
 /**
+ * The closed set of notification types that count as "a task is waiting on a human review"
+ * for the opt-in review-debt friction feature (see `backend/docs/review-debt-friction.md`).
+ * Every entry is a human-parking surface that raises an open card carrying a `blockId` +
+ * `createdAt`; the friction verdict derives its debt list from open notifications of these
+ * types. It is the single source of truth shared by the frontend, the pure verdict function
+ * (`assessReviewFriction`), and the backend enforcement point — adding a new human-parking
+ * surface to the debt definition is a one-line change reviewed like any other contract change.
+ *
+ * Deliberately EXCLUDED: failure-remediation cards (`ci_failed`, `test_failed`,
+ * `release_regression`) — "the machine needs help", not "a human owes a review" — and
+ * block-less/system cards (`platform_health`, `budget_paused`, `key_drift`, `initiative`) that
+ * aren't tied to a reviewable task.
+ */
+export const REVIEW_WAIT_NOTIFICATION_TYPES = [
+  'merge_review',
+  'pipeline_complete',
+  'requirement_review',
+  'clarity_review',
+  'decision_required',
+  'human_test_ready',
+  'visual_confirmation_ready',
+  'human_review',
+  'followup_pending',
+  'fork_decision_pending',
+  'pr_review_ready',
+] as const satisfies readonly NotificationType[]
+
+export type ReviewWaitNotificationType = (typeof REVIEW_WAIT_NOTIFICATION_TYPES)[number]
+
+const REVIEW_WAIT_NOTIFICATION_TYPE_SET: ReadonlySet<NotificationType> = new Set(
+  REVIEW_WAIT_NOTIFICATION_TYPES,
+)
+
+/** Whether a notification type counts as a task waiting on human review (see above). */
+export function isReviewWaitNotificationType(type: NotificationType): boolean {
+  return REVIEW_WAIT_NOTIFICATION_TYPE_SET.has(type)
+}
+
+/**
  * One credential the ENCRYPTION_KEY-drift sweep (ADR 0026 D6.2) could not decrypt, carried on a
  * `key_drift` notification. NEVER carries the secret value — only its non-secret identity (source
  * table, row id, a human label) plus WHY it failed, so the surfaced issue is legible and the

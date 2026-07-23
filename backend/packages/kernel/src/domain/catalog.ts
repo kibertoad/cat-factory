@@ -37,6 +37,10 @@ export const DEFAULT_WORKSPACE_SETTINGS: WorkspaceSettings = {
   artifactRetentionDays: 14,
   kaizenEnabled: true,
   delegateAgentsToRunnerPool: false,
+  reviewFrictionMode: 'off',
+  reviewFrictionWarnCount: 3,
+  reviewFrictionBlockCount: null,
+  reviewFrictionBlockStuckMinutes: null,
   spendCurrency: null,
   spendMonthlyLimit: null,
 }

@@ -4,9 +4,14 @@ import type {
   AddModuleInput,
   AddServiceFromRepoInput,
   AddTaskInput,
+  Notification,
   ReparentInput,
+  ReviewDebtItem,
+  ReviewFrictionVerdict,
   UpdateBlockInput,
+  WorkspaceSettings,
 } from '@cat-factory/contracts'
+import { assessReviewFriction } from '@cat-factory/contracts'
 import type {
   Block,
   BlockType,
@@ -14,7 +19,7 @@ import type {
   PreloadedBlocks,
   ServiceConnection,
 } from '@cat-factory/kernel'
-import { assertFound, NotFoundError, ValidationError } from '@cat-factory/kernel'
+import { assertFound, ConflictError, NotFoundError, ValidationError } from '@cat-factory/kernel'
 import { BLOCK_TYPE_LABEL, defaultPipelineIdForTaskType } from '@cat-factory/kernel'
 import type {
   BlockRepository,
@@ -108,6 +113,25 @@ export interface BoardServiceDependencies {
    * pipeline. Absent (tests / no custom types) ⇒ only the built-in type defaults apply.
    */
   taskTypeRegistry?: TaskTypeRegistry
+  /**
+   * Opt-in review-debt friction on task creation (`backend/docs/review-debt-friction.md`).
+   * When BOTH readers are wired and the workspace has enabled friction, {@link BoardService.addTask}
+   * refuses (or requires acknowledgement for) authoring a new task while too many tasks sit parked
+   * on human review. Absent (tests / conformance / minimal facades / friction off) ⇒ the guard is a
+   * pass-through and creation behaves exactly as before.
+   */
+  reviewFrictionSettings?: ReviewFrictionSettingsReader
+  reviewFrictionNotifications?: ReviewFrictionNotificationReader
+}
+
+/** Minimal read seam over workspace settings for the review-debt friction guard. */
+export interface ReviewFrictionSettingsReader {
+  get(workspaceId: string): Promise<WorkspaceSettings>
+}
+
+/** Minimal read seam over open notifications for the review-debt friction guard. */
+export interface ReviewFrictionNotificationReader {
+  listOpen(workspaceId: string): Promise<Notification[]>
 }
 
 /**
@@ -147,6 +171,8 @@ export class BoardService {
   private readonly initiativeRepository?: InitiativeRepository
   private readonly events?: ExecutionEventPublisher
   private readonly taskTypeRegistry?: TaskTypeRegistry
+  private readonly reviewFrictionSettings?: ReviewFrictionSettingsReader
+  private readonly reviewFrictionNotifications?: ReviewFrictionNotificationReader
 
   constructor({
     workspaceRepository,
@@ -162,6 +188,8 @@ export class BoardService {
     initiativeRepository,
     executionEventPublisher,
     taskTypeRegistry,
+    reviewFrictionSettings,
+    reviewFrictionNotifications,
   }: BoardServiceDependencies) {
     this.workspaceRepository = workspaceRepository
     this.blockRepository = blockRepository
@@ -176,6 +204,8 @@ export class BoardService {
     this.initiativeRepository = initiativeRepository
     this.events = executionEventPublisher
     this.taskTypeRegistry = taskTypeRegistry
+    this.reviewFrictionSettings = reviewFrictionSettings
+    this.reviewFrictionNotifications = reviewFrictionNotifications
   }
 
   /**
@@ -517,6 +547,73 @@ export class BoardService {
     }
   }
 
+  /**
+   * Enforce the opt-in review-debt friction policy before a human authors a new task. With both
+   * seams wired and friction enabled, reads the acting workspace's settings + open notifications
+   * and computes the shared verdict (the SAME pure function the SPA pre-warns with). A hard `block`
+   * verdict throws a `review_debt_blocked` 409 — an acknowledgement can NEVER tunnel through it,
+   * since hard is checked first and ignores the flag. A soft `warn` throws `review_debt_warn`
+   * UNLESS the caller acknowledged. `ok` — or unwired seams / friction off — returns silently.
+   */
+  private async assertReviewFrictionAllows(
+    workspaceId: string,
+    blocks: readonly Block[],
+    acknowledged: boolean,
+  ): Promise<void> {
+    const settingsReader = this.reviewFrictionSettings
+    const notificationsReader = this.reviewFrictionNotifications
+    if (!settingsReader || !notificationsReader) return
+    const settings = await settingsReader.get(workspaceId)
+    if (settings.reviewFrictionMode === 'off') return
+    const open = await notificationsReader.listOpen(workspaceId)
+    const now = this.clock.now()
+    const verdict = assessReviewFriction(open, settings, now)
+    if (verdict.kind === 'ok') return
+    if (verdict.kind === 'warn' && acknowledged) return
+    throw this.reviewFrictionConflict(verdict, blocks, settings, now)
+  }
+
+  /**
+   * Build the 409 for a non-`ok` friction verdict: a machine-readable reason
+   * (`review_debt_warn` / `review_debt_blocked`) plus a details payload the SPA renders into the
+   * friction dialog — each waiting task's title + how long it has waited (worst first), and the
+   * threshold that fired. Titles are joined in from the already-loaded workspace block list, so
+   * there is no extra query.
+   */
+  private reviewFrictionConflict(
+    verdict: Extract<ReviewFrictionVerdict, { kind: 'warn' | 'block' }>,
+    blocks: readonly Block[],
+    settings: WorkspaceSettings,
+    now: number,
+  ): ConflictError {
+    const titles = new Map(blocks.map((b) => [b.id, b.title]))
+    const debt = verdict.debt.map((item: ReviewDebtItem) => ({
+      blockId: item.blockId,
+      title: titles.get(item.blockId) ?? null,
+      waitingMinutes: Math.max(0, Math.round((now - item.waitingSince) / 60_000)),
+    }))
+    if (verdict.kind === 'block') {
+      const threshold =
+        verdict.reason === 'stuck'
+          ? settings.reviewFrictionBlockStuckMinutes
+          : settings.reviewFrictionBlockCount
+      const message =
+        verdict.reason === 'stuck'
+          ? `Task creation is blocked: a task has been waiting on human review longer than ${threshold} minute(s). Work down the review queue first.`
+          : `Task creation is blocked: ${debt.length} task(s) are waiting on human review (limit ${threshold}). Work down the review queue first.`
+      return new ConflictError(message, 'review_debt_blocked', {
+        friction: verdict.reason,
+        debt,
+        threshold,
+      })
+    }
+    return new ConflictError(
+      `${debt.length} task(s) are waiting on human review. Consider reviewing them before creating more work.`,
+      'review_debt_warn',
+      { debt, threshold: settings.reviewFrictionWarnCount },
+    )
+  }
+
   /** Add a task inside a container (a service frame or a module). */
   async addTask(
     workspaceId: string,
@@ -532,6 +629,11 @@ export class BoardService {
       throw new ValidationError('Tasks cannot contain other tasks')
     }
     const blocks = await this.blockRepository.listByWorkspace(homeWorkspaceId)
+    // Opt-in review-debt friction: refuse (or require acknowledgement for) authoring a new task
+    // while too many tasks sit parked on human review. Runs in the ACTING workspace's context
+    // (its settings + its open notifications) before any side effect; `blocks` supplies the debt
+    // titles with no extra query. Pass-through when the seams are unwired or friction is off.
+    await this.assertReviewFrictionAllows(workspaceId, blocks, input.acknowledgeReviewDebt === true)
     const siblings = tasksOf(blocks, containerId).length
     const service = serviceOf(blocks, container)
     const taskType = input.taskType ?? 'feature'

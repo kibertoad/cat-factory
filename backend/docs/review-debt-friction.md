@@ -1,6 +1,6 @@
 # Review-debt friction (opt-in) — design
 
-**Status:** Proposed (design only — nothing in this document is implemented yet).
+**Status:** Implemented (see the "Landed code" map at the end).
 **Scope:** per-workspace, opt-in, off by default.
 
 ## Problem
@@ -313,6 +313,32 @@ invariant (same stance as the task-limit gate).
 - **A standing "review debt" banner instead of creation-time friction.** Passive signals
   already exist (the red inbox). The point of this feature is to attach the cost to the
   action that grows the debt.
+
+## Landed code
+
+The implementation follows this design; the notable pieces:
+
+- **Contracts** (`backend/packages/contracts/src/`): `REVIEW_WAIT_NOTIFICATION_TYPES` +
+  `isReviewWaitNotificationType` (`notifications.ts`); the pure `assessReviewFriction` /
+  `collectReviewDebt` + `ReviewDebtItem` / `ReviewFrictionVerdict` (`reviewFriction.ts`, with
+  `reviewFriction.test.ts`); the four `reviewFriction*` fields on `workspaceSettingsSchema` +
+  `updateWorkspaceSettingsSchema` (`workspace-settings.ts`); `acknowledgeReviewDebt` on
+  `addTaskSchema` (`requests.ts`); the `review_debt_warn` / `review_debt_blocked` conflict
+  reasons (`errors.ts`).
+- **Kernel**: defaults in `DEFAULT_WORKSPACE_SETTINGS` (`domain/catalog.ts`).
+- **Orchestration**: the `addTask` guard `assertReviewFrictionAllows` + its 409 builder, behind the
+  optional `reviewFrictionSettings` / `reviewFrictionNotifications` seams
+  (`modules/board/BoardService.ts`, wired in `container.ts`); the `enforce`-mode cross-field
+  write validation (`modules/settings/WorkspaceSettingsService.ts`). Tests:
+  `BoardService.reviewFriction.test.ts`.
+- **Runtimes**: D1 migration `0058_review_friction.sql` + `D1WorkspaceSettingsRepository`;
+  Drizzle `workspaceSettings` columns + generated migration + `DrizzleWorkspaceSettingsRepository`.
+- **Conformance**: `defineReviewFrictionSuite` (HTTP-driven) run on all three facades, plus the
+  four fields added to `defineWorkspaceSettingsSuite`'s round-trip.
+- **Frontend** (`frontend/app`): the "Review friction" group in `WorkspaceSettingsPanel.vue`, the
+  `ReviewFrictionDialog.vue` modal + the add-task 409 retry flow, the pre-warn badge, and the
+  `errors.reviewFriction.*` / `settings.reviewFriction.*` i18n keys (all locales), with the
+  `usePipelineErrorToast`-style exhaustive conflict-reason map.
 
 ## Open questions
 

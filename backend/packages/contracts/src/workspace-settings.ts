@@ -25,6 +25,25 @@ export const taskLimitPerTypeSchema = v.record(createTaskTypeSchema, limitSchema
 export type TaskLimitPerType = v.InferOutput<typeof taskLimitPerTypeSchema>
 
 // ---------------------------------------------------------------------------
+// Opt-in review-debt friction (see `backend/docs/review-debt-friction.md`). When a
+// workspace has too many tasks parked on human review — by count, or by how long the
+// oldest has been stuck — authoring a NEW task requires an explicit acknowledgement
+// (soft friction), and past a harder threshold is refused outright (hard block). Off
+// by default; the debt itself is derived from open review-wait notifications, so this
+// only ever shapes *new* work.
+// ---------------------------------------------------------------------------
+
+/**
+ * Whether/how review-debt friction is applied to task creation:
+ *  - `off`     — no friction (the default).
+ *  - `warn`    — soft friction only: past the warn threshold, creating a task
+ *                requires an explicit acknowledgement.
+ *  - `enforce` — soft friction plus the hard block thresholds.
+ */
+export const reviewFrictionModeSchema = v.picklist(['off', 'warn', 'enforce'])
+export type ReviewFrictionMode = v.InferOutput<typeof reviewFrictionModeSchema>
+
+// ---------------------------------------------------------------------------
 // Per-workspace spend budget. Moved out of the deployment-wide env vars
 // (`SPEND_MONTHLY_LIMIT` / `SPEND_CURRENCY`) onto the workspace settings row so
 // an operator can tune a workspace's budget in the UI without a redeploy. Both
@@ -84,6 +103,26 @@ export const workspaceSettingsSchema = v.object({
    * inert there. Enabling it with no runner pool registered fails the run loudly.
    */
   delegateAgentsToRunnerPool: v.boolean(),
+  /** Whether/how review-debt friction is applied when authoring a new task. */
+  reviewFrictionMode: reviewFrictionModeSchema,
+  /**
+   * Tasks-in-review count at which soft friction starts (past it, creating a task
+   * needs an explicit acknowledgement). Default 3.
+   */
+  reviewFrictionWarnCount: v.pipe(v.number(), v.integer(), v.minValue(1), v.maxValue(1000)),
+  /**
+   * Hard block: refuse task creation while ≥ this many tasks are in human review.
+   * Null ⇒ the count trigger is off. Must be ≥ {@link workspaceSettingsSchema.reviewFrictionWarnCount}.
+   * Only consulted when {@link reviewFrictionModeSchema} is `enforce`.
+   */
+  reviewFrictionBlockCount: v.nullable(limitSchema),
+  /**
+   * Hard block: refuse task creation while ANY task has been in human review longer than
+   * this many minutes. Null ⇒ the age trigger is off. Only consulted in `enforce` mode.
+   */
+  reviewFrictionBlockStuckMinutes: v.nullable(
+    v.pipe(v.number(), v.integer(), v.minValue(1), v.maxValue(100_000)),
+  ),
   /** Spend budget currency (ISO 4217). Null ⇒ the built-in default (`EUR`). */
   spendCurrency: v.nullable(spendCurrencySchema),
   /**
@@ -115,6 +154,14 @@ export const updateWorkspaceSettingsSchema = v.object({
   ),
   kaizenEnabled: v.optional(v.boolean()),
   delegateAgentsToRunnerPool: v.optional(v.boolean()),
+  reviewFrictionMode: v.optional(reviewFrictionModeSchema),
+  reviewFrictionWarnCount: v.optional(
+    v.pipe(v.number(), v.integer(), v.minValue(1), v.maxValue(1000)),
+  ),
+  reviewFrictionBlockCount: v.optional(v.nullable(limitSchema)),
+  reviewFrictionBlockStuckMinutes: v.optional(
+    v.nullable(v.pipe(v.number(), v.integer(), v.minValue(1), v.maxValue(100_000))),
+  ),
   spendCurrency: v.optional(v.nullable(spendCurrencySchema)),
   spendMonthlyLimit: v.optional(v.nullable(v.pipe(v.number(), v.minValue(0)))),
 })

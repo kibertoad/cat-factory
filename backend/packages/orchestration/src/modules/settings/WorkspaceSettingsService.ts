@@ -10,6 +10,7 @@ import {
   DEFAULT_WORKSPACE_SETTINGS,
   readCachedWorkspaceSettings,
   requireWorkspace,
+  ValidationError,
 } from '@cat-factory/kernel'
 
 export interface WorkspaceSettingsServiceDependencies {
@@ -85,6 +86,16 @@ export class WorkspaceSettingsService {
       kaizenEnabled: patch.kaizenEnabled ?? current.kaizenEnabled,
       delegateAgentsToRunnerPool:
         patch.delegateAgentsToRunnerPool ?? current.delegateAgentsToRunnerPool,
+      reviewFrictionMode: patch.reviewFrictionMode ?? current.reviewFrictionMode,
+      reviewFrictionWarnCount: patch.reviewFrictionWarnCount ?? current.reviewFrictionWarnCount,
+      reviewFrictionBlockCount:
+        patch.reviewFrictionBlockCount !== undefined
+          ? patch.reviewFrictionBlockCount
+          : current.reviewFrictionBlockCount,
+      reviewFrictionBlockStuckMinutes:
+        patch.reviewFrictionBlockStuckMinutes !== undefined
+          ? patch.reviewFrictionBlockStuckMinutes
+          : current.reviewFrictionBlockStuckMinutes,
       spendCurrency:
         patch.spendCurrency !== undefined ? patch.spendCurrency : current.spendCurrency,
       spendMonthlyLimit:
@@ -101,6 +112,27 @@ export class WorkspaceSettingsService {
     } else {
       next.taskLimitShared = null
       if (next.taskLimitPerType == null) next.taskLimitPerType = {}
+    }
+    // Review-debt friction cross-field validation (mirrors the taskLimit checks). The hard-block
+    // knobs persist across mode switches so toggling back to `enforce` restores them; the verdict
+    // function only consults them in `enforce`, so a warn/off mode never reads a stale threshold.
+    if (next.reviewFrictionMode === 'enforce') {
+      if (
+        next.reviewFrictionBlockCount == null &&
+        next.reviewFrictionBlockStuckMinutes == null
+      ) {
+        throw new ValidationError(
+          'Enforce mode requires at least one hard-block threshold (a block count or a stuck-minutes limit).',
+        )
+      }
+      if (
+        next.reviewFrictionBlockCount != null &&
+        next.reviewFrictionBlockCount < next.reviewFrictionWarnCount
+      ) {
+        throw new ValidationError(
+          'The review-debt block count must be greater than or equal to the warn count.',
+        )
+      }
     }
     await this.settings.upsert(workspaceId, next)
     // Drop the cached row (and broadcast to peers) after the write commits, so the next

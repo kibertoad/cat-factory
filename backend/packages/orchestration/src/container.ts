@@ -1458,6 +1458,16 @@ export function createCore(dependencies: CoreDependencies): Core {
   // return. The core spine (below) stays explicit —
   // it carries the genuine circular late-bindings (account ⇄ spend, engine ⇄ initiative loop).
   const modules = new ModuleRegistry()
+  // Built up-front (before the board + execution engine) so the board's review-debt friction
+  // guard on task creation, the per-service task limit, and the escalation sweep can all read
+  // them. Neither module depends on any service constructed below — only `dependencies` + the
+  // settings cache slice — so building them here is safe and keeps the locals threadable.
+  const notifications = modules.build('notifications', () =>
+    createNotificationsModule(dependencies),
+  )
+  const settings = modules.build('settings', () =>
+    createWorkspaceSettingsModule(dependencies, caches.workspaceSettings),
+  )
   // Pass the resolved publisher so board mutations push a coarse `boardChanged` to every
   // user on the workspace (and every board mounting a shared service) — both facades route
   // here, so the wiring is symmetric by construction. The repo-projection cache lets
@@ -1470,6 +1480,11 @@ export function createCore(dependencies: CoreDependencies): Core {
     // deployment-registered default pipeline (the raw `dependencies.taskTypeRegistry` may be
     // undefined; this is the same instance re-exposed on `Core` for the snapshot projection).
     taskTypeRegistry,
+    // Opt-in review-debt friction on task creation: read the acting workspace's settings + open
+    // notifications to decide whether authoring a new task is frictioned. Optional seams — when a
+    // facade doesn't wire settings/notifications, the guard is a pass-through.
+    reviewFrictionSettings: settings?.service,
+    reviewFrictionNotifications: notifications?.service,
   })
   const workspaceService = new WorkspaceService({
     ...dependencies,
@@ -1669,19 +1684,11 @@ export function createCore(dependencies: CoreDependencies): Core {
     boardService,
     blockRepository: dependencies.blockRepository,
   })
-  // Built before the execution engine so it can raise merge-review / CI-failed /
-  // pipeline-complete notifications during a run (when the module is configured).
-  const notifications = modules.build('notifications', () =>
-    createNotificationsModule(dependencies),
-  )
+  // `notifications` + `settings` are built up-front (near the board service) so the friction
+  // guard, the per-service task limit, and the escalation sweep can read them.
   modules.build('slack', () => createSlackModule(dependencies))
   modules.build('riskPolicies', () => createRiskPoliciesModule(dependencies, caches))
   modules.build('sandbox', () => createSandboxModule(dependencies, agentKindRegistry))
-  // Built before the execution engine so the per-service running-task limit can be
-  // enforced at start() (and the escalation sweep can read the waiting threshold).
-  const settings = modules.build('settings', () =>
-    createWorkspaceSettingsModule(dependencies, caches.workspaceSettings),
-  )
   registerStandaloneModules(modules, dependencies)
   // Built before the execution engine so the planning pipeline's plan ingest + the
   // committer step's tracker mirror can run through it.

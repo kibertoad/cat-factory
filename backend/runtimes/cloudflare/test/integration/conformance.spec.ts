@@ -7,6 +7,7 @@ import {
   RecordingEventPublisher,
   defineCacheSuite,
   defineConformanceSuite,
+  defineReviewFrictionSuite,
   defineWorkspaceAccessSuite,
   defineWorkspaceRbacSuite,
   makeIncorporatedClarityReview,
@@ -260,6 +261,9 @@ defineWorkspaceAccessSuite(harness)
 // Workspace-RBAC initiative (slice 3): the gate's resolution + viewer write floor + list
 // filtering, enforced over the real HTTP gate — identically on D1 and Postgres.
 defineWorkspaceRbacSuite(harness)
+// Opt-in review-debt friction: the four settings columns + the board's friction guard must
+// gate task creation identically on D1 and Postgres.
+defineReviewFrictionSuite(harness)
 // Caching initiative: the Worker serves the fragment catalog through the
 // ISOLATE-SAFE (pass-through) profile — coherence must hold there exactly as it
 // does through Node's live in-memory cache.
