@@ -210,6 +210,23 @@ async function add() {
   }
 }
 
+/** Route an update to the scope the key lives in (account / workspace / user). */
+async function updateKey(k: ApiKey, patch: { enabled?: boolean; isDefault?: boolean }) {
+  try {
+    if (k.scope === 'account') await keys.updateAccountKey(k.id, patch)
+    else if (k.scope === 'workspace') await keys.updateWorkspaceKey(k.id, patch)
+    else await keys.updateUserKey(k.id, patch)
+    // Enabling/disabling changes provider selectability in the picker — refresh it.
+    if (workspace.workspaceId) await models.refresh(workspace.workspaceId)
+  } catch (e) {
+    toast.add({
+      title: t('providers.apiKeys.toast.updateFailed'),
+      description: e instanceof Error ? e.message : String(e),
+      color: 'error',
+    })
+  }
+}
+
 async function remove(k: ApiKey) {
   const noun = t('providers.apiKeys.keyNoun')
   if (!(await confirmAction('remove', noun))) return
@@ -352,10 +369,14 @@ async function remove(k: ApiKey) {
         v-for="k in connected"
         :key="k.id"
         class="flex items-center justify-between rounded-md border border-slate-700 bg-slate-900/50 px-3 py-2 text-sm"
+        :class="{ 'opacity-55': !k.enabled }"
       >
         <div>
           <span class="font-medium text-slate-200">{{ k.label }}</span>
           <span class="ms-2 text-xs text-slate-500">{{ providerLabel(k.provider) }}</span>
+          <UBadge v-if="!k.enabled" color="neutral" variant="subtle" size="sm" class="ms-2">
+            {{ t('providers.apiKeys.disabledBadge') }}
+          </UBadge>
           <div class="text-[11px] tabular-nums text-slate-500">
             {{
               t(
@@ -366,13 +387,32 @@ async function remove(k: ApiKey) {
             }}
           </div>
         </div>
-        <UButton
-          icon="i-lucide-trash-2"
-          color="error"
-          variant="ghost"
-          size="xs"
-          @click="remove(k)"
-        />
+        <div class="flex items-center gap-2">
+          <UButton
+            :icon="k.isDefault ? 'i-lucide-star' : 'i-lucide-star-off'"
+            :color="k.isDefault ? 'primary' : 'neutral'"
+            :variant="k.isDefault ? 'subtle' : 'ghost'"
+            size="xs"
+            @click="updateKey(k, { isDefault: !k.isDefault })"
+          >
+            {{
+              k.isDefault ? t('providers.apiKeys.defaultBadge') : t('providers.apiKeys.pinDefault')
+            }}
+          </UButton>
+          <USwitch
+            :model-value="k.enabled"
+            size="sm"
+            :aria-label="t('providers.apiKeys.enableToggle')"
+            @update:model-value="(v: boolean) => updateKey(k, { enabled: v })"
+          />
+          <UButton
+            icon="i-lucide-trash-2"
+            color="error"
+            variant="ghost"
+            size="xs"
+            @click="remove(k)"
+          />
+        </div>
       </div>
     </div>
   </div>
