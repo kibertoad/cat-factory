@@ -1050,6 +1050,13 @@ export class RunDispatcher {
         this.clock.now(),
       )
       step.gate.attemptLog = [...(step.gate.attemptLog ?? []), attempt]
+      // Same reasoning for the helper's effort self-assessment: a gate step runs no agent of
+      // its own, so its report is its LAST helper's (what made fixing CI / resolving the
+      // conflicts hard). This path deliberately never records a result, so without this the
+      // gate window could only ever show a bare attempt count.
+      if (update.state === 'done' && update.result.effortReport) {
+        step.effortReport = update.result.effortReport
+      }
       // The conflicts gate's precheck carries no failure detail of its own (GitHub
       // reports mergeability as a single bit), so surface the resolver's account as
       // the gate's last failure summary. CI's probe already sets a richer summary
@@ -1350,6 +1357,16 @@ export class RunDispatcher {
     isFinalStep: boolean,
     result: AgentRunResult,
   ): Promise<AdvanceResult> {
+    // The container agent's effort self-assessment (how hard the work was, what reduced its
+    // effectiveness, the obstacles it hit) describes the JOB THAT JUST RAN, so record it before
+    // any of the paths below can return early — exactly like the usage metering under it. It
+    // used to sit with the normal completion further down, which meant every kind whose verdict
+    // drives run flow silently dropped it: a `pr-reviewer` parking on its findings, a container
+    // companion applying its verdict, the fork proposer, a Tester withholding its greenlight, a
+    // step raising a human decision. Those are the runs whose self-assessment is most worth
+    // reading, and none of them ever reaches the normal completion with the result in hand.
+    if (result.effortReport) step.effortReport = result.effortReport
+
     // Meter the LLM call into the usage ledger. Recorded whether the step completed or
     // raised a decision — both consumed tokens. A subscription-harness result is tagged
     // `'subscription'` so it's counted for the usage report but EXCLUDED from the budget
@@ -1399,10 +1416,6 @@ export class RunDispatcher {
     // `generic-structured` result view can render it (a post-op consumes the same value
     // server-side). Built-in / prose kinds leave it undefined.
     if (result.custom !== undefined) step.custom = result.custom
-    // The container agent's effort self-assessment (how hard the work was, what reduced its
-    // effectiveness, the obstacles) — surfaced in run details for every container step. Absent
-    // for inline agents / older harness images.
-    if (result.effortReport) step.effortReport = result.effortReport
     if (result.model) step.model = result.model
     step.progress = 1
     this.stepGraph.finishStep(step)
